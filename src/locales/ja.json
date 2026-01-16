@@ -1,0 +1,61 @@
+{
+  "demo": {
+    "title": "音声解析デモ",
+    "subtitle": "音声ファイルをドロップしてBPM、キー、コードなどを解析",
+    "dropzone": {
+      "title": "音声ファイルをドロップ",
+      "subtitle": "またはクリックして選択",
+      "formats": "MP3, WAV, FLAC, OGG対応"
+    },
+    "analyzing": "解析中...",
+    "progress": "{stage} - {percent}%",
+    "panel": {
+      "title": "解析",
+      "bpm": "BPM",
+      "key": "キー",
+      "chord": "コード",
+      "progression": "進行",
+      "pattern": "パターン",
+      "timeSig": "拍子",
+      "duration": "長さ",
+      "rate": "レート",
+      "source": "ソース"
+    },
+    "results": {
+      "title": "解析結果",
+      "bpm": "BPM",
+      "key": "キー",
+      "timeSignature": "拍子",
+      "duration": "長さ",
+      "confidence": "信頼度"
+    },
+    "player": {
+      "play": "再生",
+      "pause": "一時停止",
+      "stop": "停止"
+    },
+    "waveform": {
+      "title": "波形"
+    },
+    "beats": {
+      "title": "ビート表示",
+      "detected": "{count}個のビートを検出"
+    },
+    "chords": {
+      "title": "コード進行"
+    },
+    "sections": {
+      "title": "楽曲セクション"
+    },
+    "error": {
+      "loadFailed": "音声ファイルの読み込みに失敗しました",
+      "analysisFailed": "解析に失敗しました",
+      "unsupportedFormat": "サポートされていないファイル形式です"
+    }
+  },
+  "common": {
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "retry": "再試行"
+  }
+}

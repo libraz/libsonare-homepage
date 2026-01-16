@@ -1,0 +1,25 @@
+{
+  "name": "libsonare-homepage",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "copy:wasm": "./scripts/copy-wasm.sh"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.26"
+  },
+  "volta": {
+    "node": "22.21.1",
+    "yarn": "4.12.0"
+  },
+  "dependencies": {
+    "mermaid": "^11.12.2",
+    "vitepress-plugin-mermaid": "^2.0.17"
+  }
+}

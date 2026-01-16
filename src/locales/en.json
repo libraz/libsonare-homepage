@@ -1,0 +1,61 @@
+{
+  "demo": {
+    "title": "Audio Analysis Demo",
+    "subtitle": "Drop an audio file to analyze BPM, key, chords, and more",
+    "dropzone": {
+      "title": "Drop audio file here",
+      "subtitle": "or click to select",
+      "formats": "MP3, WAV, FLAC, OGG supported"
+    },
+    "analyzing": "Analyzing...",
+    "progress": "{stage} - {percent}%",
+    "panel": {
+      "title": "ANALYSIS",
+      "bpm": "BPM",
+      "key": "KEY",
+      "chord": "CHORD",
+      "progression": "PROGRESSION",
+      "pattern": "PATTERN",
+      "timeSig": "TIME",
+      "duration": "LEN",
+      "rate": "RATE",
+      "source": "SRC"
+    },
+    "results": {
+      "title": "Analysis Results",
+      "bpm": "BPM",
+      "key": "Key",
+      "timeSignature": "Time Signature",
+      "duration": "Duration",
+      "confidence": "Confidence"
+    },
+    "player": {
+      "play": "Play",
+      "pause": "Pause",
+      "stop": "Stop"
+    },
+    "waveform": {
+      "title": "Waveform"
+    },
+    "beats": {
+      "title": "Beat Visualization",
+      "detected": "{count} beats detected"
+    },
+    "chords": {
+      "title": "Chord Progression"
+    },
+    "sections": {
+      "title": "Song Sections"
+    },
+    "error": {
+      "loadFailed": "Failed to load audio file",
+      "analysisFailed": "Analysis failed",
+      "unsupportedFormat": "Unsupported file format"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry"
+  }
+}
