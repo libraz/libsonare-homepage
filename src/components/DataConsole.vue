@@ -31,8 +31,8 @@ let intervalId: ReturnType<typeof setInterval> | null = null
 
 const currentFrame = computed(() => {
   if (!props.chromaData || props.duration === 0) return 0
-  const progress = props.currentTime / props.duration
-  return Math.floor(progress * props.chromaData.nFrames)
+  const progress = Math.max(0, Math.min(props.currentTime / props.duration, 1))
+  return Math.max(0, Math.min(Math.floor(progress * props.chromaData.nFrames), props.chromaData.nFrames - 1))
 })
 
 function formatValue(val: number, decimals = 3): string {

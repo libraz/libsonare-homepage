@@ -114,9 +114,19 @@ export function useAudioPlayer() {
 
     source.onended = () => {
       if (isPlaying.value && !isPaused.value) {
-        isPlaying.value = false
-        currentTime.value = 0
+        if (animationFrame) {
+          cancelAnimationFrame(animationFrame)
+          animationFrame = null
+        }
+        if (sourceNode.value) {
+          sourceNode.value.disconnect()
+          sourceNode.value = null
+        }
         stopProcessing()
+        isPlaying.value = false
+        isPaused.value = false
+        currentTime.value = 0
+        pauseTime.value = 0
       }
     }
 
@@ -203,9 +213,10 @@ export function useAudioPlayer() {
   function updateTime() {
     if (!isPlaying.value || !audioContext.value) return
 
-    currentTime.value = audioContext.value.currentTime - startTime.value
+    const rawTime = audioContext.value.currentTime - startTime.value
+    currentTime.value = Math.min(rawTime, duration.value)
 
-    if (currentTime.value >= duration.value) {
+    if (rawTime >= duration.value) {
       stop()
       return
     }

@@ -126,10 +126,9 @@ async function handleFile(file: File) {
     fileProgressStage.value = 'EXTRACTING SAMPLES'
     // Pre-compute visualization data
     const wasm = await import('@/wasm/index.js')
-    const maxSamples = Math.min(buffer.length, buffer.sampleRate * 30)
     const samples = buffer.numberOfChannels > 1
-      ? mixToMono(buffer, maxSamples)
-      : buffer.getChannelData(0).slice(0, maxSamples)
+      ? mixToMono(buffer)
+      : buffer.getChannelData(0).slice()
     await yieldToMain()
 
     fileProgress.value = 55
@@ -414,10 +413,9 @@ async function loadDemoFile() {
     // (streaming will update this in real-time during playback)
     t0 = performance.now()
     const wasm = await import('@/wasm/index.js')
-    const maxSamples = Math.min(buffer.length, buffer.sampleRate * 30)
     const samples = buffer.numberOfChannels > 1
-      ? mixToMono(buffer, maxSamples)
-      : buffer.getChannelData(0).slice(0, maxSamples)
+      ? mixToMono(buffer)
+      : buffer.getChannelData(0).slice()
     timings['Mix to mono'] = performance.now() - t0
 
     await yieldToMain()

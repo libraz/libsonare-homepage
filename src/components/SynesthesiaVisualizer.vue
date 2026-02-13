@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps<{
   chromaData: {
@@ -70,10 +70,9 @@ const LATENCY_COMPENSATION = 0.05
 
 const currentFrame = computed(() => {
   if (!props.chromaData || props.duration === 0) return 0
-  // Add latency compensation for better perceived sync
-  const compensatedTime = Math.min(props.currentTime + LATENCY_COMPENSATION, props.duration)
+  const compensatedTime = Math.max(0, Math.min(props.currentTime + LATENCY_COMPENSATION, props.duration))
   const progress = compensatedTime / props.duration
-  return Math.min(Math.floor(progress * props.chromaData.nFrames), props.chromaData.nFrames - 1)
+  return Math.max(0, Math.min(Math.floor(progress * props.chromaData.nFrames), props.chromaData.nFrames - 1))
 })
 
 function hsl(h: number, s: number, l: number, a = 1) {
@@ -281,51 +280,64 @@ function draw() {
   const centerY = size / 2
   const maxRadius = size * 0.40
 
-  // Clear with subtle fade for trails
-  ctx.fillStyle = 'rgba(6, 8, 12, 0.35)'
-  ctx.fillRect(0, 0, size, size)
+  // Full clear when transitioning out of active state (e.g. playback ended)
+  if (needsFullClear) {
+    ctx.fillStyle = 'rgb(6, 8, 12)'
+    ctx.fillRect(0, 0, size, size)
+    needsFullClear = false
+  } else {
+    // Partial clear with fade that adapts to volume - faster fade at low levels
+    const clearAlpha = 0.25 + (1 - smoothedRms.value) * 0.35
+    ctx.fillStyle = `rgba(6, 8, 12, ${clearAlpha})`
+    ctx.fillRect(0, 0, size, size)
+  }
 
   const frame = currentFrame.value
   const hasData = props.chromaData && props.rmsData
+  // Only show active visualization when playback has started (playing or paused mid-track)
+  const isActive = hasData && (props.isPlaying || props.currentTime > 0)
   const time = Date.now() / 1000
 
   // Always draw grid and scan lines for atmosphere
   drawGrid(centerX, centerY, maxRadius)
 
-  if (hasData && props.chromaData && props.rmsData) {
+  if (isActive && props.chromaData && props.rmsData) {
     const { features, nChroma } = props.chromaData
 
-    // Update smoothed chroma values (higher = more responsive)
+    // RMS smoothing - compute first so we can use it as global intensity
+    const rmsFrame = Math.floor((frame / props.chromaData.nFrames) * props.rmsData.length)
+    const currentRms = props.rmsData[rmsFrame] || 0
+    smoothedRms.value = lerp(smoothedRms.value, currentRms, 0.4)
+
+    // Flare intensity from RMS with power curve - suppresses flare effects at low levels
+    const flareIntensity = Math.pow(smoothedRms.value, 1.8)
+
+    // Update smoothed chroma values - use raw values for sensitive note detection
     for (let i = 0; i < nChroma; i++) {
       const value = features[frame * nChroma + i] || 0
       const smoothing = props.isPlaying ? 0.45 : 0.1
       smoothedChroma[i] = lerp(smoothedChroma[i], value, smoothing)
     }
 
-    // RMS smoothing - more responsive for better sync
-    const rmsFrame = Math.floor((frame / props.chromaData.nFrames) * props.rmsData.length)
-    const currentRms = props.rmsData[rmsFrame] || 0
-    smoothedRms.value = lerp(smoothedRms.value, currentRms, 0.4)
-
-    // Band smoothing - increased responsiveness
+    // Band smoothing - scaled by flare intensity for visual effects
     if (props.bandData) {
       const bandFrame = Math.floor((frame / props.chromaData.nFrames) * props.bandData.low.length)
       const currentLow = props.bandData.low[bandFrame] || 0
       const currentHigh = props.bandData.high[bandFrame] || 0
-      smoothedLow.value = lerp(smoothedLow.value, currentLow, 0.4)
-      smoothedHigh.value = lerp(smoothedHigh.value, currentHigh, 0.4)
+      smoothedLow.value = lerp(smoothedLow.value, currentLow * flareIntensity, 0.4)
+      smoothedHigh.value = lerp(smoothedHigh.value, currentHigh * flareIntensity, 0.4)
 
-      // Track peaks for ripple effects
-      if (currentLow > 0.4 && Math.random() > 0.7) {
+      // Track peaks for ripple effects - higher thresholds
+      if (currentLow > 0.55 && Math.random() > 0.7) {
         peakHistory.push({ time: Date.now(), type: 'low' })
       }
-      if (currentHigh > 0.3 && Math.random() > 0.7) {
+      if (currentHigh > 0.45 && Math.random() > 0.7) {
         peakHistory.push({ time: Date.now(), type: 'high' })
       }
     }
 
-    // Trigger radial burst on strong peaks
-    if (currentRms > 0.5 && Math.random() > 0.6) {
+    // Trigger radial burst on strong peaks - higher threshold
+    if (currentRms > 0.6 && Math.random() > 0.65) {
       // Choose hue based on dominant frequency band
       const burstHue = smoothedLow.value > smoothedHigh.value ? DRUMS_HUE : MELODY_HUE
       spawnBurstParticles(currentRms, burstHue)
@@ -336,17 +348,17 @@ function draw() {
       peakHistory.shift()
     }
 
-    // === FREQUENCY BAND VISUALIZATION (inner rings) ===
-    const drumIntensity = Math.min(smoothedLow.value * 1.8, 1)
-    const melodyIntensity = Math.min(smoothedHigh.value * 1.8, 1)
+    // === LAYER 1: FLARE EFFECTS (below note arcs) ===
 
-    // Drums ring (inner, left-biased arc)
-    if (drumIntensity > 0.02) {
+    // Frequency band arcs (inner rings)
+    const drumIntensity = Math.min(smoothedLow.value * 1.4, 1)
+    const melodyIntensity = Math.min(smoothedHigh.value * 1.4, 1)
+
+    if (drumIntensity > 0.08) {
       const drumRadius = maxRadius * 0.32
       const drumArcStart = Math.PI * 0.6
       const drumArcEnd = Math.PI * 1.4
 
-      // Outer glow
       ctx.save()
       ctx.filter = 'blur(12px)'
       ctx.beginPath()
@@ -357,7 +369,6 @@ function draw() {
       ctx.stroke()
       ctx.restore()
 
-      // Core arc
       ctx.beginPath()
       ctx.arc(centerX, centerY, drumRadius, drumArcStart, drumArcEnd)
       const drumGrad = ctx.createLinearGradient(
@@ -373,13 +384,11 @@ function draw() {
       ctx.stroke()
     }
 
-    // Melody ring (inner, right-biased arc)
-    if (melodyIntensity > 0.02) {
+    if (melodyIntensity > 0.08) {
       const melodyRadius = maxRadius * 0.32
       const melodyArcStart = -Math.PI * 0.4
       const melodyArcEnd = Math.PI * 0.4
 
-      // Outer glow
       ctx.save()
       ctx.filter = 'blur(12px)'
       ctx.beginPath()
@@ -390,7 +399,6 @@ function draw() {
       ctx.stroke()
       ctx.restore()
 
-      // Core arc
       ctx.beginPath()
       ctx.arc(centerX, centerY, melodyRadius, melodyArcStart, melodyArcEnd)
       const melodyGrad = ctx.createLinearGradient(
@@ -406,82 +414,13 @@ function draw() {
       ctx.stroke()
     }
 
-    // === CHROMA ARCS (outer ring) ===
-    const arcAngle = (Math.PI * 2) / 12
-    const arcGap = 0.025
-
-    for (let i = 0; i < 12; i++) {
-      const value = smoothedChroma[i]
-      const color = noteColors[i]
-      const startAngle = i * arcAngle - Math.PI / 2 + arcGap
-      const endAngle = (i + 1) * arcAngle - Math.PI / 2 - arcGap
-
-      if (value > 0.02) {
-        // Glow layer
-        ctx.save()
-        ctx.filter = 'blur(8px)'
-        ctx.beginPath()
-        ctx.arc(centerX, centerY, maxRadius * 0.92, startAngle, endAngle)
-        ctx.strokeStyle = hsl(color.h, color.s, color.l + 15, value * 0.4)
-        ctx.lineWidth = 16 + value * 12
-        ctx.lineCap = 'round'
-        ctx.stroke()
-        ctx.restore()
-
-        // Main arc
-        ctx.beginPath()
-        ctx.arc(centerX, centerY, maxRadius * 0.92, startAngle, endAngle)
-        ctx.strokeStyle = hsl(color.h, color.s, color.l + value * 15, 0.3 + value * 0.7)
-        ctx.lineWidth = 10 + value * 10
-        ctx.lineCap = 'round'
-        ctx.stroke()
-
-        // Inner radial bars
-        const barAngle = (startAngle + endAngle) / 2
-        const barLength = value * maxRadius * 0.35
-        const innerStart = maxRadius * 0.50
-
-        const x1 = centerX + Math.cos(barAngle) * innerStart
-        const y1 = centerY + Math.sin(barAngle) * innerStart
-        const x2 = centerX + Math.cos(barAngle) * (innerStart + barLength)
-        const y2 = centerY + Math.sin(barAngle) * (innerStart + barLength)
-
-        const barGrad = ctx.createLinearGradient(x1, y1, x2, y2)
-        barGrad.addColorStop(0, hsl(color.h, color.s - 10, color.l - 10, 0.2))
-        barGrad.addColorStop(1, hsl(color.h, color.s, color.l + 10, value * 0.9))
-
-        ctx.beginPath()
-        ctx.moveTo(x1, y1)
-        ctx.lineTo(x2, y2)
-        ctx.strokeStyle = barGrad
-        ctx.lineWidth = 3 + value * 3
-        ctx.lineCap = 'round'
-        ctx.stroke()
-      }
-
-      // Note labels (always visible, intensity varies)
-      const labelRadius = maxRadius * 1.10
-      const labelAngle = (startAngle + endAngle) / 2
-      const labelX = centerX + Math.cos(labelAngle) * labelRadius
-      const labelY = centerY + Math.sin(labelAngle) * labelRadius
-      const labelAlpha = 0.25 + value * 0.75
-
-      ctx.font = `${value > 0.35 ? '600' : '400'} 11px "IBM Plex Mono", monospace`
-      ctx.fillStyle = hsl(color.h, color.s - 20, 65 + value * 25, labelAlpha)
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(noteNames[i], labelX, labelY)
-    }
-
-    // === CENTER HUB ===
+    // Center hub
     const peakThreshold = 0.55
     const peakIntensity = smoothedRms.value > peakThreshold
       ? Math.min((smoothedRms.value - peakThreshold) / 0.45, 1)
       : 0
-
     const hubRadius = 22 + peakIntensity * 4
 
-    // Hub glow (subtle purple instead of white)
     if (peakIntensity > 0.3) {
       ctx.save()
       ctx.filter = 'blur(12px)'
@@ -492,7 +431,6 @@ function draw() {
       ctx.restore()
     }
 
-    // Hub background
     const hubGrad = ctx.createRadialGradient(
       centerX, centerY, 0,
       centerX, centerY, hubRadius
@@ -500,40 +438,34 @@ function draw() {
     hubGrad.addColorStop(0, `rgba(20, 25, 35, 0.95)`)
     hubGrad.addColorStop(0.7, `rgba(15, 18, 28, 0.95)`)
     hubGrad.addColorStop(1, `rgba(10, 12, 20, 0.9)`)
-
     ctx.beginPath()
     ctx.arc(centerX, centerY, hubRadius, 0, Math.PI * 2)
     ctx.fillStyle = hubGrad
     ctx.fill()
-
-    // Hub border (subtle)
     ctx.beginPath()
     ctx.arc(centerX, centerY, hubRadius, 0, Math.PI * 2)
     ctx.strokeStyle = `rgba(139, 92, 246, ${0.15 + peakIntensity * 0.1})`
     ctx.lineWidth = 1
     ctx.stroke()
 
-    // === SPIRAL PARTICLE BURST ===
+    // Burst particles
     drawBurstParticles(centerX, centerY, maxRadius)
 
-    // === SUBTLE RIPPLE EFFECTS (colored only, for low/high bands) ===
+    // Ripple effects
     const now = Date.now()
     for (const peak of peakHistory) {
       if (peak.type === 'peak') continue
-
       const age = (now - peak.time) / 1000
       if (age < 0.8) {
         const progress = age / 0.8
         const rippleRadius = maxRadius * 0.4 + progress * maxRadius * 0.4
         const alpha = (1 - progress) * 0.1
-
         let rippleColor = ''
         if (peak.type === 'low') {
           rippleColor = `hsla(${DRUMS_HUE}, 60%, 45%`
         } else if (peak.type === 'high') {
           rippleColor = `hsla(${MELODY_HUE}, 55%, 45%`
         }
-
         if (rippleColor) {
           ctx.beginPath()
           ctx.arc(centerX, centerY, rippleRadius, 0, Math.PI * 2)
@@ -542,6 +474,87 @@ function draw() {
           ctx.stroke()
         }
       }
+    }
+
+    // Chroma glow (flare, below arcs)
+    const arcAngle = (Math.PI * 2) / 12
+    const arcGap = 0.025
+    for (let i = 0; i < 12; i++) {
+      const value = smoothedChroma[i]
+      if (value <= 0.02) continue
+      const color = noteColors[i]
+      const startAngle = i * arcAngle - Math.PI / 2 + arcGap
+      const endAngle = (i + 1) * arcAngle - Math.PI / 2 - arcGap
+      const glowAlpha = value * 0.4 * flareIntensity
+      if (glowAlpha > 0.01) {
+        ctx.save()
+        ctx.filter = 'blur(8px)'
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, maxRadius * 0.92, startAngle, endAngle)
+        ctx.strokeStyle = hsl(color.h, color.s, color.l + 15, glowAlpha)
+        ctx.lineWidth = 16 + value * 12 * flareIntensity
+        ctx.lineCap = 'round'
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+
+    // Scan lines (between flare and note arcs)
+    drawScanLines(size)
+
+    // === LAYER 2: NOTE DETECTION (on top, no white interference) ===
+    // Visual scale: 0.2 (quiet) to 1.0 (loud) based on RMS
+    const noteScale = 0.2 + smoothedRms.value * 0.8
+
+    for (let i = 0; i < 12; i++) {
+      const value = smoothedChroma[i]
+      const color = noteColors[i]
+      const startAngle = i * arcAngle - Math.PI / 2 + arcGap
+      const endAngle = (i + 1) * arcAngle - Math.PI / 2 - arcGap
+
+      if (value > 0.02) {
+        // Main arc - width and alpha scale with RMS
+        const arcAlpha = 0.15 + value * 0.35 + value * 0.5 * noteScale
+        const arcWidth = 4 + value * 6 * noteScale
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, maxRadius * 0.92, startAngle, endAngle)
+        ctx.strokeStyle = hsl(color.h, color.s, color.l + value * 15 * noteScale, arcAlpha)
+        ctx.lineWidth = arcWidth
+        ctx.lineCap = 'round'
+        ctx.stroke()
+
+        // Inner radial bars - length and width scale with RMS
+        const barAngle = (startAngle + endAngle) / 2
+        const barLength = value * maxRadius * 0.35 * noteScale
+        const innerStart = maxRadius * 0.50
+        const x1 = centerX + Math.cos(barAngle) * innerStart
+        const y1 = centerY + Math.sin(barAngle) * innerStart
+        const x2 = centerX + Math.cos(barAngle) * (innerStart + barLength)
+        const y2 = centerY + Math.sin(barAngle) * (innerStart + barLength)
+
+        const barGrad = ctx.createLinearGradient(x1, y1, x2, y2)
+        barGrad.addColorStop(0, hsl(color.h, color.s - 10, color.l - 10, 0.15))
+        barGrad.addColorStop(1, hsl(color.h, color.s, color.l + 10, value * 0.5 + value * 0.4 * noteScale))
+        ctx.beginPath()
+        ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
+        ctx.strokeStyle = barGrad
+        ctx.lineWidth = 2 + value * 2 * noteScale
+        ctx.lineCap = 'round'
+        ctx.stroke()
+      }
+
+      // Note labels
+      const labelRadius = maxRadius * 1.10
+      const labelAngle = (startAngle + endAngle) / 2
+      const labelX = centerX + Math.cos(labelAngle) * labelRadius
+      const labelY = centerY + Math.sin(labelAngle) * labelRadius
+      const labelAlpha = 0.2 + value * 0.4 + value * 0.4 * noteScale
+      ctx.font = `${value > 0.35 && noteScale > 0.5 ? '600' : '400'} 11px "IBM Plex Mono", monospace`
+      ctx.fillStyle = hsl(color.h, color.s - 20, 55 + value * 25 * noteScale, labelAlpha)
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(noteNames[i], labelX, labelY)
     }
 
   } else {
@@ -561,7 +574,6 @@ function draw() {
       ctx.stroke()
     }
 
-    // Idle center
     const idlePulse = 0.5 + Math.sin(time * 2) * 0.1
     ctx.beginPath()
     ctx.arc(centerX, centerY, 20, 0, Math.PI * 2)
@@ -570,10 +582,9 @@ function draw() {
     ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 * idlePulse})`
     ctx.lineWidth = 1
     ctx.stroke()
-  }
 
-  // Scan lines overlay (very subtle)
-  drawScanLines(size)
+    drawScanLines(size)
+  }
 
   animationFrame = requestAnimationFrame(draw)
 }
@@ -599,6 +610,8 @@ function setupCanvas() {
   }
 }
 
+let needsFullClear = false
+
 function resetVisualizer() {
   // Clear smoothed values
   smoothedChroma.fill(0)
@@ -610,12 +623,20 @@ function resetVisualizer() {
   burstParticles.length = 0
   peakHistory.length = 0
   lastBurstTime = 0
+
+  // Request full canvas clear on next draw frame
+  needsFullClear = true
 }
 
-// Reset when playback stops
+// Reset when playback truly stops (not during seek)
 watch(() => props.isPlaying, (playing, wasPlaying) => {
   if (!playing && wasPlaying) {
-    resetVisualizer()
+    // Wait a tick to check if isPlaying is still false (seek toggles it back quickly)
+    nextTick(() => {
+      if (!props.isPlaying) {
+        resetVisualizer()
+      }
+    })
   }
 })
 
