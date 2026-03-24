@@ -16,6 +16,7 @@ libsonare provides audio analysis capabilities for web applications:
 | **Full Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
 | **Audio Effects** | `hpss`, `timeStretch`, `pitchShift` | Remixing, practice tools |
 | **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
+| **Audio Class** | `Audio.fromBuffer` | OOP wrapper for all functions |
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
@@ -44,6 +45,7 @@ pnpm add @libraz/libsonare
 ```typescript
 import {
   init,
+  Audio,
   detectBpm,
   detectKey,
   detectBeats,
@@ -624,6 +626,71 @@ function resample(
   targetSr: number
 ): Float32Array
 ```
+
+## Audio Class
+
+The `Audio` class provides an object-oriented wrapper around all standalone functions. It stores the samples and sample rate internally, so you don't need to pass them to every call.
+
+### `Audio.fromBuffer(samples, sampleRate)`
+
+Create an Audio instance from raw sample data.
+
+```typescript
+const audio = Audio.fromBuffer(samples, 44100);
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `audio.data` | `Float32Array` | Raw audio samples |
+| `audio.length` | `number` | Number of samples |
+| `audio.sampleRate` | `number` | Sample rate (Hz) |
+| `audio.duration` | `number` | Duration (seconds) |
+
+### Instance Methods
+
+All standalone functions are available as instance methods — `samples` and `sampleRate` are provided automatically:
+
+```typescript
+import { init, Audio } from '@libraz/libsonare';
+
+await init();
+
+const audio = Audio.fromBuffer(samples, 44100);
+
+// Analysis
+const bpm = audio.detectBpm();
+const key = audio.detectKey();
+const beats = audio.detectBeats();
+const onsets = audio.detectOnsets();
+const result = audio.analyze();
+
+// Effects
+const { harmonic, percussive } = audio.hpss();
+const stretched = audio.timeStretch(1.5);
+const shifted = audio.pitchShift(2);
+const normalized = audio.normalize(-3.0);
+const trimmed = audio.trim(-60.0);
+
+// Feature extraction
+const stftResult = audio.stft();
+const mel = audio.melSpectrogram();
+const mfcc = audio.mfcc();
+const chroma = audio.chroma();
+const centroid = audio.spectralCentroid();
+const bandwidth = audio.spectralBandwidth();
+const rolloff = audio.spectralRolloff();
+const flatness = audio.spectralFlatness();
+const zcr = audio.zeroCrossingRate();
+const rms = audio.rmsEnergy();
+const pitch = audio.pitchPyin();
+
+// Resampling
+const resampled = audio.resample(22050);
+```
+
+All parameters (e.g., `nFft`, `hopLength`, `nMels`) have the same defaults as the standalone functions.
 
 ## Streaming API
 

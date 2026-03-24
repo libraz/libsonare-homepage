@@ -67,6 +67,48 @@ async function analyzeAudio() {
 }
 ```
 
+## Audio Class
+
+You can use the `Audio` class as an object-oriented alternative to standalone functions. It wraps the samples and sample rate, so you don't need to pass them every time.
+
+```typescript
+import { init, Audio } from '@libraz/libsonare';
+
+await init();
+
+const audioCtx = new AudioContext();
+const response = await fetch('music.mp3');
+const arrayBuffer = await response.arrayBuffer();
+const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+// Create Audio instance
+const audio = Audio.fromBuffer(
+  audioBuffer.getChannelData(0),
+  audioBuffer.sampleRate
+);
+
+// Analysis
+const bpm = audio.detectBpm();
+const key = audio.detectKey();
+const result = audio.analyze();
+
+// Effects
+const { harmonic, percussive } = audio.hpss();
+const stretched = audio.timeStretch(1.5);
+const shifted = audio.pitchShift(2);
+
+// Feature extraction
+const mel = audio.melSpectrogram();
+const mfcc = audio.mfcc();
+const chroma = audio.chroma();
+const pitch = audio.pitchPyin();
+
+console.log(`BPM: ${bpm}, Key: ${key.name}`);
+console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
+```
+
+See the [JS API Reference](/docs/js-api#audio-class) for the full list of instance methods.
+
 ## File Input
 
 ```typescript

@@ -152,6 +152,8 @@ The `StreamAnalyzer` runs the same pipeline on audio **chunk-by-chunk** with low
 |----------|-----------|----------|
 | **Browser** | JavaScript/TypeScript (WebAssembly) | Web apps, client-side analysis |
 | **Node.js** | JavaScript/TypeScript (WebAssembly) | Server-side processing |
+| **Node.js** | JavaScript/TypeScript (N-API native addon) | High-performance server-side processing |
+| **Python** | Python (cffi) | Data science, scripting, librosa migration |
 | **Linux / macOS** | C++ | Native applications, CLI tools |
 | **Any (via C API)** | C | FFI integration with other languages |
 
