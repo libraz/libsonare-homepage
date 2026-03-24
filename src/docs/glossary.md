@@ -144,6 +144,18 @@ Alternative to STFT that uses **musical spacing** - each octave has the same num
 | Speed | Faster | Slower |
 :::
 
+### VQT (Variable-Q Transform)
+
+A variant of CQT where the **Q factor varies across frequency bins** (controlled by a gamma parameter). This allows trading off between time and frequency resolution more flexibly than standard CQT.
+
+::: details CQT vs VQT
+| Feature | CQT | VQT |
+|---------|-----|-----|
+| Q factor | Constant | Variable (gamma parameter) |
+| Low-frequency resolution | High frequency, low time | Adjustable |
+| Use case | Music transcription | Adaptive analysis |
+:::
+
 ---
 
 ## Rhythm Analysis

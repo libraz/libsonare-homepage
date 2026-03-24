@@ -22,10 +22,10 @@ defineProps<{
 
 <style scoped>
 .tech-panel {
-  --panel-bg: rgba(8, 10, 14, 0.85);
-  --panel-border: rgba(139, 92, 246, 0.15);
-  --panel-header-bg: rgba(20, 22, 28, 0.8);
-  --panel-text: rgba(255, 255, 255, 0.4);
+  --panel-bg: var(--demo-bg-elevated, rgba(8, 10, 14, 0.85));
+  --panel-border: var(--demo-border-strong, rgba(139, 92, 246, 0.15));
+  --panel-header-bg: var(--demo-bg-header, rgba(20, 22, 28, 0.8));
+  --panel-text: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
 
   display: flex;
   flex-direction: column;

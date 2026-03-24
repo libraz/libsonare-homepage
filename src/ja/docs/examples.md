@@ -1,7 +1,7 @@
 # 使用例
 
 ::: warning パッケージ未公開
-npm パッケージ `@libraz/sonare` は現在ベータ版です。[インストール](/ja/docs/installation)で代替オプションを確認してください。
+npm パッケージ `@libraz/libsonare` は現在ベータ版です。[インストール](/ja/docs/installation)で代替オプションを確認してください。
 :::
 
 ## JavaScript/TypeScript
@@ -9,7 +9,7 @@ npm パッケージ `@libraz/sonare` は現在ベータ版です。[インスト
 ### 基本的な BPM とキー検出
 
 ```typescript
-import { init, detectBpm, detectKey } from '@libraz/sonare';
+import { init, detectBpm, detectKey } from '@libraz/libsonare';
 
 async function quickAnalysis(url: string) {
   await init();
@@ -33,7 +33,7 @@ async function quickAnalysis(url: string) {
 ### 完全な音楽解析
 
 ```typescript
-import { init, analyze } from '@libraz/sonare';
+import { init, analyze } from '@libraz/libsonare';
 
 const result = analyze(samples, sampleRate);
 
@@ -58,7 +58,7 @@ console.log(`\n楽曲形式: ${result.form}`);
 ### Harmonic-Percussive 分離
 
 ```typescript
-import { init, hpss, detectKey } from '@libraz/sonare';
+import { init, hpss, detectKey } from '@libraz/libsonare';
 
 await init();
 
@@ -74,7 +74,7 @@ const key = detectKey(result.harmonic, result.sampleRate);
 ### オーディオエフェクト
 
 ```typescript
-import { init, timeStretch, pitchShift, normalize, trim } from '@libraz/sonare';
+import { init, timeStretch, pitchShift, normalize, trim } from '@libraz/libsonare';
 
 await init();
 
@@ -94,7 +94,7 @@ const trimmed = trim(samples, sampleRate, -60);
 ### 特徴抽出
 
 ```typescript
-import { init, melSpectrogram, mfcc, chroma } from '@libraz/sonare';
+import { init, melSpectrogram, mfcc, chroma } from '@libraz/libsonare';
 
 await init();
 
@@ -114,7 +114,7 @@ console.log('ピッチクラス分布:', chromaResult.meanEnergy);
 ### ピッチ検出
 
 ```typescript
-import { init, pitchPyin } from '@libraz/sonare';
+import { init, pitchPyin } from '@libraz/libsonare';
 
 await init();
 
@@ -130,7 +130,7 @@ console.log(`有声フレーム: ${pitch.voicedFlag.filter(v => v).length}/${pit
 ビジュアライゼーションとライブモニタリング用のリアルタイム音声解析。
 
 ```typescript
-import { init, StreamAnalyzer } from '@libraz/sonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 await init();
 

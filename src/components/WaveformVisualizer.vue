@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useWaveform } from '@/composables/useWaveform'
+import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{
   audioBuffer: AudioBuffer | null
@@ -13,15 +14,23 @@ const emit = defineEmits<{
   (e: 'seek', time: number): void
 }>()
 
+const { isDark } = useTheme()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
-const { setAudioBuffer, setBeats, setProgress } = useWaveform(canvasRef, {
+const bgColor = computed(() => isDark.value ? 'rgba(6, 8, 12, 1)' : 'rgba(245, 243, 255, 1)')
+const barCol = computed(() => isDark.value ? 'rgba(139, 92, 246, 0.25)' : 'rgba(139, 92, 246, 0.3)')
+const progCol = computed(() => isDark.value ? 'rgba(139, 92, 246, 0.85)' : 'rgba(124, 58, 237, 0.8)')
+
+const { setAudioBuffer, setBeats, setProgress, draw } = useWaveform(canvasRef, {
   barWidth: 2,
   barGap: 1,
-  barColor: 'rgba(139, 92, 246, 0.25)',
-  progressColor: 'rgba(139, 92, 246, 0.85)',
-  backgroundColor: 'rgba(6, 8, 12, 1)',
+  barColor: barCol,
+  progressColor: progCol,
+  backgroundColor: bgColor,
 })
+
+// Redraw when theme changes
+watch(isDark, () => draw())
 
 watch(() => props.audioBuffer, (buffer) => {
   if (buffer) {
@@ -74,9 +83,8 @@ onMounted(() => {
   position: relative;
   width: 100%;
   height: 100px;
-  background: rgba(6, 8, 12, 1);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-radius: 6px;
+  background: var(--demo-screen-bg, rgba(6, 8, 12, 1));
+  border: 1px solid var(--demo-border-strong, rgba(139, 92, 246, 0.15));
   overflow: hidden;
   cursor: pointer;
 }
@@ -165,7 +173,7 @@ onMounted(() => {
 }
 
 .waveform:hover {
-  border-color: rgba(139, 92, 246, 0.25);
+  border-color: var(--demo-accent-dim, rgba(139, 92, 246, 0.25));
 }
 
 .waveform:hover .waveform__playhead {

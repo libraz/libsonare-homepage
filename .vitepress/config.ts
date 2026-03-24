@@ -80,7 +80,7 @@ export default withMermaid(defineConfig({
       themeConfig: {
         nav: [
           { text: 'Demo', link: '/' },
-          { text: 'Docs', link: '/docs/getting-started' },
+          { text: 'Docs', link: '/docs/introduction' },
           { text: 'GitHub', link: githubUrl }
         ],
         sidebar: {
@@ -88,6 +88,7 @@ export default withMermaid(defineConfig({
             {
               text: 'Guide',
               items: [
+                { text: 'Introduction', link: '/docs/introduction' },
                 { text: 'Getting Started', link: '/docs/getting-started' },
                 { text: 'Installation', link: '/docs/installation' },
                 { text: 'Examples', link: '/docs/examples' },
@@ -99,6 +100,7 @@ export default withMermaid(defineConfig({
               items: [
                 { text: 'JavaScript API', link: '/docs/js-api' },
                 { text: 'C++ API', link: '/docs/cpp-api' },
+                { text: 'Native Bindings', link: '/docs/native-bindings' },
                 { text: 'CLI Reference', link: '/docs/cli' },
               ]
             },
@@ -122,7 +124,7 @@ export default withMermaid(defineConfig({
       themeConfig: {
         nav: [
           { text: 'デモ', link: '/ja/' },
-          { text: 'ドキュメント', link: '/ja/docs/getting-started' },
+          { text: 'ドキュメント', link: '/ja/docs/introduction' },
           { text: 'GitHub', link: githubUrl }
         ],
         sidebar: {
@@ -130,6 +132,7 @@ export default withMermaid(defineConfig({
             {
               text: 'ガイド',
               items: [
+                { text: 'イントロダクション', link: '/ja/docs/introduction' },
                 { text: 'はじめに', link: '/ja/docs/getting-started' },
                 { text: 'インストール', link: '/ja/docs/installation' },
                 { text: '使用例', link: '/ja/docs/examples' },
@@ -141,6 +144,7 @@ export default withMermaid(defineConfig({
               items: [
                 { text: 'JavaScript API', link: '/ja/docs/js-api' },
                 { text: 'C++ API', link: '/ja/docs/cpp-api' },
+                { text: 'ネイティブバインディング', link: '/ja/docs/native-bindings' },
                 { text: 'CLIリファレンス', link: '/ja/docs/cli' },
               ]
             },

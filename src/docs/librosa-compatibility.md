@@ -193,7 +193,7 @@ Minimal impact on downstream features.
 ### 2. CQT
 
 - **librosa**: Full CQT implementation
-- **libsonare**: STFT-based chroma only
+- **libsonare**: Full CQT and VQT implementation
 
 ### 3. Window Normalization
 
@@ -217,7 +217,7 @@ print(f"BPM: {tempo}")
 
 **After (TypeScript):**
 ```typescript
-import { init, detectBpm, resample } from '@libraz/sonare';
+import { init, detectBpm, resample } from '@libraz/libsonare';
 
 await init();
 

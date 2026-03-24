@@ -28,9 +28,9 @@ defineEmits<{
 
 <style scoped>
 .transport-btn {
-  --btn-bg: rgba(139, 92, 246, 0.1);
-  --btn-border: rgba(139, 92, 246, 0.15);
-  --btn-color: rgba(255, 255, 255, 0.8);
+  --btn-bg: var(--demo-accent-subtle, rgba(139, 92, 246, 0.1));
+  --btn-border: var(--demo-accent-border, rgba(139, 92, 246, 0.15));
+  --btn-color: var(--demo-text-strong, rgba(255, 255, 255, 0.8));
   --btn-size: 40px;
   --btn-radius: 6px;
 
@@ -54,8 +54,8 @@ defineEmits<{
 }
 
 .transport-btn:hover:not(:disabled) {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: var(--demo-accent-dim, rgba(139, 92, 246, 0.2));
+  border-color: var(--demo-accent, rgba(139, 92, 246, 0.4));
 }
 
 .transport-btn:active:not(:disabled) {
@@ -64,8 +64,8 @@ defineEmits<{
 
 /* Variants */
 .transport-btn--primary {
-  --btn-bg: #8B5CF6;
-  --btn-border: #8B5CF6;
+  --btn-bg: var(--demo-accent, #8B5CF6);
+  --btn-border: var(--demo-accent, #8B5CF6);
   --btn-color: #fff;
 }
 
@@ -81,7 +81,7 @@ defineEmits<{
 }
 
 .transport-btn--ghost:hover:not(:disabled) {
-  --btn-bg: rgba(139, 92, 246, 0.1);
+  --btn-bg: var(--demo-accent-subtle, rgba(139, 92, 246, 0.1));
 }
 
 /* Sizes */

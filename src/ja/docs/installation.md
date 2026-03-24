@@ -3,15 +3,24 @@
 ## npm（ブラウザ/Node.js）
 
 ::: warning パッケージ未公開
-npm パッケージ `@libraz/sonare` は現在ベータ版で、まだ公開されていません。現時点では、ソースからビルドするか、リポジトリから直接 WASM ファイルを使用してください。
+npm パッケージ `@libraz/libsonare` は現在ベータ版で、まだ公開されていません。現時点では、ソースからビルドするか、リポジトリから直接 WASM ファイルを使用してください。
 :::
 
-```bash
-# 未公開 - 近日公開予定
-npm install @libraz/sonare
-# または
-yarn add @libraz/sonare
+::: code-group
+
+```bash [npm]
+npm install @libraz/libsonare
 ```
+
+```bash [yarn]
+yarn add @libraz/libsonare
+```
+
+```bash [pnpm]
+pnpm add @libraz/libsonare
+```
+
+:::
 
 ## ソースからビルド
 
@@ -37,12 +46,16 @@ make -j$(nproc)
 make build-wasm
 ```
 
+## ネイティブバインディング（Python / Node.js）
+
+デスクトップ環境ではネイティブバインディングによりC++の性能を直接活用できます。PythonとNode.jsのインストール・使用方法は[ネイティブバインディング](/ja/docs/native-bindings)を参照してください。
+
 ## 使用方法
 
 ### ブラウザ
 
 ```typescript
-import { init, detectBpm, detectKey, analyze } from '@libraz/sonare';
+import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
 
 // WASMモジュールを初期化
 await init();

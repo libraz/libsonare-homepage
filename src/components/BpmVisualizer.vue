@@ -150,7 +150,7 @@ onUnmounted(() => {
   font-family: 'JetBrains Mono', monospace;
   font-size: 2.5rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--demo-text-strong, #fff);
   line-height: 1;
 }
 
@@ -158,7 +158,7 @@ onUnmounted(() => {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 0.85rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.5));
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin-top: 0.25rem;

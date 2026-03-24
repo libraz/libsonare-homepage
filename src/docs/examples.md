@@ -1,7 +1,7 @@
 # Usage Examples
 
 ::: warning Package Not Published
-The npm package `@libraz/sonare` is currently in beta. See [Installation](/docs/installation) for alternative options.
+The npm package `@libraz/libsonare` is currently in beta. See [Installation](/docs/installation) for alternative options.
 :::
 
 ## JavaScript/TypeScript
@@ -9,7 +9,7 @@ The npm package `@libraz/sonare` is currently in beta. See [Installation](/docs/
 ### Basic BPM and Key Detection
 
 ```typescript
-import { init, detectBpm, detectKey } from '@libraz/sonare';
+import { init, detectBpm, detectKey } from '@libraz/libsonare';
 
 async function quickAnalysis(url: string) {
   await init();
@@ -33,7 +33,7 @@ async function quickAnalysis(url: string) {
 ### Full Music Analysis
 
 ```typescript
-import { init, analyze } from '@libraz/sonare';
+import { init, analyze } from '@libraz/libsonare';
 
 const result = analyze(samples, sampleRate);
 
@@ -58,7 +58,7 @@ console.log(`\nForm: ${result.form}`);
 ### Harmonic-Percussive Separation
 
 ```typescript
-import { init, hpss } from '@libraz/sonare';
+import { init, hpss } from '@libraz/libsonare';
 
 await init();
 
@@ -74,7 +74,7 @@ const key = detectKey(result.harmonic, result.sampleRate);
 ### Audio Effects
 
 ```typescript
-import { init, timeStretch, pitchShift, normalize, trim } from '@libraz/sonare';
+import { init, timeStretch, pitchShift, normalize, trim } from '@libraz/libsonare';
 
 await init();
 
@@ -94,7 +94,7 @@ const trimmed = trim(samples, sampleRate, -60);
 ### Feature Extraction
 
 ```typescript
-import { init, melSpectrogram, mfcc, chroma } from '@libraz/sonare';
+import { init, melSpectrogram, mfcc, chroma } from '@libraz/libsonare';
 
 await init();
 
@@ -114,7 +114,7 @@ console.log('Pitch class distribution:', chromaResult.meanEnergy);
 ### Pitch Detection
 
 ```typescript
-import { init, pitchPyin } from '@libraz/sonare';
+import { init, pitchPyin } from '@libraz/libsonare';
 
 await init();
 
@@ -130,7 +130,7 @@ console.log(`Voiced frames: ${pitch.voicedFlag.filter(v => v).length}/${pitch.nF
 Real-time audio analysis for visualizations and live monitoring.
 
 ```typescript
-import { init, StreamAnalyzer } from '@libraz/sonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 await init();
 

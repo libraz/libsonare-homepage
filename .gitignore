@@ -1,19 +1,23 @@
+# Dependencies
+node_modules
+
+# Yarn
 .yarn/cache/*
 .yarn/unplugged/*
 .yarn/build-state.yml
 .yarn/install-state.gz
-
-# Swap the comments on the following lines if you don't wish to use zero-installs
-# Documentation here: https://yarnpkg.com/features/zero-installs
 !.yarn/cache
-#.pnp.*
-node_modules
+
+# Build
 .vitepress/cache
 .vitepress/dist
+
+# Environment
 *.local
 
 # AI
 .claude
+.serena/
 *.claude.md
 CLAUDE.md
 AGENT.md

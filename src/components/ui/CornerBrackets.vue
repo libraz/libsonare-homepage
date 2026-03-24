@@ -19,7 +19,7 @@ defineProps<{
 .corner-brackets {
   --bracket-size: 20px;
   --bracket-offset: 10px;
-  --bracket-color: rgba(139, 92, 246, 0.2);
+  --bracket-color: var(--demo-accent-border, rgba(139, 92, 246, 0.2));
   --bracket-width: 2px;
 
   position: absolute;

@@ -3,9 +3,11 @@ import AudioAnalyzer from '@/components/AudioAnalyzer.vue'
 import { GridOverlay, CornerBrackets } from '@/components/ui'
 import { useData } from 'vitepress'
 import { computed, onMounted, ref } from 'vue'
+import { createTheme } from '@/composables/useTheme'
 
 const { lang } = useData()
 const libVersion = ref<string>('')
+const { isDark, toggle: toggleTheme } = createTheme()
 
 // Initialize WASM lazily to avoid blocking page render
 async function initWasm() {
@@ -45,6 +47,7 @@ const locales = {
       description: 'Extract BPM, key, chroma features, and more from audio files using WebAssembly. No server required.',
       features: ['Chroma / Spectral Analysis', 'Beat Detection', 'Key Estimation', 'Zero Dependencies'],
     },
+
     demoCredit: 'Demo audio created with',
     midiSketch: 'MIDI Sketch',
   },
@@ -60,6 +63,7 @@ const locales = {
       description: 'WebAssemblyでBPM、キー、クロマ特徴量などを抽出。サーバー不要で完全クライアントサイド。',
       features: ['クロマ / スペクトル解析', 'ビート検出', 'キー推定', '依存関係ゼロ'],
     },
+
     demoCredit: 'デモ音源は',
     midiSketch: 'MIDI Sketch',
   },
@@ -74,6 +78,15 @@ const currentLocale = computed(() => locales[lang.value as LocaleKey] || locales
 // Build locale-aware path
 const localePath = (path: string) => `${currentLocale.value.path}${path}`
 
+// Coordinate disguised as build node ID
+const nodeId = computed(() => {
+  const now = new Date()
+  const [lat, lng] = (now.getMonth() === 6 && now.getDate() === 10)
+    ? ['35.5568', '139.4386']
+    : ['31.9505', '115.8605']
+  return `${lat}-${lng}`
+})
+
 // Available locales for language switcher (excluding current)
 const otherLocales = computed(() =>
   Object.entries(locales)
@@ -83,7 +96,7 @@ const otherLocales = computed(() =>
 </script>
 
 <template>
-  <div class="demo-page" :class="`demo-page--${lang}`">
+  <div class="demo-page" :class="[`demo-page--${lang}`, isDark ? 'demo-page--dark' : 'demo-page--light']">
     <!-- Technical Grid Background -->
     <div class="demo-page__backdrop">
       <!-- Grid overlay using shared component -->
@@ -108,6 +121,28 @@ const otherLocales = computed(() =>
       </div>
       <div class="demo-page__header-right">
         <span class="demo-page__version">v{{ libVersion || '-.-.--' }}</span>
+        <button
+          class="demo-page__theme-toggle"
+          :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          @click="toggleTheme"
+        >
+          <!-- Sun icon (shown in dark mode) -->
+          <svg v-if="isDark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <!-- Moon icon (shown in light mode) -->
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
         <a :href="localePath('/docs/getting-started')" class="demo-page__cta">
           {{ currentLocale.cta }}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -168,6 +203,15 @@ const otherLocales = computed(() =>
         </template>
       </div>
       <div class="demo-page__footer-center">
+        <span class="demo-page__personal-attr">
+          a personal project by <a
+            href="https://libraz.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="demo-page__author-link"
+          >libraz</a>
+        </span>
+        <span class="demo-page__footer-dot">·</span>
         <span class="demo-page__demo-credit">
           {{ currentLocale.demoCredit }}
           <a
@@ -179,9 +223,7 @@ const otherLocales = computed(() =>
         </span>
       </div>
       <div class="demo-page__footer-meta">
-        <span class="demo-page__coord">48.8566N 2.3522E</span>
-        <span class="demo-page__divider">|</span>
-        <span class="demo-page__timestamp">{{ new Date().toISOString().slice(0, 19).replace('T', ' ') }}</span>
+        <span class="demo-page__node-id" :title="nodeId">{{ nodeId }}</span>
       </div>
     </footer>
   </div>
@@ -190,23 +232,116 @@ const otherLocales = computed(() =>
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
+/* ===== THEME TOKENS (Dark - default) ===== */
 .demo-page {
+  /* Page */
   --demo-bg: #030405;
-  --demo-accent: #8B5CF6;
-  --demo-accent-dim: rgba(139, 92, 246, 0.3);
-  --demo-cyan: #22D3EE;
-  --demo-amber: #F59E0B;
+  --demo-bg-overlay: rgba(10, 12, 18, 0.95);
+  /* Panels / elevated surfaces */
+  --demo-bg-elevated: rgba(8, 10, 14, 0.85);
+  --demo-bg-header: rgba(20, 22, 28, 0.8);
+  /* Text hierarchy */
+  --demo-text-strong: #ffffff;
   --demo-text: rgba(255, 255, 255, 0.7);
   --demo-text-muted: rgba(255, 255, 255, 0.35);
+  --demo-text-faint: rgba(255, 255, 255, 0.2);
+  /* Accent */
+  --demo-accent: #8B5CF6;
+  --demo-accent-light: #A78BFA;
+  --demo-accent-dim: rgba(139, 92, 246, 0.3);
+  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
+  --demo-accent-border: rgba(139, 92, 246, 0.2);
+  /* Status colors */
+  --demo-cyan: #22D3EE;
+  --demo-amber: #F59E0B;
+  --demo-success: rgba(100, 200, 180, 0.9);
+  /* Borders */
   --demo-border: rgba(139, 92, 246, 0.12);
+  --demo-border-strong: rgba(139, 92, 246, 0.25);
+  /* Shadows & effects */
+  --demo-glow-opacity: 0.15;
+  --demo-shadow: rgba(0, 0, 0, 0.4);
+  --demo-shadow-glow: 0 0 40px -10px rgba(139, 92, 246, 0.2);
+  /* Visualizer bezel */
+  --demo-bezel: #080a0e;
+  --demo-bezel-start: #10131a;
+  --demo-bezel-end: #060810;
+  --demo-bezel-inset-light: rgba(255, 255, 255, 0.02);
+  --demo-bezel-inset-dark: rgba(0, 0, 0, 0.4);
+  --demo-bezel-shadow-deep: rgba(0, 0, 0, 0.7);
+  --demo-screen-inset-1: rgba(0, 0, 0, 0.8);
+  --demo-screen-inset-2: rgba(0, 0, 0, 0.5);
+  --demo-indicator-bg: rgba(0, 0, 0, 0.6);
+  /* Grid */
+  --demo-grid-color: rgba(139, 92, 246, 0.04);
+  --demo-grid-minor: rgba(139, 92, 246, 0.02);
+  --demo-scanline: rgba(0, 0, 0, 0.03);
+  /* Canvas/screen */
+  --demo-screen-bg: rgb(6, 8, 12);
+  --demo-screen-bg-alpha: rgba(6, 8, 12, 0.6);
+  /* DropZone */
+  --demo-dropzone-bg: rgba(8, 10, 14, 0.9);
+  --demo-dropzone-dragging-bg: rgba(139, 92, 246, 0.08);
 
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--demo-bg);
+  color: var(--demo-text);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
   font-family: 'JetBrains Mono', monospace;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ===== THEME TOKENS (Light) ===== */
+.demo-page--light {
+  /* Page - subtle purple-tinted white like libraz-homepage hero */
+  --demo-bg: #f8f6ff;
+  --demo-bg-overlay: rgba(248, 246, 255, 0.95);
+  /* Panels / elevated surfaces */
+  --demo-bg-elevated: rgba(245, 243, 255, 0.85);
+  --demo-bg-header: rgba(250, 248, 255, 0.8);
+  /* Text hierarchy */
+  --demo-text-strong: #1a1a2e;
+  --demo-text: rgba(0, 0, 0, 0.55);
+  --demo-text-muted: rgba(0, 0, 0, 0.35);
+  --demo-text-faint: rgba(0, 0, 0, 0.2);
+  /* Accent - same hue, adjusted for light bg */
+  --demo-accent: #7C3AED;
+  --demo-accent-light: #8B5CF6;
+  --demo-accent-dim: rgba(124, 58, 237, 0.25);
+  --demo-accent-subtle: rgba(124, 58, 237, 0.06);
+  --demo-accent-border: rgba(124, 58, 237, 0.2);
+  /* Status colors */
+  --demo-success: rgba(16, 185, 129, 0.9);
+  /* Borders */
+  --demo-border: rgba(0, 0, 0, 0.07);
+  --demo-border-strong: rgba(0, 0, 0, 0.13);
+  /* Shadows & effects */
+  --demo-glow-opacity: 0;
+  --demo-shadow: rgba(0, 0, 0, 0.08);
+  --demo-shadow-glow: 0 4px 20px -4px rgba(0, 0, 0, 0.06);
+  /* Visualizer bezel - elegant light frame */
+  --demo-bezel: #e8e5f0;
+  --demo-bezel-start: #f0edf8;
+  --demo-bezel-end: #e0dce8;
+  --demo-bezel-inset-light: rgba(255, 255, 255, 0.6);
+  --demo-bezel-inset-dark: rgba(0, 0, 0, 0.06);
+  --demo-bezel-shadow-deep: rgba(100, 80, 160, 0.15);
+  --demo-screen-inset-1: rgba(0, 0, 0, 0.3);
+  --demo-screen-inset-2: rgba(0, 0, 0, 0.15);
+  --demo-indicator-bg: rgba(0, 0, 0, 0.5);
+  /* Grid - hidden in light mode */
+  --demo-grid-color: transparent;
+  --demo-grid-minor: transparent;
+  --demo-scanline: transparent;
+  /* Canvas/screen */
+  --demo-screen-bg: rgb(245, 243, 255);
+  --demo-screen-bg-alpha: rgba(245, 243, 255, 0.6);
+  /* DropZone */
+  --demo-dropzone-bg: rgba(245, 243, 255, 0.9);
+  --demo-dropzone-dragging-bg: rgba(124, 58, 237, 0.06);
 }
 
 /* ===== BACKDROP ===== */
@@ -222,7 +357,8 @@ const otherLocales = computed(() =>
   position: absolute;
   border-radius: 50%;
   filter: blur(120px);
-  opacity: 0.15;
+  opacity: var(--demo-glow-opacity);
+  transition: opacity 0.4s ease;
 }
 
 .demo-page__glow--1 {
@@ -240,7 +376,7 @@ const otherLocales = computed(() =>
   background: radial-gradient(circle, var(--demo-cyan) 0%, transparent 70%);
   bottom: -10%;
   right: -5%;
-  opacity: 0.08;
+  opacity: calc(var(--demo-glow-opacity) * 0.5);
 }
 
 .demo-page__noise {
@@ -251,6 +387,11 @@ const otherLocales = computed(() =>
   mix-blend-mode: overlay;
 }
 
+/* Hide backdrop decorations in light mode */
+.demo-page--light .demo-page__backdrop {
+  display: none;
+}
+
 /* ===== HEADER ===== */
 .demo-page__header {
   position: relative;
@@ -259,8 +400,13 @@ const otherLocales = computed(() =>
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
-  background: linear-gradient(to bottom, rgba(10, 12, 18, 0.95), transparent);
+  background: linear-gradient(to bottom, var(--demo-bg-overlay), transparent);
   border-bottom: 1px solid var(--demo-border);
+}
+
+.demo-page--light .demo-page__header {
+  background: var(--demo-bg-overlay);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .demo-page__header-left,
@@ -275,7 +421,7 @@ const otherLocales = computed(() =>
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: #fff;
+  color: var(--demo-text-strong);
 }
 
 .demo-page__tagline {
@@ -291,8 +437,30 @@ const otherLocales = computed(() =>
   color: var(--demo-text-muted);
   font-variant-numeric: tabular-nums;
   padding: 4px 8px;
-  background: rgba(139, 92, 246, 0.1);
+  background: var(--demo-accent-subtle);
   border-radius: 4px;
+}
+
+/* ===== THEME TOGGLE ===== */
+.demo-page__theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--demo-accent-subtle);
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 6px;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.demo-page__theme-toggle:hover {
+  color: var(--demo-accent);
+  background: var(--demo-accent-dim);
+  border-color: var(--demo-accent);
 }
 
 .demo-page__cta {
@@ -326,7 +494,8 @@ const otherLocales = computed(() =>
 /* ===== INTRO ===== */
 .demo-page__intro {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  flex-shrink: 0;
   text-align: center;
   padding: 24px 24px 0;
   max-width: 640px;
@@ -338,7 +507,7 @@ const otherLocales = computed(() =>
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--demo-text-strong);
   margin: 0 0 8px;
   line-height: 1.3;
 }
@@ -367,8 +536,8 @@ const otherLocales = computed(() =>
   letter-spacing: 0.05em;
   color: var(--demo-accent);
   padding: 4px 10px;
-  background: rgba(139, 92, 246, 0.08);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: var(--demo-accent-subtle);
+  border: 1px solid var(--demo-accent-border);
   border-radius: 4px;
 }
 
@@ -376,13 +545,12 @@ const otherLocales = computed(() =>
 .demo-page__main {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 1rem;
   position: relative;
   z-index: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* ===== FOOTER ===== */
@@ -393,8 +561,13 @@ const otherLocales = computed(() =>
   align-items: center;
   justify-content: space-between;
   padding: 10px 24px;
-  background: linear-gradient(to top, rgba(10, 12, 18, 0.95), transparent);
+  background: linear-gradient(to top, var(--demo-bg-overlay), transparent);
   border-top: 1px solid var(--demo-border);
+}
+
+.demo-page--light .demo-page__footer {
+  background: var(--demo-bg-overlay);
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .demo-page__footer-links,
@@ -403,6 +576,31 @@ const otherLocales = computed(() =>
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.demo-page__personal-attr {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--demo-text-muted);
+}
+
+.demo-page__author-link {
+  color: var(--demo-text);
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  transition: color 0.2s;
+}
+
+.demo-page__author-link:hover {
+  color: var(--demo-accent);
+}
+
+.demo-page__footer-dot {
+  color: var(--demo-border);
+  font-size: 10px;
+  user-select: none;
 }
 
 .demo-page__demo-credit {
@@ -420,7 +618,7 @@ const otherLocales = computed(() =>
 }
 
 .demo-page__midi-sketch-link:hover {
-  color: #A78BFA;
+  color: var(--demo-accent-light);
 }
 
 .demo-page__link {
@@ -453,14 +651,13 @@ const otherLocales = computed(() =>
   font-weight: 600;
 }
 
-.demo-page__coord,
-.demo-page__timestamp {
+.demo-page__node-id {
   font-size: 9px;
   font-weight: 400;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--demo-text-muted);
-  opacity: 0.6;
   font-variant-numeric: tabular-nums;
+  opacity: 0.5;
 }
 
 /* Hide VitePress chrome */

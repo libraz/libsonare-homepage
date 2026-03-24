@@ -1,11 +1,15 @@
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, type Ref } from 'vue'
 
 export interface WaveformOptions {
   barWidth?: number
   barGap?: number
-  barColor?: string
-  progressColor?: string
-  backgroundColor?: string
+  barColor?: string | Ref<string>
+  progressColor?: string | Ref<string>
+  backgroundColor?: string | Ref<string>
+}
+
+function unref(v: string | Ref<string>): string {
+  return typeof v === 'string' ? v : v.value
 }
 
 export function useWaveform(
@@ -25,6 +29,7 @@ export function useWaveform(
   const beatMarkers = ref<number[]>([])
 
   let resizeObserver: ResizeObserver | null = null
+  let currentAudioBuffer: AudioBuffer | null = null
 
   function extractWaveformData(audioBuffer: AudioBuffer, numBars = 200): number[] {
     const rawData = audioBuffer.numberOfChannels > 1
@@ -75,11 +80,18 @@ export function useWaveform(
   }
 
   function setAudioBuffer(audioBuffer: AudioBuffer) {
+    currentAudioBuffer = audioBuffer
+    recalcBars()
+  }
+
+  function recalcBars() {
     const canvas = canvasRef.value
-    if (!canvas) return
+    if (!canvas || !currentAudioBuffer) return
 
     const numBars = Math.floor(canvas.width / (barWidth + barGap))
-    waveformData.value = extractWaveformData(audioBuffer, numBars)
+    if (numBars > 0) {
+      waveformData.value = extractWaveformData(currentAudioBuffer, numBars)
+    }
     draw()
   }
 
@@ -103,7 +115,7 @@ export function useWaveform(
     const data = waveformData.value
 
     // Clear
-    ctx.fillStyle = backgroundColor
+    ctx.fillStyle = unref(backgroundColor)
     ctx.fillRect(0, 0, width, height)
 
     if (data.length === 0) return
@@ -112,13 +124,15 @@ export function useWaveform(
     const centerY = height / 2
 
     // Draw bars
+    const bc = unref(barColor)
+    const pc = unref(progressColor)
     for (let i = 0; i < data.length; i++) {
       const x = i * totalBarWidth
       const barHeight = data[i] * height * 0.8
       const y = centerY - barHeight / 2
 
       const barProgress = i / data.length
-      ctx.fillStyle = barProgress <= progress.value ? progressColor : barColor
+      ctx.fillStyle = barProgress <= progress.value ? pc : bc
 
       ctx.beginPath()
       ctx.roundRect(x, y, barWidth, barHeight, 2)
@@ -156,7 +170,7 @@ export function useWaveform(
       ctx.scale(dpr, dpr)
     }
 
-    draw()
+    recalcBars()
   }
 
   onMounted(() => {

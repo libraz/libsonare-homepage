@@ -16,7 +16,7 @@ defineProps<{
 
 <style scoped>
 .status-indicator {
-  --status-color: rgba(255, 255, 255, 0.3);
+  --status-color: var(--demo-text-muted, rgba(255, 255, 255, 0.3));
 
   display: inline-flex;
   align-items: center;
@@ -30,11 +30,11 @@ defineProps<{
 }
 
 .status-indicator--offline {
-  --status-color: rgba(255, 255, 255, 0.2);
+  --status-color: var(--demo-text-faint, rgba(255, 255, 255, 0.2));
 }
 
 .status-indicator--idle {
-  --status-color: rgba(255, 255, 255, 0.4);
+  --status-color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
 }
 
 .status-indicator--warning {

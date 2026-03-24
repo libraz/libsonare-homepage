@@ -120,10 +120,10 @@ function isValidAudioFile(file: File): boolean {
 
 <style scoped>
 .dropzone {
-  --accent: #8B5CF6;
-  --accent-dim: rgba(139, 92, 246, 0.3);
-  --bg: rgba(8, 10, 14, 0.9);
-  --border: rgba(139, 92, 246, 0.2);
+  --accent: var(--demo-accent, #8B5CF6);
+  --accent-dim: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
+  --bg: var(--demo-dropzone-bg, rgba(8, 10, 14, 0.9));
+  --border: var(--demo-accent-border, rgba(139, 92, 246, 0.2));
 
   position: relative;
   display: flex;
@@ -146,8 +146,8 @@ function isValidAudioFile(file: File): boolean {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(rgba(139, 92, 246, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 92, 246, 0.02) 1px, transparent 1px);
+    linear-gradient(var(--demo-grid-minor, rgba(139, 92, 246, 0.02)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--demo-grid-minor, rgba(139, 92, 246, 0.02)) 1px, transparent 1px);
   background-size: 20px 20px;
   opacity: 0.5;
   pointer-events: none;
@@ -155,7 +155,7 @@ function isValidAudioFile(file: File): boolean {
 
 .dropzone:hover {
   border-color: var(--accent-dim);
-  box-shadow: 0 0 40px -10px rgba(139, 92, 246, 0.2);
+  box-shadow: var(--demo-shadow-glow, 0 0 40px -10px rgba(139, 92, 246, 0.2));
 }
 
 .dropzone:hover .dropzone__icon {
@@ -164,7 +164,7 @@ function isValidAudioFile(file: File): boolean {
 
 .dropzone--dragging {
   border-color: var(--accent);
-  background: rgba(139, 92, 246, 0.08);
+  background: var(--demo-dropzone-dragging-bg, rgba(139, 92, 246, 0.08));
   transform: scale(1.01);
   box-shadow: 0 0 60px -10px rgba(139, 92, 246, 0.3);
 }
@@ -204,7 +204,7 @@ function isValidAudioFile(file: File): boolean {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--demo-text-strong, rgba(255, 255, 255, 0.85));
   text-transform: uppercase;
 }
 
@@ -212,7 +212,7 @@ function isValidAudioFile(file: File): boolean {
   font-size: 11px;
   font-weight: 400;
   letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
 }
 
 .dropzone__formats {
@@ -220,7 +220,7 @@ function isValidAudioFile(file: File): boolean {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: rgba(139, 92, 246, 0.1);
+  background: var(--demo-accent-subtle, rgba(139, 92, 246, 0.1));
   border: 1px solid var(--border);
   border-radius: 4px;
 }
@@ -229,7 +229,7 @@ function isValidAudioFile(file: File): boolean {
   font-size: 8px;
   font-weight: 500;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--demo-text-faint, rgba(255, 255, 255, 0.35));
 }
 
 .dropzone__format-list {

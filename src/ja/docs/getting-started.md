@@ -7,20 +7,24 @@ libsonareは、音楽情報検索（MIR）のためのC++17音声解析ライブ
 - **BPM検出** - テンポグラムと自己相関を使用した正確なテンポ推定
 - **キー検出** - Krumhansl-Schmucklerアルゴリズムによる調性検出
 - **ビート検出** - 動的計画法に基づくビート抽出
-- **コード認識** - 84種類のコードタイプに対応したテンプレートマッチング
+- **コード認識** - 108種類のコードタイプに対応したテンプレートマッチング
 - **セクション検出** - 構造的セグメンテーション（イントロ、Aメロ、サビなど）
+- **メロディ / ピッチ検出** - YIN / pYIN アルゴリズムによる基本周波数検出
 - **音響特性** - 音色、ダイナミクス、リズム分析
+- **スペクトル特徴量** - メルスペクトログラム、MFCC、クロマ、CQT/VQT、スペクトル重心/平坦度
+- **オーディオエフェクト** - HPSS、タイムストレッチ、ピッチシフト、ノーマライズ、トリム
+- **ストリーミング解析** - リアルタイムのチャンク単位処理とプログレッシブBPM/キー/コード推定
 
 ## クイックスタート
 
 ::: warning パッケージ未公開
-npm パッケージ `@libraz/sonare` は現在ベータ版で、まだ公開されていません。[インストール](/ja/docs/installation)で代替オプションを確認してください。
+npm パッケージ `@libraz/libsonare` は現在ベータ版で、まだ公開されていません。[インストール](/ja/docs/installation)で代替オプションを確認してください。
 :::
 
 ### ブラウザ（WebAssembly）
 
 ```typescript
-import { init, analyze } from '@libraz/sonare';
+import { init, analyze } from '@libraz/libsonare';
 
 // WASMモジュールを初期化
 await init();
@@ -33,9 +37,9 @@ console.log('キー:', result.key.name);
 console.log('コード:', result.chords);
 ```
 
-### Node.js / C++
+### Python / Node.js（ネイティブ）
 
-ネイティブでの使用方法は[インストール](/ja/docs/installation)を参照してください。
+Python（ctypes）とNode.js（N-API）向けのネイティブバインディングが利用可能です。インストールとAPIリファレンスは[ネイティブバインディング](/ja/docs/native-bindings)を参照してください。
 
 ## 今すぐ試す
 

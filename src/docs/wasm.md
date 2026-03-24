@@ -5,30 +5,39 @@ libsonare can be compiled to WebAssembly for audio analysis directly in web brow
 ## Installation
 
 ::: warning Package Not Published
-The npm package `@libraz/sonare` is currently in beta and not yet publicly available. For now, use the WASM files directly from the repository or build from source.
+The npm package `@libraz/libsonare` is currently in beta and not yet publicly available. For now, use the WASM files directly from the repository or build from source.
 :::
 
 ### npm/yarn
 
-```bash
-# Not yet available - coming soon
-npm install @libraz/sonare
-# or
-yarn add @libraz/sonare
+::: code-group
+
+```bash [npm]
+npm install @libraz/libsonare
 ```
+
+```bash [yarn]
+yarn add @libraz/libsonare
+```
+
+```bash [pnpm]
+pnpm add @libraz/libsonare
+```
+
+:::
 
 ### CDN
 
 ```html
 <script type="module">
-  import { init, detectBpm } from 'https://unpkg.com/@libraz/sonare';
+  import { init, detectBpm } from 'https://unpkg.com/@libraz/libsonare';
 </script>
 ```
 
 ## Basic Usage
 
 ```typescript
-import { init, detectBpm, detectKey, analyze } from '@libraz/sonare';
+import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
 
 async function analyzeAudio() {
   // Initialize WASM module
@@ -84,7 +93,7 @@ input.addEventListener('change', async (e) => {
 ## Progress Reporting
 
 ```typescript
-import { init, analyzeWithProgress } from '@libraz/sonare';
+import { init, analyzeWithProgress } from '@libraz/libsonare';
 
 await init();
 
@@ -105,7 +114,7 @@ Offload analysis to a Web Worker to avoid blocking the main thread.
 **worker.ts:**
 
 ```typescript
-import { init, analyze, AnalysisResult } from '@libraz/sonare';
+import { init, analyze, AnalysisResult } from '@libraz/libsonare';
 
 let initialized = false;
 
@@ -178,7 +187,7 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
 For BPM detection, 22050 Hz is sufficient:
 
 ```typescript
-import { resample, detectBpm } from '@libraz/sonare';
+import { resample, detectBpm } from '@libraz/libsonare';
 
 // Downsample for faster analysis
 const downsampled = resample(samples, 48000, 22050);
@@ -211,7 +220,7 @@ const result = analyzeSegment(samples, sampleRate, 60, 90);
 
 ```tsx
 import { useState } from 'react';
-import { init, analyzeWithProgress, AnalysisResult } from '@libraz/sonare';
+import { init, analyzeWithProgress, AnalysisResult } from '@libraz/libsonare';
 
 function AudioAnalyzer() {
   const [progress, setProgress] = useState(0);
@@ -298,7 +307,7 @@ flowchart TB
 ### Basic Example
 
 ```typescript
-import { init, StreamAnalyzer } from '@libraz/sonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 async function setupStreaming() {
   await init();
@@ -356,7 +365,7 @@ Loading WASM in AudioWorklet requires special handling. The WASM module must be 
 **analyzer-worklet.ts:**
 
 ```typescript
-import { StreamAnalyzer } from '@libraz/sonare';
+import { StreamAnalyzer } from '@libraz/libsonare';
 
 class AnalyzerWorklet extends AudioWorkletProcessor {
   private analyzer: StreamAnalyzer;

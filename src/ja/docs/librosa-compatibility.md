@@ -193,7 +193,7 @@ const melSlaney = hzToMel(hz);     // Slaney（デフォルト）
 ### 2. CQT
 
 - **librosa**: 完全な CQT 実装
-- **libsonare**: STFT ベースのクロマのみ
+- **libsonare**: 完全な CQT / VQT 実装
 
 ### 3. 窓の正規化
 
@@ -217,7 +217,7 @@ print(f"BPM: {tempo}")
 
 **変更後 (TypeScript):**
 ```typescript
-import { init, detectBpm, resample } from '@libraz/sonare';
+import { init, detectBpm, resample } from '@libraz/libsonare';
 
 await init();
 

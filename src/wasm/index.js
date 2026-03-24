@@ -870,3 +870,4 @@ export class StreamAnalyzer {
 // Re-exports
 // ============================================================================
 export { PitchClass as Pitch };
+//# sourceMappingURL=index.js.map

@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { isDark } = useTheme()
+const chromaBg = computed(() => isDark.value ? 'rgba(10, 10, 15, 0.95)' : 'rgba(245, 243, 255, 0.95)')
+const labelColor = computed(() => isDark.value ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)')
+const playheadColor = computed(() => isDark.value ? '#fff' : '#1a1a2e')
 
 const props = defineProps<{
   chromaData: {
@@ -41,7 +47,7 @@ function drawChroma() {
   const height = canvas.value.height
 
   // Clear
-  ctx.value.fillStyle = 'rgba(10, 10, 15, 0.95)'
+  ctx.value.fillStyle = chromaBg.value
   ctx.value.fillRect(0, 0, width, height)
 
   const barWidth = width / nFrames
@@ -70,7 +76,7 @@ function drawChroma() {
     const progress = props.currentTime / props.duration
     const x = progress * width
 
-    ctx.value.strokeStyle = '#fff'
+    ctx.value.strokeStyle = playheadColor.value
     ctx.value.lineWidth = 2
     ctx.value.beginPath()
     ctx.value.moveTo(x, 0)
@@ -79,7 +85,7 @@ function drawChroma() {
   }
 
   // Draw note labels on left
-  ctx.value.fillStyle = 'rgba(255, 255, 255, 0.7)'
+  ctx.value.fillStyle = labelColor.value
   ctx.value.font = '10px monospace'
   ctx.value.textAlign = 'left'
   ctx.value.textBaseline = 'middle'
@@ -141,7 +147,7 @@ onUnmounted(() => {
   height: 120px;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(10, 10, 15, 0.6);
+  background: var(--demo-screen-bg-alpha, rgba(10, 10, 15, 0.6));
 }
 
 .chroma-canvas {

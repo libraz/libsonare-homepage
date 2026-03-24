@@ -16,7 +16,7 @@ defineProps<{
 
 <style scoped>
 .grid-overlay {
-  --grid-color: rgba(139, 92, 246, 0.04);
+  --grid-color: var(--demo-grid-color, rgba(139, 92, 246, 0.04));
   --grid-size-major: 80px;
   --grid-size-minor: 16px;
 
@@ -42,8 +42,8 @@ defineProps<{
   background-image:
     linear-gradient(var(--grid-color) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-color) 1px, transparent 1px),
-    linear-gradient(rgba(139, 92, 246, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 92, 246, 0.02) 1px, transparent 1px);
+    linear-gradient(var(--demo-grid-minor, rgba(139, 92, 246, 0.02)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--demo-grid-minor, rgba(139, 92, 246, 0.02)) 1px, transparent 1px);
   background-size:
     var(--grid-size-major) var(--grid-size-major),
     var(--grid-size-major) var(--grid-size-major),
@@ -60,8 +60,8 @@ defineProps<{
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
+    var(--demo-scanline, rgba(0, 0, 0, 0.03)) 2px,
+    var(--demo-scanline, rgba(0, 0, 0, 0.03)) 4px
   );
 }
 </style>

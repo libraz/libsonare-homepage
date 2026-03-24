@@ -5,30 +5,39 @@ libsonare は WebAssembly にコンパイルでき、ブラウザで直接オー
 ## インストール
 
 ::: warning パッケージ未公開
-npm パッケージ `@libraz/sonare` は現在ベータ版で、まだ公開されていません。現時点では、リポジトリから直接 WASM ファイルを使用するか、ソースからビルドしてください。
+npm パッケージ `@libraz/libsonare` は現在ベータ版で、まだ公開されていません。現時点では、リポジトリから直接 WASM ファイルを使用するか、ソースからビルドしてください。
 :::
 
 ### npm/yarn
 
-```bash
-# 未公開 - 近日公開予定
-npm install @libraz/sonare
-# または
-yarn add @libraz/sonare
+::: code-group
+
+```bash [npm]
+npm install @libraz/libsonare
 ```
+
+```bash [yarn]
+yarn add @libraz/libsonare
+```
+
+```bash [pnpm]
+pnpm add @libraz/libsonare
+```
+
+:::
 
 ### CDN
 
 ```html
 <script type="module">
-  import { init, detectBpm } from 'https://unpkg.com/@libraz/sonare';
+  import { init, detectBpm } from 'https://unpkg.com/@libraz/libsonare';
 </script>
 ```
 
 ## 基本的な使い方
 
 ```typescript
-import { init, detectBpm, detectKey, analyze } from '@libraz/sonare';
+import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
 
 async function analyzeAudio() {
   // WASM モジュールを初期化
@@ -84,7 +93,7 @@ input.addEventListener('change', async (e) => {
 ## 進捗レポート
 
 ```typescript
-import { init, analyzeWithProgress } from '@libraz/sonare';
+import { init, analyzeWithProgress } from '@libraz/libsonare';
 
 await init();
 
@@ -105,7 +114,7 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 **worker.ts:**
 
 ```typescript
-import { init, analyze, AnalysisResult } from '@libraz/sonare';
+import { init, analyze, AnalysisResult } from '@libraz/libsonare';
 
 let initialized = false;
 
@@ -178,7 +187,7 @@ async function getMonoSamples(audioBuffer: AudioBuffer): Promise<Float32Array> {
 BPM 検出には 22050 Hz で十分です:
 
 ```typescript
-import { resample, detectBpm } from '@libraz/sonare';
+import { resample, detectBpm } from '@libraz/libsonare';
 
 // 高速解析のためにダウンサンプル
 const downsampled = resample(samples, 48000, 22050);
@@ -211,7 +220,7 @@ const result = analyzeSegment(samples, sampleRate, 60, 90);
 
 ```tsx
 import { useState } from 'react';
-import { init, analyzeWithProgress, AnalysisResult } from '@libraz/sonare';
+import { init, analyzeWithProgress, AnalysisResult } from '@libraz/libsonare';
 
 function AudioAnalyzer() {
   const [progress, setProgress] = useState(0);
@@ -298,7 +307,7 @@ flowchart TB
 ### 基本的な例
 
 ```typescript
-import { init, StreamAnalyzer } from '@libraz/sonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 async function setupStreaming() {
   await init();

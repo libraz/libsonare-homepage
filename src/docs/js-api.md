@@ -3,7 +3,7 @@
 Complete API reference for libsonare JavaScript/TypeScript interface.
 
 ::: warning Package Not Published
-The npm package `@libraz/sonare` is not yet publicly available. For now, use the WASM files directly from the repository or build from source.
+The npm package `@libraz/libsonare` is not yet publicly available. For now, use the WASM files directly from the repository or build from source.
 :::
 
 ## Overview
@@ -23,10 +23,21 @@ New to audio analysis? See the [Glossary](/docs/glossary) for explanations of te
 
 ## Installation
 
-```bash
-# Not yet available - coming soon
-npm install @libraz/sonare
+::: code-group
+
+```bash [npm]
+npm install @libraz/libsonare
 ```
+
+```bash [yarn]
+yarn add @libraz/libsonare
+```
+
+```bash [pnpm]
+pnpm add @libraz/libsonare
+```
+
+:::
 
 ## Import
 
@@ -40,7 +51,7 @@ import {
   analyze,
   analyzeWithProgress,
   version
-} from '@libraz/sonare';
+} from '@libraz/libsonare';
 ```
 
 ## Initialization
@@ -58,7 +69,7 @@ async function init(options?: {
 **Example:**
 
 ```typescript
-import { init, detectBpm } from '@libraz/sonare';
+import { init, detectBpm } from '@libraz/libsonare';
 
 // Basic initialization
 await init();
@@ -670,6 +681,18 @@ class StreamAnalyzer {
   // Current time position (seconds)
   currentTime(): number;
 
+  // Get the sample rate
+  sampleRate(): number;
+
+  // Set expected total duration for pattern lock timing
+  setExpectedDuration(durationSeconds: number): void;
+
+  // Set normalization gain for loud/compressed audio
+  setNormalizationGain(gain: number): void;
+
+  // Set tuning reference frequency (default: 440 Hz)
+  setTuningRefHz(refHz: number): void;
+
   // Release resources (call when done)
   dispose(): void;
 }
@@ -768,7 +791,7 @@ interface ProgressiveEstimate {
 ### Basic Streaming Example
 
 ```typescript
-import { init, StreamAnalyzer } from '@libraz/sonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 await init();
 
@@ -834,7 +857,7 @@ sequenceDiagram
 **worklet-processor.ts:**
 
 ```typescript
-import { StreamAnalyzer } from '@libraz/sonare';
+import { StreamAnalyzer } from '@libraz/libsonare';
 
 class AnalyzerProcessor extends AudioWorkletProcessor {
   private analyzer: StreamAnalyzer;

@@ -3,15 +3,24 @@
 ## npm (Browser/Node.js)
 
 ::: warning Package Not Published
-The npm package `@libraz/sonare` is currently in beta and not yet publicly available. For now, build from source or use the WASM files directly from the repository.
+The npm package `@libraz/libsonare` is currently in beta and not yet publicly available. For now, build from source or use the WASM files directly from the repository.
 :::
 
-```bash
-# Not yet available - coming soon
-npm install @libraz/sonare
-# or
-yarn add @libraz/sonare
+::: code-group
+
+```bash [npm]
+npm install @libraz/libsonare
 ```
+
+```bash [yarn]
+yarn add @libraz/libsonare
+```
+
+```bash [pnpm]
+pnpm add @libraz/libsonare
+```
+
+:::
 
 ## Building from Source
 
@@ -37,12 +46,16 @@ make -j$(nproc)
 make build-wasm
 ```
 
+## Native Bindings (Python / Node.js)
+
+For desktop use, native bindings provide direct C++ performance. See the [Native Bindings](/docs/native-bindings) page for Python and Node.js installation and usage.
+
 ## Usage
 
 ### Browser
 
 ```typescript
-import { init, detectBpm, detectKey, analyze } from '@libraz/sonare';
+import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
 
 // Initialize WASM module
 await init();

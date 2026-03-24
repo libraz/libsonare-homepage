@@ -719,9 +719,7 @@ onMounted(() => {
 <style scoped>
 .analyzer {
   width: 100%;
-  height: 100%;
   max-width: 1400px;
-  max-height: calc(100vh - 120px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -781,7 +779,7 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   fill: none;
-  stroke: rgba(255, 255, 255, 0.9);
+  stroke: var(--demo-text-strong, rgba(255, 255, 255, 0.9));
   stroke-width: 2;
   filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)) drop-shadow(0 0 16px rgba(139, 92, 246, 0.5));
 }
@@ -814,7 +812,7 @@ onMounted(() => {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.15em;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.5));
   text-transform: uppercase;
 }
 
@@ -901,7 +899,7 @@ onMounted(() => {
 .analyzer__progress-text {
   font-size: 10px;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
 }
 
 /* ===== MAIN LAYOUT ===== */
@@ -929,14 +927,24 @@ onMounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow: hidden;
+  position: relative;
 }
 
 .analyzer__scope-container :deep(.scope) {
   max-width: 100%;
-  height: auto;
   margin: 0;
+  position: static;
+}
+
+.analyzer__scope-container :deep(.scope__footer) {
+  position: absolute;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  margin: 10px 0;
 }
 
 /* ===== TRANSPORT ===== */
@@ -946,8 +954,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  background: rgba(8, 10, 14, 0.85);
-  border: 1px solid rgba(139, 92, 246, 0.15);
+  background: var(--demo-bg-elevated, rgba(8, 10, 14, 0.85));
+  border: 1px solid var(--demo-border-strong, rgba(139, 92, 246, 0.15));
   border-radius: 8px;
   backdrop-filter: blur(10px);
 }
@@ -970,21 +978,21 @@ onMounted(() => {
 .analyzer__time {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--demo-text-strong, rgba(255, 255, 255, 0.8));
 }
 
 .analyzer__time-current {
-  color: #8B5CF6;
+  color: var(--demo-accent, #8B5CF6);
   font-weight: 600;
 }
 
 .analyzer__time-sep {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
   margin: 0 4px;
 }
 
 .analyzer__time-total {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
 }
 
 /* ===== SIDEBAR ===== */
@@ -1018,7 +1026,7 @@ onMounted(() => {
 
 .analyzer__metrics-divider {
   height: 1px;
-  background: rgba(139, 92, 246, 0.15);
+  background: var(--demo-border-strong, rgba(139, 92, 246, 0.15));
   margin: 4px 0;
 }
 
@@ -1034,14 +1042,14 @@ onMounted(() => {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
   min-width: 50px;
 }
 
 .analyzer__metric-hero-value {
   font-size: 20px;
   font-weight: 600;
-  color: #A78BFA;
+  color: var(--demo-accent-light, #A78BFA);
   font-variant-numeric: tabular-nums;
   min-width: 60px;
 }
@@ -1053,7 +1061,7 @@ onMounted(() => {
 
 .analyzer__metric-hero-conf {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--demo-text-faint, rgba(255, 255, 255, 0.3));
   margin-left: auto;
 }
 
@@ -1061,8 +1069,8 @@ onMounted(() => {
 .analyzer__pattern {
   margin-top: 4px;
   padding: 8px 10px;
-  background: rgba(139, 92, 246, 0.08);
-  border: 1px solid rgba(139, 92, 246, 0.15);
+  background: var(--demo-accent-subtle, rgba(139, 92, 246, 0.08));
+  border: 1px solid var(--demo-border-strong, rgba(139, 92, 246, 0.15));
   border-radius: 6px;
 }
 
@@ -1077,13 +1085,13 @@ onMounted(() => {
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.35));
 }
 
 .analyzer__pattern-bar {
   font-size: 9px;
   font-weight: 600;
-  color: #A78BFA;
+  color: var(--demo-accent-light, #A78BFA);
   letter-spacing: 0.05em;
 }
 
@@ -1098,14 +1106,14 @@ onMounted(() => {
 .analyzer__pattern-chords {
   font-size: 13px;
   font-weight: 600;
-  color: #A78BFA;
+  color: var(--demo-accent-light, #A78BFA);
   letter-spacing: 0.02em;
 }
 
 .analyzer__pattern-score {
   font-size: 9px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
   margin-top: 4px;
   display: block;
 }

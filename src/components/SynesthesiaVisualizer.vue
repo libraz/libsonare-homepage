@@ -1,5 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { isDark } = useTheme()
+
+// Theme-aware canvas colors
+const canvasBg = computed(() => isDark.value ? 'rgb(6, 8, 12)' : 'rgb(245, 243, 255)')
+const canvasBgFade = (alpha: number) => isDark.value
+  ? `rgba(6, 8, 12, ${alpha})`
+  : `rgba(245, 243, 255, ${alpha})`
+const gridStroke = (a: number) => isDark.value
+  ? `rgba(255, 255, 255, ${a})`
+  : `rgba(100, 80, 160, ${a})`
+const idleCenterFill = computed(() => isDark.value ? 'rgba(15, 18, 28, 0.9)' : 'rgba(240, 238, 248, 0.9)')
+const scanLineColor = computed(() => isDark.value ? 'rgba(255, 255, 255, 0.5)' : 'rgba(100, 80, 160, 0.3)')
 
 const props = defineProps<{
   chromaData: {
@@ -241,7 +255,7 @@ function drawScanLines(size: number) {
   ctx.save()
   ctx.globalAlpha = 0.015
   for (let y = 0; y < size; y += 4) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.fillStyle = scanLineColor.value
     ctx.fillRect(0, y, size, 1)
   }
   ctx.restore()
@@ -255,7 +269,7 @@ function drawGrid(centerX: number, centerY: number, maxRadius: number) {
   rings.forEach((r, i) => {
     ctx!.beginPath()
     ctx!.arc(centerX, centerY, maxRadius * r, 0, Math.PI * 2)
-    ctx!.strokeStyle = `rgba(255, 255, 255, ${0.03 + i * 0.01})`
+    ctx!.strokeStyle = gridStroke(0.03 + i * 0.01)
     ctx!.lineWidth = 1
     ctx!.stroke()
   })
@@ -266,7 +280,7 @@ function drawGrid(centerX: number, centerY: number, maxRadius: number) {
     ctx!.beginPath()
     ctx!.moveTo(centerX + Math.cos(angle) * maxRadius * 0.2, centerY + Math.sin(angle) * maxRadius * 0.2)
     ctx!.lineTo(centerX + Math.cos(angle) * maxRadius * 0.9, centerY + Math.sin(angle) * maxRadius * 0.9)
-    ctx!.strokeStyle = 'rgba(255, 255, 255, 0.04)'
+    ctx!.strokeStyle = gridStroke(0.04)
     ctx!.lineWidth = 1
     ctx!.stroke()
   }
@@ -280,16 +294,18 @@ function draw() {
   const centerY = size / 2
   const maxRadius = size * 0.40
 
-  // Full clear when transitioning out of active state (e.g. playback ended)
+  // Clear canvas with transparency so scope__screen background shows through
   if (needsFullClear) {
-    ctx.fillStyle = 'rgb(6, 8, 12)'
-    ctx.fillRect(0, 0, size, size)
+    ctx.clearRect(0, 0, size, size)
     needsFullClear = false
   } else {
     // Partial clear with fade that adapts to volume - faster fade at low levels
     const clearAlpha = 0.25 + (1 - smoothedRms.value) * 0.35
-    ctx.fillStyle = `rgba(6, 8, 12, ${clearAlpha})`
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.fillStyle = `rgba(0, 0, 0, ${clearAlpha})`
     ctx.fillRect(0, 0, size, size)
+    ctx.restore()
   }
 
   const frame = currentFrame.value
@@ -577,9 +593,9 @@ function draw() {
     const idlePulse = 0.5 + Math.sin(time * 2) * 0.1
     ctx.beginPath()
     ctx.arc(centerX, centerY, 20, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(15, 18, 28, 0.9)`
+    ctx.fillStyle = idleCenterFill.value
     ctx.fill()
-    ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 * idlePulse})`
+    ctx.strokeStyle = gridStroke(0.05 * idlePulse)
     ctx.lineWidth = 1
     ctx.stroke()
 
@@ -595,7 +611,14 @@ function setupCanvas() {
   const container = canvas.value.parentElement
   if (!container) return
 
-  const size = Math.min(container.clientWidth, container.clientHeight, 520)
+  // scope__screen is a square (aspect-ratio: 1) taller than the visible area.
+  // Find the scope-container to get the actual available height.
+  const scopeEl = canvas.value.closest('.scope')
+  const scopeContainer = scopeEl?.parentElement
+  const availableHeight = scopeContainer
+    ? scopeContainer.clientHeight - 28 - 36 // bezel padding (14 * 2) + footer (36)
+    : container.clientHeight
+  const size = Math.min(container.clientWidth, availableHeight, 520)
   canvasSize = size
   const dpr = window.devicePixelRatio || 1
 
@@ -684,9 +707,9 @@ onUnmounted(() => {
 .scope {
   --drums-color: hsl(28, 85%, 55%);
   --melody-color: hsl(190, 75%, 55%);
-  --bezel-color: #080a0e;
-  --screen-bg: #040608;
-  --accent: rgba(139, 92, 246, 0.3);
+  --bezel-color: var(--demo-bezel, #080a0e);
+  --screen-bg: var(--demo-screen-bg, rgb(6, 8, 12));
+  --accent: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
 
   position: relative;
   width: 100%;
@@ -697,14 +720,14 @@ onUnmounted(() => {
 
 .scope__bezel {
   position: relative;
-  background: linear-gradient(145deg, #10131a 0%, var(--bezel-color) 50%, #060810 100%);
+  background: linear-gradient(145deg, var(--demo-bezel-start, #10131a) 0%, var(--bezel-color) 50%, var(--demo-bezel-end, #060810) 100%);
   border-radius: 16px;
   padding: 14px;
   border: 1px solid var(--accent);
   box-shadow:
-    0 2px 0 rgba(255, 255, 255, 0.02) inset,
-    0 -2px 0 rgba(0, 0, 0, 0.4) inset,
-    0 20px 40px -10px rgba(0, 0, 0, 0.7),
+    0 2px 0 var(--demo-bezel-inset-light, rgba(255, 255, 255, 0.02)) inset,
+    0 -2px 0 var(--demo-bezel-inset-dark, rgba(0, 0, 0, 0.4)) inset,
+    0 20px 40px -10px var(--demo-bezel-shadow-deep, rgba(0, 0, 0, 0.7)),
     0 0 60px -10px rgba(139, 92, 246, 0.1);
 }
 
@@ -715,11 +738,11 @@ onUnmounted(() => {
   overflow: hidden;
   aspect-ratio: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.8) inset,
-    0 0 30px rgba(0, 0, 0, 0.5) inset,
+    0 0 0 1px var(--demo-screen-inset-1, rgba(0, 0, 0, 0.8)) inset,
+    0 0 30px var(--demo-screen-inset-2, rgba(0, 0, 0, 0.5)) inset,
     0 0 60px rgba(100, 180, 255, 0.02) inset;
 }
 
@@ -751,7 +774,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--demo-indicator-bg, rgba(0, 0, 0, 0.6));
   border-radius: 4px;
   backdrop-filter: blur(4px);
 }
@@ -800,14 +823,14 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.15em;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.5));
 }
 
 .scope__type {
   font-size: 9px;
   font-weight: 400;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--demo-text-faint, rgba(255, 255, 255, 0.25));
   text-transform: uppercase;
 }
 
