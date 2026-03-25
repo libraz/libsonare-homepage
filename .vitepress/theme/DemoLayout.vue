@@ -96,7 +96,7 @@ const otherLocales = computed(() =>
 </script>
 
 <template>
-  <div class="demo-page" :class="[`demo-page--${lang}`, isDark ? 'demo-page--dark' : 'demo-page--light']">
+  <div class="demo-page" :class="`demo-page--${lang}`">
     <!-- Technical Grid Background -->
     <div class="demo-page__backdrop">
       <!-- Grid overlay using shared component -->
@@ -295,7 +295,7 @@ const otherLocales = computed(() =>
 }
 
 /* ===== THEME TOKENS (Light) ===== */
-.demo-page--light {
+html:not(.dark) .demo-page {
   /* Page - subtle purple-tinted white like libraz-homepage hero */
   --demo-bg: #f8f6ff;
   --demo-bg-overlay: rgba(248, 246, 255, 0.95);
@@ -388,7 +388,7 @@ const otherLocales = computed(() =>
 }
 
 /* Hide backdrop decorations in light mode */
-.demo-page--light .demo-page__backdrop {
+html:not(.dark) .demo-page .demo-page__backdrop {
   display: none;
 }
 
@@ -404,7 +404,7 @@ const otherLocales = computed(() =>
   border-bottom: 1px solid var(--demo-border);
 }
 
-.demo-page--light .demo-page__header {
+html:not(.dark) .demo-page .demo-page__header {
   background: var(--demo-bg-overlay);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
@@ -463,12 +463,18 @@ const otherLocales = computed(() =>
   border-color: var(--demo-accent);
 }
 
-/* Show sun in dark mode, moon in light mode — CSS avoids hydration mismatch */
+/* Show sun in dark mode, moon in light mode — pure CSS avoids hydration mismatch */
 .demo-page__icon-sun { display: none; }
 .demo-page__icon-moon { display: block; }
-.demo-page--dark .demo-page__icon-sun { display: block; }
-.demo-page--dark .demo-page__icon-moon { display: none; }
+</style>
 
+<style>
+/* Global (non-scoped) selectors for html.dark — scoped CSS can't target <html> ancestor reliably */
+html.dark .demo-page__icon-sun { display: block; }
+html.dark .demo-page__icon-moon { display: none; }
+</style>
+
+<style scoped>
 .demo-page__cta {
   display: inline-flex;
   align-items: center;
@@ -571,7 +577,7 @@ const otherLocales = computed(() =>
   border-top: 1px solid var(--demo-border);
 }
 
-.demo-page--light .demo-page__footer {
+html:not(.dark) .demo-page .demo-page__footer {
   background: var(--demo-bg-overlay);
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
 }
