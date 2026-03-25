@@ -1,108 +1,23 @@
 # ネイティブバインディング
 
-libsonareは**Python**と**Node.js**向けのネイティブバインディングを提供し、デスクトップ環境で高速な音声解析を実現します。
+libsonareはデスクトップ環境向けのネイティブバインディングを提供しています。各言語の詳細は個別のAPIページを参照してください:
 
-## Python
+- **[Python API](/ja/docs/python-api)** — cffi ベースのバインディング、PyPI でビルド済みホイールを配布
+- **Node.js（N-API）** — C++の性能を直接活用するネイティブアドオン（以下に記載）
 
-### インストール
+## 比較
 
-PyPI からインストールできます（推奨）。ビルド済みホイールが Linux (x86_64, aarch64) と macOS (Apple Silicon) に対応しています。
-
-```bash
-pip install libsonare
-```
-
-`sonare` コマンドもあわせてインストールされます。詳しくは [CLI リファレンス](/ja/docs/cli) をご覧ください。
-
-### ソースからビルド（上級者向け）
-
-PyPI のホイールが利用できない環境では、ソースからビルドすることも可能です。
-
-**要件:**
-- Python 3.11以上
-- CMake 3.16以上
-- C++17対応コンパイラ（GCC 9+、Clang 10+、MSVC 2019+）
-
-```bash
-git clone https://github.com/libraz/libsonare.git
-cd libsonare
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED=ON
-cmake --build build -j
-
-cd bindings/python
-pip install -e .
-```
-
-### 使用例
-
-```python
-from libsonare import Audio, analyze, detect_bpm, detect_key, detect_beats
-
-# ファイルから音声を読み込み
-audio = Audio.from_file("music.mp3")
-
-# 個別の解析
-bpm = detect_bpm(audio.data, audio.sample_rate)
-key = detect_key(audio.data, audio.sample_rate)
-beats = detect_beats(audio.data, audio.sample_rate)
-
-# フル解析
-result = analyze(audio.data, audio.sample_rate)
-print(f"BPM: {result.bpm} ({result.bpm_confidence:.0%})")
-print(f"キー: {result.key}")
-print(f"拍子: {result.time_signature}")
-print(f"ビート数: {len(result.beat_times)}")
-```
-
-### APIリファレンス
-
-#### Audio
-
-| メソッド | 説明 |
-|---------|------|
-| `Audio.from_file(path)` | WAV/MP3ファイルを読み込み |
-| `Audio.from_buffer(data, sample_rate)` | floatサンプルから作成 |
-| `Audio.from_memory(data)` | バイナリWAV/MP3をデコード |
-| `audio.data` | 生のfloatサンプル |
-| `audio.sample_rate` | サンプルレート（Hz） |
-| `audio.duration` | 長さ（秒） |
-| `audio.length` | サンプル数 |
-
-#### 解析関数
-
-| 関数 | 戻り値 | 説明 |
-|------|--------|------|
-| `detect_bpm(samples, sample_rate)` | `float` | テンポ（BPM） |
-| `detect_key(samples, sample_rate)` | `Key` | ルート、モード、確信度 |
-| `detect_beats(samples, sample_rate)` | `list[float]` | ビート位置（秒） |
-| `detect_onsets(samples, sample_rate)` | `list[float]` | オンセット位置（秒） |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | フル解析 |
-| `version()` | `str` | ライブラリバージョン |
-
-#### 型定義
-
-```python
-class PitchClass(IntEnum):
-    C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B
-
-class Mode(IntEnum):
-    MAJOR = 0
-    MINOR = 1
-
-@dataclass(frozen=True)
-class Key:
-    root: PitchClass
-    mode: Mode
-    confidence: float
-
-@dataclass(frozen=True)
-class AnalysisResult:
-    bpm: float
-    bpm_confidence: float
-    key: Key
-    time_signature: TimeSignature
-    beat_times: list[float]
-```
+| | WebAssembly | Python | Node.js（N-API） |
+|---|---|---|---|
+| **プラットフォーム** | ブラウザ | デスクトップ | デスクトップ |
+| **配布** | npm | PyPI / ソース | ソース |
+| **ビルド** | Emscripten | ビルド済みホイール（または CMake + pip） | CMake + cmake-js |
+| **パフォーマンス** | ネイティブに近い | ネイティブ | ネイティブ |
+| **ストリーミング** | 対応 | 非対応 | 非対応 |
+| **ファイルI/O** | 非対応 | 対応 | 対応 |
+| **エフェクト** | 対応 | 対応 | 対応 |
+| **特徴抽出** | 対応 | 対応 | 対応 |
+| **単位変換** | 対応 | 対応 | 対応 |
 
 ---
 
@@ -179,7 +94,7 @@ audio.destroy();
 | `analyze(samples, sampleRate?)` | `AnalysisResult` | フル解析 |
 | `version()` | `string` | ライブラリバージョン |
 
-デフォルトの`sampleRate`は`22050`です。
+デフォルトの`sampleRate`は`22050`です。すべての関数は `Audio` インスタンスメソッドとしても利用可能です。
 
 #### 型定義
 
@@ -204,16 +119,3 @@ interface AnalysisResult {
   beatTimes: Float32Array;
 }
 ```
-
----
-
-## 比較
-
-| | WebAssembly | Python | Node.js（N-API） |
-|---|---|---|---|
-| **プラットフォーム** | ブラウザ | デスクトップ | デスクトップ |
-| **配布** | npm | PyPI / ソース | ソース |
-| **ビルド** | Emscripten | CMake + pip | CMake + cmake-js |
-| **パフォーマンス** | ネイティブに近い | ネイティブ | ネイティブ |
-| **ストリーミング** | 対応 | 非対応 | 非対応 |
-| **ファイルI/O** | 非対応 | 対応 | 対応 |

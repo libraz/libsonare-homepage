@@ -215,8 +215,12 @@ struct StreamConfig {
   float fmin = 0.0f;
   float fmax = 0.0f;  // 0 = sr/2
 
-  // 出力スロットリング
-  int emit_every_n_frames = 1;  // 4 = 44100Hz で約 60fps
+  // チューニング設定
+  float tuning_ref_hz = 440.0f;  // A4 の基準周波数
+
+  // 出力設定
+  int emit_every_n_frames = 1;   // 4 = 44100Hz で約 60fps
+  int magnitude_downsample = 1;  // マグニチュードのダウンサンプル係数
 
   // プログレッシブ推定間隔
   float key_update_interval_sec = 5.0f;
@@ -256,6 +260,86 @@ void audio_callback(const float* samples, size_t n_samples) {
 }
 ```
 
+### ChordChange
+
+```cpp
+struct ChordChange {
+  int root;           // 0-11 (C-B)
+  int quality;        // 0=Maj, 1=Min, 2=Dim, etc.
+  float start_time;   // 秒
+  float confidence;   // 0-1
+};
+```
+
+### BarChord
+
+小節境界で検出されたコード（ビート同期）。
+
+```cpp
+struct BarChord {
+  int bar_index;
+  int root;           // 0-11 (C-B)
+  int quality;        // 0=Maj, 1=Min, 2=Dim, etc.
+  float start_time;   // 秒
+  float confidence;   // 0-1
+};
+```
+
+### AnalyzerStats
+
+```cpp
+struct AnalyzerStats {
+  int total_frames;
+  size_t total_samples;
+  float duration_seconds;
+  ProgressiveEstimate estimate;
+};
+```
+
+### ProgressiveEstimate
+
+時間とともに精度が向上する BPM、キー、コード、パターンの推定値。
+
+```cpp
+struct ProgressiveEstimate {
+  // BPM 推定
+  float bpm;                // 未推定の場合は 0
+  float bpm_confidence;     // 0-1、時間とともに増加
+  int bpm_candidate_count;
+
+  // キー推定
+  int key;                  // 0-11 (C-B)、-1 = 不明
+  bool key_minor;
+  float key_confidence;     // 0-1、時間とともに増加
+
+  // コード推定（現在）
+  int chord_root;           // 0-11、-1 = 不明
+  int chord_quality;        // 0=Maj, 1=Min, etc.
+  float chord_confidence;
+  float chord_start_time;
+
+  // コード進行（時間とともに蓄積）
+  std::vector<ChordChange> chord_progression;
+
+  // 小節同期コード進行（安定した BPM が必要）
+  std::vector<BarChord> bar_chord_progression;
+  int current_bar;          // BPM 不安定時は -1
+  float bar_duration;       // BPM 不安定時は 0
+
+  // パターン検出
+  int pattern_length;                     // 繰り返しパターンの長さ（デフォルト: 4小節）
+  std::vector<BarChord> voted_pattern;    // 各パターン位置の投票済みコード
+  std::string detected_pattern_name;      // 最も一致するパターン名（例: "royalRoad"）
+  float detected_pattern_score;           // 一致スコア（0-1）
+  std::vector<std::pair<std::string, float>> all_pattern_scores;
+
+  // 統計情報
+  float accumulated_seconds;
+  int used_frames;
+  bool updated;             // このフレームで推定が更新された場合 true
+};
+```
+
 ### プログレッシブ推定
 
 時間とともに精度が向上する BPM とキーの推定を取得:
@@ -275,6 +359,36 @@ if (stats.estimate.key >= 0) {
   std::cout << "キー: " << keys[stats.estimate.key]
             << (stats.estimate.key_minor ? " マイナー" : " メジャー") << "\n";
 }
+
+// コード進行パターン
+if (!stats.estimate.detected_pattern_name.empty()) {
+  std::cout << "パターン: " << stats.estimate.detected_pattern_name
+            << " (スコア: " << stats.estimate.detected_pattern_score << ")\n";
+}
+```
+
+### 設定メソッド
+
+```cpp
+// パターンロックの最適タイミングのために予想総時間を設定
+analyzer.set_expected_duration(180.0f);  // 3 分
+
+// ラウドな音声のノーマライズゲインを設定
+analyzer.set_normalization_gain(0.5f);   // -6dB 減衰
+
+// チューニング基準周波数を設定（デフォルト: 440 Hz）
+// 非標準チューニングの音声に使用
+analyzer.set_tuning_ref_hz(466.16f);     // 半音高い
+```
+
+### クエリメソッド
+
+```cpp
+// 処理済みフレーム数
+int count = analyzer.frame_count();
+
+// 現在の時間位置（秒）
+float time = analyzer.current_time();
 ```
 
 ### 量子化形式（帯域幅削減）

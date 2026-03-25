@@ -4,10 +4,6 @@ libsonare can be compiled to WebAssembly for audio analysis directly in web brow
 
 ## Installation
 
-::: warning Package Not Published
-The npm package `@libraz/libsonare` is currently in beta and not yet publicly available. For now, use the WASM files directly from the repository or build from source.
-:::
-
 ### npm/yarn
 
 ::: code-group

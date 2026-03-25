@@ -4,10 +4,6 @@ libsonare は WebAssembly にコンパイルでき、ブラウザで直接オー
 
 ## インストール
 
-::: warning パッケージ未公開
-npm パッケージ `@libraz/libsonare` は現在ベータ版で、まだ公開されていません。現時点では、リポジトリから直接 WASM ファイルを使用するか、ソースからビルドしてください。
-:::
-
 ### npm/yarn
 
 ::: code-group

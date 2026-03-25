@@ -3,7 +3,7 @@
 Performance comparison of libsonare against librosa (Python) for audio analysis tasks.
 
 ::: info Reproducible
-All benchmarks can be reproduced locally. See [Reproducing](#reproducing) at the bottom of this page.
+All benchmarks can be reproduced locally. See [Run Benchmarks Yourself](#run-benchmarks-yourself) at the bottom of this page.
 :::
 
 ::: info Note on hardware
@@ -122,25 +122,53 @@ libsonare's spectrograms, Mel features, and onset strength are computed once and
 
 ## Run Benchmarks Yourself
 
+### Full Analysis
+
 ```bash
-# Clone and build
-git clone https://github.com/libraz/libsonare.git
-cd libsonare && make release
-
-# Full analysis benchmark
-time ./build/bin/sonare analyze path/to/audio.mp3 -q --json
-
-# System info (shows CPU cores and parallel config)
-./build/bin/sonare system-info
-
-# Python benchmark
 pip install libsonare
-time sonare analyze path/to/audio.mp3 --json
+time sonare analyze path/to/audio.mp3 --json > /dev/null
 ```
+
+### Per-Feature Comparison
+
+```python
+import time
+import librosa
+from libsonare import Audio, resample, stft, mel_spectrogram, mfcc, chroma
+from libsonare import hpss, detect_beats, pitch_pyin, spectral_centroid, analyze
+
+audio = Audio.from_file("audio.mp3")
+samples = resample(audio.data, audio.sample_rate, 22050)
+sr = 22050
+y, _ = librosa.load("audio.mp3", sr=22050, mono=True)
+
+def bench(name, fn, runs=3):
+    times = []
+    for _ in range(runs):
+        t0 = time.perf_counter()
+        fn()
+        times.append((time.perf_counter() - t0) * 1000)
+    import statistics
+    print(f"{name:<30s} {statistics.median(times):>8.1f}ms")
+
+print("--- libsonare ---")
+bench("Full Analyze", lambda: analyze(samples, sr))
+bench("HPSS", lambda: hpss(samples, sr))
+bench("pYIN", lambda: pitch_pyin(samples, sr))
+bench("Beat Track", lambda: detect_beats(samples, sr))
+
+print("--- librosa ---")
+bench("HPSS", lambda: librosa.effects.hpss(y))
+bench("pYIN", lambda: librosa.pyin(y, fmin=65, fmax=2093, sr=sr))
+bench("Beat Track", lambda: librosa.beat.beat_track(y=y, sr=sr))
+```
+
+::: tip
+Per-feature numbers in the table above are measured using C++ internal timing (`chrono::steady_clock`). When calling individual functions through the Python cffi binding, data marshalling adds overhead. Full analysis (`analyze()`) runs the entire pipeline in C++ and returns only the result, so its performance matches the C++ CLI.
+:::
 
 ## Notes
 
-- librosa timings measured via `time.perf_counter`, libsonare via `chrono::steady_clock`
-- libsonare's Python bindings use the same C++ engine via ctypes -- performance is identical to the C++ CLI
+- librosa timings measured via `time.perf_counter`, libsonare per-feature via `chrono::steady_clock`
 - Results vary by hardware, audio duration, and content complexity
 - WASM builds are single-threaded (no parallelization) but still significantly faster than Python

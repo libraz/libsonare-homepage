@@ -2,6 +2,8 @@
 
 ## npm (Browser/Node.js)
 
+Requires Node.js 18.0.0 or later.
+
 ::: code-group
 
 ```bash [npm]
@@ -19,6 +21,8 @@ pnpm add @libraz/libsonare
 :::
 
 ## Python (pip)
+
+Requires Python 3.11 or later (3.11, 3.12, 3.13).
 
 ```bash
 pip install libsonare

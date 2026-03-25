@@ -226,8 +226,12 @@ struct StreamConfig {
   float fmin = 0.0f;
   float fmax = 0.0f;  // 0 = sr/2
 
-  // Output throttling
-  int emit_every_n_frames = 1;  // 4 = ~60fps at 44100Hz
+  // Tuning configuration
+  float tuning_ref_hz = 440.0f;  // Reference frequency for A4
+
+  // Output configuration
+  int emit_every_n_frames = 1;   // 4 = ~60fps at 44100Hz
+  int magnitude_downsample = 1;  // Downsample factor for magnitude
 
   // Progressive estimation intervals
   float key_update_interval_sec = 5.0f;
@@ -287,6 +291,11 @@ struct StreamFrame {
   // Onset detection (1-frame lag)
   float onset_strength;
   bool onset_valid;  // false for first frame
+
+  // Chord detection (per-frame)
+  int chord_root;          // 0-11 for C-B, -1 = unknown
+  int chord_quality;       // 0=Maj, 1=Min, 2=Dim, etc.
+  float chord_confidence;  // 0-1
 };
 ```
 
@@ -322,6 +331,86 @@ QuantizedFrameBufferI16 i16_buffer;
 analyzer.read_frames_quantized_i16(max_frames, i16_buffer, qconfig);
 ```
 
+### ChordChange
+
+```cpp
+struct ChordChange {
+  int root;           // 0-11 (C-B)
+  int quality;        // 0=Maj, 1=Min, 2=Dim, etc.
+  float start_time;   // seconds
+  float confidence;   // 0-1
+};
+```
+
+### BarChord
+
+Chord detected at bar boundary (beat-synchronized).
+
+```cpp
+struct BarChord {
+  int bar_index;
+  int root;           // 0-11 (C-B)
+  int quality;        // 0=Maj, 1=Min, 2=Dim, etc.
+  float start_time;   // seconds
+  float confidence;   // 0-1
+};
+```
+
+### AnalyzerStats
+
+```cpp
+struct AnalyzerStats {
+  int total_frames;
+  size_t total_samples;
+  float duration_seconds;
+  ProgressiveEstimate estimate;
+};
+```
+
+### ProgressiveEstimate
+
+BPM, key, chord, and pattern estimates that improve over time.
+
+```cpp
+struct ProgressiveEstimate {
+  // BPM estimation
+  float bpm;                // 0 if not yet estimated
+  float bpm_confidence;     // 0-1, increases over time
+  int bpm_candidate_count;
+
+  // Key estimation
+  int key;                  // 0-11 (C-B), -1 = unknown
+  bool key_minor;
+  float key_confidence;     // 0-1, increases over time
+
+  // Chord estimation (current)
+  int chord_root;           // 0-11, -1 = unknown
+  int chord_quality;        // 0=Maj, 1=Min, etc.
+  float chord_confidence;
+  float chord_start_time;
+
+  // Chord progression (accumulated over time)
+  std::vector<ChordChange> chord_progression;
+
+  // Bar-synchronized chord progression (requires stable BPM)
+  std::vector<BarChord> bar_chord_progression;
+  int current_bar;          // -1 if BPM not stable
+  float bar_duration;       // 0 if BPM not stable
+
+  // Pattern detection
+  int pattern_length;                     // repeating pattern length (default: 4 bars)
+  std::vector<BarChord> voted_pattern;    // voted chord per pattern position
+  std::string detected_pattern_name;      // best matching pattern (e.g., "royalRoad")
+  float detected_pattern_score;           // match score (0-1)
+  std::vector<std::pair<std::string, float>> all_pattern_scores;
+
+  // Statistics
+  float accumulated_seconds;
+  int used_frames;
+  bool updated;             // true if estimate changed this frame
+};
+```
+
 ### Progressive Estimation
 
 Get BPM and key estimates that improve over time:
@@ -340,6 +429,12 @@ if (stats.estimate.key >= 0) {
   const char* keys[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
   std::cout << "Key: " << keys[stats.estimate.key]
             << (stats.estimate.key_minor ? " minor" : " major") << "\n";
+}
+
+// Chord progression pattern
+if (!stats.estimate.detected_pattern_name.empty()) {
+  std::cout << "Pattern: " << stats.estimate.detected_pattern_name
+            << " (score: " << stats.estimate.detected_pattern_score << ")\n";
 }
 ```
 
@@ -365,6 +460,33 @@ analyzer.reset();
 
 // Reset with base offset
 analyzer.reset(initial_sample_offset);
+```
+
+### Configuration Methods
+
+```cpp
+// Set expected total duration for optimal pattern lock timing
+analyzer.set_expected_duration(180.0f);  // 3 minutes
+
+// Set normalization gain for loud/compressed audio
+analyzer.set_normalization_gain(0.5f);   // -6dB reduction
+
+// Set tuning reference frequency (default: 440 Hz)
+// Use when audio has non-standard tuning
+analyzer.set_tuning_ref_hz(466.16f);     // 1 semitone sharp
+```
+
+### Query Methods
+
+```cpp
+// Total frames processed
+int count = analyzer.frame_count();
+
+// Current time position (seconds)
+float time = analyzer.current_time();
+
+// Get sample rate
+int sr = analyzer.config().sample_rate;
 ```
 
 ## Feature Extraction

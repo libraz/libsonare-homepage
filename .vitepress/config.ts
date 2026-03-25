@@ -99,8 +99,9 @@ export default withMermaid(defineConfig({
               text: 'API Reference',
               items: [
                 { text: 'JavaScript API', link: '/docs/js-api' },
+                { text: 'Python API', link: '/docs/python-api' },
                 { text: 'C++ API', link: '/docs/cpp-api' },
-                { text: 'Native Bindings', link: '/docs/native-bindings' },
+                { text: 'Node.js / Native Bindings', link: '/docs/native-bindings' },
                 { text: 'CLI Reference', link: '/docs/cli' },
               ]
             },
@@ -144,8 +145,9 @@ export default withMermaid(defineConfig({
               text: 'APIリファレンス',
               items: [
                 { text: 'JavaScript API', link: '/ja/docs/js-api' },
+                { text: 'Python API', link: '/ja/docs/python-api' },
                 { text: 'C++ API', link: '/ja/docs/cpp-api' },
-                { text: 'ネイティブバインディング', link: '/ja/docs/native-bindings' },
+                { text: 'Node.js / ネイティブバインディング', link: '/ja/docs/native-bindings' },
                 { text: 'CLIリファレンス', link: '/ja/docs/cli' },
               ]
             },

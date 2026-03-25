@@ -1,9 +1,5 @@
 # 使用例
 
-::: warning パッケージ未公開
-npm パッケージ `@libraz/libsonare` は現在ベータ版です。[インストール](/ja/docs/installation)で代替オプションを確認してください。
-:::
-
 ## JavaScript/TypeScript
 
 ### 基本的な BPM とキー検出

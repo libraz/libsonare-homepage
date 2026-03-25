@@ -1,9 +1,5 @@
 # Usage Examples
 
-::: warning Package Not Published
-The npm package `@libraz/libsonare` is currently in beta. See [Installation](/docs/installation) for alternative options.
-:::
-
 ## JavaScript/TypeScript
 
 ### Basic BPM and Key Detection

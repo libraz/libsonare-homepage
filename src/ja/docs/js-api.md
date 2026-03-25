@@ -694,6 +694,17 @@ interface BarChord {
 }
 ```
 
+### PatternScore
+
+既知のコード進行パターンの一致スコア。
+
+```typescript
+interface PatternScore {
+  name: string;   // パターン名（例: "royalRoad", "pop"）
+  score: number;  // 一致スコア（0-1）
+}
+```
+
 ### AnalyzerStats
 
 ```typescript
@@ -729,6 +740,13 @@ interface ProgressiveEstimate {
   barChordProgression: BarChord[];     // 小節同期コード
   currentBar: number;                  // 現在の小節インデックス
   barDuration: number;                 // 小節の長さ（秒）
+
+  // パターン検出
+  votedPattern: BarChord[];            // 各パターン位置の投票済みコード
+  patternLength: number;              // 繰り返しパターンの長さ（デフォルト: 4小節）
+  detectedPatternName: string;        // 最も一致するパターン名（例: "royalRoad"）
+  detectedPatternScore: number;       // 一致スコア（0-1）
+  allPatternScores: PatternScore[];   // 全既知パターンのスコア
 
   // 統計情報
   accumulatedSeconds: number;

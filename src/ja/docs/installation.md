@@ -2,6 +2,8 @@
 
 ## npm（ブラウザ/Node.js）
 
+Node.js 18.0.0 以上が必要です。
+
 ::: code-group
 
 ```bash [npm]
@@ -43,6 +45,8 @@ make build-wasm
 ```
 
 ## PyPI（Python）
+
+Python 3.11 以上が必要です（3.11、3.12、3.13）。
 
 ```bash
 pip install libsonare

@@ -808,6 +808,17 @@ interface BarChord {
 }
 ```
 
+### PatternScore
+
+Match score for a known chord progression pattern.
+
+```typescript
+interface PatternScore {
+  name: string;   // pattern name (e.g., "royalRoad", "pop")
+  score: number;  // match score (0-1)
+}
+```
+
 ### AnalyzerStats
 
 ```typescript
@@ -843,6 +854,13 @@ interface ProgressiveEstimate {
   barChordProgression: BarChord[];     // bar-synchronized chords
   currentBar: number;                  // current bar index
   barDuration: number;                 // bar duration in seconds
+
+  // Pattern detection
+  votedPattern: BarChord[];            // voted chord for each pattern position
+  patternLength: number;              // length of repeating pattern (default: 4 bars)
+  detectedPatternName: string;        // best matching pattern name (e.g., "royalRoad")
+  detectedPatternScore: number;       // match score (0-1)
+  allPatternScores: PatternScore[];   // all known pattern scores
 
   // Statistics
   accumulatedSeconds: number;
