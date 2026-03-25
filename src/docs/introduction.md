@@ -39,7 +39,7 @@ libsonare is designed for developers building music-related applications:
 A DAW (Digital Audio Workstation) is software for recording, editing, and producing audio. Examples include Ableton Live, Logic Pro, FL Studio, and GarageBand. DAW plugins extend these applications with additional functionality like effects, instruments, or analysis tools.
 :::
 
-- **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs at native C++ speed (~10x faster) and works in the browser.
+- **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs at native C++ speed (tens of times faster, with parallel analysis and automatic CPU detection) and works in the browser.
 
 - **Game / interactive media developers** — Analyze music in real-time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
 

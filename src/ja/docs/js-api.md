@@ -2,10 +2,6 @@
 
 libsonare JavaScript/TypeScript インターフェースの完全な API リファレンス。
 
-::: warning パッケージ未公開
-npm パッケージ `@libraz/libsonare` はまだ公開されていません。現時点では、リポジトリから直接 WASM ファイルを使用するか、ソースからビルドしてください。
-:::
-
 ## 概要
 
 libsonare は Web アプリケーション向けのオーディオ解析機能を提供します：

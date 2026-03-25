@@ -2,9 +2,18 @@
 
 Complete reference for the `sonare` command-line interface.
 
+::: tip Install via pip
+The easiest way to get the `sonare` CLI is via pip:
+```bash
+pip install libsonare
+sonare analyze music.mp3
+```
+Pre-built wheels are available for Linux (x86_64, aarch64) and macOS (Apple Silicon).
+:::
+
 ## Overview
 
-The sonare CLI provides comprehensive music analysis, audio processing, and feature extraction capabilities from the command line.
+The sonare CLI provides comprehensive music analysis, audio processing, and feature extraction capabilities from the command line. Parallel analysis across all available CPU cores delivers performance tens of times faster than Python alternatives.
 
 ```bash
 sonare <command> [options] <audio_file> [-o output]
@@ -513,6 +522,24 @@ sonare version --json
 ```
 sonare-cli version 1.0.0
 libsonare version 1.0.0
+```
+
+### system-info
+
+Display system information including CPU cores, SIMD support, and platform details.
+
+```bash
+sonare system-info
+sonare system-info --json
+```
+
+**Output:**
+```
+System Information:
+  Platform:    macOS (aarch64)
+  CPU Cores:   14
+  SIMD:        NEON
+  Build Type:  Release
 ```
 
 ## Examples

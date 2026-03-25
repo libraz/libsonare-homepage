@@ -2,10 +2,6 @@
 
 Complete API reference for libsonare JavaScript/TypeScript interface.
 
-::: warning Package Not Published
-The npm package `@libraz/libsonare` is not yet publicly available. For now, use the WASM files directly from the repository or build from source.
-:::
-
 ## Overview
 
 libsonare provides audio analysis capabilities for web applications:

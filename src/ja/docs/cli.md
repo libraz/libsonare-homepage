@@ -2,9 +2,13 @@
 
 `sonare` コマンドラインインターフェースの完全なリファレンス。
 
+::: tip pip でかんたんインストール
+`pip install libsonare` を実行すると `sonare` コマンドがすぐに使えます。ソースからのビルドは不要です。
+:::
+
 ## 概要
 
-sonare CLI は、コマンドラインから包括的な音楽解析、オーディオ処理、特徴抽出機能を提供します。
+sonare CLI は、コマンドラインから包括的な音楽解析、オーディオ処理、特徴抽出機能を提供します。CPU自動検出による並列解析で、Pythonベースのライブラリより数十倍高速に動作します。HPSSメディアンフィルタのマルチスレッド実行やキャッシュ効率の最適化を行っています。
 
 ```bash
 sonare <command> [options] <audio_file> [-o output]
@@ -515,6 +519,26 @@ sonare-cli version 1.0.0
 libsonare version 1.0.0
 ```
 
+### system-info
+
+システム情報と実行環境の詳細を表示。CPU のコア数やアーキテクチャなど、パフォーマンスの診断に役立ちます。
+
+```bash
+sonare system-info
+sonare system-info --json
+```
+
+**出力:**
+```
+System Information:
+  OS:            macOS 15.3 (arm64)
+  CPU:           Apple M4 Max
+  Cores:         16 (14 performance + 2 efficiency)
+  Threads Used:  14
+  SIMD:          NEON
+  libsonare:     1.0.0
+```
+
 ## 使用例
 
 ### 基本解析ワークフロー
@@ -586,18 +610,20 @@ done
 
 ## パフォーマンスのヒント
 
-1. **大きなファイル**: 10分を超えるファイルは、セグメントを解析することを検討:
+1. **並列処理**: libsonare はCPUコア数を自動検出し、HPSSのメディアンフィルタ処理などをマルチスレッドで実行します。`system-info` コマンドで利用中のスレッド数を確認できます。
+
+2. **大きなファイル**: 10分を超えるファイルは、セグメントを解析することを検討:
    ```bash
    # 最初の60秒のみ解析（ffmpeg使用）
    ffmpeg -i long_song.mp3 -t 60 sample.wav
    sonare analyze sample.wav
    ```
 
-2. **バッチ処理**: `--quiet` で出力オーバーヘッドを削減:
+3. **バッチ処理**: `--quiet` で出力オーバーヘッドを削減:
    ```bash
    sonare analyze song.mp3 --quiet --json > result.json
    ```
 
-3. **FFT サイズ**: 小さい FFT サイズ（`--n-fft 1024`）は高速だが周波数解像度が低い。
+4. **FFT サイズ**: 小さい FFT サイズ（`--n-fft 1024`）は高速だが周波数解像度が低い。
 
-4. **ホップ長**: 大きいホップ長（`--hop-length 1024`）は高速だが時間解像度が低い。
+5. **ホップ長**: 大きいホップ長（`--hop-length 1024`）は高速だが時間解像度が低い。

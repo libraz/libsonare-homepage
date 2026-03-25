@@ -5,6 +5,7 @@ import { useData } from 'vitepress'
 import './custom.css'
 import DemoLayout from './DemoLayout.vue'
 import AudioAnalyzer from '@/components/AudioAnalyzer.vue'
+import BenchChart from './components/BenchChart.vue'
 
 export default {
   extends: DefaultTheme,
@@ -17,5 +18,6 @@ export default {
   },
   enhanceApp({ app }) {
     app.component('AudioAnalyzer', AudioAnalyzer)
+    app.component('BenchChart', BenchChart)
   }
 } satisfies Theme

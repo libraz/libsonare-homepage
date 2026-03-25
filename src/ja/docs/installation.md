@@ -2,10 +2,6 @@
 
 ## npm（ブラウザ/Node.js）
 
-::: warning パッケージ未公開
-npm パッケージ `@libraz/libsonare` は現在ベータ版で、まだ公開されていません。現時点では、ソースからビルドするか、リポジトリから直接 WASM ファイルを使用してください。
-:::
-
 ::: code-group
 
 ```bash [npm]
@@ -45,6 +41,14 @@ make -j$(nproc)
 # WebAssemblyをビルド
 make build-wasm
 ```
+
+## PyPI（Python）
+
+```bash
+pip install libsonare
+```
+
+Python パッケージをインストールすると、ライブラリとして使えるだけでなく `sonare` コマンドも利用可能になります。詳細は [CLI リファレンス](/ja/docs/cli) を参照してください。
 
 ## ネイティブバインディング（Python / Node.js）
 

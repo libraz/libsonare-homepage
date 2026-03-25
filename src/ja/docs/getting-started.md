@@ -17,10 +17,6 @@ libsonareは、音楽情報検索（MIR）のためのC++17音声解析ライブ
 
 ## クイックスタート
 
-::: warning パッケージ未公開
-npm パッケージ `@libraz/libsonare` は現在ベータ版で、まだ公開されていません。[インストール](/ja/docs/installation)で代替オプションを確認してください。
-:::
-
 ### ブラウザ（WebAssembly）
 
 ```typescript
@@ -37,9 +33,40 @@ console.log('キー:', result.key.name);
 console.log('コード:', result.chords);
 ```
 
-### Python / Node.js（ネイティブ）
+### Python
 
-Python（ctypes）とNode.js（N-API）向けのネイティブバインディングが利用可能です。インストールとAPIリファレンスは[ネイティブバインディング](/ja/docs/native-bindings)を参照してください。
+```bash
+pip install libsonare
+```
+
+```python
+from libsonare import Audio, analyze
+
+# 音声ファイルを解析
+audio = Audio.from_file("music.mp3")
+result = analyze(audio.data, audio.sample_rate)
+
+print(f"BPM: {result.bpm}")
+print(f"キー: {result.key}")
+print(f"ビート数: {len(result.beat_times)}")
+```
+
+### CLI（コマンドライン）
+
+`pip install libsonare` で `sonare` コマンドが使えるようになります。
+
+```bash
+# BPM とキーをすばやく確認
+sonare bpm music.mp3
+sonare key music.mp3
+
+# JSON 形式で完全解析
+sonare analyze music.mp3 --json
+```
+
+### Node.js（ネイティブ）
+
+Node.js（N-API）向けのネイティブバインディングも利用可能です。インストールとAPIリファレンスは[ネイティブバインディング](/ja/docs/native-bindings)を参照してください。
 
 ## 今すぐ試す
 

@@ -1,31 +1,34 @@
 # ネイティブバインディング
 
-libsonareは**Python**と**Node.js**向けのネイティブバインディングを提供し、デスクトップ環境で高速な音声解析を実現します。WebAssemblyビルドとは異なり、ソースからのビルドが必要です。
-
-::: info npm/PyPIでは配布していません
-ネイティブバインディングはパッケージレジストリに公開されていません。以下の手順でソースからビルドしてください。
-:::
+libsonareは**Python**と**Node.js**向けのネイティブバインディングを提供し、デスクトップ環境で高速な音声解析を実現します。
 
 ## Python
 
-PythonバインディングはC共有ライブラリ（`libsonare.so` / `libsonare.dylib` / `sonare.dll`）を**ctypes**で呼び出します。
+### インストール
 
-### 要件
+PyPI からインストールできます（推奨）。ビルド済みホイールが Linux (x86_64, aarch64) と macOS (Apple Silicon) に対応しています。
 
+```bash
+pip install libsonare
+```
+
+`sonare` コマンドもあわせてインストールされます。詳しくは [CLI リファレンス](/ja/docs/cli) をご覧ください。
+
+### ソースからビルド（上級者向け）
+
+PyPI のホイールが利用できない環境では、ソースからビルドすることも可能です。
+
+**要件:**
 - Python 3.11以上
 - CMake 3.16以上
 - C++17対応コンパイラ（GCC 9+、Clang 10+、MSVC 2019+）
 
-### インストール
-
 ```bash
-# リポジトリをクローンして共有ライブラリをビルド
 git clone https://github.com/libraz/libsonare.git
 cd libsonare
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED=ON
 cmake --build build -j
 
-# Pythonパッケージをインストール
 cd bindings/python
 pip install -e .
 ```
@@ -209,7 +212,7 @@ interface AnalysisResult {
 | | WebAssembly | Python | Node.js（N-API） |
 |---|---|---|---|
 | **プラットフォーム** | ブラウザ | デスクトップ | デスクトップ |
-| **配布** | npm（予定） | ソース | ソース |
+| **配布** | npm | PyPI / ソース | ソース |
 | **ビルド** | Emscripten | CMake + pip | CMake + cmake-js |
 | **パフォーマンス** | ネイティブに近い | ネイティブ | ネイティブ |
 | **ストリーミング** | 対応 | 非対応 | 非対応 |

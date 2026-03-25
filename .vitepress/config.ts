@@ -110,6 +110,7 @@ export default withMermaid(defineConfig({
                 { text: 'Architecture', link: '/docs/architecture' },
                 { text: 'WebAssembly', link: '/docs/wasm' },
                 { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
+                { text: 'Benchmarks', link: '/docs/benchmarks' },
               ]
             }
           ]
@@ -154,6 +155,7 @@ export default withMermaid(defineConfig({
                 { text: 'アーキテクチャ', link: '/ja/docs/architecture' },
                 { text: 'WebAssembly', link: '/ja/docs/wasm' },
                 { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
+                { text: 'ベンチマーク', link: '/ja/docs/benchmarks' },
               ]
             }
           ]

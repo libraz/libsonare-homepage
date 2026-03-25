@@ -1,34 +1,38 @@
 # Native Bindings
 
-libsonare provides native bindings for **Python** and **Node.js** for high-performance audio analysis on desktop platforms. Unlike the WebAssembly build, native bindings must be built from source.
-
-::: info Not Distributed via npm/PyPI
-Native bindings are not published to package registries. Build from source following the instructions below.
-:::
+libsonare provides native bindings for **Python** and **Node.js** for high-performance audio analysis on desktop platforms.
 
 ## Python
 
-The Python binding uses **cffi** to interface with the C API (`libsonare.so` / `libsonare.dylib` / `sonare.dll`).
-
-### Requirements
-
-- Python 3.11+
-- CMake 3.16+
-- C++17 compiler (GCC 9+, Clang 10+, MSVC 2019+)
+The Python binding uses **cffi** to interface with the C API. Pre-built wheels are available on PyPI for Linux (x86_64, aarch64) and macOS (Apple Silicon).
 
 ### Installation
 
 ```bash
-# Clone and build the shared library
+pip install libsonare
+```
+
+This also installs the `sonare` CLI command. See [CLI Reference](/docs/cli) for details.
+
+### Building from Source (alternative)
+
+If pre-built wheels are not available for your platform, you can build from source:
+
+```bash
 git clone https://github.com/libraz/libsonare.git
 cd libsonare
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED=ON
 cmake --build build -j
 
-# Install the Python package
 cd bindings/python
 pip install -e .
 ```
+
+**Requirements for building from source:**
+
+- Python 3.11+
+- CMake 3.16+
+- C++17 compiler (GCC 9+, Clang 10+, MSVC 2019+)
 
 ### Usage
 
@@ -561,8 +565,8 @@ interface PitchResult {
 | | WebAssembly | Python | Node.js (N-API) |
 |---|---|---|---|
 | **Platform** | Browser | Desktop | Desktop |
-| **Distribution** | npm (planned) | Source | Source |
-| **Build** | Emscripten | CMake + pip | CMake + cmake-js |
+| **Distribution** | npm (`@libraz/libsonare`) | PyPI (`pip install libsonare`) | Source |
+| **Build** | Emscripten | Pre-built wheels (or CMake + pip) | CMake + cmake-js |
 | **Performance** | Near-native | Native | Native |
 | **Streaming** | Yes | No | No |
 | **File I/O** | No | Yes | Yes |

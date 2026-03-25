@@ -2,10 +2,6 @@
 
 ## npm (Browser/Node.js)
 
-::: warning Package Not Published
-The npm package `@libraz/libsonare` is currently in beta and not yet publicly available. For now, build from source or use the WASM files directly from the repository.
-:::
-
 ::: code-group
 
 ```bash [npm]
@@ -21,6 +17,14 @@ pnpm add @libraz/libsonare
 ```
 
 :::
+
+## Python (pip)
+
+```bash
+pip install libsonare
+```
+
+This installs the Python library and the `sonare` CLI command. See [CLI Reference](/docs/cli) for command-line usage.
 
 ## Building from Source
 

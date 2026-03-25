@@ -17,10 +17,6 @@ libsonare is a C++17 audio analysis library for music information retrieval (MIR
 
 ## Quick Start
 
-::: warning Package Not Published
-The npm package `@libraz/libsonare` is currently in beta and not yet publicly available. See [Installation](/docs/installation) for alternative options.
-:::
-
 ### Browser (WebAssembly)
 
 ```typescript
@@ -37,9 +33,37 @@ console.log('Key:', result.key.name);
 console.log('Chords:', result.chords);
 ```
 
-### Python / Node.js (Native)
+### Python
 
-Native bindings are available for Python (ctypes) and Node.js (N-API). See [Native Bindings](/docs/native-bindings) for installation and API reference.
+```bash
+pip install libsonare
+```
+
+```python
+from libsonare import Audio
+
+audio = Audio.from_file("music.mp3")
+result = audio.analyze()
+
+print(f"BPM: {result.bpm}")
+print(f"Key: {result.key}")
+print(f"Beats: {len(result.beat_times)}")
+```
+
+See [Native Bindings](/docs/native-bindings) for the full Python and Node.js API reference.
+
+### CLI
+
+The `sonare` command is included when you install via pip:
+
+```bash
+pip install libsonare
+sonare analyze music.mp3
+sonare bpm music.mp3
+sonare key music.mp3
+```
+
+See [CLI Reference](/docs/cli) for all available commands.
 
 ## Try It Now
 
