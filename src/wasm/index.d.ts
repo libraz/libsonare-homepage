@@ -571,6 +571,68 @@ export declare function timeToFrames(time: number, sr: number, hopLength: number
  */
 export declare function resample(samples: Float32Array, srcSr: number, targetSr: number): Float32Array;
 /**
+ * Wrapper around audio data that exposes all analysis and feature functions as instance methods.
+ *
+ * @example
+ * ```typescript
+ * import { init, Audio } from '@libraz/sonare';
+ *
+ * await init();
+ *
+ * const audio = Audio.fromBuffer(samples, 44100);
+ * console.log('BPM:', audio.detectBpm());
+ * console.log('Key:', audio.detectKey().name);
+ *
+ * const mel = audio.melSpectrogram();
+ * ```
+ */
+export declare class Audio {
+    private _samples;
+    private _sampleRate;
+    private constructor();
+    /** Create an Audio instance from raw sample data. */
+    static fromBuffer(samples: Float32Array, sampleRate: number): Audio;
+    /** The raw audio samples. */
+    get data(): Float32Array;
+    /** Number of samples. */
+    get length(): number;
+    /** Sample rate in Hz. */
+    get sampleRate(): number;
+    /** Duration in seconds. */
+    get duration(): number;
+    detectBpm(): number;
+    detectKey(): Key;
+    detectOnsets(): Float32Array;
+    detectBeats(): Float32Array;
+    analyze(): AnalysisResult;
+    analyzeWithProgress(onProgress: ProgressCallback): AnalysisResult;
+    hpss(kernelHarmonic?: number, kernelPercussive?: number): HpssResult;
+    harmonic(): Float32Array;
+    percussive(): Float32Array;
+    timeStretch(rate: number): Float32Array;
+    pitchShift(semitones: number): Float32Array;
+    normalize(targetDb?: number): Float32Array;
+    trim(thresholdDb?: number): Float32Array;
+    stft(nFft?: number, hopLength?: number): StftResult;
+    stftDb(nFft?: number, hopLength?: number): {
+        nBins: number;
+        nFrames: number;
+        db: Float32Array;
+    };
+    melSpectrogram(nFft?: number, hopLength?: number, nMels?: number): MelSpectrogramResult;
+    mfcc(nFft?: number, hopLength?: number, nMels?: number, nMfcc?: number): MfccResult;
+    chroma(nFft?: number, hopLength?: number): ChromaResult;
+    spectralCentroid(nFft?: number, hopLength?: number): Float32Array;
+    spectralBandwidth(nFft?: number, hopLength?: number): Float32Array;
+    spectralRolloff(nFft?: number, hopLength?: number, rollPercent?: number): Float32Array;
+    spectralFlatness(nFft?: number, hopLength?: number): Float32Array;
+    zeroCrossingRate(frameLength?: number, hopLength?: number): Float32Array;
+    rmsEnergy(frameLength?: number, hopLength?: number): Float32Array;
+    pitchYin(frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number): PitchResult;
+    pitchPyin(frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number): PitchResult;
+    resample(targetSr: number): Float32Array;
+}
+/**
  * A detected chord change in the progression
  */
 export interface ChordChange {
@@ -766,4 +828,3 @@ export declare class StreamAnalyzer {
     dispose(): void;
 }
 export { PitchClass as Pitch };
-//# sourceMappingURL=index.d.ts.map

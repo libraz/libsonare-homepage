@@ -681,6 +681,135 @@ export function resample(samples, srcSr, targetSr) {
     return module.resample(samples, srcSr, targetSr);
 }
 // ============================================================================
+// Audio Class
+// ============================================================================
+/**
+ * Wrapper around audio data that exposes all analysis and feature functions as instance methods.
+ *
+ * @example
+ * ```typescript
+ * import { init, Audio } from '@libraz/sonare';
+ *
+ * await init();
+ *
+ * const audio = Audio.fromBuffer(samples, 44100);
+ * console.log('BPM:', audio.detectBpm());
+ * console.log('Key:', audio.detectKey().name);
+ *
+ * const mel = audio.melSpectrogram();
+ * ```
+ */
+export class Audio {
+    constructor(samples, sampleRate) {
+        this._samples = samples;
+        this._sampleRate = sampleRate;
+    }
+    /** Create an Audio instance from raw sample data. */
+    static fromBuffer(samples, sampleRate) {
+        return new Audio(samples, sampleRate);
+    }
+    /** The raw audio samples. */
+    get data() {
+        return this._samples;
+    }
+    /** Number of samples. */
+    get length() {
+        return this._samples.length;
+    }
+    /** Sample rate in Hz. */
+    get sampleRate() {
+        return this._sampleRate;
+    }
+    /** Duration in seconds. */
+    get duration() {
+        return this._samples.length / this._sampleRate;
+    }
+    // -- Analysis --
+    detectBpm() {
+        return detectBpm(this._samples, this._sampleRate);
+    }
+    detectKey() {
+        return detectKey(this._samples, this._sampleRate);
+    }
+    detectOnsets() {
+        return detectOnsets(this._samples, this._sampleRate);
+    }
+    detectBeats() {
+        return detectBeats(this._samples, this._sampleRate);
+    }
+    analyze() {
+        return analyze(this._samples, this._sampleRate);
+    }
+    analyzeWithProgress(onProgress) {
+        return analyzeWithProgress(this._samples, this._sampleRate, onProgress);
+    }
+    // -- Effects --
+    hpss(kernelHarmonic = 31, kernelPercussive = 31) {
+        return hpss(this._samples, this._sampleRate, kernelHarmonic, kernelPercussive);
+    }
+    harmonic() {
+        return harmonic(this._samples, this._sampleRate);
+    }
+    percussive() {
+        return percussive(this._samples, this._sampleRate);
+    }
+    timeStretch(rate) {
+        return timeStretch(this._samples, this._sampleRate, rate);
+    }
+    pitchShift(semitones) {
+        return pitchShift(this._samples, this._sampleRate, semitones);
+    }
+    normalize(targetDb = 0.0) {
+        return normalize(this._samples, this._sampleRate, targetDb);
+    }
+    trim(thresholdDb = -60.0) {
+        return trim(this._samples, this._sampleRate, thresholdDb);
+    }
+    // -- Features --
+    stft(nFft = 2048, hopLength = 512) {
+        return stft(this._samples, this._sampleRate, nFft, hopLength);
+    }
+    stftDb(nFft = 2048, hopLength = 512) {
+        return stftDb(this._samples, this._sampleRate, nFft, hopLength);
+    }
+    melSpectrogram(nFft = 2048, hopLength = 512, nMels = 128) {
+        return melSpectrogram(this._samples, this._sampleRate, nFft, hopLength, nMels);
+    }
+    mfcc(nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 13) {
+        return mfcc(this._samples, this._sampleRate, nFft, hopLength, nMels, nMfcc);
+    }
+    chroma(nFft = 2048, hopLength = 512) {
+        return chroma(this._samples, this._sampleRate, nFft, hopLength);
+    }
+    spectralCentroid(nFft = 2048, hopLength = 512) {
+        return spectralCentroid(this._samples, this._sampleRate, nFft, hopLength);
+    }
+    spectralBandwidth(nFft = 2048, hopLength = 512) {
+        return spectralBandwidth(this._samples, this._sampleRate, nFft, hopLength);
+    }
+    spectralRolloff(nFft = 2048, hopLength = 512, rollPercent = 0.85) {
+        return spectralRolloff(this._samples, this._sampleRate, nFft, hopLength, rollPercent);
+    }
+    spectralFlatness(nFft = 2048, hopLength = 512) {
+        return spectralFlatness(this._samples, this._sampleRate, nFft, hopLength);
+    }
+    zeroCrossingRate(frameLength = 2048, hopLength = 512) {
+        return zeroCrossingRate(this._samples, this._sampleRate, frameLength, hopLength);
+    }
+    rmsEnergy(frameLength = 2048, hopLength = 512) {
+        return rmsEnergy(this._samples, this._sampleRate, frameLength, hopLength);
+    }
+    pitchYin(frameLength = 2048, hopLength = 512, fmin = 65.0, fmax = 2093.0, threshold = 0.3) {
+        return pitchYin(this._samples, this._sampleRate, frameLength, hopLength, fmin, fmax, threshold);
+    }
+    pitchPyin(frameLength = 2048, hopLength = 512, fmin = 65.0, fmax = 2093.0, threshold = 0.3) {
+        return pitchPyin(this._samples, this._sampleRate, frameLength, hopLength, fmin, fmax, threshold);
+    }
+    resample(targetSr) {
+        return resample(this._samples, this._sampleRate, targetSr);
+    }
+}
+// ============================================================================
 // StreamAnalyzer Class
 // ============================================================================
 /**
@@ -870,4 +999,3 @@ export class StreamAnalyzer {
 // Re-exports
 // ============================================================================
 export { PitchClass as Pitch };
-//# sourceMappingURL=index.js.map

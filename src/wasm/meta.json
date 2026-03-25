@@ -1,7 +1,9 @@
 {
-  "size": ,
-  "sizeKB": 0,
-  "gzipSize":   186384,
-  "gzipKB": 182,
-  "md5": "b5c51e997ee06edcda61ef2202f93b7f"
+  "size": 463577,
+  "sizeKB": 452,
+  "gzipSize":   184635,
+  "gzipKB": 180,
+  "md5": "94f9b48fe50339de61c2154581bb7580",
+  "buildDate": "2026-03-25T14:27:04Z",
+  "commitHash": "e46eb41"
 }
