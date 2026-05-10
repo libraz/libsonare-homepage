@@ -254,13 +254,15 @@ auto energy = chroma.mean_energy();
 
 | Operation | librosa (Python) | libsonare (C++) | Speedup |
 |-----------|------------------|-----------------|---------|
-| STFT | 19ms | 17ms | 1.1x |
-| Mel spectrogram | 36ms | 10ms | 3.6x |
-| MFCC | 24ms | 1ms | 24x |
-| Beat tracking | 527ms | 26ms | 20x |
-| HPSS | 2,207ms | 70ms | 32x |
-| Full analysis | 44s | 0.81s | ~54x |
+| STFT | 13ms | 14ms | tied |
+| Mel spectrogram | 20ms | 23ms | tied |
+| MFCC | 22ms | 24ms | tied |
+| Beat tracking | 36ms | 24ms | 1.5x |
+| Chroma | 45ms | 15ms | 2.9x |
+| HPSS | 1,762ms | 89ms | **19.7x** |
+| pYIN | 5,825ms | 474ms | **12.3x** |
+| Full analysis | 36.4s | 0.67s | **~54x** |
 
-*Benchmarked on Apple M4 Max (16 cores, 128GB), 73-second MP3 at 44100 Hz stereo. See [Benchmarks](/docs/benchmarks) for details.*
+*Benchmarked on Apple M5 Max (16 cores, 128GB), 73-second WAV at 44100 Hz stereo, all per-feature calls measured standalone from raw audio. See [Benchmarks](/docs/benchmarks) for full methodology and reproduction steps.*
 
 WebAssembly is ~2-3x slower than native C++, but still faster than Python.

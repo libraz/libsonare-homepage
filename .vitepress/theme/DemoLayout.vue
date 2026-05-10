@@ -121,6 +121,9 @@ const otherLocales = computed(() =>
       </div>
       <div class="demo-page__header-right">
         <span class="demo-page__version">v{{ libVersion || '-.-.--' }}</span>
+        <a :href="localePath('/docs/introduction')" class="demo-page__docs-link">
+          {{ currentLocale.docsLabel }}
+        </a>
         <button
           class="demo-page__theme-toggle"
           :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
@@ -441,6 +444,23 @@ html:not(.dark) .demo-page .demo-page__header {
   border-radius: 4px;
 }
 
+/* ===== DOCS LINK ===== */
+.demo-page__docs-link {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--demo-text);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.demo-page__docs-link:hover {
+  color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+}
+
 /* ===== THEME TOGGLE ===== */
 .demo-page__theme-toggle {
   display: inline-flex;
@@ -737,6 +757,11 @@ html:not(.dark) .demo-page .demo-page__footer {
 
   .demo-page__cta svg {
     display: none;
+  }
+
+  .demo-page__docs-link {
+    font-size: 10px;
+    padding: 5px 8px;
   }
 
   .demo-page__main {

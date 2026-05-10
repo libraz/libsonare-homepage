@@ -355,16 +355,16 @@ async function setupStreaming() {
   const source = audioCtx.createMediaStreamSource(stream);
 
   // Create analyzer with throttling for 60fps
-  const analyzer = new StreamAnalyzer(
-    audioCtx.sampleRate,
-    2048,   // nFft
-    512,    // hopLength
-    128,    // nMels
-    true,   // computeMel
-    true,   // computeChroma
-    true,   // computeOnset
-    4       // emit every 4 frames (~60fps at 44100Hz)
-  );
+  const analyzer = new StreamAnalyzer({
+    sampleRate: audioCtx.sampleRate,
+    nFft: 2048,
+    hopLength: 512,
+    nMels: 128,
+    computeMel: true,
+    computeChroma: true,
+    computeOnset: true,
+    emitEveryNFrames: 4, // emit every 4 frames (~60fps at 44100Hz)
+  });
 
   // Use ScriptProcessor for simplicity (AudioWorklet recommended for production)
   const processor = audioCtx.createScriptProcessor(512, 1, 1);
@@ -375,7 +375,7 @@ async function setupStreaming() {
 
     const available = analyzer.availableFrames();
     if (available > 0) {
-      const frames = analyzer.readFramesSoa(available);
+      const frames = analyzer.readFrames(available);
       updateVisualization(frames);
 
       // Check progressive BPM/key estimates
@@ -412,16 +412,16 @@ class AnalyzerWorklet extends AudioWorkletProcessor {
   constructor() {
     super();
     // sampleRate is a global in AudioWorkletGlobalScope
-    this.analyzer = new StreamAnalyzer(
+    this.analyzer = new StreamAnalyzer({
       sampleRate,
-      2048,   // nFft
-      512,    // hopLength
-      64,     // nMels (reduced for bandwidth)
-      true,   // computeMel
-      true,   // computeChroma
-      true,   // computeOnset
-      4       // emit every 4 frames
-    );
+      nFft: 2048,
+      hopLength: 512,
+      nMels: 64, // reduced for bandwidth
+      computeMel: true,
+      computeChroma: true,
+      computeOnset: true,
+      emitEveryNFrames: 4,
+    });
   }
 
   process(inputs: Float32Array[][]): boolean {
@@ -432,8 +432,7 @@ class AnalyzerWorklet extends AudioWorkletProcessor {
 
     const available = this.analyzer.availableFrames();
     if (available >= 4) {
-      // Use U8 format for minimal bandwidth
-      const frames = this.analyzer.readFramesU8(available);
+      const frames = this.analyzer.readFrames(available);
 
       // Transfer buffers for zero-copy
       this.port.postMessage({
@@ -485,13 +484,13 @@ source.connect(workletNode);
 
 ### Bandwidth Optimization
 
-Choose the appropriate output format based on your needs:
+The TypeScript `StreamAnalyzer` wrapper exposes a single `readFrames(maxFrames)` method that returns a Structure-of-Arrays `FrameBuffer` of `Float32Array`/`Int32Array` values. For lower-bandwidth transfer between threads, downsample or quantize the buffers yourself before calling `postMessage`. The underlying embind class also exposes 16-bit and 8-bit quantized variants (`readFramesI16` / `readFramesU8`) that can be used directly from C++ or via raw embind access; they are not part of the TypeScript wrapper's public surface.
 
-| Format | Size per Frame | Best For |
-|--------|---------------|----------|
-| `readFramesSoa()` | ~600 bytes | Development, debugging |
-| `readFramesI16()` | ~300 bytes | High-quality visualizations |
-| `readFramesU8()` | ~150 bytes | Mobile, bandwidth-limited |
+| Approach | Approx. size per frame | Best For |
+|----------|------------------------|----------|
+| `readFrames()` (Float32 SoA) | ~600 bytes | General use, full precision |
+| Downsample mel rows + quantize to Int16 in JS | ~300 bytes | High-quality visualizations |
+| Downsample mel rows + quantize to Uint8 in JS | ~150 bytes | Mobile, bandwidth-limited |
 
 ### Progressive Estimation
 
@@ -518,14 +517,17 @@ if (stats.estimate.key >= 0) {
 ### Visualization Example
 
 ```typescript
-function renderVisualization(frames: QuantizedFrameBufferU8) {
-  const { nFrames, nMels, mel, chroma, onsetStrength } = frames;
+import type { FrameBuffer } from '@libraz/libsonare';
 
-  // Render mel spectrogram (scrolling display)
+function renderVisualization(frames: FrameBuffer, nMels: number) {
+  const { nFrames, mel, chroma, onsetStrength } = frames;
+
+  // Render mel spectrogram (scrolling display). Values are linear power; clamp/scale to 0-1.
   for (let f = 0; f < nFrames; f++) {
     for (let m = 0; m < nMels; m++) {
-      const value = mel[f * nMels + m]; // 0-255
-      const color = `rgb(${value}, ${value * 0.5}, ${255 - value})`;
+      const value = Math.min(1, mel[f * nMels + m]);
+      const c = Math.round(value * 255);
+      const color = `rgb(${c}, ${Math.round(c * 0.5)}, ${255 - c})`;
       // Draw pixel at (scrollX + f, nMels - m)
     }
   }
@@ -538,9 +540,9 @@ function renderVisualization(frames: QuantizedFrameBufferU8) {
     }
   }
 
-  // Trigger effects on strong onsets
+  // Trigger effects on strong onsets (linear units)
   for (let f = 0; f < nFrames; f++) {
-    if (onsetStrength[f] > 200) { // threshold
+    if (onsetStrength[f] > 1.5) { // tune threshold for your audio
       triggerBeatEffect();
     }
   }
@@ -565,9 +567,9 @@ Requirements:
 
 | File | Size | Gzipped |
 |------|------|---------|
-| `sonare.js` | ~34 KB | ~12 KB |
-| `sonare.wasm` | ~228 KB | ~80 KB |
-| **Total** | ~262 KB | ~92 KB |
+| `sonare.js` | ~50 KB | ~13 KB |
+| `sonare.wasm` | ~458 KB | ~183 KB |
+| **Total** | ~508 KB | ~196 KB |
 
 ## Troubleshooting
 

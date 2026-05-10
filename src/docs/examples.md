@@ -131,16 +131,16 @@ import { init, StreamAnalyzer } from '@libraz/libsonare';
 await init();
 
 // Create analyzer for 44.1kHz audio
-const analyzer = new StreamAnalyzer(
-  44100,  // sampleRate
-  2048,   // nFft
-  512,    // hopLength
-  128,    // nMels
-  true,   // computeMel
-  true,   // computeChroma
-  true,   // computeOnset
-  4       // emit every 4 frames (~60fps)
-);
+const analyzer = new StreamAnalyzer({
+  sampleRate: 44100,
+  nFft: 2048,
+  hopLength: 512,
+  nMels: 128,
+  computeMel: true,
+  computeChroma: true,
+  computeOnset: true,
+  emitEveryNFrames: 4, // emit every 4 frames (~60fps)
+});
 
 // Process incoming audio chunks
 function onAudioData(samples: Float32Array) {
@@ -149,14 +149,15 @@ function onAudioData(samples: Float32Array) {
   // Check for available frames
   const available = analyzer.availableFrames();
   if (available > 0) {
-    // Use quantized format for efficient transfer
-    const frames = analyzer.readFramesU8(available);
+    const frames = analyzer.readFrames(available);
 
-    // frames.nFrames - number of frames
-    // frames.mel - [nFrames * nMels] Uint8Array
-    // frames.chroma - [nFrames * 12] Uint8Array
-    // frames.onsetStrength - [nFrames] Uint8Array
-    // frames.rmsEnergy - [nFrames] Uint8Array
+    // frames.nFrames        - number of frames
+    // frames.timestamps     - [nFrames] Float32Array (stream time in seconds)
+    // frames.mel            - [nFrames * nMels] Float32Array
+    // frames.chroma         - [nFrames * 12] Float32Array
+    // frames.onsetStrength  - [nFrames] Float32Array
+    // frames.rmsEnergy      - [nFrames] Float32Array
+    // frames.spectralCentroid / spectralFlatness / chordRoot / chordQuality / chordConfidence
 
     updateVisualization(frames);
   }
@@ -187,7 +188,13 @@ class AnalyzerProcessor extends AudioWorkletProcessor {
 
   constructor() {
     super();
-    this.analyzer = new StreamAnalyzer(sampleRate, 2048, 512, 64, true, true, true, 4);
+    this.analyzer = new StreamAnalyzer({
+      sampleRate,
+      nFft: 2048,
+      hopLength: 512,
+      nMels: 64,
+      emitEveryNFrames: 4,
+    });
   }
 
   process(inputs: Float32Array[][]): boolean {
@@ -198,7 +205,7 @@ class AnalyzerProcessor extends AudioWorkletProcessor {
 
     const available = this.analyzer.availableFrames();
     if (available >= 4) {
-      const frames = this.analyzer.readFramesU8(available);
+      const frames = this.analyzer.readFrames(available);
       this.port.postMessage({ type: 'frames', data: frames }, [
         frames.timestamps.buffer,
         frames.mel.buffer
@@ -291,8 +298,8 @@ int main() {
   // Mel spectrogram
   sonare::MelConfig config;
   config.n_mels = 128;
-  config.stft.n_fft = 2048;
-  config.stft.hop_length = 512;
+  config.n_fft = 2048;
+  config.hop_length = 512;
 
   auto mel = sonare::MelSpectrogram::compute(audio, config);
   std::cout << "Mel shape: " << mel.n_mels() << " x " << mel.n_frames() << std::endl;
@@ -363,6 +370,9 @@ int main() {
 #include <sonare_c.h>
 #include <stdio.h>
 
+static const char* kPitchNames[] = {
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
 int main() {
   SonareAudio* audio = NULL;
   SonareError err;
@@ -374,24 +384,27 @@ int main() {
     return 1;
   }
 
-  // Detect BPM
-  float bpm, confidence;
-  err = sonare_detect_bpm(audio, &bpm, &confidence);
+  // Detect BPM (uses the audio handle directly, no extra data copy)
+  float bpm;
+  err = sonare_audio_detect_bpm(audio, &bpm);
   if (err == SONARE_OK) {
-    printf("BPM: %.1f (confidence: %.0f%%)\n", bpm, confidence * 100);
+    printf("BPM: %.1f\n", bpm);
   }
 
-  // Detect key
+  // Detect key (SonareKey holds root + mode + confidence)
   SonareKey key;
-  err = sonare_detect_key(audio, &key);
+  err = sonare_audio_detect_key(audio, &key);
   if (err == SONARE_OK) {
-    printf("Key: %s\n", key.name);
+    printf("Key: %s %s (confidence: %.0f%%)\n",
+           kPitchNames[key.root],
+           key.mode == SONARE_MODE_MAJOR ? "major" : "minor",
+           key.confidence * 100);
   }
 
   // Detect beats
   float* beat_times = NULL;
   size_t beat_count = 0;
-  err = sonare_detect_beats(audio, &beat_times, &beat_count);
+  err = sonare_audio_detect_beats(audio, &beat_times, &beat_count);
   if (err == SONARE_OK) {
     printf("Beats: %zu\n", beat_count);
     sonare_free_floats(beat_times);
@@ -401,6 +414,17 @@ int main() {
   return 0;
 }
 ```
+
+::: tip Sample-based variants
+If you already hold raw samples (e.g., from another audio source), use the sample-based variants instead of constructing a `SonareAudio` handle:
+
+```c
+sonare_detect_bpm(samples, length, sample_rate, &out_bpm);
+sonare_detect_key(samples, length, sample_rate, &out_key);
+sonare_detect_beats(samples, length, sample_rate, &out_times, &out_count);
+sonare_analyze(samples, length, sample_rate, &out_result);
+```
+:::
 
 ## CLI Examples
 
@@ -417,7 +441,11 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### Audio Processing
+### Audio Processing (C++ CLI only)
+
+::: info
+`pitch-shift`, `time-stretch`, and the `hpss` export commands are provided by the C++ `sonare_cli` binary built from source. The Python CLI installed via `pip install libsonare` exposes the analysis and feature commands listed in the [CLI Reference](/docs/cli).
+:::
 
 ```bash
 # Transpose up 2 semitones

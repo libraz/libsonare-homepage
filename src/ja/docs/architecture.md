@@ -321,7 +321,7 @@ auto chorus = full.slice(60, 90);   // 60-90 秒
 ## WASM コンパイル
 
 ```
-出力: ~228KB WASM + ~34KB JS
+出力: ~458KB WASM + ~50KB JS
 ビルド: Emscripten + Embind
 フラグ: -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```

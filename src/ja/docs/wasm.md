@@ -313,16 +313,16 @@ async function setupStreaming() {
   const source = audioCtx.createMediaStreamSource(stream);
 
   // 60fps 用にスロットリングしたアナライザーを作成
-  const analyzer = new StreamAnalyzer(
-    audioCtx.sampleRate,
-    2048,   // nFft
-    512,    // hopLength
-    128,    // nMels
-    true,   // computeMel
-    true,   // computeChroma
-    true,   // computeOnset
-    4       // 4 フレームごとに出力（44100Hz で約 60fps）
-  );
+  const analyzer = new StreamAnalyzer({
+    sampleRate: audioCtx.sampleRate,
+    nFft: 2048,
+    hopLength: 512,
+    nMels: 128,
+    computeMel: true,
+    computeChroma: true,
+    computeOnset: true,
+    emitEveryNFrames: 4, // 4 フレームごとに出力（44100Hz で約 60fps）
+  });
 
   // シンプルさのため ScriptProcessor を使用（本番では AudioWorklet 推奨）
   const processor = audioCtx.createScriptProcessor(512, 1, 1);
@@ -333,7 +333,7 @@ async function setupStreaming() {
 
     const available = analyzer.availableFrames();
     if (available > 0) {
-      const frames = analyzer.readFramesSoa(available);
+      const frames = analyzer.readFrames(available);
       updateVisualization(frames);
 
       // プログレッシブ BPM/キー推定をチェック
@@ -352,13 +352,13 @@ async function setupStreaming() {
 
 ### 帯域幅最適化
 
-ニーズに応じて適切な出力形式を選択:
+TypeScript の `StreamAnalyzer` ラッパーが公開しているのは `readFrames(maxFrames)` の 1 メソッドのみで、`Float32Array` / `Int32Array` の Structure-of-Arrays 形式 `FrameBuffer` を返します。スレッド間転送の帯域幅を抑えたい場合は、`postMessage` する前に JS 側でダウンサンプル・量子化してください。なお、内部の embind クラスには 16bit/8bit 量子化版（`readFramesI16` / `readFramesU8`）も実装されており、C++ から直接または embind を経由して呼び出せますが、TypeScript ラッパーの公開 API には含まれません。
 
-| 形式 | フレームあたりサイズ | 用途 |
-|------|---------------------|------|
-| `readFramesSoa()` | 〜600 バイト | 開発、デバッグ |
-| `readFramesI16()` | 〜300 バイト | 高品質ビジュアライゼーション |
-| `readFramesU8()` | 〜150 バイト | モバイル、帯域幅制限環境 |
+| アプローチ | フレームあたりサイズ目安 | 用途 |
+|------------|--------------------------|------|
+| `readFrames()` (Float32 SoA) | 〜600 バイト | 通常用途・フル精度 |
+| JS 側で mel をダウンサンプル + Int16 量子化 | 〜300 バイト | 高品質ビジュアライゼーション |
+| JS 側で mel をダウンサンプル + Uint8 量子化 | 〜150 バイト | モバイル、帯域幅制限環境 |
 
 ### プログレッシブ推定
 
@@ -400,9 +400,9 @@ if (stats.estimate.key >= 0) {
 
 | ファイル | サイズ | Gzip |
 |---------|--------|------|
-| `sonare.js` | ~34 KB | ~12 KB |
-| `sonare.wasm` | ~228 KB | ~80 KB |
-| **合計** | ~262 KB | ~92 KB |
+| `sonare.js` | ~50 KB | ~13 KB |
+| `sonare.wasm` | ~458 KB | ~183 KB |
+| **合計** | ~508 KB | ~196 KB |
 
 ## トラブルシューティング
 

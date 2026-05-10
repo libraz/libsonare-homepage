@@ -103,6 +103,8 @@ interface Key {
   root: string;        // "C", "C#", "D", ...
   mode: string;        // "major" | "minor"
   confidence: number;
+  name: string;        // "C major", "A minor"
+  shortName: string;   // "C", "Am"
 }
 
 interface TimeSignature {
@@ -117,5 +119,6 @@ interface AnalysisResult {
   key: Key;
   timeSignature: TimeSignature;
   beatTimes: Float32Array;
+  beats: Array<{ time: number; strength: undefined }>;
 }
 ```

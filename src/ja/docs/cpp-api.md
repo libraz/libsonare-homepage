@@ -43,13 +43,11 @@ static Audio Audio::from_buffer(const float* samples, size_t size, int sample_ra
 // ベクターから（ムーブ）
 static Audio Audio::from_vector(std::vector<float> samples, int sample_rate);
 
-// ファイルから（WAV, MP3）
+// ファイルから（WAV, MP3）— デコード失敗時は SonareException
 static Audio Audio::from_file(const std::string& path);
-static Audio Audio::from_file(const std::string& path, const AudioLoadOptions& options);
 
-// メモリバッファから
+// メモリ上の WAV/MP3 バッファから — デコード失敗時は SonareException
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
-static Audio Audio::from_memory(const uint8_t* data, size_t size, const AudioLoadOptions& options);
 ```
 
 #### プロパティ
@@ -80,20 +78,8 @@ const float* begin() const;
 const float* end() const;
 ```
 
-#### AudioLoadOptions
-
-リソース制限付きでオーディオファイルを読み込むための設定。
-
-```cpp
-struct AudioLoadOptions {
-  size_t max_file_size = 500 * 1024 * 1024;  // デフォルト 500 MB
-  int target_sample_rate = 0;                 // 0 = 元のまま
-  bool normalize = false;                     // 読み込み時にピークノーマライズ
-};
-```
-
 ::: tip 大きなファイルの処理
-非常に大きなファイルの場合は、`max_file_size` を適切に設定するか、`slice()` を使用してセグメントごとに処理してください。
+非常に大きなファイルを扱う場合は、読み込み後に `slice()` でセグメントに分割して処理することを検討してください。
 :::
 
 ### Spectrogram
@@ -414,8 +400,8 @@ analyzer.read_frames_quantized_i16(max_frames, i16_buffer, qconfig);
 ```cpp
 MelConfig config;
 config.n_mels = 128;
-config.stft.n_fft = 2048;
-config.stft.hop_length = 512;
+config.n_fft = 2048;
+config.hop_length = 512;
 
 auto mel = MelSpectrogram::compute(audio, config);
 

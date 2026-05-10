@@ -255,7 +255,7 @@ sonare version --json
 
 **Output:**
 ```
-libsonare 1.0.1 (Python CLI)
+libsonare 1.0.2 (Python CLI)
 ```
 
 ## Examples

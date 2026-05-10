@@ -50,8 +50,8 @@ mkdir build && cd build
 cmake ..
 make -j$(nproc)
 
-# Build WebAssembly
-make build-wasm
+# Build WebAssembly (run from the repository root, not from build/)
+cd .. && make wasm
 ```
 
 ## Native Bindings (Python / Node.js)

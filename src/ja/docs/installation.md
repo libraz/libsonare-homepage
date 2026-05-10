@@ -40,8 +40,8 @@ mkdir build && cd build
 cmake ..
 make -j$(nproc)
 
-# WebAssemblyをビルド
-make build-wasm
+# WebAssemblyをビルド（build/ ではなくリポジトリルートで実行）
+cd .. && make wasm
 ```
 
 ## PyPI（Python）

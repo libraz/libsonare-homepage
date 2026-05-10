@@ -358,7 +358,7 @@ Default parameters match librosa:
 ## WASM Compilation
 
 ```
-Output: ~228KB WASM + ~34KB JS
+Output: ~458KB WASM + ~50KB JS
 Build: Emscripten with Embind
 Flags: -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```

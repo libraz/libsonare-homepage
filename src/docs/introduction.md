@@ -157,7 +157,7 @@ The `StreamAnalyzer` runs the same pipeline on audio **chunk-by-chunk** with low
 | **Linux / macOS** | C++ | Native applications, CLI tools |
 | **Any (via C API)** | C | FFI integration with other languages |
 
-The WebAssembly build is ~262 KB (~92 KB gzipped) with no external dependencies.
+The WebAssembly build is ~508 KB (~196 KB gzipped) with no external dependencies.
 
 ## Relationship with librosa
 

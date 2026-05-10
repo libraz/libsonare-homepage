@@ -131,16 +131,16 @@ import { init, StreamAnalyzer } from '@libraz/libsonare';
 await init();
 
 // 44.1kHz 音声用アナライザーを作成
-const analyzer = new StreamAnalyzer(
-  44100,  // sampleRate
-  2048,   // nFft
-  512,    // hopLength
-  128,    // nMels
-  true,   // computeMel
-  true,   // computeChroma
-  true,   // computeOnset
-  4       // 4 フレームごとに出力（約 60fps）
-);
+const analyzer = new StreamAnalyzer({
+  sampleRate: 44100,
+  nFft: 2048,
+  hopLength: 512,
+  nMels: 128,
+  computeMel: true,
+  computeChroma: true,
+  computeOnset: true,
+  emitEveryNFrames: 4, // 4 フレームごとに出力（約 60fps）
+});
 
 // 入力音声チャンクを処理
 function onAudioData(samples: Float32Array) {
@@ -149,14 +149,15 @@ function onAudioData(samples: Float32Array) {
   // 利用可能なフレームをチェック
   const available = analyzer.availableFrames();
   if (available > 0) {
-    // 効率的な転送のため量子化形式を使用
-    const frames = analyzer.readFramesU8(available);
+    const frames = analyzer.readFrames(available);
 
-    // frames.nFrames - フレーム数
-    // frames.mel - [nFrames * nMels] Uint8Array
-    // frames.chroma - [nFrames * 12] Uint8Array
-    // frames.onsetStrength - [nFrames] Uint8Array
-    // frames.rmsEnergy - [nFrames] Uint8Array
+    // frames.nFrames        - フレーム数
+    // frames.timestamps     - [nFrames] Float32Array (秒単位のストリーム時刻)
+    // frames.mel            - [nFrames * nMels] Float32Array
+    // frames.chroma         - [nFrames * 12] Float32Array
+    // frames.onsetStrength  - [nFrames] Float32Array
+    // frames.rmsEnergy      - [nFrames] Float32Array
+    // frames.spectralCentroid / spectralFlatness / chordRoot / chordQuality / chordConfidence
 
     updateVisualization(frames);
   }
@@ -187,7 +188,13 @@ class AnalyzerProcessor extends AudioWorkletProcessor {
 
   constructor() {
     super();
-    this.analyzer = new StreamAnalyzer(sampleRate, 2048, 512, 64, true, true, true, 4);
+    this.analyzer = new StreamAnalyzer({
+      sampleRate,
+      nFft: 2048,
+      hopLength: 512,
+      nMels: 64,
+      emitEveryNFrames: 4,
+    });
   }
 
   process(inputs: Float32Array[][]): boolean {
@@ -198,7 +205,7 @@ class AnalyzerProcessor extends AudioWorkletProcessor {
 
     const available = this.analyzer.availableFrames();
     if (available >= 4) {
-      const frames = this.analyzer.readFramesU8(available);
+      const frames = this.analyzer.readFrames(available);
       this.port.postMessage({ type: 'frames', data: frames }, [
         frames.timestamps.buffer,
         frames.mel.buffer
@@ -291,8 +298,8 @@ int main() {
   // メルスペクトログラム
   sonare::MelConfig config;
   config.n_mels = 128;
-  config.stft.n_fft = 2048;
-  config.stft.hop_length = 512;
+  config.n_fft = 2048;
+  config.hop_length = 512;
 
   auto mel = sonare::MelSpectrogram::compute(audio, config);
   std::cout << "Mel 形状: " << mel.n_mels() << " x " << mel.n_frames() << std::endl;
@@ -372,7 +379,11 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### オーディオ処理
+### オーディオ処理（C++ CLI 専用）
+
+::: info
+`pitch-shift`、`time-stretch`、エクスポート用 `hpss` などのコマンドは、ソースからビルドする C++ 製 `sonare_cli` バイナリで提供されます。`pip install libsonare` でインストールされる Python CLI には、[CLI リファレンス](/ja/docs/cli)で説明する解析・特徴抽出系コマンドのみが含まれます。
+:::
 
 ```bash
 # 2 半音上に移調

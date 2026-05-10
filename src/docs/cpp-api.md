@@ -43,13 +43,11 @@ static Audio Audio::from_buffer(const float* samples, size_t size, int sample_ra
 // From vector (moved)
 static Audio Audio::from_vector(std::vector<float> samples, int sample_rate);
 
-// From file (WAV, MP3)
+// From file (WAV, MP3) — throws SonareException on decode error
 static Audio Audio::from_file(const std::string& path);
-static Audio Audio::from_file(const std::string& path, const AudioLoadOptions& options);
 
-// From memory buffer
+// From in-memory WAV/MP3 buffer — throws SonareException on decode error
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
-static Audio Audio::from_memory(const uint8_t* data, size_t size, const AudioLoadOptions& options);
 ```
 
 #### Properties
@@ -80,20 +78,8 @@ const float* begin() const;
 const float* end() const;
 ```
 
-#### AudioLoadOptions
-
-Configuration for loading audio files with resource limits.
-
-```cpp
-struct AudioLoadOptions {
-  size_t max_file_size = 500 * 1024 * 1024;  // 500 MB default
-  int target_sample_rate = 0;                 // 0 = keep original
-  bool normalize = false;                     // Peak normalize on load
-};
-```
-
 ::: tip Large File Handling
-For very large files, set `max_file_size` appropriately or process in segments using `slice()`.
+For very large files, prefer streaming or process in segments using `slice()` after loading.
 :::
 
 #### Example
@@ -496,8 +482,8 @@ int sr = analyzer.config().sample_rate;
 ```cpp
 MelConfig config;
 config.n_mels = 128;
-config.stft.n_fft = 2048;
-config.stft.hop_length = 512;
+config.n_fft = 2048;
+config.hop_length = 512;
 
 auto mel = MelSpectrogram::compute(audio, config);
 
@@ -802,30 +788,56 @@ int time_to_frames(float time, int sr, int hop_length);
 
 ## C API
 
-For FFI integration.
+For FFI integration. Two parallel entry-point styles are provided: handle-based (takes a `SonareAudio*`) and sample-based (takes a raw `float*` buffer).
 
 ```c
 #include <sonare_c.h>
 
-// Audio
-SonareError sonare_audio_from_buffer(const float* data, size_t len, int sr, SonareAudio** out);
-SonareError sonare_audio_from_file(const char* path, SonareAudio** out);
-void sonare_audio_free(SonareAudio* audio);
+// Audio handle
+SonareError sonare_audio_from_buffer(const float* data, size_t length, int sample_rate,
+                                     SonareAudio** out);
+SonareError sonare_audio_from_memory(const uint8_t* data, size_t length, SonareAudio** out);
+SonareError sonare_audio_from_file(const char* path, SonareAudio** out);  // Not available in WASM
+void        sonare_audio_free(SonareAudio* audio);
+const float* sonare_audio_data(const SonareAudio* audio);
+size_t      sonare_audio_length(const SonareAudio* audio);
+int         sonare_audio_sample_rate(const SonareAudio* audio);
+float       sonare_audio_duration(const SonareAudio* audio);
 
-// Analysis
-SonareError sonare_detect_bpm(const SonareAudio* audio, float* out_bpm, float* out_confidence);
-SonareError sonare_detect_key(const SonareAudio* audio, SonareKey* out_key);
-SonareError sonare_detect_beats(const SonareAudio* audio, float** out_times, size_t* out_count);
-SonareError sonare_analyze(const SonareAudio* audio, SonareAnalysisResult* out);
+// Handle-based analysis (avoids copying samples across the FFI boundary)
+SonareError sonare_audio_detect_bpm(const SonareAudio* audio, float* out_bpm);
+SonareError sonare_audio_detect_key(const SonareAudio* audio, SonareKey* out_key);
+SonareError sonare_audio_detect_beats(const SonareAudio* audio,
+                                      float** out_times, size_t* out_count);
+SonareError sonare_audio_detect_onsets(const SonareAudio* audio,
+                                       float** out_times, size_t* out_count);
+SonareError sonare_audio_analyze(const SonareAudio* audio, SonareAnalysisResult* out);
+
+// Sample-based analysis (use when you already have a raw float buffer)
+SonareError sonare_detect_bpm(const float* samples, size_t length, int sample_rate,
+                              float* out_bpm);
+SonareError sonare_detect_key(const float* samples, size_t length, int sample_rate,
+                              SonareKey* out_key);
+SonareError sonare_detect_beats(const float* samples, size_t length, int sample_rate,
+                                float** out_times, size_t* out_count);
+SonareError sonare_detect_onsets(const float* samples, size_t length, int sample_rate,
+                                 float** out_times, size_t* out_count);
+SonareError sonare_analyze(const float* samples, size_t length, int sample_rate,
+                           SonareAnalysisResult* out);
 
 // Memory management
 void sonare_free_floats(float* ptr);
+void sonare_free_ints(int* ptr);
 void sonare_free_result(SonareAnalysisResult* result);
 
 // Utility
 const char* sonare_error_message(SonareError error);
 const char* sonare_version(void);
 ```
+
+`SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
+
+Effects (`sonare_hpss`, `sonare_time_stretch`, `sonare_pitch_shift`, `sonare_normalize`, `sonare_trim`), features (`sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin`), conversions, and resampling have matching sample-based entry points — see `src/sonare_c.h` for the full list.
 
 ## Error Handling
 

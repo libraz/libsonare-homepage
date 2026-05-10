@@ -240,15 +240,18 @@ function analyzeWithProgress(
 
 **Progress Stages:**
 
-| Stage | Description | Progress Range |
-|-------|-------------|----------------|
-| `"bpm"` | BPM detection | 0.0 - 0.15 |
-| `"key"` | Key detection | 0.15 - 0.25 |
-| `"beats"` | Beat tracking | 0.25 - 0.45 |
-| `"chords"` | Chord recognition | 0.45 - 0.65 |
-| `"sections"` | Section detection | 0.65 - 0.85 |
-| `"timbre"` | Timbre analysis | 0.85 - 0.95 |
-| `"dynamics"` | Dynamics analysis | 0.95 - 1.0 |
+| Stage | Description | Progress |
+|-------|-------------|----------|
+| `"features"` | Feature precomputation | 0.0 |
+| `"bpm"` | BPM detection | 0.15 |
+| `"key"` | Key detection | 0.15 |
+| `"beats"` | Beat tracking | 0.25 |
+| `"chords"` | Chord recognition | 0.40 |
+| `"sections"` | Section detection | 0.55 |
+| `"timbre"` | Timbre analysis | 0.70 |
+| `"dynamics"` | Dynamics analysis | 0.80 |
+| `"rhythm"` | Rhythm analysis | 0.90 |
+| `"complete"` | Finished | 1.0 |
 
 ```typescript
 const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
@@ -1032,7 +1035,8 @@ interface AnalysisResult {
   bpmConfidence: number;
   key: Key;
   timeSignature: TimeSignature;
-  beats: Beat[];
+  beatTimes: Float32Array;  // Convenience copy of beats[].time, useful for librosa-style code
+  beats: Beat[];            // Beat objects with per-beat strength
   chords: Chord[];
   sections: Section[];
   timbre: Timbre;
@@ -1196,9 +1200,9 @@ try {
 
 | File | Size | Gzipped |
 |------|------|---------|
-| `sonare.js` | ~34 KB | ~12 KB |
-| `sonare.wasm` | ~228 KB | ~80 KB |
-| **Total** | ~262 KB | ~92 KB |
+| `sonare.js` | ~50 KB | ~13 KB |
+| `sonare.wasm` | ~458 KB | ~183 KB |
+| **Total** | ~508 KB | ~196 KB |
 
 ## Browser Support
 

@@ -172,8 +172,7 @@ export default withMermaid(defineConfig({
       { icon: 'github', link: githubUrl }
     ],
     footer: {
-      message: 'Released under the Apache-2.0 License.',
-      copyright: 'Copyright © 2024-present libraz'
+      message: 'a personal project by <a href="https://libraz.net" target="_blank" rel="noopener">libraz</a>'
     }
   },
 

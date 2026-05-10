@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "vitepress": "^1.6.4",
-    "vue": "^3.5.26"
+    "vue": "^3.5.34"
   },
   "volta": {
     "node": "22.21.1",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
-    "mermaid": "^11.12.2",
+    "mermaid": "^11.14.0",
     "vitepress-plugin-mermaid": "^2.0.17"
   }
 }

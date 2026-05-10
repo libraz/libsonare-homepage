@@ -228,15 +228,18 @@ function analyzeWithProgress(
 
 **進捗ステージ:**
 
-| ステージ | 説明 | 進捗範囲 |
-|---------|------|----------|
-| `"bpm"` | BPM 検出 | 0.0 - 0.15 |
-| `"key"` | キー検出 | 0.15 - 0.25 |
-| `"beats"` | ビートトラッキング | 0.25 - 0.45 |
-| `"chords"` | コード認識 | 0.45 - 0.65 |
-| `"sections"` | セクション検出 | 0.65 - 0.85 |
-| `"timbre"` | 音色解析 | 0.85 - 0.95 |
-| `"dynamics"` | ダイナミクス解析 | 0.95 - 1.0 |
+| ステージ | 説明 | 進捗 |
+|---------|------|------|
+| `"features"` | 特徴量の事前計算 | 0.0 |
+| `"bpm"` | BPM 検出 | 0.15 |
+| `"key"` | キー検出 | 0.15 |
+| `"beats"` | ビートトラッキング | 0.25 |
+| `"chords"` | コード認識 | 0.40 |
+| `"sections"` | セクション検出 | 0.55 |
+| `"timbre"` | 音色解析 | 0.70 |
+| `"dynamics"` | ダイナミクス解析 | 0.80 |
+| `"rhythm"` | リズム解析 | 0.90 |
+| `"complete"` | 完了 | 1.0 |
 
 ## オーディオエフェクト
 
@@ -897,7 +900,8 @@ interface AnalysisResult {
   bpmConfidence: number;
   key: Key;
   timeSignature: TimeSignature;
-  beats: Beat[];
+  beatTimes: Float32Array;  // beats[].time のコピー。librosa 互換コードで便利
+  beats: Beat[];            // 各拍の強度を含むオブジェクト配列
   chords: Chord[];
   sections: Section[];
   timbre: Timbre;
