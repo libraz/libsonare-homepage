@@ -225,6 +225,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
 
   let analyzer: StreamAnalyzer | null = null
   let wasmModule: typeof import('@/wasm/index') | null = null
+  let nextExpectedSampleOffset: number | null = null
 
   const defaultConfig: StreamConfig = {
     sampleRate: 44100,
@@ -279,16 +280,31 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     spectralCentroidHistory.length = 0
     spectralFlatnessHistory.length = 0
     onsetStrengthHistory.length = 0
+    nextExpectedSampleOffset = null
   }
 
-  function process(samples: Float32Array): void {
+  function process(samples: Float32Array, sampleOffset?: number): void {
     if (!analyzer || !isInitialized.value) return
 
     isProcessing.value = true
 
-    // Pass samples directly to C++ analyzer
-    // (C++ handles resampling internally if needed for high sample rates)
-    analyzer.process(samples)
+    // Keep StreamAnalyzer synchronized with the AudioWorklet timeline.
+    // If playback seeks or resumes from a non-contiguous point, reset analysis
+    // state so overlap/chord accumulators do not mix unrelated audio regions.
+    if (sampleOffset !== undefined) {
+      if (
+        nextExpectedSampleOffset !== null &&
+        sampleOffset !== nextExpectedSampleOffset
+      ) {
+        reset(sampleOffset)
+      }
+
+      analyzer.processWithOffset(samples, sampleOffset)
+      nextExpectedSampleOffset = sampleOffset + samples.length
+    } else {
+      analyzer.process(samples)
+      nextExpectedSampleOffset = null
+    }
 
     // Read available frames
     const availableFrames = analyzer.availableFrames()
@@ -460,10 +476,12 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     }
   }
 
-  function reset(): void {
+  function reset(baseSampleOffset = 0): void {
     if (analyzer) {
-      analyzer.reset()
+      analyzer.reset(baseSampleOffset)
     }
+
+    nextExpectedSampleOffset = baseSampleOffset
 
     chromaHistory.length = 0
     rmsHistory.length = 0

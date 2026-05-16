@@ -26,8 +26,11 @@ graph TB
         BEAT["BeatAnalyzer"]
         CHORD["ChordAnalyzer"]
         SECTION["SectionAnalyzer"]
+        BOUNDARY["BoundaryDetector"]
         TIMBRE["TimbreAnalyzer"]
         DYNAMICS["DynamicsAnalyzer"]
+        RHYTHM["RhythmAnalyzer"]
+        MELODY["MelodyAnalyzer"]
     end
 
     subgraph "Effects Layer"
@@ -35,12 +38,14 @@ graph TB
         TIMESTRETCH["Time Stretch"]
         PITCHSHIFT["Pitch Shift"]
         NORMALIZE["Normalize"]
+        TTS["TTS Utilities"]
     end
 
     subgraph "Feature Layer"
         MEL["MelSpectrogram"]
         CHROMA["Chroma"]
         CQT["CQT"]
+        VQT["VQT"]
         SPECTRAL["Spectral Features"]
         ONSET["Onset Detection"]
         PITCH["Pitch Tracking"]
@@ -73,20 +78,29 @@ graph TB
     MUSIC --> BEAT
     MUSIC --> CHORD
     MUSIC --> SECTION
+    MUSIC --> BOUNDARY
     MUSIC --> TIMBRE
     MUSIC --> DYNAMICS
+    MUSIC --> RHYTHM
+    MUSIC --> MELODY
 
     BPM --> ONSET
     KEY --> CHROMA
     BEAT --> ONSET
     CHORD --> CHROMA
     SECTION --> MEL
+    BOUNDARY --> MEL
+    MELODY --> PITCH
 
     HPSS --> SPECTRUM
     TIMESTRETCH --> SPECTRUM
+    PITCHSHIFT --> TIMESTRETCH
+    PITCHSHIFT --> RESAMPLE
 
     MEL --> SPECTRUM
     CHROMA --> SPECTRUM
+    CQT --> FFT
+    VQT --> CQT
     SPECTRAL --> SPECTRUM
     ONSET --> MEL
 
@@ -111,7 +125,7 @@ src/
 │   ├── fft.h           # KissFFT wrapper
 │   ├── spectrum.h      # STFT/iSTFT
 │   ├── audio.h         # Audio buffer
-│   ├── audio_io.h      # WAV/MP3 loading
+│   ├── audio_io.h      # WAV/MP3 loading, optional FFmpeg-backed formats
 │   └── resample.h      # r8brain resampling
 │
 ├── filters/            # Level 4: Filterbanks
@@ -123,15 +137,19 @@ src/
 ├── feature/            # Level 4: Feature extraction
 │   ├── mel_spectrogram.h
 │   ├── chroma.h
+│   ├── cqt.h
+│   ├── vqt.h
 │   ├── spectral.h
 │   ├── onset.h
 │   └── pitch.h
 │
 ├── effects/            # Level 5: Audio effects
 │   ├── hpss.h
+│   ├── phase_vocoder.h
 │   ├── time_stretch.h
 │   ├── pitch_shift.h
-│   └── normalize.h
+│   ├── normalize.h
+│   └── tts.h
 │
 ├── analysis/           # Level 6: Music analysis
 │   ├── music_analyzer.h
@@ -140,6 +158,11 @@ src/
 │   ├── beat_analyzer.h
 │   ├── chord_analyzer.h
 │   ├── section_analyzer.h
+│   ├── boundary_detector.h
+│   ├── melody_analyzer.h
+│   ├── rhythm_analyzer.h
+│   ├── timbre_analyzer.h
+│   ├── dynamics_analyzer.h
 │   └── ...
 │
 ├── streaming/          # Level 6: Real-time streaming
@@ -161,7 +184,7 @@ src/
 ```mermaid
 flowchart LR
     subgraph Input
-        FILE[Audio File<br/>WAV/MP3]
+        FILE[Audio File<br/>WAV/MP3<br/>+ FFmpeg formats when enabled]
         BUFFER[Raw Buffer<br/>float*]
     end
 
@@ -208,23 +231,24 @@ flowchart LR
 ### Audio Effects Pipeline
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Input
         AUDIO[Audio]
     end
 
-    subgraph Transform
+    subgraph SharedTransform
         STFT[STFT]
         SPEC[Complex<br/>Spectrogram]
+        ISTFT[iSTFT]
     end
 
-    subgraph Effects
+    subgraph SpectralEffects
         HPSS[HPSS]
         PV[Phase Vocoder]
     end
 
-    subgraph Reconstruct
-        ISTFT[iSTFT]
+    subgraph PitchShift
+        TS[Time Stretch]
         RESAMPLE[Resample]
     end
 
@@ -237,9 +261,11 @@ flowchart LR
     SPEC --> HPSS
     SPEC --> PV
     HPSS --> ISTFT
-    PV --> RESAMPLE
-    RESAMPLE --> ISTFT
+    PV --> ISTFT
+    AUDIO --> TS
+    TS --> RESAMPLE
     ISTFT --> OUT
+    RESAMPLE --> OUT
 ```
 
 ### Streaming Pipeline
@@ -326,19 +352,24 @@ auto chorus = full.slice(60, 90);   // 60-90 sec
 
 ### WASM Compatibility
 
-Core modules avoid:
-- File I/O (handled by Audio I/O layer)
-- Threading (single-threaded execution)
-- Dynamic loading
-- System-specific APIs
+The npm/WebAssembly package exposes sample-based APIs. It expects decoded mono
+`Float32Array` samples and does not bundle file decoding. Browser applications
+typically decode files with the Web Audio API or another JavaScript decoder
+before calling libsonare.
+
+WASM builds avoid native file I/O and FFmpeg-backed decoding. Runtime behavior is
+single-threaded unless a future build explicitly enables browser threading.
 
 ### librosa Compatibility
 
-Default parameters match librosa:
+Many DSP defaults intentionally mirror common librosa values, but libsonare is
+not a drop-in replacement. In particular, libsonare usually requires the caller
+to provide the sample rate; it does not implicitly resample to 22050 Hz the way
+`librosa.load()` does by default.
 
 | Parameter | Default |
 |-----------|---------|
-| sample_rate | 22050 |
+| sample_rate | User-provided |
 | n_fft | 2048 |
 | hop_length | 512 |
 | n_mels | 128 |
@@ -353,12 +384,13 @@ Default parameters match librosa:
 | Eigen3 | Matrix ops | MPL-2.0 |
 | dr_libs | WAV decode | Public Domain |
 | minimp3 | MP3 decode | CC0-1.0 |
+| FFmpeg | Optional extended file decoding | LGPL/GPL depending on linked build |
 | r8brain | Resampling | MIT |
 
 ## WASM Compilation
 
 ```
-Output: ~458KB WASM + ~50KB JS
+Output: ~457KB WASM + ~50KB JS in the current site bundle
 Build: Emscripten with Embind
 Flags: -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```

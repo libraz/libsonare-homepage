@@ -3,7 +3,7 @@
 libsonareとlibrosa (Python) の音声解析タスクにおける性能比較。
 
 ::: info 計測方法
-以下の数値はすべて **「raw audio から standalone」** で計測しています。各呼び出しは必要な中間状態 (STFT、Melなど) を元のサンプルから毎回再構築します。これは両APIを単発で使うユーザーが体験するのと同じコードパスなので、フェアな比較になっています。ベンチマークのソースと結果JSONは libsonare リポジトリの [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) にあります。
+以下の数値はすべて「<strong>raw audio から standalone</strong>」で計測しています。各呼び出しは必要な中間状態 (STFT、Melなど) を元のサンプルから毎回再構築します。これは両APIを単発で使うユーザーが体験するのと同じコードパスなので、フェアな比較になっています。ベンチマークのソースと結果JSONは libsonare リポジトリの [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) にあります。
 :::
 
 ::: info ハードウェア
@@ -121,7 +121,7 @@ rye run --pyproject benchmarks/pyproject.toml python benchmarks/run_bench.py
 統合された `benchmarks/results.json` には C++ 計測の libsonare 値と librosa 値、そして `bpm-detector` が `PATH` にあれば bpm-detector のフルパイプライン時間も含まれます。
 
 ::: tip libsonare を Python から呼ぶ場合
-上記の数値は libsonare のネイティブ C++ 性能です。個別の特徴量関数を Python `cffi` バインディング経由で呼ぶ場合 (例: `libsonare.stft(samples, sr)`)、各呼び出しでサンプルバッファが FFI 境界を跨いでマーシャリングされ、軽量な特徴量ではこれが実行時間を支配します。フルパイプラインの `analyze()` は影響を受けません — エンドツーエンドで C++ 内で動き、小さな結果構造体のみが境界を越えます。
+上記の数値は libsonare のネイティブ C++ 性能です。個別の特徴量関数を Python バインディング経由で呼ぶ場合 (例: `libsonare.stft(samples, sr)`)、各呼び出しでサンプルバッファが FFI 境界を跨いでマーシャリングされ、軽量な特徴量ではこれが実行時間を支配します。フルパイプラインの `analyze()` は影響を受けません — エンドツーエンドで C++ 内で動き、小さな結果構造体のみが境界を越えます。
 :::
 
 ## 備考

@@ -3,7 +3,16 @@
 `sonare` コマンドラインインターフェースの完全なリファレンス。
 
 ::: tip pip で簡単インストール
-`pip install libsonare` を実行すると `sonare` コマンドがすぐに使えます。ソースからのビルドは不要です。
+`sonare` CLI は PyPI の Python パッケージに含まれます。
+
+```bash
+pip install libsonare
+sonare analyze music.mp3
+```
+
+npm の WebAssembly パッケージ `@libraz/libsonare` ではインストールされません。
+
+標準の PyPI ホイールは WAV/MP3 をデコードします。M4A/AAC/FLAC/OGG/Opus を直接読むには FFmpeg 有効ビルドが必要です。
 :::
 
 ::: info C++ CLI
@@ -12,7 +21,7 @@
 
 ## 概要
 
-sonare CLI は、コマンドラインから音楽解析と特徴抽出機能を提供します。CPU自動検出による並列解析で、Pythonベースのライブラリより数十倍高速に動作します。
+`sonare` CLI は、ターミナルでの簡易確認、バッチ解析、スクリプト向け JSON サマリー出力のためのツールです。重い解析処理は Python 実装ではなく、Python パッケージからネイティブ C++ パイプラインを呼び出して実行します。
 
 ```bash
 sonare <command> [options] <audio_file>
@@ -24,10 +33,14 @@ sonare <command> [options] <audio_file>
 |--------|-------------|
 | `--json` | JSON 形式で結果を出力 |
 | `--help`, `-h` | コマンドのヘルプを表示 |
-| `-o`, `--output` | 出力ファイルパス |
+| `-o`, `--output` | Python CLI のパーサーでは受け付けますが、解析・特徴抽出コマンドは現在 stdout に出力します |
 | `--n-fft <int>` | FFT サイズ（デフォルト: 2048） |
 | `--hop-length <int>` | ホップ長（デフォルト: 512） |
 | `--n-mels <int>` | Mel バンド数（デフォルト: 128） |
+
+`--json` はスクリプトで扱いやすい要約JSONを出力します。Python CLI の
+`mel` や `chroma` は特徴量の全行列をそのまま出力するのではなく、次元や
+要約値を出力します。
 
 ## 解析コマンド
 
@@ -131,7 +144,7 @@ sonare onsets music.mp3 --json
 
 ### mel
 
-メルスペクトログラム統計を計算。
+メルスペクトログラムを計算し、その次元を表示。
 
 ```bash
 sonare mel music.mp3
@@ -250,7 +263,7 @@ sonare version --json
 
 **出力:**
 ```
-libsonare 1.0.2 (Python CLI)
+libsonare 1.0.4 (Python CLI)
 ```
 
 ## 使用例
@@ -266,10 +279,10 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### ML 用特徴抽出
+### 特徴量サマリーの書き出し
 
 ```bash
-# 機械学習用に特徴を抽出
+# コンパクトな特徴量サマリーを書き出す
 sonare mel song.mp3 --json > mel_features.json
 sonare spectral song.mp3 --json > spectral_features.json
 sonare chroma song.mp3 --json > chroma_features.json
@@ -297,6 +310,9 @@ done
 |--------|-----------|-------|
 | WAV | `.wav` | 非圧縮 PCM |
 | MP3 | `.mp3` | minimp3 でデコード |
+| M4A / AAC / FLAC / OGG / Opus | 形式により異なる | FFmpeg 有効ビルドのみ対応 |
+
+現在のビルドが FFmpeg デコードに対応しているかは、Python から `libsonare.has_ffmpeg_support()` で確認できます。
 
 ## 終了コード
 

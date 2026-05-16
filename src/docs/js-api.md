@@ -4,7 +4,9 @@ Complete API reference for libsonare JavaScript/TypeScript interface.
 
 ## Overview
 
-libsonare provides audio analysis capabilities for web applications:
+libsonare provides audio analysis capabilities for web applications. The npm
+package is the WebAssembly build and works on decoded mono `Float32Array`
+samples; it does not include a file decoder.
 
 | Category | Functions | Use Cases |
 |----------|-----------|-----------|
@@ -91,7 +93,7 @@ function isInitialized(): boolean
 Get the library version.
 
 ```typescript
-function version(): string  // e.g., "1.0.0"
+function version(): string  // e.g., "1.0.4"
 ```
 
 ## Analysis Functions
@@ -116,7 +118,7 @@ function detectBpm(samples: Float32Array, sampleRate: number): number
 | `samples` | `Float32Array` | Mono audio samples (range -1.0 to 1.0) |
 | `sampleRate` | `number` | Sample rate in Hz (e.g., 44100) |
 
-**Returns:** Detected BPM (typically 60-200), accuracy ±2 BPM
+**Returns:** Detected BPM as a number.
 
 ```typescript
 const bpm = detectBpm(samples, sampleRate);
@@ -1201,8 +1203,8 @@ try {
 | File | Size | Gzipped |
 |------|------|---------|
 | `sonare.js` | ~50 KB | ~13 KB |
-| `sonare.wasm` | ~458 KB | ~183 KB |
-| **Total** | ~508 KB | ~196 KB |
+| `sonare.wasm` | ~457 KB | ~182 KB |
+| **Total** | ~508 KB | ~195 KB |
 
 ## Browser Support
 

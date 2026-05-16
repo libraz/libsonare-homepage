@@ -39,7 +39,7 @@ libsonare is designed for developers building music-related applications:
 A DAW (Digital Audio Workstation) is software for recording, editing, and producing audio. Examples include Ableton Live, Logic Pro, FL Studio, and GarageBand. DAW plugins extend these applications with additional functionality like effects, instruments, or analysis tools.
 :::
 
-- **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs at native C++ speed (tens of times faster, with parallel analysis and automatic CPU detection) and works in the browser.
+- **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs the heavy pipeline in native C++ and also works in the browser.
 
 - **Game / interactive media developers** — Analyze music in real-time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
 
@@ -153,22 +153,24 @@ The `StreamAnalyzer` runs the same pipeline on audio **chunk-by-chunk** with low
 | **Browser** | JavaScript/TypeScript (WebAssembly) | Web apps, client-side analysis |
 | **Node.js** | JavaScript/TypeScript (WebAssembly) | Server-side processing |
 | **Node.js** | JavaScript/TypeScript (N-API native addon) | High-performance server-side processing |
-| **Python** | Python (cffi) | Data science, scripting, librosa migration |
+| **Python** | Python (`ctypes` over the native C API) | Data science, scripting, librosa migration |
 | **Linux / macOS** | C++ | Native applications, CLI tools |
 | **Any (via C API)** | C | FFI integration with other languages |
 
-The WebAssembly build is ~508 KB (~196 KB gzipped) with no external dependencies.
+The current site bundle includes about ~508 KB of WebAssembly/JavaScript assets
+before compression. See the [WebAssembly Guide](/docs/wasm#bundle-size) for the
+current breakdown.
 
 ## Relationship with librosa
 
-[librosa](https://librosa.org/) is the de facto standard Python library for audio analysis in the MIR community. libsonare is designed as a **compatible alternative** for environments where Python isn't available or performance is critical:
+[librosa](https://librosa.org/) is the de facto standard Python library for audio analysis in the MIR community. libsonare provides similar MIR building blocks for environments where Python is not available, where native integration is useful, or where a single C++ core is preferred:
 
 ::: details What are sample rate, FFT size, and hop length?
-These are the fundamental parameters of audio analysis. **Sample rate** is how many amplitude measurements per second the audio contains (e.g., 44,100 Hz for CD quality). **FFT size** (n_fft) is the number of samples in each analysis window — larger windows give better frequency resolution but worse time resolution. **Hop length** is how many samples the window moves between frames — smaller hops give more time detail but more computation. libsonare defaults to 22,050 Hz sample rate, 2,048 FFT size, and 512 hop length, matching librosa.
+These are the fundamental parameters of audio analysis. **Sample rate** is how many amplitude measurements per second the audio contains (e.g., 44,100 Hz for CD quality). **FFT size** (n_fft) is the number of samples in each analysis window — larger windows give better frequency resolution but worse time resolution. **Hop length** is how many samples the window moves between frames — smaller hops give more time detail but more computation. libsonare generally asks you to pass the sample rate explicitly; common DSP defaults such as `n_fft=2048` and `hop_length=512` mirror typical librosa usage.
 :::
 
-- Default parameters (sample rate, FFT size, hop length, etc.) match librosa exactly
-- Core algorithms (STFT, mel spectrogram, MFCC, chroma) produce numerically compatible results
+- Common DSP parameters and APIs are intentionally close to librosa where practical
+- Core features such as STFT, Mel spectrogram, MFCC, and chroma are covered by reference tests against librosa
 - Function names and API patterns are intentionally similar for easy migration
 
 libsonare also goes beyond librosa's scope with features like **chord recognition**, **section detection**, **timbre analysis**, and **real-time streaming** — capabilities that are typically separate tools in the Python ecosystem.

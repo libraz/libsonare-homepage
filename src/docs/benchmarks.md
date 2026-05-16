@@ -121,7 +121,7 @@ rye run --pyproject benchmarks/pyproject.toml python benchmarks/run_bench.py
 The merged `benchmarks/results.json` contains both the C++ libsonare numbers and the librosa numbers, plus the bpm-detector full-pipeline timing if `bpm-detector` is on `PATH`.
 
 ::: tip Calling libsonare from Python
-The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python `cffi` binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI boundary, which dominates the runtime for cheap features. The full-pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
+The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI boundary, which dominates the runtime for cheap features. The full-pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
 :::
 
 ## Notes

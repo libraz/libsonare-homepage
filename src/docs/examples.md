@@ -1,5 +1,66 @@
 # Usage Examples
 
+## By Use Case
+
+### Show BPM and Key in a Browser App
+
+Use the npm WebAssembly package when audio stays in the browser. Decode files
+with Web Audio API first, then pass mono `Float32Array` samples to libsonare.
+
+```typescript
+import { init, detectBpm, detectKey } from '@libraz/libsonare';
+
+await init();
+
+const audioCtx = new AudioContext();
+const decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
+const samples = decoded.getChannelData(0);
+
+const bpm = detectBpm(samples, decoded.sampleRate);
+const key = detectKey(samples, decoded.sampleRate);
+```
+
+### Batch Analyze a Music Folder from the Terminal
+
+Use the CLI when you want quick terminal output or JSON summaries for scripts.
+The CLI is installed from PyPI, not npm.
+
+```bash
+pip install libsonare
+
+for f in *.mp3; do
+  sonare analyze "$f" --json > "${f%.mp3}.json"
+done
+```
+
+### Extract Metadata in Python
+
+Use Python when you want scripting, notebooks, or a librosa-like workflow with a
+native C++ backend.
+
+```python
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    result = audio.analyze()
+
+print(result.bpm, result.key, len(result.beat_times))
+```
+
+### Analyze Uploaded Files in Node.js
+
+Use the native Node.js binding when you need server-side file loading and native
+performance. It is currently source-build oriented.
+
+```typescript
+import { Audio } from '@libraz/libsonare-native';
+
+const audio = Audio.fromFile('/tmp/upload.wav');
+const result = audio.analyze();
+
+console.log(result.bpm, result.key.name);
+```
+
 ## JavaScript/TypeScript
 
 ### Basic BPM and Key Detection
@@ -54,7 +115,7 @@ console.log(`\nForm: ${result.form}`);
 ### Harmonic-Percussive Separation
 
 ```typescript
-import { init, hpss } from '@libraz/libsonare';
+import { init, hpss, detectKey } from '@libraz/libsonare';
 
 await init();
 

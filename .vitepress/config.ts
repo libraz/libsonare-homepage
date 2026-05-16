@@ -96,20 +96,20 @@ export default withMermaid(defineConfig({
               ]
             },
             {
-              text: 'API Reference',
+              text: 'Use by Runtime',
               items: [
+                { text: 'Browser / WASM', link: '/docs/wasm' },
                 { text: 'JavaScript API', link: '/docs/js-api' },
                 { text: 'Python API', link: '/docs/python-api' },
-                { text: 'C++ API', link: '/docs/cpp-api' },
-                { text: 'Node.js / Native Bindings', link: '/docs/native-bindings' },
+                { text: 'Node.js Native', link: '/docs/native-bindings' },
                 { text: 'CLI Reference', link: '/docs/cli' },
+                { text: 'C++ API', link: '/docs/cpp-api' },
               ]
             },
             {
               text: 'Technical',
               items: [
                 { text: 'Architecture', link: '/docs/architecture' },
-                { text: 'WebAssembly', link: '/docs/wasm' },
                 { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
                 { text: 'Benchmarks', link: '/docs/benchmarks' },
               ]
@@ -142,20 +142,20 @@ export default withMermaid(defineConfig({
               ]
             },
             {
-              text: 'APIリファレンス',
+              text: '利用環境別',
               items: [
+                { text: 'ブラウザ / WASM', link: '/ja/docs/wasm' },
                 { text: 'JavaScript API', link: '/ja/docs/js-api' },
                 { text: 'Python API', link: '/ja/docs/python-api' },
-                { text: 'C++ API', link: '/ja/docs/cpp-api' },
-                { text: 'Node.js / ネイティブバインディング', link: '/ja/docs/native-bindings' },
+                { text: 'Node.js ネイティブ', link: '/ja/docs/native-bindings' },
                 { text: 'CLIリファレンス', link: '/ja/docs/cli' },
+                { text: 'C++ API', link: '/ja/docs/cpp-api' },
               ]
             },
             {
               text: '技術情報',
               items: [
                 { text: 'アーキテクチャ', link: '/ja/docs/architecture' },
-                { text: 'WebAssembly', link: '/ja/docs/wasm' },
                 { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
                 { text: 'ベンチマーク', link: '/ja/docs/benchmarks' },
               ]

@@ -3,12 +3,15 @@
 Complete reference for the `sonare` command-line interface.
 
 ::: tip Install via pip
-The easiest way to get the `sonare` CLI is via pip:
+The `sonare` CLI is installed from PyPI with the Python package:
 ```bash
 pip install libsonare
 sonare analyze music.mp3
 ```
-Pre-built wheels are available for Linux (x86_64, aarch64) and macOS (Apple Silicon).
+It is not installed by the npm WebAssembly package `@libraz/libsonare`.
+
+The default PyPI wheels decode WAV and MP3. Rebuild with FFmpeg enabled for
+direct M4A/AAC/FLAC/OGG/Opus decoding.
 :::
 
 ::: info C++ CLI
@@ -17,7 +20,9 @@ Building from source provides the C++ CLI with additional commands: `chords`, `s
 
 ## Overview
 
-The sonare CLI provides music analysis and feature extraction capabilities from the command line. Parallel analysis across all available CPU cores delivers performance tens of times faster than Python alternatives.
+The `sonare` CLI is for terminal workflows: quick BPM/key checks, batch
+analysis, and JSON summaries for scripts. The heavy analysis runs in native C++
+through the Python package, avoiding Python implementations of the DSP pipeline.
 
 ```bash
 sonare <command> [options] <audio_file>
@@ -29,10 +34,14 @@ sonare <command> [options] <audio_file>
 |--------|-------------|
 | `--json` | Output results in JSON format |
 | `--help`, `-h` | Show help for command |
-| `-o`, `--output` | Output file path |
+| `-o`, `--output` | Accepted by the Python CLI parser, but analysis and feature commands currently write to stdout |
 | `--n-fft <int>` | FFT size (default: 2048) |
 | `--hop-length <int>` | Hop length (default: 512) |
 | `--n-mels <int>` | Number of Mel bands (default: 128) |
+
+`--json` outputs compact, script-friendly summaries. Feature commands such as
+`mel` and `chroma` do not dump full matrix data from the Python CLI; they print
+dimensions and summary values.
 
 ## Analysis Commands
 
@@ -136,7 +145,7 @@ sonare onsets music.mp3 --json
 
 ### mel
 
-Compute Mel spectrogram statistics.
+Compute a Mel spectrogram and print its dimensions.
 
 ```bash
 sonare mel music.mp3
@@ -255,7 +264,7 @@ sonare version --json
 
 **Output:**
 ```
-libsonare 1.0.2 (Python CLI)
+libsonare 1.0.4 (Python CLI)
 ```
 
 ## Examples
@@ -271,10 +280,10 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### Feature Extraction for ML
+### Feature Summary Export
 
 ```bash
-# Extract features for machine learning
+# Export compact feature summaries
 sonare mel song.mp3 --json > mel_features.json
 sonare spectral song.mp3 --json > spectral_features.json
 sonare chroma song.mp3 --json > chroma_features.json
@@ -302,6 +311,9 @@ done
 |--------|-----------|-------|
 | WAV | `.wav` | Uncompressed PCM |
 | MP3 | `.mp3` | Decoded using minimp3 |
+| M4A / AAC / FLAC / OGG / Opus | varies | Supported only when libsonare is built with FFmpeg |
+
+Check the active build from Python with `libsonare.has_ffmpeg_support()`.
 
 ## Exit Codes
 

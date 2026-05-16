@@ -43,10 +43,12 @@ static Audio Audio::from_buffer(const float* samples, size_t size, int sample_ra
 // From vector (moved)
 static Audio Audio::from_vector(std::vector<float> samples, int sample_rate);
 
-// From file (WAV, MP3) — throws SonareException on decode error
+// From file (WAV/MP3 by default; FFmpeg formats when built with SONARE_WITH_FFMPEG)
+// Throws SonareException on decode error
 static Audio Audio::from_file(const std::string& path);
 
-// From in-memory WAV/MP3 buffer — throws SonareException on decode error
+// From in-memory encoded audio bytes with the same format support as from_file()
+// Throws SonareException on decode error
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
 ```
 
@@ -136,7 +138,7 @@ Simple functions for common analysis tasks.
 
 ```cpp
 namespace sonare::quick {
-  // BPM detection (±2 BPM accuracy)
+  // BPM detection
   float detect_bpm(const float* samples, size_t length, int sample_rate);
 
   // Key detection

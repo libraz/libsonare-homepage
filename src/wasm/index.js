@@ -93,8 +93,14 @@ export async function init(options) {
         return initPromise;
     }
     initPromise = (async () => {
-        const createModule = (await import('./sonare.js')).default;
-        module = await createModule(options);
+        try {
+            const createModule = (await import('./sonare.js')).default;
+            module = await createModule(options);
+        }
+        catch (error) {
+            initPromise = null;
+            throw error;
+        }
     })();
     return initPromise;
 }
@@ -177,6 +183,10 @@ export function detectBeats(samples, sampleRate) {
 }
 // Helper to convert WASM result to typed result
 function convertAnalysisResult(wasm) {
+    const beatTimes = new Float32Array(wasm.beats.length);
+    for (let i = 0; i < wasm.beats.length; i++) {
+        beatTimes[i] = wasm.beats[i].time;
+    }
     return {
         bpm: wasm.bpm,
         bpmConfidence: wasm.bpmConfidence,
@@ -188,6 +198,7 @@ function convertAnalysisResult(wasm) {
             shortName: wasm.key.shortName,
         },
         timeSignature: wasm.timeSignature,
+        beatTimes,
         beats: wasm.beats,
         chords: wasm.chords.map((c) => ({
             root: c.root,

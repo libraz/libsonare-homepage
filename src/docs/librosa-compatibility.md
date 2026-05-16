@@ -4,7 +4,11 @@ This document describes how libsonare functions correspond to Python's librosa l
 
 ## Overview
 
-libsonare aims to provide functionality similar to [librosa](https://librosa.org/) while being optimized for C++ and WebAssembly environments. Most core features use the same algorithms with compatible default parameters.
+libsonare provides many of the same MIR building blocks as
+[librosa](https://librosa.org/) while targeting C++, Python bindings, Node.js
+native bindings, and WebAssembly. It is not a drop-in replacement for librosa:
+APIs, defaults, and numerical details can differ. The libsonare test suite
+contains reference checks against librosa 0.11 for selected features.
 
 ## Feature Comparison
 
@@ -12,19 +16,19 @@ libsonare aims to provide functionality similar to [librosa](https://librosa.org
 
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
-| `librosa.load()` | `Audio::from_file()` | WAV, MP3 support |
-| `librosa.resample()` | `resample()` | Uses r8brain |
-| `librosa.stft()` | `Spectrogram::compute()` | Full compatibility |
+| `librosa.load()` | `Audio::from_file()` | WAV/MP3 by default; FFmpeg-supported formats in FFmpeg builds |
+| `librosa.resample()` | `resample()` | librosa 0.11 defaults to soxr; libsonare uses r8brain |
+| `librosa.stft()` | `Spectrogram::compute()` | Compatible defaults; small numerical differences are expected |
 | `librosa.istft()` | `Spectrogram::to_audio()` | OLA reconstruction |
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` | Slaney normalization |
-| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` | DCT-II, liftering |
+| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa |
 | `librosa.feature.chroma_stft()` | `Chroma::compute()` | STFT-based |
 | `librosa.onset.onset_strength()` | `compute_onset_strength()` | Spectral flux |
 | `librosa.beat.beat_track()` | `BeatAnalyzer` | DP-based |
 | `librosa.beat.tempo()` | `BpmAnalyzer` | Tempogram |
 | `librosa.effects.hpss()` | `hpss()` | Median filtering |
 | `librosa.effects.time_stretch()` | `time_stretch()` | Phase vocoder |
-| `librosa.effects.pitch_shift()` | `pitch_shift()` | WSOLA-like |
+| `librosa.effects.pitch_shift()` | `pitch_shift()` | Time stretch plus resampling |
 
 ### Features Not in librosa
 
@@ -146,8 +150,11 @@ const beats = detectBeats(samples, sampleRate);  // Already in seconds
 | `n_mels` | 128 | 128 |
 | `fmin` | 0.0 | 0.0 |
 | `fmax` | sr/2 | sr/2 |
-| `n_mfcc` | 20 | 13 |
+| `n_mfcc` | 20 | 13 in JS/top-level helpers; some wrapper methods default to 20 |
 | `n_chroma` | 12 | 12 |
+
+When matching librosa output, pass parameters explicitly instead of relying on
+wrapper defaults.
 
 ## Mel Scale Formulas
 
@@ -164,47 +171,56 @@ For f >= 1000 Hz: mel = 15 + 27 * log10(f / 1000) / log10(6.4)
 mel = 2595 * log10(1 + f / 700)
 ```
 
-libsonare provides both:
+libsonare provides Slaney conversion helpers publicly and supports HTK Mel
+filterbank generation through Mel configuration in the C++ core:
 ```typescript
 const melSlaney = hzToMel(hz);     // Slaney (default)
-// HTK available in C++ API
 ```
 
-## Tolerance Guidelines
+## Reference Tolerance Guidelines
+
+These are practical comparison thresholds seen in libsonare's reference tests
+against librosa 0.11. They are regression-test guidance, not guaranteed
+accuracy bounds for arbitrary audio.
 
 | Feature | Tolerance | Notes |
 |---------|-----------|-------|
-| STFT magnitude | < 1e-6 | Floating point precision |
-| Mel spectrogram | < 1% | Filterbank differences |
-| MFCC | < 2% | DCT normalization |
+| STFT magnitude | ~0.1% for aggregate values; individual bins can differ more | Float32 vs float64, windowing, and near-zero bins |
+| Mel filterbank | ~0.1% for sums/max values in reference tests | Filterbank generation |
+| MFCC | ~10-15% for mean/std reference checks | DCT and log-Mel details |
 | Chroma | < 5% | Pitch mapping |
-| BPM | ±2 BPM | Algorithm differences |
-| Beat times | ±50ms | Phase alignment |
+| BPM | within a few percent; half/double-tempo cases can occur | Tempo-candidate differences |
+| Beat times | tens of ms to ~80 ms in impulse-train tests | Phase alignment |
 
 ## Known Differences
 
 ### 1. Resampling
 
-- **librosa**: Uses `resampy` (Kaiser best)
+- **librosa 0.11**: Defaults to `soxr_hq` and supports multiple resamplers
 - **libsonare**: Uses `r8brain-free` (24-bit quality)
 
-Minimal impact on downstream features.
+This can slightly change downstream features after resampling.
 
 ### 2. CQT
 
-- **librosa**: Full CQT implementation
-- **libsonare**: Full CQT and VQT implementation
+- **librosa**: CQT/VQT APIs with librosa-specific parameterization
+- **libsonare**: CQT and VQT implementations with libsonare-specific APIs
 
 ### 3. Window Normalization
 
 - **librosa**: Normalizes window for COLA
 - **libsonare**: Uses raw window values
 
-Use `normalize()` to correct amplitude differences in iSTFT.
+Expect small amplitude differences in iSTFT-style reconstruction. Apply
+normalization after reconstruction if your workflow depends on level matching.
 
 ## Migration Guide
 
 ### Python to TypeScript
+
+`librosa.load()` defaults to mono audio at 22050 Hz. In the browser, decode the
+file first, downmix to mono if needed, and resample explicitly if you want to
+match that behavior.
 
 **Before (Python):**
 ```python
@@ -222,6 +238,7 @@ import { init, detectBpm, resample } from '@libraz/libsonare';
 await init();
 
 // Get audio from AudioContext
+// Downmix stereo to mono before analysis if needed.
 const samples = audioBuffer.getChannelData(0);
 
 // Optionally resample to 22050
@@ -232,6 +249,9 @@ console.log(`BPM: ${bpm}`);
 ```
 
 ### Python to C++
+
+`Audio::from_file()` keeps the decoded file sample rate. Resample explicitly if
+you want to match `librosa.load(..., sr=22050)`.
 
 **Before (Python):**
 ```python
@@ -265,4 +285,6 @@ auto energy = chroma.mean_energy();
 
 *Benchmarked on Apple M5 Max (16 cores, 128GB), 73-second WAV at 44100 Hz stereo, all per-feature calls measured standalone from raw audio. See [Benchmarks](/docs/benchmarks) for full methodology and reproduction steps.*
 
-WebAssembly is ~2-3x slower than native C++, but still faster than Python.
+WebAssembly is generally slower than native C++; exact performance depends on
+the feature, browser, input length, and build settings. See
+[Benchmarks](/docs/benchmarks) for measured results.

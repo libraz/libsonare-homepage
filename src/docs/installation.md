@@ -1,8 +1,16 @@
 # Installation
 
-## npm (Browser/Node.js)
+## npm (Browser / WASM)
 
 Requires Node.js 18.0.0 or later.
+
+`@libraz/libsonare` is the WebAssembly package. It does not decode files by
+itself; pass decoded mono `Float32Array` samples from the Web Audio API or
+another JavaScript decoder.
+
+This npm package is for browser/WebAssembly use. It does not install the
+`sonare` CLI. For the command-line tool, install the Python package from PyPI
+with `pip install libsonare`.
 
 ::: code-group
 
@@ -30,12 +38,25 @@ pip install libsonare
 
 This installs the Python library and the `sonare` CLI command. See [CLI Reference](/docs/cli) for command-line usage.
 
+The PyPI wheels are built for deterministic installation and decode WAV and
+MP3 by default. To load M4A, AAC, FLAC, OGG, Opus, or other FFmpeg-supported
+formats directly, rebuild from source with FFmpeg enabled:
+
+```bash
+SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
+```
+
+FFmpeg-enabled builds require FFmpeg development libraries. On macOS, install
+them with `brew install ffmpeg`. On Debian/Ubuntu, install `libavformat-dev
+libavcodec-dev libavutil-dev libswresample-dev`.
+
 ## Building from Source
 
 ### Prerequisites
 
 - CMake 3.16+
-- C++17 compatible compiler (GCC 9+, Clang 10+, MSVC 2019+)
+- C++17 compatible compiler (GCC or Clang on the supported Linux/macOS targets)
+- Optional FFmpeg development libraries for M4A/AAC/FLAC/OGG/Opus decoding
 - Emscripten (for WebAssembly build)
 
 ### Build Steps
@@ -47,7 +68,9 @@ cd libsonare
 
 # Build native library
 mkdir build && cd build
-cmake ..
+cmake ..                         # auto-detect FFmpeg
+# cmake .. -DSONARE_WITH_FFMPEG=ON  # require FFmpeg-backed decoding
+
 make -j$(nproc)
 
 # Build WebAssembly (run from the repository root, not from build/)
@@ -56,7 +79,9 @@ cd .. && make wasm
 
 ## Native Bindings (Python / Node.js)
 
-For desktop use, native bindings provide direct C++ performance. See the [Native Bindings](/docs/native-bindings) page for Python and Node.js installation and usage.
+For desktop use, native bindings provide direct C++ performance. Python is
+available from PyPI; the Node.js N-API binding is currently built from source.
+See the [Native Bindings](/docs/native-bindings) page for details.
 
 ## Usage
 
@@ -84,6 +109,9 @@ const key = detectKey(samples, audioBuffer.sampleRate);
 // Full analysis
 const result = analyze(samples, audioBuffer.sampleRate);
 ```
+
+For stereo files, downmix to mono first instead of passing only one channel if
+you need both channels represented.
 
 ### C++
 

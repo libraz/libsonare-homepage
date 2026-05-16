@@ -43,10 +43,12 @@ static Audio Audio::from_buffer(const float* samples, size_t size, int sample_ra
 // ベクターから（ムーブ）
 static Audio Audio::from_vector(std::vector<float> samples, int sample_rate);
 
-// ファイルから（WAV, MP3）— デコード失敗時は SonareException
+// ファイルから（標準は WAV/MP3。SONARE_WITH_FFMPEG 有効ビルドでは FFmpeg 対応形式）
+// デコード失敗時は SonareException
 static Audio Audio::from_file(const std::string& path);
 
-// メモリ上の WAV/MP3 バッファから — デコード失敗時は SonareException
+// メモリ上のエンコード済み音声から。対応形式は from_file() と同じ
+// デコード失敗時は SonareException
 static Audio Audio::from_memory(const uint8_t* data, size_t size);
 ```
 
@@ -125,7 +127,7 @@ auto reconstructed = spec.to_audio();
 
 ```cpp
 namespace sonare::quick {
-  // BPM 検出（±2 BPM 精度）
+  // BPM 検出
   float detect_bpm(const float* samples, size_t length, int sample_rate);
 
   // キー検出

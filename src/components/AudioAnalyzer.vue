@@ -118,7 +118,7 @@ async function handleFile(file: File) {
 
     // Set up streaming callback
     setProcessCallback((samples, sampleOffset) => {
-      processAudioChunk(samples)
+      processAudioChunk(samples, sampleOffset)
     })
     await yieldToMain()
 
@@ -406,7 +406,7 @@ async function loadDemoFile() {
 
     // Set up streaming callback
     setProcessCallback((samples, sampleOffset) => {
-      processAudioChunk(samples)
+      processAudioChunk(samples, sampleOffset)
     })
 
     // Pre-compute initial visualization data for immediate display

@@ -1,6 +1,8 @@
 # WebAssembly Guide
 
-libsonare can be compiled to WebAssembly for audio analysis directly in web browsers.
+libsonare can be compiled to WebAssembly for audio analysis directly in web
+browsers. The npm package expects decoded mono `Float32Array` samples; file
+decoding is handled by the Web Audio API or another JavaScript decoder.
 
 ## Installation
 
@@ -45,7 +47,7 @@ async function analyzeAudio() {
   const arrayBuffer = await response.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-  // Get mono samples
+  // Get one mono channel. Downmix explicitly if you need both stereo channels.
   const samples = audioBuffer.getChannelData(0);
   const sampleRate = audioBuffer.sampleRate;
 
@@ -106,6 +108,9 @@ console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
 See the [JS API Reference](/docs/js-api#audio-class) for the full list of instance methods.
 
 ## File Input
+
+WASM builds do not bundle WAV/MP3/M4A decoders. Browser support for compressed
+formats depends on `AudioContext.decodeAudioData()` and the user's browser.
 
 ```typescript
 async function analyzeFile(file: File) {
@@ -568,8 +573,8 @@ Requirements:
 | File | Size | Gzipped |
 |------|------|---------|
 | `sonare.js` | ~50 KB | ~13 KB |
-| `sonare.wasm` | ~458 KB | ~183 KB |
-| **Total** | ~508 KB | ~196 KB |
+| `sonare.wasm` | ~457 KB | ~182 KB |
+| **Total** | ~508 KB | ~195 KB |
 
 ## Troubleshooting
 

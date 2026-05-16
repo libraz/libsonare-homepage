@@ -1,6 +1,6 @@
 # Python API
 
-libsonareは**cffi**を使用したPythonバインディングを提供し、デスクトップ環境で高速な音声解析を実現します。ビルド済みホイールが PyPI で Linux (x86_64, aarch64) と macOS (Apple Silicon) に対応しています。
+libsonare はネイティブ C API を **ctypes** 経由で呼び出す Python バインディングを提供し、デスクトップ環境で高速な音声解析を実現します。対応対象の Linux/macOS 向けに PyPI ホイールを配布しています。
 
 ## インストール
 
@@ -12,14 +12,26 @@ pip install libsonare
 
 `sonare` コマンドもあわせてインストールされます。詳しくは [CLI リファレンス](/ja/docs/cli) をご覧ください。
 
+標準の PyPI ホイールは WAV と MP3 をデコードします。読み込まれているビルドが
+FFmpeg デコードに対応しているかは `libsonare.has_ffmpeg_support()` で確認できます。
+M4A/AAC/FLAC/OGG/Opus を直接読み込みたい場合は、FFmpeg を有効にしてソースから
+インストールします。
+
+```bash
+SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
+```
+
+FFmpeg 有効ビルドには FFmpeg の開発ライブラリが必要です。macOS では `brew install ffmpeg`、Debian/Ubuntu 系では `libavformat-dev libavcodec-dev libavutil-dev libswresample-dev` をインストールしてください。
+
 ### ソースからビルド（上級者向け）
 
-PyPI のホイールが利用できない環境では、ソースからビルドすることも可能です。
+PyPI のホイールが利用できない環境では、ソースからビルドすることもできます。
 
 **要件:**
-- Python 3.11以上
-- CMake 3.16以上
-- C++17対応コンパイラ（GCC 9+、Clang 10+、MSVC 2019+）
+- Python 3.11 以上
+- CMake 3.16 以上
+- C++17 対応コンパイラ（対応対象の Linux/macOS では GCC または Clang）
+- `SONARE_FFMPEG=1` でビルドする場合は FFmpeg 開発ライブラリ
 
 ```bash
 git clone https://github.com/libraz/libsonare.git
@@ -72,6 +84,11 @@ shifted = audio.pitch_shift(semitones=2.0)     # 2半音上げ
 normalized = audio.normalize(target_db=-3.0)
 trimmed = audio.trim(threshold_db=-60.0)
 
+# TTS 向けユーティリティ
+quality = audio.analyze_tts_quality()
+prepared = audio.prepare_tts()
+compressed = audio.compress_pauses(max_pause_sec=0.6)
+
 # リサンプル
 resampled = audio.resample(target_sr=44100)
 ```
@@ -120,15 +137,15 @@ frames_to_time(100, sr=22050, hop_length=512)  # → 秒
 time_to_frames(2.32, sr=22050, hop_length=512) # → フレームインデックス
 ```
 
-## APIリファレンス
+## API リファレンス
 
 ### Audio
 
 | メソッド | 説明 |
 |---------|------|
-| `Audio.from_file(path)` | WAV/MP3ファイルを読み込み |
+| `Audio.from_file(path)` | WAV/MP3 ファイルを読み込み。FFmpeg 有効ビルドでは FFmpeg が対応する形式も読み込めます |
 | `Audio.from_buffer(data, sample_rate)` | floatサンプルから作成 |
-| `Audio.from_memory(data)` | バイナリWAV/MP3をデコード |
+| `Audio.from_memory(data)` | `from_file` と同じ形式対応で、メモリ上のエンコード済み音声をデコード |
 | `audio.data` | 生のfloatサンプル |
 | `audio.sample_rate` | サンプルレート（Hz） |
 | `audio.duration` | 長さ（秒） |
@@ -152,8 +169,9 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_onsets(samples, sample_rate)` | `list[float]` | オンセット位置（秒） |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | フル解析 |
 | `version()` | `str` | ライブラリバージョン |
+| `has_ffmpeg_support()` | `bool` | 読み込まれたネイティブライブラリが FFmpeg デコードに対応しているか |
 
-すべての関数は `Audio` インスタンスメソッドとしても利用可能です（例: `audio.detect_bpm()`）。
+すべての関数は `Audio` インスタンスメソッドとしても使えます（例: `audio.detect_bpm()`）。
 
 ### エフェクト関数
 
@@ -166,6 +184,9 @@ with Audio.from_file("music.mp3") as audio:
 | `pitch_shift(samples, sr, semitones)` | `list[float]` | テンポを変えずにピッチ変更 |
 | `normalize(samples, sr, target_db?)` | `list[float]` | 目標dBにノーマライズ（デフォルト: -3.0） |
 | `trim(samples, sr, threshold_db?)` | `list[float]` | 無音をトリミング（デフォルト: -60.0 dB） |
+| `analyze_tts_quality(samples, sr, silence_threshold_db?)` | `TtsQualityResult` | TTS 音声の客観的な性質を測定 |
+| `prepare_tts(samples, sr, target_rms_db?, silence_threshold_db?, peak_limit_db?, fade_sec?)` | `list[float]` | TTS 音声を無音トリム、RMS ノーマライズ、ピークリミットし、短いフェードを付与 |
+| `compress_pauses(samples, sr, max_pause_sec?, silence_threshold_db?)` | `list[float]` | 長い低レベル無音を短縮 |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | 目標サンプルレートにリサンプル |
 
 ### 特徴抽出関数

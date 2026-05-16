@@ -2,7 +2,7 @@
 
 libsonare provides native bindings for desktop platforms. See the individual API pages for each language:
 
-- **[Python API](/docs/python-api)** — cffi-based bindings with pre-built wheels on PyPI
+- **[Python API](/docs/python-api)** — ctypes-based bindings with wheels on PyPI
 - **Node.js (N-API)** — Native addon for direct C++ performance (documented below)
 
 ## Comparison
@@ -10,11 +10,11 @@ libsonare provides native bindings for desktop platforms. See the individual API
 | | WebAssembly | Python | Node.js (N-API) |
 |---|---|---|---|
 | **Platform** | Browser | Desktop | Desktop |
-| **Distribution** | npm (`@libraz/libsonare`) | PyPI (`pip install libsonare`) | Source |
+| **Distribution** | npm (`@libraz/libsonare`) | PyPI (`pip install libsonare`) | Source (`bindings/node`) |
 | **Build** | Emscripten | Pre-built wheels (or CMake + pip) | CMake + cmake-js |
 | **Performance** | Near-native | Native | Native |
 | **Streaming** | Yes | No | No |
-| **File I/O** | No | Yes | Yes |
+| **File I/O** | No; pass decoded samples | WAV/MP3 by default; FFmpeg formats in FFmpeg builds | WAV/MP3 by default; FFmpeg formats in FFmpeg builds |
 | **Effects** | Yes | Yes | Yes |
 | **Feature Extraction** | Yes | Yes | Yes |
 | **Unit Conversions** | Yes | Yes | Yes |
@@ -39,6 +39,18 @@ git clone https://github.com/libraz/libsonare.git
 cd libsonare/bindings/node
 yarn install
 yarn build
+```
+
+`@libraz/libsonare-native` is currently intended to be built from
+`bindings/node` in the source tree. To use it from another project, reference
+the built local package through your workspace or a `file:` dependency.
+
+The native build auto-detects FFmpeg development libraries via `pkg-config`.
+Without FFmpeg it decodes WAV and MP3. To require or disable FFmpeg explicitly:
+
+```bash
+SONARE_FFMPEG=1 yarn build  # require FFmpeg-backed decoding
+SONARE_FFMPEG=0 yarn build  # force WAV/MP3-only decoding
 ```
 
 ### Usage
@@ -87,6 +99,11 @@ const shifted = audio.pitchShift(2.0);         // Up 2 semitones
 // Normalize and trim silence
 const normalized = audio.normalize(0.0);        // 0 dB
 const trimmed = audio.trim(-60.0);
+
+// TTS-oriented utilities
+const quality = audio.analyzeTtsQuality();
+const prepared = audio.prepareTts();
+const compressed = audio.compressPauses(0.6);
 
 audio.destroy();
 ```
@@ -145,9 +162,9 @@ timeToFrames(2.32, 22050, 512); // → frame index
 
 | Method | Description |
 |--------|-------------|
-| `Audio.fromFile(path)` | Load WAV/MP3 from disk |
+| `Audio.fromFile(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when built with FFmpeg |
 | `Audio.fromBuffer(samples, sampleRate?)` | Create from `Float32Array` |
-| `Audio.fromMemory(data)` | Decode from `Buffer` / `Uint8Array` |
+| `Audio.fromMemory(data)` | Decode encoded audio bytes with the same format support as `fromFile` |
 | `audio.getData()` | `Float32Array` of samples |
 | `audio.getSampleRate()` | Sample rate (Hz) |
 | `audio.getDuration()` | Duration (seconds) |
@@ -164,6 +181,7 @@ timeToFrames(2.32, 22050, 512); // → frame index
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | Onset timestamps |
 | `analyze(samples, sampleRate?)` | `AnalysisResult` | Full analysis |
 | `version()` | `string` | Library version |
+| `hasFfmpegSupport()` | `boolean` | Whether the loaded native addon can decode via FFmpeg |
 
 Default `sampleRate` is `22050`. All functions also available as `Audio` instance methods.
 
@@ -178,6 +196,9 @@ Default `sampleRate` is `22050`. All functions also available as `Audio` instanc
 | `pitchShift(samples, sr?, semitones)` | `Float32Array` | Pitch-shift without tempo change |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |
+| `analyzeTtsQuality(samples, sr?, silenceThresholdDb?)` | `TtsQualityResult` | Measure objective TTS audio properties |
+| `prepareTts(samples, sr?, targetRmsDb?, silenceThresholdDb?, peakLimitDb?, fadeSec?)` | `Float32Array` | Trim, RMS-normalize, peak-limit, and lightly fade TTS audio |
+| `compressPauses(samples, sr?, maxPauseSec?, silenceThresholdDb?)` | `Float32Array` | Shorten long low-level pauses |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 
 #### Feature Extraction Functions

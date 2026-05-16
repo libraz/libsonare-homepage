@@ -26,8 +26,11 @@ graph TB
         BEAT["BeatAnalyzer"]
         CHORD["ChordAnalyzer"]
         SECTION["SectionAnalyzer"]
+        BOUNDARY["BoundaryDetector"]
         TIMBRE["TimbreAnalyzer"]
         DYNAMICS["DynamicsAnalyzer"]
+        RHYTHM["RhythmAnalyzer"]
+        MELODY["MelodyAnalyzer"]
     end
 
     subgraph "エフェクトレイヤー"
@@ -35,12 +38,14 @@ graph TB
         TIMESTRETCH["タイムストレッチ"]
         PITCHSHIFT["ピッチシフト"]
         NORMALIZE["ノーマライズ"]
+        TTS["TTS ユーティリティ"]
     end
 
     subgraph "特徴レイヤー"
         MEL["MelSpectrogram"]
         CHROMA["Chroma"]
         CQT["CQT"]
+        VQT["VQT"]
         SPECTRAL["スペクトル特徴"]
         ONSET["オンセット検出"]
         PITCH["ピッチ追跡"]
@@ -73,20 +78,29 @@ graph TB
     MUSIC --> BEAT
     MUSIC --> CHORD
     MUSIC --> SECTION
+    MUSIC --> BOUNDARY
     MUSIC --> TIMBRE
     MUSIC --> DYNAMICS
+    MUSIC --> RHYTHM
+    MUSIC --> MELODY
 
     BPM --> ONSET
     KEY --> CHROMA
     BEAT --> ONSET
     CHORD --> CHROMA
     SECTION --> MEL
+    BOUNDARY --> MEL
+    MELODY --> PITCH
 
     HPSS --> SPECTRUM
     TIMESTRETCH --> SPECTRUM
+    PITCHSHIFT --> TIMESTRETCH
+    PITCHSHIFT --> RESAMPLE
 
     MEL --> SPECTRUM
     CHROMA --> SPECTRUM
+    CQT --> FFT
+    VQT --> CQT
     SPECTRAL --> SPECTRUM
     ONSET --> MEL
 
@@ -111,7 +125,7 @@ src/
 │   ├── fft.h           # KissFFT ラッパー
 │   ├── spectrum.h      # STFT/iSTFT
 │   ├── audio.h         # オーディオバッファ
-│   ├── audio_io.h      # WAV/MP3 読み込み
+│   ├── audio_io.h      # WAV/MP3 読み込み、任意で FFmpeg 対応形式
 │   └── resample.h      # r8brain リサンプリング
 │
 ├── filters/            # レベル 4: フィルターバンク
@@ -123,15 +137,19 @@ src/
 ├── feature/            # レベル 4: 特徴抽出
 │   ├── mel_spectrogram.h
 │   ├── chroma.h
+│   ├── cqt.h
+│   ├── vqt.h
 │   ├── spectral.h
 │   ├── onset.h
 │   └── pitch.h
 │
 ├── effects/            # レベル 5: オーディオエフェクト
 │   ├── hpss.h
+│   ├── phase_vocoder.h
 │   ├── time_stretch.h
 │   ├── pitch_shift.h
-│   └── normalize.h
+│   ├── normalize.h
+│   └── tts.h
 │
 ├── analysis/           # レベル 6: 音楽解析
 │   ├── music_analyzer.h
@@ -140,6 +158,11 @@ src/
 │   ├── beat_analyzer.h
 │   ├── chord_analyzer.h
 │   ├── section_analyzer.h
+│   ├── boundary_detector.h
+│   ├── melody_analyzer.h
+│   ├── rhythm_analyzer.h
+│   ├── timbre_analyzer.h
+│   ├── dynamics_analyzer.h
 │   └── ...
 │
 ├── streaming/          # レベル 6: リアルタイムストリーミング
@@ -161,7 +184,7 @@ src/
 ```mermaid
 flowchart LR
     subgraph 入力
-        FILE[オーディオファイル<br/>WAV/MP3]
+        FILE[オーディオファイル<br/>WAV/MP3<br/>+ FFmpeg 有効時の対応形式]
         BUFFER[生バッファ<br/>float*]
     end
 
@@ -203,6 +226,46 @@ flowchart LR
     KEY --> RESULT
     BEAT --> RESULT
     CHORD --> RESULT
+```
+
+### オーディオエフェクトパイプライン
+
+```mermaid
+flowchart TB
+    subgraph 入力
+        AUDIO[Audio]
+    end
+
+    subgraph 共通変換
+        STFT[STFT]
+        SPEC[Complex<br/>Spectrogram]
+        ISTFT[iSTFT]
+    end
+
+    subgraph スペクトルエフェクト
+        HPSS[HPSS]
+        PV[Phase Vocoder]
+    end
+
+    subgraph ピッチシフト
+        TS[タイムストレッチ]
+        RESAMPLE[リサンプル]
+    end
+
+    subgraph 出力
+        OUT[処理後オーディオ]
+    end
+
+    AUDIO --> STFT
+    STFT --> SPEC
+    SPEC --> HPSS
+    SPEC --> PV
+    HPSS --> ISTFT
+    PV --> ISTFT
+    AUDIO --> TS
+    TS --> RESAMPLE
+    ISTFT --> OUT
+    RESAMPLE --> OUT
 ```
 
 ### ストリーミングパイプライン
@@ -289,19 +352,17 @@ auto chorus = full.slice(60, 90);   // 60-90 秒
 
 ### WASM 互換性
 
-コアモジュールは以下を避けます:
-- ファイル I/O（Audio I/O レイヤーで処理）
-- スレッド（シングルスレッド実行）
-- 動的ローディング
-- システム固有 API
+npm / WebAssembly パッケージはサンプルベースの API を公開しています。デコード済みのモノラル `Float32Array` サンプルを受け取り、ファイルデコード機能は同梱しません。ブラウザアプリでは、通常 Web Audio API や別の JavaScript デコーダでファイルをデコードしてから libsonare に渡します。
+
+WASM ビルドでは、ネイティブのファイル I/O や FFmpeg ベースのデコードは使いません。将来ブラウザスレッドを明示的に有効化したビルドを用意しない限り、実行はシングルスレッドです。
 
 ### librosa 互換性
 
-デフォルトパラメータは librosa と一致:
+多くの DSP パラメータは librosa で一般的な値に寄せていますが、libsonare は librosa の完全なドロップイン置き換えではありません。特に libsonare は通常、呼び出し側がサンプルレートを渡します。`librosa.load()` のように標準で 22050 Hz へ暗黙にリサンプルするわけではありません。
 
 | パラメータ | デフォルト |
 |-----------|---------|
-| sample_rate | 22050 |
+| sample_rate | ユーザー指定 |
 | n_fft | 2048 |
 | hop_length | 512 |
 | n_mels | 128 |
@@ -316,12 +377,13 @@ auto chorus = full.slice(60, 90);   // 60-90 秒
 | Eigen3 | 行列演算 | MPL-2.0 |
 | dr_libs | WAV デコード | Public Domain |
 | minimp3 | MP3 デコード | CC0-1.0 |
+| FFmpeg | 任意の拡張ファイルデコード | リンクするビルドにより LGPL/GPL |
 | r8brain | リサンプリング | MIT |
 
 ## WASM コンパイル
 
 ```
-出力: ~458KB WASM + ~50KB JS
+出力: 現在のサイト同梱版では ~457KB WASM + ~50KB JS
 ビルド: Emscripten + Embind
 フラグ: -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```

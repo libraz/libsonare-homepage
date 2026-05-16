@@ -1,6 +1,8 @@
 # Python API
 
-libsonare provides Python bindings using **cffi** for high-performance audio analysis on desktop platforms. Pre-built wheels are available on PyPI for Linux (x86_64, aarch64) and macOS (Apple Silicon).
+libsonare provides Python bindings using **ctypes** over the native C API for
+high-performance audio analysis on desktop platforms. PyPI wheels are available
+for supported Linux and macOS targets.
 
 ## Installation
 
@@ -11,6 +13,18 @@ pip install libsonare
 ```
 
 This also installs the `sonare` CLI command. See [CLI Reference](/docs/cli) for details.
+
+Default PyPI wheels decode WAV and MP3. Use `libsonare.has_ffmpeg_support()` to
+check the loaded build. If you need direct M4A/AAC/FLAC/OGG/Opus decoding,
+install from source with FFmpeg enabled:
+
+```bash
+SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
+```
+
+FFmpeg-enabled builds require FFmpeg development libraries. On macOS, install
+them with `brew install ffmpeg`. On Debian/Ubuntu, install `libavformat-dev
+libavcodec-dev libavutil-dev libswresample-dev`.
 
 ### Building from Source (alternative)
 
@@ -30,7 +44,8 @@ pip install -e .
 
 - Python 3.11+
 - CMake 3.16+
-- C++17 compiler (GCC 9+, Clang 10+, MSVC 2019+)
+- C++17 compiler (GCC or Clang on the supported Linux/macOS targets)
+- Optional FFmpeg development libraries when building with `SONARE_FFMPEG=1`
 
 ## Quick Start
 
@@ -72,6 +87,11 @@ shifted = audio.pitch_shift(semitones=2.0)     # Up 2 semitones
 # Normalize and trim silence
 normalized = audio.normalize(target_db=-3.0)
 trimmed = audio.trim(threshold_db=-60.0)
+
+# TTS-oriented utilities
+quality = audio.analyze_tts_quality()
+prepared = audio.prepare_tts()
+compressed = audio.compress_pauses(max_pause_sec=0.6)
 
 # Resample
 resampled = audio.resample(target_sr=44100)
@@ -127,9 +147,9 @@ time_to_frames(2.32, sr=22050, hop_length=512) # → frame index
 
 | Method | Description |
 |--------|-------------|
-| `Audio.from_file(path)` | Load WAV/MP3 from disk |
+| `Audio.from_file(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when the library is built with FFmpeg |
 | `Audio.from_buffer(data, sample_rate)` | Create from float samples |
-| `Audio.from_memory(data)` | Decode from binary WAV/MP3 in memory |
+| `Audio.from_memory(data)` | Decode encoded audio bytes with the same format support as `from_file` |
 | `audio.data` | Raw float samples |
 | `audio.sample_rate` | Sample rate (Hz) |
 | `audio.duration` | Duration (seconds) |
@@ -153,6 +173,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_onsets(samples, sample_rate)` | `list[float]` | Onset timestamps (seconds) |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | Full analysis |
 | `version()` | `str` | Library version |
+| `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
 All functions also available as `Audio` instance methods (e.g., `audio.detect_bpm()`).
 
@@ -167,6 +188,9 @@ All functions also available as `Audio` instance methods (e.g., `audio.detect_bp
 | `pitch_shift(samples, sr, semitones)` | `list[float]` | Pitch-shift without tempo change |
 | `normalize(samples, sr, target_db?)` | `list[float]` | Normalize to target dB (default: -3.0) |
 | `trim(samples, sr, threshold_db?)` | `list[float]` | Trim silence (default: -60.0 dB) |
+| `analyze_tts_quality(samples, sr, silence_threshold_db?)` | `TtsQualityResult` | Measure objective TTS audio properties |
+| `prepare_tts(samples, sr, target_rms_db?, silence_threshold_db?, peak_limit_db?, fade_sec?)` | `list[float]` | Trim, RMS-normalize, peak-limit, and lightly fade TTS audio |
+| `compress_pauses(samples, sr, max_pause_sec?, silence_threshold_db?)` | `list[float]` | Shorten long low-level pauses |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
 
 ### Feature Extraction Functions

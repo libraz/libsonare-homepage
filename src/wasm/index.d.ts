@@ -159,6 +159,7 @@ export interface AnalysisResult {
     bpmConfidence: number;
     key: Key;
     timeSignature: TimeSignature;
+    beatTimes: Float32Array;
     beats: Beat[];
     chords: Chord[];
     sections: Section[];

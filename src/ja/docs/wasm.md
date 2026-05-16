@@ -1,6 +1,6 @@
 # WebAssembly ガイド
 
-libsonare は WebAssembly にコンパイルでき、ブラウザで直接オーディオ解析が可能です。
+libsonare は WebAssembly にコンパイルでき、ブラウザで直接オーディオ解析が可能です。npm パッケージはデコード済みのモノラル `Float32Array` サンプルを受け取り、ファイルデコードは Web Audio API や別の JavaScript デコーダに任せます。
 
 ## インストール
 
@@ -45,7 +45,7 @@ async function analyzeAudio() {
   const arrayBuffer = await response.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-  // モノラルサンプルを取得
+  // 1 つのモノラルチャンネルを取得。ステレオ両方を反映したい場合は明示的にダウンミックスします。
   const samples = audioBuffer.getChannelData(0);
   const sampleRate = audioBuffer.sampleRate;
 
@@ -64,6 +64,8 @@ async function analyzeAudio() {
 ```
 
 ## ファイル入力
+
+WASM ビルドには WAV/MP3/M4A デコーダは同梱されていません。圧縮形式を読めるかどうかは `AudioContext.decodeAudioData()` とユーザーのブラウザに依存します。
 
 ```typescript
 async function analyzeFile(file: File) {
@@ -401,8 +403,8 @@ if (stats.estimate.key >= 0) {
 | ファイル | サイズ | Gzip |
 |---------|--------|------|
 | `sonare.js` | ~50 KB | ~13 KB |
-| `sonare.wasm` | ~458 KB | ~183 KB |
-| **合計** | ~508 KB | ~196 KB |
+| `sonare.wasm` | ~457 KB | ~182 KB |
+| **合計** | ~508 KB | ~195 KB |
 
 ## トラブルシューティング
 

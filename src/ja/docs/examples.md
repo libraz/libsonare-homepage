@@ -1,5 +1,62 @@
 # 使用例
 
+## ユースケース別
+
+### ブラウザアプリで BPM とキーを表示する
+
+音声をブラウザ内で扱う場合は、npm の WebAssembly パッケージを使います。ファイルは先に Web Audio API でデコードし、モノラルの `Float32Array` サンプルを libsonare に渡します。
+
+```typescript
+import { init, detectBpm, detectKey } from '@libraz/libsonare';
+
+await init();
+
+const audioCtx = new AudioContext();
+const decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
+const samples = decoded.getChannelData(0);
+
+const bpm = detectBpm(samples, decoded.sampleRate);
+const key = detectKey(samples, decoded.sampleRate);
+```
+
+### ターミナルで音楽フォルダを一括解析する
+
+CLI は、ターミナルでの確認やスクリプト向け JSON サマリー出力に向いています。CLI は npm ではなく PyPI からインストールします。
+
+```bash
+pip install libsonare
+
+for f in *.mp3; do
+  sonare analyze "$f" --json > "${f%.mp3}.json"
+done
+```
+
+### Python でメタデータを抽出する
+
+Python は、スクリプト、ノートブック、librosa に近いワークフローでネイティブ C++ バックエンドを使いたい場合に向いています。
+
+```python
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    result = audio.analyze()
+
+print(result.bpm, result.key, len(result.beat_times))
+```
+
+### Node.js でアップロード音源を解析する
+
+サーバーサイドでファイル読み込みやネイティブ性能が必要な場合は、Node.js ネイティブバインディングを使います。現在はソースビルド前提です。
+
+```typescript
+import { Audio } from '@libraz/libsonare-native';
+
+const audio = Audio.fromFile('/tmp/upload.wav');
+const result = audio.analyze();
+
+console.log(result.bpm, result.key.name);
+```
+
 ## JavaScript/TypeScript
 
 ### 基本的な BPM とキー検出
