@@ -134,7 +134,12 @@ auto reconstructed = spec.to_audio();
 
 ## Quick API
 
-Simple functions for common analysis tasks.
+Simple, single-shot functions for common analysis tasks. Use these when you want exactly one result (BPM, key, beats, or onsets).
+
+::: info When to use Quick API vs MusicAnalyzer
+- **Quick API (`sonare::quick::...`)** — When you only need one result. Only the necessary stages run.
+- **MusicAnalyzer** — When you need several results from the same audio (BPM + key + chords + sections). Intermediates (STFT, chroma, onset envelope) are shared so nothing is computed twice.
+:::
 
 ```cpp
 namespace sonare::quick {
@@ -684,6 +689,50 @@ auto with_fade_out = fade_out(audio, 1.0f); // 1.0 second fade out
 auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 ```
 
+### librosa-Compatible Helpers <Badge type="tip" text="v1.1.0+" />
+
+Added in libsonare 1.1.0. Each helper mirrors the corresponding `librosa`
+function — see [librosa Compatibility](./librosa-compatibility.md) for the
+full mapping.
+
+::: tip What each helper is for
+- **`preemphasis` / `deemphasis`** — classic one-tap IIR pre-processing for the waveform.
+- **`trim_silence` / `split_silence`** — trim leading/trailing silence or split on silent gaps.
+- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — framing and size-alignment utilities for fixed-frame DSP.
+- **`peak_pick` / `vector_normalize`** — peak detection on 1-D signals and vector-norm normalisation.
+- **`pcen`** — dynamic range compression for mel spectrograms.
+- **`tonnetz`** — projects chroma into a 6-D harmonic space.
+- **`tempogram` / `plp`** — time-varying tempo representation and dominant local pulse.
+:::
+
+```cpp
+// Pre-emphasis / de-emphasis (librosa.effects.preemphasis / deemphasis)
+auto pre   = preemphasis(audio, /*coef=*/0.97f);
+auto deemp = deemphasis(audio, /*coef=*/0.97f);
+
+// Silence trim / split (librosa.effects.trim / split)
+auto [trimmed, start_sample, end_sample] = trim_silence(audio, /*top_db=*/60.0f);
+auto intervals = split_silence(audio, /*top_db=*/60.0f);  // std::vector<std::pair<int,int>>
+
+// Frame / pad / length helpers (librosa.util.*)
+auto frames = frame_signal(samples, /*frame_length=*/2048, /*hop_length=*/512);
+auto padded = pad_center(values, /*size=*/4096);
+auto fixed  = fix_length(values, /*size=*/4096);
+auto bounds = fix_frames(frame_indices, /*x_min=*/0, /*x_max=*/-1);
+
+// Peak picking and vector normalize (librosa.util.peak_pick / normalize)
+auto peaks  = peak_pick(onset_envelope, pre_max, post_max, pre_avg, post_avg, delta, wait);
+auto normed = vector_normalize(values, /*norm_type=*/2);  // 0=inf, 1=L1, 2=L2, 3=power
+
+// PCEN (librosa.pcen) — input is row-major [n_bins x n_frames]
+auto pcen_out = pcen(mel, n_bins, n_frames, sample_rate, hop_length);
+
+// Tonnetz / tempogram / PLP
+auto tonnetz_out = tonnetz(chromagram, n_chroma, n_frames);
+auto tempo_out   = tempogram(onset_env, sample_rate);
+auto plp_out     = plp(onset_env, sample_rate);
+```
+
 ## Types
 
 ### Key
@@ -786,6 +835,18 @@ float note_to_hz(const std::string& note);
 // Time <-> Frames
 float frames_to_time(int frames, int sr, int hop_length);
 int time_to_frames(float time, int sr, int hop_length);
+
+// Frames <-> Samples (librosa.frames_to_samples / samples_to_frames)
+int frames_to_samples(int frames, int hop_length = 512, int n_fft = 0);
+int samples_to_frames(int samples, int hop_length = 512, int n_fft = 0);
+
+// dB conversions (librosa.power_to_db / amplitude_to_db / inverses)
+std::vector<float> power_to_db(const std::vector<float>& values,
+                               float ref = 1.0f, float amin = 1e-10f, float top_db = 80.0f);
+std::vector<float> amplitude_to_db(const std::vector<float>& values,
+                                   float ref = 1.0f, float amin = 1e-5f, float top_db = 80.0f);
+std::vector<float> db_to_power(const std::vector<float>& values, float ref = 1.0f);
+std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref = 1.0f);
 ```
 
 ## C API
@@ -840,6 +901,15 @@ const char* sonare_version(void);
 `SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
 
 Effects (`sonare_hpss`, `sonare_time_stretch`, `sonare_pitch_shift`, `sonare_normalize`, `sonare_trim`), features (`sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin`), conversions, and resampling have matching sample-based entry points — see `src/sonare_c.h` for the full list.
+
+The librosa-parity helpers added in 1.1.0 are also exposed through the C API:
+`sonare_preemphasis`, `sonare_deemphasis`, `sonare_trim_silence`,
+`sonare_split_silence`, `sonare_frame_signal`, `sonare_pad_center`,
+`sonare_fix_length`, `sonare_fix_frames`, `sonare_peak_pick`,
+`sonare_vector_normalize`, `sonare_pcen`, `sonare_tonnetz`,
+`sonare_tempogram`, `sonare_plp`, `sonare_power_to_db`,
+`sonare_amplitude_to_db`, `sonare_db_to_power`, `sonare_db_to_amplitude`,
+`sonare_frames_to_samples`, `sonare_samples_to_frames`.
 
 ## Error Handling
 

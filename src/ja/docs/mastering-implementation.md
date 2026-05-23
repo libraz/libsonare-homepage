@@ -1,0 +1,84 @@
+---
+title: マスタリング実装
+description: ブラウザ内マスタリングデモが UI の判断を libsonare WASM 処理へどう対応させるか。
+---
+
+# マスタリング実装
+
+このページは、`/ja/mastering` デモが少数の UI 上の判断を、決定的な libsonare マスタリングレンダリングへどう変換するかを説明します。自動生成したパラメータ一覧ではなく、UI・ワーカー・WASM の各エクスポート・機能群ごとの用語集ガイドをつなぐ実装マップとして使います。
+
+ブラウザデモでは、長い解説は VitePress のドキュメントを正本にしています。アプリケーション UI には短いラベルと、このドキュメントへの導線だけを置いています。
+
+## レンダリングフロー
+
+```mermaid
+flowchart TD
+  A[ブラウザのファイル入力] --> B[Web Audio でデコード]
+  B --> C[Float32 チャンネルバッファ]
+  C --> D[Mastering worker]
+  D --> E[libsonare WASM]
+  E --> F[ソースのメトリクス]
+  E --> G[プリセットまたはチェーンでレンダリング]
+  G --> H[レンダリング後のメトリクス]
+  H --> I[WAV 書き出し]
+  H --> J[JSON report]
+```
+
+デコードはブラウザ API で行います。重い DSP が VitePress のページを止めないよう、マスタリング処理は Mastering worker 上で実行します。ワーカーはモノラル／ステレオの `Float32Array` バッファを WASM パッケージへ渡し、レンダリング後のサンプルとメトリクスを受け取って、再生・ダウンロード・JSON report 用のローカル object URL を生成します。
+
+## データの所有
+
+音源はユーザーの端末上に残ります。ソースファイル、任意のリファレンスファイル、レンダリング後の WAV、JSON レポート、書き出した設定はすべてブラウザ内のローカルオブジェクトとして扱われ、レンダリングのためにアップロードされることはありません。
+
+これは実装上も重要です。UI はサーバー側のリトライ、リモートキュー、アカウント状態に依存できません。エラー処理はローカルでの復旧を前提にします。具体的には、別のブラウザがデコード可能な形式を試す、ソースの長さを短くする、強すぎる設定を下げる、ワーカー失敗後に再レンダリングする、といった流れです。
+
+## UI とチェーンの対応
+
+Quick Master は音楽的な判断を露出させ、Studio は機能群ごとにまとめたコントロールを露出させます。どちらも同じ内部チェーンモデルに渡されます。
+
+| UI 上のエリア | チェーン上のエリア | 主なガイド |
+|---------|------------|-----------|
+| インプットゲイン、ノイズ除去 | リペアと入力 | [リペアと入力コントロール](./glossary/mastering/repair.md) |
+| トーン、エキサイター、Air | トーンと Air | [トーンと Air コントロール](./glossary/mastering/tone-air.md) |
+| スレッショルド、レシオ、アタック、リリース | ダイナミクス | [ダイナミクスコントロール](./glossary/mastering/dynamics.md) |
+| 幅、シーリング、目標 LUFS | 最終ステージ | [ステレオ・リミッター・ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) |
+| ソース／リファレンスの比較 | ペア解析 | [リファレンスマッチ](./glossary/mastering/reference-match.md) |
+| LUFS、True Peak、クレスト、相関値 | メーター | [マスタリングメーターの読み方](./glossary/mastering/meter-reading.md) |
+
+機能群ごとのページは意図的に広めにしてあります。たとえばコンプレッサーのページではスレッショルド・レシオ・アタック・リリース・ニー・ディテクター挙動・ゲインリダクションの読み方をまとめて説明できます。1 パラメータ 1 ページに分けると、実際にどの判断をしているかが見えにくくなります。
+
+## アルゴリズムの境界
+
+デモはマスタリングアルゴリズムを Vue 側で再実装しません。Vue が担当するのはインタラクション、入力検証、ローカルな再生状態、表示です。DSP は libsonare 側が持っています。
+
+:::: details 実装メモ
+ワーカー境界が重要な設計線です。UI 上の状態はシリアライズ可能なチェーン設定オブジェクトに変換され、可能な場合はチャンネルバッファを transferable として一緒にワーカーへ渡します。ワーカーは WASM モジュールを初期化し、選択されたプリセット・チェーン・プロセッサ・解析 API を呼び出し、進捗と完了メッセージを UI に返します。
+
+最終結果はイミュータブルとして扱います。後段の A/B 比較ではラウドネス揃え再生のために一時的な再生ゲインをかけることはありますが、書き出した WAV は書き換えません。レポートには UI の既定値ではなく、実際のレンダリングで得たメトリクス・ステージ名・プリセット名・ターゲット値・チューニング値を記録します。
+::::
+
+## WASM API サーフェス
+
+ドキュメントは `src/wasm/index.d.ts` が公開しているマスタリング API を追跡します。検証スクリプトは宣言ファイルから現在の `mastering*` / `masterAudio*` 関数を抽出し、JavaScript／ネイティブバインディングのドキュメントに記載があることを確認します。
+
+目的別には次のように使い分けます。
+
+| 目的 | API ファミリ |
+|--------|------------|
+| プリセットを使う | `masterAudio()`、`masterAudioStereo()`、`masteringPresetNames()` |
+| フルチェーンを実行する | `masteringChain()`、`masteringChainStereo()` |
+| 進捗を表示する | `masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
+| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `reset` / `latencySamples` / `stageNames`） |
+| 名前付きプロセッサを単体で実行する | `masteringProcessorNames()`、`masteringProcess()`、`masteringProcessStereo()` |
+| ソースとリファレンスを比較する | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()` |
+| ステレオ出力を解析する | `masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
+
+## 検証
+
+リリースゲートではドキュメントチェックを `yarn verify` に含めています。
+
+- `yarn check:glossary` は、公開済みの用語集ページが英日両方に存在し、frontmatter・関連リンク・実装メモ・index リンク・サイドバーへの掲載を備えていることを確認します。
+- `yarn check:mastering-docs` は、廃止済みの旧ルート名・撤去済みのパラメータ別ページ・ランタイムドキュメントの欠落・WASM API ドキュメントの不一致を検出して落とします。
+- `yarn check:built-routes` は、ビルド成果物に `/mastering` と `/ja/mastering` が存在し、撤去済みの旧ルートが残っていないことを確認します。
+
+関連: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [JavaScript API](./js-api.md), [WASM](./wasm.md)

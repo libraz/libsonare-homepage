@@ -15,7 +15,13 @@ direct M4A/AAC/FLAC/OGG/Opus decoding.
 :::
 
 ::: info C++ CLI
-Building from source provides the C++ CLI with additional commands: `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, `boundaries`, `pitch-shift`, `time-stretch`, `onset-env`, `cqt`, `system-info`. See [Building from Source](/docs/installation#building-from-source).
+Building from source provides the C++ CLI with additional commands. See [Building from Source](/docs/installation#building-from-source).
+
+- Analysis: `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, `boundaries`, `system-info`
+- Effects / transforms: `pitch-shift`, `time-stretch`, `preemphasis`, `deemphasis`, `trim-silence`, `split-silence`
+- Features: `onset-env`, `cqt`, `tonnetz`, `tempogram`, `plp`, `pcen`
+- librosa utilities: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
+- Mastering: `mastering`, `mastering-processor`, `mastering-pair-analyze`, `mastering-stereo-analyze`, `mastering-processors`
 :::
 
 ## Overview
@@ -264,7 +270,7 @@ sonare version --json
 
 **Output:**
 ```
-libsonare 1.0.4 (Python CLI)
+libsonare 1.1.0 (Python CLI)
 ```
 
 ## Examples
@@ -304,6 +310,48 @@ for f in *.wav; do
   echo "$f: $bpm BPM"
 done
 ```
+
+### Mastering Workflow
+
+::: info Source-built CLI required
+The mastering subcommands below ship with the **C++ CLI** (built from source). The PyPI Python CLI focuses on analysis (BPM, key, spectral features) and does not include `mastering-*` subcommands. See [Building from Source](/docs/installation#building-from-source).
+:::
+
+```bash
+# Inspect processors compiled into this libsonare build
+sonare mastering-processors
+sonare mastering-stereo-analyses
+
+# Run a named mastering processor and write a mastered WAV
+sonare mastering-processor track.wav \
+  --processor spectral.airBand \
+  --params amount=0.4,shelfFrequencyHz=14000 \
+  --output libsonare-master.wav
+
+# Reference-based loudness / tonal analysis
+sonare mastering-pair-analyses
+sonare mastering-pair-analyze track.wav \
+  --reference reference.wav \
+  --analysis match.referenceLoudness \
+  --json > mastering-report.json
+```
+
+The `/mastering` browser demo uses the same mastering processor families. Use the exported report from the demo as a starting point for CLI automation.
+
+Named mastering command families:
+
+| Purpose | Command |
+|---------|---------|
+| List mono/stereo processors | `sonare mastering-processors` |
+| Process mono or stereo-capable file | `sonare mastering-processor` |
+| List pair processors | `sonare mastering-pair-processors` |
+| Process source/reference pair | `sonare mastering-pair-processor` |
+| List pair analyses | `sonare mastering-pair-analyses` |
+| Analyze source/reference pair | `sonare mastering-pair-analyze` |
+| List stereo analyses | `sonare mastering-stereo-analyses` |
+| Analyze stereo channels | `sonare mastering-stereo-analyze` |
+
+Related mastering guides: [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Error recovery](./glossary/mastering/error-recovery.md).
 
 ## Supported Audio Formats
 

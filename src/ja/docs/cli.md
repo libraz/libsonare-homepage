@@ -16,7 +16,13 @@ npm の WebAssembly パッケージ `@libraz/libsonare` ではインストール
 :::
 
 ::: info C++ CLI
-ソースからビルドすると、追加コマンドを含む C++ CLI が利用できます: `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, `boundaries`, `pitch-shift`, `time-stretch`, `onset-env`, `cqt`, `system-info`。[ソースからビルド](/ja/docs/installation#ソースからビルド)を参照してください。
+ソースからビルドすると、追加コマンドを含む C++ CLI が利用できます。[ソースからビルド](/ja/docs/installation#ソースからビルド)を参照してください。
+
+- 解析: `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, `boundaries`, `system-info`
+- エフェクト／変換: `pitch-shift`, `time-stretch`, `preemphasis`, `deemphasis`, `trim-silence`, `split-silence`
+- 特徴量: `onset-env`, `cqt`, `tonnetz`, `tempogram`, `plp`, `pcen`
+- librosa 互換ユーティリティ: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
+- マスタリング: `mastering`, `mastering-processor`, `mastering-pair-analyze`, `mastering-stereo-analyze`, `mastering-processors`
 :::
 
 ## 概要
@@ -220,7 +226,7 @@ sonare pitch music.mp3 --algorithm yin
 
 ### hpss
 
-Harmonic-Percussive Source Separation（調和-打楽器分離）。
+HPSS（Harmonic / Percussive Source Separation）。倍音成分（ボーカル／メロディ）と打撃成分（ドラム）を分離します。
 
 ```bash
 sonare hpss music.mp3
@@ -263,7 +269,7 @@ sonare version --json
 
 **出力:**
 ```
-libsonare 1.0.4 (Python CLI)
+libsonare 1.1.0 (Python CLI)
 ```
 
 ## 使用例
@@ -303,6 +309,48 @@ for f in *.wav; do
   echo "$f: $bpm BPM"
 done
 ```
+
+### マスタリングのワークフロー
+
+::: info ソースビルドの CLI が必要
+以下のマスタリング系サブコマンドは **C++ CLI**（ソースからビルドした `sonare` バイナリ）に含まれます。PyPI 配布の Python CLI は解析（BPM・キー・スペクトル特徴量など）が中心で、`mastering-*` サブコマンドは含まれません。[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
+:::
+
+```bash
+# このビルドに含まれるマスタリングプロセッサを確認
+sonare mastering-processors
+sonare mastering-stereo-analyses
+
+# 名前付きマスタリングプロセッサを実行して WAV を書き出す
+sonare mastering-processor track.wav \
+  --processor spectral.airBand \
+  --params amount=0.4,shelfFrequencyHz=14000 \
+  --output libsonare-master.wav
+
+# リファレンスを使ったラウドネス／トーン解析
+sonare mastering-pair-analyses
+sonare mastering-pair-analyze track.wav \
+  --reference reference.wav \
+  --analysis match.referenceLoudness \
+  --json > mastering-report.json
+```
+
+`/ja/mastering` ブラウザデモも同じマスタリングプロセッサ群を呼び出しています。デモから書き出したレポートを CLI 自動化の起点として活用できます。
+
+マスタリング系コマンドは次の系統に分かれます。
+
+| 目的 | コマンド |
+|------|---------|
+| モノラル／ステレオプロセッサ一覧 | `sonare mastering-processors` |
+| モノラル／ステレオ対応ファイルを処理 | `sonare mastering-processor` |
+| ペアプロセッサ一覧 | `sonare mastering-pair-processors` |
+| ソース／リファレンスのペア処理 | `sonare mastering-pair-processor` |
+| ペア解析一覧 | `sonare mastering-pair-analyses` |
+| ソース／リファレンスのペア解析 | `sonare mastering-pair-analyze` |
+| ステレオ解析一覧 | `sonare mastering-stereo-analyses` |
+| ステレオチャンネル解析 | `sonare mastering-stereo-analyze` |
+
+関連するマスタリングガイド: [配信ターゲット](./glossary/mastering/delivery-targets.md)、[メーターの読み方](./glossary/mastering/meter-reading.md)、[エラー復旧](./glossary/mastering/error-recovery.md)。
 
 ## 対応オーディオ形式
 

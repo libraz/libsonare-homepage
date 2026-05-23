@@ -61,6 +61,20 @@ Individual feature extraction on the same 73-second audio (resampled to 22050 Hz
 | pYIN | 5,825ms | 474ms | **12.3x** |
 | Spectral Centroid | 24.8ms | 16.5ms | 1.5x |
 
+## WASM Mastering ISP Guard
+
+The mastering true-peak path is also checked in WebAssembly with a 48 kHz stereo
+1 ms block, 4x oversampling, and the same sliding-max guard used by the final
+limiter.
+
+| Benchmark | Runtime | Median per 1 ms audio | Threshold | Result |
+|-----------|---------|-----------------------|-----------|--------|
+| `mastering_isp_4x_stereo_1ms` | WASM / Node | 0.0062ms | 5.0ms | Pass |
+
+This verifies the inter-sample peak detector has enough headroom for browser
+rendering. Reproduce with `cd bindings/wasm && yarn bench:wasm:isp` in the
+libsonare repository.
+
 ::: tip Honest take
 For the cheap STFT-dominated features (STFT, Mel, Onset, MFCC) libsonare is **roughly tied** with librosa. librosa delegates the FFT to scipy.fft (heavily optimized C/Fortran), so once you account for the FFT cost there isn't much room to win on a single call.
 

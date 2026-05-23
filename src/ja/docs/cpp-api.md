@@ -123,7 +123,12 @@ auto reconstructed = spec.to_audio();
 
 ## Quick API
 
-一般的な解析タスクのためのシンプルな関数。
+一般的な解析タスクのためのシンプルな関数群です。1 回限りの BPM・キー・ビート・オンセット検出に向きます。
+
+::: info Quick API と MusicAnalyzer の使い分け
+- **Quick API（`sonare::quick::...`）** — 1 つの結果だけが欲しいとき。内部で必要なステージだけを走らせます。
+- **MusicAnalyzer** — 同じ音源から BPM・キー・コード・セクションなど複数の結果が必要なとき。中間特徴量（STFT・クロマ・オンセット包絡線）を共有して二重計算を避けます。
+:::
 
 ```cpp
 namespace sonare::quick {
@@ -602,6 +607,50 @@ auto with_fade_out = fade_out(audio, 1.0f); // 1.0秒フェードアウト
 auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 ```
 
+### librosa 互換ヘルパー <Badge type="tip" text="v1.1.0+" />
+
+libsonare 1.1.0 で追加された関数群です。対応する `librosa` 関数の挙動に
+合わせています。全体のマッピングは
+[librosa 互換性](./librosa-compatibility.md) を参照してください。
+
+::: tip 各ヘルパーの位置づけ
+- **`preemphasis` / `deemphasis`** — 高域を持ち上げる／戻す古典的な 1 タップ IIR の前処理。
+- **`trim_silence` / `split_silence`** — 前後無音のトリムや、無音区間での区切り出し。
+- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — 固定フレーム DSP に通すためのフレーミング・サイズ揃え。
+- **`peak_pick` / `vector_normalize`** — 1 次元信号のピーク検出と、ベクトルのノルム正規化。
+- **`pcen`** — メルスペクトログラム向けの動的レンジ圧縮。
+- **`tonnetz`** — クロマを 6 次元のハーモニック空間へ射影。
+- **`tempogram` / `plp`** — オンセット包絡線から構築するテンポ表現と支配的なパルスの抽出。
+:::
+
+```cpp
+// プリエンファシス／ディエンファシス（librosa.effects.preemphasis / deemphasis）
+auto pre   = preemphasis(audio, /*coef=*/0.97f);
+auto deemp = deemphasis(audio, /*coef=*/0.97f);
+
+// 無音トリム／分割（librosa.effects.trim / split）
+auto [trimmed, start_sample, end_sample] = trim_silence(audio, /*top_db=*/60.0f);
+auto intervals = split_silence(audio, /*top_db=*/60.0f);  // std::vector<std::pair<int,int>>
+
+// フレーミング／パディングのヘルパー（librosa.util.*）
+auto frames = frame_signal(samples, /*frame_length=*/2048, /*hop_length=*/512);
+auto padded = pad_center(values, /*size=*/4096);
+auto fixed  = fix_length(values, /*size=*/4096);
+auto bounds = fix_frames(frame_indices, /*x_min=*/0, /*x_max=*/-1);
+
+// ピーク検出／ベクトル正規化（librosa.util.peak_pick / normalize）
+auto peaks  = peak_pick(onset_envelope, pre_max, post_max, pre_avg, post_avg, delta, wait);
+auto normed = vector_normalize(values, /*norm_type=*/2);  // 0=inf, 1=L1, 2=L2, 3=power
+
+// PCEN（librosa.pcen）— 入力は row-major の [n_bins x n_frames]
+auto pcen_out = pcen(mel, n_bins, n_frames, sample_rate, hop_length);
+
+// Tonnetz／Tempogram／PLP
+auto tonnetz_out = tonnetz(chromagram, n_chroma, n_frames);
+auto tempo_out   = tempogram(onset_env, sample_rate);
+auto plp_out     = plp(onset_env, sample_rate);
+```
+
 ## 型
 
 ### Key
@@ -690,6 +739,18 @@ float note_to_hz(const std::string& note);
 // 時間 <-> フレーム
 float frames_to_time(int frames, int sr, int hop_length);
 int time_to_frames(float time, int sr, int hop_length);
+
+// フレーム <-> サンプル（librosa.frames_to_samples / samples_to_frames）
+int frames_to_samples(int frames, int hop_length = 512, int n_fft = 0);
+int samples_to_frames(int samples, int hop_length = 512, int n_fft = 0);
+
+// dB 変換（librosa.power_to_db / amplitude_to_db とその逆）
+std::vector<float> power_to_db(const std::vector<float>& values,
+                               float ref = 1.0f, float amin = 1e-10f, float top_db = 80.0f);
+std::vector<float> amplitude_to_db(const std::vector<float>& values,
+                                   float ref = 1.0f, float amin = 1e-5f, float top_db = 80.0f);
+std::vector<float> db_to_power(const std::vector<float>& values, float ref = 1.0f);
+std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref = 1.0f);
 ```
 
 ## エラーハンドリング

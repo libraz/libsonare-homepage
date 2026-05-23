@@ -38,7 +38,9 @@ graph TB
         TIMESTRETCH["タイムストレッチ"]
         PITCHSHIFT["ピッチシフト"]
         NORMALIZE["ノーマライズ"]
-        TTS["TTS ユーティリティ"]
+        SILENCE["無音トリム／分割"]
+        PREEMPH["プリ／ディエンファシス"]
+        DECOMPOSE["分解<br/>(NMF)"]
     end
 
     subgraph "特徴レイヤー"
@@ -149,7 +151,10 @@ src/
 │   ├── time_stretch.h
 │   ├── pitch_shift.h
 │   ├── normalize.h
-│   └── tts.h
+│   ├── preemphasis.h
+│   ├── silence.h
+│   ├── decompose.h
+│   └── remix.h
 │
 ├── analysis/           # レベル 6: 音楽解析
 │   ├── music_analyzer.h
@@ -325,18 +330,22 @@ flowchart LR
 
 ### 遅延初期化
 
-MusicAnalyzer は個別のアナライザーを遅延初期化します:
+MusicAnalyzer は個別のアナライザーを遅延初期化します。必要になったタイミングで初めて中間特徴量（STFT、クロマ、オンセットなど）を計算し、その後の問い合わせでは結果を再利用します。
 
 ```cpp
-// BPM のみ計算
+// BPM のみ計算（オンセット包絡線まで）
 float bpm = analyzer.bpm();
 
 // キー検出はクロマ計算をトリガー
 Key key = analyzer.key();
 
-// 完全解析はすべてを計算
+// 完全解析は残りすべてを計算
 AnalysisResult result = analyzer.analyze();
 ```
+
+::: tip 何が嬉しいか
+キーだけ欲しい呼び出しでコード認識やセクション検出まで計算しないので、無駄な処理が発生しません。逆に `analyze()` を 1 回呼ぶと、すでに計算済みの中間結果がそのまま使われます。
+:::
 
 ### ゼロコピースライシング
 

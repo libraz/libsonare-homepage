@@ -65,6 +65,18 @@ async function analyzeAudio() {
 }
 ```
 
+The browser build also exposes the full librosa-parity helper set added in
+libsonare 1.1.0, grouped by intent:
+
+- **Waveform pre-processing** — `preemphasis` / `deemphasis`, `trimSilence` / `splitSilence`
+- **Framing / size alignment** — `frameSignal`, `padCenter`, `fixLength`, `fixFrames`
+- **1-D post-processing** — `peakPick`, `vectorNormalize`
+- **Features** — `pcen` (mel dynamic-range compression), `tonnetz` (harmonic-space projection), `tempogram` / `plp` (tempo representations)
+- **Unit conversion** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`, `framesToSamples` / `samplesToFrames`
+
+See the [JS API reference](./js-api.md) for signatures and the
+[librosa Compatibility](./librosa-compatibility.md) mapping.
+
 ## Audio Class
 
 You can use the `Audio` class as an object-oriented alternative to standalone functions. It wraps the samples and sample rate, so you don't need to pass them every time.
@@ -106,6 +118,12 @@ console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
 See the [JS API Reference](/docs/js-api#audio-class) for the full list of instance methods.
+
+## Browser Mastering
+
+The `/mastering` demo uses the same WASM package described here. Audio decoding happens in the browser, mastering work runs in a Web Worker, and the rendered WAV plus JSON report are created locally.
+
+For implementation details, see [Mastering Implementation](./mastering-implementation.md), [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), and [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md).
 
 ## File Input
 
@@ -504,13 +522,13 @@ The Streaming API provides **progressive BPM and key estimates** that improve ov
 ```typescript
 const stats = analyzer.stats();
 
-// BPM (available after ~5 seconds)
+// BPM (available after ~10 seconds — see StreamConfig.bpmUpdateIntervalSec)
 if (stats.estimate.bpm > 0) {
   const confidence = stats.estimate.bpmConfidence;
   console.log(`BPM: ${stats.estimate.bpm.toFixed(1)} (${(confidence * 100).toFixed(0)}%)`);
 }
 
-// Key (available after ~10 seconds)
+// Key (available after ~5 seconds — see StreamConfig.keyUpdateIntervalSec)
 if (stats.estimate.key >= 0) {
   const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const keyName = keyNames[stats.estimate.key];

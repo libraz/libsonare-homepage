@@ -3,7 +3,7 @@
 libsonareとlibrosa (Python) の音声解析タスクにおける性能比較。
 
 ::: info 計測方法
-以下の数値はすべて「<strong>raw audio から standalone</strong>」で計測しています。各呼び出しは必要な中間状態 (STFT、Melなど) を元のサンプルから毎回再構築します。これは両APIを単発で使うユーザーが体験するのと同じコードパスなので、フェアな比較になっています。ベンチマークのソースと結果JSONは libsonare リポジトリの [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) にあります。
+以下の数値はすべて「**生音声からのスタンドアロン計測**」です。各呼び出しは必要な中間状態（STFT、Mel など）を元のサンプルから毎回再構築します。これは両 API を単発で使うユーザーが体験するのと同じコードパスなので、フェアな比較になっています。ベンチマークのソースと結果 JSON は libsonare リポジトリの [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) にあります。
 :::
 
 ::: info ハードウェア
@@ -61,6 +61,16 @@ Apple M5 Max (16コア、128GBユニファイドメモリ) で計測。絶対値
 | pYIN | 5,825ms | 474ms | **12.3倍** |
 | スペクトル重心 | 24.8ms | 16.5ms | 1.5倍 |
 
+## WASM Mastering ISP Guard
+
+マスタリングの True Peak 経路（WASM Mastering ISP Guard）も WebAssembly 上で検証しています。48 kHz ステレオの 1 ms ブロックを、4 倍オーバーサンプリングと最終リミッターと同じ sliding-max ガードで処理するベンチマークです。
+
+| ベンチマーク | ランタイム | 1 ms audio あたりの中央値 | 閾値 | 結果 |
+|-----------|---------|-----------------------|-----------|--------|
+| `mastering_isp_4x_stereo_1ms` | WASM / Node | 0.0062ms | 5.0ms | 合格 |
+
+これによって、インターサンプルピーク検出器がブラウザレンダリングに十分な余裕を持つことを確認しています。libsonare リポジトリで `cd bindings/wasm && yarn bench:wasm:isp` を実行すれば再現できます。
+
 ::: tip 率直な評価
 STFTが支配的な軽量な特徴量 (STFT、Mel、Onset、MFCC) では、libsonare は librosa と **ほぼ同等** です。librosa は FFT を scipy.fft (高度に最適化された C/Fortran) に委譲しているため、FFT コストを差し引くと一回呼ぶだけでは差を作る余地があまりありません。
 
@@ -71,7 +81,7 @@ STFTが支配的な軽量な特徴量 (STFT、Mel、Onset、MFCC) では、libso
 
 ### フルパイプライン (54倍): 共有中間結果 + Python 境界なし
 
-libsonare の `analyze()` は STFT と Mel スペクトログラムを **一度だけ** 計算し、下流のすべてのアナライザで再利用します。コード検出は key アナライザと同じクロマグラムを読み、ビートトラッカーはセクション検出器が消費するのと同じオンセットエンベロープを読みます。独立したパスは CPU コア間で並列実行されます。これらはどれも Python 境界を跨がないため、呼び出しごとのディスパッチオーバーヘッドが消えます。
+libsonare の `analyze()` は STFT と Mel スペクトログラムを **一度だけ** 計算し、下流のすべてのアナライザで再利用します。コード検出はキー検出と同じクロマグラムを読み、ビートトラッカーはセクション検出器が消費するのと同じオンセットエンベロープを読みます。独立したパスは CPU コア間で並列実行されます。これらはどれも Python 境界を跨がないため、呼び出しごとのディスパッチオーバーヘッドが消えます。
 
 bpm-detector (および他の librosa ベースのパイプライン) は各アナライザでこれらの中間結果を再構築し、Python から全体をオーケストレーションします。コストが積み重なります。
 
@@ -96,7 +106,7 @@ pYIN のボトルネックはフレームごとの候補評価とビタビ復号
 
 - **STFT 単体**: librosa は `scipy.fft` に委譲しており、これは C/Fortran 実装。両者の差はノイズの範囲内。
 - **Mel / MFCC / オンセット強度**: 基底の STFT コストに支配される。STFT 後のフレームごとの Mel フィルタバンク乗算や DCT は、別言語で書いても差が出るほど重くない。
-- **パイプライン内での利用**: `analyze()` 内ではこれらの特徴量は <1ms で動きます。STFT/Mel が一度だけ計算され共有されるためです。上記の standalone 値は「単体で呼んだときのコスト」を示すもので、パイプライン内コストではありません。
+- **パイプライン内での利用**: `analyze()` 内ではこれらの特徴量は <1ms で動きます。STFT/Mel が一度だけ計算され共有されるためです。上記のスタンドアロン値は「単体で呼んだときのコスト」を示すもので、パイプライン内コストではありません。
 
 ## 自分で再現する
 
@@ -118,7 +128,7 @@ rye run --pyproject benchmarks/pyproject.toml python benchmarks/generate_audio.p
 rye run --pyproject benchmarks/pyproject.toml python benchmarks/run_bench.py
 ```
 
-統合された `benchmarks/results.json` には C++ 計測の libsonare 値と librosa 値、そして `bpm-detector` が `PATH` にあれば bpm-detector のフルパイプライン時間も含まれます。
+統合された `benchmarks/results.json` には C++ 計測の libsonare 値と librosa 値、そして `bpm-detector` が `PATH` にあれば `bpm-detector` のフルパイプライン時間も含まれます。
 
 ::: tip libsonare を Python から呼ぶ場合
 上記の数値は libsonare のネイティブ C++ 性能です。個別の特徴量関数を Python バインディング経由で呼ぶ場合 (例: `libsonare.stft(samples, sr)`)、各呼び出しでサンプルバッファが FFI 境界を跨いでマーシャリングされ、軽量な特徴量ではこれが実行時間を支配します。フルパイプラインの `analyze()` は影響を受けません — エンドツーエンドで C++ 内で動き、小さな結果構造体のみが境界を越えます。

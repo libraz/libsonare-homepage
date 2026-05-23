@@ -53,6 +53,380 @@
       "unsupportedFormat": "Unsupported file format"
     }
   },
+  "master": {
+    "header": {
+      "title": "Mastering Demo",
+      "privacy": "LOCAL ONLY",
+      "mode": "Mastering mode",
+      "docs": "Docs",
+      "openAnalyzer": "Open analyzer",
+      "help": "Help"
+    },
+    "status": {
+      "idle": "Waiting",
+      "loaded": "Loaded",
+      "rendering": "Rendering",
+      "ready": "Ready"
+    },
+    "quick": {
+      "title": "Quick Master",
+      "step1": "Step 1 - Drop your audio",
+      "step2": "Step 2 - What is this for?",
+      "step3": "Step 3 - Where will you publish?",
+      "step4": "Step 4 - Optional fine-tune",
+      "dropTitle": "Drop audio here",
+      "dropSubtitle": "WAV, MP3, FLAC, or OGG. Your audio never leaves this browser.",
+      "customTarget": "Custom target",
+      "showFineTune": "Show fine-tune controls",
+      "hideFineTune": "Hide fine-tune controls",
+      "processButton": "Master my audio",
+      "processing": "Mastering...",
+      "processingEta": "Est. processing time: {seconds}s on your device"
+    },
+    "studio": {
+      "title": "Studio",
+      "chain": "Chain",
+      "meters": "Meters",
+      "render": "Render master",
+      "rendering": "Rendering...",
+      "renderHint": "Runs the full chain on the loaded audio.",
+      "chainSettings": "Chain settings",
+      "graph": "DSP chain graph",
+      "savePreset": "Save",
+      "loadPreset": "Load",
+      "exportPreset": "Export",
+      "downloadPreset": "Download JSON",
+      "importPreset": "Import JSON",
+      "resetModule": "Reset module",
+      "resetModuleHint": "Restore every knob in this module to its default value.",
+      "resetModuleUseWhen": "You've wandered far from the defaults and want to start over for this stage.",
+      "resetModuleAria": "Reset this module to defaults",
+      "tooltips": {
+        "savePreset": "Save all current chain settings to your browser's local storage so they can be restored later.",
+        "loadPreset": "Replace current chain settings with the most recently saved preset from this browser.",
+        "exportPreset": "Create a JSON snapshot of every chain setting. Use this to share or back up a chain.",
+        "importPreset": "Load chain settings from a previously exported JSON file."
+      },
+      "loadSource": "Load file",
+      "replaceSource": "Replace",
+      "waveformIdle": "No audio loaded",
+      "stageLabel": "Stage"
+    },
+    "renderStages": {
+      "queued": "Queued",
+      "preparing": "Preparing audio buffers",
+      "loadingWasm": "Loading WASM module",
+      "runningChain": "Running mastering chain",
+      "finalizing": "Finalizing render",
+      "complete": "Complete",
+      "matchEqLeft": "Matching reference EQ · Left",
+      "matchEqRight": "Matching reference EQ · Right"
+    },
+    "presets": {
+      "pop": {
+        "name": "Pop",
+        "tagline": "Balanced tone and loudness for modern releases.",
+        "description": "Transparent tilt EQ, gentle ~2:1 glue compression, and a touch of air-band lift. Targets contemporary pop loudness without crushing transients.",
+        "tip": "Mainstream pop, rock, indie, or singer-songwriter material aimed at streaming services."
+      },
+      "edm": {
+        "name": "EDM / Dance",
+        "tagline": "Tighter dynamics with a controlled final limiter.",
+        "description": "Faster compressor release (≤120 ms) for movement on the kick + bass groove, plus a confident true-peak limiter for club-ready loudness.",
+        "tip": "House, techno, trance, drum & bass — anything that needs sustained energy on club systems."
+      },
+      "acoustic": {
+        "name": "Acoustic",
+        "tagline": "Gentler compression that preserves natural transients.",
+        "description": "Lower ratio (1.5:1), slower attack/release, and softer EQ moves. The compressor protects without flattening, leaving dynamic detail intact.",
+        "tip": "Acoustic guitar, jazz, classical, or any production where natural dynamics matter."
+      },
+      "hiphop": {
+        "name": "Hip-Hop / R&B",
+        "tagline": "Solid low end with focused vocal presence.",
+        "description": "Pivot shifted to 850 Hz with a slight downward tilt to keep weight in the low end, plus a stronger compressor ratio for cohesion.",
+        "tip": "Hip-hop, trap, R&B, lo-fi — anything that lives off a powerful low-end."
+      },
+      "aiMusic": {
+        "name": "AI-Generated",
+        "tagline": "Denoise, air-band lift, and repair for AI artifacts.",
+        "description": "Activates spectral repair to suppress the high-frequency mush of generative models, then opens up the air band around 15.5 kHz.",
+        "tip": "Suno, Udio, MusicGen, or any AI-rendered material that needs cleanup and added sparkle."
+      },
+      "speech": {
+        "name": "Speech / Podcast",
+        "tagline": "Clear voice normalization for spoken content.",
+        "description": "Strict denoise, capped fast attack (≤8 ms) for consistent voice level, and zero stereo decorrelation to keep the voice rock-solid in the center.",
+        "tip": "Podcasts, audiobooks, lectures, voiceovers — content where intelligibility is paramount."
+      }
+    },
+    "platforms": {
+      "spotify": "Spotify",
+      "youtube": "YouTube",
+      "apple": "Apple Music",
+      "tiktok": "TikTok",
+      "custom": "Custom",
+      "descriptions": {
+        "spotify": "Spotify normalizes playback to about -14 LUFS integrated. Tracks louder than that are turned down at playback.",
+        "youtube": "YouTube targets roughly -14 LUFS integrated for music; louder masters get attenuated on playback.",
+        "apple": "Apple Music targets about -16 LUFS integrated with strict true-peak limiting at -1 dBTP.",
+        "tiktok": "TikTok normalizes feed audio around -16 LUFS to keep volume consistent across short videos.",
+        "custom": "Pick any LUFS target between -24 and -8. Useful for non-streaming delivery like CD, vinyl, or broadcast."
+      },
+      "useWhen": {
+        "spotify": "Delivering to Spotify or any service that targets -14 LUFS playback.",
+        "youtube": "Uploading to YouTube Music or YouTube videos that should match streaming norms.",
+        "apple": "Delivering to Apple Music or any service that prefers the quieter Apple target.",
+        "tiktok": "Short-form video platforms like TikTok, Instagram Reels, or Shorts.",
+        "custom": "Internal references, mastered CDs, vinyl pre-masters, or broadcast specs that don't match streaming."
+      }
+    },
+    "parameters": {
+      "tone": "Tone",
+      "width": "Width",
+      "dynamics": "Dynamics",
+      "strength": "Strength",
+      "inputGainDb": "Input gain",
+      "denoiseAmount": "Denoise",
+      "declickAmount": "Declick",
+      "dereverbAmount": "Dereverb",
+      "tiltDb": "Tilt EQ",
+      "compressorThresholdDb": "Threshold",
+      "compressorRatio": "Ratio",
+      "compressorAttackMs": "Attack",
+      "compressorReleaseMs": "Release",
+      "deesserAmount": "De-esser",
+      "transientAttackDb": "Transient",
+      "multibandLowAmount": "MB low",
+      "multibandMidAmount": "MB mid",
+      "multibandHighAmount": "MB high",
+      "tapeDriveDb": "Tape drive",
+      "tapeSaturation": "Tape sat.",
+      "exciterAmount": "Exciter",
+      "airBandAmount": "Air band",
+      "stereoWidth": "Stereo width",
+      "monoMakerAmount": "Mono maker",
+      "limiterCeilingDb": "Ceiling",
+      "limiterLookaheadMs": "Lookahead"
+    },
+    "hints": {
+      "tone": "Shifts the overall spectrum from neutral toward warmer harmonic color. Higher values add low-mid weight and tame top-end harshness.",
+      "width": "Adjusts stereo side energy while keeping lows centered. Low values tighten the image; high values open it up without breaking mono compatibility.",
+      "dynamics": "Sets how hard compression flattens the signal. Lower values sound denser and louder; higher values keep transient movement and punch.",
+      "strength": "How assertively the selected module shapes the signal. Higher values push the effect harder.",
+      "inputGainDb": "Level fed into the mastering chain. Keep peaks below 0 dBFS so downstream stages have headroom to work.",
+      "denoiseAmount": "Spectral denoise applied before tone shaping. Higher values remove more hiss and rumble but can dull transients.",
+      "declickAmount": "Detects and repairs sharp clicks/pops. Higher values lower the trigger threshold and catch quieter artifacts at the cost of some risk to drum transients.",
+      "dereverbAmount": "Spectral dereverb that suppresses late reflections. Higher values attenuate room tone more aggressively but can thin out sustained material.",
+      "tiltDb": "Tilt EQ pivoted around 1 kHz. Positive values brighten the highs and thin the lows; negative values do the opposite.",
+      "compressorThresholdDb": "Level where the compressor starts reducing gain. Lower values catch more of the signal; higher values touch only peaks.",
+      "compressorRatio": "How much louder-than-threshold signal is reduced. 2:1 is gentle glue, 4:1 is mastering control, 8:1+ is heavy limiting.",
+      "compressorAttackMs": "How quickly the compressor clamps after the signal crosses threshold. Faster attacks tame transients; slower ones let them through.",
+      "compressorReleaseMs": "How quickly the compressor recovers after the signal drops back below threshold. Tracks tempo for musical breathing.",
+      "deesserAmount": "Tames sibilant peaks around 6 kHz. Higher values lower the threshold and raise the ratio so the de-esser engages on softer s/sh content.",
+      "transientAttackDb": "Boosts (positive) or softens (negative) the attack portion of transients. Independent of overall level — drives drum punch without raising loudness.",
+      "multibandLowAmount": "Compression amount for the low band (<220 Hz). Higher values clamp boomy lows; useful for bass-heavy mixes that overpower the rest.",
+      "multibandMidAmount": "Compression amount for the mid band (220 Hz–4.5 kHz). Controls body and vocal presence; small moves go a long way here.",
+      "multibandHighAmount": "Compression amount for the high band (>4.5 kHz). Tames harshness or cymbal flare without dulling overall brightness.",
+      "tapeDriveDb": "Drive into the tape model. Higher values push more harmonic generation and natural compression; reads as warmth and glue.",
+      "tapeSaturation": "How hard the tape stage saturates at a given drive. Adds even/odd harmonics and softens transients in a vintage way.",
+      "exciterAmount": "Generates controlled high-frequency harmonics for perceived brightness without raw EQ boost.",
+      "airBandAmount": "Gentle shelf above ~10 kHz that adds openness and shimmer to the very top of the spectrum.",
+      "stereoWidth": "Multiplier on stereo side content. 1.0 leaves it untouched, <1.0 narrows, >1.0 widens — bass stays mono-safe.",
+      "monoMakerAmount": "Sums low frequencies to mono below a fixed crossover. Higher values move more of the bass into the center for club/vinyl safety.",
+      "limiterCeilingDb": "Maximum true-peak level allowed at the output. Lower ceilings give lossy-codec headroom; higher ones push more loudness.",
+      "limiterLookaheadMs": "How far ahead the limiter peeks before peaks arrive. More lookahead catches transients cleaner but adds latency."
+    },
+    "tips": {
+      "useWhen": "Use when",
+      "tone": "Mixes feel thin, harsh, or fatiguing at the top.",
+      "width": "Tracks feel narrow on speakers but need to stay mono-safe.",
+      "dynamics": "Drums need punch (high) or streaming needs density (low).",
+      "strength": "Dial up if the effect is too subtle; pull back if it overcooks.",
+      "inputGainDb": "Source already clips, or sits too quietly for the chain to react.",
+      "denoiseAmount": "AI-generated, mobile-recorded, or restoration material with audible noise.",
+      "declickAmount": "Vinyl rips, digital glitches, or recordings with audible clicks/pops you want gone.",
+      "dereverbAmount": "Room-y or reverb-heavy sources where you need less ambience before mastering.",
+      "tiltDb": "Small moves of ±1–2 dB go a long way — tilt affects the whole spectrum.",
+      "compressorThresholdDb": "Aim for 3–6 dB of gain reduction on the loudest sections.",
+      "compressorRatio": "Stick to 1.5:1–3:1 for transparent mastering glue.",
+      "compressorAttackMs": "Slow (20–40 ms) preserves drum punch; fast (1–5 ms) tightens loose peaks.",
+      "compressorReleaseMs": "Match roughly one beat for musical pumping; faster on percussive material.",
+      "deesserAmount": "Vocals or cymbals where sibilance/harshness pokes out over the mix.",
+      "transientAttackDb": "Drums sound soft — push +1 to +3 dB to add bite without raising volume.",
+      "multibandLowAmount": "Sub or kick energy overwhelms the mix on club systems.",
+      "multibandMidAmount": "Mid range feels honky or vocals jump forward inconsistently.",
+      "multibandHighAmount": "Cymbal hits or sibilance flare with the rest of the mix staying calm.",
+      "tapeDriveDb": "Sterile or AI-generated material that needs analog warmth and glue.",
+      "tapeSaturation": "Push past 0.3 only when you want obvious tape character on the bus.",
+      "exciterAmount": "Subtle 0.1–0.3 adds sparkle without sounding buzzy or digital.",
+      "airBandAmount": "Vocals, acoustic, and ambient material that needs extra sheen on top.",
+      "stereoWidth": "Stay under ~1.3× to keep streaming codecs and club systems happy.",
+      "monoMakerAmount": "Vinyl pressing, club playback, or any environment where mono bass matters.",
+      "limiterCeilingDb": "-1.0 dBTP for Spotify/Apple; -0.3 dBTP for CD or uncompressed delivery.",
+      "limiterLookaheadMs": "5 ms is the standard mastering setting; lower only for low-latency monitoring."
+    },
+    "defaults": {
+      "label": "Default",
+      "off": "off",
+      "tone": "Center keeps tilt neutral; the EQ stage stays out of the way until you ask for warmth or air.",
+      "width": "Center leaves the stereo image untouched so the imager only multiplies what you set in studio mode.",
+      "dynamics": "Center balances compressor threshold/ratio between transparent glue and visible movement.",
+      "inputGainDb": "Source enters the chain unchanged — loudness normalization handles the final level.",
+      "denoiseAmount": "Bypassed because spectral denoise is destructive — enable only when the source actually has noise.",
+      "declickAmount": "Bypassed; the click detector skips clean material to avoid chewing drum transients.",
+      "dereverbAmount": "Bypassed; aggressive dereverb thins sustained material, so it's opt-in.",
+      "tiltDb": "Flat tilt — leave the source's tonal balance alone unless mixes feel dull or harsh.",
+      "compressorThresholdDb": "Typical mastering glue point — produces ~3 dB of gain reduction on the loudest sections.",
+      "compressorRatio": "Light glue ratio that controls peaks without crushing transient detail.",
+      "compressorAttackMs": "Fast enough to catch peaks, slow enough to preserve drum attack.",
+      "compressorReleaseMs": "Musical breathing time that tracks roughly one beat at common pop tempos.",
+      "deesserAmount": "Bypassed; engage only when sibilance actively pokes out over the mix.",
+      "transientAttackDb": "No transient shaping — drum punch is preserved as recorded.",
+      "multibandLowAmount": "Bypassed; reach for low-band control only when bass overwhelms the mix.",
+      "multibandMidAmount": "Bypassed; tame mids only when honky midrange or jumpy vocals are an issue.",
+      "multibandHighAmount": "Bypassed; tame highs only when cymbals or sibilance flare.",
+      "tapeDriveDb": "No tape drive — clean source flavor; enable for analog glue/warmth.",
+      "tapeSaturation": "Tape stage bypassed by default; pair with drive for analog character.",
+      "exciterAmount": "Subtle harmonic seasoning — adds perceived brightness without obvious processing.",
+      "airBandAmount": "Gentle ~10 kHz shelf for openness and shimmer on most material.",
+      "stereoWidth": "5% widening adds air without breaking mono compatibility on speakers and phones.",
+      "monoMakerAmount": "Bypassed; turn on for vinyl pressing or club playback where mono bass matters.",
+      "limiterCeilingDb": "Safe ceiling for Spotify/Apple — leaves codec headroom for lossy playback.",
+      "limiterLookaheadMs": "Standard mastering lookahead — balanced between transient capture and latency."
+    },
+    "glossary": {
+      "openGuide": "Guide",
+      "moduleGuide": "Open implementation guide"
+    },
+    "intro": {
+      "title": "What is mastering?",
+      "body": "Mastering is the final step before release. It prepares a mix so it plays back reliably across streaming platforms, speakers, headphones, and phones.",
+      "pointLoudness": "Balances perceived loudness for the selected destination.",
+      "pointTone": "Adjusts broad tonal balance and air without rebuilding the mix.",
+      "pointPeaks": "Controls peaks so conversion and streaming playback stay clean.",
+      "pointPrivacy": "In this demo, audio processing runs locally in your browser.",
+      "start": "Start Quick Master"
+    },
+    "modules": {
+      "input": {
+        "name": "Input Gain",
+        "description": "Sets a clean starting level before repair, EQ, and dynamics.",
+        "tip": "Trim the source to leave ~6 dB of headroom before the chain starts working."
+      },
+      "repair": {
+        "name": "Repair",
+        "description": "Denoise, declick, and dereverb stages for cleaning up noisy, glitchy, or room-y sources before mastering.",
+        "tip": "Run only what you actually need — each stage has cost; leave everything at 0 for clean studio mixes."
+      },
+      "eq": {
+        "name": "EQ",
+        "description": "Shapes tonal balance with a broad tilt before dynamics.",
+        "tip": "Use gentle tilt (±2 dB) to nudge overall brightness — not for surgical correction."
+      },
+      "dynamics": {
+        "name": "Dynamics",
+        "description": "Single-band compressor plus de-esser and transient shaper for level control and detail.",
+        "tip": "Set compressor first for glue, then layer de-esser and transient shaping for polish."
+      },
+      "multiband": {
+        "name": "Multiband Compressor",
+        "description": "Splits the signal into low, mid, and high bands and compresses each independently.",
+        "tip": "Reach for bands individually when one frequency range needs control without affecting the rest."
+      },
+      "exciter": {
+        "name": "Saturation / Air",
+        "description": "Tape, exciter, and air-band stages that add harmonic color and top-end openness.",
+        "tip": "Tape glues the mix, exciter sharpens detail, air widens the top — combine in small amounts."
+      },
+      "stereo": {
+        "name": "Stereo",
+        "description": "Stereo imager and mono-maker — controls width and the bass-mono crossover.",
+        "tip": "Open up dense mixes; narrow when the bass starts wandering off-center."
+      },
+      "limiter": {
+        "name": "True Peak Limiter",
+        "description": "Controls the final ceiling and catches inter-sample peaks.",
+        "tip": "Always engaged on the final stage — adjust the ceiling rather than the input gain."
+      },
+      "loudness": {
+        "name": "LUFS Normalize",
+        "description": "Matches the rendered master to the selected platform loudness.",
+        "tip": "Pick the destination platform and the chain compensates automatically.",
+        "note": "Current render target:"
+      },
+      "output": {
+        "name": "Output",
+        "description": "Prepares the final WAV download from the processed buffer.",
+        "tip": "Verify the naming convention and bit depth before exporting your delivery file.",
+        "note": "The browser demo exports stereo 16-bit PCM WAV and a JSON report."
+      }
+    },
+    "meters": {
+      "status": "Status",
+      "inputLufs": "Input LUFS",
+      "outputLufs": "Output LUFS",
+      "gain": "Gain",
+      "peak": "Peak",
+      "crest": "Crest",
+      "correlation": "Correlation",
+      "file": "File",
+      "duration": "Duration",
+      "sampleRate": "Rate",
+      "channels": "Channels",
+      "sourcePeak": "Source Peak",
+      "masterPeak": "Master Peak",
+      "stereoNarrow": "Narrow / mono-safe",
+      "stereoBalanced": "Balanced stereo",
+      "stereoWide": "Wide / check mono",
+      "descriptions": {
+        "lufs": "Integrated loudness (BS.1770). The perceived volume of the whole master — what streaming services normalize against.",
+        "peak": "Peak sample level in dBFS. The highest absolute sample value, before true-peak oversampling.",
+        "crest": "Peak-to-RMS ratio in dB. Higher = more dynamic; lower = more compressed/loud.",
+        "correlation": "L/R correlation between -1 (out of phase) and +1 (mono). Near 0 = wide stereo, near 1 = mono.",
+        "phase": "Lissajous/phase scope. Diagonal cluster = mono-safe, horizontal spread = wide, X shape = potential phase issues."
+      },
+      "useWhen": {
+        "lufs": "Comparing the rendered loudness to your platform target — click to jump to the LUFS stage.",
+        "peak": "Checking digital ceiling headroom — click to jump to the limiter stage.",
+        "crest": "Diagnosing 'too squashed' or 'too dynamic' results — click to jump to the dynamics stage.",
+        "correlation": "Diagnosing stereo width problems — click to jump to the stereo stage.",
+        "phase": "Verifying mono compatibility before delivering to club/vinyl/broadcast."
+      },
+      "jumpAria": "Open the {module} stage"
+    },
+    "result": {
+      "title": "Result",
+      "download": "Download WAV",
+      "downloadHint": "Save the rendered master as a stereo 16-bit PCM WAV file.",
+      "report": "Export report",
+      "reportHint": "Download a JSON metadata report including LUFS, peak, applied gain, and chain stages.",
+      "before": "Before",
+      "beforeHint": "Listen to the unprocessed source for A/B comparison.",
+      "after": "After",
+      "afterHint": "Listen to the rendered master for A/B comparison.",
+      "loudnessMatch": "Match loudness",
+      "loudnessMatchTooltip": "Attenuates whichever side is louder so you compare tonal/dynamic changes, not just volume — required for fair A/B.",
+      "loudnessMatchNote": "A/B playback lowers the louder side so the comparison is not biased by volume.",
+      "rawCompareNote": "Raw comparison is using each file at its rendered level."
+    },
+    "reference": {
+      "title": "Reference track",
+      "titleHint": "Load a reference track and the chain will run a spectral match instead of the normal chain. Output EQ is shaped toward the reference's spectrum.",
+      "drop": "Drop a reference track for comparison",
+      "masterDelta": "Master / reference crest",
+      "match": "Match reference EQ",
+      "matchHint": "Replaces the regular chain with a one-shot spectral match against the loaded reference. Only EQ shape is matched — loudness and limiting are not.",
+      "matching": "Matching..."
+    },
+    "errors": {
+      "loadFailed": "Could not load this audio file. Try WAV, MP3, FLAC, or OGG.",
+      "renderFailed": "Mastering failed. Try a shorter file or a lighter preset.",
+      "referenceFailed": "Reference matching failed. Try a shorter source or reference file.",
+      "noSavedPreset": "No saved chain preset was found in this browser.",
+      "presetLoadFailed": "Could not load these chain settings."
+    }
+  },
   "common": {
     "loading": "Loading...",
     "error": "Error",

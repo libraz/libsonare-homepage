@@ -93,7 +93,7 @@ function isInitialized(): boolean
 Get the library version.
 
 ```typescript
-function version(): string  // e.g., "1.0.4"
+function version(): string  // e.g., "1.1.0"
 ```
 
 ## Analysis Functions
@@ -612,7 +612,174 @@ function noteToHz(note: string): number
 // Time <-> Frames
 function framesToTime(frames: number, sr: number, hopLength: number): number
 function timeToFrames(time: number, sr: number, hopLength: number): number
+
+// Frames <-> Samples (librosa.frames_to_samples / samples_to_frames)
+function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
+function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number
+
+// dB conversions (vectorised)
+function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function dbToPower(values: Float32Array, ref?: number): Float32Array
+function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 ```
+
+## librosa-Compatible Helpers
+
+These librosa-parity helpers were added in libsonare 1.1.0. They mirror the
+behaviour of the corresponding `librosa` functions and are exposed across the
+WASM, Node, and Python bindings. See [librosa Compatibility](/docs/librosa-compatibility)
+for the librosa function each helper matches.
+
+::: tip What each helper is for
+- **Pre / De-emphasis** — Classic one-tap IIR pre-processing that boosts (or undoes) high frequencies before analysis.
+- **Silence Trim / Split** — Practical helpers that cut leading/trailing silence or split a recording on silent gaps.
+- **Frame / Pad / Length** — Utilities to slice a waveform into fixed-length frames, or align array sizes before feeding fixed-frame DSP.
+- **Peak Picking / Vector Normalize** — Post-processing on 1-D signals (e.g. onset envelopes) to extract peak indices or normalise vectors under a chosen norm.
+- **PCEN** — Dynamic range compression for mel spectrograms; produces features that are more robust to background noise and gain changes.
+- **Tonnetz** — Projects a chromagram into a 6-D harmonic space — useful for chord-relation and modulation analysis.
+- **Tempogram / PLP** — A time-varying tempo representation built from the onset envelope, and the predominant local pulse extracted from it.
+:::
+
+### Pre-emphasis / De-emphasis
+
+```typescript
+function preemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array
+function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array
+```
+
+`coef` defaults to `0.97`. Pass `zi` to provide an initial condition (the value
+from a previous frame's tail) when streaming.
+
+### Silence Trim / Split
+
+```typescript
+function trimSilence(
+  samples: Float32Array,
+  topDb?: number,        // default 60
+  frameLength?: number,  // default 2048
+  hopLength?: number,    // default 512
+): { audio: Float32Array; startSample: number; endSample: number }
+
+function splitSilence(
+  samples: Float32Array,
+  topDb?: number,
+  frameLength?: number,
+  hopLength?: number,
+): Int32Array  // flat [start0, end0, start1, end1, ...]
+```
+
+`trimSilence` matches `librosa.effects.trim`. `splitSilence` matches
+`librosa.effects.split` and returns non-silent intervals as sample-index pairs.
+
+### Frame / Pad / Length Helpers
+
+```typescript
+function frameSignal(
+  samples: Float32Array,
+  frameLength: number,
+  hopLength: number,
+): { nFrames: number; frames: Float32Array }  // row-major
+
+function padCenter(values: Float32Array, size: number, padValue?: number): Float32Array
+function fixLength(values: Float32Array, size: number, padValue?: number): Float32Array
+function fixFrames(frames: Int32Array | number[], xMin?: number, xMax?: number, pad?: boolean): Int32Array
+```
+
+`frameSignal` is `librosa.util.frame`. `padCenter`, `fixLength`, and `fixFrames`
+mirror the librosa.util helpers of the same names.
+
+### Peak Picking / Vector Normalize
+
+```typescript
+function peakPick(
+  values: Float32Array,
+  preMax: number,
+  postMax: number,
+  preAvg: number,
+  postAvg: number,
+  delta: number,
+  wait: number,
+): Int32Array  // peak indices
+
+function vectorNormalize(
+  values: Float32Array,
+  normType?: number,  // 0 = inf, 1 = L1, 2 = L2, 3 = power (default 0)
+  threshold?: number,
+): Float32Array
+```
+
+`peakPick` is `librosa.util.peak_pick`. `vectorNormalize` is `librosa.util.normalize`.
+
+::: details `peakPick` parameters
+- `preMax` / `postMax` — local-maximum window (in samples) on each side of a candidate.
+- `preAvg` / `postAvg` — averaging window on each side; a candidate must exceed the local mean + `delta`.
+- `delta` — required prominence above the local mean. Increase to reject smaller peaks.
+- `wait` — minimum spacing between successive peaks. Suppresses double-trigger.
+
+Used as a post-processing step on 1-D signals such as onset envelopes.
+:::
+
+::: details `vectorNormalize` `normType`
+- `0` (**inf**, default) — divide by max absolute value, mapping into `[-1, 1]` (peak-style normalisation).
+- `1` (**L1**) — divide by sum of absolute values (probability-distribution style).
+- `2` (**L2**) — divide by sqrt of sum of squares (common feature-vector pre-processing).
+- `3` (**power**) — divide by sum of squares (energy normalisation).
+
+`threshold` skips normalisation when the chosen norm is below it — guards against amplifying near-silent frames.
+:::
+
+### PCEN (Per-Channel Energy Normalization)
+
+```typescript
+function pcen(
+  values: Float32Array,
+  nBins: number,
+  nFrames: number,
+  options?: {
+    sampleRate?: number;
+    hopLength?: number;
+    timeConstant?: number;  // default 0.4
+    gain?: number;          // default 0.98
+    bias?: number;          // default 2.0
+    power?: number;         // default 0.5
+    eps?: number;           // default 1e-6
+  },
+): Float32Array
+```
+
+`pcen` matches `librosa.pcen`. Input is a row-major `[nBins x nFrames]`
+mel spectrogram; output uses the same layout.
+
+### Tonnetz / Tempogram / PLP
+
+```typescript
+function tonnetz(
+  chromagram: Float32Array,   // row-major [nChroma x nFrames]
+  nChroma: number,
+  nFrames: number,
+): Float32Array               // [6 x nFrames]
+
+function tempogram(
+  onsetEnvelope: Float32Array,
+  sampleRate?: number,
+  hopLength?: number,         // default 512
+  winLength?: number,         // default 384
+): { nFrames: number; winLength: number; data: Float32Array }
+
+function plp(
+  onsetEnvelope: Float32Array,
+  sampleRate?: number,
+  hopLength?: number,
+  tempoMin?: number,          // default 30
+  tempoMax?: number,          // default 300
+  winLength?: number,
+): Float32Array
+```
+
+`tonnetz` is `librosa.feature.tonnetz`. `tempogram` matches
+`librosa.feature.tempogram` (autocorrelation). `plp` is
+`librosa.beat.plp` (predominant local pulse).
 
 ## Resampling
 
@@ -1178,6 +1345,219 @@ try {
   }
 }
 ```
+
+## Mastering API
+
+The browser package includes the same named mastering processors used by the `/mastering` demo. Decode audio with Web Audio API, pass `Float32Array` channel buffers to libsonare, then export the returned samples as WAV in your application.
+
+```typescript
+import {
+  init,
+  masterAudioStereo,
+  masteringChainStereo,
+  masteringChainStereoWithProgress,
+  masteringPresetNames,
+  masteringProcessorNames,
+  masteringProcess,
+  masteringStereoAnalyze,
+} from '@libraz/libsonare'
+
+await init()
+
+console.log(masteringProcessorNames())
+console.log(masteringPresetNames())
+
+const result = masteringChainStereo(left, right, sampleRate, {
+  spectral: {
+    airBand: { amount: 0.35, shelfFrequencyHz: 14000 },
+  },
+  maximizer: {
+    truePeakLimiter: {
+      ceilingDb: -1,
+      lookaheadMs: 5,
+      oversampleFactor: 4,
+    },
+  },
+  loudness: {
+    targetLufs: -14,
+    ceilingDb: -1,
+    truePeakOversample: 4,
+  },
+})
+
+console.log(result.outputLufs, result.appliedGainDb, result.stages)
+
+const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
+  'loudness.targetLufs': -14,
+})
+console.log(presetResult.outputLufs, presetResult.stages)
+
+const progressResult = masteringChainStereoWithProgress(left, right, sampleRate, {
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+}, (progress, stage) => {
+  console.log(`mastering ${(progress * 100).toFixed(0)}%: ${stage}`)
+})
+console.log(progressResult.outputLufs)
+
+const mono = masteringProcess('spectral.airBand', samples, sampleRate, {
+  amount: 0.4,
+  shelfFrequencyHz: 14000,
+})
+
+const stereoReport = masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate)
+console.log(JSON.parse(stereoReport))
+```
+
+Use `masteringPairProcessorNames()` and `masteringPairAnalyze()` for reference-track workflows such as match analysis or A/B reporting. Pair inputs should use the same sample rate and comparable duration.
+
+### StreamingMasteringChain
+
+For real-time or memory-constrained use cases — e.g. processing audio
+block-by-block from `AudioWorklet` or a stream — the WASM module exposes
+`StreamingMasteringChain`. It accepts the same nested config as
+`masteringChain()`, prepares processor state for a fixed block size, and
+applies the chain incrementally.
+
+```typescript
+import { init, StreamingMasteringChain } from '@libraz/libsonare';
+await init();
+
+const chain = new StreamingMasteringChain({
+  eq: { tiltDb: 0.5 },
+  dynamics: { compressor: { thresholdDb: -20 } },
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+});
+
+chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
+
+const monoOut = chain.processMono(monoBlock);                // 1ch
+const { left, right } = chain.processStereo(leftBlock, rightBlock); // 2ch
+
+console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
+console.log(chain.latencySamples());  // total latency reported by active stages
+
+chain.reset();   // clear processor state without re-preparing
+chain.delete();  // release the WASM handle (call when done)
+```
+
+Stereo-only stages are skipped when `numChannels === 1`. Use `reset()` between
+independent songs that share the same chain; use `delete()` to free the
+underlying handle.
+
+
+
+The named mastering API families are:
+
+| Purpose | Function |
+|---------|----------|
+| Apply simple loudness mastering | `mastering()` |
+| List built-in mastering presets | `masteringPresetNames()` |
+| Apply a preset to mono audio | `masterAudio()` |
+| Apply a preset to stereo audio | `masterAudioStereo()` |
+| Run a full mono chain | `masteringChain()` |
+| Run a full stereo chain | `masteringChainStereo()` |
+| Run a full mono chain with progress | `masteringChainWithProgress()` |
+| Run a full stereo chain with progress | `masteringChainStereoWithProgress()` |
+| Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
+| List mono/stereo processors | `masteringProcessorNames()` |
+| Process mono audio | `masteringProcess()` |
+| Process stereo audio | `masteringProcessStereo()` |
+| List pair processors | `masteringPairProcessorNames()` |
+| Process source/reference pair | `masteringPairProcess()` |
+| List pair analyses | `masteringPairAnalysisNames()` |
+| Analyze source/reference pair | `masteringPairAnalyze()` |
+| List stereo analyses | `masteringStereoAnalysisNames()` |
+| Analyze stereo channels | `masteringStereoAnalyze()` |
+
+Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and air](./glossary/mastering/tone-air.md), [Dynamics](./glossary/mastering/dynamics.md), [Stereo, limiter, and loudness](./glossary/mastering/stereo-limiter-loudness.md), [Reference match](./glossary/mastering/reference-match.md).
+
+### MasteringChainConfig
+
+All `masteringChain*`, `masterAudio*`, and `StreamingMasteringChain` calls
+share the same nested config schema. Every key is optional — only the stages
+you set are activated, in chain order: **repair → eq → dynamics → saturation →
+spectral → stereo → maximizer → loudness**. `masterAudio*` (preset) overrides
+use the same key names but a flat `"dynamics.compressor.thresholdDb"` form.
+
+::: details Full interface (click to expand)
+
+```typescript
+interface MasteringChainConfig {
+  repair?: {
+    denoise?: boolean;
+    nFft?: number; hopLength?: number; ddAlpha?: number; gainFloor?: number;
+    declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
+                lpcOrder?: number; residualRatio?: number; };
+    dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
+                 hopLength?: number; t60Sec?: number; lateDelayMs?: number;
+                 overSubtraction?: number; spectralFloor?: number;
+                 wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
+                 wpeStrength?: number; };
+  };
+  eq?: { tiltDb?: number; pivotHz?: number };
+  dynamics?: {
+    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
+                   releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
+                   autoMakeup?: boolean; };
+    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
+                attackMs?: number; releaseMs?: number; rangeDb?: number; };
+    transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
+                        fastAttackMs?: number; fastReleaseMs?: number;
+                        slowAttackMs?: number; slowReleaseMs?: number;
+                        sensitivity?: number; maxGainDb?: number;
+                        gainSmoothingMs?: number; lookaheadMs?: number; };
+    multibandComp?: { lowCutoffHz?: number; highCutoffHz?: number;
+                      lowThresholdDb?: number;  lowRatio?: number;
+                      lowAttackMs?: number;     lowReleaseMs?: number;
+                      midThresholdDb?: number;  midRatio?: number;
+                      midAttackMs?: number;     midReleaseMs?: number;
+                      highThresholdDb?: number; highRatio?: number;
+                      highAttackMs?: number;    highReleaseMs?: number; };
+  };
+  saturation?: {
+    tape?: { driveDb?: number; saturation?: number; hysteresis?: number;
+             outputGainDb?: number; speedIps?: number; headBumpDb?: number;
+             bias?: number; gapLoss?: number; };
+    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number;
+                q?: number; evenOddMix?: number; };
+  };
+  spectral?: {
+    airBand?: { amount?: number; shelfFrequencyHz?: number;
+                dynamicThresholdDb?: number; dynamicRangeDb?: number; };
+  };
+  stereo?: {
+    imager?: { width?: number; outputGainDb?: number;
+               decorrelationAmount?: number; preserveEnergy?: boolean; };
+    monoMaker?: { amount?: number };
+  };
+  maximizer?: {
+    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
+                        releaseMs?: number; oversampleFactor?: number;
+                        applyGainAtInputRate?: boolean; };
+  };
+  loudness?: { targetLufs?: number; ceilingDb?: number;
+               truePeakOversample?: number; };
+}
+
+interface MasteringResult {
+  samples: Float32Array; sampleRate: number;
+  inputLufs: number; outputLufs: number; appliedGainDb: number;
+  latencySamples?: number;
+}
+interface MasteringChainResult extends MasteringResult { stages: string[] }
+interface MasteringStereoResult {
+  left: Float32Array; right: Float32Array; sampleRate: number;
+  inputLufs: number; outputLufs: number; appliedGainDb: number;
+  latencySamples: number;
+}
+```
+
+:::
+
+The glossary mastering guides explain when to reach for each section:
+[Repair](./glossary/mastering/repair.md), [Tone and Air](./glossary/mastering/tone-air.md),
+[Dynamics](./glossary/mastering/dynamics.md),
+[Stereo, Limiter, Loudness](./glossary/mastering/stereo-limiter-loudness.md).
 
 ## Performance Summary
 

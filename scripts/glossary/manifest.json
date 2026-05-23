@@ -1,0 +1,67 @@
+{
+  "note": "This is an editorial coverage manifest only. Do not generate public glossary prose from it. Public pages must be written and reviewed by hand, then marked published here.",
+  "categories": [
+    {
+      "id": ".",
+      "label": { "en": "Published starter pages", "ja": "公開済みスターターページ" },
+      "entries": [
+        { "id": "mastering", "path": "mastering.md", "status": "published", "title": { "en": "Mastering", "ja": "マスタリング" } },
+        { "id": "lufs", "path": "lufs.md", "status": "published", "title": { "en": "LUFS", "ja": "LUFS" } },
+        { "id": "true-peak", "path": "true-peak.md", "status": "published", "title": { "en": "True Peak", "ja": "True Peak" } },
+        { "id": "ab-comparison", "path": "ab-comparison.md", "status": "published", "title": { "en": "A/B Comparison", "ja": "A/B 比較" } },
+        { "id": "air-band", "path": "air-band.md", "status": "published", "title": { "en": "Air Band", "ja": "Air Band" } }
+      ]
+    },
+    {
+      "id": "concepts",
+      "label": { "en": "Concepts", "ja": "概念" },
+      "entries": [
+        { "id": "what-is-mastering", "status": "published", "title": { "en": "What Is Mastering?", "ja": "マスタリングとは?" } },
+        { "id": "mir-overview", "status": "published", "title": { "en": "MIR Overview", "ja": "MIR の全体像" } },
+        { "id": "audio-basics", "status": "published", "title": { "en": "Audio Basics", "ja": "オーディオ基礎" } },
+        { "id": "loudness-matching", "status": "published", "title": { "en": "Loudness Matching", "ja": "ラウドネスマッチング" } },
+        { "id": "reference-track", "status": "published", "title": { "en": "Reference Track", "ja": "リファレンストラック" } },
+        { "id": "true-peak-safety", "status": "published", "title": { "en": "True Peak Safety", "ja": "True Peak 安全性" } },
+        { "id": "dynamic-range", "status": "published", "title": { "en": "Dynamic Range", "ja": "ダイナミックレンジ" } },
+        { "id": "crest-factor", "status": "published", "title": { "en": "Crest Factor", "ja": "クレストファクター" } },
+        { "id": "mono-compatibility", "status": "published", "title": { "en": "Mono Compatibility", "ja": "モノラル互換性" } },
+        { "id": "gain-staging", "status": "published", "title": { "en": "Gain Staging", "ja": "ゲインステージング" } },
+        { "id": "browser-local-processing", "status": "published", "title": { "en": "Browser Local Processing", "ja": "ブラウザ内ローカル処理" } }
+      ]
+    },
+    {
+      "id": "mastering",
+      "label": { "en": "Mastering feature guides", "ja": "マスタリング機能ガイド" },
+      "entries": [
+        { "id": "repair", "status": "published", "title": { "en": "Repair and Input Controls", "ja": "リペアと入力コントロール" } },
+        { "id": "dynamics", "status": "published", "title": { "en": "Dynamics Controls", "ja": "ダイナミクスコントロール" } },
+        { "id": "tone-air", "status": "published", "title": { "en": "Tone and Air Controls", "ja": "トーンと Air コントロール" } },
+        { "id": "stereo-limiter-loudness", "status": "published", "title": { "en": "Stereo, Limiter, and Loudness Controls", "ja": "ステレオ、リミッター、ラウドネスコントロール" } },
+        { "id": "reference-match", "status": "published", "title": { "en": "Reference Match", "ja": "リファレンスマッチ" } },
+        { "id": "delivery-targets", "status": "published", "title": { "en": "Delivery Targets", "ja": "配信ターゲット" } },
+        { "id": "error-recovery", "status": "published", "title": { "en": "Error Recovery", "ja": "エラー復旧" } }
+      ]
+    },
+    {
+      "id": "mastering",
+      "label": { "en": "Mastering measurement guides", "ja": "マスタリング計測ガイド" },
+      "entries": [
+        { "id": "meter-reading", "status": "published", "title": { "en": "Reading Mastering Meters", "ja": "マスタリングメーターの読み方" } }
+      ]
+    },
+    {
+      "id": "mastering",
+      "label": { "en": "Mastering preset guides", "ja": "マスタリングプリセットガイド" },
+      "entries": [
+        { "id": "preset-selection", "status": "published", "title": { "en": "Choosing a Mastering Preset", "ja": "マスタリングプリセットの選び方" } }
+      ]
+    },
+    {
+      "id": "mastering",
+      "label": { "en": "Mastering troubleshooting guides", "ja": "マスタリングトラブルシュートガイド" },
+      "entries": [
+        { "id": "quality-checklist", "status": "published", "title": { "en": "Mastering Quality Checklist", "ja": "マスタリング品質チェックリスト" } }
+      ]
+    }
+  ]
+}

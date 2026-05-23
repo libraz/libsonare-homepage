@@ -88,11 +88,6 @@ shifted = audio.pitch_shift(semitones=2.0)     # Up 2 semitones
 normalized = audio.normalize(target_db=-3.0)
 trimmed = audio.trim(threshold_db=-60.0)
 
-# TTS-oriented utilities
-quality = audio.analyze_tts_quality()
-prepared = audio.prepare_tts()
-compressed = audio.compress_pauses(max_pause_sec=0.6)
-
 # Resample
 resampled = audio.resample(target_sr=44100)
 ```
@@ -171,7 +166,12 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_key(samples, sample_rate)` | `Key` | Root, mode, confidence |
 | `detect_beats(samples, sample_rate)` | `list[float]` | Beat timestamps (seconds) |
 | `detect_onsets(samples, sample_rate)` | `list[float]` | Onset timestamps (seconds) |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | Full analysis |
+| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments with templates |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | Full analysis (BPM, key, chords, sections, timbre, ...) |
+| `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
+| `analyze_rhythm(samples, sample_rate)` | `RhythmResult` | Syncopation, groove type, regularity |
+| `analyze_dynamics(samples, sample_rate)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
+| `analyze_timbre(samples, sample_rate)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity |
 | `version()` | `str` | Library version |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
@@ -188,9 +188,6 @@ All functions also available as `Audio` instance methods (e.g., `audio.detect_bp
 | `pitch_shift(samples, sr, semitones)` | `list[float]` | Pitch-shift without tempo change |
 | `normalize(samples, sr, target_db?)` | `list[float]` | Normalize to target dB (default: -3.0) |
 | `trim(samples, sr, threshold_db?)` | `list[float]` | Trim silence (default: -60.0 dB) |
-| `analyze_tts_quality(samples, sr, silence_threshold_db?)` | `TtsQualityResult` | Measure objective TTS audio properties |
-| `prepare_tts(samples, sr, target_rms_db?, silence_threshold_db?, peak_limit_db?, fade_sec?)` | `list[float]` | Trim, RMS-normalize, peak-limit, and lightly fade TTS audio |
-| `compress_pauses(samples, sr, max_pause_sec?, silence_threshold_db?)` | `list[float]` | Shorten long low-level pauses |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
 
 ### Feature Extraction Functions
@@ -213,6 +210,39 @@ All functions also available as `Audio` instance methods (e.g., `audio.detect_bp
 
 Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`.
 
+### librosa-Compatible Helpers
+
+Added in libsonare 1.1.0. These mirror the corresponding `librosa` functions —
+see [librosa Compatibility](./librosa-compatibility.md) for the function each
+helper matches.
+
+::: tip What each helper is for
+- **`preemphasis` / `deemphasis`** — classic one-tap IIR pre-processing that boosts (or undoes) high frequencies.
+- **`trim_silence` / `split_silence`** — trim leading/trailing silence or split on silent gaps.
+- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — framing and size-alignment utilities for fixed-frame DSP.
+- **`peak_pick` / `vector_normalize`** — peak detection on 1-D signals (e.g. onset envelopes) and vector-norm normalisation.
+- **`pcen`** — dynamic range compression for mel spectrograms; features that are robust to gain and background noise.
+- **`tonnetz`** — projects chroma into a 6-D harmonic space for chord-relation and modulation analysis.
+- **`tempogram` / `plp`** — time-varying tempo representation from the onset envelope, and the dominant local pulse on top.
+:::
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `preemphasis(samples, coef?, zi?)` | `list[float]` | Pre-emphasis filter (librosa.effects.preemphasis) |
+| `deemphasis(samples, coef?, zi?)` | `list[float]` | Inverse pre-emphasis (librosa.effects.deemphasis) |
+| `trim_silence(samples, top_db?, frame_length?, hop_length?)` | `tuple[list[float], int, int]` | `librosa.effects.trim` — returns `(audio, start_sample, end_sample)` |
+| `split_silence(samples, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | `librosa.effects.split` — non-silent intervals as sample pairs |
+| `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame` — returns `(n_frames, row-major frames)` |
+| `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
+| `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
+| `fix_frames(frames, x_min?, x_max?, pad?)` | `list[int]` | `librosa.util.fix_frames` |
+| `peak_pick(values, pre_max, post_max, pre_avg, post_avg, delta, wait)` | `list[int]` | `librosa.util.peak_pick` — returns peak indices |
+| `vector_normalize(values, norm_type?, threshold?)` | `list[float]` | `librosa.util.normalize`. `norm_type`: 0=inf, 1=L1, 2=L2, 3=power |
+| `pcen(values, n_bins, n_frames, sample_rate?, hop_length?, time_constant?, gain?, bias?, power?, eps?)` | `list[float]` | `librosa.pcen` — input is row-major `[n_bins x n_frames]` mel |
+| `tonnetz(chromagram, n_chroma, n_frames)` | `list[float]` | `librosa.feature.tonnetz` — returns row-major `[6 x n_frames]` |
+| `tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, center?, norm?)` | `tuple[int, list[float]]` | `librosa.feature.tempogram` (autocorrelation) |
+| `plp(onset_envelope, sample_rate?, hop_length?, tempo_min?, tempo_max?, win_length?)` | `list[float]` | `librosa.beat.plp` — predominant local pulse |
+
 ### Conversion Functions
 
 | Function | Description |
@@ -225,6 +255,12 @@ Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, `
 | `note_to_hz(note)` | Note name → Hertz |
 | `frames_to_time(frames, sr, hop_length)` | Frame index → seconds |
 | `time_to_frames(time, sr, hop_length)` | Seconds → frame index |
+| `frames_to_samples(frames, hop_length?, n_fft?)` | Frame index → sample index (librosa.frames_to_samples) |
+| `samples_to_frames(samples, hop_length?, n_fft?)` | Sample index → frame index (librosa.samples_to_frames) |
+| `power_to_db(values, ref?, amin?, top_db?)` | Power → dB (librosa.power_to_db) |
+| `amplitude_to_db(values, ref?, amin?, top_db?)` | Amplitude → dB (librosa.amplitude_to_db) |
+| `db_to_power(values, ref?)` | dB → power |
+| `db_to_amplitude(values, ref?)` | dB → amplitude |
 
 ### Types
 
@@ -241,6 +277,8 @@ class Key:
     root: PitchClass
     mode: Mode
     confidence: float
+    name: str          # "C major", "A minor"
+    short_name: str    # "C", "Am"
 
 @dataclass(frozen=True)
 class TimeSignature:
@@ -255,6 +293,13 @@ class AnalysisResult:
     key: Key
     time_signature: TimeSignature
     beat_times: list[float]
+    beats: list[Beat]              # per-beat strength
+    chords: list[Chord]            # detected chord segments
+    sections: list[Section]        # Intro / Verse / Chorus / ...
+    timbre: TimbreResult
+    dynamics: DynamicsResult
+    rhythm: RhythmResult
+    form: str                      # e.g. "IABABCO"
 
 @dataclass(frozen=True)
 class HpssResult:
@@ -306,3 +351,98 @@ class PitchResult:
     median_f0: float
     mean_f0: float
 ```
+
+## Mastering API
+
+Python exposes the same named mastering processors as the browser demo. Use the name-list helpers to inspect the active build, then call mono, stereo, pair, or analysis APIs with explicit parameters.
+
+```python
+import json
+import libsonare as sonare
+
+print(sonare.mastering_processor_names())
+# e.g. ['dynamics.compressor', 'eq.parametric', 'spectral.airBand', 'stereo.imager', ...]
+
+result = sonare.mastering_process(
+    "spectral.airBand",
+    samples,
+    sample_rate=sample_rate,
+    params={
+        "amount": 0.4,
+        "shelfFrequencyHz": 14000,
+    },
+)
+
+report = sonare.mastering_stereo_analyze(
+    "stereo.monoCompatCheck",
+    left,
+    right,
+    sample_rate=sample_rate,
+)
+print(json.loads(report))
+
+# Preset-driven chain (one-shot)
+sonare.mastering_preset_names()
+# -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech']
+chain_result = sonare.master_audio(
+    samples,
+    sample_rate=sample_rate,
+    preset="aiMusic",
+    overrides={"loudness.targetLufs": -13},
+)
+print(chain_result.output_lufs, chain_result.applied_gain_db)
+
+# Block-by-block streaming variant
+with sonare.StreamingMasteringChain({
+    "eq.tilt.tiltDb": 0.5,
+    "dynamics.compressor.thresholdDb": -20.0,
+}) as chain:
+    chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
+    out_block = chain.process_mono([0.0] * 512)
+```
+
+Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. Pair inputs should use the same sample rate and comparable length.
+
+### Progress callbacks
+
+`mastering_chain()`, `mastering_chain_stereo()`, `master_audio()`, and
+`master_audio_stereo()` accept an optional `on_progress=callable` keyword that
+receives `(progress: float, stage: str)` after each stage. `progress` runs
+from `0.0` to `1.0`; `stage` is the named processor that just completed
+(`eq.tilt`, `dynamics.compressor`, `loudness.targetLufs`, etc.). Use it to
+drive UI progress bars or to log per-stage timing.
+
+```python
+def on_step(progress: float, stage: str) -> None:
+    print(f"{progress:5.1%}  {stage}")
+
+result = sonare.mastering_chain(
+    samples,
+    sample_rate=sample_rate,
+    config={"loudness": {"targetLufs": -14, "ceilingDb": -1}},
+    on_progress=on_step,
+)
+```
+
+The named mastering API families are:
+
+| Purpose | Function |
+|---------|----------|
+| Apply simple loudness mastering | `mastering()` |
+| List built-in mastering presets | `mastering_preset_names()` |
+| Apply a preset to mono audio | `master_audio()` |
+| Apply a preset to stereo audio | `master_audio_stereo()` |
+| Run a full mono chain | `mastering_chain()` |
+| Run a full stereo chain | `mastering_chain_stereo()` |
+| Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
+| List mono/stereo processors | `mastering_processor_names()` |
+| Process mono audio | `mastering_process()` |
+| Process stereo audio | `mastering_process_stereo()` |
+| List pair processors | `mastering_pair_processor_names()` |
+| Process source/reference pair | `mastering_pair_process()` |
+| List pair analyses | `mastering_pair_analysis_names()` |
+| Analyze source/reference pair | `mastering_pair_analyze()` |
+| List stereo analyses | `mastering_stereo_analysis_names()` |
+| Analyze stereo channels | `mastering_stereo_analyze()` |
+
+Related mastering guides: [Preset selection](./glossary/mastering/preset-selection.md), [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Quality checklist](./glossary/mastering/quality-checklist.md).

@@ -2,9 +2,9 @@
 
 ## What is libsonare?
 
-libsonare is an audio analysis library for **Music Information Retrieval (MIR)**. Given an audio file or stream, it can automatically extract musical information such as tempo (BPM), key, chords, beats, song structure, and more.
+libsonare is an audio analysis and mastering DSP library for **Music Information Retrieval (MIR)** and browser-native music tools. Given an audio file or stream, it can automatically extract musical information such as tempo (BPM), key, chords, beats, song structure, and more. It also includes mastering processors for loudness normalization, true-peak limiting, EQ, dynamics, stereo processing, repair, and reference matching.
 
-It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same analysis directly in web browsers — no server required.
+It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same analysis and mastering chain directly in web browsers — no server required.
 
 ::: details What is WebAssembly?
 WebAssembly (WASM) is a binary instruction format that runs in web browsers at near-native speed. It allows code written in languages like C++ to be compiled and executed in the browser, without needing a server or installing anything. libsonare uses this to bring C++-level audio analysis performance directly to web applications.
@@ -33,7 +33,7 @@ libsonare is designed for developers building music-related applications:
 
 - **Web app developers** — Add audio analysis to your app without a backend. Detect BPM for a DJ tool, visualize chords for a practice app, or build an automatic song structure viewer, all running client-side in the browser via WebAssembly.
 
-- **Music tool creators** — Build DAW plugins, chord detectors, auto-transcription tools, or music education software. libsonare provides the analysis engine so you can focus on the user experience.
+- **Music tool creators** — Build DAW plugins, chord detectors, auto-transcription tools, mastering workflows, or music education software. libsonare provides the analysis and mastering engine so you can focus on the user experience.
 
 ::: details What is a DAW?
 A DAW (Digital Audio Workstation) is software for recording, editing, and producing audio. Examples include Ableton Live, Logic Pro, FL Studio, and GarageBand. DAW plugins extend these applications with additional functionality like effects, instruments, or analysis tools.
@@ -42,6 +42,10 @@ A DAW (Digital Audio Workstation) is software for recording, editing, and produc
 - **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs the heavy pipeline in native C++ and also works in the browser.
 
 - **Game / interactive media developers** — Analyze music in real-time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
+
+::: tip Try it in the browser
+Use the [audio analysis demo](/) for MIR features, or open the [mastering demo](/mastering) to render a local-only WAV master with no upload.
+:::
 
 ## How Audio Analysis Works
 

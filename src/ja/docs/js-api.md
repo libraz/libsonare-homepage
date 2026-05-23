@@ -89,7 +89,7 @@ function isInitialized(): boolean
 ライブラリのバージョンを取得します。
 
 ```typescript
-function version(): string  // 例: "1.0.4"
+function version(): string  // 例: "1.1.0"
 ```
 
 ## 解析関数
@@ -245,17 +245,17 @@ function analyzeWithProgress(
 
 ### `hpss(samples, sampleRate, kernelHarmonic?, kernelPercussive?)` <Badge type="warning" text="高負荷" />
 
-Harmonic-Percussive Source Separation（調和-打楽器分離）。オーディオを調性成分（ボーカル、シンセ）と過渡成分（ドラム）に分離。
+HPSS（Harmonic / Percussive Source Separation。倍音成分／打撃成分の分離）。音源を倍音成分（ボーカル、シンセなどの持続音）と打撃成分（ドラム、過渡音）に分離します。
 
 ::: info ユースケース
-- **リミックス**: ドラムを分離または削除
-- **カラオケ**: ボーカルを除去してインストゥルメンタルを抽出（harmonic使用）
-- **より良い解析**: よりクリーンなコード検出のためにharmonicのみを使用
-- **ドラム抽出**: サンプリング用にパーカッションのみを取得
+- **リミックス**: ドラムを分離または除去する
+- **カラオケ**: ボーカルを除去してインストゥルメンタルを取り出す（倍音成分を使用）
+- **解析精度の向上**: クリーンなコード検出のために倍音成分のみを使う
+- **ドラム抽出**: サンプリング用に打撃成分だけを取り出す
 :::
 
 ::: tip パフォーマンス
-HPSS は STFT 計算とメディアンフィルタリングを必要とします。処理時間はオーディオの長さに比例します。
+HPSS は STFT とメディアンフィルタリングを必要とします。処理時間は音源の長さに比例します。
 :::
 
 ```typescript
@@ -275,7 +275,7 @@ interface HpssResult {
 
 ### `harmonic(samples, sampleRate)` <Badge type="warning" text="高負荷" />
 
-オーディオから調和成分を抽出します。
+音源から倍音成分を抽出します。
 
 ```typescript
 function harmonic(samples: Float32Array, sampleRate: number): Float32Array
@@ -283,7 +283,7 @@ function harmonic(samples: Float32Array, sampleRate: number): Float32Array
 
 ### `percussive(samples, sampleRate)` <Badge type="warning" text="高負荷" />
 
-オーディオから打楽器成分を抽出します。
+音源から打撃成分を抽出します。
 
 ```typescript
 function percussive(samples: Float32Array, sampleRate: number): Float32Array
@@ -561,7 +561,176 @@ function noteToHz(note: string): number
 // 時間 <-> フレーム
 function framesToTime(frames: number, sr: number, hopLength: number): number
 function timeToFrames(time: number, sr: number, hopLength: number): number
+
+// フレーム <-> サンプル (librosa.frames_to_samples / samples_to_frames 相当)
+function framesToSamples(frames: number, hopLength?: number, nFft?: number): number
+function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number
+
+// dB 変換（ベクトル）
+function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array
+function dbToPower(values: Float32Array, ref?: number): Float32Array
+function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 ```
+
+## librosa 互換ヘルパー
+
+libsonare 1.1.0 で追加された librosa 互換ヘルパー群です。対応する `librosa`
+関数の挙動に合わせており、WASM・Node・Python すべてのバインディングから
+利用できます。各ヘルパーが対応する librosa 関数は
+[librosa 互換性](/ja/docs/librosa-compatibility) を参照してください。
+
+::: tip 各ヘルパーの位置づけ
+- **プリ／ディエンファシス** — 解析前の前処理。高域を持ち上げて／戻して S/N を改善する古典的な 1 タップ IIR フィルタです。
+- **無音トリム／分割** — 音源の前後の無音をカットしたり、無音区間で区切ったりする実用処理です。
+- **フレーミング／パディング** — STFT のような固定フレーム処理に通すために、波形を `frame_length` サンプルごとに切り出したり、サイズを揃えたりするためのユーティリティです。
+- **ピーク検出／ベクトル正規化** — オンセット強度などの 1 次元信号からピークを拾ったり、ベクトルを目的のノルムで揃えたりする後処理です。
+- **PCEN** — メルスペクトログラム向けの動的レンジ圧縮。ノイズや音量変動に強い特徴量を作るために使います。
+- **Tonnetz** — クロマグラムを 6 次元のハーモニック空間に射影した特徴量。コード関係や転調の解析に向きます。
+- **Tempogram / PLP** — オンセット包絡線からテンポ候補を時間方向に追える表現と、その上で支配的なパルスを取り出す手法です。
+:::
+
+### プリエンファシス／ディエンファシス
+
+```typescript
+function preemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array
+function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array
+```
+
+`coef` の既定値は `0.97` です。ストリーミング処理で前ブロック末尾の値を
+受け渡したい場合は `zi` に初期条件を指定します。
+
+### 無音トリム／無音分割
+
+```typescript
+function trimSilence(
+  samples: Float32Array,
+  topDb?: number,        // 既定 60
+  frameLength?: number,  // 既定 2048
+  hopLength?: number,    // 既定 512
+): { audio: Float32Array; startSample: number; endSample: number }
+
+function splitSilence(
+  samples: Float32Array,
+  topDb?: number,
+  frameLength?: number,
+  hopLength?: number,
+): Int32Array  // [start0, end0, start1, end1, ...] のフラット配列
+```
+
+`trimSilence` は `librosa.effects.trim`、`splitSilence` は
+`librosa.effects.split` と同等で、非無音区間をサンプル単位の開始／終了
+ペアで返します。
+
+### フレーミング／パディングのヘルパー
+
+```typescript
+function frameSignal(
+  samples: Float32Array,
+  frameLength: number,
+  hopLength: number,
+): { nFrames: number; frames: Float32Array }  // row-major
+
+function padCenter(values: Float32Array, size: number, padValue?: number): Float32Array
+function fixLength(values: Float32Array, size: number, padValue?: number): Float32Array
+function fixFrames(frames: Int32Array | number[], xMin?: number, xMax?: number, pad?: boolean): Int32Array
+```
+
+`frameSignal` は `librosa.util.frame`、`padCenter` / `fixLength` /
+`fixFrames` は対応する librosa.util の同名関数と互換です。
+
+### ピーク検出／ベクトル正規化
+
+```typescript
+function peakPick(
+  values: Float32Array,
+  preMax: number,
+  postMax: number,
+  preAvg: number,
+  postAvg: number,
+  delta: number,
+  wait: number,
+): Int32Array  // ピーク位置のインデックス
+
+function vectorNormalize(
+  values: Float32Array,
+  normType?: number,  // 0=inf, 1=L1, 2=L2, 3=power（既定 0）
+  threshold?: number,
+): Float32Array
+```
+
+`peakPick` は `librosa.util.peak_pick`、`vectorNormalize` は
+`librosa.util.normalize` に対応します。
+
+::: details `peakPick` のパラメータ
+- `preMax` / `postMax` — 各候補点の前後 N サンプルの中で**最大値か**を判定する窓幅（局所最大判定）。
+- `preAvg` / `postAvg` — 同じく前後 N サンプルの**平均値 + `delta`** を超えているかを判定する窓幅。
+- `delta` — 平均からどれだけ突出していればピークと見なすかの閾値。値を上げるとピークが少なくなります。
+- `wait` — 連続するピーク間の最小距離（サンプル数）。短すぎる二重ピークを抑止します。
+
+オンセット強度（`detectOnsets` / `tempogram` などの入力に使う 1 次元信号）からピーク時刻を抽出する後処理用です。
+:::
+
+::: details `vectorNormalize` の `normType`
+- `0` (**inf**, 既定) — 最大絶対値で割って `[-1, 1]` に収める。波形のピーク正規化に近い動作。
+- `1` (**L1**) — 絶対値の総和で割る。確率分布のように正規化したいとき。
+- `2` (**L2**) — 各成分を二乗和の平方根で割る。特徴ベクトル比較の前処理として一般的。
+- `3` (**power**) — 二乗和そのもので割る（パワー正規化）。
+
+`threshold` を指定するとそれ以下のノルムでは正規化をスキップし、ほぼ無音のフレームで値が暴れるのを防げます。
+:::
+
+### PCEN（チャンネル別エネルギー正規化）
+
+```typescript
+function pcen(
+  values: Float32Array,
+  nBins: number,
+  nFrames: number,
+  options?: {
+    sampleRate?: number;
+    hopLength?: number;
+    timeConstant?: number;  // 既定 0.4
+    gain?: number;          // 既定 0.98
+    bias?: number;          // 既定 2.0
+    power?: number;         // 既定 0.5
+    eps?: number;           // 既定 1e-6
+  },
+): Float32Array
+```
+
+`pcen` は `librosa.pcen` 互換です。入力は row-major の
+`[nBins x nFrames]` メルスペクトログラム、出力も同じレイアウトです。
+
+### Tonnetz／Tempogram／PLP
+
+```typescript
+function tonnetz(
+  chromagram: Float32Array,   // row-major [nChroma x nFrames]
+  nChroma: number,
+  nFrames: number,
+): Float32Array               // [6 x nFrames]
+
+function tempogram(
+  onsetEnvelope: Float32Array,
+  sampleRate?: number,
+  hopLength?: number,         // 既定 512
+  winLength?: number,         // 既定 384
+): { nFrames: number; winLength: number; data: Float32Array }
+
+function plp(
+  onsetEnvelope: Float32Array,
+  sampleRate?: number,
+  hopLength?: number,
+  tempoMin?: number,          // 既定 30
+  tempoMax?: number,          // 既定 300
+  winLength?: number,
+): Float32Array
+```
+
+`tonnetz` は `librosa.feature.tonnetz`、`tempogram` は
+`librosa.feature.tempogram`（自己相関ベース）、`plp` は
+`librosa.beat.plp`（Predominant Local Pulse）と対応します。
 
 ## リサンプリング
 
@@ -576,6 +745,71 @@ function resample(
   targetSr: number
 ): Float32Array
 ```
+
+## Audio クラス
+
+`Audio` クラスは、スタンドアロン関数群をオブジェクト指向ラッパーとして提供します。サンプルとサンプルレートを内部で保持するため、各呼び出しで渡し直す必要がありません。
+
+### `Audio.fromBuffer(samples, sampleRate)`
+
+サンプルデータから Audio インスタンスを作成します。
+
+```typescript
+const audio = Audio.fromBuffer(samples, 44100);
+```
+
+### プロパティ
+
+| プロパティ | 型 | 説明 |
+|----------|------|-------------|
+| `audio.data` | `Float32Array` | サンプルデータ |
+| `audio.length` | `number` | サンプル数 |
+| `audio.sampleRate` | `number` | サンプルレート（Hz） |
+| `audio.duration` | `number` | 長さ（秒） |
+
+### インスタンスメソッド
+
+スタンドアロン関数はすべてインスタンスメソッドとしても呼び出せます — `samples` と `sampleRate` は自動的に渡されます。
+
+```typescript
+import { init, Audio } from '@libraz/libsonare';
+
+await init();
+
+const audio = Audio.fromBuffer(samples, 44100);
+
+// 解析
+const bpm = audio.detectBpm();
+const key = audio.detectKey();
+const beats = audio.detectBeats();
+const onsets = audio.detectOnsets();
+const result = audio.analyze();
+
+// エフェクト
+const { harmonic, percussive } = audio.hpss();
+const stretched = audio.timeStretch(1.5);
+const shifted = audio.pitchShift(2);
+const normalized = audio.normalize(-3.0);
+const trimmed = audio.trim(-60.0);
+
+// 特徴抽出
+const stftResult = audio.stft();
+const mel = audio.melSpectrogram();
+const mfcc = audio.mfcc();
+const chroma = audio.chroma();
+const centroid = audio.spectralCentroid();
+const bandwidth = audio.spectralBandwidth();
+const rolloff = audio.spectralRolloff();
+const flatness = audio.spectralFlatness();
+const zcr = audio.zeroCrossingRate();
+const rms = audio.rmsEnergy();
+const pitch = audio.pitchPyin();
+
+// リサンプリング
+const resampled = audio.resample(22050);
+```
+
+引数のデフォルト値（`nFft`、`hopLength`、`nMels` など）はスタンドアロン関数と同じです。
 
 ## ストリーミング API
 
@@ -1041,6 +1275,221 @@ try {
   }
 }
 ```
+
+## マスタリング API
+
+ブラウザ向けパッケージには `/ja/mastering` デモと同じ名前付きマスタリングプロセッサが含まれます。Web Audio API などでデコードした `Float32Array` のチャンネルバッファを渡し、戻り値のサンプルをアプリ側で WAV などに書き出します。
+
+```typescript
+import {
+  init,
+  masterAudioStereo,
+  masteringChainStereo,
+  masteringChainStereoWithProgress,
+  masteringPresetNames,
+  masteringProcessorNames,
+  masteringProcess,
+  masteringStereoAnalyze,
+} from '@libraz/libsonare'
+
+await init()
+
+console.log(masteringProcessorNames())
+console.log(masteringPresetNames())
+
+const result = masteringChainStereo(left, right, sampleRate, {
+  spectral: {
+    airBand: { amount: 0.35, shelfFrequencyHz: 14000 },
+  },
+  maximizer: {
+    truePeakLimiter: {
+      ceilingDb: -1,
+      lookaheadMs: 5,
+      oversampleFactor: 4,
+    },
+  },
+  loudness: {
+    targetLufs: -14,
+    ceilingDb: -1,
+    truePeakOversample: 4,
+  },
+})
+
+console.log(result.outputLufs, result.appliedGainDb, result.stages)
+
+const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
+  'loudness.targetLufs': -14,
+})
+console.log(presetResult.outputLufs, presetResult.stages)
+
+const progressResult = masteringChainStereoWithProgress(left, right, sampleRate, {
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+}, (progress, stage) => {
+  console.log(`mastering ${(progress * 100).toFixed(0)}%: ${stage}`)
+})
+console.log(progressResult.outputLufs)
+
+const mono = masteringProcess('spectral.airBand', samples, sampleRate, {
+  amount: 0.4,
+  shelfFrequencyHz: 14000,
+})
+
+const stereoReport = masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate)
+console.log(JSON.parse(stereoReport))
+```
+
+リファレンストラックや A/B レポート用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います。ペアに渡す入力はサンプルレートを揃え、長さもなるべく近づけてください。
+
+### StreamingMasteringChain
+
+リアルタイム処理やメモリ制約のあるユースケース（`AudioWorklet` やストリーム
+入力からのブロック単位処理など）向けに、WASM モジュールは
+`StreamingMasteringChain` を公開しています。`masteringChain()` と同じ
+ネスト構造の設定オブジェクトを受け取り、固定ブロックサイズで内部状態を準備した上で、
+チェーンを逐次的に適用します。
+
+```typescript
+import { init, StreamingMasteringChain } from '@libraz/libsonare';
+await init();
+
+const chain = new StreamingMasteringChain({
+  eq: { tiltDb: 0.5 },
+  dynamics: { compressor: { thresholdDb: -20 } },
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+});
+
+chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
+
+const monoOut = chain.processMono(monoBlock);                // 1ch
+const { left, right } = chain.processStereo(leftBlock, rightBlock); // 2ch
+
+console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
+console.log(chain.latencySamples());  // 有効ステージの合計レイテンシ
+
+chain.reset();   // prepare し直さずに状態だけクリア
+chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
+```
+
+`numChannels === 1` のときはステレオ専用ステージはスキップされます。
+同じチェーンで複数曲を順に処理する場合は `reset()`、使い終わったら
+`delete()` を呼んでハンドルを解放してください。
+
+
+
+名前付きマスタリング API は次の系統に分かれます。
+
+| 目的 | 関数 |
+|------|----------|
+| シンプルなラウドネスマスタリングを実行 | `mastering()` |
+| 組み込みプリセットの一覧 | `masteringPresetNames()` |
+| プリセットをモノラルに適用 | `masterAudio()` |
+| プリセットをステレオに適用 | `masterAudioStereo()` |
+| フルチェーン実行（モノラル） | `masteringChain()` |
+| フルチェーン実行（ステレオ） | `masteringChainStereo()` |
+| 進捗付きフルチェーン実行（モノラル） | `masteringChainWithProgress()` |
+| 進捗付きフルチェーン実行（ステレオ） | `masteringChainStereoWithProgress()` |
+| ストリーミング（ブロック単位）チェーン | `StreamingMasteringChain` |
+| 名前付きプロセッサ一覧（モノラル／ステレオ） | `masteringProcessorNames()` |
+| モノラル音声を処理 | `masteringProcess()` |
+| ステレオ音声を処理 | `masteringProcessStereo()` |
+| ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
+| ソース／リファレンスのペアを処理 | `masteringPairProcess()` |
+| ペア解析の一覧 | `masteringPairAnalysisNames()` |
+| ソース／リファレンスのペアを解析 | `masteringPairAnalyze()` |
+| ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |
+| ステレオチャンネルを解析 | `masteringStereoAnalyze()` |
+
+関連するマスタリングガイド: [処理チェーン](./glossary/mastering.md)、[トーンと Air](./glossary/mastering/tone-air.md)、[ダイナミクス](./glossary/mastering/dynamics.md)、[ステレオ、リミッター、ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)。
+
+### MasteringChainConfig
+
+`masteringChain*` / `masterAudio*` / `StreamingMasteringChain` はすべて
+同じネスト構造の設定スキーマを共有します。各キーは任意で、指定された
+ステージだけがチェーン順に有効になります: **repair → eq → dynamics →
+saturation → spectral → stereo → maximizer → loudness**。
+`masterAudio*`（プリセット）の `overrides` は同じキー名をフラットなドット記法
+（`"dynamics.compressor.thresholdDb"`）で受け取ります。
+
+::: details インターフェース全文（クリックで展開）
+
+```typescript
+interface MasteringChainConfig {
+  repair?: {
+    denoise?: boolean;
+    nFft?: number; hopLength?: number; ddAlpha?: number; gainFloor?: number;
+    declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
+                lpcOrder?: number; residualRatio?: number; };
+    dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
+                 hopLength?: number; t60Sec?: number; lateDelayMs?: number;
+                 overSubtraction?: number; spectralFloor?: number;
+                 wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
+                 wpeStrength?: number; };
+  };
+  eq?: { tiltDb?: number; pivotHz?: number };
+  dynamics?: {
+    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
+                   releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
+                   autoMakeup?: boolean; };
+    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
+                attackMs?: number; releaseMs?: number; rangeDb?: number; };
+    transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
+                        fastAttackMs?: number; fastReleaseMs?: number;
+                        slowAttackMs?: number; slowReleaseMs?: number;
+                        sensitivity?: number; maxGainDb?: number;
+                        gainSmoothingMs?: number; lookaheadMs?: number; };
+    multibandComp?: { lowCutoffHz?: number; highCutoffHz?: number;
+                      lowThresholdDb?: number;  lowRatio?: number;
+                      lowAttackMs?: number;     lowReleaseMs?: number;
+                      midThresholdDb?: number;  midRatio?: number;
+                      midAttackMs?: number;     midReleaseMs?: number;
+                      highThresholdDb?: number; highRatio?: number;
+                      highAttackMs?: number;    highReleaseMs?: number; };
+  };
+  saturation?: {
+    tape?: { driveDb?: number; saturation?: number; hysteresis?: number;
+             outputGainDb?: number; speedIps?: number; headBumpDb?: number;
+             bias?: number; gapLoss?: number; };
+    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number;
+                q?: number; evenOddMix?: number; };
+  };
+  spectral?: {
+    airBand?: { amount?: number; shelfFrequencyHz?: number;
+                dynamicThresholdDb?: number; dynamicRangeDb?: number; };
+  };
+  stereo?: {
+    imager?: { width?: number; outputGainDb?: number;
+               decorrelationAmount?: number; preserveEnergy?: boolean; };
+    monoMaker?: { amount?: number };
+  };
+  maximizer?: {
+    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
+                        releaseMs?: number; oversampleFactor?: number;
+                        applyGainAtInputRate?: boolean; };
+  };
+  loudness?: { targetLufs?: number; ceilingDb?: number;
+               truePeakOversample?: number; };
+}
+
+interface MasteringResult {
+  samples: Float32Array; sampleRate: number;
+  inputLufs: number; outputLufs: number; appliedGainDb: number;
+  latencySamples?: number;
+}
+interface MasteringChainResult extends MasteringResult { stages: string[] }
+interface MasteringStereoResult {
+  left: Float32Array; right: Float32Array; sampleRate: number;
+  inputLufs: number; outputLufs: number; appliedGainDb: number;
+  latencySamples: number;
+}
+```
+
+:::
+
+各ステージの使いどころは用語集の各ページに対応しています:
+[リペア](./glossary/mastering/repair.md)、
+[トーンと Air](./glossary/mastering/tone-air.md)、
+[ダイナミクス](./glossary/mastering/dynamics.md)、
+[ステレオ・リミッター・ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)。
 
 ## パフォーマンスサマリー
 

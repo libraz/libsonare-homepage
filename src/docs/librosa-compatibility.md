@@ -2,6 +2,12 @@
 
 This document describes how libsonare functions correspond to Python's librosa library.
 
+::: tip How to read this page
+- **New to librosa**: start with [Introduction](/docs/introduction) and [MIR Overview](/docs/glossary/concepts/mir-overview), then come back.
+- **Migrating from librosa**: jump to the [Migration Guide](#migration-guide) and [Known Differences](#known-differences) at the bottom.
+- **Just need a mapping**: scan the [Feature Comparison](#feature-comparison) tables.
+:::
+
 ## Overview
 
 libsonare provides many of the same MIR building blocks as
@@ -14,32 +20,93 @@ contains reference checks against librosa 0.11 for selected features.
 
 ### Supported Features
 
+#### Core / IO
+
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
 | `librosa.load()` | `Audio::from_file()` | WAV/MP3 by default; FFmpeg-supported formats in FFmpeg builds |
 | `librosa.resample()` | `resample()` | librosa 0.11 defaults to soxr; libsonare uses r8brain |
-| `librosa.stft()` | `Spectrogram::compute()` | Compatible defaults; small numerical differences are expected |
+| `librosa.stft()` | `Spectrogram::compute()` / `stft()` | Compatible defaults; small numerical differences are expected |
 | `librosa.istft()` | `Spectrogram::to_audio()` | OLA reconstruction |
-| `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` | Slaney normalization |
-| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` | STFT-based |
-| `librosa.onset.onset_strength()` | `compute_onset_strength()` | Spectral flux |
-| `librosa.beat.beat_track()` | `BeatAnalyzer` | DP-based |
-| `librosa.beat.tempo()` | `BpmAnalyzer` | Tempogram |
-| `librosa.effects.hpss()` | `hpss()` | Median filtering |
-| `librosa.effects.time_stretch()` | `time_stretch()` | Phase vocoder |
-| `librosa.effects.pitch_shift()` | `pitch_shift()` | Time stretch plus resampling |
+| `librosa.power_to_db()` | `powerToDb()` / `power_to_db()` | `ref`, `amin`, `top_db` all supported |
+| `librosa.amplitude_to_db()` | `amplitudeToDb()` / `amplitude_to_db()` | Same parameters |
+| `librosa.db_to_power()` | `dbToPower()` / `db_to_power()` | Inverse of `power_to_db` |
+| `librosa.db_to_amplitude()` | `dbToAmplitude()` / `db_to_amplitude()` | Inverse of `amplitude_to_db` |
 
-### Features Not in librosa
+#### Effects
+
+| librosa | libsonare | Notes |
+|---------|-----------|-------|
+| `librosa.effects.hpss()` | `hpss()` | Median filtering |
+| `librosa.effects.harmonic()` | `harmonic()` | Harmonic component only |
+| `librosa.effects.percussive()` | `percussive()` | Percussive component only |
+| `librosa.effects.time_stretch()` | `time_stretch()` / `timeStretch()` | Phase vocoder |
+| `librosa.effects.pitch_shift()` | `pitch_shift()` / `pitchShift()` | Time stretch plus resampling |
+| `librosa.effects.preemphasis()` | `preemphasis()` | `coef`, optional `zi` |
+| `librosa.effects.deemphasis()` | `deemphasis()` | Inverse pre-emphasis |
+| `librosa.effects.trim()` | `trimSilence()` / `trim_silence()` | Returns `(audio, startSample, endSample)` |
+| `librosa.effects.split()` | `splitSilence()` / `split_silence()` | Non-silent intervals |
+
+#### Features (spectral / pitch / chroma)
+
+| librosa | libsonare | Notes |
+|---------|-----------|-------|
+| `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney normalization |
+| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based |
+| `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | Per-frame |
+| `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
+| `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` supported |
+| `librosa.feature.spectral_flatness()` | `spectralFlatness()` / `spectral_flatness()` | Per-frame |
+| `librosa.feature.zero_crossing_rate()` | `zeroCrossingRate()` / `zero_crossing_rate()` | Per-frame |
+| `librosa.feature.rms()` | `rmsEnergy()` / `rms_energy()` | Per-frame |
+| `librosa.feature.tonnetz()` | `tonnetz()` | Input: row-major chromagram |
+| `librosa.feature.tempogram()` | `tempogram()` | Autocorrelation tempogram |
+| `librosa.pcen()` | `pcen()` | `time_constant`, `gain`, `bias`, `power`, `eps` |
+| `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | Probabilistic YIN |
+| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN |
+
+#### Onset / Beat / Tempo
+
+| librosa | libsonare | Notes |
+|---------|-----------|-------|
+| `librosa.onset.onset_strength()` | `compute_onset_strength()` | Spectral flux |
+| `librosa.onset.onset_detect()` | `detectOnsets()` / `detect_onsets()` | Returns onset times |
+| `librosa.beat.beat_track()` | `BeatAnalyzer` / `detectBeats()` | DP-based |
+| `librosa.beat.tempo()` | `BpmAnalyzer` / `detectBpm()` | Tempogram |
+| `librosa.beat.plp()` | `plp()` | Predominant local pulse |
+| `librosa.util.peak_pick()` | `peakPick()` / `peak_pick()` | Returns peak indices |
+
+#### Utilities
+
+| librosa | libsonare | Notes |
+|---------|-----------|-------|
+| `librosa.util.frame()` | `frameSignal()` / `frame_signal()` | Row-major frames |
+| `librosa.util.pad_center()` | `padCenter()` / `pad_center()` | Pad to size, centered |
+| `librosa.util.fix_length()` | `fixLength()` / `fix_length()` | Crop or pad |
+| `librosa.util.fix_frames()` | `fixFrames()` / `fix_frames()` | Bound frame indices |
+| `librosa.util.normalize()` | `vectorNormalize()` / `vector_normalize()` | `norm_type`: 0=inf, 1=L1, 2=L2, 3=power |
+| `librosa.frames_to_samples()` | `framesToSamples()` / `frames_to_samples()` | Frame → sample index |
+| `librosa.samples_to_frames()` | `samplesToFrames()` / `samples_to_frames()` | Sample → frame index |
+| `librosa.frames_to_time()` | `framesToTime()` / `frames_to_time()` | Frame → seconds |
+| `librosa.time_to_frames()` | `timeToFrames()` / `time_to_frames()` | Seconds → frame |
+
+### Higher-level analyzers not in librosa
+
+librosa's strength is low-level DSP — higher-level music understanding is typically delegated to separate tools. libsonare bundles those higher-level tasks in one library.
 
 | libsonare | Description |
 |-----------|-------------|
-| `KeyAnalyzer` | Musical key detection (Krumhansl-Schmuckler) |
-| `ChordAnalyzer` | Chord recognition (template matching) |
-| `SectionAnalyzer` | Song structure analysis |
-| `TimbreAnalyzer` | Timbre characteristics |
-| `DynamicsAnalyzer` | Loudness and dynamics |
-| `RhythmAnalyzer` | Time signature, groove |
+| `KeyAnalyzer` | Musical key detection (Krumhansl-Schmuckler profiles) |
+| `ChordAnalyzer` | Chord recognition (108 chord-type templates) |
+| `SectionAnalyzer` | Song structure analysis (intro / verse / chorus, etc.) |
+| `TimbreAnalyzer` | Timbre characteristics (brightness, warmth, density, …) |
+| `DynamicsAnalyzer` | Loudness, dynamic range, crest factor |
+| `RhythmAnalyzer` | Time signature, groove, syncopation, regularity |
+
+::: info Streaming
+`StreamAnalyzer` — progressive real-time BPM / key / chord estimates — is also libsonare-specific. librosa has no streaming API.
+:::
 
 ## Function Mapping
 

@@ -41,6 +41,99 @@ yarn install
 yarn build
 ```
 
+## Mastering API
+
+Node users can choose between the WASM npm package and the native addon:
+
+| Package | Use when |
+|---------|----------|
+| `@libraz/libsonare` | You want the same API as the browser demo or need Web-compatible WASM. |
+| `@libraz/libsonare-native` | You need native file decoding or native runtime performance in Node.js. |
+
+```typescript
+import {
+  init,
+  masterAudioStereo,
+  masteringChainStereo,
+  masteringChainStereoWithProgress,
+  masteringPresetNames,
+  masteringPairAnalyze,
+  masteringProcessorNames,
+} from '@libraz/libsonare'
+
+await init()
+
+console.log(masteringProcessorNames())
+console.log(masteringPresetNames())
+
+const mastered = masteringChainStereo(left, right, sampleRate, {
+  dynamics: {
+    compressor: {
+      thresholdDb: -18,
+      ratio: 2.2,
+      autoMakeup: true,
+    },
+  },
+  loudness: {
+    targetLufs: -14,
+    ceilingDb: -1,
+    truePeakOversample: 4,
+  },
+})
+console.log(mastered.outputLufs, mastered.stages)
+
+const presetMaster = masterAudioStereo(left, right, sampleRate, 'pop', {
+  'loudness.targetLufs': -14,
+})
+console.log(presetMaster.outputLufs, presetMaster.stages)
+
+const matchReport = JSON.parse(
+  masteringPairAnalyze('match.referenceLoudness', source, reference, sampleRate),
+)
+
+const masteredWithProgress = masteringChainStereoWithProgress(left, right, sampleRate, {
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+}, (progress, stage) => {
+  console.log(`render ${(progress * 100).toFixed(0)}%: ${stage}`)
+})
+console.log(masteredWithProgress.outputLufs)
+```
+
+For long offline renders, use `masteringChainWithProgress()` or `masteringChainStereoWithProgress()` and update your Node or browser UI from the progress callback.
+
+The WASM package exposes the same camelCase mastering API names as the browser demo: `mastering()`, `masteringPresetNames()`, `masterAudio()`, `masterAudioStereo()`, `masteringChain()`, `masteringChainStereo()`, `masteringChainWithProgress()`, `masteringChainStereoWithProgress()`, `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()`, `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()`, and the `StreamingMasteringChain` class for block-by-block rendering.
+
+### StreamingMasteringChain
+
+The native addon (and the WASM package) exposes a `StreamingMasteringChain`
+class for incremental rendering — for example when bridging an Electron app,
+worker, or audio capture pipeline. It accepts the same nested config as
+`masteringChain()` and renders one block at a time.
+
+```typescript
+import { StreamingMasteringChain } from '@libraz/libsonare-native';
+
+const chain = new StreamingMasteringChain({
+  eq: { tiltDb: 0.5 },
+  dynamics: { compressor: { thresholdDb: -20 } },
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+});
+
+chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
+
+const monoOut = chain.processMono(monoBlock);
+const { left, right } = chain.processStereo(leftBlock, rightBlock);
+
+console.log(chain.stageNames(), chain.latencySamples());
+chain.reset();   // clear state without rebuilding
+```
+
+Stereo-only stages are skipped when `numChannels === 1`. The WASM build also
+exposes `chain.delete()` to release the underlying handle; the native addon
+releases its handle on GC.
+
+Related mastering guides: [Browser local processing](./glossary/concepts/browser-local-processing.md), [Reference match](./glossary/mastering/reference-match.md), [Quality checklist](./glossary/mastering/quality-checklist.md).
+
 `@libraz/libsonare-native` is currently intended to be built from
 `bindings/node` in the source tree. To use it from another project, reference
 the built local package through your workspace or a `file:` dependency.
@@ -73,11 +166,8 @@ const beats = detectBeats(samples, sampleRate);
 // Full analysis
 const result = analyze(samples, sampleRate);
 console.log(`BPM: ${result.bpm}`);
-console.log(`Key: ${result.key.root} ${result.key.mode}`);
+console.log(`Key: ${result.key.name}`);     // "C major"
 console.log(`Beats: ${result.beatTimes.length}`);
-
-// Cleanup
-audio.destroy();
 ```
 
 #### Audio Effects
@@ -99,13 +189,6 @@ const shifted = audio.pitchShift(2.0);         // Up 2 semitones
 // Normalize and trim silence
 const normalized = audio.normalize(0.0);        // 0 dB
 const trimmed = audio.trim(-60.0);
-
-// TTS-oriented utilities
-const quality = audio.analyzeTtsQuality();
-const prepared = audio.prepareTts();
-const compressed = audio.compressPauses(0.6);
-
-audio.destroy();
 ```
 
 #### Feature Extraction
@@ -133,8 +216,6 @@ const rms = audio.rmsEnergy();
 const pitchYin = audio.pitchYin();
 const pitchPyin = audio.pitchPyin();
 console.log(`Median F0: ${pitchPyin.medianF0.toFixed(1)} Hz`);
-
-audio.destroy();
 ```
 
 #### Unit Conversions
@@ -169,7 +250,11 @@ timeToFrames(2.32, 22050, 512); // → frame index
 | `audio.getSampleRate()` | Sample rate (Hz) |
 | `audio.getDuration()` | Duration (seconds) |
 | `audio.getLength()` | Number of samples |
-| `audio.destroy()` | Free native memory |
+| `audio.destroy()` | Release the native handle. Optional — the addon also cleans up on GC, but call this for deterministic cleanup of long-lived processes |
+
+The `Audio` instance also exposes every analysis, effects, and feature
+function listed below as a method (e.g. `audio.detectBpm()`,
+`audio.masteringChain(config)`), with the same defaults.
 
 #### Analysis Functions
 
@@ -179,7 +264,12 @@ timeToFrames(2.32, 22050, 512); // → frame index
 | `detectKey(samples, sampleRate?)` | `Key` | Root, mode, confidence |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | Beat timestamps |
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | Onset timestamps |
-| `analyze(samples, sampleRate?)` | `AnalysisResult` | Full analysis |
+| `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?)` | `ChordAnalysisResult` | Chord progression with timings |
+| `analyze(samples, sampleRate?)` | `AnalysisResult` | Full analysis (BPM, key, beats, chords, sections, timbre, dynamics, rhythm, form) |
+| `analyzeBpm(samples, sampleRate?, bpmMin?, bpmMax?, startBpm?, nFft?, hopLength?, maxCandidates?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates |
+| `analyzeRhythm(samples, sampleRate?, bpmMin?, bpmMax?, startBpm?, nFft?, hopLength?)` | `RhythmResult` | Time signature, groove, syncopation |
+| `analyzeDynamics(samples, sampleRate?, windowSec?, hopLength?, compressionThreshold?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
+| `analyzeTimbre(samples, sampleRate?, nFft?, hopLength?, nMels?, nMfcc?, windowSec?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity |
 | `version()` | `string` | Library version |
 | `hasFfmpegSupport()` | `boolean` | Whether the loaded native addon can decode via FFmpeg |
 
@@ -196,9 +286,6 @@ Default `sampleRate` is `22050`. All functions also available as `Audio` instanc
 | `pitchShift(samples, sr?, semitones)` | `Float32Array` | Pitch-shift without tempo change |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |
-| `analyzeTtsQuality(samples, sr?, silenceThresholdDb?)` | `TtsQualityResult` | Measure objective TTS audio properties |
-| `prepareTts(samples, sr?, targetRmsDb?, silenceThresholdDb?, peakLimitDb?, fadeSec?)` | `Float32Array` | Trim, RMS-normalize, peak-limit, and lightly fade TTS audio |
-| `compressPauses(samples, sr?, maxPauseSec?, silenceThresholdDb?)` | `Float32Array` | Shorten long low-level pauses |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 
 #### Feature Extraction Functions
@@ -221,6 +308,38 @@ Default `sampleRate` is `22050`. All functions also available as `Audio` instanc
 
 Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=13`, `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`.
 
+#### librosa-Compatible Helpers
+
+Added in libsonare 1.1.0. These mirror the corresponding `librosa` functions —
+see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
+
+::: tip What each helper is for
+- **`preemphasis` / `deemphasis`** — classic one-tap IIR pre-processing on the waveform.
+- **`trimSilence` / `splitSilence`** — trim leading/trailing silence or split on silent gaps.
+- **`frameSignal` / `padCenter` / `fixLength` / `fixFrames`** — framing and size-alignment utilities for fixed-frame DSP.
+- **`peakPick` / `vectorNormalize`** — peak detection on 1-D signals and vector-norm normalisation.
+- **`pcen`** — dynamic range compression for mel spectrograms.
+- **`tonnetz`** — projects chroma into a 6-D harmonic space.
+- **`tempogram` / `plp`** — time-varying tempo representation and dominant local pulse.
+:::
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `preemphasis(samples, coef?, zi?)` | `Float32Array` | Pre-emphasis filter |
+| `deemphasis(samples, coef?, zi?)` | `Float32Array` | Inverse pre-emphasis |
+| `trimSilence(samples, topDb?, frameLength?, hopLength?)` | `{ audio: Float32Array; startSample: number; endSample: number }` | `librosa.effects.trim` |
+| `splitSilence(samples, topDb?, frameLength?, hopLength?)` | `Int32Array` | `librosa.effects.split` — flat `[start0, end0, start1, end1, ...]` |
+| `frameSignal(samples, frameLength, hopLength)` | `{ nFrames: number; frames: Float32Array }` | `librosa.util.frame` (row-major) |
+| `padCenter(values, size, padValue?)` | `Float32Array` | `librosa.util.pad_center` |
+| `fixLength(values, size, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
+| `fixFrames(frames, xMin?, xMax?, pad?)` | `Int32Array` | `librosa.util.fix_frames` |
+| `peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait)` | `Int32Array` | `librosa.util.peak_pick` |
+| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`. `normType`: 0=inf, 1=L1, 2=L2, 3=power |
+| `pcen(values, nBins, nFrames, options?)` | `Float32Array` | `librosa.pcen` (row-major mel input) |
+| `tonnetz(chromagram, nChroma, nFrames)` | `Float32Array` | `librosa.feature.tonnetz` (`[6 x nFrames]`) |
+| `tempogram(onsetEnvelope, sr?, hopLength?, winLength?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram` |
+| `plp(onsetEnvelope, sr?, hopLength?, tempoMin?, tempoMax?, winLength?)` | `Float32Array` | `librosa.beat.plp` |
+
 #### Conversion Functions
 
 | Function | Description |
@@ -233,13 +352,19 @@ Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=13`, `fmin
 | `noteToHz(note)` | Note name → Hertz |
 | `framesToTime(frames, sr, hopLength)` | Frame index → seconds |
 | `timeToFrames(time, sr, hopLength)` | Seconds → frame index |
+| `framesToSamples(frames, hopLength?, nFft?)` | Frame index → sample index (`librosa.frames_to_samples`) |
+| `samplesToFrames(samples, hopLength?, nFft?)` | Sample index → frame index (`librosa.samples_to_frames`) |
+| `powerToDb(values, ref?, amin?, topDb?)` | Power → dB (`librosa.power_to_db`) |
+| `amplitudeToDb(values, ref?, amin?, topDb?)` | Amplitude → dB (`librosa.amplitude_to_db`) |
+| `dbToPower(values, ref?)` | dB → power |
+| `dbToAmplitude(values, ref?)` | dB → amplitude |
 
 #### Types
 
 ```typescript
 interface Key {
-  root: string;        // "C", "C#", "D", ...
-  mode: string;        // "major" | "minor"
+  root: number;        // PitchClass: 0=C, 1=C#, ..., 11=B
+  mode: number;        // Mode: 0=Major, 1=Minor
   confidence: number;
   name: string;        // "C major", "A minor"
   shortName: string;   // "C", "Am"
@@ -257,7 +382,13 @@ interface AnalysisResult {
   key: Key;
   timeSignature: TimeSignature;
   beatTimes: Float32Array;
-  beats: Array<{ time: number; strength: undefined }>;
+  beats: Array<{ time: number; strength: number }>;
+  chords: Chord[];
+  sections: Section[];
+  timbre: Timbre;
+  dynamics: Dynamics;
+  rhythm: RhythmFeatures;
+  form: string;  // e.g. "IABABCO"
 }
 
 interface HpssResult {

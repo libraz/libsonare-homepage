@@ -42,123 +42,35 @@ const locales = {
     docsLabel: 'Docs',
     tagline: 'WebAssembly Audio Analysis Library',
     cta: 'Get Started',
-    intro: {
-      eyebrow: 'Browser WASM / Python / C++',
-      headline: 'Audio analysis you can run locally',
-      description: 'Try the live browser demo first, then use the same core library from TypeScript, Python, Node.js, or C++.',
-      features: ['BPM estimation', 'Key estimation', 'Chroma features', 'Streaming estimates'],
-    },
-    quickStart: {
-      title: 'Use it in 30 seconds',
-      note: 'The WASM package expects decoded mono Float32Array samples. Use Web Audio API or another decoder before analysis.',
-      docs: 'Open full guide',
-      items: [
-        {
-          id: 'browser',
-          label: 'Browser',
-          docsPath: '/docs/wasm',
-          code: `npm install @libraz/libsonare
-
-import { init, detectBpm, detectKey } from '@libraz/libsonare'
-
-await init()
-const bpm = detectBpm(samples, sampleRate)
-const key = detectKey(samples, sampleRate)`,
-        },
-        {
-          id: 'python',
-          label: 'Python',
-          docsPath: '/docs/python-api',
-          code: `pip install libsonare
-
-import libsonare as sonare
-
-result = sonare.analyze_file("track.wav")
-print(result.bpm, result.key.name)`,
-        },
-        {
-          id: 'cli',
-          label: 'CLI',
-          docsPath: '/docs/cli',
-          code: `pip install libsonare
-
-sonare analyze track.wav
-sonare bpm track.wav
-sonare key track.wav`,
-        },
-      ],
-    },
-    demoLead: 'Live demo',
-    demoDescription: 'Drop or play audio to see streaming estimates for BPM, key, chroma, and spectrum data in the browser.',
+    demoLead: 'Analyzer demo',
+    demoDescription: 'Streaming BPM, key, chroma, and spectrum estimates — running entirely in your browser via WASM.',
     demoLinks: [
       { label: 'WASM API', path: '/docs/wasm' },
       { label: 'Python API', path: '/docs/python-api' },
       { label: 'CLI', path: '/docs/cli' },
     ],
+    masteringPath: '/mastering',
+    masteringLabel: 'Mastering Demo',
 
     demoCredit: 'Demo audio created with',
     midiSketch: 'MIDI Sketch',
   },
   ja: {
     label: '日本語',
-    shortLabel: '日本語',
+    shortLabel: 'JA',
     path: '/ja',
     docsLabel: 'ドキュメント',
     tagline: 'WebAssembly 音声解析ライブラリ',
     cta: 'はじめる',
-    intro: {
-      eyebrow: 'Browser WASM / Python / C++',
-      headline: 'ローカルで動くオーディオ解析',
-      description: 'まずブラウザ上のライブデモで挙動を確認し、そのまま同じコアライブラリを TypeScript、Python、Node.js、C++ から利用できます。',
-      features: ['BPM推定', 'キー推定', 'クロマ特徴量', 'ストリーミング推定'],
-    },
-    quickStart: {
-      title: '30秒で試す',
-      note: 'WASMパッケージはデコード済みのモノラル Float32Array を受け取ります。ファイルのデコードには Web Audio API などを使ってください。',
-      docs: '詳しい手順を見る',
-      items: [
-        {
-          id: 'browser',
-          label: 'Browser',
-          docsPath: '/docs/wasm',
-          code: `npm install @libraz/libsonare
-
-import { init, detectBpm, detectKey } from '@libraz/libsonare'
-
-await init()
-const bpm = detectBpm(samples, sampleRate)
-const key = detectKey(samples, sampleRate)`,
-        },
-        {
-          id: 'python',
-          label: 'Python',
-          docsPath: '/docs/python-api',
-          code: `pip install libsonare
-
-import libsonare as sonare
-
-result = sonare.analyze_file("track.wav")
-print(result.bpm, result.key.name)`,
-        },
-        {
-          id: 'cli',
-          label: 'CLI',
-          docsPath: '/docs/cli',
-          code: `pip install libsonare
-
-sonare analyze track.wav
-sonare bpm track.wav
-sonare key track.wav`,
-        },
-      ],
-    },
-    demoLead: 'ライブデモ',
-    demoDescription: '音源をドロップまたは再生すると、ブラウザ内でBPM、キー、クロマ、スペクトル情報のストリーミング推定を確認できます。',
+    demoLead: '解析デモ',
+    demoDescription: 'ブラウザ内で BPM・キー・クロマ・スペクトルのストリーミング解析が動きます。WASM 上ですべてローカル実行です。',
     demoLinks: [
       { label: 'WASM API', path: '/docs/wasm' },
       { label: 'Python API', path: '/docs/python-api' },
       { label: 'CLI', path: '/docs/cli' },
     ],
+    masteringPath: '/mastering',
+    masteringLabel: 'マスタリングデモ',
 
     demoCredit: 'デモ音源は',
     midiSketch: 'MIDI Sketch',
@@ -170,48 +82,6 @@ const defaultLocale: LocaleKey = 'en'
 
 // Current locale config
 const currentLocale = computed(() => locales[lang.value as LocaleKey] || locales[defaultLocale])
-const quickStartMode = ref('browser')
-const currentQuickStart = computed(() =>
-  currentLocale.value.quickStart.items.find((item) => item.id === quickStartMode.value)
-  || currentLocale.value.quickStart.items[0]
-)
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-function highlightCode(code: string, mode: string) {
-  const lines = escapeHtml(code).split('\n')
-
-  if (mode === 'cli') {
-    return lines.map((line) => {
-      if (!line.trim()) return ''
-      return line.replace(/^(\S+)/, '<span class="demo-page__code-command">$1</span>')
-    }).join('\n')
-  }
-
-  if (mode === 'python') {
-    return lines.map((line) => line
-      .replace(/(&quot;[^&]*&quot;|"[^"]*"|'[^']*')/g, '<span class="demo-page__code-string">$1</span>')
-      .replace(/\b(import|as|from|with|print)\b/g, '<span class="demo-page__code-keyword">$1</span>')
-      .replace(/\b(result|sonare)\b/g, '<span class="demo-page__code-variable">$1</span>')
-    ).join('\n')
-  }
-
-  return lines.map((line) => line
-    .replace(/(&quot;[^&]*&quot;|"[^"]*"|'[^']*')/g, '<span class="demo-page__code-string">$1</span>')
-    .replace(/\b(import|from|await|const)\b/g, '<span class="demo-page__code-keyword">$1</span>')
-    .replace(/\b(init|detectBpm|detectKey)\b/g, '<span class="demo-page__code-function">$1</span>')
-    .replace(/\b(samples|sampleRate|bpm|key)\b/g, '<span class="demo-page__code-variable">$1</span>')
-  ).join('\n')
-}
-
-const highlightedQuickStart = computed(() =>
-  highlightCode(currentQuickStart.value.code, currentQuickStart.value.id)
-)
 
 // Build locale-aware path
 const localePath = (path: string) => `${currentLocale.value.path}${path}`
@@ -231,6 +101,25 @@ const otherLocales = computed(() =>
     .filter(([key]) => key !== lang.value)
     .map(([key, config]) => ({ key, ...config }))
 )
+
+const initialPath = typeof window === 'undefined' ? '/' : window.location.pathname
+
+function otherLocaleHref(targetPath: string) {
+  if (lang.value === 'ja') {
+    const stripped = initialPath.replace(/^\/ja(\/|$)/, '/')
+    return stripped || '/'
+  }
+  if (initialPath === '/' || initialPath === '') return `${targetPath}/`
+  return `${targetPath}${initialPath}`
+}
+
+function switchLocale(event: Event, targetPath: string) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+  const href = otherLocaleHref(targetPath)
+  if (typeof window !== 'undefined') window.location.assign(href)
+}
 </script>
 
 <template>
@@ -250,13 +139,26 @@ const otherLocales = computed(() =>
     <!-- Top Status Bar -->
     <header class="demo-page__header">
       <div class="demo-page__header-left">
-        <span class="demo-page__brand">LIBSONARE</span>
+        <a :href="localePath('/')" class="demo-page__brand">LIBSONARE</a>
         <span class="demo-page__tagline">{{ currentLocale.tagline }}</span>
       </div>
       <div class="demo-page__header-right">
         <span class="demo-page__version">v{{ libVersion || '-.-.--' }}</span>
         <a :href="localePath('/docs/introduction')" class="demo-page__docs-link">
           {{ currentLocale.docsLabel }}
+        </a>
+        <a :href="localePath(currentLocale.masteringPath)" class="demo-page__mastering-link">
+          {{ currentLocale.masteringLabel }}
+        </a>
+        <a
+          v-for="locale in otherLocales"
+          :key="locale.key"
+          :href="locale.path ? `${locale.path}/` : '/'"
+          class="demo-page__lang-switch"
+          :aria-label="`Switch to ${locale.label}`"
+          @click.capture.stop.prevent="switchLocale($event, locale.path)"
+        >
+          {{ locale.shortLabel }}
         </a>
         <button
           class="demo-page__theme-toggle"
@@ -289,62 +191,24 @@ const otherLocales = computed(() =>
       </div>
     </header>
 
-    <!-- Intro Section -->
-    <section class="demo-page__intro">
-      <div class="demo-page__copy">
-        <p class="demo-page__eyebrow">{{ currentLocale.intro.eyebrow }}</p>
-        <h1 class="demo-page__headline">{{ currentLocale.intro.headline }}</h1>
-        <p class="demo-page__description">{{ currentLocale.intro.description }}</p>
-        <ul class="demo-page__features">
-          <li v-for="feature in currentLocale.intro.features" :key="feature" class="demo-page__feature">
-            {{ feature }}
-          </li>
-        </ul>
+    <!-- Chrome bar (matches mastering page chrome) -->
+    <div class="demo-page__chrome">
+      <div class="demo-page__chrome-title">
+        <span class="demo-page__chrome-lead">{{ currentLocale.demoLead }}</span>
+        <span class="demo-page__chrome-description">{{ currentLocale.demoDescription }}</span>
       </div>
-
-      <aside class="demo-page__quick-start" aria-labelledby="quick-start-title">
-        <div class="demo-page__quick-header">
-          <h2 id="quick-start-title" class="demo-page__quick-title">{{ currentLocale.quickStart.title }}</h2>
-          <a :href="localePath(currentQuickStart.docsPath)" class="demo-page__quick-docs">
-            {{ currentLocale.quickStart.docs }}
-          </a>
-        </div>
-        <div class="demo-page__quick-tabs" role="tablist" aria-label="Quick start examples">
-          <button
-            v-for="item in currentLocale.quickStart.items"
-            :key="item.id"
-            class="demo-page__quick-tab"
-            :class="{ 'demo-page__quick-tab--active': quickStartMode === item.id }"
-            type="button"
-            role="tab"
-            :aria-selected="quickStartMode === item.id"
-            @click="quickStartMode = item.id"
-          >
-            {{ item.label }}
-          </button>
-        </div>
-        <pre class="demo-page__code"><code v-html="highlightedQuickStart"></code></pre>
-        <p class="demo-page__quick-note">{{ currentLocale.quickStart.note }}</p>
-      </aside>
-    </section>
-
-    <!-- Main Demo Area -->
-    <div class="demo-page__demo-heading">
-      <div class="demo-page__demo-copy">
-        <span class="demo-page__demo-lead">{{ currentLocale.demoLead }}</span>
-        <span class="demo-page__demo-description">{{ currentLocale.demoDescription }}</span>
-      </div>
-      <nav class="demo-page__demo-links" aria-label="Implementation documentation">
+      <nav class="demo-page__chrome-links" aria-label="Implementation documentation">
         <a
           v-for="link in currentLocale.demoLinks"
           :key="link.path"
           :href="localePath(link.path)"
-          class="demo-page__demo-link"
+          class="demo-page__chrome-link"
         >
           {{ link.label }}
         </a>
       </nav>
     </div>
+
     <main class="demo-page__main">
       <AudioAnalyzer :lib-version="libVersion" />
     </main>
@@ -378,7 +242,11 @@ const otherLocales = computed(() =>
         </a>
         <template v-for="locale in otherLocales" :key="locale.key">
           <span class="demo-page__divider">|</span>
-          <a :href="locale.path || '/'" class="demo-page__link demo-page__lang-switch">
+          <a
+            :href="locale.path ? `${locale.path}/` : '/'"
+            class="demo-page__link"
+            @click.capture.stop.prevent="switchLocale($event, locale.path)"
+          >
             <span>{{ locale.shortLabel }}</span>
           </a>
         </template>
@@ -575,6 +443,12 @@ html:not(.dark) .demo-page .demo-page__header {
   font-weight: 700;
   letter-spacing: 0.15em;
   color: var(--demo-text-strong);
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.demo-page__brand:hover {
+  opacity: 0.78;
 }
 
 .demo-page__tagline {
@@ -609,6 +483,30 @@ html:not(.dark) .demo-page .demo-page__header {
 .demo-page__docs-link:hover {
   color: var(--demo-accent);
   background: var(--demo-accent-subtle);
+}
+
+/* ===== LANG SWITCH ===== */
+.demo-page__lang-switch {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--demo-text-muted);
+  text-decoration: none;
+  background: var(--demo-accent-subtle);
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.demo-page__lang-switch:hover {
+  color: var(--demo-accent);
+  background: var(--demo-accent-dim);
+  border-color: var(--demo-accent);
 }
 
 /* ===== THEME TOGGLE ===== */
@@ -673,269 +571,113 @@ html.dark .demo-page__icon-moon { display: none; }
   transform: translateX(3px);
 }
 
-/* ===== INTRO ===== */
-.demo-page__intro {
+/* ===== MASTERING NAV CHIP ===== */
+.demo-page__mastering-link {
   position: relative;
-  z-index: 2;
-  flex-shrink: 0;
-  display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
-  gap: 24px;
-  align-items: stretch;
-  padding: 28px 24px 0;
-  width: min(1180px, calc(100% - 48px));
-  max-width: 1180px;
-  margin: 0 auto;
-}
-
-.demo-page__copy {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
-}
-
-.demo-page__eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--demo-accent-light);
-  margin: 0 0 8px;
-  text-transform: uppercase;
-}
-
-.demo-page__headline {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--demo-text-strong);
-  margin: 0 0 8px;
-  line-height: 1.18;
-}
-
-.demo-page__description {
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.6;
-  color: var(--demo-text);
-  margin: 0 0 16px;
-}
-
-.demo-page__features {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.demo-page__feature {
-  font-size: 9px;
-  font-weight: 500;
   letter-spacing: 0.05em;
-  color: var(--demo-accent);
-  padding: 4px 10px;
+  color: var(--demo-text-strong);
+  text-decoration: none;
+  padding: 6px 12px;
   background: var(--demo-accent-subtle);
   border: 1px solid var(--demo-accent-border);
-  border-radius: 4px;
+  border-radius: 6px;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
-.demo-page__quick-start {
-  min-width: 0;
-  background: var(--demo-bg-elevated);
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 8px;
-  box-shadow: var(--demo-shadow-glow);
-  padding: 14px;
+.demo-page__mastering-link::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--demo-accent-light);
+  transform: translateY(-50%);
+  box-shadow: 0 0 6px var(--demo-accent-light);
 }
 
-.demo-page__quick-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.demo-page__quick-title {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--demo-text-strong);
-  margin: 0;
-}
-
-.demo-page__quick-docs {
-  flex-shrink: 0;
-  color: var(--demo-accent-light);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-decoration: none;
-}
-
-.demo-page__quick-docs:hover {
+.demo-page__mastering-link:hover {
   color: var(--demo-accent);
+  background: var(--demo-accent-dim);
+  border-color: var(--demo-accent);
 }
 
-.demo-page__quick-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 3px;
-  margin-bottom: 10px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-}
-
-html:not(.dark) .demo-page .demo-page__quick-tabs {
-  background: rgba(255, 255, 255, 0.55);
-}
-
-.demo-page__quick-tab {
-  min-width: 0;
-  height: 28px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.demo-page__quick-tab:hover,
-.demo-page__quick-tab--active {
-  background: var(--demo-accent);
-  color: #fff;
-}
-
-.demo-page__code {
-  min-height: 148px;
-  overflow: auto;
-  margin: 0;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  color: var(--demo-text-strong);
-  font-size: 11px;
-  line-height: 1.55;
-  tab-size: 2;
-}
-
-html:not(.dark) .demo-page .demo-page__code {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.demo-page__code code {
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.demo-page__code :deep(.demo-page__code-keyword) {
-  color: #c4b5fd;
-}
-
-.demo-page__code :deep(.demo-page__code-function),
-.demo-page__code :deep(.demo-page__code-command) {
-  color: #67e8f9;
-}
-
-.demo-page__code :deep(.demo-page__code-string) {
-  color: #fcd34d;
-}
-
-.demo-page__code :deep(.demo-page__code-variable) {
-  color: #f9a8d4;
-}
-
-html:not(.dark) .demo-page .demo-page__code :deep(.demo-page__code-keyword) {
-  color: #6d28d9;
-}
-
-html:not(.dark) .demo-page .demo-page__code :deep(.demo-page__code-function),
-html:not(.dark) .demo-page .demo-page__code :deep(.demo-page__code-command) {
-  color: #0891b2;
-}
-
-html:not(.dark) .demo-page .demo-page__code :deep(.demo-page__code-string) {
-  color: #9a3412;
-}
-
-html:not(.dark) .demo-page .demo-page__code :deep(.demo-page__code-variable) {
-  color: #be185d;
-}
-
-.demo-page__quick-note {
-  margin: 10px 0 0;
-  color: var(--demo-text-muted);
-  font-size: 10px;
-  line-height: 1.55;
-}
-
-.demo-page__demo-heading {
-  position: relative;
-  z-index: 2;
+/* ===== CHROME BAR (matches mastering page) ===== */
+.demo-page__chrome {
+  position: sticky;
+  top: 57px;
+  z-index: 9;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: min(1180px, calc(100% - 48px));
-  margin: 18px auto 0;
+  padding: 8px 24px;
+  background: var(--demo-bg-overlay);
+  border-bottom: 1px solid var(--demo-border);
+  backdrop-filter: blur(16px);
 }
 
-.demo-page__demo-copy {
+.demo-page__chrome-title {
   display: flex;
   align-items: baseline;
   gap: 12px;
   min-width: 0;
 }
 
-.demo-page__demo-lead {
+.demo-page__chrome-lead {
   flex-shrink: 0;
   color: var(--demo-text-strong);
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0;
 }
 
-.demo-page__demo-description {
+.demo-page__chrome-description {
   color: var(--demo-text-muted);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.demo-page__demo-links {
-  display: flex;
-  align-items: center;
+.demo-page__chrome-links {
+  display: inline-flex;
   flex-shrink: 0;
-  gap: 6px;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
 }
 
-.demo-page__demo-link {
-  color: var(--demo-text);
+html:not(.dark) .demo-page .demo-page__chrome-links {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.demo-page__chrome-link {
+  min-width: 84px;
+  height: 28px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--demo-text-muted);
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-decoration: none;
-  padding: 5px 8px;
-  background: var(--demo-accent-subtle);
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 4px;
-  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.demo-page__demo-link:hover {
-  color: var(--demo-accent-light);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-dim);
+.demo-page__chrome-link:hover {
+  color: var(--demo-text-strong);
+  background: var(--demo-accent-subtle);
 }
 
 /* ===== MAIN ===== */
@@ -1076,77 +818,29 @@ html:not(.dark) .demo-page .demo-page__footer {
     display: none;
   }
 
-  .demo-page__intro {
-    grid-template-columns: 1fr;
-    padding: 20px 20px 0;
-    width: min(720px, calc(100% - 40px));
-    gap: 18px;
+  .demo-page__chrome {
+    padding: 8px 16px;
   }
 
-  .demo-page__headline {
-    font-size: 24px;
-  }
-
-  .demo-page__demo-heading {
-    width: min(720px, calc(100% - 40px));
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .demo-page__demo-copy {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
+  .demo-page__chrome-description {
+    display: none;
   }
 }
 
 @media (max-width: 768px) {
-  .demo-page__intro {
-    padding: 16px 16px 0;
-    width: calc(100% - 32px);
+  .demo-page__mastering-link {
+    display: none;
   }
 
-  .demo-page__headline {
-    font-size: 21px;
+  .demo-page__chrome {
+    padding: 8px 12px;
+    gap: 8px;
   }
 
-  .demo-page__description {
-    font-size: 12px;
-  }
-
-  .demo-page__features {
-    gap: 6px;
-  }
-
-  .demo-page__feature {
-    font-size: 8px;
-    padding: 3px 8px;
-  }
-
-  .demo-page__quick-start {
-    padding: 12px;
-  }
-
-  .demo-page__quick-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .demo-page__code {
-    min-height: 132px;
-    font-size: 10px;
-  }
-
-  .demo-page__demo-heading {
-    width: calc(100% - 32px);
-    gap: 4px;
-    margin-top: 14px;
-  }
-
-  .demo-page__demo-links {
-    flex-wrap: wrap;
+  .demo-page__chrome-link {
+    min-width: 64px;
+    padding: 0 8px;
+    font-size: 9px;
   }
 
   .demo-page__header {

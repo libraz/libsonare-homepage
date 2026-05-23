@@ -38,7 +38,9 @@ graph TB
         TIMESTRETCH["Time Stretch"]
         PITCHSHIFT["Pitch Shift"]
         NORMALIZE["Normalize"]
-        TTS["TTS Utilities"]
+        SILENCE["Silence Trim/Split"]
+        PREEMPH["Pre/De-emphasis"]
+        DECOMPOSE["Decompose<br/>(NMF)"]
     end
 
     subgraph "Feature Layer"
@@ -149,7 +151,10 @@ src/
 │   ├── time_stretch.h
 │   ├── pitch_shift.h
 │   ├── normalize.h
-│   └── tts.h
+│   ├── preemphasis.h
+│   ├── silence.h
+│   ├── decompose.h
+│   └── remix.h
 │
 ├── analysis/           # Level 6: Music analysis
 │   ├── music_analyzer.h
@@ -325,18 +330,22 @@ The streaming pipeline also accumulates chroma and onset data for progressive BP
 
 ### Lazy Initialization
 
-MusicAnalyzer uses lazy initialization for individual analyzers:
+MusicAnalyzer initialises sub-analyzers on demand. Each intermediate (STFT, chroma, onset envelope, etc.) is computed the first time it's needed and reused afterwards.
 
 ```cpp
-// Only BPM is computed
+// BPM only (computes onset envelope)
 float bpm = analyzer.bpm();
 
 // Key detection triggers chroma computation
 Key key = analyzer.key();
 
-// Full analysis computes everything
+// Full analysis fills in what's left
 AnalysisResult result = analyzer.analyze();
 ```
+
+::: tip Why this matters
+Asking just for the key does **not** force chord recognition or section detection to run. Conversely, calling `analyze()` once reuses any intermediates already computed — no redundant FFTs.
+:::
 
 ### Zero-Copy Audio Slicing
 

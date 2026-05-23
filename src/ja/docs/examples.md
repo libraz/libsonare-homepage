@@ -108,7 +108,7 @@ for (const section of result.sections) {
 console.log(`\n楽曲形式: ${result.form}`);
 ```
 
-### Harmonic-Percussive 分離
+### HPSS（倍音／打撃成分の分離）
 
 ```typescript
 import { init, hpss, detectKey } from '@libraz/libsonare';
@@ -117,10 +117,10 @@ await init();
 
 const result = hpss(samples, sampleRate);
 
-// result.harmonic - メロディ成分
-// result.percussive - ドラム/パーカッション
+// result.harmonic   — 倍音成分（ボーカル／メロディ／和音）
+// result.percussive — 打撃成分（ドラム／パーカッション）
 
-// キー検出には調和成分を使用（よりクリーン）
+// キー検出は倍音成分のほうがクリーンに当たります
 const key = detectKey(result.harmonic, result.sampleRate);
 ```
 

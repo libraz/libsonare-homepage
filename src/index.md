@@ -1,3 +1,3 @@
 ---
-layout: demo
+layout: landing
 ---

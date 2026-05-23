@@ -63,6 +63,66 @@ async function analyzeAudio() {
 }
 ```
 
+ブラウザビルドには libsonare 1.1.0 で追加された librosa 互換ヘルパーも含まれます。
+ざっくり次の用途別に分かれます。
+
+- **前処理（波形）** — `preemphasis` / `deemphasis`、`trimSilence` / `splitSilence`
+- **フレーミング／サイズ揃え** — `frameSignal`、`padCenter`、`fixLength`、`fixFrames`
+- **後処理（1 次元信号）** — `peakPick`、`vectorNormalize`
+- **特徴量** — `pcen`（メルの動的レンジ圧縮）、`tonnetz`（ハーモニック空間射影）、`tempogram` / `plp`（テンポ表現）
+- **単位変換** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`、`framesToSamples` / `samplesToFrames`
+
+シグネチャは [JS API リファレンス](./js-api.md) を、librosa との対応関係は
+[librosa 互換性](./librosa-compatibility.md) を参照してください。
+
+## Audio クラス
+
+スタンドアロン関数の代わりに、`Audio` クラスをオブジェクト指向的に使うこともできます。サンプルとサンプルレートを内部で保持するため、毎回の呼び出しで渡し直す必要がありません。
+
+```typescript
+import { init, Audio } from '@libraz/libsonare';
+
+await init();
+
+const audioCtx = new AudioContext();
+const response = await fetch('music.mp3');
+const arrayBuffer = await response.arrayBuffer();
+const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+// Audio インスタンスを作成
+const audio = Audio.fromBuffer(
+  audioBuffer.getChannelData(0),
+  audioBuffer.sampleRate
+);
+
+// 解析
+const bpm = audio.detectBpm();
+const key = audio.detectKey();
+const result = audio.analyze();
+
+// エフェクト
+const { harmonic, percussive } = audio.hpss();
+const stretched = audio.timeStretch(1.5);
+const shifted = audio.pitchShift(2);
+
+// 特徴量
+const mel = audio.melSpectrogram();
+const mfcc = audio.mfcc();
+const chroma = audio.chroma();
+const pitch = audio.pitchPyin();
+
+console.log(`BPM: ${bpm}, キー: ${key.name}`);
+console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
+```
+
+インスタンスメソッドの一覧は [JS API リファレンス](/ja/docs/js-api#audio-クラス) を参照してください。
+
+## ブラウザ内マスタリング
+
+`/ja/mastering` デモは、このページで説明しているものと同じ WASM パッケージを使用しています。音源のデコードはブラウザで行い、マスタリング処理は Web Worker で実行し、レンダリング後の WAV と JSON レポートはローカルで生成されます。
+
+実装の詳細は [マスタリング実装](./mastering-implementation.md), [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) を参照してください。
+
 ## ファイル入力
 
 WASM ビルドには WAV/MP3/M4A デコーダは同梱されていません。圧縮形式を読めるかどうかは `AudioContext.decodeAudioData()` とユーザーのブラウザに依存します。
@@ -352,6 +412,96 @@ async function setupStreaming() {
 }
 ```
 
+### AudioWorklet 連携
+
+本番用途では、メインスレッドをブロックしないよう `StreamAnalyzer` を AudioWorklet 内で動かします。
+
+::: warning AudioWorklet での WASM 利用
+AudioWorklet での WASM ロードには、特別な扱いが必要です。WASM モジュールはワークレットのコンテキスト内でロード・インスタンス化する必要があります。
+:::
+
+**analyzer-worklet.ts:**
+
+```typescript
+import { StreamAnalyzer } from '@libraz/libsonare';
+
+class AnalyzerWorklet extends AudioWorkletProcessor {
+  private analyzer: StreamAnalyzer;
+  private frameCounter = 0;
+
+  constructor() {
+    super();
+    // sampleRate は AudioWorkletGlobalScope のグローバル
+    this.analyzer = new StreamAnalyzer({
+      sampleRate,
+      nFft: 2048,
+      hopLength: 512,
+      nMels: 64, // 帯域幅のため削減
+      computeMel: true,
+      computeChroma: true,
+      computeOnset: true,
+      emitEveryNFrames: 4,
+    });
+  }
+
+  process(inputs: Float32Array[][]): boolean {
+    const input = inputs[0]?.[0];
+    if (!input || input.length === 0) return true;
+
+    this.analyzer.process(input);
+
+    const available = this.analyzer.availableFrames();
+    if (available >= 4) {
+      const frames = this.analyzer.readFrames(available);
+
+      // ゼロコピー転送
+      this.port.postMessage({
+        type: 'frames',
+        data: frames
+      }, [
+        frames.timestamps.buffer,
+        frames.mel.buffer,
+        frames.chroma.buffer
+      ]);
+    }
+
+    // 定期的に統計情報を送信
+    if (++this.frameCounter % 100 === 0) {
+      this.port.postMessage({
+        type: 'stats',
+        data: this.analyzer.stats()
+      });
+    }
+
+    return true;
+  }
+}
+
+registerProcessor('analyzer-worklet', AnalyzerWorklet);
+```
+
+**main.ts:**
+
+```typescript
+const audioCtx = new AudioContext();
+await audioCtx.audioWorklet.addModule('analyzer-worklet.js');
+
+const workletNode = new AudioWorkletNode(audioCtx, 'analyzer-worklet');
+
+workletNode.port.onmessage = (e) => {
+  if (e.data.type === 'frames') {
+    renderVisualization(e.data.data);
+  } else if (e.data.type === 'stats') {
+    updateBpmDisplay(e.data.data.estimate);
+  }
+};
+
+// 音声ソースを接続
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+const source = audioCtx.createMediaStreamSource(stream);
+source.connect(workletNode);
+```
+
 ### 帯域幅最適化
 
 TypeScript の `StreamAnalyzer` ラッパーが公開しているのは `readFrames(maxFrames)` の 1 メソッドのみで、`Float32Array` / `Int32Array` の Structure-of-Arrays 形式 `FrameBuffer` を返します。スレッド間転送の帯域幅を抑えたい場合は、`postMessage` する前に JS 側でダウンサンプル・量子化してください。なお、内部の embind クラスには 16bit/8bit 量子化版（`readFramesI16` / `readFramesU8`）も実装されており、C++ から直接または embind を経由して呼び出せますが、TypeScript ラッパーの公開 API には含まれません。
@@ -369,18 +519,53 @@ TypeScript の `StreamAnalyzer` ラッパーが公開しているのは `readFra
 ```typescript
 const stats = analyzer.stats();
 
-// BPM（約 5 秒後に利用可能）
+// BPM（約 10 秒後に利用可能 — StreamConfig.bpmUpdateIntervalSec 既定値）
 if (stats.estimate.bpm > 0) {
   const confidence = stats.estimate.bpmConfidence;
   console.log(`BPM: ${stats.estimate.bpm.toFixed(1)} (${(confidence * 100).toFixed(0)}%)`);
 }
 
-// キー（約 10 秒後に利用可能）
+// キー（約 5 秒後に利用可能 — StreamConfig.keyUpdateIntervalSec 既定値）
 if (stats.estimate.key >= 0) {
   const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const keyName = keyNames[stats.estimate.key];
   const mode = stats.estimate.keyMinor ? 'マイナー' : 'メジャー';
   console.log(`キー: ${keyName} ${mode}`);
+}
+```
+
+### ビジュアライゼーション例
+
+```typescript
+import type { FrameBuffer } from '@libraz/libsonare';
+
+function renderVisualization(frames: FrameBuffer, nMels: number) {
+  const { nFrames, mel, chroma, onsetStrength } = frames;
+
+  // メルスペクトログラムを描画（スクロール表示）。値は線形パワーなので 0-1 にクランプ／スケールする。
+  for (let f = 0; f < nFrames; f++) {
+    for (let m = 0; m < nMels; m++) {
+      const value = Math.min(1, mel[f * nMels + m]);
+      const c = Math.round(value * 255);
+      const color = `rgb(${c}, ${Math.round(c * 0.5)}, ${255 - c})`;
+      // (scrollX + f, nMels - m) にピクセルを描画
+    }
+  }
+
+  // クロマ（12 ピッチクラス）を描画
+  for (let f = 0; f < nFrames; f++) {
+    for (let c = 0; c < 12; c++) {
+      const value = chroma[f * 12 + c];
+      // クロマバーを描画
+    }
+  }
+
+  // 強いオンセットでエフェクトをトリガー（線形単位）
+  for (let f = 0; f < nFrames; f++) {
+    if (onsetStrength[f] > 1.5) { // 素材に合わせて閾値を調整
+      triggerBeatEffect();
+    }
+  }
 }
 ```
 
