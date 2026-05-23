@@ -175,7 +175,7 @@ html, body {
 }
 
 .VPNavBarTitle .title::after {
-  content: 'Audio Analysis Library';
+  content: 'Audio Analysis & Mastering Library';
   font-size: 0.65rem;
   font-weight: 400;
   color: var(--vp-c-text-3);
@@ -183,7 +183,7 @@ html, body {
 }
 
 html[lang="ja"] .VPNavBarTitle .title::after {
-  content: '音声解析ライブラリ';
+  content: '音声解析・マスタリングライブラリ';
 }
 
 .vpi-languages {

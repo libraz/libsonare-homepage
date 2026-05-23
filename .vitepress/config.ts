@@ -1,9 +1,14 @@
 import { defineConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'node:fs'
 
 const siteUrl = 'https://sonare.libraz.net'
 const githubUrl = 'https://github.com/libraz/libsonare'
+
+const wasmMeta = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../src/wasm/meta.json', import.meta.url)), 'utf-8')
+) as { version: string }
 
 const glossarySidebar = [
   {
@@ -130,7 +135,7 @@ const softwareApplicationJsonLd = {
   url: siteUrl,
   softwareHelp: `${siteUrl}/mastering`,
   downloadUrl: githubUrl,
-  softwareVersion: '0.1.0',
+  softwareVersion: wasmMeta.version,
   isAccessibleForFree: true,
   license: 'https://www.apache.org/licenses/LICENSE-2.0',
   featureList: [
@@ -150,8 +155,8 @@ const softwareApplicationJsonLd = {
 export default withMermaid(defineConfig({
   srcDir: 'src',
 
-  title: 'libsonare - Audio Analysis Library',
-  description: 'Audio analysis library for music information retrieval. Detect BPM, key, chords, beats, and sections. Works in browsers via WebAssembly.',
+  title: 'libsonare - Audio Analysis & Mastering Library',
+  description: 'Audio analysis and mastering library. Detect BPM, key, chords, beats, and sections; run mastering chains with loudness, true-peak limiting, EQ, dynamics, and reference matching. Works in browsers via WebAssembly.',
 
   // Sitemap
   sitemap: {
@@ -174,8 +179,8 @@ export default withMermaid(defineConfig({
 
     // OGP
     ['meta', { property: 'og:site_name', content: 'libsonare' }],
-    ['meta', { property: 'og:title', content: 'libsonare - Audio Analysis Library' }],
-    ['meta', { property: 'og:description', content: 'Audio analysis library for music information retrieval. Detect BPM, key, chords, beats, and sections.' }],
+    ['meta', { property: 'og:title', content: 'libsonare - Audio Analysis & Mastering Library' }],
+    ['meta', { property: 'og:description', content: 'Audio analysis and mastering for BPM, key, chords, beats, and sections, plus loudness, true-peak limiting, EQ, dynamics, and reference matching.' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:url', content: siteUrl }],
     ['meta', { property: 'og:image', content: `${siteUrl}/og-image.svg` }],
@@ -186,8 +191,8 @@ export default withMermaid(defineConfig({
 
     // Twitter
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    ['meta', { name: 'twitter:title', content: 'libsonare - Audio Analysis Library' }],
-    ['meta', { name: 'twitter:description', content: 'Audio analysis for BPM, key, chords, beats, and sections. WebAssembly ready.' }],
+    ['meta', { name: 'twitter:title', content: 'libsonare - Audio Analysis & Mastering Library' }],
+    ['meta', { name: 'twitter:description', content: 'Audio analysis and mastering for BPM, key, chords, beats, sections, loudness, true peak, and EQ. WebAssembly ready.' }],
     ['meta', { name: 'twitter:image', content: `${siteUrl}/og-image.svg` }],
     ['script', { defer: '', 'data-domain': 'sonare.libraz.net', src: 'https://plausible.io/js/script.js' }],
   ],
@@ -242,8 +247,8 @@ export default withMermaid(defineConfig({
     ja: {
       label: '日本語',
       lang: 'ja',
-      title: 'libsonare - 音声解析ライブラリ',
-      description: '音楽情報検索のための音声解析ライブラリ。BPM、キー、コード、ビート、セクションを検出。WebAssemblyでブラウザ動作可能。',
+      title: 'libsonare - 音声解析・マスタリングライブラリ',
+      description: '音声解析・マスタリングライブラリ。BPM、キー、コード、ビート、セクションを検出し、ラウドネス正規化、True Peak リミッター、EQ、ダイナミクス、リファレンスマッチングなどのマスタリングチェーンも実行可能。WebAssembly でブラウザ動作。',
       themeConfig: {
         nav: [
           { text: 'デモ', link: '/ja/' },

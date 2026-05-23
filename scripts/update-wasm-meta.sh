@@ -30,8 +30,20 @@ if [ -f "$WASM_FILE" ]; then
     COMMIT_HASH=$(git -C "$LIBSONARE_DIR" rev-parse --short HEAD)
   fi
 
+  # Get version from libsonare WASM binding's package.json (single source of truth)
+  WASM_PKG="$LIBSONARE_DIR/bindings/wasm/package.json"
+  VERSION=""
+  if [ -f "$WASM_PKG" ]; then
+    VERSION=$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$WASM_PKG" | head -1)
+  fi
+  if [ -z "$VERSION" ]; then
+    echo "❌ Could not read version from $WASM_PKG"
+    exit 1
+  fi
+
   cat > "$META_FILE" << EOF
 {
+  "version": "$VERSION",
   "size": $SIZE,
   "sizeKB": $SIZE_KB,
   "gzipSize": $GZIP_SIZE,
@@ -43,6 +55,7 @@ if [ -f "$WASM_FILE" ]; then
 EOF
 
   echo "📦 Updated $META_FILE"
+  echo "   Version: $VERSION"
   echo "   Size: ${SIZE_KB}KB (${GZIP_KB}KB gzipped)"
   echo "   MD5: $MD5"
   echo "   Build: $BUILD_DATE"

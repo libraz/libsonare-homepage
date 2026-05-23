@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { TechPanel, StatusIndicator } from '@/components/ui'
+import wasmMeta from '@/wasm/meta.json'
 
 const props = defineProps<{
   chromaData: {
@@ -126,7 +127,7 @@ function generateLog() {
 function bootSequence() {
   const bootLogs = [
     { text: '══════════════════════════════════════════════', type: 'info' as const },
-    { text: '  LIBSONARE AUDIO ANALYSIS ENGINE v1.0.0', type: 'info' as const },
+    { text: `  LIBSONARE AUDIO ANALYSIS ENGINE v${wasmMeta.version}`, type: 'info' as const },
     { text: '══════════════════════════════════════════════', type: 'info' as const },
     { text: '[BOOT] Initializing WebAudio context...', type: 'info' as const },
     { text: '[BOOT] Loading WASM module...', type: 'info' as const },

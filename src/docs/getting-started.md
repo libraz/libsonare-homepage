@@ -1,6 +1,6 @@
 # Getting Started
 
-libsonare is a C++17 audio analysis library for music information retrieval (MIR).
+libsonare is a C++17 audio analysis and mastering DSP library for music information retrieval (MIR) and browser-native music tools.
 
 ## Choose Your Runtime
 
