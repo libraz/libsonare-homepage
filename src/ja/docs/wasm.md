@@ -2,6 +2,34 @@
 
 libsonare は WebAssembly にコンパイルでき、ブラウザで直接オーディオ解析が可能です。npm パッケージはデコード済みのモノラル `Float32Array` サンプルを受け取り、ファイルデコードは Web Audio API や別の JavaScript デコーダに任せます。
 
+このページは、ブラウザアプリを作る人向けです。Python スクリプト、ターミナルのバッチ処理、ネイティブデスクトップツールを作る場合は、先に [はじめに](./getting-started.md) で別の利用環境を選んでください。
+
+## ブラウザでの考え方
+
+| 手順 | 内容 |
+|------|------|
+| 1. ファイルを取得する | `fetch`、`<input type="file">`、ドラッグ & ドロップ、その他のブラウザ入力を使う |
+| 2. 音声をデコードする | `AudioContext.decodeAudioData(...)` または独自のデコーダを使う |
+| 3. サンプルを選ぶ | 1 つのモノラルチャンネルを渡す、ステレオを自分でダウンミックスする、または対応するステレオ API を使う |
+| 4. libsonare を呼ぶ | サンプルと `sampleRate` を解析、編集、マスタリング、ミキシング API に渡す |
+
+初学者がつまずきやすい点は、MP3 の `ArrayBuffer` をそのまま解析関数へ渡してしまうことです。先にデコードしてください。ブラウザ版 libsonare が扱うのは、圧縮ファイルのバイト列ではなく PCM サンプルです。
+
+::: details Float32Array・PCM・モノラル・ダウンミックスとは？
+- **PCM サンプル** は、圧縮されていない生の波形 — 振幅値の長い列です。MP3/WAV の*ファイル*は圧縮・梱包されたバイト列で、デコードすると PCM になります。
+- **`Float32Array`** は、そのサンプルを 32bit 浮動小数点（通常 −1〜1 の範囲）で 1 サンプル 1 要素として保持する、Web Audio API が使う JavaScript の typed array です。libsonare のブラウザ API はこれをそのまま受け取ります。
+- **モノラル／ダウンミックス** — モノラルは 1 チャンネルです。ステレオは左右の独立したチャンネルを持ち、*ダウンミックス*はそれらを 1 つにまとめます（通常は平均）。これでモノラル API に 1 チャンネルを渡せます。
+:::
+
+## このページで身につくこと
+
+このページを読むと、次のことを判断・実装できるようになります。
+
+- WASM パッケージを正しくインストールし、初期化できる。
+- ブラウザ上のファイルを PCM へデコードし、正しいチャンネルとサンプルレートの組を libsonare に渡せる。
+- 1 回呼び出しの関数、`Audio`、`StreamAnalyzer`、`StreamingMasteringChain`、`Mixer`、`RealtimeEngine` を使い分けられる。
+- ブラウザアプリとして出す前に、バンドルサイズ、Worker、AudioWorklet のトレードオフを理解できる。
+
 ## インストール
 
 ### npm/yarn
@@ -63,8 +91,15 @@ async function analyzeAudio() {
 }
 ```
 
-ブラウザビルドには libsonare 1.1.0 で追加された librosa 互換ヘルパーも含まれます。
-ざっくり次の用途別に分かれます。
+同じ 1 ファイル確認を CLI で行う場合:
+
+```bash
+sonare bpm music.mp3
+sonare key music.mp3
+sonare analyze music.mp3 --json
+```
+
+ブラウザビルドには librosa 互換ヘルパーも含まれます。ざっくり次の用途別に分かれます。
 
 - **前処理（波形）** — `preemphasis` / `deemphasis`、`trimSilence` / `splitSilence`
 - **フレーミング／サイズ揃え** — `frameSignal`、`padCenter`、`fixLength`、`fixFrames`
@@ -72,8 +107,41 @@ async function analyzeAudio() {
 - **特徴量** — `pcen`（メルの動的レンジ圧縮）、`tonnetz`（ハーモニック空間射影）、`tempogram` / `plp`（テンポ表現）
 - **単位変換** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`、`framesToSamples` / `samplesToFrames`
 
-シグネチャは [JS API リファレンス](./js-api.md) を、librosa との対応関係は
-[librosa 互換性](./librosa-compatibility.md) を参照してください。
+シグネチャは [JS API リファレンス](./js-api.md) を、librosa との対応関係は [librosa 互換性](./librosa-compatibility.md) を参照してください。
+
+## ブラウザ内ミキシング
+
+WASM パッケージからミキシングエンジンも使えます。ステムを一括でレンダーするだけなら `mixStereo(...)`、バス、センド、インサートオートメーション、ゴニオメーター、ストリップメーターが必要ならシーン JSON から作る `Mixer` を使います。
+
+```typescript
+import { init, Mixer, mixStereo, mixingScenePresetJson } from '@libraz/libsonare';
+
+await init();
+
+const rendered = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
+  faderDb: [-3, -12],
+  pan: [0, -0.2],
+  width: [1, 0.9],
+});
+
+const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
+mixer.scheduleFaderAutomation(0, sampleRate * 4, -6, 's-curve');
+const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
+const meter = mixer.stripMeter(0, 'postFader');
+mixer.delete();
+```
+
+詳しくは [ミキシングエンジン](./mixing.md) を参照してください。
+
+組み込みミキサーシーンを CLI でレンダーする場合:
+
+```bash
+sonare mix \
+  --preset vocalReverbSend \
+  --input vocal.wav \
+  --input music.wav \
+  -o mixed.wav
+```
 
 ## Audio クラス
 
@@ -115,6 +183,15 @@ console.log(`BPM: ${bpm}, キー: ${key.name}`);
 console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
+上の解析・編集呼び出しに対応する CLI 例:
+
+```bash
+sonare analyze music.mp3 --json
+sonare hpss music.mp3 --json
+sonare pitch-shift music.wav --semitones 2 -o shifted.wav
+sonare pitch music.mp3 --algorithm pyin --json
+```
+
 インスタンスメソッドの一覧は [JS API リファレンス](/ja/docs/js-api#audio-クラス) を参照してください。
 
 ## ブラウザ内マスタリング
@@ -122,6 +199,14 @@ console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
 `/ja/mastering` デモは、このページで説明しているものと同じ WASM パッケージを使用しています。音源のデコードはブラウザで行い、マスタリング処理は Web Worker で実行し、レンダリング後の WAV と JSON レポートはローカルで生成されます。
 
 実装の詳細は [マスタリング実装](./mastering-implementation.md), [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) を参照してください。
+
+マスタリング API には、JSON ベースのアシスタント出力、音源プロファイル、配信プラットフォーム別のプレビューを返す `masteringAssistantSuggest(...)`、`masteringAudioProfile(...)`、`masteringStreamingPreview(...)` も含まれます。
+
+シンプルなラウドネス正規化マスターを CLI で行う場合:
+
+```bash
+sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+```
 
 ## ファイル入力
 
@@ -401,8 +486,11 @@ async function setupStreaming() {
       // プログレッシブ BPM/キー推定をチェック
       const stats = analyzer.stats();
       if (stats.estimate.updated) {
+        const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const mode = stats.estimate.keyMinor ? 'マイナー' : 'メジャー';
         console.log(`BPM: ${stats.estimate.bpm.toFixed(1)}`);
-        console.log(`キー: ${stats.estimate.key}`);
+        // estimate.key は文字列ではなく PitchClass のインデックス（0〜11）
+        console.log(`キー: ${keyNames[stats.estimate.key]} ${mode}`);
       }
     }
   };
@@ -416,6 +504,10 @@ async function setupStreaming() {
 
 本番用途では、メインスレッドをブロックしないよう `StreamAnalyzer` を AudioWorklet 内で動かします。
 
+リアルタイムエンジン再生では、このパッケージに `@libraz/libsonare/worklet` の
+AudioWorklet bridge と `@libraz/libsonare/rt` の軽量 realtime module も含まれます。
+そのエンジン向け経路は [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。下の例は独自の analyzer worklet を作る場合のものです。
+
 ::: warning AudioWorklet での WASM 利用
 AudioWorklet での WASM ロードには、特別な扱いが必要です。WASM モジュールはワークレットのコンテキスト内でロード・インスタンス化する必要があります。
 :::
@@ -423,30 +515,32 @@ AudioWorklet での WASM ロードには、特別な扱いが必要です。WASM
 **analyzer-worklet.ts:**
 
 ```typescript
-import { StreamAnalyzer } from '@libraz/libsonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 class AnalyzerWorklet extends AudioWorkletProcessor {
-  private analyzer: StreamAnalyzer;
+  private analyzer?: StreamAnalyzer;
   private frameCounter = 0;
 
   constructor() {
     super();
-    // sampleRate は AudioWorkletGlobalScope のグローバル
-    this.analyzer = new StreamAnalyzer({
-      sampleRate,
-      nFft: 2048,
-      hopLength: 512,
-      nMels: 64, // 帯域幅のため削減
-      computeMel: true,
-      computeChroma: true,
-      computeOnset: true,
-      emitEveryNFrames: 4,
+    void init().then(() => {
+      // sampleRate は AudioWorkletGlobalScope のグローバル
+      this.analyzer = new StreamAnalyzer({
+        sampleRate,
+        nFft: 2048,
+        hopLength: 512,
+        nMels: 64, // 帯域幅のため削減
+        computeMel: true,
+        computeChroma: true,
+        computeOnset: true,
+        emitEveryNFrames: 4,
+      });
     });
   }
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0]?.[0];
-    if (!input || input.length === 0) return true;
+    if (!input || input.length === 0 || !this.analyzer) return true;
 
     this.analyzer.process(input);
 
@@ -504,7 +598,29 @@ source.connect(workletNode);
 
 ### 帯域幅最適化
 
-TypeScript の `StreamAnalyzer` ラッパーが公開しているのは `readFrames(maxFrames)` の 1 メソッドのみで、`Float32Array` / `Int32Array` の Structure-of-Arrays 形式 `FrameBuffer` を返します。スレッド間転送の帯域幅を抑えたい場合は、`postMessage` する前に JS 側でダウンサンプル・量子化してください。なお、内部の embind クラスには 16bit/8bit 量子化版（`readFramesI16` / `readFramesU8`）も実装されており、C++ から直接または embind を経由して呼び出せますが、TypeScript ラッパーの公開 API には含まれません。
+TypeScript の `StreamAnalyzer` ラッパーには、3 つの読み出し方法があります。UI に必要な精度と、スレッド間で送れるデータ量に応じて選びます。
+
+| メソッド | 戻り値 | 使う場面 |
+|----------|--------|----------|
+| `readFrames(maxFrames)` | `Float32Array` / `Int32Array` を持つ `FrameBuffer` | 解析や高品質な可視化でフル精度が必要なとき |
+| `readFramesI16(maxFrames)` | `StreamFramesI16` | メーターや一般的な可視化で、転送量を減らしたいとき |
+| `readFramesU8(maxFrames)` | `StreamFramesU8` | モバイルや高頻度更新で、転送量をかなり小さくしたいとき |
+
+`StreamConfig.outputFormat` を設定すると、アナライザーが内部で対応するフレーム型を直接生成します。
+
+| `outputFormat` | 内部フレーム型 |
+|----------------|----------------|
+| `0` | Float32 |
+| `1` | Int16 |
+| `2` | Uint8 |
+
+これにより、`postMessage` の前に JS 側で量子化する必要がなくなります。
+
+::: details 「Structure-of-Arrays」と transferable オブジェクトとは？
+- **Structure-of-Arrays（SoA）** は、フレームごとのオブジェクトの配列ではなく、各フィールドを独立したフラットな typed array に持つ形式です（タイムスタンプは 1 本、メル値は別の 1 本…）。スライスも別スレッドへの受け渡しも安価になります。
+- **transferable オブジェクト** は、`postMessage` がコピーせず*移動*できる `ArrayBuffer` です。所有権が移る（送信側のビューは空になる）ため、音声フレームのスレッド間受け渡しがほぼ瞬時になります。バッファは第 2 引数に列挙します: `postMessage(msg, [buffer, ...])`。
+- **量子化** はここでは、各 float をより小さい 16bit / 8bit 整数に詰めることを指します。送るバイト数は減りますが精度は落ちます（メーターやヒートマップには十分、後段の DSP には不向き）。
+:::
 
 | アプローチ | フレームあたりサイズ目安 | 用途 |
 |------------|--------------------------|------|
@@ -569,6 +685,71 @@ function renderVisualization(frames: FrameBuffer, nMels: number) {
 }
 ```
 
+## 逆再構成
+
+WASM ビルドには逆再構成ヘルパーが同梱されており、メルスペクトログラムや MFCC 行列からスペクトルや音声へ、ブラウザ内で完結して戻せます。
+
+```typescript
+import { melSpectrogram, melToAudio, mfcc, mfccToAudio, init } from '@libraz/libsonare';
+
+await init();
+
+// メル → 音声（Griffin-Lim による位相復元）
+const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+
+// MFCC → 音声
+const m = mfcc(samples, sampleRate, 2048, 512, 128, 20);
+const fromMfcc = mfccToAudio(m.coefficients, m.nMfcc, m.nFrames, mel.nMels, sampleRate);
+```
+
+ソースビルド C++ CLI での対応コマンド:
+
+```bash
+sonare mel-to-audio music.wav -o mel-reconstructed.wav
+sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
+```
+
+| 関数 | 戻り値 | 備考 |
+|------|--------|------|
+| `melToStft(melPower, nMels, nFrames, sampleRate, nFft?, hopLength?, fmin?, fmax?)` | `StftPowerResult` `{ nBins, nFrames, power }` | メルフィルタバンクの擬似逆変換 |
+| `melToAudio(melPower, nMels, nFrames, sampleRate, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | Griffin-Lim による音声合成 |
+| `mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels?)` | `MelPowerResult` `{ nMels, nFrames, power }` | 逆 DCT でメルスペクトログラムへ |
+| `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | MFCC → メル → 音声を一度に |
+
+::: warning ロスのある往復
+これらは*振幅*を再構成し、位相を Griffin-Lim で推定するため、出力は近似です。ソニフィケーション・試聴・可視化には十分ですが、ビット精度の復元には使えません。完全なパイプラインと注意点は [逆変換特徴量](./inverse-features.md) を参照してください。
+:::
+
+## Streaming Retune
+
+`StreamingRetune` は libsonare 1.2.1 で追加された、ブロック単位のモノラル retune 用 WASM wrapper です。ライブ入力やチャンク処理で、ブロック間の状態を保ったままピッチを動かしたい場合に使います。
+
+```typescript
+import { init, StreamingRetune } from '@libraz/libsonare';
+
+await init();
+
+const retune = new StreamingRetune({ semitones: 3, mix: 1 });
+retune.prepare(48000, 512);
+
+try {
+  const shifted = retune.processMono(inputBlock);
+  retune.setConfig({ semitones: -2, mix: 0.75 });
+  const next = retune.processMono(nextInputBlock);
+  console.log(shifted, next, retune.grainSize());
+} finally {
+  retune.delete();
+}
+```
+
+ファイル単位のオフライン処理をターミナルで行う場合は、近い CLI コマンドとして次を使います。
+
+```bash
+sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
+sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
+```
+
 ## ブラウザ互換性
 
 | ブラウザ | 最小バージョン |
@@ -588,8 +769,9 @@ function renderVisualization(frames: FrameBuffer, nMels: number) {
 | ファイル | サイズ | Gzip |
 |---------|--------|------|
 | `sonare.js` | ~50 KB | ~13 KB |
-| `sonare.wasm` | ~457 KB | ~182 KB |
-| **合計** | ~508 KB | ~195 KB |
+| `index.js` | ~64 KB | ~12 KB |
+| `sonare.wasm` | ~1,607 KB | ~573 KB |
+| **合計** | ~1,721 KB | ~598 KB |
 
 ## トラブルシューティング
 

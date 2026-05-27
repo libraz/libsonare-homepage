@@ -1,15 +1,17 @@
 <script setup lang="ts">
 defineProps<{
-  label: string
-  value?: string | number
-  variant?: 'default' | 'accent' | 'success' | 'muted'
-  layout?: 'row' | 'column'
-}>()
+  label?: string;
+  value?: string | number;
+  variant?: 'default' | 'accent' | 'success' | 'muted';
+  layout?: 'row' | 'column';
+}>();
 </script>
 
 <template>
   <div class="metric-item" :class="[layout && `metric-item--${layout}`]">
-    <span class="metric-item__label">{{ label }}</span>
+    <span class="metric-item__label">
+      <slot name="label">{{ label }}</slot>
+    </span>
     <span class="metric-item__value" :class="[variant && `metric-item__value--${variant}`]">
       <slot>{{ value ?? '-' }}</slot>
     </span>

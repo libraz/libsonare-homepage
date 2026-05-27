@@ -1,9 +1,9 @@
 <script setup lang="ts">
 defineProps<{
-  active?: boolean
-  duration?: number
-  color?: string
-}>()
+  active?: boolean;
+  duration?: number;
+  color?: string;
+}>();
 </script>
 
 <template>

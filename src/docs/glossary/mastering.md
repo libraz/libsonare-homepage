@@ -49,9 +49,19 @@ The grouped guides below explain the implementation details without splitting ev
 
 :::: details Implementation notes
 
-The chain is intentionally ordered from corrective stages to final delivery stages. Repair and input gain run first because clicks, noise, DC offset, or very low input level can mislead later detectors. Broad tone shaping runs before dynamics so the compressor reacts to the tonal balance the listener will hear. Stereo processing stays late in the chain because widening can change peak relationships and mono compatibility, which the limiter and meter stages must see.
+The chain is intentionally ordered from corrective stages to final delivery stages.
 
-The final loudness stage should not be treated as a simple gain knob. Integrated LUFS is measured over the rendered material, true peak is checked on an oversampled path, and the limiter ceiling remains a separate safety constraint. When these stages disagree, peak safety wins over target loudness; otherwise a master can pass a LUFS target while still clipping after codec conversion.
+| Stage area | Why it appears there |
+|------------|----------------------|
+| Repair and input gain | Clicks, noise, DC offset, or very low input level can mislead later detectors |
+| Broad tone shaping | Dynamics should react to the tonal balance the listener will hear |
+| Stereo processing | Widening can change peak relationships and mono compatibility, so limiter and meter stages need to see it |
+
+The final loudness stage should not be treated as a simple gain knob.
+
+Integrated LUFS is measured over the rendered material. True peak is checked on an oversampled path. The limiter ceiling remains a separate safety constraint.
+
+When these stages disagree, peak safety wins over target loudness. Otherwise a master can pass a LUFS target while still clipping after codec conversion.
 
 ::::
 

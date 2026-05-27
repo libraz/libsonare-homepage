@@ -38,9 +38,17 @@ AI-generated music can have weak upper harmonics, hiss, smeared transients, or a
 
 Do not use it automatically on every generated track. If the source is already bright or brittle, a simpler preset may be better.
 
+::: warning Don't reach for the AI-Generated preset reflexively
+Its repair and air-band restoration assume a dull, hissy, or artifact-laden source. On a track that is already bright or brittle it over-processes — a simpler preset such as Pop is safer.
+:::
+
 :::: details Implementation notes
 
-The preset is converted into a libsonare mastering configuration before rendering. Presets adjust compressor timing, ratio behavior, repair activation, air-band amount, exciter focus, stereo width limits, and limiter release behavior. The Quick Master Tone, Width, and Dynamics controls then apply macro-level offsets on top of those preset defaults.
+The preset is converted into a libsonare mastering configuration before rendering.
+
+Presets adjust compressor timing, ratio behavior, repair activation, air-band amount, exciter focus, stereo width limits, and limiter release behavior.
+
+The Quick Master Tone, Width, and Dynamics controls then apply macro-level offsets on top of those preset defaults.
 
 When you change individual stages directly in Studio mode, that state is mirrored into the JSON report. The report records both the applied preset name and the overridden parameter values, so it is possible to reconstruct exactly which preset you started from and where you departed from it.
 

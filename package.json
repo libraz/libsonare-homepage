@@ -9,8 +9,14 @@
     "build": "vitepress build",
     "preview": "vitepress preview",
     "copy:wasm": "./scripts/copy-wasm.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "ncu": "NO_UPDATE_NOTIFIER=1 ncu",
+    "ncu:update": "NO_UPDATE_NOTIFIER=1 ncu -u",
     "check": "yarn check:docs && yarn check:glossary && yarn check:i18n && yarn check:mastering-docs && yarn check:mastering",
-    "verify": "yarn check && yarn build && yarn check:built-routes",
+    "verify": "yarn check && yarn test && yarn build && yarn check:built-routes",
     "check:docs": "node scripts/check-doc-links.mjs",
     "check:glossary": "node scripts/check-glossary-coverage.mjs",
     "check:i18n": "node scripts/check-i18n-parity.mjs",
@@ -19,7 +25,16 @@
     "check:mastering": "node scripts/validate-mastering-presets.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@vitejs/plugin-vue": "^6",
+    "@vue/compiler-dom": "^3.5",
+    "@vue/test-utils": "^2.4",
+    "jsdom": "^29",
+    "npm-check-updates": "^22.2.1",
+    "typescript": "^6.0.3",
+    "vite": "^8",
     "vitepress": "^1.6.4",
+    "vitest": "^4",
     "vue": "^3.5.34"
   },
   "volta": {
@@ -28,7 +43,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
-    "mermaid": "^11.14.0",
+    "mermaid": "^11.15.0",
     "vitepress-plugin-mermaid": "^2.0.17"
   }
 }

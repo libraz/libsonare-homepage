@@ -1,34 +1,50 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useData } from 'vitepress'
-import { CornerBrackets, GridOverlay } from '@/components/ui'
-import { createTheme } from '@/composables/useTheme'
-import wasmMeta from '@/wasm/meta.json'
+import { useData } from 'vitepress';
+import { computed, onMounted, ref } from 'vue';
+import DemoCardGrid from '@/components/DemoCardGrid.vue';
+import { CornerBrackets, GridOverlay } from '@/components/ui';
+import { createTheme } from '@/composables/useTheme';
+import wasmMeta from '@/wasm/meta.json';
 
-const { lang } = useData()
-const libVersion = ref<string>('')
-const { isDark, toggle: toggleTheme } = createTheme()
+const { lang } = useData();
+const libVersion = ref<string>('');
+const { isDark, toggle: toggleTheme } = createTheme();
+
+const copiedKey = ref<string | null>(null);
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+async function copyCommand(text: string, key: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    copiedKey.value = key;
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      copiedKey.value = null;
+    }, 1600);
+  } catch {
+    /* clipboard unavailable (insecure context or denied) */
+  }
+}
 
 async function initWasm() {
-  if (typeof window === 'undefined') return
-  if (libVersion.value) return
+  if (typeof window === 'undefined') return;
+  if (libVersion.value) return;
   try {
-    const wasm = await import('@/wasm/index.js')
-    await wasm.init()
-    libVersion.value = wasm.version()
+    const wasm = await import('@/wasm/index.js');
+    await wasm.init();
+    libVersion.value = wasm.version();
   } catch (e) {
-    console.warn('Failed to initialize WASM:', e)
+    console.warn('Failed to initialize WASM:', e);
   }
 }
 
 onMounted(() => {
-  const ric = (window as any).requestIdleCallback
+  const ric = (window as any).requestIdleCallback;
   if (ric) {
-    ric(initWasm, { timeout: 2000 })
+    ric(initWasm, { timeout: 2000 });
   } else {
-    setTimeout(initWasm, 100)
+    setTimeout(initWasm, 100);
   }
-})
+});
 
 const locales = {
   en: {
@@ -37,14 +53,17 @@ const locales = {
     path: '',
     docsLabel: 'Docs',
     githubCta: 'GitHub',
-    tagline: 'Audio analysis + mastering DSP',
+    tagline: 'Dependency-free audio DSP toolkit',
     hero: {
-      eyebrow: 'Open Source · Apache-2.0 · WebAssembly',
-      title: 'Audio analysis + commercial-grade mastering DSP.',
-      subtitle: 'One Apache-2.0 library across C++, Python, and the browser. No SaaS, no upload, no telemetry.',
+      eyebrow: 'Apache-2.0 · Zero runtime dependencies · WebAssembly',
+      title: 'Dependency-free audio DSP for analysis, mastering, mixing, and editing.',
+      subtitle:
+        'One toolkit for C++, Python, and the browser. The same processors run native and WASM: no Python runtime, no GPL/AGPL, no model weights.',
       installCaption: 'Install',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
+      copyLabel: 'Copy command',
+      copiedLabel: 'Copied',
       starCta: 'View on GitHub',
       docsCta: 'Read the docs',
     },
@@ -53,27 +72,31 @@ const locales = {
       { key: 'RUNTIME', value: 'C++17' },
       { key: 'TARGETS', value: 'LINUX · MACOS · WASM' },
       { key: 'PACKAGES', value: 'NPM · PYPI' },
-      { key: 'DEPS', value: 'NONE' },
+      { key: 'DEPS', value: 'ZERO RUNTIME' },
     ],
     demoSection: {
       eyebrow: 'Try it locally',
-      heading: 'Two demos. One library.',
-      subhead: 'Both run entirely in your browser via WebAssembly. Same Apache-2.0 source on GitHub.',
+      heading: 'Five demos. One library.',
+      subhead:
+        'Every demo runs the same Apache-2.0 processors locally in your browser via WebAssembly.',
+      viewAll: 'Browse all demos',
     },
     analyzer: {
       status: 'LIVE',
-      eyebrow: 'Streaming analysis',
-      title: 'Audio Analyzer',
-      tagline: 'BPM, key, chord, beat, and spectrum — estimated as the audio plays, entirely in the browser.',
+      eyebrow: 'Real-time visualization',
+      title: 'Visual Player',
+      tagline:
+        'Chroma and spectrum visualized in real time as the audio plays, with live BPM, key, and chord readouts — entirely in the browser.',
       chips: ['BPM', 'KEY', 'CHORDS', 'BEATS', 'SECTIONS', 'CHROMA', 'SPECTRUM'],
-      cta: 'Open analyzer',
+      cta: 'Open player',
       path: '/analyzer',
     },
     mastering: {
       status: 'STUDIO',
       eyebrow: 'Mastering DSP',
       title: 'Mastering Studio',
-      tagline: 'EQ, dynamics, multiband, stereo, true-peak limiter — render LUFS-normalized WAVs locally.',
+      tagline:
+        'EQ, dynamics, multiband, stereo, true-peak limiter — render LUFS-normalized WAVs locally.',
       chips: ['EQ', 'DYNAMICS', 'MULTIBAND', 'STEREO', 'TRUE PEAK', 'LUFS', 'REPAIR'],
       cta: 'Open mastering',
       path: '/mastering',
@@ -88,31 +111,31 @@ const locales = {
     },
     pillars: {
       eyebrow: 'What ships in the box',
-      heading: 'Built for honest engineering',
+      heading: 'A DSP toolkit, not a service',
       items: [
         {
           tag: 'ANALYSIS',
-          title: 'librosa-compatible. Tens of times faster.',
-          body: 'BPM, key, chord, beat, section, timbre, dynamics, pitch (YIN / pYIN). librosa-matching defaults (sr 22050, n_fft 2048, hop 512). Parallelized HPSS with multi-threaded median filter.',
+          title: 'Deep MIR analysis for music tools.',
+          body: 'BPM, key, chords with Viterbi/HMM smoothing, beats, downbeats, time signature, sections, timbre, dynamics, YIN/pYIN pitch, tempogram/PLP, NNLS chroma, LUFS, and room-acoustic estimates. Defaults are validated against generated reference values in CI.',
           link: { label: 'Benchmarks', path: '/docs/benchmarks' },
         },
         {
           tag: 'MASTERING',
-          title: '70+ DSP processors. Published standards.',
-          body: 'EQ, dynamics, multiband, stereo, saturation, repair, maximizer, reference matching. ITU-R BS.1770-4 loudness and true-peak, Vicanek biquads, ADAA nonlinearities, polyphase FIR oversampling.',
+          title: '77 named DSP processors. Published references.',
+          body: 'EQ, dynamics, multiband, stereo, saturation, repair, maximizer, and reference matching, with 14 processors in the default chain. Loudness, true peak, crossovers, biquads, clippers, tube saturation, and oversampling are implemented against published references.',
           link: { label: 'Mastering guide', path: '/docs/glossary' },
         },
         {
-          tag: 'LICENSE',
-          title: 'Apache-2.0 across the entire stack.',
-          body: 'No LGPL/GPL surface. No proprietary algorithms. No SaaS dependencies. Same permissive license from the C++ core to the WASM build.',
-          link: { label: 'View LICENSE', path: 'https://github.com/libraz/libsonare/blob/main/LICENSE', external: true },
+          tag: 'MIXING',
+          title: 'Real-time-safe mixing, routing, and creative FX.',
+          body: 'Channel strips, buses, sends, pan modes, width, plugin-delay compensation, goniometer and true-peak metering, scene presets, offline stereo rendering, time stretch, pitch shift, voice-change controls, reverbs, modulation, delay, and ducking.',
+          link: { label: 'Mixing engine', path: '/docs/mixing' },
         },
       ],
     },
     finalCta: {
-      heading: 'Drop it into your stack today.',
-      subhead: 'One install line. No accounts. No telemetry. No upload.',
+      heading: 'Run the same DSP everywhere.',
+      subhead: 'C++, C, Python, Node, WASM, and CLI under one Apache-2.0 license.',
       github: 'View source on GitHub',
       docs: 'Read the docs',
       license: 'Apache-2.0 License',
@@ -126,14 +149,17 @@ const locales = {
     path: '/ja',
     docsLabel: 'ドキュメント',
     githubCta: 'GitHub',
-    tagline: 'オーディオ解析 + マスタリング DSP',
+    tagline: '依存なしのオーディオ DSP ツールキット',
     hero: {
-      eyebrow: 'オープンソース · Apache-2.0 · WebAssembly',
-      title: 'オーディオ解析と業務クオリティのマスタリング DSP を、ひとつの Apache-2.0 ライブラリで。',
-      subtitle: 'C++・Python・ブラウザのどこからでも同じコード。SaaS なし、アップロードなし、テレメトリなし。',
+      eyebrow: 'Apache-2.0 · ランタイム依存ゼロ · WebAssembly',
+      title: '解析、マスタリング、ミキシング、編集のための依存なしオーディオ DSP。',
+      subtitle:
+        'C++・Python・ブラウザで使えるひとつのツールキット。同じプロセッサがネイティブと WASM で動きます。Python ランタイムなし、GPL/AGPL なし、モデル重みなし。',
       installCaption: 'インストール',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
+      copyLabel: 'コマンドをコピー',
+      copiedLabel: 'コピーしました',
       starCta: 'GitHub で見る',
       docsCta: 'ドキュメントを読む',
     },
@@ -142,27 +168,31 @@ const locales = {
       { key: 'RUNTIME', value: 'C++17' },
       { key: 'TARGETS', value: 'LINUX · MACOS · WASM' },
       { key: 'PACKAGES', value: 'NPM · PYPI' },
-      { key: 'DEPS', value: 'NONE' },
+      { key: 'DEPS', value: 'ZERO RUNTIME' },
     ],
     demoSection: {
       eyebrow: 'ローカルで試す',
-      heading: '2 つのデモ、ひとつのライブラリ。',
-      subhead: 'どちらも WebAssembly でブラウザ内完結。GitHub 上の同じ Apache-2.0 ソースから動いています。',
+      heading: '5 つのデモ、ひとつのライブラリ。',
+      subhead:
+        'すべてのデモは、同じ Apache-2.0 のプロセッサを WebAssembly でブラウザ内ローカル実行します。',
+      viewAll: 'すべてのデモを見る',
     },
     analyzer: {
       status: 'LIVE',
-      eyebrow: 'ストリーミング解析',
-      title: 'オーディオアナライザー',
-      tagline: '再生に合わせて BPM・キー・コード・ビート・スペクトルをブラウザ内でリアルタイム推定。',
+      eyebrow: 'リアルタイム可視化',
+      title: 'ビジュアルプレイヤー',
+      tagline:
+        '再生に合わせてクロマ・スペクトルをブラウザ内でリアルタイム可視化。BPM・キー・コードも参考値として表示します。',
       chips: ['BPM', 'KEY', 'CHORDS', 'BEATS', 'SECTIONS', 'CHROMA', 'SPECTRUM'],
-      cta: 'アナライザーを開く',
+      cta: 'プレイヤーを開く',
       path: '/analyzer',
     },
     mastering: {
       status: 'STUDIO',
       eyebrow: 'マスタリング DSP',
       title: 'マスタリングスタジオ',
-      tagline: 'EQ・ダイナミクス・マルチバンド・ステレオ・True-Peak リミッター。LUFS 正規化済みの WAV をローカルで書き出し。',
+      tagline:
+        'EQ・ダイナミクス・マルチバンド・ステレオ・True-Peak リミッター。LUFS 正規化済みの WAV をローカルで書き出し。',
       chips: ['EQ', 'DYNAMICS', 'MULTIBAND', 'STEREO', 'TRUE PEAK', 'LUFS', 'REPAIR'],
       cta: 'マスタリングを開く',
       path: '/mastering',
@@ -177,31 +207,31 @@ const locales = {
     },
     pillars: {
       eyebrow: '同梱されるもの',
-      heading: 'エンジニアリングに正直な設計',
+      heading: 'サービスではなく DSP ツールキット',
       items: [
         {
           tag: 'ANALYSIS',
-          title: 'librosa 互換。数十倍高速。',
-          body: 'BPM・キー・コード・ビート・セクション・音色・ダイナミクス・ピッチ (YIN / pYIN)。librosa 互換のデフォルト値 (sr 22050、n_fft 2048、hop 512)。HPSS は並列化＋マルチスレッド中央値フィルタで高速化。',
+          title: '音楽ツール向けの深い MIR 解析。',
+          body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、室内音響推定。デフォルト値は CI で生成した参照値と照合しています。',
           link: { label: 'ベンチマーク', path: '/docs/benchmarks' },
         },
         {
           tag: 'MASTERING',
-          title: '70 以上の DSP プロセッサ。公開規格ベース。',
-          body: 'EQ・ダイナミクス・マルチバンド・ステレオ・サチュレーション・リペア・マキシマイザー・リファレンスマッチング。ITU-R BS.1770-4 ラウドネス／トゥルーピーク、Vicanek バイクァッド、ADAA 非線形、ポリフェーズ FIR オーバーサンプリング。',
+          title: '77 個の名前付き DSP プロセッサ。公開リファレンスベース。',
+          body: 'EQ、ダイナミクス、マルチバンド、ステレオ、サチュレーション、リペア、マキシマイザー、リファレンスマッチング。デフォルトチェーンは 14 プロセッサ。ラウドネス、トゥルーピーク、クロスオーバー、バイクァッド、クリッパー、真空管サチュレーション、オーバーサンプリングは公開リファレンスに基づいています。',
           link: { label: 'マスタリングガイド', path: '/docs/glossary' },
         },
         {
-          tag: 'LICENSE',
-          title: 'スタック全体が Apache-2.0。',
-          body: 'LGPL/GPL に触れず、プロプライエタリアルゴリズムなし、SaaS 依存なし。C++ コアから WASM ビルドまで一貫してパーミッシブライセンス。',
-          link: { label: 'LICENSE を見る', path: 'https://github.com/libraz/libsonare/blob/main/LICENSE', external: true },
+          tag: 'MIXING',
+          title: 'リアルタイム安全なミキシング、ルーティング、クリエイティブ FX。',
+          body: 'チャンネルストリップ、バス、センド、パン、幅、プラグイン遅延補償、ゴニオメーター、トゥルーピークメーター、シーンプリセット、オフラインステレオレンダー、タイムストレッチ、ピッチシフト、ボイスチェンジ、リバーブ、モジュレーション、ディレイ、ダッキング。',
+          link: { label: 'ミキシングエンジン', path: '/docs/mixing' },
         },
       ],
     },
     finalCta: {
-      heading: '今すぐスタックに組み込む。',
-      subhead: 'インストールは 1 行。アカウントもテレメトリもアップロードもありません。',
+      heading: '同じ DSP をどこでも動かす。',
+      subhead: 'C++、C、Python、Node、WASM、CLI まで、ひとつの Apache-2.0 ライセンスで。',
       github: 'GitHub でソースを見る',
       docs: 'ドキュメントを読む',
       license: 'Apache-2.0 ライセンス',
@@ -209,65 +239,65 @@ const locales = {
     demoCredit: 'デモ音源は',
     midiSketch: 'MIDI Sketch',
   },
-} as const
+} as const;
 
-type LocaleKey = keyof typeof locales
-const defaultLocale: LocaleKey = 'en'
-const currentLocale = computed(() => locales[lang.value as LocaleKey] || locales[defaultLocale])
-const localePath = (path: string) => `${currentLocale.value.path}${path}`
-const isJa = computed(() => lang.value === 'ja')
+type LocaleKey = keyof typeof locales;
+const defaultLocale: LocaleKey = 'en';
+const currentLocale = computed(() => locales[lang.value as LocaleKey] || locales[defaultLocale]);
+const localePath = (path: string) => `${currentLocale.value.path}${path}`;
+const isJa = computed(() => lang.value === 'ja');
 
 const packageLinks = {
   npm: 'https://www.npmjs.com/package/@libraz/libsonare',
   pypi: 'https://pypi.org/project/libsonare/',
-}
+};
 
 const wasmReceiptFields = (() => {
-  const fields: { key: string; value: string }[] = []
+  const fields: { key: string; value: string }[] = [];
   if (wasmMeta.gzipKB && wasmMeta.sizeKB) {
     fields.push({
       key: 'WASM',
       value: `${wasmMeta.gzipKB} KB gzip / ${wasmMeta.sizeKB} KB raw`,
-    })
+    });
   }
-  const buildDate = wasmMeta.buildDate ? wasmMeta.buildDate.slice(0, 10) : ''
-  const buildParts = [buildDate, wasmMeta.commitHash].filter(Boolean)
+  const buildDate = wasmMeta.buildDate ? wasmMeta.buildDate.slice(0, 10) : '';
+  const buildParts = [buildDate, wasmMeta.commitHash].filter(Boolean);
   if (buildParts.length > 0) {
-    fields.push({ key: 'BUILD', value: buildParts.join(' · ') })
+    fields.push({ key: 'BUILD', value: buildParts.join(' · ') });
   }
-  return fields
-})()
+  return fields;
+})();
 
 const otherLocales = computed(() =>
   Object.entries(locales)
     .filter(([key]) => key !== lang.value)
-    .map(([key, config]) => ({ key, ...config }))
-)
+    .map(([key, config]) => ({ key, ...config })),
+);
 
-const initialPath = typeof window === 'undefined' ? '/' : window.location.pathname
+const initialPath = typeof window === 'undefined' ? '/' : window.location.pathname;
 
 function otherLocaleHref(targetPath: string) {
   if (lang.value === 'ja') {
-    const stripped = initialPath.replace(/^\/ja(\/|$)/, '/')
-    return stripped || '/'
+    const stripped = initialPath.replace(/^\/ja(\/|$)/, '/');
+    return stripped || '/';
   }
-  if (initialPath === '/' || initialPath === '') return `${targetPath}/`
-  return `${targetPath}${initialPath}`
+  if (initialPath === '/' || initialPath === '') return `${targetPath}/`;
+  return `${targetPath}${initialPath}`;
 }
 
 function switchLocale(event: Event, targetPath: string) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
-  if (typeof window === 'undefined') return
-  window.location.assign(otherLocaleHref(targetPath))
+  event.preventDefault();
+  event.stopPropagation();
+  if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+  if (typeof window === 'undefined') return;
+  window.location.assign(otherLocaleHref(targetPath));
 }
 
 // Quick Start matrix
-type Discipline = 'analysis' | 'mastering'
-type Runtime = 'browser' | 'python' | 'cli'
-const discipline = ref<Discipline>('analysis')
-const runtime = ref<Runtime>('browser')
+type Discipline = 'analysis' | 'mastering';
+type Runtime = 'browser' | 'python' | 'cli';
+const discipline = ref<Discipline>('analysis');
+const runtime = ref<Runtime>('browser');
 
 const codeMatrix: Record<Discipline, Record<Runtime, string>> = {
   analysis: {
@@ -314,76 +344,105 @@ sonare mastering-processor song.wav \\
   --processor dynamics.compressor \\
   --params thresholdDb=-24,ratio=1.5`,
   },
-}
+};
 
-const currentCode = computed(() => codeMatrix[discipline.value][runtime.value])
+const currentCode = computed(() => codeMatrix[discipline.value][runtime.value]);
 
 function escapeHtml(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function highlight(code: string, rt: Runtime): string {
-  const lines = escapeHtml(code).split('\n')
+  const lines = escapeHtml(code).split('\n');
   if (rt === 'cli') {
-    return lines.map((line) => {
-      if (!line.trim()) return ''
-      if (line.startsWith('#')) return `<span class="landing__code-comment">${line}</span>`
-      return line.replace(/^(\S+)/, '<span class="landing__code-function">$1</span>')
-                 .replace(/(--[a-z-]+)/g, '<span class="landing__code-keyword">$1</span>')
-    }).join('\n')
+    return lines
+      .map((line) => {
+        if (!line.trim()) return '';
+        if (line.startsWith('#')) return `<span class="landing__code-comment">${line}</span>`;
+        return line
+          .replace(/^(\S+)/, '<span class="landing__code-function">$1</span>')
+          .replace(/(--[a-z-]+)/g, '<span class="landing__code-keyword">$1</span>');
+      })
+      .join('\n');
   }
   if (rt === 'python') {
-    return lines.map((line) =>
-      line
-        .replace(/(&quot;[^&]*&quot;|"[^"]*"|'[^']*')/g, '<span class="landing__code-string">$1</span>')
-        .replace(/\b(import|as|from|with|print|def|return|f)\b/g, '<span class="landing__code-keyword">$1</span>')
-        .replace(/\b(libsonare|audio|result)\b/g, '<span class="landing__code-variable">$1</span>')
-        .replace(/(#.*$)/g, '<span class="landing__code-comment">$1</span>')
-    ).join('\n')
+    return lines
+      .map((line) =>
+        line
+          .replace(
+            /(&quot;[^&]*&quot;|"[^"]*"|'[^']*')/g,
+            '<span class="landing__code-string">$1</span>',
+          )
+          .replace(
+            /\b(import|as|from|with|print|def|return|f)\b/g,
+            '<span class="landing__code-keyword">$1</span>',
+          )
+          .replace(
+            /\b(libsonare|audio|result)\b/g,
+            '<span class="landing__code-variable">$1</span>',
+          )
+          .replace(/(#.*$)/g, '<span class="landing__code-comment">$1</span>'),
+      )
+      .join('\n');
   }
-  return lines.map((line) =>
-    line
-      .replace(/(&quot;[^&]*&quot;|"[^"]*"|'[^']*'|`[^`]*`)/g, '<span class="landing__code-string">$1</span>')
-      .replace(/\b(import|from|await|const|let|var|function|return)\b/g, '<span class="landing__code-keyword">$1</span>')
-      .replace(/\b(init|detectBpm|detectKey|analyze|masteringChainStereo|masteringChain|masteringProcess)\b/g, '<span class="landing__code-function">$1</span>')
-      .replace(/\b(samples|sampleRate|bpm|key|result|left|right|left|right)\b/g, '<span class="landing__code-variable">$1</span>')
-      .replace(/(\/\/.*$)/g, '<span class="landing__code-comment">$1</span>')
-  ).join('\n')
+  return lines
+    .map((line) =>
+      line
+        .replace(
+          /(&quot;[^&]*&quot;|"[^"]*"|'[^']*'|`[^`]*`)/g,
+          '<span class="landing__code-string">$1</span>',
+        )
+        .replace(
+          /\b(import|from|await|const|let|var|function|return)\b/g,
+          '<span class="landing__code-keyword">$1</span>',
+        )
+        .replace(
+          /\b(init|detectBpm|detectKey|analyze|masteringChainStereo|masteringChain|masteringProcess)\b/g,
+          '<span class="landing__code-function">$1</span>',
+        )
+        .replace(
+          /\b(samples|sampleRate|bpm|key|result|left|right|left|right)\b/g,
+          '<span class="landing__code-variable">$1</span>',
+        )
+        .replace(/(\/\/.*$)/g, '<span class="landing__code-comment">$1</span>'),
+    )
+    .join('\n');
 }
 
-const highlightedCode = computed(() => highlight(currentCode.value, runtime.value))
+const highlightedCode = computed(() => highlight(currentCode.value, runtime.value));
 
 // Mini spectrum bars for the analyzer card — pseudo-spectrum based on a deterministic seed
 const spectrumBars = Array.from({ length: 22 }, (_, i) => {
-  const angle = (i / 22) * Math.PI
-  const env = Math.sin(angle) ** 1.4
-  const wob = 0.55 + 0.45 * Math.sin(i * 1.7)
-  return 22 + env * 60 * wob
-})
+  const angle = (i / 22) * Math.PI;
+  const env = Math.sin(angle) ** 1.4;
+  const wob = 0.55 + 0.45 * Math.sin(i * 1.7);
+  return 22 + env * 60 * wob;
+});
 
 // Mini LUFS arc (mastering card)
 const lufsTicks = Array.from({ length: 24 }, (_, i) => {
-  const t = i / 23
-  const angle = -Math.PI * 0.85 + t * Math.PI * 1.7
-  const r = 36
-  const r2 = i < 18 ? 30 : 24
+  const t = i / 23;
+  const angle = -Math.PI * 0.85 + t * Math.PI * 1.7;
+  const r = 36;
+  const r2 = i < 18 ? 30 : 24;
   return {
     x1: 50 + Math.cos(angle) * r,
     y1: 50 + Math.sin(angle) * r,
     x2: 50 + Math.cos(angle) * r2,
     y2: 50 + Math.sin(angle) * r2,
     on: i < 18,
-  }
-})
+  };
+});
 
 // Coordinate disguised as build node ID (matches DemoLayout)
 const nodeId = computed(() => {
-  const now = new Date()
-  const [lat, lng] = (now.getMonth() === 6 && now.getDate() === 10)
-    ? ['35.5568', '139.4386']
-    : ['31.9505', '115.8605']
-  return `${lat}-${lng}`
-})
+  const now = new Date();
+  const [lat, lng] =
+    now.getMonth() === 6 && now.getDate() === 10
+      ? ['35.5568', '139.4386']
+      : ['31.9505', '115.8605'];
+  return `${lat}-${lng}`;
+});
 </script>
 
 <template>
@@ -463,6 +522,21 @@ const nodeId = computed(() => {
           <div class="landing__install-row">
             <span class="landing__install-prompt">$</span>
             <code class="landing__install-code">{{ currentLocale.hero.installNpm }}</code>
+            <button
+              type="button"
+              class="landing__install-copy"
+              :class="{ 'landing__install-copy--done': copiedKey === 'npm' }"
+              :aria-label="copiedKey === 'npm' ? currentLocale.hero.copiedLabel : currentLocale.hero.copyLabel"
+              @click="copyCommand(currentLocale.hero.installNpm, 'npm')"
+            >
+              <svg v-if="copiedKey === 'npm'" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+            </button>
             <a
               :href="packageLinks.npm"
               target="_blank"
@@ -483,6 +557,21 @@ const nodeId = computed(() => {
           <div class="landing__install-row">
             <span class="landing__install-prompt">$</span>
             <code class="landing__install-code">{{ currentLocale.hero.installPip }}</code>
+            <button
+              type="button"
+              class="landing__install-copy"
+              :class="{ 'landing__install-copy--done': copiedKey === 'pip' }"
+              :aria-label="copiedKey === 'pip' ? currentLocale.hero.copiedLabel : currentLocale.hero.copyLabel"
+              @click="copyCommand(currentLocale.hero.installPip, 'pip')"
+            >
+              <svg v-if="copiedKey === 'pip'" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+            </button>
             <a
               :href="packageLinks.pypi"
               target="_blank"
@@ -501,6 +590,7 @@ const nodeId = computed(() => {
               </svg>
             </a>
           </div>
+          <span class="landing__sr-status" role="status" aria-live="polite">{{ copiedKey ? currentLocale.hero.copiedLabel : '' }}</span>
         </div>
 
         <div class="landing__hero-actions">
@@ -568,94 +658,14 @@ const nodeId = computed(() => {
         <p class="landing__section-subhead">{{ currentLocale.demoSection.subhead }}</p>
       </header>
 
-      <div class="landing__demo-grid">
-        <a
-          :href="localePath(currentLocale.analyzer.path)"
-          class="landing__demo-card landing__demo-card--analyzer"
-        >
-          <div class="landing__demo-card-head">
-            <span class="landing__demo-status">
-              <span class="landing__demo-status-dot"></span>
-              {{ currentLocale.analyzer.status }}
-            </span>
-            <span class="landing__demo-eyebrow">{{ currentLocale.analyzer.eyebrow }}</span>
-          </div>
+      <DemoCardGrid />
 
-          <div class="landing__demo-visual landing__demo-visual--spectrum" aria-hidden="true">
-            <svg viewBox="0 0 220 60" preserveAspectRatio="none">
-              <g>
-                <rect
-                  v-for="(bar, i) in spectrumBars"
-                  :key="i"
-                  :x="i * (220 / spectrumBars.length) + 1"
-                  :y="60 - bar * 0.55"
-                  :width="(220 / spectrumBars.length) - 3"
-                  :height="bar * 0.55"
-                  rx="1"
-                />
-              </g>
-            </svg>
-          </div>
-
-          <h3 class="landing__demo-title">{{ currentLocale.analyzer.title }}</h3>
-          <p class="landing__demo-tagline">{{ currentLocale.analyzer.tagline }}</p>
-
-          <ul class="landing__demo-chips">
-            <li v-for="chip in currentLocale.analyzer.chips" :key="chip">{{ chip }}</li>
-          </ul>
-
-          <span class="landing__demo-cta">
-            {{ currentLocale.analyzer.cta }}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </span>
-        </a>
-
-        <a
-          :href="localePath(currentLocale.mastering.path)"
-          class="landing__demo-card landing__demo-card--mastering"
-        >
-          <div class="landing__demo-card-head">
-            <span class="landing__demo-status landing__demo-status--accent">
-              <span class="landing__demo-status-dot"></span>
-              {{ currentLocale.mastering.status }}
-            </span>
-            <span class="landing__demo-eyebrow">{{ currentLocale.mastering.eyebrow }}</span>
-          </div>
-
-          <div class="landing__demo-visual landing__demo-visual--lufs" aria-hidden="true">
-            <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet">
-              <g>
-                <line
-                  v-for="(tick, i) in lufsTicks"
-                  :key="i"
-                  :x1="tick.x1"
-                  :y1="tick.y1"
-                  :x2="tick.x2"
-                  :y2="tick.y2"
-                  :class="tick.on ? 'landing__lufs-tick--on' : 'landing__lufs-tick--off'"
-                />
-                <text x="50" y="56" text-anchor="middle" class="landing__lufs-label">-14.0 LUFS</text>
-              </g>
-            </svg>
-          </div>
-
-          <h3 class="landing__demo-title">{{ currentLocale.mastering.title }}</h3>
-          <p class="landing__demo-tagline">{{ currentLocale.mastering.tagline }}</p>
-
-          <ul class="landing__demo-chips">
-            <li v-for="chip in currentLocale.mastering.chips" :key="chip">{{ chip }}</li>
-          </ul>
-
-          <span class="landing__demo-cta">
-            {{ currentLocale.mastering.cta }}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </span>
-        </a>
-      </div>
+      <a :href="localePath('/demos')" class="landing__demos-all">
+        {{ currentLocale.demoSection.viewAll }}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </a>
     </section>
 
     <!-- Quick Start matrix -->
@@ -696,7 +706,24 @@ const nodeId = computed(() => {
           </button>
         </div>
 
-        <pre class="landing__code"><code v-html="highlightedCode"></code></pre>
+        <div class="landing__code-wrap">
+          <button
+            type="button"
+            class="landing__code-copy"
+            :class="{ 'landing__code-copy--done': copiedKey === 'code' }"
+            :aria-label="copiedKey === 'code' ? currentLocale.hero.copiedLabel : currentLocale.hero.copyLabel"
+            @click="copyCommand(currentCode, 'code')"
+          >
+            <svg v-if="copiedKey === 'code'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+          </button>
+          <pre class="landing__code"><code v-html="highlightedCode"></code></pre>
+        </div>
 
         <div class="landing__quick-footer">
           <p class="landing__quick-note">{{ currentLocale.quickStart.note }}</p>
@@ -803,1264 +830,12 @@ const nodeId = computed(() => {
   </div>
 </template>
 
-<style scoped>
-/* ===== THEME TOKENS (Dark - default) ===== */
-.landing {
-  --demo-bg: #030405;
-  --demo-bg-overlay: rgba(10, 12, 18, 0.95);
-  --demo-bg-elevated: rgba(8, 10, 14, 0.85);
-  --demo-bg-header: rgba(20, 22, 28, 0.8);
-  --demo-text-strong: #ffffff;
-  --demo-text: rgba(255, 255, 255, 0.72);
-  --demo-text-muted: rgba(255, 255, 255, 0.42);
-  --demo-text-faint: rgba(255, 255, 255, 0.22);
-  --demo-accent: #8B5CF6;
-  --demo-accent-light: #A78BFA;
-  --demo-accent-dim: rgba(139, 92, 246, 0.3);
-  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
-  --demo-accent-border: rgba(139, 92, 246, 0.22);
-  --demo-cyan: #22D3EE;
-  --demo-cyan-subtle: rgba(34, 211, 238, 0.10);
-  --demo-cyan-border: rgba(34, 211, 238, 0.25);
-  --demo-success: rgba(100, 200, 180, 0.9);
-  --demo-border: rgba(139, 92, 246, 0.12);
-  --demo-border-strong: rgba(139, 92, 246, 0.25);
-  --demo-shadow: rgba(0, 0, 0, 0.4);
-  --demo-shadow-glow: 0 0 40px -10px rgba(139, 92, 246, 0.2);
-  --demo-code-bg: rgba(0, 0, 0, 0.42);
-  --demo-grid-color: rgba(139, 92, 246, 0.04);
-  --demo-grid-minor: rgba(139, 92, 246, 0.02);
-  --demo-scanline: rgba(0, 0, 0, 0.03);
-
-  min-height: 100vh;
-  min-height: 100dvh;
-  background: var(--demo-bg);
-  color: var(--demo-text);
-  display: flex;
-  flex-direction: column;
-  overflow-x: hidden;
-  font-family: 'JetBrains Mono', monospace;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-/* ===== THEME TOKENS (Light) ===== */
-html:not(.dark) .landing {
-  --demo-bg: #f8f6ff;
-  --demo-bg-overlay: rgba(248, 246, 255, 0.95);
-  --demo-bg-elevated: rgba(255, 255, 255, 0.7);
-  --demo-bg-header: rgba(250, 248, 255, 0.85);
-  --demo-text-strong: #1a1a2e;
-  --demo-text: rgba(0, 0, 0, 0.62);
-  --demo-text-muted: rgba(0, 0, 0, 0.4);
-  --demo-text-faint: rgba(0, 0, 0, 0.22);
-  --demo-accent: #6D28D9;
-  --demo-accent-light: #7C3AED;
-  --demo-accent-dim: rgba(109, 40, 217, 0.25);
-  --demo-accent-subtle: rgba(109, 40, 217, 0.06);
-  --demo-accent-border: rgba(109, 40, 217, 0.22);
-  --demo-cyan: #0E7490;
-  --demo-cyan-subtle: rgba(14, 116, 144, 0.08);
-  --demo-cyan-border: rgba(14, 116, 144, 0.22);
-  --demo-success: rgba(16, 185, 129, 0.9);
-  --demo-border: rgba(0, 0, 0, 0.07);
-  --demo-border-strong: rgba(0, 0, 0, 0.13);
-  --demo-shadow: rgba(0, 0, 0, 0.08);
-  --demo-shadow-glow: 0 4px 24px -6px rgba(109, 40, 217, 0.10);
-  --demo-code-bg: rgba(255, 255, 255, 0.78);
-  --demo-grid-color: transparent;
-  --demo-grid-minor: transparent;
-  --demo-scanline: transparent;
-}
-
-/* ===== BACKDROP ===== */
-.landing__backdrop {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.landing__noise {
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: 0.025;
-  mix-blend-mode: overlay;
-}
-
-html:not(.dark) .landing .landing__backdrop {
-  display: none;
-}
-
-/* ===== HEADER ===== */
-.landing__header {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  background: linear-gradient(to bottom, var(--demo-bg-overlay), transparent);
-  border-bottom: 1px solid var(--demo-border);
-}
-
-html:not(.dark) .landing .landing__header {
-  background: var(--demo-bg-overlay);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.landing__header-left,
-.landing__header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.landing__brand {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  color: var(--demo-text-strong);
-  text-decoration: none;
-}
-
-.landing__tagline {
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  color: var(--demo-text-muted);
-}
-
-.landing__version {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--demo-text-muted);
-  font-variant-numeric: tabular-nums;
-  padding: 4px 8px;
-  background: var(--demo-accent-subtle);
-  border-radius: 4px;
-}
-
-.landing__nav-link {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--demo-text);
-  text-decoration: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  transition: color 0.2s ease, background-color 0.2s ease;
-}
-
-.landing__nav-link:hover {
-  color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-}
-
-.landing__lang-switch {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 10px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--demo-text-muted);
-  text-decoration: none;
-  background: var(--demo-accent-subtle);
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.landing__lang-switch:hover {
-  color: var(--demo-accent);
-  background: var(--demo-accent-dim);
-  border-color: var(--demo-accent);
-}
-
-.landing__theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: var(--demo-accent-subtle);
-  border: 1px solid var(--demo-accent-border);
-  border-radius: 6px;
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.landing__theme-toggle:hover {
-  color: var(--demo-accent);
-  background: var(--demo-accent-dim);
-  border-color: var(--demo-accent);
-}
-
-.landing__icon-sun { display: none; }
-.landing__icon-moon { display: block; }
-
-.landing__github-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: #fff;
-  text-decoration: none;
-  padding: 7px 14px;
-  background: var(--demo-accent);
-  border-radius: 6px;
-  transition: background-color 0.2s ease, transform 0.2s ease;
-}
-
-.landing__github-cta:hover {
-  background: #9D6FFF;
-  transform: translateY(-1px);
-}
-
-/* ===== HERO ===== */
-.landing__hero {
-  position: relative;
-  z-index: 2;
-  width: min(1180px, calc(100% - 48px));
-  margin: 40px auto 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: 56px;
-  align-items: center;
-}
-
-.landing__hero-left {
-  min-width: 0;
-}
-
-.landing__hero-right {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.landing__eyebrow {
-  margin: 0 0 12px;
-  color: var(--demo-cyan);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.landing__title {
-  margin: 0 0 14px;
-  color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: clamp(28px, 3.8vw, 46px);
-  font-weight: 600;
-  line-height: 1.12;
-  letter-spacing: -0.01em;
-  max-width: 18ch;
-}
-
-.landing--ja .landing__title {
-  font-size: clamp(22px, 3.2vw, 36px);
-  line-height: 1.28;
-  letter-spacing: 0;
-  max-width: 22ch;
-}
-
-.landing__subtitle {
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 14px;
-  line-height: 1.6;
-  max-width: 50ch;
-}
-
-.landing__install {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-}
-
-.landing__install-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  background: var(--demo-code-bg);
-}
-
-.landing__install-row::before,
-.landing__install-row::after {
-  content: '';
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-color: var(--demo-accent-border);
-  border-style: solid;
-  border-width: 0;
-  pointer-events: none;
-}
-
-.landing__install-row::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 1px;
-  border-left-width: 1px;
-}
-
-.landing__install-row::after {
-  bottom: -1px;
-  right: -1px;
-  border-bottom-width: 1px;
-  border-right-width: 1px;
-}
-
-.landing__install-prompt {
-  color: var(--demo-accent-light);
-  font-size: 12px;
-  font-weight: 700;
-  user-select: none;
-}
-
-.landing__install-code {
-  flex: 1;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  color: var(--demo-text-strong);
-  white-space: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: transparent;
-  padding: 0;
-}
-
-.landing__install-code::-webkit-scrollbar { display: none; }
-
-.landing__install-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 72px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--demo-text-muted);
-  padding: 4px 8px;
-  border: 1px solid var(--demo-border);
-  border-radius: 3px;
-  flex-shrink: 0;
-  text-decoration: none;
-}
-
-.landing__install-tag-brand {
-  flex-shrink: 0;
-  opacity: 0.85;
-  transition: opacity 0.18s ease;
-}
-
-.landing__install-tag-arrow {
-  flex-shrink: 0;
-  opacity: 0;
-  transform: translate(-2px, 2px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.landing__install-tag--link {
-  cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.landing__install-tag--link:hover,
-.landing__install-tag--link:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-  outline: none;
-}
-
-.landing__install-tag--link:hover .landing__install-tag-brand,
-.landing__install-tag--link:focus-visible .landing__install-tag-brand {
-  opacity: 1;
-}
-
-.landing__install-tag--link:hover .landing__install-tag-arrow,
-.landing__install-tag--link:focus-visible .landing__install-tag-arrow {
-  opacity: 1;
-  transform: translate(0, 0);
-}
-
-.landing__hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.landing__action {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-decoration: none;
-  padding: 10px 16px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.landing__action--primary {
-  background: var(--demo-accent);
-  color: #fff;
-  border: 1px solid var(--demo-accent);
-}
-
-.landing__action--primary:hover {
-  background: #9D6FFF;
-  transform: translateY(-1px);
-}
-
-.landing__action--ghost {
-  color: var(--demo-text);
-  border: 1px solid var(--demo-border-strong);
-  background: transparent;
-}
-
-.landing__action--ghost:hover {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-}
-
-/* ===== RECEIPT STRIP ===== */
-.landing__receipt {
-  position: relative;
-  z-index: 2;
-  width: min(1180px, calc(100% - 48px));
-  margin: 28px auto 0;
-  padding: 10px 14px;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background: var(--demo-bg-elevated);
-}
-
-.landing__receipt-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.landing__receipt-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-}
-
-.landing__receipt-row--build {
-  padding-top: 7px;
-  border-top: 1px dashed var(--demo-border);
-}
-
-.landing__receipt-row--build .landing__receipt-value {
-  color: var(--demo-accent-light);
-}
-
-html:not(.dark) .landing .landing__receipt-row--build .landing__receipt-value {
-  color: var(--demo-accent);
-}
-
-.landing__receipt-field {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.landing__receipt-row > .landing__receipt-field:first-child .landing__receipt-key {
-  display: inline-block;
-  min-width: 54px;
-}
-
-.landing__receipt-key {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--demo-text-muted);
-}
-
-.landing__receipt-value {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--demo-text-strong);
-}
-
-.landing__receipt-sep {
-  color: var(--demo-text-faint);
-  font-size: 11px;
-  user-select: none;
-}
-
-/* ===== SECTIONS COMMON ===== */
-.landing__demos,
-.landing__quick,
-.landing__pillars,
-.landing__final {
-  position: relative;
-  z-index: 2;
-  width: min(1180px, calc(100% - 48px));
-  margin: 56px auto 0;
-}
-
-.landing__section-header {
-  margin-bottom: 20px;
-  max-width: 720px;
-}
-
-.landing__section-eyebrow {
-  margin: 0 0 10px;
-  color: var(--demo-accent-light);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.landing__section-title {
-  margin: 0 0 8px;
-  color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: clamp(22px, 3vw, 34px);
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.005em;
-}
-
-.landing__section-subhead {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* ===== DEMO CARDS ===== */
-.landing__demo-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.landing__demo-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 22px 22px 20px;
-  background:
-    radial-gradient(ellipse at top right, var(--demo-accent-subtle), transparent 60%),
-    var(--demo-bg-elevated);
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 4px;
-  text-decoration: none;
-  color: inherit;
-  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.landing__demo-card::before,
-.landing__demo-card::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-color: var(--demo-accent-border);
-  border-style: solid;
-  border-width: 0;
-  pointer-events: none;
-  transition: border-color 0.25s ease;
-}
-
-.landing__demo-card::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 1px;
-  border-left-width: 1px;
-}
-
-.landing__demo-card::after {
-  bottom: -1px;
-  right: -1px;
-  border-bottom-width: 1px;
-  border-right-width: 1px;
-}
-
-.landing__demo-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--demo-accent);
-  box-shadow: 0 16px 40px -16px rgba(139, 92, 246, 0.35);
-}
-
-.landing__demo-card:hover::before,
-.landing__demo-card:hover::after {
-  border-color: var(--demo-accent);
-}
-
-html:not(.dark) .landing .landing__demo-card:hover {
-  box-shadow: 0 14px 36px -16px rgba(109, 40, 217, 0.18);
-}
-
-.landing__demo-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.landing__demo-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: var(--demo-accent-light);
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border: 1px solid var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-  border-radius: 4px;
-}
-
-html:not(.dark) .landing .landing__demo-status {
-  color: var(--demo-accent);
-}
-
-.landing__demo-status--accent {
-  color: var(--demo-accent-light);
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-}
-
-html:not(.dark) .landing .landing__demo-status--accent {
-  color: var(--demo-accent);
-}
-
-.landing__demo-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-  animation: landing-pulse 2s ease-in-out infinite;
-}
-
-@keyframes landing-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-.landing__demo-eyebrow {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  color: var(--demo-text-muted);
-  text-transform: uppercase;
-}
-
-.landing__demo-visual {
-  height: 52px;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background:
-    linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px),
-    var(--demo-code-bg);
-  background-size: 16px 16px;
-  overflow: hidden;
-  padding: 6px 12px;
-}
-
-.landing__demo-visual svg {
-  width: 100%;
-  height: 100%;
-}
-
-.landing__demo-visual--spectrum svg rect {
-  fill: var(--demo-accent-light);
-  opacity: 0.78;
-}
-
-.landing__demo-visual--lufs .landing__lufs-tick--on {
-  stroke: var(--demo-accent-light);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-
-.landing__demo-visual--lufs .landing__lufs-tick--off {
-  stroke: var(--demo-text-faint);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
-
-.landing__demo-visual--lufs .landing__lufs-label {
-  fill: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.landing__demo-title {
-  margin: 2px 0 0;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--demo-text-strong);
-}
-
-.landing__demo-tagline {
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-.landing__demo-chips {
-  list-style: none;
-  margin: 4px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.landing__demo-chips li {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--demo-text-muted);
-  padding: 4px 8px;
-  border: 1px solid var(--demo-border);
-  border-radius: 3px;
-}
-
-.landing__demo-card--analyzer .landing__demo-chips li,
-.landing__demo-card--mastering .landing__demo-chips li {
-  color: var(--demo-accent-light);
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-}
-
-html:not(.dark) .landing .landing__demo-card--analyzer .landing__demo-chips li,
-html:not(.dark) .landing .landing__demo-card--mastering .landing__demo-chips li {
-  color: var(--demo-accent);
-}
-
-.landing__demo-cta {
-  margin-top: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--demo-text-strong);
-}
-
-.landing__demo-cta svg {
-  transition: transform 0.2s ease;
-}
-
-.landing__demo-card:hover .landing__demo-cta svg {
-  transform: translateX(4px);
-}
-
-.landing__demo-card--analyzer .landing__demo-cta,
-.landing__demo-card--mastering .landing__demo-cta {
-  color: var(--demo-accent-light);
-}
-
-html:not(.dark) .landing .landing__demo-card--analyzer .landing__demo-cta,
-html:not(.dark) .landing .landing__demo-card--mastering .landing__demo-cta {
-  color: var(--demo-accent);
-}
-
-/* ===== QUICK START ===== */
-.landing__quick-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  background: var(--demo-bg-elevated);
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 10px;
-  box-shadow: var(--demo-shadow-glow);
-}
-
-.landing__quick-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.landing__quick-tabs--primary {
-  padding: 3px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  align-self: flex-start;
-}
-
-html:not(.dark) .landing .landing__quick-tabs--primary {
-  background: rgba(255, 255, 255, 0.55);
-}
-
-.landing__quick-tabs--secondary {
-  padding: 3px;
-  background: rgba(0, 0, 0, 0.14);
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  align-self: flex-start;
-}
-
-html:not(.dark) .landing .landing__quick-tabs--secondary {
-  background: rgba(255, 255, 255, 0.45);
-}
-
-.landing__quick-tab {
-  width: 120px;
-  height: 30px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.landing__quick-tab--primary {
-  font-size: 11.5px;
-}
-
-.landing__quick-tab:hover {
-  color: var(--demo-text-strong);
-}
-
-.landing__quick-tab--active {
-  background: var(--demo-accent);
-  color: #fff;
-}
-
-.landing__quick-tab--primary.landing__quick-tab--active {
-  background: var(--demo-accent);
-}
-
-.landing__code {
-  margin: 0;
-  padding: 14px 18px;
-  overflow-x: auto;
-  background: var(--demo-code-bg);
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12.5px;
-  line-height: 1.65;
-  tab-size: 2;
-  min-height: 180px;
-}
-
-.landing__code :deep(.landing__code-keyword) { color: #c4b5fd; }
-.landing__code :deep(.landing__code-function) { color: #67e8f9; }
-.landing__code :deep(.landing__code-string) { color: #fcd34d; }
-.landing__code :deep(.landing__code-variable) { color: #f9a8d4; }
-.landing__code :deep(.landing__code-comment) { color: rgba(255,255,255,0.35); font-style: italic; }
-
-html:not(.dark) .landing .landing__code :deep(.landing__code-keyword) { color: #6d28d9; }
-html:not(.dark) .landing .landing__code :deep(.landing__code-function) { color: #0891b2; }
-html:not(.dark) .landing .landing__code :deep(.landing__code-string) { color: #9a3412; }
-html:not(.dark) .landing .landing__code :deep(.landing__code-variable) { color: #be185d; }
-html:not(.dark) .landing .landing__code :deep(.landing__code-comment) { color: rgba(0,0,0,0.35); font-style: italic; }
-
-.landing__quick-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.landing__quick-note {
-  margin: 0;
-  color: var(--demo-text-muted);
-  font-size: 10.5px;
-  line-height: 1.55;
-}
-
-.landing__quick-link {
-  color: var(--demo-accent-light);
-  text-decoration: none;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.landing__quick-link:hover {
-  color: var(--demo-accent);
-}
-
-/* ===== PILLARS ===== */
-.landing__pillar-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-
-.landing__pillar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px;
-  background: var(--demo-bg-elevated);
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  transition: border-color 0.25s ease;
-}
-
-.landing__pillar::before,
-.landing__pillar::after {
-  content: '';
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border-color: var(--demo-accent-border);
-  border-style: solid;
-  border-width: 0;
-}
-
-.landing__pillar::before {
-  top: -1px; left: -1px;
-  border-top-width: 1px;
-  border-left-width: 1px;
-}
-
-.landing__pillar::after {
-  bottom: -1px; right: -1px;
-  border-bottom-width: 1px;
-  border-right-width: 1px;
-}
-
-.landing__pillar:hover {
-  border-color: var(--demo-accent-border);
-}
-
-.landing__pillar-tag {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--demo-accent-light);
-}
-
-.landing__pillar-tag-index {
-  color: var(--demo-text-faint);
-  font-size: 11px;
-}
-
-.landing__pillar-title {
-  margin: 0;
-  color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.32;
-  letter-spacing: 0;
-}
-
-.landing__pillar-body {
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 12px;
-  line-height: 1.65;
-  flex: 1;
-}
-
-.landing__pillar-link {
-  align-self: flex-start;
-  color: var(--demo-accent-light);
-  text-decoration: none;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.landing__pillar-link:hover {
-  color: var(--demo-accent);
-}
-
-html:not(.dark) .landing .landing__pillar-tag,
-html:not(.dark) .landing .landing__pillar-link {
-  color: var(--demo-accent);
-}
-
-/* ===== FINAL CTA ===== */
-.landing__final {
-  position: relative;
-  margin: 56px auto 40px;
-}
-
-.landing__final-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto;
-  gap: 24px;
-  align-items: center;
-  padding: 22px 26px;
-  background:
-    radial-gradient(circle at 100% 0%, var(--demo-accent-subtle), transparent 60%),
-    var(--demo-bg-elevated);
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 12px;
-}
-
-.landing__final-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.landing__final-heading {
-  margin: 0;
-  color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: clamp(18px, 2vw, 24px);
-  font-weight: 600;
-  line-height: 1.22;
-}
-
-.landing__final-subhead {
-  margin: 0;
-  color: var(--demo-text);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-.landing__final-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-/* ===== FOOTER ===== */
-.landing__footer {
-  position: relative;
-  z-index: 10;
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 12px 24px;
-  border-top: 1px solid var(--demo-border);
-  background: linear-gradient(to top, var(--demo-bg-overlay), transparent);
-}
-
-html:not(.dark) .landing .landing__footer {
-  background: var(--demo-bg-overlay);
-}
-
-.landing__footer-links,
-.landing__footer-center,
-.landing__footer-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.landing__footer-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--demo-text-muted);
-  text-decoration: none;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  transition: color 0.2s;
-}
-
-.landing__footer-link:hover {
-  color: var(--demo-accent);
-}
-
-.landing__footer-link svg { opacity: 0.6; }
-
-.landing__footer-sep,
-.landing__footer-dot {
-  color: var(--demo-border);
-  font-size: 10px;
-  user-select: none;
-}
-
-.landing__footer-attr {
-  font-size: 9px;
-  color: var(--demo-text-muted);
-  letter-spacing: 0.04em;
-}
-
-.landing__footer-author {
-  color: var(--demo-text);
-  text-decoration: none;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.landing__footer-author:hover { color: var(--demo-accent); }
-
-.landing__footer-credit {
-  color: var(--demo-accent);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.landing__node-id {
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--demo-text-muted);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.5;
-}
-
-/* Hide VitePress chrome */
-.landing :deep(.VPNav),
-.landing :deep(.VPNavBar),
-.landing :deep(.VPSidebar),
-.landing :deep(.VPFooter),
-.landing :deep(.VPLocalNav) {
-  display: none !important;
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 960px) {
-  .landing__hero {
-    margin-top: 32px;
-    grid-template-columns: 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-
-  .landing__hero-right {
-    max-width: 520px;
-  }
-
-  .landing__demos,
-  .landing__quick,
-  .landing__pillars,
-  .landing__final {
-    margin-top: 48px;
-  }
-
-  .landing__demo-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .landing__pillar-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .landing__final-inner {
-    grid-template-columns: 1fr;
-  }
-
-  .landing__final-actions {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 720px) {
-  .landing__header {
-    padding: 10px 16px;
-  }
-
-  .landing__tagline,
-  .landing__version {
-    display: none;
-  }
-
-  .landing__hero,
-  .landing__receipt,
-  .landing__demos,
-  .landing__quick,
-  .landing__pillars,
-  .landing__final {
-    width: calc(100% - 28px);
-  }
-
-  .landing__demo-card {
-    padding: 20px 18px 18px;
-  }
-
-  .landing__quick-tab {
-    min-width: 90px;
-    height: 28px;
-    font-size: 10px;
-  }
-
-  .landing__quick-tab--primary {
-    min-width: 100px;
-  }
-
-  .landing__code {
-    font-size: 11.5px;
-    padding: 14px 16px;
-    min-height: 200px;
-  }
-
-  .landing__footer {
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 16px;
-  }
-
-  .landing__footer-meta {
-    display: none;
-  }
-
-  .landing__final-inner {
-    padding: 24px 20px;
-  }
-}
-</style>
-
-<style>
-/* Theme toggle icon swap (must be global to react to html.dark) */
-html.dark .landing__icon-sun { display: block; }
-html.dark .landing__icon-moon { display: none; }
-</style>
+<style scoped src="./styles/landing/landingBase.css"></style>
+<style scoped src="./styles/landing/landingHero.css"></style>
+<style scoped src="./styles/landing/landingSections.css"></style>
+<style scoped src="./styles/landing/landingQuickPillars.css"></style>
+<style scoped src="./styles/landing/landingFooter.css"></style>
+<style scoped src="./styles/landing/landingResponsive.css"></style>
+
+
+<style src="./styles/landing/landingGlobal.css"></style>

@@ -9,6 +9,15 @@ This page explains how the `/mastering` demo turns a small set of user decisions
 
 The browser demo keeps long-form explanation in VitePress docs. The application UI only shows short labels and links into these pages.
 
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- trace the browser mastering demo from file input through worker rendering, metrics, export, and report generation;
+- understand why explanatory text lives in docs while the app UI stays compact;
+- map UI controls to chain areas and glossary pages;
+- know which docs check keeps the mastering API documentation aligned with the WASM declarations.
+
 ## Render Path
 
 ```mermaid
@@ -61,6 +70,8 @@ The final result is treated as immutable. A later A/B comparison may apply tempo
 
 The docs track the public mastering API exported by `src/wasm/index.d.ts`. The verification script extracts current `mastering*` and `masterAudio*` functions from that declaration file and requires the JavaScript and native binding docs to mention them.
 
+Run `yarn check:mastering-docs` after changing the mastering worker, WASM declarations, processor docs, or this implementation map. The check keeps this page, the JavaScript API page, and the native binding page aligned with the current exported API.
+
 Use these entry points by intent:
 
 | Intent | API family |
@@ -72,13 +83,8 @@ Use these entry points by intent:
 | Run one named processor | `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()` |
 | Compare source and reference | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()` |
 | Analyze stereo output | `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
-
-## Verification
-
-The release gate uses docs checks as part of `yarn verify`:
-
-- `yarn check:glossary` ensures every published glossary page exists in English and Japanese, has frontmatter, related links, implementation notes, index links, and sidebar exposure.
-- `yarn check:mastering-docs` rejects legacy route names, removed parameter-page directories, missing runtime docs, and mismatched WASM API docs.
-- `yarn check:built-routes` confirms production output exposes `/mastering` and `/ja/mastering` without removed legacy route pages.
+| Profile, suggest, and preview | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
 
 Related: [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), [JavaScript API](./js-api.md), [WASM](./wasm.md)
+
+For the complete named processor, preset, pair-analysis, and stereo-analysis lists, see [Mastering Processors](./mastering-processors.md). For assistant suggestions and profile construction, see [Mastering Assistant](./mastering-assistant.md).

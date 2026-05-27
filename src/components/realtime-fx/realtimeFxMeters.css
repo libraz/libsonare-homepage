@@ -1,0 +1,117 @@
+.rt-meters {
+  display: grid;
+  grid-template-columns: 24px 1fr 1fr;
+  gap: 12px;
+  padding: 18px 24px 14px;
+}
+
+.rt-scale {
+  position: relative;
+  height: 200px;
+}
+
+.rt-scale__tick {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  color: var(--demo-text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rt-meter {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.rt-meter__track {
+  position: relative;
+  width: 100%;
+  max-width: 46px;
+  height: 200px;
+  border-radius: 5px;
+  background: var(--demo-track-bg);
+  border: 1px solid var(--demo-border);
+  overflow: hidden;
+}
+
+.rt-meter__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.rt-meter__zones {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 200px;
+  background: linear-gradient(
+    to top,
+    var(--demo-success) 0%,
+    var(--demo-success) 70%,
+    var(--demo-amber) 78%,
+    var(--demo-amber) 90%,
+    var(--demo-danger) 96%,
+    var(--demo-danger) 100%
+  );
+}
+
+.rt-meter__peak {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(50%);
+  background: var(--demo-text-strong);
+  transition: bottom 0.08s linear;
+}
+
+.rt-meter__hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(50%);
+  background: var(--demo-amber);
+  box-shadow: 0 0 5px var(--demo-amber);
+  transition: bottom 0.12s linear;
+}
+
+.rt-clip {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  border: 1px solid var(--demo-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  background: var(--demo-bg-elevated);
+  color: var(--demo-text-faint);
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.rt-clip--lit {
+  border-color: var(--demo-danger);
+  background: var(--demo-danger);
+  color: #fff;
+  box-shadow: 0 0 8px var(--demo-danger);
+}
+
+.rt-meter b {
+  color: var(--demo-text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+

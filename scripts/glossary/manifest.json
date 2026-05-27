@@ -5,62 +5,311 @@
       "id": ".",
       "label": { "en": "Published starter pages", "ja": "公開済みスターターページ" },
       "entries": [
-        { "id": "mastering", "path": "mastering.md", "status": "published", "title": { "en": "Mastering", "ja": "マスタリング" } },
-        { "id": "lufs", "path": "lufs.md", "status": "published", "title": { "en": "LUFS", "ja": "LUFS" } },
-        { "id": "true-peak", "path": "true-peak.md", "status": "published", "title": { "en": "True Peak", "ja": "True Peak" } },
-        { "id": "ab-comparison", "path": "ab-comparison.md", "status": "published", "title": { "en": "A/B Comparison", "ja": "A/B 比較" } },
-        { "id": "air-band", "path": "air-band.md", "status": "published", "title": { "en": "Air Band", "ja": "Air Band" } }
+        {
+          "id": "mastering",
+          "path": "mastering.md",
+          "status": "published",
+          "title": { "en": "Mastering", "ja": "マスタリング" }
+        },
+        {
+          "id": "lufs",
+          "path": "lufs.md",
+          "status": "published",
+          "title": { "en": "LUFS", "ja": "LUFS" }
+        },
+        {
+          "id": "true-peak",
+          "path": "true-peak.md",
+          "status": "published",
+          "title": { "en": "True Peak", "ja": "True Peak" }
+        },
+        {
+          "id": "ab-comparison",
+          "path": "ab-comparison.md",
+          "status": "published",
+          "title": { "en": "A/B Comparison", "ja": "A/B 比較" }
+        },
+        {
+          "id": "air-band",
+          "path": "air-band.md",
+          "status": "published",
+          "title": { "en": "Air Band", "ja": "Air Band" }
+        }
       ]
     },
     {
       "id": "concepts",
       "label": { "en": "Concepts", "ja": "概念" },
       "entries": [
-        { "id": "what-is-mastering", "status": "published", "title": { "en": "What Is Mastering?", "ja": "マスタリングとは?" } },
-        { "id": "mir-overview", "status": "published", "title": { "en": "MIR Overview", "ja": "MIR の全体像" } },
-        { "id": "audio-basics", "status": "published", "title": { "en": "Audio Basics", "ja": "オーディオ基礎" } },
-        { "id": "loudness-matching", "status": "published", "title": { "en": "Loudness Matching", "ja": "ラウドネスマッチング" } },
-        { "id": "reference-track", "status": "published", "title": { "en": "Reference Track", "ja": "リファレンストラック" } },
-        { "id": "true-peak-safety", "status": "published", "title": { "en": "True Peak Safety", "ja": "True Peak 安全性" } },
-        { "id": "dynamic-range", "status": "published", "title": { "en": "Dynamic Range", "ja": "ダイナミックレンジ" } },
-        { "id": "crest-factor", "status": "published", "title": { "en": "Crest Factor", "ja": "クレストファクター" } },
-        { "id": "mono-compatibility", "status": "published", "title": { "en": "Mono Compatibility", "ja": "モノラル互換性" } },
-        { "id": "gain-staging", "status": "published", "title": { "en": "Gain Staging", "ja": "ゲインステージング" } },
-        { "id": "browser-local-processing", "status": "published", "title": { "en": "Browser Local Processing", "ja": "ブラウザ内ローカル処理" } }
+        {
+          "id": "what-is-mastering",
+          "status": "published",
+          "title": { "en": "What Is Mastering?", "ja": "マスタリングとは?" }
+        },
+        {
+          "id": "mir-overview",
+          "status": "published",
+          "title": { "en": "MIR Overview", "ja": "MIR の全体像" }
+        },
+        {
+          "id": "audio-basics",
+          "status": "published",
+          "title": { "en": "Audio Basics", "ja": "オーディオ基礎" }
+        },
+        {
+          "id": "mixing-basics",
+          "status": "published",
+          "title": { "en": "Mixing Basics", "ja": "ミキシングの基礎" }
+        },
+        {
+          "id": "editing-basics",
+          "status": "published",
+          "title": { "en": "Editing Basics", "ja": "編集の基礎" }
+        },
+        {
+          "id": "loudness-matching",
+          "status": "published",
+          "title": { "en": "Loudness Matching", "ja": "ラウドネスマッチング" }
+        },
+        {
+          "id": "reference-track",
+          "status": "published",
+          "title": { "en": "Reference Track", "ja": "リファレンストラック" }
+        },
+        {
+          "id": "true-peak-safety",
+          "status": "published",
+          "title": { "en": "True Peak Safety", "ja": "True Peak 安全性" }
+        },
+        {
+          "id": "dynamic-range",
+          "status": "published",
+          "title": { "en": "Dynamic Range", "ja": "ダイナミックレンジ" }
+        },
+        {
+          "id": "crest-factor",
+          "status": "published",
+          "title": { "en": "Crest Factor", "ja": "クレストファクター" }
+        },
+        {
+          "id": "mono-compatibility",
+          "status": "published",
+          "title": { "en": "Mono Compatibility", "ja": "モノラル互換性" }
+        },
+        {
+          "id": "gain-staging",
+          "status": "published",
+          "title": { "en": "Gain Staging", "ja": "ゲインステージング" }
+        },
+        {
+          "id": "browser-local-processing",
+          "status": "published",
+          "title": { "en": "Browser Local Processing", "ja": "ブラウザ内ローカル処理" }
+        }
       ]
     },
     {
       "id": "mastering",
       "label": { "en": "Mastering feature guides", "ja": "マスタリング機能ガイド" },
       "entries": [
-        { "id": "repair", "status": "published", "title": { "en": "Repair and Input Controls", "ja": "リペアと入力コントロール" } },
-        { "id": "dynamics", "status": "published", "title": { "en": "Dynamics Controls", "ja": "ダイナミクスコントロール" } },
-        { "id": "tone-air", "status": "published", "title": { "en": "Tone and Air Controls", "ja": "トーンと Air コントロール" } },
-        { "id": "stereo-limiter-loudness", "status": "published", "title": { "en": "Stereo, Limiter, and Loudness Controls", "ja": "ステレオ、リミッター、ラウドネスコントロール" } },
-        { "id": "reference-match", "status": "published", "title": { "en": "Reference Match", "ja": "リファレンスマッチ" } },
-        { "id": "delivery-targets", "status": "published", "title": { "en": "Delivery Targets", "ja": "配信ターゲット" } },
-        { "id": "error-recovery", "status": "published", "title": { "en": "Error Recovery", "ja": "エラー復旧" } }
+        {
+          "id": "repair",
+          "status": "published",
+          "title": { "en": "Repair and Input Controls", "ja": "リペアと入力コントロール" }
+        },
+        {
+          "id": "dynamics",
+          "status": "published",
+          "title": { "en": "Dynamics Controls", "ja": "ダイナミクスコントロール" }
+        },
+        {
+          "id": "tone-air",
+          "status": "published",
+          "title": { "en": "Tone and Air Controls", "ja": "トーンと Air コントロール" }
+        },
+        {
+          "id": "stereo-limiter-loudness",
+          "status": "published",
+          "title": {
+            "en": "Stereo, Limiter, and Loudness Controls",
+            "ja": "ステレオ、リミッター、ラウドネスコントロール"
+          }
+        },
+        {
+          "id": "reference-match",
+          "status": "published",
+          "title": { "en": "Reference Match", "ja": "リファレンスマッチ" }
+        },
+        {
+          "id": "delivery-targets",
+          "status": "published",
+          "title": { "en": "Delivery Targets", "ja": "配信ターゲット" }
+        },
+        {
+          "id": "error-recovery",
+          "status": "published",
+          "title": { "en": "Error Recovery", "ja": "エラー復旧" }
+        }
+      ]
+    },
+    {
+      "id": "analysis",
+      "label": { "en": "Analysis guides", "ja": "解析ガイド" },
+      "entries": [
+        {
+          "id": "spectrogram-stft",
+          "status": "published",
+          "title": { "en": "Spectrogram and STFT", "ja": "スペクトログラムと STFT" }
+        },
+        {
+          "id": "onset-detection",
+          "status": "published",
+          "title": { "en": "Onset Detection", "ja": "オンセット検出" }
+        },
+        {
+          "id": "tempo-bpm",
+          "status": "published",
+          "title": { "en": "Tempo and BPM", "ja": "テンポと BPM" }
+        },
+        {
+          "id": "beats-downbeats",
+          "status": "published",
+          "title": { "en": "Beats and Downbeats", "ja": "ビートとダウンビート" }
+        },
+        {
+          "id": "chroma-features",
+          "status": "published",
+          "title": { "en": "Chroma Features", "ja": "クロマ特徴量" }
+        },
+        {
+          "id": "key-detection",
+          "status": "published",
+          "title": { "en": "Key Detection", "ja": "キー検出" }
+        },
+        {
+          "id": "chord-recognition",
+          "status": "published",
+          "title": { "en": "Chord Recognition", "ja": "コード認識" }
+        },
+        {
+          "id": "mel-mfcc-timbre",
+          "status": "published",
+          "title": { "en": "Mel, MFCC, and Timbre", "ja": "メル・MFCC・音色" }
+        },
+        {
+          "id": "melody-pitch",
+          "status": "published",
+          "title": { "en": "Melody and Pitch", "ja": "メロディとピッチ" }
+        },
+        {
+          "id": "section-structure",
+          "status": "published",
+          "title": { "en": "Section and Structure", "ja": "セクションと構成" }
+        }
+      ]
+    },
+    {
+      "id": "mixing",
+      "label": { "en": "Mixing guides", "ja": "ミキシングガイド" },
+      "entries": [
+        {
+          "id": "channel-strip",
+          "status": "published",
+          "title": { "en": "Channel Strip", "ja": "チャンネルストリップ" }
+        },
+        {
+          "id": "buses-sends",
+          "status": "published",
+          "title": { "en": "Buses and Sends", "ja": "バスとセンド" }
+        },
+        {
+          "id": "pan-width",
+          "status": "published",
+          "title": { "en": "Pan and Stereo Width", "ja": "パンとステレオ幅" }
+        },
+        {
+          "id": "automation-metering",
+          "status": "published",
+          "title": { "en": "Automation and Metering", "ja": "オートメーションとメーター" }
+        }
+      ]
+    },
+    {
+      "id": "editing",
+      "label": { "en": "Editing guides", "ja": "編集ガイド" },
+      "entries": [
+        {
+          "id": "phase-vocoder-stretch",
+          "status": "published",
+          "title": { "en": "Time Stretch and Pitch Shift", "ja": "タイムストレッチとピッチシフト" }
+        },
+        {
+          "id": "pitch-correction",
+          "status": "published",
+          "title": { "en": "Pitch Correction and Note Editing", "ja": "ピッチ補正とノート編集" }
+        },
+        {
+          "id": "voice-formant",
+          "status": "published",
+          "title": { "en": "Voice and Formant", "ja": "ボイスとフォルマント" }
+        }
+      ]
+    },
+    {
+      "id": "realtime",
+      "label": { "en": "Realtime guides", "ja": "リアルタイムガイド" },
+      "entries": [
+        {
+          "id": "streaming-analysis",
+          "status": "published",
+          "title": { "en": "Streaming Analysis", "ja": "ストリーミング解析" }
+        },
+        {
+          "id": "realtime-engine",
+          "status": "published",
+          "title": { "en": "Realtime Engine", "ja": "リアルタイムエンジン" }
+        },
+        {
+          "id": "realtime-safety",
+          "status": "published",
+          "title": { "en": "Realtime Safety", "ja": "リアルタイム安全性" }
+        }
       ]
     },
     {
       "id": "mastering",
       "label": { "en": "Mastering measurement guides", "ja": "マスタリング計測ガイド" },
       "entries": [
-        { "id": "meter-reading", "status": "published", "title": { "en": "Reading Mastering Meters", "ja": "マスタリングメーターの読み方" } }
+        {
+          "id": "meter-reading",
+          "status": "published",
+          "title": { "en": "Reading Mastering Meters", "ja": "マスタリングメーターの読み方" }
+        }
       ]
     },
     {
       "id": "mastering",
       "label": { "en": "Mastering preset guides", "ja": "マスタリングプリセットガイド" },
       "entries": [
-        { "id": "preset-selection", "status": "published", "title": { "en": "Choosing a Mastering Preset", "ja": "マスタリングプリセットの選び方" } }
+        {
+          "id": "preset-selection",
+          "status": "published",
+          "title": { "en": "Choosing a Mastering Preset", "ja": "マスタリングプリセットの選び方" }
+        }
       ]
     },
     {
       "id": "mastering",
-      "label": { "en": "Mastering troubleshooting guides", "ja": "マスタリングトラブルシュートガイド" },
+      "label": {
+        "en": "Mastering troubleshooting guides",
+        "ja": "マスタリングトラブルシュートガイド"
+      },
       "entries": [
-        { "id": "quality-checklist", "status": "published", "title": { "en": "Mastering Quality Checklist", "ja": "マスタリング品質チェックリスト" } }
+        {
+          "id": "quality-checklist",
+          "status": "published",
+          "title": { "en": "Mastering Quality Checklist", "ja": "マスタリング品質チェックリスト" }
+        }
       ]
     }
   ]

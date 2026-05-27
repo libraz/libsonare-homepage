@@ -1,0 +1,222 @@
+.loudness-chart {
+  position: relative;
+  padding: 14px 14px 0 34px;
+}
+
+.loudness-scale {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  width: 30px;
+  height: 150px;
+}
+
+.loudness-scale__tick {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+  color: var(--demo-text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.loudness-chart__svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(to top, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    var(--demo-track-bg);
+  background-size: 100% 25%;
+}
+
+.loudness-chart__ref {
+  stroke: var(--demo-success);
+  stroke-width: 0.4;
+  stroke-dasharray: 1.4 1.4;
+  opacity: 0.8;
+}
+
+.loudness-chart__short {
+  fill: none;
+  stroke: var(--demo-accent);
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.9;
+}
+
+.loudness-chart__moment {
+  fill: none;
+  stroke: var(--demo-cyan);
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.7;
+}
+
+.loudness-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 14px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--demo-text-muted);
+}
+
+.loudness-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loudness-legend__item::before {
+  content: "";
+  width: 14px;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.loudness-legend__item--moment {
+  color: var(--demo-cyan);
+}
+
+.loudness-legend__item--short {
+  color: var(--demo-accent-light);
+}
+
+.loudness-legend__item--int {
+  color: var(--demo-success);
+}
+
+.loudness-legend__item--int::before {
+  border-top-style: dashed;
+}
+
+.loudness-legend__item b {
+  color: var(--demo-text-strong);
+}
+
+.heatmap-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.heatmap-tabs__button {
+  border: 1px solid var(--demo-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.heatmap-tabs__button--active {
+  border-color: var(--demo-accent);
+  color: var(--demo-accent-light);
+}
+
+.analysis-table {
+  display: grid;
+  padding: 12px;
+}
+
+.analysis-table__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--demo-border);
+  color: var(--demo-text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+
+.analysis-table__name {
+  flex-shrink: 0;
+  min-width: 48px;
+}
+
+.analysis-table__meter {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--demo-track-bg);
+  overflow: hidden;
+}
+
+.analysis-table__meter i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  border-radius: 3px;
+  /* Colour comes from the .is-high/.is-mid/.is-low tone class on the element. */
+  background: var(--demo-accent);
+}
+
+.analysis-table__meter i.is-high { background: var(--demo-success); }
+.analysis-table__meter i.is-mid { background: var(--demo-amber); }
+.analysis-table__meter i.is-low { background: var(--demo-text-muted); }
+
+.analysis-table__row strong {
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: right;
+  color: var(--demo-accent-light);
+}
+
+/* Confidence tone scale shared by the BPM chip and the harmony meter bars. */
+.is-high { background: var(--demo-success); }
+.is-mid { background: var(--demo-amber); }
+.is-low { background: var(--demo-text-muted); }
+
+.metric-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conf-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: var(--demo-bg, #0b0b12);
+}
+
+.conf-chip.is-low {
+  color: var(--demo-text-strong);
+  background: color-mix(in srgb, var(--demo-text-muted) 35%, transparent);
+}
+
+.melody-cloud {
+  position: relative;
+  height: 170px;
+  margin: 0 12px 12px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(to top, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    var(--demo-track-bg);
+  background-size: 100% 25%;
+  overflow: hidden;
+}
+
+.melody-cloud__point {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--demo-cyan);
+  box-shadow: 0 0 8px var(--demo-cyan);
+}
+

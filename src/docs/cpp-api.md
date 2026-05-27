@@ -4,15 +4,39 @@ Complete API reference for libsonare C++ interface.
 
 ## Overview
 
-libsonare provides comprehensive audio analysis for C++ applications:
+libsonare provides audio analysis, metering, feature extraction, editing DSP, realtime streaming, mastering, and mixing components for C++ applications. `sonare.h` is the broad analysis/feature umbrella; mastering, mixing, engine, graph, and editing modules also have focused headers when you want to include only one subsystem.
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- choose between quick helpers, `MusicAnalyzer`, `StreamAnalyzer`, module headers, and the C ABI;
+- understand which C++ surface backs each language binding;
+- find the right struct or class for audio loading, analysis, streaming frames, mastering, mixing, and FFI;
+- use this page as a reference after reading the higher-level task guide for your feature.
 
 | Component | Purpose | Key Classes/Functions |
 |-----------|---------|----------------------|
 | **Core** | Audio I/O and signal processing | `Audio`, `Spectrogram` |
-| **Quick API** | Simple one-line analysis | `detect_bpm()`, `detect_key()`, `analyze()` |
-| **MusicAnalyzer** | Full analysis with callbacks | `MusicAnalyzer`, `AnalysisResult` |
-| **Features** | Low-level feature extraction | `MelSpectrogram`, `Chroma`, spectral functions |
-| **Effects** | Audio processing | `hpss()`, `time_stretch()`, `pitch_shift()` |
+| **Quick API** | Simple one-line analysis and room-acoustic entry points | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
+| **MusicAnalyzer** | Full music analysis with callbacks | `MusicAnalyzer`, `AnalysisResult` |
+| **Streaming** | Block-by-block MIR frames and progressive estimates | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
+| **Features** | Low-level feature extraction and inverse feature reconstruction | `MelSpectrogram`, `Chroma`, `cqt()`, `vqt()`, `mel_to_audio()` |
+| **Effects / editing** | Audio processing and editing primitives | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer modules |
+| **Mastering** | Presets, chains, named processors, assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
+| **Mixing / engine** | Scene-based mixer and DAW-style realtime transport | `mixing::api::Scene`, `mixing::MixerController`, `RealtimeEngine` |
+| **C ABI** | Stable FFI surface for bindings | `sonare_c.h` |
+
+## Pick The Right C++ Surface
+
+| Goal | Include / API |
+|------|---------------|
+| One-off BPM/key/beat/onset/acoustic checks | `#include <sonare/sonare.h>` and `sonare::quick::*` |
+| Several music-analysis results from the same audio | `MusicAnalyzer`, so shared intermediates are reused |
+| Live visualizer or progressive estimates | `#include <sonare/streaming/stream_analyzer.h>` |
+| Mastering presets or named processors | `src/mastering/api/*` headers; see [Mastering Processors](./mastering-processors.md) |
+| Stem mixer / scene JSON | `src/mixing/api/scene.h`, `src/mixing/api/scene_json.cpp` concepts; see [Mixing Engine](./mixing.md) |
+| Language binding or plugin boundary | `sonare_c.h` rather than C++ classes |
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, HPSS, and more.
@@ -134,7 +158,7 @@ auto reconstructed = spec.to_audio();
 
 ## Quick API
 
-Simple, single-shot functions for common analysis tasks. Use these when you want exactly one result (BPM, key, beats, or onsets).
+Simple, single-shot functions for common analysis tasks. Use these when you want exactly one result (BPM, key, beats, downbeats, onsets, or room acoustics).
 
 ::: info When to use Quick API vs MusicAnalyzer
 - **Quick API (`sonare::quick::...`)** — When you only need one result. Only the necessary stages run.
@@ -148,15 +172,25 @@ namespace sonare::quick {
 
   // Key detection
   Key detect_key(const float* samples, size_t length, int sample_rate);
+  Key detect_key(const float* samples, size_t length, int sample_rate, const KeyConfig& config);
+  std::vector<KeyCandidate> detect_key_candidates(const float* samples, size_t length, int sample_rate,
+                                                  const KeyConfig& config = KeyConfig());
 
   // Beat times in seconds
   std::vector<float> detect_beats(const float* samples, size_t length, int sample_rate);
+
+  // Downbeat times in seconds
+  std::vector<float> detect_downbeats(const float* samples, size_t length, int sample_rate);
 
   // Onset times in seconds
   std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate);
 
   // Full analysis
   AnalysisResult analyze(const float* samples, size_t length, int sample_rate);
+
+  // Room acoustics
+  AcousticParameters detect_acoustic(const float* samples, size_t length, int sample_rate);
+  AcousticParameters analyze_impulse_response(const float* samples, size_t length, int sample_rate);
 }
 ```
 
@@ -223,6 +257,7 @@ struct StreamConfig {
   float tuning_ref_hz = 440.0f;  // Reference frequency for A4
 
   // Output configuration
+  OutputFormat output_format = OutputFormat::Float32;
   int emit_every_n_frames = 1;   // 4 = ~60fps at 44100Hz
   int magnitude_downsample = 1;  // Downsample factor for magnitude
 
@@ -231,6 +266,8 @@ struct StreamConfig {
   float bpm_update_interval_sec = 10.0f;
 };
 ```
+
+`OutputFormat` selects the internal frame representation for downstream transfer: `Float32` for full precision, `Int16` for compact streaming data, or `Uint8` for visualization payloads. Use it together with the matching read method below when you want to reduce worker or UI-thread bandwidth.
 
 ### Basic Usage
 
@@ -241,6 +278,7 @@ StreamConfig config;
 config.sample_rate = 44100;
 config.n_mels = 64;
 config.emit_every_n_frames = 4;
+config.output_format = OutputFormat::Float32;
 
 StreamAnalyzer analyzer(config);
 
@@ -307,6 +345,12 @@ analyzer.read_frames_soa(max_frames, buffer);
 // buffer.onset_strength - [n_frames]
 // buffer.rms_energy - [n_frames]
 ```
+
+::: details Layout terms: Structure-of-Arrays, row-major, quantization
+- **Structure-of-Arrays (SoA)** — each field is its own contiguous array (`timestamps`, `mel`, `chroma`, …) rather than an array of per-frame structs. This is cache-friendly, SIMD-friendly, and cheap to hand to another thread.
+- **Row-major** — 2-D data such as `mel` (`[n_frames * n_mels]`) is stored one full row after another: all of frame 0's mel bins, then all of frame 1's. Index element `(f, m)` as `f * n_mels + m`.
+- **Quantization** (next section) — packs each 32-bit float into an 8- or 16-bit integer over a fixed min/max range, trading precision for ~4x / 2x smaller buffers; ideal for handing frames to a UI thread.
+:::
 
 ### Quantized Formats (Bandwidth Reduction)
 
@@ -595,18 +639,22 @@ auto vqt_result = vqt(audio, vqt_config);
 :::
 
 ::: danger Deprecated Functions
-The inverse transform functions `icqt()` and `ivqt()` are **deprecated** and will be removed in a future version.
+The inverse transform functions `icqt()` and `ivqt()` are **deprecated** in the
+headers. Prefer Griffin-Lim or phase-vocoder based reconstruction paths for new
+code.
 
 ```cpp
 // Deprecated - do not use
-[[deprecated("Use Griffin-Lim reconstruction instead")]]
+[[deprecated("Use Griffin-Lim or phase vocoder for better reconstruction quality")]]
 Audio icqt(const CqtResult& cqt);
 
-[[deprecated("Use Griffin-Lim reconstruction instead")]]
+[[deprecated("Use griffinlim_vqt or phase vocoder for better reconstruction quality")]]
 Audio ivqt(const VqtResult& vqt);
 ```
 
-**Migration:** For audio reconstruction from CQT/VQT, use the Griffin-Lim algorithm with STFT instead:
+**Migration:** For preview audio reconstruction, use the Griffin-Lim paths from
+the inverse feature helpers, or keep phase information in your own STFT-domain
+pipeline when quality matters.
 ```cpp
 // Recommended approach
 auto spec = Spectrogram::compute(audio, stft_config);
@@ -689,9 +737,9 @@ auto with_fade_out = fade_out(audio, 1.0f); // 1.0 second fade out
 auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 ```
 
-### librosa-Compatible Helpers <Badge type="tip" text="v1.1.0+" />
+### librosa-Compatible Helpers
 
-Added in libsonare 1.1.0. Each helper mirrors the corresponding `librosa`
+Each helper mirrors the corresponding `librosa`
 function — see [librosa Compatibility](./librosa-compatibility.md) for the
 full mapping.
 
@@ -740,11 +788,11 @@ auto plp_out     = plp(onset_env, sample_rate);
 ```cpp
 struct Key {
   PitchClass root;      // C=0, Cs=1, ..., B=11
-  Mode mode;            // Major, Minor
+  Mode mode;            // Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian
   float confidence;     // 0.0 - 1.0
 
   std::string to_string() const;  // "C major"
-  std::string short_name() const; // "C", "Am"
+  std::string to_short_string() const; // "C", "Am"
 };
 ```
 
@@ -757,6 +805,7 @@ struct Chord {
   float start;           // seconds
   float end;             // seconds
   float confidence;
+  PitchClass bass;        // Bass pitch class for inversion notation
 
   std::string to_string() const;  // "C", "Am", "G7"
 };
@@ -772,7 +821,8 @@ struct Section {
   float energy_level;
   float confidence;
 
-  std::string to_string() const;
+  std::string type_string() const;
+  float duration() const;
 };
 ```
 
@@ -790,6 +840,7 @@ struct AnalysisResult {
   Timbre timbre;
   Dynamics dynamics;
   RhythmFeatures rhythm;
+  MelodyContour melody;
   std::string form;  // "IABABCO"
 };
 ```
@@ -801,15 +852,18 @@ enum class PitchClass {
   C = 0, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B
 };
 
-enum class Mode { Major, Minor };
+enum class Mode {
+  Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian
+};
 
 enum class ChordQuality {
   Major, Minor, Diminished, Augmented,
-  Dominant7, Major7, Minor7, Sus2, Sus4
+  Dominant7, Major7, Minor7, Sus2, Sus4, Unknown,
+  Add9, MinorAdd9, Dim7, HalfDim7, Major9, Dominant9, Sus2Add4
 };
 
 enum class SectionType {
-  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro
+  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro, Unknown
 };
 
 enum class WindowType {
@@ -848,6 +902,64 @@ std::vector<float> amplitude_to_db(const std::vector<float>& values,
 std::vector<float> db_to_power(const std::vector<float>& values, float ref = 1.0f);
 std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref = 1.0f);
 ```
+
+## Mixing Engine
+
+The C++ core includes the mixing engine used by the C, Python, Node, and WASM bindings. The main building blocks are channel strips, buses, sends, FX buses, VCA groups, automation lanes, meter snapshots, goniometer buffers, scene presets, and offline stereo rendering.
+
+```cpp
+#include <sonare/mixing/channel_strip.h>
+#include <sonare/mixing/api/presets.h>
+
+auto scene = sonare::mixing::api::scene_preset(
+  sonare::mixing::api::scene_preset_from_string("vocalReverbSend")
+);
+auto json = sonare::mixing::api::scene_to_json(scene);
+
+sonare::mixing::ChannelStrip strip;
+strip.set_input_trim_db(3.0f);
+strip.set_fader_db(-6.0f);
+strip.set_pan(-0.15f);
+strip.set_width(1.1f);
+strip.prepare(48000.0, 512);
+```
+
+For cross-runtime examples and scene-level guidance, see [Mixing Engine](./mixing.md).
+
+## Mastering
+
+The high-level mastering API lives in `sonare::mastering::api`. `master_audio_mono` / `master_audio_stereo` apply a built-in `Preset` (optionally with flat dot-notation overrides) and return a chain result; the `preset_*` helpers enumerate and resolve preset identifiers.
+
+```cpp
+#include <sonare/mastering/api/presets.h>
+
+namespace api = sonare::mastering::api;
+
+// 25 built-in presets: Pop, EDM, Acoustic, HipHop, AIMusic, Speech, Streaming,
+// YouTube, Broadcast, Podcast, Audiobook, Cinema, JPop, Ambient, Lofi, Classical,
+// DrumAndBass, Techno, Metal, Trap, RnB, Jazz, KPop, Trance, GameOst.
+std::vector<std::string> names = api::preset_names();
+api::Preset preset = api::preset_from_string("aiMusic");
+
+// Optional flat overrides (same dot-notation as the chain config params)
+api::Param overrides[] = {{"loudness.targetLufs", -13.0f}};
+
+api::MonoChainResult result = api::master_audio_mono(
+  preset, samples.data(), samples.size(), sample_rate, overrides, 1);
+// result carries the rendered samples plus per-stage metrics.
+
+// Stereo equivalent:
+// api::master_audio_stereo(preset, left, right, length, sample_rate, overrides, 1);
+```
+
+Two helper calls are useful when working with mastering presets:
+
+| Helper | Use it for |
+|--------|------------|
+| `preset_to_string(Preset)` | Getting the canonical preset identifier. It does not throw; invalid values return `"unknown"`. |
+| `preset_config(Preset)` | Getting a mutable `MasteringChainConfig` that you can inspect or tweak before running a chain. |
+
+For the named processor registry and the assistant/profile JSON helpers, see [Mastering Processors](./mastering-processors.md) and [Mastering Assistant](./mastering-assistant.md).
 
 ## C API
 
@@ -900,16 +1012,29 @@ const char* sonare_version(void);
 
 `SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
 
-Effects (`sonare_hpss`, `sonare_time_stretch`, `sonare_pitch_shift`, `sonare_normalize`, `sonare_trim`), features (`sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin`), conversions, and resampling have matching sample-based entry points — see `src/sonare_c.h` for the full list.
+`SonareAnalysisResult` is the compact C ABI result: BPM, BPM confidence, key,
+time signature, and beat times. The richer C++ `AnalysisResult` fields such as
+chords, sections, timbre, dynamics, rhythm, melody, and form are exposed through
+their dedicated C ABI functions or higher-level C++ APIs.
 
-The librosa-parity helpers added in 1.1.0 are also exposed through the C API:
-`sonare_preemphasis`, `sonare_deemphasis`, `sonare_trim_silence`,
-`sonare_split_silence`, `sonare_frame_signal`, `sonare_pad_center`,
-`sonare_fix_length`, `sonare_fix_frames`, `sonare_peak_pick`,
-`sonare_vector_normalize`, `sonare_pcen`, `sonare_tonnetz`,
-`sonare_tempogram`, `sonare_plp`, `sonare_power_to_db`,
-`sonare_amplitude_to_db`, `sonare_db_to_power`, `sonare_db_to_amplitude`,
-`sonare_frames_to_samples`, `sonare_samples_to_frames`.
+Several helper families also have sample-based C ABI entry points:
+
+| Family | Examples |
+|--------|----------|
+| Effects | `sonare_hpss`, `sonare_time_stretch`, `sonare_pitch_shift`, `sonare_normalize`, `sonare_trim` |
+| Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
+| Conversions and resampling | See `src/sonare_c.h` for the full list |
+
+The librosa-parity helpers are also exposed through the C API:
+
+| Category | Helpers |
+|----------|---------|
+| Emphasis and silence | `sonare_preemphasis`, `sonare_deemphasis`, `sonare_trim_silence`, `sonare_split_silence` |
+| Framing and padding | `sonare_frame_signal`, `sonare_pad_center`, `sonare_fix_length`, `sonare_fix_frames` |
+| Picking and normalization | `sonare_peak_pick`, `sonare_vector_normalize` |
+| Feature utilities | `sonare_pcen`, `sonare_tonnetz`, `sonare_tempogram`, `sonare_plp` |
+| dB conversions | `sonare_power_to_db`, `sonare_amplitude_to_db`, `sonare_db_to_power`, `sonare_db_to_amplitude` |
+| Time/frame conversion | `sonare_frames_to_samples`, `sonare_samples_to_frames` |
 
 ## Error Handling
 

@@ -1,12 +1,12 @@
 ---
 layout: demo
-title: libsonare Audio Analyzer
-description: Streaming BPM, key, chord, beat, and spectrum analysis in your browser via WebAssembly. Open source, Apache-2.0, no upload.
+title: libsonare Visual Player
+description: Browser-local visual player powered by libsonare WebAssembly, with live chroma, spectrum, BPM, key, and chord views from the same dependency-free DSP toolkit.
 head:
   - - meta
     - property: og:title
-      content: libsonare Audio Analyzer
+      content: libsonare Visual Player
   - - meta
     - property: og:description
-      content: Streaming BPM, key, chord, beat, and spectrum analysis — running entirely in your browser via WASM. Apache-2.0.
+      content: Real-time chroma, spectrum, BPM, key, and chord visualization from libsonare's dependency-free WebAssembly DSP.
 ---

@@ -1,5 +1,16 @@
 # Usage Examples
 
+Use this page after [Getting Started](./getting-started.md). The examples are intentionally task-first: pick the workflow closest to what you are building, then follow the linked runtime reference for full API details.
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- copy one small working pattern for browser, Python, CLI, or Node native use;
+- see how the same task changes across runtimes;
+- distinguish "load/decode audio" from "call libsonare";
+- move from a recipe to the matching API reference when you need options and return types.
+
 ## By Use Case
 
 ### Show BPM and Key in a Browser App
@@ -61,11 +72,18 @@ const result = audio.analyze();
 console.log(result.bpm, result.key.name);
 ```
 
-## JavaScript/TypeScript
+## Feature Recipes
+
+Each recipe shows the same task across runtimes — pick the tab for where you run
+libsonare. The browser package decodes nothing on its own, so you pass decoded
+mono `Float32Array` samples; the Python package and `sonare` CLI load WAV/MP3
+files directly. C++ programs are collected separately in the C++ section below.
 
 ### Basic BPM and Key Detection
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, detectBpm, detectKey } from '@libraz/libsonare';
 
 async function quickAnalysis(url: string) {
@@ -87,10 +105,36 @@ async function quickAnalysis(url: string) {
 }
 ```
 
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    bpm = audio.detect_bpm()
+    key = audio.detect_key()
+
+print(f"BPM: {bpm}")
+print(f"Key: {key.name} (confidence: {key.confidence * 100:.1f}%)")
+```
+
+```bash [CLI]
+sonare bpm song.mp3
+sonare key song.mp3
+```
+
+:::
+
 ### Full Music Analysis
 
-```typescript
+In the browser, `analyze()` returns chords, sections, and form in one call. The
+Python `analyze()` returns the core summary (BPM, key, time signature, beats);
+chords and sections are separate calls (`detect_chords()` and `analyze_sections()`).
+
+::: code-group
+
+```typescript [Browser]
 import { init, analyze } from '@libraz/libsonare';
+
+await init();
 
 const result = analyze(samples, sampleRate);
 
@@ -112,9 +156,92 @@ for (const section of result.sections) {
 console.log(`\nForm: ${result.form}`);
 ```
 
+```python [Python]
+from libsonare import Audio, analyze_sections
+
+with Audio.from_file("song.mp3") as audio:
+    result = audio.analyze()
+    chords = audio.detect_chords().chords
+    sections = analyze_sections(audio.data, audio.sample_rate).sections
+
+print("=== Music Analysis ===")
+print(f"BPM: {result.bpm} (confidence: {result.bpm_confidence * 100:.0f}%)")
+print(f"Key: {result.key.name}")
+print(f"Time Signature: {result.time_signature}")
+
+print("\nChords:")
+for chord in chords:
+    print(f"  {chord.name} [{chord.start:.2f}s - {chord.end:.2f}s]")
+
+print("\nSections:")
+for section in sections:
+    print(f"  {section.name} [{section.start:.2f}s - {section.end:.2f}s]")
+```
+
+```bash [CLI]
+sonare analyze song.mp3 --json > analysis.json
+```
+
+:::
+
+::: details What are "sections" and "form"?
+**Sections** are the structural parts of a song — intro, verse, chorus, bridge, outro — found from where the music's character changes. **Form** is the whole arrangement expressed as a compact pattern of those sections (for example `intro–verse–chorus–verse–chorus–outro`, sometimes written with letters such as `ABABCB`). Together they answer "how is this song laid out over time?"
+:::
+
+### Room Acoustic Metrics
+
+Use `analyzeImpulseResponse()` when you have a measured impulse response. Use
+`detectAcoustic()` for a blind estimate from ordinary program audio. Blind
+estimates are useful for tagging or monitoring, but the confidence field should
+decide how much UI weight to give them.
+
+::: code-group
+
+```typescript [Browser]
+import { init, analyzeImpulseResponse, detectAcoustic } from '@libraz/libsonare';
+
+await init();
+
+const measured = analyzeImpulseResponse(irSamples, sampleRate);
+console.log(`RT60: ${measured.rt60.toFixed(2)} s`);
+console.log(`C80: ${measured.c80.toFixed(1)} dB`);
+
+const blind = detectAcoustic(samples, sampleRate);
+console.log(`Blind RT60: ${blind.rt60.toFixed(2)} s`);
+console.log(`Confidence: ${(blind.confidence * 100).toFixed(0)}%`);
+```
+
+```python [Python]
+from libsonare import Audio, analyze_impulse_response
+
+with Audio.from_file("room-ir.wav") as ir:
+    measured = analyze_impulse_response(ir.data, sample_rate=ir.sample_rate)
+
+print(f"RT60: {measured.rt60:.2f} s")
+print(f"C80: {measured.c80:.1f} dB")
+
+with Audio.from_file("recording.wav") as audio:
+    blind = audio.detect_acoustic()
+
+print(f"Blind RT60: {blind.rt60:.2f} s")
+print(f"Confidence: {blind.confidence * 100:.0f}%")
+```
+
+```bash [CLI]
+# Treat the file as a measured impulse response:
+sonare acoustic room-ir.wav --ir --json
+
+# Estimate acoustic parameters from ordinary audio:
+sonare acoustic recording.wav --json
+```
+
+:::
+
 ### Harmonic-Percussive Separation
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, hpss, detectKey } from '@libraz/libsonare';
 
 await init();
@@ -128,9 +255,33 @@ const result = hpss(samples, sampleRate);
 const key = detectKey(result.harmonic, result.sampleRate);
 ```
 
+```python [Python]
+from libsonare import Audio, detect_key
+
+with Audio.from_file("song.mp3") as audio:
+    result = audio.hpss()
+    # result.harmonic - melodic content
+    # result.percussive - drums/percussion
+
+# Use the harmonic component for cleaner key detection
+key = detect_key(result.harmonic, result.sample_rate)
+```
+
+```bash [CLI]
+# The Python CLI reports harmonic/percussive energies:
+sonare hpss song.mp3 --json
+
+# Writing harmonic/percussive WAV stems is provided by the C++ sonare_cli build:
+#   sonare hpss song.wav -o separated
+```
+
+:::
+
 ### Audio Effects
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, timeStretch, pitchShift, normalize, trim } from '@libraz/libsonare';
 
 await init();
@@ -148,9 +299,31 @@ const normalized = normalize(samples, sampleRate, -3);
 const trimmed = trim(samples, sampleRate, -60);
 ```
 
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    slower = audio.time_stretch(0.8)        # slow down to 80% speed
+    higher = audio.pitch_shift(2)           # transpose up 2 semitones
+    normalized = audio.normalize(-3)        # normalize to -3 dB
+    trimmed = audio.trim(-60)               # trim silence below -60 dB
+```
+
+```bash [CLI]
+# Source-built C++ CLI
+sonare time-stretch song.wav --rate 0.8 -o slower.wav
+sonare pitch-shift song.wav --semitones 2 -o higher.wav
+sonare normalize song.wav --target-db -3 -o normalized.wav
+sonare trim-silence song.wav -o trimmed.wav
+```
+
+:::
+
 ### Feature Extraction
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, melSpectrogram, mfcc, chroma } from '@libraz/libsonare';
 
 await init();
@@ -168,9 +341,36 @@ const chromaResult = chroma(samples, sampleRate);
 console.log('Pitch class distribution:', chromaResult.meanEnergy);
 ```
 
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    # Mel spectrogram
+    mel = audio.mel_spectrogram(n_fft=2048, hop_length=512, n_mels=128)
+    print(f"Mel shape: {mel.n_mels} x {mel.n_frames}")
+
+    # MFCC
+    mfcc_result = audio.mfcc(n_fft=2048, hop_length=512, n_mels=128, n_mfcc=13)
+    print(f"MFCC shape: {mfcc_result.n_mfcc} x {mfcc_result.n_frames}")
+
+    # Chroma
+    chroma_result = audio.chroma()
+    print("Pitch class distribution:", chroma_result.mean_energy)
+```
+
+```bash [CLI]
+sonare mel song.mp3 --json
+sonare chroma song.mp3 --json
+# MFCC has no dedicated CLI command; use the browser or Python API.
+```
+
+:::
+
 ### Pitch Detection
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 import { init, pitchPyin } from '@libraz/libsonare';
 
 await init();
@@ -181,6 +381,28 @@ console.log(`Median F0: ${pitch.medianF0.toFixed(1)} Hz`);
 console.log(`Mean F0: ${pitch.meanF0.toFixed(1)} Hz`);
 console.log(`Voiced frames: ${pitch.voicedFlag.filter(v => v).length}/${pitch.nFrames}`);
 ```
+
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    pitch = audio.pitch_pyin()
+
+voiced = sum(1 for v in pitch.voiced_flag if v)
+print(f"Median F0: {pitch.median_f0:.1f} Hz")
+print(f"Mean F0: {pitch.mean_f0:.1f} Hz")
+print(f"Voiced frames: {voiced}/{pitch.n_frames}")
+```
+
+```bash [CLI]
+sonare pitch song.mp3 --algorithm pyin --json
+```
+
+:::
+
+::: details What do "voiced" frames mean?
+Pitch trackers label each frame as **voiced** or **unvoiced**. *Voiced* means a clear periodic pitch was found (a sung vowel, a held note); *unvoiced* means there is no definite pitch (silence, breaths, consonants like "s"/"t", or noisy/percussive sound). `voicedFlag` / `voiced_flag` is that per-frame boolean, so counting the `true` values tells you how much of the clip actually carried a trackable melody.
+:::
 
 ### Streaming Analysis
 
@@ -244,23 +466,27 @@ function checkEstimates() {
 
 ```typescript
 // analyzer-processor.ts (AudioWorklet)
+import { init, StreamAnalyzer } from '@libraz/libsonare';
+
 class AnalyzerProcessor extends AudioWorkletProcessor {
-  private analyzer: StreamAnalyzer;
+  private analyzer?: StreamAnalyzer;
 
   constructor() {
     super();
-    this.analyzer = new StreamAnalyzer({
-      sampleRate,
-      nFft: 2048,
-      hopLength: 512,
-      nMels: 64,
-      emitEveryNFrames: 4,
+    void init().then(() => {
+      this.analyzer = new StreamAnalyzer({
+        sampleRate,
+        nFft: 2048,
+        hopLength: 512,
+        nMels: 64,
+        emitEveryNFrames: 4,
+      });
     });
   }
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0]?.[0];
-    if (!input) return true;
+    if (!input || !this.analyzer) return true;
 
     this.analyzer.process(input);
 

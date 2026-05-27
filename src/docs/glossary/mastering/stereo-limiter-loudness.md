@@ -17,6 +17,10 @@ Use loudness-matched A/B and check correlation. For speech, keep width conservat
 
 A reliable warning sign is checking mono: if the vocal, kick, bass, or snare cores get thinner when you collapse to mono, back off. A setting that sounds impressive in stereo but hollows out the center is not a mastering improvement — it is a balance shift in disguise.
 
+::: warning Always check width in mono
+Collapse to mono before committing to a width setting. If the center cores thin out, the width is too high. The limiter is your last safety net, not a density tool — if it is working deep at all times, fix the low end, compressor, and input gain earlier in the chain instead of raising the ceiling.
+:::
+
 ## True Peak Limiter
 
 The True Peak Limiter catches peaks that can appear between digital samples after reconstruction or codec conversion. Limiter Ceiling is the final safety limit, commonly around `-1 dBTP` for streaming-style delivery.
@@ -37,9 +41,17 @@ The browser demo renders locally and exports stereo 16-bit PCM WAV plus a JSON r
 
 :::: details Implementation notes
 
-libsonare's stereo imager uses mid/side processing with energy preservation and optional decorrelation. The true-peak limiter uses lookahead, linked peak detection, and an oversampled true-peak path. The loudness optimizer measures the rendered signal, computes the gain needed to reach the LUFS target, and caps that gain against the true-peak ceiling.
+libsonare's stereo imager uses mid/side processing with energy preservation and optional decorrelation.
 
-The demo defaults to 4x true-peak handling and reports the executed stage names in the JSON export so the final chain is auditable. When the ceiling and the LUFS target conflict, the design favors peak safety, so a state like "the LUFS target was missed but the true-peak limit was reached" is possible. That state is identifiable from the report's applied gain and output LUFS values.
+The true-peak limiter uses lookahead, linked peak detection, and an oversampled true-peak path.
+
+The loudness optimizer measures the rendered signal, computes the gain needed to reach the LUFS target, and caps that gain against the true-peak ceiling.
+
+The demo defaults to 4x true-peak handling and reports the executed stage names in the JSON export, so the final chain is auditable.
+
+When the ceiling and the LUFS target conflict, the design favors peak safety. A state like "the LUFS target was missed but the true-peak limit was reached" is possible.
+
+That state is identifiable from the report's applied gain and output LUFS values.
 
 ::::
 

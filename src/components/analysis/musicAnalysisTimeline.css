@@ -1,0 +1,75 @@
+.analysis-timeline {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.timeline-row {
+  position: relative;
+  height: 38px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: var(--demo-track-bg);
+  overflow: hidden;
+}
+
+.timeline-section,
+.timeline-chord {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 4px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--demo-text-strong);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+/* Chord blocks vary in width; left-align so a clipped narrow block still shows
+   its root note instead of the middle of the label. */
+.timeline-chord {
+  justify-content: flex-start;
+}
+
+.timeline-section {
+  /* Fill intensity tracks the section's detected energy (--energy 0..1). */
+  background: color-mix(in srgb, var(--demo-accent) calc(20% + var(--energy, 0.5) * 38%), transparent);
+}
+
+.timeline-chord {
+  background: color-mix(in srgb, var(--demo-cyan) 26%, transparent);
+}
+
+.timeline-beat,
+.timeline-downbeat {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--demo-text-muted);
+}
+
+.timeline-downbeat {
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--demo-amber);
+}
+
+.heatmap-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 0 14px 14px;
+  color: var(--demo-text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+

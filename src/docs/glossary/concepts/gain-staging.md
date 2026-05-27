@@ -39,7 +39,17 @@ If the master is too dense, lowering the loudness target may help, but you shoul
 
 The demo exposes Input Gain as a narrow control and keeps final gain inside the loudness stage. This avoids making compressor threshold decisions depend on large arbitrary input moves. The exported report records both source and rendered metrics so gain decisions can be audited after rendering.
 
-Worth noting: moving Input Gain changes the signal level reaching every downstream detector. Compressor threshold, saturation drive, and limiter gain reduction all behave differently at the same numeric setting once the input level changes. After a large Input Gain move, re-check the dynamics and limiter settings. After a preset change, it is also safer to reset Input Gain to its default rather than carrying over the previous value, since presets are designed around their own input assumptions.
+Moving Input Gain changes the signal level reaching every downstream detector.
+
+That affects several later stages:
+
+| Stage | What changes when input gain moves |
+|-------|------------------------------------|
+| Compressor | The same threshold can react more or less strongly |
+| Saturation | The same drive setting can distort more or less |
+| Limiter | Gain reduction can increase or decrease |
+
+After a large Input Gain move, re-check the dynamics and limiter settings. After changing presets, reset Input Gain to its default unless you intentionally want to carry the old offset forward.
 
 ::::
 

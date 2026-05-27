@@ -1,0 +1,46 @@
+/* --- VitePress Overrides --- */
+.VPNavBarTitle {
+  display: flex;
+  align-items: center;
+}
+
+.VPNavBarTitle .title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.VPNavBarTitle .title::after {
+  content: 'Dependency-Free Audio DSP Toolkit';
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--vp-c-text-3);
+  letter-spacing: 0;
+}
+
+html[lang="ja"] .VPNavBarTitle .title::after {
+  content: '依存なしオーディオ DSP ツールキット';
+}
+
+.vpi-languages {
+  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E");
+}
+
+.VPFeature {
+  border-radius: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.VPFeature:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15);
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+  .VPNavBarTitle .title::after {
+    display: none;
+  }
+}

@@ -1,27 +1,31 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useTheme } from '@/composables/useTheme'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useTheme } from '@/composables/useTheme';
 
-const { isDark } = useTheme()
-const chromaBg = computed(() => isDark.value ? 'rgba(10, 10, 15, 0.95)' : 'rgba(245, 243, 255, 0.95)')
-const labelColor = computed(() => isDark.value ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)')
-const playheadColor = computed(() => isDark.value ? '#fff' : '#1a1a2e')
+const { isDark } = useTheme();
+const chromaBg = computed(() =>
+  isDark.value ? 'rgba(10, 10, 15, 0.95)' : 'rgba(245, 243, 255, 0.95)',
+);
+const labelColor = computed(() =>
+  isDark.value ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+);
+const playheadColor = computed(() => (isDark.value ? '#fff' : '#1a1a2e'));
 
 const props = defineProps<{
   chromaData: {
-    features: Float32Array
-    nFrames: number
-    nChroma: number
-  } | null
-  currentTime: number
-  duration: number
-}>()
+    features: Float32Array;
+    nFrames: number;
+    nChroma: number;
+  } | null;
+  currentTime: number;
+  duration: number;
+}>();
 
-const canvas = ref<HTMLCanvasElement | null>(null)
-const ctx = ref<CanvasRenderingContext2D | null>(null)
+const canvas = ref<HTMLCanvasElement | null>(null);
+const ctx = ref<CanvasRenderingContext2D | null>(null);
 
 // Note names for 12 pitch classes
-const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 // Colors for each pitch class (rainbow-ish)
 const noteColors = [
@@ -37,102 +41,105 @@ const noteColors = [
   '#748ffc', // A - blue
   '#9775fa', // A#
   '#da77f2', // B - purple
-]
+];
 
 function drawChroma() {
-  if (!canvas.value || !ctx.value || !props.chromaData) return
+  if (!canvas.value || !ctx.value || !props.chromaData) return;
 
-  const { features, nFrames, nChroma } = props.chromaData
-  const width = canvas.value.width
-  const height = canvas.value.height
+  const { features, nFrames, nChroma } = props.chromaData;
+  const width = canvas.value.width;
+  const height = canvas.value.height;
 
   // Clear
-  ctx.value.fillStyle = chromaBg.value
-  ctx.value.fillRect(0, 0, width, height)
+  ctx.value.fillStyle = chromaBg.value;
+  ctx.value.fillRect(0, 0, width, height);
 
-  const barWidth = width / nFrames
-  const barHeight = height / nChroma
+  const barWidth = width / nFrames;
+  const barHeight = height / nChroma;
 
   // Draw chroma grid
   for (let frame = 0; frame < nFrames; frame++) {
     for (let pitch = 0; pitch < nChroma; pitch++) {
-      const value = features[frame * nChroma + pitch]
-      const alpha = Math.min(1, value * 2) // Boost visibility
+      const value = features[frame * nChroma + pitch];
+      const alpha = Math.min(1, value * 2); // Boost visibility
 
-      ctx.value.fillStyle = noteColors[pitch]
-      ctx.value.globalAlpha = alpha * 0.8 + 0.1
+      ctx.value.fillStyle = noteColors[pitch];
+      ctx.value.globalAlpha = alpha * 0.8 + 0.1;
 
       // Draw from bottom (C at bottom, B at top)
-      const y = height - (pitch + 1) * barHeight
-      ctx.value.fillRect(frame * barWidth, y, barWidth + 1, barHeight)
+      const y = height - (pitch + 1) * barHeight;
+      ctx.value.fillRect(frame * barWidth, y, barWidth + 1, barHeight);
     }
   }
 
   // Reset alpha
-  ctx.value.globalAlpha = 1
+  ctx.value.globalAlpha = 1;
 
   // Draw playhead
   if (props.duration > 0) {
-    const progress = props.currentTime / props.duration
-    const x = progress * width
+    const progress = props.currentTime / props.duration;
+    const x = progress * width;
 
-    ctx.value.strokeStyle = playheadColor.value
-    ctx.value.lineWidth = 2
-    ctx.value.beginPath()
-    ctx.value.moveTo(x, 0)
-    ctx.value.lineTo(x, height)
-    ctx.value.stroke()
+    ctx.value.strokeStyle = playheadColor.value;
+    ctx.value.lineWidth = 2;
+    ctx.value.beginPath();
+    ctx.value.moveTo(x, 0);
+    ctx.value.lineTo(x, height);
+    ctx.value.stroke();
   }
 
   // Draw note labels on left
-  ctx.value.fillStyle = labelColor.value
-  ctx.value.font = '10px monospace'
-  ctx.value.textAlign = 'left'
-  ctx.value.textBaseline = 'middle'
+  ctx.value.fillStyle = labelColor.value;
+  ctx.value.font = '10px monospace';
+  ctx.value.textAlign = 'left';
+  ctx.value.textBaseline = 'middle';
   for (let pitch = 0; pitch < nChroma; pitch++) {
-    const y = height - (pitch + 0.5) * barHeight
-    ctx.value.fillText(noteNames[pitch], 4, y)
+    const y = height - (pitch + 0.5) * barHeight;
+    ctx.value.fillText(noteNames[pitch], 4, y);
   }
 }
 
 function setupCanvas() {
-  if (!canvas.value) return
-  ctx.value = canvas.value.getContext('2d')
+  if (!canvas.value) return;
+  ctx.value = canvas.value.getContext('2d');
 
   // Set canvas size
-  const rect = canvas.value.getBoundingClientRect()
-  canvas.value.width = rect.width * window.devicePixelRatio
-  canvas.value.height = rect.height * window.devicePixelRatio
-  ctx.value?.scale(window.devicePixelRatio, window.devicePixelRatio)
+  const rect = canvas.value.getBoundingClientRect();
+  canvas.value.width = rect.width * window.devicePixelRatio;
+  canvas.value.height = rect.height * window.devicePixelRatio;
+  ctx.value?.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  drawChroma()
+  drawChroma();
 }
 
-let animationFrame: number | null = null
+let animationFrame: number | null = null;
 
 function animate() {
-  drawChroma()
-  animationFrame = requestAnimationFrame(animate)
+  drawChroma();
+  animationFrame = requestAnimationFrame(animate);
 }
 
-watch(() => props.chromaData, () => {
-  if (props.chromaData) {
-    drawChroma()
-  }
-})
+watch(
+  () => props.chromaData,
+  () => {
+    if (props.chromaData) {
+      drawChroma();
+    }
+  },
+);
 
 onMounted(() => {
-  setupCanvas()
-  animate()
-  window.addEventListener('resize', setupCanvas)
-})
+  setupCanvas();
+  animate();
+  window.addEventListener('resize', setupCanvas);
+});
 
 onUnmounted(() => {
   if (animationFrame) {
-    cancelAnimationFrame(animationFrame)
+    cancelAnimationFrame(animationFrame);
   }
-  window.removeEventListener('resize', setupCanvas)
-})
+  window.removeEventListener('resize', setupCanvas);
+});
 </script>
 
 <template>

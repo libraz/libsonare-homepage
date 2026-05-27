@@ -1,12 +1,12 @@
 ---
 layout: master
 title: libsonare Mastering Demo
-description: Browser-based open source mastering demo powered by libsonare WebAssembly. Audio stays on your device.
+description: Browser-local mastering studio powered by libsonare WebAssembly, with broadcast-grade loudness, true-peak, EQ, dynamics, repair, and reference tools.
 head:
   - - meta
     - property: og:title
       content: libsonare Mastering Demo
   - - meta
     - property: og:description
-      content: Master audio in your browser with open source WebAssembly DSP. No upload required.
+      content: "Master audio locally with libsonare's dependency-free WebAssembly DSP: loudness, true peak, EQ, dynamics, repair, and reference matching."
 ---

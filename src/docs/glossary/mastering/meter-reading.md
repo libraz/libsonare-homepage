@@ -9,6 +9,10 @@ Mastering meters are useful only when read together. A single number cannot tell
 
 The browser demo shows loudness, peak level, crest factor, correlation, phase scope, and stereo image. These meters answer different questions: how loud it is, how safe it is, how dense it is, and whether the stereo image will translate.
 
+::: tip Read meters in groups, then trust your ears
+No single reading proves a master is good. Loudness + peak answer "is it on target and safe"; crest factor + correlation answer "is it still alive and mono-safe". Use the meters to *catch* problems, then confirm by listening.
+:::
+
 ## The Main Readings
 
 | Meter | Question it answers |
@@ -38,9 +42,28 @@ Use the meters to catch problems, then confirm by listening:
 
 :::: details Implementation notes
 
-The demo computes lightweight visual metrics in the Vue component for immediate feedback. Peak, RMS, crest factor, and correlation are sampled from the source or rendered buffers with a stride for responsiveness. The phase scope and stereo image are visualization aids; the authoritative processing metrics are the values returned by the libsonare render and included in the JSON report. The UI numbers and the report numbers can therefore look slightly different, because the immediate UI metrics and the post-render measurement come from separate paths.
+The demo uses two measurement paths:
 
-The preset validation script separately checks generated test signals through the mastering chain, ensuring the configured presets produce finite LUFS values, bounded peak levels, and expected stage names. This catches breakage in the processor wiring or inconsistencies in preset definitions during the pre-release verification phase, before any of it reaches the demo or downstream users.
+| Path | Purpose | Where it appears |
+|------|---------|------------------|
+| Lightweight UI metrics | Immediate feedback while interacting | Vue components |
+| Authoritative render metrics | Values to keep in the report | libsonare render result and JSON report |
+
+Peak, RMS, crest factor, and correlation in the UI are sampled from the source or rendered buffers with a stride so the interface stays responsive. The phase scope and stereo image are visualization aids.
+
+Because the UI metrics and the post-render metrics come from separate paths, the numbers can differ slightly. Treat the JSON report as the processing record.
+
+The preset validation script runs generated test signals through the mastering chain.
+
+It checks three practical things:
+
+| Check | Why it matters |
+|-------|----------------|
+| Finite LUFS values | The loudness path did not produce invalid numbers. |
+| Bounded peak levels | The chain did not create runaway output. |
+| Expected stage names | The preset wiring still matches the public report shape. |
+
+This catches processor wiring breakage or preset-definition inconsistencies before they reach the demo or downstream users.
 
 ::::
 

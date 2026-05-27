@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { CornerBrackets, ScanLine } from '@/components/ui'
+import { ref } from 'vue';
+import { CornerBrackets, ScanLine } from '@/components/ui';
+import { useI18n } from '@/composables/useI18n';
 
-const emit = defineEmits<{
-  (e: 'file', file: File): void
-}>()
+const emit = defineEmits<(e: 'file', file: File) => void>();
 
-const { t } = useI18n()
-const isDragging = ref(false)
-const isHovering = ref(false)
-const fileInput = ref<HTMLInputElement | null>(null)
+const { t } = useI18n();
+const isDragging = ref(false);
+const isHovering = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 const acceptedTypes = [
   'audio/mpeg',
@@ -20,53 +18,55 @@ const acceptedTypes = [
   'audio/flac',
   'audio/ogg',
   'audio/mp3',
-]
+];
 
 function handleDragEnter(e: DragEvent) {
-  e.preventDefault()
-  isDragging.value = true
+  e.preventDefault();
+  isDragging.value = true;
 }
 
 function handleDragLeave(e: DragEvent) {
-  e.preventDefault()
-  isDragging.value = false
+  e.preventDefault();
+  isDragging.value = false;
 }
 
 function handleDragOver(e: DragEvent) {
-  e.preventDefault()
+  e.preventDefault();
 }
 
 function handleDrop(e: DragEvent) {
-  e.preventDefault()
-  isDragging.value = false
+  e.preventDefault();
+  isDragging.value = false;
 
-  const files = e.dataTransfer?.files
+  const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
-    const file = files[0]
+    const file = files[0];
     if (isValidAudioFile(file)) {
-      emit('file', file)
+      emit('file', file);
     }
   }
 }
 
 function handleClick() {
-  fileInput.value?.click()
+  fileInput.value?.click();
 }
 
 function handleFileSelect(e: Event) {
-  const input = e.target as HTMLInputElement
-  const files = input.files
+  const input = e.target as HTMLInputElement;
+  const files = input.files;
   if (files && files.length > 0) {
-    emit('file', files[0])
+    emit('file', files[0]);
   }
 }
 
 function isValidAudioFile(file: File): boolean {
-  return acceptedTypes.includes(file.type) ||
+  return (
+    acceptedTypes.includes(file.type) ||
     file.name.endsWith('.mp3') ||
     file.name.endsWith('.wav') ||
     file.name.endsWith('.flac') ||
     file.name.endsWith('.ogg')
+  );
 }
 </script>
 

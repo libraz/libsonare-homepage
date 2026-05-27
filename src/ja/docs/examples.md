@@ -1,5 +1,16 @@
 # 使用例
 
+このページは [はじめに](./getting-started.md) の後に読むページです。例は意図的に目的別に並べています。作りたいものに最も近いワークフローを選び、詳細な API はリンク先の実行環境別リファレンスで確認してください。
+
+## このページで身につくこと
+
+このページを読むと、次のことを判断・実行できるようになります。
+
+- ブラウザ、Python、CLI、Node ネイティブの小さな動作パターンを 1 つコピーして試せる。
+- 同じ処理が実行環境ごとにどう変わるかを見比べられる。
+- 「音声を読み込む／デコードする」処理と「libsonare を呼ぶ」処理を区別できる。
+- オプションや戻り値の形が必要になったときに、レシピから該当 API リファレンスへ移れる。
+
 ## ユースケース別
 
 ### ブラウザアプリで BPM とキーを表示する
@@ -57,11 +68,18 @@ const result = audio.analyze();
 console.log(result.bpm, result.key.name);
 ```
 
-## JavaScript/TypeScript
+## 機能別レシピ
+
+各レシピは同じ処理を実行環境ごとに示します。libsonare を動かす環境のタブを選んでください。
+ブラウザパッケージ自体はデコードを行わないため、デコード済みのモノラル `Float32Array`
+サンプルを渡します。Python パッケージと `sonare` CLI は WAV/MP3 ファイルを直接読み込めます。
+C++ プログラムは下の C++ セクションにまとめています。
 
 ### 基本的な BPM とキー検出
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ]
 import { init, detectBpm, detectKey } from '@libraz/libsonare';
 
 async function quickAnalysis(url: string) {
@@ -83,10 +101,36 @@ async function quickAnalysis(url: string) {
 }
 ```
 
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    bpm = audio.detect_bpm()
+    key = audio.detect_key()
+
+print(f"BPM: {bpm}")
+print(f"キー: {key.name} (信頼度: {key.confidence * 100:.1f}%)")
+```
+
+```bash [CLI]
+sonare bpm song.mp3
+sonare key song.mp3
+```
+
+:::
+
 ### 完全な音楽解析
 
-```typescript
+ブラウザでは `analyze()` がコード・セクション・楽曲形式まで一度に返します。Python の
+`analyze()` は基本サマリー（BPM・キー・拍子・ビート）を返し、コードとセクションは別の呼び出し
+（`detect_chords()` と `analyze_sections()`）になります。
+
+::: code-group
+
+```typescript [ブラウザ]
 import { init, analyze } from '@libraz/libsonare';
+
+await init();
 
 const result = analyze(samples, sampleRate);
 
@@ -108,9 +152,91 @@ for (const section of result.sections) {
 console.log(`\n楽曲形式: ${result.form}`);
 ```
 
+```python [Python]
+from libsonare import Audio, analyze_sections
+
+with Audio.from_file("song.mp3") as audio:
+    result = audio.analyze()
+    chords = audio.detect_chords().chords
+    sections = analyze_sections(audio.data, audio.sample_rate).sections
+
+print("=== 音楽解析 ===")
+print(f"BPM: {result.bpm} (信頼度: {result.bpm_confidence * 100:.0f}%)")
+print(f"キー: {result.key.name}")
+print(f"拍子: {result.time_signature}")
+
+print("\nコード:")
+for chord in chords:
+    print(f"  {chord.name} [{chord.start:.2f}秒 - {chord.end:.2f}秒]")
+
+print("\nセクション:")
+for section in sections:
+    print(f"  {section.name} [{section.start:.2f}秒 - {section.end:.2f}秒]")
+```
+
+```bash [CLI]
+sonare analyze song.mp3 --json > analysis.json
+```
+
+:::
+
+::: details 「セクション」と「フォーム」とは？
+**セクション** は曲の構造的なパート — イントロ、ヴァース、コーラス、ブリッジ、アウトロ — で、音楽的な性格が変わる場所から検出します。**フォーム** は、それらのセクションをコンパクトなパターンで表した曲全体の構成です（例: `イントロ–ヴァース–コーラス–ヴァース–コーラス–アウトロ`、`ABABCB` のように記号で書くこともあります）。両者は「この曲が時間軸上でどう構成されているか」に答えます。
+:::
+
+### 室内音響メトリクス
+
+測定済みのインパルスレスポンスがある場合は `analyzeImpulseResponse()` を使います。
+通常の音楽や録音から推定する場合は `detectAcoustic()` を使います。ブラインド推定は
+タグ付けやモニタリングに便利ですが、UI で強く見せるかどうかは `confidence` を見て判断してください。
+
+::: code-group
+
+```typescript [ブラウザ]
+import { init, analyzeImpulseResponse, detectAcoustic } from '@libraz/libsonare';
+
+await init();
+
+const measured = analyzeImpulseResponse(irSamples, sampleRate);
+console.log(`RT60: ${measured.rt60.toFixed(2)} 秒`);
+console.log(`C80: ${measured.c80.toFixed(1)} dB`);
+
+const blind = detectAcoustic(samples, sampleRate);
+console.log(`ブラインド RT60: ${blind.rt60.toFixed(2)} 秒`);
+console.log(`信頼度: ${(blind.confidence * 100).toFixed(0)}%`);
+```
+
+```python [Python]
+from libsonare import Audio, analyze_impulse_response
+
+with Audio.from_file("room-ir.wav") as ir:
+    measured = analyze_impulse_response(ir.data, sample_rate=ir.sample_rate)
+
+print(f"RT60: {measured.rt60:.2f} 秒")
+print(f"C80: {measured.c80:.1f} dB")
+
+with Audio.from_file("recording.wav") as audio:
+    blind = audio.detect_acoustic()
+
+print(f"ブラインド RT60: {blind.rt60:.2f} 秒")
+print(f"信頼度: {blind.confidence * 100:.0f}%")
+```
+
+```bash [CLI]
+# 測定済みインパルスレスポンスとして扱う:
+sonare acoustic room-ir.wav --ir --json
+
+# 通常の音声から音響パラメータを推定する:
+sonare acoustic recording.wav --json
+```
+
+:::
+
 ### HPSS（倍音／打撃成分の分離）
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ]
 import { init, hpss, detectKey } from '@libraz/libsonare';
 
 await init();
@@ -124,9 +250,33 @@ const result = hpss(samples, sampleRate);
 const key = detectKey(result.harmonic, result.sampleRate);
 ```
 
+```python [Python]
+from libsonare import Audio, detect_key
+
+with Audio.from_file("song.mp3") as audio:
+    result = audio.hpss()
+    # result.harmonic   — 倍音成分（ボーカル／メロディ／和音）
+    # result.percussive — 打撃成分（ドラム／パーカッション）
+
+# 倍音成分を使うとキー検出がクリーンに当たります
+key = detect_key(result.harmonic, result.sample_rate)
+```
+
+```bash [CLI]
+# Python CLI は倍音／打撃成分のエネルギーを表示します:
+sonare hpss song.mp3 --json
+
+# 倍音／打撃成分の WAV 書き出しは C++ 製 sonare_cli ビルドで提供されます:
+#   sonare hpss song.wav -o separated
+```
+
+:::
+
 ### オーディオエフェクト
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ]
 import { init, timeStretch, pitchShift, normalize, trim } from '@libraz/libsonare';
 
 await init();
@@ -144,9 +294,31 @@ const normalized = normalize(samples, sampleRate, -3);
 const trimmed = trim(samples, sampleRate, -60);
 ```
 
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    slower = audio.time_stretch(0.8)        # 80% 速度にスローダウン
+    higher = audio.pitch_shift(2)           # 2 半音上に移調
+    normalized = audio.normalize(-3)        # -3 dB に正規化
+    trimmed = audio.trim(-60)               # -60 dB 以下の無音をトリム
+```
+
+```bash [CLI]
+# ソースビルド C++ CLI
+sonare time-stretch song.wav --rate 0.8 -o slower.wav
+sonare pitch-shift song.wav --semitones 2 -o higher.wav
+sonare normalize song.wav --target-db -3 -o normalized.wav
+sonare trim-silence song.wav -o trimmed.wav
+```
+
+:::
+
 ### 特徴抽出
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ]
 import { init, melSpectrogram, mfcc, chroma } from '@libraz/libsonare';
 
 await init();
@@ -164,9 +336,36 @@ const chromaResult = chroma(samples, sampleRate);
 console.log('ピッチクラス分布:', chromaResult.meanEnergy);
 ```
 
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    # メルスペクトログラム
+    mel = audio.mel_spectrogram(n_fft=2048, hop_length=512, n_mels=128)
+    print(f"Mel 形状: {mel.n_mels} x {mel.n_frames}")
+
+    # MFCC
+    mfcc_result = audio.mfcc(n_fft=2048, hop_length=512, n_mels=128, n_mfcc=13)
+    print(f"MFCC 形状: {mfcc_result.n_mfcc} x {mfcc_result.n_frames}")
+
+    # クロマ
+    chroma_result = audio.chroma()
+    print("ピッチクラス分布:", chroma_result.mean_energy)
+```
+
+```bash [CLI]
+sonare mel song.mp3 --json
+sonare chroma song.mp3 --json
+# MFCC 専用の CLI コマンドはありません。ブラウザまたは Python API を使ってください。
+```
+
+:::
+
 ### ピッチ検出
 
-```typescript
+::: code-group
+
+```typescript [ブラウザ]
 import { init, pitchPyin } from '@libraz/libsonare';
 
 await init();
@@ -177,6 +376,28 @@ console.log(`中央値 F0: ${pitch.medianF0.toFixed(1)} Hz`);
 console.log(`平均 F0: ${pitch.meanF0.toFixed(1)} Hz`);
 console.log(`有声フレーム: ${pitch.voicedFlag.filter(v => v).length}/${pitch.nFrames}`);
 ```
+
+```python [Python]
+from libsonare import Audio
+
+with Audio.from_file("song.mp3") as audio:
+    pitch = audio.pitch_pyin()
+
+voiced = sum(1 for v in pitch.voiced_flag if v)
+print(f"中央値 F0: {pitch.median_f0:.1f} Hz")
+print(f"平均 F0: {pitch.mean_f0:.1f} Hz")
+print(f"有声フレーム: {voiced}/{pitch.n_frames}")
+```
+
+```bash [CLI]
+sonare pitch song.mp3 --algorithm pyin --json
+```
+
+:::
+
+::: details 「有声（voiced）」フレームとは？
+ピッチ追跡は各フレームを **有声（voiced）** か **無声（unvoiced）** に分類します。*有声*は明確な周期的ピッチが見つかったフレーム（歌の母音、持続音など）、*無声*は明確なピッチがないフレーム（無音、息、「s」「t」などの子音、ノイズ的・打撃的な音）です。`voicedFlag` / `voiced_flag` はそのフレームごとの真偽値で、`true` の数を数えると、クリップのどれだけが追跡可能なメロディを含んでいたかが分かります。
+:::
 
 ### ストリーミング解析
 
@@ -240,23 +461,27 @@ function checkEstimates() {
 
 ```typescript
 // analyzer-processor.ts (AudioWorklet)
+import { init, StreamAnalyzer } from '@libraz/libsonare';
+
 class AnalyzerProcessor extends AudioWorkletProcessor {
-  private analyzer: StreamAnalyzer;
+  private analyzer?: StreamAnalyzer;
 
   constructor() {
     super();
-    this.analyzer = new StreamAnalyzer({
-      sampleRate,
-      nFft: 2048,
-      hopLength: 512,
-      nMels: 64,
-      emitEveryNFrames: 4,
+    void init().then(() => {
+      this.analyzer = new StreamAnalyzer({
+        sampleRate,
+        nFft: 2048,
+        hopLength: 512,
+        nMels: 64,
+        emitEveryNFrames: 4,
+      });
     });
   }
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0]?.[0];
-    if (!input) return true;
+    if (!input || !this.analyzer) return true;
 
     this.analyzer.process(input);
 
@@ -439,7 +664,7 @@ sonare analyze song.mp3 --json > analysis.json
 ### オーディオ処理（C++ CLI 専用）
 
 ::: info
-`pitch-shift`、`time-stretch`、エクスポート用 `hpss` などのコマンドは、ソースからビルドする C++ 製 `sonare_cli` バイナリで提供されます。`pip install libsonare` でインストールされる Python CLI には、[CLI リファレンス](/ja/docs/cli)で説明する解析・特徴抽出系コマンドのみが含まれます。
+`pitch-shift`、`time-stretch`、エクスポート用 `hpss` などのコマンドは、ソースからビルドする C++ 製 `sonare_cli` バイナリで提供されます。`pip install libsonare` でインストールされる Python CLI には、[CLI リファレンス](/ja/docs/cli) で説明する解析・特徴抽出系コマンドのみが含まれます。
 :::
 
 ```bash

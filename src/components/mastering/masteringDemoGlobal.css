@@ -1,0 +1,3 @@
+/* Global (non-scoped) — toggle sun/moon icons via html.dark, mirroring DemoLayout */
+html.dark .master-page__icon-sun { display: block; }
+html.dark .master-page__icon-moon { display: none; }

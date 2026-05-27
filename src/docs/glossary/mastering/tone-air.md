@@ -33,13 +33,21 @@ Start with Tilt EQ when the whole master is too dark or too bright. Move to Exci
 
 This order prevents a common mistake: using exciter or air-band processing to fix a broad tonal imbalance. If the low end is too heavy, adding air may create a louder, harsher master while the actual imbalance remains.
 
+::: warning Don't use exciter or air to fix a broad imbalance
+Brightness controls add presence; they do not rebalance the spectrum. If the master is too dark or too bass-heavy, reach for Tilt EQ first — then exciter for presence, and air-band last.
+:::
+
 ## What To Listen For
 
 Use loudness-matched A/B and listen past the first impression. Good tone moves make the vocal, snare, cymbals, and ambience easier to place without pulling the mix apart. Bad moves create a separate shiny layer above the song, make sibilants jump forward, or make the low end feel smaller only because the top end became exaggerated.
 
 :::: details Implementation notes
 
-The demo maps the Quick Tone macro into tilt, exciter drive/amount, and air-band amount. libsonare's tilt stage uses complementary shelving around a pivot; the demo keeps the pivot broad so it behaves like mastering EQ rather than surgical EQ. Studio mode also exposes the pivot frequency, but extreme values tend to break the overall tonal balance, so it is usually safer to keep the pivot somewhere in the midrange.
+The demo maps the Quick Tone macro into three controls: tilt, exciter drive/amount, and air-band amount.
+
+libsonare's tilt stage uses complementary shelving around a pivot. The demo keeps that pivot broad so it behaves like mastering EQ rather than surgical EQ.
+
+Studio mode also exposes the pivot frequency. Extreme values tend to break the overall tonal balance, so it is usually safer to keep the pivot somewhere in the midrange.
 
 The saturation stage receives exciter frequency, drive, amount, Q, and even/odd mix. The spectral air-band stage uses a high shelf-like restoration amount. AI-generated presets bias both stages higher and focus them toward the upper band.
 

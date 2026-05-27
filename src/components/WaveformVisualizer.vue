@@ -1,25 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { useWaveform } from '@/composables/useWaveform'
-import { useTheme } from '@/composables/useTheme'
+import { computed, onMounted, ref, watch } from 'vue';
+import { useTheme } from '@/composables/useTheme';
+import { useWaveform } from '@/composables/useWaveform';
 
 const props = defineProps<{
-  audioBuffer: AudioBuffer | null
-  beats?: Float32Array | number[]
-  currentTime?: number
-  duration?: number
-}>()
+  audioBuffer: AudioBuffer | null;
+  beats?: Float32Array | number[];
+  currentTime?: number;
+  duration?: number;
+}>();
 
-const emit = defineEmits<{
-  (e: 'seek', time: number): void
-}>()
+const emit = defineEmits<(e: 'seek', time: number) => void>();
 
-const { isDark } = useTheme()
-const canvasRef = ref<HTMLCanvasElement | null>(null)
+const { isDark } = useTheme();
+const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-const bgColor = computed(() => isDark.value ? 'rgba(6, 8, 12, 1)' : 'rgba(245, 243, 255, 1)')
-const barCol = computed(() => isDark.value ? 'rgba(139, 92, 246, 0.25)' : 'rgba(139, 92, 246, 0.3)')
-const progCol = computed(() => isDark.value ? 'rgba(139, 92, 246, 0.85)' : 'rgba(124, 58, 237, 0.8)')
+const bgColor = computed(() => (isDark.value ? 'rgba(6, 8, 12, 1)' : 'rgba(245, 243, 255, 1)'));
+const barCol = computed(() =>
+  isDark.value ? 'rgba(139, 92, 246, 0.25)' : 'rgba(139, 92, 246, 0.3)',
+);
+const progCol = computed(() =>
+  isDark.value ? 'rgba(139, 92, 246, 0.85)' : 'rgba(124, 58, 237, 0.8)',
+);
 
 const { setAudioBuffer, setBeats, setProgress, draw } = useWaveform(canvasRef, {
   barWidth: 2,
@@ -27,45 +29,48 @@ const { setAudioBuffer, setBeats, setProgress, draw } = useWaveform(canvasRef, {
   barColor: barCol,
   progressColor: progCol,
   backgroundColor: bgColor,
-})
+});
 
 // Redraw when theme changes
-watch(isDark, () => draw())
+watch(isDark, () => draw());
 
-watch(() => props.audioBuffer, (buffer) => {
-  if (buffer) {
-    setAudioBuffer(buffer)
-  }
-})
+watch(
+  () => props.audioBuffer,
+  (buffer) => {
+    if (buffer) {
+      setAudioBuffer(buffer);
+    }
+  },
+);
 
 watch([() => props.beats, () => props.duration], ([beats, duration]) => {
   if (beats && duration && duration > 0) {
-    setBeats(beats, duration)
+    setBeats(beats, duration);
   }
-})
+});
 
 watch([() => props.currentTime, () => props.duration], ([current, total]) => {
   if (typeof current === 'number' && typeof total === 'number' && total > 0) {
-    setProgress(current / total)
+    setProgress(current / total);
   }
-})
+});
 
 function handleClick(e: MouseEvent) {
-  if (!canvasRef.value || !props.duration) return
+  if (!canvasRef.value || !props.duration) return;
 
-  const rect = canvasRef.value.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const progress = x / rect.width
-  const time = progress * props.duration
+  const rect = canvasRef.value.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const progress = x / rect.width;
+  const time = progress * props.duration;
 
-  emit('seek', time)
+  emit('seek', time);
 }
 
 onMounted(() => {
   if (props.audioBuffer) {
-    setAudioBuffer(props.audioBuffer)
+    setAudioBuffer(props.audioBuffer);
   }
-})
+});
 </script>
 
 <template>

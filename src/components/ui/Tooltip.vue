@@ -1,168 +1,169 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
-type Placement = 'top' | 'bottom'
+type Placement = 'top' | 'bottom';
 
 const props = withDefaults(
   defineProps<{
-    eyebrow?: string
-    title?: string
-    body?: string
-    tip?: string
-    tipLabel?: string
+    eyebrow?: string;
+    title?: string;
+    body?: string;
+    tip?: string;
+    tipLabel?: string;
     /** Default-value chip (e.g. "-18 dB" / "0 (off)"). */
-    defaultValue?: string
+    defaultValue?: string;
     /** Rationale shown next to the default value chip. */
-    defaultRationale?: string
+    defaultRationale?: string;
     /** Label for the default section (defaults to "Default"). */
-    defaultLabel?: string
-    href?: string
-    linkLabel?: string
-    placement?: 'auto' | Placement
-    maxWidth?: number
+    defaultLabel?: string;
+    href?: string;
+    linkLabel?: string;
+    placement?: 'auto' | Placement;
+    maxWidth?: number;
     /** Adds aria-label to the trigger wrapper. */
-    ariaLabel?: string
+    ariaLabel?: string;
   }>(),
   {
     placement: 'auto',
     maxWidth: 296,
   },
-)
+);
 
-const triggerRef = ref<HTMLSpanElement | null>(null)
-const popoverRef = ref<HTMLDivElement | null>(null)
-const open = ref(false)
-const placementState = ref<Placement>('top')
+const triggerRef = ref<HTMLSpanElement | null>(null);
+const popoverRef = ref<HTMLDivElement | null>(null);
+const open = ref(false);
+const placementState = ref<Placement>('top');
 
-const styleVars = computed(() => ({ '--tt-max-width': `${props.maxWidth}px` }))
+const styleVars = computed(() => ({ '--tt-max-width': `${props.maxWidth}px` }));
 
-const popoverStyle = ref<Record<string, string>>({})
+const popoverStyle = ref<Record<string, string>>({});
 
-let showTimer: number | null = null
-let hideTimer: number | null = null
+let showTimer: number | null = null;
+let hideTimer: number | null = null;
 
 function clearTimers() {
   if (showTimer !== null) {
-    window.clearTimeout(showTimer)
-    showTimer = null
+    window.clearTimeout(showTimer);
+    showTimer = null;
   }
   if (hideTimer !== null) {
-    window.clearTimeout(hideTimer)
-    hideTimer = null
+    window.clearTimeout(hideTimer);
+    hideTimer = null;
   }
 }
 
 function show() {
-  if (typeof window === 'undefined') return
-  clearTimers()
-  if (open.value) return
+  if (typeof window === 'undefined') return;
+  clearTimers();
+  if (open.value) return;
   showTimer = window.setTimeout(() => {
-    open.value = true
-    void nextTick(updatePosition)
-  }, 80)
+    open.value = true;
+    void nextTick(updatePosition);
+  }, 80);
 }
 
 function hide() {
-  clearTimers()
+  clearTimers();
   hideTimer = window.setTimeout(() => {
-    open.value = false
-  }, 100)
+    open.value = false;
+  }, 100);
 }
 
 function cancelHide() {
   if (hideTimer !== null) {
-    window.clearTimeout(hideTimer)
-    hideTimer = null
+    window.clearTimeout(hideTimer);
+    hideTimer = null;
   }
 }
 
 function toggle() {
   if (open.value) {
-    clearTimers()
-    open.value = false
+    clearTimers();
+    open.value = false;
   } else {
-    clearTimers()
-    open.value = true
-    void nextTick(updatePosition)
+    clearTimers();
+    open.value = true;
+    void nextTick(updatePosition);
   }
 }
 
 function updatePosition() {
-  const trigger = triggerRef.value
-  const popover = popoverRef.value
-  if (!trigger || !popover) return
+  const trigger = triggerRef.value;
+  const popover = popoverRef.value;
+  if (!trigger || !popover) return;
 
-  const triggerRect = trigger.getBoundingClientRect()
-  const popoverRect = popover.getBoundingClientRect()
-  const viewportW = window.innerWidth
-  const viewportH = window.innerHeight
-  const gap = 10
-  const edgePadding = 12
+  const triggerRect = trigger.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  const gap = 10;
+  const edgePadding = 12;
 
-  let placement: Placement
+  let placement: Placement;
   if (props.placement === 'top' || props.placement === 'bottom') {
-    placement = props.placement
+    placement = props.placement;
   } else {
-    const spaceAbove = triggerRect.top
-    const spaceBelow = viewportH - triggerRect.bottom
-    placement = spaceAbove >= popoverRect.height + gap + edgePadding || spaceAbove >= spaceBelow ? 'top' : 'bottom'
+    const spaceAbove = triggerRect.top;
+    const spaceBelow = viewportH - triggerRect.bottom;
+    placement =
+      spaceAbove >= popoverRect.height + gap + edgePadding || spaceAbove >= spaceBelow
+        ? 'top'
+        : 'bottom';
   }
-  placementState.value = placement
+  placementState.value = placement;
 
   const top =
-    placement === 'top'
-      ? triggerRect.top - popoverRect.height - gap
-      : triggerRect.bottom + gap
+    placement === 'top' ? triggerRect.top - popoverRect.height - gap : triggerRect.bottom + gap;
 
   // Center horizontally over trigger, clamped to viewport.
-  const triggerCenter = triggerRect.left + triggerRect.width / 2
-  const half = popoverRect.width / 2
-  let left = triggerCenter - half
-  left = Math.max(edgePadding, Math.min(left, viewportW - popoverRect.width - edgePadding))
+  const triggerCenter = triggerRect.left + triggerRect.width / 2;
+  const half = popoverRect.width / 2;
+  let left = triggerCenter - half;
+  left = Math.max(edgePadding, Math.min(left, viewportW - popoverRect.width - edgePadding));
 
   // Arrow offset (where arrow should sit horizontally relative to popover).
-  const arrowOffset = Math.max(14, Math.min(triggerCenter - left, popoverRect.width - 14))
+  const arrowOffset = Math.max(14, Math.min(triggerCenter - left, popoverRect.width - 14));
 
   popoverStyle.value = {
     top: `${Math.max(edgePadding, top)}px`,
     left: `${left}px`,
     '--tt-arrow-x': `${arrowOffset}px`,
-  }
+  };
 }
 
 function handleScrollOrResize() {
-  if (!open.value) return
-  updatePosition()
+  if (!open.value) return;
+  updatePosition();
 }
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && open.value) {
-    clearTimers()
-    open.value = false
+    clearTimers();
+    open.value = false;
   }
 }
 
 watch(open, (next) => {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined') return;
   if (next) {
-    window.addEventListener('scroll', handleScrollOrResize, true)
-    window.addEventListener('resize', handleScrollOrResize)
-    window.addEventListener('keydown', handleKeydown)
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('keydown', handleKeydown);
   } else {
-    window.removeEventListener('scroll', handleScrollOrResize, true)
-    window.removeEventListener('resize', handleScrollOrResize)
-    window.removeEventListener('keydown', handleKeydown)
+    window.removeEventListener('scroll', handleScrollOrResize, true);
+    window.removeEventListener('resize', handleScrollOrResize);
+    window.removeEventListener('keydown', handleKeydown);
   }
-})
+});
 
 onBeforeUnmount(() => {
-  clearTimers()
+  clearTimers();
   if (typeof window !== 'undefined') {
-    window.removeEventListener('scroll', handleScrollOrResize, true)
-    window.removeEventListener('resize', handleScrollOrResize)
-    window.removeEventListener('keydown', handleKeydown)
+    window.removeEventListener('scroll', handleScrollOrResize, true);
+    window.removeEventListener('resize', handleScrollOrResize);
+    window.removeEventListener('keydown', handleKeydown);
   }
-})
+});
 </script>
 
 <template>

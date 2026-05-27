@@ -1,230 +1,291 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useI18n } from '@/composables/useI18n'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from '@/composables/useI18n';
 
 type WaveAudio = {
-  left: Float32Array
-  right: Float32Array
-  sampleRate: number
-  duration?: number
-  channels?: number
-  fileName?: string
-}
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  duration?: number;
+  channels?: number;
+  fileName?: string;
+};
 
 const props = defineProps<{
-  audio: WaveAudio | null
+  audio: WaveAudio | null;
   /** Optional second buffer shown as a ghost outline behind `audio`. Both are normalized to the shared max so loudness changes are visible. */
-  compare?: WaveAudio | null
+  compare?: WaveAudio | null;
   /** Optional label for source / master overlay context */
-  variant?: 'source' | 'master'
+  variant?: 'source' | 'master';
   /** Drawing area height in px */
-  height?: number
-}>()
+  height?: number;
+  /** Playback position as a 0..1 fraction; renders a playhead when audio is loaded. */
+  progress?: number;
+  /** Override the corner mode badge (defaults to source or mastered labels). */
+  modeLabel?: string;
+}>();
 
-const { t } = useI18n()
+const emit = defineEmits<{
+  /** Fired on click / drag over the waveform with the target position as a 0..1 fraction. */
+  seek: [fraction: number];
+}>();
 
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-const bodyRef = ref<HTMLElement | null>(null)
+const { t } = useI18n();
 
-let primaryPeaks: Float32Array | null = null
-let comparePeaks: Float32Array | null = null
-let cachedPrimary: WaveAudio | null = null
-let cachedCompare: WaveAudio | null = null
-let cachedSamplesPerPx = 0
-let rafId: number | null = null
-let resizeObserver: ResizeObserver | null = null
-let themeObserver: MutationObserver | null = null
+// Playhead / click-to-seek are only active when the parent wires up playback
+// progress; other waveform instances (e.g. the chain module view) stay static.
+const interactive = computed(() => props.progress !== undefined);
+const playheadLeft = computed(() => `${Math.min(100, Math.max(0, (props.progress ?? 0) * 100))}%`);
 
-const drawHeight = computed(() => props.height ?? 132)
+function seekFromEvent(event: PointerEvent) {
+  const body = bodyRef.value;
+  if (!body || !props.audio) return;
+  const rect = body.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  emit('seek', Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)));
+}
+
+function onPointerDown(event: PointerEvent) {
+  if (!props.audio || !interactive.value) return;
+  try {
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  } catch {
+    // Ignore: pointer capture is best-effort for drag-scrub.
+  }
+  seekFromEvent(event);
+}
+
+function onPointerMove(event: PointerEvent) {
+  const target = event.currentTarget as HTMLElement;
+  if (!props.audio || !interactive.value || !target.hasPointerCapture(event.pointerId)) return;
+  seekFromEvent(event);
+}
+
+function onPointerUp(event: PointerEvent) {
+  const target = event.currentTarget as HTMLElement;
+  if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+}
+
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+const bodyRef = ref<HTMLElement | null>(null);
+
+let primaryPeaks: Float32Array | null = null;
+let comparePeaks: Float32Array | null = null;
+let cachedPrimary: WaveAudio | null = null;
+let cachedCompare: WaveAudio | null = null;
+let cachedSamplesPerPx = 0;
+let rafId: number | null = null;
+let resizeObserver: ResizeObserver | null = null;
+let themeObserver: MutationObserver | null = null;
+
+const drawHeight = computed(() => props.height ?? 132);
 
 const variantLabel = computed(() => {
-  if (props.compare) return props.variant === 'master' ? 'A/B · MASTER' : 'A/B · SOURCE'
-  return props.variant === 'master' ? 'MASTER · DT' : 'SOURCE · DT'
-})
+  if (props.modeLabel) return props.modeLabel;
+  if (props.compare) return props.variant === 'master' ? 'A/B · MASTER' : 'A/B · SOURCE';
+  return props.variant === 'master' ? 'MASTER · DT' : 'SOURCE · DT';
+});
 
 const titleLabel = computed(() => {
-  const a = props.audio
-  if (!a) return t('master.studio.waveformIdle')
-  if (a.fileName) return a.fileName
-  return props.variant === 'master' ? 'Master render' : 'Source'
-})
+  const a = props.audio;
+  if (!a) return t('master.studio.waveformIdle');
+  if (a.fileName) return a.fileName;
+  return props.variant === 'master' ? 'Master render' : 'Source';
+});
 
 const durationLabel = computed(() => {
-  const a = props.audio
-  if (!a) return '--:--'
-  const total = Number.isFinite(a.duration) && a.duration != null
-    ? a.duration
-    : a.left.length / a.sampleRate
-  if (!Number.isFinite(total) || total <= 0) return '--:--'
-  const m = Math.floor(total / 60)
-  const s = Math.floor(total % 60).toString().padStart(2, '0')
-  return `${m}:${s}`
-})
+  const a = props.audio;
+  if (!a) return '--:--';
+  const total =
+    Number.isFinite(a.duration) && a.duration != null ? a.duration : a.left.length / a.sampleRate;
+  if (!Number.isFinite(total) || total <= 0) return '--:--';
+  const m = Math.floor(total / 60);
+  const s = Math.floor(total % 60)
+    .toString()
+    .padStart(2, '0');
+  return `${m}:${s}`;
+});
 
 const subReadout = computed(() => {
-  const a = props.audio
-  if (!a) return '—'
-  const sr = a.sampleRate / 1000
-  const ch = a.channels != null
-    ? (a.channels === 1 ? 'MONO' : a.channels === 2 ? 'STEREO' : `${a.channels}CH`)
-    : (a.right && a.right !== a.left ? 'STEREO' : 'MONO')
-  const rate = Number.isInteger(sr) ? `${sr.toFixed(0)}k` : `${sr.toFixed(1)}k`
-  return `${rate} · ${ch}`
-})
+  const a = props.audio;
+  if (!a) return '—';
+  const sr = a.sampleRate / 1000;
+  const ch =
+    a.channels != null
+      ? a.channels === 1
+        ? 'MONO'
+        : a.channels === 2
+          ? 'STEREO'
+          : `${a.channels}CH`
+      : a.right && a.right !== a.left
+        ? 'STEREO'
+        : 'MONO';
+  const rate = Number.isInteger(sr) ? `${sr.toFixed(0)}k` : `${sr.toFixed(1)}k`;
+  return `${rate} · ${ch}`;
+});
 
-function computePeaksRaw(buf: WaveAudio, samplesPerPx: number): { peaks: Float32Array; max: number } {
-  const len = Math.min(buf.left.length, buf.right.length || buf.left.length)
-  const totalPixels = Math.ceil(len / samplesPerPx)
-  const peaks = new Float32Array(totalPixels * 2)
-  let globalMax = 0
+function computePeaksRaw(
+  buf: WaveAudio,
+  samplesPerPx: number,
+): { peaks: Float32Array; max: number } {
+  const len = Math.min(buf.left.length, buf.right.length || buf.left.length);
+  const totalPixels = Math.ceil(len / samplesPerPx);
+  const peaks = new Float32Array(totalPixels * 2);
+  let globalMax = 0;
   for (let i = 0; i < totalPixels; i++) {
-    const start = i * samplesPerPx
-    const end = Math.min(start + samplesPerPx, len)
-    let min = 1
-    let max = -1
+    const start = i * samplesPerPx;
+    const end = Math.min(start + samplesPerPx, len);
+    let min = 1;
+    let max = -1;
     for (let j = start; j < end; j++) {
-      const r = buf.right ? buf.right[j] : buf.left[j]
-      const v = (buf.left[j] + (r ?? buf.left[j])) * 0.5
-      if (v < min) min = v
-      if (v > max) max = v
+      const r = buf.right ? buf.right[j] : buf.left[j];
+      const v = (buf.left[j] + (r ?? buf.left[j])) * 0.5;
+      if (v < min) min = v;
+      if (v > max) max = v;
     }
-    peaks[i * 2] = min
-    peaks[i * 2 + 1] = max
-    const absMax = Math.max(Math.abs(min), Math.abs(max))
-    if (absMax > globalMax) globalMax = absMax
+    peaks[i * 2] = min;
+    peaks[i * 2 + 1] = max;
+    const absMax = Math.max(Math.abs(min), Math.abs(max));
+    if (absMax > globalMax) globalMax = absMax;
   }
-  return { peaks, max: globalMax }
+  return { peaks, max: globalMax };
 }
 
 function applyScale(peaks: Float32Array, scale: number): void {
-  for (let i = 0; i < peaks.length; i++) peaks[i] *= scale
+  for (let i = 0; i < peaks.length; i++) peaks[i] *= scale;
 }
 
 function draw() {
-  const canvas = canvasRef.value
-  const body = bodyRef.value
-  if (!canvas || !body) return
-  const w = Math.floor(body.clientWidth)
-  const h = drawHeight.value
-  if (w <= 0) return
+  const canvas = canvasRef.value;
+  const body = bodyRef.value;
+  if (!canvas || !body) return;
+  const w = Math.floor(body.clientWidth);
+  const h = drawHeight.value;
+  if (w <= 0) return;
 
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = w * dpr
-  canvas.height = h * dpr
-  canvas.style.width = `${w}px`
-  canvas.style.height = `${h}px`
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
 
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.scale(dpr, dpr)
-  ctx.clearRect(0, 0, w, h)
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
 
-  const cs = getComputedStyle(body)
-  const fillColor = cs.getPropertyValue('--wave-fill').trim() || 'rgba(139, 92, 246, 0.32)'
-  const lineColor = cs.getPropertyValue('--wave-line').trim() || 'rgba(139, 92, 246, 0.2)'
-  const compareColor = cs.getPropertyValue('--wave-compare').trim() || 'rgba(148, 163, 184, 0.5)'
-  const placeholderColor = cs.getPropertyValue('--wave-placeholder').trim() || 'rgba(255, 255, 255, 0.22)'
+  const cs = getComputedStyle(body);
+  const fillColor = cs.getPropertyValue('--wave-fill').trim() || 'rgba(139, 92, 246, 0.32)';
+  const lineColor = cs.getPropertyValue('--wave-line').trim() || 'rgba(139, 92, 246, 0.2)';
+  const compareColor = cs.getPropertyValue('--wave-compare').trim() || 'rgba(148, 163, 184, 0.5)';
+  const placeholderColor =
+    cs.getPropertyValue('--wave-placeholder').trim() || 'rgba(255, 255, 255, 0.22)';
 
-  const mid = h / 2
+  const mid = h / 2;
 
   // Center axis
-  ctx.strokeStyle = lineColor
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(0, mid)
-  ctx.lineTo(w, mid)
-  ctx.stroke()
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, mid);
+  ctx.lineTo(w, mid);
+  ctx.stroke();
 
   if (!props.audio) {
-    ctx.fillStyle = placeholderColor
-    ctx.font = '600 9px "JetBrains Mono", ui-monospace, monospace'
-    ctx.letterSpacing = '0.16em' as unknown as string
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('NO AUDIO LOADED', w / 2, mid + 2)
-    return
+    ctx.fillStyle = placeholderColor;
+    ctx.font = '600 9px "JetBrains Mono", ui-monospace, monospace';
+    ctx.letterSpacing = '0.16em' as unknown as string;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('NO AUDIO LOADED', w / 2, mid + 2);
+    return;
   }
 
-  const samplesPerPx = Math.max(1, Math.floor(props.audio.left.length / w))
+  const samplesPerPx = Math.max(1, Math.floor(props.audio.left.length / w));
   const compareSamplesPerPx = props.compare
     ? Math.max(1, Math.floor(props.compare.left.length / w))
-    : 0
+    : 0;
   const needRecompute =
     cachedPrimary !== props.audio ||
     cachedCompare !== (props.compare ?? null) ||
-    cachedSamplesPerPx !== samplesPerPx
+    cachedSamplesPerPx !== samplesPerPx;
   if (needRecompute) {
-    const primary = computePeaksRaw(props.audio, samplesPerPx)
-    const secondary = props.compare ? computePeaksRaw(props.compare, compareSamplesPerPx) : null
-    const sharedMax = Math.max(primary.max, secondary?.max ?? 0) || 1
-    const scale = 1 / sharedMax
-    applyScale(primary.peaks, scale)
-    if (secondary) applyScale(secondary.peaks, scale)
-    primaryPeaks = primary.peaks
-    comparePeaks = secondary?.peaks ?? null
-    cachedPrimary = props.audio
-    cachedCompare = props.compare ?? null
-    cachedSamplesPerPx = samplesPerPx
+    const primary = computePeaksRaw(props.audio, samplesPerPx);
+    const secondary = props.compare ? computePeaksRaw(props.compare, compareSamplesPerPx) : null;
+    const sharedMax = Math.max(primary.max, secondary?.max ?? 0) || 1;
+    const scale = 1 / sharedMax;
+    applyScale(primary.peaks, scale);
+    if (secondary) applyScale(secondary.peaks, scale);
+    primaryPeaks = primary.peaks;
+    comparePeaks = secondary?.peaks ?? null;
+    cachedPrimary = props.audio;
+    cachedCompare = props.compare ?? null;
+    cachedSamplesPerPx = samplesPerPx;
   }
-  if (!primaryPeaks) return
+  if (!primaryPeaks) return;
 
   // Ghost: draw compare buffer first (hollow outline)
   if (comparePeaks) {
-    const cmpCols = Math.min(w, comparePeaks.length / 2)
-    ctx.fillStyle = compareColor
-    ctx.beginPath()
+    const cmpCols = Math.min(w, comparePeaks.length / 2);
+    ctx.fillStyle = compareColor;
+    ctx.beginPath();
     for (let i = 0; i < cmpCols; i++) {
-      const min = comparePeaks[i * 2]
-      const max = comparePeaks[i * 2 + 1]
-      const y1 = mid - max * mid
-      const y2 = mid - min * mid
-      ctx.rect(i, y1, 1, Math.max(1, y2 - y1))
+      const min = comparePeaks[i * 2];
+      const max = comparePeaks[i * 2 + 1];
+      const y1 = mid - max * mid;
+      const y2 = mid - min * mid;
+      ctx.rect(i, y1, 1, Math.max(1, y2 - y1));
     }
-    ctx.fill()
+    ctx.fill();
   }
 
   // Primary on top
-  const cols = Math.min(w, primaryPeaks.length / 2)
-  ctx.fillStyle = fillColor
-  ctx.beginPath()
+  const cols = Math.min(w, primaryPeaks.length / 2);
+  ctx.fillStyle = fillColor;
+  ctx.beginPath();
   for (let i = 0; i < cols; i++) {
-    const min = primaryPeaks[i * 2]
-    const max = primaryPeaks[i * 2 + 1]
-    const y1 = mid - max * mid
-    const y2 = mid - min * mid
-    ctx.rect(i, y1, 1, Math.max(1, y2 - y1))
+    const min = primaryPeaks[i * 2];
+    const max = primaryPeaks[i * 2 + 1];
+    const y1 = mid - max * mid;
+    const y2 = mid - min * mid;
+    ctx.rect(i, y1, 1, Math.max(1, y2 - y1));
   }
-  ctx.fill()
+  ctx.fill();
 }
 
 function requestDraw() {
-  if (rafId !== null) return
+  if (rafId !== null) return;
   rafId = requestAnimationFrame(() => {
-    rafId = null
-    draw()
-  })
+    rafId = null;
+    draw();
+  });
 }
 
-watch(() => [props.audio, props.compare, props.height, props.variant], requestDraw, { deep: false })
+watch(() => [props.audio, props.compare, props.height, props.variant], requestDraw, {
+  deep: false,
+});
 
 onMounted(() => {
-  requestDraw()
+  requestDraw();
   if (bodyRef.value && typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(() => requestDraw())
-    resizeObserver.observe(bodyRef.value)
+    resizeObserver = new ResizeObserver(() => requestDraw());
+    resizeObserver.observe(bodyRef.value);
   }
   if (typeof MutationObserver !== 'undefined') {
-    themeObserver = new MutationObserver(() => requestDraw())
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    themeObserver = new MutationObserver(() => requestDraw());
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
   }
-})
+});
 
 onBeforeUnmount(() => {
-  if (rafId !== null) cancelAnimationFrame(rafId)
-  resizeObserver?.disconnect()
-  themeObserver?.disconnect()
-})
+  if (rafId !== null) cancelAnimationFrame(rafId);
+  resizeObserver?.disconnect();
+  themeObserver?.disconnect();
+});
 </script>
 
 <template>
@@ -244,11 +305,24 @@ onBeforeUnmount(() => {
       </span>
       <span class="wave-panel__mode">{{ variantLabel }}</span>
     </header>
-    <div ref="bodyRef" class="wave-panel__body">
+    <div
+      ref="bodyRef"
+      class="wave-panel__body"
+      :class="{ 'wave-panel__body--seekable': !!audio && interactive }"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+    >
       <canvas ref="canvasRef" class="wave-panel__canvas"></canvas>
       <div class="wave-panel__grid" aria-hidden="true">
         <span v-for="i in 7" :key="i"></span>
       </div>
+      <div
+        v-if="audio && interactive"
+        class="wave-panel__playhead"
+        :style="{ left: playheadLeft }"
+        aria-hidden="true"
+      ></div>
       <div class="wave-panel__edge" aria-hidden="true"></div>
     </div>
   </div>
@@ -407,6 +481,36 @@ html:not(.dark) .wave-panel {
   height: 100%;
   position: relative;
   z-index: 1;
+}
+
+.wave-panel__body--seekable {
+  cursor: pointer;
+  touch-action: none;
+}
+
+.wave-panel__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--demo-cyan);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--demo-cyan) 70%, transparent);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.wave-panel__playhead::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--demo-cyan);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--demo-cyan) 80%, transparent);
+  transform: translateX(-50%);
 }
 
 .wave-panel__grid {

@@ -1,0 +1,26 @@
+@media (max-width: 1180px) {
+  .mix-studio {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  }
+
+  .mix-studio__right {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .mix-statusbar {
+    padding: 8px 10px;
+  }
+
+  .mix-studio {
+    grid-template-columns: 1fr;
+  }
+
+  .mix-studio__right {
+    display: flex;
+  }
+}
+

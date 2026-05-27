@@ -1,99 +1,105 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps<{
-  bpm: number
-  isPlaying: boolean
-  currentTime: number
-  beats?: Float32Array | number[]
-}>()
+  bpm: number;
+  isPlaying: boolean;
+  currentTime: number;
+  beats?: Float32Array | number[];
+}>();
 
-const pulseScale = ref(1)
-const isBeating = ref(false)
+const pulseScale = ref(1);
+const isBeating = ref(false);
 
-let animationFrame: number | null = null
-let lastBeatIndex = -1
+let animationFrame: number | null = null;
+let lastBeatIndex = -1;
 
 const beatInterval = computed(() => {
-  if (props.bpm <= 0) return 0
-  return 60 / props.bpm
-})
+  if (props.bpm <= 0) return 0;
+  return 60 / props.bpm;
+});
 
 // Beat-synced animation
-watch([() => props.isPlaying, () => props.currentTime, () => props.beats], ([playing, time, beats]) => {
-  if (!playing || !beats || beats.length === 0) {
-    isBeating.value = false
-    return
-  }
-
-  // Find the closest beat
-  const beatsArray = Array.from(beats)
-  let closestIndex = -1
-  let minDiff = Infinity
-
-  for (let i = 0; i < beatsArray.length; i++) {
-    const diff = Math.abs(beatsArray[i] - time)
-    if (diff < minDiff) {
-      minDiff = diff
-      closestIndex = i
+watch(
+  [() => props.isPlaying, () => props.currentTime, () => props.beats],
+  ([playing, time, beats]) => {
+    if (!playing || !beats || beats.length === 0) {
+      isBeating.value = false;
+      return;
     }
-  }
 
-  // Trigger pulse on beat
-  if (closestIndex !== lastBeatIndex && minDiff < 0.05) {
-    lastBeatIndex = closestIndex
-    triggerPulse()
-  }
-})
+    // Find the closest beat
+    const beatsArray = Array.from(beats);
+    let closestIndex = -1;
+    let minDiff = Infinity;
+
+    for (let i = 0; i < beatsArray.length; i++) {
+      const diff = Math.abs(beatsArray[i] - time);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIndex = i;
+      }
+    }
+
+    // Trigger pulse on beat
+    if (closestIndex !== lastBeatIndex && minDiff < 0.05) {
+      lastBeatIndex = closestIndex;
+      triggerPulse();
+    }
+  },
+);
 
 function triggerPulse() {
-  isBeating.value = true
-  pulseScale.value = 1.15
+  isBeating.value = true;
+  pulseScale.value = 1.15;
 
   setTimeout(() => {
-    pulseScale.value = 1
-  }, 100)
+    pulseScale.value = 1;
+  }, 100);
 
   setTimeout(() => {
-    isBeating.value = false
-  }, 200)
+    isBeating.value = false;
+  }, 200);
 }
 
 // Fallback: BPM-based pulse when no beats detected
-watch(() => props.isPlaying, (playing) => {
-  if (playing && (!props.beats || props.beats.length === 0)) {
-    startBpmPulse()
-  } else if (!playing) {
-    stopBpmPulse()
-  }
-})
+watch(
+  () => props.isPlaying,
+  (playing) => {
+    if (playing && (!props.beats || props.beats.length === 0)) {
+      startBpmPulse();
+    } else if (!playing) {
+      stopBpmPulse();
+    }
+  },
+);
 
-let bpmInterval: number | null = null
+let bpmInterval: number | null = null;
 
 function startBpmPulse() {
-  if (bpmInterval) return
-  if (beatInterval.value <= 0) return
+  if (bpmInterval) return;
+  if (beatInterval.value <= 0) return;
 
   bpmInterval = window.setInterval(() => {
     if (props.isPlaying) {
-      triggerPulse()
+      triggerPulse();
     }
-  }, beatInterval.value * 1000)
+  }, beatInterval.value * 1000);
 }
 
 function stopBpmPulse() {
   if (bpmInterval) {
-    clearInterval(bpmInterval)
-    bpmInterval = null
+    clearInterval(bpmInterval);
+    bpmInterval = null;
   }
 }
 
 onUnmounted(() => {
-  stopBpmPulse()
+  stopBpmPulse();
   if (animationFrame) {
-    cancelAnimationFrame(animationFrame)
+    cancelAnimationFrame(animationFrame);
   }
-})
+});
 </script>
 
 <template>

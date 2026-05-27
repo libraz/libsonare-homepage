@@ -1,50 +1,134 @@
 ---
 title: MIR Overview
-description: How BPM, beats, key, chords, chroma, onsets, FFT, STFT, spectrograms, MFCC, CQT, VQT, HPSS, pitch, and sections fit together.
+description: How BPM, beats, key, chords, chroma, onsets, FFT, STFT, spectrograms, MFCC, CQT, VQT, HPSS, pitch, and sections fit together — and which libsonare feature answers which musical question.
 ---
 
 # MIR Overview
 
-MIR means Music Information Retrieval. It is the part of audio analysis that extracts musical structure from sound: tempo, beat positions, key, chords, pitch, timbre, and sections.
+MIR means **Music Information Retrieval**: the part of audio analysis that turns sound into *musical* answers — tempo, beat positions, key, chords, pitch, timbre, and structure. This page is a map. It groups the terms you will meet across the docs and shows how they build on one another, so you know which feature to reach for and where it is computed.
 
-These terms are grouped because they are not isolated features. Most MIR tasks build on spectral or time-frequency representations.
+These terms are grouped on purpose. They are not isolated functions — almost every MIR task is built on the same **time–frequency foundation**. Understanding that shared foundation once means the individual features stop looking like a long, unrelated list.
 
-## Timing: BPM, Beat, Onset, Section
+::: tip New here? Read this as orientation, not reference
+This page explains *how the pieces relate*. For call signatures, go to the [JavaScript API](../../js-api.md#feature-extraction) or [Python API](../../python-api.md#feature-extraction); for *how each one is computed*, see [DSP Implementation Notes](../../dsp-implementation.md).
+:::
 
-BPM estimates tempo. Beat tracking places pulses on the timeline. Onset detection finds moments where notes, drums, consonants, or other events begin.
+## The shared pipeline
 
-Section analysis groups longer spans such as intro, verse-like material, chorus-like material, breaks, or repeated patterns. It usually depends on changes in rhythm, harmony, timbre, and energy over time.
+Most MIR features are derived from a small set of intermediate representations. You rarely build these by hand — libsonare computes them internally — but seeing the flow explains why so many features share parameters like `nFft` and `hopLength`.
 
-## Harmony: Key, Chord, Chroma
+```mermaid
+flowchart TD
+  W[waveform] --> S[STFT / spectrogram]
+  S --> MEL[mel spectrogram]
+  S --> CH[chroma]
+  S --> ON[onset strength]
+  MEL --> MFCC[MFCC / timbre]
+  CH --> KEY[key]
+  CH --> CHORD[chords]
+  ON --> BPM[BPM / beats]
+  ON --> SEC[sections]
+  S --> HPSS[HPSS: harmonic / percussive]
+```
 
-Key detection estimates the tonal center. Chord recognition estimates local harmony. Chroma compresses frequency content into 12 pitch-class bins, which is useful because the same pitch class can appear in many octaves.
+Because these intermediates are shared, asking for BPM, key, chord, and section results back-to-back on the same source does **not** repeat the heavy work — the STFT and friends are computed once and reused.
 
-Chroma is powerful for harmony, but it ignores some octave and timbre detail. That is a feature for chord/key work and a limitation for other tasks.
+## Which question, which feature
 
-## Spectrum: FFT, STFT, Spectrogram
+| You want to answer… | Reach for | Built on |
+|---------------------|-----------|----------|
+| How fast is it? Where are the beats? | BPM / beat tracking | onset strength |
+| What key is it in? | key detection | chroma |
+| What chord is playing? | chord recognition | chroma |
+| Where does the chorus start? | section analysis | rhythm + harmony + timbre |
+| What note is the melody? | pitch / melody tracking | (V)QT, autocorrelation |
+| What does it *sound* like (timbre)? | MFCC | mel spectrogram |
+| Can I separate drums from the rest? | HPSS | spectrogram structure |
+| What is the raw frequency content over time? | STFT / spectrogram | the waveform |
+| What does the recording space sound like? | room-acoustic analysis | impulse-response decay or blind free-decay estimates |
 
-The FFT is an efficient algorithm for computing the DFT (Discrete Fourier Transform), which converts a block of samples into frequency content. STFT repeats that process over many short windows so frequency content can be tracked over time.
+## Timing: BPM, beat, onset, section
 
-A spectrogram is the visual result: time on one axis, frequency on another, and intensity as brightness or color.
+The timing family builds up in layers:
 
-## Perceptual Features: Mel, MFCC, CQT, VQT
+| Feature | What it answers |
+|---------|-----------------|
+| **Onset detection** | Where notes, drums, or consonants begin: the spikes in an onset-strength envelope. |
+| **BPM** | How periodic those onsets are. |
+| **Beat tracking** | Where pulses land on the timeline. |
+| **Section analysis** | Where longer spans such as intros, verse-like sections, chorus-like sections, and breaks begin and end. |
 
-Mel spectrograms warp frequency resolution toward human hearing. MFCCs are the DCT of the log-mel power spectrum, producing decorrelated coefficients that approximate the spectral envelope.
+::: info Onset is the root of the rhythm family
+BPM, beats, and tempograms all start from the same onset-strength envelope. If you want the time × tempo picture behind a BPM estimate, see the tempogram family in [Realtime and Streaming](../../realtime-streaming.md#tempograms-from-an-onset-envelope).
+:::
 
-CQT and VQT use musically spaced frequency bins. They are useful when pitch relationships matter more than equal-Hz spacing.
+## Harmony: key, chord, chroma
 
-## Separation and Pitch: HPSS and Pitch
+**Chroma** compresses frequency content into 12 pitch-class bins (C, C♯, … B), folding every octave of the same note together. That makes it the natural substrate for harmony: **key detection** estimates the tonal center from the overall chroma distribution, and **chord recognition** estimates local harmony frame by frame.
 
-HPSS separates harmonic material from percussive material by exploiting their different spectrogram footprints: harmonic content forms horizontal lines, percussive content forms vertical lines. This can improve downstream tasks because drums and pitched instruments often confuse each other.
+::: warning Chroma trades octave and timbre detail for harmonic clarity
+Folding octaves together is exactly what makes chroma good for key/chord work — and exactly what makes it the wrong tool for melody or timbre, where octave and spectral shape matter. Match the representation to the question.
+:::
 
-Pitch estimation tracks fundamental frequency. It is useful for melody, vocals, instruments, tuning checks, and transcription-style workflows.
+## Spectrum: FFT, STFT, spectrogram
+
+The **FFT** is an efficient algorithm for the DFT (Discrete Fourier Transform), which converts a block of samples into frequency content.
+
+The **STFT** repeats that over many short, overlapping windows so frequency content can be tracked *over time*.
+
+A **spectrogram** is the visual result: time on one axis, frequency on another, intensity as brightness.
+
+Two parameters recur everywhere: `nFft` (window size — bigger means finer frequency resolution but blurrier timing) and `hopLength` (step between windows — smaller means more frames and smoother motion). The trade-off between frequency and time resolution is fundamental, not a libsonare quirk.
+
+## Perceptual features: mel, MFCC, CQT, VQT
+
+These perceptual features answer different questions:
+
+| Feature | What it emphasizes |
+|---------|--------------------|
+| **Mel spectrogram** | Frequency resolution shaped toward human hearing: fine detail low, coarser detail high. |
+| **MFCCs** | A compact "timbre fingerprint" from the DCT of the log-mel power spectrum. |
+| **CQT** / **VQT** | Musically spaced bins, useful when pitch relationships matter more than equal-Hz spacing. |
+
+You can also run these transforms backwards for previews and debugging — see [Inverse Features](../../inverse-features.md).
+
+## Separation and pitch: HPSS and pitch
+
+**HPSS** means Harmonic/Percussive Source Separation. It splits sustained pitched material from transient hits by using their spectrogram shapes.
+
+| Component | Spectrogram shape |
+|-----------|-------------------|
+| Harmonic content | Mostly **horizontal** lines. |
+| Percussive content | Mostly **vertical** lines. |
+
+Separating them first often improves downstream tasks because drums and pitched instruments otherwise confuse each other.
+
+**Pitch estimation** tracks the fundamental frequency — useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
+
+## Adjacent: room acoustics
+
+Room-acoustic analysis is adjacent to MIR. It describes the space captured by the recording rather than the notes, rhythm, or form of the music.
+
+Use direct IR analysis when you have a clean impulse response. That path measures RT60, EDT, C50, C80, D50, and band decay.
+
+Use blind acoustic estimation when you only have a normal recording. That path reports room-decay cues with a confidence value because the free-decay evidence may be weak or missing. See [Room Acoustics](../../acoustic-analysis.md).
 
 :::: details Implementation notes
 
-libsonare exposes MIR functions across browser/WASM, JavaScript, Python, native bindings, CLI, and C++ APIs. Many features share intermediate representations such as STFT, chroma, and spectral energy curves, so asking for BPM, key, chord, and section results back-to-back on the same source does not repeat the heavy work — the intermediates are computed once and reused.
+libsonare exposes MIR functions across browser/WASM, JavaScript, Python, native bindings, CLI, and C++ APIs.
 
-The browser analysis demo is built for interactive use, with progressive BPM/key/chord estimates through `StreamAnalyzer` and AudioWorklet integration in mind. The mastering demo focuses on measurement-style APIs instead: loudness measurement, reference comparison, and report export. Running both demos on the same library is meant to show what is reusable across analysis and finishing work.
+Many features share intermediate representations such as STFT, chroma, and spectral energy curves. Asking for BPM, key, chord, and section results back-to-back on the same source does not repeat the heavy work; the intermediates are computed once and reused.
+
+The browser demos are built for interactive use, but each one emphasizes a different part of the library:
+
+| Demo | Main role |
+|------|-----------|
+| [Music Analysis Studio](/music-analysis) | Full-file MIR: BPM, key, chords, sections, and related analysis. |
+| Realtime views | Progressive BPM, key, and chord estimates through `StreamAnalyzer`. |
+| [Mastering Studio](/mastering) | Measurement-style APIs such as loudness measurement, reference comparison, and report export. |
+
+Seeing those demos side by side shows which pieces are reusable across analysis work and finishing work.
 
 ::::
 
-Related: [Introduction](../../introduction.md), [librosa Compatibility](../../librosa-compatibility.md), [Audio Basics](./audio-basics.md)
+Related: [Introduction](../../introduction.md), [Audio Basics](./audio-basics.md), [JavaScript API](../../js-api.md#feature-extraction), [Room Acoustics](../../acoustic-analysis.md), [DSP Implementation Notes](../../dsp-implementation.md), [librosa Compatibility](../../librosa-compatibility.md)

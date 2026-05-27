@@ -2,6 +2,17 @@
 
 This document describes the internal architecture of libsonare.
 
+Use this page after the task and runtime guides. It is an internal map for contributors and integrators who need to understand how public APIs connect to the C++ core.
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- trace a public call from WASM, C, quick API, or `sonare.h` into analysis, streaming, effects, mastering, mixing, and engine modules;
+- identify which source directories own each subsystem;
+- understand where shared DSP, feature extraction, realtime processing, and language bindings meet;
+- decide whether a change belongs in a core module, a binding wrapper, a demo component, or documentation.
+
 ## Module Overview
 
 ```mermaid
@@ -31,6 +42,7 @@ graph TB
         DYNAMICS["DynamicsAnalyzer"]
         RHYTHM["RhythmAnalyzer"]
         MELODY["MelodyAnalyzer"]
+        ACOUSTIC["AcousticAnalyzer"]
     end
 
     subgraph "Effects Layer"
@@ -43,6 +55,15 @@ graph TB
         DECOMPOSE["Decompose<br/>(NMF)"]
     end
 
+    subgraph "Mastering & Mixing Layer"
+        MASTERCHAIN["MasteringChain<br/>(eq/dynamics/spectral/<br/>stereo/maximizer/loudness)"]
+        STREAMMASTER["StreamingMasteringChain"]
+        STREAMEQ["StreamingEqualizer"]
+        MIXER["Mixer<br/>(channel strips/buses/sends)"]
+        ENGINE["RealtimeEngine<br/>(transport/clips/automation)"]
+        METER["Metering<br/>(LUFS/true-peak/goniometer)"]
+    end
+
     subgraph "Feature Layer"
         MEL["MelSpectrogram"]
         CHROMA["Chroma"]
@@ -51,6 +72,7 @@ graph TB
         SPECTRAL["Spectral Features"]
         ONSET["Onset Detection"]
         PITCH["Pitch Tracking"]
+        INVERSE["Inverse Features<br/>(Mel/MFCC reconstruction)"]
     end
 
     subgraph "Core Layer"
@@ -85,6 +107,7 @@ graph TB
     MUSIC --> DYNAMICS
     MUSIC --> RHYTHM
     MUSIC --> MELODY
+    QUICK --> ACOUSTIC
 
     BPM --> ONSET
     KEY --> CHROMA
@@ -93,11 +116,21 @@ graph TB
     SECTION --> MEL
     BOUNDARY --> MEL
     MELODY --> PITCH
+    ACOUSTIC --> SPECTRUM
 
     HPSS --> SPECTRUM
     TIMESTRETCH --> SPECTRUM
     PITCHSHIFT --> TIMESTRETCH
     PITCHSHIFT --> RESAMPLE
+
+    WASM --> MASTERCHAIN
+    WASM --> STREAMMASTER
+    WASM --> STREAMEQ
+    WASM --> MIXER
+    WASM --> ENGINE
+    MASTERCHAIN --> SPECTRUM
+    MIXER --> METER
+    ENGINE --> MIXER
 
     MEL --> SPECTRUM
     CHROMA --> SPECTRUM
@@ -105,12 +138,27 @@ graph TB
     VQT --> CQT
     SPECTRAL --> SPECTRUM
     ONSET --> MEL
+    INVERSE --> MEL
+    INVERSE --> SPECTRUM
 
     SPECTRUM --> FFT
     SPECTRUM --> WINDOW
     AUDIO --> AUDIO_IO
     AUDIO --> RESAMPLE
 ```
+
+## Page Map
+
+| If you are looking at... | Read... |
+|--------------------------|---------|
+| `analysis/` and `feature/` | [JavaScript API](./js-api.md), [Python API](./python-api.md), [librosa Compatibility](./librosa-compatibility.md) |
+| `analysis/acoustic_analyzer.*` | [Room Acoustics](./acoustic-analysis.md) |
+| `streaming/` | [Realtime and Streaming](./realtime-streaming.md) |
+| `mastering/` | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Mastering Assistant](./mastering-assistant.md) |
+| `mixing/` | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
+| `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [Realtime and Streaming](./realtime-streaming.md), especially `RealtimeEngine` |
+| `editing/` and `effects/` | [Editing DSP](./editing-dsp.md), [DSP Implementation Notes](./dsp-implementation.md#effects-and-editing-dsp) |
+| `sonare_c.h` and binding folders | [Binding Parity](./binding-parity.md), [Native Bindings](./native-bindings.md), [C++ API](./cpp-api.md) |
 
 ## Directory Structure
 
@@ -141,6 +189,7 @@ src/
 │   ├── chroma.h
 │   ├── cqt.h
 │   ├── vqt.h
+│   ├── inverse.h
 │   ├── spectral.h
 │   ├── onset.h
 │   └── pitch.h
@@ -168,12 +217,31 @@ src/
 │   ├── rhythm_analyzer.h
 │   ├── timbre_analyzer.h
 │   ├── dynamics_analyzer.h
+│   ├── acoustic_analyzer.h
 │   └── ...
 │
 ├── streaming/          # Level 6: Real-time streaming
 │   ├── stream_analyzer.h   # Main streaming analyzer
 │   ├── stream_config.h     # Configuration options
 │   └── stream_frame.h      # Frame and buffer types
+│
+├── mastering/          # Mastering engine
+│   ├── api/            # Chain, registry, presets (25 presets)
+│   ├── eq/ dynamics/ spectral/ stereo/   # Processor families
+│   ├── maximizer/ multiband/ saturation/ repair/
+│   ├── match/ assistant/                 # Reference match + assistant/profile
+│   └── common/        # Shared biquad/loudness helpers
+│
+├── mixing/             # Mixing engine
+│   ├── channel_strip.* # Strip: trim/insert/pan/width/sends
+│   ├── bus.* sends.* vca_group.* panner.*
+│   └── api/            # Scene JSON + scene presets
+│
+├── engine/             # Realtime engine (transport/clips/graph)
+├── automation/         # Automation lanes + curve shapes
+├── metering/           # LUFS, true-peak, phase scope/goniometer
+├── graph/  rt/  transport/   # DSP graph, RT-safe primitives, transport
+├── editing/            # Pitch editor, voice changer, note stretch
 │
 ├── quick.h             # Simple function API
 ├── sonare.h            # Unified include header
@@ -272,6 +340,10 @@ flowchart TB
     ISTFT --> OUT
     RESAMPLE --> OUT
 ```
+
+::: details What is a phase vocoder?
+A phase vocoder is the standard way to time-stretch audio (or, combined with resampling, pitch-shift it) without obvious artifacts. It takes the STFT and *advances the phase* of each frequency bin to fit the new timeline before reconstructing, so a sound can be made longer or shorter while its pitch and spectral character stay intact. libsonare uses it for `timeStretch` / `pitchShift` and the editing-DSP voice tools.
+:::
 
 ### Streaming Pipeline
 
@@ -399,7 +471,10 @@ to provide the sample rate; it does not implicitly resample to 22050 Hz the way
 ## WASM Compilation
 
 ```
-Output: ~457KB WASM + ~50KB JS in the current site bundle
-Build: Emscripten with Embind
-Flags: -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
+Output: ~1,607 KB WASM (~573 KB gzipped) plus the JS glue;
+        ~1,721 KB total (~598 KB gzipped) — see src/wasm/meta.json
+Build:  Emscripten with Embind
+Flags:  -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```
+
+The full mastering + mixing + analysis surface accounts for the bundle size; an analysis-only build would be smaller.

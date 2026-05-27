@@ -1,0 +1,3 @@
+/* Theme toggle icon swap (must be global to react to html.dark) */
+html.dark .landing__icon-sun { display: block; }
+html.dark .landing__icon-moon { display: none; }

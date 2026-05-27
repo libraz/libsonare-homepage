@@ -1,125 +1,144 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { TechPanel, StatusIndicator } from '@/components/ui'
-import wasmMeta from '@/wasm/meta.json'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { StatusIndicator, TechPanel } from '@/components/ui';
+import wasmMeta from '@/wasm/meta.json';
 
 const props = defineProps<{
   chromaData: {
-    features: Float32Array
-    nFrames: number
-    nChroma: number
-  } | null
-  rmsData: Float32Array | null
+    features: Float32Array;
+    nFrames: number;
+    nChroma: number;
+  } | null;
+  rmsData: Float32Array | null;
   bandData: {
-    low: Float32Array
-    high: Float32Array
-  } | null
-  currentTime: number
-  duration: number
-  isPlaying: boolean
-  sampleRate?: number
-}>()
+    low: Float32Array;
+    high: Float32Array;
+  } | null;
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
+  sampleRate?: number;
+}>();
 
-const consoleRef = ref<HTMLDivElement | null>(null)
-const logs = ref<{ text: string; type: 'data' | 'info' | 'metric' | 'note' }[]>([])
-const maxLogs = 50
+const consoleRef = ref<HTMLDivElement | null>(null);
+const logs = ref<{ text: string; type: 'data' | 'info' | 'metric' | 'note' }[]>([]);
+const maxLogs = 50;
 
-const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-let lastLogTime = 0
-let frameCount = 0
-let intervalId: ReturnType<typeof setInterval> | null = null
+let lastLogTime = 0;
+let frameCount = 0;
+let intervalId: ReturnType<typeof setInterval> | null = null;
 
 const currentFrame = computed(() => {
-  if (!props.chromaData || props.duration === 0) return 0
-  const progress = Math.max(0, Math.min(props.currentTime / props.duration, 1))
-  return Math.max(0, Math.min(Math.floor(progress * props.chromaData.nFrames), props.chromaData.nFrames - 1))
-})
+  if (!props.chromaData || props.duration === 0) return 0;
+  const progress = Math.max(0, Math.min(props.currentTime / props.duration, 1));
+  return Math.max(
+    0,
+    Math.min(Math.floor(progress * props.chromaData.nFrames), props.chromaData.nFrames - 1),
+  );
+});
 
 function formatValue(val: number, decimals = 3): string {
-  return val.toFixed(decimals).padStart(7, ' ')
+  return val.toFixed(decimals).padStart(7, ' ');
 }
 
 function formatHex(val: number): string {
-  const hex = Math.floor(val * 255).toString(16).toUpperCase().padStart(2, '0')
-  return `0x${hex}`
+  const hex = Math.floor(val * 255)
+    .toString(16)
+    .toUpperCase()
+    .padStart(2, '0');
+  return `0x${hex}`;
 }
 
 function getDominantNote(): { name: string; value: number } | null {
-  if (!props.chromaData) return null
-  const frame = currentFrame.value
-  const { features, nChroma } = props.chromaData
+  if (!props.chromaData) return null;
+  const frame = currentFrame.value;
+  const { features, nChroma } = props.chromaData;
 
-  let maxIdx = 0
-  let maxVal = 0
+  let maxIdx = 0;
+  let maxVal = 0;
   for (let i = 0; i < nChroma; i++) {
-    const v = features[frame * nChroma + i] || 0
+    const v = features[frame * nChroma + i] || 0;
     if (v > maxVal) {
-      maxVal = v
-      maxIdx = i
+      maxVal = v;
+      maxIdx = i;
     }
   }
 
-  return maxVal > 0.1 ? { name: noteNames[maxIdx], value: maxVal } : null
+  return maxVal > 0.1 ? { name: noteNames[maxIdx], value: maxVal } : null;
 }
 
 function addLog(text: string, type: 'data' | 'info' | 'metric' | 'note' = 'data') {
-  logs.value.push({ text, type })
+  logs.value.push({ text, type });
   if (logs.value.length > maxLogs) {
-    logs.value.shift()
+    logs.value.shift();
   }
 }
 
 function generateLog() {
-  if (!props.isPlaying) return
+  if (!props.isPlaying) return;
 
-  const now = Date.now()
-  if (now - lastLogTime < 80) return // throttle
-  lastLogTime = now
-  frameCount++
+  const now = Date.now();
+  if (now - lastLogTime < 80) return; // throttle
+  lastLogTime = now;
+  frameCount++;
 
-  const frame = currentFrame.value
-  const timestamp = props.currentTime.toFixed(3).padStart(8, '0')
+  const frame = currentFrame.value;
+  const timestamp = props.currentTime.toFixed(3).padStart(8, '0');
 
   // Cycle through different log types
-  const logType = frameCount % 6
+  const logType = frameCount % 6;
 
   if (props.rmsData && logType === 0) {
-    const rmsFrame = Math.floor((frame / (props.chromaData?.nFrames || 1)) * props.rmsData.length)
-    const rms = props.rmsData[rmsFrame] || 0
-    addLog(`[${timestamp}] RMS_PWR: ${formatValue(rms)} ${formatHex(rms)} ▐${'█'.repeat(Math.floor(rms * 20))}${'░'.repeat(20 - Math.floor(rms * 20))}▌`, 'metric')
+    const rmsFrame = Math.floor((frame / (props.chromaData?.nFrames || 1)) * props.rmsData.length);
+    const rms = props.rmsData[rmsFrame] || 0;
+    addLog(
+      `[${timestamp}] RMS_PWR: ${formatValue(rms)} ${formatHex(rms)} ▐${'█'.repeat(Math.floor(rms * 20))}${'░'.repeat(20 - Math.floor(rms * 20))}▌`,
+      'metric',
+    );
   }
 
   if (props.bandData && logType === 1) {
-    const bandFrame = Math.floor((frame / (props.chromaData?.nFrames || 1)) * props.bandData.low.length)
-    const low = props.bandData.low[bandFrame] || 0
-    addLog(`[${timestamp}] LO_BAND: ${formatValue(low)} ◄ ${formatHex(low)}`, 'data')
+    const bandFrame = Math.floor(
+      (frame / (props.chromaData?.nFrames || 1)) * props.bandData.low.length,
+    );
+    const low = props.bandData.low[bandFrame] || 0;
+    addLog(`[${timestamp}] LO_BAND: ${formatValue(low)} ◄ ${formatHex(low)}`, 'data');
   }
 
   if (props.bandData && logType === 2) {
-    const bandFrame = Math.floor((frame / (props.chromaData?.nFrames || 1)) * props.bandData.high.length)
-    const high = props.bandData.high[bandFrame] || 0
-    addLog(`[${timestamp}] HI_BAND: ${formatValue(high)} ◄ ${formatHex(high)}`, 'data')
+    const bandFrame = Math.floor(
+      (frame / (props.chromaData?.nFrames || 1)) * props.bandData.high.length,
+    );
+    const high = props.bandData.high[bandFrame] || 0;
+    addLog(`[${timestamp}] HI_BAND: ${formatValue(high)} ◄ ${formatHex(high)}`, 'data');
   }
 
   if (props.chromaData && logType === 3) {
-    const { features, nChroma } = props.chromaData
+    const { features, nChroma } = props.chromaData;
     const chromaStr = Array.from({ length: nChroma }, (_, i) => {
-      const v = features[frame * nChroma + i] || 0
-      return v > 0.3 ? '█' : v > 0.1 ? '▓' : v > 0.05 ? '░' : '·'
-    }).join('')
-    addLog(`[${timestamp}] CHROMA:  ${chromaStr}`, 'data')
+      const v = features[frame * nChroma + i] || 0;
+      return v > 0.3 ? '█' : v > 0.1 ? '▓' : v > 0.05 ? '░' : '·';
+    }).join('');
+    addLog(`[${timestamp}] CHROMA:  ${chromaStr}`, 'data');
   }
 
   if (logType === 4) {
-    const dominant = getDominantNote()
+    const dominant = getDominantNote();
     if (dominant) {
-      addLog(`[${timestamp}] NOTE_DT: ${dominant.name.padEnd(3, ' ')} [${formatValue(dominant.value)}]`, 'note')
+      addLog(
+        `[${timestamp}] NOTE_DT: ${dominant.name.padEnd(3, ' ')} [${formatValue(dominant.value)}]`,
+        'note',
+      );
     }
   }
 
   if (logType === 5) {
-    addLog(`[${timestamp}] FRM_IDX: ${frame.toString().padStart(6, '0')} / ${(props.chromaData?.nFrames || 0).toString().padStart(6, '0')}`, 'info')
+    addLog(
+      `[${timestamp}] FRM_IDX: ${frame.toString().padStart(6, '0')} / ${(props.chromaData?.nFrames || 0).toString().padStart(6, '0')}`,
+      'info',
+    );
   }
 }
 
@@ -136,39 +155,46 @@ function bootSequence() {
     { text: '[BOOT] Signal analyzer online', type: 'info' as const },
     { text: '[READY] Awaiting audio signal...', type: 'metric' as const },
     { text: '──────────────────────────────────────────────', type: 'info' as const },
-  ]
+  ];
 
   bootLogs.forEach((log, i) => {
-    setTimeout(() => addLog(log.text, log.type), i * 100)
-  })
+    setTimeout(() => addLog(log.text, log.type), i * 100);
+  });
 }
 
-watch(() => props.isPlaying, (playing) => {
-  if (playing) {
-    addLog('──────────────────────────────────────────────', 'info')
-    addLog('[STREAM] Audio playback started', 'info')
-    addLog('[STREAM] Real-time analysis active', 'metric')
-    addLog('──────────────────────────────────────────────', 'info')
-  } else {
-    addLog('[STREAM] Playback paused', 'info')
-  }
-})
+watch(
+  () => props.isPlaying,
+  (playing) => {
+    if (playing) {
+      addLog('──────────────────────────────────────────────', 'info');
+      addLog('[STREAM] Audio playback started', 'info');
+      addLog('[STREAM] Real-time analysis active', 'metric');
+      addLog('──────────────────────────────────────────────', 'info');
+    } else {
+      addLog('[STREAM] Playback paused', 'info');
+    }
+  },
+);
 
 // Auto-scroll to bottom
-watch(logs, () => {
-  if (consoleRef.value) {
-    consoleRef.value.scrollTop = consoleRef.value.scrollHeight
-  }
-}, { flush: 'post' })
+watch(
+  logs,
+  () => {
+    if (consoleRef.value) {
+      consoleRef.value.scrollTop = consoleRef.value.scrollHeight;
+    }
+  },
+  { flush: 'post' },
+);
 
 onMounted(() => {
-  bootSequence()
-  intervalId = setInterval(generateLog, 80)
-})
+  bootSequence();
+  intervalId = setInterval(generateLog, 80);
+});
 
 onUnmounted(() => {
-  if (intervalId) clearInterval(intervalId)
-})
+  if (intervalId) clearInterval(intervalId);
+});
 </script>
 
 <template>
@@ -205,6 +231,17 @@ onUnmounted(() => {
 
   height: 100%;
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* The default palette is tuned for a dark terminal; in light mode the panel
+   background is light, so recolor the readout to dark, theme-aligned hues that
+   keep enough contrast on the light surface. */
+html:not(.dark) .console {
+  --console-text: rgba(30, 41, 59, 0.78);
+  --console-data: rgba(14, 116, 144, 0.95);
+  --console-info: rgba(51, 65, 85, 0.72);
+  --console-metric: rgba(109, 40, 217, 0.95);
+  --console-note: rgba(154, 52, 18, 0.95);
 }
 
 .console__body {

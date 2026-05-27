@@ -1,10 +1,10 @@
 <script setup lang="ts">
 defineProps<{
-  variant?: 'default' | 'dense' | 'sparse'
-  color?: string
-  opacity?: number
-  scanlines?: boolean
-}>()
+  variant?: 'default' | 'dense' | 'sparse';
+  color?: string;
+  opacity?: number;
+  scanlines?: boolean;
+}>();
 </script>
 
 <template>

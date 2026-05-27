@@ -10,7 +10,7 @@
     "analyzing": "Analyzing...",
     "progress": "{stage} - {percent}%",
     "panel": {
-      "title": "ANALYSIS",
+      "title": "NOW PLAYING",
       "bpm": "BPM",
       "key": "KEY",
       "chord": "CHORD",
@@ -59,7 +59,7 @@
       "privacy": "LOCAL ONLY",
       "mode": "Mastering mode",
       "docs": "Docs",
-      "openAnalyzer": "Open analyzer",
+      "openAnalyzer": "Open player",
       "help": "Help"
     },
     "status": {
@@ -109,6 +109,7 @@
       },
       "loadSource": "Load file",
       "replaceSource": "Replace",
+      "loadDemo": "Load demo",
       "waveformIdle": "No audio loaded",
       "stageLabel": "Stage"
     },
@@ -376,6 +377,7 @@
       "channels": "Channels",
       "sourcePeak": "Source Peak",
       "masterPeak": "Master Peak",
+      "stereoImage": "Stereo Image",
       "stereoNarrow": "Narrow / mono-safe",
       "stereoBalanced": "Balanced stereo",
       "stereoWide": "Wide / check mono",
@@ -405,10 +407,13 @@
       "beforeHint": "Listen to the unprocessed source for A/B comparison.",
       "after": "After",
       "afterHint": "Listen to the rendered master for A/B comparison.",
+      "reference": "Reference",
+      "referenceHint": "Listen to the loaded reference track for A/B comparison.",
       "loudnessMatch": "Match loudness",
       "loudnessMatchTooltip": "Attenuates whichever side is louder so you compare tonal/dynamic changes, not just volume — required for fair A/B.",
       "loudnessMatchNote": "A/B playback lowers the louder side so the comparison is not biased by volume.",
-      "rawCompareNote": "Raw comparison is using each file at its rendered level."
+      "rawCompareNote": "Raw comparison is using each file at its rendered level.",
+      "empty": "Master your audio to compare before and after here."
     },
     "reference": {
       "title": "Reference track",
@@ -419,12 +424,26 @@
       "matchHint": "Replaces the regular chain with a one-shot spectral match against the loaded reference. Only EQ shape is matched — loudness and limiting are not.",
       "matching": "Matching..."
     },
+    "insights": {
+      "title": "Source assistant",
+      "profile": "Audio profile",
+      "suggestions": "Suggested moves",
+      "deliveryPreview": "Delivery preview",
+      "analyzing": "Analyzing",
+      "ready": "Ready",
+      "refresh": "Refresh",
+      "empty": "Load a source to measure loudness, dynamics, tonal balance, and stereo cues.",
+      "suggestionHint": "Suggestions appear after the source profile is measured.",
+      "previewHint": "Platform previews estimate how the source relates to common loudness targets.",
+      "ceilingRisk": "Ceiling risk"
+    },
     "errors": {
       "loadFailed": "Could not load this audio file. Try WAV, MP3, FLAC, or OGG.",
       "renderFailed": "Mastering failed. Try a shorter file or a lighter preset.",
       "referenceFailed": "Reference matching failed. Try a shorter source or reference file.",
       "noSavedPreset": "No saved chain preset was found in this browser.",
-      "presetLoadFailed": "Could not load these chain settings."
+      "presetLoadFailed": "Could not load these chain settings.",
+      "presetSaveFailed": "Could not save these chain settings."
     }
   },
   "common": {

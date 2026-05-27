@@ -4,9 +4,7 @@ Complete API reference for libsonare JavaScript/TypeScript interface.
 
 ## Overview
 
-libsonare provides audio analysis capabilities for web applications. The npm
-package is the WebAssembly build and works on decoded mono `Float32Array`
-samples; it does not include a file decoder.
+libsonare provides audio analysis, mastering, mixing, and editing DSP capabilities for web applications. The npm package is the WebAssembly build and works on decoded `Float32Array` samples; it does not include a file decoder.
 
 | Category | Functions | Use Cases |
 |----------|-----------|-----------|
@@ -14,11 +12,40 @@ samples; it does not include a file decoder.
 | **Full Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
 | **Audio Effects** | `hpss`, `timeStretch`, `pitchShift` | Remixing, practice tools |
 | **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
+| **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS targets, true-peak limiting, presets, streaming chains |
+| **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
+| **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune` | Vocal tuning, note edits, pitch/formant changes |
 | **Audio Class** | `Audio.fromBuffer` | OOP wrapper for all functions |
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
 :::
+
+For a cross-binding feature map, see [Feature Map](./api-surface.md). For the complete mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
+
+## How To Read This Reference
+
+Read this page in three passes:
+
+1. Start with [Pick The Smallest API That Solves The Job](#pick-the-smallest-api-that-solves-the-job) and choose one function family.
+2. Read only the section for that family, then run one recipe from [Examples](./examples.md).
+3. Come back to the full type definitions when you need exact return shapes, optional parameters, or runtime parity.
+
+For browser apps, keep the core rule in mind: initialize WASM with `await init()`, decode files to PCM first, then pass `Float32Array` samples plus the original `sampleRate`.
+
+## Pick The Smallest API That Solves The Job
+
+The package is broad, so start from the task rather than the function list:
+
+| You need | Start with | Why |
+|----------|------------|-----|
+| One tempo/key/beat value for a track | `detectBpm`, `detectKey`, `detectBeats` | Fast, direct answers without building the full analysis object |
+| Metadata for a whole song | `analyze` or the focused `analyze*` helpers | `analyze` gives the common summary; focused helpers expose more detail |
+| A live visualizer or progressive BPM/key/chord UI | `StreamAnalyzer` | Processes blocks and drains frame buffers for UI rendering |
+| Browser mastering or delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Use presets first, then move to named processors when you need control |
+| Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; persistent scene mixer when routing matters |
+| Vocal/note edits | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune` | Editing DSP changes the signal rather than analyzing it |
+| Room decay or clarity measurements | `analyzeImpulseResponse`, `detectAcoustic` | These describe the recording space, not the music |
 
 ## Installation
 
@@ -93,7 +120,7 @@ function isInitialized(): boolean
 Get the library version.
 
 ```typescript
-function version(): string  // e.g., "1.1.0"
+function version(): string  // e.g., "1.2.1"
 ```
 
 ## Analysis Functions
@@ -145,7 +172,7 @@ function detectKey(samples: Float32Array, sampleRate: number): Key
 ```typescript
 interface Key {
   root: PitchClass;      // 0-11 (C=0, B=11)
-  mode: Mode;            // 0=Major, 1=Minor
+  mode: Mode;            // Major, Minor, or modal value; see Mode enum
   confidence: number;    // 0.0 to 1.0
   name: string;          // "C major", "A minor"
   shortName: string;     // "C", "Am"
@@ -261,6 +288,63 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 });
 ```
 
+### Focused analysis helpers
+
+Use the focused helpers when the default `analyze(...)` result is either too broad or not detailed enough. They share the same mono `Float32Array` input model but expose options that are hidden by the high-level call.
+
+| Task | Function | Notes |
+|------|----------|-------|
+| Downbeat/bar starts | `detectDownbeats(samples, sampleRate)` | Returns seconds for likely bar starts. Pair with `detectBeats` for grid displays. |
+| Ranked key candidates | `detectKeyCandidates(samples, sampleRate, options?)` | Useful when the top key is ambiguous or when you want profile/mode filtering. |
+| Detailed tempo candidates | `analyzeBpm(samples, sampleRate, ...)` | Returns the best BPM plus alternate candidates and tempo evidence. |
+| Rhythm character | `analyzeRhythm(samples, sampleRate, ...)` | Reports groove, syncopation, and regularity style features. |
+| Dynamics | `analyzeDynamics(samples, sampleRate, ...)` | Dynamic range, loudness range, crest factor, and compression flag. |
+| Timbre | `analyzeTimbre(samples, sampleRate, ...)` | Brightness, warmth, density, roughness, and complexity. |
+| Chords | `detectChords(samples, sampleRate, options?)` | Chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' | 'nnls'`. |
+| Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. |
+| Melody | `analyzeMelody(samples, sampleRate, ...)` | Monophonic melody contour based on pitch tracking. |
+
+```typescript
+const keys = detectKeyCandidates(samples, sampleRate, {
+  modes: [Mode.Major, Mode.Minor],
+  profile: 'krumhansl',
+  genreHint: 'pop',
+});
+
+const chords = detectChords(samples, sampleRate, {
+  useHmm: true,
+  useKeyContext: true,
+  keyRoot: keys[0].root,
+  keyMode: keys[0].mode,
+  chromaMethod: 'nnls',
+});
+
+const sections = analyzeSections(samples, sampleRate);
+```
+
+`detectKey(...)` and `detectKeyCandidates(...)` accept the same
+`KeyDetectionOptions` includes:
+
+| Option group | Values |
+|--------------|--------|
+| Controls | `modes`, `profile`, `genreHint`, `useHpss`, `loudnessWeighted`, `highPassHz` |
+| Profile names | `ks`, `krumhansl`, `temperley`, `shaath`, `keyfinder`, `faraldo-edmt` / `edmt`, `faraldo-edma` / `edma`, `faraldo-edmm` / `edmm`, `bellman-budge` / `bellman` |
+| Genre hints | `auto`, `edm`, `electronic`, `dance`, `pop`, `classical`, `jazz` |
+
+## Room Acoustics
+
+`analyzeImpulseResponse(...)` and `detectAcoustic(...)` measure the space captured by the recording rather than the song itself. Use the first when you have a clean impulse response, and the second when you only have a normal recording and need a blind estimate.
+
+```typescript
+const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6);
+console.log(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence);
+
+const blind = detectAcoustic(roomRecording, sampleRate, 6, 24, 30, 10);
+console.log(blind.isBlind, blind.rt60Bands);
+```
+
+See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, and confidence.
+
 ## Audio Effects
 
 ### `hpss(samples, sampleRate, kernelHarmonic?, kernelPercussive?)` <Badge type="warning" text="Heavy" />
@@ -355,6 +439,44 @@ function pitchShift(
 ): Float32Array
 ```
 
+### Editing DSP
+
+These functions change the signal itself rather than only analyzing it. They are
+also available as `Audio` instance methods, where the stored `sampleRate` is
+used automatically.
+
+```typescript
+function pitchCorrectToMidi(
+  samples: Float32Array,
+  sampleRate: number,
+  currentMidi: number,
+  targetMidi: number,
+): Float32Array
+
+function noteStretch(
+  samples: Float32Array,
+  sampleRate: number,
+  onsetSample: number,
+  offsetSample: number,
+  stretchRatio: number,  // >1 lengthens the region, <1 shortens it
+): Float32Array
+
+function voiceChange(
+  samples: Float32Array,
+  sampleRate: number,
+  pitchSemitones: number,
+  formantFactor: number,  // 1.0 = unchanged
+): Float32Array
+```
+
+CLI equivalents:
+
+```bash
+sonare pitch-correct vocal.wav --current-midi 68.7 --target-midi 69 -o corrected.wav
+sonare note-stretch take.wav --onset 12000 --offset 24000 --ratio 1.25 -o held.wav
+sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice.wav
+```
+
 ### `normalize(samples, sampleRate, targetDb?)`
 
 Normalize audio to target peak level.
@@ -378,6 +500,10 @@ function trim(
   thresholdDb?: number   // default: -60.0
 ): Float32Array
 ```
+
+This is the simple `Audio`-level threshold trim. For librosa-compatible
+frame/RMS silence detection that also returns the original start/end sample
+range, use `trimSilence(...)` below.
 
 ## Feature Extraction
 
@@ -557,6 +683,38 @@ function rmsEnergy(
 ): Float32Array
 ```
 
+### CQT, VQT, NNLS chroma, inverse features, and loudness
+
+These functions are not just "more features"; they solve different modeling problems:
+
+| Need | Use | Why |
+|------|-----|-----|
+| Log-frequency pitch representation | `cqt(...)` | Constant-Q bins align well with musical pitch over octaves. |
+| Variable bandwidth pitch representation | `vqt(...)` | Like CQT, but with a bandwidth offset for low-frequency stability. |
+| Chord-friendly chroma | `nnlsChroma(...)` | NNLS note activations can be cleaner for chord work than STFT chroma. |
+| Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. |
+| Delivery loudness measurements | `lufs`, `momentaryLufs`, `shortTermLufs` | ITU-R BS.1770 / EBU R128 style loudness values. |
+
+```typescript
+const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
+const nnls = nnlsChroma(samples, sampleRate);
+const loudness = lufs(samples, sampleRate);
+
+const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+```
+
+Closest CLI equivalents:
+
+```bash
+sonare cqt song.wav
+sonare vqt song.wav
+sonare nnls-chroma song.wav
+sonare lufs song.wav --json
+sonare mel-to-audio song.wav -o mel-preview.wav
+```
+
+For reconstruction limits and parameter notes, see [Inverse Features](./inverse-features.md). For librosa-parity details, see [librosa Compatibility](./librosa-compatibility.md).
+
 ### Pitch Detection <Badge type="info" text="Medium" />
 
 ```typescript
@@ -626,7 +784,7 @@ function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 
 ## librosa-Compatible Helpers
 
-These librosa-parity helpers were added in libsonare 1.1.0. They mirror the
+These librosa-parity helpers mirror the
 behaviour of the corresponding `librosa` functions and are exposed across the
 WASM, Node, and Python bindings. See [librosa Compatibility](/docs/librosa-compatibility)
 for the librosa function each helper matches.
@@ -669,8 +827,15 @@ function splitSilence(
 ): Int32Array  // flat [start0, end0, start1, end1, ...]
 ```
 
-`trimSilence` matches `librosa.effects.trim`. `splitSilence` matches
-`librosa.effects.split` and returns non-silent intervals as sample-index pairs.
+`trimSilence` matches `librosa.effects.trim`. It uses frame RMS and a `topDb`
+distance below the peak RMS, then returns both the trimmed audio and the
+original `[startSample, endSample)` range.
+
+This is distinct from `trim(samples, sampleRate, thresholdDb)`, which is a
+simpler threshold trim.
+
+`splitSilence` matches `librosa.effects.split` and returns non-silent intervals
+as sample-index pairs.
 
 ### Frame / Pad / Length Helpers
 
@@ -683,7 +848,7 @@ function frameSignal(
 
 function padCenter(values: Float32Array, size: number, padValue?: number): Float32Array
 function fixLength(values: Float32Array, size: number, padValue?: number): Float32Array
-function fixFrames(frames: Int32Array | number[], xMin?: number, xMax?: number, pad?: boolean): Int32Array
+function fixFrames(frames: Int32Array, xMin?: number, xMax?: number, pad?: boolean): Int32Array
 ```
 
 `frameSignal` is `librosa.util.frame`. `padCenter`, `fixLength`, and `fixFrames`
@@ -705,7 +870,7 @@ function peakPick(
 function vectorNormalize(
   values: Float32Array,
   normType?: number,  // 0 = inf, 1 = L1, 2 = L2, 3 = power (default 0)
-  threshold?: number,
+  threshold?: number, // default 1e-12
 ): Float32Array
 ```
 
@@ -762,14 +927,38 @@ function tonnetz(
 
 function tempogram(
   onsetEnvelope: Float32Array,
-  sampleRate?: number,
+  sampleRate: number,
   hopLength?: number,         // default 512
   winLength?: number,         // default 384
+  mode?: 'autocorrelation' | 'auto' | 'ac' | 'cosine' | 0 | 1,  // default 'autocorrelation'
 ): { nFrames: number; winLength: number; data: Float32Array }
+
+function fourierTempogram(
+  onsetEnvelope: Float32Array,
+  sampleRate?: number,
+  hopLength?: number,
+  winLength?: number,
+): { nBins: number; nFrames: number; data: Float32Array }
+
+function cyclicTempogram(
+  onsetEnvelope: Float32Array,
+  sampleRate: number,
+  hopLength?: number,
+  winLength?: number,
+  bpmMin?: number,            // default 60
+  nBins?: number,             // default 60
+): { nFrames: number; nBins: number; data: Float32Array }
+
+function tempogramRatio(
+  tempogramData: Float32Array,
+  winLength?: number,
+  sampleRate?: number,
+  hopLength?: number,
+): Float32Array
 
 function plp(
   onsetEnvelope: Float32Array,
-  sampleRate?: number,
+  sampleRate: number,
   hopLength?: number,
   tempoMin?: number,          // default 30
   tempoMax?: number,          // default 300
@@ -777,9 +966,19 @@ function plp(
 ): Float32Array
 ```
 
-`tonnetz` is `librosa.feature.tonnetz`. `tempogram` matches
-`librosa.feature.tempogram` (autocorrelation). `plp` is
-`librosa.beat.plp` (predominant local pulse).
+These helpers mirror familiar librosa rhythm and harmony features:
+
+| Helper | Meaning |
+|--------|---------|
+| `tonnetz` | Corresponds to `librosa.feature.tonnetz` |
+| `tempogram` | Corresponds to `librosa.feature.tempogram`; autocorrelation by default |
+| `fourierTempogram` | FFT-based tempogram |
+| `cyclicTempogram` | Tempo classes folded by octave |
+| `plp` | `librosa.beat.plp` (predominant local pulse) |
+
+For `tempogram`, pass `mode: 'cosine'` to use the window-local cosine-similarity variant. The wrapper also accepts `'auto'`, `'ac'`, `0`, and `1` aliases for parity with lower-level bindings.
+
+See [Realtime and Streaming](./realtime-streaming.md#tempograms-from-an-onset-envelope) for when to use each.
 
 ## Resampling
 
@@ -797,7 +996,7 @@ function resample(
 
 ## Audio Class
 
-The `Audio` class provides an object-oriented wrapper around all standalone functions. It stores the samples and sample rate internally, so you don't need to pass them to every call.
+The `Audio` class provides an object-oriented wrapper around the common one-shot functions. It stores the samples and sample rate internally, so you don't need to pass them to every call. Focused helpers such as section/melody/timbre/dynamics analysis and room-acoustic estimation remain standalone in the WASM wrapper.
 
 ### `Audio.fromBuffer(samples, sampleRate)`
 
@@ -818,10 +1017,18 @@ const audio = Audio.fromBuffer(samples, 44100);
 
 ### Instance Methods
 
-All standalone functions are available as instance methods — `samples` and `sampleRate` are provided automatically:
+Common one-shot helpers are available as instance methods — `samples` and `sampleRate` are provided automatically. Focused helpers such as `analyzeSections(...)`, `analyzeMelody(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and the room-acoustic functions remain standalone calls in the WASM wrapper.
 
 ```typescript
-import { init, Audio } from '@libraz/libsonare';
+import {
+  init,
+  Audio,
+  analyzeSections,
+  analyzeMelody,
+  analyzeDynamics,
+  analyzeTimbre,
+  detectAcoustic,
+} from '@libraz/libsonare';
 
 await init();
 
@@ -830,12 +1037,23 @@ const audio = Audio.fromBuffer(samples, 44100);
 // Analysis
 const bpm = audio.detectBpm();
 const key = audio.detectKey();
+const keyCandidates = audio.detectKeyCandidates();
 const beats = audio.detectBeats();
+const downbeats = audio.detectDownbeats();
 const onsets = audio.detectOnsets();
 const result = audio.analyze();
+const chords = audio.detectChords({ useHmm: true });
+const sections = analyzeSections(audio.data, audio.sampleRate);
+const melody = analyzeMelody(audio.data, audio.sampleRate);
+const dynamics = analyzeDynamics(audio.data, audio.sampleRate);
+const timbre = analyzeTimbre(audio.data, audio.sampleRate);
+const acoustic = detectAcoustic(audio.data, audio.sampleRate);
 
 // Effects
 const { harmonic, percussive } = audio.hpss();
+const corrected = audio.pitchCorrectToMidi(68.7, 69);
+const held = audio.noteStretch(12000, 24000, 1.25);
+const voice = audio.voiceChange(3, 1.05);
 const stretched = audio.timeStretch(1.5);
 const shifted = audio.pitchShift(2);
 const normalized = audio.normalize(-3.0);
@@ -846,6 +1064,9 @@ const stftResult = audio.stft();
 const mel = audio.melSpectrogram();
 const mfcc = audio.mfcc();
 const chroma = audio.chroma();
+const nnls = audio.nnlsChroma();
+const env = audio.onsetEnvelope();
+const loudness = audio.lufs();
 const centroid = audio.spectralCentroid();
 const bandwidth = audio.spectralBandwidth();
 const rolloff = audio.spectralRolloff();
@@ -875,16 +1096,30 @@ Configuration options for StreamAnalyzer.
 
 ```typescript
 interface StreamConfig {
-  sampleRate: number;          // e.g., 44100
+  sampleRate: number;          // e.g., 44100 (stream default, not 22050)
   nFft?: number;               // default: 2048
   hopLength?: number;          // default: 512
   nMels?: number;              // default: 128
+  fmin?: number;               // default: 0
+  fmax?: number;               // default: 0 (= sr/2)
+  tuningRefHz?: number;        // default: 440
+  computeMagnitude?: boolean;  // default: true
   computeMel?: boolean;        // default: true
   computeChroma?: boolean;     // default: true
   computeOnset?: boolean;      // default: true
+  computeSpectral?: boolean;   // default: true
   emitEveryNFrames?: number;   // default: 1 (no throttling)
+  magnitudeDownsample?: number;// default: 1
+  keyUpdateIntervalSec?: number;  // default: 5
+  bpmUpdateIntervalSec?: number;  // default: 10
+  window?: number;             // 0=Hann (default), 1=Hamming, 2=Blackman, 3=Rectangular
+  outputFormat?: number;       // 0=Float32 (default), 1=Int16, 2=Uint8
 }
 ```
+
+`outputFormat` controls how `readFramesU8`/`readFramesI16` quantize on the way
+out (the analysis itself always runs in float). See
+[Realtime and Streaming](./realtime-streaming.md#reading-frames-and-output-format).
 
 ### StreamAnalyzer Class
 
@@ -901,8 +1136,12 @@ class StreamAnalyzer {
   // Number of frames ready to read
   availableFrames(): number;
 
-  // Read processed frames
+  // Read processed frames (full float precision)
   readFrames(maxFrames: number): FrameBuffer;
+
+  // Quantized reads for bandwidth-reduced transfer / visualization
+  readFramesU8(maxFrames: number): StreamFramesU8;   // Uint8 feature arrays
+  readFramesI16(maxFrames: number): StreamFramesI16; // Int16 feature arrays
 
   // Reset state for new stream
   reset(baseSampleOffset?: number): void;
@@ -1088,6 +1327,10 @@ function processChunk(samples: Float32Array) {
 analyzer.dispose();
 ```
 
+::: details Why call `dispose()` / `delete()`? (embind handles)
+Classes like `StreamAnalyzer`, `Mixer`, and `StreamingMasteringChain` are C++ objects exposed to JavaScript through **embind** (Emscripten's C++↔JS bridge). Each one owns a block of WASM heap memory that the JavaScript garbage collector *cannot* see or reclaim. You must release it yourself — `StreamAnalyzer` uses `dispose()`, while `Mixer` and `StreamingMasteringChain` use `delete()` (some WASM classes also expose `destroy()` as an alias). Skipping this slowly leaks WASM memory in long-running pages. Plain functions like `analyze()` return ordinary JS values and need no cleanup; only these handle-holding classes do. Node native cleanup differs; see [Native Bindings](./native-bindings.md).
+:::
+
 ### AudioWorklet Integration
 
 ```mermaid
@@ -1110,28 +1353,30 @@ sequenceDiagram
 **worklet-processor.ts:**
 
 ```typescript
-import { StreamAnalyzer } from '@libraz/libsonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 class AnalyzerProcessor extends AudioWorkletProcessor {
-  private analyzer: StreamAnalyzer;
+  private analyzer?: StreamAnalyzer;
 
   constructor() {
     super();
-    this.analyzer = new StreamAnalyzer({
-      sampleRate,
-      nFft: 2048,
-      hopLength: 512,
-      nMels: 128,
-      computeMel: true,
-      computeChroma: true,
-      computeOnset: true,
-      emitEveryNFrames: 4
+    void init().then(() => {
+      this.analyzer = new StreamAnalyzer({
+        sampleRate,
+        nFft: 2048,
+        hopLength: 512,
+        nMels: 128,
+        computeMel: true,
+        computeChroma: true,
+        computeOnset: true,
+        emitEveryNFrames: 4
+      });
     });
   }
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0]?.[0];
-    if (!input) return true;
+    if (!input || !this.analyzer) return true;
 
     this.analyzer.process(input);
 
@@ -1229,6 +1474,7 @@ interface Beat {
 ```typescript
 interface Chord {
   root: PitchClass;
+  bass: PitchClass;     // bass note for inversions
   quality: ChordQuality;
   start: number;       // seconds
   end: number;         // seconds
@@ -1309,7 +1555,12 @@ const PitchClass = {
 ```typescript
 const Mode = {
   Major: 0,
-  Minor: 1
+  Minor: 1,
+  Dorian: 2,
+  Phrygian: 3,
+  Lydian: 4,
+  Mixolydian: 5,
+  Locrian: 6
 } as const;
 ```
 
@@ -1318,7 +1569,9 @@ const Mode = {
 ```typescript
 const ChordQuality = {
   Major: 0, Minor: 1, Diminished: 2, Augmented: 3,
-  Dominant7: 4, Major7: 5, Minor7: 6, Sus2: 7, Sus4: 8
+  Dominant7: 4, Major7: 5, Minor7: 6, Sus2: 7, Sus4: 8,
+  Unknown: 9, Add9: 10, MinorAdd9: 11, Dim7: 12,
+  HalfDim7: 13, Major9: 14, Dominant9: 15, Sus2Add4: 16
 } as const;
 ```
 
@@ -1327,7 +1580,7 @@ const ChordQuality = {
 ```typescript
 const SectionType = {
   Intro: 0, Verse: 1, PreChorus: 2, Chorus: 3,
-  Bridge: 4, Instrumental: 5, Outro: 6
+  Bridge: 4, Instrumental: 5, Outro: 6, Unknown: 7
 } as const;
 ```
 
@@ -1356,9 +1609,12 @@ import {
   masterAudioStereo,
   masteringChainStereo,
   masteringChainStereoWithProgress,
+  masteringAssistantSuggest,
+  masteringAudioProfile,
   masteringPresetNames,
   masteringProcessorNames,
   masteringProcess,
+  masteringStreamingPreview,
   masteringStereoAnalyze,
 } from '@libraz/libsonare'
 
@@ -1406,9 +1662,94 @@ const mono = masteringProcess('spectral.airBand', samples, sampleRate, {
 
 const stereoReport = masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate)
 console.log(JSON.parse(stereoReport))
+
+const profile = JSON.parse(masteringAudioProfile(samples, sampleRate, {
+  nFft: 2048,
+  hopLength: 512,
+  truePeakOversample: 4,
+}))
+const suggestions = JSON.parse(masteringAssistantSuggest(samples, sampleRate, {
+  targetLufs: -14,
+  ceilingDb: -1,
+  preferStreamingSafe: true,
+}))
+const deliveryPreview = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
+  { name: 'YouTube', targetLufs: -14, ceilingDb: -1 },
+  { name: 'Podcast', targetLufs: -16, ceilingDb: -1 },
+]))
+console.log(profile, suggestions, deliveryPreview)
 ```
 
+`masteringAudioProfile()` accepts optional numeric profile settings: `nFft`, `hopLength`, and `truePeakOversample`. `masteringAssistantSuggest()` accepts `targetLufs`, `ceilingDb`, `enableRepair`, `preferStreamingSafe`, and `speechMonoAmount`; snake_case aliases are also accepted by the native bindings.
+
 Use `masteringPairProcessorNames()` and `masteringPairAnalyze()` for reference-track workflows such as match analysis or A/B reporting. Pair inputs should use the same sample rate and comparable duration.
+
+### StreamingEqualizer
+
+`StreamingEqualizer` is the block-by-block EQ wrapper used for realtime-safe
+processing: up to 24 bands, zero-latency/natural/linear phase modes, dynamic EQ,
+mid/side processing, external sidechain input, spectrum snapshots, and offline
+reference matching. In the WASM wrapper, call `init()` first and `delete()` when
+done.
+
+```typescript
+import { init, StreamingEqualizer } from '@libraz/libsonare';
+await init();
+
+const eq = new StreamingEqualizer({ sampleRate: 48000, maxBlockSize: 512 });
+try {
+  eq.setBand(0, {
+    type: 'HighShelf',
+    frequencyHz: 8000,
+    gainDb: 4,
+    q: 0.7,
+    enabled: true,
+  });
+  eq.setPhaseMode(1); // 1 = zero-latency, 2 = natural, 3 = linear
+  eq.setAutoGain(true);
+
+  const { left, right } = eq.processStereo(leftBlock, rightBlock);
+  console.log(eq.spectrum(), eq.latencySamples(), left, right);
+} finally {
+  eq.delete();
+}
+```
+
+Source-built C++ CLI equivalents for file-based EQ and filtering:
+
+```bash
+sonare eq track.wav --type 2 --frequency-hz 8000 --gain-db 4 --q 0.7 -o eq.wav
+sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
+```
+
+### StreamingRetune
+
+`StreamingRetune` is the block-by-block mono pitch retune wrapper added in
+libsonare 1.2.1. It maintains grain and delay state across calls, so use
+`prepare()` before the first block and `delete()` when done.
+
+```typescript
+import { init, StreamingRetune } from '@libraz/libsonare';
+await init();
+
+const retune = new StreamingRetune({ semitones: 3, mix: 1, grainSize: 0 });
+retune.prepare(48000, 512);
+
+try {
+  const out = retune.processMono(inputBlock);
+  retune.setConfig({ semitones: -2, mix: 0.75 });
+  console.log(out, retune.config(), retune.grainSize());
+} finally {
+  retune.delete();
+}
+```
+
+Closest CLI equivalents for offline files:
+
+```bash
+sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
+sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
+```
 
 ### StreamingMasteringChain
 
@@ -1425,7 +1766,7 @@ await init();
 const chain = new StreamingMasteringChain({
   eq: { tiltDb: 0.5 },
   dynamics: { compressor: { thresholdDb: -20 } },
-  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
+  maximizer: { truePeakLimiter: { ceilingDb: -1, oversampleFactor: 4 } },
 });
 
 chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
@@ -1440,9 +1781,21 @@ chain.reset();   // clear processor state without re-preparing
 chain.delete();  // release the WASM handle (call when done)
 ```
 
-Stereo-only stages are skipped when `numChannels === 1`. Use `reset()` between
-independent songs that share the same chain; use `delete()` to free the
-underlying handle.
+Stereo-only stages are skipped when `numChannels === 1`.
+
+Offline-only stages that need whole-file context are not accepted by the streaming constructor:
+
+- `repair.declick`
+- `repair.declip`
+- `repair.decrackle`
+- `repair.dehum`
+- `repair.dereverb`
+- `repair.denoise`
+- `loudness`
+
+Use `masteringChain*` or `masterAudio*` when you need those stages.
+
+Use `reset()` between independent songs that share the same chain. Use `delete()` to free the underlying handle.
 
 
 
@@ -1458,7 +1811,11 @@ The named mastering API families are:
 | Run a full stereo chain | `masteringChainStereo()` |
 | Run a full mono chain with progress | `masteringChainWithProgress()` |
 | Run a full stereo chain with progress | `masteringChainStereoWithProgress()` |
+| Run block-by-block EQ | `StreamingEqualizer` |
 | Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
+| Summarize source audio for mastering decisions | `masteringAudioProfile()` |
+| Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
+| Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
 | List mono/stereo processors | `masteringProcessorNames()` |
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
@@ -1473,11 +1830,15 @@ Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and
 
 ### MasteringChainConfig
 
-All `masteringChain*`, `masterAudio*`, and `StreamingMasteringChain` calls
-share the same nested config schema. Every key is optional — only the stages
-you set are activated, in chain order: **repair → eq → dynamics → saturation →
-spectral → stereo → maximizer → loudness**. `masterAudio*` (preset) overrides
-use the same key names but a flat `"dynamics.compressor.thresholdDb"` form.
+`masteringChain*` and `StreamingMasteringChain` use the nested config schema
+below. Every key is optional. Only the stages you set are activated.
+
+The chain runs in this order: **repair → eq → dynamics → saturation → spectral
+→ stereo → maximizer → loudness**.
+
+`masterAudio*` starts from a preset and accepts overrides using the same key
+names in flat dot-notation form, such as
+`"dynamics.compressor.thresholdDb"`.
 
 ::: details Full interface (click to expand)
 
@@ -1559,11 +1920,49 @@ The glossary mastering guides explain when to reach for each section:
 [Dynamics](./glossary/mastering/dynamics.md),
 [Stereo, Limiter, Loudness](./glossary/mastering/stereo-limiter-loudness.md).
 
+## Mixing API
+
+The WASM package exposes the libsonare mixing engine. `mixStereo(...)` is a compact one-shot renderer for stem arrays. `Mixer` is a persistent scene-based mixer with channel strips, buses, sends, VCA groups, automation, strip meters, and goniometer buffers.
+
+```typescript
+import {
+  Mixer,
+  mixStereo,
+  mixingScenePresetJson,
+  mixingScenePresetNames,
+} from '@libraz/libsonare';
+
+mixingScenePresetNames(); // ['vocalReverbSend', ...]
+
+const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
+  inputTrimDb: [3, 0],
+  faderDb: [-3, -12],
+  pan: [0, -0.2],
+  width: [1, 0.9],
+  muted: [false, false],
+});
+
+const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
+const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
+const meter = mixer.stripMeter(0, 'postFader');
+
+mixer.scheduleFaderAutomation(0, sampleRate * 8, -6, 's-curve');
+mixer.schedulePanAutomation(0, sampleRate * 8, -0.25, 'linear');
+mixer.scheduleSendAutomation(0, 0, sampleRate * 12, -12, 'hold');
+
+const goniometer = mixer.readGoniometerLatest(0, 256);
+const sceneJson = mixer.toSceneJson();
+mixer.delete();
+```
+
+`Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. See [Mixing Engine](./mixing.md) for scene and routing details.
+
 ## Performance Summary
 
 | API | Load | Notes |
 |-----|------|-------|
 | `StreamAnalyzer` | <Badge type="tip" text="Real-time" /> | Per-chunk processing, ~2ms/frame, progressive BPM/key/chord estimation |
+| `Mixer` | <Badge type="tip" text="Real-time" /> | Scene-based block processing with automation and meters |
 | `analyze` / `analyzeWithProgress` | <Badge type="warning" text="Heavy" /> | Full analysis pipeline |
 | `hpss` / `harmonic` / `percussive` | <Badge type="warning" text="Heavy" /> | STFT + median filtering |
 | `timeStretch` | <Badge type="warning" text="Heavy" /> | Phase vocoder |
@@ -1583,8 +1982,9 @@ The glossary mastering guides explain when to reach for each section:
 | File | Size | Gzipped |
 |------|------|---------|
 | `sonare.js` | ~50 KB | ~13 KB |
-| `sonare.wasm` | ~457 KB | ~182 KB |
-| **Total** | ~508 KB | ~195 KB |
+| `index.js` | ~64 KB | ~12 KB |
+| `sonare.wasm` | ~1,607 KB | ~573 KB |
+| **Total** | ~1,721 KB | ~598 KB |
 
 ## Browser Support
 

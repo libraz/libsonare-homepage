@@ -10,6 +10,7 @@ node_modules
 
 # Build
 .vitepress/cache
+.vitepress/cache.stale-*
 .vitepress/dist
 
 # Environment

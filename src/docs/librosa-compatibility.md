@@ -11,10 +11,36 @@ This document describes how libsonare functions correspond to Python's librosa l
 ## Overview
 
 libsonare provides many of the same MIR building blocks as
-[librosa](https://librosa.org/) while targeting C++, Python bindings, Node.js
-native bindings, and WebAssembly. It is not a drop-in replacement for librosa:
-APIs, defaults, and numerical details can differ. The libsonare test suite
-contains reference checks against librosa 0.11 for selected features.
+[librosa](https://librosa.org/), but targets C++, Python bindings, Node.js
+native bindings, and WebAssembly.
+
+It is not a drop-in replacement for librosa. APIs, defaults, and numerical
+details can differ.
+
+The libsonare test suite contains reference checks against librosa 0.11 for
+selected features.
+
+## Task-Oriented Map
+
+Use this table before scanning the long compatibility matrix:
+
+| If your librosa code does... | Use in libsonare | Watch out for |
+|------------------------------|------------------|---------------|
+| Load files and run one-off analysis | `Audio.from_file(...)`, then `detect_bpm`, `detect_key`, `analyze` | Browser/WASM does not decode files; decode with Web Audio first |
+| Build spectrogram features for ML | `stft`, `melSpectrogram` / `mel_spectrogram`, `mfcc`, `pcen` | Pass `n_fft`, `hop_length`, `n_mels`, and `n_mfcc` explicitly when comparing |
+| Compute chroma or harmonic features | `chroma`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `nnlsChroma` is not a strict `librosa.feature.chroma_cqt` clone |
+| Track tempo, beats, onsets, or pulse | `onsetEnvelope`, `detectOnsets`, `detectBeats`, `detectBpm`, `tempogram`, `plp` | libsonare returns beat/onset times in seconds for high-level detectors |
+| Edit or transform audio | `hpss`, `timeStretch` / `time_stretch`, `pitchShift` / `pitch_shift`, `trimSilence` / `trim_silence` | Phase-vocoder and resampling details differ from librosa |
+| Convert units or reshape feature arrays | `framesToSamples`, `samplesToFrames`, `frameSignal`, `padCenter`, `fixLength`, `vectorNormalize` | JS names are camelCase, Python names are snake_case |
+| Reconstruct approximate audio from features | `melToAudio`, `mfccToAudio` | Griffin-Lim reconstruction is lossy and phase-estimated |
+
+## Validation Coverage
+
+Compatibility here means "checked against reference behavior", not "the APIs are identical".
+
+The libsonare repository has librosa comparison tests for STFT, mel/MFCC, chroma, CQT, pitch, onset/beat/tempo, tempogram/PLP, PCEN, dB conversion, framing/sequence helpers, silence trim/split, HPSS, harmonic/decompose/remix, tonnetz, and related utilities.
+
+Use the tolerances below as migration guidance. They are not exact numerical guarantees for every input.
 
 ## Feature Comparison
 
@@ -44,8 +70,8 @@ contains reference checks against librosa 0.11 for selected features.
 | `librosa.effects.pitch_shift()` | `pitch_shift()` / `pitchShift()` | Time stretch plus resampling |
 | `librosa.effects.preemphasis()` | `preemphasis()` | `coef`, optional `zi` |
 | `librosa.effects.deemphasis()` | `deemphasis()` | Inverse pre-emphasis |
-| `librosa.effects.trim()` | `trimSilence()` / `trim_silence()` | Returns `(audio, startSample, endSample)` |
-| `librosa.effects.split()` | `splitSilence()` / `split_silence()` | Non-silent intervals |
+| `librosa.effects.trim()` | `trimSilence()` / `trim_silence()` | WASM/Node return `{ audio, startSample, endSample }`; Python returns `(audio, start_sample, end_sample)` |
+| `librosa.effects.split()` | `splitSilence()` / `split_silence()` | WASM/Node return a flat `Int32Array`; Python returns `list[tuple[int, int]]` |
 
 #### Features (spectral / pitch / chroma)
 
@@ -61,16 +87,33 @@ contains reference checks against librosa 0.11 for selected features.
 | `librosa.feature.zero_crossing_rate()` | `zeroCrossingRate()` / `zero_crossing_rate()` | Per-frame |
 | `librosa.feature.rms()` | `rmsEnergy()` / `rms_energy()` | Per-frame |
 | `librosa.feature.tonnetz()` | `tonnetz()` | Input: row-major chromagram |
-| `librosa.feature.tempogram()` | `tempogram()` | Autocorrelation tempogram |
+| `librosa.cqt()` | `cqt()` | Constant-Q transform magnitude |
+| `librosa.vqt()` | `vqt()` | Variable-Q transform; `gamma` controls Q |
+| `librosa.feature.chroma_cqt()` (closest) | `nnlsChroma()` / `nnls_chroma()` | NNLS note-activation chroma; no exact librosa equivalent |
+| `librosa.feature.tempogram()` | `tempogram()` | Autocorrelation (default) or `mode='cosine'` window-local cosine similarity |
+| `librosa.feature.fourier_tempogram()` | `fourierTempogram()` / `fourier_tempogram()` | Complex Fourier tempogram |
+| _(tempo-octave-invariant variant)_ | `cyclicTempogram()` / `cyclic_tempogram()` | Cyclic tempogram; no exact librosa equivalent |
+| `librosa.feature.tempogram_ratio()` | `tempogramRatio()` / `tempogram_ratio()` | Tempogram ratio features |
 | `librosa.pcen()` | `pcen()` | `time_constant`, `gain`, `bias`, `power`, `eps` |
 | `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | Probabilistic YIN |
 | `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN |
+
+#### Inverse reconstruction
+
+These mirror `librosa.feature.inverse.*` and use Griffin-Lim for phase, so round-trips are approximate. See [Inverse Features](./inverse-features.md).
+
+| librosa | libsonare | Notes |
+|---------|-----------|-------|
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT magnitude |
+| _(mel_to_stft + `librosa.griffinlim`)_ | `melToAudio()` / `mel_to_audio()` | Mel power → audio (Griffin-Lim) |
+| `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → mel power |
+| `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → audio (Griffin-Lim) |
 
 #### Onset / Beat / Tempo
 
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
-| `librosa.onset.onset_strength()` | `compute_onset_strength()` | Spectral flux |
+| `librosa.onset.onset_strength()` | `onsetEnvelope()` / `onset_envelope()` | Spectral flux (C++ free function is `compute_onset_strength()`) |
 | `librosa.onset.onset_detect()` | `detectOnsets()` / `detect_onsets()` | Returns onset times |
 | `librosa.beat.beat_track()` | `BeatAnalyzer` / `detectBeats()` | DP-based |
 | `librosa.beat.tempo()` | `BpmAnalyzer` / `detectBpm()` | Tempogram |
@@ -110,6 +153,9 @@ librosa's strength is low-level DSP — higher-level music understanding is typi
 
 ## Function Mapping
 
+The libsonare snippets below assume `import libsonare as sonare` (Python) or the
+named imports from `@libraz/libsonare` (Browser).
+
 ### STFT
 
 **librosa:**
@@ -124,8 +170,15 @@ S = librosa.stft(
 )
 ```
 
-**libsonare (C++):**
-```cpp
+**libsonare:**
+::: code-group
+```typescript [Browser]
+const result = stft(samples, sampleRate, 2048, 512);
+```
+```python [Python]
+result = sonare.stft(samples, sample_rate, n_fft=2048, hop_length=512)
+```
+```cpp [C++]
 sonare::StftConfig config;
 config.n_fft = 2048;
 config.hop_length = 512;
@@ -134,11 +187,11 @@ config.center = true;
 
 auto spec = sonare::Spectrogram::compute(audio, config);
 ```
-
-**libsonare (JS):**
-```typescript
-const result = stft(samples, sampleRate, 2048, 512);
+```bash [CLI]
+# No CLI command dumps the full STFT matrix; use spectral summaries from the CLI.
+sonare spectral song.wav --n-fft 2048 --hop-length 512 --json
 ```
+:::
 
 ### Mel Spectrogram
 
@@ -154,11 +207,21 @@ mel_db = librosa.power_to_db(mel, ref=np.max)
 ```
 
 **libsonare:**
-```typescript
+::: code-group
+```typescript [Browser]
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 // mel.power - power spectrum
 // mel.db - dB scale
 ```
+```python [Python]
+mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
+# mel.power - power spectrum
+# mel.db - dB scale
+```
+```bash [CLI]
+sonare mel song.wav --n-fft 2048 --hop-length 512 --n-mels 128 --json
+```
+:::
 
 ### MFCC
 
@@ -171,10 +234,24 @@ mfcc = librosa.feature.mfcc(
 ```
 
 **libsonare:**
-```typescript
+::: code-group
+```typescript [Browser]
 const result = mfcc(samples, sampleRate, 2048, 512, 128, 13);
 // result.coefficients - [nMfcc x nFrames]
 ```
+```python [Python]
+result = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=13)
+# result.coefficients - [n_mfcc x n_frames]
+```
+```bash [CLI]
+# No CLI command dumps MFCC coefficients; use inverse MFCC preview from the source-built C++ CLI.
+sonare mfcc-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 --n-mfcc 13 -o mfcc-preview.wav
+```
+:::
+
+::: details What is DCT-II, and why does MFCC use it?
+MFCC stands for *Mel-Frequency Cepstral Coefficients*. After building a mel spectrogram and taking its log, libsonare applies a **DCT-II** (type-II Discrete Cosine Transform) along the frequency axis. The DCT is like an FFT that produces only real numbers and packs most of the energy into the first few coefficients, so keeping just `n_mfcc` of them gives a compact summary of the spectral *shape* (the "cepstrum") while discarding fine detail. That is why MFCCs are a small, ML-friendly timbre descriptor rather than a full spectrum.
+:::
 
 ### HPSS
 
@@ -184,11 +261,21 @@ y_harm, y_perc = librosa.effects.hpss(y, kernel_size=31)
 ```
 
 **libsonare:**
-```typescript
+::: code-group
+```typescript [Browser]
 const result = hpss(samples, sampleRate, 31, 31);
 // result.harmonic
 // result.percussive
 ```
+```python [Python]
+result = sonare.hpss(samples, sample_rate, kernel_harmonic=31, kernel_percussive=31)
+# result.harmonic
+# result.percussive
+```
+```bash [CLI]
+sonare hpss song.wav --json
+```
+:::
 
 ### Beat Tracking
 
@@ -199,10 +286,20 @@ beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=512)
 ```
 
 **libsonare:**
-```typescript
+::: code-group
+```typescript [Browser]
 const bpm = detectBpm(samples, sampleRate);
 const beats = detectBeats(samples, sampleRate);  // Already in seconds
 ```
+```python [Python]
+bpm = sonare.detect_bpm(samples, sample_rate)
+beats = sonare.detect_beats(samples, sample_rate)  # Already in seconds
+```
+```bash [CLI]
+sonare bpm song.wav --json
+sonare beats song.wav --json
+```
+:::
 
 ## Default Parameters
 
@@ -215,9 +312,9 @@ const beats = detectBeats(samples, sampleRate);  // Already in seconds
 | `window` | 'hann' | Hann |
 | `center` | True | true |
 | `n_mels` | 128 | 128 |
-| `fmin` | 0.0 | 0.0 |
+| `fmin` | 0.0 | 0.0 for mel/inverse helpers; pitch helpers default to 65.0 Hz; CQT/VQT default to C1 (32.70319566 Hz) |
 | `fmax` | sr/2 | sr/2 |
-| `n_mfcc` | 20 | 13 in JS/top-level helpers; some wrapper methods default to 20 |
+| `n_mfcc` | 20 | 13 in WASM/Node JS helpers; 20 in Python top-level `mfcc()` |
 | `n_chroma` | 12 | 12 |
 
 When matching librosa output, pass parameters explicitly instead of relying on
@@ -240,9 +337,17 @@ mel = 2595 * log10(1 + f / 700)
 
 libsonare provides Slaney conversion helpers publicly and supports HTK Mel
 filterbank generation through Mel configuration in the C++ core:
-```typescript
+::: code-group
+```typescript [Browser]
 const melSlaney = hzToMel(hz);     // Slaney (default)
 ```
+```python [Python]
+mel_slaney = sonare.hz_to_mel(hz)  # Slaney (default)
+```
+```bash [CLI]
+# No direct Hz/Mel conversion CLI; this conversion is exposed through the APIs above.
+```
+:::
 
 ## Reference Tolerance Guidelines
 
@@ -280,6 +385,10 @@ This can slightly change downstream features after resampling.
 
 Expect small amplitude differences in iSTFT-style reconstruction. Apply
 normalization after reconstruction if your workflow depends on level matching.
+
+::: details What is COLA?
+**COLA** stands for *Constant Overlap-Add*. When you reconstruct audio from an STFT, the overlapping windowed frames are added back together. If those overlapping windows sum to a constant value at every sample position, the reconstruction has even gain everywhere — that is the COLA condition. librosa normalizes the window so this holds exactly; libsonare uses the raw window, so the summed level can differ slightly. It only matters if you depend on the absolute output level after an inverse STFT.
+:::
 
 ## Migration Guide
 

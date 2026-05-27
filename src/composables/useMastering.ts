@@ -1,262 +1,298 @@
-import { ref, shallowRef } from 'vue'
-import type {
-  MasteringChainConfig,
-} from '@/wasm/index'
+import { ref, shallowRef } from 'vue';
+import type { MasteringChainConfig, StreamingPlatform } from '@/wasm/index';
 
-export type MasteringPresetId = 'pop' | 'edm' | 'acoustic' | 'hiphop' | 'aiMusic' | 'speech'
-export type MasteringPlatformId = 'spotify' | 'youtube' | 'apple' | 'tiktok' | 'custom'
+export type MasteringPresetId = 'pop' | 'edm' | 'acoustic' | 'hiphop' | 'aiMusic' | 'speech';
+export type MasteringPlatformId = 'spotify' | 'youtube' | 'apple' | 'tiktok' | 'custom';
 
 export interface MasteringTuning {
-  tone: number
-  width: number
-  dynamics: number
+  tone: number;
+  width: number;
+  dynamics: number;
 }
 
 export interface MasteringModuleSettings {
-  inputGainDb: number
+  inputGainDb: number;
   // Repair (denoise + declick + dereverb)
-  denoiseAmount: number
-  declickAmount: number
-  dereverbAmount: number
+  denoiseAmount: number;
+  declickAmount: number;
+  dereverbAmount: number;
   // EQ
-  tiltDb: number
+  tiltDb: number;
   // Single-band dynamics
-  compressorThresholdDb: number
-  compressorRatio: number
-  compressorAttackMs: number
-  compressorReleaseMs: number
-  deesserAmount: number
-  transientAttackDb: number
+  compressorThresholdDb: number;
+  compressorRatio: number;
+  compressorAttackMs: number;
+  compressorReleaseMs: number;
+  deesserAmount: number;
+  transientAttackDb: number;
   // Multiband compressor (per-band amount drives threshold + ratio)
-  multibandLowAmount: number
-  multibandMidAmount: number
-  multibandHighAmount: number
+  multibandLowAmount: number;
+  multibandMidAmount: number;
+  multibandHighAmount: number;
   // Saturation / Air
-  tapeDriveDb: number
-  tapeSaturation: number
-  exciterAmount: number
-  airBandAmount: number
+  tapeDriveDb: number;
+  tapeSaturation: number;
+  exciterAmount: number;
+  airBandAmount: number;
   // Stereo
-  stereoWidth: number
-  monoMakerAmount: number
+  stereoWidth: number;
+  monoMakerAmount: number;
   // Limiter
-  limiterCeilingDb: number
-  limiterLookaheadMs: number
+  limiterCeilingDb: number;
+  limiterLookaheadMs: number;
 }
 
 export interface MasteringRenderOptions {
-  preset: MasteringPresetId
-  targetLufs: number
-  tuning: MasteringTuning
-  moduleSettings?: MasteringModuleSettings
+  preset: MasteringPresetId;
+  targetLufs: number;
+  tuning: MasteringTuning;
+  moduleSettings?: MasteringModuleSettings;
+}
+
+export interface ReferenceMatchOptions {
+  targetLufs: number;
+  ceilingDb: number;
+  lookaheadMs: number;
 }
 
 export interface DecodedMasteringAudio {
-  fileName: string
-  sampleRate: number
-  duration: number
-  channels: number
-  left: Float32Array
-  right: Float32Array
+  fileName: string;
+  sampleRate: number;
+  duration: number;
+  channels: number;
+  left: Float32Array;
+  right: Float32Array;
 }
 
 export interface RenderedMasteringAudio {
-  left: Float32Array
-  right: Float32Array
-  sampleRate: number
-  inputLufs: number
-  outputLufs: number
-  appliedGainDb: number
-  stages: string[]
-  latencySamples?: number
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  stages: string[];
+  latencySamples?: number;
+}
+
+export interface MasteringInsightReport {
+  profile: unknown;
+  suggestions: unknown;
+  streamingPreview: unknown;
 }
 
 type WorkerMessage =
   | { type: 'progress'; id: number; progress: number; stage: string }
   | { type: 'done'; id: number; result: RenderedMasteringAudio }
-  | { type: 'error'; id: number; error: string }
+  | { type: 'error'; id: number; error: string };
 
 export function useMastering() {
-  const isInitialized = ref(false)
-  const isLoading = ref(false)
-  const isRendering = ref(false)
-  const renderProgress = ref(0)
-  const renderStage = ref('')
-  const error = ref<string | null>(null)
-  const source = shallowRef<DecodedMasteringAudio | null>(null)
-  const rendered = shallowRef<RenderedMasteringAudio | null>(null)
+  const isInitialized = ref(false);
+  const isLoading = ref(false);
+  const isRendering = ref(false);
+  const renderProgress = ref(0);
+  const renderStage = ref('');
+  const error = ref<string | null>(null);
+  const source = shallowRef<DecodedMasteringAudio | null>(null);
+  const rendered = shallowRef<RenderedMasteringAudio | null>(null);
 
-  let wasmModule: any = null
-  let audioContext: AudioContext | null = null
-  let worker: Worker | null = null
-  let renderRequestId = 0
+  let wasmModule: any = null;
+  let audioContext: AudioContext | null = null;
+  let worker: Worker | null = null;
+  let renderRequestId = 0;
 
   async function initWasm() {
-    if (isInitialized.value) return
-    wasmModule = await import('@/wasm/index.js')
-    await wasmModule.init()
-    isInitialized.value = true
+    if (isInitialized.value) return;
+    wasmModule = await import('@/wasm/index.js');
+    await wasmModule.init();
+    isInitialized.value = true;
   }
 
   function getAudioContext(): AudioContext {
     if (!audioContext) {
-      audioContext = new AudioContext()
+      audioContext = new AudioContext();
     }
-    return audioContext
+    return audioContext;
   }
 
   async function loadFile(file: File): Promise<DecodedMasteringAudio> {
-    isLoading.value = true
-    error.value = null
-    rendered.value = null
+    isLoading.value = true;
+    error.value = null;
+    rendered.value = null;
 
     try {
-      const decoded = await decodeFile(file)
-      source.value = decoded
-      return decoded
+      const decoded = await decodeFile(file);
+      source.value = decoded;
+      return decoded;
     } catch (e) {
-      console.error('Failed to load mastering file:', e)
-      error.value = 'Failed to decode audio file'
-      throw e
+      console.error('Failed to load mastering file:', e);
+      error.value = 'Failed to decode audio file';
+      throw e;
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
   }
 
   async function decodeFile(file: File): Promise<DecodedMasteringAudio> {
-    const ctx = getAudioContext()
-    const buffer = await ctx.decodeAudioData(await file.arrayBuffer())
+    const ctx = getAudioContext();
+    const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
     return {
       fileName: file.name,
       sampleRate: buffer.sampleRate,
       duration: buffer.duration,
       channels: buffer.numberOfChannels,
       left: new Float32Array(buffer.getChannelData(0)),
-      right: buffer.numberOfChannels > 1
-        ? new Float32Array(buffer.getChannelData(1))
-        : new Float32Array(buffer.getChannelData(0)),
-    }
+      right:
+        buffer.numberOfChannels > 1
+          ? new Float32Array(buffer.getChannelData(1))
+          : new Float32Array(buffer.getChannelData(0)),
+    };
   }
 
   async function render(options: MasteringRenderOptions): Promise<RenderedMasteringAudio> {
     if (!source.value) {
-      throw new Error('No audio loaded')
+      throw new Error('No audio loaded');
     }
 
-    isRendering.value = true
-    renderProgress.value = 0
-    renderStage.value = 'Queued'
-    error.value = null
+    isRendering.value = true;
+    renderProgress.value = 0;
+    renderStage.value = 'Queued';
+    error.value = null;
 
     try {
-      const config = buildMasteringConfig(options)
-      const inputGainDb = options.moduleSettings?.inputGainDb ?? 0
-      const inputSource = inputGainDb !== 0
-        ? applyGain(source.value, inputGainDb)
-        : source.value
-      const output = await renderInWorker(inputSource, config)
-      rendered.value = output
-      renderProgress.value = 1
-      renderStage.value = 'Complete'
-      return output
+      const config = buildMasteringConfig(options);
+      const inputGainDb = options.moduleSettings?.inputGainDb ?? 0;
+      const inputSource = inputGainDb !== 0 ? applyGain(source.value, inputGainDb) : source.value;
+      const output = await renderInWorker(inputSource, config);
+      rendered.value = output;
+      renderProgress.value = 1;
+      renderStage.value = 'Complete';
+      return output;
     } catch (e) {
-      console.error('Mastering render failed:', e)
-      error.value = 'Mastering render failed'
-      throw e
+      console.error('Mastering render failed:', e);
+      error.value = 'Mastering render failed';
+      throw e;
     } finally {
-      isRendering.value = false
+      isRendering.value = false;
     }
   }
 
-  async function renderReferenceMatch(reference: DecodedMasteringAudio): Promise<RenderedMasteringAudio> {
+  async function renderReferenceMatch(
+    reference: DecodedMasteringAudio,
+    options: ReferenceMatchOptions,
+  ): Promise<RenderedMasteringAudio> {
     if (!source.value) {
-      throw new Error('No audio loaded')
+      throw new Error('No audio loaded');
     }
 
-    isRendering.value = true
-    renderProgress.value = 0
-    renderStage.value = 'Queued'
-    error.value = null
+    isRendering.value = true;
+    renderProgress.value = 0;
+    renderStage.value = 'Queued';
+    error.value = null;
 
     try {
-      const matchedReference = reference.sampleRate === source.value.sampleRate
-        ? reference
-        : {
-            ...reference,
-            sampleRate: source.value.sampleRate,
-            left: resampleLinear(reference.left, reference.sampleRate, source.value.sampleRate),
-            right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
-          }
-      const output = await renderReferenceMatchInWorker(source.value, matchedReference)
-      rendered.value = output
-      renderProgress.value = 1
-      renderStage.value = 'Complete'
-      return output
+      const matchedReference =
+        reference.sampleRate === source.value.sampleRate
+          ? reference
+          : {
+              ...reference,
+              sampleRate: source.value.sampleRate,
+              left: resampleLinear(reference.left, reference.sampleRate, source.value.sampleRate),
+              right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
+            };
+      const output = await renderReferenceMatchInWorker(source.value, matchedReference, options);
+      rendered.value = output;
+      renderProgress.value = 1;
+      renderStage.value = 'Complete';
+      return output;
     } catch (e) {
-      console.error('Reference match failed:', e)
-      error.value = 'Reference match failed'
-      throw e
+      console.error('Reference match failed:', e);
+      error.value = 'Reference match failed';
+      throw e;
     } finally {
-      isRendering.value = false
+      isRendering.value = false;
     }
+  }
+
+  async function measureIntegratedLufs(audio: DecodedMasteringAudio): Promise<number> {
+    await initWasm();
+    const mono = mixToMono(audio.left, audio.right);
+    return wasmModule.lufs(mono, audio.sampleRate).integratedLufs;
+  }
+
+  async function analyzeSource(platforms: StreamingPlatform[]): Promise<MasteringInsightReport> {
+    if (!source.value) {
+      throw new Error('No audio loaded');
+    }
+    await initWasm();
+    const samples = mixToMono(source.value.left, source.value.right);
+    return {
+      profile: parseJsonReport(wasmModule.masteringAudioProfile(samples, source.value.sampleRate)),
+      suggestions: parseJsonReport(
+        wasmModule.masteringAssistantSuggest(samples, source.value.sampleRate),
+      ),
+      streamingPreview: parseJsonReport(
+        wasmModule.masteringStreamingPreview(samples, source.value.sampleRate, platforms),
+      ),
+    };
   }
 
   function createAudioUrl(audio: RenderedMasteringAudio): string {
-    const wav = encodeWav(audio.left, audio.right, audio.sampleRate)
-    return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }))
+    const wav = encodeWav(audio.left, audio.right, audio.sampleRate);
+    return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
   }
 
   function createSourceAudioUrl(audio: DecodedMasteringAudio): string {
-    const wav = encodeWav(audio.left, audio.right, audio.sampleRate)
-    return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }))
+    const wav = encodeWav(audio.left, audio.right, audio.sampleRate);
+    return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
   }
 
   function dispose() {
-    worker?.terminate()
-    worker = null
+    worker?.terminate();
+    worker = null;
   }
 
   function renderInWorker(
     audio: DecodedMasteringAudio,
     config: MasteringChainConfig,
   ): Promise<RenderedMasteringAudio> {
-    const id = ++renderRequestId
+    const id = ++renderRequestId;
 
     if (!worker) {
       worker = new Worker(new URL('../workers/mastering.worker.ts', import.meta.url), {
         type: 'module',
-      })
+      });
     }
 
     return new Promise((resolve, reject) => {
       const onMessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data
-        if (message.id !== id) return
+        const message = event.data;
+        if (message.id !== id) return;
 
         if (message.type === 'progress') {
-          renderProgress.value = message.progress
-          renderStage.value = message.stage
-          return
+          renderProgress.value = message.progress;
+          renderStage.value = message.stage;
+          return;
         }
 
-        worker?.removeEventListener('message', onMessage)
-        worker?.removeEventListener('error', onError)
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
 
         if (message.type === 'done') {
-          resolve(message.result)
+          resolve(message.result);
         } else {
-          reject(new Error(message.error))
+          reject(new Error(message.error));
         }
-      }
+      };
 
       const onError = (event: ErrorEvent) => {
-        worker?.removeEventListener('message', onMessage)
-        worker?.removeEventListener('error', onError)
-        reject(event.error || new Error(event.message))
-      }
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
+        reject(event.error || new Error(event.message));
+      };
 
-      worker!.addEventListener('message', onMessage)
-      worker!.addEventListener('error', onError)
+      worker!.addEventListener('message', onMessage);
+      worker!.addEventListener('error', onError);
       worker!.postMessage({
         type: 'render',
         id,
@@ -264,51 +300,52 @@ export function useMastering() {
         right: new Float32Array(audio.right),
         sampleRate: audio.sampleRate,
         config,
-      })
-    })
+      });
+    });
   }
 
   function renderReferenceMatchInWorker(
     audio: DecodedMasteringAudio,
     referenceAudio: DecodedMasteringAudio,
+    options: ReferenceMatchOptions,
   ): Promise<RenderedMasteringAudio> {
-    const id = ++renderRequestId
+    const id = ++renderRequestId;
 
     if (!worker) {
       worker = new Worker(new URL('../workers/mastering.worker.ts', import.meta.url), {
         type: 'module',
-      })
+      });
     }
 
     return new Promise((resolve, reject) => {
       const onMessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data
-        if (message.id !== id) return
+        const message = event.data;
+        if (message.id !== id) return;
 
         if (message.type === 'progress') {
-          renderProgress.value = message.progress
-          renderStage.value = message.stage
-          return
+          renderProgress.value = message.progress;
+          renderStage.value = message.stage;
+          return;
         }
 
-        worker?.removeEventListener('message', onMessage)
-        worker?.removeEventListener('error', onError)
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
 
         if (message.type === 'done') {
-          resolve(message.result)
+          resolve(message.result);
         } else {
-          reject(new Error(message.error))
+          reject(new Error(message.error));
         }
-      }
+      };
 
       const onError = (event: ErrorEvent) => {
-        worker?.removeEventListener('message', onMessage)
-        worker?.removeEventListener('error', onError)
-        reject(event.error || new Error(event.message))
-      }
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
+        reject(event.error || new Error(event.message));
+      };
 
-      worker!.addEventListener('message', onMessage)
-      worker!.addEventListener('error', onError)
+      worker!.addEventListener('message', onMessage);
+      worker!.addEventListener('error', onError);
       worker!.postMessage({
         type: 'referenceMatch',
         id,
@@ -317,8 +354,11 @@ export function useMastering() {
         referenceLeft: new Float32Array(referenceAudio.left),
         referenceRight: new Float32Array(referenceAudio.right),
         sampleRate: audio.sampleRate,
-      })
-    })
+        targetLufs: options.targetLufs,
+        ceilingDb: options.ceilingDb,
+        lookaheadMs: options.lookaheadMs,
+      });
+    });
   }
 
   return {
@@ -335,43 +375,64 @@ export function useMastering() {
     loadFile,
     render,
     renderReferenceMatch,
+    analyzeSource,
+    measureIntegratedLufs,
     createAudioUrl,
     createSourceAudioUrl,
     dispose,
+  };
+}
+
+function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
+  const length = Math.min(left.length, right.length);
+  const mono = new Float32Array(length);
+  for (let i = 0; i < length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+  return mono;
+}
+
+function parseJsonReport(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
   }
 }
 
 function applyGain(audio: DecodedMasteringAudio, gainDb: number): DecodedMasteringAudio {
-  const factor = 10 ** (gainDb / 20)
-  const left = new Float32Array(audio.left.length)
-  const right = new Float32Array(audio.right.length)
-  for (let i = 0; i < audio.left.length; i++) left[i] = audio.left[i] * factor
-  for (let i = 0; i < audio.right.length; i++) right[i] = audio.right[i] * factor
-  return { ...audio, left, right }
+  const factor = 10 ** (gainDb / 20);
+  const left = new Float32Array(audio.left.length);
+  const right = new Float32Array(audio.right.length);
+  for (let i = 0; i < audio.left.length; i++) left[i] = audio.left[i] * factor;
+  for (let i = 0; i < audio.right.length; i++) right[i] = audio.right[i] * factor;
+  return { ...audio, left, right };
 }
 
-function resampleLinear(samples: Float32Array, fromSampleRate: number, toSampleRate: number): Float32Array {
-  if (fromSampleRate === toSampleRate || samples.length === 0) return new Float32Array(samples)
-  const ratio = toSampleRate / fromSampleRate
-  const outputLength = Math.max(1, Math.round(samples.length * ratio))
-  const output = new Float32Array(outputLength)
+function resampleLinear(
+  samples: Float32Array,
+  fromSampleRate: number,
+  toSampleRate: number,
+): Float32Array {
+  if (fromSampleRate === toSampleRate || samples.length === 0) return new Float32Array(samples);
+  const ratio = toSampleRate / fromSampleRate;
+  const outputLength = Math.max(1, Math.round(samples.length * ratio));
+  const output = new Float32Array(outputLength);
   for (let i = 0; i < outputLength; i++) {
-    const sourceIndex = i / ratio
-    const index = Math.floor(sourceIndex)
-    const fraction = sourceIndex - index
-    const current = samples[Math.min(index, samples.length - 1)]
-    const next = samples[Math.min(index + 1, samples.length - 1)]
-    output[i] = current + (next - current) * fraction
+    const sourceIndex = i / ratio;
+    const index = Math.floor(sourceIndex);
+    const fraction = sourceIndex - index;
+    const current = samples[Math.min(index, samples.length - 1)];
+    const next = samples[Math.min(index + 1, samples.length - 1)];
+    output[i] = current + (next - current) * fraction;
   }
-  return output
+  return output;
 }
 
 function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainConfig {
-  const { preset, targetLufs, tuning } = options
-  const warm = tuning.tone / 100
-  const wide = tuning.width / 100
-  const compressed = (100 - tuning.dynamics) / 100
-  const settings = options.moduleSettings || defaultModuleSettings()
+  const { preset, targetLufs, tuning } = options;
+  const warm = tuning.tone / 100;
+  const wide = tuning.width / 100;
+  const compressed = (100 - tuning.dynamics) / 100;
+  const settings = options.moduleSettings || defaultModuleSettings();
 
   const config: MasteringChainConfig = {
     eq: {
@@ -382,8 +443,14 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       compressor: {
         thresholdDb: settings.compressorThresholdDb - compressed * 4,
         ratio: settings.compressorRatio + compressed * 0.8,
-        attackMs: preset === 'speech' ? Math.min(settings.compressorAttackMs, 8) : settings.compressorAttackMs,
-        releaseMs: preset === 'edm' ? Math.min(settings.compressorReleaseMs, 120) : settings.compressorReleaseMs,
+        attackMs:
+          preset === 'speech'
+            ? Math.min(settings.compressorAttackMs, 8)
+            : settings.compressorAttackMs,
+        releaseMs:
+          preset === 'edm'
+            ? Math.min(settings.compressorReleaseMs, 120)
+            : settings.compressorReleaseMs,
         kneeDb: 4,
         autoMakeup: true,
       },
@@ -392,22 +459,29 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       exciter: {
         frequencyHz: preset === 'aiMusic' ? 14500 : 9000,
         driveDb: warm * 2.5,
-        amount: preset === 'aiMusic'
-          ? settings.exciterAmount + 0.14 + warm * 0.18
-          : settings.exciterAmount + warm * 0.1,
+        amount:
+          preset === 'aiMusic'
+            ? settings.exciterAmount + 0.14 + warm * 0.18
+            : settings.exciterAmount + warm * 0.1,
         q: 0.8,
         evenOddMix: 0.65,
       },
     },
     spectral: {
       airBand: {
-        amount: preset === 'aiMusic' ? Math.max(settings.airBandAmount, 0.55) : settings.airBandAmount + warm * 0.12,
+        amount:
+          preset === 'aiMusic'
+            ? Math.max(settings.airBandAmount, 0.55)
+            : settings.airBandAmount + warm * 0.12,
         shelfFrequencyHz: preset === 'aiMusic' ? 15500 : 12000,
       },
     },
     stereo: {
       imager: {
-        width: preset === 'speech' ? Math.min(settings.stereoWidth, 0.95) : settings.stereoWidth + wide * 0.2,
+        width:
+          preset === 'speech'
+            ? Math.min(settings.stereoWidth, 0.95)
+            : settings.stereoWidth + wide * 0.2,
         decorrelationAmount: preset === 'speech' ? 0 : wide * 0.08,
         preserveEnergy: true,
       },
@@ -426,7 +500,7 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       ceilingDb: settings.limiterCeilingDb,
       truePeakOversample: 4,
     },
-  }
+  };
 
   // ---- Repair (denoise / declick / dereverb) -----------------------------
   const repairActive =
@@ -434,7 +508,7 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
     preset === 'speech' ||
     settings.denoiseAmount > 0 ||
     settings.declickAmount > 0 ||
-    settings.dereverbAmount > 0
+    settings.dereverbAmount > 0;
 
   if (repairActive) {
     config.repair = {
@@ -443,14 +517,14 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       hopLength: 512,
       ddAlpha: preset === 'speech' ? 0.96 : 0.98,
       gainFloor: Math.max(0.04, 0.16 - settings.denoiseAmount * 0.12),
-    }
+    };
     if (settings.declickAmount > 0) {
       config.repair.declick = {
         // Higher UI amount → lower trigger threshold (more aggressive declick)
         threshold: Math.max(0.08, 0.5 - settings.declickAmount * 0.4),
         neighborRatio: 4,
         maxClickSamples: 96,
-      }
+      };
     }
     if (settings.dereverbAmount > 0) {
       config.repair.dereverb = {
@@ -459,7 +533,7 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
         nFft: 2048,
         hopLength: 512,
         overSubtraction: 1.2,
-      }
+      };
     }
   }
 
@@ -472,7 +546,7 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       attackMs: 1.5,
       releaseMs: 60,
       rangeDb: 12,
-    }
+    };
   }
   if (settings.transientAttackDb !== 0) {
     config.dynamics!.transientShaper = {
@@ -486,13 +560,13 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       maxGainDb: 8,
       gainSmoothingMs: 6,
       lookaheadMs: 1.5,
-    }
+    };
   }
 
   // ---- Multiband compressor (3-band, amount-driven) ---------------------
-  const mbLow = settings.multibandLowAmount
-  const mbMid = settings.multibandMidAmount
-  const mbHigh = settings.multibandHighAmount
+  const mbLow = settings.multibandLowAmount;
+  const mbMid = settings.multibandMidAmount;
+  const mbHigh = settings.multibandHighAmount;
   if (mbLow > 0 || mbMid > 0 || mbHigh > 0) {
     config.dynamics!.multibandComp = {
       lowCutoffHz: 220,
@@ -509,7 +583,7 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       highRatio: 1.4 + mbHigh * 2,
       highAttackMs: 6,
       highReleaseMs: 90,
-    }
+    };
   }
 
   // ---- Tape saturation (chain-side color) -------------------------------
@@ -526,14 +600,14 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
         bias: 0.5,
         gapLoss: 0.25,
       },
-    }
+    };
   }
 
   // ---- Stereo mono-maker (bass mono safety) -----------------------------
   if (settings.monoMakerAmount > 0) {
     config.stereo!.monoMaker = {
       amount: settings.monoMakerAmount,
-    }
+    };
   }
 
   // ---- Preset-specific overrides (keep behavior) ------------------------
@@ -548,18 +622,18 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
         kneeDb: 6,
         autoMakeup: true,
       },
-    }
+    };
   }
 
   if (preset === 'hiphop') {
     config.eq = {
       tiltDb: (config.eq?.tiltDb ?? 0) - 0.5,
       pivotHz: 850,
-    }
-    config.dynamics!.compressor!.ratio = 2.6 + compressed
+    };
+    config.dynamics!.compressor!.ratio = 2.6 + compressed;
   }
 
-  return config
+  return config;
 }
 
 export function defaultModuleSettings(): MasteringModuleSettings {
@@ -586,48 +660,48 @@ export function defaultModuleSettings(): MasteringModuleSettings {
     monoMakerAmount: 0,
     limiterCeilingDb: -1,
     limiterLookaheadMs: 5,
-  }
+  };
 }
 
 function encodeWav(left: Float32Array, right: Float32Array, sampleRate: number): ArrayBuffer {
-  const channels = 2
-  const bytesPerSample = 2
-  const blockAlign = channels * bytesPerSample
-  const dataSize = left.length * blockAlign
-  const buffer = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buffer)
+  const channels = 2;
+  const bytesPerSample = 2;
+  const blockAlign = channels * bytesPerSample;
+  const dataSize = left.length * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
 
-  writeString(view, 0, 'RIFF')
-  view.setUint32(4, 36 + dataSize, true)
-  writeString(view, 8, 'WAVE')
-  writeString(view, 12, 'fmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true)
-  view.setUint16(22, channels, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * blockAlign, true)
-  view.setUint16(32, blockAlign, true)
-  view.setUint16(34, bytesPerSample * 8, true)
-  writeString(view, 36, 'data')
-  view.setUint32(40, dataSize, true)
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
 
-  let offset = 44
+  let offset = 44;
   for (let i = 0; i < left.length; i++) {
-    view.setInt16(offset, floatToInt16(left[i]), true)
-    view.setInt16(offset + 2, floatToInt16(right[i]), true)
-    offset += 4
+    view.setInt16(offset, floatToInt16(left[i]), true);
+    view.setInt16(offset + 2, floatToInt16(right[i]), true);
+    offset += 4;
   }
 
-  return buffer
+  return buffer;
 }
 
 function floatToInt16(value: number): number {
-  const clipped = Math.max(-1, Math.min(1, value))
-  return clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff
+  const clipped = Math.max(-1, Math.min(1, value));
+  return clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
 }
 
 function writeString(view: DataView, offset: number, value: string) {
   for (let i = 0; i < value.length; i++) {
-    view.setUint8(offset + i, value.charCodeAt(i))
+    view.setUint8(offset + i, value.charCodeAt(i));
   }
 }

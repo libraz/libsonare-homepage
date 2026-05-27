@@ -5,7 +5,9 @@ description: Why true peak limiting matters for browser and streaming mastering.
 
 # True Peak
 
-True Peak estimates the highest level after audio is reconstructed between digital samples. A file can have sample peaks below 0 dBFS and still clip after conversion or playback reconstruction.
+True Peak estimates the highest level after audio is reconstructed between digital samples.
+
+A file can have sample peaks below 0 dBFS and still clip after conversion or playback reconstruction.
 This is the inter-sample peak problem. The visible sample points can look safe while the reconstructed analog-like waveform rises above the limit between those points.
 
 ## Practical Starting Point
@@ -13,6 +15,7 @@ This is the inter-sample peak problem. The visible sample points can look safe w
 A common release ceiling is around `-1 dBTP`. The libsonare demo uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode.
 
 For the delivery-safety side of this topic, see [True Peak Safety](./concepts/true-peak-safety.md).
+
 `-1 dBTP` is not a universal law, but it is a practical starting point because it leaves room for platform encoding and playback reconstruction. If raising the ceiling adds harshness or distortion after export, prioritize safety over a small loudness increase.
 
 ## Related Controls
@@ -29,7 +32,11 @@ True peak problems often appear where kick and bass hit together, where cymbals 
 
 If lowering the ceiling barely changes the sound, choose the safer setting. If lowering it removes punch immediately, do not solve the whole problem at the limiter; revisit dynamics, saturation, or input level earlier in the chain.
 
-Even when the sample-peak meter looks safe, codec conversion and device-side reconstruction can lift peaks by roughly +0.5 to +1 dB in typical material, and occasionally up to around +2 dB when low and high energy hit at the same time. Right before release it is worth checking not only the exported WAV but also a quick render through the expected delivery codec (MP3, AAC, Opus) to confirm peak behavior on the target format.
+Even when the sample-peak meter looks safe, codec conversion and device-side reconstruction can lift peaks.
+
+Typical material may rise by roughly +0.5 to +1 dB. In harder cases, especially when low and high energy hit together, peaks can rise by around +2 dB.
+
+Right before release, check both the exported WAV and a quick render through the expected delivery codec, such as MP3, AAC, or Opus.
 
 :::: details Implementation notes
 

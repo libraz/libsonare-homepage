@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { useAudioAnalysis } from '@/composables/useAudioAnalysis'
-import { useAudioPlayer } from '@/composables/useAudioPlayer'
-import { useStreamAnalyzer } from '@/composables/useStreamAnalyzer'
-import { TechPanel, MetricItem, TransportButton } from '@/components/ui'
-import DropZone from './DropZone.vue'
-import WaveformVisualizer from './WaveformVisualizer.vue'
-import SynesthesiaVisualizer from './SynesthesiaVisualizer.vue'
-import DataConsole from './DataConsole.vue'
+import { computed, onMounted, ref, watch } from 'vue';
+import { MetricItem, TechPanel, TransportButton } from '@/components/ui';
+import { useAudioAnalysis } from '@/composables/useAudioAnalysis';
+import { useAudioPlayer } from '@/composables/useAudioPlayer';
+import { useI18n } from '@/composables/useI18n';
+import { useStreamAnalyzer } from '@/composables/useStreamAnalyzer';
+import DataConsole from './DataConsole.vue';
+import DropZone from './DropZone.vue';
+import SynesthesiaVisualizer from './SynesthesiaVisualizer.vue';
+import WaveformVisualizer from './WaveformVisualizer.vue';
 
 defineProps<{
-  libVersion?: string
-}>()
+  libVersion?: string;
+}>();
 
-const { t } = useI18n()
-const isLoadingDemo = ref(false)
-const isStreamingMode = ref(true) // Enable streaming by default
+const { t } = useI18n();
+const isLoadingDemo = ref(false);
+const isStreamingMode = ref(true); // Enable streaming by default
 
 const {
   isAnalyzing,
@@ -25,7 +25,7 @@ const {
   result,
   error: analysisError,
   analyze,
-} = useAudioAnalysis()
+} = useAudioAnalysis();
 
 const {
   audioBuffer,
@@ -43,7 +43,7 @@ const {
   formatTime,
   setProcessCallback,
   getAudioContext,
-} = useAudioPlayer()
+} = useAudioPlayer();
 
 const {
   isInitialized: isStreamInitialized,
@@ -56,126 +56,126 @@ const {
   setNormalizationGain,
   reset: resetStreamAnalyzer,
 } = useStreamAnalyzer({
-  sampleRate: 44100,  // Will be updated when audio is loaded
+  sampleRate: 44100, // Will be updated when audio is loaded
   nFft: 2048,
-  hopLength: 512,  // Changed from 1024 for better time resolution
+  hopLength: 512, // Changed from 1024 for better time resolution
   nMels: 128,
   computeMel: true,
   computeChroma: true,
   computeOnset: true,
-})
+});
 
-const fileName = ref('')
-const beats = ref<Float32Array | null>(null)
-const rmsData = ref<Float32Array | null>(null)
-const chromaData = ref<{ features: Float32Array; nFrames: number; nChroma: number } | null>(null)
-const bandData = ref<{ low: Float32Array; high: Float32Array } | null>(null)
-const sampleRate = ref(44100)
+const fileName = ref('');
+const beats = ref<Float32Array | null>(null);
+const rmsData = ref<Float32Array | null>(null);
+const chromaData = ref<{ features: Float32Array; nFrames: number; nChroma: number } | null>(null);
+const bandData = ref<{ low: Float32Array; high: Float32Array } | null>(null);
+const sampleRate = ref(44100);
 
-const isLoadingFile = ref(false)
-const fileProgress = ref(0)
-const fileProgressStage = ref('')
-const hasUserFile = ref(false)  // Track if user uploaded a file
+const isLoadingFile = ref(false);
+const fileProgress = ref(0);
+const fileProgressStage = ref('');
+const hasUserFile = ref(false); // Track if user uploaded a file
 
 async function handleFile(file: File) {
   // Stop current playback and reset state
   if (isPlaying.value) {
-    stop()
+    stop();
   }
-  resetStreamAnalyzer()
-  setProcessCallback(null)
+  resetStreamAnalyzer();
+  setProcessCallback(null);
 
-  hasUserFile.value = true  // Mark that user uploaded a file
-  fileName.value = file.name
-  isLoadingFile.value = true
-  fileProgress.value = 0
-  fileProgressStage.value = 'DECODING AUDIO'
+  hasUserFile.value = true; // Mark that user uploaded a file
+  fileName.value = file.name;
+  isLoadingFile.value = true;
+  fileProgress.value = 0;
+  fileProgressStage.value = 'DECODING AUDIO';
 
   try {
     // Initialize WASM and StreamAnalyzer if needed
-    fileProgress.value = 5
-    await initStreamAnalyzer()
-    await yieldToMain()
+    fileProgress.value = 5;
+    await initStreamAnalyzer();
+    await yieldToMain();
 
-    fileProgress.value = 15
-    fileProgressStage.value = 'DECODING AUDIO'
-    const buffer = await loadAudio(file)
-    await yieldToMain()
+    fileProgress.value = 15;
+    fileProgressStage.value = 'DECODING AUDIO';
+    const buffer = await loadAudio(file);
+    await yieldToMain();
 
-    fileProgress.value = 35
-    fileProgressStage.value = 'INITIALIZING ANALYZER'
+    fileProgress.value = 35;
+    fileProgressStage.value = 'INITIALIZING ANALYZER';
     // Reinitialize stream analyzer with AudioContext sample rate
-    const ctx = getAudioContext()
-    sampleRate.value = ctx.sampleRate
-    await reinitStreamAnalyzer(ctx.sampleRate)
+    const ctx = getAudioContext();
+    sampleRate.value = ctx.sampleRate;
+    await reinitStreamAnalyzer(ctx.sampleRate);
 
     // Set expected duration for pattern lock timing
-    setExpectedDuration(buffer.duration)
+    setExpectedDuration(buffer.duration);
 
     // Set normalization gain for loud audio
-    const normGain = calculateNormalizationGain(buffer)
-    setNormalizationGain(normGain)
+    const normGain = calculateNormalizationGain(buffer);
+    setNormalizationGain(normGain);
 
     // Set up streaming callback
     setProcessCallback((samples, sampleOffset) => {
-      processAudioChunk(samples, sampleOffset)
-    })
-    await yieldToMain()
+      processAudioChunk(samples, sampleOffset);
+    });
+    await yieldToMain();
 
-    fileProgress.value = 45
-    fileProgressStage.value = 'EXTRACTING SAMPLES'
+    fileProgress.value = 45;
+    fileProgressStage.value = 'EXTRACTING SAMPLES';
     // Pre-compute visualization data
-    const wasm = await import('@/wasm/index.js')
-    const samples = buffer.numberOfChannels > 1
-      ? mixToMono(buffer)
-      : buffer.getChannelData(0).slice()
-    await yieldToMain()
+    const wasm = await import('@/wasm/index.js');
+    const samples =
+      buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
+    await yieldToMain();
 
-    fileProgress.value = 55
-    fileProgressStage.value = 'COMPUTING RMS'
-    const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024)
-    await yieldToMain()
+    fileProgress.value = 55;
+    fileProgressStage.value = 'COMPUTING RMS';
+    const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024);
+    await yieldToMain();
 
-    fileProgress.value = 70
-    fileProgressStage.value = 'COMPUTING CHROMA'
-    const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024)
-    await yieldToMain()
+    fileProgress.value = 70;
+    fileProgressStage.value = 'COMPUTING CHROMA';
+    const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
+    await yieldToMain();
 
-    fileProgress.value = 85
-    fileProgressStage.value = 'COMPUTING SPECTROGRAM'
-    const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128)
-    await yieldToMain()
+    fileProgress.value = 85;
+    fileProgressStage.value = 'COMPUTING SPECTROGRAM';
+    const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128);
+    await yieldToMain();
 
-    fileProgress.value = 95
-    fileProgressStage.value = 'FINALIZING'
-    const { nMels, nFrames: melFrames } = melResult
-    const lowBandRms = new Float32Array(melFrames)
-    const highBandRms = new Float32Array(melFrames)
-    const lowEnd = Math.floor(nMels * 0.25)
-    const highStart = Math.floor(nMels * 0.5)
+    fileProgress.value = 95;
+    fileProgressStage.value = 'FINALIZING';
+    const { nMels, nFrames: melFrames } = melResult;
+    const lowBandRms = new Float32Array(melFrames);
+    const highBandRms = new Float32Array(melFrames);
+    const lowEnd = Math.floor(nMels * 0.25);
+    const highStart = Math.floor(nMels * 0.5);
 
     for (let f = 0; f < melFrames; f++) {
-      let lowSum = 0, highSum = 0
+      let lowSum = 0,
+        highSum = 0;
       for (let m = 0; m < lowEnd; m++) {
-        lowSum += melResult.power[f * nMels + m]
+        lowSum += melResult.power[f * nMels + m];
       }
       for (let m = highStart; m < nMels; m++) {
-        highSum += melResult.power[f * nMels + m]
+        highSum += melResult.power[f * nMels + m];
       }
-      lowBandRms[f] = Math.sqrt(lowSum / lowEnd)
-      highBandRms[f] = Math.sqrt(highSum / (nMels - highStart))
+      lowBandRms[f] = Math.sqrt(lowSum / lowEnd);
+      highBandRms[f] = Math.sqrt(highSum / (nMels - highStart));
     }
 
-    rmsData.value = rms
+    rmsData.value = rms;
     chromaData.value = {
       features: chromaResult.features,
       nFrames: chromaResult.nFrames,
       nChroma: chromaResult.nChroma,
-    }
+    };
     bandData.value = {
       low: lowBandRms,
       high: highBandRms,
-    }
+    };
 
     // Set minimal result to show UI
     result.value = {
@@ -190,290 +190,298 @@ async function handleFile(file: File) {
       dynamics: { dynamicRangeDb: 0, loudnessRangeDb: 0, crestFactor: 0, isCompressed: false },
       rhythm: { syncopation: 0, grooveType: '', patternRegularity: 0 },
       form: '',
-    }
+    };
 
-    fileProgress.value = 100
-    isLoadingFile.value = false
+    fileProgress.value = 100;
+    isLoadingFile.value = false;
   } catch (e) {
-    console.error('Failed to process audio:', e)
-    isLoadingFile.value = false
+    console.error('Failed to process audio:', e);
+    isLoadingFile.value = false;
   }
 }
 
 function togglePlayback() {
   if (isPlaying.value) {
-    pause()
+    pause();
   } else if (isPaused.value) {
-    resume()
+    resume();
   } else {
-    play()
+    play();
   }
 }
 
 function rewind() {
-  seek(0)
+  seek(0);
   // Don't reset here - will reset when play is pressed at position 0
 }
 
 function handleSeek(time: number) {
-  seek(time)
+  seek(time);
 }
 
 function resetFile() {
-  audioBuffer.value = null
-  result.value = null
-  resetStreamAnalyzer()
-  setProcessCallback(null)
+  audioBuffer.value = null;
+  result.value = null;
+  resetStreamAnalyzer();
+  setProcessCallback(null);
 }
 
 // Use streaming estimates when available, fallback to batch analysis
 const displayBpm = computed(() => {
   if (isStreamingMode.value && streamEstimate.value.bpm > 0) {
-    return streamEstimate.value.bpm
+    return streamEstimate.value.bpm;
   }
-  return result.value?.bpm ?? 0
-})
+  return result.value?.bpm ?? 0;
+});
 
 const displayKey = computed(() => {
   if (isStreamingMode.value && streamEstimate.value.key !== '-') {
-    return streamEstimate.value.key
+    return streamEstimate.value.key;
   }
-  return result.value?.key?.name ?? '-'
-})
+  return result.value?.key?.name ?? '-';
+});
 
 const displayBpmConfidence = computed(() => {
   if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.bpmConfidence * 100)
+    return Math.round(streamEstimate.value.bpmConfidence * 100);
   }
-  return result.value?.bpmConfidence ? Math.round(result.value.bpmConfidence * 100) : 0
-})
+  return result.value?.bpmConfidence ? Math.round(result.value.bpmConfidence * 100) : 0;
+});
 
 const displayKeyConfidence = computed(() => {
   if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.keyConfidence * 100)
+    return Math.round(streamEstimate.value.keyConfidence * 100);
   }
-  return result.value?.key?.confidence ? Math.round(result.value.key.confidence * 100) : 0
-})
+  return result.value?.key?.confidence ? Math.round(result.value.key.confidence * 100) : 0;
+});
+
+// While streaming playback is running, the BPM/key estimators need a few
+// seconds of audio before they produce a value. Surface that warm-up as a
+// pending state instead of a bare "-", which reads as broken.
+const bpmPending = computed(() => isStreamingMode.value && isPlaying.value && !displayBpm.value);
+const keyPending = computed(
+  () => isStreamingMode.value && isPlaying.value && displayKey.value === '-',
+);
 
 const displayChord = computed(() => {
   if (isStreamingMode.value && streamEstimate.value.chord !== '-') {
-    return streamEstimate.value.chord
+    return streamEstimate.value.chord;
   }
-  return '-'
-})
+  return '-';
+});
 
 const displayChordConfidence = computed(() => {
   if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.chordConfidence * 100)
+    return Math.round(streamEstimate.value.chordConfidence * 100);
   }
-  return 0
-})
+  return 0;
+});
 
 const displayTimeSignature = computed(() => {
-  if (!result.value?.timeSignature) return '-'
-  const ts = result.value.timeSignature
-  return `${ts.numerator}/${ts.denominator}`
-})
+  if (!result.value?.timeSignature) return '-';
+  const ts = result.value.timeSignature;
+  return `${ts.numerator}/${ts.denominator}`;
+});
 
 // Bar chord progression
 const displayCurrentBar = computed(() => {
   if (isStreamingMode.value && streamEstimate.value.currentBar >= 0) {
-    return streamEstimate.value.currentBar + 1 // 1-indexed for display
+    return streamEstimate.value.currentBar + 1; // 1-indexed for display
   }
-  return 0
-})
+  return 0;
+});
 
 const displayBarChordProgression = computed(() => {
   if (isStreamingMode.value) {
-    return streamEstimate.value.barChordProgression
+    return streamEstimate.value.barChordProgression;
   }
-  return []
-})
+  return [];
+});
 
 // C++ computed voted pattern (more accurate than barChordProgression.slice(-4))
 const displayVotedPattern = computed(() => {
   if (isStreamingMode.value) {
-    return streamEstimate.value.votedPattern
+    return streamEstimate.value.votedPattern;
   }
-  return []
-})
+  return [];
+});
 
 const displayDetectedPatternName = computed(() => {
   if (isStreamingMode.value) {
-    return streamEstimate.value.detectedPatternName
+    return streamEstimate.value.detectedPatternName;
   }
-  return ''
-})
+  return '';
+});
 
 const displayDetectedPatternScore = computed(() => {
   if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.detectedPatternScore * 100)
+    return Math.round(streamEstimate.value.detectedPatternScore * 100);
   }
-  return 0
-})
+  return 0;
+});
 
 // Calculate normalization gain for loud audio
 function calculateNormalizationGain(buffer: AudioBuffer): number {
-  const TARGET_PEAK = 0.5  // Target peak level (~-6dB)
-  const THRESHOLD = 0.8   // Only normalize if peak > this
+  const TARGET_PEAK = 0.5; // Target peak level (~-6dB)
+  const THRESHOLD = 0.8; // Only normalize if peak > this
 
   // Find peak across all channels
-  let maxPeak = 0
+  let maxPeak = 0;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch)
+    const data = buffer.getChannelData(ch);
     for (let i = 0; i < data.length; i++) {
-      const abs = Math.abs(data[i])
-      if (abs > maxPeak) maxPeak = abs
+      const abs = Math.abs(data[i]);
+      if (abs > maxPeak) maxPeak = abs;
     }
   }
 
   // If audio is loud (peak > threshold), apply normalization
   if (maxPeak > THRESHOLD) {
-    return TARGET_PEAK / maxPeak
+    return TARGET_PEAK / maxPeak;
   }
 
-  return 1.0  // No normalization needed
+  return 1.0; // No normalization needed
 }
 
 // Yield to main thread for animation
-const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0))
+const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 async function loadDemoFile() {
-  isLoadingDemo.value = true
+  isLoadingDemo.value = true;
 
   // Wait for loading animation to render
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
   // Abort if user uploaded a file
   if (hasUserFile.value) {
-    isLoadingDemo.value = false
-    return
+    isLoadingDemo.value = false;
+    return;
   }
 
-  const timings: Record<string, number> = {}
-  let t0 = performance.now()
+  const timings: Record<string, number> = {};
+  let t0 = performance.now();
 
   try {
     // Initialize WASM and StreamAnalyzer
-    t0 = performance.now()
-    await initStreamAnalyzer()
-    timings['StreamAnalyzer init'] = performance.now() - t0
+    t0 = performance.now();
+    await initStreamAnalyzer();
+    timings['StreamAnalyzer init'] = performance.now() - t0;
 
     // Abort if user uploaded a file
     if (hasUserFile.value) {
-      isLoadingDemo.value = false
-      return
+      isLoadingDemo.value = false;
+      return;
     }
 
-    await yieldToMain()
+    await yieldToMain();
 
-    t0 = performance.now()
-    const response = await fetch('/demo.mp3')
+    t0 = performance.now();
+    const response = await fetch('/demo.mp3');
     if (!response.ok) {
-      throw new Error('Failed to load demo file')
+      throw new Error('Failed to load demo file');
     }
-    const arrayBuffer = await response.arrayBuffer()
-    timings['Fetch MP3'] = performance.now() - t0
+    const arrayBuffer = await response.arrayBuffer();
+    timings['Fetch MP3'] = performance.now() - t0;
 
     // Abort if user uploaded a file
     if (hasUserFile.value) {
-      isLoadingDemo.value = false
-      return
+      isLoadingDemo.value = false;
+      return;
     }
 
-    await yieldToMain()
+    await yieldToMain();
 
-    fileName.value = 'demo.mp3'
+    fileName.value = 'demo.mp3';
 
-    t0 = performance.now()
-    const buffer = await loadAudioFromArrayBuffer(arrayBuffer.slice(0))
-    timings['Decode audio'] = performance.now() - t0
+    t0 = performance.now();
+    const buffer = await loadAudioFromArrayBuffer(arrayBuffer.slice(0));
+    timings['Decode audio'] = performance.now() - t0;
 
-    await yieldToMain()
+    await yieldToMain();
 
     // Reinitialize stream analyzer with AudioContext sample rate
     // (AnalyserNode outputs at AudioContext rate, not buffer rate)
-    const ctx = getAudioContext()
-    sampleRate.value = ctx.sampleRate
-    await reinitStreamAnalyzer(ctx.sampleRate)
+    const ctx = getAudioContext();
+    sampleRate.value = ctx.sampleRate;
+    await reinitStreamAnalyzer(ctx.sampleRate);
 
     // Set expected duration for pattern lock timing
-    setExpectedDuration(buffer.duration)
+    setExpectedDuration(buffer.duration);
 
     // Set normalization gain for loud audio
-    const normGain = calculateNormalizationGain(buffer)
-    setNormalizationGain(normGain)
+    const normGain = calculateNormalizationGain(buffer);
+    setNormalizationGain(normGain);
 
     // Set up streaming callback
     setProcessCallback((samples, sampleOffset) => {
-      processAudioChunk(samples, sampleOffset)
-    })
+      processAudioChunk(samples, sampleOffset);
+    });
 
     // Pre-compute initial visualization data for immediate display
     // (streaming will update this in real-time during playback)
-    t0 = performance.now()
-    const wasm = await import('@/wasm/index.js')
-    const samples = buffer.numberOfChannels > 1
-      ? mixToMono(buffer)
-      : buffer.getChannelData(0).slice()
-    timings['Mix to mono'] = performance.now() - t0
+    t0 = performance.now();
+    const wasm = await import('@/wasm/index.js');
+    const samples =
+      buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
+    timings['Mix to mono'] = performance.now() - t0;
 
-    await yieldToMain()
+    await yieldToMain();
 
-    t0 = performance.now()
-    const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024)
-    timings['rmsEnergy'] = performance.now() - t0
+    t0 = performance.now();
+    const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024);
+    timings['rmsEnergy'] = performance.now() - t0;
 
-    await yieldToMain()
+    await yieldToMain();
 
-    t0 = performance.now()
-    const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024)
-    timings['chroma'] = performance.now() - t0
+    t0 = performance.now();
+    const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
+    timings['chroma'] = performance.now() - t0;
 
-    await yieldToMain()
+    await yieldToMain();
 
-    t0 = performance.now()
-    const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128)
-    timings['melSpectrogram'] = performance.now() - t0
+    t0 = performance.now();
+    const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128);
+    timings['melSpectrogram'] = performance.now() - t0;
 
-    await yieldToMain()
+    await yieldToMain();
 
-    t0 = performance.now()
-    const { nMels, nFrames: melFrames } = melResult
-    const lowBandRms = new Float32Array(melFrames)
-    const highBandRms = new Float32Array(melFrames)
-    const lowEnd = Math.floor(nMels * 0.25)
-    const highStart = Math.floor(nMels * 0.5)
+    t0 = performance.now();
+    const { nMels, nFrames: melFrames } = melResult;
+    const lowBandRms = new Float32Array(melFrames);
+    const highBandRms = new Float32Array(melFrames);
+    const lowEnd = Math.floor(nMels * 0.25);
+    const highStart = Math.floor(nMels * 0.5);
 
     for (let f = 0; f < melFrames; f++) {
-      let lowSum = 0, highSum = 0
+      let lowSum = 0,
+        highSum = 0;
       for (let m = 0; m < lowEnd; m++) {
-        lowSum += melResult.power[f * nMels + m]
+        lowSum += melResult.power[f * nMels + m];
       }
       for (let m = highStart; m < nMels; m++) {
-        highSum += melResult.power[f * nMels + m]
+        highSum += melResult.power[f * nMels + m];
       }
-      lowBandRms[f] = Math.sqrt(lowSum / lowEnd)
-      highBandRms[f] = Math.sqrt(highSum / (nMels - highStart))
+      lowBandRms[f] = Math.sqrt(lowSum / lowEnd);
+      highBandRms[f] = Math.sqrt(highSum / (nMels - highStart));
     }
-    timings['band separation'] = performance.now() - t0
+    timings['band separation'] = performance.now() - t0;
 
     // Abort if user uploaded a file - don't overwrite their data
     if (hasUserFile.value) {
-      isLoadingDemo.value = false
-      return
+      isLoadingDemo.value = false;
+      return;
     }
 
-    rmsData.value = rms
+    rmsData.value = rms;
     chromaData.value = {
       features: chromaResult.features,
       nFrames: chromaResult.nFrames,
       nChroma: chromaResult.nChroma,
-    }
+    };
     bandData.value = {
       low: lowBandRms,
       high: highBandRms,
-    }
+    };
 
     result.value = {
       bpm: 0,
@@ -487,57 +495,57 @@ async function loadDemoFile() {
       dynamics: { dynamicRangeDb: 0, loudnessRangeDb: 0, crestFactor: 0, isCompressed: false },
       rhythm: { syncopation: 0, grooveType: '', patternRegularity: 0 },
       form: '',
-    }
+    };
 
-    isLoadingDemo.value = false
+    isLoadingDemo.value = false;
   } catch (e) {
-    console.error('Failed to load demo file:', e)
-    isLoadingDemo.value = false
+    console.error('Failed to load demo file:', e);
+    isLoadingDemo.value = false;
   }
 }
 
 function mixToMono(audioBuffer: AudioBuffer, maxLength?: number): Float32Array {
-  const length = maxLength ? Math.min(audioBuffer.length, maxLength) : audioBuffer.length
-  const channels = audioBuffer.numberOfChannels
+  const length = maxLength ? Math.min(audioBuffer.length, maxLength) : audioBuffer.length;
+  const channels = audioBuffer.numberOfChannels;
 
-  const channelData: Float32Array[] = []
+  const channelData: Float32Array[] = [];
   for (let ch = 0; ch < channels; ch++) {
-    channelData.push(audioBuffer.getChannelData(ch))
+    channelData.push(audioBuffer.getChannelData(ch));
   }
 
   if (channels === 2) {
-    const left = channelData[0]
-    const right = channelData[1]
-    const mono = new Float32Array(length)
+    const left = channelData[0];
+    const right = channelData[1];
+    const mono = new Float32Array(length);
     for (let i = 0; i < length; i++) {
-      mono[i] = (left[i] + right[i]) * 0.5
+      mono[i] = (left[i] + right[i]) * 0.5;
     }
-    return mono
+    return mono;
   }
 
-  const mono = new Float32Array(length)
-  const scale = 1 / channels
+  const mono = new Float32Array(length);
+  const scale = 1 / channels;
   for (let i = 0; i < length; i++) {
-    let sum = 0
+    let sum = 0;
     for (let ch = 0; ch < channels; ch++) {
-      sum += channelData[ch][i]
+      sum += channelData[ch][i];
     }
-    mono[i] = sum * scale
+    mono[i] = sum * scale;
   }
-  return mono
+  return mono;
 }
 
 // Reset stream analyzer when starting fresh playback from the beginning
 watch(isPlaying, (playing, wasPlaying) => {
   if (playing && !wasPlaying && currentTime.value === 0) {
     // Starting new playback from beginning - reset analyzer
-    resetStreamAnalyzer()
+    resetStreamAnalyzer();
   }
-})
+});
 
 onMounted(() => {
-  loadDemoFile()
-})
+  loadDemoFile();
+});
 </script>
 
 <template>
@@ -676,13 +684,25 @@ onMounted(() => {
             <!-- Primary Analysis Results -->
             <div class="analyzer__metric-hero">
               <span class="analyzer__metric-hero-label">{{ t('demo.panel.bpm') }}</span>
-              <span class="analyzer__metric-hero-value">{{ displayBpm || '-' }}</span>
-              <span v-if="displayBpmConfidence > 0" class="analyzer__metric-hero-conf">{{ displayBpmConfidence }}%</span>
+              <span class="analyzer__metric-hero-value">
+                <span v-if="bpmPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
+                  <i></i><i></i><i></i>
+                </span>
+                <template v-else>{{ displayBpm || '-' }}</template>
+              </span>
+              <span v-if="bpmPending" class="analyzer__metric-hero-conf analyzer__metric-hero-conf--pending">{{ t('demo.analyzing') }}</span>
+              <span v-else-if="displayBpmConfidence > 0" class="analyzer__metric-hero-conf">{{ displayBpmConfidence }}%</span>
             </div>
             <div class="analyzer__metric-hero">
               <span class="analyzer__metric-hero-label">{{ t('demo.panel.key') }}</span>
-              <span class="analyzer__metric-hero-value">{{ displayKey }}</span>
-              <span v-if="displayKeyConfidence > 0" class="analyzer__metric-hero-conf">{{ displayKeyConfidence }}%</span>
+              <span class="analyzer__metric-hero-value">
+                <span v-if="keyPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
+                  <i></i><i></i><i></i>
+                </span>
+                <template v-else>{{ displayKey }}</template>
+              </span>
+              <span v-if="keyPending" class="analyzer__metric-hero-conf analyzer__metric-hero-conf--pending">{{ t('demo.analyzing') }}</span>
+              <span v-else-if="displayKeyConfidence > 0" class="analyzer__metric-hero-conf">{{ displayKeyConfidence }}%</span>
             </div>
             <!-- Chord Progression Pattern (C++ computed) -->
             <div v-if="displayVotedPattern.length >= 4" class="analyzer__pattern">
@@ -716,494 +736,8 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
-.analyzer {
-  width: 100%;
-  max-width: 1400px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'JetBrains Mono', monospace;
-}
+<style scoped src="./analyzer/audioAnalyzerLoading.css"></style>
+<style scoped src="./analyzer/audioAnalyzerLayout.css"></style>
+<style scoped src="./analyzer/audioAnalyzerMetrics.css"></style>
+<style scoped src="./analyzer/audioAnalyzerResponsive.css"></style>
 
-/* ===== LOADING ===== */
-.analyzer__loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
-  position: relative;
-  padding: 60px;
-}
-
-/* Audio waveform bars wrapper */
-.analyzer__loading-bars {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 80px;
-  position: relative;
-  z-index: 1;
-}
-
-.analyzer__loading-bar {
-  width: 4px;
-  height: 48px;
-  background: linear-gradient(to top, #8B5CF6, #A78BFA);
-  border-radius: 2px;
-  will-change: transform, opacity;
-  animation: wave-bar 1.2s ease-in-out infinite;
-}
-
-@keyframes wave-bar {
-  0%, 100% { transform: scaleY(0.25); opacity: 0.4; }
-  50% { transform: scaleY(1); opacity: 1; }
-}
-
-/* Center icon - positioned relative to bars container */
-.analyzer__loading-icon {
-  position: absolute;
-  width: 36px;
-  height: 36px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10;
-  will-change: transform;
-  animation: icon-pulse 2s ease-in-out infinite;
-}
-
-.analyzer__loading-icon svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: var(--demo-text-strong, rgba(255, 255, 255, 0.9));
-  stroke-width: 2;
-  filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)) drop-shadow(0 0 16px rgba(139, 92, 246, 0.5));
-}
-
-@keyframes icon-pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); }
-  50% { transform: translate(-50%, -50%) scale(1.05); }
-}
-
-/* Loading text container */
-.analyzer__loading-text-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  position: relative;
-  z-index: 1;
-}
-
-.analyzer__loading-label {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  color: #8B5CF6;
-  text-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
-  margin-top: 5px;
-}
-
-.analyzer__loading-text {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.15em;
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.5));
-  text-transform: uppercase;
-}
-
-/* Loading dots */
-.analyzer__loading-dots {
-  display: flex;
-  gap: 6px;
-  position: relative;
-  z-index: 1;
-}
-
-.analyzer__loading-dot {
-  width: 6px;
-  height: 6px;
-  background: rgba(139, 92, 246, 0.4);
-  border-radius: 50%;
-  will-change: transform;
-  animation: dot-bounce 1.4s ease-in-out infinite;
-}
-
-@keyframes dot-bounce {
-  0%, 80%, 100% { transform: translateY(0); background: rgba(139, 92, 246, 0.4); }
-  40% { transform: translateY(-8px); background: #8B5CF6; }
-}
-
-/* Loading progress bar */
-.analyzer__loading-progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 240px;
-  position: relative;
-  z-index: 1;
-}
-
-.analyzer__loading-progress-bar {
-  width: 100%;
-  height: 3px;
-  background: rgba(139, 92, 246, 0.15);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.analyzer__loading-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #8B5CF6, #A78BFA);
-  border-radius: 2px;
-  transition: width 0.2s ease-out;
-  box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
-}
-
-.analyzer__loading-progress-text {
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #A78BFA;
-  letter-spacing: 0.05em;
-}
-
-/* ===== PROGRESS ===== */
-.analyzer__progress {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 300px;
-}
-
-.analyzer__progress-bar {
-  width: 100%;
-  height: 4px;
-  background: rgba(139, 92, 246, 0.15);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.analyzer__progress-fill {
-  height: 100%;
-  background: #8B5CF6;
-  transition: width 0.3s ease;
-}
-
-.analyzer__progress-text {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
-}
-
-/* ===== MAIN LAYOUT ===== */
-.analyzer__main {
-  display: grid;
-  grid-template-columns: 220px 1fr 280px;
-  grid-template-rows: 1fr;
-  gap: 16px;
-  width: 100%;
-  height: 100%;
-  max-height: 700px;
-}
-
-/* ===== CENTER ===== */
-.analyzer__center {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  grid-column: 2;
-  min-height: 0;
-}
-
-.analyzer__scope-container {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow: hidden;
-  position: relative;
-}
-
-.analyzer__scope-container :deep(.scope) {
-  max-width: 100%;
-  margin: 0;
-  position: static;
-}
-
-.analyzer__scope-container :deep(.scope__footer) {
-  position: absolute;
-  bottom: 0;
-  left: 14px;
-  right: 14px;
-  margin: 10px 0;
-}
-
-/* ===== TRANSPORT ===== */
-.analyzer__transport {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--demo-bg-elevated, rgba(8, 10, 14, 0.85));
-  border: 1px solid var(--demo-border-strong, rgba(139, 92, 246, 0.15));
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
-}
-
-.analyzer__controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.analyzer__controls-left,
-.analyzer__controls-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.analyzer__time {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--demo-text-strong, rgba(255, 255, 255, 0.8));
-}
-
-.analyzer__time-current {
-  color: var(--demo-accent, #8B5CF6);
-  font-weight: 600;
-}
-
-.analyzer__time-sep {
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
-  margin: 0 4px;
-}
-
-.analyzer__time-total {
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
-}
-
-/* ===== SIDEBAR ===== */
-.analyzer__sidebar {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.analyzer__sidebar--left {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.analyzer__sidebar--right {
-  grid-column: 3;
-  grid-row: 1;
-}
-
-/* ===== METRICS PANEL ===== */
-.analyzer__metrics {
-  height: 100%;
-}
-
-.analyzer__metrics-body {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.analyzer__metrics-divider {
-  height: 1px;
-  background: var(--demo-border-strong, rgba(139, 92, 246, 0.15));
-  margin: 4px 0;
-}
-
-/* ===== HERO METRICS ===== */
-.analyzer__metric-hero {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 0;
-}
-
-.analyzer__metric-hero-label {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
-  min-width: 50px;
-}
-
-.analyzer__metric-hero-value {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--demo-accent-light, #A78BFA);
-  font-variant-numeric: tabular-nums;
-  min-width: 60px;
-}
-
-.analyzer__metric-hero-value--chord {
-  min-width: 45px;
-  font-size: 18px;
-}
-
-.analyzer__metric-hero-conf {
-  font-size: 10px;
-  color: var(--demo-text-faint, rgba(255, 255, 255, 0.3));
-  margin-left: auto;
-}
-
-/* ===== CHORD PATTERN ===== */
-.analyzer__pattern {
-  margin-top: 4px;
-  padding: 8px 10px;
-  background: var(--demo-accent-subtle, rgba(139, 92, 246, 0.08));
-  border: 1px solid var(--demo-border-strong, rgba(139, 92, 246, 0.15));
-  border-radius: 6px;
-}
-
-.analyzer__pattern-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.analyzer__pattern-label {
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.35));
-}
-
-.analyzer__pattern-bar {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--demo-accent-light, #A78BFA);
-  letter-spacing: 0.05em;
-}
-
-.analyzer__pattern-name {
-  font-size: 10px;
-  font-weight: 600;
-  color: #10B981;
-  letter-spacing: 0.05em;
-  text-transform: capitalize;
-}
-
-.analyzer__pattern-chords {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--demo-accent-light, #A78BFA);
-  letter-spacing: 0.02em;
-}
-
-.analyzer__pattern-score {
-  font-size: 9px;
-  font-weight: 500;
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
-  margin-top: 4px;
-  display: block;
-}
-
-/* ===== ERROR ===== */
-.analyzer__error {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 8px;
-  color: #ef4444;
-  font-size: 12px;
-}
-
-.analyzer__error-icon {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(239, 68, 68, 0.2);
-  border-radius: 50%;
-  font-weight: 700;
-  font-size: 11px;
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 1100px) {
-  .analyzer__main {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
-    max-height: none;
-  }
-
-  .analyzer__sidebar--left {
-    grid-column: 1;
-    grid-row: 3;
-    max-height: 200px;
-  }
-
-  .analyzer__sidebar--right {
-    display: none;
-  }
-
-  .analyzer__center {
-    grid-column: 1;
-    grid-row: 1 / 3;
-  }
-
-  .analyzer__metrics-body {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-
-  .analyzer__metrics-body :deep(.metric-item) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    min-width: 80px;
-  }
-
-  .analyzer__metrics-divider {
-    display: none;
-  }
-}
-
-@media (max-width: 600px) {
-  .analyzer__main {
-    gap: 10px;
-  }
-
-  .analyzer__time {
-    font-size: 11px;
-  }
-
-  .analyzer__sidebar--left {
-    max-height: 160px;
-  }
-
-  .analyzer__metrics-body {
-    padding: 8px 10px;
-    gap: 12px;
-  }
-
-  .analyzer__metrics-body :deep(.metric-item) {
-    min-width: 70px;
-  }
-}
-</style>

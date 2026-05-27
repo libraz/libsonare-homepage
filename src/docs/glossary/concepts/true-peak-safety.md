@@ -44,7 +44,11 @@ The libsonare mastering chain uses a true-peak limiter stage and exposes ceiling
 
 The safety check uses the same principle as true-peak metering: estimate the reconstructed waveform by oversampling, then evaluate the highest sample on that denser grid. A limiter that only clamps original samples can still leave inter-sample overs, so the guard has to observe the oversampled path, not just the input buffer.
 
-Lookahead and release are coupled. Lookahead gives the limiter a chance to begin attenuation before the peak, while release determines how quickly it returns to unity gain. Very short release can produce modulation; very long release can dull transients and reduce loudness headroom. The practical setting is therefore a compromise between codec safety, transient preservation, and audible gain movement.
+Lookahead and release are coupled.
+
+Lookahead gives the limiter a chance to begin attenuation before the peak. Release determines how quickly it returns to unity gain.
+
+Very short release can produce modulation. Very long release can dull transients and reduce loudness headroom. The practical setting is a compromise between codec safety, transient preservation, and audible gain movement.
 
 ::::
 

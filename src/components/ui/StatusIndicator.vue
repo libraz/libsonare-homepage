@@ -1,9 +1,9 @@
 <script setup lang="ts">
 defineProps<{
-  status?: 'online' | 'offline' | 'idle' | 'active' | 'warning' | 'error'
-  label?: string
-  pulse?: boolean
-}>()
+  status?: 'online' | 'offline' | 'idle' | 'active' | 'warning' | 'error';
+  label?: string;
+  pulse?: boolean;
+}>();
 </script>
 
 <template>

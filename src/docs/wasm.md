@@ -4,6 +4,34 @@ libsonare can be compiled to WebAssembly for audio analysis directly in web
 browsers. The npm package expects decoded mono `Float32Array` samples; file
 decoding is handled by the Web Audio API or another JavaScript decoder.
 
+Use this page when you are building a browser app. If you are writing a Python script, terminal batch job, or native desktop tool, start with [Getting Started](./getting-started.md) and choose another runtime.
+
+## Browser Mental Model
+
+| Step | What happens |
+|------|--------------|
+| 1. Load a file | Use `fetch`, an `<input type="file">`, drag-and-drop, or another browser source |
+| 2. Decode audio | Use `AudioContext.decodeAudioData(...)` or your own decoder |
+| 3. Choose samples | Pass one mono channel, downmix stereo yourself, or call stereo APIs where available |
+| 4. Call libsonare | Pass samples plus `sampleRate` to analysis, editing, mastering, or mixing APIs |
+
+The most common beginner mistake is passing an MP3 `ArrayBuffer` directly to an analysis function. Decode it first; libsonare's browser package works on PCM samples, not compressed file bytes.
+
+::: details What are Float32Array, PCM, mono, and downmixing?
+- **PCM samples** are the raw, uncompressed waveform — a long list of amplitude numbers. An MP3/WAV *file* is compressed or wrapped bytes; decoding turns it into PCM.
+- **`Float32Array`** is the JavaScript typed array the Web Audio API uses to hold those samples as 32-bit floats (normally in the −1…1 range), one number per sample. libsonare's browser API takes this directly.
+- **Mono / downmixing** — mono is a single channel. Stereo audio has separate left and right channels; *downmixing* combines them into one (typically by averaging) so you can pass a single channel to a mono API.
+:::
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- install and initialize the WASM package correctly;
+- decode browser files into PCM and pass the right channel/sample-rate pair to libsonare;
+- choose between one-shot functions, `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `Mixer`, and `RealtimeEngine`;
+- understand the bundle-size and Worker/AudioWorklet tradeoffs before shipping a browser app.
+
 ## Installation
 
 ### npm/yarn
@@ -65,8 +93,15 @@ async function analyzeAudio() {
 }
 ```
 
-The browser build also exposes the full librosa-parity helper set added in
-libsonare 1.1.0, grouped by intent:
+CLI equivalent for the same one-file checks:
+
+```bash
+sonare bpm music.mp3
+sonare key music.mp3
+sonare analyze music.mp3 --json
+```
+
+The browser build also exposes the full librosa-parity helper set, grouped by intent:
 
 - **Waveform pre-processing** — `preemphasis` / `deemphasis`, `trimSilence` / `splitSilence`
 - **Framing / size alignment** — `frameSignal`, `padCenter`, `fixLength`, `fixFrames`
@@ -74,8 +109,41 @@ libsonare 1.1.0, grouped by intent:
 - **Features** — `pcen` (mel dynamic-range compression), `tonnetz` (harmonic-space projection), `tempogram` / `plp` (tempo representations)
 - **Unit conversion** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`, `framesToSamples` / `samplesToFrames`
 
-See the [JS API reference](./js-api.md) for signatures and the
-[librosa Compatibility](./librosa-compatibility.md) mapping.
+See the [JS API reference](./js-api.md) for signatures and the [librosa Compatibility](./librosa-compatibility.md) mapping.
+
+## Browser Mixing
+
+The WASM package exposes the mixing engine. Use `mixStereo(...)` for one-shot stem rendering, or keep a persistent `Mixer` built from scene JSON when you need buses, sends, insert automation, goniometer data, and strip meters.
+
+```typescript
+import { init, Mixer, mixStereo, mixingScenePresetJson } from '@libraz/libsonare';
+
+await init();
+
+const rendered = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
+  faderDb: [-3, -12],
+  pan: [0, -0.2],
+  width: [1, 0.9],
+});
+
+const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
+mixer.scheduleFaderAutomation(0, sampleRate * 4, -6, 's-curve');
+const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
+const meter = mixer.stripMeter(0, 'postFader');
+mixer.delete();
+```
+
+For a full walkthrough, see [Mixing Engine](./mixing.md).
+
+CLI equivalent for rendering a built-in mixer scene:
+
+```bash
+sonare mix \
+  --preset vocalReverbSend \
+  --input vocal.wav \
+  --input music.wav \
+  -o mixed.wav
+```
 
 ## Audio Class
 
@@ -117,6 +185,15 @@ console.log(`BPM: ${bpm}, Key: ${key.name}`);
 console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
+CLI equivalents for the analysis and editing calls above:
+
+```bash
+sonare analyze music.mp3 --json
+sonare hpss music.mp3 --json
+sonare pitch-shift music.wav --semitones 2 -o shifted.wav
+sonare pitch music.mp3 --algorithm pyin --json
+```
+
 See the [JS API Reference](/docs/js-api#audio-class) for the full list of instance methods.
 
 ## Browser Mastering
@@ -124,6 +201,14 @@ See the [JS API Reference](/docs/js-api#audio-class) for the full list of instan
 The `/mastering` demo uses the same WASM package described here. Audio decoding happens in the browser, mastering work runs in a Web Worker, and the rendered WAV plus JSON report are created locally.
 
 For implementation details, see [Mastering Implementation](./mastering-implementation.md), [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), and [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md).
+
+The mastering API also includes `masteringAssistantSuggest(...)`, `masteringAudioProfile(...)`, and `masteringStreamingPreview(...)` for JSON-driven assistant output, source profiling, and platform preview reporting.
+
+CLI equivalent for a simple loudness-normalized master:
+
+```bash
+sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+```
 
 ## File Input
 
@@ -404,8 +489,11 @@ async function setupStreaming() {
       // Check progressive BPM/key estimates
       const stats = analyzer.stats();
       if (stats.estimate.updated) {
+        const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const mode = stats.estimate.keyMinor ? 'minor' : 'major';
         console.log(`BPM: ${stats.estimate.bpm.toFixed(1)}`);
-        console.log(`Key: ${stats.estimate.key}`);
+        // estimate.key is a PitchClass index (0-11), not a string
+        console.log(`Key: ${keyNames[stats.estimate.key]} ${mode}`);
       }
     }
   };
@@ -419,6 +507,11 @@ async function setupStreaming() {
 
 For production use, run `StreamAnalyzer` in an AudioWorklet to avoid main thread blocking.
 
+For realtime-engine playback, the package also ships an AudioWorklet bridge at
+`@libraz/libsonare/worklet` and a reduced realtime module at
+`@libraz/libsonare/rt`; see [Realtime and Streaming](./realtime-streaming.md)
+for that engine-focused path. The example below shows a custom analyzer worklet.
+
 ::: warning WASM in AudioWorklet
 Loading WASM in AudioWorklet requires special handling. The WASM module must be loaded and instantiated within the worklet context.
 :::
@@ -426,30 +519,32 @@ Loading WASM in AudioWorklet requires special handling. The WASM module must be 
 **analyzer-worklet.ts:**
 
 ```typescript
-import { StreamAnalyzer } from '@libraz/libsonare';
+import { init, StreamAnalyzer } from '@libraz/libsonare';
 
 class AnalyzerWorklet extends AudioWorkletProcessor {
-  private analyzer: StreamAnalyzer;
+  private analyzer?: StreamAnalyzer;
   private frameCounter = 0;
 
   constructor() {
     super();
-    // sampleRate is a global in AudioWorkletGlobalScope
-    this.analyzer = new StreamAnalyzer({
-      sampleRate,
-      nFft: 2048,
-      hopLength: 512,
-      nMels: 64, // reduced for bandwidth
-      computeMel: true,
-      computeChroma: true,
-      computeOnset: true,
-      emitEveryNFrames: 4,
+    void init().then(() => {
+      // sampleRate is a global in AudioWorkletGlobalScope
+      this.analyzer = new StreamAnalyzer({
+        sampleRate,
+        nFft: 2048,
+        hopLength: 512,
+        nMels: 64, // reduced for bandwidth
+        computeMel: true,
+        computeChroma: true,
+        computeOnset: true,
+        emitEveryNFrames: 4,
+      });
     });
   }
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0]?.[0];
-    if (!input || input.length === 0) return true;
+    if (!input || input.length === 0 || !this.analyzer) return true;
 
     this.analyzer.process(input);
 
@@ -507,7 +602,29 @@ source.connect(workletNode);
 
 ### Bandwidth Optimization
 
-The TypeScript `StreamAnalyzer` wrapper exposes a single `readFrames(maxFrames)` method that returns a Structure-of-Arrays `FrameBuffer` of `Float32Array`/`Int32Array` values. For lower-bandwidth transfer between threads, downsample or quantize the buffers yourself before calling `postMessage`. The underlying embind class also exposes 16-bit and 8-bit quantized variants (`readFramesI16` / `readFramesU8`) that can be used directly from C++ or via raw embind access; they are not part of the TypeScript wrapper's public surface.
+The TypeScript `StreamAnalyzer` wrapper has three read methods. Choose them by how much precision your UI needs and how much data you can afford to move between threads.
+
+| Method | Returned type | Use when |
+|--------|---------------|----------|
+| `readFrames(maxFrames)` | `FrameBuffer` with `Float32Array` / `Int32Array` fields | You need full precision for analysis or high-quality visuals |
+| `readFramesI16(maxFrames)` | `StreamFramesI16` | You want smaller payloads but still enough precision for most visual meters |
+| `readFramesU8(maxFrames)` | `StreamFramesU8` | You need very small payloads for mobile or dense visual updates |
+
+Set `StreamConfig.outputFormat` so the analyzer produces the matching frame type internally:
+
+| `outputFormat` | Internal frame type |
+|----------------|---------------------|
+| `0` | Float32 |
+| `1` | Int16 |
+| `2` | Uint8 |
+
+This avoids doing quantization yourself before `postMessage`.
+
+::: details What are "Structure-of-Arrays" and transferable objects?
+- **Structure-of-Arrays (SoA)** means each field lives in its own flat typed array — all timestamps in one array, all mel values in another — instead of an array of per-frame objects. It is cheaper to slice and cheaper to hand to another thread.
+- **Transferable objects** are `ArrayBuffer`s that `postMessage` can *move* to a worker instead of copying. Ownership transfers (the sender's view becomes empty afterward), which makes passing audio frames between threads near-instant. List the buffers in the second argument: `postMessage(msg, [buffer, ...])`.
+- **Quantizing** here means packing each float into a smaller 16-bit or 8-bit integer — fewer bytes to send, at the cost of precision (fine for a meter or heatmap, not for further DSP).
+:::
 
 | Approach | Approx. size per frame | Best For |
 |----------|------------------------|----------|
@@ -572,6 +689,74 @@ function renderVisualization(frames: FrameBuffer, nMels: number) {
 }
 ```
 
+## Inverse Reconstruction
+
+The WASM build ships the inverse reconstruction helpers, so you can go from a mel spectrogram or MFCC matrix back to a spectrum or audio entirely in the browser:
+
+```typescript
+import { melSpectrogram, melToAudio, mfcc, mfccToAudio, init } from '@libraz/libsonare';
+
+await init();
+
+// Mel → audio (Griffin-Lim phase reconstruction)
+const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
+const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+
+// MFCC → audio
+const m = mfcc(samples, sampleRate, 2048, 512, 128, 20);
+const fromMfcc = mfccToAudio(m.coefficients, m.nMfcc, m.nFrames, mel.nMels, sampleRate);
+```
+
+Source-built C++ CLI equivalents:
+
+```bash
+sonare mel-to-audio music.wav -o mel-reconstructed.wav
+sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
+```
+
+| Function | Returns | Notes |
+|----------|---------|-------|
+| `melToStft(melPower, nMels, nFrames, sampleRate, nFft?, hopLength?, fmin?, fmax?)` | `StftPowerResult` `{ nBins, nFrames, power }` | Pseudo-inverse of the mel filterbank |
+| `melToAudio(melPower, nMels, nFrames, sampleRate, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | Griffin-Lim audio synthesis |
+| `mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels?)` | `MelPowerResult` `{ nMels, nFrames, power }` | Inverse DCT back to a mel spectrogram |
+| `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | MFCC → mel → audio in one call |
+
+::: warning Lossy round-trip
+These reconstruct *magnitude* and estimate phase with Griffin-Lim, so the output is an approximation — fine for sonification, audition, and visualization, not for bit-exact recovery. See [Inverse Features](./inverse-features.md) for the full pipeline and caveats.
+:::
+
+## Streaming Retune
+
+`StreamingRetune` is the WASM block-by-block mono retune wrapper added in
+libsonare 1.2.1. Use it for live or chunked pitch shifting when you need state
+to continue across blocks.
+
+```typescript
+import { init, StreamingRetune } from '@libraz/libsonare';
+
+await init();
+
+const retune = new StreamingRetune({ semitones: 3, mix: 1 });
+retune.prepare(48000, 512);
+
+try {
+  const shifted = retune.processMono(inputBlock);
+  retune.setConfig({ semitones: -2, mix: 0.75 });
+  const next = retune.processMono(nextInputBlock);
+  console.log(shifted, next, retune.grainSize());
+} finally {
+  retune.delete();
+}
+```
+
+For file-based offline processing from the terminal, use the closest CLI
+commands:
+
+```bash
+sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
+sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
+```
+
 ## Browser Compatibility
 
 | Browser | Minimum Version |
@@ -591,8 +776,9 @@ Requirements:
 | File | Size | Gzipped |
 |------|------|---------|
 | `sonare.js` | ~50 KB | ~13 KB |
-| `sonare.wasm` | ~457 KB | ~182 KB |
-| **Total** | ~508 KB | ~195 KB |
+| `index.js` | ~64 KB | ~12 KB |
+| `sonare.wasm` | ~1,607 KB | ~573 KB |
+| **Total** | ~1,721 KB | ~598 KB |
 
 ## Troubleshooting
 

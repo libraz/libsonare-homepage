@@ -5,12 +5,23 @@ description: High-frequency air-band processing for mastering and AI-generated s
 
 # Air Band
 
-The air band is the very high frequency region, roughly above 10-12 kHz. It contributes openness, shimmer, and perceived detail.
+The air band is the very high frequency region, roughly above 10-12 kHz.
+
+It contributes:
+
+| Quality | What it means |
+|---------|---------------|
+| Openness | The mix feels less covered or dull |
+| Shimmer | Cymbals, breath, and bright textures feel more present |
+| Perceived detail | Small high-frequency cues become easier to notice |
 This region carries more of the breath, cymbal edge, room tail, and surface texture than the actual musical pitch. Small moves can make a master feel clearer, but excessive moves often reveal hiss, sibilance, or a brittle top end before they reveal useful detail.
 
 ## AI-Generated Sources
 
-Some generated music has a dull or sharply limited upper band. Air-band synthesis and high-frequency excitation can help restore perceived openness, but too much can sound brittle or noisy.
+Some generated music has a dull or sharply limited upper band. Air-band synthesis and high-frequency excitation can help restore perceived openness.
+
+Use restraint: too much air can sound brittle or noisy.
+
 When a source falls off sharply around 16 kHz, a normal high-shelf EQ may not be enough because there is little useful material to boost. In that case, treat air-band processing as a way to infer a natural upper edge from the remaining harmonics and noise floor, not as a replacement for missing recording detail.
 
 ## In Studio Mode
@@ -32,7 +43,15 @@ Air-band processing runs before the final loudness optimizer. That order lets th
 
 The demo keeps Air Band Amount and Exciter Amount separate because they solve different problems. Air Band primarily restores the upper edge; Exciter increases harmonic density. Moving one at a time makes the cause of each audible change easier to identify.
 
-For generated material, the stage should be conservative when the detected upper band is mostly noise. In that case, boosting or synthesizing too much "air" makes the artifact easier to hear. The safer path is to add a small high-band reconstruction, then let the limiter and loudness stage re-check peak behavior. Studio mode also exposes the air-band shelf frequency, but pushing it too far up tends to amplify noise more than musical content, so it is usually safer to leave the frequency near its default and move only the amount.
+For generated material, be conservative when the detected upper band is mostly noise. Boosting or synthesizing too much "air" can make the artifact easier to hear.
+
+A safer workflow is:
+
+1. Add a small amount of high-band reconstruction.
+2. Let the limiter and loudness stage re-check peak behavior.
+3. Adjust the amount before moving the shelf frequency.
+
+Studio mode exposes the air-band shelf frequency, but pushing it too high often amplifies noise more than musical content. In most cases, leave the frequency near its default and move only the amount.
 
 ::::
 

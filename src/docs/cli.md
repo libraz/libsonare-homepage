@@ -2,6 +2,37 @@
 
 Complete reference for the `sonare` command-line interface.
 
+Use the CLI when you want quick checks, batch jobs, or script-friendly JSON without writing application code. If you are building a UI, start with [WebAssembly Guide](./wasm.md), [Python API](./python-api.md), or [Mixing Engine](./mixing.md) instead.
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- install the PyPI `sonare` command and understand how it differs from the source-built C++ CLI;
+- choose the right command for quick analysis, feature summaries, editing, mastering, acoustic checks, or simple mixing;
+- decide when to use human-readable output and when to use `--json` for scripts;
+- recognize which workflows should move from CLI commands to Python, WASM, or native APIs.
+
+## First Commands To Try
+
+| Goal | Command |
+|------|---------|
+| Show the main summary | `sonare analyze music.mp3` |
+| Get only tempo | `sonare bpm music.mp3` |
+| Get only key | `sonare key music.mp3` |
+| Produce script-friendly output | `sonare analyze music.mp3 --json` |
+
+## Which CLI Are You Using?
+
+There are two `sonare` command-line entry points in the source tree:
+
+| CLI | How you get it | Best for | Command coverage |
+|-----|----------------|----------|------------------|
+| Python CLI | `pip install libsonare` | Most users: batch analysis, feature summaries, editing, mastering, simple mixing | Broad, stable, file-decoding friendly |
+| C++ CLI | Build from source with `BUILD_CLI=ON` | Development, parity checks, lower-level utilities, extra scene/export commands | Superset for some feature/utility commands |
+
+Unless this page explicitly says "source-built C++ CLI", assume the command is available from the PyPI Python CLI.
+
 ::: tip Install via pip
 The `sonare` CLI is installed from PyPI with the Python package:
 ```bash
@@ -14,14 +45,18 @@ The default PyPI wheels decode WAV and MP3. Rebuild with FFmpeg enabled for
 direct M4A/AAC/FLAC/OGG/Opus decoding.
 :::
 
-::: info C++ CLI
-Building from source provides the C++ CLI with additional commands. See [Building from Source](/docs/installation#building-from-source).
+::: info C++ CLI has even more commands
+The Python CLI already covers analysis, features, editing, mastering, and `mix`
+(see [More Commands](#more-commands) below). Building from source adds a C++ CLI
+with extra commands not in the PyPI package. See [Building from Source](/docs/installation#building-from-source).
 
-- Analysis: `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, `boundaries`, `system-info`
-- Effects / transforms: `pitch-shift`, `time-stretch`, `preemphasis`, `deemphasis`, `trim-silence`, `split-silence`
-- Features: `onset-env`, `cqt`, `tonnetz`, `tempogram`, `plp`, `pcen`
+- Analysis: `sections`, `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
+- Effects / transforms: `pitch-shift`, `time-stretch`, `preemphasis`, `deemphasis`, `trim-silence`, `split-silence`, `normalize`, `gain`, `fade`, `filter`, `resample`
+- Synthesis: `tone`, `chirp`, `clicks`
+- Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (short alias for `onset-envelope`), `fourier-tempogram`, `tempogram-ratio`
 - librosa utilities: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
-- Mastering: `mastering`, `mastering-processor`, `mastering-pair-analyze`, `mastering-stereo-analyze`, `mastering-processors`
+- Mastering: `mastering-pair-processor` (process a source/reference pair), `mastering-stereo-analyses`, `mastering-stereo-analyze`
+- Mixing scene tools: `mixing-presets`, `mixing-preset` (list / export scene JSON)
 :::
 
 ## Overview
@@ -40,7 +75,7 @@ sonare <command> [options] <audio_file>
 |--------|-------------|
 | `--json` | Output results in JSON format |
 | `--help`, `-h` | Show help for command |
-| `-o`, `--output` | Accepted by the Python CLI parser, but analysis and feature commands currently write to stdout |
+| `-o`, `--output` | Output WAV path. Editing, mastering, `eq`, and `mix` commands write a WAV here; analysis/feature commands print to stdout |
 | `--n-fft <int>` | FFT size (default: 2048) |
 | `--hop-length <int>` | Hop length (default: 512) |
 | `--n-mels <int>` | Number of Mel bands (default: 128) |
@@ -108,6 +143,7 @@ Detect musical key.
 ```bash
 sonare key music.mp3
 sonare key music.mp3 --json
+sonare key music.mp3 --candidates 5 --profile temperley --modes major-minor
 ```
 
 **Output:**
@@ -119,6 +155,24 @@ sonare key music.mp3 --json
 ```json
 {"root": 9, "mode": 1, "confidence": 0.82, "name": "A minor"}
 ```
+
+Useful options:
+
+| Option | Use |
+|--------|-----|
+| `--candidates N` | Show the top `N` ranked key candidates, not only the winner |
+| `--use-hpss` | Analyze harmonic content for cleaner key detection on drum-heavy material |
+| `--loudness-weighted` | Weight chroma frames by RMS so quieter passages contribute less |
+| `--high-pass-hz FREQ` | Ignore low-frequency energy before key analysis |
+| `--modes major-minor|all|...` | Limit candidate modes |
+| `--profile ks|krumhansl|temperley|shaath|keyfinder|faraldo-edmt|edmt|faraldo-edma|edma|faraldo-edmm|edmm|bellman-budge|bellman` | Choose the key-profile family |
+| `--genre-hint auto|edm|electronic|dance|pop|classical|jazz` | Let the CLI choose a profile from a genre hint |
+
+::: details What are key profiles, genre hints, and `--high-pass-hz`?
+- **Key profile** — a template of how prominent each of the 12 pitch classes tends to be in a given key. The detector compares your song's chroma against these templates and picks the best match. Different families (`ks` / `krumhansl`, `temperley`, `shaath` / `keyfinder`, the Faraldo EDM profiles, `bellman` / `bellman-budge`) were tuned on different material, so one may fit your genre better than another.
+- **Genre hint** — instead of naming a profile directly, you tell the CLI the rough style and it picks a matching profile for you (e.g. an EDM hint selects an EDM-tuned profile).
+- **`--high-pass-hz`** — a high-pass filter removes energy below the given frequency before key analysis, so bass rumble or sub kick doesn't skew the chroma. A value like 80–120 Hz is typical.
+:::
 
 ### beats
 
@@ -241,6 +295,84 @@ sonare hpss music.mp3 --json
   Percussive energy: 0.018000
 ```
 
+## More Commands
+
+The Python CLI ships many more subcommands than the core set above. They all
+take the same global options (`--json`, `--n-fft`, etc.) and a file argument.
+Editing commands write a WAV when you pass `-o/--output`.
+
+### More analysis
+
+| Command | Description | Notable options |
+|---------|-------------|-----------------|
+| `sonare downbeats music.mp3` | Downbeat times (seconds) | — |
+| `sonare chords music.mp3` | Chord progression | `--min-duration`, `--smoothing-window`, `--threshold`, `--triads-only`, `--nnls`, `--no-beat-sync`, `--use-hmm`, `--hmm-beam-width`, `--key-context`, `--key-root`, `--key-mode`, `--detect-inversions` |
+| `sonare rhythm music.mp3` | Rhythm primitives (syncopation, groove, regularity) | — |
+| `sonare dynamics music.mp3` | Dynamics / loudness summary | — |
+| `sonare timbre music.mp3` | Timbre / spectral-shape summary | — |
+| `sonare lufs music.mp3` | EBU R128 loudness | `--series` (also emit momentary/short-term series) |
+| `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | `--ir` (treat input as an impulse response) |
+| `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Source-built C++ CLI only. `--clip-threshold`, `--oversample` |
+| `sonare clipping music.wav` | Clipped sample and region detection | Source-built C++ CLI only. `--threshold`, `--min-region` |
+| `sonare dynamic-range music.wav` | Percentile RMS dynamic range | Source-built C++ CLI only. `--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
+| `sonare stereo left.wav --reference right.wav` | Stereo correlation and width from left/right files | Source-built C++ CLI only |
+| `sonare phase left.wav --reference right.wav` | Phase-scope summary from left/right files | Source-built C++ CLI only |
+
+### More features
+
+| Command | Python CLI | Source-built C++ CLI | Description |
+|---------|------------|----------------------|-------------|
+| `sonare onset-envelope music.mp3` | Yes | Yes | Onset strength envelope |
+| `sonare onset-env music.mp3` | No | Yes | Short alias for onset strength envelope |
+| `sonare tempogram music.mp3` | Yes | Yes | Autocorrelation tempogram |
+| `sonare plp music.mp3` | Yes | Yes | Predominant local pulse |
+| `sonare nnls-chroma music.mp3` | Yes | Yes | NNLS chromagram |
+| `sonare cqt music.mp3` | No | Yes | Constant-Q transform summary |
+| `sonare vqt music.mp3` | No | Yes | Variable-Q transform summary |
+| `sonare mel-to-audio music.mp3 -o recon.wav` | No | Yes | Reconstruct audio from a computed Mel spectrogram with Griffin-Lim |
+| `sonare mfcc-to-audio music.mp3 -o recon.wav` | No | Yes | Reconstruct audio from computed MFCCs via Mel + Griffin-Lim |
+| `sonare tonnetz music.mp3` | No | Yes | Tonal centroid features |
+| `sonare pcen --values ... --n-bins 128 --n-frames 10` | No | Yes | Per-channel energy normalization over a flattened matrix |
+| `sonare fourier-tempogram music.mp3` | No | Yes | Fourier tempogram |
+| `sonare tempogram-ratio music.mp3` | No | Yes | Tempo-ratio features |
+
+The Python CLI intentionally prints summaries for matrix features rather than dumping full arrays. For full feature matrices, use [Python API](./python-api.md) or [JavaScript API](./js-api.md).
+
+### Editing
+
+These transform audio and write a WAV with `-o`:
+
+| Command | Description | Options |
+|---------|-------------|---------|
+| `sonare pitch-correct vocal.wav -o out.wav` | Pitch-correct toward a target MIDI note | `--current-midi` (69.0), `--target-midi` (69.0) |
+| `sonare note-stretch take.wav -o out.wav` | Time-stretch a single note region | `--onset`, `--offset` (sample indices), `--ratio` (1.0) |
+| `sonare voice-change vocal.wav -o out.wav` | Voice change (pitch + formant) | `--pitch-semitones` (0.0), `--formant-factor` (1.0) |
+
+The Python CLI focuses on the file-writing edit commands above, plus HPSS summaries.
+
+The source-built C++ CLI includes those same three edit commands and adds lower-level processing commands:
+
+| C++ command | Required or notable option |
+|-------------|----------------------------|
+| `pitch-shift` | `--semitones` |
+| `time-stretch` | `--rate` |
+| `normalize` | `-o`; `--mode peak|rms`, `--target-db` |
+| `gain` | `-o`, `--gain-db` |
+| `fade` | `-o`, `--fade-in` and/or `--fade-out` |
+| `filter` | `-o`, `--type hp|lp|bp|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch |
+| `resample` | `-o`, `--target-sr` |
+| `preemphasis`, `deemphasis`, `trim-silence`, `split-silence` | `-o` when writing a processed file |
+
+### Synthesis
+
+The source-built C++ CLI can generate simple test signals:
+
+| C++ command | Required or notable option |
+|-------------|----------------------------|
+| `tone -o tone.wav` | `--frequency`; optional `--sr`, `--duration`, `--phase`, `--amplitude` |
+| `chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr`, `--duration` |
+| `clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr`, `--length`, `--frequency`, `--click-duration` |
+
 ## Utility Commands
 
 ### info
@@ -270,7 +402,7 @@ sonare version --json
 
 **Output:**
 ```
-libsonare 1.1.0 (Python CLI)
+libsonare 1.2.1 (Python CLI)
 ```
 
 ## Examples
@@ -313,20 +445,25 @@ done
 
 ### Mastering Workflow
 
-::: info Source-built CLI required
-The mastering subcommands below ship with the **C++ CLI** (built from source). The PyPI Python CLI focuses on analysis (BPM, key, spectral features) and does not include `mastering-*` subcommands. See [Building from Source](/docs/installation#building-from-source).
+::: info Command availability
+The PyPI Python CLI includes `mastering`, `mastering-processor`, `eq`, `mastering-processors`, and the pair-analysis commands shown below. Source-built C++ CLI builds expose additional mastering commands: `mastering-pair-processor` for source/reference processing, plus stereo-analysis lists and runners. See [Building from Source](/docs/installation#building-from-source).
 :::
 
 ```bash
+# Loudness-normalize to a target with a true-peak ceiling, write a WAV
+sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+
 # Inspect processors compiled into this libsonare build
 sonare mastering-processors
-sonare mastering-stereo-analyses
 
 # Run a named mastering processor and write a mastered WAV
 sonare mastering-processor track.wav \
   --processor spectral.airBand \
   --params amount=0.4,shelfFrequencyHz=14000 \
-  --output libsonare-master.wav
+  -o libsonare-master.wav
+
+# Apply the unified equalizer (one band per call, or --params for several)
+sonare eq track.wav --type 2 --frequency-hz 12000 --gain-db 2.5 --q 0.7 -o eq.wav
 
 # Reference-based loudness / tonal analysis
 sonare mastering-pair-analyses
@@ -336,22 +473,54 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
+For Python CLI pair analysis, the source and reference files must decode to the same number of samples and should already use the same sample rate. The CLI surfaces mismatched lengths as an error; for resampling or trimming before comparison, use the Python API.
+
 The `/mastering` browser demo uses the same mastering processor families. Use the exported report from the demo as a starting point for CLI automation.
 
-Named mastering command families:
+Named mastering commands in the Python CLI:
 
 | Purpose | Command |
 |---------|---------|
+| Loudness-normalize with a true-peak ceiling | `sonare mastering` |
+| Apply the unified equalizer | `sonare eq` |
 | List mono/stereo processors | `sonare mastering-processors` |
-| Process mono or stereo-capable file | `sonare mastering-processor` |
+| Apply a named processor | `sonare mastering-processor` |
 | List pair processors | `sonare mastering-pair-processors` |
-| Process source/reference pair | `sonare mastering-pair-processor` |
 | List pair analyses | `sonare mastering-pair-analyses` |
-| Analyze source/reference pair | `sonare mastering-pair-analyze` |
-| List stereo analyses | `sonare mastering-stereo-analyses` |
-| Analyze stereo channels | `sonare mastering-stereo-analyze` |
+| Analyze a source/reference pair | `sonare mastering-pair-analyze` |
+
+Source-built C++ CLI only: `sonare mastering-pair-processor`, `sonare mastering-stereo-analyses`, and `sonare mastering-stereo-analyze`.
 
 Related mastering guides: [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Error recovery](./glossary/mastering/error-recovery.md).
+
+Room-acoustic fields such as RT60, EDT, C50, C80, D50, and confidence are explained in [Room Acoustics](./acoustic-analysis.md).
+
+### Mixing Workflow
+
+::: info Command availability
+The PyPI Python CLI includes `mix`, which loads a mixer scene from a JSON file or
+a built-in preset and optionally renders per-strip input WAVs. Source-built C++ CLI
+builds also expose `mixing-presets` and `mixing-preset` for listing scenes and
+exporting scene JSON loadable by the WASM, Python, Node, or C++ mixer APIs.
+:::
+
+```bash
+# Load a built-in scene preset and render per-strip inputs to a stereo WAV
+sonare mix \
+  --preset vocalReverbSend \
+  --input vocal.wav \
+  --input music.wav \
+  --sample-rate 48000 \
+  -o mixed.wav
+
+# Or load a scene from JSON (e.g. exported from the C++ `mixing-preset` command)
+sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
+```
+
+`mix` requires exactly one of `--scene` or `--preset`. Pass one `--input` per
+strip; rendering to a file needs `-o/--output`.
+
+Related: [Mixing Engine](./mixing.md).
 
 ## Supported Audio Formats
 

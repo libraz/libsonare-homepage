@@ -19,7 +19,57 @@ These pages cover the signal and analysis concepts that recur across the API, CL
 |-------|--------|
 | [Audio Basics](./glossary/concepts/audio-basics.md) | Sample rate, bit depth, mono/stereo, amplitude, dB, clipping, headroom, and latency. |
 | [MIR Overview](./glossary/concepts/mir-overview.md) | BPM, beats, onsets, key, chords, chroma, FFT, STFT, spectrograms, MFCC, CQT, VQT, HPSS, pitch, and sections. |
+| [Mixing Basics](./glossary/concepts/mixing-basics.md) | Tracks, stems, trim, fader, pan, stereo width, mute, solo, polarity, headroom, and bouncing. |
+| [Editing Basics](./glossary/concepts/editing-basics.md) | Pitch vs time, semitones and cents, MIDI note numbers, formant, and samples vs seconds. |
 | [Browser Local Processing](./glossary/concepts/browser-local-processing.md) | What stays local in the browser mastering demo, what still loads from the network, and the tradeoffs of local WASM processing. |
+
+## Analysis Guides
+
+These pages expand the MIR terms used by the analyzer, realtime views, and feature-extraction APIs.
+
+| Guide | Covers |
+|-------|--------|
+| [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md) | FFT, STFT windows, `nFft`, `hopLength`, spectrograms, CQT, and VQT. |
+| [Onset Detection](./glossary/analysis/onset-detection.md) | Onsets, transients, onset-strength envelopes, and why tempo starts there. |
+| [Tempo and BPM](./glossary/analysis/tempo-bpm.md) | BPM estimation, tempograms, autocorrelation, confidence, and half/double-tempo ambiguity. |
+| [Beats and Downbeats](./glossary/analysis/beats-downbeats.md) | Beat tracking, dynamic programming, meter phase, and downbeat estimation. |
+| [Chroma Features](./glossary/analysis/chroma-features.md) | Pitch classes, chromagrams, and why chroma powers key/chord analysis. |
+| [Key Detection](./glossary/analysis/key-detection.md) | Chroma-profile key estimation, candidate keys, profile families, and confidence. |
+| [Chord Recognition](./glossary/analysis/chord-recognition.md) | Chord templates, beat-synchronous chroma, smoothing, HMM options, and segment confidence. |
+| [Mel, MFCC, and Timbre](./glossary/analysis/mel-mfcc-timbre.md) | Mel scaling, MFCCs, spectral centroid, flatness, and timbre descriptors. |
+| [Melody and Pitch](./glossary/analysis/melody-pitch.md) | F0, YIN, pYIN, monophonic pitch tracking, voicing, and melody contours. |
+| [Section and Structure](./glossary/analysis/section-structure.md) | Boundary detection, self-similarity, repetition, energy, and section labels. |
+
+## Mixing Guides
+
+These pages expand the mixing-engine terms — the channel strip, routing, image, and metering — used by the [Mixing Engine](./mixing.md) guide.
+
+| Guide | Covers |
+|-------|--------|
+| [Channel Strip](./glossary/mixing/channel-strip.md) | The fixed strip signal order and why it decides what each control does. |
+| [Buses and Sends](./glossary/mixing/buses-sends.md) | Master/aux/submix roles, pre/post-fader sends, FX buses, and VCA groups. |
+| [Pan and Stereo Width](./glossary/mixing/pan-width.md) | Pan modes, pan law, and stereo width vs mono compatibility. |
+| [Automation and Metering](./glossary/mixing/automation-metering.md) | Automation curves, goniometer, correlation, and true-peak metering. |
+
+## Editing Guides
+
+These pages expand the editing-DSP terms behind the [Editing DSP](./editing-dsp.md) guide.
+
+| Guide | Covers |
+|-------|--------|
+| [Time Stretch and Pitch Shift](./glossary/editing/phase-vocoder-stretch.md) | Phase vocoder, resampling, the time/pitch trade, and artifacts. |
+| [Pitch Correction and Note Editing](./glossary/editing/pitch-correction.md) | MIDI-targeted correction, note regions, and sample-accurate edits. |
+| [Voice and Formant](./glossary/editing/voice-formant.md) | Formants, the vocal tract, and pitch vs formant independence. |
+
+## Realtime Guides
+
+These pages expand the realtime/streaming terms used by `StreamAnalyzer`, the `RealtimeEngine`, and the AudioWorklet path.
+
+| Guide | Covers |
+|-------|--------|
+| [Streaming Analysis](./glossary/realtime/streaming-analysis.md) | Blocks, frames, hops, progressive estimates, and quantized reads. |
+| [Realtime Engine](./glossary/realtime/realtime-engine.md) | Transport, clip scheduling, the metronome, and telemetry. |
+| [Realtime Safety](./glossary/realtime/realtime-safety.md) | The audio-callback deadline, no-allocation/lock-free rules, and the AudioWorklet. |
 
 ## Mastering Concepts
 

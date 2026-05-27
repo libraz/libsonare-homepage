@@ -1,14 +1,12 @@
 <script setup lang="ts">
 defineProps<{
-  variant?: 'default' | 'primary' | 'ghost'
-  size?: 'sm' | 'md' | 'lg'
-  round?: boolean
-  disabled?: boolean
-}>()
+  variant?: 'default' | 'primary' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  round?: boolean;
+  disabled?: boolean;
+}>();
 
-defineEmits<{
-  (e: 'click'): void
-}>()
+defineEmits<(e: 'click') => void>();
 </script>
 
 <template>

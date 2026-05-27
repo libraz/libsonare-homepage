@@ -2,6 +2,17 @@
 
 Performance comparison of libsonare against librosa (Python) for audio analysis tasks.
 
+Use this page as performance context, not as a functional tutorial. If you need to learn the API first, read [Getting Started](./getting-started.md), [Feature Map](./api-surface.md), and the runtime page for your language.
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- interpret benchmark numbers as workload-specific measurements rather than universal speed claims;
+- distinguish full-pipeline speedups from per-feature comparisons;
+- understand why shared intermediates, native execution, and pipeline design matter;
+- find the benchmark source and reproduce or update the measurements when hardware, inputs, or implementations change.
+
 ::: info Methodology
 All numbers below are measured **standalone from raw audio** — every call rebuilds whatever intermediate state it needs (STFT, Mel, etc.) from the original samples. This is the same code path a one-shot user of either API exercises, so the comparison is apples-to-apples. The full benchmark source and results JSON live in [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) inside the libsonare repo.
 :::
@@ -14,7 +25,7 @@ Measured on Apple M5 Max (16 cores, 128 GB unified memory). Absolute times scale
 
 Complete music analysis: BPM + key + beats + chords + sections + timbre + dynamics + rhythm + melody.
 
-Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo (committed in `benchmarks/generate_audio.py`).
+Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the committed `benchmarks/generate_audio.py` script (the WAV fixture itself is gitignored, not committed).
 
 <BenchChart
   title="Full Analysis Latency (lower is better)"
@@ -85,7 +96,16 @@ The clear wins are in (1) **compute-heavy operations** where libsonare's multith
 
 ### Full pipeline (54x): shared intermediates + no Python
 
-libsonare's `analyze()` computes the STFT and Mel spectrogram **once** and reuses them across every downstream analyzer — chord detection reads the same chromagram the key analyzer uses; the beat tracker reads the same onset envelope the section detector consumes. Independent paths run in parallel across CPU cores. None of this crosses the Python boundary, so per-call dispatch overhead is gone.
+libsonare's `analyze()` computes the STFT and Mel spectrogram **once**, then reuses them across downstream analyzers.
+
+That reuse matters:
+
+| Analyzer | Shared input it can reuse |
+|----------|---------------------------|
+| Chord detection | The same chromagram used by key detection. |
+| Beat tracking | The same onset envelope consumed by section detection. |
+
+Independent paths run in parallel across CPU cores. None of this crosses the Python boundary, so per-call dispatch overhead is gone.
 
 bpm-detector (and any other librosa-based pipeline) rebuilds these intermediates per analyzer and orchestrates everything from Python — the cost adds up.
 
@@ -97,6 +117,10 @@ libsonare replaces this with a custom sliding median:
 - **Sorted flat array** with O(log k) binary search + O(k) memmove instead of a tree, which fits in L1 cache for typical kernel sizes
 - **Multi-threaded execution** — rows and columns processed in parallel across all cores
 - Result: ~20x faster end-to-end than the scipy version on this hardware
+
+::: details What is a median filter (and a sliding median)?
+A **median filter** replaces each value with the *median* of its neighbours in a small window. Unlike averaging, it removes spikes and outliers while keeping edges sharp — which is exactly why HPSS uses it: a horizontal median pass keeps steady (harmonic) lines, a vertical pass keeps sharp (percussive) hits. A **sliding median** computes this efficiently as the window moves across the data, instead of re-sorting from scratch at every step.
+:::
 
 ### pYIN (12.3x): native Viterbi + parallelized candidates
 

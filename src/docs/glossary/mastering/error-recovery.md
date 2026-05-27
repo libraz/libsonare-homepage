@@ -31,6 +31,10 @@ Try this order:
 
 If the master sounds worse, do not keep adding processing. Return to the smallest useful move.
 
+::: warning When it sounds worse, subtract — don't add
+The instinct to fix a bad master with *more* processing usually deepens the problem. Undo back to the last version that sounded right, then make one small change and re-check.
+:::
+
 | Symptom | First adjustment |
 |---------|------------------|
 | Harsh or hissy | Lower Air Band Amount or Exciter Amount. |
@@ -45,7 +49,15 @@ Mastering cannot fix every mix issue. If the vocal is buried, the kick and bass 
 
 :::: details Implementation notes
 
-The UI separates local errors from worker errors. File decoding happens through `AudioContext.decodeAudioData`; rendering and reference matching happen in a module worker. Output, report, reference, and chain-setting object URLs are revoked when replaced so repeated attempts do not leak browser memory. The same design keeps the residual footprint small if a long render is interrupted by closing the tab mid-process.
+The UI separates local errors from worker errors:
+
+| Work | Where it happens |
+|------|------------------|
+| File decoding | `AudioContext.decodeAudioData` in the browser. |
+| Rendering and reference matching | A module worker. |
+| Output, report, reference, and chain-setting downloads | Object URLs in local browser memory. |
+
+Those object URLs are revoked when replaced, so repeated attempts do not leak browser memory. The same design keeps the residual footprint small if a long render is interrupted by closing the tab mid-process.
 
 The validation script exercises the mastering presets with generated signals and checks that each preset produces finite loudness, bounded peaks, and expected stage names. That does not prove every user file will succeed, but it catches broken processor wiring before release.
 

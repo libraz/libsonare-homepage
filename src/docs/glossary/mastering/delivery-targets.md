@@ -21,6 +21,10 @@ The loudness target is the integrated LUFS value the renderer aims for after pro
 
 Louder is not automatically better. If the target forces the limiter to work too hard, the master can lose punch and still be turned down by the platform.
 
+::: warning A higher target is not a louder master
+Streaming platforms normalize playback loudness. Past a point, raising the target just makes the limiter work harder for no extra loudness on playback — and costs you punch. See [Loudness Matching](../concepts/loudness-matching.md).
+:::
+
 ## True-Peak Ceiling
 
 The ceiling protects the rendered file from peaks that may appear during reconstruction or codec conversion. A common streaming-oriented starting point is around `-1 dBTP`.

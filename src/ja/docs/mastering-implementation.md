@@ -9,6 +9,15 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
 
 ブラウザデモでは、長い解説は VitePress のドキュメントを正本にしています。アプリケーション UI には短いラベルと、このドキュメントへの導線だけを置いています。
 
+## このページで身につくこと
+
+このページを読むと、次のことを追跡・説明できるようになります。
+
+- ブラウザ内マスタリングデモが、ファイル入力からワーカーレンダリング、メトリクス、書き出し、レポート生成へ進む流れを追える。
+- 長い説明をドキュメント側に置き、アプリ UI を短いラベル中心に保つ理由を理解できる。
+- UI コントロールをチェーン上の領域と用語集ページへ対応づけられる。
+- WASM 宣言とマスタリング API ドキュメントの整合を保つ検証コマンドを把握できる。
+
 ## レンダリングフロー
 
 ```mermaid
@@ -34,7 +43,7 @@ flowchart TD
 
 ## UI とチェーンの対応
 
-Quick Master は音楽的な判断を露出させ、Studio は機能群ごとにまとめたコントロールを露出させます。どちらも同じ内部チェーンモデルに渡されます。
+クイックマスターは音楽的な判断を露出させ、Studio は機能群ごとにまとめたコントロールを露出させます。どちらも同じ内部チェーンモデルに渡されます。
 
 | UI 上のエリア | チェーン上のエリア | 主なガイド |
 |---------|------------|-----------|
@@ -61,6 +70,8 @@ Quick Master は音楽的な判断を露出させ、Studio は機能群ごとに
 
 ドキュメントは `src/wasm/index.d.ts` が公開しているマスタリング API を追跡します。検証スクリプトは宣言ファイルから現在の `mastering*` / `masterAudio*` 関数を抽出し、JavaScript／ネイティブバインディングのドキュメントに記載があることを確認します。
 
+マスタリングワーカー、WASM 宣言、プロセッサドキュメント、またはこの実装マップを変更した後は `yarn check:mastering-docs` を実行してください。このチェックにより、このページ、JavaScript API ページ、ネイティブバインディングページが現在の公開 API と揃っていることを確認できます。
+
 目的別には次のように使い分けます。
 
 | 目的 | API ファミリ |
@@ -72,13 +83,8 @@ Quick Master は音楽的な判断を露出させ、Studio は機能群ごとに
 | 名前付きプロセッサを単体で実行する | `masteringProcessorNames()`、`masteringProcess()`、`masteringProcessStereo()` |
 | ソースとリファレンスを比較する | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()` |
 | ステレオ出力を解析する | `masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
-
-## 検証
-
-リリースゲートではドキュメントチェックを `yarn verify` に含めています。
-
-- `yarn check:glossary` は、公開済みの用語集ページが英日両方に存在し、frontmatter・関連リンク・実装メモ・index リンク・サイドバーへの掲載を備えていることを確認します。
-- `yarn check:mastering-docs` は、廃止済みの旧ルート名・撤去済みのパラメータ別ページ・ランタイムドキュメントの欠落・WASM API ドキュメントの不一致を検出して落とします。
-- `yarn check:built-routes` は、ビルド成果物に `/mastering` と `/ja/mastering` が存在し、撤去済みの旧ルートが残っていないことを確認します。
+| プロファイル・提案・プレビュー | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()` |
 
 関連: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [JavaScript API](./js-api.md), [WASM](./wasm.md)
+
+名前付きプロセッサ、プリセット、ペア解析、ステレオ解析の完全な一覧は [マスタリングプロセッサ](./mastering-processors.md) を参照してください。提案生成とプロファイル構築は [マスタリングアシスタント](./mastering-assistant.md) にまとめています。

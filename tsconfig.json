@@ -21,15 +21,6 @@
       "@theme/*": [".vitepress/theme/*"]
     }
   },
-  "include": [
-    ".vitepress/**/*.ts",
-    ".vitepress/**/*.vue",
-    "src/**/*.ts",
-    "src/**/*.vue"
-  ],
-  "exclude": [
-    "node_modules",
-    ".vitepress/dist",
-    ".vitepress/cache"
-  ]
+  "include": [".vitepress/**/*.ts", ".vitepress/**/*.vue", "src/**/*.ts", "src/**/*.vue"],
+  "exclude": ["node_modules", ".vitepress/dist", ".vitepress/cache"]
 }

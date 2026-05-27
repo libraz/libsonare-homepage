@@ -45,6 +45,10 @@ If several checks fail at once, move earlier in the chain. Fixing input, repair,
 
 Stop when the master translates and the musical intent is still intact. Do not keep processing just because another control is available.
 
+::: tip If the next move is vague, go listen elsewhere
+A car, a phone speaker, cheap earbuds, and a quiet playback level reveal more than another 30 minutes of parameter changes. Export the render and check translation before touching anything else.
+:::
+
 If the next move is vague, export the current render and listen elsewhere. A car, phone speaker, cheap earbuds, and quiet playback level often reveal more than another 30 minutes of parameter changes.
 
 :::: details Implementation notes

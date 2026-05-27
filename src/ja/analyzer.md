@@ -1,12 +1,12 @@
 ---
 layout: demo
-title: libsonare オーディオアナライザー
-description: WebAssembly でブラウザ内に動く BPM・キー・コード・ビート・スペクトル解析デモ。オープンソース・Apache-2.0・アップロード不要。
+title: libsonare ビジュアルプレイヤー
+description: libsonare WebAssembly で動くブラウザ内ビジュアルプレイヤー。外部依存なし DSP ツールキットのクロマ、スペクトル、BPM、キー、コード表示をローカル実行します。
 head:
   - - meta
     - property: og:title
-      content: libsonare オーディオアナライザー
+      content: libsonare ビジュアルプレイヤー
   - - meta
     - property: og:description
-      content: BPM・キー・コード・ビート・スペクトルをブラウザ内で WASM 上に解析。Apache-2.0、アップロード不要。
+      content: libsonare の外部依存なし WebAssembly DSP で、クロマ、スペクトル、BPM、キー、コードをブラウザ内でリアルタイム可視化。
 ---

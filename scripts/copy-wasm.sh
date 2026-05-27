@@ -2,13 +2,14 @@
 set -e
 
 LIBSONARE_DIR="../libsonare"
-WASM_BUILD_DIR="$LIBSONARE_DIR/bindings/wasm/build-wasm/bin"
 JS_DIST_DIR="$LIBSONARE_DIR/bindings/wasm/dist"
+WASM_BUILD_DIR="$JS_DIST_DIR"
 DEST_DIR="src/wasm"
 
 # Required files
 WASM_FILES=("sonare.wasm" "sonare.js")
 JS_FILES=("index.js" "index.d.ts")
+JS_CHUNK_GLOB="chunk-*.js"
 
 # Obsolete sub-module files from the previous tsc-based layout — removed after
 # libsonare switched to a tsup bundle. Cleaned up from DEST_DIR if present.
@@ -30,7 +31,7 @@ fi
 # Check WASM build directory
 if [ ! -d "$WASM_BUILD_DIR" ]; then
   echo "❌ Error: WASM build directory not found at $WASM_BUILD_DIR"
-  echo "   Run 'yarn build:wasm' in libsonare/bindings/wasm first."
+  echo "   Run 'yarn build' in libsonare/bindings/wasm first."
   exit 1
 fi
 
@@ -55,7 +56,7 @@ if [ ${#missing_wasm[@]} -gt 0 ]; then
     echo "   - $file"
   done
   echo ""
-  echo "   Run 'yarn build:wasm' in libsonare/bindings/wasm first."
+  echo "   Run 'yarn build' in libsonare/bindings/wasm first."
   exit 1
 fi
 
@@ -66,6 +67,10 @@ for file in "${JS_FILES[@]}"; do
     missing_js+=("$file")
   fi
 done
+
+shopt -s nullglob
+JS_CHUNK_FILES=("$JS_DIST_DIR"/$JS_CHUNK_GLOB)
+shopt -u nullglob
 
 if [ ${#missing_js[@]} -gt 0 ]; then
   echo "❌ Error: JS API files missing in $JS_DIST_DIR:"
@@ -107,6 +112,14 @@ for file in "${JS_FILES[@]}"; do
   fi
 done
 
+for source_file in "${JS_CHUNK_FILES[@]}"; do
+  file=$(basename "$source_file")
+  if [ ! -f "$DEST_DIR/$file" ] || ! cmp -s "$source_file" "$DEST_DIR/$file"; then
+    JS_CHANGED=true
+    break
+  fi
+done
+
 # Detect leftover obsolete files
 OBSOLETE_PRESENT=false
 for file in "${OBSOLETE_FILES[@]}"; do
@@ -116,7 +129,30 @@ for file in "${OBSOLETE_FILES[@]}"; do
   fi
 done
 
-if ! $WASM_CHANGED && ! $JS_CHANGED && ! $OBSOLETE_PRESENT; then
+# Detect stale chunks: chunk-*.js in DEST that no longer exist in source.
+# tsup emits content-hashed chunk names, so renamed chunks would otherwise
+# accumulate in DEST_DIR on each copy.
+SOURCE_CHUNK_NAMES=()
+for source_file in "${JS_CHUNK_FILES[@]}"; do
+  SOURCE_CHUNK_NAMES+=("$(basename "$source_file")")
+done
+
+STALE_CHUNKS=()
+shopt -s nullglob
+for dest_file in "$DEST_DIR"/$JS_CHUNK_GLOB; do
+  name=$(basename "$dest_file")
+  found=false
+  for src_name in "${SOURCE_CHUNK_NAMES[@]}"; do
+    if [ "$name" = "$src_name" ]; then
+      found=true
+      break
+    fi
+  done
+  $found || STALE_CHUNKS+=("$name")
+done
+shopt -u nullglob
+
+if ! $WASM_CHANGED && ! $JS_CHANGED && ! $OBSOLETE_PRESENT && [ ${#STALE_CHUNKS[@]} -eq 0 ]; then
   echo ""
   echo "✅ No changes detected — all files are identical"
   echo "   WASM MD5: $NEW_MD5"
@@ -141,9 +177,18 @@ if $JS_CHANGED; then
     cp "$JS_DIST_DIR/$file" "$DEST_DIR/"
     echo "   ✓ $file"
   done
+  for source_file in "${JS_CHUNK_FILES[@]}"; do
+    file=$(basename "$source_file")
+    cp "$source_file" "$DEST_DIR/"
+    echo "   ✓ $file"
+  done
 
   # Remove sourceMappingURL from copied JS/DTS files (not needed in homepage)
-  for file in "${JS_FILES[@]}"; do
+  JS_COPIED_FILES=("${JS_FILES[@]}")
+  for source_file in "${JS_CHUNK_FILES[@]}"; do
+    JS_COPIED_FILES+=("$(basename "$source_file")")
+  done
+  for file in "${JS_COPIED_FILES[@]}"; do
     target="$DEST_DIR/$file"
     case "$file" in
       *.js|*.d.ts)
@@ -169,6 +214,15 @@ if $OBSOLETE_PRESENT; then
       rm "$DEST_DIR/$file"
       echo "   ✗ $file (removed)"
     fi
+  done
+fi
+
+# Prune stale chunks no longer present in source
+if [ ${#STALE_CHUNKS[@]} -gt 0 ]; then
+  echo "   Pruning stale chunks..."
+  for file in "${STALE_CHUNKS[@]}"; do
+    rm "$DEST_DIR/$file"
+    echo "   ✗ $file (removed)"
   done
 fi
 

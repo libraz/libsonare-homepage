@@ -9,6 +9,10 @@ Dynamics controls decide how much movement the master keeps. In the demo they dr
 
 This is one topic, not five separate decisions. Threshold, ratio, attack, release, and knee only make sense together.
 
+::: tip Tune the five together, with your ears
+Changing one control shifts what the others do, so judge the *result*, not each knob in isolation. Always confirm with loudness-matched [A/B Comparison](../ab-comparison.md): compression that only sounds "better" because it got louder is not actually better.
+:::
+
 ## Threshold, Ratio, Attack, Release, Knee
 
 Threshold decides where compression starts. Ratio decides how strongly levels above that point are reduced. Attack decides how quickly gain reduction arrives. Release decides how quickly it lets go. Knee decides whether compression begins abruptly or gradually near the threshold.

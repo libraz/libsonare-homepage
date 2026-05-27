@@ -1,193 +1,192 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import Tooltip from '@/components/ui/Tooltip.vue'
+import { computed, nextTick, ref } from 'vue';
+import Tooltip from '@/components/ui/Tooltip.vue';
 
 const props = defineProps<{
-  modelValue: number
-  min: number
-  max: number
-  step: number
-  label: string
-  unit?: string
-  hint?: string
-  tip?: string
-  tipLabel?: string
-  default?: number
-  defaultRationale?: string
-  defaultLabel?: string
-  defaultOffLabel?: string
-  docsHref?: string
-  docsLinkLabel?: string
-}>()
+  modelValue: number;
+  min: number;
+  max: number;
+  step: number;
+  label: string;
+  unit?: string;
+  hint?: string;
+  tip?: string;
+  tipLabel?: string;
+  default?: number;
+  defaultRationale?: string;
+  defaultLabel?: string;
+  defaultOffLabel?: string;
+  docsHref?: string;
+  docsLinkLabel?: string;
+}>();
 
-const emit = defineEmits<{
-  (e: 'update:modelValue', value: number): void
-}>()
+const emit = defineEmits<(e: 'update:modelValue', value: number) => void>();
 
-const dragging = ref(false)
-const editing = ref(false)
-const draftValue = ref('')
-const inputRef = ref<HTMLInputElement | null>(null)
-const trackRef = ref<HTMLElement | null>(null)
+const dragging = ref(false);
+const editing = ref(false);
+const draftValue = ref('');
+const inputRef = ref<HTMLInputElement | null>(null);
+const trackRef = ref<HTMLElement | null>(null);
 
-const range = computed(() => props.max - props.min)
-const bipolar = computed(() => props.min < 0 && props.max > 0)
+const range = computed(() => props.max - props.min);
+const bipolar = computed(() => props.min < 0 && props.max > 0);
 
 const normalized = computed(() => {
-  if (range.value === 0) return 0
-  return Math.max(0, Math.min(1, (props.modelValue - props.min) / range.value))
-})
+  if (range.value === 0) return 0;
+  return Math.max(0, Math.min(1, (props.modelValue - props.min) / range.value));
+});
 
-const percent = computed(() => normalized.value * 100)
-const zeroPercent = computed(() => (range.value === 0 ? 0 : (-props.min / range.value) * 100))
+const percent = computed(() => normalized.value * 100);
+const zeroPercent = computed(() => (range.value === 0 ? 0 : (-props.min / range.value) * 100));
 
 const fillStyle = computed(() => {
   if (bipolar.value) {
-    const z = zeroPercent.value
-    const p = percent.value
-    const left = Math.min(z, p)
-    const width = Math.abs(p - z)
-    return { left: `${left}%`, width: `${width}%` }
+    const z = zeroPercent.value;
+    const p = percent.value;
+    const left = Math.min(z, p);
+    const width = Math.abs(p - z);
+    return { left: `${left}%`, width: `${width}%` };
   }
-  return { left: '0%', width: `${percent.value}%` }
-})
+  return { left: '0%', width: `${percent.value}%` };
+});
 
 const ticks = computed(() => {
-  if (bipolar.value) return [0, 25, zeroPercent.value, 75, 100]
-  return [0, 25, 50, 75, 100]
-})
+  if (bipolar.value) return [0, 25, zeroPercent.value, 75, 100];
+  return [0, 25, 50, 75, 100];
+});
 
 const decimals = computed(() => {
-  const text = props.step.toString()
-  const dot = text.indexOf('.')
-  return dot === -1 ? 0 : text.length - dot - 1
-})
+  const text = props.step.toString();
+  const dot = text.indexOf('.');
+  return dot === -1 ? 0 : text.length - dot - 1;
+});
 
 const displayValue = computed(() => {
-  if (decimals.value === 0) return Math.round(props.modelValue).toString()
-  return props.modelValue.toFixed(decimals.value)
-})
+  if (decimals.value === 0) return Math.round(props.modelValue).toString();
+  return props.modelValue.toFixed(decimals.value);
+});
 
 const defaultDisplay = computed(() => {
-  if (props.default === undefined) return undefined
+  if (props.default === undefined) return undefined;
   if (props.default === 0 && !props.unit && props.defaultOffLabel) {
-    return `0 · ${props.defaultOffLabel}`
+    return `0 · ${props.defaultOffLabel}`;
   }
-  const num = decimals.value === 0
-    ? Math.round(props.default).toString()
-    : props.default.toFixed(decimals.value)
-  return props.unit ? `${num} ${props.unit}` : num
-})
+  const num =
+    decimals.value === 0
+      ? Math.round(props.default).toString()
+      : props.default.toFixed(decimals.value);
+  return props.unit ? `${num} ${props.unit}` : num;
+});
 
 function snapValue(value: number): number {
-  let v = value
-  if (props.step > 0) v = Math.round(v / props.step) * props.step
-  v = Math.max(props.min, Math.min(props.max, v))
-  if (decimals.value > 0) v = parseFloat(v.toFixed(decimals.value))
-  return v
+  let v = value;
+  if (props.step > 0) v = Math.round(v / props.step) * props.step;
+  v = Math.max(props.min, Math.min(props.max, v));
+  if (decimals.value > 0) v = parseFloat(v.toFixed(decimals.value));
+  return v;
 }
 
 function commit(value: number) {
-  const v = snapValue(value)
-  if (v !== props.modelValue) emit('update:modelValue', v)
+  const v = snapValue(value);
+  if (v !== props.modelValue) emit('update:modelValue', v);
 }
 
 function valueFromClientX(clientX: number): number {
-  const track = trackRef.value
-  if (!track) return props.modelValue
-  const rect = track.getBoundingClientRect()
-  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-  return props.min + ratio * range.value
+  const track = trackRef.value;
+  if (!track) return props.modelValue;
+  const rect = track.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  return props.min + ratio * range.value;
 }
 
 function onPointerDown(event: PointerEvent) {
-  event.preventDefault()
-  const target = event.currentTarget as HTMLElement
-  target.setPointerCapture(event.pointerId)
-  dragging.value = true
-  commit(valueFromClientX(event.clientX))
+  event.preventDefault();
+  const target = event.currentTarget as HTMLElement;
+  target.setPointerCapture(event.pointerId);
+  dragging.value = true;
+  commit(valueFromClientX(event.clientX));
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (!dragging.value) return
+  if (!dragging.value) return;
   if (event.shiftKey) {
-    const sensitivity = range.value / 800
-    commit(props.modelValue + event.movementX * sensitivity)
+    const sensitivity = range.value / 800;
+    commit(props.modelValue + event.movementX * sensitivity);
   } else {
-    commit(valueFromClientX(event.clientX))
+    commit(valueFromClientX(event.clientX));
   }
 }
 
 function onPointerUp(event: PointerEvent) {
-  if (!dragging.value) return
-  dragging.value = false
-  ;(event.currentTarget as Element).releasePointerCapture(event.pointerId)
+  if (!dragging.value) return;
+  dragging.value = false;
+  (event.currentTarget as Element).releasePointerCapture(event.pointerId);
 }
 
 function onWheel(event: WheelEvent) {
-  event.preventDefault()
-  const dir = event.deltaY < 0 ? 1 : -1
-  const fine = event.shiftKey ? 0.25 : 1
-  commit(props.modelValue + dir * props.step * (1 / fine))
+  event.preventDefault();
+  const dir = event.deltaY < 0 ? 1 : -1;
+  const fine = event.shiftKey ? 0.25 : 1;
+  commit(props.modelValue + dir * props.step * (1 / fine));
 }
 
 function onDoubleClick() {
-  commit(bipolar.value ? 0 : (props.min + props.max) / 2)
+  commit(bipolar.value ? 0 : (props.min + props.max) / 2);
 }
 
 async function startEditing() {
-  if (editing.value) return
-  draftValue.value = displayValue.value
-  editing.value = true
-  await nextTick()
-  inputRef.value?.focus()
-  inputRef.value?.select()
+  if (editing.value) return;
+  draftValue.value = displayValue.value;
+  editing.value = true;
+  await nextTick();
+  inputRef.value?.focus();
+  inputRef.value?.select();
 }
 
 function commitDraft() {
-  if (!editing.value) return
-  const parsed = parseFloat(draftValue.value)
-  if (Number.isFinite(parsed)) commit(parsed)
-  editing.value = false
+  if (!editing.value) return;
+  const parsed = parseFloat(draftValue.value);
+  if (Number.isFinite(parsed)) commit(parsed);
+  editing.value = false;
 }
 
 function cancelDraft() {
-  editing.value = false
+  editing.value = false;
 }
 
 function onDraftKey(event: KeyboardEvent) {
   if (event.key === 'Enter') {
-    event.preventDefault()
-    commitDraft()
+    event.preventDefault();
+    commitDraft();
   } else if (event.key === 'Escape') {
-    event.preventDefault()
-    cancelDraft()
+    event.preventDefault();
+    cancelDraft();
   }
 }
 
 const shortcutHint = computed(() => {
-  const base = `${props.label}: drag / click anywhere on the track / ←→ keys to nudge / Shift = fine / double-click = reset / click value to type`
-  return props.hint ? `${props.hint}\n\n${base}` : base
-})
+  const base = `${props.label}: drag / click anywhere on the track / ←→ keys to nudge / Shift = fine / double-click = reset / click value to type`;
+  return props.hint ? `${props.hint}\n\n${base}` : base;
+});
 
 function onKeyDown(event: KeyboardEvent) {
-  let handled = true
+  let handled = true;
   if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-    commit(props.modelValue + props.step * (event.shiftKey ? 0.25 : 1))
+    commit(props.modelValue + props.step * (event.shiftKey ? 0.25 : 1));
   } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-    commit(props.modelValue - props.step * (event.shiftKey ? 0.25 : 1))
+    commit(props.modelValue - props.step * (event.shiftKey ? 0.25 : 1));
   } else if (event.key === 'PageUp') {
-    commit(props.modelValue + props.step * 10)
+    commit(props.modelValue + props.step * 10);
   } else if (event.key === 'PageDown') {
-    commit(props.modelValue - props.step * 10)
+    commit(props.modelValue - props.step * 10);
   } else if (event.key === 'Home') {
-    commit(props.min)
+    commit(props.min);
   } else if (event.key === 'End') {
-    commit(props.max)
+    commit(props.max);
   } else {
-    handled = false
+    handled = false;
   }
-  if (handled) event.preventDefault()
+  if (handled) event.preventDefault();
 }
 </script>
 

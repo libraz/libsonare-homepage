@@ -1,9 +1,9 @@
 <script setup lang="ts">
 defineProps<{
-  size?: 'sm' | 'md' | 'lg'
-  offset?: 'sm' | 'md' | 'lg'
-  color?: string
-}>()
+  size?: 'sm' | 'md' | 'lg';
+  offset?: 'sm' | 'md' | 'lg';
+  color?: string;
+}>();
 </script>
 
 <template>

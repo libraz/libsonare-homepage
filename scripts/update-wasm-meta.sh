@@ -60,6 +60,7 @@ EOF
   echo "   MD5: $MD5"
   echo "   Build: $BUILD_DATE"
   [ -n "$COMMIT_HASH" ] && echo "   Commit: $COMMIT_HASH"
+  exit 0
 else
   echo "❌ WASM file not found: $WASM_FILE"
   exit 1

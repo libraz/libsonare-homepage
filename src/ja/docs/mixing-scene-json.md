@@ -1,0 +1,260 @@
+---
+title: ミキシングシーン JSON
+description: ミキサーシーンの交換形式を完全解説。ストリップ・インサート・センド・バス・VCA・接続の全フィールドを、注釈つきの組み込みプリセットとブラウザデモのプロジェクト形式とともに示します。
+---
+
+# ミキシングシーン JSON
+
+**シーン**は、ミキサー全体をプレーンデータで記述したものです。`Mixer.fromSceneJson(...)` が読み、`toSceneJson()` が書き出す形式（Python では `from_scene_json(...)` / `to_scene_json()`）で、WASM・Python・Node・C ABI・C++ で同一です。プレーンな JSON なので、プロジェクトと一緒に保存し、git で差分を取り、手で編集し、あとから読み直せます。
+
+ストリップ・センド・バスにまだ馴染みがなければ、先に [ミキシングの基礎](./glossary/concepts/mixing-basics.md) と [ミキシングエンジン](./mixing.md) を読んでください。本ページはフィールドごとのリファレンスです。
+
+## このページで身につくこと
+
+このページを読むと、次のことを判断・実装できるようになります。
+
+- シーン最上位の形と、ストリップ、バス、VCA グループ、接続の役割を見分けられる。
+- ストリップ制御、インサート、センド、ルーティング辺を混同せずにシーンを編集・生成できる。
+- どのフィールドに既定値があり、どの識別子をグラフ内で一致させる必要があるかを理解できる。
+- 組み込みプリセットを、カスタム Scene JSON の安全な出発点として使える。
+
+::: tip 実例で形式を学ぶ
+スキーマを理解する最速の方法は、組み込みプリセットを出力して読むことです。`mixingScenePresetJson('vocalReverbSend')` の出力には以下のすべてのフィールドが現れるので、各キーを実際の値と対応づけられます。ページ末尾の[注釈つきシーン](#注釈つきの完全なシーン)がまさにそれです。
+:::
+
+## 最上位の形
+
+```json
+{
+  "version": 1,
+  "strips": [],
+  "buses": [],
+  "vcaGroups": [],
+  "connections": []
+}
+```
+
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `version` | integer | スキーマバージョン。現在は**必ず `1`**。他の値は拒否されます。 |
+| `strips` | array | トラックレーン（[ストリップ](#ストリップ)参照） |
+| `buses` | array | 共有の行き先。`master` を含む（[バス](#バス)参照） |
+| `vcaGroups` | array | 複数ストリップを一括調整するレベルグループ（[VCA グループ](#vca-グループ)参照） |
+| `connections` | array | ルーティンググラフの辺（[接続](#接続)参照） |
+
+::: warning 未知のキーはエラーではなく無視される
+パーサーは認識しないフィールドを無視するため、前方互換のプロデューサは古いリーダーを壊さずにメタデータを追加できます。裏を返せば、**綴り間違いのキーは黙って捨てられます**。設定が効かないように見えたら、以下の表と綴りを照合してください。`processorName`（誤）と `processor`（正）が典型です。
+:::
+
+## ストリップ
+
+各ストリップオブジェクトは 1 つのチャンネルレーンを表します。数値フィールドには妥当な既定値があるので、最小のストリップは `{ "id": "vocal" }` だけです。
+
+| フィールド | 型 | 既定 | 意味 |
+|-----------|----|------|------|
+| `id` | string | —（必須） | 接続・センド・VCA メンバーが参照する一意の識別子 |
+| `inputTrimDb` | number | `0` | 処理前のゲイン（[ストリップ信号フロー](./mixing.md#チャンネルストリップを信号順にたどる)の最初の段） |
+| `faderDb` | number | `0` | メインフェーダーのレベル |
+| `pan` | number | `0` | パン位置。`-1`（左）…`+1`（右） |
+| `width` | number | `1` | ステレオ幅／サイド倍率（`0` = モノラル、`>1` = より広い） |
+| `muted` | boolean | `false` | ストリップを無音化 |
+| `soloed` | boolean | `false` | 他の（ソロセーフでない）ストリップを暗黙ミュート |
+| `soloSafe` | boolean | `false` | 他ストリップのソロで暗黙ミュートされない |
+| `panMode` | integer | `0` | `0` = バランス、`1` = ステレオパン、`2` = デュアルパン |
+| `dualPanLeft` | number | `0` | デュアルパン時の左位置 |
+| `dualPanRight` | number | `0` | デュアルパン時の右位置 |
+| `polarityInvertLeft` | boolean | `false` | 左チャンネルの極性反転 |
+| `polarityInvertRight` | boolean | `false` | 右チャンネルの極性反転 |
+| `panLaw` | integer | `0` | `0` = 定 3 dB、`1` = 定 4.5 dB、`2` = 定 6 dB、`3` = リニア 0 dB |
+| `channelDelaySamples` | integer | `0` | ストリップごとの遅延。[PDC](./mixing.md#レイテンシとプラグインディレイ補償-pdc) にも寄与 |
+| `inserts` | array | `[]` | 直列のプロセッサ（[インサート](#インサート)参照） |
+| `sends` | array | `[]` | バスへの並列センド（[センド](#センド)参照） |
+
+::: info enum はファイルでは整数、API では文字列
+シーン**ファイル**は `panMode`・`panLaw`・インサート／センドのタイミングを整数または短いトークンで保存します。JavaScript の実行時**メソッド**は分かりやすい文字列を受け付けます — `setPanLaw(strip, 'const3dB')`、`addSend(..., 'postFader')`。Python はセンド／メータータップでは同じ名前を受け付けますが、パンロー文字列は `'const-3db'`、`'const-4.5db'`、`'const-6db'`、`'linear-0db'` のような正規化名（または enum/int 値）を使います。どちらも同じ内部値に対応し、違いはファイル形式か使いやすい API かだけです。
+:::
+
+::: details フィールド用語: デュアルパン・ポラリティ反転・パンロー・PDC
+- **デュアルパン**（`panMode: 2`） — 信号全体をまとめて動かすのではなく、左右チャンネルを*独立した*位置にパンします。すでにステレオの素材を狭めたり配置し直したりするのに便利です。
+- **ポラリティ反転** — チャンネルを −1 倍して波形を反転します。別トラックと逆相で録れてしまった場合の補正に使います。位相関係を変えるもので、それ自体は体感ラウドネスを変えません。
+- **パンロー（pan law）** — パンしてもラウドネスが一定に保たれるよう、中央を左右いっぱいに対してどれだけ下げるか。`定 3/4.5/6 dB` は定パワー系、`リニア 0 dB` は合算レベルを一定に保ちます。[ミキシングエンジン](./mixing.md#パンモードとパンロー) を参照してください。
+- **PDC（プラグインディレイ補償）** — ある経路がルックアヘッド処理で遅れるとき、エンジンが短い経路を合わせて遅らせ、マスターで揃えます。`channelDelaySamples` はこの計算に入ります。
+:::
+
+## インサート
+
+インサートは、ストリップ（またはバス）内で直列に動く名前付きプロセッサです。
+
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `slot` | `"pre"` \| `"post"` | フェーダーの前か後で動く。**短いトークン**に注意 — `preFader`/`postFader` ではありません。 |
+| `processor` | string | プロセッサ id（例 `eq.parametric`、`dynamics.compressor`、`effects.reverb.plate`）。[マスタリングプロセッサ](./mastering-processors.md#ミキサーインサート名)参照。 |
+| `params` | string | プロセッサのパラメータを **JSON 文字列**（エスケープしたオブジェクト）で。例 `"{\"thresholdDb\":-18,\"ratio\":2.5}"`。 |
+| `sidechainKey` | string | *任意。* このインサートの外部サイドチェインに供給するストリップ id（ダッキングなど）。空のときは省略されます。 |
+
+::: warning `params` はオブジェクトではなく文字列
+シーン JSON 内では `params` はネストしたオブジェクトではなく、**エスケープした JSON 文字列**を保持します — `"params": "{\"ratio\":2.5}"`。これにより各プロセッサのパラメータスキーマをシーンパーサーから不透明に保てます。個別の値を読むには自分でパースしてください。
+:::
+
+## センド
+
+センドは、ストリップ信号のゲイン後コピーを行き先バスへ送ります。
+
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `id` | string | センド識別子 |
+| `destinationBusId` | string | 対象バスの `id` |
+| `sendDb` | number | センドレベル（dB） |
+| `timing` | `"pre"` \| `"post"` | フェーダーの前か後でタップ（こちらも短いトークン） |
+
+## バス
+
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `id` | string | バス識別子（慣習上 1 つは `"master"`） |
+| `role` | string | `"master"`、`"aux"`、`"submix"` |
+| `inserts` | array | バス自体のプロセッサ（ストリップと同じ[インサート](#インサート)形式） |
+
+## VCA グループ
+
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `id` | string | グループ識別子 |
+| `gainDb` | number | 各メンバーのフェーダーに加算するオフセット |
+| `members` | string[] | グループが統括するストリップ id |
+
+## 接続
+
+| フィールド | 型 | 意味 |
+|-----------|----|------|
+| `source` | string | 信号が出るストリップ／バス id |
+| `destination` | string | 信号が入るストリップ／バス id |
+
+接続はグラフの辺です。`master` へ送るストリップは `{ "source": "vocal", "destination": "master" }` です。センドのバスは、バス（またはそのリターンストリップ）から `master` への接続を通じてマスターへ届きます。
+
+## 組み込みプリセット
+
+| プリセット | 意図 |
+|-----------|------|
+| `vocalReverbSend` | ボーカルストリップ（EQ + コンプのインサート）と、プレートリバーブリターンへのポストフェーダー AUX センド |
+| `drumBusSubgroup` | キック／スネア／オーバーヘッドを `submix` へ送り、パラレルコンプとテープでまとめ、「drums」VCA で調整 |
+| `commentaryDucking` | host／guest の話声（ディエス + コンプ）と、host をキーにした `dynamics.sidechainRouter` でダッキングする音楽ベッド |
+
+実行時には `mixingScenePresetNames()` で一覧を取得し、`mixingScenePresetJson(name)` で 1 つを取得します。
+
+## 注釈つきの完全なシーン
+
+これは `mixingScenePresetJson('vocalReverbSend')` の実際の出力です（読みやすさのため既定値は省略）。すべての関係が現れます。2 つのプリフェーダーインサートとポストフェーダーセンドを持つボーカルストリップ、リバーブリターンストリップ、2 つのバス、それらをマスターへ配線する接続です。
+
+```json
+{
+  "version": 1,
+  "strips": [
+    {
+      "id": "vocal",
+      "faderDb": -3,
+      "inserts": [
+        { "slot": "pre", "processor": "eq.parametric",      "params": "{\"highPassHz\":80,\"presenceDb\":2}" },
+        { "slot": "pre", "processor": "dynamics.compressor", "params": "{\"thresholdDb\":-18,\"ratio\":2.5}" }
+      ],
+      "sends": [
+        { "id": "vocal-to-verb", "destinationBusId": "vocal-verb", "sendDb": -14, "timing": "post" }
+      ]
+    },
+    {
+      "id": "vocal-verb-return",
+      "faderDb": -10,
+      "width": 1.25,
+      "inserts": [
+        { "slot": "post", "processor": "effects.reverb.plate", "params": "{\"decaySec\":1.8,\"preDelayMs\":25}" }
+      ]
+    }
+  ],
+  "buses": [
+    { "id": "master",     "role": "master" },
+    { "id": "vocal-verb", "role": "aux" }
+  ],
+  "vcaGroups": [],
+  "connections": [
+    { "source": "vocal",             "destination": "master" },
+    { "source": "vocal-verb",        "destination": "vocal-verb-return" },
+    { "source": "vocal-verb-return", "destination": "master" }
+  ]
+}
+```
+
+リバーブの経路をたどると、**vocal** ストリップのポストフェーダーセンドが **vocal-verb** AUX バスへ供給し、そのバスは（プレートリバーブを置いた）**vocal-verb-return** ストリップへ接続し、リターンが **master** へつながります。ドライのボーカルも直接 **master** へつながります。リバーブは 1 インスタンス、ドライとウェットは分離されたままです。
+
+## 編集して保存し直す
+
+::: code-group
+
+```typescript [ブラウザ]
+const json = mixingScenePresetJson('vocalReverbSend');
+const mixer = Mixer.fromSceneJson(json, 48000, 512);
+
+mixer.addSend(0, 'more-verb', 'vocal-verb', -18, 'postFader');  // トポロジー変更
+mixer.compile();                                                 // タイミングが重要な処理の前に再構築
+
+const saved = mixer.toSceneJson();   // 同じスキーマへラウンドトリップ
+```
+
+```python [Python]
+import libsonare as sonare
+
+scene_json = sonare.mixing_scene_preset_json('vocalReverbSend')
+mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
+
+mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # トポロジー変更
+mixer.compile()                                                  # タイミングが重要な処理の前に再構築
+
+saved = mixer.to_scene_json()   # 同じスキーマへラウンドトリップ
+mixer.close()                   # ネイティブハンドルを解放
+```
+
+```bash [CLI]
+# 組み込みシーンを書き出し、JSON を編集してからレンダーする。
+sonare mixing-preset vocalReverbSend > my-scene.json
+sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav
+```
+
+:::
+
+::: tip いつ再コンパイルするか
+構造的な編集 — バス・センド・VCA グループ・接続の追加／削除 — はグラフを dirty にし、次のタイミングが重要なブロックの前に `compile()` が必要です。パラメータ操作（`setSendDb` / Python `set_send_db`、`setPanLaw`）やスケジュール済みオートメーションには再コンパイルは不要です。
+:::
+
+## ブラウザデモのプロジェクト JSON
+
+`/ja/mixing` デモは、ブラウザセッション用に*別の*小さなファイルを書き出します。これはミキサーシーンではなく UI プロジェクトで、デコード済み音声**ではなく**トラックごとのアレンジ設定を保存します。
+
+```json
+{
+  "version": 1,
+  "masterFaderDb": 0,
+  "tracks": [
+    {
+      "id": "track-id",
+      "name": "Lead Vocal",
+      "offsetSeconds": 1.5,
+      "inputTrimDb": 0,
+      "faderDb": -3,
+      "pan": 0,
+      "width": 1,
+      "muted": false,
+      "soloed": false,
+      "polarityLeft": false,
+      "polarityRight": false
+    }
+  ]
+}
+```
+
+`offsetSeconds` はアレンジタイムライン上のクリップ開始時刻です。デモは WASM ミキサーを呼ぶ前に各ステムをその分だけパディングするため、画面上の開始時刻がオフラインバウンスにも保たれます。ファイルは音声を含まないので、再インポート時は音声を再読み込みしたあとに `id`（または `name`）でトラックを照合します。
+
+## 関連
+
+- [ミキシングエンジン](./mixing.md) — API ガイドと信号フロー
+- [ミキシングの基礎](./glossary/concepts/mixing-basics.md) — 用語
+- [マスタリングプロセッサ](./mastering-processors.md#ミキサーインサート名) — 有効な `processor` id と追加のミキサーインサート名
+- [バインディング対応表](./binding-parity.md) — 実行環境ごとの差分

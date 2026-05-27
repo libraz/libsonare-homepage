@@ -9,6 +9,10 @@ Reference Match compares your source against a finished release and uses that co
 
 A reference is not a magic "make mine sound like this" button. It is a calibration tool. The goal is to notice whether your master is too dark, too bright, too narrow, too dense, or too quiet for the style you are aiming at.
 
+::: warning A reference calibrates; it does not transplant
+Forcing a sparse track toward a dense commercial master throws off not just EQ but the dynamics and stereo decisions that follow. If the match makes the track lose its own identity, the match strength is too high — lower it or use the reference for tonal comparison only.
+:::
+
 ## What It Is For
 
 Use Reference Match when you have a target release that is close to your track in arrangement, genre, density, and delivery context.
@@ -51,7 +55,11 @@ When you choose reference matching, the worker compares source and reference cha
 
 The worker trims the source and reference to a shared duration, then runs `match.applyMatchEq` for left and right channels. The current demo uses a maximum match gain of 6 dB and 5 smoothing bins. Those limits matter because a raw spectral difference curve can contain narrow notches and spikes that are not musically useful.
 
-The operation is pair-based and sample-rate sensitive. If the reference sample rate differs from the source, the composable resamples the reference linearly before sending it to the worker. This is adequate for analysis alignment in the demo, while final mastering still happens through the normal libsonare chain. The match result is also stored as metrics in the report, which makes it a useful reference when adjusting EQ by hand in Studio mode.
+The operation compares one source file with one reference file, so sample rate matters.
+
+If the reference sample rate differs from the source, the composable linearly resamples the reference before sending it to the worker. That is accurate enough for analysis alignment in the demo. Final mastering still happens through the normal libsonare chain.
+
+The match result is also stored as metrics in the report, so it can guide manual EQ adjustments in Studio mode.
 
 ::::
 

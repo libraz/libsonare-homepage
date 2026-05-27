@@ -10,7 +10,7 @@
     "analyzing": "解析中...",
     "progress": "{stage} - {percent}%",
     "panel": {
-      "title": "解析",
+      "title": "再生中",
       "bpm": "BPM",
       "key": "キー",
       "chord": "コード",
@@ -59,21 +59,21 @@
       "privacy": "LOCAL ONLY",
       "mode": "マスタリングモード",
       "docs": "ドキュメント",
-      "openAnalyzer": "解析デモを開く",
+      "openAnalyzer": "プレイヤーを開く",
       "help": "ヘルプ"
     },
     "status": {
       "idle": "待機中",
-      "loaded": "読込済み",
+      "loaded": "読み込み済み",
       "rendering": "処理中",
       "ready": "完了"
     },
     "quick": {
-      "title": "Quick Master",
-      "step1": "Step 1 - 音源をドロップ",
-      "step2": "Step 2 - 用途を選択",
-      "step3": "Step 3 - 公開先を選択",
-      "step4": "Step 4 - 任意の微調整",
+      "title": "クイックマスター",
+      "step1": "ステップ 1 - 音源をドロップ",
+      "step2": "ステップ 2 - 用途を選択",
+      "step3": "ステップ 3 - 公開先を選択",
+      "step4": "ステップ 4 - 必要に応じて微調整",
       "dropTitle": "ここに音源をドロップ",
       "dropSubtitle": "WAV、MP3、FLAC、OGG 対応。音源はブラウザ外へ送信されません。",
       "customTarget": "カスタムターゲット",
@@ -87,29 +87,30 @@
       "title": "Studio",
       "chain": "チェーン",
       "meters": "メーター",
-      "render": "マスターをレンダー",
+      "render": "マスターを書き出す",
       "rendering": "レンダー中...",
       "renderHint": "読み込んだ音源にチェーン全体を適用します。",
       "chainSettings": "チェーン設定",
       "graph": "DSP チェーングラフ",
       "savePreset": "保存",
-      "loadPreset": "読込",
-      "exportPreset": "書出",
+      "loadPreset": "読み込み",
+      "exportPreset": "書き出し",
       "downloadPreset": "JSON をダウンロード",
-      "importPreset": "JSON 読込",
+      "importPreset": "JSON 読み込み",
       "resetModule": "モジュールを初期化",
       "resetModuleHint": "このモジュール内のすべてのノブをデフォルト値に戻します。",
-      "resetModuleUseWhen": "現在のステージで設定を弄りすぎて、いちど振り出しに戻したい時。",
+      "resetModuleUseWhen": "現在のステージで設定を動かしすぎて、いちど初期状態に戻したいとき。",
       "resetModuleAria": "このモジュールをデフォルトにリセット",
       "tooltips": {
-        "savePreset": "現在のチェーン設定をブラウザの localStorage に保存し、後で復元できるようにします。",
+        "savePreset": "現在のチェーン設定をこのブラウザに保存し、後で復元できるようにします。",
         "loadPreset": "このブラウザで最後に保存したプリセットでチェーン設定を上書きします。",
         "exportPreset": "現在のチェーン設定全体を JSON スナップショットとして書き出します。共有・バックアップ用。",
-        "importPreset": "以前に Export した JSON ファイルからチェーン設定を読み込みます。"
+        "importPreset": "以前に書き出した JSON ファイルからチェーン設定を読み込みます。"
       },
       "loadSource": "ファイルを読み込む",
       "replaceSource": "差し替え",
-      "waveformIdle": "音源未読込",
+      "loadDemo": "デモを読み込む",
+      "waveformIdle": "音源未読み込み",
       "stageLabel": "ステージ"
     },
     "renderStages": {
@@ -119,8 +120,8 @@
       "runningChain": "マスタリングチェーン実行中",
       "finalizing": "レンダリングを仕上げ中",
       "complete": "完了",
-      "matchEqLeft": "Reference EQ を適用中 · Left",
-      "matchEqRight": "Reference EQ を適用中 · Right"
+      "matchEqLeft": "リファレンス EQ を適用中 · 左",
+      "matchEqRight": "リファレンス EQ を適用中 · 右"
     },
     "presets": {
       "pop": {
@@ -167,14 +168,14 @@
       "tiktok": "TikTok",
       "custom": "Custom",
       "descriptions": {
-        "spotify": "Spotify は再生時に約 -14 LUFS で正規化します。それより大きいマスターは再生時に下げられます。",
-        "youtube": "YouTube も音楽コンテンツを約 -14 LUFS でターゲットし、超えるマスターは再生時に下げられます。",
-        "apple": "Apple Music は約 -16 LUFS をターゲットとし、True Peak は -1 dBTP に厳しく制限されます。",
+        "spotify": "Spotify は再生時におおむね -14 LUFS integrated へ正規化します。それより大きいマスターは再生時に音量を下げられます。",
+        "youtube": "YouTube も音楽コンテンツをおおむね -14 LUFS integrated にそろえ、超えるマスターは再生時に下げます。",
+        "apple": "Apple Music はおおむね -16 LUFS integrated を基準とし、True Peak は -1 dBTP を上限にするのが安全です。",
         "tiktok": "TikTok はフィード音声を約 -16 LUFS で正規化し、ショート動画間の音量を均一化します。",
         "custom": "-24〜-8 LUFS の範囲で自由にターゲットを設定。CD、ヴァイナル、放送向けなど非ストリーミング納品に。"
       },
       "useWhen": {
-        "spotify": "Spotify や -14 LUFS 再生を採るサービスへの納品時。",
+        "spotify": "Spotify や -14 LUFS 前後で再生正規化されるサービスへの納品時。",
         "youtube": "YouTube Music や YouTube 動画、ストリーミング基準に揃えたいとき。",
         "apple": "Apple Music など、より静かなターゲットを好むサービスへの納品時。",
         "tiktok": "TikTok・Instagram Reels・YouTube Shorts などの短尺動画プラットフォーム向け。",
@@ -189,19 +190,19 @@
       "inputGainDb": "入力ゲイン",
       "denoiseAmount": "ノイズ低減",
       "declickAmount": "Declick",
-      "dereverbAmount": "Dereverb",
+      "dereverbAmount": "残響低減",
       "tiltDb": "Tilt EQ",
-      "compressorThresholdDb": "Threshold",
-      "compressorRatio": "Ratio",
-      "compressorAttackMs": "Attack",
-      "compressorReleaseMs": "Release",
+      "compressorThresholdDb": "スレッショルド",
+      "compressorRatio": "レシオ",
+      "compressorAttackMs": "アタック",
+      "compressorReleaseMs": "リリース",
       "deesserAmount": "De-esser",
       "transientAttackDb": "Transient",
       "multibandLowAmount": "MB Low",
       "multibandMidAmount": "MB Mid",
       "multibandHighAmount": "MB High",
       "tapeDriveDb": "Tape Drive",
-      "tapeSaturation": "Tape Sat.",
+      "tapeSaturation": "テープサチュレーション",
       "exciterAmount": "Exciter",
       "airBandAmount": "Air Band",
       "stereoWidth": "ステレオ幅",
@@ -217,24 +218,24 @@
       "inputGainDb": "マスタリングチェーンに入る前のレベルです。後段が動けるよう、ピークを 0 dBFS 以下に保ちます。",
       "denoiseAmount": "トーンシェイピング前に適用するスペクトラルノイズ低減です。高いほどノイズは減りますが、トランジェントが鈍ることがあります。",
       "declickAmount": "鋭いクリック / ポップを検出して修復します。高い値ほどトリガー閾値が下がり、小さなアーティファクトも捕まえますが、ドラムのトランジェントへの影響リスクも増えます。",
-      "dereverbAmount": "後部残響を抑制するスペクトラル dereverb です。高い値ほどルーム感を強く減衰させますが、持続音が薄くなる場合があります。",
+      "dereverbAmount": "後部残響を抑えるスペクトル処理です。高い値ほどルーム感を強く減らしますが、持続音が薄くなる場合があります。",
       "tiltDb": "1 kHz を軸とした Tilt EQ です。プラスで高域を持ち上げ低域を控えめに、マイナスはその逆です。",
       "compressorThresholdDb": "コンプレッションが始まる音量レベルです。低い値ほど広く効き、高い値はピークだけを抑えます。",
-      "compressorRatio": "Threshold を超えた音をどれくらい圧縮するかです。2:1 はソフトグルー、4:1 はマスタリング寄り、8:1 以上はリミッティング寄り。",
-      "compressorAttackMs": "Threshold を超えてから圧縮が掛かるまでの速さです。速いほどトランジェントを抑え、遅いほど通します。",
-      "compressorReleaseMs": "Threshold を下回ったあと、圧縮が解除されるまでの速さです。テンポと合わせると音楽的に呼吸します。",
-      "deesserAmount": "約 6 kHz 付近の歯擦音ピークを抑えます。高い値ほど threshold が下がり ratio が上がり、より穏やかな S / SH 音にも反応します。",
+      "compressorRatio": "スレッショルドを超えた音をどれくらい圧縮するかです。2:1 は軽いまとまり、4:1 はマスタリング向けの制御、8:1 以上は強いリミッティング寄りです。",
+      "compressorAttackMs": "スレッショルドを超えてから圧縮が掛かるまでの速さです。速いほどトランジェントを抑え、遅いほど通します。",
+      "compressorReleaseMs": "スレッショルドを下回ったあと、圧縮が解除されるまでの速さです。テンポと合わせると音楽的な動きになります。",
+      "deesserAmount": "約 6 kHz 付近の歯擦音ピークを抑えます。高い値ほどスレッショルドが下がりレシオが上がるため、より穏やかな S / SH 音にも反応します。",
       "transientAttackDb": "トランジェントのアタック部分を強調 (プラス) / 抑制 (マイナス) します。全体音量を上げずにドラムのパンチを足せます。",
       "multibandLowAmount": "低域 (< 220 Hz) のコンプ量です。ブーミーな低域を抑え、低域過多のミックスをバランスさせるのに有効です。",
       "multibandMidAmount": "中域 (220 Hz〜4.5 kHz) のコンプ量です。胴鳴りやボーカルの突出を整えます。少しの動きで大きく効きます。",
       "multibandHighAmount": "高域 (> 4.5 kHz) のコンプ量です。シンバルや刺さりだけを抑え、全体の明るさは保ったままにできます。",
       "tapeDriveDb": "テープモデルへの drive 量です。高い値ほど倍音生成とナチュラルコンプが増え、温かみとグルーが出ます。",
-      "tapeSaturation": "同じ drive でもテープがどれだけサチるかです。偶数 / 奇数倍音を加え、ビンテージ的にトランジェントを丸めます。",
+      "tapeSaturation": "同じドライブ量でも、テープ段がどれだけ飽和するかを決めます。偶数 / 奇数倍音を加え、ビンテージ機材のようにトランジェントを丸めます。",
       "exciterAmount": "高域倍音を制御して付加し、EQ ブーストとは別の経路で明るさ感を作ります。",
       "airBandAmount": "10 kHz 以上を緩やかに持ち上げるシェルフで、超高域の開放感を足します。",
-      "stereoWidth": "サイド成分の倍率です。1.0 で無加工、< 1.0 で狭く、> 1.0 で広く — 低域はモノ安全のまま保持されます。",
+      "stereoWidth": "サイド成分の倍率です。1.0 で無加工、1.0 未満で狭く、1.0 超で広くなります。低域はモノ互換を保ちます。",
       "monoMakerAmount": "固定 crossover より下の低域をモノに集約します。高い値ほど低域がセンターに寄り、クラブ / アナログ再生で安定します。",
-      "limiterCeilingDb": "出力での True Peak の上限です。低い ceiling はロッシー変換用の余裕、高い ceiling はラウドネス優先です。",
+      "limiterCeilingDb": "出力での True Peak の上限です。低めのシーリングは非可逆変換用の余裕を残し、高めのシーリングはラウドネスを優先します。",
       "limiterLookaheadMs": "ピーク到達前にリミッターが先読みする時間です。長いほどトランジェントは綺麗に抑えられますが、レイテンシが増えます。"
     },
     "tips": {
@@ -246,19 +247,19 @@
       "inputGainDb": "ソースがすでにクリップ気味、または静かすぎてチェーンが反応しないとき。",
       "denoiseAmount": "AI 生成・スマホ録音・修復素材など、ノイズが目立つ場合に。",
       "declickAmount": "ヴァイナルのリッピングや、デジタルグリッチ、クリック / ポップが残っている素材に。",
-      "dereverbAmount": "残響感の強い素材で、マスタリング前にアンビエンスを少し減らしたい時。",
+      "dereverbAmount": "残響感の強い素材で、マスタリング前にアンビエンスを少し減らしたいとき。",
       "tiltDb": "±1〜2 dB の小さな動きで十分。スペクトル全体に影響します。",
       "compressorThresholdDb": "ラウドな部分で 3〜6 dB のゲインリダクションを目安に。",
       "compressorRatio": "透明感を保つなら 1.5:1〜3:1 が推奨レンジ。",
       "compressorAttackMs": "ドラムの抜けを残すなら 20〜40 ms、ピークを締めるなら 1〜5 ms。",
       "compressorReleaseMs": "音楽的なポンピングは 1 拍程度、パーカッシブな素材は短めに。",
-      "deesserAmount": "ボーカルやシンバルで歯擦音 / 高域の刺さりが目立つ時。",
-      "transientAttackDb": "ドラムが眠く感じる時に +1〜+3 dB でアタックを補強。音量は上げずにパンチを増やせます。",
+      "deesserAmount": "ボーカルやシンバルで歯擦音 / 高域の刺さりが目立つとき。",
+      "transientAttackDb": "ドラムが眠く感じるときに +1〜+3 dB でアタックを補強。音量は上げずにパンチを増やせます。",
       "multibandLowAmount": "サブやキックの低域がクラブシステムで過剰になる素材に。",
-      "multibandMidAmount": "中域が詰まって聞こえる、ボーカルの前後感が不安定な時。",
+      "multibandMidAmount": "中域が詰まって聞こえる、ボーカルの前後感が不安定なとき。",
       "multibandHighAmount": "シンバルや歯擦音だけが突出する素材に、他帯域を触らず適用。",
-      "tapeDriveDb": "無機質 / AI 生成系の素材に、アナログのウォームさとグルーを足したい時。",
-      "tapeSaturation": "0.3 を超えるのは、明確なテープキャラクターをマスターバスに足したい時のみ。",
+      "tapeDriveDb": "無機質 / AI 生成系の素材に、アナログらしい温かさとまとまりを足したいとき。",
+      "tapeSaturation": "0.3 を超えるのは、明確なテープらしさをマスターバスに足したいときだけにします。",
       "exciterAmount": "0.1〜0.3 程度の控えめな量で十分。多すぎるとデジタル臭くなります。",
       "airBandAmount": "ボーカル・アコースティック・アンビエント素材の質感補強に。",
       "stereoWidth": "配信コーデックやクラブ再生を考えるなら 1.3 倍以内に留めるのが安全。",
@@ -269,30 +270,30 @@
     "defaults": {
       "label": "デフォルト",
       "off": "オフ",
-      "tone": "中央位置で Tilt EQ を実質ノーマライズ。ミックスの音色バランスをそのまま通します。",
+      "tone": "中央位置では Tilt EQ をニュートラルに保ちます。ミックスの音色バランスをそのまま通します。",
       "width": "中央位置でステレオイメージを変更しません。Studio で別途設定した幅だけが反映されます。",
       "dynamics": "中央位置でコンプの強さを「透明な接着」と「動きを残す」の中間に置きます。",
       "inputGainDb": "ソースを無加工でチェーンに通す値。最終ラウドネスは Loudness ステージが揃えます。",
       "denoiseAmount": "デノイズは破壊的処理なのでオフが既定。ノイズが実際に気になるときだけ有効化します。",
-      "declickAmount": "ドラムのトランジェントを誤って削らないよう、既定ではオフ。素材に明確なクリックがある時のみ。",
-      "dereverbAmount": "強く掛けると伸びた音が痩せるため既定ではオフ。残響感の強い素材だけ有効化。",
+      "declickAmount": "ドラムのトランジェントを誤って削らないよう、既定ではオフです。素材に明確なクリックがあるときだけ有効化します。",
+      "dereverbAmount": "強く掛けると伸びた音が痩せるため既定ではオフです。残響感の強い素材だけ有効化します。",
       "tiltDb": "Flat (0 dB) で原音の音色バランスをそのまま通します。",
       "compressorThresholdDb": "一般的なマスタリングのグルー値。ラウドなセクションで約 3 dB の GR を生みます。",
       "compressorRatio": "ピークを抑えつつもトランジェントを潰さない、軽めのグルー比率です。",
       "compressorAttackMs": "ピークは捉えつつ、ドラムのアタックは残せる中間値です。",
       "compressorReleaseMs": "一般的なポップス BPM で 1 拍に近い、音楽的なリリースタイム。",
-      "deesserAmount": "歯擦音が明確に飛び出している時だけ有効化したいので、既定はオフ。",
+      "deesserAmount": "歯擦音が明確に飛び出しているときだけ有効化したいので、既定はオフです。",
       "transientAttackDb": "トランジェントを未加工で通します。ドラムの抜けは原音準拠。",
       "multibandLowAmount": "ベースがミックスを覆い被さるときのみ使用する想定で、既定はオフ。",
-      "multibandMidAmount": "中域の篭りやボーカルの前後感ブレが気になる時のみ使う想定で、既定はオフ。",
+      "multibandMidAmount": "中域のこもりやボーカルの前後感のブレが気になるときだけ使う想定で、既定はオフです。",
       "multibandHighAmount": "シンバル / 歯擦音が暴れる素材のみ使う想定で、既定はオフ。",
-      "tapeDriveDb": "0 dB なら無加工のクリーンな信号。アナログのウォームさが欲しい時に上げます。",
-      "tapeSaturation": "既定ではテープステージをバイパス。Drive と組み合わせてキャラクター付けに使います。",
-      "exciterAmount": "聴感上わずかに明るくする「味付け」レベル。あからさまにはしません。",
+      "tapeDriveDb": "0 dB なら無加工のクリーンな信号です。アナログらしい温かさが欲しいときに上げます。",
+      "tapeSaturation": "既定ではテープステージをバイパスします。ドライブ量と組み合わせてキャラクター付けに使います。",
+      "exciterAmount": "体感上わずかに明るくする「味付け」レベル。あからさまにはしません。",
       "airBandAmount": "約 10 kHz の控えめなシェルフで、ほとんどの素材で自然な抜け感を加えます。",
       "stereoWidth": "+5% の控えめな広がり。モノ互換性を壊さずに少しだけ空気感を足します。",
       "monoMakerAmount": "ヴァイナルプレスやクラブ再生など、低域モノ互換性が必要な場面のみ有効化。",
-      "limiterCeilingDb": "Spotify/Apple 向けに安全な ceiling。ロッシー変換時のヘッドルームを確保します。",
+      "limiterCeilingDb": "Spotify/Apple 向けに安全なシーリングです。非可逆変換時のヘッドルームを確保します。",
       "limiterLookaheadMs": "マスタリングの一般値。トランジェント捕捉とレイテンシのバランスが取れます。"
     },
     "glossary": {
@@ -302,11 +303,11 @@
     "intro": {
       "title": "マスタリングとは?",
       "body": "マスタリングはリリース前の最終工程です。配信サービス、スピーカー、ヘッドホン、スマートフォンで安定して聴けるようにミックスを整えます。",
-      "pointLoudness": "公開先に合わせて聴感上の音量を整えます。",
+      "pointLoudness": "公開先に合わせて体感上の音量を整えます。",
       "pointTone": "ミックスを作り直さず、広い音色バランスや Air 感を調整します。",
       "pointPeaks": "変換後や配信再生でもクリップしにくいようピークを制御します。",
-      "pointPrivacy": "このデモでは音声処理はブラウザ内でローカル実行されます。",
-      "start": "Quick Master を開始"
+      "pointPrivacy": "このデモの音声処理はブラウザ内でローカル実行されます。",
+      "start": "クイックマスターを開始"
     },
     "modules": {
       "input": {
@@ -327,12 +328,12 @@
       "dynamics": {
         "name": "Dynamics",
         "description": "シングルバンドコンプ + デエッサー + トランジェントシェイパー。レベル制御と質感を 1 段で扱います。",
-        "tip": "まず compressor で接着、その上に de-esser と transient で仕上げを重ねるのが基本。"
+        "tip": "まずコンプレッサーでまとまりを作り、その上にディエッサーとトランジェント処理で仕上げを重ねるのが基本です。"
       },
       "multiband": {
         "name": "Multiband Compressor",
         "description": "Low / Mid / High の 3 バンドに分割し、それぞれ独立にコンプレッションします。",
-        "tip": "特定帯域だけを抑えたい時に。他帯域に影響を出さずスポット処理できます。"
+        "tip": "特定帯域だけを抑えたいときに使います。他帯域に影響を出さずスポット処理できます。"
       },
       "exciter": {
         "name": "Saturation / Air",
@@ -347,7 +348,7 @@
       "limiter": {
         "name": "True Peak Limiter",
         "description": "最終天井を制御し、インターサンプルピークを抑えます。",
-        "tip": "常に最終段で動作。出力ゲインではなく ceiling で調整します。"
+        "tip": "常に最終段で動作します。出力ゲインではなくシーリングで調整します。"
       },
       "loudness": {
         "name": "LUFS Normalize",
@@ -376,6 +377,7 @@
       "channels": "チャンネル",
       "sourcePeak": "元音源ピーク",
       "masterPeak": "マスターピーク",
+      "stereoImage": "ステレオイメージ",
       "stereoNarrow": "狭め / モノ安全",
       "stereoBalanced": "バランス型ステレオ",
       "stereoWide": "広め / モノ確認",
@@ -387,11 +389,11 @@
         "phase": "Lissajous / フェーズスコープ。斜めの集中 = モノ安全、横方向 = 広い、X 字 = 位相問題の兆候。"
       },
       "useWhen": {
-        "lufs": "出力ラウドネスをプラットフォームターゲットと比較する時 — クリックで LUFS ステージへジャンプ。",
-        "peak": "デジタル天井の余裕を確認する時 — クリックで Limiter ステージへ。",
-        "crest": "「潰しすぎ」「ダイナミック過ぎ」を診断する時 — クリックで Dynamics ステージへ。",
-        "correlation": "ステレオ幅の問題を診断する時 — クリックで Stereo ステージへ。",
-        "phase": "クラブ / ヴァイナル / 放送納品前にモノ互換性を確認する時。"
+        "lufs": "出力ラウドネスを公開先の目標値と比較するとき。クリックで LUFS ステージへ移動します。",
+        "peak": "デジタル天井の余裕を確認するとき。クリックで Limiter ステージへ移動します。",
+        "crest": "「潰しすぎ」「ダイナミックすぎ」を診断するとき。クリックで Dynamics ステージへ移動します。",
+        "correlation": "ステレオ幅の問題を診断するとき。クリックで Stereo ステージへ移動します。",
+        "phase": "クラブ / ヴァイナル / 放送納品前にモノ互換性を確認するとき。"
       },
       "jumpAria": "{module} ステージを開く"
     },
@@ -405,26 +407,43 @@
       "beforeHint": "未処理のソース音源を A/B 比較用に再生します。",
       "after": "After",
       "afterHint": "レンダー済みマスターを A/B 比較用に再生します。",
+      "reference": "リファレンス",
+      "referenceHint": "読み込んだリファレンストラックを A/B 比較用に再生します。",
       "loudnessMatch": "ラウドネスを揃える",
       "loudnessMatchTooltip": "大きい方を下げて、音量差ではなくトーンとダイナミクスの違いだけで比較できるようにします。公平な A/B には必須。",
       "loudnessMatchNote": "A/B 再生では音量差で判断が偏らないよう、大きい側を下げて比較します。",
-      "rawCompareNote": "Raw 比較では各ファイルのレンダー後レベルをそのまま再生します。"
+      "rawCompareNote": "素の比較では、各ファイルをレンダー後のレベルのまま再生します。",
+      "empty": "マスタリングを実行すると、ここで処理前 / 処理後を比較できます。"
     },
     "reference": {
       "title": "リファレンストラック",
-      "titleHint": "リファレンス音源を読み込むと、通常のチェーンではなく Spectral Match が実行されます。出力 EQ をリファレンスのスペクトルに寄せます。",
-      "drop": "比較用の reference track をドロップ",
-      "masterDelta": "Master / reference crest",
-      "match": "Reference EQ に合わせる",
+      "titleHint": "リファレンス音源を読み込むと、通常のチェーンではなくスペクトルマッチを実行できます。出力 EQ をリファレンスのスペクトルに寄せます。",
+      "drop": "比較用のリファレンストラックをドロップ",
+      "masterDelta": "マスター / リファレンスのクレスト",
+      "match": "リファレンス EQ に合わせる",
       "matchHint": "通常のチェーンの代わりに、リファレンスに対する一回限りのスペクトルマッチを実行します。EQ シェイプのみで、ラウドネスやリミッターは適用されません。",
-      "matching": "Reference に合わせています..."
+      "matching": "リファレンスに合わせています..."
+    },
+    "insights": {
+      "title": "ソースアシスタント",
+      "profile": "音源プロファイル",
+      "suggestions": "提案",
+      "deliveryPreview": "配信プレビュー",
+      "analyzing": "解析中",
+      "ready": "完了",
+      "refresh": "再解析",
+      "empty": "音源を読み込むと、ラウドネス、ダイナミクス、トーンバランス、ステレオ情報を測定します。",
+      "suggestionHint": "音源プロファイルの測定後に提案が表示されます。",
+      "previewHint": "一般的な配信ラウドネスターゲットに対して、音源がどう見えるかを推定します。",
+      "ceilingRisk": "シーリングリスク"
     },
     "errors": {
       "loadFailed": "音声ファイルを読み込めませんでした。WAV、MP3、FLAC、OGG を試してください。",
       "renderFailed": "マスタリングに失敗しました。短いファイル、または軽いプリセットで再試行してください。",
-      "referenceFailed": "Reference matching に失敗しました。短い音源または reference ファイルで再試行してください。",
+      "referenceFailed": "リファレンスマッチに失敗しました。短い音源またはリファレンスファイルで再試行してください。",
       "noSavedPreset": "このブラウザに保存済みのチェーン設定がありません。",
-      "presetLoadFailed": "チェーン設定を読み込めませんでした。"
+      "presetLoadFailed": "チェーン設定を読み込めませんでした。",
+      "presetSaveFailed": "チェーン設定を保存できませんでした。"
     }
   },
   "common": {

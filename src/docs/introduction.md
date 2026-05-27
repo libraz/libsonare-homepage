@@ -1,10 +1,31 @@
 # Introduction
 
+If you are new to libsonare, read this page for the vocabulary, then follow the [Learning Path](./learning-path.md) to choose the shortest route for your project. The short explainers here are deliberately brief; the [Glossary](./glossary.md) and [MIR Overview](./glossary/concepts/mir-overview.md) go deeper on each term when you want it.
+
+## What You Will Learn
+
+By the end of this page you should be able to:
+
+- explain what libsonare is and which kinds of music/audio tools it supports;
+- understand the basic MIR pipeline from waveform to spectrogram, features, and higher-level music analysis;
+- tell analysis, editing, mixing, mastering, realtime streaming, room acoustics, and inverse features apart;
+- choose the next page from the [Learning Path](./learning-path.md) without needing DSP background.
+
 ## What is libsonare?
 
-libsonare is an audio analysis and mastering DSP library for **Music Information Retrieval (MIR)** and browser-native music tools. Given an audio file or stream, it can automatically extract musical information such as tempo (BPM), key, chords, beats, song structure, and more. It also includes mastering processors for loudness normalization, true-peak limiting, EQ, dynamics, stereo processing, repair, and reference matching.
+libsonare is a dependency-free audio DSP toolkit for browser-native and native music tools.
 
-It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same analysis and mastering chain directly in web browsers — no server required.
+It covers several related jobs:
+
+| Area | What libsonare can do |
+|------|-----------------------|
+| Music Information Retrieval (MIR) | Extract tempo, key, chords, beats, downbeats, time signature, structure, melody, timbre, and dynamics |
+| Room acoustics | Estimate or measure room-decay cues |
+| Mastering | Run broadcast-grade mastering processors and loudness/true-peak handling |
+| Mixing | Build a real-time-safe mixer with routing, buses, sends, and meters |
+| Editing and creative FX | Change pitch, timing, voice character, reverb, and modulation-style effects |
+
+It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
 
 ::: details What is WebAssembly?
 WebAssembly (WASM) is a binary instruction format that runs in web browsers at near-native speed. It allows code written in languages like C++ to be compiled and executed in the browser, without needing a server or installing anything. libsonare uses this to bring C++-level audio analysis performance directly to web applications.
@@ -33,7 +54,7 @@ libsonare is designed for developers building music-related applications:
 
 - **Web app developers** — Add audio analysis to your app without a backend. Detect BPM for a DJ tool, visualize chords for a practice app, or build an automatic song structure viewer, all running client-side in the browser via WebAssembly.
 
-- **Music tool creators** — Build DAW plugins, chord detectors, auto-transcription tools, mastering workflows, or music education software. libsonare provides the analysis and mastering engine so you can focus on the user experience.
+- **Music tool creators** — Build DAW plugins, chord detectors, auto-transcription tools, browser mixers, mastering workflows, or music education software. libsonare provides the analysis, mixing, and mastering engine so you can focus on the user experience.
 
 ::: details What is a DAW?
 A DAW (Digital Audio Workstation) is software for recording, editing, and producing audio. Examples include Ableton Live, Logic Pro, FL Studio, and GarageBand. DAW plugins extend these applications with additional functionality like effects, instruments, or analysis tools.
@@ -44,12 +65,16 @@ A DAW (Digital Audio Workstation) is software for recording, editing, and produc
 - **Game / interactive media developers** — Analyze music in real-time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
 
 ::: tip Try it in the browser
-Use the [audio analysis demo](/) for MIR features, or open the [mastering demo](/mastering) to render a local-only WAV master with no upload.
+Open [Demos](/demos) for the browser-local tools. Use [Music Analysis Studio](/music-analysis) for MIR features, or open the [Mastering Studio](/mastering) to render a local-only WAV master with no upload.
 :::
 
 ## How Audio Analysis Works
 
 Audio analysis is not a single step — it's a **pipeline** where each stage builds on the previous one. Understanding this flow helps you see what libsonare is doing under the hood and why certain features depend on others.
+
+::: tip This section is the overview; the [MIR Overview](./glossary/concepts/mir-overview.md) is the map
+What follows is a quick tour of the pipeline. For a deeper, cross-linked map of how every feature relates — plus a "which question, which feature" table — see [MIR Overview](./glossary/concepts/mir-overview.md).
+:::
 
 ```
 Audio Waveform
@@ -63,7 +88,11 @@ Musical Analysis (key, chords, BPM, beats, sections, ...)
 
 ### Stage 1: Spectral Analysis
 
-Raw audio is a sequence of amplitude values over time — a waveform. To extract musical meaning, the first step is to convert this into a **spectrogram** using the Short-Time Fourier Transform (STFT). The STFT breaks the audio into short overlapping windows and computes the frequency content of each, producing a 2D map of "which frequencies are present at each moment."
+Raw audio is a sequence of amplitude values over time: a waveform.
+
+To extract musical meaning, the first step is to convert this into a **spectrogram** using the Short-Time Fourier Transform (STFT).
+
+The STFT breaks the audio into short overlapping windows and computes the frequency content of each. The result is a 2D map of "which frequencies are present at each moment."
 
 ::: details What is a Fourier Transform?
 A Fourier Transform decomposes a signal into its constituent frequencies — like splitting white light through a prism into a rainbow. Audio is a sum of many frequencies (sine waves) at different amplitudes. The Fourier Transform reveals which frequencies are present and how strong they are. The **Short-Time** variant (STFT) applies this repeatedly to overlapping windows of the audio, so you can see how the frequency content changes over time.
@@ -134,6 +163,19 @@ The fundamental frequency (F0) is the lowest frequency of a periodic sound — t
 
 This layered design means libsonare doesn't just give you answers — it exposes each stage, so you can use low-level features for your own analysis or plug them into ML pipelines.
 
+### Room Acoustics and Inverse Features
+
+Some analysis is about the recording space rather than the song.
+
+| Entry point | Input | Result |
+|-------------|-------|--------|
+| `analyzeImpulseResponse` / `analyze_impulse_response` | A clean impulse response | Direct RT60, EDT, clarity, and definition measurements. |
+| `detectAcoustic` / `detect_acoustic` | Ordinary audio | Estimated room cues with a confidence value. |
+
+See [Room Acoustics](./acoustic-analysis.md) for when to use each mode.
+
+libsonare also exposes inverse helpers for debugging and ML workflows: mel spectrograms and MFCCs can be mapped back to approximate spectra or preview audio. These are not restoration tools; they are lossy previews. See [Inverse Features](./inverse-features.md).
+
 ### Audio Effects
 
 libsonare also provides audio processing capabilities that operate on the spectral representation:
@@ -143,12 +185,21 @@ libsonare also provides audio processing capabilities that operate on the spectr
 ::: details What are harmonic and percussive components?
 In a spectrogram, harmonic sounds (vocals, strings, sustained notes) appear as horizontal lines — they maintain a stable frequency over time. Percussive sounds (drums, clicks, transients) appear as vertical lines — they contain many frequencies but only for a brief moment. HPSS exploits this difference using median filters: a horizontal median filter extracts the harmonic part, and a vertical median filter extracts the percussive part.
 :::
-- **Time Stretch** — Changes tempo without affecting pitch by manipulating the STFT phase.
-- **Pitch Shift** — Transposes pitch without affecting tempo.
+- **Time Stretch / Pitch Shift** — Changes tempo or transposes pitch by combining phase-vocoder processing and resampling.
+- **Editing DSP** — Pitch correction to a target MIDI note, note-region stretch, and voice-change pitch/formant controls.
+- **Creative FX / inserts** — Reverb insert processors (`effects.reverb.*`) are available through mixer/mastering insert factories when creative FX is enabled. Chorus, flanger, phaser, and stereo-delay DSP modules exist in the source tree but are not exposed as standalone top-level JS/Python helpers. Ducking is exposed as `dynamics.duckingProcessor` / mixer routing rather than a one-shot editing helper.
 
 ### Real-Time Streaming
 
-The `StreamAnalyzer` runs the same pipeline on audio **chunk-by-chunk** with low latency, producing per-frame features suitable for real-time visualization or live analysis. It integrates with the Web Audio API's AudioWorklet for in-browser real-time processing.
+The `StreamAnalyzer` runs the same pipeline on audio **chunk by chunk** with low latency.
+
+It produces per-frame features for real-time visualization or live analysis. Its progressive estimate includes BPM, key, current chord, chord progression, bar-level chord voting, and pattern scores.
+
+In the browser, it integrates with the Web Audio API's AudioWorklet for real-time processing.
+
+### Mixing and Routing
+
+The libsonare mixing engine provides channel strips, pan modes, stereo width controls, sends, FX buses, VCA groups, scene presets, automation lanes, goniometer/true-peak metering, and offline stereo rendering. Use the [Mixing Engine](./mixing.md) guide when you need a persistent mixer scene rather than a one-shot analysis or mastering render.
 
 ## Platform Support
 
@@ -161,9 +212,7 @@ The `StreamAnalyzer` runs the same pipeline on audio **chunk-by-chunk** with low
 | **Linux / macOS** | C++ | Native applications, CLI tools |
 | **Any (via C API)** | C | FFI integration with other languages |
 
-The current site bundle includes about ~508 KB of WebAssembly/JavaScript assets
-before compression. See the [WebAssembly Guide](/docs/wasm#bundle-size) for the
-current breakdown.
+The current site bundle includes about ~1.7 MB of WebAssembly/JavaScript assets before compression. See the [WebAssembly Guide](/docs/wasm#bundle-size) for the current breakdown.
 
 ## Relationship with librosa
 
@@ -183,7 +232,12 @@ See [librosa Compatibility](/docs/librosa-compatibility) for detailed comparison
 
 ## Next Steps
 
+- [Learning Path](/docs/learning-path) — Choose the right route for your first project
+- [Glossary](/docs/glossary) — Plain-language deep dives on every term used here
 - [Installation](/docs/installation) — Set up libsonare in your project
 - [Getting Started](/docs/getting-started) — Your first analysis in 5 minutes
+- [Feature Map](/docs/api-surface) — See which features are exposed in each binding
 - [Examples](/docs/examples) — Common use cases with code
-- [Demo](/) — Try it in your browser right now
+- [Mixing Engine](/docs/mixing) — Channel strips, routing, automation, scenes, and metering
+- [Implementation Validation](/docs/implementation-validation) — Understand what is covered by tests and reference checks
+- [Demos](/demos) — Try the browser-local tools

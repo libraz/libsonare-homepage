@@ -1,0 +1,63 @@
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1100px) {
+  .analyzer__main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    max-height: none;
+  }
+
+  .analyzer__sidebar--left {
+    grid-column: 1;
+    grid-row: 3;
+    max-height: 200px;
+  }
+
+  .analyzer__sidebar--right {
+    display: none;
+  }
+
+  .analyzer__center {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .analyzer__metrics-body {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .analyzer__metrics-body :deep(.metric-item) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 80px;
+  }
+
+  .analyzer__metrics-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .analyzer__main {
+    gap: 10px;
+  }
+
+  .analyzer__time {
+    font-size: 11px;
+  }
+
+  .analyzer__sidebar--left {
+    max-height: 160px;
+  }
+
+  .analyzer__metrics-body {
+    padding: 8px 10px;
+    gap: 12px;
+  }
+
+  .analyzer__metrics-body :deep(.metric-item) {
+    min-width: 70px;
+  }
+}

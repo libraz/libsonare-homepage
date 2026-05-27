@@ -4,18 +4,42 @@ libsonare C++ インターフェースの完全な API リファレンス。
 
 ## 概要
 
-libsonare は C++ アプリケーション向けの包括的なオーディオ解析を提供します：
+libsonare は C++ アプリケーション向けに、オーディオ解析、メーター、特徴抽出、編集 DSP、リアルタイムストリーミング、マスタリング、ミキシングを提供します。`sonare.h` は解析・特徴量系の広い入口です。マスタリング、ミキシング、エンジン、グラフ、編集モジュールは、必要なサブシステムだけを include したい場合の専用ヘッダーも持っています。
+
+## このページで身につくこと
+
+このページを読むと、次のことを判断・実装できるようになります。
+
+- quick helper、`MusicAnalyzer`、`StreamAnalyzer`、各モジュールヘッダー、C ABI を使い分けられる。
+- どの C++ サーフェスが各言語バインディングの土台になっているかを理解できる。
+- 音声読み込み、解析、ストリーミングフレーム、マスタリング、ミキシング、FFI に必要な struct / class を探せる。
+- 目的別ガイドを読んだ後のリファレンスとして、このページを使える。
 
 | コンポーネント | 目的 | 主なクラス/関数 |
 |-----------|---------|----------------------|
 | **コア** | オーディオI/Oと信号処理 | `Audio`, `Spectrogram` |
-| **Quick API** | シンプルな一行解析 | `detect_bpm()`, `detect_key()`, `analyze()` |
-| **MusicAnalyzer** | コールバック付き完全解析 | `MusicAnalyzer`, `AnalysisResult` |
-| **特徴量** | 低レベル特徴抽出 | `MelSpectrogram`, `Chroma`, spectral関数 |
-| **エフェクト** | オーディオ処理 | `hpss()`, `time_stretch()`, `pitch_shift()` |
+| **Quick API** | 一行解析とルーム音響の入口 | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
+| **MusicAnalyzer** | コールバック付きの楽曲解析 | `MusicAnalyzer`, `AnalysisResult` |
+| **ストリーミング** | ブロック単位の MIR フレームと逐次推定 | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
+| **特徴量** | 低レベル特徴抽出と逆変換特徴量 | `MelSpectrogram`, `Chroma`, `cqt()`, `vqt()`, `mel_to_audio()` |
+| **エフェクト／編集** | オーディオ処理と編集プリミティブ | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer モジュール |
+| **マスタリング** | プリセット、チェーン、名前付きプロセッサ、assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
+| **ミキシング／エンジン** | シーンベースのミキサーと DAW 風リアルタイムトランスポート | `mixing::api::Scene`, `mixing::MixerController`, `RealtimeEngine` |
+| **C ABI** | バインディング向けの安定 FFI | `sonare_c.h` |
+
+## C++ でどの入口を使うか
+
+| 目的 | include / API |
+|------|---------------|
+| BPM、キー、ビート、オンセット、音響指標を単発で見る | `#include <sonare/sonare.h>` と `sonare::quick::*` |
+| 同じ音声から複数の楽曲解析結果を得る | `MusicAnalyzer`。中間特徴量を再利用できます |
+| ライブビジュアライザや逐次推定 | `#include <sonare/streaming/stream_analyzer.h>` |
+| マスタリングプリセットや名前付きプロセッサ | `src/mastering/api/*` ヘッダー。[マスタリングプロセッサ](./mastering-processors.md) も参照 |
+| ステムミキサー / シーン JSON | `src/mixing/api/scene.h` と `src/mixing/api/scene_json.cpp` の概念。[ミキシングエンジン](./mixing.md) も参照 |
+| 言語バインディングやプラグイン境界 | C++ クラスではなく `sonare_c.h` |
 
 ::: tip 用語について
-オーディオ解析が初めてですか？[用語集](/ja/docs/glossary)で BPM、STFT、Chroma、HPSS などの用語の説明をご覧ください。
+オーディオ解析が初めてですか？[用語集](/ja/docs/glossary) で BPM、STFT、Chroma、HPSS などの用語の説明をご覧ください。
 :::
 
 ## 名前空間
@@ -123,7 +147,7 @@ auto reconstructed = spec.to_audio();
 
 ## Quick API
 
-一般的な解析タスクのためのシンプルな関数群です。1 回限りの BPM・キー・ビート・オンセット検出に向きます。
+一般的な解析タスクのためのシンプルな関数群です。1 回限りの BPM・キー・ビート・ダウンビート・オンセット検出やルーム音響解析に向きます。
 
 ::: info Quick API と MusicAnalyzer の使い分け
 - **Quick API（`sonare::quick::...`）** — 1 つの結果だけが欲しいとき。内部で必要なステージだけを走らせます。
@@ -137,15 +161,25 @@ namespace sonare::quick {
 
   // キー検出
   Key detect_key(const float* samples, size_t length, int sample_rate);
+  Key detect_key(const float* samples, size_t length, int sample_rate, const KeyConfig& config);
+  std::vector<KeyCandidate> detect_key_candidates(const float* samples, size_t length, int sample_rate,
+                                                  const KeyConfig& config = KeyConfig());
 
   // ビート時刻（秒）
   std::vector<float> detect_beats(const float* samples, size_t length, int sample_rate);
+
+  // ダウンビート時刻（秒）
+  std::vector<float> detect_downbeats(const float* samples, size_t length, int sample_rate);
 
   // オンセット時刻（秒）
   std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate);
 
   // 完全解析
   AnalysisResult analyze(const float* samples, size_t length, int sample_rate);
+
+  // ルーム音響
+  AcousticParameters detect_acoustic(const float* samples, size_t length, int sample_rate);
+  AcousticParameters analyze_impulse_response(const float* samples, size_t length, int sample_rate);
 }
 ```
 
@@ -212,6 +246,7 @@ struct StreamConfig {
   float tuning_ref_hz = 440.0f;  // A4 の基準周波数
 
   // 出力設定
+  OutputFormat output_format = OutputFormat::Float32;
   int emit_every_n_frames = 1;   // 4 = 44100Hz で約 60fps
   int magnitude_downsample = 1;  // マグニチュードのダウンサンプル係数
 
@@ -220,6 +255,8 @@ struct StreamConfig {
   float bpm_update_interval_sec = 10.0f;
 };
 ```
+
+`OutputFormat` は下流へ渡すストリーミングフレームの内部表現を選びます。`Float32` は精度優先、`Int16` は帯域幅を抑えた転送、`Uint8` は可視化向けの軽量ペイロードに向きます。UI スレッドや Worker へ送る量を減らしたい場合は、後述の量子化読み出しメソッドと組み合わせて使います。
 
 ### 基本的な使い方
 
@@ -230,6 +267,7 @@ StreamConfig config;
 config.sample_rate = 44100;
 config.n_mels = 64;
 config.emit_every_n_frames = 4;
+config.output_format = OutputFormat::Float32;
 
 StreamAnalyzer analyzer(config);
 
@@ -252,6 +290,57 @@ void audio_callback(const float* samples, size_t n_samples) {
   }
 }
 ```
+
+### StreamFrame
+
+`read_frames()` は読み出したフレームを内部キューから消費し、フレーム単位の構造体として返します。デバッグやネイティブ UI への直接描画には扱いやすい形式です。
+
+```cpp
+struct StreamFrame {
+  float timestamp;          // ストリーム時間（秒）
+  int frame_index;          // 累積フレーム番号
+
+  std::vector<float> magnitude;  // [n_bins] またはダウンサンプル後
+  std::vector<float> mel;        // [n_mels]
+  std::vector<float> chroma;     // [12]
+
+  float spectral_centroid;       // Hz
+  float spectral_flatness;       // 0-1
+  float rms_energy;              // 正規化 RMS
+
+  float onset_strength;
+  bool onset_valid;              // 最初のフレームでは false
+
+  int chord_root;                // 0-11、-1 = 不明
+  int chord_quality;             // 0=Maj, 1=Min, 2=Dim など
+  float chord_confidence;        // 0-1
+};
+```
+
+### SOA 形式（効率的な転送）
+
+Worker や UI スレッドへまとめて渡す場合は、Structure-of-Arrays の `FrameBuffer` を使います。`std::vector<StreamFrame>` より連続メモリに寄せやすく、WASM や `postMessage` 相当の転送に向いています。
+
+```cpp
+FrameBuffer buffer;
+analyzer.read_frames_soa(max_frames, buffer);
+
+// buffer.n_frames
+// buffer.timestamps - [n_frames]
+// buffer.mel - [n_frames * n_mels]
+// buffer.chroma - [n_frames * 12]
+// buffer.onset_strength - [n_frames]
+// buffer.rms_energy - [n_frames]
+// buffer.spectral_centroid - [n_frames]
+// buffer.spectral_flatness - [n_frames]
+// buffer.chord_root / chord_quality / chord_confidence - [n_frames]
+```
+
+::: details レイアウト用語: Structure-of-Arrays・row-major・量子化
+- **Structure-of-Arrays（SoA）** — フレームごとの構造体の配列ではなく、各フィールドを独立した連続配列（`timestamps`、`mel`、`chroma`…）に持ちます。キャッシュ効率・SIMD 効率がよく、別スレッドへの受け渡しも安価です。
+- **row-major（行優先）** — `mel`（`[n_frames * n_mels]`）のような 2 次元データを、1 行ずつ連続して格納します。フレーム 0 のメル全ビン、次にフレーム 1…という順です。要素 `(f, m)` は `f * n_mels + m` で参照します。
+- **量子化**（後述） — 各 32bit float を固定の min/max 範囲で 8bit / 16bit 整数に詰め、精度と引き換えにバッファを約 1/4・1/2 に縮めます。UI スレッドへフレームを渡すのに向いています。
+:::
 
 ### ChordChange
 
@@ -513,18 +602,20 @@ auto vqt_result = vqt(audio, vqt_config);
 :::
 
 ::: danger 非推奨関数
-逆変換関数 `icqt()` および `ivqt()` は**非推奨**であり、将来のバージョンで削除される予定です。
+逆変換関数 `icqt()` および `ivqt()` はヘッダー上で**非推奨**です。新しいコードでは、
+Griffin-Lim または位相ボコーダ系の再構成経路を優先してください。
 
 ```cpp
 // 非推奨 - 使用しないでください
-[[deprecated("代わりに Griffin-Lim 再構成を使用してください")]]
+[[deprecated("Use Griffin-Lim or phase vocoder for better reconstruction quality")]]
 Audio icqt(const CqtResult& cqt);
 
-[[deprecated("代わりに Griffin-Lim 再構成を使用してください")]]
+[[deprecated("Use griffinlim_vqt or phase vocoder for better reconstruction quality")]]
 Audio ivqt(const VqtResult& vqt);
 ```
 
-**移行方法:** CQT/VQT からオーディオを再構成するには、代わりに STFT で Griffin-Lim アルゴリズムを使用してください:
+**移行方法:** プレビュー音声の再構成には逆変換ヘルパー側の Griffin-Lim 経路を使い、
+品質が重要な場合は独自の STFT ドメイン処理で位相情報を保持してください。
 ```cpp
 // 推奨アプローチ
 auto spec = Spectrogram::compute(audio, stft_config);
@@ -607,9 +698,9 @@ auto with_fade_out = fade_out(audio, 1.0f); // 1.0秒フェードアウト
 auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 ```
 
-### librosa 互換ヘルパー <Badge type="tip" text="v1.1.0+" />
+### librosa 互換ヘルパー
 
-libsonare 1.1.0 で追加された関数群です。対応する `librosa` 関数の挙動に
+対応する `librosa` 関数の挙動に
 合わせています。全体のマッピングは
 [librosa 互換性](./librosa-compatibility.md) を参照してください。
 
@@ -658,11 +749,11 @@ auto plp_out     = plp(onset_env, sample_rate);
 ```cpp
 struct Key {
   PitchClass root;      // C=0, Cs=1, ..., B=11
-  Mode mode;            // Major, Minor
+  Mode mode;            // Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian
   float confidence;     // 0.0 - 1.0
 
   std::string to_string() const;  // "C major"
-  std::string short_name() const; // "C", "Am"
+  std::string to_short_string() const; // "C", "Am"
 };
 ```
 
@@ -675,6 +766,7 @@ struct Chord {
   float start;           // 秒
   float end;             // 秒
   float confidence;
+  PitchClass bass;        // 転回形表記用のベース音
 
   std::string to_string() const;  // "C", "Am", "G7"
 };
@@ -694,6 +786,7 @@ struct AnalysisResult {
   Timbre timbre;
   Dynamics dynamics;
   RhythmFeatures rhythm;
+  MelodyContour melody;
   std::string form;  // "IABABCO"
 };
 ```
@@ -705,15 +798,18 @@ enum class PitchClass {
   C = 0, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B
 };
 
-enum class Mode { Major, Minor };
+enum class Mode {
+  Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian
+};
 
 enum class ChordQuality {
   Major, Minor, Diminished, Augmented,
-  Dominant7, Major7, Minor7, Sus2, Sus4
+  Dominant7, Major7, Minor7, Sus2, Sus4, Unknown,
+  Add9, MinorAdd9, Dim7, HalfDim7, Major9, Dominant9, Sus2Add4
 };
 
 enum class SectionType {
-  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro
+  Intro, Verse, PreChorus, Chorus, Bridge, Instrumental, Outro, Unknown
 };
 
 enum class WindowType {
@@ -752,6 +848,95 @@ std::vector<float> amplitude_to_db(const std::vector<float>& values,
 std::vector<float> db_to_power(const std::vector<float>& values, float ref = 1.0f);
 std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref = 1.0f);
 ```
+
+## ミキシングエンジン
+
+C++ コアには、C、Python、Node、WASM の各バインディングから使われるミキシングエンジンも含まれます。主な構成要素は、チャンネルストリップ、バス、センド、FX バス、VCA グループ、オートメーションレーン、メータースナップショット、ゴニオメーターバッファ、シーンプリセット、オフラインステレオレンダーです。
+
+```cpp
+#include <sonare/mixing/channel_strip.h>
+#include <sonare/mixing/api/presets.h>
+
+auto scene = sonare::mixing::api::scene_preset(
+  sonare::mixing::api::scene_preset_from_string("vocalReverbSend")
+);
+auto json = sonare::mixing::api::scene_to_json(scene);
+
+sonare::mixing::ChannelStrip strip;
+strip.set_input_trim_db(3.0f);
+strip.set_fader_db(-6.0f);
+strip.set_pan(-0.15f);
+strip.set_width(1.1f);
+strip.prepare(48000.0, 512);
+```
+
+ランタイム横断の例とシーン単位の説明は [ミキシングエンジン](./mixing.md) を参照してください。
+
+## マスタリング
+
+高レベルのマスタリング API は `sonare::mastering::api` にあります。`master_audio_mono` / `master_audio_stereo` は組み込みの `Preset`（必要に応じてフラットなドット記法の上書き値付き）を適用し、チェーン結果を返します。`preset_*` ヘルパーはプリセット識別子の列挙と解決を行います。
+
+```cpp
+#include <sonare/mastering/api/presets.h>
+
+namespace api = sonare::mastering::api;
+
+// 25 個の組み込みプリセット: Pop, EDM, Acoustic, HipHop, AIMusic, Speech, Streaming,
+// YouTube, Broadcast, Podcast, Audiobook, Cinema, JPop, Ambient, Lofi, Classical,
+// DrumAndBass, Techno, Metal, Trap, RnB, Jazz, KPop, Trance, GameOst。
+std::vector<std::string> names = api::preset_names();
+api::Preset preset = api::preset_from_string("aiMusic");
+
+// 任意のフラットな上書き値（チェーン設定 params と同じドット記法）
+api::Param overrides[] = {{"loudness.targetLufs", -13.0f}};
+
+api::MonoChainResult result = api::master_audio_mono(
+  preset, samples.data(), samples.size(), sample_rate, overrides, 1);
+// result にはレンダリング後のサンプルと各ステージの指標が含まれます。
+
+// ステレオ版:
+// api::master_audio_stereo(preset, left, right, length, sample_rate, overrides, 1);
+```
+
+`preset_to_string(Preset)` は正規の識別子を返し（例外を投げず、不正値には `"unknown"`）、`preset_config(Preset)` はチェーン実行前に確認・調整できる可変の `MasteringChainConfig` を返します。名前付きプロセッサのレジストリやアシスタント／プロファイルの JSON ヘルパーは、[マスタリングプロセッサ](./mastering-processors.md) と [マスタリングアシスタント](./mastering-assistant.md) を参照してください。
+
+## C API
+
+FFI 統合向けの C ABI です。`SonareAudio*` を受け取るハンドルベースの入口と、`float*` の生サンプルを受け取るサンプルベースの入口があります。
+
+```c
+#include <sonare_c.h>
+
+SonareError sonare_audio_from_buffer(const float* data, size_t length, int sample_rate,
+                                     SonareAudio** out);
+SonareError sonare_audio_from_memory(const uint8_t* data, size_t length, SonareAudio** out);
+SonareError sonare_audio_from_file(const char* path, SonareAudio** out);  // WASM では利用不可
+void        sonare_audio_free(SonareAudio* audio);
+
+SonareError sonare_audio_detect_bpm(const SonareAudio* audio, float* out_bpm);
+SonareError sonare_audio_detect_key(const SonareAudio* audio, SonareKey* out_key);
+SonareError sonare_audio_analyze(const SonareAudio* audio, SonareAnalysisResult* out);
+
+SonareError sonare_detect_bpm(const float* samples, size_t length, int sample_rate,
+                              float* out_bpm);
+SonareError sonare_detect_key(const float* samples, size_t length, int sample_rate,
+                              SonareKey* out_key);
+SonareError sonare_analyze(const float* samples, size_t length, int sample_rate,
+                           SonareAnalysisResult* out);
+
+void sonare_free_floats(float* ptr);
+void sonare_free_ints(int* ptr);
+void sonare_free_result(SonareAnalysisResult* result);
+const char* sonare_error_message(SonareError error);
+const char* sonare_version(void);
+```
+
+`SonareAnalysisResult` は C ABI 用のコンパクトな結果で、BPM、BPM 確信度、キー、
+拍子、ビート時刻を保持します。C++ の `AnalysisResult` にあるコード、セクション、
+音色、ダイナミクス、リズム、メロディ、form などは、専用の C ABI 関数または
+高レベル C++ API から取得します。
+
+エフェクト、特徴量、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。完全な一覧は `src/sonare_c.h` を参照してください。
 
 ## エラーハンドリング
 

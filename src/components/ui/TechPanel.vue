@@ -1,8 +1,8 @@
 <script setup lang="ts">
 defineProps<{
-  title?: string
-  variant?: 'default' | 'transparent'
-}>()
+  title?: string;
+  variant?: 'default' | 'transparent';
+}>();
 </script>
 
 <template>
@@ -53,9 +53,9 @@ defineProps<{
 
 .tech-panel__title {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.14em;
   color: var(--panel-text);
   text-transform: uppercase;
 }

@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+.scope {
+  --drums-color: hsl(28, 85%, 55%);
+  --melody-color: hsl(190, 75%, 55%);
+  --bezel-color: var(--demo-bezel, #080a0e);
+  --screen-bg: var(--demo-screen-bg, rgb(6, 8, 12));
+  --accent: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
+
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.scope__bezel {
+  position: relative;
+  background: linear-gradient(145deg, var(--demo-bezel-start, #10131a) 0%, var(--bezel-color) 50%, var(--demo-bezel-end, #060810) 100%);
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid var(--accent);
+  box-shadow:
+    0 2px 0 var(--demo-bezel-inset-light, rgba(255, 255, 255, 0.02)) inset,
+    0 -2px 0 var(--demo-bezel-inset-dark, rgba(0, 0, 0, 0.4)) inset,
+    0 20px 40px -10px var(--demo-bezel-shadow-deep, rgba(0, 0, 0, 0.7)),
+    0 0 60px -10px rgba(139, 92, 246, 0.1);
+}
+
+.scope__screen {
+  position: relative;
+  background: var(--screen-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  box-shadow:
+    0 0 0 1px var(--demo-screen-inset-1, rgba(0, 0, 0, 0.8)) inset,
+    0 0 30px var(--demo-screen-inset-2, rgba(0, 0, 0, 0.5)) inset,
+    0 0 60px rgba(100, 180, 255, 0.02) inset;
+}
+
+.scope__screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 20%, rgba(139, 92, 246, 0.008) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.scope__canvas {
+  display: block;
+}
+
+.scope__indicators {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 24px;
+  z-index: 20;
+}
+
+.scope__indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--demo-indicator-bg, rgba(0, 0, 0, 0.6));
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+}
+
+.scope__indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.scope__indicator--drums .scope__indicator-dot {
+  background: var(--drums-color);
+  box-shadow: 0 0 8px var(--drums-color);
+}
+
+.scope__indicator--melody .scope__indicator-dot {
+  background: var(--melody-color);
+  box-shadow: 0 0 8px var(--melody-color);
+  animation-delay: 0.5s;
+}
+
+.scope__indicator-label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scope__indicator--drums .scope__indicator-label {
+  color: var(--drums-color);
+}
+
+.scope__indicator--melody .scope__indicator-label {
+  color: var(--melody-color);
+}
+
+.scope__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 8px 0;
+}
+
+.scope__model {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.5));
+}
+
+.scope__type {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: var(--demo-text-faint, rgba(255, 255, 255, 0.25));
+  text-transform: uppercase;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@media (max-width: 680px) {
+  .scope {
+    max-width: 480px;
+  }
+}
+
+@media (max-width: 520px) {
+  .scope {
+    max-width: 380px;
+  }
+
+  .scope__bezel {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .scope__indicators {
+    gap: 16px;
+    top: 18px;
+  }
+
+  .scope__indicator {
+    padding: 3px 8px;
+  }
+
+  .scope__indicator-label {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 400px) {
+  .scope {
+    max-width: 300px;
+  }
+}
