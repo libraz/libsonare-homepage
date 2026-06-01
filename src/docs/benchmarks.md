@@ -4,6 +4,10 @@ Performance comparison of libsonare against librosa (Python) for audio analysis 
 
 Use this page as performance context, not as a functional tutorial. If you need to learn the API first, read [Getting Started](./getting-started.md), [Feature Map](./api-surface.md), and the runtime page for your language.
 
+::: info How to read benchmark numbers
+Lower latency means the operation finished faster for this exact workload. A speedup such as `2x` means "twice as fast in this benchmark," not "twice as fast for every file." Hardware, sample rate, clip length, codec decode time, and whether intermediate features are reused can all change the result.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:

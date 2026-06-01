@@ -21,6 +21,10 @@ libsonare provides audio analysis, mastering, mixing, and editing DSP capabiliti
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
 :::
 
+::: info The JavaScript API is not a file loader
+Most browser functions do not take an MP3 or WAV path. They take decoded PCM samples plus `sampleRate`. Bytes from `fetch` or `<input type="file">` must be decoded to an `AudioBuffer` or equivalent sample array before calling libsonare.
+:::
+
 For a cross-binding feature map, see [Feature Map](./api-surface.md). For the complete mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
 
 ## How To Read This Reference
@@ -129,6 +133,15 @@ ABI version of the realtime voice-changer POD config used by native and FFI APIs
 
 ```typescript
 function voiceChangerAbiVersion(): number
+```
+
+### Voice Preset Accessors
+
+Use these when you need the canonical voice-character preset ID or the resolved flat POD config without parsing preset JSON.
+
+```typescript
+function voiceCharacterPresetId(preset: VoicePresetId | number): string | null
+function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null
 ```
 
 ### Realtime environment helpers
@@ -336,7 +349,7 @@ Use the focused helpers when the default `analyze(...)` result is either too bro
 | Rhythm character | `analyzeRhythm(samples, sampleRate, ...)` | Reports groove, syncopation, and regularity style features. |
 | Dynamics | `analyzeDynamics(samples, sampleRate, ...)` | Dynamic range, loudness range, crest factor, and compression flag. |
 | Timbre | `analyzeTimbre(samples, sampleRate, ...)` | Brightness, warmth, density, roughness, and complexity. |
-| Chords | `detectChords(samples, sampleRate, options?)` | Chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' | 'nnls'`. |
+| Chords | `detectChords(samples, sampleRate, options?)` | Chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' \| 'nnls'`. |
 | Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. |
 | Melody | `analyzeMelody(samples, sampleRate, ...)` | Monophonic melody contour based on pitch tracking. |
 
@@ -783,9 +796,9 @@ const lra = ebur128LoudnessRange(samples, sampleRate);
 const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
 ```
 
-Closest CLI equivalents:
+Closest CLI equivalents from the source-built C++ CLI:
 
-```bash
+```bash [C++ CLI]
 sonare cqt song.wav
 sonare vqt song.wav
 sonare nnls-chroma song.wav
@@ -1942,7 +1955,7 @@ try {
 
 Source-built C++ CLI equivalents for file-based EQ and filtering:
 
-```bash
+```bash [C++ CLI]
 sonare eq track.wav --type 2 --frequency-hz 8000 --gain-db 4 --q 0.7 -o eq.wav
 sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
 ```
@@ -1967,9 +1980,9 @@ try {
 }
 ```
 
-Closest CLI equivalents for offline files:
+Closest CLI equivalents for offline files from the source-built C++ CLI:
 
-```bash
+```bash [C++ CLI]
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
@@ -1985,15 +1998,18 @@ import {
   init,
   RealtimeVoiceChanger,
   realtimeVoiceChangerPresetJson,
+  realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetNames,
   validateRealtimeVoiceChangerPresetJson,
+  voiceCharacterPresetId,
 } from '@libraz/libsonare';
 
 await init();
 
 const preset = realtimeVoiceChangerPresetNames()[1]; // e.g. "bright-idol"
 const presetJson = realtimeVoiceChangerPresetJson(preset);
-console.log(validateRealtimeVoiceChangerPresetJson(presetJson).ok);
+const presetConfig = realtimeVoiceChangerPresetConfig(preset);
+console.log(voiceCharacterPresetId(1), validateRealtimeVoiceChangerPresetJson(presetJson).ok, presetConfig);
 
 const changer = new RealtimeVoiceChanger(preset);
 changer.prepare(48000, 128, 1);
@@ -2244,7 +2260,7 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Mastering | `MasteringProcessorParams`, `MasteringStereoChainResult` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
-| Realtime voice | `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
+| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | Mixing realtime buffers | `MixerRealtimeBuffer` |
 
 ## Performance Summary

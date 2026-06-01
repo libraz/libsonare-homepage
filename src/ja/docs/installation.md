@@ -21,6 +21,10 @@
 | Node ネイティブのサービスやデスクトップツール | `bindings/node` を `@libraz/libsonare-native` としてビルド |
 | C++ 組み込みや独自 WASM ビルド | ソースからビルド |
 
+::: tip 迷ったらアプリの実行場所で選ぶ
+ブラウザ UI なら npm / WASM、ノートブックやローカル処理なら PyPI、ターミナルだけで確認するなら PyPI 同梱の `sonare` CLI から始めます。Node ネイティブや C++ ビルドは、WASM や Python では性能・配布・既存コード連携が足りないと分かった段階で選ぶと判断しやすくなります。
+:::
+
 ## npm（ブラウザ / WASM）
 
 Node.js 18.0.0 以上が必要です。
@@ -79,6 +83,10 @@ SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
 FFmpeg 有効ビルドには FFmpeg の開発ライブラリが必要です。macOS では `brew install ffmpeg`、Debian/Ubuntu 系では `libavformat-dev libavcodec-dev libavutil-dev libswresample-dev` をインストールしてください。
 
 ## ソースからビルド
+
+::: info ソースビルドとは？
+公開済みの npm / PyPI パッケージをそのまま使うのではなく、手元の環境で C++ コアやバインディングをコンパイルする方法です。独自の FFmpeg 対応、未配布の環境、開発中の変更確認には有効ですが、最初の導入では通常パッケージインストールの方が簡単です。
+:::
 
 ### 前提条件
 
@@ -184,7 +192,7 @@ sonare analyze audio.mp3 --json > analysis.json
 ### C++
 
 ```cpp
-#include <sonare/quick.h>
+#include <quick.h>
 
 // BPM 検出
 float bpm = sonare::quick::detect_bpm(samples, size, sample_rate);

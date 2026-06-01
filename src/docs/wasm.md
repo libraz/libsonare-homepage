@@ -185,9 +185,9 @@ console.log(`BPM: ${bpm}, Key: ${key.name}`);
 console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
-CLI equivalents for the analysis and editing calls above:
+CLI equivalents for the calls above. `analyze`, `hpss`, and `pitch` are available in the Python CLI; `pitch-shift` is from the source-built C++ CLI:
 
-```bash
+```bash [Mixed CLI]
 sonare analyze music.mp3 --json
 sonare hpss music.mp3 --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
@@ -657,9 +657,9 @@ if (stats.estimate.key >= 0) {
 ### Visualization Example
 
 ```typescript
-import type { FrameBuffer } from '@libraz/libsonare';
+import type { StreamAnalyzer } from '@libraz/libsonare';
 
-function renderVisualization(frames: FrameBuffer, nMels: number) {
+function renderVisualization(frames: ReturnType<StreamAnalyzer['readFrames']>, nMels: number) {
   const { nFrames, mel, chroma, onsetStrength } = frames;
 
   // Render mel spectrogram (scrolling display). Values are linear power; clamp/scale to 0-1.
@@ -709,7 +709,7 @@ const fromMfcc = mfccToAudio(m.coefficients, m.nMfcc, m.nFrames, mel.nMels, samp
 
 Source-built C++ CLI equivalents:
 
-```bash
+```bash [C++ CLI]
 sonare mel-to-audio music.wav -o mel-reconstructed.wav
 sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 ```
@@ -748,9 +748,9 @@ try {
 ```
 
 For file-based offline processing from the terminal, use the closest CLI
-commands:
+commands. `pitch-shift` is from the source-built C++ CLI; `voice-change` is available in the Python CLI:
 
-```bash
+```bash [Mixed CLI]
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
@@ -763,7 +763,9 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 import {
   init,
   RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetNames,
+  voiceCharacterPresetId,
 } from '@libraz/libsonare';
 
 await init();
@@ -778,13 +780,19 @@ try {
   realtime.input.set(inputBlock.subarray(0, 128));
   realtime.process();
 
-  console.log(realtimeVoiceChangerPresetNames(), out, realtime.output);
+  console.log(
+    voiceCharacterPresetId(1),
+    realtimeVoiceChangerPresetNames(),
+    realtimeVoiceChangerPresetConfig('bright-idol'),
+    out,
+    realtime.output,
+  );
 } finally {
   changer.delete();
 }
 ```
 
-Use `realtimeVoiceChangerPresetJson(name)` to inspect a built-in preset and `validateRealtimeVoiceChangerPresetJson(json)` before accepting user-authored preset JSON. Current factory presets use schema version `1`.
+Use `realtimeVoiceChangerPresetJson(name)` to inspect a built-in preset and `validateRealtimeVoiceChangerPresetJson(json)` before accepting user-authored preset JSON. Current factory presets use schema version `1`. If you need the canonical ID or resolved flat POD config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)`.
 
 ## Browser Compatibility
 

@@ -94,8 +94,8 @@ re_mel = sonare.mfcc_to_mel(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_frames,
 # re_mel.rows = n_mels; re_mel.data is row-major [rows x n_frames]
 ```
 
-```bash [CLI]
-# The CLI audio-preview path for these same forward/inverse settings:
+```bash [C++ CLI]
+# Source-built C++ CLI audio-preview path for these same forward/inverse settings:
 sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-preview.wav
 ```
 
@@ -135,7 +135,7 @@ from_mfcc = sonare.mfcc_to_audio(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_fr
 # note the n_mels (128) argument before sample_rate
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # Source-built C++ CLI equivalents for quick file previews:
 sonare mel-to-audio song.wav -o mel-preview.wav
 sonare mfcc-to-audio song.wav -o mfcc-preview.wav
@@ -177,7 +177,7 @@ preview = sonare.mel_to_audio(mel.power, mel.n_mels, mel.n_frames, sample_rate=s
 print(len(samples), len(preview))
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # Listen to the reconstructed preview and compare it with the source.
 sonare mel-to-audio song.wav -o mel-preview.wav
 ```

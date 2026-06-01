@@ -12,6 +12,10 @@ libsonare has two realtime-oriented surfaces:
 
 In realtime docs, "chunk" or "block" means a short slice of audio processed repeatedly, often inside a Web Audio `AudioWorklet`. Realtime code should avoid heavy allocation inside the audio callback: prepare objects first, then process blocks.
 
+::: info Chunk, block, and frame
+**Chunks** and **blocks** are short groups of input samples from a realtime stream. **Frames** are time steps of analysis data produced from those blocks. Think "blocks go in, frames come out" when wiring a UI.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -104,9 +108,9 @@ For thread transfer and visualization you often do not need full float precision
 
 | Read method | Element type | `outputFormat` | Use it for |
 |-------------|--------------|----------------|------------|
-| `readFrames(n)` | `Float32Array` | `0` (default) | Full-precision DSP, further analysis |
-| `readFramesI16(n)` | `Int16Array` | `1` | Bandwidth-reduced transfer to a worker / over the wire |
-| `readFramesU8(n)` | `Uint8Array` | `2` | Cheap visualization (a heatmap pixel only needs 8 bits) |
+| `readFrames(n)` | `FrameBuffer` with `Float32Array` / `Int32Array` fields | `0` (default) | Full-precision DSP, further analysis |
+| `readFramesI16(n)` | `StreamFramesI16` with `Int16Array` fields | `1` | Bandwidth-reduced transfer to a worker / over the wire |
+| `readFramesU8(n)` | `StreamFramesU8` with `Uint8Array` fields | `2` | Cheap visualization (a heatmap pixel only needs 8 bits) |
 
 ```typescript
 // A spectrogram canvas only needs 8-bit mel — quantize at the source.

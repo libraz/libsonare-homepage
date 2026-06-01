@@ -6,6 +6,10 @@ Use this page when you already have audio samples and want to change the sound i
 
 If *semitone*, *MIDI note number*, or *formant* are unfamiliar, read [Editing Basics](./glossary/concepts/editing-basics.md) first — this page assumes that vocabulary and focuses on which function to call.
 
+::: info DSP vs editing
+DSP means Digital Signal Processing: measuring or transforming audio as a signal. The editing DSP on this page does more than measure BPM or key; it rewrites the sound itself, changing pitch, duration, or vocal character.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:

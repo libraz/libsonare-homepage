@@ -252,7 +252,7 @@ const result = mfcc(samples, sampleRate, 2048, 512, 128, 13);
 result = sonare.mfcc(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128, n_mfcc=13)
 # result.coefficients - [n_mfcc x n_frames]
 ```
-```bash [CLI]
+```bash [C++ CLI]
 # MFCC 係数をそのまま出力する CLI はありません。ソースビルド C++ CLI では MFCC からの音声プレビューを作れます。
 sonare mfcc-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 --n-mfcc 13 -o mfcc-preview.wav
 ```
@@ -440,7 +440,7 @@ chroma = librosa.feature.chroma_stft(y=y, sr=sr)
 
 **変更後 (C++):**
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 
 auto audio = sonare::Audio::from_file("audio.mp3");
 auto chroma = sonare::Chroma::compute(audio);

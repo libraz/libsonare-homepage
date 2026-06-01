@@ -323,6 +323,8 @@ console.log(`ビート数: ${result.beatTimes.length}`);
 | `shortTermLufs(samples, sampleRate?)` | `Float32Array` | ショートタームラウドネス（3s）の時系列 |
 | `version()` | `string` | ライブラリバージョン |
 | `voiceChangerAbiVersion()` | `number` | リアルタイムボイスチェンジャー POD 設定の ABI バージョン。プリセット JSON の `schemaVersion` とは別 |
+| `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | 序数または ID から正規の voice-character プリセット ID を返す |
+| `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig \| null` | JSON 解析なしで、組み込みボイスプリセットの解決済みフラット POD 設定を返す |
 | `hasFfmpegSupport()` | `boolean` | 読み込まれたネイティブアドオンが FFmpeg デコードに対応しているか |
 
 デフォルトの `sampleRate` は、ヘルパーの種類によって異なります。
@@ -525,7 +527,9 @@ Node ネイティブの `RealtimeVoiceChanger` は `{ sampleRate, maxBlockSize, 
 ```typescript
 import {
   RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetNames,
+  voiceCharacterPresetId,
   voiceChangeRealtime,
 } from '@libraz/libsonare-native';
 
@@ -538,7 +542,15 @@ const changer = new RealtimeVoiceChanger({
 
 const blockOut = changer.processMono(inputBlock);
 const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
-console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), blockOut, rendered);
+const presetConfig = realtimeVoiceChangerPresetConfig('bright-idol');
+console.log(
+  voiceCharacterPresetId(1),
+  realtimeVoiceChangerPresetNames(),
+  presetConfig,
+  changer.latencySamples(),
+  blockOut,
+  rendered,
+);
 changer.destroy();
 ```
 
@@ -642,7 +654,7 @@ interface PitchResult {
 | ストリーミング解析 | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | マスタリングとメータリング | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
 | ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanMode`, `SendTiming` |
-| リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerOptions` |
+| リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | リアルタイムエンジングラフ | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
 | リアルタイムエンジントランスポート | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |

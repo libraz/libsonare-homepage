@@ -4,6 +4,10 @@ This document describes the internal architecture of libsonare.
 
 Use this page after the task and runtime guides. It is an internal map for contributors and integrators who need to understand how public APIs connect to the C++ core.
 
+::: info How to read the layers
+The outer API layers are what apps call. The core and feature layers are where reusable signal-processing work happens. Bindings should stay thin: they translate language shapes into the same C++ behavior rather than reimplementing DSP.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:

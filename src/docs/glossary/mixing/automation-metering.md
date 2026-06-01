@@ -32,7 +32,7 @@ Rooms lie and ears tire, so a mix is also judged on meters:
 Meters describe; they do not decide. Use them to catch problems your ears miss, not to chase numbers.
 
 ::: details How libsonare models automation and metering
-Automation is scheduled on `AutomationLane`s as sample-accurate `AutomationEvent`s with an `AutomationCurveType` (`linear`/`exponential`/`s-curve`/`hold`); an `AutomationTarget` points at a fader, pan, send, or insert parameter, and `InsertAutomationLane` automates inside an insert. Metering uses a `MeterProcessor` (`MeterConfig`) for peak/true-peak/RMS/LUFS and correlation, plus a `GoniometerBuffer` of `GoniometerPoint`s for the vectorscope. All of this is real-time-safe, so automation plays back and meters update both offline and inside an AudioWorklet, with engine-side telemetry available for UI displays.
+Automation is scheduled on `AutomationLane`s as sample-accurate `AutomationEvent`s with an `AutomationCurve` (`linear`/`exponential`/`s-curve`/`hold`); an `AutomationTarget` points at a fader, pan, send, or insert parameter, and `InsertAutomationLane` automates inside an insert. Metering uses a `MeterProcessor` (`MeterConfig`) for peak/true-peak/RMS/LUFS and correlation, plus a `GoniometerBuffer` of `GoniometerPoint`s for the vectorscope. All of this is real-time-safe, so automation plays back and meters update both offline and inside an AudioWorklet, with engine-side telemetry available for UI displays.
 :::
 
 Related: [Mixing Basics](../concepts/mixing-basics.md), [Channel Strip](./channel-strip.md), [True Peak](../true-peak.md), [Reading Mastering Meters](../mastering/meter-reading.md)

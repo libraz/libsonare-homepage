@@ -26,7 +26,7 @@
     "check:mastering": "node scripts/validate-mastering-presets.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.4.16",
     "@vitejs/plugin-vue": "^6",
     "@vue/compiler-dom": "^3.5",
     "@vue/test-utils": "^2.4",
@@ -36,15 +36,16 @@
     "vite": "^8",
     "vitepress": "^1.6.4",
     "vitest": "^4",
-    "vue": "^3.5.34"
+    "vue": "^3.5.35"
   },
   "volta": {
-    "node": "22.21.1",
-    "yarn": "4.12.0"
+    "node": "22.22.3",
+    "yarn": "4.15.0"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
     "mermaid": "^11.15.0",
+    "three": "^0.184.0",
     "vitepress-plugin-mermaid": "^2.0.17"
   }
 }

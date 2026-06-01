@@ -11,6 +11,10 @@ libsonare includes a real-time-safe mixing and routing engine on top of the same
 
 If the words *strip*, *bus*, *send*, *fader*, *pan*, or *automation* are new to you, read [Mixing Basics](./glossary/concepts/mixing-basics.md) first — this page assumes you know what they mean and focuses on **how libsonare implements them** and **what to call to get a job done**.
 
+::: info Three words to know first
+A **strip** is one track's processing lane. A **bus** is a shared destination for one or more tracks. A **send** copies some of a track to another bus while the original path continues. These three ideas make faders, panning, reverb sends, and meters much easier to follow.
+:::
+
 ::: tip Where mixing sits in the pipeline
 **Analysis** tells you *what* a track is. **Editing** fixes timing and pitch of one track. **Mixing** balances *several* tracks into a stereo bus. **Mastering** polishes that finished stereo mix for delivery. Mixing is the stage that turns "a folder of stems" into "a song". You usually mix first, then master the result.
 :::

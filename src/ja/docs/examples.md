@@ -304,7 +304,7 @@ with Audio.from_file("song.mp3") as audio:
     trimmed = audio.trim(-60)               # -60 dB 以下の無音をトリム
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # ソースビルド C++ CLI
 sonare time-stretch song.wav --rate 0.8 -o slower.wav
 sonare pitch-shift song.wav --semitones 2 -o higher.wav
@@ -522,7 +522,7 @@ audioCtx.createMediaStreamSource(stream).connect(worklet);
 ### 基本的な使い方
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -540,7 +540,7 @@ int main() {
 ### MusicAnalyzer での完全解析
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -571,7 +571,7 @@ int main() {
 ### 特徴抽出
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -597,7 +597,7 @@ int main() {
 ### オーディオエフェクト
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 
 int main() {
   auto audio = sonare::Audio::from_file("music.mp3");
@@ -620,7 +620,7 @@ int main() {
 ### ゼロコピースライシング
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -667,7 +667,7 @@ sonare analyze song.mp3 --json > analysis.json
 `pitch-shift`、`time-stretch`、エクスポート用 `hpss` などのコマンドは、ソースからビルドする C++ 製 `sonare_cli` バイナリで提供されます。`pip install libsonare` でインストールされる Python CLI には、[CLI リファレンス](/ja/docs/cli) で説明する解析・特徴抽出系コマンドのみが含まれます。
 :::
 
-```bash
+```bash [C++ CLI]
 # 2 半音上に移調
 sonare pitch-shift --semitones 2 input.wav -o output.wav
 

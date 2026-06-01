@@ -20,6 +20,10 @@ Use this page when you want scripts, notebooks, batch analysis, or local tools t
 
 Most Python APIs accept raw sample arrays plus `sample_rate`. The `Audio` wrapper is a convenience for file-based workflows.
 
+::: tip Start with `Audio` or call functions directly
+If your workflow begins with an audio file, start with `Audio.from_file(...)`. If you already have samples from NumPy or another loader, call module-level functions such as `detect_bpm(samples, sample_rate)` directly.
+:::
+
 ## How To Read This Reference
 
 Read this page in three passes:
@@ -229,6 +233,8 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
 | `version()` | `str` | Library version |
 | `voice_changer_abi_version()` | `int` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
+| `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal |
+| `realtime_voice_changer_preset_pod(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
 | `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
@@ -311,6 +317,7 @@ import libsonare as sonare
 
 print(sonare.realtime_voice_changer_preset_names())
 print(sonare.voice_changer_abi_version())  # native POD-config ABI version
+print(sonare.voice_character_preset_id(1))  # "bright-idol"
 preset_json = sonare.realtime_voice_changer_preset_json("bright-idol")
 print(sonare.validate_realtime_voice_changer_preset_json(preset_json)["ok"])
 pod = sonare.realtime_voice_changer_preset_pod("bright-idol")  # canonical RealtimeVoiceChangerConfig

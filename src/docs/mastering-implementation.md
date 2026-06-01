@@ -9,6 +9,10 @@ This page explains how the `/mastering` demo turns a small set of user decisions
 
 The browser demo keeps long-form explanation in VitePress docs. The application UI only shows short labels and links into these pages.
 
+::: info Worker, transferable buffer, and object URL
+A **worker** runs JavaScript off the main UI thread. A **transferable buffer** lets the app hand audio memory to that worker without copying it. An **object URL** is a temporary browser-local URL for playback or download of generated audio/report data.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:

@@ -15,6 +15,12 @@ By the end of this page you should be able to:
 
 ## How To Use This Map
 
+This page is not a list to memorize. Choose one task, then follow that row to the right runtime and guide.
+
+::: info Runtime, API, and binding
+**Runtime** means where the code runs: browser, Python, CLI, Node, or C++. **API** means the functions and classes you call. **Binding** means the layer that lets another language call the same C++ core. If you are unsure, choose one runtime first and read only that runtime's API page.
+:::
+
 | If you need to... | Read... |
 |-------------------|---------|
 | Find whether a feature exists | [Feature Families](#feature-families) |
@@ -35,6 +41,16 @@ By the end of this page you should be able to:
 
 ## Feature Families
 
+::: details Acronyms in the feature table
+- **STFT** — short-time Fourier transform, the basis of spectrograms.
+- **MFCC** — compact timbre features often used for ML and classification.
+- **CQT / VQT** — frequency transforms aligned with musical pitch spacing.
+- **NNLS / NMF** — matrix-factorization methods that split audio features into non-negative parts.
+- **PLP** — a feature that estimates the main rhythmic pulse.
+- **LUFS / LRA** — loudness and loudness-range metrics.
+- **VCA** — a group control that moves several strip levels together.
+:::
+
 | Family | What is covered | Main pages |
 |--------|-----------------|------------|
 | Analysis | BPM, key, key candidates, beats, downbeats, onsets, chords, sections, melody, timbre, dynamics, rhythm, acoustic analysis | [JavaScript API](./js-api.md), [Python API](./python-api.md), [C++ API](./cpp-api.md) |
@@ -42,7 +58,7 @@ By the end of this page you should be able to:
 | Metering | Offline level, loudness, crest-factor, true-peak and DC-offset meters; clipping and dynamic-range reports; stereo correlation/width; vectorscope, phase-scope, and spectrum snapshots | [JavaScript API](./js-api.md#metering), [Python API](./python-api.md), [Native Bindings](./native-bindings.md) |
 | Scale quantization | Snap MIDI notes to a scale, measure the correction in semitones, and test pitch-class membership | [JavaScript API](./js-api.md#scale-quantization), [Python API](./python-api.md) |
 | Effects and editing | HPSS, HPSS with residual, harmonic/percussive extraction, normalize, trim, remix, phase vocoder, time stretch, pitch shift, pitch correction, note stretch, voice pitch/formant change, realtime voice presets | [Editing DSP](./editing-dsp.md), [JavaScript API](./js-api.md#audio-effects) |
-| Room acoustics | Impulse-response RT60/EDT/C50/C80/D50 analysis and blind acoustic estimation from normal recordings | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
+| Room acoustics | Impulse-response reverberation time (RT60 / EDT), clarity (C50 / C80), definition (D50), and blind acoustic estimation from normal recordings | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
 | Mixing | Channel strips, buses, sends, VCA groups, scene presets, automation, meters, goniometer, offline rendering | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | Mastering assistant | Source audio profile, chain suggestion JSON, streaming-platform preview JSON | [Mastering Assistant](./mastering-assistant.md) |
 | Mastering | Presets, full chains, named processors, pair processors, pair analyses, stereo analyses, streaming mastering chain | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Mastering Implementation](./mastering-implementation.md) |

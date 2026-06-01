@@ -9,6 +9,10 @@ libsonare includes room-acoustic analysis for measuring or estimating how a spac
 
 This is different from music analysis. `detectBpm(...)` and `analyze(...)` describe a song; `analyzeImpulseResponse(...)` and `detectAcoustic(...)` describe the room or playback environment.
 
+::: info What is an impulse response?
+An impulse response (IR) records how a room rings and decays after a short excitation such as a clap, balloon pop, or sweep. Because it captures the room reaction rather than the song, it is a cleaner input for RT60, clarity, and other room-acoustic metrics.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:

@@ -465,7 +465,7 @@ describe('MasteringDemo flow', () => {
     );
   });
 
-  it('caps the render target when source analysis indicates over-limiting risk', async () => {
+  it('keeps the selected render target when source analysis reports limiting risk', async () => {
     const wrapper = mount(MasteringDemo);
 
     await loadSource(wrapper);
@@ -485,7 +485,7 @@ describe('MasteringDemo flow', () => {
 
     expect(masteringMock.render).toHaveBeenCalledWith(
       expect.objectContaining({
-        targetLufs: -17,
+        targetLufs: -14,
       }),
     );
   });

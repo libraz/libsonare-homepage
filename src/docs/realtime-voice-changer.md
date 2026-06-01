@@ -4,6 +4,10 @@
 
 For a one-shot offline pitch/formant edit, use [`voiceChange(...)`](./editing-dsp.md#offline-voicechange-vs-realtimevoicechanger). For a live or chunked preset chain, use this page.
 
+::: info Why this is a class, not just a function
+Live voice processing has memory: gates, compressors, reverbs, and smooth pitch/formant changes all depend on previous blocks. `RealtimeVoiceChanger` keeps that state across calls. Recreating it for every block would sound worse and add unnecessary setup cost.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -102,15 +106,20 @@ if (!validation.ok) {
 
 Current built-in preset JSON uses schema version `1`. The native POD-config ABI is separate; check it with `voiceChangerAbiVersion()` when you are crossing FFI or native boundaries.
 
+If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. Python exposes the same native-config path as `realtime_voice_changer_preset_pod(...)`.
+
 ## Python
 
 ```python
 import libsonare as sonare
 
+print(sonare.voice_character_preset_id(1))
+preset_config = sonare.realtime_voice_changer_preset_pod("bright-idol")
+
 with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
     out = changer.process_mono(input_block)
     changer.set_config("soft-whisper")
-    print(sonare.realtime_voice_changer_preset_names(), changer.latency_samples())
+    print(sonare.realtime_voice_changer_preset_names(), preset_config, changer.latency_samples())
 
 processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
 ```

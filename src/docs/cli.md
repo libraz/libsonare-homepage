@@ -22,6 +22,10 @@ By the end of this page you should be able to:
 | Get only key | `sonare key music.mp3` |
 | Produce script-friendly output | `sonare analyze music.mp3 --json` |
 
+::: info What is a CLI?
+CLI means Command Line Interface: a tool you run from a terminal. It is good for quick checks before integration, batch processing many files, and piping JSON into another script. If you are building a visual UI or live audio path, a WASM, Python, or C++ API is usually the better entry point.
+:::
+
 ## Which CLI Are You Using?
 
 There are two `sonare` command-line entry points in the source tree:
@@ -164,9 +168,9 @@ Useful options:
 | `--use-hpss` | Analyze harmonic content for cleaner key detection on drum-heavy material |
 | `--loudness-weighted` | Weight chroma frames by RMS so quieter passages contribute less |
 | `--high-pass-hz FREQ` | Ignore low-frequency energy before key analysis |
-| `--modes major-minor|all|...` | Limit candidate modes |
-| `--profile ks|krumhansl|temperley|shaath|keyfinder|faraldo-edmt|edmt|faraldo-edma|edma|faraldo-edmm|edmm|bellman-budge|bellman` | Choose the key-profile family |
-| `--genre-hint auto|edm|electronic|dance|pop|classical|jazz` | Let the CLI choose a profile from a genre hint |
+| `--modes major-minor\|all\|...` | Limit candidate modes |
+| `--profile ks\|krumhansl\|temperley\|shaath\|keyfinder\|faraldo-edmt\|edmt\|faraldo-edma\|edma\|faraldo-edmm\|edmm\|bellman-budge\|bellman` | Choose the key-profile family |
+| `--genre-hint auto\|edm\|electronic\|dance\|pop\|classical\|jazz` | Let the CLI choose a profile from a genre hint |
 
 ::: details What are key profiles, genre hints, and `--high-pass-hz`?
 - **Key profile** — a template of how prominent each of the 12 pitch classes tends to be in a given key. The detector compares your song's chroma against these templates and picks the best match. Different families (`ks` / `krumhansl`, `temperley`, `shaath` / `keyfinder`, the Faraldo EDM profiles, `bellman` / `bellman-budge`) were tuned on different material, so one may fit your genre better than another.
@@ -354,10 +358,10 @@ The source-built C++ CLI includes those same three edit commands and adds lower-
 |-------------|----------------------------|
 | `pitch-shift` | `--semitones` |
 | `time-stretch` | `--rate` |
-| `normalize` | `-o`; `--mode peak|rms`, `--target-db` |
+| `normalize` | `-o`; `--mode peak\|rms`, `--target-db` |
 | `gain` | `-o`, `--gain-db` |
 | `fade` | `-o`, `--fade-in` and/or `--fade-out` |
-| `filter` | `-o`, `--type hp|lp|bp|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch |
+| `filter` | `-o`, `--type hp\|lp\|bp\|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch |
 | `resample` | `-o`, `--target-sr` |
 | `preemphasis`, `deemphasis`, `trim-silence`, `split-silence` | `-o` when writing a processed file |
 

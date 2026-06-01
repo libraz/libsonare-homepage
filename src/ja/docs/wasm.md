@@ -183,9 +183,9 @@ console.log(`BPM: ${bpm}, キー: ${key.name}`);
 console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
-上の解析・編集呼び出しに対応する CLI 例:
+上の呼び出しに対応する CLI 例です。`analyze`、`hpss`、`pitch` は Python CLI、`pitch-shift` はソースビルド C++ CLI のコマンドです。
 
-```bash
+```bash [Mixed CLI]
 sonare analyze music.mp3 --json
 sonare hpss music.mp3 --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
@@ -653,9 +653,9 @@ if (stats.estimate.key >= 0) {
 ### ビジュアライゼーション例
 
 ```typescript
-import type { FrameBuffer } from '@libraz/libsonare';
+import type { StreamAnalyzer } from '@libraz/libsonare';
 
-function renderVisualization(frames: FrameBuffer, nMels: number) {
+function renderVisualization(frames: ReturnType<StreamAnalyzer['readFrames']>, nMels: number) {
   const { nFrames, mel, chroma, onsetStrength } = frames;
 
   // メルスペクトログラムを描画（スクロール表示）。値は線形パワーなので 0-1 にクランプ／スケールする。
@@ -705,7 +705,7 @@ const fromMfcc = mfccToAudio(m.coefficients, m.nMfcc, m.nFrames, mel.nMels, samp
 
 ソースビルド C++ CLI での対応コマンド:
 
-```bash
+```bash [C++ CLI]
 sonare mel-to-audio music.wav -o mel-reconstructed.wav
 sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 ```
@@ -743,9 +743,9 @@ try {
 }
 ```
 
-ファイル単位のオフライン処理をターミナルで行う場合は、近い CLI コマンドとして次を使います。
+ファイル単位のオフライン処理をターミナルで行う場合は、近い CLI コマンドとして次を使います。`pitch-shift` はソースビルド C++ CLI、`voice-change` は Python CLI のコマンドです。
 
-```bash
+```bash [Mixed CLI]
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
@@ -758,7 +758,9 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 import {
   init,
   RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetNames,
+  voiceCharacterPresetId,
 } from '@libraz/libsonare';
 
 await init();
@@ -773,13 +775,19 @@ try {
   realtime.input.set(inputBlock.subarray(0, 128));
   realtime.process();
 
-  console.log(realtimeVoiceChangerPresetNames(), out, realtime.output);
+  console.log(
+    voiceCharacterPresetId(1),
+    realtimeVoiceChangerPresetNames(),
+    realtimeVoiceChangerPresetConfig('bright-idol'),
+    out,
+    realtime.output,
+  );
 } finally {
   changer.delete();
 }
 ```
 
-組み込みプリセットの内容確認には `realtimeVoiceChangerPresetJson(name)` を使います。ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。現在のファクトリープリセットはスキーマバージョン `1` です。
+組み込みプリセットの内容確認には `realtimeVoiceChangerPresetJson(name)` を使います。ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。現在のファクトリープリセットはスキーマバージョン `1` です。正規 ID や解決済みのフラット POD 設定だけが必要な場合は、`voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。
 
 ## ブラウザ互換性
 

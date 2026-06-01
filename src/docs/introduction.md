@@ -172,6 +172,10 @@ Some analysis is about the recording space rather than the song.
 | `analyzeImpulseResponse` / `analyze_impulse_response` | A clean impulse response | Direct RT60, EDT, clarity, and definition measurements. |
 | `detectAcoustic` / `detect_acoustic` | Ordinary audio | Estimated room cues with a confidence value. |
 
+::: info Room-acoustic abbreviations
+**RT60** is the time for reverberation to fall by 60 dB. **EDT** is early decay time, often closer to perceived reverberance. **C50 / C80** are speech/music clarity metrics, and **D50** is the fraction of energy arriving in the first 50 ms. For now, read them as numbers that describe how a room rings; [Room Acoustics](./acoustic-analysis.md) explains how to interpret them.
+:::
+
 See [Room Acoustics](./acoustic-analysis.md) for when to use each mode.
 
 libsonare also exposes inverse helpers for debugging and ML workflows: mel spectrograms and MFCCs can be mapped back to approximate spectra or preview audio. These are not restoration tools; they are lossy previews. See [Inverse Features](./inverse-features.md).

@@ -309,7 +309,7 @@ with Audio.from_file("song.mp3") as audio:
     trimmed = audio.trim(-60)               # trim silence below -60 dB
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # Source-built C++ CLI
 sonare time-stretch song.wav --rate 0.8 -o slower.wav
 sonare pitch-shift song.wav --semitones 2 -o higher.wav
@@ -527,7 +527,7 @@ audioCtx.createMediaStreamSource(stream).connect(worklet);
 ### Basic Usage
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -545,7 +545,7 @@ int main() {
 ### Full Analysis with MusicAnalyzer
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -576,7 +576,7 @@ int main() {
 ### Feature Extraction
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -602,7 +602,7 @@ int main() {
 ### Audio Effects
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 
 int main() {
   auto audio = sonare::Audio::from_file("music.mp3");
@@ -625,7 +625,7 @@ int main() {
 ### Zero-Copy Slicing
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 #include <iostream>
 
 int main() {
@@ -734,7 +734,7 @@ sonare analyze song.mp3 --json > analysis.json
 `pitch-shift`, `time-stretch`, and the `hpss` export commands are provided by the C++ `sonare_cli` binary built from source. The Python CLI installed via `pip install libsonare` exposes the analysis and feature commands listed in the [CLI Reference](/docs/cli).
 :::
 
-```bash
+```bash [C++ CLI]
 # Transpose up 2 semitones
 sonare pitch-shift --semitones 2 input.wav -o output.wav
 

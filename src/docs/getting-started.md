@@ -25,6 +25,10 @@ Most examples follow the same pattern: load or decode audio, pass `Float32Array`
 | Stereo | Two channels, left and right |
 | WASM | WebAssembly, the browser runtime used by the npm package |
 
+::: info Separate the file from the samples
+MP3 and WAV are file formats. Most libsonare APIs receive decoded PCM samples, such as a `Float32Array` in JavaScript or a sample array in Python. In the browser you decode the file first; in Python and CLI workflows the package can often load the file for you.
+:::
+
 ## Choose Your Runtime
 
 Start with the page that matches where you will run libsonare:
@@ -147,7 +151,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **Section Detection** - Structural segmentation such as intro, verse, and chorus
 - **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
 - **Audio Characteristics** - Timbre, dynamics, and rhythm analysis
-- **Room Acoustics** - RT60, EDT, C50, C80, D50, octave-band decay, and blind acoustic estimates
+- **Room Acoustics** - reverberation time (RT60 / EDT), clarity (C50 / C80), definition (D50), octave-band decay, and blind acoustic estimates
 - **Spectral Features** - Mel spectrogram, MFCC, chroma, CQT/VQT, spectral centroid, and flatness
 - **Audio Effects** - HPSS, time stretch, pitch shift, normalize, and trim
 - **Streaming Analysis** - Chunk-by-chunk processing with progressive BPM/key/chord estimates
@@ -155,6 +159,16 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **Mixing** - Channel strips, sends, buses, automation, scene presets, goniometer/true-peak metering, and offline stereo rendering
 - **Editing DSP and inserts** - Direct pitch correction, note-region stretch, and voice-change pitch/formant controls; reverb and ducking are available through named processor or mixer insert paths where enabled
 - **Inverse Feature Helpers** - Approximate STFT/audio reconstruction from mel spectrograms and MFCCs
+
+::: details Acronyms in this list
+- **BPM** — beats per minute; the tempo of the song.
+- **STFT** — short-time Fourier transform; the windowed frequency analysis behind spectrograms.
+- **MFCC** — compact timbre features often used for ML or classification.
+- **CQT / VQT** — frequency analyses shaped around musical pitch spacing.
+- **HPSS** — harmonic/percussive source separation.
+- **LUFS / True Peak** — mastering metrics for perceived loudness and peak safety.
+- **Goniometer** — a stereo meter that visualizes width and phase behavior.
+:::
 
 ## Try It Now
 

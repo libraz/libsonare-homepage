@@ -21,6 +21,10 @@ By the end of this page you should be able to:
 | Node native service or desktop tool | Build `bindings/node` as `@libraz/libsonare-native` |
 | C++ integration or custom WASM build | Build from source |
 
+::: tip Choose by where the app runs
+For a browser UI, start with npm / WASM. For notebooks or local scripts, start with PyPI. For terminal checks, use the `sonare` CLI installed by the PyPI package. Reach for Node native or a C++ build when WASM or Python is not enough for performance, distribution, or existing-code integration.
+:::
+
 ## npm (Browser / WASM)
 
 Requires Node.js 18.0.0 or later.
@@ -85,6 +89,10 @@ them with `brew install ffmpeg`. On Debian/Ubuntu, install `libavformat-dev
 libavcodec-dev libavutil-dev libswresample-dev`.
 
 ## Building from Source
+
+::: info What does source build mean?
+Instead of using a published npm or PyPI package, you compile the C++ core and bindings on your machine. This is useful for custom FFmpeg support, unsupported platforms, or development changes, but normal package installation is the simpler starting point.
+:::
 
 ### Prerequisites
 
@@ -193,7 +201,7 @@ sonare analyze audio.mp3 --json > analysis.json
 ### C++
 
 ```cpp
-#include <sonare/quick.h>
+#include <quick.h>
 
 // Detect BPM
 float bpm = sonare::quick::detect_bpm(samples, size, sample_rate);

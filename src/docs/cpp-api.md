@@ -31,9 +31,9 @@ By the end of this page you should be able to:
 
 | Goal | Include / API |
 |------|---------------|
-| One-off BPM/key/beat/onset/acoustic checks | `#include <sonare/sonare.h>` and `sonare::quick::*` |
+| One-off BPM/key/beat/onset/acoustic checks | `#include <sonare.h>` and `sonare::quick::*` |
 | Several music-analysis results from the same audio | `MusicAnalyzer`, so shared intermediates are reused |
-| Live visualizer or progressive estimates | `#include <sonare/streaming/stream_analyzer.h>` |
+| Live visualizer or progressive estimates | `#include <streaming/stream_analyzer.h>` |
 | Mastering presets or named processors | `src/mastering/api/*` headers; see [Mastering Processors](./mastering-processors.md) |
 | Stem mixer / scene JSON | `src/mixing/api/scene.h`, `src/mixing/api/scene_json.cpp` concepts; see [Mixing Engine](./mixing.md) |
 | Language binding or plugin boundary | `sonare_c.h` rather than C++ classes |
@@ -47,7 +47,7 @@ New to audio analysis? See the [Glossary](/docs/glossary) for explanations of te
 All libsonare functionality is contained within the `sonare` namespace.
 
 ```cpp
-#include <sonare/sonare.h>
+#include <sonare.h>
 
 using namespace sonare;
 ```
@@ -130,6 +130,7 @@ struct StftConfig {
   int win_length = 0;  // 0 = n_fft
   WindowType window = WindowType::Hann;
   bool center = true;
+  PadMode pad_mode = PadMode::Constant;
 };
 
 // Compute STFT
@@ -272,7 +273,9 @@ struct StreamConfig {
 ### Basic Usage
 
 ```cpp
-#include <sonare/streaming/stream_analyzer.h>
+#include <streaming/stream_analyzer.h>
+
+using namespace sonare;
 
 StreamConfig config;
 config.sample_rate = 44100;
@@ -344,6 +347,9 @@ analyzer.read_frames_soa(max_frames, buffer);
 // buffer.chroma - [n_frames * 12]
 // buffer.onset_strength - [n_frames]
 // buffer.rms_energy - [n_frames]
+// buffer.spectral_centroid - [n_frames]
+// buffer.spectral_flatness - [n_frames]
+// buffer.chord_root / chord_quality / chord_confidence - [n_frames]
 ```
 
 ::: details Layout terms: Structure-of-Arrays, row-major, quantization
@@ -908,8 +914,8 @@ std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref =
 The C++ core includes the mixing engine used by the C, Python, Node, and WASM bindings. The main building blocks are channel strips, buses, sends, FX buses, VCA groups, automation lanes, meter snapshots, goniometer buffers, scene presets, and offline stereo rendering.
 
 ```cpp
-#include <sonare/mixing/channel_strip.h>
-#include <sonare/mixing/api/presets.h>
+#include <mixing/channel_strip.h>
+#include <mixing/api/presets.h>
 
 auto scene = sonare::mixing::api::scene_preset(
   sonare::mixing::api::scene_preset_from_string("vocalReverbSend")
@@ -931,7 +937,7 @@ For cross-runtime examples and scene-level guidance, see [Mixing Engine](./mixin
 The high-level mastering API lives in `sonare::mastering::api`. `master_audio_mono` / `master_audio_stereo` apply a built-in `Preset` (optionally with flat dot-notation overrides) and return a chain result; the `preset_*` helpers enumerate and resolve preset identifiers.
 
 ```cpp
-#include <sonare/mastering/api/presets.h>
+#include <mastering/api/presets.h>
 
 namespace api = sonare::mastering::api;
 

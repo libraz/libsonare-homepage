@@ -214,7 +214,7 @@ saved = mixer.to_scene_json()   # 同じスキーマへラウンドトリップ
 mixer.close()                   # ネイティブハンドルを解放
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # 組み込みシーンを書き出し、JSON を編集してからレンダーする。
 sonare mixing-preset vocalReverbSend > my-scene.json
 sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav

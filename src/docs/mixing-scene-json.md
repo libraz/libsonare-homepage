@@ -218,7 +218,7 @@ saved = mixer.to_scene_json()   # round-trips back to the same schema
 mixer.close()                   # release the native handle
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # Export a built-in scene, edit the JSON file, then render it.
 sonare mixing-preset vocalReverbSend > my-scene.json
 sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav

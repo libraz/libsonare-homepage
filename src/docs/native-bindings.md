@@ -400,6 +400,8 @@ those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
 | `shortTermLufs(samples, sampleRate?)` | `Float32Array` | Short-term loudness (3 s) per step |
 | `version()` | `string` | Library version |
 | `voiceChangerAbiVersion()` | `number` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
+| `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | Canonical voice-character preset ID for an ordinal or ID |
+| `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig \| null` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
 | `hasFfmpegSupport()` | `boolean` | Whether the loaded native addon can decode via FFmpeg |
 
 Default sample rates differ by helper family:
@@ -601,7 +603,9 @@ Node native names the float Structure-of-Arrays read `readFramesSoa(...)`. The W
 ```typescript
 import {
   RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetNames,
+  voiceCharacterPresetId,
   voiceChangeRealtime,
 } from '@libraz/libsonare-native';
 
@@ -614,7 +618,15 @@ const changer = new RealtimeVoiceChanger({
 
 const blockOut = changer.processMono(inputBlock);
 const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
-console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), blockOut, rendered);
+const presetConfig = realtimeVoiceChangerPresetConfig('bright-idol');
+console.log(
+  voiceCharacterPresetId(1),
+  realtimeVoiceChangerPresetNames(),
+  presetConfig,
+  changer.latencySamples(),
+  blockOut,
+  rendered,
+);
 changer.destroy();
 ```
 
@@ -718,7 +730,7 @@ The native package also exports TypeScript helper types for option objects, call
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanMode`, `SendTiming` |
-| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerOptions` |
+| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
 | Realtime engine transport | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |

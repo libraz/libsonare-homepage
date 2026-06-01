@@ -146,39 +146,8 @@ const targetLufs = computed(() =>
 
 const recommendedLufs = computed(() => MASTERING_PRESET_TARGETS[selectedPreset.value]);
 const selectedPresetName = computed(() => t(`master.presets.${selectedPreset.value}.name`));
-const quickSafeTargetLufs = computed(() =>
-  mode.value === 'quick'
-    ? Math.min(targetLufs.value, recommendedLufs.value, -16)
-    : targetLufs.value,
-);
-const qualityTargetLufs = computed(() => {
-  const profile = insightReport.value?.profile as Record<string, unknown> | null;
-  const loudness = profile?.loudness as Record<string, unknown> | undefined;
-  const integrated = loudness?.integratedLufs;
-  const truePeak = loudness?.truePeakDb;
-  const crest = loudness?.crestFactorDb;
-  if (
-    typeof integrated !== 'number' ||
-    !Number.isFinite(integrated) ||
-    typeof truePeak !== 'number' ||
-    !Number.isFinite(truePeak)
-  ) {
-    return null;
-  }
-
-  const requestedGain = quickSafeTargetLufs.value - integrated;
-  const highPeak = truePeak > moduleSettings.value.limiterCeilingDb;
-  const highCrest = typeof crest === 'number' && Number.isFinite(crest) && crest >= 18;
-  if (requestedGain <= 6 && !highPeak) return null;
-
-  const maxGain = highPeak || highCrest ? 6 : 8;
-  const cappedTarget = clamp(integrated + maxGain, -24, quickSafeTargetLufs.value);
-  return cappedTarget < quickSafeTargetLufs.value - 0.05 ? cappedTarget : null;
-});
-const effectiveTargetLufs = computed(() => qualityTargetLufs.value ?? quickSafeTargetLufs.value);
-const qualityGuardLufs = computed(() =>
-  effectiveTargetLufs.value < targetLufs.value - 0.05 ? effectiveTargetLufs.value : null,
-);
+const effectiveTargetLufs = computed(() => targetLufs.value);
+const qualityGuardLufs = computed<number | null>(() => null);
 
 const { sourceMetrics, masterMetrics, referenceMetrics, meterReadings, phasePoints, stereoImage } =
   useMasteringMetering({
@@ -576,7 +545,7 @@ async function renderMaster() {
         dynamics: dynamics.value,
       },
       moduleSettings: moduleSettings.value,
-      qualityMode: mode.value === 'quick' ? 'safe' : 'studio',
+      qualityMode: 'studio',
       diagnosticBypass: diagnosticBypass.value,
     });
     outputUrl.value = mastering.createAudioUrl(result);

@@ -100,8 +100,8 @@ re_mel = sonare.mfcc_to_mel(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_frames,
 # re_mel.rows = n_mels。re_mel.data は row-major の [rows x n_frames]
 ```
 
-```bash [CLI]
-# 同じ順変換／逆変換設定で音声プレビューを作る CLI 経路:
+```bash [C++ CLI]
+# 同じ順変換／逆変換設定で音声プレビューを作るソースビルド C++ CLI 経路:
 sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-preview.wav
 ```
 
@@ -143,7 +143,7 @@ from_mfcc = sonare.mfcc_to_audio(coeffs.coefficients, coeffs.n_mfcc, coeffs.n_fr
 # sample_rate の前に n_mels（128）引数が入る点に注意
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # 簡易プレビュー用のソースビルド C++ CLI 対応コマンド:
 sonare mel-to-audio song.wav -o mel-preview.wav
 sonare mfcc-to-audio song.wav -o mfcc-preview.wav
@@ -185,7 +185,7 @@ preview = sonare.mel_to_audio(mel.power, mel.n_mels, mel.n_frames, sample_rate=s
 print(len(samples), len(preview))
 ```
 
-```bash [CLI]
+```bash [C++ CLI]
 # 再構成プレビューを聴いてソースと比較する。
 sonare mel-to-audio song.wav -o mel-preview.wav
 ```

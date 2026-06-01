@@ -9,6 +9,10 @@ libsonare provides three **JSON-returning** mastering helpers for apps that need
 
 If "LUFS", "true peak", "crest factor", or "tonal balance" are unfamiliar, read [What Is Mastering?](./glossary/concepts/what-is-mastering.md) and [Reading Mastering Meters](./glossary/mastering/meter-reading.md) first — this page assumes the vocabulary and focuses on the JSON contract.
 
+::: info The assistant is not an auto-master button
+Here, an assistant means a helper API that measures the source and explains why a processing direction may make sense. The actual sound is created later, after the user accepts or edits the suggestion and passes it to a rendering API.
+:::
+
 For a first implementation, read this page in order:
 
 1. Use `masteringAudioProfile(...)` to show the user what the source looks like.

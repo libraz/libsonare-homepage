@@ -2,6 +2,10 @@
 
 This page is the beginner-friendly route through the libsonare docs. You do not need to understand DSP, MIR, WebAssembly, or mastering terminology before starting.
 
+::: info Acronyms you will see early
+**DSP** means signal processing: measuring or changing audio as numbers. **MIR** means reading musical information such as BPM, key, and chords from audio. **WASM / WebAssembly** is the browser runtime format. **API** means the functions and classes your app calls. **CLI** means a terminal command. At this stage, you only need enough vocabulary to choose the next page.
+:::
+
 If you want to read the docs linearly, use this order:
 
 1. [Introduction](./introduction.md) for vocabulary and the overall audio-analysis pipeline.

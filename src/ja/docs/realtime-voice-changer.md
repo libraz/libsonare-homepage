@@ -4,6 +4,10 @@
 
 半音値とフォルマント係数で 1 回だけオフライン変換するなら [`voiceChange(...)`](./editing-dsp.md#オフライン-voicechange-と-realtimevoicechanger) を使います。ライブ処理やチャンク処理のプリセットチェーンが必要なら、このページを読んでください。
 
+::: info なぜ関数ではなくクラスなのか
+ライブ音声処理には「前のブロックから続く状態」があります。ゲート、コンプレッサー、リバーブ、滑らかなピッチ／フォルマント変化は、前後のブロックをまたいで動く必要があります。`RealtimeVoiceChanger` はその状態を保持するため、ブロックごとに作り直すと音が不自然になり、準備コストも増えます。
+:::
+
 ## このページで身につくこと
 
 このページを読むと、次のことを判断・実装できるようになります。
@@ -102,15 +106,20 @@ if (!validation.ok) {
 
 現在の組み込みプリセット JSON はスキーマバージョン `1` を使います。ネイティブ POD 設定の ABI は別物です。FFI やネイティブ境界をまたぐ場合は `voiceChangerAbiVersion()` で確認してください。
 
+正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_pod(...)` として公開しています。
+
 ## Python
 
 ```python
 import libsonare as sonare
 
+print(sonare.voice_character_preset_id(1))
+preset_config = sonare.realtime_voice_changer_preset_pod("bright-idol")
+
 with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
     out = changer.process_mono(input_block)
     changer.set_config("soft-whisper")
-    print(sonare.realtime_voice_changer_preset_names(), changer.latency_samples())
+    print(sonare.realtime_voice_changer_preset_names(), preset_config, changer.latency_samples())
 
 processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
 ```
