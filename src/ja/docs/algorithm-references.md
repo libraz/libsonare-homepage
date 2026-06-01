@@ -7,7 +7,7 @@
 このページを読むと、次のことを判断・確認できるようになります。
 
 - ソースで確認済みの根拠、参照値で検証した互換性、アルゴリズムファミリー名のみの記載を区別できる。
-- ラウドネス、トゥルーピーク、デノイズ、EQ、ピッチ、室内音響、sequence helper、リバーブ系の標準・論文・根拠を探せる。
+- ラウドネス、トゥルーピーク、デノイズ、EQ、ピッチ、室内音響、シーケンスヘルパー、リバーブ系の標準・論文・根拠を探せる。
 - このページを「すべての高レベル推定が別ライブラリと同一」という保証として読まないようにできる。
 - テスト範囲を確認したいときに [実装検証](./implementation-validation.md) と組み合わせて読める。
 
@@ -30,11 +30,11 @@
 | テープヒステリシス | Jiles-Atherton hysteresis、Chowdhury "Real-time Physical Modelling for Analog Tape Machines", DAFx-19 2019, equations 6-10 | `src/mastering/common/hysteresis_ja.cpp`、`src/mastering/saturation/tape.h` |
 | EQ フィルター | RBJ biquads、Vicanek matched-Z IIR、Butterworth Q、Linkwitz-Riley crossovers with all-pass phase compensation | `README.md`、`src/rt/biquad_design.h`、`src/rt/biquad_design.cpp`、EQ routing / cut-filter sources |
 | 非線形処理のアンチエイリアシング | ADAA / antiderivative anti-aliasing | `README.md`、`src/rt/adaa.h`、`src/rt/aliasing_control.h` |
-| スライディング最大値 | Lemire sliding max | `README.md`、limiter / true-peak helper usage |
+| スライディング最大値 | Lemire sliding max | `README.md`、リミッター／トゥルーピーク補助処理の利用箇所 |
 | Tonnetz | Harte et al. 2006 と `librosa.feature.tonnetz` の挙動 | `src/feature/tonnetz.h`、`src/feature/tonnetz.cpp`、`tests/librosa/tonnetz_test.cpp` |
 | ピッチ追跡 | YIN と pYIN。pYIN は確率的な複数ピッチ候補と Viterbi decoding を使う | `src/feature/pitch.h`、`tests/librosa/pitch_test.cpp` |
 | 室内音響解析 | インパルスレスポンス向けの Schroeder 型 energy decay curve、RT60、EDT、C50、C80、D50、自由減衰区間検出と指数減衰フィットによるブラインド RT60 推定 | `src/analysis/acoustic_analyzer.h`、`src/analysis/acoustic_analyzer.cpp`、`tests/analysis/acoustic_analyzer_test.cpp`、`tests/analysis/acoustic_dataset_test.cpp` |
-| sequence helpers | DTW、Viterbi、discriminative Viterbi、recurrence quantification analysis、`librosa.sequence` 互換 | `src/util/sequence.h`、`src/feature/segment.*`、librosa sequence references |
+| シーケンスヘルパー | DTW、Viterbi、discriminative Viterbi、recurrence quantification analysis、`librosa.sequence` 互換 | `src/util/sequence.h`、`src/feature/segment.*`、librosa のシーケンス参照 |
 | タイムストレッチとピッチシフト | Native spectral stretch、phase-vocoder fallback、time stretch followed by resampling による pitch shift | `src/effects/time_stretch.h`、`src/effects/pitch_shift.h` |
 | リバーブ系 | Convolution、Dattorro plate、FDN、velvet-noise reverb engines | `README.md`、`src/effects/reverb/*`、`tests/effects/creative_fx_test.cpp` |
 

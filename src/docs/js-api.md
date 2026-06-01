@@ -14,7 +14,7 @@ libsonare provides audio analysis, mastering, mixing, and editing DSP capabiliti
 | **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
 | **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS targets, true-peak limiting, presets, streaming chains |
 | **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
-| **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune` | Vocal tuning, note edits, pitch/formant changes |
+| **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
 | **Audio Class** | `Audio.fromBuffer` | OOP wrapper for all functions |
 
 ::: tip Terminology
@@ -44,7 +44,7 @@ The package is broad, so start from the task rather than the function list:
 | A live visualizer or progressive BPM/key/chord UI | `StreamAnalyzer` | Processes blocks and drains frame buffers for UI rendering |
 | Browser mastering or delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Use presets first, then move to named processors when you need control |
 | Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; persistent scene mixer when routing matters |
-| Vocal/note edits | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune` | Editing DSP changes the signal rather than analyzing it |
+| Vocal/note edits | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
 | Room decay or clarity measurements | `analyzeImpulseResponse`, `detectAcoustic` | These describe the recording space, not the music |
 
 ## Installation
@@ -120,8 +120,34 @@ function isInitialized(): boolean
 Get the library version.
 
 ```typescript
-function version(): string  // e.g., "1.2.1"
+function version(): string  // e.g., "1.2.2"
 ```
+
+### `voiceChangerAbiVersion()`
+
+ABI version of the realtime voice-changer POD config used by native and FFI APIs. This is separate from preset JSON `schemaVersion`, currently `1`. Check user-authored presets with `validateRealtimeVoiceChangerPresetJson(...)` before accepting them.
+
+```typescript
+function voiceChangerAbiVersion(): number
+```
+
+### Realtime environment helpers
+
+These helpers describe the runtime capabilities used by [`RealtimeEngine`](./realtime-streaming.md#realtimeengine). Use them before wiring AudioWorklet/SharedArrayBuffer paths, especially when the page may run under different browser isolation policies.
+
+```typescript
+function engineAbiVersion(): number
+function engineCapabilities(): {
+  abiVersion: number;
+  hasSharedArrayBuffer: boolean;
+  hasAtomics: boolean;
+  hasAudioWorklet: boolean;
+  supportsRealtimeEngine: boolean;
+}
+function hasFfmpegSupport(): boolean
+```
+
+`hasFfmpegSupport()` reports whether the loaded build can decode through FFmpeg. The browser/WASM npm package works on decoded PCM and normally returns `false`; Python/native builds are the intended place to decode files directly.
 
 ## Analysis Functions
 
@@ -177,6 +203,16 @@ interface Key {
   name: string;          // "C major", "A minor"
   shortName: string;     // "C", "Am"
 }
+
+const KeyProfile = {
+  KrumhanslSchmuckler: 0,
+  Temperley: 1,
+  Shaath: 2,
+  FaraldoEDMT: 3,
+  FaraldoEDMA: 4,
+  FaraldoEDMM: 5,
+  BellmanBudge: 6,
+} as const;
 ```
 
 ```typescript
@@ -591,7 +627,7 @@ function mfcc(
   nFft?: number,      // default: 2048
   hopLength?: number, // default: 512
   nMels?: number,     // default: 128
-  nMfcc?: number      // default: 13
+  nMfcc?: number      // default: 20
 ): MfccResult
 
 interface MfccResult {
@@ -666,6 +702,26 @@ function spectralFlatness(
   hopLength?: number
 ): Float32Array
 
+// Spectral contrast matrix, shape (nBands + 1) x nFrames
+function spectralContrast(
+  samples: Float32Array,
+  sampleRate?: number,
+  nFft?: number,
+  hopLength?: number,
+  nBands?: number,
+  fmin?: number,
+  quantile?: number
+): Matrix2dResult
+
+// Per-frame polynomial spectral coefficients, shape (order + 1) x nFrames
+function polyFeatures(
+  samples: Float32Array,
+  sampleRate?: number,
+  nFft?: number,
+  hopLength?: number,
+  order?: number
+): Matrix2dResult
+
 // Zero crossing rate
 function zeroCrossingRate(
   samples: Float32Array,
@@ -673,6 +729,15 @@ function zeroCrossingRate(
   frameLength?: number,
   hopLength?: number
 ): Float32Array
+
+// Sample indices where the waveform crosses zero
+function zeroCrossings(
+  samples: Float32Array,
+  threshold?: number,
+  refMagnitude?: boolean,
+  pad?: boolean,
+  zeroPos?: boolean
+): Int32Array
 
 // RMS energy
 function rmsEnergy(
@@ -692,14 +757,29 @@ These functions are not just "more features"; they solve different modeling prob
 | Log-frequency pitch representation | `cqt(...)` | Constant-Q bins align well with musical pitch over octaves. |
 | Variable bandwidth pitch representation | `vqt(...)` | Like CQT, but with a bandwidth offset for low-frequency stability. |
 | Chord-friendly chroma | `nnlsChroma(...)` | NNLS note activations can be cleaner for chord work than STFT chroma. |
+| Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)` | Librosa-compatible contrast bands, polynomial coefficients, and zero-crossing indices. |
+| Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
+| Decomposition and remixing | `decompose(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, nearest-neighbour filtering, interval remixing, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. |
-| Delivery loudness measurements | `lufs`, `momentaryLufs`, `shortTermLufs` | ITU-R BS.1770 / EBU R128 style loudness values. |
+| Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA. |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
 const nnls = nnlsChroma(samples, sampleRate);
 const loudness = lufs(samples, sampleRate);
 
+const contrast = spectralContrast(samples, sampleRate);
+const poly = polyFeatures(samples, sampleRate);
+const crossings = zeroCrossings(samples);
+const tuning = estimateTuning(samples, sampleRate);
+const offset = pitchTuning(pitch.f0);
+const { w, h } = decompose(spectrogram, nFeatures, nFrames, 8);
+const filtered = nnFilter(spectrogram, nFeatures, nFrames);
+const remixed = remix(samples, Int32Array.from([0, sampleRate, sampleRate, 2 * sampleRate]));
+const stretched = phaseVocoder(samples, 1.5, sampleRate);
+const hpssResidual = hpssWithResidual(samples, sampleRate);
+const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
+const lra = ebur128LoudnessRange(samples, sampleRate);
 const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
 ```
 
@@ -726,7 +806,8 @@ function pitchYin(
   hopLength?: number,    // default: 512
   fmin?: number,         // default: 65 Hz
   fmax?: number,         // default: 2093 Hz
-  threshold?: number     // default: 0.3
+  threshold?: number,    // default: 0.3
+  fillNa?: boolean       // default: false; true writes 0 for unvoiced f0 frames
 ): PitchResult
 
 // pYIN algorithm (probabilistic YIN with HMM smoothing)
@@ -737,7 +818,8 @@ function pitchPyin(
   hopLength?: number,
   fmin?: number,
   fmax?: number,
-  threshold?: number
+  threshold?: number,
+  fillNa?: boolean       // default: false; true writes 0 for unvoiced f0 frames
 ): PitchResult
 
 interface PitchResult {
@@ -749,6 +831,8 @@ interface PitchResult {
   meanF0: number;
 }
 ```
+
+By default, unvoiced `f0` frames remain `NaN`. Set `fillNa: true` when a downstream numeric pipeline cannot carry `NaN` and should treat unvoiced frames as `0`.
 
 ## Unit Conversion
 
@@ -781,6 +865,136 @@ function amplitudeToDb(values: Float32Array, ref?: number, amin?: number, topDb?
 function dbToPower(values: Float32Array, ref?: number): Float32Array
 function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 ```
+
+## Metering
+
+Standalone meters report level, dynamics, and stereo-image statistics from a decoded buffer. They are independent of the mastering chain and the streaming engine: pass a `Float32Array` or a left/right pair and get back a value or report. Every function accepts optional `options` with a `validate` flag (default `true`); set `validate: false` to skip NaN/Inf input checks on hot paths.
+
+### Single-channel level meters
+
+```typescript
+// Sample peak, dBFS
+function meteringPeakDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
+// RMS level, dBFS
+function meteringRmsDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
+// Crest factor (peak − RMS), dB
+function meteringCrestFactorDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
+// Mean (DC) offset, linear amplitude
+function meteringDcOffset(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
+// Inter-sample (true) peak, dBFS. oversampleFactor is a power of two in 1..16 (0 / omit = 4)
+function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversampleFactor?: number, options?: ValidateOptions): number
+```
+
+### Clipping and dynamic range
+
+```typescript
+function meteringDetectClipping(
+  samples: Float32Array,
+  sampleRate?: number,
+  threshold?: number,         // default: 0.999
+  minRegionSamples?: number,  // default: 1
+  options?: ValidateOptions
+): ClippingReport
+
+function meteringDynamicRange(
+  samples: Float32Array,
+  sampleRate?: number,
+  windowSec?: number,      // 0 / omit = 3 s
+  hopSec?: number,         // 0 / omit = 1 s
+  lowPercentile?: number,  // 0 / omit = 0.10
+  highPercentile?: number, // 0 / omit = 0.95
+  options?: ValidateOptions
+): DynamicRangeReport
+
+interface ClippingReport {
+  clippedSamples: number;
+  clippingRatio: number;
+  maxClippedPeak: number;
+  regions: ClippingRegion[];
+}
+interface ClippingRegion {
+  startSample: number;
+  endSample: number;
+  length: number;
+  peak: number;
+}
+interface DynamicRangeReport {
+  dynamicRangeDb: number;
+  lowPercentileDb: number;
+  highPercentileDb: number;
+  windowRmsDb: Float32Array;
+}
+```
+
+### Stereo image
+
+```typescript
+// Pearson correlation between channels, −1..1
+function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
+// Mid/side stereo width
+function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
+// Per-sample mid/side point series
+function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): VectorscopeReport
+// Phase-scope point series plus summary stats
+function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): PhaseScopeReport
+
+interface VectorscopeReport {
+  mid: Float32Array;
+  side: Float32Array;
+}
+interface PhaseScopeReport {
+  mid: Float32Array;
+  side: Float32Array;
+  radius: Float32Array;
+  angleRad: Float32Array;
+  correlation: number;
+  averageAbsAngleRad: number;
+  maxRadius: number;
+}
+```
+
+`meteringStereoCorrelation`, `meteringStereoWidth`, `meteringVectorscope`, and `meteringPhaseScope` require `left` and `right` to be the same length.
+
+### Spectrum snapshot
+
+```typescript
+function meteringSpectrum(
+  samples: Float32Array,
+  sampleRate?: number,
+  options?: SpectrumOptions & ValidateOptions
+): SpectrumReport
+
+interface SpectrumOptions {
+  nFft?: number;                 // 0 / omit = 2048
+  applyOctaveSmoothing?: boolean;
+  octaveFraction?: number;       // e.g. 3 = 1/3-octave; 0 / omit = 3
+  dbRef?: number;                // 0 / omit = 1.0
+  dbAmin?: number;               // 0 / omit = library floor
+}
+interface SpectrumReport {
+  frequencies: Float32Array;
+  magnitude: Float32Array;
+  power: Float32Array;
+  db: Float32Array;
+  nFft: number;
+  sampleRate: number;
+}
+```
+
+## Scale Quantization
+
+12-TET scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (a `PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69).
+
+```typescript
+// Snap a (possibly fractional) MIDI number to the nearest enabled pitch class
+function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referenceMidi?: number): number
+// Correction (quantized − input), in semitones
+function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number
+// Is pitchClass (0..11) enabled by modeMask relative to root?
+function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean
+```
+
+Pair `scaleQuantizeMidi(...)` with `pitchCorrectToMidi(...)` to retune a detected note to the nearest scale degree.
 
 ## librosa-Compatible Helpers
 
@@ -846,8 +1060,8 @@ function frameSignal(
   hopLength: number,
 ): { nFrames: number; frames: Float32Array }  // row-major
 
-function padCenter(values: Float32Array, size: number, padValue?: number): Float32Array
-function fixLength(values: Float32Array, size: number, padValue?: number): Float32Array
+function padCenter(values: Float32Array, targetSize: number, padValue?: number): Float32Array
+function fixLength(values: Float32Array, targetSize: number, padValue?: number): Float32Array
 function fixFrames(frames: Int32Array, xMin?: number, xMax?: number, pad?: boolean): Int32Array
 ```
 
@@ -1516,6 +1730,21 @@ interface Timbre {
   roughness: number;
   complexity: number;
 }
+
+interface TimbreFrame {
+  brightness: number;
+  warmth: number;
+  density: number;
+  roughness: number;
+  complexity: number;
+}
+
+interface TimbreAnalysisResult extends TimbreFrame {
+  spectralCentroid: Float32Array;
+  spectralFlatness: Float32Array;
+  spectralRolloff: Float32Array;
+  timbreOverTime: TimbreFrame[];
+}
 ```
 
 ### Dynamics
@@ -1686,11 +1915,7 @@ Use `masteringPairProcessorNames()` and `masteringPairAnalyze()` for reference-t
 
 ### StreamingEqualizer
 
-`StreamingEqualizer` is the block-by-block EQ wrapper used for realtime-safe
-processing: up to 24 bands, zero-latency/natural/linear phase modes, dynamic EQ,
-mid/side processing, external sidechain input, spectrum snapshots, and offline
-reference matching. In the WASM wrapper, call `init()` first and `delete()` when
-done.
+`StreamingEqualizer` is the block-by-block EQ wrapper used for realtime-safe processing: up to 24 bands, zero-latency/natural/linear phase modes, dynamic EQ, mid/side processing, external sidechain input, spectrum snapshots, and offline reference matching. In the WASM wrapper, call `init()` first and `delete()` when done.
 
 ```typescript
 import { init, StreamingEqualizer } from '@libraz/libsonare';
@@ -1724,9 +1949,7 @@ sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
 
 ### StreamingRetune
 
-`StreamingRetune` is the block-by-block mono pitch retune wrapper added in
-libsonare 1.2.1. It maintains grain and delay state across calls, so use
-`prepare()` before the first block and `delete()` when done.
+`StreamingRetune` is the block-by-block mono pitch retune wrapper. It maintains grain and delay state across calls, so use `prepare()` before the first block and `delete()` when done.
 
 ```typescript
 import { init, StreamingRetune } from '@libraz/libsonare';
@@ -1751,13 +1974,46 @@ sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
 
+### RealtimeVoiceChanger
+
+`RealtimeVoiceChanger` is the preset-driven live voice chain. It combines retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages, and keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple.
+
+Factory preset IDs are available at runtime with `realtimeVoiceChangerPresetNames()`. Preset JSON can be fetched and validated with `realtimeVoiceChangerPresetJson(...)` and `validateRealtimeVoiceChangerPresetJson(...)`. The current schema version is `1`.
+
+```typescript
+import {
+  init,
+  RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetJson,
+  realtimeVoiceChangerPresetNames,
+  validateRealtimeVoiceChangerPresetJson,
+} from '@libraz/libsonare';
+
+await init();
+
+const preset = realtimeVoiceChangerPresetNames()[1]; // e.g. "bright-idol"
+const presetJson = realtimeVoiceChangerPresetJson(preset);
+console.log(validateRealtimeVoiceChangerPresetJson(presetJson).ok);
+
+const changer = new RealtimeVoiceChanger(preset);
+changer.prepare(48000, 128, 1);
+
+try {
+  const out = changer.processMono(inputBlock);
+  const realtime = changer.createRealtimeMonoBuffer(128);
+  realtime.input.set(inputBlock.subarray(0, 128));
+  realtime.process();
+  console.log(out, realtime.output, changer.latencySamples());
+} finally {
+  changer.delete();
+}
+```
+
+The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, and `createRealtimePlanarBuffer`) return WASM heap views owned by the changer. Reuse them inside a realtime loop, and discard them after `delete()`.
+
 ### StreamingMasteringChain
 
-For real-time or memory-constrained use cases — e.g. processing audio
-block-by-block from `AudioWorklet` or a stream — the WASM module exposes
-`StreamingMasteringChain`. It accepts the same nested config as
-`masteringChain()`, prepares processor state for a fixed block size, and
-applies the chain incrementally.
+For real-time or memory-constrained use cases, such as processing audio block-by-block from `AudioWorklet` or a stream, the WASM module exposes `StreamingMasteringChain`. It accepts the same nested config as `masteringChain()`, prepares processor state for a fixed block size, and applies the chain incrementally.
 
 ```typescript
 import { init, StreamingMasteringChain } from '@libraz/libsonare';
@@ -1807,6 +2063,8 @@ The named mastering API families are:
 | List built-in mastering presets | `masteringPresetNames()` |
 | Apply a preset to mono audio | `masterAudio()` |
 | Apply a preset to stereo audio | `masterAudioStereo()` |
+| Apply a preset to mono audio with progress | `masterAudioWithProgress()` |
+| Apply a preset to stereo audio with progress | `masterAudioStereoWithProgress()` |
 | Run a full mono chain | `masteringChain()` |
 | Run a full stereo chain | `masteringChainStereo()` |
 | Run a full mono chain with progress | `masteringChainWithProgress()` |
@@ -1828,17 +2086,35 @@ The named mastering API families are:
 
 Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and air](./glossary/mastering/tone-air.md), [Dynamics](./glossary/mastering/dynamics.md), [Stereo, limiter, and loudness](./glossary/mastering/stereo-limiter-loudness.md), [Reference match](./glossary/mastering/reference-match.md).
 
+### Standalone dynamics and repair processors
+
+Every named stage is also a one-shot function, so you can run a single processor without assembling a chain. The dynamics processors return a `DynamicsResult` (processed samples plus gain-reduction telemetry); the repair processors return a `Float32Array`.
+
+```typescript
+// Offline dynamics
+function masteringDynamicsCompressor(samples: Float32Array, sampleRate: number, options?: CompressorOptions): DynamicsResult
+function masteringDynamicsGate(samples: Float32Array, sampleRate: number, options?: GateOptions): DynamicsResult
+function masteringDynamicsTransientShaper(samples: Float32Array, sampleRate: number, options?: TransientShaperOptions): DynamicsResult
+
+// Offline repair
+function masteringRepairDeclick(samples: Float32Array, sampleRate: number, options?: DeclickOptions): Float32Array
+function masteringRepairDeclip(samples: Float32Array, sampleRate: number, options?: DeclipOptions): Float32Array
+function masteringRepairDecrackle(samples: Float32Array, sampleRate: number, options?: DecrackleOptions): Float32Array
+function masteringRepairDehum(samples: Float32Array, sampleRate: number, options?: DehumOptions): Float32Array
+function masteringRepairDenoiseClassical(samples: Float32Array, sampleRate: number, options?: DenoiseClassicalOptions): Float32Array
+function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: number, options?: DereverbClassicalOptions): Float32Array
+function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array
+```
+
+The repair stages are offline-only and are rejected by `StreamingMasteringChain` — run them with these one-shot helpers or inside `masteringChain*`/`masterAudio*`. See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
+
 ### MasteringChainConfig
 
-`masteringChain*` and `StreamingMasteringChain` use the nested config schema
-below. Every key is optional. Only the stages you set are activated.
+`masteringChain*` and `StreamingMasteringChain` use the nested config schema below. Every key is optional. Only the stages you set are activated.
 
-The chain runs in this order: **repair → eq → dynamics → saturation → spectral
-→ stereo → maximizer → loudness**.
+The chain runs in this order: **repair → eq → dynamics → saturation → spectral → stereo → maximizer → loudness**.
 
-`masterAudio*` starts from a preset and accepts overrides using the same key
-names in flat dot-notation form, such as
-`"dynamics.compressor.thresholdDb"`.
+`masterAudio*` starts from a preset and accepts overrides using the same key names in flat dot-notation form, such as `"dynamics.compressor.thresholdDb"`.
 
 ::: details Full interface (click to expand)
 
@@ -1956,6 +2232,20 @@ mixer.delete();
 ```
 
 `Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. See [Mixing Engine](./mixing.md) for scene and routing details.
+
+## Type Export Index
+
+The WASM package exports TypeScript helper types in addition to functions and classes. Use these when typing options, realtime buffers, and callback payloads.
+
+| Area | Exported types/constants |
+|------|--------------------------|
+| Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EngineCapabilities` |
+| Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
+| Mastering | `MasteringProcessorParams`, `MasteringStereoChainResult` |
+| Streaming retune | `StreamingRetuneConfig` |
+| Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
+| Realtime voice | `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
+| Mixing realtime buffers | `MixerRealtimeBuffer` |
 
 ## Performance Summary
 

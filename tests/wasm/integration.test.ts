@@ -84,13 +84,13 @@ describe('wasm package integration', () => {
     expect(wasm.SectionType.Unknown).toBeGreaterThan(wasm.SectionType.Intro);
 
     const preset = wasm.mixingScenePresetNames()[0];
-    expect(wasm.mixerScenePresetJson(preset)).toBe(wasm.mixingScenePresetJson(preset));
+    expect(JSON.parse(wasm.mixingScenePresetJson(preset))).toBeTruthy();
   });
 
   it('keeps the runtime export surface aligned with the generated type bundle', () => {
     const dtsPath = join(process.cwd(), 'src/wasm/index.d.ts');
     const dts = readFileSync(dtsPath, 'utf8');
-    const exportBlock = dts.match(/export \{([\s\S]+)\};\s*$/)?.[1];
+    const exportBlock = dts.match(/^export \{([^}]+)\};\s*$/m)?.[1];
     expect(exportBlock).toBeTruthy();
 
     const runtimeExports = new Set(Object.keys(wasm));

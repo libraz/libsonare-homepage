@@ -100,6 +100,12 @@
   padding: 12px;
 }
 
+/* Playback transport anchored above the structure timeline; the playhead it
+   drives is mirrored across the loudness, waveform, and melody visuals. */
+.analysis-transport {
+  padding: 12px 14px 2px;
+}
+
 .analysis-actions--stack {
   flex-direction: column;
 }
@@ -138,6 +144,11 @@
 
 .waveform-mini {
   padding: 0 12px 12px;
+}
+
+/* Positioning context for the waveform playhead overlay. */
+.waveform-plot {
+  position: relative;
 }
 
 .waveform-mini svg {

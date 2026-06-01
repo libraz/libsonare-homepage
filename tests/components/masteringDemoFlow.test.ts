@@ -16,6 +16,8 @@ const masteringMock = vi.hoisted(() => ({
 const insightMock = vi.hoisted(() => ({
   analyzeSourceInsights: vi.fn(),
   resetInsights: vi.fn(),
+  report: null as any,
+  preview: null as any,
 }));
 const resultPanelMock = vi.hoisted(() => ({
   setVolume: vi.fn(),
@@ -68,13 +70,17 @@ vi.mock('@/composables/useMastering', async () => {
 
 vi.mock('@/composables/useMasteringInsights', async () => {
   const { computed, ref } = await vi.importActual<typeof import('vue')>('vue');
+  const report = ref(null);
+  const preview = ref<any[]>([]);
+  insightMock.report = report;
+  insightMock.preview = preview;
   return {
     useMasteringInsights: () => ({
-      insightReport: ref(null),
+      insightReport: report,
       isAnalyzingInsights: ref(false),
       insightProfileItems: computed(() => []),
       insightSuggestions: computed(() => []),
-      insightPreview: computed(() => []),
+      insightPreview: computed(() => preview.value),
       analyzeSourceInsights: insightMock.analyzeSourceInsights,
       resetInsights: insightMock.resetInsights,
     }),
@@ -94,6 +100,24 @@ vi.mock('@/components/MasteringPresetGrid.vue', () => ({
             onClick: () => emit('update:modelValue', 'edm'),
           },
           'Preset EDM',
+        );
+    },
+  }),
+}));
+
+vi.mock('@/components/MasteringVenueSelector.vue', () => ({
+  default: defineComponent({
+    props: { modelValue: String },
+    emits: ['update:modelValue'],
+    setup(_props, { emit }) {
+      return () =>
+        h(
+          'button',
+          {
+            class: 'venue-livehouse-small',
+            onClick: () => emit('update:modelValue', 'livehouseSmall'),
+          },
+          'Venue small',
         );
     },
   }),
@@ -124,7 +148,7 @@ vi.mock('@/components/MasteringPlatformSelector.vue', () => ({
 
 vi.mock('@/components/MasteringFineTune.vue', () => ({
   default: defineComponent({
-    emits: ['update:tone', 'update:width', 'update:dynamics', 'update:show'],
+    emits: ['update:tone', 'update:width', 'update:dynamics', 'update:show', 'update:ceilingDb'],
     setup(_props, { emit }) {
       return () =>
         h(
@@ -136,6 +160,7 @@ vi.mock('@/components/MasteringFineTune.vue', () => ({
               emit('update:tone', 70);
               emit('update:width', 40);
               emit('update:dynamics', 65);
+              emit('update:ceilingDb', -1.5);
             },
           },
           'Fine tune',
@@ -226,14 +251,17 @@ vi.mock('@/components/MasteringResultPanel.vue', () => ({
 
 vi.mock('@/components/MasteringInsights.vue', () => ({
   default: defineComponent({
-    emits: ['refresh'],
+    emits: ['apply', 'refresh'],
     setup(_props, { emit }) {
       return () =>
-        h(
-          'button',
-          { class: 'insights-refresh', onClick: () => emit('refresh') },
-          'Refresh insights',
-        );
+        h('div', { class: 'insights-stub' }, [
+          h('button', { class: 'insights-apply', onClick: () => emit('apply') }, 'Apply insights'),
+          h(
+            'button',
+            { class: 'insights-refresh', onClick: () => emit('refresh') },
+            'Refresh insights',
+          ),
+        ]);
     },
   }),
 }));
@@ -316,6 +344,8 @@ describe('MasteringDemo flow', () => {
     masteringMock.dispose.mockReset();
     insightMock.analyzeSourceInsights.mockReset();
     insightMock.resetInsights.mockReset();
+    insightMock.report.value = null;
+    insightMock.preview.value = [];
     resultPanelMock.setVolume.mockReset();
     resultPanelMock.togglePlayback.mockReset();
     masteringMock.state.source.value = null;
@@ -360,6 +390,7 @@ describe('MasteringDemo flow', () => {
     );
 
     await wrapper.find('.preset-edm').trigger('click');
+    await wrapper.find('.venue-livehouse-small').trigger('click');
     await wrapper.find('.platform-custom').trigger('click');
     await wrapper.find('.fine-tune-stub').trigger('click');
     await wrapper.find('.master-action').trigger('click');
@@ -368,8 +399,10 @@ describe('MasteringDemo flow', () => {
     expect(masteringMock.render).toHaveBeenCalledWith(
       expect.objectContaining({
         preset: 'edm',
+        venue: 'livehouseSmall',
         targetLufs: -16,
         tuning: { tone: 70, width: 40, dynamics: 65 },
+        moduleSettings: expect.objectContaining({ limiterCeilingDb: -1.5 }),
       }),
     );
     expect(masteringMock.createAudioUrl).toHaveBeenCalledWith(masteringMock.state.rendered.value);
@@ -383,6 +416,78 @@ describe('MasteringDemo flow', () => {
 
     wrapper.unmount();
     expect(masteringMock.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies source assistant suggestions to quick mastering settings', async () => {
+    const wrapper = mount(MasteringDemo);
+
+    await loadSource(wrapper);
+    insightMock.report.value = {
+      suggestions: {
+        chainConfig: {
+          params: {
+            'eq.tilt.tiltDb': -1.2,
+            'dynamics.compressor.thresholdDb': -20,
+            'dynamics.compressor.ratio': 2.8,
+            'maximizer.truePeakLimiter.ceilingDb': -0.5,
+            'loudness.targetLufs': -16,
+          },
+        },
+        genreCandidates: [{ name: 'hipHop' }],
+      },
+    };
+    insightMock.preview.value = [
+      {
+        name: 'YouTube',
+        normalizationGainDb: 1.2,
+        ceilingRisk: true,
+        safeCeilingDb: -2.2,
+        currentCeilingDb: -1,
+      },
+    ];
+    await nextTick();
+
+    await wrapper.find('.insights-apply').trigger('click');
+    await wrapper.find('.master-action').trigger('click');
+    await flushPromises();
+
+    expect(masteringMock.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preset: 'hiphop',
+        targetLufs: -16,
+        moduleSettings: expect.objectContaining({
+          tiltDb: -1.2,
+          compressorThresholdDb: -20,
+          compressorRatio: 2.8,
+          limiterCeilingDb: -2.2,
+        }),
+      }),
+    );
+  });
+
+  it('caps the render target when source analysis indicates over-limiting risk', async () => {
+    const wrapper = mount(MasteringDemo);
+
+    await loadSource(wrapper);
+    insightMock.report.value = {
+      profile: {
+        loudness: {
+          integratedLufs: -25,
+          truePeakDb: -3,
+          crestFactorDb: 10,
+        },
+      },
+    };
+    await nextTick();
+
+    await wrapper.find('.master-action').trigger('click');
+    await flushPromises();
+
+    expect(masteringMock.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetLufs: -17,
+      }),
+    );
   });
 
   it('switches to studio mode, loads a reference and renders reference matching', async () => {

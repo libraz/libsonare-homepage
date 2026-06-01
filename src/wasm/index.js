@@ -92,6 +92,21 @@ function panLawCode(panLaw) {
       return 0;
   }
 }
+function panModeCode(panMode) {
+  if (typeof panMode === "number") {
+    return panMode;
+  }
+  switch (panMode) {
+    case "stereoPan":
+    case "stereo-pan":
+      return 1;
+    case "dualPan":
+    case "dual-pan":
+      return 2;
+    default:
+      return 0;
+  }
+}
 function meterTapCode(tap) {
   return tap === "preFader" || tap === 0 ? 0 : 1;
 }
@@ -100,6 +115,31 @@ function sendTimingCode(timing) {
 }
 var module = null;
 var initPromise = null;
+function assertNonEmptySamples(fnName, samples, argName = "samples") {
+  if (samples.length === 0) {
+    throw new RangeError(`${fnName}: ${argName} must not be empty`);
+  }
+}
+function assertFiniteSamples(fnName, samples, validate, argName = "samples") {
+  if (!validate) {
+    return;
+  }
+  for (let i = 0; i < samples.length; i++) {
+    const v = samples[i];
+    if (!Number.isFinite(v)) {
+      throw new RangeError(`${fnName}: ${argName} contains NaN or Inf at index ${i}`);
+    }
+  }
+}
+function assertSamples(fnName, samples, validate, argName = "samples") {
+  assertNonEmptySamples(fnName, samples, argName);
+  assertFiniteSamples(fnName, samples, validate, argName);
+}
+function assertFiniteScalar(fnName, value, argName) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
+  }
+}
 async function init(options) {
   if (module) {
     return;
@@ -132,6 +172,42 @@ function engineAbiVersion() {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.engineAbiVersion();
+}
+function voiceChangerAbiVersion() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.voiceChangerAbiVersion();
+}
+var VOICE_PRESET_ORDINALS = [
+  "neutral-monitor",
+  "bright-idol",
+  "soft-whisper",
+  "deep-narrator",
+  "robot-mascot",
+  "dark-villain"
+];
+function resolveVoicePresetOrdinal(preset) {
+  if (typeof preset === "number") {
+    return preset;
+  }
+  const ordinal = VOICE_PRESET_ORDINALS.indexOf(preset);
+  if (ordinal < 0) {
+    throw new Error(`Unknown voice character preset: ${preset}`);
+  }
+  return ordinal;
+}
+function voiceCharacterPresetId(preset) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.voiceCharacterPresetId(resolveVoicePresetOrdinal(preset));
+}
+function realtimeVoiceChangerPresetConfig(preset) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.realtimeVoiceChangerPresetConfig(resolveVoicePresetOrdinal(preset));
 }
 function engineCapabilities() {
   const abiVersion = engineAbiVersion();
@@ -305,13 +381,13 @@ var RealtimeEngine = class {
     this.native.delete();
   }
 };
-function detectBpm(samples, sampleRate) {
+function detectBpm(samples, sampleRate = 22050) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.detectBpm(samples, sampleRate);
 }
-function detectKey(samples, sampleRate, options = {}) {
+function detectKey(samples, sampleRate = 22050, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -400,7 +476,7 @@ function keyProfileValue(profile) {
   };
   return names[profile];
 }
-function detectKeyCandidates(samples, sampleRate, options = {}) {
+function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -417,19 +493,19 @@ function detectKeyCandidates(samples, sampleRate, options = {}) {
     options.genreHint ?? ""
   ).map(convertKeyCandidate);
 }
-function detectOnsets(samples, sampleRate) {
+function detectOnsets(samples, sampleRate = 22050) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.detectOnsets(samples, sampleRate);
 }
-function detectBeats(samples, sampleRate) {
+function detectBeats(samples, sampleRate = 22050) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.detectBeats(samples, sampleRate);
 }
-function detectDownbeats(samples, sampleRate) {
+function detectDownbeats(samples, sampleRate = 22050) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -448,7 +524,7 @@ function convertChordAnalysisResult(wasm) {
     }))
   };
 }
-function detectChords(samples, sampleRate, options = {}) {
+function detectChords(samples, sampleRate = 22050, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -522,14 +598,14 @@ function convertAnalysisResult(wasm) {
     form: wasm.form
   };
 }
-function analyze(samples, sampleRate) {
+function analyze(samples, sampleRate = 22050) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   const result = module.analyze(samples, sampleRate);
   return convertAnalysisResult(result);
 }
-function analyzeImpulseResponse(samples, sampleRate, nOctaveBands = 6) {
+function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -540,7 +616,7 @@ function analyzeImpulseResponse(samples, sampleRate, nOctaveBands = 6) {
   );
   return result;
 }
-function detectAcoustic(samples, sampleRate, nOctaveBands = 6, nThirdOctaveSubbands = 24, minDecayDb = 30, noiseFloorMarginDb = 10) {
+function detectAcoustic(samples, sampleRate = 48e3, nOctaveBands = 6, nThirdOctaveSubbands = 24, minDecayDb = 30, noiseFloorMarginDb = 10) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -554,14 +630,53 @@ function detectAcoustic(samples, sampleRate, nOctaveBands = 6, nThirdOctaveSubba
   );
   return result;
 }
-function analyzeWithProgress(samples, sampleRate, onProgress) {
+function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   const result = module.analyzeWithProgress(samples, sampleRate, onProgress);
   return convertAnalysisResult(result);
 }
-function hpss(samples, sampleRate, kernelHarmonic = 31, kernelPercussive = 31) {
+function analyzeBpm(samples, sampleRate = 22050, bpmMin = 30, bpmMax = 300, startBpm = 120, nFft = 2048, hopLength = 512, maxCandidates = 5) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.analyzeBpm(
+    samples,
+    sampleRate,
+    bpmMin,
+    bpmMax,
+    startBpm,
+    nFft,
+    hopLength,
+    maxCandidates
+  );
+}
+function analyzeRhythm(samples, sampleRate = 22050, bpmMin = 60, bpmMax = 200, startBpm = 120, nFft = 2048, hopLength = 512) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.analyzeRhythm(samples, sampleRate, bpmMin, bpmMax, startBpm, nFft, hopLength);
+}
+function analyzeDynamics(samples, sampleRate = 22050, windowSec = 0.4, hopLength = 512, compressionThreshold = 6) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.analyzeDynamics(samples, sampleRate, windowSec, hopLength, compressionThreshold);
+}
+function analyzeTimbre(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 13, windowSec = 0.5) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.analyzeTimbre(samples, sampleRate, nFft, hopLength, nMels, nMfcc, windowSec);
+}
+function hasFfmpegSupport() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.hasFfmpegSupport();
+}
+function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -591,22 +706,23 @@ function pitchShift(samples, sampleRate, semitones) {
   }
   return module.pitchShift(samples, sampleRate, semitones);
 }
-function pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi) {
+function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
 }
-function noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio) {
+function noteStretch(samples, sampleRate = 22050, onsetSample = 0, offsetSample = 0, stretchRatio = 1) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio);
 }
-function voiceChange(samples, sampleRate, pitchSemitones, formantFactor) {
+function voiceChange(samples, sampleRate = 22050, pitchSemitones = 0, formantFactor = 1, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("voiceChange", samples, options.validate !== false);
   return module.voiceChange(samples, sampleRate, pitchSemitones, formantFactor);
 }
 function normalize(samples, sampleRate, targetDb = 0) {
@@ -615,7 +731,7 @@ function normalize(samples, sampleRate, targetDb = 0) {
   }
   return module.normalize(samples, sampleRate, targetDb);
 }
-function mastering(samples, sampleRate, targetLufs = -14, ceilingDb = -1, truePeakOversample = 4) {
+function mastering(samples, sampleRate = 22050, targetLufs = -14, ceilingDb = -1, truePeakOversample = 4) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -645,13 +761,13 @@ function masteringStereoAnalysisNames() {
   }
   return module.masteringStereoAnalysisNames();
 }
-function masteringProcess(processorName, samples, sampleRate, params = {}) {
+function masteringProcess(processorName, samples, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringProcess(processorName, samples, sampleRate, params);
 }
-function masteringProcessStereo(processorName, left, right, sampleRate, params = {}) {
+function masteringProcessStereo(processorName, left, right, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -660,49 +776,92 @@ function masteringProcessStereo(processorName, left, right, sampleRate, params =
   }
   return module.masteringProcessStereo(processorName, left, right, sampleRate, params);
 }
-function masteringPairProcess(processorName, source, reference, sampleRate, params = {}) {
+function masteringPairProcess(processorName, source, reference, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringPairProcess(processorName, source, reference, sampleRate, params);
 }
-function masteringPairAnalyze(analysisName, source, reference, sampleRate, params = {}) {
+function masteringPairAnalyze(analysisName, source, reference, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringPairAnalyze(analysisName, source, reference, sampleRate, params);
 }
-function masteringStereoAnalyze(analysisName, left, right, sampleRate, params = {}) {
+function masteringStereoAnalyze(analysisName, left, right, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringStereoAnalyze(analysisName, left, right, sampleRate, params);
 }
-function masteringAssistantSuggest(samples, sampleRate, params = {}) {
+function masteringAssistantSuggest(samples, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringAssistantSuggest(samples, sampleRate, params);
 }
-function masteringAudioProfile(samples, sampleRate, params = {}) {
+function masteringAudioProfile(samples, sampleRate = 22050, params = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringAudioProfile(samples, sampleRate, params);
 }
-function masteringStreamingPreview(samples, sampleRate, platforms = []) {
+function masteringStreamingPreview(samples, sampleRate = 22050, platforms = []) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringStreamingPreview(samples, sampleRate, platforms);
 }
-function masteringChain(samples, sampleRate, config) {
+function masteringRepairDeclick(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDeclick(samples, sampleRate, options);
+}
+function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDenoiseClassical(samples, sampleRate, options);
+}
+function masteringRepairDeclip(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDeclip(samples, sampleRate, options);
+}
+function masteringRepairDecrackle(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDecrackle(samples, sampleRate, options);
+}
+function masteringRepairDehum(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDehum(samples, sampleRate, options);
+}
+function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDereverbClassical(samples, sampleRate, options);
+}
+function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairTrimSilence(samples, sampleRate, options);
+}
+var COMPRESSOR_DETECTOR_MAP = {
+  peak: 0,
+  rms: 1,
+  log_rms: 2
+};
+function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
+  assertSamples("masteringDynamicsCompressor", samples, options.validate !== false);
+  const detector = typeof options.detector === "string" ? COMPRESSOR_DETECTOR_MAP[options.detector] : options.detector;
+  const opts = { ...options };
+  if (detector !== void 0) {
+    opts.detector = detector;
+  }
+  return requireModule().masteringDynamicsCompressor(samples, sampleRate, opts);
+}
+function masteringDynamicsGate(samples, sampleRate, options = {}) {
+  assertSamples("masteringDynamicsGate", samples, options.validate !== false);
+  return requireModule().masteringDynamicsGate(samples, sampleRate, options);
+}
+function masteringDynamicsTransientShaper(samples, sampleRate, options = {}) {
+  assertSamples("masteringDynamicsTransientShaper", samples, options.validate !== false);
+  return requireModule().masteringDynamicsTransientShaper(samples, sampleRate, options);
+}
+function masteringChain(samples, sampleRate = 22050, config) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masteringChain(samples, sampleRate, config);
 }
-function masteringChainStereo(left, right, sampleRate, config) {
+function masteringChainStereo(left, right, sampleRate = 22050, config) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -711,7 +870,7 @@ function masteringChainStereo(left, right, sampleRate, config) {
   }
   return module.masteringChainStereo(left, right, sampleRate, config);
 }
-function masteringChainWithProgress(samples, sampleRate, config, onProgress) {
+function masteringChainWithProgress(samples, sampleRate = 22050, config, onProgress) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -722,7 +881,7 @@ function masteringChainWithProgress(samples, sampleRate, config, onProgress) {
     onProgress
   );
 }
-function masteringChainStereoWithProgress(left, right, sampleRate, config, onProgress) {
+function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config, onProgress) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -743,13 +902,13 @@ function masteringPresetNames() {
   }
   return module.masteringPresetNames();
 }
-function masterAudio(samples, sampleRate, presetName, overrides = null) {
+function masterAudio(samples, sampleRate = 22050, presetName, overrides = null) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.masterAudio(presetName, samples, sampleRate, overrides);
 }
-function masterAudioStereo(left, right, sampleRate, presetName, overrides = null) {
+function masterAudioStereo(left, right, sampleRate = 22050, presetName, overrides = null) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -758,17 +917,39 @@ function masterAudioStereo(left, right, sampleRate, presetName, overrides = null
   }
   return module.masterAudioStereo(presetName, left, right, sampleRate, overrides);
 }
+function masterAudioWithProgress(samples, sampleRate = 22050, presetName, onProgress, overrides = null) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.masterAudioWithProgress(presetName, samples, sampleRate, overrides, onProgress);
+}
+function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetName, onProgress, overrides = null) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return module.masterAudioStereoWithProgress(
+    presetName,
+    left,
+    right,
+    sampleRate,
+    overrides,
+    onProgress
+  );
+}
 function mixingScenePresetNames() {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.mixingScenePresetNames();
 }
-function mixingScenePresetJson(preset) {
+function mixingScenePresetJson(presetName) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.mixingScenePresetJson(preset);
+  return module.mixingScenePresetJson(presetName);
 }
 function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {}) {
   if (!module) {
@@ -979,11 +1160,158 @@ var StreamingRetune = class {
     this.retune.delete();
   }
 };
-function mixerScenePresetJson(preset) {
+var RealtimeVoiceChanger = class {
+  constructor(config = "neutral-monitor") {
+    if (!module) {
+      throw new Error("Module not initialized. Call init() first.");
+    }
+    this.changer = module.createRealtimeVoiceChanger(config);
+  }
+  prepare(sampleRate, maxBlockSize = 128, channels = 1) {
+    this.changer.prepare(sampleRate, maxBlockSize, channels);
+  }
+  reset() {
+    this.changer.reset();
+  }
+  setConfig(config) {
+    this.changer.setConfig(config);
+  }
+  configJson() {
+    return this.changer.configJson();
+  }
+  latencySamples() {
+    return this.changer.latencySamples();
+  }
+  processMono(samples) {
+    return this.changer.processMono(samples);
+  }
+  processMonoInto(samples, output) {
+    this.changer.processMonoInto(samples, output);
+  }
+  processInterleaved(samples, channels) {
+    return this.changer.processInterleaved(samples, channels);
+  }
+  processInterleavedInto(samples, channels, output) {
+    this.changer.processInterleavedInto(samples, channels, output);
+  }
+  /**
+   * Acquire a typed-memory view onto the WASM heap for mono input.
+   *
+   * Write your input samples into the returned `Float32Array` directly (e.g.
+   * via `input.set(source)`); no copy crosses the JS↔C++ bridge until
+   * {@link processPreparedMono} is called. The view is owned by this
+   * RealtimeVoiceChanger and becomes invalid after {@link delete}; it may
+   * also be invalidated if you later call this method with a larger
+   * `numSamples` value (the underlying buffer may be reallocated).
+   */
+  getMonoInputBuffer(numSamples) {
+    return this.changer.getMonoInputBuffer(numSamples);
+  }
+  /** Mono output view counterpart to {@link getMonoInputBuffer}. */
+  getMonoOutputBuffer(numSamples) {
+    return this.changer.getMonoOutputBuffer(numSamples);
+  }
+  /**
+   * Process the previously-acquired mono input buffer in place. The output
+   * appears in the buffer returned by {@link getMonoOutputBuffer}. No JS↔C++
+   * sample-level crossings happen on this call — it just hands control to
+   * the underlying DSP on already-on-heap data.
+   */
+  processPreparedMono(numSamples) {
+    this.changer.processPreparedMono(numSamples);
+  }
+  /** Interleaved input view (layout L0,R0,L1,R1,...). */
+  getInterleavedInputBuffer(numFrames, numChannels) {
+    return this.changer.getInterleavedInputBuffer(numFrames, numChannels);
+  }
+  /** Interleaved output view counterpart. */
+  getInterleavedOutputBuffer(numFrames, numChannels) {
+    return this.changer.getInterleavedOutputBuffer(numFrames, numChannels);
+  }
+  /**
+   * Process the previously-acquired interleaved buffer in place. Output
+   * appears in the buffer returned by {@link getInterleavedOutputBuffer}.
+   */
+  processPreparedInterleaved(numFrames, numChannels) {
+    this.changer.processPreparedInterleaved(numFrames, numChannels);
+  }
+  /**
+   * Planar-channel input/output view (one Float32Array per channel). Matches
+   * AudioWorklet's native layout; processing happens in place.
+   */
+  getPlanarChannelBuffer(channel, numFrames) {
+    return this.changer.getPlanarChannelBuffer(channel, numFrames);
+  }
+  /**
+   * Process the previously-acquired planar channel buffers in place. Each
+   * channel must have been obtained from {@link getPlanarChannelBuffer}
+   * with the same `numFrames`. Output replaces input in the same buffers.
+   */
+  processPreparedPlanar(numFrames) {
+    this.changer.processPreparedPlanar(numFrames);
+  }
+  /**
+   * Convenience factory for the mono zero-copy path: returns the input/output
+   * heap views plus a `process()` thunk wired to the same `numSamples`. The
+   * views are reused across calls and become invalid after {@link delete}.
+   */
+  createRealtimeMonoBuffer(numSamples) {
+    const input = this.getMonoInputBuffer(numSamples);
+    const output = this.getMonoOutputBuffer(numSamples);
+    return {
+      input,
+      output,
+      process: () => this.processPreparedMono(numSamples)
+    };
+  }
+  /** Same as {@link createRealtimeMonoBuffer} but for interleaved I/O. */
+  createRealtimeInterleavedBuffer(numFrames, numChannels) {
+    const input = this.getInterleavedInputBuffer(numFrames, numChannels);
+    const output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+    return {
+      input,
+      output,
+      channels: numChannels,
+      process: () => this.processPreparedInterleaved(numFrames, numChannels)
+    };
+  }
+  /**
+   * Convenience factory for the planar zero-copy path. Acquires one
+   * heap-backed Float32Array per channel and returns a `process()` thunk
+   * wired to the same `numFrames`. Buffers are reused across calls and
+   * become invalid after {@link delete}.
+   */
+  createRealtimePlanarBuffer(numFrames, numChannels) {
+    const channels = [];
+    for (let ch = 0; ch < numChannels; ch++) {
+      channels.push(this.getPlanarChannelBuffer(ch, numFrames));
+    }
+    return {
+      channels,
+      process: () => this.processPreparedPlanar(numFrames)
+    };
+  }
+  delete() {
+    this.changer.delete();
+  }
+};
+function realtimeVoiceChangerPresetNames() {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.mixerPresetJson(preset);
+  return module.realtimeVoiceChangerPresetNames();
+}
+function realtimeVoiceChangerPresetJson(name) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.realtimeVoiceChangerPresetJson(name);
+}
+function validateRealtimeVoiceChangerPresetJson(json) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.validateRealtimeVoiceChangerPresetJson(json);
 }
 var Mixer = class _Mixer {
   constructor(mixer) {
@@ -1127,6 +1455,26 @@ var Mixer = class _Mixer {
   /** Number of VCA groups in the mixer topology. */
   vcaGroupCount() {
     return this.mixer.vcaGroupCount();
+  }
+  /** Set the strip's input trim in dB. */
+  setInputTrimDb(stripIndex, db) {
+    this.mixer.setInputTrimDb(stripIndex, db);
+  }
+  /** Set the strip's fader level in dB. */
+  setFaderDb(stripIndex, db) {
+    this.mixer.setFaderDb(stripIndex, db);
+  }
+  /** Set the strip's pan position. */
+  setPan(stripIndex, pan, panMode = 0) {
+    this.mixer.setPan(stripIndex, pan, panModeCode(panMode));
+  }
+  /** Set the strip's stereo width. */
+  setWidth(stripIndex, width) {
+    this.mixer.setWidth(stripIndex, width);
+  }
+  /** Set the strip's mute state. */
+  setMuted(stripIndex, muted) {
+    this.mixer.setMuted(stripIndex, muted);
   }
   /**
    * Set a strip's solo state. Takes effect on the next process without a
@@ -1278,37 +1626,37 @@ function trim(samples, sampleRate, thresholdDb = -60) {
   }
   return module.trim(samples, sampleRate, thresholdDb);
 }
-function stft(samples, sampleRate, nFft = 2048, hopLength = 512) {
+function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.stft(samples, sampleRate, nFft, hopLength);
 }
-function stftDb(samples, sampleRate, nFft = 2048, hopLength = 512) {
+function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.stftDb(samples, sampleRate, nFft, hopLength);
 }
-function melSpectrogram(samples, sampleRate, nFft = 2048, hopLength = 512, nMels = 128) {
+function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.melSpectrogram(samples, sampleRate, nFft, hopLength, nMels);
 }
-function mfcc(samples, sampleRate, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 13) {
+function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.mfcc(samples, sampleRate, nFft, hopLength, nMels, nMfcc);
 }
-function melToStft(melPower, nMels, nFrames, sampleRate, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0) {
+function melToStft(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.melToStft(melPower, nMels, nFrames, sampleRate, nFft, hopLength, fmin, fmax);
+  return module.melToStft(melPower, nMels, nFrames, sampleRate, nFft, fmin, fmax);
 }
-function melToAudio(melPower, nMels, nFrames, sampleRate, nFft = 2048, hopLength = 512, nIter = 32, fmin = 0, fmax = 0) {
+function melToAudio(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -1319,9 +1667,9 @@ function melToAudio(melPower, nMels, nFrames, sampleRate, nFft = 2048, hopLength
     sampleRate,
     nFft,
     hopLength,
-    nIter,
     fmin,
-    fmax
+    fmax,
+    nIter
   );
 }
 function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128) {
@@ -1330,7 +1678,7 @@ function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128) {
   }
   return module.mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
 }
-function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate, nFft = 2048, hopLength = 512, nIter = 32, fmin = 0, fmax = 0) {
+function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -1342,64 +1690,155 @@ function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate, nFft =
     sampleRate,
     nFft,
     hopLength,
-    nIter,
     fmin,
-    fmax
+    fmax,
+    nIter
   );
 }
-function chroma(samples, sampleRate, nFft = 2048, hopLength = 512) {
+function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.chroma(samples, sampleRate, nFft, hopLength);
 }
-function spectralCentroid(samples, sampleRate, nFft = 2048, hopLength = 512) {
+function spectralCentroid(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.spectralCentroid(samples, sampleRate, nFft, hopLength);
 }
-function spectralBandwidth(samples, sampleRate, nFft = 2048, hopLength = 512) {
+function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nBands = 6, fmin = 200, quantile = 0.02) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.spectralContrast(samples, sampleRate, nFft, hopLength, nBands, fmin, quantile);
+}
+function polyFeatures(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, order = 1) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.polyFeatures(samples, sampleRate, nFft, hopLength, order);
+}
+function zeroCrossings(samples, threshold = 1e-10, refMagnitude = false, pad = true, zeroPos = true) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.zeroCrossings(samples, threshold, refMagnitude, pad, zeroPos);
+}
+function pitchTuning(frequencies, resolution = 0.01, binsPerOctave = 12) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.pitchTuning(frequencies, resolution, binsPerOctave);
+}
+function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, resolution = 0.01, binsPerOctave = 12) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.estimateTuning(samples, sampleRate, nFft, hopLength, resolution, binsPerOctave);
+}
+function decompose(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.decompose(s, nFeatures, nFrames, nComponents, nIter, beta);
+}
+function nnFilter(s, nFeatures, nFrames, aggregate = "mean", k = 7, width = 1) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.nnFilter(s, nFeatures, nFrames, aggregate, k, width);
+}
+function remix(samples, intervals, sampleRate = 22050, alignZeros = false) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  const intervalsI32 = intervals instanceof Int32Array ? intervals : Int32Array.from(intervals, (v) => Math.trunc(v));
+  return module.remix(samples, intervalsI32, sampleRate, alignZeros);
+}
+function phaseVocoder(samples, rate, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
+}
+function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
+}
+function lufsInterleaved(samples, channels, sampleRate = 22050) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.lufsInterleaved(samples, channels, sampleRate);
+}
+function ebur128LoudnessRange(samples, sampleRate = 22050) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.ebur128LoudnessRange(samples, sampleRate);
+}
+function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.spectralBandwidth(samples, sampleRate, nFft, hopLength);
 }
-function spectralRolloff(samples, sampleRate, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
+function spectralRolloff(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.spectralRolloff(samples, sampleRate, nFft, hopLength, rollPercent);
 }
-function spectralFlatness(samples, sampleRate, nFft = 2048, hopLength = 512) {
+function spectralFlatness(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.spectralFlatness(samples, sampleRate, nFft, hopLength);
 }
-function zeroCrossingRate(samples, sampleRate, frameLength = 2048, hopLength = 512) {
+function zeroCrossingRate(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.zeroCrossingRate(samples, sampleRate, frameLength, hopLength);
 }
-function rmsEnergy(samples, sampleRate, frameLength = 2048, hopLength = 512) {
+function rmsEnergy(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.rmsEnergy(samples, sampleRate, frameLength, hopLength);
 }
-function pitchYin(samples, sampleRate, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3) {
+function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.pitchYin(samples, sampleRate, frameLength, hopLength, fmin, fmax, threshold);
+  return module.pitchYin(
+    samples,
+    sampleRate,
+    frameLength,
+    hopLength,
+    fmin,
+    fmax,
+    threshold,
+    fillNa
+  );
 }
-function pitchPyin(samples, sampleRate, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3) {
+function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.pitchPyin(samples, sampleRate, frameLength, hopLength, fmin, fmax, threshold);
+  return module.pitchPyin(
+    samples,
+    sampleRate,
+    frameLength,
+    hopLength,
+    fmin,
+    fmax,
+    threshold,
+    fillNa
+  );
 }
 function hzToMel(hz) {
   if (!module) {
@@ -1437,13 +1876,13 @@ function noteToHz(note) {
   }
   return module.noteToHz(note);
 }
-function framesToTime(frames, sr, hopLength) {
+function framesToTime(frames, sr = 22050, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.framesToTime(frames, sr, hopLength);
 }
-function timeToFrames(time, sr, hopLength) {
+function timeToFrames(time, sr = 22050, hopLength = 512) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -1515,17 +1954,17 @@ function frameSignal(samples, frameLength, hopLength) {
   }
   return module.frameSignal(samples, frameLength, hopLength);
 }
-function padCenter(values, size, padValue = 0) {
+function padCenter(values, targetSize, padValue = 0) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.padCenter(values, size, padValue);
+  return module.padCenter(values, targetSize, padValue);
 }
-function fixLength(values, size, padValue = 0) {
+function fixLength(values, targetSize, padValue = 0) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return module.fixLength(values, size, padValue);
+  return module.fixLength(values, targetSize, padValue);
 }
 function fixFrames(frames, xMin = 0, xMax = -1, pad = true) {
   if (!module) {
@@ -1539,7 +1978,7 @@ function peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait) {
   }
   return module.peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait);
 }
-function vectorNormalize(values, normType = 0, threshold = 1e-12) {
+function vectorNormalize(values, normType = 0, threshold = 0) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -1557,19 +1996,19 @@ function tonnetz(chromagram, nChroma, nFrames) {
   }
   return module.tonnetz(chromagram, nChroma, nFrames);
 }
-function tempogram(onsetEnvelope2, sampleRate, hopLength = 512, winLength = 384, mode = "autocorrelation") {
+function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation") {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
 }
-function cyclicTempogram(onsetEnvelope2, sampleRate, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
+function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.cyclicTempogram(onsetEnvelope2, sampleRate, hopLength, winLength, bpmMin, nBins);
 }
-function plp(onsetEnvelope2, sampleRate, hopLength = 512, tempoMin = 30, tempoMax = 300, winLength = 384) {
+function plp(onsetEnvelope2, sampleRate = 22050, hopLength = 512, tempoMin = 30, tempoMax = 300, winLength = 384) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -1593,13 +2032,13 @@ function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257
   }
   return module.vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
 }
-function analyzeSections(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, minSectionSec = 8) {
+function analyzeSections(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, minSectionSec = 4) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
   return module.analyzeSections(samples, sampleRate, nFft, hopLength, minSectionSec).map((s) => ({ ...s, type: s.type }));
 }
-function analyzeMelody(samples, sampleRate = 22050, fmin = 65, fmax = 2093, frameLength = 2048, hopLength = 512, threshold = 0.1) {
+function analyzeMelody(samples, sampleRate = 22050, fmin = 65, fmax = 2093, frameLength = 2048, hopLength = 256, threshold = 0.1) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
@@ -1623,23 +2062,109 @@ function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopL
   }
   return module.tempogramRatio(tempogramData, winLength, sampleRate, hopLength);
 }
-function lufs(samples, sampleRate = 22050) {
+function lufs(samples, sampleRate = 22050, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("lufs", samples, options.validate !== false);
   return module.lufs(samples, sampleRate);
 }
-function momentaryLufs(samples, sampleRate = 22050) {
+function momentaryLufs(samples, sampleRate = 22050, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("momentaryLufs", samples, options.validate !== false);
   return module.momentaryLufs(samples, sampleRate);
 }
-function shortTermLufs(samples, sampleRate = 22050) {
+function shortTermLufs(samples, sampleRate = 22050, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("shortTermLufs", samples, options.validate !== false);
   return module.shortTermLufs(samples, sampleRate);
+}
+function requireModule() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module;
+}
+function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringPeakDb", samples, options.validate !== false);
+  return requireModule().meteringPeakDb(samples, sampleRate);
+}
+function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringRmsDb", samples, options.validate !== false);
+  return requireModule().meteringRmsDb(samples, sampleRate);
+}
+function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringCrestFactorDb", samples, options.validate !== false);
+  return requireModule().meteringCrestFactorDb(samples, sampleRate);
+}
+function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDcOffset", samples, options.validate !== false);
+  return requireModule().meteringDcOffset(samples, sampleRate);
+}
+function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
+  assertSamples("meteringTruePeakDb", samples, options.validate !== false);
+  return requireModule().meteringTruePeakDb(samples, sampleRate, oversampleFactor);
+}
+function meteringDetectClipping(samples, sampleRate = 22050, threshold = 0.999, minRegionSamples = 1, options = {}) {
+  assertSamples("meteringDetectClipping", samples, options.validate !== false);
+  return requireModule().meteringDetectClipping(samples, sampleRate, threshold, minRegionSamples);
+}
+function meteringDynamicRange(samples, sampleRate = 22050, windowSec = 0, hopSec = 0, lowPercentile = 0, highPercentile = 0, options = {}) {
+  assertSamples("meteringDynamicRange", samples, options.validate !== false);
+  return requireModule().meteringDynamicRange(
+    samples,
+    sampleRate,
+    windowSec,
+    hopSec,
+    lowPercentile,
+    highPercentile
+  );
+}
+function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringStereoCorrelation", left, validate, "left");
+  assertSamples("meteringStereoCorrelation", right, validate, "right");
+  return requireModule().meteringStereoCorrelation(left, right, sampleRate);
+}
+function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringStereoWidth", left, validate, "left");
+  assertSamples("meteringStereoWidth", right, validate, "right");
+  return requireModule().meteringStereoWidth(left, right, sampleRate);
+}
+function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringVectorscope", left, validate, "left");
+  assertSamples("meteringVectorscope", right, validate, "right");
+  return requireModule().meteringVectorscope(left, right, sampleRate);
+}
+function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringPhaseScope", left, validate, "left");
+  assertSamples("meteringPhaseScope", right, validate, "right");
+  return requireModule().meteringPhaseScope(left, right, sampleRate);
+}
+function meteringSpectrum(samples, sampleRate = 22050, options) {
+  const validate = options?.validate !== false;
+  assertSamples("meteringSpectrum", samples, validate);
+  return requireModule().meteringSpectrum(samples, sampleRate, options ?? {});
+}
+function scaleQuantizeMidi(root, modeMask, midi, referenceMidi = 0) {
+  assertFiniteScalar("scaleQuantizeMidi", midi, "midi");
+  assertFiniteScalar("scaleQuantizeMidi", referenceMidi, "referenceMidi");
+  return requireModule().scaleQuantizeMidi(root, modeMask, midi, referenceMidi);
+}
+function scaleCorrectionSemitones(root, modeMask, midi, referenceMidi = 0) {
+  assertFiniteScalar("scaleCorrectionSemitones", midi, "midi");
+  assertFiniteScalar("scaleCorrectionSemitones", referenceMidi, "referenceMidi");
+  return requireModule().scaleCorrectionSemitones(root, modeMask, midi, referenceMidi);
+}
+function scalePitchClassEnabled(root, modeMask, pitchClass) {
+  return requireModule().scalePitchClassEnabled(root, modeMask, pitchClass);
 }
 function resample(samples, srcSr, targetSr) {
   if (!module) {
@@ -1716,13 +2241,13 @@ var Audio = class _Audio {
   pitchShift(semitones) {
     return pitchShift(this._samples, this._sampleRate, semitones);
   }
-  pitchCorrectToMidi(currentMidi, targetMidi) {
+  pitchCorrectToMidi(currentMidi = 69, targetMidi = 69) {
     return pitchCorrectToMidi(this._samples, this._sampleRate, currentMidi, targetMidi);
   }
-  noteStretch(onsetSample, offsetSample, stretchRatio) {
+  noteStretch(onsetSample = 0, offsetSample = 0, stretchRatio = 1) {
     return noteStretch(this._samples, this._sampleRate, onsetSample, offsetSample, stretchRatio);
   }
-  voiceChange(pitchSemitones, formantFactor) {
+  voiceChange(pitchSemitones = 0, formantFactor = 1) {
     return voiceChange(this._samples, this._sampleRate, pitchSemitones, formantFactor);
   }
   normalize(targetDb = 0) {
@@ -1753,7 +2278,7 @@ var Audio = class _Audio {
   melSpectrogram(nFft = 2048, hopLength = 512, nMels = 128) {
     return melSpectrogram(this._samples, this._sampleRate, nFft, hopLength, nMels);
   }
-  mfcc(nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 13) {
+  mfcc(nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20) {
     return mfcc(this._samples, this._sampleRate, nFft, hopLength, nMels, nMfcc);
   }
   chroma(nFft = 2048, hopLength = 512) {
@@ -1792,10 +2317,19 @@ var Audio = class _Audio {
   rmsEnergy(frameLength = 2048, hopLength = 512) {
     return rmsEnergy(this._samples, this._sampleRate, frameLength, hopLength);
   }
-  pitchYin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3) {
-    return pitchYin(this._samples, this._sampleRate, frameLength, hopLength, fmin, fmax, threshold);
+  pitchYin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+    return pitchYin(
+      this._samples,
+      this._sampleRate,
+      frameLength,
+      hopLength,
+      fmin,
+      fmax,
+      threshold,
+      fillNa
+    );
   }
-  pitchPyin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3) {
+  pitchPyin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
     return pitchPyin(
       this._samples,
       this._sampleRate,
@@ -1803,7 +2337,8 @@ var Audio = class _Audio {
       hopLength,
       fmin,
       fmax,
-      threshold
+      threshold,
+      fillNa
     );
   }
   resample(targetSr) {
@@ -1820,8 +2355,7 @@ var StreamAnalyzer = class {
     if (!module) {
       throw new Error("Module not initialized. Call init() first.");
     }
-    const wasmModule = module;
-    const args = [
+    this.analyzer = new module.StreamAnalyzer(
       config.sampleRate,
       config.nFft ?? 2048,
       config.hopLength ?? 512,
@@ -1840,44 +2374,7 @@ var StreamAnalyzer = class {
       config.bpmUpdateIntervalSec ?? 10,
       config.window ?? 0,
       config.outputFormat ?? 0
-    ];
-    const isArityError = (error) => {
-      const message = String(error?.message ?? error);
-      return message.includes("invalid number of parameters");
-    };
-    const createLegacy = () => {
-      const LegacyStreamAnalyzer = wasmModule.StreamAnalyzer;
-      return new LegacyStreamAnalyzer(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        args[8],
-        args[9],
-        args[10],
-        args[12]
-      );
-    };
-    const hasExtendedConfig = config.fmin !== void 0 || config.fmax !== void 0 || config.tuningRefHz !== void 0 || config.computeMagnitude !== void 0 || config.computeSpectral !== void 0 || config.magnitudeDownsample !== void 0 || config.keyUpdateIntervalSec !== void 0 || config.bpmUpdateIntervalSec !== void 0 || config.window !== void 0 || config.outputFormat !== void 0;
-    if (hasExtendedConfig) {
-      try {
-        this.analyzer = new wasmModule.StreamAnalyzer(...args);
-      } catch (error) {
-        if (!isArityError(error)) {
-          throw error;
-        }
-        this.analyzer = createLegacy();
-      }
-    } else {
-      try {
-        this.analyzer = createLegacy();
-      } catch (error) {
-        if (!isArityError(error)) {
-          throw error;
-        }
-        this.analyzer = new wasmModule.StreamAnalyzer(...args);
-      }
-    }
+    );
   }
   /**
    * Process audio samples.
@@ -2046,6 +2543,7 @@ export {
   PitchClass as Pitch,
   PitchClass,
   RealtimeEngine,
+  RealtimeVoiceChanger,
   SectionType,
   StreamAnalyzer,
   StreamingEqualizer,
@@ -2053,15 +2551,20 @@ export {
   StreamingRetune,
   amplitudeToDb,
   analyze,
+  analyzeBpm,
+  analyzeDynamics,
   analyzeImpulseResponse,
   analyzeMelody,
+  analyzeRhythm,
   analyzeSections,
+  analyzeTimbre,
   analyzeWithProgress,
   chroma,
   cqt,
   cyclicTempogram,
   dbToAmplitude,
   dbToPower,
+  decompose,
   deemphasis,
   detectAcoustic,
   detectBeats,
@@ -2071,8 +2574,10 @@ export {
   detectKey,
   detectKeyCandidates,
   detectOnsets,
+  ebur128LoudnessRange,
   engineAbiVersion,
   engineCapabilities,
+  estimateTuning,
   fixFrames,
   fixLength,
   fourierTempogram,
@@ -2080,15 +2585,20 @@ export {
   framesToSamples,
   framesToTime,
   harmonic,
+  hasFfmpegSupport,
   hpss,
+  hpssWithResidual,
   hzToMel,
   hzToMidi,
   hzToNote,
   init,
   isInitialized,
   lufs,
+  lufsInterleaved,
   masterAudio,
   masterAudioStereo,
+  masterAudioStereoWithProgress,
+  masterAudioWithProgress,
   mastering,
   masteringAssistantSuggest,
   masteringAudioProfile,
@@ -2096,6 +2606,9 @@ export {
   masteringChainStereo,
   masteringChainStereoWithProgress,
   masteringChainWithProgress,
+  masteringDynamicsCompressor,
+  masteringDynamicsGate,
+  masteringDynamicsTransientShaper,
   masteringPairAnalysisNames,
   masteringPairAnalyze,
   masteringPairProcess,
@@ -2104,6 +2617,13 @@ export {
   masteringProcess,
   masteringProcessStereo,
   masteringProcessorNames,
+  masteringRepairDeclick,
+  masteringRepairDeclip,
+  masteringRepairDecrackle,
+  masteringRepairDehum,
+  masteringRepairDenoiseClassical,
+  masteringRepairDereverbClassical,
+  masteringRepairTrimSilence,
   masteringStereoAnalysisNames,
   masteringStereoAnalyze,
   masteringStreamingPreview,
@@ -2111,15 +2631,27 @@ export {
   melToAudio,
   melToHz,
   melToStft,
+  meteringCrestFactorDb,
+  meteringDcOffset,
+  meteringDetectClipping,
+  meteringDynamicRange,
+  meteringPeakDb,
+  meteringPhaseScope,
+  meteringRmsDb,
+  meteringSpectrum,
+  meteringStereoCorrelation,
+  meteringStereoWidth,
+  meteringTruePeakDb,
+  meteringVectorscope,
   mfcc,
   mfccToAudio,
   mfccToMel,
   midiToHz,
   mixStereo,
-  mixerScenePresetJson,
   mixingScenePresetJson,
   mixingScenePresetNames,
   momentaryLufs,
+  nnFilter,
   nnlsChroma,
   normalize,
   noteStretch,
@@ -2129,19 +2661,30 @@ export {
   pcen,
   peakPick,
   percussive,
+  phaseVocoder,
   pitchCorrectToMidi,
   pitchPyin,
   pitchShift,
+  pitchTuning,
   pitchYin,
   plp,
+  polyFeatures,
   powerToDb,
   preemphasis,
+  realtimeVoiceChangerPresetConfig,
+  realtimeVoiceChangerPresetJson,
+  realtimeVoiceChangerPresetNames,
+  remix,
   resample,
   rmsEnergy,
   samplesToFrames,
+  scaleCorrectionSemitones,
+  scalePitchClassEnabled,
+  scaleQuantizeMidi,
   shortTermLufs,
   spectralBandwidth,
   spectralCentroid,
+  spectralContrast,
   spectralFlatness,
   spectralRolloff,
   splitSilence,
@@ -2154,9 +2697,13 @@ export {
   tonnetz,
   trim,
   trimSilence,
+  validateRealtimeVoiceChangerPresetJson,
   vectorNormalize,
   version,
   voiceChange,
+  voiceChangerAbiVersion,
+  voiceCharacterPresetId,
   vqt,
-  zeroCrossingRate
+  zeroCrossingRate,
+  zeroCrossings
 };

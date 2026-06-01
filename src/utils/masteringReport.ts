@@ -1,9 +1,15 @@
-import type { MasteringPlatformId, MasteringPresetId } from '@/composables/useMastering';
+import type {
+  MasteringPlatformId,
+  MasteringPresetId,
+  MasteringVenueId,
+} from '@/composables/useMastering';
 
 export interface MasteringReportPayload {
   preset: MasteringPresetId;
+  venue: MasteringVenueId;
   platform: MasteringPlatformId;
   targetLufs: number;
+  effectiveTargetLufs?: number;
   tuning: {
     tone: number;
     width: number;

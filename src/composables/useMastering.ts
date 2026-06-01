@@ -1,13 +1,31 @@
 import { ref, shallowRef } from 'vue';
 import type { MasteringChainConfig, StreamingPlatform } from '@/wasm/index';
 
-export type MasteringPresetId = 'pop' | 'edm' | 'acoustic' | 'hiphop' | 'aiMusic' | 'speech';
+export type MasteringPresetId =
+  | 'pop'
+  | 'edm'
+  | 'acoustic'
+  | 'liveSmall'
+  | 'liveLarge'
+  | 'hiphop'
+  | 'aiMusic'
+  | 'speech';
+export type MasteringVenueId = 'studio' | 'livehouseSmall' | 'livehouseLarge';
 export type MasteringPlatformId = 'spotify' | 'youtube' | 'apple' | 'tiktok' | 'custom';
 
 export interface MasteringTuning {
   tone: number;
   width: number;
   dynamics: number;
+}
+
+export interface MasteringDiagnosticBypass {
+  repair: boolean;
+  dynamics: boolean;
+  saturation: boolean;
+  airBand: boolean;
+  stereo: boolean;
+  loudnessLimiter: boolean;
 }
 
 export interface MasteringModuleSettings {
@@ -44,9 +62,12 @@ export interface MasteringModuleSettings {
 
 export interface MasteringRenderOptions {
   preset: MasteringPresetId;
+  venue?: MasteringVenueId;
   targetLufs: number;
   tuning: MasteringTuning;
   moduleSettings?: MasteringModuleSettings;
+  qualityMode?: 'safe' | 'studio';
+  diagnosticBypass?: MasteringDiagnosticBypass;
 }
 
 export interface ReferenceMatchOptions {
@@ -226,15 +247,26 @@ export function useMastering() {
     }
     await initWasm();
     const samples = mixToMono(source.value.left, source.value.right);
-    return {
-      profile: parseJsonReport(wasmModule.masteringAudioProfile(samples, source.value.sampleRate)),
-      suggestions: parseJsonReport(
-        wasmModule.masteringAssistantSuggest(samples, source.value.sampleRate),
-      ),
-      streamingPreview: parseJsonReport(
-        wasmModule.masteringStreamingPreview(samples, source.value.sampleRate, platforms),
-      ),
-    };
+    try {
+      return {
+        profile: parseJsonReport(
+          wasmModule.masteringAudioProfile(samples, source.value.sampleRate),
+        ),
+        suggestions: parseJsonReport(
+          wasmModule.masteringAssistantSuggest(samples, source.value.sampleRate),
+        ),
+        streamingPreview: parseJsonReport(
+          wasmModule.masteringStreamingPreview(samples, source.value.sampleRate, platforms),
+        ),
+      };
+    } catch (e) {
+      // The mastering assistant rejects clips shorter than one analysis window.
+      // It surfaces as a raw WASM exception pointer (a number), so normalise it
+      // into an Error and set a friendly message instead of leaking the pointer.
+      console.error('Mastering analysis failed:', e);
+      error.value = 'Could not analyze this audio — it may be too short.';
+      throw e instanceof Error ? e : new Error('Mastering analysis failed');
+    }
   }
 
   function createAudioUrl(audio: RenderedMasteringAudio): string {
@@ -429,20 +461,30 @@ function resampleLinear(
 
 function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainConfig {
   const { preset, targetLufs, tuning } = options;
+  const venue: MasteringVenueId = options.venue ?? 'studio';
+  const safeMode = options.qualityMode === 'safe';
   const warm = tuning.tone / 100;
   const wide = tuning.width / 100;
   const compressed = (100 - tuning.dynamics) / 100;
   const settings = options.moduleSettings || defaultModuleSettings();
+  const ceilingDb = safeMode
+    ? Math.min(settings.limiterCeilingDb, -1.5)
+    : settings.limiterCeilingDb;
+  const exciterAmount = safeMode ? Math.min(settings.exciterAmount, 0.04) : settings.exciterAmount;
+  const exciterEnabled = exciterAmount > 0;
+  const airBandAmount = safeMode ? Math.min(settings.airBandAmount, 0.14) : settings.airBandAmount;
+  const stereoWidth = safeMode ? Math.min(settings.stereoWidth, 1.03) : settings.stereoWidth;
+  const exciterDriveDb = exciterEnabled ? warm * (safeMode ? 0.8 : 2.5) : 0;
 
   const config: MasteringChainConfig = {
     eq: {
-      tiltDb: settings.tiltDb + (warm - 0.5) * -2.5,
+      tiltDb: settings.tiltDb + (warm - 0.5) * (safeMode ? -1.2 : -2.5),
       pivotHz: 1000,
     },
     dynamics: {
       compressor: {
-        thresholdDb: settings.compressorThresholdDb - compressed * 4,
-        ratio: settings.compressorRatio + compressed * 0.8,
+        thresholdDb: settings.compressorThresholdDb - compressed * (safeMode ? 2 : 4),
+        ratio: settings.compressorRatio + compressed * (safeMode ? 0.35 : 0.8),
         attackMs:
           preset === 'speech'
             ? Math.min(settings.compressorAttackMs, 8)
@@ -452,27 +494,17 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
             ? Math.min(settings.compressorReleaseMs, 120)
             : settings.compressorReleaseMs,
         kneeDb: 4,
-        autoMakeup: true,
-      },
-    },
-    saturation: {
-      exciter: {
-        frequencyHz: preset === 'aiMusic' ? 14500 : 9000,
-        driveDb: warm * 2.5,
-        amount:
-          preset === 'aiMusic'
-            ? settings.exciterAmount + 0.14 + warm * 0.18
-            : settings.exciterAmount + warm * 0.1,
-        q: 0.8,
-        evenOddMix: 0.65,
+        autoMakeup: !safeMode,
       },
     },
     spectral: {
       airBand: {
         amount:
           preset === 'aiMusic'
-            ? Math.max(settings.airBandAmount, 0.55)
-            : settings.airBandAmount + warm * 0.12,
+            ? safeMode
+              ? Math.max(airBandAmount, 0.22)
+              : Math.max(airBandAmount, 0.55)
+            : airBandAmount + warm * (safeMode ? 0.04 : 0.12),
         shelfFrequencyHz: preset === 'aiMusic' ? 15500 : 12000,
       },
     },
@@ -480,32 +512,47 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       imager: {
         width:
           preset === 'speech'
-            ? Math.min(settings.stereoWidth, 0.95)
-            : settings.stereoWidth + wide * 0.2,
-        decorrelationAmount: preset === 'speech' ? 0 : wide * 0.08,
+            ? Math.min(stereoWidth, 0.95)
+            : stereoWidth + wide * (safeMode ? 0.06 : 0.2),
+        decorrelationAmount: preset === 'speech' ? 0 : wide * (safeMode ? 0.02 : 0.08),
         preserveEnergy: true,
       },
     },
     maximizer: {
       truePeakLimiter: {
-        ceilingDb: settings.limiterCeilingDb,
+        ceilingDb,
         lookaheadMs: settings.limiterLookaheadMs,
-        releaseMs: preset === 'edm' ? 80 : 120,
+        releaseMs: safeMode ? 160 : preset === 'edm' ? 80 : 120,
         oversampleFactor: 4,
-        applyGainAtInputRate: true,
+        applyGainAtInputRate: safeMode,
       },
     },
     loudness: {
       targetLufs,
-      ceilingDb: settings.limiterCeilingDb,
+      ceilingDb,
       truePeakOversample: 4,
+      applyGainAtInputRate: safeMode,
     },
   };
 
+  if (exciterEnabled) {
+    config.saturation = {
+      exciter: {
+        frequencyHz: preset === 'aiMusic' ? 14500 : 9000,
+        driveDb: exciterDriveDb,
+        amount: preset === 'aiMusic' ? exciterAmount + (safeMode ? 0.02 : 0.08) : exciterAmount,
+        q: 0.8,
+        evenOddMix: 0.65,
+      },
+    };
+  }
+
   // ---- Repair (denoise / declick / dereverb) -----------------------------
+  const isLivehouse = venue === 'livehouseSmall' || venue === 'livehouseLarge';
   const repairActive =
     preset === 'aiMusic' ||
     preset === 'speech' ||
+    isLivehouse ||
     settings.denoiseAmount > 0 ||
     settings.declickAmount > 0 ||
     settings.dereverbAmount > 0;
@@ -526,10 +573,14 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
         maxClickSamples: 96,
       };
     }
-    if (settings.dereverbAmount > 0) {
+    // Small rooms have a short, dense tail (pull back gently); large rooms
+    // wash out with a long tail (pull back harder). User amount always wins.
+    const livehouseDereverb =
+      venue === 'livehouseSmall' ? 0.25 : venue === 'livehouseLarge' ? 0.45 : 0;
+    if (settings.dereverbAmount > 0 || livehouseDereverb > 0) {
       config.repair.dereverb = {
         threshold: 0.08,
-        attenuation: settings.dereverbAmount,
+        attenuation: settings.dereverbAmount > 0 ? settings.dereverbAmount : livehouseDereverb,
         nFft: 2048,
         hopLength: 512,
         overSubtraction: 1.2,
@@ -550,7 +601,9 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
   }
   if (settings.transientAttackDb !== 0) {
     config.dynamics!.transientShaper = {
-      attackGainDb: settings.transientAttackDb,
+      attackGainDb: safeMode
+        ? Math.max(-3, Math.min(3, settings.transientAttackDb))
+        : settings.transientAttackDb,
       sustainGainDb: 0,
       fastAttackMs: 1.5,
       fastReleaseMs: 18,
@@ -568,19 +621,20 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
   const mbMid = settings.multibandMidAmount;
   const mbHigh = settings.multibandHighAmount;
   if (mbLow > 0 || mbMid > 0 || mbHigh > 0) {
+    const mbScale = safeMode ? 0.55 : 1;
     config.dynamics!.multibandComp = {
       lowCutoffHz: 220,
       highCutoffHz: 4500,
-      lowThresholdDb: -10 - mbLow * 16,
-      lowRatio: 1.4 + mbLow * 2,
+      lowThresholdDb: -10 - mbLow * mbScale * 16,
+      lowRatio: 1.4 + mbLow * mbScale * 2,
       lowAttackMs: 12,
       lowReleaseMs: 220,
-      midThresholdDb: -12 - mbMid * 14,
-      midRatio: 1.4 + mbMid * 2,
+      midThresholdDb: -12 - mbMid * mbScale * 14,
+      midRatio: 1.4 + mbMid * mbScale * 2,
       midAttackMs: 18,
       midReleaseMs: 160,
-      highThresholdDb: -14 - mbHigh * 14,
-      highRatio: 1.4 + mbHigh * 2,
+      highThresholdDb: -14 - mbHigh * mbScale * 14,
+      highRatio: 1.4 + mbHigh * mbScale * 2,
       highAttackMs: 6,
       highReleaseMs: 90,
     };
@@ -591,8 +645,8 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
     config.saturation = {
       ...config.saturation,
       tape: {
-        driveDb: settings.tapeDriveDb,
-        saturation: settings.tapeSaturation,
+        driveDb: safeMode ? Math.min(settings.tapeDriveDb, 1.5) : settings.tapeDriveDb,
+        saturation: safeMode ? Math.min(settings.tapeSaturation, 0.25) : settings.tapeSaturation,
         hysteresis: 0.25,
         outputGainDb: 0,
         speedIps: 15,
@@ -620,7 +674,7 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
         attackMs: Math.max(24, settings.compressorAttackMs),
         releaseMs: Math.max(220, settings.compressorReleaseMs),
         kneeDb: 6,
-        autoMakeup: true,
+        autoMakeup: !safeMode,
       },
     };
   }
@@ -630,10 +684,112 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       tiltDb: (config.eq?.tiltDb ?? 0) - 0.5,
       pivotHz: 850,
     };
-    config.dynamics!.compressor!.ratio = 2.6 + compressed;
+    config.dynamics!.compressor!.ratio = safeMode ? 2.2 + compressed * 0.45 : 2.6 + compressed;
   }
 
+  // Live-music genre character (NOT room repair — that is the venue layer).
+  // These keep the performance dynamics and stage energy that a studio-loud
+  // master would flatten. Small = intimate club gig, Large = big-stage show.
+  if (preset === 'liveSmall') {
+    config.eq = {
+      tiltDb: (config.eq?.tiltDb ?? 0) + 0.2,
+      pivotHz: 900,
+    };
+    config.dynamics!.compressor = {
+      ...config.dynamics!.compressor!,
+      ratio: 1.8 + compressed * 0.6,
+      attackMs: Math.max(18, settings.compressorAttackMs),
+      releaseMs: Math.max(180, settings.compressorReleaseMs),
+      kneeDb: 6,
+      autoMakeup: !safeMode,
+    };
+  }
+
+  if (preset === 'liveLarge') {
+    config.eq = {
+      tiltDb: (config.eq?.tiltDb ?? 0) + 0.1,
+      pivotHz: 700,
+    };
+    config.dynamics!.compressor = {
+      ...config.dynamics!.compressor!,
+      ratio: 1.6 + compressed * 0.6,
+      attackMs: Math.max(24, settings.compressorAttackMs),
+      releaseMs: Math.max(240, settings.compressorReleaseMs),
+      kneeDb: 6,
+      autoMakeup: !safeMode,
+    };
+    config.stereo!.imager = {
+      ...config.stereo!.imager,
+      width: (config.stereo?.imager?.width ?? settings.stereoWidth) + 0.05,
+      preserveEnergy: true,
+    };
+  }
+
+  // ---- Recording-condition (venue) layer --------------------------------
+  // Orthogonal to the genre preset: a live-room repair pass that composes ON
+  // TOP of the chosen style instead of replacing it. It re-centers the EQ
+  // pivot on the room's problem band, adds a gentle corrective tilt, folds the
+  // low end to tame room modes, and slows the compressor for the acoustic
+  // space — while the genre keeps driving character and loudness. (Dereverb
+  // for the venue is wired through the repair section above.)
+  if (isLivehouse) {
+    // Small clubs (~100-300 cap): close walls give a boxy/one-note low-mid
+    // buildup. Large halls: deep low-frequency room modes and a long, diffuse
+    // tail — fold the bottom harder and slow the compressor for the big space.
+    const room =
+      venue === 'livehouseSmall'
+        ? { pivotHz: 600, tiltDelta: 0.4, monoFloor: 0.25, attackFloor: 20, releaseFloor: 160 }
+        : { pivotHz: 500, tiltDelta: 0.2, monoFloor: 0.45, attackFloor: 24, releaseFloor: 220 };
+
+    // Keep the genre's tonal direction but re-center the pivot on the room and
+    // add a light de-boxing tilt.
+    config.eq = {
+      tiltDb: (config.eq?.tiltDb ?? 0) + room.tiltDelta,
+      pivotHz: room.pivotHz,
+    };
+
+    // Floors only — a genre that already compresses slower keeps its setting.
+    const compressor = config.dynamics?.compressor;
+    if (compressor) {
+      compressor.attackMs = Math.max(compressor.attackMs ?? 0, room.attackFloor);
+      compressor.releaseMs = Math.max(compressor.releaseMs ?? 0, room.releaseFloor);
+    }
+
+    // Fold the low end to control room modes; a stronger user/genre value wins.
+    config.stereo = config.stereo ?? {};
+    const existingMono = config.stereo.monoMaker?.amount ?? settings.monoMakerAmount;
+    config.stereo.monoMaker = { amount: Math.max(existingMono, room.monoFloor) };
+  }
+
+  applyDiagnosticBypass(config, options.diagnosticBypass);
   return config;
+}
+
+function applyDiagnosticBypass(
+  config: MasteringChainConfig,
+  bypass: MasteringDiagnosticBypass | undefined,
+) {
+  if (!bypass) return;
+  if (bypass.repair) delete config.repair;
+  if (bypass.dynamics) delete config.dynamics;
+  if (bypass.saturation) delete config.saturation;
+  if (bypass.airBand) delete config.spectral;
+  if (bypass.stereo) delete config.stereo;
+  if (bypass.loudnessLimiter) {
+    delete config.maximizer;
+    delete config.loudness;
+  }
+}
+
+export function defaultDiagnosticBypass(): MasteringDiagnosticBypass {
+  return {
+    repair: false,
+    dynamics: false,
+    saturation: false,
+    airBand: false,
+    stereo: false,
+    loudnessLimiter: false,
+  };
 }
 
 export function defaultModuleSettings(): MasteringModuleSettings {
@@ -654,7 +810,7 @@ export function defaultModuleSettings(): MasteringModuleSettings {
     multibandHighAmount: 0,
     tapeDriveDb: 0,
     tapeSaturation: 0,
-    exciterAmount: 0.12,
+    exciterAmount: 0,
     airBandAmount: 0.22,
     stereoWidth: 1.05,
     monoMakerAmount: 0,

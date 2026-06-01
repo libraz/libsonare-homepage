@@ -117,7 +117,7 @@ describe('validate-mastering-presets script helpers', () => {
       version: vi.fn(() => 'test-version'),
       masteringChainStereo: vi
         .fn()
-        .mockReturnValueOnce(validOutput({ outputLufs: -25 }))
+        .mockReturnValueOnce(validOutput({ inputLufs: -18, outputLufs: -25 }))
         .mockReturnValueOnce(validOutput({ stages: [] }))
         .mockReturnValueOnce(validOutput({ left: new Float32Array([0.1]) }))
         .mockReturnValueOnce(validOutput({ left: new Float32Array(length).fill(1.2) })),
@@ -135,7 +135,7 @@ describe('validate-mastering-presets script helpers', () => {
         ],
       }),
     ).resolves.toEqual([
-      'lufs: output LUFS -25.00 is far from target -14',
+      'lufs: output LUFS -25.00 is quieter than input -18.00',
       'stages: no mastering stages were applied',
       `length: unexpected output length 1/${length}`,
       'peak: invalid peak 1.2000000476837158',

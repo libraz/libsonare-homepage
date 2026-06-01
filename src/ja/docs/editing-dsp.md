@@ -12,6 +12,7 @@ libsonare は、解析やマスタリング API に加えて、編集向けの D
 
 - 信号を書き換える編集 API と、測定だけを行う解析 API を区別できる。
 - 音楽的な目的に応じて、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、ボイスチェンジを選べる。
+- オフラインの `voiceChange(...)` と、ブロック継続用のリアルタイムボイスチェンジャーを使い分けられる。
 - 秒、サンプル位置、半音、MIDI ノート番号を推測ではなく明示的に変換できる。
 - 大きなピッチ／フォルマント変更でアーティファクトが出る理由と、自然に保つための範囲を理解できる。
 
@@ -24,6 +25,7 @@ libsonare は、解析やマスタリング API に加えて、編集向けの D
 | ボーカルの音程を目標音へ寄せる | ピッチ補正 | 補正前に現在のピッチを推定または指定する必要があります |
 | 1 つのノート区間を伸ばす／縮める | ノートストレッチ | 区間は秒ではなくサンプル位置で指定します。`stretchRatio > 1` で長くなります |
 | 声のキャラクターを変える | ボイスチェンジ | ピッチは音高、フォルマントは声の太さや質感に影響します |
+| プリセット付きでライブ音声ブロックを処理する | リアルタイムボイスチェンジャー | AudioWorklet、モニタリング、チャンク処理など、ブロック間の DSP 状態を保ちたい場合に使います |
 
 ::: details フォルマントとは？
 フォルマントは、声道の共鳴によって生じる特定の周波数帯のエネルギーのピークです。母音の響きや声の太さ・キャラクターを決めますが、ピッチ（実際に歌っている音高）とは独立しています。`voiceChange` がこの 2 つを分けて扱うのはこのためで、フォルマント係数を下げると声は大きく暗く、上げると小さく明るく聞こえ、ピッチは指定した位置のまま保たれます。
@@ -38,6 +40,8 @@ libsonare は、解析やマスタリング API に加えて、編集向けの D
 | ある MIDI ノートから別の MIDI ノートへ補正する | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | ノート区間だけをストレッチする | `noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio)` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | ピッチとフォルマントを別々に動かす | `voiceChange(samples, sampleRate, pitchSemitones, formantFactor)` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
+| 状態を持つリアルタイム音声プリセットチェーン | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
+| リアルタイム音声プリセットを 1 回でレンダリング | Node ネイティブ: `voiceChangeRealtime(samples, sampleRate, preset)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
 ## 使い方
 
@@ -120,6 +124,49 @@ const heldNote = noteStretch(vocal, sampleRate, onsetSample, offsetSample, 1.25)
 | `1.25` | 区間を 25% 長くする |
 | `1.0` | 長さを変えない |
 | `0.8` | 区間を 20% 短くする |
+
+### オフライン `voiceChange(...)` と `RealtimeVoiceChanger`
+
+`voiceChange(...)` は、デコード済みモノラルクリップに半音値とフォルマント係数を渡し、処理済みバッファを受け取る簡単なオフラインヘルパーです。
+
+`RealtimeVoiceChanger` は、ライブ入力やチャンク処理向けの状態付きプリセットチェーンです。リチューン、フォルマント、EQ、ゲート、コンプレッサー、ディエッサー、リバーブ、リミッターの各段をまとめて扱います。標準プリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。
+
+同じ処理を複数ブロックに分けて呼び、呼び出し間で状態を保つ必要がある場合はリアルタイムクラスを使います。WASM では `prepare(...)` と `delete()` を明示的に呼びます。Python ではコンテキストマネージャーまたは `close()` を使えます。
+
+::: code-group
+
+```typescript [ブラウザ]
+import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
+
+await init();
+
+const changer = new RealtimeVoiceChanger('bright-idol');
+changer.prepare(48000, 128, 1);
+
+try {
+  const out = changer.processMono(inputBlock);
+  changer.setConfig('soft-whisper');
+  console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), out);
+} finally {
+  changer.delete();
+}
+```
+
+```python [Python]
+import libsonare as sonare
+
+with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
+    out = changer.process_mono(input_block)
+    changer.set_config("soft-whisper")
+    print(sonare.realtime_voice_changer_preset_names(), changer.latency_samples())
+```
+
+```bash [CLI]
+sonare voice-presets --json
+sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
+```
+
+:::
 
 ### `Audio` ラッパーから使う場合
 

@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import type { MasteringPlatformId } from '@/composables/useMastering';
+import { MASTERING_LOUD_WARNING_LU } from '@/utils/masteringUi';
 
-defineProps<{
+const props = defineProps<{
   modelValue: MasteringPlatformId;
   customLufs: number;
   platforms: Array<{ id: MasteringPlatformId; lufs: number }>;
   eyebrow: string;
   studio?: boolean;
+  recommendedLufs?: number;
+  currentLufs?: number;
+  presetName?: string;
 }>();
 
 const emit = defineEmits<{
@@ -17,6 +22,17 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+const hasRecommendation = computed(() => typeof props.recommendedLufs === 'number');
+
+// Streaming only attenuates, so "louder than recommended" (numerically higher
+// LUFS) is what risks the loudness stage flattening dynamic material.
+const isLouderThanRecommended = computed(
+  () =>
+    hasRecommendation.value &&
+    typeof props.currentLufs === 'number' &&
+    props.currentLufs - (props.recommendedLufs as number) >= MASTERING_LOUD_WARNING_LU,
+);
 </script>
 
 <template>
@@ -56,6 +72,15 @@ const { t } = useI18n();
         </button>
       </Tooltip>
     </div>
+  </div>
+
+  <div v-if="hasRecommendation" class="platform-rec" :class="{ 'platform-rec--inline': studio }">
+    <span class="platform-rec__badge">
+      {{ t('master.platforms.recommended', { preset: presetName, lufs: recommendedLufs }) }}
+    </span>
+    <p v-if="isLouderThanRecommended" class="platform-rec__warning" role="status">
+      {{ t('master.platforms.loudWarning', { preset: presetName }) }}
+    </p>
   </div>
 
   <label v-if="modelValue === 'custom'" class="master-slider" :class="{ 'master-slider--inline': studio }">
@@ -140,7 +165,7 @@ const { t } = useI18n();
   border-radius: 999px;
   background: var(--demo-bg-elevated);
   color: var(--demo-text-muted);
-  cursor: help;
+  cursor: pointer;
   opacity: 0;
   transition: opacity 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
@@ -160,6 +185,59 @@ const { t } = useI18n();
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   font-weight: 800;
+}
+
+.platform-rec {
+  display: grid;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+
+.platform-rec--inline {
+  padding: 10px 0 0;
+}
+
+.platform-rec__badge {
+  justify-self: start;
+  padding: 4px 10px;
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 999px;
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent-light);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.platform-rec__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--demo-warn-border);
+  border-radius: 6px;
+  background: var(--demo-warn-bg);
+  color: var(--demo-warn-text);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.platform-rec__warning::before {
+  content: '!';
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--demo-warn);
+  color: var(--demo-bg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .master-slider {

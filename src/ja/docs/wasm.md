@@ -723,7 +723,7 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 
 ## Streaming Retune
 
-`StreamingRetune` は libsonare 1.2.1 で追加された、ブロック単位のモノラル retune 用 WASM wrapper です。ライブ入力やチャンク処理で、ブロック間の状態を保ったままピッチを動かしたい場合に使います。
+`StreamingRetune` は、ブロック単位で動かすモノラルのリチューン用 WASM ラッパーです。ライブ入力やチャンク処理で、ブロック間の状態を保ったままピッチを動かしたい場合に使います。
 
 ```typescript
 import { init, StreamingRetune } from '@libraz/libsonare';
@@ -749,6 +749,37 @@ try {
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
+
+## リアルタイムボイスチェンジャー
+
+`RealtimeVoiceChanger` は、プリセット駆動のライブ音声チェーン用 WASM ラッパーです。オフラインの `voiceChange(...)` ヘルパーとは別に、ブロック間の DSP 状態を保持します。AudioWorklet 形式のループでコピーを減らせるよう、WASM ヒープ上のゼロコピーバッファも公開します。
+
+```typescript
+import {
+  init,
+  RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetNames,
+} from '@libraz/libsonare';
+
+await init();
+
+const changer = new RealtimeVoiceChanger('bright-idol');
+changer.prepare(48000, 128, 1);
+
+try {
+  const out = changer.processMono(inputBlock);
+
+  const realtime = changer.createRealtimeMonoBuffer(128);
+  realtime.input.set(inputBlock.subarray(0, 128));
+  realtime.process();
+
+  console.log(realtimeVoiceChangerPresetNames(), out, realtime.output);
+} finally {
+  changer.delete();
+}
+```
+
+組み込みプリセットの内容確認には `realtimeVoiceChangerPresetJson(name)` を使います。ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。現在のファクトリープリセットはスキーマバージョン `1` です。
 
 ## ブラウザ互換性
 

@@ -1,7 +1,45 @@
 .analysis-timeline {
+  padding: 14px;
+}
+
+.timeline-rows {
+  position: relative;
   display: grid;
   gap: 8px;
-  padding: 14px;
+}
+
+/* Time-aligned visuals become scrub surfaces: click anywhere to seek there. */
+.is-seekable {
+  cursor: pointer;
+}
+
+/* Transport playhead — a bright vertical cursor positioned by the shared --play
+   fraction (0..1). Reused across the timeline, loudness, waveform, and melody
+   overlays, so a single transport sweeps every time axis at once. */
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--play, 0) * 100%);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--demo-text-strong);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--demo-accent) 70%, transparent);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.playhead::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--demo-text-strong);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--demo-accent) 85%, transparent);
+  transform: translateX(-50%);
 }
 
 .timeline-row {

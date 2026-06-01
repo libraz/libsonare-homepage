@@ -249,6 +249,22 @@ describe('MusicAnalysisStudio', () => {
     expect(MockWorker.terminated).toBe(1);
   });
 
+  it('localizes known section labels in Japanese', async () => {
+    lang.value = 'ja';
+    const wrapper = mount(MusicAnalysisStudio);
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'デモを読み込む')!
+      .trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('イントロ');
+    expect(wrapper.text()).toContain('Drop');
+
+    wrapper.unmount();
+  });
+
   it('exports the current analysis report as JSON', async () => {
     const createObjectUrl = vi.mocked(URL.createObjectURL);
     const click = vi
@@ -291,7 +307,9 @@ describe('MusicAnalysisStudio', () => {
       const exportButton = wrapper
         .findAll('button')
         .find((button) => button.text() === 'Export JSON report')!;
-      createObjectUrl.mockClear();
+      // Loading the source also mints a playback object URL, so reset (not just
+      // clear) to drain any queued once-values before scripting the export pair.
+      createObjectUrl.mockReset();
       createObjectUrl.mockReturnValueOnce('blob:first').mockReturnValueOnce('blob:second');
 
       await exportButton.trigger('click');

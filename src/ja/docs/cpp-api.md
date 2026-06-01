@@ -938,6 +938,20 @@ const char* sonare_version(void);
 
 エフェクト、特徴量、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。完全な一覧は `src/sonare_c.h` を参照してください。
 
+現在の C ABI は、用途別のヘッダーに分かれています。上の短い例に出ていないシンボルは、この表から探してください。
+
+| ヘッダー | 公開範囲 |
+|----------|---------|
+| `sonare_c_types.h` | オーディオハンドル、コンパクト解析、キー候補、ダウンビート、エラー／バージョン／FFmpeg ヘルパー |
+| `sonare_c_features.h` | 個別解析、STFT／メル／MFCC／クロマ、逆変換特徴量、CQT/VQT、ピッチ、テンポグラム／PLP、LUFS |
+| `sonare_c_effects.h` | HPSS／編集 DSP、リアルタイムボイスチェンジャー、リアルタイムエンジン、分解／リミックスヘルパー |
+| `sonare_c_metering.h` | ピーク／RMS／クレストファクター／DC オフセット／トゥルーピーク、クリッピング、ダイナミックレンジ、ステレオ相関／幅、ベクトルスコープ、位相スコープ、スペクトル |
+| `sonare_c_mastering.h` | プリセット、フルチェーン、進捗コールバック、名前付きプロセッサ、アシスタント／プロファイル／プレビュー JSON、ストリーミングマスタリングチェーン、ストリーミング EQ、リペア／ダイナミクスの単発ヘルパー |
+| `sonare_c_mixing.h` | チャンネルストリップ制御、センド、バス、VCA グループ、オートメーション、メーター、ゴニオメーター、シーンプリセット |
+| `sonare_c_streaming.h` | `StreamAnalyzer`、量子化フレーム読み出し、逐次統計、チューニング／正規化制御 |
+
+リアルタイムボイスプリセットは C では `sonare_realtime_voice_changer_preset_names()`、`sonare_realtime_voice_changer_preset_json()`、`sonare_realtime_voice_changer_validate_preset_json()` から扱えます。ネイティブ POD 設定の ABI は `SONARE_VOICE_CHANGER_ABI_VERSION` で、プリセット JSON の `schemaVersion` とは別です。
+
 ## エラーハンドリング
 
 ```cpp

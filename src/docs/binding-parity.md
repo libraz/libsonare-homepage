@@ -35,6 +35,8 @@ By the end of this page you should be able to:
 | Mastering assistant/profile/preview JSON | Yes | Yes | Yes | Yes | Yes | No dedicated CLI command |
 | Mixing engine and scenes | Yes | Yes | Yes | Yes | Yes | `mix`; C++ CLI also scene preset export |
 | Editing DSP | Yes | Yes | Yes | Yes | Yes | Yes |
+| Metering (offline meters, clipping/dynamic-range, stereo image, spectrum) | Yes | Yes | Yes | Yes | Yes | C++ CLI `meter`, `clipping`, `dynamic-range`; no Python CLI command |
+| Scale quantization | Yes | Yes | Yes | Yes | Yes | No |
 | Room acoustics | `analyzeImpulseResponse`, `detectAcoustic` | `analyze_impulse_response`, `detect_acoustic`, `Audio.detect_acoustic()` | Yes | `quick::analyze_impulse_response`, `quick::detect_acoustic` | `sonare_analyze_impulse_response`, `sonare_detect_acoustic` | `sonare acoustic [--ir]` |
 | File decoding | Browser: no, pass decoded samples | WAV/MP3 by default, FFmpeg builds add more formats | WAV/MP3 by default, FFmpeg builds add more formats | Same as build | Same as build | Same as Python/C++ executable build |
 
@@ -49,7 +51,7 @@ By the end of this page you should be able to:
 - WASM `mixStereo(...)` accepts separate `leftChannels` and `rightChannels` arrays plus a `MixOptions` object.
 - Persistent `Mixer` strip references differ slightly: WASM mixer methods take numeric strip indexes and provide `stripById(id)` for lookup; Node native and Python accept either a numeric index or a strip id string for most mixer control methods. For metering, use `meterTap(strip, tap)` when you need an explicit pre/post-fader tap; Node's `stripMeter(strip)` is the post-fader convenience path.
 - The streaming analyzer ships in every non-CLI binding. WASM exposes `StreamAnalyzer.process(...)`, `readFrames(...)`, and `stats()`; Node native names the float Structure-of-Arrays read `readFramesSoa(...)`; Python uses `process(...)`, `read_frames(...)`, and `stats()`. All three add quantized `readFramesI16`/`readFramesU8` (`read_frames_i16`/`read_frames_u8` in Python) and a `StreamConfig.outputFormat`/`output_format` field.
-- `normalize(...)` defaults differ: Python module functions and `Audio.normalize()` default to `target_db=-3.0`, while WASM and Node native default to `targetDb=0.0`.
+- `normalize(...)` defaults differ by entry point: the Python module-level `normalize(...)`, WASM, and Node native all default to `0.0` (full scale), while the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0`.
 - `trim(...)` and `trimSilence(...)` are different helpers. `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / Python `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges.
 - Scene JSON is the interchange format for persistent mixers. Prefer `Mixer.toSceneJson()` in WASM/Node or `Mixer.to_scene_json()` in Python over hand-written JSON when preserving runtime edits.
 - Acoustic analysis has two entry points across bindings: impulse-response analysis for measured IR files and blind estimation from ordinary audio. Blind estimates should be displayed with their confidence value.

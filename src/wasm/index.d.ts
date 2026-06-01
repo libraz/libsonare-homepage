@@ -1,3 +1,6 @@
+import { ProgressCallback, WasmNnlsChromaResult, WasmDecomposeResult, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineTelemetry, WasmEngineTransportState, WasmHpssWithResidualResult, WasmMatrix2dResult, WasmEngineProcessWithMonitorResult, WasmCyclicTempogramResult, WasmFourierTempogramResult, WasmFrameResult, WasmLufsResult, WasmTempogramResult, WasmTrimResult } from './sonare.js';
+export { ProgressCallback } from './sonare.js';
+
 /**
  * Pitch class enum (C=0, C#=1, ..., B=11)
  */
@@ -660,6 +663,57 @@ interface StreamingRetuneConfig {
     /** Grain size in samples. Use 0/omit to derive it from the sample rate. */
     grainSize?: number;
 }
+type VoicePresetId = 'neutral-monitor' | 'bright-idol' | 'soft-whisper' | 'deep-narrator' | 'robot-mascot' | 'dark-villain';
+interface RealtimeVoiceChangerPreset {
+    schemaVersion: 1;
+    id?: string;
+    name?: string;
+    description?: string;
+    macros?: Record<string, number>;
+    dsp?: Record<string, unknown>;
+}
+type RealtimeVoiceChangerConfigInput = VoicePresetId | RealtimeVoiceChangerPreset;
+/**
+ * Flat (POD) realtime voice-changer configuration. Field names mirror the
+ * C ABI `SonareRealtimeVoiceChangerConfig` / Python POD exactly (snake_case),
+ * so a config can be round-tripped across bindings without renaming.
+ */
+interface RealtimeVoiceChangerPodConfig {
+    input_gain_db: number;
+    output_gain_db: number;
+    wet_mix: number;
+    retune_semitones: number;
+    retune_mix: number;
+    retune_grain_size: number;
+    formant_factor: number;
+    formant_amount: number;
+    formant_body: number;
+    formant_brightness: number;
+    formant_nasal: number;
+    eq_highpass_hz: number;
+    eq_body_db: number;
+    eq_presence_db: number;
+    eq_air_db: number;
+    gate_threshold_db: number;
+    gate_attack_ms: number;
+    gate_release_ms: number;
+    gate_range_db: number;
+    compressor_threshold_db: number;
+    compressor_ratio: number;
+    compressor_attack_ms: number;
+    compressor_release_ms: number;
+    compressor_makeup_gain_db: number;
+    deesser_frequency_hz: number;
+    deesser_threshold_db: number;
+    deesser_ratio: number;
+    deesser_range_db: number;
+    reverb_mix: number;
+    reverb_time_ms: number;
+    reverb_damping: number;
+    reverb_seed: number;
+    limiter_ceiling_db: number;
+    limiter_release_ms: number;
+}
 /** Options for {@link StreamingEqualizer.match}. */
 interface EqMatchOptions {
     sampleRate?: number;
@@ -790,180 +844,6 @@ interface StreamConfig {
     outputFormat?: number;
 }
 
-type ProgressCallback = (progress: number, stage: string) => void;
-interface WasmTrimResult {
-    audio: Float32Array;
-    startSample: number;
-    endSample: number;
-}
-interface WasmFrameResult {
-    nFrames: number;
-    frames: Float32Array;
-}
-interface WasmTempogramResult {
-    nFrames: number;
-    winLength: number;
-    data: Float32Array;
-}
-interface WasmCyclicTempogramResult {
-    nFrames: number;
-    nBins: number;
-    data: Float32Array;
-}
-interface WasmFourierTempogramResult {
-    nBins: number;
-    nFrames: number;
-    data: Float32Array;
-}
-interface WasmNnlsChromaResult {
-    nChroma: number;
-    nFrames: number;
-    data: Float32Array;
-}
-interface WasmEngineClip {
-    id?: number;
-    channels: Float32Array[];
-    startPpq: number;
-    lengthSamples?: number;
-    clipOffsetSamples?: number;
-    loop?: boolean;
-    gain?: number;
-    fadeInSamples?: number;
-    fadeOutSamples?: number;
-}
-interface WasmEngineParameterInfo {
-    id: number;
-    name: string;
-    unit: string;
-    minValue: number;
-    maxValue: number;
-    defaultValue: number;
-    rtSafe: boolean;
-    defaultCurve: number;
-}
-interface WasmEngineAutomationPoint {
-    ppq: number;
-    value: number;
-    curveToNext?: number;
-}
-interface WasmEngineMarker {
-    id: number;
-    ppq: number;
-    name?: string;
-}
-interface WasmEngineMetronomeConfig {
-    enabled: boolean;
-    beatGain?: number;
-    accentGain?: number;
-    clickSamples?: number;
-}
-interface WasmEngineGraphNode {
-    id: string;
-    type?: number;
-    gainDb?: number;
-    numPorts?: number;
-}
-interface WasmEngineGraphConnection {
-    sourceNode: string;
-    sourcePort: number;
-    destNode: string;
-    destPort: number;
-    mix?: number;
-}
-interface WasmEngineGraphParameterBinding {
-    paramId: number;
-    nodeId: string;
-}
-interface WasmEngineGraphSpec {
-    nodes: WasmEngineGraphNode[];
-    connections: WasmEngineGraphConnection[];
-    inputNode: string;
-    outputNode: string;
-    numChannels: number;
-    parameterBindings?: WasmEngineGraphParameterBinding[];
-}
-interface WasmEngineTelemetry {
-    type: number;
-    error: number;
-    renderFrame: number;
-    timelineSample: number;
-    audibleTimelineSample: number;
-    graphLatencySamplesQ8: number;
-    value: number;
-}
-interface WasmEngineMeterTelemetry {
-    targetId: number;
-    renderFrame: number;
-    seq: number;
-    peakDbL: number;
-    peakDbR: number;
-    rmsDbL: number;
-    rmsDbR: number;
-    truePeakDbL: number;
-    truePeakDbR: number;
-    maxTruePeakDb: number;
-    correlation: number;
-    monoCompatWidth: number;
-    momentaryLufs: number;
-    shortTermLufs: number;
-    integratedLufs: number;
-    gainReductionDb: number;
-    droppedRecords: number;
-}
-interface WasmEngineCaptureStatus {
-    capturedFrames: number;
-    overflowCount: number;
-    armed: boolean;
-    punchEnabled: boolean;
-}
-interface WasmEngineTransportState {
-    playing: boolean;
-    looping: boolean;
-    renderFrame: number;
-    samplePosition: number;
-    ppq: number;
-    bpm: number;
-    loopStartPpq: number;
-    loopEndPpq: number;
-    sampleRate: number;
-}
-interface WasmEngineBounceOptions {
-    totalFrames: number;
-    blockSize?: number;
-    numChannels?: number;
-    targetSampleRate?: number;
-    sourceSampleRate?: number;
-    normalizeLufs?: boolean;
-    targetLufs?: number;
-    dither?: 0 | 1 | 2 | 3;
-    ditherBits?: number;
-    ditherSeed?: number;
-}
-interface WasmEngineBounceResult {
-    interleaved: Float32Array;
-    frames: number;
-    numChannels: number;
-    sampleRate: number;
-    integratedLufs: number;
-}
-interface WasmEngineFreezeOptions {
-    totalFrames: number;
-    blockSize?: number;
-    numChannels?: number;
-    clipId?: number;
-    startPpq?: number;
-    gain?: number;
-}
-interface WasmEngineFreezeResult {
-    clipId: number;
-    frames: number;
-    numChannels: number;
-}
-interface WasmEngineProcessWithMonitorResult {
-    output: Float32Array[];
-    monitor: Float32Array[];
-}
-
 /**
  * sonare - Audio Analysis Library
  *
@@ -998,6 +878,12 @@ type EngineFreezeResult = WasmEngineFreezeResult;
 type EngineTelemetry = WasmEngineTelemetry;
 type EngineMeterTelemetry = WasmEngineMeterTelemetry;
 type EngineTransportState = WasmEngineTransportState;
+/** Row-major 2-D matrix as a flat buffer plus its dimensions. */
+type Matrix2dResult = WasmMatrix2dResult;
+/** NMF factor matrices { w, h } from {@link decompose}. */
+type DecomposeResult = WasmDecomposeResult;
+/** Harmonic / percussive / residual signals from {@link hpssWithResidual}. */
+type HpssWithResidualResult = WasmHpssWithResidualResult;
 declare const EXPECTED_ENGINE_ABI_VERSION = 2;
 interface EngineCapabilities {
     engineAbiVersion: number;
@@ -1014,6 +900,48 @@ interface MixerRealtimeBuffer {
     outLeft: Float32Array;
     outRight: Float32Array;
     process: (numSamples?: number) => void;
+}
+/**
+ * Zero-copy realtime buffer pair for {@link RealtimeVoiceChanger} mono
+ * processing. The `input` / `output` `Float32Array`s are typed-memory views
+ * onto the WASM heap — write samples into `input`, call `process()`, then
+ * read from `output`. The views are owned by the {@link RealtimeVoiceChanger}
+ * and remain valid until `delete()` is called on it.
+ */
+interface RealtimeVoiceChangerMonoBuffer {
+    input: Float32Array;
+    output: Float32Array;
+    process: () => void;
+}
+/**
+ * Zero-copy realtime buffer pair for {@link RealtimeVoiceChanger} interleaved
+ * multi-channel processing. Layout is L0,R0,L1,R1,... for stereo. The views
+ * are owned by the {@link RealtimeVoiceChanger}.
+ */
+interface RealtimeVoiceChangerInterleavedBuffer {
+    input: Float32Array;
+    output: Float32Array;
+    channels: number;
+    process: () => void;
+}
+/**
+ * Zero-copy realtime buffer for {@link RealtimeVoiceChanger} planar stereo
+ * processing. Each entry in `channels` is a heap-backed `Float32Array` for one
+ * channel (matching AudioWorklet's native layout). Process happens in place:
+ * write samples into each channel view, call `process()`, then read back from
+ * the same views.
+ */
+interface RealtimeVoiceChangerPlanarBuffer {
+    channels: Float32Array[];
+    process: () => void;
+}
+/**
+ * Per-call validation options accepted by guarded wrappers. Empty-buffer
+ * checks are always performed; pass `{ validate: false }` to opt out of the
+ * O(n) NaN/Inf scan on hot paths.
+ */
+interface ValidateOptions {
+    validate?: boolean;
 }
 /**
  * Initialize the WASM module.
@@ -1034,6 +962,18 @@ declare function isInitialized(): boolean;
  */
 declare function version(): string;
 declare function engineAbiVersion(): number;
+declare function voiceChangerAbiVersion(): number;
+/**
+ * Map a voice-character preset ordinal (or canonical id) to its canonical id
+ * string (e.g. `'bright-idol'`). Returns `null` for an out-of-range ordinal.
+ */
+declare function voiceCharacterPresetId(preset: VoicePresetId | number): string | null;
+/**
+ * Return the canonical (normalized) flat POD config for a built-in voice
+ * preset, skipping the JSON round-trip. Accepts a canonical preset id or its
+ * integer ordinal. Returns `null` for an out-of-range ordinal.
+ */
+declare function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null;
 declare function engineCapabilities(): EngineCapabilities;
 declare class RealtimeEngine {
     private native;
@@ -1091,81 +1031,157 @@ declare class RealtimeEngine {
  * Detect BPM from audio samples.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Detected BPM
  */
-declare function detectBpm(samples: Float32Array, sampleRate: number): number;
+declare function detectBpm(samples: Float32Array, sampleRate?: number): number;
 /**
  * Detect musical key from audio samples.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Detected key
  */
-declare function detectKey(samples: Float32Array, sampleRate: number, options?: KeyDetectionOptions): Key;
-declare function detectKeyCandidates(samples: Float32Array, sampleRate: number, options?: KeyDetectionOptions): KeyCandidate[];
+declare function detectKey(samples: Float32Array, sampleRate?: number, options?: KeyDetectionOptions): Key;
+declare function detectKeyCandidates(samples: Float32Array, sampleRate?: number, options?: KeyDetectionOptions): KeyCandidate[];
 /**
  * Detect onset times from audio samples.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Array of onset times in seconds
  */
-declare function detectOnsets(samples: Float32Array, sampleRate: number): Float32Array;
+declare function detectOnsets(samples: Float32Array, sampleRate?: number): Float32Array;
 /**
  * Detect beat times from audio samples.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Array of beat times in seconds
  */
-declare function detectBeats(samples: Float32Array, sampleRate: number): Float32Array;
+declare function detectBeats(samples: Float32Array, sampleRate?: number): Float32Array;
 /**
  * Detect downbeat times from audio samples.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Array of downbeat times in seconds
  */
-declare function detectDownbeats(samples: Float32Array, sampleRate: number): Float32Array;
+declare function detectDownbeats(samples: Float32Array, sampleRate?: number): Float32Array;
 /**
  * Detect chords from audio samples.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param options - Optional chord detection settings
  * @returns Detected chord segments
  */
-declare function detectChords(samples: Float32Array, sampleRate: number, options?: ChordDetectionOptions): ChordAnalysisResult;
+declare function detectChords(samples: Float32Array, sampleRate?: number, options?: ChordDetectionOptions): ChordAnalysisResult;
 /**
  * Perform complete music analysis.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Complete analysis result
  */
-declare function analyze(samples: Float32Array, sampleRate: number): AnalysisResult;
-declare function analyzeImpulseResponse(samples: Float32Array, sampleRate: number, nOctaveBands?: number): AcousticResult;
-declare function detectAcoustic(samples: Float32Array, sampleRate: number, nOctaveBands?: number, nThirdOctaveSubbands?: number, minDecayDb?: number, noiseFloorMarginDb?: number): AcousticResult;
+declare function analyze(samples: Float32Array, sampleRate?: number): AnalysisResult;
+declare function analyzeImpulseResponse(samples: Float32Array, sampleRate?: number, nOctaveBands?: number): AcousticResult;
+declare function detectAcoustic(samples: Float32Array, sampleRate?: number, nOctaveBands?: number, nThirdOctaveSubbands?: number, minDecayDb?: number, noiseFloorMarginDb?: number): AcousticResult;
 /**
  * Perform complete music analysis with progress reporting.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param onProgress - Progress callback (progress: 0-1, stage: string)
  * @returns Complete analysis result
  */
-declare function analyzeWithProgress(samples: Float32Array, sampleRate: number, onProgress: ProgressCallback): AnalysisResult;
+declare function analyzeWithProgress(samples: Float32Array, sampleRate: number | undefined, onProgress: ProgressCallback): AnalysisResult;
+interface BpmCandidate {
+    bpm: number;
+    confidence: number;
+}
+interface BpmAnalysisResult {
+    bpm: number;
+    confidence: number;
+    candidates: BpmCandidate[];
+    autocorrelation: Float32Array;
+    tempogram: Float32Array;
+}
+interface RhythmAnalysisResult {
+    timeSignature: {
+        numerator: number;
+        denominator: number;
+        confidence: number;
+    };
+    syncopation: number;
+    grooveType: string;
+    patternRegularity: number;
+    tempoStability: number;
+    bpm: number;
+    beatIntervals: Float32Array;
+}
+interface DynamicsAnalysisResult {
+    dynamicRangeDb: number;
+    peakDb: number;
+    rmsDb: number;
+    crestFactor: number;
+    loudnessRangeDb: number;
+    isCompressed: boolean;
+    /** Loudness curve timestamps (seconds), parallel to {@link loudnessRmsDb}. */
+    loudnessTimes: Float32Array;
+    /** Loudness curve RMS values (dB), parallel to {@link loudnessTimes}. */
+    loudnessRmsDb: Float32Array;
+}
+/** Timbre metrics for one analysis window. Entries are ordered by time in `timbreOverTime`. */
+interface TimbreFrame {
+    brightness: number;
+    warmth: number;
+    density: number;
+    roughness: number;
+    complexity: number;
+}
+interface TimbreAnalysisResult extends TimbreFrame {
+    spectralCentroid: Float32Array;
+    spectralFlatness: Float32Array;
+    spectralRolloff: Float32Array;
+    /** Time-varying timbre metrics, one entry per analysis window. */
+    timbreOverTime: TimbreFrame[];
+}
+/**
+ * Detailed BPM analysis (BPM, confidence, alternate candidates, autocorrelation,
+ * tempogram). Matches the Node `analyzeBpm` / Python `analyze_bpm` surface.
+ */
+declare function analyzeBpm(samples: Float32Array, sampleRate?: number, bpmMin?: number, bpmMax?: number, startBpm?: number, nFft?: number, hopLength?: number, maxCandidates?: number): BpmAnalysisResult;
+/**
+ * Detailed rhythm analysis (time signature, groove, syncopation, beat intervals).
+ */
+declare function analyzeRhythm(samples: Float32Array, sampleRate?: number, bpmMin?: number, bpmMax?: number, startBpm?: number, nFft?: number, hopLength?: number): RhythmAnalysisResult;
+/**
+ * Dynamics analysis (RMS, peak, crest factor, LRA, loudness curve).
+ */
+declare function analyzeDynamics(samples: Float32Array, sampleRate?: number, windowSec?: number, hopLength?: number, compressionThreshold?: number): DynamicsAnalysisResult;
+/**
+ * Timbre analysis (brightness/warmth/density/roughness/complexity plus spectral
+ * features and per-window timbre frames).
+ */
+declare function analyzeTimbre(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, nMels?: number, nMfcc?: number, windowSec?: number): TimbreAnalysisResult;
+/**
+ * Whether this WASM build was compiled with FFmpeg support. Mirrors Node /
+ * Python `hasFfmpegSupport`. In the published WASM binding this currently
+ * always returns `false` (FFmpeg is not bundled into the .wasm), but the API
+ * exists so caller code can branch on capabilities portably.
+ */
+declare function hasFfmpegSupport(): boolean;
 /**
  * Perform Harmonic-Percussive Source Separation (HPSS).
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param kernelHarmonic - Horizontal median filter size for harmonic (default: 31)
  * @param kernelPercussive - Vertical median filter size for percussive (default: 31)
  * @returns Separated harmonic and percussive components
  */
-declare function hpss(samples: Float32Array, sampleRate: number, kernelHarmonic?: number, kernelPercussive?: number): HpssResult;
+declare function hpss(samples: Float32Array, sampleRate?: number, kernelHarmonic?: number, kernelPercussive?: number): HpssResult;
 /**
  * Extract harmonic component from audio.
  *
@@ -1209,7 +1225,7 @@ declare function pitchShift(samples: Float32Array, sampleRate: number, semitones
  * @param targetMidi - Desired MIDI note number
  * @returns Pitch-corrected audio
  */
-declare function pitchCorrectToMidi(samples: Float32Array, sampleRate: number, currentMidi: number, targetMidi: number): Float32Array;
+declare function pitchCorrectToMidi(samples: Float32Array, sampleRate?: number, currentMidi?: number, targetMidi?: number): Float32Array;
 /**
  * Time-stretch a note region between two sample offsets without changing pitch.
  *
@@ -1220,7 +1236,7 @@ declare function pitchCorrectToMidi(samples: Float32Array, sampleRate: number, c
  * @param stretchRatio - Stretch ratio (0.5 = double duration, 2.0 = half duration)
  * @returns Audio with the note region stretched
  */
-declare function noteStretch(samples: Float32Array, sampleRate: number, onsetSample: number, offsetSample: number, stretchRatio: number): Float32Array;
+declare function noteStretch(samples: Float32Array, sampleRate?: number, onsetSample?: number, offsetSample?: number, stretchRatio?: number): Float32Array;
 /**
  * Apply a voice change by shifting pitch and formants independently.
  *
@@ -1230,7 +1246,7 @@ declare function noteStretch(samples: Float32Array, sampleRate: number, onsetSam
  * @param formantFactor - Formant scaling factor (1.0 = unchanged)
  * @returns Voice-changed audio
  */
-declare function voiceChange(samples: Float32Array, sampleRate: number, pitchSemitones: number, formantFactor: number): Float32Array;
+declare function voiceChange(samples: Float32Array, sampleRate?: number, pitchSemitones?: number, formantFactor?: number, options?: ValidateOptions): Float32Array;
 /**
  * Normalize audio to target peak level.
  *
@@ -1244,34 +1260,176 @@ declare function normalize(samples: Float32Array, sampleRate: number, targetDb?:
  * Apply mastering loudness normalization with a true-peak ceiling.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param targetLufs - Target integrated LUFS (default: -14)
  * @param ceilingDb - True/sample peak ceiling in dBFS (default: -1)
  * @param truePeakOversample - Oversampling factor used for peak estimation
  * @returns Processed audio and loudness metadata
  */
-declare function mastering(samples: Float32Array, sampleRate: number, targetLufs?: number, ceilingDb?: number, truePeakOversample?: number): MasteringResult;
+declare function mastering(samples: Float32Array, sampleRate?: number, targetLufs?: number, ceilingDb?: number, truePeakOversample?: number): MasteringResult;
 declare function masteringProcessorNames(): SoloProcessor[];
 declare function masteringPairProcessorNames(): PairProcessor[];
 declare function masteringPairAnalysisNames(): PairAnalysis[];
 declare function masteringStereoAnalysisNames(): StereoAnalysis[];
-declare function masteringProcess(processorName: SoloProcessor, samples: Float32Array, sampleRate: number, params?: MasteringProcessorParams): MasteringResult;
-declare function masteringProcessStereo(processorName: SoloProcessor, left: Float32Array, right: Float32Array, sampleRate: number, params?: MasteringProcessorParams): MasteringStereoResult;
-declare function masteringPairProcess(processorName: PairProcessor, source: Float32Array, reference: Float32Array, sampleRate: number, params?: MasteringProcessorParams): MasteringResult;
-declare function masteringPairAnalyze(analysisName: PairAnalysis, source: Float32Array, reference: Float32Array, sampleRate: number, params?: MasteringProcessorParams): string;
-declare function masteringStereoAnalyze(analysisName: StereoAnalysis, left: Float32Array, right: Float32Array, sampleRate: number, params?: MasteringProcessorParams): string;
-declare function masteringAssistantSuggest(samples: Float32Array, sampleRate: number, params?: MasteringProcessorParams): string;
-declare function masteringAudioProfile(samples: Float32Array, sampleRate: number, params?: MasteringProcessorParams): string;
-declare function masteringStreamingPreview(samples: Float32Array, sampleRate: number, platforms?: StreamingPlatform[]): string;
+declare function masteringProcess(processorName: SoloProcessor, samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
+declare function masteringProcessStereo(processorName: SoloProcessor, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringStereoResult;
+declare function masteringPairProcess(processorName: PairProcessor, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
+declare function masteringPairAnalyze(analysisName: PairAnalysis, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+declare function masteringStereoAnalyze(analysisName: StereoAnalysis, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+declare function masteringAssistantSuggest(samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+declare function masteringAudioProfile(samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+declare function masteringStreamingPreview(samples: Float32Array, sampleRate?: number, platforms?: StreamingPlatform[]): string;
+/** Options for `masteringRepairDeclick`. */
+interface DeclickOptions {
+    threshold?: number;
+    neighborRatio?: number;
+    maxClickSamples?: number;
+    lpcOrder?: number;
+    residualRatio?: number;
+}
+/** Algorithms accepted by `masteringRepairDenoiseClassical`. */
+type DenoiseClassicalMode = 'logMmse' | 'mmseStsa' | 'spectralSubtraction';
+/** Noise PSD estimators accepted by `masteringRepairDenoiseClassical`. */
+type DenoiseClassicalNoiseEstimator = 'quantile' | 'mcra' | 'imcra';
+/** Options for `masteringRepairDenoiseClassical`. */
+interface DenoiseClassicalOptions {
+    mode?: DenoiseClassicalMode;
+    noiseEstimator?: DenoiseClassicalNoiseEstimator;
+    nFft?: number;
+    hopLength?: number;
+    ddAlpha?: number;
+    gainFloor?: number;
+    overSubtraction?: number;
+    spectralFloor?: number;
+    noiseEstimationQuantile?: number;
+    speechPresenceGain?: boolean;
+    gainSmoothing?: boolean;
+}
+/** Offline LPC-based declicker. */
+declare function masteringRepairDeclick(samples: Float32Array, sampleRate: number, options?: DeclickOptions): Float32Array;
+/** Offline STFT-domain classical denoiser (LogMMSE / MMSE-STSA / SpectralSubtraction). */
+declare function masteringRepairDenoiseClassical(samples: Float32Array, sampleRate: number, options?: DenoiseClassicalOptions): Float32Array;
+/** Options for `masteringRepairDeclip`. */
+interface DeclipOptions {
+    clipThreshold?: number;
+    lpcOrder?: number;
+    iterations?: number;
+    lpcBlend?: number;
+}
+/** Algorithms accepted by `masteringRepairDecrackle`. */
+type DecrackleMode = 'median' | 'waveletShrinkage';
+/** Options for `masteringRepairDecrackle`. */
+interface DecrackleOptions {
+    threshold?: number;
+    mode?: DecrackleMode;
+    levels?: number;
+}
+/** Options for `masteringRepairDehum`. */
+interface DehumOptions {
+    fundamentalHz?: number;
+    harmonics?: number;
+    q?: number;
+    adaptive?: boolean;
+    searchRangeHz?: number;
+    adaptation?: number;
+    frameSize?: number;
+    pllBandwidth?: number;
+}
+/** Options for `masteringRepairDereverbClassical`. */
+interface DereverbClassicalOptions {
+    threshold?: number;
+    attenuation?: number;
+    nFft?: number;
+    hopLength?: number;
+    t60Sec?: number;
+    lateDelayMs?: number;
+    overSubtraction?: number;
+    spectralFloor?: number;
+    wpeEnabled?: boolean;
+    wpeIterations?: number;
+    wpeTaps?: number;
+    wpeStrength?: number;
+}
+/** Trimming modes accepted by `masteringRepairTrimSilence`. */
+type TrimSilenceMode = 'peak' | 'lufsGated';
+/** Options for `masteringRepairTrimSilence`. */
+interface TrimSilenceOptions {
+    threshold?: number;
+    paddingSamples?: number;
+    mode?: TrimSilenceMode;
+    gateLufs?: number;
+    windowMs?: number;
+}
+/** Offline LPC-based declipper. */
+declare function masteringRepairDeclip(samples: Float32Array, sampleRate: number, options?: DeclipOptions): Float32Array;
+/** Offline crackle suppressor (median or wavelet-shrinkage). */
+declare function masteringRepairDecrackle(samples: Float32Array, sampleRate: number, options?: DecrackleOptions): Float32Array;
+/** Offline mains-hum remover. */
+declare function masteringRepairDehum(samples: Float32Array, sampleRate: number, options?: DehumOptions): Float32Array;
+/** Offline classical dereverberator (spectral subtraction + optional WPE). */
+declare function masteringRepairDereverbClassical(samples: Float32Array, sampleRate: number, options?: DereverbClassicalOptions): Float32Array;
+/** Offline silence trimmer (peak threshold or LUFS-gated). */
+declare function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, options?: TrimSilenceOptions): Float32Array;
+/** Compressor sidechain detector mode. */
+type CompressorDetector = 'peak' | 'rms' | 'log_rms';
+/** Options for `masteringDynamicsCompressor`. */
+interface CompressorOptions extends ValidateOptions {
+    thresholdDb?: number;
+    ratio?: number;
+    attackMs?: number;
+    releaseMs?: number;
+    kneeDb?: number;
+    makeupGainDb?: number;
+    autoMakeup?: boolean;
+    detector?: CompressorDetector | number;
+    sidechainHpfEnabled?: boolean;
+    sidechainHpfHz?: number;
+    pdrTimeMs?: number;
+    pdrReleaseScale?: number;
+}
+/** Options for `masteringDynamicsGate`. */
+interface GateOptions extends ValidateOptions {
+    thresholdDb?: number;
+    attackMs?: number;
+    releaseMs?: number;
+    rangeDb?: number;
+    holdMs?: number;
+    closeThresholdDb?: number;
+    keyHpfHz?: number;
+}
+/** Options for `masteringDynamicsTransientShaper`. */
+interface TransientShaperOptions extends ValidateOptions {
+    attackGainDb?: number;
+    sustainGainDb?: number;
+    fastAttackMs?: number;
+    fastReleaseMs?: number;
+    slowAttackMs?: number;
+    slowReleaseMs?: number;
+    sensitivity?: number;
+    maxGainDb?: number;
+    gainSmoothingMs?: number;
+    lookaheadMs?: number;
+}
+/** Result envelope returned by offline mastering dynamics processors. */
+interface DynamicsResult {
+    samples: Float32Array;
+    latencySamples: number;
+}
+/** Offline feed-forward compressor (soft knee, optional auto-makeup / sidechain HPF). */
+declare function masteringDynamicsCompressor(samples: Float32Array, sampleRate: number, options?: CompressorOptions): DynamicsResult;
+/** Offline noise gate (hysteresis, hold, optional key HPF). */
+declare function masteringDynamicsGate(samples: Float32Array, sampleRate: number, options?: GateOptions): DynamicsResult;
+/** Offline transient shaper (envelope-difference attack/sustain control). */
+declare function masteringDynamicsTransientShaper(samples: Float32Array, sampleRate: number, options?: TransientShaperOptions): DynamicsResult;
 /**
  * Apply a configurable mastering chain in WASM.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param config - Chain stage configuration
  * @returns Processed audio, loudness metadata, and applied stage names
  */
-declare function masteringChain(samples: Float32Array, sampleRate: number, config: MasteringChainConfig): MasteringChainResult;
+declare function masteringChain(samples: Float32Array, sampleRate: number | undefined, config: MasteringChainConfig): MasteringChainResult;
 /**
  * Apply a configurable stereo mastering chain in WASM.
  *
@@ -1281,17 +1439,17 @@ declare function masteringChain(samples: Float32Array, sampleRate: number, confi
  * @param config - Chain stage configuration
  * @returns Processed stereo audio, loudness metadata, and applied stage names
  */
-declare function masteringChainStereo(left: Float32Array, right: Float32Array, sampleRate: number, config: MasteringChainConfig): MasteringStereoChainResult;
+declare function masteringChainStereo(left: Float32Array, right: Float32Array, sampleRate: number | undefined, config: MasteringChainConfig): MasteringStereoChainResult;
 /**
  * Apply a configurable mastering chain in WASM with progress reporting.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param config - Chain stage configuration
  * @param onProgress - Progress callback (progress: 0-1, stage: string)
  * @returns Processed audio, loudness metadata, and applied stage names
  */
-declare function masteringChainWithProgress(samples: Float32Array, sampleRate: number, config: MasteringChainConfig, onProgress: ProgressCallback): MasteringChainResult;
+declare function masteringChainWithProgress(samples: Float32Array, sampleRate: number | undefined, config: MasteringChainConfig, onProgress: ProgressCallback): MasteringChainResult;
 /**
  * Apply a configurable stereo mastering chain in WASM with progress reporting.
  *
@@ -1302,7 +1460,7 @@ declare function masteringChainWithProgress(samples: Float32Array, sampleRate: n
  * @param onProgress - Progress callback (progress: 0-1, stage: string)
  * @returns Processed stereo audio, loudness metadata, and applied stage names
  */
-declare function masteringChainStereoWithProgress(left: Float32Array, right: Float32Array, sampleRate: number, config: MasteringChainConfig, onProgress: ProgressCallback): MasteringStereoChainResult;
+declare function masteringChainStereoWithProgress(left: Float32Array, right: Float32Array, sampleRate: number | undefined, config: MasteringChainConfig, onProgress: ProgressCallback): MasteringStereoChainResult;
 /**
  * List built-in mastering preset identifiers.
  *
@@ -1313,12 +1471,12 @@ declare function masteringPresetNames(): MasteringPreset[];
  * Apply a named mastering preset chain to mono audio.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param presetName - Preset identifier from {@link masteringPresetNames}
  * @param overrides - Optional flat overrides (dot-notation, e.g. `'loudness.targetLufs'`) applied on top of the preset. Pass `null` for preset defaults.
  * @returns Processed audio, loudness metadata, and applied stage names
  */
-declare function masterAudio(samples: Float32Array, sampleRate: number, presetName: MasteringPreset, overrides?: Record<string, number | boolean> | null): MasteringChainResult;
+declare function masterAudio(samples: Float32Array, sampleRate: number | undefined, presetName: MasteringPreset, overrides?: Record<string, number | boolean> | null): MasteringChainResult;
 /**
  * Apply a named mastering preset chain to stereo audio.
  *
@@ -1329,17 +1487,26 @@ declare function masterAudio(samples: Float32Array, sampleRate: number, presetNa
  * @param overrides - Optional flat overrides (dot-notation, e.g. `'loudness.targetLufs'`) applied on top of the preset. Pass `null` for preset defaults.
  * @returns Processed stereo audio, loudness metadata, and applied stage names
  */
-declare function masterAudioStereo(left: Float32Array, right: Float32Array, sampleRate: number, presetName: MasteringPreset, overrides?: Record<string, number | boolean> | null): MasteringStereoChainResult;
+declare function masterAudioStereo(left: Float32Array, right: Float32Array, sampleRate: number | undefined, presetName: MasteringPreset, overrides?: Record<string, number | boolean> | null): MasteringStereoChainResult;
+/**
+ * Mono `masterAudio` with per-stage progress reporting. `onProgress` is invoked
+ * with `(progress, stage)` between each chain stage (progress is in [0,1]).
+ */
+declare function masterAudioWithProgress(samples: Float32Array, sampleRate: number | undefined, presetName: MasteringPreset, onProgress: ProgressCallback, overrides?: Record<string, number | boolean> | null): MasteringChainResult;
+/**
+ * Stereo `masterAudio` with per-stage progress reporting.
+ */
+declare function masterAudioStereoWithProgress(left: Float32Array, right: Float32Array, sampleRate: number | undefined, presetName: MasteringPreset, onProgress: ProgressCallback, overrides?: Record<string, number | boolean> | null): MasteringStereoChainResult;
 declare function mixingScenePresetNames(): string[];
 /**
  * Get a built-in mixing scene preset serialized as JSON. This is the canonical
  * name shared with the Node and Python bindings; the returned JSON loads
  * directly into a {@link Mixer} via {@link Mixer.fromSceneJson}.
  *
- * @param preset - Preset name (see {@link mixingScenePresetNames})
+ * @param presetName - Preset name (see {@link mixingScenePresetNames})
  * @returns Scene JSON string
  */
-declare function mixingScenePresetJson(preset: string): string;
+declare function mixingScenePresetJson(presetName: string): string;
 declare function mixStereo(leftChannels: Float32Array[], rightChannels: Float32Array[], sampleRate?: number, options?: MixOptions): MixResult;
 /**
  * Block-by-block streaming variant of {@link masteringChain}.
@@ -1508,23 +1675,86 @@ declare class StreamingRetune {
     /** Release the underlying WASM object. Safe to call only once. */
     delete(): void;
 }
-/**
- * Get a built-in mixing scene preset serialized as JSON, normalized through the
- * C mixer API (the same path {@link Mixer.fromSceneJson} uses to load it).
- *
- * @deprecated Use {@link mixingScenePresetJson}, the canonical name shared with
- * the Node and Python bindings. This alias is retained for backwards
- * compatibility and may be removed in a future release. Both functions return a
- * scene JSON string that loads cleanly into a {@link Mixer}.
- *
- * @param preset - Preset name (see {@link mixingScenePresetNames})
- * @returns Scene JSON string
- */
-declare function mixerScenePresetJson(preset: string): string;
+declare class RealtimeVoiceChanger {
+    private changer;
+    constructor(config?: RealtimeVoiceChangerConfigInput);
+    prepare(sampleRate: number, maxBlockSize?: number, channels?: number): void;
+    reset(): void;
+    setConfig(config: RealtimeVoiceChangerConfigInput): void;
+    configJson(): string;
+    latencySamples(): number;
+    processMono(samples: Float32Array): Float32Array;
+    processMonoInto(samples: Float32Array, output: Float32Array): void;
+    processInterleaved(samples: Float32Array, channels: number): Float32Array;
+    processInterleavedInto(samples: Float32Array, channels: number, output: Float32Array): void;
+    /**
+     * Acquire a typed-memory view onto the WASM heap for mono input.
+     *
+     * Write your input samples into the returned `Float32Array` directly (e.g.
+     * via `input.set(source)`); no copy crosses the JS↔C++ bridge until
+     * {@link processPreparedMono} is called. The view is owned by this
+     * RealtimeVoiceChanger and becomes invalid after {@link delete}; it may
+     * also be invalidated if you later call this method with a larger
+     * `numSamples` value (the underlying buffer may be reallocated).
+     */
+    getMonoInputBuffer(numSamples: number): Float32Array;
+    /** Mono output view counterpart to {@link getMonoInputBuffer}. */
+    getMonoOutputBuffer(numSamples: number): Float32Array;
+    /**
+     * Process the previously-acquired mono input buffer in place. The output
+     * appears in the buffer returned by {@link getMonoOutputBuffer}. No JS↔C++
+     * sample-level crossings happen on this call — it just hands control to
+     * the underlying DSP on already-on-heap data.
+     */
+    processPreparedMono(numSamples: number): void;
+    /** Interleaved input view (layout L0,R0,L1,R1,...). */
+    getInterleavedInputBuffer(numFrames: number, numChannels: number): Float32Array;
+    /** Interleaved output view counterpart. */
+    getInterleavedOutputBuffer(numFrames: number, numChannels: number): Float32Array;
+    /**
+     * Process the previously-acquired interleaved buffer in place. Output
+     * appears in the buffer returned by {@link getInterleavedOutputBuffer}.
+     */
+    processPreparedInterleaved(numFrames: number, numChannels: number): void;
+    /**
+     * Planar-channel input/output view (one Float32Array per channel). Matches
+     * AudioWorklet's native layout; processing happens in place.
+     */
+    getPlanarChannelBuffer(channel: number, numFrames: number): Float32Array;
+    /**
+     * Process the previously-acquired planar channel buffers in place. Each
+     * channel must have been obtained from {@link getPlanarChannelBuffer}
+     * with the same `numFrames`. Output replaces input in the same buffers.
+     */
+    processPreparedPlanar(numFrames: number): void;
+    /**
+     * Convenience factory for the mono zero-copy path: returns the input/output
+     * heap views plus a `process()` thunk wired to the same `numSamples`. The
+     * views are reused across calls and become invalid after {@link delete}.
+     */
+    createRealtimeMonoBuffer(numSamples: number): RealtimeVoiceChangerMonoBuffer;
+    /** Same as {@link createRealtimeMonoBuffer} but for interleaved I/O. */
+    createRealtimeInterleavedBuffer(numFrames: number, numChannels: number): RealtimeVoiceChangerInterleavedBuffer;
+    /**
+     * Convenience factory for the planar zero-copy path. Acquires one
+     * heap-backed Float32Array per channel and returns a `process()` thunk
+     * wired to the same `numFrames`. Buffers are reused across calls and
+     * become invalid after {@link delete}.
+     */
+    createRealtimePlanarBuffer(numFrames: number, numChannels: number): RealtimeVoiceChangerPlanarBuffer;
+    delete(): void;
+}
+declare function realtimeVoiceChangerPresetNames(): VoicePresetId[];
+declare function realtimeVoiceChangerPresetJson(name: VoicePresetId): string;
+declare function validateRealtimeVoiceChangerPresetJson(json: string): {
+    ok: boolean;
+    normalizedJson?: string;
+    error?: string;
+};
 /**
  * Persistent, scene-based stereo mixer.
  *
- * Build one from a scene JSON string (e.g. {@link mixerScenePresetJson} or a
+ * Build one from a scene JSON string (e.g. {@link mixingScenePresetJson} or a
  * hand-authored scene), then feed per-strip stereo blocks through
  * {@link processStereo} to get the routed stereo master. Strips, sends, buses,
  * and inserts are described entirely by the scene; the routing graph is
@@ -1536,7 +1766,7 @@ declare function mixerScenePresetJson(preset: string): string;
  *
  * @example
  * ```typescript
- * const mixer = Mixer.fromSceneJson(mixerScenePresetJson('basicStereo'), 48000, 512);
+ * const mixer = Mixer.fromSceneJson(mixingScenePresetJson('basicStereo'), 48000, 512);
  * try {
  *   const out = mixer.processStereo([stripL], [stripR]);
  * } finally {
@@ -1623,6 +1853,16 @@ declare class Mixer {
     removeVcaGroup(id: string): void;
     /** Number of VCA groups in the mixer topology. */
     vcaGroupCount(): number;
+    /** Set the strip's input trim in dB. */
+    setInputTrimDb(stripIndex: number, db: number): void;
+    /** Set the strip's fader level in dB. */
+    setFaderDb(stripIndex: number, db: number): void;
+    /** Set the strip's pan position. */
+    setPan(stripIndex: number, pan: number, panMode?: PanMode | number): void;
+    /** Set the strip's stereo width. */
+    setWidth(stripIndex: number, width: number): void;
+    /** Set the strip's mute state. */
+    setMuted(stripIndex: number, muted: boolean): void;
     /**
      * Set a strip's solo state. Takes effect on the next process without a
      * graph recompile.
@@ -1736,22 +1976,22 @@ declare function trim(samples: Float32Array, sampleRate: number, thresholdDb?: n
  * Compute Short-Time Fourier Transform (STFT).
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns STFT result with magnitude and power spectrograms
  */
-declare function stft(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number): StftResult;
+declare function stft(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number): StftResult;
 /**
  * Compute STFT and return magnitude in decibels.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns STFT result with dB values
  */
-declare function stftDb(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number): {
+declare function stftDb(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number): {
     nBins: number;
     nFrames: number;
     db: Float32Array;
@@ -1760,25 +2000,25 @@ declare function stftDb(samples: Float32Array, sampleRate: number, nFft?: number
  * Compute Mel spectrogram.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @param nMels - Number of Mel bands (default: 128)
  * @returns Mel spectrogram result
  */
-declare function melSpectrogram(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number, nMels?: number): MelSpectrogramResult;
+declare function melSpectrogram(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, nMels?: number): MelSpectrogramResult;
 /**
  * Compute MFCC (Mel-Frequency Cepstral Coefficients).
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @param nMels - Number of Mel bands (default: 128)
- * @param nMfcc - Number of MFCC coefficients (default: 13)
+ * @param nMfcc - Number of MFCC coefficients (default: 20)
  * @returns MFCC result
  */
-declare function mfcc(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number, nMels?: number, nMfcc?: number): MfccResult;
+declare function mfcc(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, nMels?: number, nMfcc?: number): MfccResult;
 /**
  * Approximate inverse of a Mel filterbank: Mel power spectrogram -> STFT power
  * spectrogram. Mirrors `feature::mel_to_stft`.
@@ -1788,10 +2028,11 @@ declare function mfcc(samples: Float32Array, sampleRate: number, nFft?: number, 
  * @param nFrames - Number of time frames
  * @param sampleRate - Sample rate in Hz
  * @param nFft - FFT size (default: 2048)
- * @param hopLength - Hop length (default: 512)
+ * @param fmin - Lower Mel band edge in Hz (default: 0)
+ * @param fmax - Upper Mel band edge in Hz (default: sr/2 when 0)
  * @returns STFT power spectrogram result
  */
-declare function melToStft(melPower: Float32Array, nMels: number, nFrames: number, sampleRate: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number): StftPowerResult;
+declare function melToStft(melPower: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, fmin?: number, fmax?: number): StftPowerResult;
 /**
  * Reconstruct audio from a Mel power spectrogram via Griffin-Lim. Mirrors
  * `feature::mel_to_audio`.
@@ -1802,10 +2043,12 @@ declare function melToStft(melPower: Float32Array, nMels: number, nFrames: numbe
  * @param sampleRate - Sample rate in Hz
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
+ * @param fmin - Minimum Mel frequency in Hz (default: 0)
+ * @param fmax - Maximum Mel frequency in Hz (default: 0 = sr/2)
  * @param nIter - Griffin-Lim iterations (default: 32)
  * @returns Reconstructed audio samples (mono, float32)
  */
-declare function melToAudio(melPower: Float32Array, nMels: number, nFrames: number, sampleRate: number, nFft?: number, hopLength?: number, nIter?: number, fmin?: number, fmax?: number): Float32Array;
+declare function melToAudio(melPower: Float32Array, nMels: number, nFrames: number, sampleRate?: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number, nIter?: number): Float32Array;
 /**
  * Invert MFCC coefficients back to a Mel power spectrogram. Mirrors
  * `feature::mfcc_to_mel`.
@@ -1825,110 +2068,173 @@ declare function mfccToMel(mfccCoefficients: Float32Array, nMfcc: number, nFrame
  * @param nMfcc - Number of MFCC coefficients
  * @param nFrames - Number of time frames
  * @param nMels - Number of Mel bins (default: 128)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
+ * @param fmin - Minimum Mel frequency in Hz (default: 0)
+ * @param fmax - Maximum Mel frequency in Hz (default: 0 = sr/2)
  * @param nIter - Griffin-Lim iterations (default: 32)
  * @returns Reconstructed audio samples (mono, float32)
  */
-declare function mfccToAudio(mfccCoefficients: Float32Array, nMfcc: number, nFrames: number, nMels: number, sampleRate: number, nFft?: number, hopLength?: number, nIter?: number, fmin?: number, fmax?: number): Float32Array;
+declare function mfccToAudio(mfccCoefficients: Float32Array, nMfcc: number, nFrames: number, nMels?: number, sampleRate?: number, nFft?: number, hopLength?: number, fmin?: number, fmax?: number, nIter?: number): Float32Array;
 /**
  * Compute chromagram (pitch class distribution).
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns Chroma features result
  */
-declare function chroma(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number): ChromaResult;
+declare function chroma(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number): ChromaResult;
 /**
  * Compute spectral centroid (center of mass of spectrum).
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns Spectral centroid in Hz for each frame
  */
-declare function spectralCentroid(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number): Float32Array;
+declare function spectralCentroid(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number): Float32Array;
+/**
+ * Compute spectral contrast (librosa.feature.spectral_contrast).
+ *
+ * @returns Matrix2d of shape (nBands + 1) x nFrames.
+ */
+declare function spectralContrast(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, nBands?: number, fmin?: number, quantile?: number): WasmMatrix2dResult;
+/**
+ * Fit per-frame polynomial coefficients (librosa.feature.poly_features).
+ *
+ * @returns Matrix2d of shape (order + 1) x nFrames.
+ */
+declare function polyFeatures(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, order?: number): WasmMatrix2dResult;
+/**
+ * Locate zero-crossing indices of a signal (librosa.zero_crossings).
+ */
+declare function zeroCrossings(samples: Float32Array, threshold?: number, refMagnitude?: boolean, pad?: boolean, zeroPos?: boolean): Int32Array;
+/**
+ * Estimate the global tuning offset from a set of frequencies
+ * (librosa.pitch_tuning). Returns a deviation in fractions of a bin.
+ */
+declare function pitchTuning(frequencies: Float32Array, resolution?: number, binsPerOctave?: number): number;
+/**
+ * Estimate the tuning offset of an audio signal (librosa.estimate_tuning).
+ */
+declare function estimateTuning(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, resolution?: number, binsPerOctave?: number): number;
+/**
+ * Non-negative matrix factorisation of a flattened [nFeatures x nFrames]
+ * spectrogram (librosa.decompose.decompose). Returns the W and H factors.
+ */
+declare function decompose(s: Float32Array, nFeatures: number, nFrames: number, nComponents: number, nIter?: number, beta?: number): WasmDecomposeResult;
+/**
+ * Nearest-neighbour filtering of a flattened [nFeatures x nFrames] spectrogram
+ * (librosa.decompose.nn_filter).
+ */
+declare function nnFilter(s: Float32Array, nFeatures: number, nFrames: number, aggregate?: string, k?: number, width?: number): WasmMatrix2dResult;
+/**
+ * Reorder/concatenate a signal by interval slices (librosa.effects.remix).
+ *
+ * @param intervals - Flat (start, end) sample pairs (even length).
+ */
+declare function remix(samples: Float32Array, intervals: Int32Array | ArrayLike<number>, sampleRate?: number, alignZeros?: boolean): Float32Array;
+/**
+ * Phase-vocoder time-scale modification (rate > 1 faster, < 1 slower).
+ */
+declare function phaseVocoder(samples: Float32Array, rate: number, sampleRate?: number, nFft?: number, hopLength?: number): Float32Array;
+/**
+ * HPSS into harmonic / percussive / residual signals.
+ */
+declare function hpssWithResidual(samples: Float32Array, sampleRate?: number, kernelHarmonic?: number, kernelPercussive?: number): WasmHpssWithResidualResult;
+/**
+ * Channel-weighted multichannel integrated loudness + LRA (ITU-R BS.1770 /
+ * EBU R128) from an interleaved buffer of `frames * channels` samples. The
+ * per-channel frame count is derived from the buffer length and `channels`.
+ */
+declare function lufsInterleaved(samples: Float32Array, channels: number, sampleRate?: number): WasmLufsResult;
+/**
+ * Standards-compliant EBU R128 loudness range (LRA) in LU.
+ */
+declare function ebur128LoudnessRange(samples: Float32Array, sampleRate?: number): number;
 /**
  * Compute spectral bandwidth.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns Spectral bandwidth in Hz for each frame
  */
-declare function spectralBandwidth(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number): Float32Array;
+declare function spectralBandwidth(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number): Float32Array;
 /**
  * Compute spectral rolloff frequency.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @param rollPercent - Percentage threshold (default: 0.85)
  * @returns Rolloff frequency in Hz for each frame
  */
-declare function spectralRolloff(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number, rollPercent?: number): Float32Array;
+declare function spectralRolloff(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, rollPercent?: number): Float32Array;
 /**
  * Compute spectral flatness.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns Spectral flatness for each frame (0 = tonal, 1 = noise-like)
  */
-declare function spectralFlatness(samples: Float32Array, sampleRate: number, nFft?: number, hopLength?: number): Float32Array;
+declare function spectralFlatness(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number): Float32Array;
 /**
  * Compute zero crossing rate.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param frameLength - Frame length (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns Zero crossing rate for each frame
  */
-declare function zeroCrossingRate(samples: Float32Array, sampleRate: number, frameLength?: number, hopLength?: number): Float32Array;
+declare function zeroCrossingRate(samples: Float32Array, sampleRate?: number, frameLength?: number, hopLength?: number): Float32Array;
 /**
  * Compute RMS energy.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param frameLength - Frame length (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @returns RMS energy for each frame
  */
-declare function rmsEnergy(samples: Float32Array, sampleRate: number, frameLength?: number, hopLength?: number): Float32Array;
+declare function rmsEnergy(samples: Float32Array, sampleRate?: number, frameLength?: number, hopLength?: number): Float32Array;
 /**
  * Detect pitch using YIN algorithm.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param frameLength - Frame length (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @param fmin - Minimum frequency in Hz (default: 65)
  * @param fmax - Maximum frequency in Hz (default: 2093)
  * @param threshold - YIN threshold (default: 0.3)
+ * @param fillNa - If true, return 0 for unvoiced f0 frames; otherwise keep NaN (default: false)
  * @returns Pitch detection result
  */
-declare function pitchYin(samples: Float32Array, sampleRate: number, frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number): PitchResult;
+declare function pitchYin(samples: Float32Array, sampleRate?: number, frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number, fillNa?: boolean): PitchResult;
 /**
  * Detect pitch using pYIN algorithm (probabilistic YIN with HMM smoothing).
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param frameLength - Frame length (default: 2048)
  * @param hopLength - Hop length (default: 512)
  * @param fmin - Minimum frequency in Hz (default: 65)
  * @param fmax - Maximum frequency in Hz (default: 2093)
  * @param threshold - YIN threshold (default: 0.3)
+ * @param fillNa - If true, return 0 for unvoiced f0 frames; otherwise keep NaN (default: false)
  * @returns Pitch detection result
  */
-declare function pitchPyin(samples: Float32Array, sampleRate: number, frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number): PitchResult;
+declare function pitchPyin(samples: Float32Array, sampleRate?: number, frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number, fillNa?: boolean): PitchResult;
 /**
  * Convert frequency in Hz to Mel scale.
  *
@@ -1975,20 +2281,20 @@ declare function noteToHz(note: string): number;
  * Convert frame index to time in seconds.
  *
  * @param frames - Frame index
- * @param sr - Sample rate in Hz
- * @param hopLength - Hop length in samples
+ * @param sr - Sample rate in Hz (default: 22050)
+ * @param hopLength - Hop length in samples (default: 512)
  * @returns Time in seconds
  */
-declare function framesToTime(frames: number, sr: number, hopLength: number): number;
+declare function framesToTime(frames: number, sr?: number, hopLength?: number): number;
 /**
  * Convert time in seconds to frame index.
  *
  * @param time - Time in seconds
- * @param sr - Sample rate in Hz
- * @param hopLength - Hop length in samples
+ * @param sr - Sample rate in Hz (default: 22050)
+ * @param hopLength - Hop length in samples (default: 512)
  * @returns Frame index
  */
-declare function timeToFrames(time: number, sr: number, hopLength: number): number;
+declare function timeToFrames(time: number, sr?: number, hopLength?: number): number;
 declare function framesToSamples(frames: number, hopLength?: number, nFft?: number): number;
 declare function samplesToFrames(samples: number, hopLength?: number, nFft?: number): number;
 declare function powerToDb(values: Float32Array, ref?: number, amin?: number, topDb?: number): Float32Array;
@@ -2000,16 +2306,16 @@ declare function deemphasis(samples: Float32Array, coef?: number, zi?: number): 
 declare function trimSilence(samples: Float32Array, topDb?: number, frameLength?: number, hopLength?: number): WasmTrimResult;
 declare function splitSilence(samples: Float32Array, topDb?: number, frameLength?: number, hopLength?: number): Int32Array;
 declare function frameSignal(samples: Float32Array, frameLength: number, hopLength: number): WasmFrameResult;
-declare function padCenter(values: Float32Array, size: number, padValue?: number): Float32Array;
-declare function fixLength(values: Float32Array, size: number, padValue?: number): Float32Array;
+declare function padCenter(values: Float32Array, targetSize: number, padValue?: number): Float32Array;
+declare function fixLength(values: Float32Array, targetSize: number, padValue?: number): Float32Array;
 declare function fixFrames(frames: Int32Array, xMin?: number, xMax?: number, pad?: boolean): Int32Array;
 declare function peakPick(values: Float32Array, preMax: number, postMax: number, preAvg: number, postAvg: number, delta: number, wait: number): Int32Array;
 declare function vectorNormalize(values: Float32Array, normType?: number, threshold?: number): Float32Array;
 declare function pcen(values: Float32Array, nBins: number, nFrames: number, options?: Record<string, number>): Float32Array;
 declare function tonnetz(chromagram: Float32Array, nChroma: number, nFrames: number): Float32Array;
-declare function tempogram(onsetEnvelope: Float32Array, sampleRate: number, hopLength?: number, winLength?: number, mode?: TempogramMode): WasmTempogramResult;
-declare function cyclicTempogram(onsetEnvelope: Float32Array, sampleRate: number, hopLength?: number, winLength?: number, bpmMin?: number, nBins?: number): WasmCyclicTempogramResult;
-declare function plp(onsetEnvelope: Float32Array, sampleRate: number, hopLength?: number, tempoMin?: number, tempoMax?: number, winLength?: number): Float32Array;
+declare function tempogram(onsetEnvelope: Float32Array, sampleRate?: number, hopLength?: number, winLength?: number, mode?: TempogramMode): WasmTempogramResult;
+declare function cyclicTempogram(onsetEnvelope: Float32Array, sampleRate?: number, hopLength?: number, winLength?: number, bpmMin?: number, nBins?: number): WasmCyclicTempogramResult;
+declare function plp(onsetEnvelope: Float32Array, sampleRate?: number, hopLength?: number, tempoMin?: number, tempoMax?: number, winLength?: number): Float32Array;
 /**
  * Compute NNLS (non-negative least squares) chromagram.
  *
@@ -2050,7 +2356,7 @@ declare function vqt(samples: Float32Array, sampleRate?: number, hopLength?: num
  * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param nFft - FFT size (default: 2048)
  * @param hopLength - Hop length (default: 512)
- * @param minSectionSec - Minimum section duration in seconds (default: 8.0)
+ * @param minSectionSec - Minimum section duration in seconds (default: 4.0)
  * @returns Array of detected sections
  */
 declare function analyzeSections(samples: Float32Array, sampleRate?: number, nFft?: number, hopLength?: number, minSectionSec?: number): Section[];
@@ -2105,7 +2411,7 @@ declare function tempogramRatio(tempogramData: Float32Array, winLength?: number,
  * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Loudness measurement result
  */
-declare function lufs(samples: Float32Array, sampleRate?: number): LufsResult;
+declare function lufs(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): LufsResult;
 /**
  * Compute the momentary loudness (LUFS) over time.
  *
@@ -2113,7 +2419,7 @@ declare function lufs(samples: Float32Array, sampleRate?: number): LufsResult;
  * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Momentary LUFS values over time
  */
-declare function momentaryLufs(samples: Float32Array, sampleRate?: number): Float32Array;
+declare function momentaryLufs(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): Float32Array;
 /**
  * Compute the short-term loudness (LUFS) over time.
  *
@@ -2121,7 +2427,105 @@ declare function momentaryLufs(samples: Float32Array, sampleRate?: number): Floa
  * @param sampleRate - Sample rate in Hz (default: 22050)
  * @returns Short-term LUFS values over time
  */
-declare function shortTermLufs(samples: Float32Array, sampleRate?: number): Float32Array;
+declare function shortTermLufs(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): Float32Array;
+/** One contiguous run of clipped samples reported by `meteringDetectClipping`. */
+interface ClippingRegion {
+    startSample: number;
+    endSample: number;
+    length: number;
+    peak: number;
+}
+/** Aggregated clipping report. */
+interface ClippingReport {
+    clippedSamples: number;
+    clippingRatio: number;
+    maxClippedPeak: number;
+    regions: ClippingRegion[];
+}
+/** Sliding-window dynamic range report. */
+interface DynamicRangeReport {
+    dynamicRangeDb: number;
+    lowPercentileDb: number;
+    highPercentileDb: number;
+    windowRmsDb: Float32Array;
+}
+declare function meteringPeakDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
+declare function meteringRmsDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
+declare function meteringCrestFactorDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
+declare function meteringDcOffset(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
+/**
+ * Inter-sample (true) peak in dBFS. `oversampleFactor` must be a power of two
+ * in [1, 16]; pass 0 to use the library default (4).
+ */
+declare function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversampleFactor?: number, options?: ValidateOptions): number;
+/**
+ * Detect contiguous runs of clipped samples.
+ *
+ * @param threshold Linear absolute threshold (default 0.999).
+ * @param minRegionSamples Minimum run length to report (default 1).
+ */
+declare function meteringDetectClipping(samples: Float32Array, sampleRate?: number, threshold?: number, minRegionSamples?: number, options?: ValidateOptions): ClippingReport;
+/**
+ * Sliding-window dynamic range. Pass 0 for any parameter to use the library
+ * default (window=3 s, hop=1 s, low=0.10, high=0.95).
+ */
+declare function meteringDynamicRange(samples: Float32Array, sampleRate?: number, windowSec?: number, hopSec?: number, lowPercentile?: number, highPercentile?: number, options?: ValidateOptions): DynamicRangeReport;
+/** Mid/side vectorscope point series for a (left, right) stereo pair. */
+interface VectorscopeReport {
+    mid: Float32Array;
+    side: Float32Array;
+}
+/** Phase-scope (Lissajous) point series plus summary stats. */
+interface PhaseScopeReport {
+    mid: Float32Array;
+    side: Float32Array;
+    radius: Float32Array;
+    angleRad: Float32Array;
+    correlation: number;
+    averageAbsAngleRad: number;
+    maxRadius: number;
+}
+/** Options for `meteringSpectrum`. */
+interface SpectrumOptions {
+    /** FFT size. Pass 0 / omit for the library default (2048). */
+    nFft?: number;
+    /** Apply fractional-octave smoothing to magnitude. */
+    applyOctaveSmoothing?: boolean;
+    /** Smoothing fraction (e.g. 3 = 1/3-octave). 0 / omit = library default (3). */
+    octaveFraction?: number;
+    /** Linear reference for the dB conversion. 0 / omit = 1.0. */
+    dbRef?: number;
+    /** Linear floor used to avoid log(0). 0 / omit = library default. */
+    dbAmin?: number;
+}
+/** Single-frame magnitude / power / dB spectrum returned by `meteringSpectrum`. */
+interface SpectrumReport {
+    frequencies: Float32Array;
+    magnitude: Float32Array;
+    power: Float32Array;
+    db: Float32Array;
+    nFft: number;
+    sampleRate: number;
+}
+/** Pearson correlation in [-1, 1] between two equal-length channels. */
+declare function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
+/** Side / mid energy ratio: 0 = pure mono, ~1 = wide stereo. */
+declare function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
+/** Per-sample mid/side point series (one entry per input frame). */
+declare function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): VectorscopeReport;
+/** Phase-scope point series plus summary stats. */
+declare function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): PhaseScopeReport;
+/** Single-frame spectrum view (uses the first `nFft` samples of `samples`). */
+declare function meteringSpectrum(samples: Float32Array, sampleRate?: number, options?: SpectrumOptions & ValidateOptions): SpectrumReport;
+/**
+ * Snap a MIDI value to the nearest pitch class enabled by `modeMask`.
+ *
+ * `modeMask` is a 12-bit mask. For natural C major use `0b101010110101`.
+ * `referenceMidi` defaults to A4 (69) when passed as 0.
+ */
+declare function scaleQuantizeMidi(root: number, modeMask: number, midi: number, referenceMidi?: number): number;
+declare function scaleCorrectionSemitones(root: number, modeMask: number, midi: number, referenceMidi?: number): number;
+declare function scalePitchClassEnabled(root: number, modeMask: number, pitchClass: number): boolean;
 /**
  * Resample audio to a different sample rate.
  *
@@ -2175,9 +2579,9 @@ declare class Audio {
     percussive(): Float32Array;
     timeStretch(rate: number): Float32Array;
     pitchShift(semitones: number): Float32Array;
-    pitchCorrectToMidi(currentMidi: number, targetMidi: number): Float32Array;
-    noteStretch(onsetSample: number, offsetSample: number, stretchRatio: number): Float32Array;
-    voiceChange(pitchSemitones: number, formantFactor: number): Float32Array;
+    pitchCorrectToMidi(currentMidi?: number, targetMidi?: number): Float32Array;
+    noteStretch(onsetSample?: number, offsetSample?: number, stretchRatio?: number): Float32Array;
+    voiceChange(pitchSemitones?: number, formantFactor?: number): Float32Array;
     normalize(targetDb?: number): Float32Array;
     mastering(targetLufs?: number, ceilingDb?: number, truePeakOversample?: number): MasteringResult;
     masteringChain(config: MasteringChainConfig): MasteringChainResult;
@@ -2204,8 +2608,8 @@ declare class Audio {
     spectralFlatness(nFft?: number, hopLength?: number): Float32Array;
     zeroCrossingRate(frameLength?: number, hopLength?: number): Float32Array;
     rmsEnergy(frameLength?: number, hopLength?: number): Float32Array;
-    pitchYin(frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number): PitchResult;
-    pitchPyin(frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number): PitchResult;
+    pitchYin(frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number, fillNa?: boolean): PitchResult;
+    pitchPyin(frameLength?: number, hopLength?: number, fmin?: number, fmax?: number, threshold?: number, fillNa?: boolean): PitchResult;
     resample(targetSr: number): Float32Array;
 }
 /**
@@ -2316,4 +2720,4 @@ declare class StreamAnalyzer {
     dispose(): void;
 }
 
-export { type AcousticResult, type AnalysisResult, type AnalyzerStats, Audio, type AutomationCurve, type BarChord, type Beat, type Chord, type ChordAnalysisResult, type ChordChange, type ChordDetectionOptions, ChordQuality, type ChromaResult, type CqtResult, type Dynamics, EXPECTED_ENGINE_ABI_VERSION, type EngineAutomationPoint, type EngineBounceOptions, type EngineBounceResult, type EngineCapabilities, type EngineCaptureStatus, type EngineClip, type EngineFreezeOptions, type EngineFreezeResult, type EngineGraphSpec, type EngineMarker, type EngineMeterTelemetry, type EngineMetronomeConfig, type EngineParameterInfo, type EngineTelemetry, type EngineTransportState, type EqBand, type EqBandPhase, type EqBandType, type EqCoeffMode, type EqMatchOptions, type EqSpectrumSnapshot, type EqStereoPlacement, type FrameBuffer, type GoniometerPoint, type HpssResult, type Key, type KeyCandidate, type KeyDetectionOptions, KeyProfile, type KeyProfileName, type LufsResult, type MasteringChainConfig, type MasteringChainResult, type MasteringPreset, type MasteringProcessorParams, type MasteringResult, type MasteringStereoChainResult, type MasteringStereoResult, type MelSpectrogramResult, type MelodyPoint, type MelodyResult, type MeterTap, type MfccResult, type MixMeterSnapshot, type MixOptions, type MixResult, Mixer, type MixerProcessResult, type MixerRealtimeBuffer, Mode, type PairAnalysis, type PairProcessor, type PanLaw, type PanMode, type PatternScore, PitchClass as Pitch, PitchClass, type PitchResult, type ProgressCallback, type ProgressiveEstimate, RealtimeEngine, type RhythmFeatures, type Section, SectionType, type SendTiming, type SoloProcessor, type StereoAnalysis, type StftResult, StreamAnalyzer, type StreamConfig, type StreamFramesI16, type StreamFramesU8, StreamingEqualizer, type StreamingEqualizerConfig, StreamingMasteringChain, type StreamingPlatform, StreamingRetune, type StreamingRetuneConfig, type Timbre, type TimeSignature, amplitudeToDb, analyze, analyzeImpulseResponse, analyzeMelody, analyzeSections, analyzeWithProgress, chroma, cqt, cyclicTempogram, dbToAmplitude, dbToPower, deemphasis, detectAcoustic, detectBeats, detectBpm, detectChords, detectDownbeats, detectKey, detectKeyCandidates, detectOnsets, engineAbiVersion, engineCapabilities, fixFrames, fixLength, fourierTempogram, frameSignal, framesToSamples, framesToTime, harmonic, hpss, hzToMel, hzToMidi, hzToNote, init, isInitialized, lufs, masterAudio, masterAudioStereo, mastering, masteringAssistantSuggest, masteringAudioProfile, masteringChain, masteringChainStereo, masteringChainStereoWithProgress, masteringChainWithProgress, masteringPairAnalysisNames, masteringPairAnalyze, masteringPairProcess, masteringPairProcessorNames, masteringPresetNames, masteringProcess, masteringProcessStereo, masteringProcessorNames, masteringStereoAnalysisNames, masteringStereoAnalyze, masteringStreamingPreview, melSpectrogram, melToAudio, melToHz, melToStft, mfcc, mfccToAudio, mfccToMel, midiToHz, mixStereo, mixerScenePresetJson, mixingScenePresetJson, mixingScenePresetNames, momentaryLufs, nnlsChroma, normalize, noteStretch, noteToHz, onsetEnvelope, padCenter, pcen, peakPick, percussive, pitchCorrectToMidi, pitchPyin, pitchShift, pitchYin, plp, powerToDb, preemphasis, resample, rmsEnergy, samplesToFrames, shortTermLufs, spectralBandwidth, spectralCentroid, spectralFlatness, spectralRolloff, splitSilence, stft, stftDb, tempogram, tempogramRatio, timeStretch, timeToFrames, tonnetz, trim, trimSilence, vectorNormalize, version, voiceChange, vqt, zeroCrossingRate };
+export { type AcousticResult, type AnalysisResult, type AnalyzerStats, Audio, type AutomationCurve, type BarChord, type Beat, type BpmAnalysisResult, type BpmCandidate, type Chord, type ChordAnalysisResult, type ChordChange, type ChordDetectionOptions, ChordQuality, type ChromaResult, type ClippingRegion, type ClippingReport, type CompressorDetector, type CompressorOptions, type CqtResult, type DeclickOptions, type DeclipOptions, type DecomposeResult, type DecrackleMode, type DecrackleOptions, type DehumOptions, type DenoiseClassicalMode, type DenoiseClassicalNoiseEstimator, type DenoiseClassicalOptions, type DereverbClassicalOptions, type DynamicRangeReport, type Dynamics, type DynamicsAnalysisResult, type DynamicsResult, EXPECTED_ENGINE_ABI_VERSION, type EngineAutomationPoint, type EngineBounceOptions, type EngineBounceResult, type EngineCapabilities, type EngineCaptureStatus, type EngineClip, type EngineFreezeOptions, type EngineFreezeResult, type EngineGraphSpec, type EngineMarker, type EngineMeterTelemetry, type EngineMetronomeConfig, type EngineParameterInfo, type EngineTelemetry, type EngineTransportState, type EqBand, type EqBandPhase, type EqBandType, type EqCoeffMode, type EqMatchOptions, type EqSpectrumSnapshot, type EqStereoPlacement, type FrameBuffer, type GateOptions, type GoniometerPoint, type HpssResult, type HpssWithResidualResult, type Key, type KeyCandidate, type KeyDetectionOptions, KeyProfile, type KeyProfileName, type LufsResult, type MasteringChainConfig, type MasteringChainResult, type MasteringPreset, type MasteringProcessorParams, type MasteringResult, type MasteringStereoChainResult, type MasteringStereoResult, type Matrix2dResult, type MelSpectrogramResult, type MelodyPoint, type MelodyResult, type MeterTap, type MfccResult, type MixMeterSnapshot, type MixOptions, type MixResult, Mixer, type MixerProcessResult, type MixerRealtimeBuffer, Mode, type PairAnalysis, type PairProcessor, type PanLaw, type PanMode, type PatternScore, type PhaseScopeReport, PitchClass as Pitch, PitchClass, type PitchResult, type ProgressiveEstimate, RealtimeEngine, RealtimeVoiceChanger, type RealtimeVoiceChangerConfigInput, type RealtimeVoiceChangerInterleavedBuffer, type RealtimeVoiceChangerMonoBuffer, type RealtimeVoiceChangerPlanarBuffer, type RhythmAnalysisResult, type RhythmFeatures, type Section, SectionType, type SendTiming, type SoloProcessor, type SpectrumOptions, type SpectrumReport, type StereoAnalysis, type StftResult, StreamAnalyzer, type StreamConfig, type StreamFramesI16, type StreamFramesU8, StreamingEqualizer, type StreamingEqualizerConfig, StreamingMasteringChain, type StreamingPlatform, StreamingRetune, type StreamingRetuneConfig, type Timbre, type TimbreAnalysisResult, type TimbreFrame, type TimeSignature, type TransientShaperOptions, type TrimSilenceMode, type TrimSilenceOptions, type ValidateOptions, type VectorscopeReport, type VoicePresetId, amplitudeToDb, analyze, analyzeBpm, analyzeDynamics, analyzeImpulseResponse, analyzeMelody, analyzeRhythm, analyzeSections, analyzeTimbre, analyzeWithProgress, chroma, cqt, cyclicTempogram, dbToAmplitude, dbToPower, decompose, deemphasis, detectAcoustic, detectBeats, detectBpm, detectChords, detectDownbeats, detectKey, detectKeyCandidates, detectOnsets, ebur128LoudnessRange, engineAbiVersion, engineCapabilities, estimateTuning, fixFrames, fixLength, fourierTempogram, frameSignal, framesToSamples, framesToTime, harmonic, hasFfmpegSupport, hpss, hpssWithResidual, hzToMel, hzToMidi, hzToNote, init, isInitialized, lufs, lufsInterleaved, masterAudio, masterAudioStereo, masterAudioStereoWithProgress, masterAudioWithProgress, mastering, masteringAssistantSuggest, masteringAudioProfile, masteringChain, masteringChainStereo, masteringChainStereoWithProgress, masteringChainWithProgress, masteringDynamicsCompressor, masteringDynamicsGate, masteringDynamicsTransientShaper, masteringPairAnalysisNames, masteringPairAnalyze, masteringPairProcess, masteringPairProcessorNames, masteringPresetNames, masteringProcess, masteringProcessStereo, masteringProcessorNames, masteringRepairDeclick, masteringRepairDeclip, masteringRepairDecrackle, masteringRepairDehum, masteringRepairDenoiseClassical, masteringRepairDereverbClassical, masteringRepairTrimSilence, masteringStereoAnalysisNames, masteringStereoAnalyze, masteringStreamingPreview, melSpectrogram, melToAudio, melToHz, melToStft, meteringCrestFactorDb, meteringDcOffset, meteringDetectClipping, meteringDynamicRange, meteringPeakDb, meteringPhaseScope, meteringRmsDb, meteringSpectrum, meteringStereoCorrelation, meteringStereoWidth, meteringTruePeakDb, meteringVectorscope, mfcc, mfccToAudio, mfccToMel, midiToHz, mixStereo, mixingScenePresetJson, mixingScenePresetNames, momentaryLufs, nnFilter, nnlsChroma, normalize, noteStretch, noteToHz, onsetEnvelope, padCenter, pcen, peakPick, percussive, phaseVocoder, pitchCorrectToMidi, pitchPyin, pitchShift, pitchTuning, pitchYin, plp, polyFeatures, powerToDb, preemphasis, realtimeVoiceChangerPresetConfig, realtimeVoiceChangerPresetJson, realtimeVoiceChangerPresetNames, remix, resample, rmsEnergy, samplesToFrames, scaleCorrectionSemitones, scalePitchClassEnabled, scaleQuantizeMidi, shortTermLufs, spectralBandwidth, spectralCentroid, spectralContrast, spectralFlatness, spectralRolloff, splitSilence, stft, stftDb, tempogram, tempogramRatio, timeStretch, timeToFrames, tonnetz, trim, trimSilence, validateRealtimeVoiceChangerPresetJson, vectorNormalize, version, voiceChange, voiceChangerAbiVersion, voiceCharacterPresetId, vqt, zeroCrossingRate, zeroCrossings };

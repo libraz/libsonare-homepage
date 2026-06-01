@@ -52,15 +52,17 @@
 | ファミリー | 対象 | 主なページ |
 |------------|------|------------|
 | 解析 | BPM、キー、キー候補、ビート、ダウンビート、オンセット、コード、セクション、メロディ、音色、ダイナミクス、リズム、音響解析 | [JavaScript API](./js-api.md)、[Python API](./python-api.md)、[C++ API](./cpp-api.md) |
+| 特徴量 | STFT、メル、MFCC、クロマ、spectral contrast/poly features、zero crossings、ピッチとチューニング、CQT/VQT、NNLS クロマ、NMF 分解、近傍フィルタ、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS/LRA | [JavaScript API](./js-api.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
+| メータリング | オフラインのレベル／ラウドネス／クレストファクター／トゥルーピーク／DC オフセット計測、クリッピング・ダイナミックレンジレポート、ステレオ相関／幅、ベクトルスコープ・位相スコープ・スペクトルスナップショット | [JavaScript API](./js-api.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
+| スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api.md#スケール量子化)、[Python API](./python-api.md) |
+| エフェクトと編集 | HPSS、残差付き HPSS、倍音／打撃成分抽出、ノーマライズ、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、ピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[JavaScript API](./js-api.md#オーディオエフェクト) |
+| ルーム音響解析 | インパルスレスポンスの RT60/EDT/C50/C80/D50 解析、通常録音からのブラインド音響推定 | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
+| ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
+| マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON | [マスタリングアシスタント](./mastering-assistant.md) |
+| マスタリング | プリセット、フルチェーン、名前付きプロセッサ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングマスタリングチェーン | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、逐次 BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、キャプチャ、モニターバス、テレメトリ、バウンス／フリーズ | [リアルタイムとストリーミング](./realtime-streaming.md) |
-| ルーム音響解析 | インパルスレスポンスの RT60/EDT/C50/C80/D50 解析、通常録音からのブラインド音響推定 | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
-| エフェクトと編集 | HPSS、倍音／打撃成分抽出、ノーマライズ、トリム、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、ピッチ／フォルマント変更 | [編集 DSP](./editing-dsp.md)、[JavaScript API](./js-api.md#オーディオエフェクト) |
-| 特徴量 | STFT、メル、MFCC、クロマ、スペクトル特徴量、ピッチ、CQT/VQT、NNLS クロマ、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS | [JavaScript API](./js-api.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声 | [逆変換特徴量](./inverse-features.md) |
-| マスタリング | プリセット、フルチェーン、名前付きプロセッサ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングマスタリングチェーン | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
-| マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON | [マスタリングアシスタント](./mastering-assistant.md) |
-| ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz | [librosa 互換性](./librosa-compatibility.md) |
 
 ## 実装と根拠のページ
@@ -81,9 +83,9 @@
 | 系統 | 例 |
 |------|----|
 | 初期化 | `init`, `isInitialized`, `version` |
-| エンジン能力確認 | `engineAbiVersion`, `engineCapabilities` |
+| エンジン能力確認 | `engineAbiVersion`, `voiceChangerAbiVersion`, `engineCapabilities` |
 | 音声処理 | 高レベル解析、エフェクト／編集、マスタリング、ミキシング、特徴量抽出、逆変換特徴量、変換ヘルパー |
-| オブジェクト API | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `Mixer`, `RealtimeEngine` |
+| オブジェクト API | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
 
 同じ npm パッケージは、AudioWorklet ブリッジ用の `@libraz/libsonare/worklet`、軽量な `sonare-rt` リアルタイムモジュールファクトリ用の `@libraz/libsonare/rt`、バンドラーや独自ローダー向けの生 WASM アセット用サブパス（`@libraz/libsonare/wasm`、`@libraz/libsonare/rt-wasm`）も公開します。
 
@@ -93,4 +95,15 @@
 
 CLI は、プログラムを書かずにファイルを指定して解析・変換したいときの入口です。自動処理や検証には便利ですが、リアルタイム UI や細かい対話的制御には JavaScript / Python / C++ API の方が向いています。
 
-Python CLI は version/info、コア解析、主要な特徴量サマリー、ファイルを書き出す新しい編集コマンド（`pitch-correct`、`note-stretch`、`voice-change`）、音響／リズム／ダイナミクス／音色サマリー、LUFS、マスタリングプロセッサ入口、簡単なミキシングを扱います。ソースビルドの C++ CLI はさらに低レベルなコマンド群を持ち、セクション／メロディ／境界ユーティリティ、CQT／tonnetz／PCEN／Fourier tempogram／tempogram-ratio ヘルパー、追加の時間／ピッチ加工コマンド（`time-stretch`、`pitch-shift`）、マスタリングのペア／ステレオ一覧、ミキシングシーンプリセット書き出しを提供します。例は [CLI](./cli.md)、ランタイム差分は [バインディング対応表](./binding-parity.md) を参照してください。
+Python CLI は次の用途を扱います。
+
+- version/info
+- コア解析
+- 主要な特徴量サマリー
+- ファイルを書き出す編集コマンド（`pitch-correct`、`note-stretch`、`voice-change`）
+- 音響／リズム／ダイナミクス／音色サマリー
+- LUFS、マスタリングプロセッサ入口、簡単なミキシング
+
+ソースビルドの C++ CLI はさらに低レベルなコマンド群を持ちます。セクション／メロディ／境界ユーティリティ、CQT／tonnetz／PCEN／Fourier tempogram／tempogram-ratio ヘルパー、追加の時間／ピッチ加工コマンド（`time-stretch`、`pitch-shift`）、マスタリングのペア／ステレオ一覧、ミキシングシーンプリセット書き出しを提供します。
+
+例は [CLI](./cli.md)、ランタイム差分は [バインディング対応表](./binding-parity.md) を参照してください。

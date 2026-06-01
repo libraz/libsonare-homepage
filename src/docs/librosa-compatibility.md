@@ -30,7 +30,7 @@ Use this table before scanning the long compatibility matrix:
 | Build spectrogram features for ML | `stft`, `melSpectrogram` / `mel_spectrogram`, `mfcc`, `pcen` | Pass `n_fft`, `hop_length`, `n_mels`, and `n_mfcc` explicitly when comparing |
 | Compute chroma or harmonic features | `chroma`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `nnlsChroma` is not a strict `librosa.feature.chroma_cqt` clone |
 | Track tempo, beats, onsets, or pulse | `onsetEnvelope`, `detectOnsets`, `detectBeats`, `detectBpm`, `tempogram`, `plp` | libsonare returns beat/onset times in seconds for high-level detectors |
-| Edit or transform audio | `hpss`, `timeStretch` / `time_stretch`, `pitchShift` / `pitch_shift`, `trimSilence` / `trim_silence` | Phase-vocoder and resampling details differ from librosa |
+| Edit or transform audio | `hpss`, `hpssWithResidual` / `hpss_with_residual`, `timeStretch` / `time_stretch`, `phaseVocoder` / `phase_vocoder`, `pitchShift` / `pitch_shift`, `remix`, `trimSilence` / `trim_silence` | Phase-vocoder, HPSS, and resampling details differ from librosa |
 | Convert units or reshape feature arrays | `framesToSamples`, `samplesToFrames`, `frameSignal`, `padCenter`, `fixLength`, `vectorNormalize` | JS names are camelCase, Python names are snake_case |
 | Reconstruct approximate audio from features | `melToAudio`, `mfccToAudio` | Griffin-Lim reconstruction is lossy and phase-estimated |
 
@@ -38,7 +38,7 @@ Use this table before scanning the long compatibility matrix:
 
 Compatibility here means "checked against reference behavior", not "the APIs are identical".
 
-The libsonare repository has librosa comparison tests for STFT, mel/MFCC, chroma, CQT, pitch, onset/beat/tempo, tempogram/PLP, PCEN, dB conversion, framing/sequence helpers, silence trim/split, HPSS, harmonic/decompose/remix, tonnetz, and related utilities.
+The libsonare repository has librosa comparison tests for STFT, mel/MFCC, chroma, CQT, pitch, tuning, onset/beat/tempo, tempogram/PLP, PCEN, spectral contrast/poly features/zero crossings, dB conversion, framing/sequence helpers, silence trim/split, HPSS, harmonic/decompose/NN filtering/remix/phase vocoder, tonnetz, and related utilities.
 
 Use the tolerances below as migration guidance. They are not exact numerical guarantees for every input.
 
@@ -64,10 +64,13 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
 | `librosa.effects.hpss()` | `hpss()` | Median filtering |
+| `librosa.effects.hpss()` with residual handling | `hpssWithResidual()` / `hpss_with_residual()` | Returns harmonic, percussive, and residual signals |
 | `librosa.effects.harmonic()` | `harmonic()` | Harmonic component only |
 | `librosa.effects.percussive()` | `percussive()` | Percussive component only |
 | `librosa.effects.time_stretch()` | `time_stretch()` / `timeStretch()` | Phase vocoder |
+| `librosa.phase_vocoder()` | `phaseVocoder()` / `phase_vocoder()` | Direct phase-vocoder time scaling |
 | `librosa.effects.pitch_shift()` | `pitch_shift()` / `pitchShift()` | Time stretch plus resampling |
+| `librosa.effects.remix()` | `remix()` | Reorder or concatenate interval slices; interval units are samples |
 | `librosa.effects.preemphasis()` | `preemphasis()` | `coef`, optional `zi` |
 | `librosa.effects.deemphasis()` | `deemphasis()` | Inverse pre-emphasis |
 | `librosa.effects.trim()` | `trimSilence()` / `trim_silence()` | WASM/Node return `{ audio, startSample, endSample }`; Python returns `(audio, start_sample, end_sample)` |
@@ -84,7 +87,10 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` supported |
 | `librosa.feature.spectral_flatness()` | `spectralFlatness()` / `spectral_flatness()` | Per-frame |
+| `librosa.feature.spectral_contrast()` | `spectralContrast()` / `spectral_contrast()` | Matrix shape `(n_bands + 1) x n_frames` |
+| `librosa.feature.poly_features()` | `polyFeatures()` / `poly_features()` | Matrix shape `(order + 1) x n_frames` |
 | `librosa.feature.zero_crossing_rate()` | `zeroCrossingRate()` / `zero_crossing_rate()` | Per-frame |
+| `librosa.zero_crossings()` | `zeroCrossings()` / `zero_crossings()` | Zero-crossing sample indices |
 | `librosa.feature.rms()` | `rmsEnergy()` / `rms_energy()` | Per-frame |
 | `librosa.feature.tonnetz()` | `tonnetz()` | Input: row-major chromagram |
 | `librosa.cqt()` | `cqt()` | Constant-Q transform magnitude |
@@ -95,8 +101,19 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | _(tempo-octave-invariant variant)_ | `cyclicTempogram()` / `cyclic_tempogram()` | Cyclic tempogram; no exact librosa equivalent |
 | `librosa.feature.tempogram_ratio()` | `tempogramRatio()` / `tempogram_ratio()` | Tempogram ratio features |
 | `librosa.pcen()` | `pcen()` | `time_constant`, `gain`, `bias`, `power`, `eps` |
-| `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | Probabilistic YIN |
-| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN |
+| `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | Probabilistic YIN; `fillNa` / `fill_na` controls whether unvoiced `f0` is `NaN` or `0` |
+| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN; `fillNa` / `fill_na` controls whether unvoiced `f0` is `NaN` or `0` |
+| `librosa.pitch_tuning()` | `pitchTuning()` / `pitch_tuning()` | Tuning offset from frequencies |
+| `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | Tuning offset from audio |
+
+#### Decomposition and loudness
+
+| librosa / standard | libsonare | Notes |
+|--------------------|-----------|-------|
+| `librosa.decompose.decompose()` | `decompose()` | NMF factor matrices from a row-major spectrogram |
+| `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbour filtering |
+| ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | Multichannel integrated loudness from interleaved samples |
+| EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | Loudness range in LU |
 
 #### Inverse reconstruction
 
@@ -314,7 +331,7 @@ sonare beats song.wav --json
 | `n_mels` | 128 | 128 |
 | `fmin` | 0.0 | 0.0 for mel/inverse helpers; pitch helpers default to 65.0 Hz; CQT/VQT default to C1 (32.70319566 Hz) |
 | `fmax` | sr/2 | sr/2 |
-| `n_mfcc` | 20 | 13 in WASM/Node JS helpers; 20 in Python top-level `mfcc()` |
+| `n_mfcc` | 20 | 20 for the standalone `mfcc()` / `Audio.mfcc()` across all bindings; the analyzer/timbre extraction path uses 13 |
 | `n_chroma` | 12 | 12 |
 
 When matching librosa output, pass parameters explicitly instead of relying on

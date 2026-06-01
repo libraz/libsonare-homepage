@@ -42,6 +42,18 @@ By the end of this page you should be able to:
 | AudioWorklet bridge for engine-style playback with telemetry | `RealtimeEngine` or the reduced `sonare-rt` module |
 | Stem or strip mixing with sends and meters | [Mixing Engine](./mixing.md) |
 
+::: info Runtime entry points
+This page is centered on the Browser / WASM `StreamAnalyzer`, `RealtimeEngine`, and AudioWorklet bridge. Python and CLI are not the same live callback API; their main entry points are batch APIs that process files or arrays outside the audio callback.
+
+| Runtime | Entry point | Typical use |
+|---------|-------------|-------------|
+| Browser / WASM | `StreamAnalyzer`, `RealtimeEngine`, `@libraz/libsonare/worklet` | Live visualizers, AudioWorklet tools, progressive BPM / key / chord displays |
+| Python | `Audio.analyze()`, `onset_envelope(...)`, `tempogram(...)`, and related batch functions | Notebooks, offline analysis, validation scripts |
+| CLI | `sonare analyze`, `sonare bpm`, `sonare key`, and related commands | File-level checks, batch jobs, JSON output |
+
+If you need to analyze the same file from Python or CLI, use [Python API](./python-api.md) or [CLI Reference](./cli.md). Treat the WASM / Worklet examples as the source of truth for code that runs inside an audio callback.
+:::
+
 ## StreamAnalyzer
 
 `StreamAnalyzer` processes blocks and emits frame buffers for UI rendering. It is the right tool for spectrograms, chroma displays, onset-driven visuals, and incremental musical estimates. You construct it once, `process()` each incoming block, then drain whatever frames have accumulated.

@@ -81,7 +81,6 @@ Node users can choose between the WASM npm package and the native addon:
 import {
   masterAudioStereo,
   masteringChainStereo,
-  masteringChainStereoWithProgress,
   masteringAssistantSuggest,
   masteringAudioProfile,
   masteringPresetNames,
@@ -118,7 +117,7 @@ const matchReport = JSON.parse(
   masteringPairAnalyze('match.referenceLoudness', source, reference, sampleRate),
 )
 
-const masteredWithProgress = masteringChainStereoWithProgress(left, right, sampleRate, {
+const masteredWithProgress = masteringChainStereo(left, right, sampleRate, {
   loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
 }, (progress, stage) => {
   console.log(`render ${(progress * 100).toFixed(0)}%: ${stage}`)
@@ -143,18 +142,22 @@ console.log(profile, suggestions, deliveryPreview)
 
 The assistant/profile helpers accept the same option names as the WASM entry points. Profile params are `nFft`, `hopLength`, and `truePeakOversample`; assistant params are `targetLufs`, `ceilingDb`, `enableRepair`, `preferStreamingSafe`, and `speechMonoAmount`. The native parser also accepts snake_case aliases.
 
-For long offline renders, use `masteringChainWithProgress()` or `masteringChainStereoWithProgress()` and update your Node or browser UI from the progress callback.
+For long offline renders, pass the optional progress callback to `masteringChain(...)`, `masteringChainStereo(...)`, `masterAudio(...)`, or `masterAudioStereo(...)` and update your Node UI from that callback.
 
 The WASM package exposes the same camelCase mastering API names as the browser demo. The main groups are:
 
 | Group | API names |
 |-------|-----------|
-| Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masterAudio()`, `masterAudioStereo()` |
+| Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masterAudio()`, `masterAudioStereo()`, `masterAudioWithProgress()`, `masterAudioStereoWithProgress()` |
 | Full chains | `masteringChain()`, `masteringChainStereo()`, `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
+| Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
+| Offline repair (one-shot) | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
 | Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
 | Named processors | `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
+
+Node native uses the same base names but folds progress into an optional final callback argument instead of exporting separate `*WithProgress` wrapper functions.
 
 ## Mixing API
 
@@ -385,15 +388,18 @@ those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
 | `analyzeBpm(samples, sampleRate?, bpmMin?, bpmMax?, startBpm?, nFft?, hopLength?, maxCandidates?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates |
 | `analyzeRhythm(samples, sampleRate?, bpmMin?, bpmMax?, startBpm?, nFft?, hopLength?)` | `RhythmResult` | Time signature, groove, syncopation |
 | `analyzeDynamics(samples, sampleRate?, windowSec?, hopLength?, compressionThreshold?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
-| `analyzeTimbre(samples, sampleRate?, nFft?, hopLength?, nMels?, nMfcc?, windowSec?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity |
+| `analyzeTimbre(samples, sampleRate?, nFft?, hopLength?, nMels?, nMfcc?, windowSec?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime` |
 | `analyzeSections(samples, sampleRate?, nFft?, hopLength?, minSectionSec?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings |
 | `analyzeMelody(samples, sampleRate?, fmin?, fmax?, frameLength?, hopLength?, threshold?)` | `MelodyResult` | Lead-melody contour (F0 per frame) |
 | `detectAcoustic(samples, sampleRate?, nOctaveBands?, nThirdOctaveSubbands?, minDecayDb?, noiseFloorMarginDb?)` | `AcousticResult` | Room acoustics from a recording (RT60, etc.) |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?)` | `AcousticResult` | Room acoustics from a measured impulse response |
 | `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, momentary, short-term loudness and loudness range (ITU-R BS.1770) |
+| `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
+| `ebur128LoudnessRange(samples, sampleRate?)` | `number` | Standards-compliant EBU R128 loudness range (LRA) in LU |
 | `momentaryLufs(samples, sampleRate?)` | `Float32Array` | Momentary loudness (400 ms) per step |
 | `shortTermLufs(samples, sampleRate?)` | `Float32Array` | Short-term loudness (3 s) per step |
 | `version()` | `string` | Library version |
+| `voiceChangerAbiVersion()` | `number` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
 | `hasFfmpegSupport()` | `boolean` | Whether the loaded native addon can decode via FFmpeg |
 
 Default sample rates differ by helper family:
@@ -407,15 +413,28 @@ Common helpers are also available as `Audio` instance methods, as noted in the `
 
 The tables below document the Node native wrapper. The WASM package uses the same camelCase names, but functions with a required argument after `sampleRate` require that `sampleRate` position to be supplied. See [JavaScript API](./js-api.md) for the browser signatures.
 
+##### Asynchronous variants (Node only)
+
+The Node addon also exposes Promise-returning variants that run the DSP pipeline on a libuv worker thread, so the JS event loop is never blocked. They resolve with the same shape as their synchronous counterparts. These are Node-native-only — the WASM build has no worker-thread equivalent. Progress callbacks are not available on the async path; use the synchronous call with `onProgress`, or run several async calls in parallel.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `analyzeAsync(samples, sampleRate?)` | `Promise<AnalysisResult>` | Async variant of `analyze(...)` |
+| `masterAudioAsync(samples, sampleRate?, presetName?, overrides?)` | `Promise<MasteringChainResult>` | Async variant of `masterAudio(...)` |
+| `masterAudioStereoAsync(left, right, sampleRate?, presetName?, overrides?)` | `Promise<MasteringChainStereoResult>` | Async variant of `masterAudioStereo(...)` |
+
 #### Effects Functions
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
 | `hpss(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssResult` | Harmonic-Percussive Source Separation |
+| `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssWithResidualResult` | HPSS with harmonic, percussive, and residual outputs |
 | `harmonic(samples, sr?)` | `Float32Array` | Extract harmonic component |
 | `percussive(samples, sr?)` | `Float32Array` | Extract percussive component |
 | `timeStretch(samples, sr, rate)` | `Float32Array` | Time-stretch without pitch change |
+| `phaseVocoder(samples, rate, sr?, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
 | `pitchShift(samples, sr, semitones)` | `Float32Array` | Pitch-shift without tempo change |
+| `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
@@ -439,16 +458,23 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 | `spectralBandwidth(samples, sr?, nFft?, hopLength?)` | `Float32Array` | Spectral bandwidth per frame |
 | `spectralRolloff(samples, sr?, nFft?, hopLength?, rollPercent?)` | `Float32Array` | Spectral rolloff per frame |
 | `spectralFlatness(samples, sr?, nFft?, hopLength?)` | `Float32Array` | Spectral flatness per frame |
+| `spectralContrast(samples, sr?, nFft?, hopLength?, nBands?, fmin?, quantile?)` | `Matrix2dResult` | Spectral contrast, shape `(nBands + 1) x nFrames` |
+| `polyFeatures(samples, sr?, nFft?, hopLength?, order?)` | `Matrix2dResult` | Per-frame polynomial spectral coefficients |
 | `zeroCrossingRate(samples, sr?, frameLength?, hopLength?)` | `Float32Array` | Zero-crossing rate per frame |
+| `zeroCrossings(samples, threshold?, refMagnitude?, pad?, zeroPos?)` | `Int32Array` | Zero-crossing sample indices |
 | `rmsEnergy(samples, sr?, frameLength?, hopLength?)` | `Float32Array` | RMS energy per frame |
-| `pitchYin(samples, sr?, frameLength?, hopLength?, fmin?, fmax?, threshold?)` | `PitchResult` | YIN pitch estimation |
-| `pitchPyin(samples, sr?, frameLength?, hopLength?, fmin?, fmax?, threshold?)` | `PitchResult` | pYIN pitch estimation |
+| `pitchYin(samples, sr?, frameLength?, hopLength?, fmin?, fmax?, threshold?, fillNa?)` | `PitchResult` | YIN pitch estimation; unvoiced `f0` stays `NaN` unless `fillNa` is true |
+| `pitchPyin(samples, sr?, frameLength?, hopLength?, fmin?, fmax?, threshold?, fillNa?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `NaN` unless `fillNa` is true |
+| `pitchTuning(frequencies, resolution?, binsPerOctave?)` | `number` | Tuning offset from frequencies |
+| `estimateTuning(samples, sr?, nFft?, hopLength?, resolution?, binsPerOctave?)` | `number` | Tuning offset from audio |
 | `cqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Constant-Q transform magnitude |
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | Variable-Q transform magnitude (`gamma` controls Q) |
 | `nnlsChroma(samples, sr?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma) |
+| `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | NMF factor matrices from a row-major spectrogram |
+| `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbour filtering |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope (the input to the tempogram family) |
 
-Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=13`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`.
+Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`.
 
 #### Inverse Reconstruction Functions
 
@@ -485,8 +511,8 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `trimSilence(samples, topDb?, frameLength?, hopLength?)` | `{ audio: Float32Array; startSample: number; endSample: number }` | `librosa.effects.trim`, distinct from threshold `trim(...)` |
 | `splitSilence(samples, topDb?, frameLength?, hopLength?)` | `Int32Array` | `librosa.effects.split` — flat `[start0, end0, start1, end1, ...]` |
 | `frameSignal(samples, frameLength, hopLength)` | `{ nFrames: number; frames: Float32Array }` | `librosa.util.frame` (row-major) |
-| `padCenter(values, size, padValue?)` | `Float32Array` | `librosa.util.pad_center` |
-| `fixLength(values, size, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
+| `padCenter(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.pad_center` |
+| `fixLength(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
 | `fixFrames(frames, xMin?, xMax?, pad?)` | `Int32Array` | `librosa.util.fix_frames` |
 | `peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait)` | `Int32Array` | `librosa.util.peak_pick` |
 | `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`. `normType`: 0=inf, 1=L1, 2=L2, 3=power. The Node wrapper defaults `threshold` to `0.0`; WASM defaults it to `1e-12` |
@@ -517,6 +543,35 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `dbToPower(values, ref?)` | dB → power |
 | `dbToAmplitude(values, ref?)` | dB → amplitude |
 
+#### Metering Functions
+
+Standalone level, dynamics, and stereo-image meters. Each accepts an optional `options` object with a `validate` flag (default `true`); pass `{ validate: false }` to skip NaN/Inf input checks on hot paths. The stereo meters require `left` and `right` to be equal length.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `meteringPeakDb(samples, sr?, options?)` | `number` | Sample peak (dBFS) |
+| `meteringRmsDb(samples, sr?, options?)` | `number` | RMS level (dBFS) |
+| `meteringCrestFactorDb(samples, sr?, options?)` | `number` | Crest factor, peak − RMS (dB) |
+| `meteringDcOffset(samples, sr?, options?)` | `number` | Mean (DC) offset, linear amplitude |
+| `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | Inter-sample (true) peak (dBFS); `oversampleFactor` is a power of two in 1..16 (default 4) |
+| `meteringDetectClipping(samples, sr?, threshold?, minRegionSamples?, options?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `minRegionSamples` default `1` |
+| `meteringDynamicRange(samples, sr?, windowSec?, hopSec?, lowPercentile?, highPercentile?, options?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0` for defaults (window 3 s, hop 1 s, low 0.10, high 0.95) |
+| `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | Pearson correlation, −1..1 |
+| `meteringStereoWidth(left, right, sr?, options?)` | `number` | Mid/side stereo width |
+| `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | Per-sample mid/side point series |
+| `meteringPhaseScope(left, right, sr?, options?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
+| `meteringSpectrum(samples, sr?, options?)` | `SpectrumReport` | Single-frame magnitude/power/dB spectrum; `options` adds `nFft`, `applyOctaveSmoothing`, `octaveFraction`, `dbRef`, `dbAmin` |
+
+#### Scale Quantization
+
+12-TET scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (`PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69). Pair with `pitchCorrectToMidi(...)` to retune to the nearest scale degree.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `scaleQuantizeMidi(root, modeMask, midi, referenceMidi?)` | `number` | Snap a (fractional) MIDI number to the nearest enabled pitch class |
+| `scaleCorrectionSemitones(root, modeMask, midi, referenceMidi?)` | `number` | Correction (quantized − input), in semitones |
+| `scalePitchClassEnabled(root, modeMask, pitchClass)` | `boolean` | Whether `pitchClass` (0..11) is enabled relative to `root` |
+
 #### Streaming and Realtime Classes
 
 Beyond the one-shot functions, the native addon exposes the same streaming and realtime classes as the WASM build:
@@ -526,6 +581,7 @@ Beyond the one-shot functions, the native addon exposes the same streaming and r
 | `StreamAnalyzer` | Block-by-block analysis with progressive BPM/key estimates and `readFramesSoa`/`readFramesI16`/`readFramesU8`. See [Realtime Streaming](./realtime-streaming.md). |
 | `StreamingEqualizer` | Real-time-safe block EQ. |
 | `StreamingMasteringChain` | Incremental mastering render (documented above). |
+| `RealtimeVoiceChanger` | Preset-driven live voice chain for block processing. |
 | `Mixer` | Persistent multi-strip mixer from a JSON scene. See [Mixing Engine](./mixing.md). |
 | `RealtimeEngine` | Transport/clip/automation engine for DAW-style hosting. |
 
@@ -539,6 +595,28 @@ const stats = analyzer.stats();          // stats.estimate.bpm / .key (PitchClas
 ```
 
 Node native names the float Structure-of-Arrays read `readFramesSoa(...)`. The WASM wrapper exposes the same operation as `readFrames(...)` for browser examples.
+
+`RealtimeVoiceChanger` in Node native is constructed with `{ sampleRate, maxBlockSize, channels, preset }`, then used with `processMono(...)`, `processMonoInto(...)`, `processInterleaved(...)`, or `processPlanarStereo(...)`. For offline convenience, `voiceChangeRealtime(...)` runs a whole mono buffer through the same preset chain in 512-sample blocks.
+
+```typescript
+import {
+  RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetNames,
+  voiceChangeRealtime,
+} from '@libraz/libsonare-native';
+
+const changer = new RealtimeVoiceChanger({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  channels: 1,
+  preset: 'bright-idol',
+});
+
+const blockOut = changer.processMono(inputBlock);
+const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
+console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), blockOut, rendered);
+changer.destroy();
+```
 
 `RealtimeEngine` is shared at the class level, but a few wrapper details differ.
 
@@ -631,3 +709,16 @@ interface PitchResult {
   meanF0: number;
 }
 ```
+
+The native package also exports TypeScript helper types for option objects, callbacks, streaming snapshots, and realtime engine messages. Use these names when annotating application code instead of re-declaring the shapes locally.
+
+| Area | Exported types |
+|------|----------------|
+| Analysis options/results | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
+| Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
+| Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
+| Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanMode`, `SendTiming` |
+| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerOptions` |
+| Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
+| Realtime engine transport | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig` |
+| Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |

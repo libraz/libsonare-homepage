@@ -103,9 +103,14 @@ const locales = {
     },
     quickStart: {
       title: 'Use it in your code',
-      subtitle: 'One library, three runtimes. Pick a discipline, then a target.',
+      subtitle: 'One library, three runtimes. Pick a task, then choose where it runs.',
       docsLink: 'Open full API guide',
-      disciplines: { analysis: 'Analysis', mastering: 'Mastering' },
+      disciplines: {
+        analysis: 'Analysis',
+        mastering: 'Mastering',
+        mixing: 'Mixing',
+        editing: 'Editing DSP',
+      },
       runtimes: { browser: 'Browser', python: 'Python', cli: 'CLI' },
       note: 'WASM accepts decoded Float32Array samples — use Web Audio API or a JS decoder.',
     },
@@ -121,8 +126,8 @@ const locales = {
         },
         {
           tag: 'MASTERING',
-          title: '77 named DSP processors. Published references.',
-          body: 'EQ, dynamics, multiband, stereo, saturation, repair, maximizer, and reference matching, with 14 processors in the default chain. Loudness, true peak, crossovers, biquads, clippers, tube saturation, and oversampling are implemented against published references.',
+          title: '66 named DSP processors. Published references.',
+          body: 'EQ, dynamics, multiband, stereo, saturation, repair, maximizer, and reference matching, with 18 processors in the default chain. Loudness, true peak, crossovers, biquads, clippers, tube saturation, and oversampling are implemented against published references.',
           link: { label: 'Mastering guide', path: '/docs/glossary' },
         },
         {
@@ -201,7 +206,12 @@ const locales = {
       title: 'コードに組み込む',
       subtitle: 'ひとつのライブラリ、3 つのランタイム。用途を選んでから実行環境を選びます。',
       docsLink: 'API ガイドを開く',
-      disciplines: { analysis: '解析', mastering: 'マスタリング' },
+      disciplines: {
+        analysis: '解析',
+        mastering: 'マスタリング',
+        mixing: 'ミキシング',
+        editing: '編集 DSP',
+      },
       runtimes: { browser: 'Browser', python: 'Python', cli: 'CLI' },
       note: 'WASM はデコード済みの Float32Array サンプルを受け取ります（Web Audio API などでデコードしてください）。',
     },
@@ -217,8 +227,8 @@ const locales = {
         },
         {
           tag: 'MASTERING',
-          title: '77 個の名前付き DSP プロセッサ。公開リファレンスベース。',
-          body: 'EQ、ダイナミクス、マルチバンド、ステレオ、サチュレーション、リペア、マキシマイザー、リファレンスマッチング。デフォルトチェーンは 14 プロセッサ。ラウドネス、トゥルーピーク、クロスオーバー、バイクァッド、クリッパー、真空管サチュレーション、オーバーサンプリングは公開リファレンスに基づいています。',
+          title: '66 個の名前付き DSP プロセッサ。公開リファレンスベース。',
+          body: 'EQ、ダイナミクス、マルチバンド、ステレオ、サチュレーション、リペア、マキシマイザー、リファレンスマッチング。デフォルトチェーンは 18 プロセッサ。ラウドネス、トゥルーピーク、クロスオーバー、バイクァッド、クリッパー、真空管サチュレーション、オーバーサンプリングは公開リファレンスに基づいています。',
           link: { label: 'マスタリングガイド', path: '/docs/glossary' },
         },
         {
@@ -294,7 +304,7 @@ function switchLocale(event: Event, targetPath: string) {
 }
 
 // Quick Start matrix
-type Discipline = 'analysis' | 'mastering';
+type Discipline = 'analysis' | 'mastering' | 'mixing' | 'editing';
 type Runtime = 'browser' | 'python' | 'cli';
 const discipline = ref<Discipline>('analysis');
 const runtime = ref<Runtime>('browser');
@@ -343,6 +353,69 @@ print(f"{result.input_lufs:.1f} → {result.output_lufs:.1f} LUFS  "
 sonare mastering-processor song.wav \\
   --processor dynamics.compressor \\
   --params thresholdDb=-24,ratio=1.5`,
+  },
+  mixing: {
+    browser: `import { init, Mixer, mixStereo, mixingScenePresetJson } from '@libraz/libsonare'
+
+await init()
+
+const mix = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
+  faderDb: [-3, -12],
+  pan: [0, -0.2],
+  width: [1, 0.9],
+})
+
+const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512)
+try {
+  const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR])
+  const meter = mixer.stripMeter(0, 'postFader')
+} finally {
+  mixer.delete()
+}`,
+    python: `import libsonare as sonare
+
+mix = sonare.mix_stereo(
+    [(vocal_l, vocal_r), (music_l, music_r)],
+    sample_rate=48000,
+    fader_db=[-3, -12],
+    pan=[0, -0.2],
+    width=[1, 0.9],
+)
+
+mixer = sonare.Mixer.from_scene_json(
+    sonare.mixing_scene_preset_json("vocalReverbSend"),
+    sample_rate=48000,
+    block_size=512,
+)
+try:
+    block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
+    meter = mixer.strip_meter(0, tap="postFader")
+finally:
+    mixer.close()`,
+    cli: `sonare mix \\
+  --preset vocalReverbSend \\
+  --input vocal.wav \\
+  --input music.wav \\
+  -o mixed.wav`,
+  },
+  editing: {
+    browser: `import { init, noteStretch, pitchCorrectToMidi, voiceChange } from '@libraz/libsonare'
+
+await init()
+
+const tuned = pitchCorrectToMidi(vocal, sampleRate, 68.7, 69)
+const heldNote = noteStretch(vocal, sampleRate, 12000, 24000, 1.25)
+const character = voiceChange(vocal, sampleRate, 5, 1.1)`,
+    python: `import libsonare as sonare
+
+tuned = sonare.pitch_correct_to_midi(vocal, sample_rate, current_midi=68.7, target_midi=69)
+held_note = sonare.note_stretch(vocal, sample_rate, onset_sample=12000, offset_sample=24000, stretch_ratio=1.25)
+character = sonare.voice_change(vocal, sample_rate, pitch_semitones=5, formant_factor=1.1)`,
+    cli: `sonare pitch-correct vocal.wav -o tuned.wav \\
+  --current-midi 68.7 --target-midi 69
+
+sonare voice-change vocal.wav -o character.wav \\
+  --pitch-semitones 5 --formant-factor 1.1`,
   },
 };
 
@@ -397,11 +470,11 @@ function highlight(code: string, rt: Runtime): string {
           '<span class="landing__code-keyword">$1</span>',
         )
         .replace(
-          /\b(init|detectBpm|detectKey|analyze|masteringChainStereo|masteringChain|masteringProcess)\b/g,
+          /\b(init|detectBpm|detectKey|analyze|masteringChainStereo|masteringChain|masteringProcess|Mixer|mixStereo|mixingScenePresetJson|processStereo|stripMeter|noteStretch|pitchCorrectToMidi|voiceChange)\b/g,
           '<span class="landing__code-function">$1</span>',
         )
         .replace(
-          /\b(samples|sampleRate|bpm|key|result|left|right|left|right)\b/g,
+          /\b(samples|sampleRate|bpm|key|result|left|right|mix|mixer|block|meter|vocal|tuned|heldNote|character)\b/g,
           '<span class="landing__code-variable">$1</span>',
         )
         .replace(/(\/\/.*$)/g, '<span class="landing__code-comment">$1</span>'),

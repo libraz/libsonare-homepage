@@ -71,9 +71,10 @@
     "quick": {
       "title": "Quick Master",
       "step1": "Step 1 - Drop your audio",
-      "step2": "Step 2 - What is this for?",
-      "step3": "Step 3 - Where will you publish?",
-      "step4": "Step 4 - Optional fine-tune",
+      "step2": "Step 2 - Recording condition",
+      "step3": "Step 3 - What is this for?",
+      "step4": "Step 4 - Where will you publish?",
+      "step5": "Step 5 - Optional fine-tune",
       "dropTitle": "Drop audio here",
       "dropSubtitle": "WAV, MP3, FLAC, or OGG. Your audio never leaves this browser.",
       "customTarget": "Custom target",
@@ -82,6 +83,16 @@
       "processButton": "Master my audio",
       "processing": "Mastering...",
       "processingEta": "Est. processing time: {seconds}s on your device"
+    },
+    "diagnostics": {
+      "title": "Diagnostic bypass",
+      "help": "Use this to isolate distortion, dull tone, or crackles. Enabled items are skipped only on the next render.",
+      "repair": "Bypass repair",
+      "dynamics": "Bypass dynamics",
+      "saturation": "Bypass exciter / tape",
+      "airBand": "Bypass air band",
+      "stereo": "Bypass stereo",
+      "loudnessLimiter": "Bypass loudness / limiter"
     },
     "studio": {
       "title": "Studio",
@@ -142,6 +153,18 @@
         "description": "Lower ratio (1.5:1), slower attack/release, and softer EQ moves. The compressor protects without flattening, leaving dynamic detail intact.",
         "tip": "Acoustic guitar, jazz, classical, or any production where natural dynamics matter."
       },
+      "liveSmall": {
+        "name": "Live · Club",
+        "tagline": "Keeps the energy of an intimate club show.",
+        "description": "For small-venue live material. Light presence around a 900 Hz pivot, a low ~1.8:1 ratio with a slower release, and a soft knee keep the performance dynamics and crowd energy intact instead of flattening them to studio loudness.",
+        "tip": "Club gigs, small-room live sets, bootlegs, or any intimate live performance you want to keep punchy and alive."
+      },
+      "liveLarge": {
+        "name": "Live · Stage",
+        "tagline": "Open and dynamic for big-stage recordings.",
+        "description": "For large-stage and festival live material. A gentle ~1.6:1 ratio with the slowest release preserves dynamic headroom, a slight extra width keeps the sense of scale, and minimal EQ movement leaves the room's openness intact.",
+        "tip": "Arena and festival sets, theater shows, orchestral live, or any big-stage recording that should feel spacious and dynamic."
+      },
       "hiphop": {
         "name": "Hip-Hop / R&B",
         "tagline": "Solid low end with focused vocal presence.",
@@ -161,12 +184,38 @@
         "tip": "Podcasts, audiobooks, lectures, voiceovers — content where intelligibility is paramount."
       }
     },
+    "venue": {
+      "label": "Recording condition",
+      "hint": "Where was this captured? Adds a live-room repair pass on top of the style."
+    },
+    "venues": {
+      "studio": {
+        "name": "Studio / Clean",
+        "tagline": "No room correction — source is already clean.",
+        "description": "For studio sessions and direct/line recordings with no room ambience to remove. The mastering chain runs the chosen style without the live-room repair layer.",
+        "tip": "Studio recordings, DI/line sources, or any already-clean material that needs no de-rooming."
+      },
+      "livehouseSmall": {
+        "name": "Live Venue · Small",
+        "tagline": "Clears boxy low-mids from tight club rooms.",
+        "description": "For small clubs where close walls create boxy low-mids, one-note boom, and crowded vocals. The 600 Hz pivot reduces boxiness, gentle dereverb trims the short dense tail, and a light bass mono fold tightens the bottom — layered on top of the genre you picked.",
+        "tip": "Small clubs, basement venues, intimate rooms, board feeds from tight spaces, or any close-walled venue capture."
+      },
+      "livehouseLarge": {
+        "name": "Live Venue · Large",
+        "tagline": "Controls deep low end and long hall reverb.",
+        "description": "For large halls where deep low-frequency room modes and a long diffuse reverb tail dominate. Stronger dereverb pulls back the wash, the 500 Hz pivot and firmer bass mono fold tighten the bottom, and slower compression preserves the open room feel — layered on top of the genre you picked.",
+        "tip": "Large clubs, theaters, arenas, halls, or any spacious room with a long reverb tail and heavy low end."
+      }
+    },
     "platforms": {
       "spotify": "Spotify",
       "youtube": "YouTube",
       "apple": "Apple Music",
       "tiktok": "TikTok",
       "custom": "Custom",
+      "recommended": "Recommended for {preset}: {lufs} LUFS",
+      "loudWarning": "Louder than recommended — the loudness stage may flatten {preset}'s dynamics. Streaming only turns loud masters down, so a quieter target is safe and keeps the energy.",
       "descriptions": {
         "spotify": "Spotify normalizes playback to about -14 LUFS integrated. Tracks louder than that are turned down at playback.",
         "youtube": "YouTube targets roughly -14 LUFS integrated for music; louder masters get attenuated on playback.",
@@ -289,7 +338,7 @@
       "multibandHighAmount": "Bypassed; tame highs only when cymbals or sibilance flare.",
       "tapeDriveDb": "No tape drive — clean source flavor; enable for analog glue/warmth.",
       "tapeSaturation": "Tape stage bypassed by default; pair with drive for analog character.",
-      "exciterAmount": "Subtle harmonic seasoning — adds perceived brightness without obvious processing.",
+      "exciterAmount": "Bypassed by default. Add it sparingly only when the source needs more perceived top-end detail.",
       "airBandAmount": "Gentle ~10 kHz shelf for openness and shimmer on most material.",
       "stereoWidth": "5% widening adds air without breaking mono compatibility on speakers and phones.",
       "monoMakerAmount": "Bypassed; turn on for vinyl pressing or club playback where mono bass matters.",
@@ -431,11 +480,17 @@
       "deliveryPreview": "Delivery preview",
       "analyzing": "Analyzing",
       "ready": "Ready",
+      "apply": "Apply",
       "refresh": "Refresh",
       "empty": "Load a source to measure loudness, dynamics, tonal balance, and stereo cues.",
       "suggestionHint": "Suggestions appear after the source profile is measured.",
       "previewHint": "Platform previews estimate how the source relates to common loudness targets.",
-      "ceilingRisk": "Ceiling risk"
+      "ceilingRisk": "Ceiling risk",
+      "ceilingRiskBody": "After platform loudness normalization, the estimated true peak could exceed that platform's allowed ceiling. In practice this can create clipping or codec distortion even if the current file does not clip.",
+      "ceilingRiskTipLabel": "Fix",
+      "ceilingRiskTip": "Lower the limiter ceiling, reduce the loudness target, or leave more headroom before export.",
+      "safeCeiling": "Set ceiling <= {value}",
+      "qualityGuard": "Quality guard: rendering at {value} to avoid noise and clipping."
     },
     "errors": {
       "loadFailed": "Could not load this audio file. Try WAV, MP3, FLAC, or OGG.",

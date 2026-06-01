@@ -76,6 +76,8 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 
 ::: info Enums are integers in the file, strings in the API
 The scene **file** stores `panMode`, `panLaw`, and insert/send timing as integers or short tokens. The JavaScript runtime **methods** accept friendly strings — `setPanLaw(strip, 'const3dB')`, `addSend(..., 'postFader')`. Python accepts the same send/tap names, but pan-law strings use normalized names such as `'const-3db'`, `'const-4.5db'`, `'const-6db'`, or `'linear-0db'` (or the enum/int value). Both map to the same underlying value; the difference is just file format vs. ergonomic API.
+
+Serializing a scene after runtime pan edits preserves the strip's current `panMode`. Use `Mixer.toSceneJson()` / `Mixer.to_scene_json()` instead of rebuilding the pan fields by hand.
 :::
 
 ::: details Field terms: dual pan, polarity invert, pan law, PDC

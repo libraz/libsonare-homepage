@@ -296,9 +296,7 @@ sonare hpss music.mp3 --json
 
 ## その他のコマンド
 
-Python CLI には、上記のコア以外にも多くのサブコマンドがあります。いずれも
-同じグローバルオプション（`--json`、`--n-fft` など）とファイル引数を取ります。
-編集系コマンドは `-o/--output` を渡すと WAV を書き出します。
+Python CLI には、上記のコア以外にも多くのサブコマンドがあります。音声ファイルを解析・特徴抽出するコマンドは共通オプション（`--json`、`--n-fft` など）とファイル引数を取ります。一覧表示やプリセット参照のコマンドは、より小さい専用のオプションセットを持ちます。編集系コマンドは `-o/--output` を渡すと WAV を書き出します。
 
 ### その他の解析
 
@@ -362,6 +360,19 @@ Python CLI は、上の 3 つのファイル書き出し編集コマンドと HP
 | `resample` | `-o`, `--target-sr` |
 | `preemphasis`, `deemphasis`, `trim-silence`, `split-silence` | 処理後のファイルを書き出す場合は `-o` |
 
+### リアルタイムボイスプリセット
+
+リアルタイムボイスチェンジャープリセットの参照、検証、レンダリングを行うコマンドです。
+
+| コマンド | 説明 | オプション |
+|----------|------|------------|
+| `sonare voice-change vocal.wav -o out.wav` | `--preset`、`--preset-json`、`--preset-pack`、`--set` を渡した場合はリアルタイム音声プリセットチェーンでレンダリング | `--preset`、`--preset-json`、`--preset-pack`、`--set PATH=VALUE` |
+| `sonare voice-presets` | リアルタイムボイスチェンジャーのプリセット ID を一覧表示 | `--json` |
+| `sonare voice-preset` | 1 つのプリセット設定を JSON で出力 | `--preset`（既定: `neutral-monitor`）、`--json` |
+| `sonare voice-preset-validate preset.json` | プリセット JSON ファイルまたはプリセットパックを検証・正規化 | パック検証時は `--preset`、`--set PATH=VALUE`、`--json` |
+
+リアルタイムプリセット系のオプションを渡さない場合、`voice-change` は `--pitch-semitones` と `--formant-factor` で制御する単純なピッチ／フォルマント変換を使います。プリセット系のオプションを渡した場合はリアルタイム音声チェーンを使い、これらの単純なピッチ／フォルマント指定は参照しません。
+
 ### 合成
 
 ソースビルドの C++ CLI では、簡単なテスト信号も生成できます。
@@ -401,7 +412,7 @@ sonare version --json
 
 **出力:**
 ```
-libsonare 1.2.1 (Python CLI)
+libsonare 1.2.2 (Python CLI)
 ```
 
 ## 使用例

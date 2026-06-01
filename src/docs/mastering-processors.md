@@ -101,6 +101,10 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 `repair.denoiseClassical`, `repair.dereverbClassical`, and friends use spectral subtraction / MMSE-STSA / LogMMSE with explicit noise estimation — **not** DNN source separation or neural spectral repair. They clean up noise, hum, clicks, and clipping; they do not un-mix a finished track. This keeps the library dependency-free.
 :::
 
+::: tip Registry names and chain keys differ
+The named processor registry exposes the one-shot repair processors as `repair.denoiseClassical` and `repair.dereverbClassical`. Full-chain configs use the shorter stage keys `repair.denoise.*` and `repair.dereverb.*` because those keys address the repair slots inside `MasteringChainConfig`. Both names point to the same classical denoise/dereverb implementations.
+:::
+
 ::: details What is spectral subtraction (MMSE-STSA / LogMMSE)?
 These are classical denoising methods. First the algorithm estimates a **noise profile** from quiet passages (the steady hiss or hum). **Spectral subtraction** then subtracts that estimated noise from each short-time spectrum frame, leaving the signal behind. **MMSE-STSA** and **LogMMSE** are smarter statistical versions that estimate, per frequency bin, how much is signal versus noise before subtracting — which reduces the warbly "musical noise" that naive subtraction leaves. None of them separate instruments; they only attenuate noise.
 :::
@@ -210,6 +214,8 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 
 :::: details Config style differs between chain entry points
 The registry is intentionally string-based so C, Python, Node, WASM, and CLI callers share processor identifiers. When you assemble a *chain* rather than a single processor, the config style depends on the entry point: WASM `masteringChain(...)` takes **nested** config objects, while `masterAudio(...)` (and the Python/Node equivalents) take **flat dot-notation** overrides such as `'loudness.targetLufs'`. The [Mastering Assistant](./mastering-assistant.md)'s `chainConfig.params` uses the flat form, so its output drops straight into `masterAudio`.
+
+Repair chain keys follow the chain slots, not the one-shot registry names: use `repair.denoise.*` / `repair.dereverb.*` in flat overrides or the nested `repair: { denoise: ..., dereverb: ... }` shape in `masteringChain(...)`.
 ::::
 
 ## Related

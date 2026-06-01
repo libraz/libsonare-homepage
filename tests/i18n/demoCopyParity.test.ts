@@ -49,6 +49,7 @@ describe('demo copy parity', () => {
       'Detecting downbeats and sections',
       'Tracing melody',
       'Measuring loudness',
+      'Metering signal',
       'Computing chroma',
       'Computing mel spectrogram',
       'Computing CQT',
@@ -63,9 +64,8 @@ describe('demo copy parity', () => {
     expect(Object.keys(fxEn.controls)).toEqual([
       'pitch',
       'formant',
+      'brightness',
       'wet',
-      'robot',
-      'reverb',
       'output',
       'bypass',
     ]);

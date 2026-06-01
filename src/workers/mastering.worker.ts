@@ -60,6 +60,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     const result =
       request.type === 'render' ? renderMasteringChain(request) : renderReferenceMatch(request);
+    applyOutputSafety(
+      result,
+      request.type === 'render' ? ceilingFromConfig(request.config) : request.ceilingDb,
+    );
 
     postProgress(request.id, 0.94, 'Finalizing render');
     self.postMessage(
@@ -100,6 +104,43 @@ function renderMasteringChain(request: Extract<WorkerRequest, { type: 'render' }
       postProgress(request.id, 0.24 + progress * 0.7, stage);
     },
   );
+}
+
+function ceilingFromConfig(config: MasteringChainConfig): number {
+  const loudnessCeiling = config.loudness?.ceilingDb;
+  if (typeof loudnessCeiling === 'number' && Number.isFinite(loudnessCeiling)) {
+    return loudnessCeiling;
+  }
+  const limiterCeiling = config.maximizer?.truePeakLimiter?.ceilingDb;
+  if (typeof limiterCeiling === 'number' && Number.isFinite(limiterCeiling)) {
+    return limiterCeiling;
+  }
+  return -1;
+}
+
+function applyOutputSafety(result: MasteringStereoChainResult, ceilingDb: number) {
+  const ceiling = 10 ** (Math.min(ceilingDb, -0.1) / 20);
+  let peak = 0;
+
+  for (let i = 0; i < result.left.length; i++) {
+    const left = Number.isFinite(result.left[i]) ? result.left[i] : 0;
+    const right = Number.isFinite(result.right[i]) ? result.right[i] : 0;
+    result.left[i] = left;
+    result.right[i] = right;
+    peak = Math.max(peak, Math.abs(left), Math.abs(right));
+  }
+
+  if (peak <= ceiling || peak <= 0) return;
+
+  const gain = ceiling / peak;
+  for (let i = 0; i < result.left.length; i++) {
+    result.left[i] *= gain;
+    result.right[i] *= gain;
+  }
+
+  const gainDb = 20 * Math.log10(gain);
+  result.appliedGainDb += gainDb;
+  result.outputLufs += gainDb;
 }
 
 function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'referenceMatch' }>) {

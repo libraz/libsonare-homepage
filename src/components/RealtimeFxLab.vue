@@ -4,8 +4,14 @@ import { enCopy, jaCopy } from '@/components/realtime-fx/realtimeFxCopy';
 import ToolShell from '@/components/ToolShell.vue';
 import { MetricItem, StatusIndicator, TechPanel, TermLabel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
-import { FX_PRESETS, isPresetId, type PresetId, useRealtimeFx } from '@/composables/useRealtimeFx';
+import {
+  isVoicePresetId,
+  useRealtimeFx,
+  VOICE_PRESET_MACROS,
+  VOICE_PRESET_ORDER,
+} from '@/composables/useRealtimeFx';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
+import type { VoicePresetId } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
 import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
@@ -14,13 +20,12 @@ const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
 const fx = useRealtimeFx(sonareJsUrl, sonareWasmUrl);
 const libVersion = ref('');
 const isStarting = ref(false);
-const selectedPreset = ref<PresetId>('natural');
+const selectedPreset = ref<VoicePresetId>('neutral-monitor');
 const pitchSemitones = ref(0);
 const formant = ref(1);
-const wet = ref(0.72);
-const robot = ref(0);
-const reverb = ref(0.08);
-const outputGain = ref(0.74);
+const brightness = ref(0.1);
+const wet = ref(1);
+const outputGain = ref(0.85);
 const bypass = ref(false);
 
 const PRESET_STORAGE_KEY = 'libsonare:fx:preset';
@@ -62,10 +67,9 @@ type TermKey = keyof typeof enCopy.terms.items;
 
 const TERM_SLUGS: Record<TermKey, string | undefined> = {
   pitch: 'concepts/audio-basics',
-  formant: undefined,
+  formant: 'editing/voice-formant',
+  brightness: 'editing/voice-formant',
   wet: undefined,
-  robot: undefined,
-  reverb: undefined,
   output: 'concepts/gain-staging',
   bypass: undefined,
   inputPeak: 'concepts/audio-basics',
@@ -111,9 +115,8 @@ const outputRmsDb = computed(() => formatDb(amplitudeToDb(meter.value.outputRms)
 // meterFillPercent's -60..0 dB → 0..100% mapping, so ticks line up with the fill.
 const dbTicks = [0, -6, -20, -40, -60].map((db) => ({ db, pct: ((db + 60) / 60) * 100 }));
 
-const PRESET_ORDER: PresetId[] = ['natural', 'low', 'bright', 'robot', 'room', 'hall'];
 const presets = computed(() =>
-  PRESET_ORDER.map((id) => ({ id, label: copy.value.presets[id].label })),
+  VOICE_PRESET_ORDER.map((id) => ({ id, label: copy.value.presets[id].label })),
 );
 const activePresetHint = computed(() => copy.value.presets[selectedPreset.value].hint);
 
@@ -163,16 +166,13 @@ async function toggleMonitor() {
   await fx.toggleMonitor();
 }
 
-function applyPreset(id: PresetId) {
+function applyPreset(id: VoicePresetId) {
   selectedPreset.value = id;
-  const preset = FX_PRESETS[id];
-  pitchSemitones.value = preset.pitchSemitones;
-  formant.value = preset.formant;
-  wet.value = preset.wet;
-  robot.value = preset.robot;
-  reverb.value = preset.reverb;
-  outputGain.value = preset.outputGain;
-  bypass.value = preset.bypass;
+  const macros = VOICE_PRESET_MACROS[id];
+  pitchSemitones.value = macros.pitchSemitones;
+  formant.value = macros.formant;
+  brightness.value = macros.brightness;
+  wet.value = macros.wet;
   applyParams();
   try {
     localStorage.setItem(PRESET_STORAGE_KEY, id);
@@ -188,16 +188,16 @@ function restorePreset() {
   } catch {
     /* storage unavailable */
   }
-  if (isPresetId(stored)) applyPreset(stored);
+  if (isVoicePresetId(stored)) applyPreset(stored);
 }
 
 function applyParams() {
   fx.setParams({
+    preset: selectedPreset.value,
     pitchSemitones: pitchSemitones.value,
     formant: formant.value,
+    brightness: brightness.value,
     wet: wet.value,
-    robot: robot.value,
-    reverb: reverb.value,
     outputGain: outputGain.value,
     bypass: bypass.value,
   });
@@ -292,19 +292,15 @@ function formatDb(value: number): string {
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('formant')">{{ copy.controls.formant }}</TermLabel> <b>{{ formant.toFixed(2) }}</b></span>
-              <input v-model.number="formant" type="range" min="0.5" max="1.8" step="0.01" @input="applyParams">
+              <input v-model.number="formant" type="range" min="0.55" max="1.65" step="0.01" @input="applyParams">
+            </label>
+            <label class="rt-slider">
+              <span><TermLabel v-bind="term('brightness')">{{ copy.controls.brightness }}</TermLabel> <b>{{ brightness.toFixed(2) }}</b></span>
+              <input v-model.number="brightness" type="range" min="-1" max="1" step="0.01" @input="applyParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('wet')">{{ copy.controls.wet }}</TermLabel> <b>{{ Math.round(wet * 100) }}%</b></span>
               <input v-model.number="wet" type="range" min="0" max="1" step="0.01" @input="applyParams">
-            </label>
-            <label class="rt-slider">
-              <span><TermLabel v-bind="term('robot')">{{ copy.controls.robot }}</TermLabel> <b>{{ Math.round(robot * 100) }}%</b></span>
-              <input v-model.number="robot" type="range" min="0" max="1" step="0.01" @input="applyParams">
-            </label>
-            <label class="rt-slider">
-              <span><TermLabel v-bind="term('reverb')">{{ copy.controls.reverb }}</TermLabel> <b>{{ Math.round(reverb * 100) }}%</b></span>
-              <input v-model.number="reverb" type="range" min="0" max="1" step="0.01" @input="applyParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('output')">{{ copy.controls.output }}</TermLabel> <b>{{ Math.round(outputGain * 100) }}%</b></span>

@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, type Ref, ref } from 'vue';
 import type { MasteringInsightReport, useMastering } from '@/composables/useMastering';
 
 type MasteringApi = ReturnType<typeof useMastering>;
@@ -12,6 +12,8 @@ export interface MasteringPreviewRow {
   name: string;
   normalizationGainDb: number;
   ceilingRisk: boolean;
+  safeCeilingDb: number;
+  currentCeilingDb: number;
 }
 
 function num(value: unknown): number | null {
@@ -35,7 +37,7 @@ const STREAMING_TARGETS = [
   { name: 'Podcast', targetLufs: -16, ceilingDb: -1 },
 ];
 
-export function useMasteringInsights(mastering: MasteringApi) {
+export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?: Ref<number>) {
   const insightReport = ref<MasteringInsightReport | null>(null);
   const isAnalyzingInsights = ref(false);
   let insightRequestId = 0;
@@ -75,11 +77,30 @@ export function useMasteringInsights(mastering: MasteringApi) {
     if (!Array.isArray(platforms)) return [];
     return platforms.map((entry) => {
       const row = entry as Record<string, unknown>;
+      const normalizationGainDb =
+        typeof row.normalizationGainDb === 'number' ? row.normalizationGainDb : Number.NaN;
+      const platformCeilingDb =
+        typeof row.ceilingDb === 'number'
+          ? row.ceilingDb
+          : STREAMING_TARGETS.find((target) => target.name === row.name)?.ceilingDb;
+      const currentCeiling = currentCeilingDb?.value;
+      const safeCeilingDb =
+        typeof platformCeilingDb === 'number' && Number.isFinite(normalizationGainDb)
+          ? platformCeilingDb - normalizationGainDb
+          : Number.NaN;
+      const settingAwareRisk =
+        typeof currentCeiling === 'number' && Number.isFinite(safeCeilingDb)
+          ? currentCeiling > safeCeilingDb
+          : Boolean(row.ceilingRisk);
       return {
         name: typeof row.name === 'string' ? row.name : '-',
-        normalizationGainDb:
-          typeof row.normalizationGainDb === 'number' ? row.normalizationGainDb : Number.NaN,
-        ceilingRisk: Boolean(row.ceilingRisk),
+        normalizationGainDb,
+        ceilingRisk: settingAwareRisk,
+        safeCeilingDb,
+        currentCeilingDb:
+          typeof currentCeiling === 'number' && Number.isFinite(currentCeiling)
+            ? currentCeiling
+            : Number.NaN,
       };
     });
   });

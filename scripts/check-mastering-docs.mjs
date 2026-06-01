@@ -55,7 +55,7 @@ export function checkMasteringDocs({ root = process.cwd() } = {}) {
 
 function checkWasmExports({ root, failures, jsApis }) {
   const dts = read(root, 'src/wasm/index.d.ts');
-  const exportLine = dts.match(/^export \{[\s\S]*?\};$/m)?.[0] ?? '';
+  const exportLine = (dts.match(/^export \{.*\};$/gm) ?? []).join('\n');
   for (const api of jsApis) {
     requireText(failures, 'src/wasm/index.d.ts', dts, `declare function ${api}(`);
     requireText(failures, 'src/wasm/index.d.ts export list', exportLine, api);

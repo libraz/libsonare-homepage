@@ -312,7 +312,7 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 | `gainReductionDb` | How hard dynamics on the strip are working |
 | `seq` | Monotonic snapshot counter for change detection |
 
-The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope.
+The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope. The latest-read path is allocation-free, so UI polling does not add audio-thread pressure.
 
 ## Realtime and the AudioWorklet bridge
 

@@ -2,6 +2,7 @@ import type {
   MasteringModuleSettings,
   MasteringPlatformId,
   MasteringPresetId,
+  MasteringVenueId,
 } from '@/composables/useMastering';
 
 export type MasteringMode = 'quick' | 'studio';
@@ -10,6 +11,7 @@ export type MasteringModuleSettingKey = keyof MasteringModuleSettings;
 export interface MasteringSessionSettings {
   mode: MasteringMode;
   selectedPreset: MasteringPresetId;
+  selectedVenue: MasteringVenueId;
   selectedPlatform: MasteringPlatformId;
   customLufs: number;
   tone: number;
@@ -33,10 +35,39 @@ export const MASTERING_PRESETS: Array<{ id: MasteringPresetId; icon: string }> =
   { id: 'pop', icon: 'POP' },
   { id: 'edm', icon: 'EDM' },
   { id: 'acoustic', icon: 'AC' },
+  { id: 'liveSmall', icon: 'LV-S' },
+  { id: 'liveLarge', icon: 'LV-L' },
   { id: 'hiphop', icon: 'HH' },
   { id: 'aiMusic', icon: 'AI' },
   { id: 'speech', icon: 'VO' },
 ];
+
+// Recording-condition axis — orthogonal to the genre preset above. Drives the
+// live-room repair layer (dereverb, pivot/tilt de-boxing, bass mono fold) that
+// composes on top of the chosen style. 'studio' = no room correction.
+export const MASTERING_VENUES: Array<{ id: MasteringVenueId; icon: string }> = [
+  { id: 'studio', icon: 'STU' },
+  { id: 'livehouseSmall', icon: 'RM-S' },
+  { id: 'livehouseLarge', icon: 'RM-L' },
+];
+
+// Recommended integrated LUFS per genre. Streaming normalization only turns
+// loud masters DOWN, so dynamic material (acoustic, live) is mastered quieter
+// to keep its dynamics; the publish step badges this and warns when the chosen
+// target is louder than recommended. Live · Stage gets the most headroom.
+export const MASTERING_PRESET_TARGETS: Record<MasteringPresetId, number> = {
+  pop: -14,
+  edm: -14,
+  acoustic: -16,
+  liveSmall: -16,
+  liveLarge: -18,
+  hiphop: -14,
+  aiMusic: -14,
+  speech: -16,
+};
+
+// Warn once the chosen target is this many LU louder than the recommendation.
+export const MASTERING_LOUD_WARNING_LU = 1;
 
 export const MASTERING_PLATFORMS: Array<{ id: MasteringPlatformId; lufs: number }> = [
   { id: 'spotify', lufs: -14 },

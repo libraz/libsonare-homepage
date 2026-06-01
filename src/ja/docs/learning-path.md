@@ -19,13 +19,29 @@
 | BPM、キー、コード、セクションを表示するブラウザアプリ | [はじめに](./getting-started.md) | [WebAssembly ガイド](./wasm.md)、[JavaScript API](./js-api.md) |
 | 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
 | ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md) | [CLI リファレンス](./cli.md) |
-| ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
-| ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
-| マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
 | ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#オーディオエフェクト) |
 | 残響時間、明瞭度、ブラインド音響推定 | [室内音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
+| ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
+| マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
+| ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
+| マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm.md#リアルタイムボイスチェンジャー) |
 | メル／MFCC 特徴量をプレビューやデバッグ用に逆変換する | [逆変換特徴量](./inverse-features.md) | [librosa 互換性](./librosa-compatibility.md) |
 | librosa からの移行 | [librosa 互換性](./librosa-compatibility.md) | [機能マップ](./api-surface.md) |
+
+::: tip 目的別ページの読み方
+「作りたいもの別」の各ページは、最初に判断基準、次に最小コード例、最後に注意点と関連ページを置く方針です。ブラウザ / WASM、Python、CLI の 3 つで同じワークフローを安全に示せる場合は `::: code-group` で併記しています。リアルタイムエンジンや AudioWorklet のように実行環境が WASM / C++ 側に寄る機能では、Python / CLI で同じ API が存在するかのようには書かず、代替となるバッチ API や参照先を明記します。
+:::
+
+## 実装者向けチェックポイント
+
+目的別ページを読んだあと、実装に入る前に次を確認してください。
+
+| 確認すること | 見る場所 | 判断のしかた |
+|--------------|----------|--------------|
+| 入力がファイルか、デコード済みサンプルか、ライブブロックか | 各ページの「いつ使うか」「どちらを使うか」 | ブラウザ / WASM は多くの場合 `Float32Array` と `sampleRate`、Python / CLI はファイル入力を直接扱えます。 |
+| 同じ処理をどの実行環境で呼ぶか | `::: code-group` のブラウザ / Python / CLI 例 | 3 つを併記しているページでは、API 名、引数名、戻り値の形の違いを見比べてください。 |
+| 用語を UI や実装コメントで説明できるか | ページ内の `::: tip` / `::: info` / `::: warning` / `::: details` と [用語集](./glossary.md) | 実装判断に効く用語は本文に短く置き、長い背景は VitePress の補足ボックスや用語集へ逃がしています。 |
+| ランタイム差分があるか | [バインディング対応表](./binding-parity.md) と各 API リファレンス | 目的別ページの例がないランタイムでは、対応 API が未公開または用途違いの可能性があります。 |
 
 ## 4 つの層で考える
 

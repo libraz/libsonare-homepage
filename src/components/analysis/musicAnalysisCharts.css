@@ -3,6 +3,12 @@
   padding: 14px 14px 0 34px;
 }
 
+/* Wraps the loudness SVG so the playhead aligns to its exact time axis (the
+   chart's left padding holds the LUFS scale, which is not part of the axis). */
+.loudness-plot {
+  position: relative;
+}
+
 .loudness-scale {
   position: absolute;
   top: 14px;
@@ -220,3 +226,73 @@
   box-shadow: 0 0 8px var(--demo-cyan);
 }
 
+
+.vectorscope {
+  padding: 4px 12px 12px;
+}
+
+.vectorscope__svg {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  margin: 0 auto;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--demo-border);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05), transparent 70%),
+    var(--demo-track-bg);
+}
+
+.vectorscope__grid circle,
+.vectorscope__grid line {
+  fill: none;
+  stroke: var(--demo-border);
+  stroke-width: 0.35;
+}
+
+.vectorscope__grid line {
+  stroke-dasharray: 1.6 1.8;
+}
+
+.vectorscope__point {
+  fill: var(--demo-cyan);
+  opacity: 0.5;
+}
+
+.vectorscope__axes {
+  position: relative;
+  max-width: 240px;
+  margin: -20px auto 0;
+  height: 0;
+}
+
+.vectorscope__axis {
+  position: absolute;
+  top: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--demo-text-faint);
+}
+
+.vectorscope__axis--l {
+  left: 8%;
+}
+
+.vectorscope__axis--m {
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--demo-text-muted);
+}
+
+.vectorscope__axis--r {
+  right: 8%;
+}
+
+.vectorscope__caption {
+  margin: 18px 2px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--demo-text-muted);
+}

@@ -727,9 +727,7 @@ These reconstruct *magnitude* and estimate phase with Griffin-Lim, so the output
 
 ## Streaming Retune
 
-`StreamingRetune` is the WASM block-by-block mono retune wrapper added in
-libsonare 1.2.1. Use it for live or chunked pitch shifting when you need state
-to continue across blocks.
+`StreamingRetune` is the WASM block-by-block mono retune wrapper. Use it for live or chunked pitch shifting when you need state to continue across blocks.
 
 ```typescript
 import { init, StreamingRetune } from '@libraz/libsonare';
@@ -756,6 +754,37 @@ commands:
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
+
+## Realtime Voice Changer
+
+`RealtimeVoiceChanger` is the WASM wrapper for the preset-driven live voice chain. It is separate from the offline `voiceChange(...)` helper because it keeps DSP state across blocks and exposes heap-backed zero-copy buffers for AudioWorklet-style loops.
+
+```typescript
+import {
+  init,
+  RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetNames,
+} from '@libraz/libsonare';
+
+await init();
+
+const changer = new RealtimeVoiceChanger('bright-idol');
+changer.prepare(48000, 128, 1);
+
+try {
+  const out = changer.processMono(inputBlock);
+
+  const realtime = changer.createRealtimeMonoBuffer(128);
+  realtime.input.set(inputBlock.subarray(0, 128));
+  realtime.process();
+
+  console.log(realtimeVoiceChangerPresetNames(), out, realtime.output);
+} finally {
+  changer.delete();
+}
+```
+
+Use `realtimeVoiceChangerPresetJson(name)` to inspect a built-in preset and `validateRealtimeVoiceChangerPresetJson(json)` before accepting user-authored preset JSON. Current factory presets use schema version `1`.
 
 ## Browser Compatibility
 

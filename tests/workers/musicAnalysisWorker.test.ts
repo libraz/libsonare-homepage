@@ -73,6 +73,20 @@ const wasmMock = vi.hoisted(() => ({
     magnitude: new Float32Array(144).fill(0.25),
     frequencies: new Float32Array(72),
   })),
+  meteringTruePeakDb: vi.fn(() => -1.2),
+  meteringDcOffset: vi.fn(() => 0.001),
+  meteringDetectClipping: vi.fn(() => ({
+    clippedSamples: 0,
+    clippingRatio: 0,
+    maxClippedPeak: 0,
+    regions: [],
+  })),
+  meteringStereoWidth: vi.fn(() => 0.6),
+  meteringStereoCorrelation: vi.fn(() => 0.8),
+  meteringVectorscope: vi.fn(() => ({
+    mid: new Float32Array([0.5, 0.4, 0.3]),
+    side: new Float32Array([0.1, 0.2, 0.1]),
+  })),
 }));
 
 vi.mock('@/wasm/index.js', () => wasmMock);

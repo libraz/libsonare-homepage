@@ -177,6 +177,19 @@ result = audio.analyze()
 The same `sonare` CLI ships with the package — see the
 [CLI Reference](/docs/cli) for terminal usage and JSON output.
 
+### CLI
+
+```bash
+pip install libsonare
+
+# Quick terminal checks
+sonare bpm audio.mp3
+sonare key audio.mp3
+
+# Machine-readable full analysis
+sonare analyze audio.mp3 --json > analysis.json
+```
+
 ### C++
 
 ```cpp

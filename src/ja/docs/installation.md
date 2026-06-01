@@ -168,6 +168,19 @@ result = audio.analyze()
 同じ `sonare` CLI がパッケージに同梱されています。ターミナルでの使い方や JSON 出力は
 [CLI リファレンス](/ja/docs/cli) を参照してください。
 
+### CLI
+
+```bash
+pip install libsonare
+
+# ターミナルでの簡易確認
+sonare bpm audio.mp3
+sonare key audio.mp3
+
+# 機械処理しやすいフル解析
+sonare analyze audio.mp3 --json > analysis.json
+```
+
 ### C++
 
 ```cpp

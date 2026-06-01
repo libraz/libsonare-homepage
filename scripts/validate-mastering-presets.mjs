@@ -12,6 +12,14 @@ export const presets = [
   ['acoustic', buildConfig({ targetLufs: -16, tiltDb: 0.1, ratio: 1.5, air: 0.16, width: 0.96 })],
   ['hiphop', buildConfig({ targetLufs: -13, tiltDb: -0.5, ratio: 2.8, air: 0.2, width: 1.02 })],
   [
+    'livehouseSmall',
+    buildConfig({ targetLufs: -14, tiltDb: 0.4, ratio: 2.0, air: 0.18, width: 1.0 }),
+  ],
+  [
+    'livehouseLarge',
+    buildConfig({ targetLufs: -14, tiltDb: 0.2, ratio: 2.1, air: 0.16, width: 1.05 }),
+  ],
+  [
     'aiMusic',
     buildConfig({ targetLufs: -14, tiltDb: 0.3, ratio: 2.1, air: 0.58, width: 1.0, denoise: true }),
   ],
@@ -50,9 +58,14 @@ export async function validateMasteringPresets({
       if (!Array.isArray(result.stages) || result.stages.length === 0) {
         throw new Error('no mastering stages were applied');
       }
-      if (Math.abs(result.outputLufs - config.loudness.targetLufs) > 2.5) {
+      if (result.outputLufs > config.loudness.targetLufs + 1.0) {
         throw new Error(
-          `output LUFS ${result.outputLufs.toFixed(2)} is far from target ${config.loudness.targetLufs}`,
+          `output LUFS ${result.outputLufs.toFixed(2)} exceeds target ${config.loudness.targetLufs}`,
+        );
+      }
+      if (result.outputLufs < result.inputLufs - 0.5) {
+        throw new Error(
+          `output LUFS ${result.outputLufs.toFixed(2)} is quieter than input ${result.inputLufs.toFixed(2)}`,
         );
       }
 

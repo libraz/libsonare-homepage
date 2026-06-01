@@ -19,13 +19,29 @@ If you want to read the docs linearly, use this order:
 | A browser app that shows BPM, key, chords, or sections | [Getting Started](./getting-started.md) | [WebAssembly Guide](./wasm.md), [JavaScript API](./js-api.md) |
 | A Python script or notebook for audio analysis | [Getting Started](./getting-started.md#python) | [Python API](./python-api.md) |
 | A terminal workflow for quick checks or batch analysis | [Getting Started](./getting-started.md#cli) | [CLI Reference](./cli.md) |
-| A live visualizer, rhythm game helper, or AudioWorklet tool | [Realtime and Streaming](./realtime-streaming.md) | [WebAssembly Guide](./wasm.md#streaming-analysis) |
-| A browser or native mixer | [Mixing Engine](./mixing.md) | [Mixing Scene JSON](./mixing-scene-json.md) |
-| A mastering UI or automatic mastering workflow | [Mastering Assistant](./mastering-assistant.md) | [Mastering Processors](./mastering-processors.md) |
 | Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#audio-effects) |
 | Room decay, clarity, or blind acoustic estimates | [Room Acoustics](./acoustic-analysis.md) | [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
+| A browser or native mixer | [Mixing Engine](./mixing.md) | [Mixing Scene JSON](./mixing-scene-json.md) |
+| A mastering UI or automatic mastering workflow | [Mastering Assistant](./mastering-assistant.md) | [Mastering Processors](./mastering-processors.md) |
+| A live visualizer, rhythm game helper, or AudioWorklet tool | [Realtime and Streaming](./realtime-streaming.md) | [WebAssembly Guide](./wasm.md#streaming-analysis) |
+| A realtime microphone voice changer | [Realtime Voice Changer](./realtime-voice-changer.md) | [WebAssembly Guide](./wasm.md#realtime-voice-changer) |
 | Inverting mel/MFCC features for previews or debugging | [Inverse Features](./inverse-features.md) | [librosa Compatibility](./librosa-compatibility.md) |
 | A migration from librosa | [librosa Compatibility](./librosa-compatibility.md) | [Feature Map](./api-surface.md) |
+
+::: tip How to read the task guides
+Each **Build By Task** page follows the same intent: start with the decision criteria, show the smallest useful code path, then call out practical caveats and related pages. When the same workflow can be shown safely in Browser / WASM, Python, and CLI, the page uses a `::: code-group` to show all three. For surfaces that are inherently WASM / C++ oriented, such as the realtime engine or AudioWorklet bridge, the docs do not imply that Python / CLI have the same live callback API; they point to the batch alternative or the runtime reference instead.
+:::
+
+## Implementation Checklist
+
+Before implementing from a task page, check these points.
+
+| Check | Where to look | How to decide |
+|-------|---------------|---------------|
+| Whether your input is a file, decoded samples, or live blocks | The page's "when to use" / "which API" section | Browser / WASM usually takes `Float32Array` plus `sampleRate`; Python / CLI often read files directly. |
+| Which runtime calls the workflow | The Browser / Python / CLI examples in `::: code-group` blocks | When all three are shown, compare API names, argument names, and result shapes before porting code. |
+| Whether the terminology is clear enough for UI copy or implementation comments | Inline `::: tip` / `::: info` / `::: warning` / `::: details` blocks and the [Glossary](./glossary.md) | Terms that affect implementation decisions stay close to the code; longer background belongs in callouts or glossary pages. |
+| Whether a runtime gap exists | [Binding Parity](./binding-parity.md) and the runtime references | If a task page does not show an example for a runtime, the API may be unavailable there or the runtime may be the wrong fit. |
 
 ## The Four Layers
 

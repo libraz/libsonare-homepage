@@ -1,12 +1,14 @@
 import type {
   AnalysisResult,
   Chord,
+  ClippingReport,
   CqtResult,
   KeyCandidate,
   LufsResult,
   MelodyResult,
   MelSpectrogramResult,
   Section,
+  VectorscopeReport,
 } from '../wasm/index';
 
 type AnalyzeRequest = {
@@ -14,6 +16,10 @@ type AnalyzeRequest = {
   id: number;
   samples: Float32Array;
   sampleRate: number;
+  // Decimated stereo pair for the goniometer / stereo-field meters. Optional so
+  // mono sources (or callers that skip it) simply omit the stereo metrics.
+  meterLeft?: Float32Array;
+  meterRight?: Float32Array;
 };
 
 type WorkerRequest =
@@ -69,6 +75,24 @@ type WasmModule = {
   lufs: (samples: Float32Array, sampleRate?: number) => LufsResult;
   momentaryLufs: (samples: Float32Array, sampleRate?: number) => Float32Array;
   shortTermLufs: (samples: Float32Array, sampleRate?: number) => Float32Array;
+  meteringTruePeakDb: (
+    samples: Float32Array,
+    sampleRate?: number,
+    oversampleFactor?: number,
+  ) => number;
+  meteringDcOffset: (samples: Float32Array, sampleRate?: number) => number;
+  meteringDetectClipping: (samples: Float32Array, sampleRate?: number) => ClippingReport;
+  meteringStereoWidth: (left: Float32Array, right: Float32Array, sampleRate?: number) => number;
+  meteringStereoCorrelation: (
+    left: Float32Array,
+    right: Float32Array,
+    sampleRate?: number,
+  ) => number;
+  meteringVectorscope: (
+    left: Float32Array,
+    right: Float32Array,
+    sampleRate?: number,
+  ) => VectorscopeReport;
   version: () => string;
 };
 
@@ -129,6 +153,24 @@ export interface MusicAnalysisWorkerResult {
   loudness: {
     momentary: Array<{ time: number; value: number }>;
     shortTerm: Array<{ time: number; value: number }>;
+  };
+  metering: {
+    truePeakDb: number;
+    dcOffset: number;
+    clipping: {
+      clippedSamples: number;
+      clippingRatio: number;
+      maxClippedPeak: number;
+      regions: number;
+    };
+    stereo: {
+      available: boolean;
+      width: number;
+      correlation: number;
+      // Strided goniometer point cloud (mid = mono axis, side = stereo axis).
+      mid: number[];
+      side: number[];
+    };
   };
 }
 
@@ -237,6 +279,15 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
   const shortTerm = wasmModule.shortTermLufs(samples, sampleRate);
 
   ensureNotCancelled(request.id);
+  postProgress(request.id, 0.64, 'Metering signal');
+  // Meter the full-quality source mono so true peak / clipping reflect the
+  // delivered file, not the down-sampled analysis copy.
+  const truePeakDb = wasmModule.meteringTruePeakDb(sourceSamples, sourceSampleRate, 4);
+  const dcOffset = wasmModule.meteringDcOffset(sourceSamples, sourceSampleRate);
+  const clipping = wasmModule.meteringDetectClipping(sourceSamples, sourceSampleRate);
+  const metering = buildMetering(truePeakDb, dcOffset, clipping, request);
+
+  ensureNotCancelled(request.id);
   postProgress(request.id, 0.68, 'Computing chroma');
   const chroma = wasmModule.chroma(samples, sampleRate, 4096, spectralHop);
 
@@ -292,7 +343,60 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
       momentary: downsampleSeries(momentary, duration, 420),
       shortTerm: downsampleSeries(shortTerm, duration, 420),
     },
+    metering,
   };
+}
+
+const VECTORSCOPE_POINTS = 640;
+
+function buildMetering(
+  truePeakDb: number,
+  dcOffset: number,
+  clipping: ClippingReport,
+  request: AnalyzeRequest,
+): MusicAnalysisWorkerResult['metering'] {
+  const left = request.meterLeft;
+  const right = request.meterRight;
+  const stereo: MusicAnalysisWorkerResult['metering']['stereo'] = {
+    available: false,
+    width: 0,
+    correlation: 1,
+    mid: [],
+    side: [],
+  };
+
+  if (wasmModule && left && right && left.length > 1 && left.length === right.length) {
+    stereo.available = true;
+    stereo.width = wasmModule.meteringStereoWidth(left, right, request.sampleRate);
+    stereo.correlation = wasmModule.meteringStereoCorrelation(left, right, request.sampleRate);
+    const scope = wasmModule.meteringVectorscope(left, right, request.sampleRate);
+    stereo.mid = strideToArray(scope.mid, VECTORSCOPE_POINTS);
+    stereo.side = strideToArray(scope.side, VECTORSCOPE_POINTS);
+  }
+
+  return {
+    truePeakDb,
+    dcOffset,
+    clipping: {
+      clippedSamples: clipping.clippedSamples,
+      clippingRatio: clipping.clippingRatio,
+      maxClippedPeak: clipping.maxClippedPeak,
+      regions: clipping.regions.length,
+    },
+    stereo,
+  };
+}
+
+// Even-stride a long sample series down to at most `target` plain numbers so the
+// goniometer payload stays small and the SVG cloud stays renderable.
+function strideToArray(values: Float32Array, target: number): number[] {
+  if (values.length <= target) return Array.from(values);
+  const step = values.length / target;
+  const output: number[] = new Array(target);
+  for (let i = 0; i < target; i++) {
+    output[i] = values[Math.floor(i * step)];
+  }
+  return output;
 }
 
 function prepareSamplesForAnalysis(samples: Float32Array, sampleRate: number) {

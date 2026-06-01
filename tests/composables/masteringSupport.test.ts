@@ -112,6 +112,7 @@ describe('mastering metrics and report helpers', () => {
     expect(
       createMasteringReportUrl({
         preset: 'pop',
+        venue: 'studio',
         platform: 'spotify',
         targetLufs: -14,
         tuning: { tone: 50, width: 50, dynamics: 50 },
@@ -158,6 +159,7 @@ describe('mastering metrics and report helpers', () => {
       expect(
         createMasteringReportUrl({
           preset: 'rock',
+          venue: 'livehouseLarge',
           platform: 'custom',
           targetLufs: -12,
           tuning: { tone: 60, width: 40, dynamics: 70 },
@@ -248,6 +250,7 @@ describe('useMasteringSession', () => {
     return {
       mode: ref<'quick' | 'studio'>('quick'),
       selectedPreset: ref<'pop' | 'edm'>('pop'),
+      selectedVenue: ref<'studio' | 'livehouseSmall' | 'livehouseLarge'>('studio'),
       selectedPlatform: ref<'spotify' | 'youtube' | 'custom'>('spotify'),
       customLufs: ref(-14),
       tone: ref(50),
@@ -270,6 +273,7 @@ describe('useMasteringSession', () => {
     session.applySessionSettings({
       mode: 'studio',
       selectedPreset: 'edm',
+      selectedVenue: 'livehouseSmall',
       selectedPlatform: 'custom',
       customLufs: -99,
       tone: 150,
@@ -284,6 +288,7 @@ describe('useMasteringSession', () => {
     expect(session.currentSessionSettings()).toMatchObject({
       mode: 'studio',
       selectedPreset: 'edm',
+      selectedVenue: 'livehouseSmall',
       selectedPlatform: 'custom',
       customLufs: -24,
       tone: 100,
@@ -297,11 +302,13 @@ describe('useMasteringSession', () => {
     session.applySessionSettings({
       mode: 'bad',
       selectedPreset: 'missing',
+      selectedVenue: 'missing',
       selectedPlatform: 'missing',
       activeModule: 'missing',
     } as any);
     expect(state.mode.value).toBe('studio');
     expect(state.selectedPreset.value).toBe('edm');
+    expect(state.selectedVenue.value).toBe('livehouseSmall');
     expect(state.selectedPlatform.value).toBe('custom');
     expect(state.activeModule.value).toBe('limiter');
   });

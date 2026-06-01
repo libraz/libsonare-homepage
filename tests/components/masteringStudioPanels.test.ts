@@ -5,7 +5,7 @@ import MasteringChainPanel from '@/components/MasteringChainPanel.vue';
 import MasteringFineTune from '@/components/MasteringFineTune.vue';
 import MasteringMetersPanel from '@/components/MasteringMetersPanel.vue';
 import MasteringModuleEditor from '@/components/MasteringModuleEditor.vue';
-import { defaultModuleSettings } from '@/composables/useMastering';
+import { defaultDiagnosticBypass, defaultModuleSettings } from '@/composables/useMastering';
 
 const lang = vi.hoisted(() => ({ value: 'en' }));
 
@@ -118,6 +118,8 @@ describe('mastering studio panel components', () => {
         tone: 50,
         width: 60,
         dynamics: 40,
+        ceilingDb: -1,
+        diagnosticBypass: defaultDiagnosticBypass(),
       },
     });
 
@@ -129,9 +131,11 @@ describe('mastering studio panel components', () => {
     await sliders[0].setValue('70');
     await sliders[1].setValue('45');
     await sliders[2].setValue('80');
+    await sliders[3].setValue('-1.5');
     expect(wrapper.emitted('update:tone')).toEqual([[70]]);
     expect(wrapper.emitted('update:width')).toEqual([[45]]);
     expect(wrapper.emitted('update:dynamics')).toEqual([[80]]);
+    expect(wrapper.emitted('update:ceilingDb')).toEqual([[-1.5]]);
   });
 
   it('keeps fine tune sliders unmounted while collapsed and switches labels by locale', async () => {
@@ -142,6 +146,8 @@ describe('mastering studio panel components', () => {
         tone: 50,
         width: 60,
         dynamics: 40,
+        ceilingDb: -1,
+        diagnosticBypass: defaultDiagnosticBypass(),
       },
     });
 
@@ -149,7 +155,7 @@ describe('mastering studio panel components', () => {
     expect(wrapper.find('.master-disclosure').text()).toContain('微調整');
 
     await wrapper.setProps({ show: true });
-    expect(wrapper.findAll('input[type="range"]')).toHaveLength(3);
+    expect(wrapper.findAll('input[type="range"]')).toHaveLength(4);
     expect(wrapper.find('.master-disclosure').text()).toContain('微調整');
 
     lang.value = 'en';

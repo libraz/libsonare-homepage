@@ -48,11 +48,18 @@ function audioBuffer(channels: Float32Array[], sampleRate = SAMPLE_RATE): AudioB
 class MockAudioContext {
   sampleRate = SAMPLE_RATE;
 
+  // Tests that need a realistic-length decode (e.g. the mastering assistant,
+  // which rejects sub-window clips) set this; everything else uses the compact
+  // 4-sample default that keeps decode/gain assertions exact.
+  static override: Float32Array[] | null = null;
+
   async decodeAudioData(_buffer: ArrayBuffer) {
-    return audioBuffer([
-      new Float32Array([0.25, -0.25, 0.5, -0.5]),
-      new Float32Array([0.125, -0.125, 0.25, -0.25]),
-    ]);
+    return audioBuffer(
+      MockAudioContext.override ?? [
+        new Float32Array([0.25, -0.25, 0.5, -0.5]),
+        new Float32Array([0.125, -0.125, 0.25, -0.25]),
+      ],
+    );
   }
 }
 
@@ -235,30 +242,66 @@ describe('wasm-backed demo composables', () => {
       arrayBuffer: async () => new ArrayBuffer(8),
     } as File;
 
-    const decoded = await mastering.loadFile(file);
-    expect(decoded).toMatchObject({
-      fileName: 'mastering-demo.wav',
-      sampleRate: SAMPLE_RATE,
-      duration: 4 / SAMPLE_RATE,
-      channels: 2,
-    });
-    expect(decoded.left).toEqual(new Float32Array([0.25, -0.25, 0.5, -0.5]));
-    expect(decoded.right).toEqual(new Float32Array([0.125, -0.125, 0.25, -0.25]));
-    expect(mastering.source.value).toBe(decoded);
-    expect(mastering.isLoading.value).toBe(false);
-    expect(mastering.error.value).toBeNull();
+    // The mastering assistant (profile/suggest) rejects clips shorter than one
+    // analysis window, so decode a representative-length tone for this path.
+    const frames = 4096;
+    const left = new Float32Array(frames);
+    const right = new Float32Array(frames);
+    for (let i = 0; i < frames; i++) {
+      left[i] = 0.3 * Math.sin((2 * Math.PI * 440 * i) / SAMPLE_RATE);
+      right[i] = left[i] * 0.5;
+    }
+    MockAudioContext.override = [left, right];
 
-    const report = await mastering.analyzeSource([
-      { name: 'Test', targetLufs: -14, ceilingDb: -1 },
-    ]);
-    expect(mastering.isInitialized.value).toBe(true);
-    expect(report.profile).toBeTruthy();
-    expect(report.suggestions).toBeTruthy();
-    expect(report.streamingPreview).toMatchObject({
-      platforms: expect.any(Array),
-    });
+    try {
+      const decoded = await mastering.loadFile(file);
+      expect(decoded).toMatchObject({
+        fileName: 'mastering-demo.wav',
+        sampleRate: SAMPLE_RATE,
+        duration: frames / SAMPLE_RATE,
+        channels: 2,
+      });
+      expect(decoded.left).toHaveLength(frames);
+      expect(decoded.left[1]).toBeCloseTo(0.3 * Math.sin((2 * Math.PI * 440) / SAMPLE_RATE), 6);
+      expect(decoded.right[1]).toBeCloseTo(decoded.left[1] * 0.5, 6);
+      expect(mastering.source.value).toBe(decoded);
+      expect(mastering.isLoading.value).toBe(false);
+      expect(mastering.error.value).toBeNull();
 
-    expect(mastering.createSourceAudioUrl(decoded)).toBe('blob:test');
+      const report = await mastering.analyzeSource([
+        { name: 'Test', targetLufs: -14, ceilingDb: -1 },
+      ]);
+      expect(mastering.isInitialized.value).toBe(true);
+      expect(report.profile).toBeTruthy();
+      expect(report.suggestions).toBeTruthy();
+      expect(report.streamingPreview).toMatchObject({
+        platforms: expect.any(Array),
+      });
+
+      expect(mastering.createSourceAudioUrl(decoded)).toBe('blob:test');
+    } finally {
+      MockAudioContext.override = null;
+    }
+  });
+
+  it('useMastering surfaces a clean error when the clip is too short to analyze', async () => {
+    const mastering = useMastering();
+    // Default mock decodes a 4-sample clip — shorter than one analysis window,
+    // which the v1.2.2 mastering assistant rejects with a raw WASM exception.
+    await mastering.loadFile({
+      name: 'too-short.wav',
+      arrayBuffer: async () => new ArrayBuffer(8),
+    } as File);
+
+    const rejection = await mastering
+      .analyzeSource([{ name: 'Test', targetLufs: -14, ceilingDb: -1 }])
+      .then(() => null)
+      .catch((e) => e);
+
+    // Must be normalised to an Error, never the bare Emscripten pointer number.
+    expect(rejection).toBeInstanceOf(Error);
+    expect(typeof rejection).not.toBe('number');
+    expect(mastering.error.value).toBeTruthy();
   });
 
   it('useMastering renders through the worker and posts mastering config/input gain', async () => {

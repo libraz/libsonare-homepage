@@ -3,12 +3,14 @@ import type {
   MasteringModuleSettings,
   MasteringPlatformId,
   MasteringPresetId,
+  MasteringVenueId,
 } from '@/composables/useMastering';
 import { clamp } from '@/utils/masteringMetrics';
 import {
   MASTERING_MODULES,
   MASTERING_PLATFORMS,
   MASTERING_PRESETS,
+  MASTERING_VENUES,
   type MasteringMode,
   type MasteringSessionSettings,
 } from '@/utils/masteringUi';
@@ -19,6 +21,7 @@ const chainPresetStorageKey = 'libsonare-mastering-chain-preset-v1';
 interface MasteringSessionRefs {
   mode: Ref<MasteringMode>;
   selectedPreset: Ref<MasteringPresetId>;
+  selectedVenue: Ref<MasteringVenueId>;
   selectedPlatform: Ref<MasteringPlatformId>;
   customLufs: Ref<number>;
   tone: Ref<number>;
@@ -38,6 +41,7 @@ export function useMasteringSession(state: MasteringSessionRefs) {
     return {
       mode: state.mode.value,
       selectedPreset: state.selectedPreset.value,
+      selectedVenue: state.selectedVenue.value,
       selectedPlatform: state.selectedPlatform.value,
       customLufs: state.customLufs.value,
       tone: state.tone.value,
@@ -54,6 +58,8 @@ export function useMasteringSession(state: MasteringSessionRefs) {
     if (settings.mode === 'quick' || settings.mode === 'studio') state.mode.value = settings.mode;
     if (isMasteringPresetId(settings.selectedPreset))
       state.selectedPreset.value = settings.selectedPreset;
+    if (isMasteringVenueId(settings.selectedVenue))
+      state.selectedVenue.value = settings.selectedVenue;
     if (isMasteringPlatformId(settings.selectedPlatform))
       state.selectedPlatform.value = settings.selectedPlatform;
     if (Number.isFinite(settings.customLufs))
@@ -171,6 +177,10 @@ export function useMasteringSession(state: MasteringSessionRefs) {
 
 function isMasteringPresetId(value: unknown): value is MasteringPresetId {
   return typeof value === 'string' && MASTERING_PRESETS.some((preset) => preset.id === value);
+}
+
+function isMasteringVenueId(value: unknown): value is MasteringVenueId {
+  return typeof value === 'string' && MASTERING_VENUES.some((venue) => venue.id === value);
 }
 
 function isMasteringPlatformId(value: unknown): value is MasteringPlatformId {

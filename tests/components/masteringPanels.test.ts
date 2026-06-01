@@ -5,6 +5,7 @@ import MasteringPlatformSelector from '@/components/MasteringPlatformSelector.vu
 import MasteringPresetGrid from '@/components/MasteringPresetGrid.vue';
 import MasteringReferencePanel from '@/components/MasteringReferencePanel.vue';
 import MasteringResultPanel from '@/components/MasteringResultPanel.vue';
+import MasteringVenueSelector from '@/components/MasteringVenueSelector.vue';
 import type { DecodedMasteringAudio, RenderedMasteringAudio } from '@/composables/useMastering';
 
 const lang = vi.hoisted(() => ({ value: 'en' }));
@@ -108,6 +109,27 @@ describe('mastering panel components', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([['edm']]);
   });
 
+  it('emits venue changes and marks the active recording condition', async () => {
+    const wrapper = mount(MasteringVenueSelector, {
+      props: {
+        modelValue: 'studio',
+        venues: [
+          { id: 'studio', icon: 'STU' },
+          { id: 'livehouseSmall', icon: 'LV-S' },
+          { id: 'livehouseLarge', icon: 'LV-L' },
+        ],
+      },
+    });
+
+    expect(wrapper.findAll('.venue-option')[0].classes()).toContain('venue-option--active');
+
+    await wrapper.findAll('.venue-option')[1].trigger('click');
+    expect(wrapper.emitted('update:modelValue')).toEqual([['livehouseSmall']]);
+
+    await wrapper.findAll('.venue-option__info')[2].trigger('click');
+    expect(wrapper.emitted('update:modelValue')).toEqual([['livehouseSmall']]);
+  });
+
   it('emits platform and custom LUFS updates', async () => {
     const wrapper = mount(MasteringPlatformSelector, {
       props: {
@@ -129,6 +151,43 @@ describe('mastering panel components', () => {
     expect(wrapper.find('.master-slider').exists()).toBe(true);
     await wrapper.find('.master-slider input').setValue('-16.5');
     expect(wrapper.emitted('update:customLufs')).toEqual([[-16.5]]);
+  });
+
+  it('shows the recommended target badge and warns only when the target is louder', async () => {
+    const wrapper = mount(MasteringPlatformSelector, {
+      props: {
+        modelValue: 'apple',
+        customLufs: -14,
+        eyebrow: 'Target',
+        platforms: [
+          { id: 'apple', lufs: -16 },
+          { id: 'youtube', lufs: -14 },
+        ],
+        recommendedLufs: -16,
+        currentLufs: -16,
+        presetName: 'Live · Stage',
+      },
+    });
+
+    expect(wrapper.find('.platform-rec__badge').exists()).toBe(true);
+    expect(wrapper.find('.platform-rec__warning').exists()).toBe(false);
+
+    // Target now 2 LU louder than the -16 recommendation → warn.
+    await wrapper.setProps({ currentLufs: -14 });
+    expect(wrapper.find('.platform-rec__warning').exists()).toBe(true);
+  });
+
+  it('omits the recommendation block when no recommended target is provided', () => {
+    const wrapper = mount(MasteringPlatformSelector, {
+      props: {
+        modelValue: 'youtube',
+        customLufs: -14,
+        eyebrow: 'Target',
+        platforms: [{ id: 'youtube', lufs: -14 }],
+      },
+    });
+
+    expect(wrapper.find('.platform-rec').exists()).toBe(false);
   });
 
   it('renders reference metrics and emits file/match events with disabled states', async () => {

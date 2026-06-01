@@ -38,15 +38,17 @@ By the end of this page you should be able to:
 | Family | What is covered | Main pages |
 |--------|-----------------|------------|
 | Analysis | BPM, key, key candidates, beats, downbeats, onsets, chords, sections, melody, timbre, dynamics, rhythm, acoustic analysis | [JavaScript API](./js-api.md), [Python API](./python-api.md), [C++ API](./cpp-api.md) |
+| Features | STFT, mel, MFCC, chroma, spectral contrast/poly features, zero crossings, pitch and tuning, CQT/VQT, NNLS chroma, NMF decomposition, nearest-neighbour filtering, tempogram, Fourier tempogram, cyclic tempogram, PLP, LUFS/LRA | [JavaScript API](./js-api.md#feature-extraction), [librosa Compatibility](./librosa-compatibility.md) |
+| Metering | Offline level, loudness, crest-factor, true-peak and DC-offset meters; clipping and dynamic-range reports; stereo correlation/width; vectorscope, phase-scope, and spectrum snapshots | [JavaScript API](./js-api.md#metering), [Python API](./python-api.md), [Native Bindings](./native-bindings.md) |
+| Scale quantization | Snap MIDI notes to a scale, measure the correction in semitones, and test pitch-class membership | [JavaScript API](./js-api.md#scale-quantization), [Python API](./python-api.md) |
+| Effects and editing | HPSS, HPSS with residual, harmonic/percussive extraction, normalize, trim, remix, phase vocoder, time stretch, pitch shift, pitch correction, note stretch, voice pitch/formant change, realtime voice presets | [Editing DSP](./editing-dsp.md), [JavaScript API](./js-api.md#audio-effects) |
+| Room acoustics | Impulse-response RT60/EDT/C50/C80/D50 analysis and blind acoustic estimation from normal recordings | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
+| Mixing | Channel strips, buses, sends, VCA groups, scene presets, automation, meters, goniometer, offline rendering | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
+| Mastering assistant | Source audio profile, chain suggestion JSON, streaming-platform preview JSON | [Mastering Assistant](./mastering-assistant.md) |
+| Mastering | Presets, full chains, named processors, pair processors, pair analyses, stereo analyses, streaming mastering chain | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Mastering Implementation](./mastering-implementation.md) |
 | Streaming MIR | Live mel/chroma/onset frames, progressive BPM/key/chord estimates, chord progression and pattern scores | [Realtime and Streaming](./realtime-streaming.md), [WASM](./wasm.md#streaming-analysis) |
 | Realtime engine | Transport, tempo, markers, metronome, automation lanes, graph topology, clips, capture, monitor bus, telemetry, bounce/freeze | [Realtime and Streaming](./realtime-streaming.md) |
-| Room acoustics | Impulse-response RT60/EDT/C50/C80/D50 analysis and blind acoustic estimation from normal recordings | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
-| Effects and editing | HPSS, harmonic/percussive extraction, normalize, trim, time stretch, pitch shift, pitch correction, note stretch, voice pitch/formant change | [Editing DSP](./editing-dsp.md), [JavaScript API](./js-api.md#audio-effects) |
-| Features | STFT, mel, MFCC, chroma, spectral features, pitch, CQT/VQT, NNLS chroma, tempogram, Fourier tempogram, cyclic tempogram, PLP, LUFS | [JavaScript API](./js-api.md#feature-extraction), [librosa Compatibility](./librosa-compatibility.md) |
 | Inverse features | Mel to STFT/audio, MFCC to mel/audio | [Inverse Features](./inverse-features.md) |
-| Mastering | Presets, full chains, named processors, pair processors, pair analyses, stereo analyses, streaming mastering chain | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Mastering Implementation](./mastering-implementation.md) |
-| Mastering assistant | Source audio profile, chain suggestion JSON, streaming-platform preview JSON | [Mastering Assistant](./mastering-assistant.md) |
-| Mixing | Channel strips, buses, sends, VCA groups, scene presets, automation, meters, goniometer, offline rendering | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | Utility / librosa parity | Frame/sample/time conversions, dB conversion, pre/de-emphasis, silence trim/split, frame/pad/fix helpers, peak pick, vector normalize, PCEN, tonnetz | [librosa Compatibility](./librosa-compatibility.md) |
 
 ## Implementation And Evidence Pages
@@ -65,9 +67,9 @@ The main `@libraz/libsonare` TypeScript wrapper exports several groups:
 | Group | Examples |
 |-------|----------|
 | Initialization | `init`, `isInitialized`, `version` |
-| Engine capabilities | `engineAbiVersion`, `engineCapabilities` |
+| Engine capabilities | `engineAbiVersion`, `voiceChangerAbiVersion`, `engineCapabilities` |
 | Audio work | High-level analysis, effects/editing, mastering, mixing, feature extraction, inverse features, conversion helpers |
-| Object APIs | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `Mixer`, `RealtimeEngine` |
+| Object APIs | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
 
 The same npm package also exports `@libraz/libsonare/worklet` for the AudioWorklet bridge, `@libraz/libsonare/rt` for the reduced `sonare-rt` realtime module factory, and raw WASM asset subpaths (`@libraz/libsonare/wasm`, `@libraz/libsonare/rt-wasm`) for bundlers or custom loaders.
 

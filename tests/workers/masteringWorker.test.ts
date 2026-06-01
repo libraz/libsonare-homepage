@@ -126,13 +126,46 @@ describe('mastering worker protocol', () => {
     expect(done.transfer).toEqual([left.buffer, right.buffer]);
   });
 
+  it('attenuates rendered output that exceeds the requested ceiling', async () => {
+    wasmMock.masteringChainStereoWithProgress.mockReturnValueOnce({
+      left: new Float32Array([1.4, -0.5]),
+      right: new Float32Array([0.25, -1.2]),
+      sampleRate: 48_000,
+      inputLufs: -18,
+      outputLufs: -10,
+      appliedGainDb: 8,
+      stages: ['maximizer.truePeakLimiter'],
+      latencySamples: 32,
+    });
+
+    await (self as any).onmessage({
+      data: {
+        type: 'render',
+        id: 11,
+        left: new Float32Array([0.1, 0.2]),
+        right: new Float32Array([0.2, 0.1]),
+        sampleRate: 48_000,
+        config: { loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 } },
+      },
+    });
+
+    const result = (posted.at(-1)!.message as any).result;
+    const peak = Math.max(
+      ...Array.from(result.left, Math.abs),
+      ...Array.from(result.right, Math.abs),
+    );
+    expect(peak).toBeLessThanOrEqual(10 ** (-1 / 20) + 1e-6);
+    expect(result.outputLufs).toBeLessThan(-10);
+    expect(result.appliedGainDb).toBeLessThan(8);
+  });
+
   it('renders reference matching without truncating sources and normalizes the matched output', async () => {
     await (self as any).onmessage({
       data: {
         type: 'referenceMatch',
         id: 2,
-        left: new Float32Array([1, 2, 3]),
-        right: new Float32Array([4, 5, 6]),
+        left: new Float32Array([0.1, 0.2, 0.3]),
+        right: new Float32Array([0.4, 0.5, 0.6]),
         referenceLeft: new Float32Array([7, 8]),
         referenceRight: new Float32Array([9, 10, 11, 12]),
         sampleRate: 44_100,
@@ -145,15 +178,17 @@ describe('mastering worker protocol', () => {
     expect(wasmMock.masteringPairProcess).toHaveBeenCalledTimes(2);
     expect(wasmMock.masteringPairProcess.mock.calls[0]).toEqual([
       'match.applyMatchEq',
-      new Float32Array([1, 2, 3]),
+      new Float32Array([0.1, 0.2, 0.3]),
       new Float32Array([7, 8]),
       44_100,
       { maxGainDb: 6, smoothingBins: 5 },
     ]);
-    expect(wasmMock.masteringPairProcess.mock.calls[1][1]).toEqual(new Float32Array([4, 5, 6]));
+    expect(wasmMock.masteringPairProcess.mock.calls[1][1]).toEqual(
+      new Float32Array([0.4, 0.5, 0.6]),
+    );
     expect(wasmMock.masteringChainStereoWithProgress).toHaveBeenCalledWith(
-      new Float32Array([1, 2, 3]),
-      new Float32Array([4, 5, 6]),
+      new Float32Array([0.1, 0.2, 0.3]),
+      new Float32Array([0.4, 0.5, 0.6]),
       44_100,
       {
         maximizer: {

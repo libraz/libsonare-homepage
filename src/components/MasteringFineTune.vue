@@ -2,15 +2,19 @@
 import { computed } from 'vue';
 import { Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
+import type { MasteringDiagnosticBypass } from '@/composables/useMastering';
 import { MASTERING_PARAMETER_GUIDE_SLUGS } from '@/utils/masteringUi';
 
 type FineTuneKey = 'tone' | 'width' | 'dynamics';
+type DiagnosticBypassKey = keyof MasteringDiagnosticBypass;
 
-defineProps<{
+const props = defineProps<{
   show: boolean;
   tone: number;
   width: number;
   dynamics: number;
+  ceilingDb: number;
+  diagnosticBypass: MasteringDiagnosticBypass;
 }>();
 
 const emit = defineEmits<{
@@ -18,6 +22,8 @@ const emit = defineEmits<{
   'update:tone': [value: number];
   'update:width': [value: number];
   'update:dynamics': [value: number];
+  'update:ceilingDb': [value: number];
+  'update:diagnosticBypass': [key: DiagnosticBypassKey, value: boolean];
 }>();
 
 const { t, locale } = useI18n();
@@ -25,8 +31,16 @@ const glossaryBasePath = computed(() =>
   locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
 );
 const controls: FineTuneKey[] = ['tone', 'width', 'dynamics'];
+const diagnosticBypassControls: DiagnosticBypassKey[] = [
+  'repair',
+  'dynamics',
+  'saturation',
+  'airBand',
+  'stereo',
+  'loudnessLimiter',
+];
 
-function docHref(key: FineTuneKey): string | undefined {
+function docHref(key: keyof typeof MASTERING_PARAMETER_GUIDE_SLUGS): string | undefined {
   const slug = MASTERING_PARAMETER_GUIDE_SLUGS[key];
   return slug ? `${glossaryBasePath.value}/${slug}` : undefined;
 }
@@ -40,6 +54,14 @@ function valueFor(
 
 function updateValue(key: FineTuneKey, value: number) {
   emit(`update:${key}`, value);
+}
+
+function updateCeiling(value: number) {
+  emit('update:ceilingDb', value);
+}
+
+function updateDiagnosticBypass(key: DiagnosticBypassKey, value: boolean) {
+  emit('update:diagnosticBypass', key, value);
 }
 </script>
 
@@ -81,6 +103,62 @@ function updateValue(key: FineTuneKey, value: number) {
       >
       <strong>{{ valueFor(control, { tone, width, dynamics }) }}</strong>
     </label>
+
+    <label class="master-slider">
+      <span class="master-slider__label">
+        {{ t('master.parameters.limiterCeilingDb') }}
+        <Tooltip
+          :title="t('master.parameters.limiterCeilingDb')"
+          :body="t('master.hints.limiterCeilingDb')"
+          :tip="t('master.tips.limiterCeilingDb')"
+          :tip-label="t('master.tips.useWhen')"
+          default-value="-1.0 dBTP"
+          :default-label="t('master.defaults.label')"
+          :default-rationale="t('master.defaults.limiterCeilingDb')"
+          :href="docHref('limiterCeilingDb')"
+          :link-label="t('master.glossary.openGuide')"
+        >
+          <button
+            type="button"
+            class="master-param-info"
+            :aria-label="t('master.glossary.openGuide')"
+            @click.stop.prevent
+          >
+            <span aria-hidden="true">i</span>
+          </button>
+        </Tooltip>
+      </span>
+      <input
+        type="range"
+        min="-3"
+        max="-0.1"
+        step="0.1"
+        :value="props.ceilingDb"
+        @input="updateCeiling(Number(($event.target as HTMLInputElement).value))"
+      >
+      <strong>{{ props.ceilingDb.toFixed(1) }} dBTP</strong>
+    </label>
+
+    <section class="diagnostic-bypass" :aria-label="t('master.diagnostics.title')">
+      <div class="diagnostic-bypass__head">
+        <strong>{{ t('master.diagnostics.title') }}</strong>
+        <span>{{ t('master.diagnostics.help') }}</span>
+      </div>
+      <div class="diagnostic-bypass__items">
+        <label
+          v-for="control in diagnosticBypassControls"
+          :key="control"
+          class="diagnostic-bypass__item"
+        >
+          <input
+            type="checkbox"
+            :checked="props.diagnosticBypass[control]"
+            @change="updateDiagnosticBypass(control, ($event.target as HTMLInputElement).checked)"
+          >
+          <span>{{ t(`master.diagnostics.${control}`) }}</span>
+        </label>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -129,6 +207,68 @@ function updateValue(key: FineTuneKey, value: number) {
 .master-slider input {
   width: 100%;
   accent-color: var(--demo-accent);
+}
+
+.diagnostic-bypass {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.diagnostic-bypass__head {
+  display: grid;
+  gap: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--demo-border);
+}
+
+.diagnostic-bypass__head strong {
+  color: var(--demo-text);
+  font-size: 11px;
+}
+
+.diagnostic-bypass__head span {
+  color: var(--demo-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.diagnostic-bypass__items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+}
+
+.diagnostic-bypass__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
+  color: var(--demo-text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.diagnostic-bypass__item:hover {
+  background: var(--master-surface);
+}
+
+.diagnostic-bypass__item input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--demo-accent);
+}
+
+@media (max-width: 560px) {
+  .diagnostic-bypass__items {
+    grid-template-columns: 1fr;
+  }
 }
 
 .master-param-info {

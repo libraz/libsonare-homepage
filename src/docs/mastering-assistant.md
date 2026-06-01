@@ -221,7 +221,7 @@ base_preset = suggestion["genreCandidates"][0]["name"]        # e.g. "hipHop"
 
 mastered = sonare.master_audio(
     samples, sample_rate=sr,
-    preset=base_preset,
+    preset_name=base_preset,
     overrides=suggestion["chainConfig"]["params"],
 )
 # mastered: samples, sample_rate, input_lufs, output_lufs, applied_gain_db, stages

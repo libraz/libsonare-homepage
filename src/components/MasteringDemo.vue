@@ -9,6 +9,7 @@ import MasteringPlatformSelector from '@/components/MasteringPlatformSelector.vu
 import MasteringPresetGrid from '@/components/MasteringPresetGrid.vue';
 import MasteringReferencePanel from '@/components/MasteringReferencePanel.vue';
 import MasteringResultPanel from '@/components/MasteringResultPanel.vue';
+import MasteringVenueSelector from '@/components/MasteringVenueSelector.vue';
 import ToolModeTabs, { type ToolModeOption } from '@/components/ToolModeTabs.vue';
 import ToolShell from '@/components/ToolShell.vue';
 import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
@@ -16,10 +17,13 @@ import { ScanLine, TechPanel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import {
   type DecodedMasteringAudio,
+  defaultDiagnosticBypass,
   defaultModuleSettings,
+  type MasteringDiagnosticBypass,
   type MasteringModuleSettings,
   type MasteringPlatformId,
   type MasteringPresetId,
+  type MasteringVenueId,
   useMastering,
 } from '@/composables/useMastering';
 import { useMasteringInsights } from '@/composables/useMasteringInsights';
@@ -33,7 +37,9 @@ import {
   MASTERING_MODULE_GUIDE_SLUGS,
   MASTERING_MODULES,
   MASTERING_PLATFORMS,
+  MASTERING_PRESET_TARGETS,
   MASTERING_PRESETS,
+  MASTERING_VENUES,
   type MasteringMode,
   type MasteringModuleSettingKey,
   moduleControlsFor,
@@ -41,15 +47,6 @@ import {
 
 const { t, locale } = useI18n();
 const mastering = useMastering();
-const {
-  insightReport,
-  isAnalyzingInsights,
-  insightProfileItems,
-  insightSuggestions,
-  insightPreview,
-  analyzeSourceInsights,
-  resetInsights,
-} = useMasteringInsights(mastering);
 
 const libVersion = ref<string>('');
 const docsPath = computed(() =>
@@ -62,6 +59,7 @@ const otherLocalePath = computed(() => (locale.value === 'ja' ? '/mastering' : '
 
 const mode = ref<MasteringMode>('quick');
 const selectedPreset = ref<MasteringPresetId>('pop');
+const selectedVenue = ref<MasteringVenueId>('studio');
 const selectedPlatform = ref<MasteringPlatformId>('youtube');
 const customLufs = ref(-14);
 const tone = ref(50);
@@ -81,7 +79,18 @@ const reference = ref<DecodedMasteringAudio | null>(null);
 const referenceUrl = ref<string | null>(null);
 const referenceLufs = ref<number | null>(null);
 const moduleSettings = ref<MasteringModuleSettings>(defaultModuleSettings());
+const diagnosticBypass = ref<MasteringDiagnosticBypass>(defaultDiagnosticBypass());
 const chainDefaults = defaultModuleSettings();
+const currentCeilingDb = computed(() => moduleSettings.value.limiterCeilingDb);
+const {
+  insightReport,
+  isAnalyzingInsights,
+  insightProfileItems,
+  insightSuggestions,
+  insightPreview,
+  analyzeSourceInsights,
+  resetInsights,
+} = useMasteringInsights(mastering, currentCeilingDb);
 
 const { applyModeFromUrl, replaceModeInUrl, enableModeUrlSync, disableModeUrlSync } =
   useMasteringModeUrlSync(mode);
@@ -97,6 +106,7 @@ const {
 } = useMasteringSession({
   mode,
   selectedPreset,
+  selectedVenue,
   selectedPlatform,
   customLufs,
   tone,
@@ -112,6 +122,7 @@ const {
 });
 
 const presets = MASTERING_PRESETS;
+const venues = MASTERING_VENUES;
 const platforms = MASTERING_PLATFORMS;
 const modules = MASTERING_MODULES;
 
@@ -133,11 +144,47 @@ const targetLufs = computed(() =>
     : (platforms.find((platform) => platform.id === selectedPlatform.value)?.lufs ?? -14),
 );
 
+const recommendedLufs = computed(() => MASTERING_PRESET_TARGETS[selectedPreset.value]);
+const selectedPresetName = computed(() => t(`master.presets.${selectedPreset.value}.name`));
+const quickSafeTargetLufs = computed(() =>
+  mode.value === 'quick'
+    ? Math.min(targetLufs.value, recommendedLufs.value, -16)
+    : targetLufs.value,
+);
+const qualityTargetLufs = computed(() => {
+  const profile = insightReport.value?.profile as Record<string, unknown> | null;
+  const loudness = profile?.loudness as Record<string, unknown> | undefined;
+  const integrated = loudness?.integratedLufs;
+  const truePeak = loudness?.truePeakDb;
+  const crest = loudness?.crestFactorDb;
+  if (
+    typeof integrated !== 'number' ||
+    !Number.isFinite(integrated) ||
+    typeof truePeak !== 'number' ||
+    !Number.isFinite(truePeak)
+  ) {
+    return null;
+  }
+
+  const requestedGain = quickSafeTargetLufs.value - integrated;
+  const highPeak = truePeak > moduleSettings.value.limiterCeilingDb;
+  const highCrest = typeof crest === 'number' && Number.isFinite(crest) && crest >= 18;
+  if (requestedGain <= 6 && !highPeak) return null;
+
+  const maxGain = highPeak || highCrest ? 6 : 8;
+  const cappedTarget = clamp(integrated + maxGain, -24, quickSafeTargetLufs.value);
+  return cappedTarget < quickSafeTargetLufs.value - 0.05 ? cappedTarget : null;
+});
+const effectiveTargetLufs = computed(() => qualityTargetLufs.value ?? quickSafeTargetLufs.value);
+const qualityGuardLufs = computed(() =>
+  effectiveTargetLufs.value < targetLufs.value - 0.05 ? effectiveTargetLufs.value : null,
+);
+
 const { sourceMetrics, masterMetrics, referenceMetrics, meterReadings, phasePoints, stereoImage } =
   useMasteringMetering({
     mastering,
     reference,
-    targetLufs,
+    targetLufs: effectiveTargetLufs,
     t,
   });
 
@@ -236,6 +283,98 @@ function updateModuleSetting(key: MasteringModuleSettingKey, value: number) {
   };
 }
 
+function updateDiagnosticBypass(key: keyof MasteringDiagnosticBypass, value: boolean) {
+  diagnosticBypass.value = {
+    ...diagnosticBypass.value,
+    [key]: value,
+  };
+}
+
+function numericParam(params: Record<string, unknown>, key: string): number | null {
+  const value = params[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function applyParam(
+  next: MasteringModuleSettings,
+  params: Record<string, unknown>,
+  key: string,
+  setting: MasteringModuleSettingKey,
+  min: number,
+  max: number,
+) {
+  const value = numericParam(params, key);
+  if (value !== null) next[setting] = clamp(value, min, max);
+}
+
+function normalizeAssistantPreset(value: unknown): MasteringPresetId | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.toLowerCase().replace(/[-_\s]/g, '');
+  const match = presets.find((preset) => preset.id.toLowerCase() === normalized);
+  return match?.id ?? null;
+}
+
+function assistantParams(): Record<string, unknown> | null {
+  const suggestions = insightReport.value?.suggestions as Record<string, unknown> | null;
+  const chainConfig = suggestions?.chainConfig as Record<string, unknown> | undefined;
+  const params = chainConfig?.params;
+  return params && typeof params === 'object' ? (params as Record<string, unknown>) : null;
+}
+
+function applyAssistantSettings() {
+  const params = assistantParams();
+  if (!params && !insightPreview.value.some((row) => row.ceilingRisk)) return;
+
+  const next: MasteringModuleSettings = { ...moduleSettings.value };
+  if (params) {
+    applyParam(next, params, 'eq.tilt.tiltDb', 'tiltDb', -12, 12);
+    applyParam(next, params, 'dynamics.compressor.thresholdDb', 'compressorThresholdDb', -40, 0);
+    applyParam(next, params, 'dynamics.compressor.ratio', 'compressorRatio', 1, 10);
+    applyParam(next, params, 'dynamics.compressor.attackMs', 'compressorAttackMs', 0.5, 100);
+    applyParam(next, params, 'dynamics.compressor.releaseMs', 'compressorReleaseMs', 20, 600);
+    applyParam(next, params, 'dynamics.transientShaper.attackGainDb', 'transientAttackDb', -6, 6);
+    // Do not auto-apply color stages from the source assistant. Exciter/tape
+    // can add grit or clicks on some sources, so keep them opt-in from Studio.
+    applyParam(next, params, 'spectral.airBand.amount', 'airBandAmount', 0, 1);
+    applyParam(next, params, 'stereo.imager.width', 'stereoWidth', 0.6, 1.6);
+    applyParam(next, params, 'stereo.monoMaker.amount', 'monoMakerAmount', 0, 1);
+    applyParam(next, params, 'maximizer.truePeakLimiter.ceilingDb', 'limiterCeilingDb', -3, -0.1);
+    applyParam(next, params, 'loudness.ceilingDb', 'limiterCeilingDb', -3, -0.1);
+    applyParam(next, params, 'maximizer.truePeakLimiter.lookaheadMs', 'limiterLookaheadMs', 1, 20);
+
+    const target = numericParam(params, 'loudness.targetLufs');
+    if (target !== null) {
+      selectedPlatform.value = 'custom';
+      customLufs.value = clamp(target, -24, -8);
+    }
+
+    const suggestions = insightReport.value?.suggestions as Record<string, unknown> | null;
+    const candidates = suggestions?.genreCandidates;
+    if (Array.isArray(candidates)) {
+      const first = candidates[0] as Record<string, unknown> | undefined;
+      const preset = normalizeAssistantPreset(first?.name);
+      if (preset) selectedPreset.value = preset;
+    }
+  }
+
+  const safeCeiling = Math.min(
+    ...insightPreview.value
+      .filter((row) => row.ceilingRisk && Number.isFinite(row.safeCeilingDb))
+      .map((row) => row.safeCeilingDb),
+  );
+  if (Number.isFinite(safeCeiling)) {
+    next.limiterCeilingDb = Math.min(next.limiterCeilingDb, clamp(safeCeiling, -3, -0.1));
+  }
+
+  moduleSettings.value = next;
+  showFineTune.value = true;
+  if (mode.value === 'studio') activeModule.value = 'limiter';
+}
+
 const canResetActiveModule = computed(() => {
   const controls = moduleControls.value;
   if (!controls.length) return false;
@@ -316,6 +455,7 @@ watch(
   [
     mode,
     selectedPreset,
+    selectedVenue,
     selectedPlatform,
     customLufs,
     tone,
@@ -428,13 +568,16 @@ async function renderMaster() {
   try {
     const result = await mastering.render({
       preset: selectedPreset.value,
-      targetLufs: targetLufs.value,
+      venue: selectedVenue.value,
+      targetLufs: effectiveTargetLufs.value,
       tuning: {
         tone: tone.value,
         width: width.value,
         dynamics: dynamics.value,
       },
       moduleSettings: moduleSettings.value,
+      qualityMode: mode.value === 'quick' ? 'safe' : 'studio',
+      diagnosticBypass: diagnosticBypass.value,
     });
     outputUrl.value = mastering.createAudioUrl(result);
     reportUrl.value = createReportUrl();
@@ -473,7 +616,7 @@ async function renderReferenceMatch() {
   releaseOutputUrl();
   try {
     const result = await mastering.renderReferenceMatch(reference.value, {
-      targetLufs: targetLufs.value,
+      targetLufs: effectiveTargetLufs.value,
       ceilingDb: moduleSettings.value.limiterCeilingDb,
       lookaheadMs: moduleSettings.value.limiterLookaheadMs,
     });
@@ -549,8 +692,10 @@ function createReportUrl(): string {
 
   return createMasteringReportUrl({
     preset: selectedPreset.value,
+    venue: selectedVenue.value,
     platform: selectedPlatform.value,
     targetLufs: targetLufs.value,
+    effectiveTargetLufs: effectiveTargetLufs.value,
     tuning: {
       tone: tone.value,
       width: width.value,
@@ -627,25 +772,49 @@ function createReportUrl(): string {
           </button>
         </TechPanel>
 
+        <MasteringInsights
+          v-if="mastering.source.value"
+          :analyzing="isAnalyzingInsights"
+          :has-report="!!insightReport"
+          :profile-items="insightProfileItems"
+          :suggestions="insightSuggestions"
+          :preview="insightPreview"
+          :can-apply="!!insightReport"
+          :quality-target-lufs="qualityGuardLufs"
+          @apply="applyAssistantSettings"
+          @refresh="analyzeSourceInsights"
+        />
+
         <TechPanel :title="t('master.quick.step2')">
-          <MasteringPresetGrid v-model="selectedPreset" :presets="presets" />
+          <MasteringVenueSelector v-model="selectedVenue" :venues="venues" />
         </TechPanel>
 
         <TechPanel :title="t('master.quick.step3')">
+          <MasteringPresetGrid v-model="selectedPreset" :presets="presets" />
+        </TechPanel>
+
+        <TechPanel :title="t('master.quick.step4')">
           <MasteringPlatformSelector
             v-model="selectedPlatform"
             v-model:custom-lufs="customLufs"
             :platforms="platforms"
-            :eyebrow="t('master.quick.step3')"
+            :eyebrow="t('master.quick.step4')"
+            :recommended-lufs="recommendedLufs"
+            :current-lufs="targetLufs"
+            :preset-name="selectedPresetName"
           />
         </TechPanel>
 
-        <TechPanel :title="t('master.quick.step4')">
+        <TechPanel :title="t('master.quick.step5')">
           <MasteringFineTune
             v-model:show="showFineTune"
             v-model:tone="tone"
             v-model:width="width"
             v-model:dynamics="dynamics"
+            :ceiling-db="moduleSettings.limiterCeilingDb"
+            :diagnostic-bypass="diagnosticBypass"
+            @update:ceiling-db="updateModuleSetting('limiterCeilingDb', $event)"
+            @update:diagnostic-bypass="updateDiagnosticBypass"
           />
         </TechPanel>
 
@@ -685,6 +854,19 @@ function createReportUrl(): string {
           </button>
         </div>
 
+        <MasteringInsights
+          v-if="mastering.source.value"
+          :analyzing="isAnalyzingInsights"
+          :has-report="!!insightReport"
+          :profile-items="insightProfileItems"
+          :suggestions="insightSuggestions"
+          :preview="insightPreview"
+          :can-apply="!!insightReport"
+          :quality-target-lufs="qualityGuardLufs"
+          @apply="applyAssistantSettings"
+          @refresh="analyzeSourceInsights"
+        />
+
         <TechPanel :title="t('master.studio.chain')">
           <MasteringChainPanel
             v-model:active-module="activeModule"
@@ -708,7 +890,7 @@ function createReportUrl(): string {
             :module-settings="moduleSettings"
             :chain-defaults="chainDefaults"
             :can-reset-active-module="canResetActiveModule"
-            :target-lufs="targetLufs"
+            :target-lufs="effectiveTargetLufs"
             :selected-platform="selectedPlatform"
             :custom-lufs="customLufs"
             :platforms="platforms"
@@ -729,7 +911,7 @@ function createReportUrl(): string {
             :rendered="mastering.rendered.value"
             :source-metrics="sourceMetrics"
             :master-metrics="masterMetrics"
-            :target-lufs="targetLufs"
+            :target-lufs="effectiveTargetLufs"
             :phase-points="phasePoints"
             :stereo-image="stereoImage"
             :glossary-base-path="glossaryBasePath"
@@ -767,16 +949,6 @@ function createReportUrl(): string {
           </div>
         </div>
       </section>
-
-      <MasteringInsights
-        v-if="mastering.source.value"
-        :analyzing="isAnalyzingInsights"
-        :has-report="!!insightReport"
-        :profile-items="insightProfileItems"
-        :suggestions="insightSuggestions"
-        :preview="insightPreview"
-        @refresh="analyzeSourceInsights"
-      />
 
       <TechPanel :title="t('master.result.title')">
         <MasteringResultPanel

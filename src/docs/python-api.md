@@ -37,7 +37,7 @@ Remember that Python `analyze(...)` is intentionally compact. For chords, sectio
 | A script that reads files and prints metadata | `Audio.from_file(...)` + `detect_bpm` / `detect_key` / `analyze` | Python handles decoding and keeps the code short |
 | Detailed music analysis | `analyze_bpm`, `detect_chords`, `analyze_sections`, `analyze_timbre`, `analyze_dynamics`, `analyze_rhythm` | These expose more detail than the compact `analyze(...)` summary |
 | Feature arrays for notebooks or ML | `mel_spectrogram`, `mfcc`, `chroma`, `cqt`, `vqt`, `nnls_chroma` | Returns plain Python lists / result objects that can be converted to NumPy if desired |
-| Editing a clip | `time_stretch`, `pitch_shift`, `pitch_correct_to_midi`, `note_stretch`, `voice_change` | These transform the signal itself |
+| Editing a clip | `time_stretch`, `pitch_shift`, `pitch_correct_to_midi`, `note_stretch`, `voice_change`, `RealtimeVoiceChanger` | These transform the signal itself |
 | Mastering a file | `master_audio`, `mastering_chain`, `StreamingMasteringChain` | Presets first, explicit chain config when you need control |
 | Live or chunked analysis | `StreamAnalyzer` | Feed audio blocks, drain feature frames, and read progressive BPM/key/chord estimates |
 | Stem mixing | `mix_stereo` or `Mixer.from_scene_json(...)` | One-shot arrays first; scene mixer for sends, buses, automation, and meters |
@@ -222,12 +222,14 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | Syncopation, groove type, regularity |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
-| `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity |
+| `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbre_over_time` (`timbreOverTime` alias) |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | Song-structure sections (intro/verse/chorus/...) |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | Monophonic melody contour (YIN) |
 | `analyze_impulse_response(samples, sample_rate, ...)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80) |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
 | `version()` | `str` | Library version |
+| `voice_changer_abi_version()` | `int` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
+| `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
 Most core analysis, effects, feature, loudness, and mastering helpers are also
@@ -292,13 +294,37 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `pitch_correct_to_midi(samples, sr, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
 | `note_stretch(samples, sr, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
 | `voice_change(samples, sr, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
-| `normalize(samples, sr, target_db?)` | `list[float]` | Normalize to target dB (default: -3.0) |
+| `voice_change_realtime(samples, sr?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
+| `normalize(samples, sr, target_db?)` | `list[float]` | Normalize to target dB (default: 0.0) |
 | `trim(samples, sr, threshold_db?)` | `list[float]` | Trim silence (default: -60.0 dB) |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
 
-`trim(...)` is the simple threshold-based edit helper. The librosa-compatible
-`trim_silence(...)` helper below uses frame RMS and `top_db`, and returns the
-trimmed audio together with its original sample range.
+`trim(...)` is the simple threshold-based edit helper. The librosa-compatible `trim_silence(...)` helper below uses frame RMS and `top_db`, and returns the trimmed audio together with its original sample range.
+
+### Realtime voice changer
+
+`RealtimeVoiceChanger` wraps the same preset-driven live voice chain exposed by WASM and Node native. It keeps retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter state across blocks. Use it instead of `voice_change(...)` when processing microphone or stream blocks.
+
+```python
+import json
+import libsonare as sonare
+
+print(sonare.realtime_voice_changer_preset_names())
+print(sonare.voice_changer_abi_version())  # native POD-config ABI version
+preset_json = sonare.realtime_voice_changer_preset_json("bright-idol")
+print(sonare.validate_realtime_voice_changer_preset_json(preset_json)["ok"])
+pod = sonare.realtime_voice_changer_preset_pod("bright-idol")  # canonical RealtimeVoiceChangerConfig
+
+with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
+    out = changer.process_mono(input_block)
+    changer.set_config(json.loads(preset_json))
+    print(changer.latency_samples(), changer.config_json(), out.shape)
+
+# Convenience one-shot render through the same realtime chain.
+processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
+```
+
+Preset IDs currently include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`. `realtime_voice_changer_preset_pod(preset)` returns the canonical, normalized `RealtimeVoiceChangerConfig` for a built-in preset (by ID or index) when you want the resolved POD config rather than the JSON form.
 
 ### Feature Extraction Functions
 
@@ -313,19 +339,72 @@ trimmed audio together with its original sample range.
 | `spectral_bandwidth(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral bandwidth per frame |
 | `spectral_rolloff(samples, sr, n_fft?, hop_length?, roll_percent?)` | `list[float]` | Spectral rolloff per frame |
 | `spectral_flatness(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral flatness per frame |
+| `spectral_contrast(samples, sr?, n_fft?, hop_length?, n_bands?, fmin?, quantile?)` | `MatrixResult` | Spectral contrast, shape `(n_bands + 1, n_frames)` |
+| `poly_features(samples, sr?, n_fft?, hop_length?, order?)` | `MatrixResult` | Per-frame polynomial spectral coefficients |
 | `zero_crossing_rate(samples, sr, frame_length?, hop_length?)` | `list[float]` | Zero-crossing rate per frame |
+| `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `list[int]` | Sample indices where the waveform crosses zero |
 | `rms_energy(samples, sr, frame_length?, hop_length?)` | `list[float]` | RMS energy per frame |
-| `pitch_yin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?)` | `PitchResult` | YIN pitch estimation |
-| `pitch_pyin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?)` | `PitchResult` | pYIN pitch estimation |
+| `pitch_yin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
+| `pitch_pyin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
+| `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | Global tuning offset from detected frequencies, in fractions of a bin |
+| `estimate_tuning(samples, sr?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio |
 | `cqt(samples, sr, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Constant-Q Transform magnitude |
 | `vqt(samples, sr, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | Variable-Q Transform magnitude |
 | `nnls_chroma(samples, sr)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)` |
+| `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
+| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `MatrixResult` | Nearest-neighbour filtering of a row-major spectrogram |
 | `onset_envelope(samples, sr, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
 | `lufs(samples, sr)` | `LufsResult` | Integrated/momentary/short-term LUFS + loudness range (EBU R128) |
+| `lufs_interleaved(samples, channels, sr?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
+| `ebur128_loudness_range(samples, sr?)` | `float` | EBU R128 loudness range (LRA) in LU |
 | `momentary_lufs(samples, sr)` | `list[float]` | Momentary LUFS per frame |
 | `short_term_lufs(samples, sr)` | `list[float]` | Short-term LUFS per frame |
 
 Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`.
+
+Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
+
+### Inverse Reconstruction Functions
+
+Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is estimated with Griffin-Lim, so the round-trip is lossy — see [Inverse Features](./inverse-features.md). Matrix inputs are row-major.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
+| `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
+| `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients |
+| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?)` | `list[float]` | Audio from MFCC coefficients |
+
+Pass `0.0` for `fmin`/`fmax` to use the full-band defaults; `n_iter` defaults to `32`.
+
+### Metering Functions
+
+Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only `validate` flag (default `True`); pass `validate=False` to skip NaN/Inf input checks on hot paths. The stereo meters require `left` and `right` to be equal length. `sample_rate` defaults to `22050`.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `metering_peak_db(samples, sample_rate?, *, validate?)` | `float` | Sample peak (dBFS) |
+| `metering_rms_db(samples, sample_rate?, *, validate?)` | `float` | RMS level (dBFS) |
+| `metering_crest_factor_db(samples, sample_rate?, *, validate?)` | `float` | Crest factor, peak − RMS (dB) |
+| `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | Mean (DC) offset, linear amplitude |
+| `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | Inter-sample (true) peak (dBFS); `oversample_factor` is a power of two in 1..16 (0 = default 4) |
+| `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `min_region_samples` default `1` |
+| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for defaults (window 3 s, hop 1 s, low 0.10, high 0.95) |
+| `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Pearson correlation, −1..1 |
+| `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | Mid/side stereo width |
+| `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | Per-sample mid/side point series |
+| `metering_phase_scope(left, right, sample_rate?, *, validate?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
+| `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | Single-frame magnitude/power/dB spectrum; pass `0` for `n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults (2048 / 3 / 1.0 / floor) |
+
+### Scale Quantization
+
+12-TET scale helpers for building pitch-correction targets. `mode_mask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (`PitchClass`, C = 0); natural major is `0b101010110101`. `reference_midi` is the tuning anchor (pass `0.0` for A4 = 69). Pair with `pitch_correct_to_midi(...)` to retune to the nearest scale degree.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `scale_quantize_midi(root, mode_mask, midi, reference_midi?)` | `float` | Snap a (fractional) MIDI number to the nearest enabled pitch class |
+| `scale_correction_semitones(root, mode_mask, midi, reference_midi?)` | `float` | Correction (quantized − input), in semitones |
+| `scale_pitch_class_enabled(root, mode_mask, pitch_class)` | `bool` | Whether `pitch_class` (0..11) is enabled relative to `root` |
 
 ### librosa-Compatible Helpers
 
@@ -401,6 +480,15 @@ class Mode(IntEnum):
     LYDIAN = 4
     MIXOLYDIAN = 5
     LOCRIAN = 6
+
+class KeyProfile(IntEnum):
+    KRUMHANSL_SCHMUCKLER = 0
+    TEMPERLEY = 1
+    SHAATH = 2
+    FARALDO_EDMT = 3
+    FARALDO_EDMA = 4
+    FARALDO_EDMM = 5
+    BELLMAN_BUDGE = 6
 
 class Key:
     root: PitchClass
@@ -547,6 +635,14 @@ class StreamStats:
     updated: bool
 ```
 
+Additional Python result classes used by focused APIs:
+
+| Area | Classes |
+|------|---------|
+| Metering | `ClippingRegion`, `StreamFramesU8`, `StreamFramesI16` |
+| Mastering | `MasteringResult`, `MasteringStereoResult` |
+| Realtime engine telemetry | `MeterTelemetryRecord` |
+
 ## Streaming Analysis API
 
 Use `StreamAnalyzer` when audio arrives in blocks: live capture, a callback loop, a long file you do not want to analyze all at once, or a visualization that needs frame-by-frame features. It keeps a small internal buffer, emits mel/chroma/onset/spectral frames, and periodically updates BPM, key, chord, bar, and pattern estimates.
@@ -586,6 +682,22 @@ For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(ma
 
 Both return timestamps as floats. If you synchronize against an external audio clock, feed chunks with `process_with_offset(samples, sample_offset)` so returned timestamps follow that timeline.
 
+## Streaming Equalizer API
+
+`StreamingEqualizer` wraps the native block-by-block EQ engine. Use it for live preview, processor UIs, or matching a source tone to a reference without assembling a mastering chain.
+
+```python
+with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
+    eq.set_band(0, {"type": "bell", "frequencyHz": 2500, "gainDb": 2.5, "q": 1.0})
+    eq.set_phase_mode("natural")
+    eq.set_auto_gain(True)
+    eq.match(source_samples, reference_samples, max_bands=8)
+    out = eq.process_mono(input_block)
+    snapshot = eq.spectrum()
+```
+
+Bands can be Python dictionaries or JSON strings. `set_phase_mode(...)` accepts `zero` / `natural` / `linear` names or numeric values. The wrapper also exposes output gain/pan, sidechain input for dynamic bands, `process_stereo(...)`, `spectrum()`, `latency_samples`, and `last_auto_gain_db`.
+
 ## Mastering API
 
 Python exposes the same named mastering processors as the browser demo. Use the name-list helpers to inspect the active build, then call mono, stereo, pair, or analysis APIs with explicit parameters.
@@ -621,7 +733,7 @@ sonare.mastering_preset_names()
 chain_result = sonare.master_audio(
     samples,
     sample_rate=sample_rate,
-    preset="aiMusic",
+    preset_name="aiMusic",
     overrides={"loudness.targetLufs": -13},
 )
 print(chain_result.output_lufs, chain_result.applied_gain_db)
@@ -653,6 +765,25 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 `mastering_audio_profile()` accepts optional profile params: `n_fft`, `hop_length`, and `true_peak_oversample`. `mastering_assistant_suggest()` accepts `target_lufs`, `ceiling_db`, `enable_repair`, `prefer_streaming_safe`, and `speech_mono_amount`; camelCase aliases also work through the shared native parser.
 
 Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. Pair inputs should use the same sample rate and comparable length.
+
+### Standalone dynamics and repair
+
+Every named stage is also a one-shot module-level function, so you can run a single processor without assembling a chain. Parameters are keyword-only and mirror the corresponding `MasteringChainConfig` keys in snake_case. The dynamics processors return `(processed_samples, gain_reduction_samples)`; the repair processors return processed samples (`np.ndarray`).
+
+| Function | Returns | Key parameters |
+|----------|---------|----------------|
+| `mastering_dynamics_compressor(samples, sample_rate?, *, ...)` | `tuple[np.ndarray, int]` | `threshold_db=-18.0`, `ratio=2.0`, `attack_ms=10.0`, `release_ms=100.0`, `knee_db`, `makeup_gain_db`, `auto_makeup`, `detector='rms'`, `sidechain_hpf_enabled`, `sidechain_hpf_hz`, `pdr_time_ms`, `pdr_release_scale` |
+| `mastering_dynamics_gate(samples, sample_rate?, *, ...)` | `tuple[np.ndarray, int]` | `threshold_db=-50.0`, `attack_ms=2.0`, `release_ms=80.0`, `range_db=-80.0`, `hold_ms`, `close_threshold_db`, `key_hpf_hz` |
+| `mastering_dynamics_transient_shaper(samples, sample_rate?, *, ...)` | `tuple[np.ndarray, int]` | `attack_gain_db=3.0`, `sustain_gain_db`, `fast_attack_ms`, `fast_release_ms=20.0`, `slow_attack_ms=15.0`, `slow_release_ms=200.0`, `sensitivity=1.0`, `max_gain_db=12.0`, `gain_smoothing_ms`, `lookahead_ms` |
+| `mastering_repair_declick(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.8`, `neighbor_ratio=4.0`, `max_click_samples=8`, `lpc_order=20`, `residual_ratio=8.0` |
+| `mastering_repair_declip(samples, sample_rate?, *, ...)` | `np.ndarray` | `clip_threshold=0.98`, `lpc_order=36`, `iterations=2`, `lpc_blend=0.65` |
+| `mastering_repair_decrackle(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.4`, `mode='median'`, `levels=4` |
+| `mastering_repair_dehum(samples, sample_rate?, *, ...)` | `np.ndarray` | `fundamental_hz=50.0`, `harmonics=4`, `q=20.0`, `adaptive`, `search_range_hz`, `adaptation`, `frame_size`, `pll_bandwidth` |
+| `mastering_repair_denoise_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `mode='logMmse'`, `noise_estimator='quantile'`, `n_fft=1024`, `hop_length=256`, `dd_alpha=0.98`, `gain_floor=0.05`, `over_subtraction=2.0`, `spectral_floor=0.05`, `noise_estimation_quantile=0.1`, `speech_presence_gain`, `gain_smoothing` |
+| `mastering_repair_dereverb_classical(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.05`, `attenuation=0.5`, `n_fft=1024`, `hop_length=256`, `t60_sec=0.4`, `late_delay_ms=50.0`, `over_subtraction`, `spectral_floor`, `wpe_enabled`, `wpe_iterations`, `wpe_taps`, `wpe_strength` |
+| `mastering_repair_trim_silence(samples, sample_rate?, *, ...)` | `np.ndarray` | `threshold=0.001`, `padding_samples=0`, `mode='peak'`, `gate_lufs=-60.0`, `window_ms=400.0` |
+
+The repair stages are offline-only and are rejected by `StreamingMasteringChain` — run them with these one-shot helpers or inside `mastering_chain*` / `master_audio*`. See [Dynamics](./glossary/mastering/dynamics.md) and [Repair](./glossary/mastering/repair.md).
 
 ### Progress callbacks
 
@@ -708,11 +839,12 @@ Related mastering guides: [Preset selection](./glossary/mastering/preset-selecti
 
 ## Mixing API
 
-Python also exposes the libsonare mixing engine. Use `mix_stereo(...)` for one-shot stem rendering, or keep a `Mixer` loaded from scene JSON when you need sends, buses, automation, meters, and scene serialization.
+Python also exposes the libsonare mixing engine. Use `mix_stereo(...)` for one-shot stem rendering, or keep a `Mixer` loaded from scene JSON when you need sends, buses, automation, meters, and scene serialization. List the built-in scene presets with `mixing_scene_preset_names()`.
 
 ```python
 import libsonare as sonare
 
+print(sonare.mixing_scene_preset_names())
 scene_json = sonare.mixing_scene_preset_json("vocalReverbSend")
 
 offline = sonare.mix_stereo(

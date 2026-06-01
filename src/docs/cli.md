@@ -297,9 +297,7 @@ sonare hpss music.mp3 --json
 
 ## More Commands
 
-The Python CLI ships many more subcommands than the core set above. They all
-take the same global options (`--json`, `--n-fft`, etc.) and a file argument.
-Editing commands write a WAV when you pass `-o/--output`.
+The Python CLI ships many more subcommands than the core set above. Audio-file analysis and feature commands share the common options (`--json`, `--n-fft`, etc.) and take a file argument. Listing and preset-inspection commands have their own smaller option sets. Editing commands write a WAV when you pass `-o/--output`.
 
 ### More analysis
 
@@ -363,6 +361,19 @@ The source-built C++ CLI includes those same three edit commands and adds lower-
 | `resample` | `-o`, `--target-sr` |
 | `preemphasis`, `deemphasis`, `trim-silence`, `split-silence` | `-o` when writing a processed file |
 
+### Realtime voice presets
+
+These commands inspect, validate, or render the realtime voice-changer preset chain:
+
+| Command | Description | Options |
+|---------|-------------|---------|
+| `sonare voice-change vocal.wav -o out.wav` | Render through the realtime voice preset chain when `--preset`, `--preset-json`, `--preset-pack`, or `--set` is supplied | `--preset`, `--preset-json`, `--preset-pack`, `--set PATH=VALUE` |
+| `sonare voice-presets` | List realtime voice changer preset ids | `--json` |
+| `sonare voice-preset` | Print one preset's config as JSON | `--preset` (`neutral-monitor`), `--json` |
+| `sonare voice-preset-validate preset.json` | Validate and normalize a preset JSON file or preset pack | `--preset` when validating a pack, `--set PATH=VALUE`, `--json` |
+
+Without realtime preset options, `voice-change` uses the simple pitch/formant helper controlled by `--pitch-semitones` and `--formant-factor`. With preset options, it uses the realtime voice chain and ignores those simple pitch/formant controls.
+
 ### Synthesis
 
 The source-built C++ CLI can generate simple test signals:
@@ -402,7 +413,7 @@ sonare version --json
 
 **Output:**
 ```
-libsonare 1.2.1 (Python CLI)
+libsonare 1.2.2 (Python CLI)
 ```
 
 ## Examples

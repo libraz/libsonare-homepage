@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { enCopy, jaCopy } from '@/components/analysis/musicAnalysisCopy';
 import MatrixHeatmap from '@/components/MatrixHeatmap.vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { MetricItem, ScanLine, StatusIndicator, TechPanel, TermLabel } from '@/components/ui';
+import { AudioTransport, MetricItem, ScanLine, StatusIndicator, TechPanel, TermLabel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import {
   calculateCorrelation,
@@ -44,6 +44,9 @@ const progress = ref(0);
 const progressStage = ref('');
 const activeHeatmap = ref<HeatmapKey>('chroma');
 const fileInput = ref<HTMLInputElement | null>(null);
+const mediaUrl = ref<string | null>(null);
+const transport = ref<InstanceType<typeof AudioTransport> | null>(null);
+const playFraction = ref(0);
 
 let audioContext: AudioContext | null = null;
 let worker: Worker | null = null;
@@ -81,6 +84,11 @@ const TERM_SLUGS: Record<TermKey, string | undefined> = {
   peak: 'concepts/audio-basics',
   rms: 'concepts/audio-basics',
   correlation: 'concepts/mono-compatibility',
+  truePeak: 'true-peak',
+  dcOffset: 'concepts/audio-basics',
+  clipping: 'concepts/true-peak-safety',
+  stereoWidth: 'concepts/mono-compatibility',
+  vectorscope: 'concepts/mono-compatibility',
   pitchRange: 'concepts/mir-overview',
   pitchStability: 'concepts/mir-overview',
   meanPitch: 'concepts/mir-overview',
@@ -125,6 +133,44 @@ const sourceMetrics = computed(() => {
     rms: formatDb(levels.rmsDb),
     correlation: calculateCorrelation(decoded.value.left, decoded.value.right).toFixed(2),
   };
+});
+
+// Decimated stereo frame budget sent to the worker for the goniometer / stereo
+// meters — dense enough for a representative cloud, small enough to transfer.
+const METER_STEREO_FRAMES = 8192;
+
+const meteringSummary = computed(() => {
+  const m = result.value?.metering;
+  if (!m) return null;
+  const clipped = m.clipping.clippedSamples;
+  return {
+    truePeak: `${formatDb(m.truePeakDb)}TP`,
+    dcOffset: `${(m.dcOffset * 100).toFixed(3)} %`,
+    clipped: clipped > 0,
+    clipping:
+      clipped > 0
+        ? `${clipped.toLocaleString()} · ${(m.clipping.clippingRatio * 100).toFixed(2)}%`
+        : copy.value.metering.clean,
+    stereoWidth: m.stereo.available ? m.stereo.width.toFixed(2) : '-',
+  };
+});
+
+// Goniometer cloud: rotate so mono (mid) sits on the vertical axis and the
+// stereo difference (side) spreads horizontally — L upper-left, R upper-right.
+const vectorscope = computed(() => {
+  const stereo = result.value?.metering?.stereo;
+  if (!stereo?.available || !stereo.mid.length) return null;
+  let maxRadius = 1e-6;
+  for (let i = 0; i < stereo.mid.length; i++) {
+    const radius = Math.hypot(stereo.mid[i], stereo.side[i]);
+    if (radius > maxRadius) maxRadius = radius;
+  }
+  const scale = 46 / maxRadius;
+  const points = stereo.mid.map((mid, index) => ({
+    x: 50 - stereo.side[index] * scale,
+    y: 50 - mid * scale,
+  }));
+  return { points, correlation: stereo.correlation };
 });
 
 const activeHeatmapData = computed(() => result.value?.heatmaps[activeHeatmap.value] || null);
@@ -186,6 +232,12 @@ const statusFields = computed(() => {
   ];
 });
 
+const hasPlayback = computed(() => Boolean(mediaUrl.value));
+
+// One transport drives every time-aligned visual: its 0..1 position is exposed as
+// a CSS var so the timeline, loudness, waveform, and melody overlays share a playhead.
+const playheadStyle = computed(() => ({ '--play': String(playFraction.value) }));
+
 onMounted(() => {
   const ric = (window as any).requestIdleCallback;
   if (ric) ric(initWasmVersion, { timeout: 2000 });
@@ -195,6 +247,7 @@ onMounted(() => {
 onUnmounted(() => {
   worker?.terminate();
   if (reportUrl) URL.revokeObjectURL(reportUrl);
+  if (mediaUrl.value) URL.revokeObjectURL(mediaUrl.value);
 });
 
 async function initWasmVersion() {
@@ -256,6 +309,9 @@ async function handleFile(file: File) {
       warning.value = copy.value.warnings.longFile;
     }
     decoded.value = audio;
+    if (mediaUrl.value) URL.revokeObjectURL(mediaUrl.value);
+    mediaUrl.value = URL.createObjectURL(file);
+    playFraction.value = 0;
     waveform.value = downsampleWaveform(audio.left, audio.right, 900);
     await analyzeCurrent();
   } catch (error) {
@@ -278,6 +334,7 @@ async function analyzeCurrent() {
 
   const id = ++requestId;
   const mono = mixToMono(audio.left, audio.right);
+  const meter = decimateStereo(audio.left, audio.right, METER_STEREO_FRAMES);
   isAnalyzing.value = true;
   localError.value = null;
   progress.value = 0.01;
@@ -324,8 +381,10 @@ async function analyzeCurrent() {
         id,
         samples: mono,
         sampleRate: audio.sampleRate,
+        meterLeft: meter.left,
+        meterRight: meter.right,
       },
-      [mono.buffer],
+      [mono.buffer, meter.left.buffer, meter.right.buffer],
     );
   })
     .catch((error) => {
@@ -371,6 +430,14 @@ function formatStage(stage: string): string {
   return copy.value.stages[stage] || stage;
 }
 
+function formatSectionName(name: string): string {
+  const normalized = name.replace(/[\s_-]+/g, '').replace(/^prechorus$/i, 'PreChorus');
+  const key = Object.keys(enCopy.sections).find(
+    (sectionKey) => sectionKey.toLowerCase() === normalized.toLowerCase(),
+  ) as keyof typeof enCopy.sections | undefined;
+  return key ? copy.value.sections[key] : name;
+}
+
 function sectionStyle(start: number, end: number) {
   const duration = result.value?.duration || 1;
   return {
@@ -384,6 +451,17 @@ function markerStyle(time: number) {
   return {
     left: `${Math.max(0, Math.min(100, (time / duration) * 100))}%`,
   };
+}
+
+// Click anywhere on a time-aligned visual to scrub there: map the click X within
+// the element's own box to a 0..1 fraction and hand it to the transport.
+function seekFromEvent(event: MouseEvent) {
+  const el = event.currentTarget as HTMLElement | null;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  const fraction = (event.clientX - rect.left) / rect.width;
+  transport.value?.seekFraction(Math.max(0, Math.min(1, fraction)));
 }
 
 function confidencePct(value: number): number {
@@ -425,6 +503,23 @@ function chordStyleRich(chord: { start: number; end: number; confidence: number 
 function chordLabel(chord: { start: number; end: number; name: string }): string {
   const duration = result.value?.duration || 1;
   return ((chord.end - chord.start) / duration) * 100 >= 2 ? chord.name : '';
+}
+
+// Even-stride a stereo pair down to at most `frames` samples so the goniometer
+// payload (and its WASM metering pass) stay cheap, without distorting the field.
+function decimateStereo(left: Float32Array, right: Float32Array, frames: number) {
+  if (left.length <= frames) {
+    return { left: left.slice(), right: right.slice() };
+  }
+  const outLeft = new Float32Array(frames);
+  const outRight = new Float32Array(frames);
+  const step = left.length / frames;
+  for (let i = 0; i < frames; i++) {
+    const index = Math.floor(i * step);
+    outLeft[i] = left[index];
+    outRight[i] = right[index] ?? left[index];
+  }
+  return { left: outLeft, right: outRight };
 }
 
 function waveformPath(): string {
@@ -503,10 +598,63 @@ function waveformPath(): string {
             </MetricItem>
           </div>
           <div v-if="waveform.length" class="waveform-mini">
-            <svg viewBox="0 0 100 72" preserveAspectRatio="none" aria-label="Waveform">
-              <path :d="waveformPath()" />
-            </svg>
+            <div
+              class="waveform-plot"
+              :class="{ 'is-seekable': hasPlayback }"
+              :style="playheadStyle"
+              @click="seekFromEvent"
+            >
+              <svg viewBox="0 0 100 72" preserveAspectRatio="none" aria-label="Waveform">
+                <path :d="waveformPath()" />
+              </svg>
+              <div v-if="hasPlayback" class="playhead playhead--wave" aria-hidden="true"></div>
+            </div>
           </div>
+        </TechPanel>
+
+        <TechPanel :title="copy.panels.metering">
+          <div v-if="meteringSummary" class="analysis-list">
+            <MetricItem :value="meteringSummary.truePeak">
+              <template #label><TermLabel v-bind="term('truePeak')">{{ copy.metrics.truePeak }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="meteringSummary.dcOffset">
+              <template #label><TermLabel v-bind="term('dcOffset')">{{ copy.metrics.dcOffset }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="meteringSummary.clipping" :variant="meteringSummary.clipped ? 'accent' : 'success'">
+              <template #label><TermLabel v-bind="term('clipping')">{{ copy.metrics.clipping }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="meteringSummary.stereoWidth">
+              <template #label><TermLabel v-bind="term('stereoWidth')">{{ copy.metrics.stereoWidth }}</TermLabel></template>
+            </MetricItem>
+          </div>
+          <div v-if="vectorscope" class="vectorscope">
+            <svg class="vectorscope__svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" :aria-label="copy.terms.items.vectorscope.title">
+              <g class="vectorscope__grid">
+                <circle cx="50" cy="50" r="46" />
+                <line x1="50" y1="4" x2="50" y2="96" />
+                <line x1="4" y1="50" x2="96" y2="50" />
+                <line x1="17" y1="17" x2="83" y2="83" />
+                <line x1="83" y1="17" x2="17" y2="83" />
+              </g>
+              <circle
+                v-for="(point, index) in vectorscope.points"
+                :key="index"
+                class="vectorscope__point"
+                :cx="point.x"
+                :cy="point.y"
+                r="0.55"
+              />
+            </svg>
+            <div class="vectorscope__axes" aria-hidden="true">
+              <span class="vectorscope__axis vectorscope__axis--l">L</span>
+              <span class="vectorscope__axis vectorscope__axis--m">M</span>
+              <span class="vectorscope__axis vectorscope__axis--r">R</span>
+            </div>
+            <p class="vectorscope__caption">
+              <TermLabel v-bind="term('vectorscope')" tone="strong">{{ copy.terms.items.vectorscope.title }}</TermLabel>
+            </p>
+          </div>
+          <div v-else-if="!result" class="analysis-empty analysis-empty--compact">{{ copy.empty.metering }}</div>
         </TechPanel>
       </aside>
 
@@ -570,32 +718,48 @@ function waveformPath(): string {
         </TechPanel>
 
         <TechPanel :title="copy.panels.timeline">
+          <div v-if="mediaUrl" class="analysis-transport">
+            <AudioTransport
+              ref="transport"
+              :key="mediaUrl"
+              :src="mediaUrl"
+              @progress="playFraction = $event"
+            />
+          </div>
           <div v-if="result" class="analysis-timeline">
-            <div class="timeline-row timeline-row--sections">
-              <span
-                v-for="section in result.sections"
-                :key="`${section.name}-${section.start}`"
-                class="timeline-section"
-                :style="sectionStyleRich(section)"
-                :title="`${section.name} ${formatDuration(section.start)} - ${formatDuration(section.end)} · ${copy.timeline.confidence} ${confidencePct(section.confidence)}% · ${copy.timeline.energy} ${confidencePct(section.energyLevel)}%`"
-              >
-                {{ section.name }}
-              </span>
-            </div>
-            <div class="timeline-row timeline-row--chords">
-              <span
-                v-for="chord in chordSegments"
-                :key="`${chord.name}-${chord.start}`"
-                class="timeline-chord"
-                :style="chordStyleRich(chord)"
-                :title="`${chord.name} ${formatDuration(chord.start)} – ${formatDuration(chord.end)} · ${copy.timeline.confidence} ${confidencePct(chord.confidence)}%`"
-              >
-                {{ chordLabel(chord) }}
-              </span>
-            </div>
-            <div class="timeline-row timeline-row--beats">
-              <span v-for="beat in result.beats.slice(0, 260)" :key="beat" class="timeline-beat" :style="markerStyle(beat)"></span>
-              <span v-for="beat in result.downbeats.slice(0, 80)" :key="`d-${beat}`" class="timeline-downbeat" :style="markerStyle(beat)"></span>
+            <div
+              class="timeline-rows"
+              :class="{ 'is-seekable': hasPlayback }"
+              :style="playheadStyle"
+              @click="seekFromEvent"
+            >
+              <div class="timeline-row timeline-row--sections">
+                <span
+                  v-for="section in result.sections"
+                  :key="`${section.name}-${section.start}`"
+                  class="timeline-section"
+                  :style="sectionStyleRich(section)"
+                  :title="`${formatSectionName(section.name)} ${formatDuration(section.start)} - ${formatDuration(section.end)} · ${copy.timeline.confidence} ${confidencePct(section.confidence)}% · ${copy.timeline.energy} ${confidencePct(section.energyLevel)}%`"
+                >
+                  {{ formatSectionName(section.name) }}
+                </span>
+              </div>
+              <div class="timeline-row timeline-row--chords">
+                <span
+                  v-for="chord in chordSegments"
+                  :key="`${chord.name}-${chord.start}`"
+                  class="timeline-chord"
+                  :style="chordStyleRich(chord)"
+                  :title="`${chord.name} ${formatDuration(chord.start)} – ${formatDuration(chord.end)} · ${copy.timeline.confidence} ${confidencePct(chord.confidence)}%`"
+                >
+                  {{ chordLabel(chord) }}
+                </span>
+              </div>
+              <div class="timeline-row timeline-row--beats">
+                <span v-for="beat in result.beats.slice(0, 260)" :key="beat" class="timeline-beat" :style="markerStyle(beat)"></span>
+                <span v-for="beat in result.downbeats.slice(0, 80)" :key="`d-${beat}`" class="timeline-downbeat" :style="markerStyle(beat)"></span>
+              </div>
+              <div v-if="hasPlayback" class="playhead playhead--timeline" aria-hidden="true"></div>
             </div>
           </div>
           <div v-else class="analysis-empty analysis-empty--compact">{{ copy.empty.timeline }}</div>
@@ -606,18 +770,26 @@ function waveformPath(): string {
             <div class="loudness-scale" aria-hidden="true">
               <span v-for="t in loudnessTicks" :key="t.lufs" class="loudness-scale__tick" :style="{ top: `${t.top}%` }">{{ t.lufs }}</span>
             </div>
-            <svg class="loudness-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Loudness timeline">
-              <line
-                v-if="loudnessChart.integratedY !== null"
-                class="loudness-chart__ref"
-                x1="0"
-                :y1="loudnessChart.integratedY"
-                x2="100"
-                :y2="loudnessChart.integratedY"
-              />
-              <path class="loudness-chart__short" :d="loudnessChart.shortTerm" />
-              <path class="loudness-chart__moment" :d="loudnessChart.momentary" />
-            </svg>
+            <div
+              class="loudness-plot"
+              :class="{ 'is-seekable': hasPlayback }"
+              :style="playheadStyle"
+              @click="seekFromEvent"
+            >
+              <svg class="loudness-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Loudness timeline">
+                <line
+                  v-if="loudnessChart.integratedY !== null"
+                  class="loudness-chart__ref"
+                  x1="0"
+                  :y1="loudnessChart.integratedY"
+                  x2="100"
+                  :y2="loudnessChart.integratedY"
+                />
+                <path class="loudness-chart__short" :d="loudnessChart.shortTerm" />
+                <path class="loudness-chart__moment" :d="loudnessChart.momentary" />
+              </svg>
+              <div v-if="hasPlayback" class="playhead playhead--loud" aria-hidden="true"></div>
+            </div>
           </div>
           <div class="loudness-legend">
             <span class="loudness-legend__item loudness-legend__item--moment">
@@ -698,7 +870,13 @@ function waveformPath(): string {
               <template #label><TermLabel v-bind="term('vibrato')">{{ copy.metrics.vibrato }}</TermLabel></template>
             </MetricItem>
           </div>
-          <div v-if="result" class="melody-cloud">
+          <div
+            v-if="result"
+            class="melody-cloud"
+            :class="{ 'is-seekable': hasPlayback }"
+            :style="playheadStyle"
+            @click="seekFromEvent"
+          >
             <span
               v-for="point in result.melody.points"
               :key="`${point.time}-${point.frequency}`"
@@ -709,6 +887,7 @@ function waveformPath(): string {
                 opacity: `${Math.max(0.25, point.confidence)}`,
               }"
             ></span>
+            <div v-if="hasPlayback" class="playhead playhead--melody" aria-hidden="true"></div>
           </div>
           <div v-if="!result" class="analysis-empty analysis-empty--compact">{{ copy.empty.melody }}</div>
         </TechPanel>

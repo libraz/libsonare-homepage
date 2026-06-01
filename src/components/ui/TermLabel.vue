@@ -67,7 +67,7 @@ withDefaults(
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  cursor: help;
+  cursor: pointer;
   outline: none;
 }
 

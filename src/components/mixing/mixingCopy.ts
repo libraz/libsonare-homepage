@@ -309,7 +309,8 @@ export const jaCopy: typeof enCopy = {
     title: 'トラック',
     dropTitle: 'ステムをドロップ',
     dropBody: '最大 8 トラック、各 5:00 まで。音声はブラウザ内だけで処理されます。',
-    timelineEmpty: '読み込んだステムがここに並びます。クリップをドラッグして各トラックの開始位置を合わせます。',
+    timelineEmpty:
+      '読み込んだステムがここに並びます。クリップをドラッグして各トラックの開始位置を合わせます。',
     choose: 'トラックを追加',
     loadDemo: 'デモを読み込む',
     demoLow: '低域',

@@ -8,42 +8,50 @@ describe('buildProcessorSource', () => {
     expect(source).toContain("import createModule from '/wasm/sonare.js';");
   });
 
-  it('injects the DSP primitives as named const bindings', () => {
-    // Bound to a const so the call sites resolve regardless of how the bundler
-    // mangles the original function name inside the .toString() output.
-    for (const name of ['ringModulate', 'advancePhase']) {
-      expect(source).toContain(`const ${name} =`);
-    }
+  it('creates and prepares the native RealtimeVoiceChanger', () => {
+    expect(source).toContain('mod.createRealtimeVoiceChanger(this.preset)');
+    expect(source).toContain('this.vc.prepare(sampleRate, MAX_BLOCK, 1)');
+    expect(source).not.toContain('createStreamingRetune');
   });
 
-  it('calls the injected primitives instead of inlining their math', () => {
-    expect(source).toContain('advancePhase(this.robotPhase, 55, sampleRate)');
-    expect(source).toContain('ringModulate(wetMono, carrier, this.robot)');
-  });
-
-  it('uses native StreamingRetune instead of offline voiceChange frames', () => {
-    expect(source).toContain('mod.createStreamingRetune');
-    expect(source).toContain('this.retune.prepare(sampleRate, RETUNE_MAX_BLOCK)');
-    expect(source).toContain(
-      'this.retune.setConfig({ semitones: this.pitch, mix: 1, grainSize: 0 })',
-    );
-    expect(source).toContain('this.retune.processMono(this.monoBlock)');
+  it('drives the zero-copy prepared-mono path with per-block heap views', () => {
+    expect(source).toContain('const inView = this.vc.getMonoInputBuffer(MAX_BLOCK)');
+    expect(source).toContain('const outView = this.vc.getMonoOutputBuffer(MAX_BLOCK)');
+    expect(source).toContain('this.vc.processPreparedMono(m)');
+    expect(source).toContain('inView[i] = mono');
+    expect(source).toContain('const wet = outView[i]');
     expect(source).not.toContain('voiceChange(');
   });
 
-  it('reports worklet readiness and module initialization failures', () => {
-    expect(source).toContain("this.port.postMessage({ type: 'ready' })");
+  it('layers the four live macros over the preset chain without dropping it', () => {
+    expect(source).toContain('this.base = JSON.parse(this.vc.configJson())');
+    expect(source).toContain('dsp.retune.semitones = this.pitch');
+    expect(source).toContain('dsp.formant.factor = this.formant');
+    expect(source).toContain('dsp.formant.brightness = this.brightness');
+    expect(source).toContain('dsp.wetMix = this.wet');
+    expect(source).toContain('this.vc.setConfig(this.base)');
+  });
+
+  it('switches the full preset chain when the preset id changes', () => {
+    expect(source).toContain('p.preset !== this.preset');
+    expect(source).toContain('this.vc.setConfig(this.preset); this.loadBase()');
+  });
+
+  it('reports worklet readiness with latency and module initialization failures', () => {
+    expect(source).toContain(
+      "this.port.postMessage({ type: 'ready', latencySamples: this.vc.latencySamples() })",
+    );
     expect(source).toContain("this.port.postMessage({ type: 'error', error: String(err) })");
     expect(source).toContain(
-      "throw new Error('StreamingRetune is not available in this WASM build')",
+      "throw new Error('RealtimeVoiceChanger is not available in this WASM build')",
     );
   });
 
-  it('resets native retune state when disabled or bypassed before passthrough', () => {
+  it('resets native state when disabled or bypassed before passthrough', () => {
     expect(source).toContain("msg.type === 'setEnabled'");
-    expect(source).toContain('if (!this.enabled && this.retune) this.retune.reset()');
+    expect(source).toContain('if (!this.enabled && this.vc) this.vc.reset()');
     expect(source).toContain('if (this.bypass || !this.ready || !this.enabled)');
-    expect(source).toContain('if (this.retune) this.retune.reset()');
+    expect(source).toContain('if (this.vc) this.vc.reset()');
   });
 
   it('publishes metering at a throttled cadence with peak and RMS values', () => {
@@ -55,15 +63,7 @@ describe('buildProcessorSource', () => {
     expect(source).toContain('outputRms: Math.sqrt(outputSum / n)');
   });
 
-  it('adds audible realtime voice color and reverb after retune', () => {
-    expect(source).toContain('this.toneLow');
-    expect(source).toContain('(this.formant - 1) * 1.7');
-    expect(source).toContain('this.revA = new Float32Array(1499)');
-    expect(source).toContain('this.revB = new Float32Array(2111)');
-    expect(source).toContain('this.revC = new Float32Array(2633)');
-  });
-
   it('registers the processor under the expected name', () => {
-    expect(source).toContain("registerProcessor('libsonare-fx'");
+    expect(source).toContain("registerProcessor('libsonare-voice'");
   });
 });

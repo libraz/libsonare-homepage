@@ -34,11 +34,11 @@ Start with the page that matches where you will run libsonare:
 | Analyze audio in a web app | Browser WebAssembly package | [Browser / WASM](/docs/wasm) |
 | Analyze files from Python scripts or notebooks | Python package from PyPI | [Python API](/docs/python-api) |
 | Run analysis from a terminal | `sonare` CLI installed from PyPI via `pip install libsonare` | [CLI Reference](/docs/cli) |
-| Build live visualizations or playback tools | Streaming analyzer and realtime engine | [Realtime and Streaming](/docs/realtime-streaming) |
 | Add pitch or voice editing | Editing DSP | [Editing DSP](/docs/editing-dsp) |
+| Estimate room decay, clarity, or blind acoustic parameters | Acoustic analysis helpers | [Room Acoustics](/docs/acoustic-analysis) |
 | Build a mixer, routing view, or stem renderer | Mixing engine through WASM, Python, Node, or C++ | [Mixing Engine](/docs/mixing) |
 | Build a mastering UI with explainable suggestions | Mastering assistant/profile/preview APIs | [Mastering Assistant](/docs/mastering-assistant) |
-| Estimate room decay, clarity, or blind acoustic parameters | Acoustic analysis helpers | [Room Acoustics](/docs/acoustic-analysis) |
+| Build live visualizations or playback tools | Streaming analyzer and realtime engine | [Realtime and Streaming](/docs/realtime-streaming) |
 | Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
 | Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |
 

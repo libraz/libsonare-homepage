@@ -1,25 +1,40 @@
 export const enCopy = {
-  title: 'Realtime FX Lab',
-  subtitle: 'Mic input voice changer and speaker output',
+  title: 'Realtime Voice Changer',
+  subtitle: "Mic input through libsonare's native voice-changer chain",
   localOnly: 'LOCAL ONLY',
   status: { idle: 'Idle', starting: 'Starting', ready: 'Ready', monitoring: 'Speaker on' },
   panels: {
     input: 'Input',
-    presets: 'Presets',
+    presets: 'Character',
     voice: 'Voice',
     meters: 'Meters',
     safety: 'Speaker Safety',
   },
   presets: {
-    natural: {
-      label: 'Natural',
-      hint: 'Subtle blend that keeps your real voice with a touch of space.',
+    'neutral-monitor': {
+      label: 'Neutral Monitor',
+      hint: 'Transparent monitor path — your own voice with the chain barely engaged.',
     },
-    low: { label: 'Low', hint: 'Drops pitch and formant for a deeper, larger voice.' },
-    bright: { label: 'Bright', hint: 'Lifts pitch and formant for a smaller, brighter voice.' },
-    robot: { label: 'Robot', hint: 'Heavy ring-mod buzz for a vocoder-like robot tone.' },
-    room: { label: 'Room', hint: 'Adds a small room ambience around a natural voice.' },
-    hall: { label: 'Hall', hint: 'Long hall reflections for a spacious, distant voice.' },
+    'bright-idol': {
+      label: 'Bright Idol',
+      hint: 'Lifts pitch and formant for a smaller, brighter, polished lead voice.',
+    },
+    'soft-whisper': {
+      label: 'Soft Whisper',
+      hint: 'Gentle lift with reduced nasality for an intimate, breathy character.',
+    },
+    'deep-narrator': {
+      label: 'Deep Narrator',
+      hint: 'Drops pitch and formant for a larger, weighty storyteller voice.',
+    },
+    'robot-mascot': {
+      label: 'Robot Mascot',
+      hint: 'High retune with bright, nasal formants for a chirpy mascot robot.',
+    },
+    'dark-villain': {
+      label: 'Dark Villain',
+      hint: 'Heavy downward shift with a big chest body for a menacing tone.',
+    },
   },
   actions: {
     start: 'Start engine',
@@ -30,9 +45,8 @@ export const enCopy = {
   controls: {
     pitch: 'Pitch',
     formant: 'Formant',
+    brightness: 'Brightness',
     wet: 'Wet/Dry',
-    robot: 'Robot',
-    reverb: 'Ambience',
     output: 'Output',
     bypass: 'Bypass',
   },
@@ -62,42 +76,36 @@ export const enCopy = {
       pitch: {
         title: 'Pitch Shift',
         body: 'Moves the voice up or down in semitones without changing its speed. 12 st is one octave.',
-        tip: 'Small shifts (±2 st) stay natural; large shifts read as an effect. Pair with formant to keep it believable.',
+        tip: 'Layered over the chosen character. Small shifts (±2 st) stay natural; pair with formant to keep it believable.',
         default: '0 st',
       },
       formant: {
         title: 'Formant',
-        body: 'Scales the resonances that define vocal character, shifting the perceived size of the singer.',
+        body: 'Scales the resonances that define vocal character, shifting the perceived size of the speaker.',
         tip: 'Below 1 sounds larger / deeper, above 1 sounds smaller / brighter. Adjust opposite to pitch for a natural shift.',
         default: '1.00',
       },
+      brightness: {
+        title: 'Brightness',
+        body: 'Tilts the formant balance toward darker (−) or brighter (+) tone without re-pitching the voice.',
+        tip: 'Push positive for an airy, present voice; negative for a warmer, chest-heavy tone.',
+        default: '0.10',
+      },
       wet: {
         title: 'Wet / Dry',
-        body: 'Balance between the processed (wet) signal and the untouched (dry) input.',
-        tip: 'Blend in dry signal to keep intelligibility when effects get heavy.',
-        default: '55%',
-      },
-      robot: {
-        title: 'Robot',
-        body: 'Forces the voice onto a fixed pitched buzz for a vocoder-like robotic tone.',
-        tip: 'Push it up for a clear robot effect; keep it low to just add a metallic edge.',
-        default: '0%',
-      },
-      reverb: {
-        title: 'Ambience',
-        body: 'Adds simulated room reflections so the voice sits in a space rather than sounding dry.',
-        tip: 'A little adds depth; too much smears consonants and pushes the voice back.',
-        default: '15%',
+        body: 'Balance between the processed (wet) signal and the untouched (dry) input inside the native chain.',
+        tip: 'Blend in dry signal to keep intelligibility when the character gets extreme.',
+        default: '100%',
       },
       output: {
         title: 'Output Gain',
         body: 'Final level applied before speaker output, as a percentage of unity.',
         tip: 'Trim it down if the output meter is hitting the top; loud speaker output risks feedback.',
-        default: '70%',
+        default: '85%',
       },
       bypass: {
         title: 'Bypass',
-        body: 'Passes the dry microphone straight through, skipping all effects.',
+        body: 'Passes the dry microphone straight through, skipping the voice-changer chain.',
         tip: 'Toggle it to A/B the processed voice against the raw input.',
       },
       inputPeak: {
@@ -118,36 +126,54 @@ export const enCopy = {
       outputRms: {
         title: 'Output RMS',
         body: 'Average processed energy in dBFS sent to your speaker output.',
-        tip: 'Compare with input RMS to see how much the effects change perceived level.',
+        tip: 'Compare with input RMS to see how much the character changes perceived level.',
       },
       latency: {
         title: 'Latency',
         body: 'Round-trip delay between mic input and speaker output, in milliseconds.',
-        tip: 'Lower is better for live output. Browser and device buffers set the floor here.',
+        tip: 'Lower is better for live output. The retune grain and device buffers set the floor here.',
       },
     },
   },
 };
 
 export const jaCopy: typeof enCopy = {
-  title: 'リアルタイム FX ラボ',
-  subtitle: 'マイク入力のボイスチェンジャーとスピーカー出力',
+  title: 'リアルタイムボイスチェンジャー',
+  subtitle: 'マイク入力を libsonare ネイティブのボイスチェンジャーチェーンへ',
   localOnly: 'LOCAL ONLY',
   status: { idle: '待機中', starting: '起動中', ready: '準備完了', monitoring: 'スピーカー出力中' },
   panels: {
     input: '入力',
-    presets: 'プリセット',
+    presets: 'キャラクター',
     voice: 'ボイス',
     meters: 'メーター',
     safety: 'スピーカー安全性',
   },
   presets: {
-    natural: { label: 'ナチュラル', hint: '素の声を保ちつつ、わずかに空間を加えるバランス設定。' },
-    low: { label: 'ロー', hint: 'ピッチとフォルマントを下げ、深く大きい声に。' },
-    bright: { label: 'ブライト', hint: 'ピッチとフォルマントを上げ、小さく明るい声に。' },
-    robot: { label: 'ロボット', hint: '強いリングモジュレーションでボコーダー風のロボット声に。' },
-    room: { label: 'ルーム', hint: '自然な声に小さな部屋のアンビエンスを加える。' },
-    hall: { label: 'ホール', hint: '長いホールの反射で、広く遠い空間の声に。' },
+    'neutral-monitor': {
+      label: 'ニュートラルモニター',
+      hint: 'チェーンをほぼ通さない素通しモニター。自分の声をそのまま確認できます。',
+    },
+    'bright-idol': {
+      label: 'ブライトアイドル',
+      hint: 'ピッチとフォルマントを上げ、小さく明るい洗練されたリードボイスに。',
+    },
+    'soft-whisper': {
+      label: 'ソフトウィスパー',
+      hint: '軽く持ち上げつつ鼻声感を抑え、親密で息感のあるキャラクターに。',
+    },
+    'deep-narrator': {
+      label: 'ディープナレーター',
+      hint: 'ピッチとフォルマントを下げ、大きく重みのある語り手の声に。',
+    },
+    'robot-mascot': {
+      label: 'ロボットマスコット',
+      hint: '高めのリチューンと明るく鼻にかかったフォルマントで陽気なマスコットロボに。',
+    },
+    'dark-villain': {
+      label: 'ダークヴィラン',
+      hint: '大きく下げつつ胸鳴りを厚くし、威圧的なトーンに。',
+    },
   },
   actions: {
     start: 'エンジン開始',
@@ -158,9 +184,8 @@ export const jaCopy: typeof enCopy = {
   controls: {
     pitch: 'ピッチ',
     formant: 'フォルマント',
+    brightness: 'ブライトネス',
     wet: 'Wet/Dry',
-    robot: 'ロボット',
-    reverb: 'アンビエンス',
     output: '出力',
     bypass: 'バイパス',
   },
@@ -190,7 +215,7 @@ export const jaCopy: typeof enCopy = {
       pitch: {
         title: 'ピッチシフト',
         body: '速度を変えずに声を半音単位で上下させます。12 st が 1 オクターブです。',
-        tip: '±2 st 程度なら自然に保てます。大きく動かすと効果音的になります。フォルマントと組み合わせると自然さを保てます。',
+        tip: '選んだキャラクターに重ねて効きます。±2 st 程度なら自然で、フォルマントと組み合わせると説得力が増します。',
         default: '0 st',
       },
       formant: {
@@ -199,33 +224,27 @@ export const jaCopy: typeof enCopy = {
         tip: '1 より下で大きく低く、上で小さく明るく聞こえます。ピッチと逆方向に動かすと自然なシフトになります。',
         default: '1.00',
       },
+      brightness: {
+        title: 'ブライトネス',
+        body: '再ピッチせずに、フォルマントのバランスを暗め（−）／明るめ（＋）へ傾けます。',
+        tip: 'プラスで空気感のある前に出る声、マイナスで暖かく胸鳴りの多いトーンになります。',
+        default: '0.10',
+      },
       wet: {
         title: 'Wet / Dry',
-        body: '処理後（Wet）の信号と、未処理（Dry）の入力とのバランスです。',
-        tip: 'エフェクトが強いときは Dry を混ぜると明瞭度を保てます。',
-        default: '55%',
-      },
-      robot: {
-        title: 'ロボット',
-        body: '声を固定ピッチのブザーに乗せ、ボコーダーのようなロボット声にします。',
-        tip: '上げるとはっきりロボット化し、低めにすると金属的な質感を少し加える程度になります。',
-        default: '0%',
-      },
-      reverb: {
-        title: '空間（アンビエンス）',
-        body: '部屋の反射をシミュレートし、ドライではなく空間の中にいる声にします。',
-        tip: '少量で奥行きが出ます。かけすぎると子音がにじみ、声が後ろに下がります。',
-        default: '15%',
+        body: 'ネイティブチェーン内での、処理後（Wet）と未処理（Dry）入力とのバランスです。',
+        tip: 'キャラクターが極端なときは Dry を混ぜると明瞭度を保てます。',
+        default: '100%',
       },
       output: {
         title: '出力ゲイン',
         body: 'スピーカー出力前に加える最終レベル（ユニティに対する割合）です。',
         tip: '出力メーターが上限に当たるなら下げてください。大音量のスピーカー出力はハウリングの原因になります。',
-        default: '70%',
+        default: '85%',
       },
       bypass: {
         title: 'バイパス',
-        body: 'すべてのエフェクトを飛ばし、ドライのマイク音をそのまま通します。',
+        body: 'ボイスチェンジャーチェーンを飛ばし、ドライのマイク音をそのまま通します。',
         tip: '切り替えて、処理後の声と素の入力を A/B 比較できます。',
       },
       inputPeak: {
@@ -246,12 +265,12 @@ export const jaCopy: typeof enCopy = {
       outputRms: {
         title: '出力 RMS',
         body: 'スピーカーへ送る処理後の平均エネルギー（dBFS）です。',
-        tip: '入力 RMS と比べると、エフェクトが体感レベルをどれだけ変えたか分かります。',
+        tip: '入力 RMS と比べると、キャラクターが体感レベルをどれだけ変えたか分かります。',
       },
       latency: {
         title: 'レイテンシ',
         body: 'マイク入力からスピーカー出力までの往復遅延（ミリ秒）です。',
-        tip: 'ライブ出力では小さいほど有利です。ブラウザと端末のバッファが下限を決めます。',
+        tip: 'ライブ出力では小さいほど有利です。リチューンのグレインと端末のバッファが下限を決めます。',
       },
     },
   },

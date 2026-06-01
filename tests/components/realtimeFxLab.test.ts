@@ -22,62 +22,15 @@ vi.mock('@/wasm/index.js', () => ({
 
 vi.mock('@/composables/useRealtimeFx', async () => {
   const { ref } = await vi.importActual<typeof import('vue')>('vue');
-  const FX_PRESETS = {
-    natural: {
-      pitchSemitones: 0,
-      formant: 1,
-      wet: 0.72,
-      robot: 0,
-      reverb: 0.08,
-      outputGain: 0.74,
-      bypass: false,
-    },
-    low: {
-      pitchSemitones: -7,
-      formant: 0.7,
-      wet: 0.9,
-      robot: 0,
-      reverb: 0.1,
-      outputGain: 0.72,
-      bypass: false,
-    },
-    bright: {
-      pitchSemitones: 6,
-      formant: 1.45,
-      wet: 0.88,
-      robot: 0,
-      reverb: 0.08,
-      outputGain: 0.68,
-      bypass: false,
-    },
-    robot: {
-      pitchSemitones: -1,
-      formant: 0.92,
-      wet: 0.92,
-      robot: 0.9,
-      reverb: 0.16,
-      outputGain: 0.62,
-      bypass: false,
-    },
-    room: {
-      pitchSemitones: 0,
-      formant: 1,
-      wet: 0.82,
-      robot: 0,
-      reverb: 0.55,
-      outputGain: 0.68,
-      bypass: false,
-    },
-    hall: {
-      pitchSemitones: 0,
-      formant: 1,
-      wet: 0.86,
-      robot: 0,
-      reverb: 0.9,
-      outputGain: 0.58,
-      bypass: false,
-    },
+  const VOICE_PRESET_MACROS = {
+    'neutral-monitor': { pitchSemitones: 0, formant: 1.0, brightness: 0.1, wet: 1 },
+    'bright-idol': { pitchSemitones: 4, formant: 1.18, brightness: 0.7, wet: 1 },
+    'soft-whisper': { pitchSemitones: 2, formant: 1.1, brightness: 0.25, wet: 1 },
+    'deep-narrator': { pitchSemitones: -5, formant: 0.84, brightness: -0.25, wet: 1 },
+    'robot-mascot': { pitchSemitones: 7, formant: 1.3, brightness: 0.75, wet: 1 },
+    'dark-villain': { pitchSemitones: -9, formant: 0.72, brightness: -0.7, wet: 1 },
   };
+  const VOICE_PRESET_ORDER = Object.keys(VOICE_PRESET_MACROS);
   const ready = ref(false);
   const monitoring = ref(false);
   const error = ref<string | null>(null);
@@ -85,8 +38,10 @@ vi.mock('@/composables/useRealtimeFx', async () => {
   const meter = ref({ inputPeak: 0, outputPeak: 0, inputRms: 0, outputRms: 0 });
   fxMock.state = { ready, monitoring, error, latencyMs, meter };
   return {
-    FX_PRESETS,
-    isPresetId: (value: unknown) => typeof value === 'string' && value in FX_PRESETS,
+    VOICE_PRESET_MACROS,
+    VOICE_PRESET_ORDER,
+    isVoicePresetId: (value: unknown) =>
+      typeof value === 'string' && Object.hasOwn(VOICE_PRESET_MACROS, value),
     useRealtimeFx: () => ({
       ready,
       monitoring,
@@ -122,33 +77,35 @@ describe('RealtimeFxLab', () => {
   });
 
   it('restores a persisted preset, applies it and persists later preset choices', async () => {
-    localStorage.setItem('libsonare:fx:preset', 'hall');
+    localStorage.setItem('libsonare:fx:preset', 'dark-villain');
     const wrapper = mount(RealtimeFxLab);
 
     await nextTick();
-    expect(wrapper.findAll('.rt-preset--active').map((button) => button.text())).toEqual(['Hall']);
+    expect(wrapper.findAll('.rt-preset--active').map((button) => button.text())).toEqual([
+      'Dark Villain',
+    ]);
     expect(fxMock.setParams).toHaveBeenLastCalledWith({
-      pitchSemitones: 0,
-      formant: 1,
-      wet: 0.86,
-      robot: 0,
-      reverb: 0.9,
-      outputGain: 0.58,
+      preset: 'dark-villain',
+      pitchSemitones: -9,
+      formant: 0.72,
+      brightness: -0.7,
+      wet: 1,
+      outputGain: 0.85,
       bypass: false,
     });
 
     await wrapper
       .findAll('.rt-preset')
-      .find((button) => button.text() === 'Robot')!
+      .find((button) => button.text() === 'Robot Mascot')!
       .trigger('click');
-    expect(localStorage.getItem('libsonare:fx:preset')).toBe('robot');
+    expect(localStorage.getItem('libsonare:fx:preset')).toBe('robot-mascot');
     expect(fxMock.setParams).toHaveBeenLastCalledWith({
-      pitchSemitones: -1,
-      formant: 0.92,
-      wet: 0.92,
-      robot: 0.9,
-      reverb: 0.16,
-      outputGain: 0.62,
+      preset: 'robot-mascot',
+      pitchSemitones: 7,
+      formant: 1.3,
+      brightness: 0.75,
+      wet: 1,
+      outputGain: 0.85,
       bypass: false,
     });
 
@@ -205,14 +162,17 @@ describe('RealtimeFxLab', () => {
       }),
     );
 
+    // Selecting a character preset sets the four voice macros but leaves the
+    // bypass A/B toggle untouched (it stays on from the step above).
     await wrapper
       .findAll('.rt-preset')
-      .find((button) => button.text() === 'Natural')!
+      .find((button) => button.text() === 'Neutral Monitor')!
       .trigger('click');
     expect(fxMock.setParams).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        preset: 'neutral-monitor',
         pitchSemitones: 0,
-        bypass: false,
+        bypass: true,
       }),
     );
 
@@ -240,7 +200,7 @@ describe('RealtimeFxLab', () => {
     const wrapper = mount(RealtimeFxLab);
 
     expect(wrapper.findAll('.rt-preset--active').map((button) => button.text())).toEqual([
-      'Natural',
+      'Neutral Monitor',
     ]);
     expect(fxMock.setParams).not.toHaveBeenCalled();
 

@@ -213,11 +213,37 @@ describe('MasteringInsights', () => {
           { label: 'Crest', value: '9.0 dB' },
         ],
         suggestions: ['Lower the limiter ceiling', 'Narrow the low end'],
+        canApply: true,
+        qualityTargetLufs: -17.5,
         preview: [
-          { name: 'Spotify', normalizationGainDb: -2.5, ceilingRisk: true },
-          { name: 'YouTube', normalizationGainDb: 1.2, ceilingRisk: false },
-          { name: 'Apple', normalizationGainDb: 0, ceilingRisk: false },
-          { name: 'Broken', normalizationGainDb: Number.NaN, ceilingRisk: false },
+          {
+            name: 'Spotify',
+            normalizationGainDb: -2.5,
+            ceilingRisk: true,
+            safeCeilingDb: -2.2,
+            currentCeilingDb: -1,
+          },
+          {
+            name: 'YouTube',
+            normalizationGainDb: 1.2,
+            ceilingRisk: false,
+            safeCeilingDb: -2.2,
+            currentCeilingDb: -2.5,
+          },
+          {
+            name: 'Apple',
+            normalizationGainDb: 0,
+            ceilingRisk: false,
+            safeCeilingDb: -1,
+            currentCeilingDb: -1,
+          },
+          {
+            name: 'Broken',
+            normalizationGainDb: Number.NaN,
+            ceilingRisk: false,
+            safeCeilingDb: Number.NaN,
+            currentCeilingDb: Number.NaN,
+          },
         ],
       },
     });
@@ -229,9 +255,20 @@ describe('MasteringInsights', () => {
     expect(wrapper.text()).toContain('+1.2 dB');
     expect(wrapper.text()).toContain('0.0 dB');
     expect(wrapper.text()).toContain('-');
+    expect(wrapper.text()).toContain('Set ceiling <= -2.2 dBTP');
+    expect(wrapper.text()).toContain('Quality guard: rendering at -17.5 LUFS');
     expect(wrapper.find('.master-insights__platform--risk').exists()).toBe(true);
 
-    await wrapper.find('.master-insights__refresh').trigger('click');
+    await wrapper
+      .findAll('.master-insights__button')
+      .find((button) => button.text() === 'Apply')!
+      .trigger('click');
+    expect(wrapper.emitted('apply')).toHaveLength(1);
+
+    await wrapper
+      .findAll('.master-insights__button')
+      .find((button) => button.text() === 'Refresh')!
+      .trigger('click');
     expect(wrapper.emitted('refresh')).toHaveLength(1);
   });
 
@@ -246,10 +283,41 @@ describe('MasteringInsights', () => {
       },
     });
 
-    expect(wrapper.find('.master-insights__refresh').attributes('disabled')).toBeDefined();
+    expect(
+      wrapper
+        .findAll('.master-insights__button')
+        .every((button) => button.attributes('disabled') !== undefined),
+    ).toBe(true);
     expect(wrapper.findAll('.master-insights__empty')).toHaveLength(3);
 
-    await wrapper.find('.master-insights__refresh').trigger('click');
+    await wrapper
+      .findAll('.master-insights__button')
+      .find((button) => button.text() === 'Refresh')!
+      .trigger('click');
     expect(wrapper.emitted('refresh')).toBeUndefined();
+  });
+
+  it('localizes known assistant suggestion text in Japanese', () => {
+    lang.value = 'ja';
+    const wrapper = mount(MasteringInsights, {
+      props: {
+        analyzing: false,
+        hasReport: true,
+        profileItems: [],
+        suggestions: [
+          'base preset selected from top genre candidate: edm',
+          'target loudness and ceiling applied from AssistantConfig',
+          'bass-heavy fast material gets mild tilt and tape drive',
+          'transient shaper enabled for dense attacks',
+        ],
+        preview: [],
+      },
+    });
+
+    expect(wrapper.text()).toContain('最上位ジャンル候補からベースプリセットを選択: edm');
+    expect(wrapper.text()).toContain('目標ラウドネスとシーリングをアシスタント設定から適用');
+    expect(wrapper.text()).toContain('低域が強く速い素材のため、軽い Tilt とテープドライブを適用');
+    expect(wrapper.text()).toContain('アタックが密なため、トランジェントシェイパーを有効化');
+    lang.value = 'en';
   });
 });

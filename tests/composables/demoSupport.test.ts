@@ -4,7 +4,7 @@ import { defineComponent, nextTick, ref } from 'vue';
 import { useAudioPlayer } from '@/composables/useAudioPlayer';
 import { useMasteringInsights } from '@/composables/useMasteringInsights';
 import { useMasteringModeUrlSync } from '@/composables/useMasteringModeUrlSync';
-import { FX_PRESETS, useRealtimeFx } from '@/composables/useRealtimeFx';
+import { useRealtimeFx } from '@/composables/useRealtimeFx';
 import { useRealtimeMixer } from '@/composables/useRealtimeMixer';
 import { useWaveform } from '@/composables/useWaveform';
 
@@ -78,13 +78,56 @@ describe('useMasteringInsights', () => {
       'Add air',
     ]);
     expect(insights.insightPreview.value).toEqual([
-      { name: 'Spotify', normalizationGainDb: -1.5, ceilingRisk: false },
-      { name: '-', normalizationGainDb: Number.NaN, ceilingRisk: true },
+      {
+        name: 'Spotify',
+        normalizationGainDb: -1.5,
+        ceilingRisk: false,
+        safeCeilingDb: 0.5,
+        currentCeilingDb: Number.NaN,
+      },
+      {
+        name: '-',
+        normalizationGainDb: Number.NaN,
+        ceilingRisk: true,
+        safeCeilingDb: Number.NaN,
+        currentCeilingDb: Number.NaN,
+      },
     ]);
 
     insights.resetInsights();
     expect(insights.insightReport.value).toBeNull();
     expect(insights.isAnalyzingInsights.value).toBe(false);
+  });
+
+  it('recomputes ceiling risk from the current limiter ceiling', async () => {
+    const source = ref({ left: new Float32Array([0]), right: new Float32Array([0]) });
+    const currentCeilingDb = ref(-1);
+    const mastering = {
+      source,
+      analyzeSource: vi.fn(async () => ({
+        profile: {},
+        suggestions: { explanation: [] },
+        streamingPreview: {
+          platforms: [{ name: 'YouTube', normalizationGainDb: 1.2, ceilingRisk: true }],
+        },
+      })),
+    } as any;
+
+    const insights = useMasteringInsights(mastering, currentCeilingDb);
+    await insights.analyzeSourceInsights();
+
+    expect(insights.insightPreview.value[0]).toMatchObject({
+      ceilingRisk: true,
+      safeCeilingDb: -2.2,
+      currentCeilingDb: -1,
+    });
+
+    currentCeilingDb.value = -2.5;
+    expect(insights.insightPreview.value[0]).toMatchObject({
+      ceilingRisk: false,
+      safeCeilingDb: -2.2,
+      currentCeilingDb: -2.5,
+    });
   });
 
   it('ignores missing sources and stale async insight results', async () => {
@@ -573,17 +616,31 @@ describe('useRealtimeFx', () => {
       expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
-      expect(node.name).toBe('libsonare-fx');
+      expect(node.name).toBe('libsonare-voice');
       expect(silentGain.gain.value).toBe(0);
       expect(fx.ready.value).toBe(true);
-      expect(fx.latencyMs.value).toBe(56);
+
+      // Latency is derived from the native chain's reported latency on `ready`.
+      node.emit({ type: 'ready', latencySamples: 2232 });
+      expect(fx.latencyMs.value).toBe(
+        Math.round((2232 / context.sampleRate + context.baseLatency) * 1000),
+      );
 
       await expect(fx.start()).resolves.toBe(true);
       expect(FxAudioContextMock.instances).toHaveLength(1);
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
 
-      fx.setParams(FX_PRESETS.robot);
-      expect(node.port.messages).toContainEqual({ type: 'params', params: FX_PRESETS.robot });
+      const params = {
+        preset: 'robot-mascot',
+        pitchSemitones: 7,
+        formant: 1.3,
+        brightness: 0.75,
+        wet: 1,
+        outputGain: 0.85,
+        bypass: false,
+      } as const;
+      fx.setParams(params);
+      expect(node.port.messages).toContainEqual({ type: 'params', params });
 
       node.emit({ type: 'meter', inputPeak: 0.5, outputPeak: 0.25, inputRms: 0.2, outputRms: 0.1 });
       expect(fx.meter.value).toMatchObject({ inputPeak: 0.5, outputPeak: 0.25 });

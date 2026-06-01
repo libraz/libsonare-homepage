@@ -12,6 +12,7 @@ By the end of this page you should be able to:
 
 - distinguish analysis APIs from editing APIs that actually rewrite the signal;
 - choose time stretch, pitch shift, pitch correction, note stretch, or voice change by musical intent;
+- choose the offline `voiceChange(...)` helper versus the block-safe realtime voice changer;
 - convert between seconds, samples, semitones, and MIDI notes without guessing;
 - understand why large pitch/formant moves create artifacts and how to keep edits conservative.
 
@@ -24,6 +25,7 @@ By the end of this page you should be able to:
 | Nudge a vocal note toward a target note | Pitch correction | You must know or estimate the current pitch first |
 | Hold or shorten one note region | Note stretch | Region positions are sample offsets, not seconds; `stretchRatio > 1` lengthens the region |
 | Change vocal character | Voice change | Pitch changes the note; formant changes the perceived body or character of the voice |
+| Process live voice blocks with presets | Realtime voice changer | Use this for AudioWorklet, monitoring, or chunked processing where DSP state must continue across blocks |
 
 ::: details What is a formant?
 A formant is a peak of acoustic energy at a particular frequency range, created by the resonances of the vocal tract. Formants shape the vowel sound and the perceived size or character of a voice, *independent* of the pitch (the note being sung). That is why `voiceChange` separates the two: lowering the formant factor makes a voice sound larger and darker, raising it makes it smaller and brighter, while the pitch stays where you set it.
@@ -38,6 +40,8 @@ A formant is a peak of acoustic energy at a particular frequency range, created 
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | Stretch only a note region | `noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio)` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | Shift pitch and formants independently | `voiceChange(samples, sampleRate, pitchSemitones, formantFactor)` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
+| Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
+| One-shot realtime voice preset render | Node native: `voiceChangeRealtime(samples, sampleRate, preset)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
 ## Usage
 
@@ -120,6 +124,49 @@ const heldNote = noteStretch(vocal, sampleRate, onsetSample, offsetSample, 1.25)
 | `1.25` | Make the region 25% longer |
 | `1.0` | Keep the same length |
 | `0.8` | Make the region 20% shorter |
+
+### Offline `voiceChange(...)` vs `RealtimeVoiceChanger`
+
+`voiceChange(...)` is the simple offline helper for a decoded mono clip: pass semitone and formant values, get a processed buffer back.
+
+`RealtimeVoiceChanger` is the stateful preset chain used for live or chunked voice processing. It combines retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages. Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`.
+
+Use the realtime class when you process repeated blocks and need continuity across calls. In WASM, call `prepare(...)` and `delete()` yourself. In Python, use the context manager or `close()`.
+
+::: code-group
+
+```typescript [Browser]
+import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
+
+await init();
+
+const changer = new RealtimeVoiceChanger('bright-idol');
+changer.prepare(48000, 128, 1);
+
+try {
+  const out = changer.processMono(inputBlock);
+  changer.setConfig('soft-whisper');
+  console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), out);
+} finally {
+  changer.delete();
+}
+```
+
+```python [Python]
+import libsonare as sonare
+
+with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
+    out = changer.process_mono(input_block)
+    changer.set_config("soft-whisper")
+    print(sonare.realtime_voice_changer_preset_names(), changer.latency_samples())
+```
+
+```bash [CLI]
+sonare voice-presets --json
+sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
+```
+
+:::
 
 ### Using the `Audio` wrapper
 

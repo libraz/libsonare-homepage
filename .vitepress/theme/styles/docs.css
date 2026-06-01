@@ -304,7 +304,11 @@ html[lang='ja'] .vp-doc th {
   background: color-mix(in srgb, var(--cb-accent) 7%, transparent);
 }
 
-.vp-doc .custom-block.tip { --cb-accent: var(--cb-tip); }
+.vp-doc .custom-block.tip,
+.vp-doc .custom-block.success {
+  --cb-accent: var(--cb-tip);
+}
+
 .vp-doc .custom-block.info { --cb-accent: var(--cb-info); }
 .vp-doc .custom-block.warning { --cb-accent: var(--cb-warning); }
 .vp-doc .custom-block.danger { --cb-accent: var(--cb-danger); }
@@ -332,8 +336,29 @@ html[lang='ja'] .vp-doc th {
 }
 
 .vp-doc .custom-block p {
+  font-size: 0.93rem;
   margin: 0.4rem 0;
-  line-height: 1.65;
+  line-height: 1.6;
+}
+
+.vp-doc .custom-block li {
+  font-size: 0.93rem;
+  line-height: 1.6;
+}
+
+.vp-doc .custom-block ul,
+.vp-doc .custom-block ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+
+.vp-doc .custom-block li + li {
+  margin-top: 0.25rem;
+}
+
+.vp-doc .custom-block p code,
+.vp-doc .custom-block li code {
+  font-size: 0.86em;
 }
 
 .vp-doc .custom-block p:first-of-type {

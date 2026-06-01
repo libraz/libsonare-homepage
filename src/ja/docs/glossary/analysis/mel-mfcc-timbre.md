@@ -39,7 +39,16 @@ MFCC は、音そのものを再生するためのデータではなく、分類
 これらは安価な明るさ／ノイズ性の代理指標で、UI メーター、しきい値、MFCC ベクトル全体までは要らない簡易記述子に便利です。
 
 ::: details libsonare がこれらをどう計算するか
-`MelSpectrogram` はメルフィルタバンクを STFT パワーに適用してメルスペクトログラムを作り、対数圧縮と DCT 相当の処理で MFCC を導きます。`MelConfig` は `n_mels = 128`、`fmin`／`fmax`（0 は sr/2）、`n_fft = 2048`／`hop_length = 512`、Hann 窓、Slaney 正規化（`htk = false` で Slaney 式）を公開し、リファレンス比較に足る程度に librosa の規約に従っています。スペクトル重心と平坦度はフレームごとに振幅スペクトルから直接計算され、`TimbreAnalyzer` などの上位記述子に再利用されます。メルと MFCC はプレビュー用に近似音声へ逆変換することもできます（逆変換特徴量を参照）。
+`MelSpectrogram` はメルフィルタバンクを STFT パワーに適用してメルスペクトログラムを作り、対数圧縮と DCT 相当の処理で MFCC を導きます。
+
+| 項目 | 内容 |
+|------|------|
+| メル設定 | `n_mels = 128`、`fmin`／`fmax`（0 は sr/2） |
+| 解析窓 | `n_fft = 2048`／`hop_length = 512`、Hann 窓 |
+| 正規化 | `htk = false` で Slaney 式 |
+| 追加指標 | スペクトル重心と平坦度はフレームごとの振幅スペクトルから直接計算 |
+
+これらはリファレンス比較に足る程度に librosa の規約に従っています。スペクトル指標は `TimbreAnalyzer` などの上位記述子に再利用されます。メルと MFCC はプレビュー用に近似音声へ逆変換することもできます（逆変換特徴量を参照）。
 :::
 
 関連: [MIR の全体像](../concepts/mir-overview.md), [スペクトログラムと STFT](./spectrogram-stft.md), [セクションと構成](./section-structure.md), [クロマ特徴量](./chroma-features.md)

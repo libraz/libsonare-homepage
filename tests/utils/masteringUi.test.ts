@@ -6,7 +6,9 @@ import {
   MASTERING_MODULES,
   MASTERING_PARAMETER_GUIDE_SLUGS,
   MASTERING_PLATFORMS,
+  MASTERING_PRESET_TARGETS,
   MASTERING_PRESETS,
+  MASTERING_VENUES,
   moduleControlsFor,
 } from '@/utils/masteringUi';
 
@@ -19,10 +21,25 @@ describe('mastering UI definitions', () => {
       'pop',
       'edm',
       'acoustic',
+      'liveSmall',
+      'liveLarge',
       'hiphop',
       'aiMusic',
       'speech',
     ]);
+
+    expect(new Set(MASTERING_VENUES.map((venue) => venue.id)).size).toBe(MASTERING_VENUES.length);
+    expect(MASTERING_VENUES.map((venue) => venue.id)).toEqual([
+      'studio',
+      'livehouseSmall',
+      'livehouseLarge',
+    ]);
+
+    // Every genre preset must carry a recommended loudness target.
+    for (const preset of MASTERING_PRESETS) {
+      expect(MASTERING_PRESET_TARGETS[preset.id], preset.id).toBeLessThan(0);
+    }
+    expect(MASTERING_PRESET_TARGETS.liveLarge).toBeLessThan(MASTERING_PRESET_TARGETS.pop);
 
     expect(new Set(MASTERING_PLATFORMS.map((platform) => platform.id)).size).toBe(
       MASTERING_PLATFORMS.length,

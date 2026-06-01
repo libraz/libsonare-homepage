@@ -1,12 +1,18 @@
 import { ref, shallowRef } from 'vue';
-import { advancePhase, ringModulate } from '@/utils/dsp';
+import type { VoicePresetId } from '@/wasm/index';
 
 export interface RealtimeFxParams {
+  /** Library character preset that supplies the full DSP chain. */
+  preset: VoicePresetId;
+  /** Retune in semitones, layered over the preset (−12..+12). */
   pitchSemitones: number;
+  /** Formant scale factor, layered over the preset (0.55..1.65). */
   formant: number;
+  /** Formant brightness tilt, layered over the preset (−1..1). */
+  brightness: number;
+  /** Wet/dry mix handed to the native chain (0..1). */
   wet: number;
-  robot: number;
-  reverb: number;
+  /** Post-chain monitor gain applied in the worklet (0..2). */
   outputGain: number;
   bypass: boolean;
 }
@@ -18,128 +24,120 @@ export interface FxMeterState {
   outputRms: number;
 }
 
-export type PresetId = 'natural' | 'low' | 'bright' | 'robot' | 'room' | 'hall';
+/**
+ * Headline macro values for each library character preset, mirrored from
+ * `realtimeVoiceChangerPresetJson(...)` so the UI sliders can show truthful
+ * starting positions before the audio engine (and its WASM) is even running.
+ * The worklet still loads the *full* preset chain by id; these only seed the
+ * four live macros the demo exposes.
+ */
+export interface VoicePresetMacros {
+  pitchSemitones: number;
+  formant: number;
+  brightness: number;
+  wet: number;
+}
 
-export const FX_PRESETS: Record<PresetId, RealtimeFxParams> = {
-  natural: {
-    pitchSemitones: 0,
-    formant: 1,
-    wet: 0.72,
-    robot: 0,
-    reverb: 0.08,
-    outputGain: 0.74,
-    bypass: false,
-  },
-  low: {
-    pitchSemitones: -7,
-    formant: 0.7,
-    wet: 0.9,
-    robot: 0,
-    reverb: 0.1,
-    outputGain: 0.72,
-    bypass: false,
-  },
-  bright: {
-    pitchSemitones: 6,
-    formant: 1.45,
-    wet: 0.88,
-    robot: 0,
-    reverb: 0.08,
-    outputGain: 0.68,
-    bypass: false,
-  },
-  robot: {
-    pitchSemitones: -1,
-    formant: 0.92,
-    wet: 0.92,
-    robot: 0.9,
-    reverb: 0.16,
-    outputGain: 0.62,
-    bypass: false,
-  },
-  room: {
-    pitchSemitones: 0,
-    formant: 1,
-    wet: 0.82,
-    robot: 0,
-    reverb: 0.55,
-    outputGain: 0.68,
-    bypass: false,
-  },
-  hall: {
-    pitchSemitones: 0,
-    formant: 1,
-    wet: 0.86,
-    robot: 0,
-    reverb: 0.9,
-    outputGain: 0.58,
-    bypass: false,
-  },
+export const VOICE_PRESET_ORDER: VoicePresetId[] = [
+  'neutral-monitor',
+  'bright-idol',
+  'soft-whisper',
+  'deep-narrator',
+  'robot-mascot',
+  'dark-villain',
+];
+
+export const VOICE_PRESET_MACROS: Record<VoicePresetId, VoicePresetMacros> = {
+  'neutral-monitor': { pitchSemitones: 0, formant: 1.0, brightness: 0.1, wet: 1 },
+  'bright-idol': { pitchSemitones: 4, formant: 1.18, brightness: 0.7, wet: 1 },
+  'soft-whisper': { pitchSemitones: 2, formant: 1.1, brightness: 0.25, wet: 1 },
+  'deep-narrator': { pitchSemitones: -5, formant: 0.84, brightness: -0.25, wet: 1 },
+  'robot-mascot': { pitchSemitones: 7, formant: 1.3, brightness: 0.75, wet: 1 },
+  'dark-villain': { pitchSemitones: -9, formant: 0.72, brightness: -0.7, wet: 1 },
 };
 
 /** Type guard for persisted/untrusted preset ids (e.g. from localStorage). */
-export function isPresetId(value: unknown): value is PresetId {
-  return typeof value === 'string' && Object.hasOwn(FX_PRESETS, value);
+export function isVoicePresetId(value: unknown): value is VoicePresetId {
+  return typeof value === 'string' && Object.hasOwn(VOICE_PRESET_MACROS, value);
 }
 
-// The native StreamingRetune derives a ~46 ms grain by default. Keep this value
-// in sync with libsonare's StreamingRetuneConfig default for latency reporting.
-const RETUNE_GRAIN_SECONDS = 2048 / 44100;
-const RETUNE_MAX_BLOCK = 2048;
+// AudioWorklet render quantum. The native voice changer is prepared for this
+// block size and its zero-copy heap views are sized to match.
+const MAX_BLOCK = 128;
 
-// AudioWorklet processor source. Runs libsonare's native StreamingRetune in the
-// audio thread with its own heap (SAB-free): static-import the emscripten
-// factory, init from a passed wasm binary, and bypass index.js.
-// Exported for tests/components/realtimeFxWorklet.test.ts.
+// AudioWorklet processor source. Runs libsonare's native RealtimeVoiceChanger in
+// the audio thread with its own heap (SAB-free): static-import the emscripten
+// factory, init from a passed wasm binary, and drive the zero-copy mono path.
+// Exported for tests/composables/realtimeFxWorklet.test.ts.
 export function buildProcessorSource(sonareUrl: string): string {
   return `
 import createModule from '${sonareUrl}';
 
-const RETUNE_MAX_BLOCK = ${RETUNE_MAX_BLOCK};
+const MAX_BLOCK = ${MAX_BLOCK};
 
-// DSP primitives injected from src/utils/dsp.ts (a blob worklet cannot import app
-// modules). They are the single tested source of truth; see tests/utils/dsp.test.ts.
-const ringModulate = ${ringModulate.toString()};
-const advancePhase = ${advancePhase.toString()};
-
-class LibsonareFxProcessor extends AudioWorkletProcessor {
+class LibsonareVoiceProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const o = options.processorOptions || {};
     this.ready = false;
     this.enabled = true;
-    this.pitch = 0; this.formant = 1; this.wet = 0.72;
-    this.robot = 0; this.reverb = 0.08; this.outputGain = 0.74; this.bypass = false;
+    this.preset = 'neutral-monitor';
+    this.pitch = 0; this.formant = 1; this.brightness = 0.1; this.wet = 1;
+    this.outputGain = 0.85; this.bypass = false;
 
-    this.robotPhase = 0; this.rev = 0; this.seq = 0; this.toneLow = 0;
-    this.revA = new Float32Array(1499); this.revB = new Float32Array(2111); this.revC = new Float32Array(2633);
-    this.revAi = 0; this.revBi = 0; this.revCi = 0;
-    this.retune = null;
-    this.monoBlock = new Float32Array(128);
+    this.vc = null; this.base = null;
+    this.seq = 0;
 
     this.port.onmessage = (e) => this.onMessage(e.data);
     createModule({ wasmBinary: o.wasmBinary, locateFile: () => 'sonare.wasm' })
       .then((mod) => {
         this.mod = mod;
-        if (!mod.createStreamingRetune) throw new Error('StreamingRetune is not available in this WASM build');
-        this.retune = mod.createStreamingRetune({ semitones: this.pitch, mix: 1, grainSize: 0 });
-        this.retune.prepare(sampleRate, RETUNE_MAX_BLOCK);
+        if (!mod.createRealtimeVoiceChanger) throw new Error('RealtimeVoiceChanger is not available in this WASM build');
+        this.vc = mod.createRealtimeVoiceChanger(this.preset);
+        this.vc.prepare(sampleRate, MAX_BLOCK, 1);
+        this.loadBase();
+        this.applyConfig();
         this.ready = true;
-        this.port.postMessage({ type: 'ready' });
+        this.port.postMessage({ type: 'ready', latencySamples: this.vc.latencySamples() });
       })
       .catch((err) => this.port.postMessage({ type: 'error', error: String(err) }));
+  }
+
+  loadBase() {
+    try { this.base = JSON.parse(this.vc.configJson()); }
+    catch (e) { this.base = null; }
+  }
+
+  // Layer the four live macros over the preset's full chain (eq, gate,
+  // compressor, de-esser, reverb, limiter all survive untouched).
+  applyConfig() {
+    if (!this.vc) return;
+    if (!this.base) this.loadBase();
+    const dsp = this.base && this.base.dsp;
+    if (!dsp) return;
+    dsp.retune.semitones = this.pitch;
+    dsp.retune.mix = Math.abs(this.pitch) > 0.05 ? 1 : 0;
+    dsp.formant.factor = this.formant;
+    dsp.formant.brightness = this.brightness;
+    dsp.wetMix = this.wet;
+    try { this.vc.setConfig(this.base); } catch (e) { /* keep last good config */ }
   }
 
   onMessage(msg) {
     if (msg.type === 'params') {
       const p = msg.params;
-      this.pitch = p.pitchSemitones; this.formant = p.formant; this.wet = p.wet;
-      this.robot = p.robot; this.reverb = p.reverb; this.outputGain = p.outputGain;
-      this.bypass = Boolean(p.bypass);
-      if (this.retune) this.retune.setConfig({ semitones: this.pitch, mix: 1, grainSize: 0 });
+      if (this.vc && p.preset && p.preset !== this.preset) {
+        this.preset = p.preset;
+        try { this.vc.setConfig(this.preset); this.loadBase(); }
+        catch (e) { /* preset id rejected; keep current */ }
+      }
+      this.pitch = p.pitchSemitones; this.formant = p.formant;
+      this.brightness = p.brightness; this.wet = p.wet;
+      this.outputGain = p.outputGain; this.bypass = Boolean(p.bypass);
+      this.applyConfig();
     } else if (msg.type === 'setEnabled') {
       this.enabled = Boolean(msg.enabled);
-      if (!this.enabled && this.retune) this.retune.reset();
+      if (!this.enabled && this.vc) this.vc.reset();
     }
   }
 
@@ -161,8 +159,8 @@ class LibsonareFxProcessor extends AudioWorkletProcessor {
       for (let i = 0; i < n; i++) {
         const l = inL ? inL[i] : 0;
         const r = inR ? inR[i] : l;
-        const ol = (this.bypass ? l : l) * g;
-        const or = (this.bypass ? r : r) * g;
+        const ol = l * g;
+        const or = r * g;
         outL[i] = ol; outR[i] = or;
         const ain = Math.max(Math.abs(l), Math.abs(r));
         if (ain > inputPeak) inputPeak = ain;
@@ -171,74 +169,45 @@ class LibsonareFxProcessor extends AudioWorkletProcessor {
         if (aout > outputPeak) outputPeak = aout;
         outputSum += (ol * ol + or * or) * 0.5;
       }
-      if (this.retune) this.retune.reset();
+      if (this.vc) this.vc.reset();
       this.publishMeter(n, inputPeak, outputPeak, inputSum, outputSum);
       return true;
     }
 
-    if (this.monoBlock.length !== n) this.monoBlock = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
+    // Acquire fresh heap views each block — a same-size view is cheap, and
+    // re-acquiring keeps us immune to any Emscripten heap growth that would
+    // detach a cached typed-array view.
+    const inView = this.vc.getMonoInputBuffer(MAX_BLOCK);
+    const m = Math.min(n, MAX_BLOCK);
+    for (let i = 0; i < m; i++) {
       const l = inL ? inL[i] : 0;
       const r = inR ? inR[i] : l;
       const mono = (l + r) * 0.5;
-      this.monoBlock[i] = mono;
+      inView[i] = mono;
       const a = Math.abs(mono);
       if (a > inputPeak) inputPeak = a;
       inputSum += mono * mono;
     }
 
-    let retuned = this.monoBlock;
-    if (this.retune && Math.abs(this.pitch) > 0.05) {
-      try { retuned = this.retune.processMono(this.monoBlock); }
-      catch (e) { retuned = this.monoBlock; }
-    }
+    // The native chain (retune + formant + eq/gate/comp/deesser/reverb/limiter)
+    // runs in place on already-on-heap samples — no per-block JS↔C++ copy.
+    this.vc.processPreparedMono(m);
 
-    for (let i = 0; i < n; i++) {
-      const dl = inL ? inL[i] : 0;
-      const dr = inR ? inR[i] : dl;
-      const wetMono = retuned[i] || this.monoBlock[i];
-
-      // Robot ring-mod + color + reverb on the wet (mono) path.
-      this.robotPhase = advancePhase(this.robotPhase, 55, sampleRate);
-      const carrier = Math.sin(this.robotPhase);
-      let proc = ringModulate(wetMono, carrier, this.robot);
-
-      // Extra realtime color makes formant moves obvious even when the retune
-      // stage is mainly shifting pitch.
-      this.toneLow += (proc - this.toneLow) * 0.08;
-      const low = this.toneLow;
-      const high = proc - low;
-      const tilt = Math.max(-1, Math.min(1, (this.formant - 1) * 1.7 + this.pitch / 24));
-      proc = tilt >= 0
-        ? proc + high * tilt * 1.6 - low * tilt * 0.25
-        : proc + low * -tilt * 1.2 - high * -tilt * 0.7;
-
-      // Small feedback-delay reverb. The one-tap ambience was too subtle to read
-      // as reverb on live mic input, so use three short decorrelated delays.
-      const wetA = this.revA[this.revAi];
-      const wetB = this.revB[this.revBi];
-      const wetC = this.revC[this.revCi];
-      const rv = (wetA + wetB + wetC) / 3;
-      const fb = 0.28 + this.reverb * 0.58;
-      const send = proc * (0.18 + this.reverb * 0.55);
-      this.revA[this.revAi] = send + wetB * fb * 0.62;
-      this.revB[this.revBi] = send + wetC * fb * 0.56;
-      this.revC[this.revCi] = send + wetA * fb * 0.5;
-      this.revAi = (this.revAi + 1) % this.revA.length;
-      this.revBi = (this.revBi + 1) % this.revB.length;
-      this.revCi = (this.revCi + 1) % this.revC.length;
-      proc = proc * (1 - this.reverb * 0.22) + rv * this.reverb * 1.35;
-
-      const g = this.outputGain;
-      const ol = (dl * (1 - this.wet) + proc * this.wet) * g;
-      const or = (dr * (1 - this.wet) + proc * this.wet) * g;
+    const outView = this.vc.getMonoOutputBuffer(MAX_BLOCK);
+    const g = this.outputGain;
+    for (let i = 0; i < m; i++) {
+      const wet = outView[i];
+      const ol = wet * g;
+      const or = ol;
       outL[i] = ol; outR[i] = or;
-      const aout = Math.max(Math.abs(ol), Math.abs(or));
+      const aout = Math.abs(ol);
       if (aout > outputPeak) outputPeak = aout;
-      outputSum += (ol * ol + or * or) * 0.5;
+      outputSum += ol * ol;
     }
+    // Fill any tail beyond MAX_BLOCK (defensive; render quantum is 128).
+    for (let i = m; i < n; i++) { outL[i] = 0; outR[i] = 0; }
 
-    this.publishMeter(n, inputPeak, outputPeak, inputSum, outputSum);
+    this.publishMeter(m, inputPeak, outputPeak, inputSum, outputSum);
     return true;
   }
 
@@ -254,7 +223,7 @@ class LibsonareFxProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('libsonare-fx', LibsonareFxProcessor);
+registerProcessor('libsonare-voice', LibsonareVoiceProcessor);
 `;
 }
 
@@ -293,7 +262,7 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
       await ctx.audioWorklet.addModule(moduleUrl);
       if (!wasmBinary) wasmBinary = await (await fetch(wasmUrl)).arrayBuffer();
 
-      node = new AudioWorkletNode(ctx, 'libsonare-fx', {
+      node = new AudioWorkletNode(ctx, 'libsonare-voice', {
         numberOfInputs: 1,
         numberOfOutputs: 1,
         outputChannelCount: [2],
@@ -310,12 +279,14 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
       silentGain.connect(ctx.destination);
       node.port.onmessage = (event) => {
         const msg = event.data;
-        if (msg?.type === 'ready') ready.value = true;
-        else if (msg?.type === 'meter') meter.value = msg;
+        if (msg?.type === 'ready') {
+          ready.value = true;
+          // Native processing latency (grain warmup) plus the device output buffer.
+          const procSeconds = (msg.latencySamples || 0) / ctx.sampleRate;
+          latencyMs.value = Math.round((procSeconds + (ctx.baseLatency || 0)) * 1000);
+        } else if (msg?.type === 'meter') meter.value = msg;
         else if (msg?.type === 'error') error.value = msg.error;
       };
-      // Processing latency (OLA warmup) plus the device output buffer.
-      latencyMs.value = Math.round((RETUNE_GRAIN_SECONDS + (ctx.baseLatency || 0)) * 1000);
       ready.value = true;
       return true;
     } catch (err) {

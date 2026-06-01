@@ -1036,6 +1036,20 @@ The librosa-parity helpers are also exposed through the C API:
 | dB conversions | `sonare_power_to_db`, `sonare_amplitude_to_db`, `sonare_db_to_power`, `sonare_db_to_amplitude` |
 | Time/frame conversion | `sonare_frames_to_samples`, `sonare_samples_to_frames` |
 
+The current C ABI is split across focused headers. Use this index when a symbol is not in the compact examples above:
+
+| Header | Surface |
+|--------|---------|
+| `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, error/version/FFmpeg helpers |
+| `sonare_c_features.h` | Focused analysis, STFT/mel/MFCC/chroma, inverse features, CQT/VQT, pitch, tempogram/PLP, LUFS |
+| `sonare_c_effects.h` | HPSS/editing DSP, realtime voice changer, realtime engine, decomposition/remix helpers |
+| `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum |
+| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors, assistant/profile/preview JSON, streaming mastering chain, streaming EQ, repair/dynamics one-shot helpers |
+| `sonare_c_mixing.h` | Channel strip controls, sends, buses, VCA groups, automation, meters, goniometer, scene presets |
+| `sonare_c_streaming.h` | `StreamAnalyzer`, quantized frame reads, progressive stats, tuning/normalization controls |
+
+Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
+
 ## Error Handling
 
 ```cpp
