@@ -131,13 +131,43 @@ const isLouderThanRecommended = computed(
   cursor: pointer;
 }
 
+.platform-option {
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+}
+
+.platform-option:hover {
+  border-color: var(--demo-accent);
+  transform: translateY(-2px);
+}
+
+.platform-option:focus-within {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .platform-option--active {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent-subtle);
 }
 
+/* Visually hidden but still keyboard-focusable so the label gets :focus-within. */
 .platform-option input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .platform-option {
+    transition: none;
+  }
 }
 
 .platform-option span {

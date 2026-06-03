@@ -3,7 +3,11 @@
 このページは、libsonare のドキュメントを初学者向けに読むための道案内です。DSP、MIR、WebAssembly、マスタリング用語を最初から理解している必要はありません。
 
 ::: info 最初に出る略語
-**DSP** は音を数値として測定・加工する信号処理、**MIR** は BPM・キー・コードなどを音楽から読み取る処理です。**WASM / WebAssembly** はブラウザで使う実行形式、**API** はアプリから呼ぶ関数やクラス、**CLI** はターミナルで使うコマンドです。ここでは用語を完全に覚えるより、「どの種類のページへ進むか」を選べれば十分です。
+**DSP** は音を数値として測定・加工する信号処理、**MIR** は BPM・キー・コードなどを音楽から読み取る処理です。
+
+**WASM / WebAssembly** はブラウザで使う実行形式、**API** はアプリから呼ぶ関数やクラス、**CLI** はターミナルで使うコマンドです。
+
+ここでは用語を完全に覚えるより、「どの種類のページへ進むか」を選べれば十分です。
 :::
 
 ドキュメントを先頭から順に読む場合は、次の順序で読むと前提が積み上がります。
@@ -24,16 +28,26 @@
 | 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
 | ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md) | [CLI リファレンス](./cli.md) |
 | ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#オーディオエフェクト) |
-| 残響時間、明瞭度、ブラインド音響推定 | [室内音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
 | ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
 | マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
 | ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
 | マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm.md#リアルタイムボイスチェンジャー) |
+| ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
 | メル／MFCC 特徴量をプレビューやデバッグ用に逆変換する | [逆変換特徴量](./inverse-features.md) | [librosa 互換性](./librosa-compatibility.md) |
 | librosa からの移行 | [librosa 互換性](./librosa-compatibility.md) | [機能マップ](./api-surface.md) |
 
 ::: tip 目的別ページの読み方
-「作りたいもの別」の各ページは、最初に判断基準、次に最小コード例、最後に注意点と関連ページを置く方針です。ブラウザ / WASM、Python、CLI の 3 つで同じワークフローを安全に示せる場合は `::: code-group` で併記しています。リアルタイムエンジンや AudioWorklet のように実行環境が WASM / C++ 側に寄る機能では、Python / CLI で同じ API が存在するかのようには書かず、代替となるバッチ API や参照先を明記します。
+「作りたいもの別」の各ページは、同じ順序で読めるようにしています。
+
+1. 最初に判断基準を示す。
+2. 次に最小コード例を示す。
+3. 最後に注意点と関連ページを置く。
+
+ブラウザ / WASM、Python、CLI の 3 つで同じワークフローを安全に示せる場合は、`::: code-group` で併記しています。
+
+リアルタイムエンジンや AudioWorklet のように実行環境が WASM / C++ 側に寄る機能では、Python / CLI に同じライブコールバック API があるかのようには書きません。代替となるバッチ API や参照先を明記します。
+
+ルーム音響には、残響時間、明瞭度、ブラインド推定、等価ルーム推定、RIR 合成、ルームモーフィングが含まれます。
 :::
 
 ## 実装者向けチェックポイント

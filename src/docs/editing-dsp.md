@@ -32,13 +32,17 @@ By the end of this page you should be able to:
 | Process live voice blocks with presets | Realtime voice changer | Use this for AudioWorklet, monitoring, or chunked processing where DSP state must continue across blocks |
 
 ::: details What is a formant?
-A formant is a peak of acoustic energy at a particular frequency range, created by the resonances of the vocal tract. Formants shape the vowel sound and the perceived size or character of a voice, *independent* of the pitch (the note being sung). That is why `voiceChange` separates the two: lowering the formant factor makes a voice sound larger and darker, raising it makes it smaller and brighter, while the pitch stays where you set it.
+A formant is a peak of acoustic energy in a particular frequency range. It is created by resonances of the vocal tract.
+
+Formants shape the vowel sound and the perceived size or character of a voice, *independent* of the pitch (the note being sung).
+
+That is why `voiceChange` separates the two controls. Lowering the formant factor makes a voice sound larger and darker. Raising it makes the voice sound smaller and brighter. The pitch stays where you set it.
 :::
 
 ## Functions
 
-| Task | JavaScript | Python |
-|------|------------|--------|
+| Task | WASM / browser JavaScript | Python |
+|------|---------------------------|--------|
 | Shift the whole signal without changing duration | `pitchShift(samples, sampleRate, semitones)` | `pitch_shift(samples, sample_rate, semitones)` |
 | Time-stretch the whole signal without changing pitch | `timeStretch(samples, sampleRate, rate)` | `time_stretch(samples, sample_rate, rate)` |
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
@@ -46,6 +50,10 @@ A formant is a peak of acoustic energy at a particular frequency range, created 
 | Shift pitch and formants independently | `voiceChange(samples, sampleRate, pitchSemitones, formantFactor)` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
 | Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
 | One-shot realtime voice preset render | Node native: `voiceChangeRealtime(samples, sampleRate, preset)` | `voice_change_realtime(samples, sample_rate, preset)` |
+
+::: tip Node native argument order
+Node native uses `timeStretch(samples, rate, sampleRate?)` and `pitchShift(samples, semitones, sampleRate?)`. The WASM/browser functions above keep `sampleRate` before the edit amount.
+:::
 
 ## Usage
 

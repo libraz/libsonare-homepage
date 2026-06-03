@@ -63,7 +63,11 @@ A goal-first index into the registry below. This is a starting point, not a rule
 | Match a reference track | `match.applyMatchEq`, `match.referenceLoudness` | [Reference Match](./glossary/mastering/reference-match.md) |
 
 ::: details What is parallel compression?
-A normal compressor turns the loud parts down. **Parallel compression** instead mixes the *original* signal with a *heavily compressed* copy of it. The compressed copy lifts the quiet detail, while the untouched copy keeps the natural peaks — so you add density and "glue" without squashing the transients. It is also called New York compression. `dynamics.transientShaper` is the related tool for the opposite goal: exaggerating or softening the attack of each hit.
+A normal compressor turns the loud parts down.
+
+**Parallel compression** mixes the *original* signal with a *heavily compressed* copy. The compressed copy lifts quiet detail, while the original keeps the natural peaks.
+
+Use it when you want density and "glue" without flattening transients. It is also called New York compression. `dynamics.transientShaper` is the related tool for the opposite goal: exaggerating or softening the attack of each hit.
 :::
 
 ## Processor Families In Plain English
@@ -98,15 +102,31 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 | Stereo | `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
 
 ::: warning Repair is classical DSP, by design
-`repair.denoiseClassical`, `repair.dereverbClassical`, and friends use spectral subtraction / MMSE-STSA / LogMMSE with explicit noise estimation — **not** DNN source separation or neural spectral repair. They clean up noise, hum, clicks, and clipping; they do not un-mix a finished track. This keeps the library dependency-free.
+`repair.denoiseClassical`, `repair.dereverbClassical`, and related processors use spectral subtraction / MMSE-STSA / LogMMSE with explicit noise estimation.
+
+They are **not** DNN source separation or neural spectral repair.
+
+- Good for: noise, hum, clicks, clipping, and mild room smear.
+- Not for: unmixing finished tracks or rebuilding missing sources.
+- Design reason: the repair path stays deterministic and dependency-free.
 :::
 
 ::: tip Registry names and chain keys differ
-The named processor registry exposes the one-shot repair processors as `repair.denoiseClassical` and `repair.dereverbClassical`. Full-chain configs use the shorter stage keys `repair.denoise.*` and `repair.dereverb.*` because those keys address the repair slots inside `MasteringChainConfig`. Both names point to the same classical denoise/dereverb implementations.
+The named processor registry exposes one-shot repair processors as `repair.denoiseClassical` and `repair.dereverbClassical`.
+
+Full-chain configs use shorter stage keys: `repair.denoise.*` and `repair.dereverb.*`. Those keys address the repair slots inside `MasteringChainConfig`.
+
+Both naming styles point to the same classical denoise/dereverb implementations.
 :::
 
 ::: details What is spectral subtraction (MMSE-STSA / LogMMSE)?
-These are classical denoising methods. First the algorithm estimates a **noise profile** from quiet passages (the steady hiss or hum). **Spectral subtraction** then subtracts that estimated noise from each short-time spectrum frame, leaving the signal behind. **MMSE-STSA** and **LogMMSE** are smarter statistical versions that estimate, per frequency bin, how much is signal versus noise before subtracting — which reduces the warbly "musical noise" that naive subtraction leaves. None of them separate instruments; they only attenuate noise.
+These are classical denoising methods.
+
+1. The algorithm estimates a **noise profile** from quiet passages, such as steady hiss or hum.
+2. **Spectral subtraction** subtracts that estimated noise from each short-time spectrum frame.
+3. **MMSE-STSA** and **LogMMSE** are statistical versions that estimate how much of each frequency bin is signal versus noise before subtracting.
+
+This reduces the warbly "musical noise" that naive subtraction can leave. These methods do not separate instruments; they only attenuate noise.
 :::
 
 ## Pair processors and analyses
@@ -135,8 +155,10 @@ Mixer scene inserts use the same processor factory as mastering inserts, but the
 | `effects.reverb.fdn` | Feedback delay network reverb |
 | `effects.reverb.velvet` | Velvet-noise style reverb |
 | `effects.reverb.convolution` | Convolution reverb; can use an impulse response in native insert creation paths |
+| `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
+| `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
 
-These insert IDs are available only in builds with `SONARE_HAVE_FX`.
+These insert IDs are available only in builds with `SONARE_HAVE_FX`. The geometric room inserts also require `BUILD_ACOUSTIC_SIM`.
 
 There are a few practical details to know:
 
@@ -213,7 +235,15 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 :::
 
 :::: details Config style differs between chain entry points
-The registry is intentionally string-based so C, Python, Node, WASM, and CLI callers share processor identifiers. When you assemble a *chain* rather than a single processor, the config style depends on the entry point: WASM `masteringChain(...)` takes **nested** config objects, while `masterAudio(...)` (and the Python/Node equivalents) take **flat dot-notation** overrides such as `'loudness.targetLufs'`. The [Mastering Assistant](./mastering-assistant.md)'s `chainConfig.params` uses the flat form, so its output drops straight into `masterAudio`.
+The registry is string-based so C, Python, Node, WASM, and CLI callers share processor identifiers.
+
+When you assemble a *chain* rather than a single processor, the config style depends on the entry point:
+
+| Entry point | Config style |
+|-------------|--------------|
+| WASM `masteringChain(...)` | Nested config objects |
+| `masterAudio(...)` and Python/Node equivalents | Flat dot-notation overrides such as `'loudness.targetLufs'` |
+| [Mastering Assistant](./mastering-assistant.md) `chainConfig.params` | Flat form, ready for `masterAudio` |
 
 Repair chain keys follow the chain slots, not the one-shot registry names: use `repair.denoise.*` / `repair.dereverb.*` in flat overrides or the nested `repair: { denoise: ..., dereverb: ... }` shape in `masteringChain(...)`.
 ::::

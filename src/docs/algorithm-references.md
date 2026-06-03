@@ -21,6 +21,10 @@ By the end of this page you should be able to:
 
 ## Source-Backed References
 
+::: info Room-acoustic terms used below
+**RIR** means room impulse response. **Equivalent-room estimation** fits a useful room model from audio rather than recovering exact geometry. **Room morphing** is a creative room effect, not dereverberation.
+:::
+
 | Area | Reference basis | Evidence |
 |------|-----------------|----------|
 | Loudness and true peak | ITU-R BS.1770-4/5, EBU R128, EBU Tech 3342 loudness range | `README.md`, `src/rt/biquad_design.h`, `src/rt/true_peak_filter.h`, `src/metering/lufs.cpp`, `tests/rt/true_peak_filter_test.cpp` |
@@ -33,10 +37,10 @@ By the end of this page you should be able to:
 | Sliding maximum | Lemire sliding max | `README.md`, limiter and true-peak helper usage |
 | Tonnetz | Harte et al. 2006 via `librosa.feature.tonnetz` behavior | `src/feature/tonnetz.h`, `src/feature/tonnetz.cpp`, `tests/librosa/tonnetz_test.cpp` |
 | Pitch tracking | YIN and pYIN; pYIN uses probabilistic pitch candidates and Viterbi decoding | `src/feature/pitch.h`, `tests/librosa/pitch_test.cpp` |
-| Room acoustics | Schroeder-style energy decay curve for impulse responses; RT60, EDT, C50, C80, and D50 metrics; blind RT60 from detected free-decay regions and exponential decay fitting | `src/analysis/acoustic_analyzer.h`, `src/analysis/acoustic_analyzer.cpp`, `tests/analysis/acoustic_analyzer_test.cpp`, `tests/analysis/acoustic_dataset_test.cpp` |
+| Room acoustics | Energy-decay metrics, blind decay fitting, RIR synthesis, room estimation, and room morphing | `src/analysis/acoustic_analyzer.*`, `src/acoustic/*`, `src/analysis/room_estimator.*`, `src/effects/acoustic/room_morph.*`, `tests/acoustic/*`, `tests/effects/room_morph_test.cpp` |
 | Sequence helpers | DTW, Viterbi, discriminative Viterbi, recurrence quantification analysis, mirroring `librosa.sequence` | `src/util/sequence.h`, `src/feature/segment.*`, librosa sequence references |
 | Time stretch and pitch shift | Native spectral stretch, phase-vocoder fallback, pitch shift by time stretch followed by resampling | `src/effects/time_stretch.h`, `src/effects/pitch_shift.h` |
-| Reverb families | Convolution, Dattorro plate, FDN, velvet-noise reverb engines | `README.md`, `src/effects/reverb/*`, `tests/effects/creative_fx_test.cpp` |
+| Reverb families | Convolution, Dattorro plate, FDN, velvet-noise, and geometric room reverb engines | `README.md`, `src/effects/reverb/*`, `src/effects/acoustic/*`, `tests/effects/*` |
 
 ::: details Plain-language gloss of the named algorithms
 This page cites algorithms by name; here is what the less-obvious ones do.
@@ -78,15 +82,22 @@ That means these paths are not DNN restoration, source separation, or interactiv
 |-------------|----------------|
 | `repair.denoiseClassical`, `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.dereverbClassical`, `repair.trimSilence` | Classical or deterministic DSP in the current implementation. |
 
-Room acoustics has two different entry points:
+Room acoustics has five different entry points:
 
 | Entry point | Input | What it does | How to treat the result |
 |-------------|-------|--------------|--------------------------|
 | `analyze_impulse_response` / `analyzeImpulseResponse` | A clap, pop, sweep-derived IR, or other recording where the room response is isolated | Measures the decay curve directly after the impulse | Easier to treat as a measurement |
 | `detect_acoustic` / `detectAcoustic` | Normal music, speech, or environmental audio | Searches for regions where room decay appears to fall naturally, then estimates from them | Treat as a hint and always inspect `confidence` |
+| `estimate_room` / `estimateRoom` | A recording or impulse response | Estimates an equivalent room with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence | Treat as a model fit, not exact geometry |
+| `synthesize_rir` / `synthesizeRir` | Shoebox dimensions plus source/listener placement | Synthesizes a mono RIR | Check `hasError` / `has_error` for invalid geometry |
+| `room_morph` / `roomMorph` | Source recording plus target room geometry | Adds a target-room character after gentle source-tail suppression | Creative effect, not dereverberation |
 
 A **decay curve** shows how quickly energy falls after the sound stops. In impulse-response analysis, that curve is measured directly and RT60/EDT are read from it.
 
 Blind estimation is different because the input is ordinary audio. The algorithm has to decide whether an apparent decay is really room reverberation. Instrument tails, sustained speech, compression, and background noise can all look like decay.
 
-For that reason, `detect_acoustic` / `detectAcoustic` intentionally returns `confidence`. If the input does not expose a clear free-decay region, the result may be unavailable or low confidence. Read low `confidence` as "this recording does not reveal the room clearly enough," not as a firm room measurement.
+`synthesize_rir` / `synthesizeRir` uses image-source early reflections and a deterministic late tail. That implementation detail matters when you compare generated RIRs, but users can usually think of it as "make a repeatable room response from dimensions."
+
+For that reason, `detect_acoustic` / `detectAcoustic` and `estimate_room` / `estimateRoom` intentionally return `confidence`. If the input does not expose a clear free-decay region, the result may be unavailable or low confidence.
+
+Read low `confidence` as "this recording does not reveal the room clearly enough," not as a firm room measurement.

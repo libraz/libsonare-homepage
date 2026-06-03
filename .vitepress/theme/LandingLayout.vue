@@ -76,7 +76,7 @@ const locales = {
     ],
     demoSection: {
       eyebrow: 'Try it locally',
-      heading: 'Five demos. One library.',
+      heading: 'Six demos. One library.',
       subhead:
         'Every demo runs the same Apache-2.0 processors locally in your browser via WebAssembly.',
       viewAll: 'Browse all demos',
@@ -121,7 +121,7 @@ const locales = {
         {
           tag: 'ANALYSIS',
           title: 'Deep MIR analysis for music tools.',
-          body: 'BPM, key, chords with Viterbi/HMM smoothing, beats, downbeats, time signature, sections, timbre, dynamics, YIN/pYIN pitch, tempogram/PLP, NNLS chroma, LUFS, and room-acoustic estimates. Defaults are validated against generated reference values in CI.',
+          body: 'BPM, key, chords with Viterbi/HMM smoothing, beats, downbeats, time signature, sections, timbre, dynamics, YIN/pYIN pitch, tempogram/PLP, NNLS chroma, LUFS, room-acoustic estimates, and geometric room tools. Defaults are validated against generated reference values in CI.',
           link: { label: 'Benchmarks', path: '/docs/benchmarks' },
         },
         {
@@ -177,7 +177,7 @@ const locales = {
     ],
     demoSection: {
       eyebrow: 'ローカルで試す',
-      heading: '5 つのデモ、ひとつのライブラリ。',
+      heading: '6 つのデモ、ひとつのライブラリ。',
       subhead:
         'すべてのデモは、同じ Apache-2.0 のプロセッサを WebAssembly でブラウザ内ローカル実行します。',
       viewAll: 'すべてのデモを見る',
@@ -222,7 +222,7 @@ const locales = {
         {
           tag: 'ANALYSIS',
           title: '音楽ツール向けの深い MIR 解析。',
-          body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、室内音響推定。デフォルト値は CI で生成した参照値と照合しています。',
+          body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、ルーム音響推定。デフォルト値は CI で生成した参照値と照合しています。',
           link: { label: 'ベンチマーク', path: '/docs/benchmarks' },
         },
         {

@@ -91,9 +91,29 @@ const { t } = useI18n();
   text-align: left;
 }
 
+.preset-card {
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+}
+
+.preset-card:hover {
+  border-color: var(--demo-accent);
+  transform: translateY(-2px);
+}
+
+.preset-card:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .preset-card--active {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preset-card {
+    transition: none;
+  }
 }
 
 .preset-card__icon {

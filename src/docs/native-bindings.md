@@ -40,7 +40,11 @@ By the end of this page you should be able to:
 The Node.js binding is a native addon built with **N-API**, providing direct C++ performance without WebAssembly overhead.
 
 ::: details What are N-API and a "native addon"?
-A **native addon** is a compiled C/C++ module that Node loads like a normal package, running real machine code instead of JavaScript or WebAssembly. **N-API** (Node-API) is the stable interface Node provides for building these addons: it shields the addon from V8 engine internals, so one compiled binary keeps working across Node versions without recompiling. The practical upside is native speed and direct file decoding from Node; the cost is that it must be built/installed for your platform rather than running everywhere like the WASM package.
+A **native addon** is a compiled C/C++ module that Node loads like a normal package. It runs real machine code instead of JavaScript or WebAssembly.
+
+**N-API** (Node-API) is the stable interface Node provides for building these addons. It shields the addon from V8 engine internals, so one compiled binary can keep working across Node versions without recompiling.
+
+The practical upside is native speed and direct file decoding from Node. The cost is that the addon must be built or installed for your platform, instead of running everywhere like the WASM package.
 :::
 
 ## Choosing A Node Package
@@ -169,7 +173,7 @@ For persistent mixers, Node native accepts a `StripRef` (`number | string`) for 
 
 ## Audio Wrapper Differences
 
-The WASM `Audio` class is a convenience wrapper for common one-shot helpers.
+The WASM `Audio` class is a convenience wrapper for common one-shot helpers. Focused helpers remain standalone when they are less common or need a different calling shape.
 
 | Available as `Audio` methods | Still standalone in WASM |
 |------------------------------|--------------------------|
@@ -177,14 +181,16 @@ The WASM `Audio` class is a convenience wrapper for common one-shot helpers.
 | HPSS and editing helpers | `analyzeMelody(...)` |
 | Mastering helpers | `analyzeDynamics(...)` |
 | Feature extraction | `analyzeTimbre(...)` |
-| Loudness and resampling | Room-acoustic estimation helpers |
+| Loudness and resampling | Room-acoustic helpers, section/melody/dynamics/timbre helpers |
 
 Node native's `Audio` wrapper is broader because it can call into the native addon directly.
 
 | Capability | Node native | WASM |
 |------------|-------------|------|
-| Extra analysis methods | `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, positional `detectChords(...)` | Use standalone focused helpers where available |
+| Extra `Audio` methods | More focused analysis and room-acoustic methods are available as instance methods | Use standalone focused helpers where available |
 | File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)` only |
+
+Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `estimateRoom(...)`, `synthesizeRir(...)`, `roomMorph(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and positional `detectChords(...)` to `Audio`.
 
 ### StreamingMasteringChain
 
@@ -393,6 +399,9 @@ those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
 | `analyzeMelody(samples, sampleRate?, fmin?, fmax?, frameLength?, hopLength?, threshold?)` | `MelodyResult` | Lead-melody contour (F0 per frame) |
 | `detectAcoustic(samples, sampleRate?, nOctaveBands?, nThirdOctaveSubbands?, minDecayDb?, noiseFloorMarginDb?)` | `AcousticResult` | Room acoustics from a recording (RT60, etc.) |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?)` | `AcousticResult` | Room acoustics from a measured impulse response |
+| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
+| `synthesizeRir(options?)` | `RirResult` | Mono room impulse response from shoebox geometry |
+| `roomMorph(samples, sampleRate, options?)` | `Float32Array` | Offline creative morph toward a target room |
 | `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, momentary, short-term loudness and loudness range (ITU-R BS.1770) |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | Standards-compliant EBU R128 loudness range (LRA) in LU |
@@ -409,7 +418,7 @@ Default sample rates differ by helper family:
 | Helper family | Default `sampleRate` |
 |---------------|----------------------|
 | Music analysis, effects, feature, and loudness helpers | `22050` |
-| `analyzeImpulseResponse` and `detectAcoustic` in the native wrapper | `48000` |
+| `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, and `synthesizeRir` in the native wrapper | `48000` |
 
 Common helpers are also available as `Audio` instance methods, as noted in the `Audio` section.
 
@@ -417,7 +426,11 @@ The tables below document the Node native wrapper. The WASM package uses the sam
 
 ##### Asynchronous variants (Node only)
 
-The Node addon also exposes Promise-returning variants that run the DSP pipeline on a libuv worker thread, so the JS event loop is never blocked. They resolve with the same shape as their synchronous counterparts. These are Node-native-only — the WASM build has no worker-thread equivalent. Progress callbacks are not available on the async path; use the synchronous call with `onProgress`, or run several async calls in parallel.
+The Node addon also exposes Promise-returning variants. They run the DSP pipeline on a libuv worker thread, so the JS event loop is not blocked.
+
+These functions resolve with the same shape as their synchronous counterparts. They are Node-native-only; the WASM build has no worker-thread equivalent.
+
+Progress callbacks are not available on the async path. If you need progress updates, use the synchronous call with `onProgress`. If you only need concurrency, run several async calls in parallel.
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
@@ -433,9 +446,9 @@ The Node addon also exposes Promise-returning variants that run the DSP pipeline
 | `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssWithResidualResult` | HPSS with harmonic, percussive, and residual outputs |
 | `harmonic(samples, sr?)` | `Float32Array` | Extract harmonic component |
 | `percussive(samples, sr?)` | `Float32Array` | Extract percussive component |
-| `timeStretch(samples, sr, rate)` | `Float32Array` | Time-stretch without pitch change |
+| `timeStretch(samples, rate, sr?)` | `Float32Array` | Time-stretch without pitch change |
 | `phaseVocoder(samples, rate, sr?, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
-| `pitchShift(samples, sr, semitones)` | `Float32Array` | Pitch-shift without tempo change |
+| `pitchShift(samples, semitones, sr?)` | `Float32Array` | Pitch-shift without tempo change |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |

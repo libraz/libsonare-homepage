@@ -190,15 +190,26 @@ sonare analyze song.mp3 --json > analysis.json
 
 ### Room Acoustic Metrics
 
-Use `analyzeImpulseResponse()` when you have a measured impulse response. Use
-`detectAcoustic()` for a blind estimate from ordinary program audio. Blind
-estimates are useful for tagging or monitoring, but the confidence field should
-decide how much UI weight to give them.
+Start from the input you have:
+
+| Input or goal | Use |
+|---------------|-----|
+| Measured impulse response | `analyzeImpulseResponse()` |
+| Ordinary music or speech recording | `detectAcoustic()` |
+| Practical room model inferred from audio | `estimateRoom()` |
+| Room dimensions you want to turn into an impulse response | `synthesizeRir()` |
+| Creative effect that pushes audio toward a target room | `roomMorph()` |
+
+::: info RIR and equivalent room
+**RIR** means room impulse response: audio samples that describe how a room reacts to a short sound. An **equivalent room** is a useful inferred model, not a scan of the exact physical room.
+:::
+
+Blind estimates and equivalent-room estimates are useful for tagging or monitoring. Use `confidence` to decide how strongly your UI should present them.
 
 ::: code-group
 
 ```typescript [Browser]
-import { init, analyzeImpulseResponse, detectAcoustic } from '@libraz/libsonare';
+import { init, analyzeImpulseResponse, detectAcoustic, estimateRoom, synthesizeRir, roomMorph } from '@libraz/libsonare';
 
 await init();
 
@@ -209,10 +220,16 @@ console.log(`C80: ${measured.c80.toFixed(1)} dB`);
 const blind = detectAcoustic(samples, sampleRate);
 console.log(`Blind RT60: ${blind.rt60.toFixed(2)} s`);
 console.log(`Confidence: ${(blind.confidence * 100).toFixed(0)}%`);
+
+const estimate = estimateRoom(samples, sampleRate);
+console.log(`Estimated room: ${estimate.length.toFixed(1)} x ${estimate.width.toFixed(1)} x ${estimate.height.toFixed(1)} m`);
+
+const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
+const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
 ```python [Python]
-from libsonare import Audio, analyze_impulse_response
+from libsonare import Audio, analyze_impulse_response, estimate_room, synthesize_rir, room_morph
 
 with Audio.from_file("room-ir.wav") as ir:
     measured = analyze_impulse_response(ir.data, sample_rate=ir.sample_rate)
@@ -222,9 +239,13 @@ print(f"C80: {measured.c80:.1f} dB")
 
 with Audio.from_file("recording.wav") as audio:
     blind = audio.detect_acoustic()
+    estimate = estimate_room(audio.data, audio.sample_rate)
+    rir = synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
+    morphed = room_morph(audio.data, audio.sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 
 print(f"Blind RT60: {blind.rt60:.2f} s")
 print(f"Confidence: {blind.confidence * 100:.0f}%")
+print(f"Estimated room: {estimate.length:.1f} x {estimate.width:.1f} x {estimate.height:.1f} m")
 ```
 
 ```bash [CLI]
@@ -233,6 +254,11 @@ sonare acoustic room-ir.wav --ir --json
 
 # Estimate acoustic parameters from ordinary audio:
 sonare acoustic recording.wav --json
+
+# Estimate, synthesize, or morph a geometric room:
+sonare estimate-room recording.wav --json
+sonare synthesize-rir --length 7 --width 5 --height 3 -o room-ir.wav
+sonare room-morph recording.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.wav
 ```
 
 :::

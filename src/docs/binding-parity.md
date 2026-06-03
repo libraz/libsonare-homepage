@@ -28,7 +28,9 @@ By the end of this page you should be able to:
 
 ## Feature Availability
 
-Every library binding — WASM, Python, Node native, C++, and the C ABI — exposes the same feature families, so the only meaningful gaps are in the CLI. The table lists each family with the library-binding status and a short note on CLI coverage; assume the feature is present in all library bindings unless the row says otherwise. Per-binding naming differences follow the [naming conventions](#naming-conventions) above.
+Every library binding exposes the same feature families: WASM, Python, Node native, C++, and the C ABI.
+
+Most meaningful gaps are in the CLI. The table lists each feature family with library-binding status and CLI coverage. Unless a row says otherwise, assume the feature exists in all library bindings. Naming differences follow the [naming conventions](#naming-conventions) above.
 
 | Feature family | Library bindings | CLI |
 |----------------|------------------|-----|
@@ -43,7 +45,7 @@ Every library binding — WASM, Python, Node native, C++, and the C ABI — expo
 | Editing DSP | Yes | Yes |
 | Metering (meters, clipping/dynamic-range, stereo image, spectrum) | Yes | C++ CLI only (`meter`, `clipping`, `dynamic-range`) |
 | Scale quantization | Yes | No |
-| Room acoustics | Yes | `sonare acoustic [--ir]` |
+| Room acoustics | Yes | `sonare acoustic [--ir]`, `estimate-room`, `synthesize-rir`, `room-morph` |
 | File decoding | Native: WAV/MP3 (FFmpeg builds add more); WASM: pass decoded samples | Same as the native build |
 
 ## Known Shape Differences
@@ -65,7 +67,7 @@ These functions exist across the library bindings but take their arguments diffe
 A few signatures don't line up across all three bindings:
 
 - **Stereo mix:** WASM `mixStereo(...)` takes separate `leftChannels` / `rightChannels` arrays plus a `MixOptions` object; Python `mix_stereo(...)` takes `[(left, right), …]` strips plus keyword arrays such as `fader_db`, `pan`, `width`, and `input_trim_db`.
-- **`timeStretch(...)`:** Node native expects an explicit numeric `sampleRate` before `rate` — do not rely on omitted or shifted arguments when porting from helpers that default the sample rate.
+- **`timeStretch(...)` / `pitchShift(...)`:** WASM uses `samples, sampleRate, rateOrSemitones`; Node native uses `samples, rateOrSemitones, sampleRate?`. Pass all numeric arguments explicitly when porting between the two.
 - **Metering taps:** use `meterTap(strip, tap)` for an explicit pre/post-fader tap; Node's `stripMeter(strip)` is the post-fader convenience path.
 
 ### Config, return, and data shapes
@@ -74,16 +76,30 @@ A few signatures don't line up across all three bindings:
 |-------|--------------|
 | Mastering chain config | `masteringChain(...)` and `StreamingMasteringChain` use nested config objects; `masterAudio(...)` overrides use flat dot-notation keys |
 | `StreamingMasteringChain` scope | Block-safe stages only — it rejects repair stages that need lookaround/file context and the whole-file `loudness` stage; use one-shot mastering APIs for those |
-| `analyze(...)` return | WASM returns the full `quick::analyze` shape (chords, sections, timbre, dynamics, rhythm, form); Python, Node native, and the C ABI return the compact C result (`bpm`, key, time signature, beat times) — call `detectChords`/`detect_chords`, `analyzeSections`/`analyze_sections`, `analyzeTimbre`/`analyze_timbre`, `analyzeDynamics`/`analyze_dynamics`, `analyzeRhythm`/`analyze_rhythm` for the richer fields |
+| `analyze(...)` return | WASM returns the full `quick::analyze` shape; Python, Node native, and the C ABI return the compact C result |
 | `normalize(...)` defaults | Module-level `normalize(...)` (Python, WASM, Node native) defaults to `0.0` (full scale); the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0` |
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM; pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
 | Automation curves | Shared `AutomationCurve` across engine and mixing APIs (`linear`, `exponential`, `hold`, `s-curve`); update older per-module curve enum names to this shared name |
 | Scene JSON | Interchange format for persistent mixers; prefer `Mixer.toSceneJson()` (WASM/Node) or `Mixer.to_scene_json()` (Python) over hand-written JSON when preserving runtime edits |
 | Mastering chain JSON | Chain JSON and named-processor parameter maps round-trip the same field set: `repair.declip` `lpcBlend`, multiband per-band parameters, compressor detector / sidechain-HPF / PDR settings, and realtime voice-changer ISP limiter settings |
-| Acoustic analysis | Two entry points — impulse-response analysis for measured IR files, and blind estimation from ordinary audio (display blind estimates with their confidence value) |
+| Acoustic analysis | Measurement and blind-estimation entry points return `AcousticResult`; geometric room acoustics adds equivalent-room estimates, RIR synthesis, and creative room morphing (display blind estimates and equivalent-room estimates with confidence) |
 | CLI surface | Some availability depends on whether the command is the PyPI Python CLI or the source-built C++ CLI — see [CLI](./cli.md) |
+
+::: info Rich analysis fields
+The full WASM `analyze(...)` shape includes chords, sections, timbre, dynamics, rhythm, and form. In Python, Node native, and the C ABI, call the focused helpers for those richer fields: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
+:::
 
 ## Verification Sources
 
-When checking parity, use the source files as the authoritative surface: `bindings/wasm/src/index.ts`, `bindings/python/src/libsonare/analyzer.pyi`, `bindings/node/src/index.ts`, `src/sonare_c.h`, `src/sonare.h`, and `tools/sonare_cli.cpp`. The libsonare repository also includes `tools/parity`, which checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM.
+When checking parity, use the source files as the authoritative surface:
+
+- `bindings/wasm/src/index.ts`
+- `bindings/python/src/libsonare/analyzer.pyi`
+- `bindings/node/src/index.ts`
+- `src/sonare_c.h`
+- `src/sonare_c_acoustic.h`
+- `src/sonare.h`
+- `tools/sonare_cli.cpp`
+
+The libsonare repository also includes `tools/parity`, which checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM.

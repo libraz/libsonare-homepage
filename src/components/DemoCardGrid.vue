@@ -57,7 +57,7 @@ onBeforeUnmount(() => {
 const prevLabel = computed(() => (ja.value ? '前のデモを表示' : 'Show previous demos'));
 const nextLabel = computed(() => (ja.value ? '次のデモを表示' : 'Show more demos'));
 
-type DemoVisual = 'spectrum' | 'lufs' | 'chroma' | 'faders' | 'fx';
+type DemoVisual = 'spectrum' | 'lufs' | 'chroma' | 'faders' | 'fx' | 'room';
 
 interface DemoEntry {
   id: string;
@@ -140,6 +140,18 @@ const cards = computed<DemoEntry[]>(() => {
         chips: ['PITCH', 'FORMANT', 'CHARACTER', 'PRESETS'],
         cta,
       },
+      {
+        id: 'spatial',
+        path: `${base.value}/spatial`,
+        visual: 'room',
+        accent: false,
+        status: 'NEW',
+        eyebrow: 'SPATIAL 3D',
+        title: '空間ルームスキャナー',
+        tagline: '録音から部屋の形状・残響・音源までの距離を 3D 推定。',
+        chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
+        cta,
+      },
     ];
   }
   return [
@@ -201,6 +213,18 @@ const cards = computed<DemoEntry[]>(() => {
       title: 'Realtime Voice Changer',
       tagline: 'Local microphone voice changer with library character presets.',
       chips: ['PITCH', 'FORMANT', 'CHARACTER', 'PRESETS'],
+      cta,
+    },
+    {
+      id: 'spatial',
+      path: `${base.value}/spatial`,
+      visual: 'room',
+      accent: false,
+      status: 'NEW',
+      eyebrow: 'SPATIAL 3D',
+      title: 'Spatial Room Scanner',
+      tagline: 'Estimate room geometry, reverb, and source distance in 3D from a recording.',
+      chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
       cta,
     },
   ];
@@ -304,6 +328,24 @@ const cards = computed<DemoEntry[]>(() => {
             <span class="demo-grid__fader-cap" :style="{ bottom: `${lvl}%`, '--d': `${i * 80}ms` }"></span>
           </span>
         </div>
+
+        <!-- Room 3D wireframe -->
+        <svg v-else-if="card.visual === 'room'" viewBox="0 0 220 60" preserveAspectRatio="xMidYMid meet">
+          <g class="demo-grid__room">
+            <!-- isometric shoebox -->
+            <polygon class="demo-grid__room-floor" points="74,44 146,44 168,32 96,32" />
+            <path class="demo-grid__room-edge" d="M74,44 96,32 96,12 74,24 Z" />
+            <path class="demo-grid__room-edge" d="M146,44 168,32 168,12 146,24 Z" />
+            <path class="demo-grid__room-edge" d="M74,24 96,12 168,12 146,24 Z" />
+            <path class="demo-grid__room-edge" d="M74,24 74,44 146,44 146,24 Z" />
+            <!-- source + propagation rings -->
+            <circle class="demo-grid__room-source" cx="108" cy="30" r="3.4" />
+            <circle class="demo-grid__room-ring" cx="108" cy="30" r="9" />
+            <circle class="demo-grid__room-ring demo-grid__room-ring--2" cx="108" cy="30" r="9" />
+            <!-- listener -->
+            <circle class="demo-grid__room-listener" cx="138" cy="38" r="2.6" />
+          </g>
+        </svg>
 
         <!-- FX waveform -->
         <svg v-else viewBox="0 0 220 60" preserveAspectRatio="none">
@@ -629,6 +671,49 @@ html:not(.dark) .demo-grid__card:hover {
   animation: demo-grid-wave 2.2s ease-in-out infinite;
 }
 
+/* Room 3D */
+.demo-grid__room-floor {
+  fill: var(--demo-accent-subtle, rgba(139, 92, 246, 0.08));
+  stroke: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
+  stroke-width: 1;
+}
+
+.demo-grid__room-edge {
+  fill: none;
+  stroke: var(--demo-accent, #8B5CF6);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  opacity: 0.7;
+}
+
+.demo-grid__room-source {
+  fill: var(--demo-amber, #F59E0B);
+  filter: drop-shadow(0 0 4px var(--demo-amber, #F59E0B));
+}
+
+.demo-grid__room-ring {
+  fill: none;
+  stroke: var(--demo-amber, #F59E0B);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: demo-grid-pulse 2.6s ease-out infinite;
+}
+
+.demo-grid__room-ring--2 {
+  animation-delay: 1.3s;
+}
+
+.demo-grid__room-listener {
+  fill: var(--demo-cyan, #22D3EE);
+  filter: drop-shadow(0 0 4px var(--demo-cyan, #22D3EE));
+}
+
+@keyframes demo-grid-pulse {
+  0% { transform: scale(0.3); opacity: 0.9; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
 .demo-grid__title {
   margin: 2px 0 0;
   font-family: 'Space Grotesk', sans-serif;
@@ -744,6 +829,7 @@ html:not(.dark) .demo-grid__visual {
   .demo-grid__chroma-cell,
   .demo-grid__fader-cap,
   .demo-grid__wave,
+  .demo-grid__room-ring,
   .demo-grid__status-dot {
     animation: none;
   }

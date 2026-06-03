@@ -305,6 +305,10 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 
 ### More analysis
 
+::: info Room-acoustic command terms
+**Equivalent room** means a useful model inferred from audio, not exact measured geometry. **RIR** means room impulse response. **Room morphing** is a creative room effect, not dereverberation.
+:::
+
 | Command | Description | Notable options |
 |---------|-------------|-----------------|
 | `sonare downbeats music.mp3` | Downbeat times (seconds) | — |
@@ -314,6 +318,9 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 | `sonare timbre music.mp3` | Timbre / spectral-shape summary | — |
 | `sonare lufs music.mp3` | EBU R128 loudness | `--series` (also emit momentary/short-term series) |
 | `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | `--ir` (treat input as an impulse response) |
+| `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
+| `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
+| `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | `--wet`, `--suppression`, geometry and placement options, `--max-seconds` |
 | `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Source-built C++ CLI only. `--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | Clipped sample and region detection | Source-built C++ CLI only. `--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | Percentile RMS dynamic range | Source-built C++ CLI only. `--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
@@ -417,7 +424,7 @@ sonare version --json
 
 **Output:**
 ```
-libsonare 1.2.2 (Python CLI)
+libsonare {{ wasmMeta.version }} (Python CLI)
 ```
 
 ## Examples
@@ -508,7 +515,7 @@ Source-built C++ CLI only: `sonare mastering-pair-processor`, `sonare mastering-
 
 Related mastering guides: [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Error recovery](./glossary/mastering/error-recovery.md).
 
-Room-acoustic fields such as RT60, EDT, C50, C80, D50, and confidence are explained in [Room Acoustics](./acoustic-analysis.md).
+Room-acoustic fields such as RT60, EDT, C50, C80, D50, volume, dimensions, absorption bands, DRR, generated RIR error state, and confidence are explained in [Room Acoustics](./acoustic-analysis.md).
 
 ### Mixing Workflow
 

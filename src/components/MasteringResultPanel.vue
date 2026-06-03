@@ -227,9 +227,24 @@ defineExpose({ setVolume, togglePlayback });
   font-weight: 800;
 }
 
+.ab-controls__button {
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.ab-controls__button:not(.ab-controls__button--active):not(:disabled):hover {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-text-strong);
+}
+
+.ab-controls__button:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .ab-controls__button--active {
   border-color: var(--demo-accent);
-  background: rgba(139, 92, 246, 0.16);
+  background: color-mix(in srgb, var(--demo-accent) 16%, transparent);
   color: var(--demo-text-strong);
 }
 
@@ -265,6 +280,21 @@ defineExpose({ setVolume, togglePlayback });
   font-weight: 800;
 }
 
+.master-download {
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.master-download:not(.master-download--disabled):hover {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent);
+}
+
+.master-download:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .master-download--disabled {
   pointer-events: none;
   opacity: 0.45;
@@ -294,7 +324,43 @@ defineExpose({ setVolume, togglePlayback });
 }
 
 .master-error {
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--demo-danger) 55%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--demo-danger) 12%, transparent);
   color: var(--demo-danger);
+}
+
+/* Staggered reveal once a master render lands. */
+.meter-stack :deep(.metric-item) {
+  animation: result-rise 0.35s ease both;
+}
+
+.meter-stack :deep(.metric-item:nth-child(2)) { animation-delay: 0.05s; }
+.meter-stack :deep(.metric-item:nth-child(3)) { animation-delay: 0.1s; }
+.meter-stack :deep(.metric-item:nth-child(4)) { animation-delay: 0.15s; }
+.meter-stack :deep(.metric-item:nth-child(5)) { animation-delay: 0.2s; }
+.meter-stack :deep(.metric-item:nth-child(6)) { animation-delay: 0.25s; }
+
+.result-player {
+  animation: result-rise 0.35s ease both;
+}
+
+@keyframes result-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-controls__button,
+  .master-download {
+    transition: none;
+  }
+
+  .meter-stack :deep(.metric-item),
+  .result-player {
+    animation: none;
+  }
 }
 
 @media (max-width: 900px) {

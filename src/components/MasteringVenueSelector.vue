@@ -97,9 +97,29 @@ const { t } = useI18n();
   text-align: left;
 }
 
+.venue-option {
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+}
+
+.venue-option:hover {
+  border-color: var(--demo-accent);
+  transform: translateY(-2px);
+}
+
+.venue-option:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .venue-option--active {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .venue-option {
+    transition: none;
+  }
 }
 
 .venue-option__icon {

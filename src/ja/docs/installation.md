@@ -106,6 +106,7 @@ cd libsonare
 mkdir build && cd build
 cmake ..                         # FFmpeg を自動検出
 # cmake .. -DSONARE_WITH_FFMPEG=ON  # FFmpeg デコードを必須にする
+# cmake .. -DBUILD_ACOUSTIC_SIM=ON  # 幾何ベースのルーム音響を有効化（既定 ON）
 
 make -j$(nproc)
 
@@ -207,3 +208,7 @@ sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rat
 室内音響メトリクスでは、測定済みインパルスレスポンスに
 `sonare::quick::analyze_impulse_response()`、通常音声からのブラインド推定に
 `sonare::quick::detect_acoustic()` を使います。
+幾何ベースのルーム音響では、次の 2 点を確認します。
+
+- 使う機能に応じて、`acoustic/rir_synthesizer.h`、`analysis/room_estimator.h`、`effects/acoustic/room_morph.h` のいずれかをインクルードする。
+- `BUILD_ACOUSTIC_SIM=ON` でビルドする。

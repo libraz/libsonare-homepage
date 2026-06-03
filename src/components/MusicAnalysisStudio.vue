@@ -3,7 +3,14 @@ import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { enCopy, jaCopy } from '@/components/analysis/musicAnalysisCopy';
 import MatrixHeatmap from '@/components/MatrixHeatmap.vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { AudioTransport, MetricItem, ScanLine, StatusIndicator, TechPanel, TermLabel } from '@/components/ui';
+import {
+  AudioTransport,
+  MetricItem,
+  ScanLine,
+  StatusIndicator,
+  TechPanel,
+  TermLabel,
+} from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import {
   calculateCorrelation,

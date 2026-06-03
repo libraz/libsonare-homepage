@@ -181,19 +181,35 @@ sonare analyze song.mp3 --json > analysis.json
 :::
 
 ::: details 「セクション」と「フォーム」とは？
-**セクション** は曲の構造的なパート — イントロ、ヴァース、コーラス、ブリッジ、アウトロ — で、音楽的な性格が変わる場所から検出します。**フォーム** は、それらのセクションをコンパクトなパターンで表した曲全体の構成です（例: `イントロ–ヴァース–コーラス–ヴァース–コーラス–アウトロ`、`ABABCB` のように記号で書くこともあります）。両者は「この曲が時間軸上でどう構成されているか」に答えます。
+**セクション** は曲の構造的なパートです。イントロ、ヴァース、コーラス、ブリッジ、アウトロのように、音楽的な性格が変わる場所から検出します。
+
+**フォーム** は、それらのセクションをコンパクトなパターンで表した曲全体の構成です。たとえば `イントロ-ヴァース-コーラス-ヴァース-コーラス-アウトロ` や `ABABCB` のように書きます。
+
+両者は「この曲が時間軸上でどう構成されているか」に答えます。
 :::
 
 ### 室内音響メトリクス
 
-測定済みのインパルスレスポンスがある場合は `analyzeImpulseResponse()` を使います。
-通常の音楽や録音から推定する場合は `detectAcoustic()` を使います。ブラインド推定は
-タグ付けやモニタリングに便利ですが、UI で強く見せるかどうかは `confidence` を見て判断してください。
+まず、手元の入力や目的から選びます。
+
+| 入力または目的 | 使う API |
+|----------------|----------|
+| 測定済みのインパルスレスポンス | `analyzeImpulseResponse()` |
+| 通常の音楽・音声録音 | `detectAcoustic()` |
+| 音声から実用的な部屋モデルを推定する | `estimateRoom()` |
+| 部屋寸法からインパルスレスポンスを作る | `synthesizeRir()` |
+| 目標ルームへ寄せる音作り効果 | `roomMorph()` |
+
+::: info RIR と等価ルーム
+**RIR** は room impulse response の略で、部屋が短い音にどう反応するかを表す音声サンプルです。**等価ルーム** は、音声から推定した実用上のモデルであり、実際の部屋を正確にスキャンした結果ではありません。
+:::
+
+ブラインド推定と等価ルーム推定はタグ付けやモニタリングに便利です。UI で強く見せるかどうかは `confidence` を見て判断してください。
 
 ::: code-group
 
 ```typescript [ブラウザ]
-import { init, analyzeImpulseResponse, detectAcoustic } from '@libraz/libsonare';
+import { init, analyzeImpulseResponse, detectAcoustic, estimateRoom, synthesizeRir, roomMorph } from '@libraz/libsonare';
 
 await init();
 
@@ -204,10 +220,16 @@ console.log(`C80: ${measured.c80.toFixed(1)} dB`);
 const blind = detectAcoustic(samples, sampleRate);
 console.log(`ブラインド RT60: ${blind.rt60.toFixed(2)} 秒`);
 console.log(`信頼度: ${(blind.confidence * 100).toFixed(0)}%`);
+
+const estimate = estimateRoom(samples, sampleRate);
+console.log(`推定ルーム: ${estimate.length.toFixed(1)} x ${estimate.width.toFixed(1)} x ${estimate.height.toFixed(1)} m`);
+
+const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
+const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
 ```python [Python]
-from libsonare import Audio, analyze_impulse_response
+from libsonare import Audio, analyze_impulse_response, estimate_room, synthesize_rir, room_morph
 
 with Audio.from_file("room-ir.wav") as ir:
     measured = analyze_impulse_response(ir.data, sample_rate=ir.sample_rate)
@@ -217,9 +239,13 @@ print(f"C80: {measured.c80:.1f} dB")
 
 with Audio.from_file("recording.wav") as audio:
     blind = audio.detect_acoustic()
+    estimate = estimate_room(audio.data, audio.sample_rate)
+    rir = synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
+    morphed = room_morph(audio.data, audio.sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 
 print(f"ブラインド RT60: {blind.rt60:.2f} 秒")
 print(f"信頼度: {blind.confidence * 100:.0f}%")
+print(f"推定ルーム: {estimate.length:.1f} x {estimate.width:.1f} x {estimate.height:.1f} m")
 ```
 
 ```bash [CLI]
@@ -228,6 +254,11 @@ sonare acoustic room-ir.wav --ir --json
 
 # 通常の音声から音響パラメータを推定する:
 sonare acoustic recording.wav --json
+
+# 幾何ベースのルームを推定・合成・モーフィングする:
+sonare estimate-room recording.wav --json
+sonare synthesize-rir --length 7 --width 5 --height 3 -o room-ir.wav
+sonare room-morph recording.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.wav
 ```
 
 :::
@@ -396,7 +427,13 @@ sonare pitch song.mp3 --algorithm pyin --json
 :::
 
 ::: details 「有声（voiced）」フレームとは？
-ピッチ追跡は各フレームを **有声（voiced）** か **無声（unvoiced）** に分類します。*有声*は明確な周期的ピッチが見つかったフレーム（歌の母音、持続音など）、*無声*は明確なピッチがないフレーム（無音、息、「s」「t」などの子音、ノイズ的・打撃的な音）です。`voicedFlag` / `voiced_flag` はそのフレームごとの真偽値で、`true` の数を数えると、クリップのどれだけが追跡可能なメロディを含んでいたかが分かります。
+ピッチ追跡は各フレームを **有声（voiced）** か **無声（unvoiced）** に分類します。
+
+*有声*は、明確な周期的ピッチが見つかったフレームです。歌の母音や持続音がこれに当たります。
+
+*無声*は、明確なピッチがないフレームです。無音、息、「s」「t」などの子音、ノイズ的・打撃的な音がこれに当たります。
+
+`voicedFlag` / `voiced_flag` は、そのフレームごとの真偽値です。`true` の数を数えると、クリップのどれだけが追跡可能なメロディを含んでいたかが分かります。
 :::
 
 ### ストリーミング解析

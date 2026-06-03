@@ -20,7 +20,7 @@ It covers several related jobs:
 | Area | What libsonare can do |
 |------|-----------------------|
 | Music Information Retrieval (MIR) | Extract tempo, key, chords, beats, downbeats, time signature, structure, melody, timbre, and dynamics |
-| Room acoustics | Estimate or measure room-decay cues |
+| Room acoustics | Measure, estimate, synthesize, or morph room character |
 | Mastering | Run broadcast-grade mastering processors and loudness/true-peak handling |
 | Mixing | Build a real-time-safe mixer with routing, buses, sends, and meters |
 | Editing and creative FX | Change pitch, timing, voice character, reverb, and modulation-style effects |
@@ -95,7 +95,11 @@ To extract musical meaning, the first step is to convert this into a **spectrogr
 The STFT breaks the audio into short overlapping windows and computes the frequency content of each. The result is a 2D map of "which frequencies are present at each moment."
 
 ::: details What is a Fourier Transform?
-A Fourier Transform decomposes a signal into its constituent frequencies — like splitting white light through a prism into a rainbow. Audio is a sum of many frequencies (sine waves) at different amplitudes. The Fourier Transform reveals which frequencies are present and how strong they are. The **Short-Time** variant (STFT) applies this repeatedly to overlapping windows of the audio, so you can see how the frequency content changes over time.
+A Fourier Transform decomposes a signal into its constituent frequencies, like splitting white light through a prism into a rainbow.
+
+Audio is a sum of many frequencies at different amplitudes. The Fourier Transform reveals which frequencies are present and how strong they are.
+
+The **Short-Time** variant (STFT) applies this repeatedly to overlapping windows of the audio. That lets you see how the frequency content changes over time.
 :::
 
 This spectrogram is the foundation for everything that follows.
@@ -131,7 +135,11 @@ Timbre (pronounced "TAM-ber") is what makes a piano and a guitar sound different
 - **CQT / VQT** — Transforms with frequency resolution that matches musical pitch, unlike the standard FFT where resolution is uniform across frequencies.
 
 ::: details Why does musical pitch need special frequency resolution?
-Musical notes are spaced logarithmically — the frequency doubles with each octave (A3 = 220 Hz, A4 = 440 Hz, A5 = 880 Hz). A standard FFT uses evenly spaced frequency bins, so it can't distinguish low notes well while wasting resolution on high notes. The Constant-Q Transform (CQT) spaces its bins logarithmically to match musical pitch, giving equal resolution per octave. The Variable-Q Transform (VQT) extends this with adjustable resolution.
+Musical notes are spaced logarithmically: the frequency doubles with each octave (A3 = 220 Hz, A4 = 440 Hz, A5 = 880 Hz).
+
+A standard FFT uses evenly spaced frequency bins. That makes low notes harder to distinguish, while spending more resolution than needed on high notes.
+
+The Constant-Q Transform (CQT) spaces bins logarithmically to match musical pitch. The Variable-Q Transform (VQT) extends this idea with adjustable resolution.
 :::
 
 These features are useful on their own (e.g., feeding a mel spectrogram to a machine learning model), but they also serve as input to higher-level analysis.
@@ -167,10 +175,17 @@ This layered design means libsonare doesn't just give you answers — it exposes
 
 Some analysis is about the recording space rather than the song.
 
+::: info New room-acoustic terms
+An **equivalent room** is a practical model inferred from audio. A **shoebox geometry** is a rectangular room described by length, width, and height. **Room morphing** applies a target room sound as an effect; it is not dereverberation.
+:::
+
 | Entry point | Input | Result |
 |-------------|-------|--------|
 | `analyzeImpulseResponse` / `analyze_impulse_response` | A clean impulse response | Direct RT60, EDT, clarity, and definition measurements. |
 | `detectAcoustic` / `detect_acoustic` | Ordinary audio | Estimated room cues with a confidence value. |
+| `estimateRoom` / `estimate_room` | Ordinary audio or an impulse response | Equivalent-room volume, dimensions, absorption, DRR, and confidence. |
+| `synthesizeRir` / `synthesize_rir` | Shoebox geometry | A deterministic mono room impulse response. |
+| `roomMorph` / `room_morph` | Audio plus target-room geometry | Creative room-character morphing, not dereverberation. |
 
 ::: info Room-acoustic abbreviations
 **RT60** is the time for reverberation to fall by 60 dB. **EDT** is early decay time, often closer to perceived reverberance. **C50 / C80** are speech/music clarity metrics, and **D50** is the fraction of energy arriving in the first 50 ms. For now, read them as numbers that describe how a room rings; [Room Acoustics](./acoustic-analysis.md) explains how to interpret them.
@@ -187,11 +202,23 @@ libsonare also provides audio processing capabilities that operate on the spectr
 - **HPSS** (Harmonic-Percussive Source Separation) — Separates audio into harmonic (tonal) and percussive (rhythmic) components using median filtering on the spectrogram. Often used as a preprocessing step to improve analysis accuracy.
 
 ::: details What are harmonic and percussive components?
-In a spectrogram, harmonic sounds (vocals, strings, sustained notes) appear as horizontal lines — they maintain a stable frequency over time. Percussive sounds (drums, clicks, transients) appear as vertical lines — they contain many frequencies but only for a brief moment. HPSS exploits this difference using median filters: a horizontal median filter extracts the harmonic part, and a vertical median filter extracts the percussive part.
+In a spectrogram, harmonic sounds such as vocals, strings, and sustained notes appear as horizontal lines. They maintain a stable frequency over time.
+
+Percussive sounds such as drums, clicks, and transients appear as vertical lines. They contain many frequencies, but only for a brief moment.
+
+HPSS exploits this difference with median filters: a horizontal median filter extracts the harmonic part, and a vertical median filter extracts the percussive part.
 :::
 - **Time Stretch / Pitch Shift** — Changes tempo or transposes pitch by combining phase-vocoder processing and resampling.
 - **Editing DSP** — Pitch correction to a target MIDI note, note-region stretch, and voice-change pitch/formant controls.
-- **Creative FX / inserts** — Reverb insert processors (`effects.reverb.*`) are available through mixer/mastering insert factories when creative FX is enabled. Chorus, flanger, phaser, and stereo-delay DSP modules exist in the source tree but are not exposed as standalone top-level JS/Python helpers. Ducking is exposed as `dynamics.duckingProcessor` / mixer routing rather than a one-shot editing helper.
+- **Creative FX / inserts** — Sound-design DSP such as reverb inserts, chorus, flanger, phaser, and stereo delay.
+
+::: details Creative FX availability
+Reverb insert processors (`effects.reverb.*`) are available through mixer/mastering insert factories when creative FX is enabled.
+
+Chorus, flanger, phaser, and stereo-delay DSP modules exist in the source tree. They are not exposed as standalone top-level JS/Python helpers today.
+
+Ducking is exposed as `dynamics.duckingProcessor` / mixer routing rather than a one-shot editing helper.
+:::
 
 ### Real-Time Streaming
 
@@ -223,7 +250,15 @@ The current site bundle includes about ~1.7 MB of WebAssembly/JavaScript assets 
 [librosa](https://librosa.org/) is the de facto standard Python library for audio analysis in the MIR community. libsonare provides similar MIR building blocks for environments where Python is not available, where native integration is useful, or where a single C++ core is preferred:
 
 ::: details What are sample rate, FFT size, and hop length?
-These are the fundamental parameters of audio analysis. **Sample rate** is how many amplitude measurements per second the audio contains (e.g., 44,100 Hz for CD quality). **FFT size** (n_fft) is the number of samples in each analysis window — larger windows give better frequency resolution but worse time resolution. **Hop length** is how many samples the window moves between frames — smaller hops give more time detail but more computation. libsonare generally asks you to pass the sample rate explicitly; common DSP defaults such as `n_fft=2048` and `hop_length=512` mirror typical librosa usage.
+These are the fundamental parameters of audio analysis.
+
+| Parameter | Meaning | Tradeoff |
+|-----------|---------|----------|
+| Sample rate | How many amplitude measurements the audio contains per second, such as 44,100 Hz for CD quality | Higher rates carry higher frequencies but use more data |
+| FFT size (`n_fft`) | How many samples each analysis window contains | Larger windows improve frequency resolution but blur time |
+| Hop length | How many samples the window moves between frames | Smaller hops give more time detail but cost more computation |
+
+libsonare generally asks you to pass the sample rate explicitly. Common DSP defaults such as `n_fft=2048` and `hop_length=512` mirror typical librosa usage.
 :::
 
 - Common DSP parameters and APIs are intentionally close to librosa where practical

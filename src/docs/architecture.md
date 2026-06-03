@@ -23,7 +23,7 @@ By the end of this page you should be able to:
 graph TB
     subgraph "API Layer"
         WASM["WASM Bindings<br/>(Embind)"]
-        CAPI["C API<br/>(sonare_c.h)"]
+        CAPI["C API<br/>(sonare_c*.h)"]
         QUICK["Quick API<br/>(quick.h)"]
         UNIFIED["Unified Header<br/>(sonare.h)"]
     end
@@ -47,6 +47,7 @@ graph TB
         RHYTHM["RhythmAnalyzer"]
         MELODY["MelodyAnalyzer"]
         ACOUSTIC["AcousticAnalyzer"]
+        ROOMEST["RoomEstimator"]
     end
 
     subgraph "Effects Layer"
@@ -57,6 +58,10 @@ graph TB
         SILENCE["Silence Trim/Split"]
         PREEMPH["Pre/De-emphasis"]
         DECOMPOSE["Decompose<br/>(NMF)"]
+        REVERB["Reverbs<br/>(convolution/plate/FDN/<br/>velvet/room)"]
+        CREATIVE["Creative FX<br/>(delay/chorus/flanger/phaser)"]
+        ROOMMORPH["Room Morph"]
+        VOICE["Voice Change<br/>& pitch editing"]
     end
 
     subgraph "Mastering & Mixing Layer"
@@ -89,9 +94,20 @@ graph TB
         AUDIO_IO["Audio I/O<br/>(dr_libs, minimp3)"]
     end
 
+    subgraph "Acoustic Simulation Layer"
+        ROOMMODEL["Room Model<br/>(shoebox/materials)"]
+        RIR["RIR Synthesizer<br/>(image source + late tail)"]
+        MATERIAL["Material Presets"]
+    end
+
     WASM --> QUICK
     WASM --> STREAM
+    WASM --> CAPI
     CAPI --> QUICK
+    CAPI --> STREAM
+    CAPI --> MASTERCHAIN
+    CAPI --> MIXER
+    CAPI --> ENGINE
     UNIFIED --> MUSIC
     QUICK --> MUSIC
 
@@ -112,6 +128,7 @@ graph TB
     MUSIC --> RHYTHM
     MUSIC --> MELODY
     QUICK --> ACOUSTIC
+    QUICK --> ROOMEST
 
     BPM --> ONSET
     KEY --> CHROMA
@@ -121,11 +138,16 @@ graph TB
     BOUNDARY --> MEL
     MELODY --> PITCH
     ACOUSTIC --> SPECTRUM
+    ROOMEST --> ACOUSTIC
+    ROOMEST --> RIR
 
     HPSS --> SPECTRUM
     TIMESTRETCH --> SPECTRUM
     PITCHSHIFT --> TIMESTRETCH
     PITCHSHIFT --> RESAMPLE
+    REVERB --> RIR
+    ROOMMORPH --> RIR
+    VOICE --> TIMESTRETCH
 
     WASM --> MASTERCHAIN
     WASM --> STREAMMASTER
@@ -149,6 +171,8 @@ graph TB
     SPECTRUM --> WINDOW
     AUDIO --> AUDIO_IO
     AUDIO --> RESAMPLE
+    RIR --> ROOMMODEL
+    ROOMMODEL --> MATERIAL
 ```
 
 ## Page Map
@@ -156,13 +180,13 @@ graph TB
 | If you are looking at... | Read... |
 |--------------------------|---------|
 | `analysis/` and `feature/` | [JavaScript API](./js-api.md), [Python API](./python-api.md), [librosa Compatibility](./librosa-compatibility.md) |
-| `analysis/acoustic_analyzer.*` | [Room Acoustics](./acoustic-analysis.md) |
+| `analysis/acoustic_analyzer.*`, `analysis/room_estimator.*`, `src/acoustic/`, or `effects/acoustic/` | [Room Acoustics](./acoustic-analysis.md), [Algorithm References](./algorithm-references.md#scope-boundaries) |
 | `streaming/` | [Realtime and Streaming](./realtime-streaming.md) |
 | `mastering/` | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Mastering Assistant](./mastering-assistant.md) |
 | `mixing/` | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [Realtime and Streaming](./realtime-streaming.md), especially `RealtimeEngine` |
 | `editing/` and `effects/` | [Editing DSP](./editing-dsp.md), [DSP Implementation Notes](./dsp-implementation.md#effects-and-editing-dsp) |
-| `sonare_c.h` and binding folders | [Binding Parity](./binding-parity.md), [Native Bindings](./native-bindings.md), [C++ API](./cpp-api.md) |
+| `sonare_c*.h` and binding folders | [Binding Parity](./binding-parity.md), [Native Bindings](./native-bindings.md), [C++ API](./cpp-api.md) |
 
 ## Directory Structure
 
@@ -207,13 +231,24 @@ src/
 │   ├── preemphasis.h
 │   ├── silence.h
 │   ├── decompose.h
-│   └── remix.h
+│   ├── remix.h
+│   ├── delay/ modulation/ reverb/
+│   ├── acoustic/       # room_morph
+│   └── common/
+│
+├── acoustic/           # Geometric room acoustics
+│   ├── room_model.* room_types.* material.*
+│   ├── image_source.*  # early reflections
+│   ├── late_reverb.*   # deterministic late tail
+│   └── rir_synthesizer.*
 │
 ├── analysis/           # Level 6: Music analysis
 │   ├── music_analyzer.h
 │   ├── bpm_analyzer.h
 │   ├── key_analyzer.h
 │   ├── beat_analyzer.h
+│   ├── downbeat_analyzer.h
+│   ├── meter_analyzer.h
 │   ├── chord_analyzer.h
 │   ├── section_analyzer.h
 │   ├── boundary_detector.h
@@ -222,6 +257,7 @@ src/
 │   ├── timbre_analyzer.h
 │   ├── dynamics_analyzer.h
 │   ├── acoustic_analyzer.h
+│   ├── room_estimator.h
 │   └── ...
 │
 ├── streaming/          # Level 6: Real-time streaming
@@ -230,8 +266,8 @@ src/
 │   └── stream_frame.h      # Frame and buffer types
 │
 ├── mastering/          # Mastering engine
-│   ├── api/            # Chain, registry, presets (25 presets)
-│   ├── eq/ dynamics/ spectral/ stereo/   # Processor families
+│   ├── api/            # Chain, registry, 25 presets, 57 solo processors + pair/stereo registries
+│   ├── eq/ dynamics/ spectral/ stereo/ final/
 │   ├── maximizer/ multiband/ saturation/ repair/
 │   ├── match/ assistant/                 # Reference match + assistant/profile
 │   └── common/        # Shared biquad/loudness helpers
@@ -249,7 +285,7 @@ src/
 │
 ├── quick.h             # Simple function API
 ├── sonare.h            # Unified include header
-├── sonare_c.h          # C API header
+├── sonare_c*.h         # C API aggregate and module headers
 └── wasm/
     └── bindings.cpp    # Embind bindings
 ```
@@ -475,8 +511,8 @@ to provide the sample rate; it does not implicitly resample to 22050 Hz the way
 ## WASM Compilation
 
 ```
-Output: ~1,607 KB WASM (~573 KB gzipped) plus the JS glue;
-        ~1,721 KB total (~598 KB gzipped) — see src/wasm/meta.json
+Output: ~{{ wasmMeta.wasm.sizeKB }} KB WASM (~{{ wasmMeta.wasm.gzipKB }} KB gzipped) plus the JS glue;
+        ~{{ wasmMeta.total.sizeKB }} KB total (~{{ wasmMeta.total.gzipKB }} KB gzipped) — see src/wasm/meta.json
 Build:  Emscripten with Embind
 Flags:  -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```

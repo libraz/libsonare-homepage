@@ -106,7 +106,7 @@ if (!validation.ok) {
 
 現在の組み込みプリセット JSON はスキーマバージョン `1` を使います。ネイティブ POD 設定の ABI は別物です。FFI やネイティブ境界をまたぐ場合は `voiceChangerAbiVersion()` で確認してください。
 
-正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_pod(...)` として公開しています。
+正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_config(...)` として公開しています。
 
 ## Python
 
@@ -114,7 +114,7 @@ if (!validation.ok) {
 import libsonare as sonare
 
 print(sonare.voice_character_preset_id(1))
-preset_config = sonare.realtime_voice_changer_preset_pod("bright-idol")
+preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")
 
 with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
     out = changer.process_mono(input_block)

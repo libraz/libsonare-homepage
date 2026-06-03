@@ -24,6 +24,7 @@ import {
   type MasteringPlatformId,
   type MasteringPresetId,
   type MasteringVenueId,
+  type ReferenceAnalysisReport,
   useMastering,
 } from '@/composables/useMastering';
 import { useMasteringInsights } from '@/composables/useMasteringInsights';
@@ -78,6 +79,8 @@ const loudnessMatched = ref(true);
 const reference = ref<DecodedMasteringAudio | null>(null);
 const referenceUrl = ref<string | null>(null);
 const referenceLufs = ref<number | null>(null);
+const referenceAnalysis = ref<ReferenceAnalysisReport | null>(null);
+const isAnalyzingReference = ref(false);
 const moduleSettings = ref<MasteringModuleSettings>(defaultModuleSettings());
 const diagnosticBypass = ref<MasteringDiagnosticBypass>(defaultDiagnosticBypass());
 const chainDefaults = defaultModuleSettings();
@@ -572,10 +575,28 @@ async function handleReferenceFile(event: Event) {
     reference.value = await mastering.decodeFile(file);
     referenceUrl.value = mastering.createSourceAudioUrl(reference.value);
     referenceLufs.value = await mastering.measureIntegratedLufs(reference.value);
+    await refreshReferenceAnalysis();
   } catch {
     localError.value = t('master.errors.loadFailed');
   } finally {
     input.value = '';
+  }
+}
+
+async function refreshReferenceAnalysis() {
+  if (!mastering.source.value || !reference.value) {
+    referenceAnalysis.value = null;
+    return;
+  }
+
+  isAnalyzingReference.value = true;
+  referenceAnalysis.value = null;
+  try {
+    referenceAnalysis.value = await mastering.analyzeReference(reference.value);
+  } catch {
+    referenceAnalysis.value = null;
+  } finally {
+    isAnalyzingReference.value = false;
   }
 }
 
@@ -647,6 +668,8 @@ function releaseUrls() {
   }
   reference.value = null;
   referenceLufs.value = null;
+  referenceAnalysis.value = null;
+  isAnalyzingReference.value = false;
 }
 
 onUnmounted(() => {
@@ -893,9 +916,11 @@ function createReportUrl(): string {
             <MasteringReferencePanel
               :reference="reference"
               :reference-metrics="referenceMetrics"
+              :reference-analysis="referenceAnalysis"
               :reference-url="referenceUrl"
               :master-crest="masterMetrics?.crest || null"
               :is-rendering="mastering.isRendering.value"
+              :is-analyzing="isAnalyzingReference"
               :can-match="!!mastering.source.value && !!reference"
               @file="handleReferenceFile"
               @match="renderReferenceMatch"

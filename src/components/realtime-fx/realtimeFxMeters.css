@@ -102,6 +102,16 @@
   letter-spacing: 0.12em;
 }
 
+.rt-clip:hover:not(:disabled) {
+  border-color: var(--demo-accent);
+  color: var(--demo-text);
+}
+
+.rt-clip:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .rt-clip--lit {
   border-color: var(--demo-danger);
   background: var(--demo-danger);

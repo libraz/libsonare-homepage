@@ -49,7 +49,7 @@ The package is broad, so start from the task rather than the function list:
 | Browser mastering or delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Use presets first, then move to named processors when you need control |
 | Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; persistent scene mixer when routing matters |
 | Vocal/note edits | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
-| Room decay or clarity measurements | `analyzeImpulseResponse`, `detectAcoustic` | These describe the recording space, not the music |
+| Room decay, clarity, equivalent-room estimates, or generated room character | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph` | These describe or apply the recording space, not the music |
 
 ## Installation
 
@@ -124,7 +124,7 @@ function isInitialized(): boolean
 Get the library version.
 
 ```typescript
-function version(): string  // e.g., "1.2.2"
+function version(): string  // e.g., "{{ wasmMeta.version }}"
 ```
 
 ### `voiceChangerAbiVersion()`
@@ -151,11 +151,13 @@ These helpers describe the runtime capabilities used by [`RealtimeEngine`](./rea
 ```typescript
 function engineAbiVersion(): number
 function engineCapabilities(): {
-  abiVersion: number;
-  hasSharedArrayBuffer: boolean;
-  hasAtomics: boolean;
-  hasAudioWorklet: boolean;
-  supportsRealtimeEngine: boolean;
+  engineAbiVersion: number;
+  expectedEngineAbiVersion: number;
+  abiCompatible: boolean;
+  sharedArrayBuffer: boolean;
+  atomics: boolean;
+  audioWorklet: boolean;
+  mode: 'sab' | 'postMessage';
 }
 function hasFfmpegSupport(): boolean
 ```
@@ -382,7 +384,19 @@ const sections = analyzeSections(samples, sampleRate);
 
 ## Room Acoustics
 
-`analyzeImpulseResponse(...)` and `detectAcoustic(...)` measure the space captured by the recording rather than the song itself. Use the first when you have a clean impulse response, and the second when you only have a normal recording and need a blind estimate.
+These functions describe or apply the recording space rather than the song itself.
+
+| Goal | Use |
+|------|-----|
+| Measure a clean impulse response | `analyzeImpulseResponse(...)` |
+| Estimate room decay from ordinary audio | `detectAcoustic(...)` |
+| Fit a practical room model from audio | `estimateRoom(...)` |
+| Create a mono room impulse response from dimensions | `synthesizeRir(...)` |
+| Add a target-room character as an effect | `roomMorph(...)` |
+
+::: info RIR and room morphing
+**RIR** means room impulse response: samples that describe how a room reacts to a short sound. `roomMorph(...)` is a creative effect, not dereverberation.
+:::
 
 ```typescript
 const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6);
@@ -390,9 +404,21 @@ console.log(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence);
 
 const blind = detectAcoustic(roomRecording, sampleRate, 6, 24, 30, 10);
 console.log(blind.isBlind, blind.rt60Bands);
+
+const estimate = estimateRoom(roomRecording, sampleRate, {
+  referenceAbsorption: 0.15,
+  nOctaveBands: 6,
+});
+console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
+console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+
+const rir = synthesizeRir({ lengthM: 7, widthM: 5, heightM: 3, absorption: 0.2 });
+console.log(rir.sampleRate, rir.rir.length, rir.hasError);
+
+const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
-See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, and confidence.
+See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, room estimates, generated RIRs, and confidence.
 
 ## Audio Effects
 
@@ -1406,6 +1432,7 @@ Structure-of-Arrays format for efficient transfer via `postMessage`.
 ```typescript
 interface FrameBuffer {
   nFrames: number;
+  nMels: number;
   timestamps: Float32Array;      // [nFrames]
   mel: Float32Array;             // [nFrames * nMels]
   chroma: Float32Array;          // [nFrames * 12]
@@ -1488,6 +1515,7 @@ interface ProgressiveEstimate {
   chordRoot: PitchClass;
   chordQuality: ChordQuality;
   chordConfidence: number;
+  chordStartTime: number;
   chordProgression: ChordChange[];     // detected chord changes
   barChordProgression: BarChord[];     // bar-synchronized chords
   currentBar: number;                  // current bar index
@@ -1555,7 +1583,19 @@ analyzer.dispose();
 ```
 
 ::: details Why call `dispose()` / `delete()`? (embind handles)
-Classes like `StreamAnalyzer`, `Mixer`, and `StreamingMasteringChain` are C++ objects exposed to JavaScript through **embind** (Emscripten's C++↔JS bridge). Each one owns a block of WASM heap memory that the JavaScript garbage collector *cannot* see or reclaim. You must release it yourself — `StreamAnalyzer` uses `dispose()`, while `Mixer` and `StreamingMasteringChain` use `delete()` (some WASM classes also expose `destroy()` as an alias). Skipping this slowly leaks WASM memory in long-running pages. Plain functions like `analyze()` return ordinary JS values and need no cleanup; only these handle-holding classes do. Node native cleanup differs; see [Native Bindings](./native-bindings.md).
+Classes like `StreamAnalyzer`, `Mixer`, and `StreamingMasteringChain` are C++ objects exposed to JavaScript through **embind** (Emscripten's C++↔JS bridge).
+
+Each object owns a block of WASM heap memory. The JavaScript garbage collector cannot see or reclaim that memory, so you must release the object yourself.
+
+| Class | Cleanup method |
+|-------|----------------|
+| `StreamAnalyzer` | `dispose()` |
+| `Mixer` | `delete()` |
+| `StreamingMasteringChain` | `delete()` |
+
+Some WASM classes also expose `destroy()` as an alias. Skipping cleanup slowly leaks WASM memory in long-running pages.
+
+Plain functions like `analyze()` return ordinary JS values and need no cleanup. Node native cleanup differs; see [Native Bindings](./native-bindings.md).
 :::
 
 ### AudioWorklet Integration
@@ -2193,14 +2233,21 @@ interface MasteringChainConfig {
 }
 
 interface MasteringResult {
-  samples: Float32Array; sampleRate: number;
-  inputLufs: number; outputLufs: number; appliedGainDb: number;
+  samples: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
   latencySamples?: number;
 }
 interface MasteringChainResult extends MasteringResult { stages: string[] }
 interface MasteringStereoResult {
-  left: Float32Array; right: Float32Array; sampleRate: number;
-  inputLufs: number; outputLufs: number; appliedGainDb: number;
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
   latencySamples: number;
 }
 ```
@@ -2255,12 +2302,13 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 
 | Area | Exported types/constants |
 |------|--------------------------|
-| Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EngineCapabilities` |
+| Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
+| Spectral and feature transforms | `MelPowerResult`, `StftPowerResult`, `TempogramMode` |
 | Mastering | `MasteringProcessorParams`, `MasteringStereoChainResult` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
-| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
+| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | Mixing realtime buffers | `MixerRealtimeBuffer` |
 
 ## Performance Summary
@@ -2287,10 +2335,10 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 
 | File | Size | Gzipped |
 |------|------|---------|
-| `sonare.js` | ~50 KB | ~13 KB |
-| `index.js` | ~64 KB | ~12 KB |
-| `sonare.wasm` | ~1,607 KB | ~573 KB |
-| **Total** | ~1,721 KB | ~598 KB |
+| `sonare.js` | ~{{ wasmMeta.sonareJs.sizeKB }} KB | ~{{ wasmMeta.sonareJs.gzipKB }} KB |
+| `index.js` | ~{{ wasmMeta.indexJs.sizeKB }} KB | ~{{ wasmMeta.indexJs.gzipKB }} KB |
+| `sonare.wasm` | ~{{ wasmMeta.wasm.sizeKB }} KB | ~{{ wasmMeta.wasm.gzipKB }} KB |
+| **Total** | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
 
 ## Browser Support
 

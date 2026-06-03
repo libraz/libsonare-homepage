@@ -1,16 +1,35 @@
 ---
 title: Room Acoustics
-description: How to use libsonare room-acoustic analysis APIs for impulse responses and blind recordings, including RT60, EDT, clarity, definition, and confidence fields.
+description: How to use libsonare room-acoustic analysis, room estimation, RIR synthesis, and room-morph APIs.
 ---
 
 # Room Acoustics
 
-libsonare includes room-acoustic analysis for measuring or estimating how a space behaves. Use this page when your input is an impulse response, a clap/pop recording, or a normal recording where you want a rough acoustic profile.
+libsonare includes room-acoustic tools for describing how a space sounds.
 
-This is different from music analysis. `detectBpm(...)` and `analyze(...)` describe a song; `analyzeImpulseResponse(...)` and `detectAcoustic(...)` describe the room or playback environment.
+Use this page when you want to:
+
+- measure a clap or impulse-response recording;
+- estimate a rough room profile from ordinary audio;
+- create a room impulse response from simple room dimensions;
+- apply a target room character as an offline effect.
+
+This is different from music analysis. `detectBpm(...)` and `analyze(...)` describe a song. The room-acoustic APIs describe, synthesize, or apply the recording space.
 
 ::: info What is an impulse response?
 An impulse response (IR) records how a room rings and decays after a short excitation such as a clap, balloon pop, or sweep. Because it captures the room reaction rather than the song, it is a cleaner input for RT60, clarity, and other room-acoustic metrics.
+:::
+
+::: info First-time terms
+- **Equivalent room** means a simple room model that matches the measured sound well enough for analysis or UI feedback. It is not a scan of the exact real room.
+- **RIR** means room impulse response: audio samples that represent how a room would respond to a short sound.
+- **Shoebox room** means a rectangular room model with length, width, and height.
+- **DRR** means direct-to-reverberant ratio: how much direct sound there is compared with reflected room sound.
+- **Room morphing** means adding a target room character as an effect. It is not dereverberation, which tries to remove reverb.
+:::
+
+::: tip Try it in the browser
+The [Spatial Room Scanner](/spatial) demo runs this whole pipeline locally: drop a recording (or pick a sample room) and it reconstructs the estimated geometry, RT60, clarity, and source distance as an interactive 3D scene.
 :::
 
 ## What You Will Learn
@@ -18,6 +37,9 @@ An impulse response (IR) records how a room rings and decays after a short excit
 By the end of this page you should be able to:
 
 - choose impulse-response analysis or blind acoustic estimation based on the input recording;
+- synthesize a mono room impulse response from shoebox dimensions;
+- estimate an equivalent room from a recording, including volume, dimensions, absorption, DRR, and confidence;
+- apply a creative room-character morph without treating it as dereverberation;
 - explain RT60, EDT, C50, C80, D50, octave bands, confidence, and `isBlind` at a practical level;
 - avoid using blind acoustic estimates as certification-grade measurements;
 - call the same acoustic workflow from JavaScript, Python, or the CLI.
@@ -28,8 +50,11 @@ By the end of this page you should be able to:
 |-------|-----|----------------|
 | A measured impulse response, starter pistol, balloon pop, sweep-derived IR, or clean clap capture | `analyzeImpulseResponse(...)` | Best accuracy. The algorithm assumes the decay belongs to the room. |
 | A normal music/speech recording with no isolated impulse | `detectAcoustic(...)` | Blind estimate. Useful for ranking or UI hints, not certification. |
+| A recording or impulse response where you need a practical equivalent-room model | `estimateRoom(...)` | Volume, representative dimensions, DRR, per-band absorption/RT60, and confidence. |
+| Shoebox room dimensions and source/listener placement | `synthesizeRir(...)` | A reproducible mono RIR for the specified room and positions. |
+| A dry or existing recording you want to push toward a target room | `roomMorph(...)` | Creative offline room effect. It does not remove existing reverb. |
 
-Both functions return `AcousticResult`, with full-band metrics plus octave-band arrays.
+`analyzeImpulseResponse(...)` and `detectAcoustic(...)` return `AcousticResult`: full-band metrics plus octave-band arrays. `estimateRoom(...)` returns `RoomEstimateResult`, `synthesizeRir(...)` returns `RirResult`, and `roomMorph(...)` returns processed samples.
 
 ## Direct measurement vs blind estimation
 
@@ -53,7 +78,14 @@ A **free-decay region** is a span where the source is no longer producing new so
 ::: code-group
 
 ```typescript [Browser]
-import { init, analyzeImpulseResponse, detectAcoustic } from '@libraz/libsonare';
+import {
+  init,
+  analyzeImpulseResponse,
+  detectAcoustic,
+  estimateRoom,
+  synthesizeRir,
+  roomMorph,
+} from '@libraz/libsonare';
 
 await init();
 
@@ -69,6 +101,34 @@ const blind = detectAcoustic(
   10,    // noise-floor margin in dB
 );
 console.log(blind.confidence, blind.isBlind);
+
+const estimate = estimateRoom(roomRecording, sampleRate, {
+  referenceAbsorption: 0.15,
+  nOctaveBands: 6,
+});
+console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
+console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+
+const { rir, hasError } = synthesizeRir({
+  lengthM: 7,
+  widthM: 5,
+  heightM: 3,
+  sourceX: 1,
+  sourceY: 1,
+  sourceZ: 1.2,
+  listenerX: 5,
+  listenerY: 4,
+  listenerZ: 1.7,
+  absorption: 0.2,
+  sampleRate,
+});
+
+const morphed = roomMorph(dryVoice, sampleRate, {
+  lengthM: 12,
+  widthM: 9,
+  heightM: 4,
+  wet: 0.6,
+});
 ```
 
 ```python [Python]
@@ -88,6 +148,22 @@ blind = sonare.detect_acoustic(
     noise_floor_margin_db=10.0,
 )
 print(blind.confidence, blind.is_blind)
+
+estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
+print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+
+rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
+print(rir.sample_rate, len(rir.rir), rir.has_error)
+
+morphed = sonare.room_morph(
+    audio.data,
+    audio.sample_rate,
+    12.0,
+    9.0,
+    4.0,
+    wet=0.6,
+)
 ```
 
 ```bash [CLI]
@@ -99,14 +175,34 @@ sonare acoustic room-clap.wav --ir
 
 # add --json for a machine-readable summary
 sonare acoustic room-clap.wav --ir --json
+
+# estimate an equivalent room from a recording
+sonare estimate-room room-recording.wav --json
+
+# synthesize a mono room impulse response from geometry
+sonare synthesize-rir --length 7 --width 5 --height 3 -o room-ir.wav
+
+# morph a recording toward a target room
+sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.wav
 ```
 
 :::
 
-Python `Audio` exposes the same calls as instance methods:
-`audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. In the
-WASM wrapper, call the standalone `analyzeImpulseResponse(...)` and
-`detectAcoustic(...)` functions with `audio.data` and `audio.sampleRate`.
+Python `Audio` exposes the same calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. The new geometric room-acoustics helpers are module-level calls in Python and standalone functions in the WASM wrapper.
+
+## Geometric room acoustics
+
+Use this section when you are not only measuring a recording, but also creating or applying a room model.
+
+`synthesizeRir(...)` builds a mono RIR from a rectangular room. You provide dimensions in metres, one wall-absorption value, and source/listener coordinates inside the room. If the geometry is invalid, JavaScript returns `hasError: true` and an empty `rir`; Python exposes the same state as `has_error`.
+
+`estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay.
+
+`roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. It should not be documented or sold as dereverberation.
+
+::: details Implementation notes for room synthesis
+`synthesizeRir(...)` uses image-source early reflections plus a deterministic late tail. `acoustic::RirSynthConfig` exposes the reflection order, Sabine/Eyring late-tail model, seed, maximum RIR length, mixing time, and crossfade width.
+:::
 
 ## Reading the result
 
@@ -132,6 +228,13 @@ These are standard room-acoustic numbers derived from how sound decays in a spac
 
 ## Practical guidance
 
-For reliable numbers, record a clean impulse response: keep the room quiet, avoid clipping, leave enough silence after the impulse, and trim unrelated noise before analysis. A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant, but it should not be treated as an architectural measurement.
+For reliable numbers, record a clean impulse response:
+
+- keep the room quiet;
+- avoid clipping;
+- leave enough silence after the impulse;
+- trim unrelated noise before analysis.
+
+A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
 
 If you need live visual frames or progressive BPM/key/chord estimates, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).

@@ -21,6 +21,10 @@
 
 ## ソースで確認できる根拠
 
+::: info 下の表で使うルーム音響用語
+**RIR** は room impulse response の略です。**等価ルーム推定**は、音声から実用上の部屋モデルを推定する処理で、正確な実形状の復元ではありません。**ルームモーフィング**は音作り向けのルーム効果であり、残響除去ではありません。
+:::
+
 | 領域 | 根拠 | 根拠箇所 |
 |------|------|----------|
 | ラウドネスとトゥルーピーク | ITU-R BS.1770-4/5、EBU R128、EBU Tech 3342 loudness range | `README.md`、`src/rt/biquad_design.h`、`src/rt/true_peak_filter.h`、`src/metering/lufs.cpp`、`tests/rt/true_peak_filter_test.cpp` |
@@ -33,10 +37,10 @@
 | スライディング最大値 | Lemire sliding max | `README.md`、リミッター／トゥルーピーク補助処理の利用箇所 |
 | Tonnetz | Harte et al. 2006 と `librosa.feature.tonnetz` の挙動 | `src/feature/tonnetz.h`、`src/feature/tonnetz.cpp`、`tests/librosa/tonnetz_test.cpp` |
 | ピッチ追跡 | YIN と pYIN。pYIN は確率的な複数ピッチ候補と Viterbi decoding を使う | `src/feature/pitch.h`、`tests/librosa/pitch_test.cpp` |
-| 室内音響解析 | インパルスレスポンス向けの Schroeder 型 energy decay curve、RT60、EDT、C50、C80、D50、自由減衰区間検出と指数減衰フィットによるブラインド RT60 推定 | `src/analysis/acoustic_analyzer.h`、`src/analysis/acoustic_analyzer.cpp`、`tests/analysis/acoustic_analyzer_test.cpp`、`tests/analysis/acoustic_dataset_test.cpp` |
+| ルーム音響解析 | 減衰指標、ブラインド減衰フィット、RIR 合成、ルーム推定、ルームモーフィング | `src/analysis/acoustic_analyzer.*`、`src/acoustic/*`、`src/analysis/room_estimator.*`、`src/effects/acoustic/room_morph.*`、`tests/acoustic/*`、`tests/effects/room_morph_test.cpp` |
 | シーケンスヘルパー | DTW、Viterbi、discriminative Viterbi、recurrence quantification analysis、`librosa.sequence` 互換 | `src/util/sequence.h`、`src/feature/segment.*`、librosa のシーケンス参照 |
 | タイムストレッチとピッチシフト | Native spectral stretch、phase-vocoder fallback、time stretch followed by resampling による pitch shift | `src/effects/time_stretch.h`、`src/effects/pitch_shift.h` |
-| リバーブ系 | Convolution、Dattorro plate、FDN、velvet-noise reverb engines | `README.md`、`src/effects/reverb/*`、`tests/effects/creative_fx_test.cpp` |
+| リバーブ系 | Convolution、Dattorro plate、FDN、velvet-noise、幾何ベースのルームリバーブエンジン | `README.md`、`src/effects/reverb/*`、`src/effects/acoustic/*`、`tests/effects/*` |
 
 ::: details 名前付きアルゴリズムの平易な解説
 このページはアルゴリズムを名前で引用しています。分かりにくいものを補足します。
@@ -52,7 +56,11 @@
 
 ## librosa 参照互換性
 
-`tests/librosa/reference/` 以下の参照値は librosa 0.11.0 で生成されています。`tests/librosa/reference/NOTICE.md` には、`tests/librosa/generate_librosa_reference.py` により生成し、libsonare と librosa の数値互換性を検証するための参照データだと記録されています。これは互換性の参照であり、実装コードをコピーしているという意味ではありません。
+`tests/librosa/reference/` 以下の参照値は librosa 0.11.0 で生成されています。
+
+`tests/librosa/reference/NOTICE.md` には、`tests/librosa/generate_librosa_reference.py` により生成した参照データだと記録されています。目的は、libsonare と librosa の数値互換性を検証することです。
+
+これは互換性の参照であり、実装コードをコピーしているという意味ではありません。
 
 | 機能ファミリー | 参照範囲 |
 |----------------|----------|
@@ -74,15 +82,22 @@
 |------------|--------|
 | `repair.denoiseClassical`, `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.dereverbClassical`, `repair.trimSilence` | 現在の実装では、古典的または決定的な DSP 経路です。 |
 
-室内音響には、性質の違う 2 つの入口があります。
+室内音響には、性質の違う 5 つの入口があります。
 
 | 入口 | 入力 | 何をしているか | 結果の扱い |
 |------|------|----------------|------------|
-| `analyze_impulse_response` / `analyzeImpulseResponse` | 拍手録音、風船の破裂音、スイープ由来 IR など、部屋の反応だけが分かりやすい録音 | 音が鳴った後の減衰曲線を直接測る | 測定値として扱いやすい |
+| `analyze_impulse_response` / `analyzeImpulseResponse` | 拍手、風船破裂音、スターターピストル音、スイープ由来 IR など、部屋の反応だけが分かりやすい短い励振音の録音 | 音が鳴った後の減衰曲線を直接測る | 測定値として扱いやすい |
 | `detect_acoustic` / `detectAcoustic` | 通常の音楽、会話、環境録音など | 録音の中から「部屋の残響だけが自然に減っている区間」を探して推定する | 目安として扱い、`confidence` を必ず見る |
+| `estimate_room` / `estimateRoom` | 録音またはインパルスレスポンス | 体積、寸法、直接音対残響音比（DRR）、吸音率バンド、RT60 バンド、信頼度を含む等価ルームを推定する | 正確な実寸ではなくモデルフィットとして扱う |
+| `synthesize_rir` / `synthesizeRir` | シューボックス寸法と音源／聴取位置 | モノラル RIR を合成する | 不正な形状は `hasError` / `has_error` を確認する |
+| `room_morph` / `roomMorph` | 録音と目標ルーム形状 | 元の残響尾部を少し抑えて目標ルームの響きを足す | 残響除去ではなく音作り効果として扱う |
 
 ここでいう **decay curve（減衰曲線）** は、音が止まった後にエネルギーがどれくらいの速さで小さくなるかを表す曲線です。インパルスレスポンス解析では、この曲線を直接作って RT60 や EDT を読みます。
 
 一方、ブラインド推定では、入力が通常音声なので「今見えている減衰が本当に部屋の残響なのか」を常に判断する必要があります。楽器の余韻、声の伸ばし、コンプレッサー、背景ノイズなども減衰に見えることがあるためです。
 
-そのため `detect_acoustic` / `detectAcoustic` は `confidence` を返します。明確な自由減衰区間が見つからない場合は、結果が利用不可になったり、低信頼度になったりします。低い `confidence` の値は「部屋がそう響く」と断定せず、「この録音からは十分に読み取れない」と解釈してください。
+`synthesize_rir` / `synthesizeRir` は、鏡像音源法による初期反射と、同じ設定なら同じ結果になる後期テールを使います。これは生成 RIR を比較するときには重要ですが、利用者向けには「寸法から再現性のある部屋応答を作る」と理解すれば十分です。
+
+そのため `detect_acoustic` / `detectAcoustic` と `estimate_room` / `estimateRoom` は `confidence` を返します。明確な自由減衰区間が見つからない場合は、結果が利用不可になったり、低信頼度になったりします。
+
+低い `confidence` の値は「部屋がそう響く」と断定せず、「この録音からは十分に読み取れない」と解釈してください。

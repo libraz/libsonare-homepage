@@ -1,16 +1,35 @@
 ---
 title: ルーム音響解析
-description: libsonare のルーム音響解析 API の使い方。インパルスレスポンスと通常録音から RT60、EDT、明瞭度、定義度、信頼度を読む方法。
+description: libsonare のルーム音響解析、ルーム推定、RIR 合成、ルームモーフィング API の使い方。
 ---
 
 # ルーム音響解析
 
-libsonare には、部屋や録音環境の響きを測るための音響解析 API があります。入力がインパルスレスポンス、手を叩く音や風船の破裂音の録音、または通常の音楽・音声録音で、空間の響き具合を知りたいときに使います。
+libsonare には、部屋や録音環境の響きを説明するためのルーム音響 API があります。
 
-これは楽曲解析とは別物です。`detectBpm(...)` や `analyze(...)` は曲を説明します。`analyzeImpulseResponse(...)` / `analyze_impulse_response(...)` と `detectAcoustic(...)` / `detect_acoustic(...)` は部屋や再生環境を説明します。
+このページは、次の目的で使います。
+
+- 拍手やインパルスレスポンスの録音を測る。
+- 通常の録音から大まかな部屋の傾向を推定する。
+- 単純な部屋寸法からルームインパルスレスポンスを作る。
+- 目標ルームの響きをオフライン効果として音声に適用する。
+
+これは楽曲解析とは別物です。`detectBpm(...)` や `analyze(...)` は曲を説明します。ルーム音響 API は、録音空間を説明・合成・適用します。
 
 ::: info インパルスレスポンスとは？
-インパルスレスポンス（IR）は、拍手・風船の破裂音・スイープなど短い入力に対して部屋がどう響いて減衰するかを記録したものです。楽曲そのものではなく「部屋の反応」を見るため、RT60 や明瞭度のような室内音響指標を測りやすくなります。
+インパルスレスポンス（IR）は、拍手、風船破裂音、スターターピストル音、スイープなどの短い励振音に対して、部屋がどう響いて減衰するかを記録したものです。楽曲そのものではなく「部屋の反応」を見るため、RT60 や明瞭度のようなルーム音響指標を測りやすくなります。
+:::
+
+::: info 初出の用語
+- **等価ルーム** は、測定された響きに近い単純な部屋モデルです。実際の部屋を正確にスキャンした結果ではありません。
+- **RIR** は room impulse response の略で、部屋が短い音にどう反応するかを表す音声サンプルです。
+- **シューボックス形状** は、長さ・幅・高さで表す直方体の部屋モデルです。
+- **DRR** は直接音対残響音比です。音源から直接届く音と、部屋で反射して届く音の比を表します。
+- **ルームモーフィング** は、目標ルームの響きを音作り効果として足す処理です。残響を取り除く残響除去とは別物です。
+:::
+
+::: tip ブラウザで試す
+[空間ルームスキャナー](/ja/spatial) のデモは、この一連の処理をすべてローカルで実行します。録音をドロップする（またはサンプルルームを選ぶ）と、推定された形状・RT60・明瞭度・音源までの距離をインタラクティブな 3D シーンとして再構成します。
 :::
 
 ## このページで身につくこと
@@ -18,6 +37,9 @@ libsonare には、部屋や録音環境の響きを測るための音響解析 
 このページを読むと、次のことを判断・実装できるようになります。
 
 - 入力録音に応じて、インパルスレスポンス解析とブラインド音響推定を選べる。
+- シューボックス寸法からモノラルのルームインパルスレスポンスを合成できる。
+- 録音から等価なルームを推定し、体積、代表寸法、吸音率、DRR、信頼度を読める。
+- ルームモーフィングを音作りの効果として使い、残響除去と混同しない。
 - RT60、EDT、C50、C80、D50、オクターブバンド、信頼度、`isBlind` を実用上の意味で説明できる。
 - ブラインド推定を認証レベルの測定値として扱う誤りを避けられる。
 - JavaScript、Python、CLI から同じ音響解析ワークフローを呼び出せる。
@@ -26,14 +48,17 @@ libsonare には、部屋や録音環境の響きを測るための音響解析 
 
 | 入力 | 使う API | 期待できること |
 |------|----------|----------------|
-| 測定済み IR、スターターピストル、風船の破裂音、スイープ由来 IR、明瞭な拍手録音 | `analyzeImpulseResponse(...)` / `analyze_impulse_response(...)` | 最も精度が出ます。減衰が部屋由来である前提です。 |
+| 測定済み IR、拍手、風船破裂音、スターターピストル音、スイープ由来 IR などの短い励振音 | `analyzeImpulseResponse(...)` / `analyze_impulse_response(...)` | 最も精度が出ます。減衰が部屋由来である前提です。 |
 | 通常の音楽・音声録音で、単独のインパルスがない | `detectAcoustic(...)` / `detect_acoustic(...)` | ブラインド推定です。順位付けや UI 上の目安向きで、認証測定向きではありません。 |
+| 録音や IR から実用的な等価ルームモデルがほしい | `estimateRoom(...)` / `estimate_room(...)` | 体積、代表寸法、DRR、バンド別吸音率／RT60、信頼度。 |
+| ルーム寸法と音源／聴取位置がある | `synthesizeRir(...)` / `synthesize_rir(...)` | 指定した部屋と位置から、再現性のあるモノラル RIR を作ります。 |
+| 録音を目標ルームの響きへ寄せたい | `roomMorph(...)` / `room_morph(...)` | オフラインの音作り効果です。既存の残響を取り除く処理ではありません。 |
 
-どちらも `AcousticResult` を返し、全帯域の値とオクターブバンドごとの配列を含みます。
+`analyzeImpulseResponse(...)` と `detectAcoustic(...)` は `AcousticResult` を返します。結果には、全帯域の値とオクターブバンドごとの配列が含まれます。`estimateRoom(...)` は `RoomEstimateResult`、`synthesizeRir(...)` は `RirResult`、`roomMorph(...)` は処理後サンプルを返します。
 
 ## 直接計測とブラインド推定の違い
 
-`analyzeImpulseResponse(...)` は、部屋に短い音を入れた後の減衰を直接見ます。拍手、風船の破裂音、スイープから作った IR のように、最初の音とその後の残響が分かれている入力に向いています。
+`analyzeImpulseResponse(...)` は、部屋に短い励振音を入れた後の減衰を直接見ます。拍手、風船破裂音、スターターピストル音、スイープ由来 IR のように、最初の音とその後の残響が分かれている入力に向いています。
 
 `detectAcoustic(...)` は、通常の音楽や会話から部屋の響きを推定します。入力の中に単独のインパルスがないため、録音の中から「音が止まり、残響だけが自然に減っているように見える区間」を探します。
 
@@ -53,7 +78,14 @@ libsonare には、部屋や録音環境の響きを測るための音響解析 
 ::: code-group
 
 ```typescript [ブラウザ]
-import { init, analyzeImpulseResponse, detectAcoustic } from '@libraz/libsonare';
+import {
+  init,
+  analyzeImpulseResponse,
+  detectAcoustic,
+  estimateRoom,
+  synthesizeRir,
+  roomMorph,
+} from '@libraz/libsonare';
 
 await init();
 
@@ -69,6 +101,34 @@ const blind = detectAcoustic(
   10,    // ノイズフロアに対する余裕 dB
 );
 console.log(blind.confidence, blind.isBlind);
+
+const estimate = estimateRoom(roomRecording, sampleRate, {
+  referenceAbsorption: 0.15,
+  nOctaveBands: 6,
+});
+console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
+console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+
+const { rir, hasError } = synthesizeRir({
+  lengthM: 7,
+  widthM: 5,
+  heightM: 3,
+  sourceX: 1,
+  sourceY: 1,
+  sourceZ: 1.2,
+  listenerX: 5,
+  listenerY: 4,
+  listenerZ: 1.7,
+  absorption: 0.2,
+  sampleRate,
+});
+
+const morphed = roomMorph(dryVoice, sampleRate, {
+  lengthM: 12,
+  widthM: 9,
+  heightM: 4,
+  wet: 0.6,
+});
 ```
 
 ```python [Python]
@@ -88,25 +148,61 @@ blind = sonare.detect_acoustic(
     noise_floor_margin_db=10.0,
 )
 print(blind.confidence, blind.is_blind)
+
+estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
+print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+
+rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
+print(rir.sample_rate, len(rir.rir), rir.has_error)
+
+morphed = sonare.room_morph(
+    audio.data,
+    audio.sample_rate,
+    12.0,
+    9.0,
+    4.0,
+    wet=0.6,
+)
 ```
 
 ```bash [CLI]
 # 通常の録音からのブラインド推定（バンド数・閾値はデフォルト）
 sonare acoustic room-recording.wav
 
-# インパルス応答モード（拍手／破裂音／スイープ由来の IR）
+# インパルス応答モード（拍手／風船破裂音／スターターピストル音／スイープ由来 IR）
 sonare acoustic room-clap.wav --ir
 
 # --json で機械可読のサマリを出力
 sonare acoustic room-clap.wav --ir --json
+
+# 録音から等価ルームを推定
+sonare estimate-room room-recording.wav --json
+
+# 形状からモノラルのルームインパルスレスポンスを合成
+sonare synthesize-rir --length 7 --width 5 --height 3 -o room-ir.wav
+
+# 録音を目標ルームへモーフィング
+sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.wav
 ```
 
 :::
 
-Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と
-`audio.detect_acoustic(...)`。WASM wrapper では、`audio.data` と
-`audio.sampleRate` を渡してスタンドアロンの `analyzeImpulseResponse(...)` /
-`detectAcoustic(...)` を呼び出します。
+Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。新しい幾何ベースのルーム音響ヘルパーは、Python ではモジュールレベル関数、WASM ラッパーではスタンドアロン関数です。
+
+## 幾何ベースのルーム音響
+
+ここは、録音を測るだけでなく、部屋モデルを作る・適用する API の説明です。
+
+`synthesizeRir(...)` は、直方体の部屋からモノラル RIR を作ります。寸法はメートル、壁は一様な吸音率、音源と聴取位置は部屋の内側の座標で指定します。形状が不正な場合、JavaScript は `hasError: true` と空の `rir` を返し、Python では同じ状態を `has_error` として読めます。
+
+`estimateRoom(...)` は、録音から等価ルームを推定します。正確な実空間を復元するものではありません。通常録音には部屋の減衰がはっきり出ていないことがあるため、必ず `confidence` を確認してください。
+
+`roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響尾部を少し弱めることがあります。残響除去として説明・提供すべきものではありません。
+
+::: details ルーム合成の実装メモ
+`synthesizeRir(...)` は、鏡像音源法による初期反射と、決定論的な後期テールを組み合わせます。`acoustic::RirSynthConfig` では、反射次数、Sabine/Eyring の後期テールモデル、シード、RIR の最大長、混合時刻、クロスフェード幅を指定できます。
+:::
 
 ## 結果の読み方
 
@@ -122,7 +218,7 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 | `isBlind` / `is_blind` | インパルスレスポンス前提ではなくブラインド推定で得た結果かどうか。 |
 
 ::: details RT60・EDT・C50/C80・D50 は何を測る？
-いずれも、音が止まったあとに空間でどう減衰するかから求める標準的な室内音響指標です。
+いずれも、音が止まったあとに空間でどう減衰するかから求める標準的なルーム音響指標です。
 
 - **RT60** — 残響が 60 dB 減衰するまでの秒数。「どれだけ響くか」を表す代表値で、小さな部屋なら約 0.3 秒、大聖堂なら数秒になります。
 - **EDT（早期減衰時間）** — 減衰の最初の部分から測った減衰速度を 60 dB 降下に換算したもの。体感上の響きの豊かさは、RT60 より EDT の方がよく一致することが多いです。
@@ -132,6 +228,13 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 ## 実用上の注意
 
-信頼できる値が必要なら、静かな環境で、クリップしないレベルで、インパルス後の無音を十分に残して録音してください。ブラインド推定は「このテイクは響きすぎているかも」といった比較や警告には便利ですが、建築音響の正式な測定値として扱うものではありません。
+信頼できる値が必要なら、きれいなインパルスレスポンスを録音してください。
+
+- 静かな環境で録る。
+- クリップしないレベルにする。
+- インパルス後の無音を十分に残す。
+- 解析前に不要なノイズをトリムする。
+
+ブラインド推定は「このテイクは響きすぎているかも」といった比較や警告には便利です。ただし、建築音響の正式な測定値として扱うものではありません。
 
 ライブ表示や段階的な BPM/キー/コード推定が必要なら [リアルタイムとストリーミング](./realtime-streaming.md) を使います。楽曲メタデータが必要なら [JavaScript API](./js-api.md) または [Python API](./python-api.md) を参照してください。

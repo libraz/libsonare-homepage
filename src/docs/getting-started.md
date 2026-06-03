@@ -39,10 +39,10 @@ Start with the page that matches where you will run libsonare:
 | Analyze files from Python scripts or notebooks | Python package from PyPI | [Python API](/docs/python-api) |
 | Run analysis from a terminal | `sonare` CLI installed from PyPI via `pip install libsonare` | [CLI Reference](/docs/cli) |
 | Add pitch or voice editing | Editing DSP | [Editing DSP](/docs/editing-dsp) |
-| Estimate room decay, clarity, or blind acoustic parameters | Acoustic analysis helpers | [Room Acoustics](/docs/acoustic-analysis) |
 | Build a mixer, routing view, or stem renderer | Mixing engine through WASM, Python, Node, or C++ | [Mixing Engine](/docs/mixing) |
 | Build a mastering UI with explainable suggestions | Mastering assistant/profile/preview APIs | [Mastering Assistant](/docs/mastering-assistant) |
 | Build live visualizations or playback tools | Streaming analyzer and realtime engine | [Realtime and Streaming](/docs/realtime-streaming) |
+| Estimate, synthesize, or morph room acoustics | Room-acoustic helpers | [Room Acoustics](/docs/acoustic-analysis) |
 | Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
 | Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |
 
@@ -144,6 +144,10 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 
 ## What libsonare Can Analyze
 
+::: info Room-acoustic terms in the list
+**RIR** means room impulse response. **Equivalent-room estimate** means a practical room model inferred from audio, not exact measured geometry. **Room morphing** is a creative room effect.
+:::
+
 - **BPM Detection** - Tempo estimation using tempogram and autocorrelation
 - **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles
 - **Beat Tracking** - Dynamic programming-based beat extraction
@@ -151,7 +155,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **Section Detection** - Structural segmentation such as intro, verse, and chorus
 - **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
 - **Audio Characteristics** - Timbre, dynamics, and rhythm analysis
-- **Room Acoustics** - reverberation time (RT60 / EDT), clarity (C50 / C80), definition (D50), octave-band decay, and blind acoustic estimates
+- **Room Acoustics** - RT60 / EDT, clarity, definition, octave-band decay, blind and equivalent-room estimates, RIR synthesis, and room morphing
 - **Spectral Features** - Mel spectrogram, MFCC, chroma, CQT/VQT, spectral centroid, and flatness
 - **Audio Effects** - HPSS, time stretch, pitch shift, normalize, and trim
 - **Streaming Analysis** - Chunk-by-chunk processing with progressive BPM/key/chord estimates

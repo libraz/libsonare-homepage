@@ -19,6 +19,7 @@ By the end of this page you should be able to:
 |-----------|---------|----------------------|
 | **Core** | Audio I/O and signal processing | `Audio`, `Spectrogram` |
 | **Quick API** | Simple one-line analysis and room-acoustic entry points | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
+| **Geometric room acoustics** | Equivalent-room estimation, RIR synthesis, and room-character morphing | `estimate_room()`, `acoustic::synthesize_rir()`, `effects::acoustic::room_morph()` |
 | **MusicAnalyzer** | Full music analysis with callbacks | `MusicAnalyzer`, `AnalysisResult` |
 | **Streaming** | Block-by-block MIR frames and progressive estimates | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
 | **Features** | Low-level feature extraction and inverse feature reconstruction | `MelSpectrogram`, `Chroma`, `cqt()`, `vqt()`, `mel_to_audio()` |
@@ -32,6 +33,7 @@ By the end of this page you should be able to:
 | Goal | Include / API |
 |------|---------------|
 | One-off BPM/key/beat/onset/acoustic checks | `#include <sonare.h>` and `sonare::quick::*` |
+| Geometric room estimation, RIR synthesis, or room morphing | `#include <analysis/room_estimator.h>`, `#include <acoustic/rir_synthesizer.h>`, `#include <effects/acoustic/room_morph.h>` |
 | Several music-analysis results from the same audio | `MusicAnalyzer`, so shared intermediates are reused |
 | Live visualizer or progressive estimates | `#include <streaming/stream_analyzer.h>` |
 | Mastering presets or named processors | `src/mastering/api/*` headers; see [Mastering Processors](./mastering-processors.md) |
@@ -194,6 +196,58 @@ namespace sonare::quick {
   AcousticParameters analyze_impulse_response(const float* samples, size_t length, int sample_rate);
 }
 ```
+
+## Geometric Room Acoustics
+
+These APIs estimate, synthesize, or apply a room model. They live in focused module headers and require builds with `BUILD_ACOUSTIC_SIM=ON` (the default source-build setting).
+
+::: info Terms in this section
+- **Equivalent room** is a practical room model inferred from audio. It is not exact measured geometry.
+- **RIR** means room impulse response: samples that describe how a room reacts to a short sound.
+- **Room morphing** is a creative room-character effect, not dereverberation.
+:::
+
+```cpp
+#include <acoustic/rir_synthesizer.h>
+#include <analysis/room_estimator.h>
+#include <effects/acoustic/room_morph.h>
+
+using namespace sonare;
+
+acoustic::ShoeboxRoom room = acoustic::uniform_shoebox({7.0f, 5.0f, 3.0f}, 0.2f);
+acoustic::SourceListener placement{{1.0f, 1.0f, 1.2f}, {5.0f, 4.0f, 1.7f}};
+auto rir = acoustic::synthesize_rir(room, placement, 48000);
+if (!rir.rir.empty()) {
+  RoomEstimate estimate = estimate_room(rir.rir);
+}
+
+effects::acoustic::RoomMorphConfig morph_config;
+morph_config.target = room;
+morph_config.placement = placement;
+morph_config.wet = 0.6f;
+Audio morphed = effects::acoustic::room_morph(recording, morph_config);
+```
+
+The three calls cover different parts of the workflow:
+
+- `estimate_room(...)` returns volume, representative dimensions, absorption bands, RT60 bands, DRR, and confidence.
+- `synthesize_rir(...)` reports geometry problems through diagnostics. It returns an empty RIR when the source or listener placement is invalid.
+- `room_morph(...)` renders the input with the target room character.
+
+::: details Configuration details
+`acoustic::RirSynthConfig` controls RIR generation:
+
+- image-source order;
+- Sabine/Eyring late-tail model;
+- deterministic seed;
+- maximum RIR length;
+- early/late mixing time;
+- crossfade width.
+
+`RoomEstimateConfig` forwards analyzer settings through `AcousticConfig`. These include mode, octave-band count, minimum decay span, and noise-floor margin.
+
+Aspect hints and `reference_absorption` define the equivalent-room prior.
+:::
 
 ## MusicAnalyzer <Badge type="warning" text="Heavy" />
 
@@ -646,26 +700,28 @@ auto vqt_result = vqt(audio, vqt_config);
 
 ::: danger Deprecated Functions
 The inverse transform functions `icqt()` and `ivqt()` are **deprecated** in the
-headers. Prefer Griffin-Lim or phase-vocoder based reconstruction paths for new
-code.
+current C++ headers. Prefer Griffin-Lim or phase-vocoder based reconstruction
+paths for new code.
 
 ```cpp
-// Deprecated - do not use
+// Deprecated - do not use in new code
 [[deprecated("Use Griffin-Lim or phase vocoder for better reconstruction quality")]]
-Audio icqt(const CqtResult& cqt);
+Audio icqt(const CqtResult& cqt_result, int length = 0);
 
 [[deprecated("Use griffinlim_vqt or phase vocoder for better reconstruction quality")]]
-Audio ivqt(const VqtResult& vqt);
+Audio ivqt(const VqtResult& vqt_result, int length = 0);
 ```
 
 **Migration:** For preview audio reconstruction, use the Griffin-Lim paths from
 the inverse feature helpers, or keep phase information in your own STFT-domain
 pipeline when quality matters.
+
 ```cpp
-// Recommended approach
-auto spec = Spectrogram::compute(audio, stft_config);
-// ... modify magnitude ...
-auto reconstructed = griffin_lim(modified_magnitude, stft_config);
+const auto& cqt_magnitude = cqt_result.magnitude();
+auto reconstructed = griffinlim_cqt(cqt_magnitude.data(), cqt_result.n_bins(),
+                                    cqt_result.n_frames(), config,
+                                    cqt_result.sample_rate());
+auto reconstructed_vqt = griffinlim_vqt(vqt_result, vqt_result.sample_rate());
 ```
 :::
 
@@ -1029,6 +1085,7 @@ Several helper families also have sample-based C ABI entry points:
 |--------|----------|
 | Effects | `sonare_hpss`, `sonare_time_stretch`, `sonare_pitch_shift`, `sonare_normalize`, `sonare_trim` |
 | Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
+| Geometric room acoustics | `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
 | Conversions and resampling | See `src/sonare_c.h` for the full list |
 
 The librosa-parity helpers are also exposed through the C API:
@@ -1049,10 +1106,17 @@ The current C ABI is split across focused headers. Use this index when a symbol 
 | `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, error/version/FFmpeg helpers |
 | `sonare_c_features.h` | Focused analysis, STFT/mel/MFCC/chroma, inverse features, CQT/VQT, pitch, tempogram/PLP, LUFS |
 | `sonare_c_effects.h` | HPSS/editing DSP, realtime voice changer, realtime engine, decomposition/remix helpers |
+| `sonare_c_acoustic.h` | RIR synthesis from room geometry, equivalent-room estimation, offline room-character morphing, `SONARE_ACOUSTIC_ABI_VERSION` |
 | `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum |
 | `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors, assistant/profile/preview JSON, streaming mastering chain, streaming EQ, repair/dynamics one-shot helpers |
 | `sonare_c_mixing.h` | Channel strip controls, sends, buses, VCA groups, automation, meters, goniometer, scene presets |
 | `sonare_c_streaming.h` | `StreamAnalyzer`, quantized frame reads, progressive stats, tuning/normalization controls |
+
+For room acoustics in the C ABI:
+
+- `SonareRirSynthConfig` covers geometry, absorption, `ism_order`, `seed`, `max_seconds`, `mixing_time_ms`, `crossfade_ms`, and `late_model`.
+- `SonareRoomEstimateConfig` covers aspect/absorption priors, `min_decay_db`, `noise_floor_margin_db`, and analyzer `mode`.
+- Analyzer mode is one of `SONARE_ACOUSTIC_MODE_AUTO`, `SONARE_ACOUSTIC_MODE_BLIND`, or `SONARE_ACOUSTIC_MODE_IMPULSE_RESPONSE`.
 
 Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
 

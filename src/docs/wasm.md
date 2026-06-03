@@ -610,15 +610,15 @@ The TypeScript `StreamAnalyzer` wrapper has three read methods. Choose them by h
 | `readFramesI16(maxFrames)` | `StreamFramesI16` | You want smaller payloads but still enough precision for most visual meters |
 | `readFramesU8(maxFrames)` | `StreamFramesU8` | You need very small payloads for mobile or dense visual updates |
 
-Set `StreamConfig.outputFormat` so the analyzer produces the matching frame type internally:
+Set `StreamConfig.outputFormat` to document the transfer format you plan to read, then call the matching method:
 
-| `outputFormat` | Internal frame type |
-|----------------|---------------------|
-| `0` | Float32 |
-| `1` | Int16 |
-| `2` | Uint8 |
+| `outputFormat` | Read method |
+|----------------|-------------|
+| `0` | `readFrames()` |
+| `1` | `readFramesI16()` |
+| `2` | `readFramesU8()` |
 
-This avoids doing quantization yourself before `postMessage`.
+The analyzer still computes internally in float. `readFramesI16()` and `readFramesU8()` quantize in the C++/WASM read path, so you do not need to quantize manually before `postMessage`.
 
 ::: details What are "Structure-of-Arrays" and transferable objects?
 - **Structure-of-Arrays (SoA)** means each field lives in its own flat typed array — all timestamps in one array, all mel values in another — instead of an array of per-frame objects. It is cheaper to slice and cheaper to hand to another thread.
@@ -629,8 +629,8 @@ This avoids doing quantization yourself before `postMessage`.
 | Approach | Approx. size per frame | Best For |
 |----------|------------------------|----------|
 | `readFrames()` (Float32 SoA) | ~600 bytes | General use, full precision |
-| Downsample mel rows + quantize to Int16 in JS | ~300 bytes | High-quality visualizations |
-| Downsample mel rows + quantize to Uint8 in JS | ~150 bytes | Mobile, bandwidth-limited |
+| `readFramesI16()` (quantized SoA) | ~300 bytes | High-quality visualizations |
+| `readFramesU8()` (quantized SoA) | ~150 bytes | Mobile, bandwidth-limited |
 
 ### Progressive Estimation
 
@@ -812,10 +812,10 @@ Requirements:
 
 | File | Size | Gzipped |
 |------|------|---------|
-| `sonare.js` | ~50 KB | ~13 KB |
-| `index.js` | ~64 KB | ~12 KB |
-| `sonare.wasm` | ~1,607 KB | ~573 KB |
-| **Total** | ~1,721 KB | ~598 KB |
+| `sonare.js` | ~{{ wasmMeta.sonareJs.sizeKB }} KB | ~{{ wasmMeta.sonareJs.gzipKB }} KB |
+| `index.js` | ~{{ wasmMeta.indexJs.sizeKB }} KB | ~{{ wasmMeta.indexJs.gzipKB }} KB |
+| `sonare.wasm` | ~{{ wasmMeta.wasm.sizeKB }} KB | ~{{ wasmMeta.wasm.gzipKB }} KB |
+| **Total** | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
 
 ## Troubleshooting
 

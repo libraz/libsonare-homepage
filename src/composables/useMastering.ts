@@ -102,9 +102,16 @@ export interface MasteringInsightReport {
   streamingPreview: unknown;
 }
 
+export interface ReferenceAnalysisReport {
+  loudness: unknown;
+  tonalBalance: unknown;
+  monoCompatibility: unknown;
+}
+
 type WorkerMessage =
   | { type: 'progress'; id: number; progress: number; stage: string }
   | { type: 'done'; id: number; result: RenderedMasteringAudio }
+  | { type: 'analysisDone'; id: number; result: ReferenceAnalysisReport }
   | { type: 'error'; id: number; error: string };
 
 export function useMastering() {
@@ -269,6 +276,31 @@ export function useMastering() {
     }
   }
 
+  async function analyzeReference(
+    reference: DecodedMasteringAudio,
+  ): Promise<ReferenceAnalysisReport> {
+    if (!source.value) {
+      throw new Error('No audio loaded');
+    }
+
+    const matchedReference =
+      reference.sampleRate === source.value.sampleRate
+        ? reference
+        : {
+            ...reference,
+            sampleRate: source.value.sampleRate,
+            left: resampleLinear(reference.left, reference.sampleRate, source.value.sampleRate),
+            right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
+          };
+
+    try {
+      return await analyzeReferenceInWorker(source.value, matchedReference);
+    } catch (e) {
+      console.error('Reference analysis failed:', e);
+      throw e instanceof Error ? e : new Error('Reference analysis failed');
+    }
+  }
+
   function createAudioUrl(audio: RenderedMasteringAudio): string {
     const wav = encodeWav(audio.left, audio.right, audio.sampleRate);
     return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
@@ -312,8 +344,10 @@ export function useMastering() {
 
         if (message.type === 'done') {
           resolve(message.result);
-        } else {
+        } else if (message.type === 'error') {
           reject(new Error(message.error));
+        } else {
+          reject(new Error('Unexpected worker response for mastering render'));
         }
       };
 
@@ -365,8 +399,10 @@ export function useMastering() {
 
         if (message.type === 'done') {
           resolve(message.result);
-        } else {
+        } else if (message.type === 'error') {
           reject(new Error(message.error));
+        } else {
+          reject(new Error('Unexpected worker response for reference match'));
         }
       };
 
@@ -393,6 +429,59 @@ export function useMastering() {
     });
   }
 
+  function analyzeReferenceInWorker(
+    audio: DecodedMasteringAudio,
+    referenceAudio: DecodedMasteringAudio,
+  ): Promise<ReferenceAnalysisReport> {
+    const id = ++renderRequestId;
+
+    if (!worker) {
+      worker = new Worker(new URL('../workers/mastering.worker.ts', import.meta.url), {
+        type: 'module',
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const onMessage = (event: MessageEvent<WorkerMessage>) => {
+        const message = event.data;
+        if (message.id !== id) return;
+
+        if (message.type === 'progress') {
+          return;
+        }
+
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
+
+        if (message.type === 'analysisDone') {
+          resolve(message.result);
+        } else if (message.type === 'error') {
+          reject(new Error(message.error));
+        } else {
+          reject(new Error('Unexpected worker response for reference analysis'));
+        }
+      };
+
+      const onError = (event: ErrorEvent) => {
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
+        reject(event.error || new Error(event.message));
+      };
+
+      worker!.addEventListener('message', onMessage);
+      worker!.addEventListener('error', onError);
+      worker!.postMessage({
+        type: 'referenceAnalyze',
+        id,
+        sourceLeft: new Float32Array(audio.left),
+        sourceRight: new Float32Array(audio.right),
+        referenceLeft: new Float32Array(referenceAudio.left),
+        referenceRight: new Float32Array(referenceAudio.right),
+        sampleRate: audio.sampleRate,
+      });
+    });
+  }
+
   return {
     isInitialized,
     isLoading,
@@ -408,6 +497,7 @@ export function useMastering() {
     render,
     renderReferenceMatch,
     analyzeSource,
+    analyzeReference,
     measureIntegratedLufs,
     createAudioUrl,
     createSourceAudioUrl,

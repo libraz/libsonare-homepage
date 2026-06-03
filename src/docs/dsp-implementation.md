@@ -87,9 +87,9 @@ The MIR side is built from reusable feature stages rather than one monolithic an
 | Onset / tempogram / PLP | Onset envelope and local periodicity representations | BPM, beat, rhythm, and pulse analysis |
 | Pitch tracking | YIN and pYIN style F0 estimation | Melody extraction and monophonic pitch analysis |
 | Inverse features | Pseudo-inverse mel/MFCC paths and Griffin-Lim audio synthesis | Debug previews and feature round-trip checks |
-| Room acoustics | Energy decay curve metrics for IRs and blind free-decay fitting for normal recordings | RT60, EDT, C50, C80, D50, band decay, and confidence |
+| Room acoustics | Energy decay curve metrics for IRs, blind free-decay fitting, equivalent-room estimation, image-source RIR synthesis, and creative room morphing | RT60, EDT, C50, C80, D50, band decay, volume, dimensions, absorption, DRR, generated RIRs, and confidence |
 
-Feature inversion and blind acoustic estimation are useful, but they are estimates. Inverse helpers cannot restore discarded phase or mel/MFCC detail; blind acoustic mode reports confidence because ordinary recordings may not contain a clean free-decay region.
+Feature inversion, blind acoustic estimation, and equivalent-room estimation are useful, but they are estimates. Inverse helpers cannot restore discarded phase or mel/MFCC detail; blind acoustic and room-estimation modes report confidence because ordinary recordings may not contain a clean free-decay region.
 
 ## Mastering Chain
 
@@ -238,8 +238,14 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 | Voice change | Pitch and formant controls | Voice transformation | More expensive than simple pitch shift |
 | Normalize | Peak or target-level gain adjustment | Utility level matching | File-level operation unless gain is known ahead |
 | Trim/split silence | Threshold segmentation | Batch cleanup and asset prep | File-level utility |
-| Reverb inserts | `effects.reverb.plate` / `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, and `effects.reverb.convolution` when `SONARE_HAVE_FX` is enabled | Space and ambience in mixer/mastering insert graphs | Algorithmic reverb is streamable; convolution needs an IR supplied through native insert creation paths |
+| Reverb inserts | Plate/Dattorro, FDN, velvet, convolution, geometric room, and room-morph inserts | Space, ambience, and room-character morphing in mixer/mastering insert graphs | Build flags and IR requirements vary |
 | Modulation/delay modules | Chorus, flanger, phaser, and stereo delay DSP live in source modules | Building blocks for creative FX | Not exposed as standalone top-level JS/Python helpers in the current public bindings |
+
+::: info Reverb insert availability
+`effects.reverb.plate` / `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, and `effects.reverb.convolution` require `SONARE_HAVE_FX`. `effects.reverb.room` and `effects.acoustic.roomMorph` also require `BUILD_ACOUSTIC_SIM`.
+
+Algorithmic and geometric room reverb are streamable. Convolution needs an IR supplied through native insert creation paths.
+:::
 
 ## Mixing DSP
 

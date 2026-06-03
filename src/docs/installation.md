@@ -112,6 +112,7 @@ cd libsonare
 mkdir build && cd build
 cmake ..                         # auto-detect FFmpeg
 # cmake .. -DSONARE_WITH_FFMPEG=ON  # require FFmpeg-backed decoding
+# cmake .. -DBUILD_ACOUSTIC_SIM=ON  # enable geometric room acoustics (default ON)
 
 make -j$(nproc)
 
@@ -215,3 +216,7 @@ sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rat
 
 For acoustic metrics, use `sonare::quick::analyze_impulse_response()` for measured
 impulse responses and `sonare::quick::detect_acoustic()` for blind estimates.
+For geometric room acoustics:
+
+- include the header for the feature you use: `acoustic/rir_synthesizer.h`, `analysis/room_estimator.h`, or `effects/acoustic/room_morph.h`;
+- build with `BUILD_ACOUSTIC_SIM=ON`.

@@ -8,7 +8,7 @@ import { useTheme } from '@/composables/useTheme';
 const props = withDefaults(
   defineProps<{
     /** Active demo, used to highlight its tab. */
-    demoId: 'analyzer' | 'mastering' | 'analysis' | 'mixing' | 'fx';
+    demoId: 'analyzer' | 'mastering' | 'analysis' | 'mixing' | 'fx' | 'spatial';
     title: string;
     subtitle?: string;
     version?: string;
@@ -68,6 +68,11 @@ const demoTabs = computed(() => [
     id: 'fx',
     label: ja.value ? 'リアルタイムFX' : 'Realtime FX',
     path: ja.value ? '/ja/realtime-fx' : '/realtime-fx',
+  },
+  {
+    id: 'spatial',
+    label: ja.value ? '空間 3D' : 'Spatial 3D',
+    path: ja.value ? '/ja/spatial' : '/spatial',
   },
 ]);
 

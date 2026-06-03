@@ -24,6 +24,15 @@ type WorkerRequest =
       targetLufs: number;
       ceilingDb: number;
       lookaheadMs: number;
+    }
+  | {
+      type: 'referenceAnalyze';
+      id: number;
+      sourceLeft: Float32Array;
+      sourceRight: Float32Array;
+      referenceLeft: Float32Array;
+      referenceRight: Float32Array;
+      sampleRate: number;
     };
 
 type WasmModule = {
@@ -42,6 +51,20 @@ type WasmModule = {
     sampleRate: number,
     params?: Record<string, number | boolean>,
   ) => MasteringResult;
+  masteringPairAnalyze: (
+    analysisName: string,
+    source: Float32Array,
+    reference: Float32Array,
+    sampleRate: number,
+    params?: Record<string, number | boolean>,
+  ) => string;
+  masteringStereoAnalyze: (
+    analysisName: string,
+    left: Float32Array,
+    right: Float32Array,
+    sampleRate: number,
+    params?: Record<string, number | boolean>,
+  ) => string;
 };
 
 let wasmModule: WasmModule | null = null;
@@ -56,6 +79,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       postProgress(request.id, 0.12, 'Loading libsonare WASM');
       wasmModule = (await import('../wasm/index.js')) as WasmModule;
       await wasmModule.init();
+    }
+
+    if (request.type === 'referenceAnalyze') {
+      const result = analyzeReference(request);
+      self.postMessage({ type: 'analysisDone', id: request.id, result });
+      return;
     }
 
     const result =
@@ -104,6 +133,47 @@ function renderMasteringChain(request: Extract<WorkerRequest, { type: 'render' }
       postProgress(request.id, 0.24 + progress * 0.7, stage);
     },
   );
+}
+
+function analyzeReference(request: Extract<WorkerRequest, { type: 'referenceAnalyze' }>) {
+  if (!wasmModule) throw new Error('WASM module is not initialized');
+
+  postProgress(request.id, 0.24, 'Analyzing reference loudness');
+  const sourceMono = mixToMono(request.sourceLeft, request.sourceRight);
+  const referenceMono = mixToMono(request.referenceLeft, request.referenceRight);
+  const pairLength = Math.min(sourceMono.length, referenceMono.length);
+  if (pairLength <= 0) throw new Error('Reference analysis requires non-empty audio');
+
+  const sourcePair = sourceMono.slice(0, pairLength);
+  const referencePair = referenceMono.slice(0, pairLength);
+  const loudness = parseJson(
+    wasmModule.masteringPairAnalyze(
+      'match.referenceLoudness',
+      sourcePair,
+      referencePair,
+      request.sampleRate,
+    ),
+  );
+
+  postProgress(request.id, 0.5, 'Analyzing tonal balance');
+  const tonalBalance = parseJson(
+    wasmModule.masteringPairAnalyze('match.tonalBalance', sourcePair, referencePair, request.sampleRate),
+  );
+
+  postProgress(request.id, 0.76, 'Checking mono compatibility');
+  const referenceStereoLength = Math.min(request.referenceLeft.length, request.referenceRight.length);
+  const monoCompatibility = parseJson(
+    wasmModule.masteringStereoAnalyze(
+      'stereo.monoCompatCheck',
+      request.referenceLeft.slice(0, referenceStereoLength),
+      request.referenceRight.slice(0, referenceStereoLength),
+      request.sampleRate,
+      { correlationThreshold: 0 },
+    ),
+  );
+
+  postProgress(request.id, 0.94, 'Finalizing reference analysis');
+  return { loudness, tonalBalance, monoCompatibility };
 }
 
 function ceilingFromConfig(config: MasteringChainConfig): number {
@@ -206,4 +276,19 @@ function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'reference
 
 function postProgress(id: number, progress: number, stage: string) {
   self.postMessage({ type: 'progress', id, progress, stage });
+}
+
+function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
+  const length = Math.min(left.length, right.length);
+  const mono = new Float32Array(length);
+  for (let i = 0; i < length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+  return mono;
+}
+
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 }

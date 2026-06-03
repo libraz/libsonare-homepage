@@ -106,7 +106,7 @@ if (!validation.ok) {
 
 Current built-in preset JSON uses schema version `1`. The native POD-config ABI is separate; check it with `voiceChangerAbiVersion()` when you are crossing FFI or native boundaries.
 
-If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. Python exposes the same native-config path as `realtime_voice_changer_preset_pod(...)`.
+If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. Python exposes the same native-config path as `realtime_voice_changer_preset_config(...)`.
 
 ## Python
 
@@ -114,7 +114,7 @@ If you only need a canonical preset ID or the resolved flat native config, use `
 import libsonare as sonare
 
 print(sonare.voice_character_preset_id(1))
-preset_config = sonare.realtime_voice_changer_preset_pod("bright-idol")
+preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")
 
 with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
     out = changer.process_mono(input_block)

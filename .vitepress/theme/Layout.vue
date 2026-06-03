@@ -7,6 +7,7 @@ import MasteringDemo from '@/components/MasteringDemo.vue';
 import MixingStudio from '@/components/MixingStudio.vue';
 import MusicAnalysisStudio from '@/components/MusicAnalysisStudio.vue';
 import RealtimeFxLab from '@/components/RealtimeFxLab.vue';
+import SpatialScanner from '@/components/SpatialScanner.vue';
 import { createTheme } from '@/composables/useTheme';
 import DemosLayout from './DemosLayout.vue';
 import LandingLayout from './LandingLayout.vue';
@@ -23,6 +24,7 @@ const isMaster = computed(() => frontmatter.value.layout === 'master');
 const isAnalysisStudio = computed(() => frontmatter.value.layout === 'analysis-studio');
 const isMixingStudio = computed(() => frontmatter.value.layout === 'mixing-studio');
 const isRealtimeFx = computed(() => frontmatter.value.layout === 'realtime-fx');
+const isSpatial = computed(() => frontmatter.value.layout === 'spatial');
 </script>
 
 <template>
@@ -33,5 +35,6 @@ const isRealtimeFx = computed(() => frontmatter.value.layout === 'realtime-fx');
   <MusicAnalysisStudio v-else-if="isAnalysisStudio" />
   <MixingStudio v-else-if="isMixingStudio" />
   <RealtimeFxLab v-else-if="isRealtimeFx" />
+  <SpatialScanner v-else-if="isSpatial" />
   <DefaultLayout v-else />
 </template>

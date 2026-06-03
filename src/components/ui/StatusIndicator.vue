@@ -78,4 +78,10 @@ defineProps<{
     transform: scale(0.9);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .status-indicator--pulse .status-indicator__dot {
+    animation: none;
+  }
+}
 </style>

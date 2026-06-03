@@ -31,14 +31,15 @@ By the end of this page you should be able to:
 |------|----------------------------|
 | librosa-compatible features | `tests/librosa/*_test.cpp` and JSON references in `tests/librosa/reference/` cover STFT, mel, MFCC, chroma/CQT, onset, beat/tempo, PCEN, tonnetz, silence, frame/pad/fix, peak pick, and conversion helpers |
 | Core DSP primitives | `tests/core/*_test.cpp`, `tests/util/*_test.cpp`, `tests/filters/*_test.cpp`, `tests/rt/*_test.cpp` cover FFT, windowing, resampling, padding, sequence, filters, oversampling, true-peak filters, queues, and realtime primitives |
-| Analysis | `tests/analysis/*_test.cpp`, music fixture manifests, and synthetic key/chord matrices cover BPM, key, chord, beat, downbeat, meter, melody, timbre, rhythm, section, boundary, and acoustic analysis |
+| Analysis | `tests/analysis/*_test.cpp`, optional music fixture manifests in `tests/fixtures/music_eval/`, and synthetic key/chord matrices cover BPM, key, chord, beat, downbeat, meter, melody, timbre, rhythm, section, boundary, and acoustic analysis |
+| Geometric room acoustics | `tests/acoustic/*_test.cpp`, `tests/effects/room_morph_test.cpp`, `tests/api/sonare_c_acoustic_test.cpp`, optional acoustic fixtures in `tests/fixtures/acoustic/`, and binding tests cover room models/materials, image-source reflections, late reverb, RIR synthesis, equivalent-room estimation, room morphing, and C ABI behavior |
 | Mastering | `tests/mastering/*_test.cpp` covers chain config, latency, EQ, dynamics, multiband, saturation, repair, spectral, stereo, match, maximizer, EBU R128, loudness ceiling, presets, golden hashes, property checks, and assistant output |
 | Mixing | `tests/mixing/*_test.cpp`, `bindings/node/tests/mixing.test.ts`, `bindings/python/tests/test_mixing.py`, and WASM tests cover routing, insert automation, no-allocation process checks, scene presets, meters, goniometer, and binding smoke tests |
 | Realtime engine | `tests/engine/*_test.cpp`, `bindings/python/tests/test_engine.py`, and WASM worklet tests cover transport, tempo sync, metronome, capture, graph runtime, monitor runtime, telemetry, offline bounce, concurrency, and AudioWorklet runtime behavior |
 | Bindings | `bindings/wasm/tests/*.test.ts`, `bindings/node/tests/*.test.ts`, `bindings/python/tests/*.py`, and typing smoke tests cover exported API shape and cross-binding behavior |
 | Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so facade drift is caught before release |
 | CLI | `tests/cli/cli_test.cpp` and Python CLI parser coverage exercise terminal entry points |
-| Performance | `benchmarks/*.cpp` and benchmark result JSON files cover spectrum, streaming mel/chroma, mastering support, ISP, stereo, mixing, EQ, and resampling-related hot paths |
+| Performance | `benchmarks/*.cpp`, `benchmarks/results.json`, and `benchmarks/results_cpp.json` cover spectrum, streaming mel/chroma, mastering support, ISP, stereo, mixing, EQ, and resampling-related hot paths |
 
 ::: details What do "golden hashes", "property checks", and "no-allocation checks" mean?
 These are the kinds of automated test used above.
@@ -63,4 +64,8 @@ libsonare still separates realtime-safe block processing from offline helpers. F
 
 ## Accuracy Boundaries
 
-librosa parity means the implementation is compared against generated reference values for the covered helper, not that every high-level music-analysis result is identical to librosa. Mastering validation checks DSP invariants, loudness/true-peak behavior, golden hashes, and published-algorithm assumptions where applicable. Room-acoustic blind estimates and music-structure analysis are heuristic features and should be treated as estimates with confidence values.
+librosa parity means the implementation is compared against generated reference values for the covered helper. It does not mean that every high-level music-analysis result is identical to librosa.
+
+Mastering validation checks DSP invariants, loudness/true-peak behavior, golden hashes, and published-algorithm assumptions where applicable.
+
+Room-acoustic blind estimates and music-structure analysis are heuristic features. Treat them as estimates with confidence values.

@@ -61,6 +61,19 @@
   text-align: center;
 }
 
+.mix-drop {
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.mix-drop:hover {
+  border-color: var(--demo-accent);
+}
+
+.mix-drop:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: -2px;
+}
+
 .mix-drop__input {
   display: none;
 }
@@ -114,15 +127,47 @@
   text-transform: uppercase;
 }
 
+.mix-button {
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.mix-button:not(.mix-button--primary):not(:disabled):hover {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-text-strong);
+}
+
+.mix-button:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
 .mix-button--primary {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
   color: #fff;
 }
 
+.mix-button--primary:not(:disabled):hover {
+  background: var(--demo-accent-light);
+  border-color: var(--demo-accent-light);
+}
+
 .mix-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.mix-progress__bar span {
+  transition: width 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-drop,
+  .mix-button,
+  .mix-progress__bar span {
+    transition: none;
+  }
 }
 
 .mix-progress,

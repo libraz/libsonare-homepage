@@ -37,7 +37,7 @@ This page is not a list to memorize. Choose one task, then follow that row to th
 | Python / CLI | `pip install libsonare` | [Python API](./python-api.md), [CLI](./cli.md) |
 | Node native | `@libraz/libsonare-native` source build | [Native Bindings](./native-bindings.md) |
 | C++ | `sonare.h`, module headers | [C++ API](./cpp-api.md) |
-| C ABI | `sonare_c.h` | [C++ API](./cpp-api.md#c-api), [Binding Parity](./binding-parity.md) |
+| C ABI | `sonare_c.h` plus module headers such as `sonare_c_acoustic.h` | [C++ API](./cpp-api.md#c-api), [Binding Parity](./binding-parity.md) |
 
 ## Feature Families
 
@@ -49,6 +49,9 @@ This page is not a list to memorize. Choose one task, then follow that row to th
 - **PLP** — a feature that estimates the main rhythmic pulse.
 - **LUFS / LRA** — loudness and loudness-range metrics.
 - **VCA** — a group control that moves several strip levels together.
+- **RIR** — room impulse response.
+- **Equivalent-room estimation** — fitting a practical room model from audio.
+- **Room morphing** — applying a target-room character as an effect.
 :::
 
 | Family | What is covered | Main pages |
@@ -58,7 +61,7 @@ This page is not a list to memorize. Choose one task, then follow that row to th
 | Metering | Offline level, loudness, crest-factor, true-peak and DC-offset meters; clipping and dynamic-range reports; stereo correlation/width; vectorscope, phase-scope, and spectrum snapshots | [JavaScript API](./js-api.md#metering), [Python API](./python-api.md), [Native Bindings](./native-bindings.md) |
 | Scale quantization | Snap MIDI notes to a scale, measure the correction in semitones, and test pitch-class membership | [JavaScript API](./js-api.md#scale-quantization), [Python API](./python-api.md) |
 | Effects and editing | HPSS, HPSS with residual, harmonic/percussive extraction, normalize, trim, remix, phase vocoder, time stretch, pitch shift, pitch correction, note stretch, voice pitch/formant change, realtime voice presets | [Editing DSP](./editing-dsp.md), [JavaScript API](./js-api.md#audio-effects) |
-| Room acoustics | Impulse-response reverberation time (RT60 / EDT), clarity (C50 / C80), definition (D50), and blind acoustic estimation from normal recordings | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
+| Room acoustics | Impulse-response reverberation time (RT60 / EDT), clarity (C50 / C80), definition (D50), blind acoustic estimation, equivalent-room estimation, geometric RIR synthesis, and creative room morphing | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
 | Mixing | Channel strips, buses, sends, VCA groups, scene presets, automation, meters, goniometer, offline rendering | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | Mastering assistant | Source audio profile, chain suggestion JSON, streaming-platform preview JSON | [Mastering Assistant](./mastering-assistant.md) |
 | Mastering | Presets, full chains, named processors, pair processors, pair analyses, stereo analyses, streaming mastering chain | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Mastering Implementation](./mastering-implementation.md) |
@@ -93,4 +96,15 @@ The complete function list is maintained in `bindings/wasm/src/index.ts` in the 
 
 ## CLI Command Families
 
-The Python CLI covers version/info, core analysis, common feature summaries, newer file-writing editing commands (`pitch-correct`, `note-stretch`, `voice-change`), acoustic/rhythm/dynamics/timbre summaries, LUFS, mastering processor entry points, and simple mixing. The source-built C++ CLI exposes a broader lower-level command set, including section/melody/boundary utilities, CQT/tonnetz/PCEN/Fourier tempogram and tempogram-ratio helpers, additional time/pitch file-processing commands (`time-stretch`, `pitch-shift`), mastering pair/stereo lists, and mixing scene preset export. See [CLI](./cli.md) for command examples and [Binding Parity](./binding-parity.md) for runtime differences.
+The Python CLI covers the common user-facing commands:
+
+- version/info and core analysis;
+- feature summaries and LUFS;
+- file-writing editing commands such as `pitch-correct`, `note-stretch`, and `voice-change`;
+- acoustic/rhythm/dynamics/timbre summaries;
+- equivalent-room estimation, RIR synthesis, and room morphing;
+- mastering processor entry points and simple mixing.
+
+The source-built C++ CLI exposes a broader lower-level command set. Use it for section/melody/boundary utilities, CQT/tonnetz/PCEN/Fourier tempogram helpers, extra time/pitch file-processing commands, mastering pair/stereo lists, and mixing scene preset export.
+
+See [CLI](./cli.md) for command examples and [Binding Parity](./binding-parity.md) for runtime differences.

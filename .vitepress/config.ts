@@ -6,9 +6,71 @@ import { withMermaid } from 'vitepress-plugin-mermaid';
 const siteUrl = 'https://sonare.libraz.net';
 const githubUrl = 'https://github.com/libraz/libsonare';
 
+type WasmAssetMeta = {
+  sizeKB: number;
+  gzipKB: number;
+};
+
+type WasmMeta = {
+  version: string;
+  sizeKB: number;
+  gzipKB: number;
+  assets?: Record<string, WasmAssetMeta>;
+  total?: WasmAssetMeta;
+};
+
 const wasmMeta = JSON.parse(
   readFileSync(fileURLToPath(new URL('../src/wasm/meta.json', import.meta.url)), 'utf-8'),
-) as { version: string };
+) as WasmMeta;
+
+function formatKb(value: number): string {
+  return value.toLocaleString('en-US');
+}
+
+function wasmAsset(name: string): WasmAssetMeta {
+  if (name === 'sonare.wasm') {
+    return {
+      sizeKB: wasmMeta.assets?.[name]?.sizeKB ?? wasmMeta.sizeKB,
+      gzipKB: wasmMeta.assets?.[name]?.gzipKB ?? wasmMeta.gzipKB,
+    };
+  }
+
+  const asset = wasmMeta.assets?.[name];
+  if (!asset) {
+    throw new Error(`Missing ${name} in src/wasm/meta.json assets`);
+  }
+  return asset;
+}
+
+const wasmMetaTokens: Record<string, string> = {
+  version: wasmMeta.version,
+  'sonareJs.sizeKB': formatKb(wasmAsset('sonare.js').sizeKB),
+  'sonareJs.gzipKB': formatKb(wasmAsset('sonare.js').gzipKB),
+  'indexJs.sizeKB': formatKb(wasmAsset('index.js').sizeKB),
+  'indexJs.gzipKB': formatKb(wasmAsset('index.js').gzipKB),
+  'wasm.sizeKB': formatKb(wasmAsset('sonare.wasm').sizeKB),
+  'wasm.gzipKB': formatKb(wasmAsset('sonare.wasm').gzipKB),
+  'total.sizeKB': formatKb(
+    wasmMeta.total?.sizeKB ??
+      wasmAsset('sonare.js').sizeKB + wasmAsset('index.js').sizeKB + wasmAsset('sonare.wasm').sizeKB,
+  ),
+  'total.gzipKB': formatKb(
+    wasmMeta.total?.gzipKB ??
+      wasmAsset('sonare.js').gzipKB +
+        wasmAsset('index.js').gzipKB +
+        wasmAsset('sonare.wasm').gzipKB,
+  ),
+};
+
+function replaceWasmMetaTokens(src: string): string {
+  return src.replace(/\{\{\s*wasmMeta\.([A-Za-z0-9.]+)\s*\}\}/g, (match, key: string) => {
+    const value = wasmMetaTokens[key];
+    if (value === undefined) {
+      throw new Error(`Unknown wasm meta token: ${match}`);
+    }
+    return value;
+  });
+}
 
 function routeFromRelativePath(relativePath: string): string {
   const withoutIndex = relativePath.replace(/(^|\/)index\.md$/, '$1');
@@ -285,7 +347,7 @@ const softwareApplicationJsonLd = {
   license: 'https://www.apache.org/licenses/LICENSE-2.0',
   featureList: [
     'Browser-local analysis, mastering, mixing, and realtime FX demos',
-    'BPM, key, chord, beat, downbeat, section, melody, loudness, and room-acoustic analysis',
+    'BPM, key, chord, beat, downbeat, section, melody, loudness, room-acoustic analysis, and geometric room tools',
     '66 named mastering DSP processors with an 18-processor default chain',
     'Real-time-safe mixing, routing, metering, offline rendering, editing DSP, and creative FX',
     'WebAssembly, Python, CLI, Node.js, and C++ APIs',
@@ -381,6 +443,14 @@ export default withMermaid(
       ],
     ],
 
+    markdown: {
+      config(md) {
+        md.core.ruler.before('normalize', 'replace_wasm_meta_tokens', (state) => {
+          state.src = replaceWasmMetaTokens(state.src);
+        });
+      },
+    },
+
     transformHead({ pageData, description }) {
       const path = routeFromRelativePath(pageData.relativePath);
       const url = absoluteUrl(path);
@@ -447,6 +517,7 @@ export default withMermaid(
                   items: [
                     { text: 'Visual Player', link: '/analyzer' },
                     { text: 'Music Analysis Studio', link: '/music-analysis' },
+                    { text: 'Spatial Room Scanner', link: '/spatial' },
                   ],
                 },
                 {
@@ -479,13 +550,13 @@ export default withMermaid(
                 text: 'Build By Task',
                 items: [
                   { text: 'Editing DSP', link: '/docs/editing-dsp' },
-                  { text: 'Room Acoustics', link: '/docs/acoustic-analysis' },
                   { text: 'Mixing Engine', link: '/docs/mixing' },
                   { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
                   { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
                   { text: 'Mastering Processors', link: '/docs/mastering-processors' },
                   { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
                   { text: 'Realtime Voice Changer', link: '/docs/realtime-voice-changer' },
+                  { text: 'Room Acoustics', link: '/docs/acoustic-analysis' },
                   { text: 'Inverse Features', link: '/docs/inverse-features' },
                 ],
               },
@@ -535,6 +606,7 @@ export default withMermaid(
                   items: [
                     { text: 'ビジュアルプレイヤー', link: '/ja/analyzer' },
                     { text: '楽曲分析スタジオ', link: '/ja/music-analysis' },
+                    { text: '空間ルームスキャナー', link: '/ja/spatial' },
                   ],
                 },
                 {
@@ -567,7 +639,6 @@ export default withMermaid(
                 text: '作りたいもの別',
                 items: [
                   { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
-                  { text: 'ルーム音響解析', link: '/ja/docs/acoustic-analysis' },
                   { text: 'ミキシングエンジン', link: '/ja/docs/mixing' },
                   { text: 'ミキシングシーン JSON', link: '/ja/docs/mixing-scene-json' },
                   { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
@@ -577,6 +648,7 @@ export default withMermaid(
                     text: 'リアルタイムボイスチェンジャー',
                     link: '/ja/docs/realtime-voice-changer',
                   },
+                  { text: 'ルーム音響解析', link: '/ja/docs/acoustic-analysis' },
                   { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
                 ],
               },

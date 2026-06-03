@@ -271,6 +271,63 @@ interface AcousticResult {
     confidence: number;
     isBlind: boolean;
 }
+/** Shoebox geometry + placement shared by RIR synthesis and the room morph. */
+interface RoomGeometryOptions {
+    lengthM?: number;
+    widthM?: number;
+    heightM?: number;
+    absorption?: number;
+    sourceX?: number;
+    sourceY?: number;
+    sourceZ?: number;
+    listenerX?: number;
+    listenerY?: number;
+    listenerZ?: number;
+    ismOrder?: number;
+    seed?: number;
+    maxSeconds?: number;
+}
+interface RirSynthOptions extends RoomGeometryOptions {
+    sampleRate?: number;
+    /** Use the Eyring statistical late-tail model (default true); false = Sabine. */
+    preferEyring?: boolean;
+    /** Early/late crossover in ms (0 = auto, ~sqrt(V) ms). */
+    mixingTimeMs?: number;
+    /** Equal-power crossfade width around the mixing time in ms (0 = default). */
+    crossfadeMs?: number;
+}
+interface RirResult {
+    rir: Float32Array;
+    sampleRate: number;
+    hasError: boolean;
+}
+interface RoomEstimateOptions {
+    aspectHintLw?: number;
+    aspectHintLh?: number;
+    referenceAbsorption?: number;
+    preferEyring?: boolean;
+    nOctaveBands?: number;
+    /** Analyzer routing: 0 = auto, 1 = blind, 2 = impulse-response. */
+    mode?: number;
+    /** Analyzer decay-fit span in dB (0 = library default). */
+    minDecayDb?: number;
+    /** Analyzer noise-floor margin in dB (0 = library default). */
+    noiseFloorMarginDb?: number;
+}
+interface RoomEstimateResult {
+    volume: number;
+    length: number;
+    width: number;
+    height: number;
+    drrDb: number;
+    confidence: number;
+    absorptionBands: Float32Array;
+    rt60Bands: Float32Array;
+}
+interface RoomMorphOptions extends RoomGeometryOptions {
+    wet?: number;
+    sourceTailSuppression?: number;
+}
 /**
  * HPSS (Harmonic-Percussive Source Separation) result
  */
@@ -713,6 +770,10 @@ interface RealtimeVoiceChangerPodConfig {
     reverb_seed: number;
     limiter_ceiling_db: number;
     limiter_release_ms: number;
+    /** Non-zero enables the 4x-oversampled inter-sample-peak limiter (default enabled). */
+    limiter_enable_isp_limiter: boolean;
+    /** True-peak ceiling in dBTP applied by the ISP limiter (default -1.0). */
+    limiter_isp_ceiling_dbtp: number;
 }
 /** Options for {@link StreamingEqualizer.match}. */
 interface EqMatchOptions {
@@ -787,6 +848,8 @@ interface AnalyzerStats {
  */
 interface FrameBuffer {
     nFrames: number;
+    /** Number of mel bands; flat `mel` is `[nFrames * nMels]` row-major. */
+    nMels: number;
     timestamps: Float32Array;
     mel: Float32Array;
     chroma: Float32Array;
@@ -824,7 +887,8 @@ interface StreamFramesI16 {
  * Configuration for StreamAnalyzer
  */
 interface StreamConfig {
-    sampleRate: number;
+    /** Sample rate in Hz. Optional for parity with the Node/Python bindings (default 44100). */
+    sampleRate?: number;
     nFft?: number;
     hopLength?: number;
     nMels?: number;
@@ -849,7 +913,7 @@ interface StreamConfig {
  *
  * @example
  * ```typescript
- * import { init, detectBpm, detectKey, analyze } from '@libraz/sonare';
+ * import { init, detectBpm, detectKey, analyze } from '@libraz/libsonare';
  *
  * await init();
  *
@@ -1019,6 +1083,25 @@ declare class RealtimeEngine {
     captureStatus(): EngineCaptureStatus;
     capturedAudio(): Float32Array[];
     process(channels: Float32Array[]): Float32Array[];
+    /**
+     * Allocates persistent per-channel WASM-heap scratch for the zero-copy
+     * `getChannelBuffer` / `processPrepared` realtime path. Call once (off the
+     * audio thread) before driving `processPrepared` from an AudioWorklet so the
+     * render callback never allocates on the C++/JS heap.
+     */
+    prepareChannels(numChannels: number, maxFrames: number): void;
+    /**
+     * Returns a Float32Array view onto the persistent WASM-heap scratch for one
+     * channel (valid for up to `numFrames`). Fill it, call `processPrepared`, then
+     * read the same view back. Re-acquire after WASM memory growth.
+     */
+    getChannelBuffer(channel: number, numFrames: number): Float32Array;
+    /**
+     * Runs the engine in place over the prepared per-channel scratch buffers.
+     * Allocation-free: safe to call on the AudioWorklet render thread after
+     * `prepareChannels`.
+     */
+    processPrepared(numFrames: number): void;
     processWithMonitor(channels: Float32Array[]): WasmEngineProcessWithMonitorResult;
     renderOffline(channels: Float32Array[], blockSize?: number): Float32Array[];
     bounceOffline(options: EngineBounceOptions): EngineBounceResult;
@@ -1087,6 +1170,22 @@ declare function detectChords(samples: Float32Array, sampleRate?: number, option
 declare function analyze(samples: Float32Array, sampleRate?: number): AnalysisResult;
 declare function analyzeImpulseResponse(samples: Float32Array, sampleRate?: number, nOctaveBands?: number): AcousticResult;
 declare function detectAcoustic(samples: Float32Array, sampleRate?: number, nOctaveBands?: number, nThirdOctaveSubbands?: number, minDecayDb?: number, noiseFloorMarginDb?: number): AcousticResult;
+/**
+ * Synthesize a room impulse response from shoebox geometry. `hasError` is true
+ * when the source/listener falls outside the room (the RIR is then empty).
+ */
+declare function synthesizeRir(options?: RirSynthOptions): RirResult;
+/**
+ * Estimate an equivalent room (volume/dimensions/absorption/DRR) from a
+ * recording or impulse response.
+ */
+declare function estimateRoom(samples: Float32Array, sampleRate?: number, options?: RoomEstimateOptions): RoomEstimateResult;
+/**
+ * Morph a recording's reverberation toward a target room (creative FX, not
+ * dereverberation). Returns the morphed samples (input length plus the target
+ * room's reverb tail).
+ */
+declare function roomMorph(samples: Float32Array, sampleRate: number, options?: RoomMorphOptions): Float32Array;
 /**
  * Perform complete music analysis with progress reporting.
  *
@@ -1189,7 +1288,7 @@ declare function hpss(samples: Float32Array, sampleRate?: number, kernelHarmonic
  * @param sampleRate - Sample rate in Hz
  * @returns Harmonic component
  */
-declare function harmonic(samples: Float32Array, sampleRate: number): Float32Array;
+declare function harmonic(samples: Float32Array, sampleRate: number, options?: ValidateOptions): Float32Array;
 /**
  * Extract percussive component from audio.
  *
@@ -1197,7 +1296,7 @@ declare function harmonic(samples: Float32Array, sampleRate: number): Float32Arr
  * @param sampleRate - Sample rate in Hz
  * @returns Percussive component
  */
-declare function percussive(samples: Float32Array, sampleRate: number): Float32Array;
+declare function percussive(samples: Float32Array, sampleRate: number, options?: ValidateOptions): Float32Array;
 /**
  * Time-stretch audio without changing pitch.
  *
@@ -1206,7 +1305,7 @@ declare function percussive(samples: Float32Array, sampleRate: number): Float32A
  * @param rate - Time stretch rate (0.5 = double duration, 2.0 = half duration)
  * @returns Time-stretched audio
  */
-declare function timeStretch(samples: Float32Array, sampleRate: number, rate: number): Float32Array;
+declare function timeStretch(samples: Float32Array, sampleRate: number, rate: number, options?: ValidateOptions): Float32Array;
 /**
  * Pitch-shift audio without changing duration.
  *
@@ -1215,7 +1314,7 @@ declare function timeStretch(samples: Float32Array, sampleRate: number, rate: nu
  * @param semitones - Pitch shift in semitones (+12 = one octave up, -12 = one octave down)
  * @returns Pitch-shifted audio
  */
-declare function pitchShift(samples: Float32Array, sampleRate: number, semitones: number): Float32Array;
+declare function pitchShift(samples: Float32Array, sampleRate: number, semitones: number, options?: ValidateOptions): Float32Array;
 /**
  * Pitch-correct audio from a current MIDI note to a target MIDI note.
  *
@@ -1225,7 +1324,7 @@ declare function pitchShift(samples: Float32Array, sampleRate: number, semitones
  * @param targetMidi - Desired MIDI note number
  * @returns Pitch-corrected audio
  */
-declare function pitchCorrectToMidi(samples: Float32Array, sampleRate?: number, currentMidi?: number, targetMidi?: number): Float32Array;
+declare function pitchCorrectToMidi(samples: Float32Array, sampleRate?: number, currentMidi?: number, targetMidi?: number, options?: ValidateOptions): Float32Array;
 /**
  * Time-stretch a note region between two sample offsets without changing pitch.
  *
@@ -1236,7 +1335,7 @@ declare function pitchCorrectToMidi(samples: Float32Array, sampleRate?: number, 
  * @param stretchRatio - Stretch ratio (0.5 = double duration, 2.0 = half duration)
  * @returns Audio with the note region stretched
  */
-declare function noteStretch(samples: Float32Array, sampleRate?: number, onsetSample?: number, offsetSample?: number, stretchRatio?: number): Float32Array;
+declare function noteStretch(samples: Float32Array, sampleRate?: number, onsetSample?: number, offsetSample?: number, stretchRatio?: number, options?: ValidateOptions): Float32Array;
 /**
  * Apply a voice change by shifting pitch and formants independently.
  *
@@ -1247,6 +1346,27 @@ declare function noteStretch(samples: Float32Array, sampleRate?: number, onsetSa
  * @returns Voice-changed audio
  */
 declare function voiceChange(samples: Float32Array, sampleRate?: number, pitchSemitones?: number, formantFactor?: number, options?: ValidateOptions): Float32Array;
+/** Options for the offline {@link voiceChangeRealtime} convenience wrapper. */
+interface VoiceChangeRealtimeOptions extends ValidateOptions {
+    sampleRate?: number;
+    /** Voice-changer preset id or full config object. */
+    preset?: RealtimeVoiceChangerConfigInput;
+    /** Channel count (1 = mono, 2 = interleaved stereo). */
+    channels?: 1 | 2;
+    /** Block size for the internal render loop (default 512). */
+    blockSize?: number;
+}
+/**
+ * Applies the realtime voice-changer chain to a whole buffer in one call.
+ *
+ * Constructs and prepares a {@link RealtimeVoiceChanger}, runs the block loop
+ * for the caller, then disposes it — matching the Python `voice_change_realtime`
+ * and Node `voiceChangeRealtime` convenience wrappers. For mono, `samples` is a
+ * plain mono buffer; for stereo, `samples` is interleaved (L0,R0,L1,R1,...).
+ *
+ * @returns The processed buffer (same layout/length as the input).
+ */
+declare function voiceChangeRealtime(samples: Float32Array, options?: VoiceChangeRealtimeOptions): Float32Array;
 /**
  * Normalize audio to target peak level.
  *
@@ -1255,7 +1375,7 @@ declare function voiceChange(samples: Float32Array, sampleRate?: number, pitchSe
  * @param targetDb - Target peak level in dB (default: 0 dB = full scale)
  * @returns Normalized audio
  */
-declare function normalize(samples: Float32Array, sampleRate: number, targetDb?: number): Float32Array;
+declare function normalize(samples: Float32Array, sampleRate: number, targetDb?: number, options?: ValidateOptions): Float32Array;
 /**
  * Apply mastering loudness normalization with a true-peak ceiling.
  *
@@ -2540,7 +2660,7 @@ declare function resample(samples: Float32Array, srcSr: number, targetSr: number
  *
  * @example
  * ```typescript
- * import { init, Audio } from '@libraz/sonare';
+ * import { init, Audio } from '@libraz/libsonare';
  *
  * await init();
  *
@@ -2617,7 +2737,7 @@ declare class Audio {
  *
  * @example
  * ```typescript
- * import { init, StreamAnalyzer } from '@libraz/sonare';
+ * import { init, StreamAnalyzer } from '@libraz/libsonare';
  *
  * await init();
  *
@@ -2720,4 +2840,4 @@ declare class StreamAnalyzer {
     dispose(): void;
 }
 
-export { type AcousticResult, type AnalysisResult, type AnalyzerStats, Audio, type AutomationCurve, type BarChord, type Beat, type BpmAnalysisResult, type BpmCandidate, type Chord, type ChordAnalysisResult, type ChordChange, type ChordDetectionOptions, ChordQuality, type ChromaResult, type ClippingRegion, type ClippingReport, type CompressorDetector, type CompressorOptions, type CqtResult, type DeclickOptions, type DeclipOptions, type DecomposeResult, type DecrackleMode, type DecrackleOptions, type DehumOptions, type DenoiseClassicalMode, type DenoiseClassicalNoiseEstimator, type DenoiseClassicalOptions, type DereverbClassicalOptions, type DynamicRangeReport, type Dynamics, type DynamicsAnalysisResult, type DynamicsResult, EXPECTED_ENGINE_ABI_VERSION, type EngineAutomationPoint, type EngineBounceOptions, type EngineBounceResult, type EngineCapabilities, type EngineCaptureStatus, type EngineClip, type EngineFreezeOptions, type EngineFreezeResult, type EngineGraphSpec, type EngineMarker, type EngineMeterTelemetry, type EngineMetronomeConfig, type EngineParameterInfo, type EngineTelemetry, type EngineTransportState, type EqBand, type EqBandPhase, type EqBandType, type EqCoeffMode, type EqMatchOptions, type EqSpectrumSnapshot, type EqStereoPlacement, type FrameBuffer, type GateOptions, type GoniometerPoint, type HpssResult, type HpssWithResidualResult, type Key, type KeyCandidate, type KeyDetectionOptions, KeyProfile, type KeyProfileName, type LufsResult, type MasteringChainConfig, type MasteringChainResult, type MasteringPreset, type MasteringProcessorParams, type MasteringResult, type MasteringStereoChainResult, type MasteringStereoResult, type Matrix2dResult, type MelSpectrogramResult, type MelodyPoint, type MelodyResult, type MeterTap, type MfccResult, type MixMeterSnapshot, type MixOptions, type MixResult, Mixer, type MixerProcessResult, type MixerRealtimeBuffer, Mode, type PairAnalysis, type PairProcessor, type PanLaw, type PanMode, type PatternScore, type PhaseScopeReport, PitchClass as Pitch, PitchClass, type PitchResult, type ProgressiveEstimate, RealtimeEngine, RealtimeVoiceChanger, type RealtimeVoiceChangerConfigInput, type RealtimeVoiceChangerInterleavedBuffer, type RealtimeVoiceChangerMonoBuffer, type RealtimeVoiceChangerPlanarBuffer, type RhythmAnalysisResult, type RhythmFeatures, type Section, SectionType, type SendTiming, type SoloProcessor, type SpectrumOptions, type SpectrumReport, type StereoAnalysis, type StftResult, StreamAnalyzer, type StreamConfig, type StreamFramesI16, type StreamFramesU8, StreamingEqualizer, type StreamingEqualizerConfig, StreamingMasteringChain, type StreamingPlatform, StreamingRetune, type StreamingRetuneConfig, type Timbre, type TimbreAnalysisResult, type TimbreFrame, type TimeSignature, type TransientShaperOptions, type TrimSilenceMode, type TrimSilenceOptions, type ValidateOptions, type VectorscopeReport, type VoicePresetId, amplitudeToDb, analyze, analyzeBpm, analyzeDynamics, analyzeImpulseResponse, analyzeMelody, analyzeRhythm, analyzeSections, analyzeTimbre, analyzeWithProgress, chroma, cqt, cyclicTempogram, dbToAmplitude, dbToPower, decompose, deemphasis, detectAcoustic, detectBeats, detectBpm, detectChords, detectDownbeats, detectKey, detectKeyCandidates, detectOnsets, ebur128LoudnessRange, engineAbiVersion, engineCapabilities, estimateTuning, fixFrames, fixLength, fourierTempogram, frameSignal, framesToSamples, framesToTime, harmonic, hasFfmpegSupport, hpss, hpssWithResidual, hzToMel, hzToMidi, hzToNote, init, isInitialized, lufs, lufsInterleaved, masterAudio, masterAudioStereo, masterAudioStereoWithProgress, masterAudioWithProgress, mastering, masteringAssistantSuggest, masteringAudioProfile, masteringChain, masteringChainStereo, masteringChainStereoWithProgress, masteringChainWithProgress, masteringDynamicsCompressor, masteringDynamicsGate, masteringDynamicsTransientShaper, masteringPairAnalysisNames, masteringPairAnalyze, masteringPairProcess, masteringPairProcessorNames, masteringPresetNames, masteringProcess, masteringProcessStereo, masteringProcessorNames, masteringRepairDeclick, masteringRepairDeclip, masteringRepairDecrackle, masteringRepairDehum, masteringRepairDenoiseClassical, masteringRepairDereverbClassical, masteringRepairTrimSilence, masteringStereoAnalysisNames, masteringStereoAnalyze, masteringStreamingPreview, melSpectrogram, melToAudio, melToHz, melToStft, meteringCrestFactorDb, meteringDcOffset, meteringDetectClipping, meteringDynamicRange, meteringPeakDb, meteringPhaseScope, meteringRmsDb, meteringSpectrum, meteringStereoCorrelation, meteringStereoWidth, meteringTruePeakDb, meteringVectorscope, mfcc, mfccToAudio, mfccToMel, midiToHz, mixStereo, mixingScenePresetJson, mixingScenePresetNames, momentaryLufs, nnFilter, nnlsChroma, normalize, noteStretch, noteToHz, onsetEnvelope, padCenter, pcen, peakPick, percussive, phaseVocoder, pitchCorrectToMidi, pitchPyin, pitchShift, pitchTuning, pitchYin, plp, polyFeatures, powerToDb, preemphasis, realtimeVoiceChangerPresetConfig, realtimeVoiceChangerPresetJson, realtimeVoiceChangerPresetNames, remix, resample, rmsEnergy, samplesToFrames, scaleCorrectionSemitones, scalePitchClassEnabled, scaleQuantizeMidi, shortTermLufs, spectralBandwidth, spectralCentroid, spectralContrast, spectralFlatness, spectralRolloff, splitSilence, stft, stftDb, tempogram, tempogramRatio, timeStretch, timeToFrames, tonnetz, trim, trimSilence, validateRealtimeVoiceChangerPresetJson, vectorNormalize, version, voiceChange, voiceChangerAbiVersion, voiceCharacterPresetId, vqt, zeroCrossingRate, zeroCrossings };
+export { type AcousticResult, type AnalysisResult, type AnalyzerStats, Audio, type AutomationCurve, type BarChord, type Beat, type BpmAnalysisResult, type BpmCandidate, type Chord, type ChordAnalysisResult, type ChordChange, type ChordDetectionOptions, ChordQuality, type ChromaResult, type ClippingRegion, type ClippingReport, type CompressorDetector, type CompressorOptions, type CqtResult, type DeclickOptions, type DeclipOptions, type DecomposeResult, type DecrackleMode, type DecrackleOptions, type DehumOptions, type DenoiseClassicalMode, type DenoiseClassicalNoiseEstimator, type DenoiseClassicalOptions, type DereverbClassicalOptions, type DynamicRangeReport, type Dynamics, type DynamicsAnalysisResult, type DynamicsResult, EXPECTED_ENGINE_ABI_VERSION, type EngineAutomationPoint, type EngineBounceOptions, type EngineBounceResult, type EngineCapabilities, type EngineCaptureStatus, type EngineClip, type EngineFreezeOptions, type EngineFreezeResult, type EngineGraphSpec, type EngineMarker, type EngineMeterTelemetry, type EngineMetronomeConfig, type EngineParameterInfo, type EngineTelemetry, type EngineTransportState, type EqBand, type EqBandPhase, type EqBandType, type EqCoeffMode, type EqMatchOptions, type EqSpectrumSnapshot, type EqStereoPlacement, type FrameBuffer, type GateOptions, type GoniometerPoint, type HpssResult, type HpssWithResidualResult, type Key, type KeyCandidate, type KeyDetectionOptions, KeyProfile, type KeyProfileName, type LufsResult, type MasteringChainConfig, type MasteringChainResult, type MasteringPreset, type MasteringProcessorParams, type MasteringResult, type MasteringStereoChainResult, type MasteringStereoResult, type Matrix2dResult, type MelPowerResult, type MelSpectrogramResult, type MelodyPoint, type MelodyResult, type MeterTap, type MfccResult, type MixMeterSnapshot, type MixOptions, type MixResult, Mixer, type MixerProcessResult, type MixerRealtimeBuffer, Mode, type PairAnalysis, type PairProcessor, type PanLaw, type PanMode, type PatternScore, type PhaseScopeReport, PitchClass as Pitch, PitchClass, type PitchResult, type ProgressiveEstimate, RealtimeEngine, RealtimeVoiceChanger, type RealtimeVoiceChangerConfigInput, type RealtimeVoiceChangerInterleavedBuffer, type RealtimeVoiceChangerMonoBuffer, type RealtimeVoiceChangerPlanarBuffer, type RealtimeVoiceChangerPodConfig, type RhythmAnalysisResult, type RhythmFeatures, type RirResult, type RirSynthOptions, type RoomEstimateOptions, type RoomEstimateResult, type RoomGeometryOptions, type RoomMorphOptions, type Section, SectionType, type SendTiming, type SoloProcessor, type SpectrumOptions, type SpectrumReport, type StereoAnalysis, type StftPowerResult, type StftResult, StreamAnalyzer, type StreamConfig, type StreamFramesI16, type StreamFramesU8, StreamingEqualizer, type StreamingEqualizerConfig, StreamingMasteringChain, type StreamingPlatform, StreamingRetune, type StreamingRetuneConfig, type TempogramMode, type Timbre, type TimbreAnalysisResult, type TimbreFrame, type TimeSignature, type TransientShaperOptions, type TrimSilenceMode, type TrimSilenceOptions, type ValidateOptions, type VectorscopeReport, type VoiceChangeRealtimeOptions, type VoicePresetId, amplitudeToDb, analyze, analyzeBpm, analyzeDynamics, analyzeImpulseResponse, analyzeMelody, analyzeRhythm, analyzeSections, analyzeTimbre, analyzeWithProgress, chroma, cqt, cyclicTempogram, dbToAmplitude, dbToPower, decompose, deemphasis, detectAcoustic, detectBeats, detectBpm, detectChords, detectDownbeats, detectKey, detectKeyCandidates, detectOnsets, ebur128LoudnessRange, engineAbiVersion, engineCapabilities, estimateRoom, estimateTuning, fixFrames, fixLength, fourierTempogram, frameSignal, framesToSamples, framesToTime, harmonic, hasFfmpegSupport, hpss, hpssWithResidual, hzToMel, hzToMidi, hzToNote, init, isInitialized, lufs, lufsInterleaved, masterAudio, masterAudioStereo, masterAudioStereoWithProgress, masterAudioWithProgress, mastering, masteringAssistantSuggest, masteringAudioProfile, masteringChain, masteringChainStereo, masteringChainStereoWithProgress, masteringChainWithProgress, masteringDynamicsCompressor, masteringDynamicsGate, masteringDynamicsTransientShaper, masteringPairAnalysisNames, masteringPairAnalyze, masteringPairProcess, masteringPairProcessorNames, masteringPresetNames, masteringProcess, masteringProcessStereo, masteringProcessorNames, masteringRepairDeclick, masteringRepairDeclip, masteringRepairDecrackle, masteringRepairDehum, masteringRepairDenoiseClassical, masteringRepairDereverbClassical, masteringRepairTrimSilence, masteringStereoAnalysisNames, masteringStereoAnalyze, masteringStreamingPreview, melSpectrogram, melToAudio, melToHz, melToStft, meteringCrestFactorDb, meteringDcOffset, meteringDetectClipping, meteringDynamicRange, meteringPeakDb, meteringPhaseScope, meteringRmsDb, meteringSpectrum, meteringStereoCorrelation, meteringStereoWidth, meteringTruePeakDb, meteringVectorscope, mfcc, mfccToAudio, mfccToMel, midiToHz, mixStereo, mixingScenePresetJson, mixingScenePresetNames, momentaryLufs, nnFilter, nnlsChroma, normalize, noteStretch, noteToHz, onsetEnvelope, padCenter, pcen, peakPick, percussive, phaseVocoder, pitchCorrectToMidi, pitchPyin, pitchShift, pitchTuning, pitchYin, plp, polyFeatures, powerToDb, preemphasis, realtimeVoiceChangerPresetConfig, realtimeVoiceChangerPresetJson, realtimeVoiceChangerPresetNames, remix, resample, rmsEnergy, roomMorph, samplesToFrames, scaleCorrectionSemitones, scalePitchClassEnabled, scaleQuantizeMidi, shortTermLufs, spectralBandwidth, spectralCentroid, spectralContrast, spectralFlatness, spectralRolloff, splitSilence, stft, stftDb, synthesizeRir, tempogram, tempogramRatio, timeStretch, timeToFrames, tonnetz, trim, trimSilence, validateRealtimeVoiceChangerPresetJson, vectorNormalize, version, voiceChange, voiceChangeRealtime, voiceChangerAbiVersion, voiceCharacterPresetId, vqt, zeroCrossingRate, zeroCrossings };

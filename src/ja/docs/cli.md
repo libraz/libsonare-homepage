@@ -172,7 +172,9 @@ sonare key music.mp3 --candidates 5 --profile temperley --modes major-minor
 | `--genre-hint auto\|edm\|electronic\|dance\|pop\|classical\|jazz` | ジャンルヒントからプロファイルを選ばせる |
 
 ::: details キープロファイル・ジャンルヒント・`--high-pass-hz` とは？
-- **キープロファイル** — あるキーで 12 のピッチクラスがそれぞれどれくらい目立ちやすいかのテンプレートです。検出器は曲のクロマをこれらと比べ、最も一致するものを選びます。系統（`ks` / `krumhansl`、`temperley`、`shaath` / `keyfinder`、Faraldo EDM 系、`bellman` / `bellman-budge`）はそれぞれ別の素材で調整されているため、ジャンルによって相性が変わります。
+- **キープロファイル** — あるキーで 12 のピッチクラスがそれぞれどれくらい目立ちやすいかのテンプレートです。検出器は曲のクロマをこれらと比べ、最も一致するものを選びます。
+
+  系統（`ks` / `krumhansl`、`temperley`、`shaath` / `keyfinder`、Faraldo EDM 系、`bellman` / `bellman-budge`）はそれぞれ別の素材で調整されています。そのため、ジャンルによって相性が変わります。
 - **ジャンルヒント** — プロファイルを直接指定する代わりに、おおまかなスタイルを伝えると CLI が合うプロファイルを選びます（例: EDM ヒントなら EDM 向けに調整したプロファイル）。
 - **`--high-pass-hz`** — ハイパスフィルターで、キー解析の前に指定周波数より下のエネルギーを除きます。低域のランブルやサブキックがクロマを歪めるのを防ぎます。80〜120 Hz 程度が一般的です。
 :::
@@ -300,9 +302,17 @@ sonare hpss music.mp3 --json
 
 ## その他のコマンド
 
-Python CLI には、上記のコア以外にも多くのサブコマンドがあります。音声ファイルを解析・特徴抽出するコマンドは共通オプション（`--json`、`--n-fft` など）とファイル引数を取ります。一覧表示やプリセット参照のコマンドは、より小さい専用のオプションセットを持ちます。編集系コマンドは `-o/--output` を渡すと WAV を書き出します。
+Python CLI には、上記のコア以外にも多くのサブコマンドがあります。
+
+音声ファイルを解析・特徴抽出するコマンドは、共通オプション（`--json`、`--n-fft` など）とファイル引数を取ります。
+
+一覧表示やプリセット参照のコマンドは、より小さい専用のオプションセットを持ちます。編集系コマンドは `-o/--output` を渡すと WAV を書き出します。
 
 ### その他の解析
+
+::: info ルーム音響コマンドの用語
+**等価ルーム** は、音声から推定した実用上の部屋モデルで、正確な実寸ではありません。**RIR** は room impulse response の略です。**ルームモーフィング**は音作り向けのルーム効果であり、残響除去ではありません。
+:::
 
 | コマンド | 説明 | 主なオプション |
 |----------|------|----------------|
@@ -312,7 +322,10 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare dynamics music.mp3` | ダイナミクス／ラウドネスの要約 | — |
 | `sonare timbre music.mp3` | 音色／スペクトル形状の要約 | — |
 | `sonare lufs music.mp3` | EBU R128 ラウドネス | `--series`（momentary／short-term の系列も出力） |
-| `sonare acoustic room.wav` | 室内音響推定（RT60／EDT／C50／C80） | `--ir`（入力をインパルス応答として扱う） |
+| `sonare acoustic room.wav` | ルーム音響推定（RT60／EDT／C50／C80） | `--ir`（入力をインパルス応答として扱う） |
+| `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
+| `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
+| `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
 | `sonare meter music.wav` | ピーク、RMS、クレスト、トゥルーピーク、クリッピング率、無音率、DC オフセット | ソースビルド C++ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ソースビルド C++ CLI のみ。`--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ソースビルド C++ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
@@ -416,7 +429,7 @@ sonare version --json
 
 **出力:**
 ```
-libsonare 1.2.2 (Python CLI)
+libsonare {{ wasmMeta.version }} (Python CLI)
 ```
 
 ## 使用例
@@ -460,7 +473,11 @@ done
 ### マスタリングのワークフロー
 
 ::: info コマンドの提供範囲
-PyPI の Python CLI には `mastering`、`mastering-processor`、`eq`、`mastering-processors`、および下記のペア解析コマンドが含まれます。ソースからビルドした C++ CLI では、ソース／リファレンスを処理する `mastering-pair-processor`、ステレオ解析一覧、ステレオ解析実行などの追加マスタリングコマンドも利用できます。[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
+PyPI の Python CLI には `mastering`、`mastering-processor`、`eq`、`mastering-processors`、および下記のペア解析コマンドが含まれます。
+
+ソースからビルドした C++ CLI では、ソース／リファレンスを処理する `mastering-pair-processor`、ステレオ解析一覧、ステレオ解析実行などの追加マスタリングコマンドも利用できます。
+
+[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
 :::
 
 ```bash
@@ -507,12 +524,14 @@ Python CLI の名前付きマスタリングコマンド:
 
 関連するマスタリングガイド: [配信ターゲット](./glossary/mastering/delivery-targets.md)、[メーターの読み方](./glossary/mastering/meter-reading.md)、[エラー復旧](./glossary/mastering/error-recovery.md)。
 
-RT60、EDT、C50、C80、D50、信頼度などのルーム音響フィールドは [ルーム音響解析](./acoustic-analysis.md) で説明しています。
+RT60、EDT、C50、C80、D50、体積、寸法、吸音率バンド、DRR、RIR 合成時のエラー状態、信頼度などのルーム音響フィールドは [ルーム音響解析](./acoustic-analysis.md) で説明しています。
 
 ### ミキシングワークフロー
 
 ::: info コマンドの提供範囲
-PyPI の Python CLI には `mix` が含まれ、JSON ファイルまたは組み込みプリセットからミキサーシーンを読み込み、必要ならストリップごとの入力 WAV をレンダリングします。ソースからビルドした C++ CLI では `mixing-presets` と `mixing-preset` も利用でき、シーン一覧の確認や、WASM／Python／Node／C++ のミキサー API に読み込ませるシーン JSON の書き出しに使えます。
+PyPI の Python CLI には `mix` が含まれます。JSON ファイルまたは組み込みプリセットからミキサーシーンを読み込み、必要ならストリップごとの入力 WAV をレンダリングします。
+
+ソースからビルドした C++ CLI では `mixing-presets` と `mixing-preset` も利用できます。シーン一覧の確認や、WASM／Python／Node／C++ のミキサー API に読み込ませるシーン JSON の書き出しに使えます。
 :::
 
 ```bash

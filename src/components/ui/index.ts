@@ -1,3 +1,4 @@
+export { default as AudioSource } from './AudioSource.vue';
 export { default as AudioTransport } from './AudioTransport.vue';
 export { default as CornerBrackets } from './CornerBrackets.vue';
 export { default as GridOverlay } from './GridOverlay.vue';

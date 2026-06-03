@@ -45,7 +45,7 @@ Remember that Python `analyze(...)` is intentionally compact. For chords, sectio
 | Mastering a file | `master_audio`, `mastering_chain`, `StreamingMasteringChain` | Presets first, explicit chain config when you need control |
 | Live or chunked analysis | `StreamAnalyzer` | Feed audio blocks, drain feature frames, and read progressive BPM/key/chord estimates |
 | Stem mixing | `mix_stereo` or `Mixer.from_scene_json(...)` | One-shot arrays first; scene mixer for sends, buses, automation, and meters |
-| Room decay or clarity measurements | `analyze_impulse_response`, `detect_acoustic` | These describe the room, not the song |
+| Room decay, clarity, equivalent-room estimates, or generated room character | `analyze_impulse_response`, `detect_acoustic`, `estimate_room`, `synthesize_rir`, `room_morph` | These describe or apply the room, not the song |
 
 ## Installation
 
@@ -231,10 +231,13 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | Monophonic melody contour (YIN) |
 | `analyze_impulse_response(samples, sample_rate, ...)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80) |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
+| `estimate_room(samples, sample_rate, ...)` | `RoomEstimate` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
+| `synthesize_rir(length_m, width_m, height_m, ...)` | `RirResult` | Mono room impulse response from shoebox geometry |
+| `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `list[float]` | Offline creative morph toward a target room |
 | `version()` | `str` | Library version |
 | `voice_changer_abi_version()` | `int` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
 | `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal |
-| `realtime_voice_changer_preset_pod(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
+| `realtime_voice_changer_preset_config(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
 | `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
@@ -269,7 +272,19 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 ## Room Acoustics
 
-Use `analyze_impulse_response(...)` for a clean impulse response and `detect_acoustic(...)` for blind estimation from a normal recording. Both return `AcousticResult` with RT60, EDT, C50, C80, D50, per-band arrays, confidence, and `is_blind`. Their `sample_rate` default is `48000`, unlike most music-analysis helpers that default to `22050`.
+Use these functions for the room or playback space, not for song structure.
+
+| Goal | Use |
+|------|-----|
+| Measure a clean impulse response | `analyze_impulse_response(...)` |
+| Estimate room decay from ordinary audio | `detect_acoustic(...)` |
+| Fit a practical room model from audio | `estimate_room(...)` |
+| Create a mono room impulse response from dimensions | `synthesize_rir(...)` |
+| Add a target-room character as an effect | `room_morph(...)` |
+
+::: info Defaults and terms
+`analyze_impulse_response(...)` and `detect_acoustic(...)` return `AcousticResult` with RT60, EDT, C50, C80, D50, per-band arrays, confidence, and `is_blind`. Their `sample_rate` default is `48000`, unlike most music-analysis helpers that default to `22050`. RIR means room impulse response.
+:::
 
 ```python
 ir = sonare.analyze_impulse_response(ir_samples, sample_rate, n_octave_bands=6)
@@ -284,7 +299,22 @@ blind = sonare.detect_acoustic(
     noise_floor_margin_db=10.0,
 )
 print(blind.is_blind, blind.rt60_bands)
+
+estimate = sonare.estimate_room(room_recording, sample_rate, n_octave_bands=6)
+print(estimate.volume, estimate.length, estimate.width, estimate.height)
+print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+
+rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=sample_rate)
+print(rir.sample_rate, len(rir.rir), rir.has_error)
+
+morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6)
 ```
+
+Keep three cautions in mind:
+
+- `estimate_room(...)` returns an equivalent room, not guaranteed real geometry; inspect `confidence`.
+- `synthesize_rir(...)` reports invalid source/listener placement through `has_error`.
+- `room_morph(...)` is a creative effect, not dereverberation.
 
 See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a blind estimate is appropriate.
 
@@ -320,7 +350,7 @@ print(sonare.voice_changer_abi_version())  # native POD-config ABI version
 print(sonare.voice_character_preset_id(1))  # "bright-idol"
 preset_json = sonare.realtime_voice_changer_preset_json("bright-idol")
 print(sonare.validate_realtime_voice_changer_preset_json(preset_json)["ok"])
-pod = sonare.realtime_voice_changer_preset_pod("bright-idol")  # canonical RealtimeVoiceChangerConfig
+preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")  # canonical RealtimeVoiceChangerConfig
 
 with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
     out = changer.process_mono(input_block)
@@ -331,7 +361,11 @@ with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128
 processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
 ```
 
-Preset IDs currently include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`. `realtime_voice_changer_preset_pod(preset)` returns the canonical, normalized `RealtimeVoiceChangerConfig` for a built-in preset (by ID or index) when you want the resolved POD config rather than the JSON form.
+Preset IDs currently include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`.
+
+Use `realtime_voice_changer_preset_config(preset)` when you want the resolved POD config rather than the JSON form. It returns the canonical, normalized `RealtimeVoiceChangerConfig` for a built-in preset by ID or index.
+
+`realtime_voice_changer_preset_pod(preset)` remains as a compatibility alias.
 
 ### Feature Extraction Functions
 

@@ -197,7 +197,8 @@ describe('wasm package integration', () => {
     const loudness = wasm.lufs(tone, SAMPLE_RATE);
     expect(Number.isFinite(loudness.integratedLufs)).toBe(true);
     expectFiniteArray(wasm.momentaryLufs(tone, SAMPLE_RATE));
-    expectFiniteArray(wasm.shortTermLufs(tone, SAMPLE_RATE));
+    // Short-term LUFS uses a 3 s sliding window (BS.1770); the 1 s `tone` yields no frames.
+    expectFiniteArray(wasm.shortTermLufs(sine(440, 4), SAMPLE_RATE));
   });
 
   it('performs editing transforms and utility conversions with valid output', () => {
@@ -334,7 +335,8 @@ describe('wasm package integration', () => {
     expectFiniteArray(audio.onsetEnvelope(512, 128, 32));
     expect(Number.isFinite(audio.lufs().integratedLufs)).toBe(true);
     expectFiniteArray(audio.momentaryLufs());
-    expectFiniteArray(audio.shortTermLufs());
+    // Short-term LUFS needs a 3 s window; the 1 s `tone` above yields none.
+    expectFiniteArray(wasm.Audio.fromBuffer(sine(440, 4), SAMPLE_RATE).shortTermLufs());
     expectFiniteArray(audio.spectralCentroid(512, 128));
     expectFiniteArray(audio.spectralBandwidth(512, 128));
     expectFiniteArray(audio.spectralRolloff(512, 128));
@@ -605,11 +607,14 @@ describe('wasm package integration', () => {
       computeOnset: true,
       computeSpectral: true,
     });
+    // The analyzer buffers an internal warmup window before emitting frames, so a
+    // single 512-sample block produces none — feed a longer signal here.
+    const streamInput = sine(220, 8192 / SHORT_SAMPLE_RATE, SHORT_SAMPLE_RATE, 0.2);
     try {
-      analyzer.process(left);
+      analyzer.process(streamInput);
       expect(analyzer.availableFrames()).toBeGreaterThan(0);
       expect(analyzer.readFrames(4).nFrames).toBeGreaterThan(0);
-      analyzer.processWithOffset(left, left.length);
+      analyzer.processWithOffset(streamInput, streamInput.length);
       expect(analyzer.stats().totalSamples).toBeGreaterThan(0);
       expect(analyzer.frameCount()).toBeGreaterThan(0);
       expect(analyzer.sampleRate()).toBe(SHORT_SAMPLE_RATE);

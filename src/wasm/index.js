@@ -359,6 +359,31 @@ var RealtimeEngine = class {
   process(channels) {
     return this.native.process(channels);
   }
+  /**
+   * Allocates persistent per-channel WASM-heap scratch for the zero-copy
+   * `getChannelBuffer` / `processPrepared` realtime path. Call once (off the
+   * audio thread) before driving `processPrepared` from an AudioWorklet so the
+   * render callback never allocates on the C++/JS heap.
+   */
+  prepareChannels(numChannels, maxFrames) {
+    this.native.prepareChannels(numChannels, maxFrames);
+  }
+  /**
+   * Returns a Float32Array view onto the persistent WASM-heap scratch for one
+   * channel (valid for up to `numFrames`). Fill it, call `processPrepared`, then
+   * read the same view back. Re-acquire after WASM memory growth.
+   */
+  getChannelBuffer(channel, numFrames) {
+    return this.native.getChannelBuffer(channel, numFrames);
+  }
+  /**
+   * Runs the engine in place over the prepared per-channel scratch buffers.
+   * Allocation-free: safe to call on the AudioWorklet render thread after
+   * `prepareChannels`.
+   */
+  processPrepared(numFrames) {
+    this.native.processPrepared(numFrames);
+  }
   processWithMonitor(channels) {
     return this.native.processWithMonitor(channels);
   }
@@ -630,6 +655,33 @@ function detectAcoustic(samples, sampleRate = 48e3, nOctaveBands = 6, nThirdOcta
   );
   return result;
 }
+function synthesizeRir(options = {}) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  if (typeof module.synthesizeRir !== "function") {
+    throw new Error("libsonare was built without acoustic-simulation support");
+  }
+  return module.synthesizeRir(options);
+}
+function estimateRoom(samples, sampleRate = 48e3, options = {}) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  if (typeof module.estimateRoom !== "function") {
+    throw new Error("libsonare was built without acoustic-simulation support");
+  }
+  return module.estimateRoom(samples, sampleRate, options);
+}
+function roomMorph(samples, sampleRate, options = {}) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  if (typeof module.roomMorph !== "function") {
+    throw new Error("libsonare was built without acoustic-simulation support");
+  }
+  return module.roomMorph(samples, sampleRate, options);
+}
 function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
@@ -682,40 +734,46 @@ function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive
   }
   return module.hpss(samples, sampleRate, kernelHarmonic, kernelPercussive);
 }
-function harmonic(samples, sampleRate) {
+function harmonic(samples, sampleRate, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("harmonic", samples, options.validate !== false);
   return module.harmonic(samples, sampleRate);
 }
-function percussive(samples, sampleRate) {
+function percussive(samples, sampleRate, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("percussive", samples, options.validate !== false);
   return module.percussive(samples, sampleRate);
 }
-function timeStretch(samples, sampleRate, rate) {
+function timeStretch(samples, sampleRate, rate, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("timeStretch", samples, options.validate !== false);
   return module.timeStretch(samples, sampleRate, rate);
 }
-function pitchShift(samples, sampleRate, semitones) {
+function pitchShift(samples, sampleRate, semitones, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("pitchShift", samples, options.validate !== false);
   return module.pitchShift(samples, sampleRate, semitones);
 }
-function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69) {
+function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("pitchCorrectToMidi", samples, options.validate !== false);
   return module.pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
 }
-function noteStretch(samples, sampleRate = 22050, onsetSample = 0, offsetSample = 0, stretchRatio = 1) {
+function noteStretch(samples, sampleRate = 22050, onsetSample = 0, offsetSample = 0, stretchRatio = 1, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("noteStretch", samples, options.validate !== false);
   return module.noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio);
 }
 function voiceChange(samples, sampleRate = 22050, pitchSemitones = 0, formantFactor = 1, options = {}) {
@@ -725,10 +783,43 @@ function voiceChange(samples, sampleRate = 22050, pitchSemitones = 0, formantFac
   assertSamples("voiceChange", samples, options.validate !== false);
   return module.voiceChange(samples, sampleRate, pitchSemitones, formantFactor);
 }
-function normalize(samples, sampleRate, targetDb = 0) {
+function voiceChangeRealtime(samples, options = {}) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  assertSamples("voiceChangeRealtime", samples, options.validate !== false);
+  const channels = options.channels ?? 1;
+  if (channels !== 1 && channels !== 2) {
+    throw new Error("voiceChangeRealtime: channels must be 1 or 2.");
+  }
+  const sampleRate = options.sampleRate ?? 48e3;
+  const blockSize = Math.max(1, Math.floor(options.blockSize ?? 512));
+  const changer = new RealtimeVoiceChanger(options.preset ?? "neutral-monitor");
+  try {
+    changer.prepare(sampleRate, blockSize, channels);
+    const out = new Float32Array(samples.length);
+    if (channels === 1) {
+      for (let offset = 0; offset < samples.length; offset += blockSize) {
+        const block = samples.subarray(offset, Math.min(offset + blockSize, samples.length));
+        out.set(changer.processMono(block), offset);
+      }
+    } else {
+      const frameStride = blockSize * 2;
+      for (let offset = 0; offset < samples.length; offset += frameStride) {
+        const block = samples.subarray(offset, Math.min(offset + frameStride, samples.length));
+        out.set(changer.processInterleaved(block, 2), offset);
+      }
+    }
+    return out;
+  } finally {
+    changer.delete();
+  }
+}
+function normalize(samples, sampleRate, targetDb = 0, options = {}) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  assertSamples("normalize", samples, options.validate !== false);
   return module.normalize(samples, sampleRate, targetDb);
 }
 function mastering(samples, sampleRate = 22050, targetLufs = -14, ceilingDb = -1, truePeakOversample = 4) {
@@ -2356,7 +2447,7 @@ var StreamAnalyzer = class {
       throw new Error("Module not initialized. Call init() first.");
     }
     this.analyzer = new module.StreamAnalyzer(
-      config.sampleRate,
+      config.sampleRate ?? 44100,
       config.nFft ?? 2048,
       config.hopLength ?? 512,
       config.nMels ?? 128,
@@ -2577,6 +2668,7 @@ export {
   ebur128LoudnessRange,
   engineAbiVersion,
   engineCapabilities,
+  estimateRoom,
   estimateTuning,
   fixFrames,
   fixLength,
@@ -2677,6 +2769,7 @@ export {
   remix,
   resample,
   rmsEnergy,
+  roomMorph,
   samplesToFrames,
   scaleCorrectionSemitones,
   scalePitchClassEnabled,
@@ -2690,6 +2783,7 @@ export {
   splitSilence,
   stft,
   stftDb,
+  synthesizeRir,
   tempogram,
   tempogramRatio,
   timeStretch,
@@ -2701,6 +2795,7 @@ export {
   vectorNormalize,
   version,
   voiceChange,
+  voiceChangeRealtime,
   voiceChangerAbiVersion,
   voiceCharacterPresetId,
   vqt,
