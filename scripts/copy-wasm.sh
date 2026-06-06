@@ -7,8 +7,12 @@ WASM_BUILD_DIR="$JS_DIST_DIR"
 DEST_DIR="src/wasm"
 
 # Required files
-WASM_FILES=("sonare.wasm" "sonare.js")
-JS_FILES=("index.js" "index.d.ts")
+# Emscripten artifacts: main module + the dedicated realtime AudioWorklet
+# runtime (sonare-rt, C-ABI-only build selectable via runtimeTarget).
+WASM_FILES=("sonare.wasm" "sonare.js" "sonare-rt.wasm" "sonare-rt.js" "sonare-rt-module.js")
+# tsup bundle: index.* is the high-level API, worklet.* is the AudioWorklet
+# entry that index.d.ts re-exports its types from.
+JS_FILES=("index.js" "index.d.ts" "worklet.js" "worklet.d.ts")
 JS_CHUNK_GLOB="chunk-*.js"
 
 # Obsolete sub-module files from the previous tsc-based layout — removed after
@@ -100,9 +104,14 @@ fi
 WASM_CHANGED=false
 JS_CHANGED=false
 
-if [ "$OLD_MD5" != "$NEW_MD5" ] || [ -z "$OLD_MD5" ]; then
-  WASM_CHANGED=true
-fi
+# Compare every Emscripten artifact, not just sonare.wasm — a sonare-rt-only
+# rebuild must still trigger a copy.
+for file in "${WASM_FILES[@]}"; do
+  if [ ! -f "$DEST_DIR/$file" ] || ! cmp -s "$WASM_BUILD_DIR/$file" "$DEST_DIR/$file"; then
+    WASM_CHANGED=true
+    break
+  fi
+done
 
 # Check if JS files have changed
 for file in "${JS_FILES[@]}"; do

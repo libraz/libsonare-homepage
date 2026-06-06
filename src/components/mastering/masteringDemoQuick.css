@@ -192,7 +192,27 @@ html:not(.dark) .master-page .master-demo-button {
   transition: width 180ms ease;
 }
 
+/* Shimmer sweep while rendering, so the bar reads as "working" even
+   between width updates. */
+.render-progress--active .render-progress__track span {
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%) 0 0 / 200% 100%,
+    linear-gradient(90deg, var(--demo-cyan), var(--demo-accent));
+  animation: render-progress-shimmer 1.4s linear infinite;
+}
+
+@keyframes render-progress-shimmer {
+  from { background-position: 200% 0, 0 0; }
+  to { background-position: -200% 0, 0 0; }
+}
+
 .render-progress:not(.render-progress--active) .render-progress__track {
   opacity: 0.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .render-progress--active .render-progress__track span {
+    animation: none;
+  }
 }
 

@@ -26,6 +26,17 @@ function runScript(root: string) {
   });
 }
 
+/** Write the realtime/worklet companion assets the script requires alongside the core trio. */
+function writeCompanionAssets(root: string) {
+  writeFileSync(path.join(root, 'src/wasm/worklet.js'), Buffer.from('fake worklet entry'));
+  writeFileSync(path.join(root, 'src/wasm/sonare-rt.wasm'), Buffer.from('fake rt wasm'));
+  writeFileSync(path.join(root, 'src/wasm/sonare-rt.js'), Buffer.from('fake rt glue'));
+  writeFileSync(
+    path.join(root, 'src/wasm/sonare-rt-module.js'),
+    Buffer.from('fake rt module glue'),
+  );
+}
+
 describe('update-wasm-meta shell script', () => {
   afterEach(() => {
     for (const workspace of workspaces) {
@@ -42,6 +53,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), sonareJsBytes);
     writeFileSync(path.join(root, 'src/wasm/index.js'), indexJsBytes);
+    writeCompanionAssets(root);
     writeFileSync(
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({
@@ -80,11 +92,13 @@ describe('update-wasm-meta shell script', () => {
       gzipSize: meta.gzipSize,
       gzipKB: meta.gzipKB,
     });
+    for (const name of ['worklet.js', 'sonare-rt.wasm', 'sonare-rt.js', 'sonare-rt-module.js']) {
+      expect(meta.assets[name].size).toBeGreaterThan(0);
+      expect(meta.assets[name].gzipSize).toBeGreaterThan(0);
+    }
     expect(meta.total).toMatchObject({
       size: sonareJsBytes.length + indexJsBytes.length + wasmBytes.length,
-      sizeKB: Math.floor(
-        (sonareJsBytes.length + indexJsBytes.length + wasmBytes.length) / 1024,
-      ),
+      sizeKB: Math.floor((sonareJsBytes.length + indexJsBytes.length + wasmBytes.length) / 1024),
       gzipSize:
         meta.assets['sonare.js'].gzipSize + meta.assets['index.js'].gzipSize + meta.gzipSize,
     });
@@ -112,6 +126,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), 'wasm');
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
     writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
+    writeCompanionAssets(root);
 
     const result = runScript(root);
 

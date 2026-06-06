@@ -30,6 +30,9 @@
 | ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#オーディオエフェクト) |
 | ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
 | マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
+| MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [組み込み楽器](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| DAW、アレンジ、MIDI シーケンスツール | [プロジェクト編集](./project-editing.md) | [MIDI 入力](./midi-input.md)、[プロジェクトバウンス](./project-bounce.md) |
+| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [組み込み楽器](./native-synth.md)、[MIDI 入力](./midi-input.md) |
 | ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
 | マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm.md#リアルタイムボイスチェンジャー) |
 | ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |

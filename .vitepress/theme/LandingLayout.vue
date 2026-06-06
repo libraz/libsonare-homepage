@@ -53,12 +53,12 @@ const locales = {
     path: '',
     docsLabel: 'Docs',
     githubCta: 'GitHub',
-    tagline: 'Dependency-free audio DSP toolkit',
+    tagline: 'Dependency-free audio engine',
     hero: {
       eyebrow: 'Apache-2.0 · Zero runtime dependencies · WebAssembly',
-      title: 'Dependency-free audio DSP for analysis, mastering, mixing, and editing.',
+      title: 'From analysis to arrangement: a dependency-free audio engine.',
       subtitle:
-        'One toolkit for C++, Python, and the browser. The same processors run native and WASM: no Python runtime, no GPL/AGPL, no model weights.',
+        'librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a realtime headless-DAW runtime — for C++, Python, and the browser. The same engine runs native and WASM: no Python runtime, no GPL/AGPL, no model weights.',
       installCaption: 'Install',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -76,7 +76,7 @@ const locales = {
     ],
     demoSection: {
       eyebrow: 'Try it locally',
-      heading: 'Six demos. One library.',
+      heading: 'Eight demos. One library.',
       subhead:
         'Every demo runs the same Apache-2.0 processors locally in your browser via WebAssembly.',
       viewAll: 'Browse all demos',
@@ -116,7 +116,7 @@ const locales = {
     },
     pillars: {
       eyebrow: 'What ships in the box',
-      heading: 'A DSP toolkit, not a service',
+      heading: 'An audio engine, not a service',
       items: [
         {
           tag: 'ANALYSIS',
@@ -125,16 +125,16 @@ const locales = {
           link: { label: 'Benchmarks', path: '/docs/benchmarks' },
         },
         {
-          tag: 'MASTERING',
-          title: '66 named DSP processors. Published references.',
-          body: 'EQ, dynamics, multiband, stereo, saturation, repair, maximizer, and reference matching, with 18 processors in the default chain. Loudness, true peak, crossovers, biquads, clippers, tube saturation, and oversampling are implemented against published references.',
-          link: { label: 'Mastering guide', path: '/docs/glossary' },
+          tag: 'MASTERING & MIXING',
+          title: 'Broadcast-grade mastering and real-time-safe mixing.',
+          body: '76 named mastering DSP processors against published references — loudness, true peak, crossovers, clippers, tube saturation, oversampling — plus a real-time-safe mixer with channel strips, buses, sends, metering, scene presets, editing DSP, and creative FX.',
+          link: { label: 'Mixing engine', path: '/docs/mixing' },
         },
         {
-          tag: 'MIXING',
-          title: 'Real-time-safe mixing, routing, and creative FX.',
-          body: 'Channel strips, buses, sends, pan modes, width, plugin-delay compensation, goniometer and true-peak metering, scene presets, offline stereo rendering, time stretch, pitch shift, voice-change controls, reverbs, modulation, delay, and ducking.',
-          link: { label: 'Mixing engine', path: '/docs/mixing' },
+          tag: 'INSTRUMENTS & DAW',
+          title: 'Built-in instruments and a headless-DAW runtime.',
+          body: 'A 7-engine synth with a data-free GM fallback bank and a GS-compatible SoundFont 2 player — MIDI never renders silent. Author projects with audio and MIDI tracks, undo/redo, MIDI sequencing, SMF import/export, offline bounce, and a sample-accurate realtime engine that runs in the browser via AudioWorklet.',
+          link: { label: 'Built-in instruments', path: '/docs/native-synth' },
         },
       ],
     },
@@ -154,12 +154,12 @@ const locales = {
     path: '/ja',
     docsLabel: 'ドキュメント',
     githubCta: 'GitHub',
-    tagline: '依存なしのオーディオ DSP ツールキット',
+    tagline: '依存なしのオーディオエンジン',
     hero: {
       eyebrow: 'Apache-2.0 · ランタイム依存ゼロ · WebAssembly',
-      title: '解析、マスタリング、ミキシング、編集のための依存なしオーディオ DSP。',
+      title: '解析からアレンジまで、依存なしのオーディオエンジン。',
       subtitle:
-        'C++・Python・ブラウザで使えるひとつのツールキット。同じプロセッサがネイティブと WASM で動きます。Python ランタイムなし、GPL/AGPL なし、モデル重みなし。',
+        'librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、リアルタイムなヘッドレス DAW ランタイム。C++・Python・ブラウザで使え、同じエンジンがネイティブと WASM で動きます。Python ランタイムなし、GPL/AGPL なし、モデル重みなし。',
       installCaption: 'インストール',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -177,7 +177,7 @@ const locales = {
     ],
     demoSection: {
       eyebrow: 'ローカルで試す',
-      heading: '6 つのデモ、ひとつのライブラリ。',
+      heading: '8 つのデモ、ひとつのライブラリ。',
       subhead:
         'すべてのデモは、同じ Apache-2.0 のプロセッサを WebAssembly でブラウザ内ローカル実行します。',
       viewAll: 'すべてのデモを見る',
@@ -217,7 +217,7 @@ const locales = {
     },
     pillars: {
       eyebrow: '同梱されるもの',
-      heading: 'サービスではなく DSP ツールキット',
+      heading: 'サービスではなくオーディオエンジン',
       items: [
         {
           tag: 'ANALYSIS',
@@ -226,16 +226,16 @@ const locales = {
           link: { label: 'ベンチマーク', path: '/docs/benchmarks' },
         },
         {
-          tag: 'MASTERING',
-          title: '66 個の名前付き DSP プロセッサ。公開リファレンスベース。',
-          body: 'EQ、ダイナミクス、マルチバンド、ステレオ、サチュレーション、リペア、マキシマイザー、リファレンスマッチング。デフォルトチェーンは 18 プロセッサ。ラウドネス、トゥルーピーク、クロスオーバー、バイクァッド、クリッパー、真空管サチュレーション、オーバーサンプリングは公開リファレンスに基づいています。',
-          link: { label: 'マスタリングガイド', path: '/docs/glossary' },
+          tag: 'MASTERING & MIXING',
+          title: '放送品質のマスタリングとリアルタイム安全なミキシング。',
+          body: '公開リファレンスに基づく 76 個の名前付きマスタリング DSP プロセッサ（ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリング）に加え、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP、クリエイティブ FX を備えたリアルタイム安全なミキサー。',
+          link: { label: 'ミキシングエンジン', path: '/docs/mixing' },
         },
         {
-          tag: 'MIXING',
-          title: 'リアルタイム安全なミキシング、ルーティング、クリエイティブ FX。',
-          body: 'チャンネルストリップ、バス、センド、パン、幅、プラグイン遅延補償、ゴニオメーター、トゥルーピークメーター、シーンプリセット、オフラインステレオレンダー、タイムストレッチ、ピッチシフト、ボイスチェンジ、リバーブ、モジュレーション、ディレイ、ダッキング。',
-          link: { label: 'ミキシングエンジン', path: '/docs/mixing' },
+          tag: 'INSTRUMENTS & DAW',
+          title: '内蔵インストゥルメントとヘッドレス DAW ランタイム。',
+          body: 'データ不要の GM フォールバックバンクを備えた 7 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤー。MIDI が無音になりません。オーディオと MIDI のトラックでプロジェクトを編集でき、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンス、ブラウザでは AudioWorklet 経由で動くサンプル精度のリアルタイムエンジンを提供します。',
+          link: { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
         },
       ],
     },

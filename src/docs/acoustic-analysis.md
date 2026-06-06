@@ -200,6 +200,51 @@ Use this section when you are not only measuring a recording, but also creating 
 
 `roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. It should not be documented or sold as dereverberation.
 
+### Wall absorption and materials
+
+Both `synthesizeRir(...)` and `roomMorph(...)` accept the shared shoebox geometry, so they take the same wall-treatment fields. You can describe the walls at three levels of detail, from coarsest to finest:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `absorption` | number | Uniform wall absorption for every band, clamped to `[0, 0.999]`. The simplest, backward-compatible control. |
+| `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. |
+| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. |
+| `materialPreset` | number | A named wall-material preset. A non-zero preset wins over both `bandAbsorption` and `absorption`. |
+
+The material presets map to integer codes: `0` none, `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it. Because a non-zero `materialPreset` wins over the explicit band arrays, set `materialPreset: 0` when you want your own `bandAbsorption`/`bandScattering` to take effect.
+
+```typescript
+// A concrete shoebox: bright, long tail
+const concrete = synthesizeRir({
+  lengthM: 7, widthM: 5, heightM: 3,
+  materialPreset: 1, // concrete
+  sampleRate,
+});
+
+// Custom per-band walls (six octave bands), with scattering
+const custom = synthesizeRir({
+  lengthM: 7, widthM: 5, heightM: 3,
+  materialPreset: 0, // let the band arrays apply
+  bandAbsorption: [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
+  bandScattering: [0.1, 0.1, 0.2, 0.2, 0.3, 0.3],
+  sampleRate,
+});
+```
+
+### Late-reverb model and tail controls
+
+The shared geometry also exposes the late-tail behaviour. `RirSynthOptions` and `RoomMorphOptions` both carry:
+
+| Field | Meaning |
+|-------|---------|
+| `preferEyring` | Selects the statistical late-reverb model: `true` (default) uses Eyring, `false` uses Sabine. |
+| `mixingTimeMs` | Early/late crossover in milliseconds. `0` auto-selects roughly `sqrt(volume)` ms. |
+| `crossfadeMs` | Equal-power crossfade width around the mixing time, in milliseconds. `0` uses the default. |
+| `ismOrder` | Image-source reflection order for the early part. |
+| `seed`, `maxSeconds` | Late-tail random seed and the maximum RIR length to generate. |
+
+The **mixing time** is where the response transitions from discrete image-source early reflections to the deterministic statistical late tail; the **crossfade** blends the two so the seam is inaudible. Sabine and Eyring are the two classical RT60 estimators behind the late tail; Eyring tends to be more accurate in more absorptive rooms.
+
 ::: details Implementation notes for room synthesis
 `synthesizeRir(...)` uses image-source early reflections plus a deterministic late tail. `acoustic::RirSynthConfig` exposes the reflection order, Sabine/Eyring late-tail model, seed, maximum RIR length, mixing time, and crossfade width.
 :::

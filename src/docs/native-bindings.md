@@ -157,7 +157,7 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
 | Offline repair (one-shot) | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
 | Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
-| Named processors | `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()` |
+| Named processors | `masteringProcessorNames()`, `masteringInsertNames()`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
 
@@ -170,6 +170,12 @@ The native addon and the WASM package both expose the mixing surface: `mixStereo
 Use it for channel-strip processing, scene presets, sends, buses, automation, meters, and offline stem rendering. See [Mixing Engine](./mixing.md) for the cross-runtime guide.
 
 For persistent mixers, Node native accepts a `StripRef` (`number | string`) for most strip control methods; WASM methods use numeric strip indexes and expose `stripById(id)` for lookup. Node `stripMeter(strip)` reads the post-fader meter; use `meterTap(strip, 'preFader' | 'postFader')` when you need an explicit tap.
+
+## Projects, Instruments & Live MIDI
+
+The Node native addon exposes the same headless-DAW surface as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The browser-only glue (`bindWebMidi`, `bindMicrophoneInput`) is WASM-specific and not part of the native addon.
+
+The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
 ## Audio Wrapper Differences
 
@@ -361,7 +367,7 @@ timeToFrames(2.32, 22050, 512); // → frame index
 | Method | Description |
 |--------|-------------|
 | `Audio.fromFile(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when built with FFmpeg |
-| `Audio.fromBuffer(samples, sampleRate?)` | Create from `Float32Array` |
+| `Audio.fromBuffer(samples, sampleRate?)` | Create from `Float32Array`; `sampleRate` defaults to `48000` |
 | `Audio.fromMemory(data)` | Decode encoded audio bytes with the same format support as `fromFile` |
 | `audio.getData()` | `Float32Array` of samples |
 | `audio.getSampleRate()` | Sample rate (Hz) |
@@ -454,8 +460,8 @@ Progress callbacks are not available on the async path. If you need progress upd
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | Retune a held note from one MIDI pitch to another |
-| `noteStretch(samples, sr, onsetSample, offsetSample, stretchRatio)` | `Float32Array` | Time-stretch a single note span in place |
-| `voiceChange(samples, sr, pitchSemitones, formantFactor?)` | `Float32Array` | Pitch + formant shift for voice transformation |
+| `noteStretch(samples, sr?, options?)` | `Float32Array` | Time-stretch a single note span in place; `options` is `{ onsetSample, offsetSample, stretchRatio }` |
+| `voiceChange(samples, sr?, options?)` | `Float32Array` | Pitch + formant shift for voice transformation; `options` is `{ pitchSemitones, formantFactor }` |
 
 `trim(...)` is the simple threshold edit helper. `trimSilence(...)` below is
 the librosa-compatible frame/RMS helper that returns the original sample range.

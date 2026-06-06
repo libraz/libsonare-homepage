@@ -8,12 +8,12 @@ By the end of this page you should be able to:
 
 - explain what libsonare is and which kinds of music/audio tools it supports;
 - understand the basic MIR pipeline from waveform to spectrogram, features, and higher-level music analysis;
-- tell analysis, editing, mixing, mastering, realtime streaming, room acoustics, and inverse features apart;
+- tell analysis, editing, mixing, mastering, realtime streaming, room acoustics, built-in instruments, the headless-DAW runtime, and inverse features apart;
 - choose the next page from the [Learning Path](./learning-path.md) without needing DSP background.
 
 ## What is libsonare?
 
-libsonare is a dependency-free audio DSP toolkit for browser-native and native music tools.
+libsonare is a dependency-free audio engine for browser-native and native music tools, covering everything from analysis to arrangement.
 
 It covers several related jobs:
 
@@ -24,6 +24,8 @@ It covers several related jobs:
 | Mastering | Run broadcast-grade mastering processors and loudness/true-peak handling |
 | Mixing | Build a real-time-safe mixer with routing, buses, sends, and meters |
 | Editing and creative FX | Change pitch, timing, voice character, reverb, and modulation-style effects |
+| Built-in instruments and MIDI | Render MIDI through a multi-engine synth with a GM fallback bank or a SoundFont 2 player ([Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md)) |
+| Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
 
 It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
 

@@ -63,9 +63,17 @@ export async function validateMasteringPresets({
           `output LUFS ${result.outputLufs.toFixed(2)} exceeds target ${config.loudness.targetLufs}`,
         );
       }
-      if (result.outputLufs < result.inputLufs - 0.5) {
+      // loudness.optimize clamps its static gain so the true peak never crosses
+      // the ceiling, so a preset may legitimately land below the target: when
+      // the target sits below the input loudness (it attenuates), and when
+      // denoise removes loudness it cannot boost back without peak headroom.
+      // Allow that headroom shortfall, but still fail on collapse.
+      const denoiseShortfall = config.repair?.denoise ? 4.0 : 0.5;
+      const loudnessFloor =
+        Math.min(result.inputLufs, config.loudness.targetLufs) - denoiseShortfall;
+      if (result.outputLufs < loudnessFloor) {
         throw new Error(
-          `output LUFS ${result.outputLufs.toFixed(2)} is quieter than input ${result.inputLufs.toFixed(2)}`,
+          `output LUFS ${result.outputLufs.toFixed(2)} fell below floor ${loudnessFloor.toFixed(2)} (input ${result.inputLufs.toFixed(2)}, target ${config.loudness.targetLufs})`,
         );
       }
 

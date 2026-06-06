@@ -1,6 +1,6 @@
 ---
 layout: landing
-title: libsonare - 外部依存なしのオーディオ DSP ツールキット
+title: libsonare - 外部依存なしのオーディオエンジン
 titleTemplate: false
-description: "C++、Python、ブラウザで使える外部依存なしのオーディオ DSP ツールキット。解析、放送品質のマスタリング、リアルタイム安全なミキシング、ルーティング、編集 DSP、クリエイティブ FX に対応。"
+description: "C++、Python、ブラウザで使える外部依存なしのオーディオエンジン。librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW / リアルタイムランタイムに対応。"
 ---

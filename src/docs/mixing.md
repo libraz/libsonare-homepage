@@ -230,6 +230,8 @@ A **bus** is a shared destination. Strips connect to buses, buses connect to oth
 | `aux` | A parallel destination for sends, typically an effect return (reverb, delay). |
 | `submix` | A group of strips processed together before the master (a "drum bus"). |
 
+Only `master` and `aux` are special tokens; any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
+
 Connections form a graph. `Mixer.fromSceneJson` compiles that graph lazily on the first `processStereo` call.
 
 Call `compile()` after a **topology** change, before the next timing-critical block. Topology changes include:
@@ -247,13 +249,25 @@ Strip addressing differs by runtime:
 | WASM | Mixer control methods use numeric strip indexes. Use `stripById(id)` first when you have a scene id. |
 | Node native / Python | Most control methods accept either a numeric index or a strip id string. |
 
+### Removing sends and buses
+
+Sends on a strip are addressed by index in **add order**. Removing one with `removeSend(strip, sendIndex)` shifts every later send down by one, so any send index you cached above the removed slot is now off by one — re-read indices after a removal (and recompile or process before reading routed results so the graph rebuilds).
+
+Removing a bus also cleans up the routing that pointed at it: any send whose destination was that bus is dropped, because its target no longer exists. Audit a strip's sends after removing a bus they fed.
+
+::: warning Buses that go nowhere
+Compiling (or processing) a scene emits a **non-fatal** warning when an explicit `submix` or `aux` bus has no path to the `master`. The graph still runs, but a bus with no route to the master contributes nothing to the output — usually a missing connection rather than an intentional dead end. Treat the warning as a prompt to check that every bus you added is actually wired through to `master`.
+:::
+
 ### VCA groups
 
 A **VCA group** is a single fader that trims the level of several strips *without* re-routing their audio.
 
 For example, pull the "drums" VCA down 2 dB and the kick, snare, and overheads all drop 2 dB while still flowing to their own buses.
 
-The group's `gainDb` is summed into each member's fader stage (step 7 above). Add live offsets with `setVcaOffsetDb(...)`; persistent membership lives in the scene.
+The group's `gainDb` is summed into each member's fader stage (step 7 above) as a **delta** on top of whatever fader value the strip already has. Because only the difference is applied, a per-strip fader trim you set inside the group survives — the group fader rides the whole set without overwriting the individual balance.
+
+Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)` and adjust it with `setVcaGroupGainDb(...)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset for the current session and is *not* persisted to the scene.
 
 ### Solo and mute logic
 

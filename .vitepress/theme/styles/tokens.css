@@ -54,10 +54,17 @@ html, body {
   --color-border-default: rgba(0, 0, 0, 0.13);
   --color-border-strong: rgba(124, 58, 237, 0.32);
 
-  /* Typography */
-  --font-display: 'Outfit', sans-serif;
-  --font-body: 'Space Grotesk', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Typography
+     'Noto Sans JP' is appended to every Latin-first stack so Japanese
+     glyphs (which Outfit / Space Grotesk / Inter lack) route to it
+     automatically via the font-family fallback chain — giving mixed
+     JA/Latin text an intentional pairing instead of an OS default.
+     --font-reading is the docs long-form reading face (Inter, self-hosted
+     by VitePress); --font-body stays Space Grotesk for landing/demo UI. */
+  --font-display: 'Outfit', 'Noto Sans JP', sans-serif;
+  --font-body: 'Space Grotesk', 'Noto Sans JP', sans-serif;
+  --font-reading: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Noto Sans JP', monospace;
 
   /* Spacing */
   --space-1: 0.25rem;

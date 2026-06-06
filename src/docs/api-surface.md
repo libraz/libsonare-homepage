@@ -67,6 +67,8 @@ This page is not a list to memorize. Choose one task, then follow that row to th
 | Mastering | Presets, full chains, named processors, pair processors, pair analyses, stereo analyses, streaming mastering chain | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Mastering Implementation](./mastering-implementation.md) |
 | Streaming MIR | Live mel/chroma/onset frames, progressive BPM/key/chord estimates, chord progression and pattern scores | [Realtime and Streaming](./realtime-streaming.md), [WASM](./wasm.md#streaming-analysis) |
 | Realtime engine | Transport, tempo, markers, metronome, automation lanes, graph topology, clips, capture, monitor bus, telemetry, bounce/freeze | [Realtime and Streaming](./realtime-streaming.md) |
+| Projects & arrangement | Audio/MIDI tracks and clips, undo/redo, takes/comping, warp, MIDI sequencing, SMF import/export, JSON save/load, and offline bounce | [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Recording and Takes](./recording-and-takes.md), [Realtime and Streaming](./realtime-streaming.md) |
+| Instruments & MIDI | Multi-engine synth with a GM fallback bank, GS-compatible SoundFont 2 player, and live MIDI playback | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md) |
 | Inverse features | Mel to STFT/audio, MFCC to mel/audio | [Inverse Features](./inverse-features.md) |
 | Utility / librosa parity | Frame/sample/time conversions, dB conversion, pre/de-emphasis, silence trim/split, frame/pad/fix helpers, peak pick, vector normalize, PCEN, tonnetz | [librosa Compatibility](./librosa-compatibility.md) |
 

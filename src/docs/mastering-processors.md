@@ -87,6 +87,15 @@ The exact IDs matter for code, but users usually choose by *role*:
 
 Most full chains use only a small subset: repair if needed, one tone stage, one dynamics stage, optional saturation/stereo, then maximizer/loudness. Stacking many processors from the registry is rarely better than starting from a preset and overriding one or two values.
 
+::: info Loudness, oversampling, and metering details
+A few capabilities sit underneath the maximizer/final and analysis surfaces:
+
+- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the BS.1770 channel weights.
+- The internal oversampler and true-peak stages accept oversampling factors of 1 and 16 (the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
+- For UI consumption there are display-decimated metering variants — `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series to at most `maxPoints` points — plus `meteringSpectrumFrame(...)`, a single-frame (non-time-averaged) spectrum reader for spectrum-analyzer snapshots.
+- A **stereo imager** (widens or narrows the stereo field per band) and a **dynamic EQ** (an EQ whose boost/cut reacts to level, like a frequency-targeted compressor) are available in multiband form: `multiband.imager` and `multiband.dynamicEq` expose per-band parameters and accept a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three.
+:::
+
 ## Solo processors
 
 | Family | Processor names |
@@ -97,7 +106,7 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 | Maximizer | `maximizer.adaptiveRelease`, `maximizer.loudnessOptimize`, `maximizer.maximizer`, `maximizer.softKneeMax`, `maximizer.truePeakLimiter` |
 | Multiband | `multiband.compressor`, `multiband.dynamicEq`, `multiband.expander`, `multiband.imager`, `multiband.limiter`, `multiband.saturation` |
 | Repair | `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.denoiseClassical`, `repair.dereverbClassical`, `repair.trimSilence` |
-| Saturation | `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
+| Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
 
@@ -129,6 +138,10 @@ These are classical denoising methods.
 This reduces the warbly "musical noise" that naive subtraction can leave. These methods do not separate instruments; they only attenuate noise.
 :::
 
+::: details What is `saturation.ampSim`?
+A guitar-amp-style coloration stage in the form drive → tone stack → cab. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then a fixed, data-free cab voicing (low cut, body bump, presence peak, and a steep roll-off around 4.8 kHz) that can be bypassed for a clean DI tone. The drive, tone, presence, and level controls are automatable through `set_parameter` on every binding.
+:::
+
 ## Pair processors and analyses
 
 Pair processors consume a source **and** a reference. Pair/stereo *analyses* return measurement JSON and do not render audio by themselves.
@@ -146,7 +159,7 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 
 ## Mixer Insert Names
 
-Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. In addition to the solo processors above, builds with creative FX enabled expose reverb insert IDs:
+Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. The full insert list is enumerable at runtime with `masteringInsertNames()`. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
 
 | Insert ID | Meaning |
 |-----------|---------|
@@ -157,6 +170,7 @@ Mixer scene inserts use the same processor factory as mastering inserts, but the
 | `effects.reverb.convolution` | Convolution reverb; can use an impulse response in native insert creation paths |
 | `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
 | `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
+| `effects.modulation.ensemble` | Solina-style BBD string-machine ensemble |
 
 These insert IDs are available only in builds with `SONARE_HAVE_FX`. The geometric room inserts also require `BUILD_ACOUSTIC_SIM`.
 
@@ -176,6 +190,10 @@ They are different ways to synthesize a reverb tail. Pick by the character you w
 - **FDN (feedback delay network)** — a flexible algorithmic reverb built from interconnected delay lines, easy to tune from small rooms to large halls.
 - **Velvet-noise** — uses sparse random impulses to build an efficient, natural-sounding tail at low CPU cost.
 - **Convolution** — reproduces a *real* space by convolving the signal with a measured impulse response of that room.
+:::
+
+::: details What is `effects.modulation.ensemble`?
+A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintage string synths. It runs three delay taps per channel, swept simultaneously by a slow and a fast 3-phase LFO bank, so the modulation is dense rather than a single chorus wobble. A BBD bucket-bandwidth lowpass darkens the wet path, emulating the analog bucket-brigade delay lines. The right-channel LFO polarity is inverted, which spreads a mono source into a wide stereo image. It is exposed through the insert factory and its parameters are automatable through `set_parameter` on every binding.
 :::
 
 Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. They are not returned by `masteringProcessorNames()` because they are mixer insert processors, not one-shot mastering processors.

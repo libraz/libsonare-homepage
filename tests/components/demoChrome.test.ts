@@ -66,7 +66,7 @@ describe('DemoCardGrid', () => {
     await wrapper.find('.demo-grid').trigger('scroll');
 
     const cards = wrapper.findAll('.demo-grid__card');
-    expect(cards).toHaveLength(6);
+    expect(cards).toHaveLength(8);
     expect(cards.map((card) => card.attributes('href'))).toEqual([
       '/analyzer',
       '/mastering',
@@ -74,16 +74,22 @@ describe('DemoCardGrid', () => {
       '/mixing',
       '/realtime-fx',
       '/spatial',
+      '/synth',
+      '/studio',
     ]);
     expect(wrapper.text()).toContain('Visual Player');
     expect(wrapper.text()).toContain('Mastering Studio');
     expect(wrapper.text()).toContain('Spatial Room Scanner');
+    expect(wrapper.text()).toContain('Synth Playground');
+    expect(wrapper.text()).toContain('Studio Mini');
     expect(wrapper.find('.demo-grid__visual--spectrum').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--lufs').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--chroma').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--faders').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--fx').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--room').exists()).toBe(true);
+    expect(wrapper.find('.demo-grid__visual--keys').exists()).toBe(true);
+    expect(wrapper.find('.demo-grid__visual--steps').exists()).toBe(true);
     expect(wrapper.find('.demo-carousel__nav--next').classes()).not.toContain(
       'demo-carousel__nav--hidden',
     );
@@ -108,9 +114,12 @@ describe('DemoCardGrid', () => {
       '/ja/mixing',
       '/ja/realtime-fx',
       '/ja/spatial',
+      '/ja/synth',
+      '/ja/studio',
     ]);
     expect(wrapper.text()).toContain('ビジュアルプレイヤー');
     expect(wrapper.text()).toContain('マスタリングスタジオ');
+    expect(wrapper.text()).toContain('シンセプレイグラウンド');
     expect(wrapper.find('.demo-carousel__nav--prev').attributes('aria-label')).toBe(
       '前のデモを表示',
     );

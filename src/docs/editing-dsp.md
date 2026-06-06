@@ -46,8 +46,9 @@ That is why `voiceChange` separates the two controls. Lowering the formant facto
 | Shift the whole signal without changing duration | `pitchShift(samples, sampleRate, semitones)` | `pitch_shift(samples, sample_rate, semitones)` |
 | Time-stretch the whole signal without changing pitch | `timeStretch(samples, sampleRate, rate)` | `time_stretch(samples, sample_rate, rate)` |
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
-| Stretch only a note region | `noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio)` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
-| Shift pitch and formants independently | `voiceChange(samples, sampleRate, pitchSemitones, formantFactor)` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
+| Follow a per-frame pitch contour toward a note | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
+| Stretch only a note region | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
+| Shift pitch and formants independently | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
 | Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
 | One-shot realtime voice preset render | Node native: `voiceChangeRealtime(samples, sampleRate, preset)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
@@ -65,8 +66,8 @@ import { init, noteStretch, pitchCorrectToMidi, voiceChange } from '@libraz/libs
 await init();
 
 const tuned = pitchCorrectToMidi(vocal, sampleRate, 68.7, 69);
-const heldNote = noteStretch(vocal, sampleRate, 12000, 24000, 1.25);
-const character = voiceChange(vocal, sampleRate, 5, 1.1);
+const heldNote = noteStretch(vocal, sampleRate, { onsetSample: 12000, offsetSample: 24000, stretchRatio: 1.25 });
+const character = voiceChange(vocal, sampleRate, { pitchSemitones: 5, formantFactor: 1.1 });
 ```
 
 ```python [Python]
@@ -102,6 +103,39 @@ const targetMidi = 69;    // A4
 const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 ```
 
+### Time-varying pitch correction
+
+`pitchCorrectToMidi(...)` applies a single constant transpose, which flattens any vibrato or drift in the take. When you want to keep that expression while still pulling the note toward a target, use `pitchCorrectToMidiTimevarying(...)`. Instead of one current-pitch number, it follows a caller-supplied **per-frame F0 contour** and retunes every voiced frame toward `targetMidi`, so the natural pitch movement is tracked rather than ironed out.
+
+```typescript
+import { init, pitchPyin, pitchCorrectToMidiTimevarying } from '@libraz/libsonare';
+
+await init();
+
+const frameLength = 512;
+const hopLength = 512;
+
+// 1. Measure a per-frame F0 contour (any detector that emits one F0 per hop).
+const pitch = pitchPyin(vocal, sampleRate, frameLength, hopLength, 65, 1000, 0.3);
+
+// 2. Retune every voiced frame toward A3 (MIDI 57) while keeping the contour.
+const tuned = pitchCorrectToMidiTimevarying(
+  vocal,
+  pitch.f0,          // Float32Array, one F0 (Hz) per analysis frame
+  57,                // target MIDI note
+  sampleRate,
+  hopLength,         // frame i covers sample i * hopLength
+  pitch.voicedFlag,  // optional: only retune voiced frames
+  pitch.voicedProb,  // optional: voicing probability in [0, 1]
+);
+```
+
+`voiced` (non-zero = voiced) and `voicedProb` are optional; omit them to treat every frame as voiced. Match `hopLength` to whatever produced `f0Hz` so frame `i` lines up with sample `i * hopLength`.
+
+::: tip Constant vs contour-following correction
+Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.
+:::
+
 ### MIDI note numbers
 
 A MIDI note number represents pitch as a semitone index. Each whole number is one semitone, and fractional values are allowed.
@@ -126,7 +160,7 @@ If your UI works in seconds, convert like this:
 ```typescript
 const onsetSample = Math.round(onsetSeconds * sampleRate);
 const offsetSample = Math.round(offsetSeconds * sampleRate);
-const heldNote = noteStretch(vocal, sampleRate, onsetSample, offsetSample, 1.25);
+const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, stretchRatio: 1.25 });
 ```
 
 `stretchRatio` is the length multiplier for the selected region.
@@ -183,6 +217,19 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 ### Using the `Audio` wrapper
 
 The `Audio` wrapper exposes the same operations as instance methods. In file-based Python workflows, you can load the file once and then apply edits to the same `Audio` object.
+
+### Creative effect inserts
+
+Beyond pitch and time transforms, two of the mixer/mastering insert processors are reach-for-them voice and instrument colour tools:
+
+- `effects.modulation.ensemble` — a BBD-style string-machine ensemble that thickens a thin source into a wide, chorused pad.
+- `saturation.ampSim` — a guitar amp simulation that adds drive and speaker-cabinet character.
+
+Load them as inserts on a strip (see [Mixing Engine](./mixing.md)) rather than as standalone functions on a raw buffer.
+
+::: info Offline transforms vs arrange-time warp
+The functions on this page are **offline** transforms: you hand them a buffer and get a new buffer back. They are different from **arrange-time warp** — clip repitch and tempo-sync inside a project, where a clip follows the timeline rather than being baked once. For that project-level workflow, see [Project Editing](./project-editing.md).
+:::
 
 ## Practical Notes
 

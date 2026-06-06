@@ -121,7 +121,7 @@ These mirror `librosa.feature.inverse.*` and use Griffin-Lim for phase, so round
 
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
-| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT magnitude |
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT power; custom Mel ranges / HTK round-trip via `fmin`/`fmax`/`htk` |
 | _(mel_to_stft + `librosa.griffinlim`)_ | `melToAudio()` / `mel_to_audio()` | Mel power → audio (Griffin-Lim) |
 | `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → mel power |
 | `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → audio (Griffin-Lim) |

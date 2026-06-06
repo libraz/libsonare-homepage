@@ -150,17 +150,48 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* ===== PERMANENT BANNER ===== */
+/* ===== PERMANENT BANNER =====
+   Amber caution strip: hazard-stripe edge, warm wash, and a filled badge make
+   the local-only / not-a-service notice read as a warning at a glance. */
 .demo-disclaimer__banner {
+  --warn-badge-fg: #221302;
   position: relative;
   z-index: 9;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 18px;
+  padding: 7px 18px 7px 23px;
   border-bottom: 1px solid var(--demo-warn-border, rgba(245, 158, 11, 0.4));
-  background: var(--demo-warn-bg, rgba(245, 158, 11, 0.1));
-  color: var(--demo-warn-text, #FCD9A0);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--demo-warn, #F59E0B) 13%, transparent),
+      color-mix(in srgb, var(--demo-warn, #F59E0B) 5%, transparent) 44%,
+      transparent 82%
+    ),
+    var(--demo-bg-overlay, rgba(16, 18, 25, 0.96));
+  backdrop-filter: blur(16px);
+  color: var(--demo-text-muted, rgba(255, 255, 255, 0.56));
+}
+
+/* Hazard-stripe edge along the left of the strip */
+.demo-disclaimer__banner::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--demo-warn, #F59E0B) 0 5px,
+    transparent 5px 11px
+  );
+  opacity: 0.85;
+}
+
+html:not(.dark) .demo-disclaimer__banner {
+  --warn-badge-fg: #fff8ec;
 }
 
 .demo-disclaimer__badge {
@@ -168,14 +199,16 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 7px;
-  border: 1px solid var(--demo-warn-border, rgba(245, 158, 11, 0.4));
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--demo-warn, #F59E0B) 70%, transparent);
   border-radius: 5px;
-  color: var(--demo-warn, #F59E0B);
+  background: var(--demo-warn, #F59E0B);
+  color: var(--warn-badge-fg);
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.14em;
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--demo-warn, #F59E0B) 55%, transparent);
 }
 
 .demo-disclaimer__badge::before {
@@ -188,6 +221,10 @@ onMounted(() => {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--demo-warn-text, #FCD9A0);
 }
 
 .demo-disclaimer__reopen {
@@ -195,32 +232,33 @@ onMounted(() => {
   padding: 4px 10px;
   border: 1px solid var(--demo-warn-border, rgba(245, 158, 11, 0.4));
   border-radius: 5px;
-  background: transparent;
-  color: var(--demo-warn, #F59E0B);
+  background: var(--demo-warn-bg, rgba(245, 158, 11, 0.1));
+  color: var(--demo-warn-text, #FCD9A0);
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: border-color 0.18s ease, color 0.18s ease;
 }
 
 .demo-disclaimer__reopen:hover {
-  background: var(--demo-warn, #F59E0B);
-  color: #1a1206;
+  border-color: var(--demo-warn, #F59E0B);
+  color: var(--demo-warn, #F59E0B);
 }
 
 @media (max-width: 720px) {
   .demo-disclaimer__banner {
     align-items: flex-start;
     flex-wrap: wrap;
-    padding: 8px 12px;
+    padding: 8px 12px 8px 17px;
   }
 
   .demo-disclaimer__banner-text {
     flex-basis: 100%;
     order: 3;
+    white-space: normal;
   }
 }
 

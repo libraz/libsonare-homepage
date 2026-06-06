@@ -311,6 +311,58 @@
           "title": { "en": "Mastering Quality Checklist", "ja": "マスタリング品質チェックリスト" }
         }
       ]
+    },
+    {
+      "id": "instruments",
+      "label": { "en": "Instruments and MIDI", "ja": "楽器と MIDI" },
+      "entries": [
+        {
+          "id": "synthesis-basics",
+          "status": "published",
+          "title": { "en": "Synthesis Basics", "ja": "シンセシスの基礎" }
+        },
+        {
+          "id": "envelopes-modulation",
+          "status": "published",
+          "title": { "en": "Envelopes and Modulation", "ja": "エンベロープとモジュレーション" }
+        },
+        {
+          "id": "midi-basics",
+          "status": "published",
+          "title": { "en": "MIDI Basics", "ja": "MIDI の基礎" }
+        },
+        {
+          "id": "soundfont",
+          "status": "published",
+          "title": { "en": "SoundFont and Sampled Instruments", "ja": "SoundFont とサンプル音源" }
+        }
+      ]
+    },
+    {
+      "id": "arrangement",
+      "label": { "en": "Arrangement and Projects", "ja": "アレンジとプロジェクト" },
+      "entries": [
+        {
+          "id": "clips-and-tracks",
+          "status": "published",
+          "title": { "en": "Clips and Tracks", "ja": "クリップとトラック" }
+        },
+        {
+          "id": "takes-and-comping",
+          "status": "published",
+          "title": { "en": "Takes and Comping", "ja": "テイクとコンピング" }
+        },
+        {
+          "id": "warp-and-tempo",
+          "status": "published",
+          "title": { "en": "Warp and Tempo Sync", "ja": "ワープとテンポ同期" }
+        },
+        {
+          "id": "bounce-and-rendering",
+          "status": "published",
+          "title": { "en": "Bounce and Rendering", "ja": "バウンスとレンダリング" }
+        }
+      ]
     }
   ]
 }

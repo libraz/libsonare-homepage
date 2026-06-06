@@ -157,11 +157,19 @@ function analyzeReference(request: Extract<WorkerRequest, { type: 'referenceAnal
 
   postProgress(request.id, 0.5, 'Analyzing tonal balance');
   const tonalBalance = parseJson(
-    wasmModule.masteringPairAnalyze('match.tonalBalance', sourcePair, referencePair, request.sampleRate),
+    wasmModule.masteringPairAnalyze(
+      'match.tonalBalance',
+      sourcePair,
+      referencePair,
+      request.sampleRate,
+    ),
   );
 
   postProgress(request.id, 0.76, 'Checking mono compatibility');
-  const referenceStereoLength = Math.min(request.referenceLeft.length, request.referenceRight.length);
+  const referenceStereoLength = Math.min(
+    request.referenceLeft.length,
+    request.referenceRight.length,
+  );
   const monoCompatibility = parseJson(
     wasmModule.masteringStereoAnalyze(
       'stereo.monoCompatCheck',

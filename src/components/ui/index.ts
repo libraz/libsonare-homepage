@@ -3,6 +3,7 @@ export { default as AudioTransport } from './AudioTransport.vue';
 export { default as CornerBrackets } from './CornerBrackets.vue';
 export { default as GridOverlay } from './GridOverlay.vue';
 export { default as MetricItem } from './MetricItem.vue';
+export { default as RotaryKnob } from './RotaryKnob.vue';
 export { default as ScanLine } from './ScanLine.vue';
 export { default as StatusIndicator } from './StatusIndicator.vue';
 export { default as TechPanel } from './TechPanel.vue';

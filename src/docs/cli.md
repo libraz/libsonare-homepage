@@ -60,7 +60,6 @@ with extra commands not in the PyPI package. See [Building from Source](/docs/in
 - Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (short alias for `onset-envelope`), `fourier-tempogram`, `tempogram-ratio`
 - librosa utilities: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
 - Mastering: `mastering-pair-processor` (process a source/reference pair), `mastering-stereo-analyses`, `mastering-stereo-analyze`
-- Mixing scene tools: `mixing-presets`, `mixing-preset` (list / export scene JSON)
 :::
 
 ## Overview
@@ -214,7 +213,14 @@ Compute a Mel spectrogram and print its dimensions.
 ```bash
 sonare mel music.mp3
 sonare mel music.mp3 --n-mels 80
+sonare mel music.mp3 --fmin 40 --fmax 16000 --htk
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--fmin FREQ` | 0 | Lowest Mel-band frequency in Hz |
+| `--fmax FREQ` | 0 | Highest Mel-band frequency in Hz; 0 uses the Nyquist frequency |
+| `--htk` | off | Use the HTK Mel scale instead of the Slaney scale |
 
 **Output:**
 ```
@@ -495,7 +501,7 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-For Python CLI pair analysis, the source and reference files must decode to the same number of samples and should already use the same sample rate. The CLI surfaces mismatched lengths as an error; for resampling or trimming before comparison, use the Python API.
+For pair analysis, the CLI resamples the reference to the source sample rate before comparing, so the two files do not need to share a sample rate. For finer control over resampling or trimming before comparison, use the Python API.
 
 The `/mastering` browser demo uses the same mastering processor families. Use the exported report from the demo as a starting point for CLI automation.
 
@@ -521,12 +527,18 @@ Room-acoustic fields such as RT60, EDT, C50, C80, D50, volume, dimensions, absor
 
 ::: info Command availability
 The PyPI Python CLI includes `mix`, which loads a mixer scene from a JSON file or
-a built-in preset and optionally renders per-strip input WAVs. Source-built C++ CLI
-builds also expose `mixing-presets` and `mixing-preset` for listing scenes and
-exporting scene JSON loadable by the WASM, Python, Node, or C++ mixer APIs.
+a built-in preset and optionally renders per-strip input WAVs. It also includes
+`mixing-presets` and `mixing-preset` for listing scenes and printing scene JSON
+loadable by the WASM, Python, Node, or C++ mixer APIs.
 :::
 
 ```bash
+# List the built-in mixer scene presets
+sonare mixing-presets
+
+# Print one preset's scene as JSON (default: basic)
+sonare mixing-preset --preset vocalReverbSend > scene.json
+
 # Load a built-in scene preset and render per-strip inputs to a stereo WAV
 sonare mix \
   --preset vocalReverbSend \
@@ -535,7 +547,7 @@ sonare mix \
   --sample-rate 48000 \
   -o mixed.wav
 
-# Or load a scene from JSON (e.g. exported from the C++ `mixing-preset` command)
+# Or load a scene from JSON (e.g. exported from `mixing-preset`)
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
@@ -543,6 +555,72 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 strip; rendering to a file needs `-o/--output`.
 
 Related: [Mixing Engine](./mixing.md).
+
+### Project & MIDI Workflow
+
+The `sonare project` command group runs headless project and Standard MIDI File
+(SMF) / MIDI 2.0 workflows from JSON project files. `midi-render` renders a MIDI
+project through the native synthesizer, and `synth-presets` lists the built-in
+instrument patches.
+
+```bash
+# Print the project ABI version
+sonare project abi
+
+# Create an empty project JSON at a given sample rate
+sonare project new --sample-rate 48000 -o project.json
+
+# Validate or compile a project JSON
+sonare project validate --in project.json
+sonare project compile --in project.json -o compiled.json
+
+# Render a project to a stereo WAV (multi-channel bounces write stereo output)
+sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
+
+# Render the project's MIDI through a NativeSynth preset instead of clip audio
+sonare project bounce --in project.json --synth -o synth-bounce.wav
+```
+
+| Command | Description | Notable options |
+|---------|-------------|-----------------|
+| `sonare project abi` | Print the project ABI version | — |
+| `sonare project new` | Create an empty project JSON | `--sample-rate`, `-o` |
+| `sonare project validate` | Validate a project JSON | `--in` |
+| `sonare project compile` | Compile a project JSON | `--in`, `-o` |
+| `sonare project bounce` | Render a project to a stereo WAV | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
+| `sonare project export-smf` | Export the project to a Standard MIDI File | `--in`, `-o` |
+| `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |
+| `sonare project export-midi2` | Export the project to a MIDI 2.0 Clip File | `--in`, `-o` |
+| `sonare project import-midi2` | Build a project from a MIDI 2.0 Clip File | `--midi2`, `-o` |
+| `sonare project synth-presets` | List the built-in NativeSynth presets | `--json` |
+
+```bash
+# Round-trip a project through Standard MIDI File format
+sonare project export-smf --in project.json -o project.mid
+sonare project import-smf --smf project.mid -o roundtrip.json
+
+# Round-trip through MIDI 2.0 Clip File format
+sonare project export-midi2 --in project.json -o project.midi2
+sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
+
+# Render a MIDI project through NativeSynth to a stereo WAV
+sonare midi-render --in project.json --synth acoustic-piano --sample-rate 48000 -o render.wav
+
+# List the built-in synth presets
+sonare synth-presets
+```
+
+| Command | Description | Notable options |
+|---------|-------------|-----------------|
+| `sonare midi-render` | Render a MIDI project through NativeSynth | `--in`, `--synth`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `-o` |
+| `sonare synth-presets` | List the built-in NativeSynth presets | `--json` |
+
+Bounce and render commands write stereo WAV output. SoundFont (SF2) and
+per-destination synth JSON are not wired through these CLI commands; use the
+Project API for SoundFont-backed bounces.
+
+Related: [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md),
+[Native Synth](./native-synth.md), [SoundFont Player](./soundfont-player.md).
 
 ## Supported Audio Formats
 

@@ -34,7 +34,7 @@
   border: 1px solid var(--demo-border);
   border-radius: 8px;
   background:
-    linear-gradient(to top, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to top, color-mix(in srgb, var(--demo-text) 5%, transparent) 1px, transparent 1px),
     var(--demo-track-bg);
   background-size: 100% 25%;
 }
@@ -238,7 +238,7 @@
   border: 1px solid var(--demo-border);
   border-radius: 8px;
   background:
-    linear-gradient(to top, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to top, color-mix(in srgb, var(--demo-text) 5%, transparent) 1px, transparent 1px),
     var(--demo-track-bg);
   background-size: 100% 25%;
   overflow: hidden;
@@ -267,7 +267,7 @@
   border: 1px solid var(--demo-border);
   border-radius: 10px;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05), transparent 70%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--demo-text) 6%, transparent), transparent 70%),
     var(--demo-track-bg);
 }
 

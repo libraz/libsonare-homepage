@@ -118,8 +118,12 @@ A send routes a post-gain copy of the strip's signal to a destination bus.
 | Field | Type | Meaning |
 |-------|------|---------|
 | `id` | string | Bus identifier (one bus is conventionally `"master"`) |
-| `role` | string | `"master"`, `"aux"`, or `"submix"` |
+| `role` | string | `"master"`, `"aux"`, or a group bus such as `"submix"` |
 | `inserts` | array | Processors on the bus itself (same [Insert](#insert) shape as a strip) |
+
+::: info Only `master` and `aux` are special role tokens
+The engine treats `master` and `aux` specially; **any other role string is just a generic non-master bus**. So a "drum bus" works the same whether its role is `submix`, `subgroup`, or `group` — the token is a label, not a behavior switch. The built-in `drumBusSubgroup` preset uses `subgroup`, so if you print it (`mixingScenePresetJson('drumBusSubgroup')`) you will see `"role": "subgroup"`, not `"submix"`.
+:::
 
 ## VCA group
 
@@ -143,7 +147,7 @@ Connections are the graph edges. A strip routed to `master` is `{ "source": "voc
 | Preset | Intent |
 |--------|--------|
 | `vocalReverbSend` | Vocal strip (EQ + compressor inserts) with a post-fader aux send into a plate-reverb return |
-| `drumBusSubgroup` | Kick/snare/overheads into a `submix`, glued with parallel compression and tape, ridden by a "drums" VCA |
+| `drumBusSubgroup` | Kick/snare/overheads into a group bus (role `subgroup`), glued with parallel compression and tape, ridden by a "drums" VCA |
 | `commentaryDucking` | Host/guest speech (de-ess + compress) with a music bed ducked via `dynamics.sidechainRouter` keyed off the host |
 
 Discover them at runtime with `mixingScenePresetNames()` and fetch one with `mixingScenePresetJson(name)`.
@@ -190,6 +194,17 @@ This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (default
 ```
 
 Trace the reverb: the **vocal** strip's post-fader send feeds the **vocal-verb** aux bus; that bus connects to the **vocal-verb-return** strip (which hosts the plate reverb); the return connects to **master**. The dry vocal also connects straight to **master**. One reverb instance, dry and wet kept separate.
+
+::: warning The `eq.parametric` insert ignores `highPassHz` / `presenceDb`
+This preset is shown verbatim, but two of its `eq.parametric` params do **nothing**. The shipped `eq.parametric` insert reads only **band-indexed** numeric keys — frequency, gain, and Q per band, addressed by index — so named keys like `highPassHz` and `presenceDb` are silently ignored. They are inert here.
+
+For tonal moves that actually take effect through a scene insert, use:
+
+- `eq.tilt` with `tiltDb` — a broad bright/dark tilt.
+- `spectral.airBand` with `airDb` — a high-shelf "air" lift.
+
+So treat the EQ params in this preset as illustrative of the *shape* of a scene, not as a working high-pass + presence boost.
+:::
 
 ## Editing and re-saving
 

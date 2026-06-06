@@ -52,7 +52,9 @@ const wasmMetaTokens: Record<string, string> = {
   'wasm.gzipKB': formatKb(wasmAsset('sonare.wasm').gzipKB),
   'total.sizeKB': formatKb(
     wasmMeta.total?.sizeKB ??
-      wasmAsset('sonare.js').sizeKB + wasmAsset('index.js').sizeKB + wasmAsset('sonare.wasm').sizeKB,
+      wasmAsset('sonare.js').sizeKB +
+        wasmAsset('index.js').sizeKB +
+        wasmAsset('sonare.wasm').sizeKB,
   ),
   'total.gzipKB': formatKb(
     wasmMeta.total?.gzipKB ??
@@ -84,7 +86,7 @@ function absoluteUrl(path: string): string {
 
 function pageTitle(title: string): string {
   return title.startsWith('libsonare - ')
-    ? 'libsonare - Dependency-Free Audio DSP Toolkit'
+    ? 'libsonare - Dependency-Free Audio Engine'
     : `${title} | libsonare`;
 }
 
@@ -162,6 +164,35 @@ const glossarySidebar = [
             link: '/docs/glossary/editing/pitch-correction',
           },
           { text: 'Voice and Formant', link: '/docs/glossary/editing/voice-formant' },
+        ],
+      },
+      {
+        text: 'Instruments and MIDI',
+        collapsed: true,
+        items: [
+          { text: 'Synthesis Basics', link: '/docs/glossary/instruments/synthesis-basics' },
+          {
+            text: 'Envelopes and Modulation',
+            link: '/docs/glossary/instruments/envelopes-modulation',
+          },
+          { text: 'MIDI Basics', link: '/docs/glossary/instruments/midi-basics' },
+          {
+            text: 'SoundFont and Sampled Instruments',
+            link: '/docs/glossary/instruments/soundfont',
+          },
+        ],
+      },
+      {
+        text: 'Arrangement and Projects',
+        collapsed: true,
+        items: [
+          { text: 'Clips and Tracks', link: '/docs/glossary/arrangement/clips-and-tracks' },
+          { text: 'Takes and Comping', link: '/docs/glossary/arrangement/takes-and-comping' },
+          { text: 'Warp and Tempo Sync', link: '/docs/glossary/arrangement/warp-and-tempo' },
+          {
+            text: 'Bounce and Rendering',
+            link: '/docs/glossary/arrangement/bounce-and-rendering',
+          },
         ],
       },
       {
@@ -274,6 +305,32 @@ const jaGlossarySidebar = [
         ],
       },
       {
+        text: '楽器と MIDI',
+        collapsed: true,
+        items: [
+          { text: 'シンセシスの基礎', link: '/ja/docs/glossary/instruments/synthesis-basics' },
+          {
+            text: 'エンベロープとモジュレーション',
+            link: '/ja/docs/glossary/instruments/envelopes-modulation',
+          },
+          { text: 'MIDI の基礎', link: '/ja/docs/glossary/instruments/midi-basics' },
+          { text: 'SoundFont とサンプル音源', link: '/ja/docs/glossary/instruments/soundfont' },
+        ],
+      },
+      {
+        text: 'アレンジとプロジェクト',
+        collapsed: true,
+        items: [
+          { text: 'クリップとトラック', link: '/ja/docs/glossary/arrangement/clips-and-tracks' },
+          { text: 'テイクとコンピング', link: '/ja/docs/glossary/arrangement/takes-and-comping' },
+          { text: 'ワープとテンポ同期', link: '/ja/docs/glossary/arrangement/warp-and-tempo' },
+          {
+            text: 'バウンスとレンダリング',
+            link: '/ja/docs/glossary/arrangement/bounce-and-rendering',
+          },
+        ],
+      },
+      {
         text: 'リアルタイムガイド',
         collapsed: true,
         items: [
@@ -330,7 +387,7 @@ const softwareApplicationJsonLd = {
   '@type': 'SoftwareApplication',
   name: 'libsonare',
   applicationCategory: 'MultimediaApplication',
-  applicationSubCategory: 'Dependency-free audio DSP toolkit',
+  applicationSubCategory: 'Dependency-free audio engine',
   operatingSystem: 'Any (Browser, Node.js, Linux, macOS)',
   offers: {
     '@type': 'Offer',
@@ -338,7 +395,7 @@ const softwareApplicationJsonLd = {
     priceCurrency: 'USD',
   },
   description:
-    'Apache-2.0 dependency-free audio DSP toolkit for C++, Python, Node, CLI, and WebAssembly: analysis, broadcast-grade mastering, real-time-safe mixing, routing, editing, and creative FX.',
+    'Apache-2.0 dependency-free audio engine for C++, Python, Node, CLI, and WebAssembly: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
   url: siteUrl,
   softwareHelp: `${siteUrl}/docs/introduction.html`,
   downloadUrl: githubUrl,
@@ -350,6 +407,9 @@ const softwareApplicationJsonLd = {
     'BPM, key, chord, beat, downbeat, section, melody, loudness, room-acoustic analysis, and geometric room tools',
     '66 named mastering DSP processors with an 18-processor default chain',
     'Real-time-safe mixing, routing, metering, offline rendering, editing DSP, and creative FX',
+    'Built-in instruments: 7-engine synthesizer with GM fallback and SoundFont 2 player',
+    'Headless DAW runtime: MIDI sequencing, arrangement editing, offline bounce',
+    'Realtime playback engine with live MIDI input and recording',
     'WebAssembly, Python, CLI, Node.js, and C++ APIs',
   ],
   author: {
@@ -363,7 +423,7 @@ const softwareApplicationJsonLd = {
   ],
   programmingLanguage: ['C++', 'TypeScript', 'Python'],
   keywords:
-    'audio DSP toolkit, dependency-free audio library, music mastering, mastering DSP, mixing engine, editing DSP, music information retrieval, MIR, BPM detection, key detection, chord recognition, beat tracking, loudness, true peak, WebAssembly, WASM, C++, Python, 音声解析, マスタリング, ミキシング, テンポ検出, キー検出, コード認識',
+    'audio engine, dependency-free audio library, music mastering, mastering DSP, mixing engine, editing DSP, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, music information retrieval, MIR, BPM detection, key detection, chord recognition, beat tracking, loudness, true peak, WebAssembly, WASM, C++, Python, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
 };
 
 const webSiteJsonLd = {
@@ -372,7 +432,7 @@ const webSiteJsonLd = {
   name: 'libsonare',
   url: siteUrl,
   description:
-    'Documentation and browser-local demos for the libsonare dependency-free audio DSP toolkit.',
+    'Documentation and browser-local demos for the libsonare dependency-free audio engine.',
   inLanguage: ['en', 'ja'],
   publisher: {
     '@type': 'Person',
@@ -384,9 +444,9 @@ export default withMermaid(
   defineConfig({
     srcDir: 'src',
 
-    title: 'libsonare - Dependency-Free Audio DSP Toolkit',
+    title: 'libsonare - Dependency-Free Audio Engine',
     description:
-      'Dependency-free audio DSP toolkit for C++, Python, and the browser: analysis, broadcast-grade mastering, real-time-safe mixing, routing, editing, and creative FX.',
+      'Dependency-free audio engine for C++, Python, and the browser: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
 
     // Sitemap
     sitemap: {
@@ -401,7 +461,7 @@ export default withMermaid(
       [
         'link',
         {
-          href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
+          href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
           rel: 'stylesheet',
         },
       ],
@@ -416,7 +476,7 @@ export default withMermaid(
         {
           name: 'keywords',
           content:
-            'audio DSP toolkit, dependency-free audio library, music information retrieval, MIR, mastering DSP, mixing engine, editing DSP, creative FX, BPM detection, key detection, chord recognition, beat tracking, WebAssembly, WASM, C++ library, Python audio, 音声解析, マスタリング, ミキシング, テンポ検出, キー検出, コード認識',
+            'audio engine, dependency-free audio library, music information retrieval, MIR, mastering DSP, mixing engine, editing DSP, creative FX, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, BPM detection, key detection, chord recognition, beat tracking, WebAssembly, WASM, C++ library, Python audio, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
         },
       ],
 
@@ -426,17 +486,11 @@ export default withMermaid(
       ['meta', { property: 'og:image', content: `${siteUrl}/og-image.svg` }],
       ['meta', { property: 'og:image:width', content: '1200' }],
       ['meta', { property: 'og:image:height', content: '630' }],
-      [
-        'meta',
-        { property: 'og:image:alt', content: 'libsonare dependency-free audio DSP toolkit' },
-      ],
+      ['meta', { property: 'og:image:alt', content: 'libsonare dependency-free audio engine' }],
       // Twitter
       ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
       ['meta', { name: 'twitter:image', content: `${siteUrl}/og-image.svg` }],
-      [
-        'meta',
-        { name: 'twitter:image:alt', content: 'libsonare dependency-free audio DSP toolkit' },
-      ],
+      ['meta', { name: 'twitter:image:alt', content: 'libsonare dependency-free audio engine' }],
       [
         'script',
         { defer: '', 'data-domain': 'sonare.libraz.net', src: 'https://plausible.io/js/script.js' },
@@ -526,6 +580,8 @@ export default withMermaid(
                     { text: 'Mastering Studio', link: '/mastering' },
                     { text: 'Mixing Studio', link: '/mixing' },
                     { text: 'Realtime FX Lab', link: '/realtime-fx' },
+                    { text: 'Synth Playground', link: '/synth' },
+                    { text: 'Studio Mini', link: '/studio' },
                   ],
                 },
               ],
@@ -561,6 +617,17 @@ export default withMermaid(
                 ],
               },
               {
+                text: 'Compose & Arrange',
+                items: [
+                  { text: 'Project Editing', link: '/docs/project-editing' },
+                  { text: 'MIDI Input', link: '/docs/midi-input' },
+                  { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
+                  { text: 'SoundFont Player', link: '/docs/soundfont-player' },
+                  { text: 'Recording & Takes', link: '/docs/recording-and-takes' },
+                  { text: 'Bouncing Projects', link: '/docs/project-bounce' },
+                ],
+              },
+              {
                 text: 'API By Runtime',
                 items: [
                   { text: 'Browser / WASM', link: '/docs/wasm' },
@@ -592,9 +659,9 @@ export default withMermaid(
       ja: {
         label: '日本語',
         lang: 'ja',
-        title: 'libsonare - 依存なしのオーディオ DSP ツールキット',
+        title: 'libsonare - 依存なしのオーディオエンジン',
         description:
-          'C++、Python、ブラウザで使える依存なしのオーディオ DSP ツールキット。解析、放送品質のマスタリング、リアルタイム安全なミキシング、ルーティング、編集 DSP、クリエイティブ FX に対応。',
+          'C++、Python、ブラウザで使える依存なしのオーディオエンジン。librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW / リアルタイムランタイムに対応。',
         themeConfig: {
           nav: [
             {
@@ -615,6 +682,8 @@ export default withMermaid(
                     { text: 'マスタリングスタジオ', link: '/ja/mastering' },
                     { text: 'ミキシングスタジオ', link: '/ja/mixing' },
                     { text: 'リアルタイムFXラボ', link: '/ja/realtime-fx' },
+                    { text: 'シンセプレイグラウンド', link: '/ja/synth' },
+                    { text: 'スタジオミニ', link: '/ja/studio' },
                   ],
                 },
               ],
@@ -650,6 +719,17 @@ export default withMermaid(
                   },
                   { text: 'ルーム音響解析', link: '/ja/docs/acoustic-analysis' },
                   { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
+                ],
+              },
+              {
+                text: '作曲・アレンジ',
+                items: [
+                  { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
+                  { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
+                  { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
+                  { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
+                  { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },
+                  { text: 'プロジェクトのバウンス', link: '/ja/docs/project-bounce' },
                 ],
               },
               {

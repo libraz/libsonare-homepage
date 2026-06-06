@@ -452,6 +452,10 @@ flowchart TB
 
 ### Basic Example
 
+::: warning `ScriptProcessorNode` is deprecated — use AudioWorklet in production
+The first example below uses `createScriptProcessor()` because it is the shortest way to see frames flowing. `ScriptProcessorNode` is **deprecated**: it runs on the main thread and can glitch under load. For anything real, use the [AudioWorklet integration](#audioworklet-integration) shown right after it, which runs the analyzer off the main thread.
+:::
+
 ```typescript
 import { init, StreamAnalyzer } from '@libraz/libsonare';
 
@@ -511,6 +515,8 @@ For realtime-engine playback, the package also ships an AudioWorklet bridge at
 `@libraz/libsonare/worklet` and a reduced realtime module at
 `@libraz/libsonare/rt`; see [Realtime and Streaming](./realtime-streaming.md)
 for that engine-focused path. The example below shows a custom analyzer worklet.
+
+The worklet entry point also ships two browser-glue helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
 
 ::: warning WASM in AudioWorklet
 Loading WASM in AudioWorklet requires special handling. The WASM module must be loaded and instantiated within the worklet context.
@@ -619,6 +625,8 @@ Set `StreamConfig.outputFormat` to document the transfer format you plan to read
 | `2` | `readFramesU8()` |
 
 The analyzer still computes internally in float. `readFramesI16()` and `readFramesU8()` quantize in the C++/WASM read path, so you do not need to quantize manually before `postMessage`.
+
+Both quantized read paths accept an optional `StreamQuantizeConfig` to widen the quantization ranges for unusually loud or quiet streams that would otherwise saturate; see [custom quantization ranges](./realtime-streaming.md#custom-quantization-ranges).
 
 ::: details What are "Structure-of-Arrays" and transferable objects?
 - **Structure-of-Arrays (SoA)** means each field lives in its own flat typed array — all timestamps in one array, all mel values in another — instead of an array of per-frame objects. It is cheaper to slice and cheaper to hand to another thread.
@@ -808,7 +816,19 @@ Requirements:
 - Web Audio API
 - ES2017+ (async/await)
 
+## Package Artifacts
+
+The published package ships a few coordinated pieces:
+
+- **Main module** — `sonare.js` plus `sonare.wasm`, the full Emscripten build behind every analysis, mastering, mixing, and editing API.
+- **Barrel entry** — the package `index` (`index.js` / `index.d.ts`) is a thin tsup bundle that re-exports the worklet bundle, so importing from `@libraz/libsonare` and `@libraz/libsonare/worklet` resolves to the same surface.
+- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, the bundle meant to run inside an `AudioWorkletGlobalScope`.
+- **Realtime runtime** — a dedicated lightweight AudioWorklet runtime (`sonare-rt.wasm` plus loaders, C-ABI only) you can select as a runtime target for engine playback when you do not need the full module. It is reachable via `@libraz/libsonare/rt`; see [Realtime and Streaming](./realtime-streaming.md).
+
 ## Bundle Size
+
+The size table covers the main module and the barrel entry. The realtime
+runtime and worklet bundle are separate artifacts and are not listed here.
 
 | File | Size | Gzipped |
 |------|------|---------|

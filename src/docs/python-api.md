@@ -32,7 +32,9 @@ Read this page in three passes:
 2. Use [Pick The Smallest API That Solves The Job](#pick-the-smallest-api-that-solves-the-job) to choose a function family instead of scanning the full reference.
 3. Return to [Types](#types) only when you need exact attribute names, row-major matrix shapes, or JS parity aliases.
 
-Remember that Python `analyze(...)` is intentionally compact. For chords, sections, timbre, dynamics, rhythm, melody, or acoustics, use the focused functions listed below.
+A single `analyze(...)` call returns the complete result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — matching the other bindings. Reach for the focused functions below when you only need one field or want per-call options.
+
+Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code.
 
 ## Pick The Smallest API That Solves The Job
 
@@ -223,7 +225,9 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | Core analysis: BPM, key, time signature, beats |
+| `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
+| `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | Syncopation, groove type, regularity |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbre_over_time` (`timbreOverTime` alias) |
@@ -268,6 +272,28 @@ chords = sonare.detect_chords(
 )
 
 sections = sonare.analyze_sections(audio.data, audio.sample_rate)
+```
+
+For long files, `analyze_with_progress(...)` returns the same `AnalysisResult` as `analyze(...)` but accepts an `on_progress=(progress, stage)` callback, mirroring the mastering progress callbacks below:
+
+```python
+def on_step(progress: float, stage: str) -> None:
+    print(f"{progress:5.1%}  {stage}")
+
+result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress=on_step)
+```
+
+To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns one label per detected chord, in chord order:
+
+```python
+labels = sonare.chord_functional_analysis(
+    audio.data,
+    key_root=keys[0].root,
+    key_mode=keys[0].mode,
+    sample_rate=audio.sample_rate,
+    use_key_context=True,
+)
+print(labels)  # e.g. ['I', 'V', 'vi', 'IV']
 ```
 
 ## Room Acoustics
@@ -328,6 +354,7 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `time_stretch(samples, sr, rate)` | `list[float]` | Time-stretch without pitch change |
 | `pitch_shift(samples, sr, semitones)` | `list[float]` | Pitch-shift without tempo change |
 | `pitch_correct_to_midi(samples, sr, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
+| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sr?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
 | `note_stretch(samples, sr, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
 | `voice_change(samples, sr, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
 | `voice_change_realtime(samples, sr?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
@@ -373,8 +400,8 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 |----------|-------------|-------------|
 | `stft(samples, sr, n_fft?, hop_length?)` | `StftResult` | Short-Time Fourier Transform |
 | `stft_db(samples, sr, n_fft?, hop_length?)` | `tuple` | STFT in decibels |
-| `mel_spectrogram(samples, sr, n_fft?, hop_length?, n_mels?)` | `MelSpectrogramResult` | Mel spectrogram |
-| `mfcc(samples, sr, n_fft?, hop_length?, n_mels?, n_mfcc?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients |
+| `mel_spectrogram(samples, sr, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; `fmin`/`fmax` bound the band edges, `htk=True` uses the HTK Mel formula |
+| `mfcc(samples, sr, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients |
 | `chroma(samples, sr, n_fft?, hop_length?)` | `ChromaResult` | Chroma features (pitch class distribution) |
 | `spectral_centroid(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral centroid per frame |
 | `spectral_bandwidth(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral bandwidth per frame |
@@ -411,12 +438,12 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
-| `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
+| `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
+| `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients |
-| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?)` | `list[float]` | Audio from MFCC coefficients |
+| `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from MFCC coefficients |
 
-Pass `0.0` for `fmin`/`fmax` to use the full-band defaults; `n_iter` defaults to `32`.
+Pass `0.0` for `fmin`/`fmax` to use the full-band defaults; `n_iter` defaults to `32`. Keep `fmin`/`fmax`/`htk` identical to the values used by the forward transform so the round-trip stays consistent.
 
 ### Metering Functions
 
@@ -897,10 +924,38 @@ offline = sonare.mix_stereo(
     width=[1, 0.9],
 )
 
-with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
+# Mixer is not a context manager — call close() when done.
+mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
+try:
     block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
     meter = mixer.strip_meter(0, tap="postFader")
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")
+finally:
+    mixer.close()
 ```
 
 See [Mixing Engine](./mixing.md) for routing concepts, scene presets, and real-time notes.
+
+## Projects, Instruments & Live MIDI
+
+The headless-DAW surface is available in Python as well: author arrangements with `Project`, render them through the built-in instruments, and drive the realtime engine with live MIDI. The dedicated guides carry the depth — this is the Python entry-point map.
+
+| Task | API | Guide |
+|------|-----|-------|
+| Author tracks, clips, tempo, markers, undo/redo | `Project` (a context manager — use `with`) | [Project Editing](./project-editing.md) |
+| Render MIDI through the built-in synthesizer | `Project.bounce_with_synth_instrument(...)`, `synth_preset_names()`, `SynthPatch` | [Built-in Synthesizer](./native-synth.md), [Bouncing Projects](./project-bounce.md) |
+| Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
+| Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
+| Play instruments live from MIDI events | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
+
+```python
+import libsonare as sonare
+
+with sonare.Project() as project:
+    project.set_sample_rate(48000)
+    track = project.add_track(kind="midi")
+    # ... add clips and MIDI events (see the Project Editing guide) ...
+    audio = project.bounce_with_synth_instrument("e-piano", num_channels=2)
+```
+
+Note that `Project` supports `with` for automatic cleanup, while `Mixer` does not (call `mixer.close()` explicitly).

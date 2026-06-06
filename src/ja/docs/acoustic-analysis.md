@@ -200,6 +200,51 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 `roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響尾部を少し弱めることがあります。残響除去として説明・提供すべきものではありません。
 
+### 壁の吸音率と材質
+
+`synthesizeRir(...)` と `roomMorph(...)` は共通のシューボックス形状を取るため、壁の指定フィールドも同じです。壁の指定は、粗い順に 3 段階で表せます。
+
+| フィールド | 型 | 意味 |
+|------------|----|------|
+| `absorption` | number | 全バンド一様の壁吸音率。`[0, 0.999]` にクランプされます。最も単純で後方互換のコントロールです。 |
+| `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。 |
+| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。 |
+| `materialPreset` | number | 名前付きの壁材質プリセット。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。 |
+
+材質プリセットは整数コードに対応します。`0` なし、`1` コンクリート、`2` 木材、`3` カーテン、`4` カーペット、`5` ガラスです。コンクリートとガラスは反射的で高域のテールが残りやすく、カーテンとカーペットは吸音的でテールが短くなります。非ゼロの `materialPreset` はバンド配列より優先されるため、自分の `bandAbsorption`／`bandScattering` を効かせたいときは `materialPreset: 0` を指定してください。
+
+```typescript
+// コンクリートのシューボックス: 明るく長いテール
+const concrete = synthesizeRir({
+  lengthM: 7, widthM: 5, heightM: 3,
+  materialPreset: 1, // concrete
+  sampleRate,
+});
+
+// バンド別の壁指定（6 オクターブバンド）と散乱
+const custom = synthesizeRir({
+  lengthM: 7, widthM: 5, heightM: 3,
+  materialPreset: 0, // バンド配列を有効にする
+  bandAbsorption: [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
+  bandScattering: [0.1, 0.1, 0.2, 0.2, 0.3, 0.3],
+  sampleRate,
+});
+```
+
+### 後期残響モデルとテールのコントロール
+
+共通形状には後期テールの挙動も含まれます。`RirSynthOptions` と `RoomMorphOptions` のどちらも次を持ちます。
+
+| フィールド | 意味 |
+|------------|------|
+| `preferEyring` | 統計的な後期残響モデルの選択。`true`（既定）は Eyring、`false` は Sabine を使います。 |
+| `mixingTimeMs` | 初期／後期の切り替え時刻（ミリ秒）。`0` でおおよそ `sqrt(volume)` ミリ秒を自動選択します。 |
+| `crossfadeMs` | 混合時刻まわりの等パワークロスフェード幅（ミリ秒）。`0` で既定値です。 |
+| `ismOrder` | 初期反射部の鏡像音源の反射次数。 |
+| `seed`, `maxSeconds` | 後期テールの乱数シードと、生成する RIR の最大長。 |
+
+**混合時刻**は、応答が離散的な鏡像音源の初期反射から決定論的な統計的後期テールへ移る点で、**クロスフェード**はその境目が聞こえないよう両者をなじませます。Sabine と Eyring は後期テールの背後にある 2 つの古典的な RT60 推定法で、Eyring はより吸音的な部屋で精度が高い傾向があります。
+
 ::: details ルーム合成の実装メモ
 `synthesizeRir(...)` は、鏡像音源法による初期反射と、決定論的な後期テールを組み合わせます。`acoustic::RirSynthConfig` では、反射次数、Sabine/Eyring の後期テールモデル、シード、RIR の最大長、混合時刻、クロスフェード幅を指定できます。
 :::

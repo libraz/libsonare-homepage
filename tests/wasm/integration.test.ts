@@ -52,6 +52,19 @@ function expectFiniteArray(values: ArrayLike<number>, minLength = 1) {
   }
 }
 
+// F0 tracks mark unvoiced / low-confidence frames as NaN (librosa-style), so a
+// plain finite check would fail on silence and window edges.
+function expectF0Track(values: ArrayLike<number>, minVoicedFrames = 1) {
+  let voicedFrames = 0;
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (Number.isNaN(value)) continue;
+    expect(Number.isFinite(value)).toBe(true);
+    voicedFrames++;
+  }
+  expect(voicedFrames).toBeGreaterThanOrEqual(minVoicedFrames);
+}
+
 describe('wasm package integration', () => {
   beforeAll(async () => {
     const wasmPath = join(process.cwd(), 'src/wasm/sonare.wasm');
@@ -88,17 +101,41 @@ describe('wasm package integration', () => {
   });
 
   it('keeps the runtime export surface aligned with the generated type bundle', () => {
-    const dtsPath = join(process.cwd(), 'src/wasm/index.d.ts');
-    const dts = readFileSync(dtsPath, 'utf8');
-    const exportBlock = dts.match(/^export \{([^}]+)\};\s*$/m)?.[1];
-    expect(exportBlock).toBeTruthy();
+    // index.d.ts is a re-export barrel over worklet.js: `export { dt as lufs, ... } from './worklet.js'`.
+    // The left-hand names are worklet.js's (mangled) exports; whether each one is a
+    // type or a value is recorded in worklet.d.ts's own export block via `type X as dt`.
+    const indexDts = readFileSync(join(process.cwd(), 'src/wasm/index.d.ts'), 'utf8');
+    const workletDts = readFileSync(join(process.cwd(), 'src/wasm/worklet.d.ts'), 'utf8');
+
+    const workletExportBlock = workletDts.match(/^export \{([^}]+)\};\s*$/m)?.[1];
+    expect(workletExportBlock).toBeTruthy();
+    const typeOnly = new Set(
+      workletExportBlock!
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.startsWith('type '))
+        .map((entry) => {
+          const alias = entry.match(/\s+as\s+(\S+)$/)?.[1];
+          return alias ?? entry.replace(/^type\s+/, '');
+        }),
+    );
+
+    const barrelBlock = indexDts.match(/^export \{([^}]+)\} from '\.\/worklet\.js';\s*$/m)?.[1];
+    expect(barrelBlock).toBeTruthy();
 
     const runtimeExports = new Set(Object.keys(wasm));
-    const missing = exportBlock!
+    const missing = barrelBlock!
       .split(',')
       .map((entry) => entry.trim())
-      .filter((entry) => entry && !entry.startsWith('type '))
-      .map((entry) => entry.replace(/\s+as\s+.+$/, ''))
+      .filter(Boolean)
+      .map((entry) => {
+        const aliased = entry.match(/^(\S+)\s+as\s+(\S+)$/);
+        return aliased
+          ? { source: aliased[1], exported: aliased[2] }
+          : { source: entry, exported: entry };
+      })
+      .filter(({ source }) => !typeOnly.has(source))
+      .map(({ exported }) => exported)
       .filter((name) => !runtimeExports.has(name));
 
     expect(missing).toEqual([]);
@@ -181,12 +218,12 @@ describe('wasm package integration', () => {
     expect(wasm.vqt(tone, SAMPLE_RATE, 256, 32.7, 24, 12, 10).nBins).toBe(24);
 
     const pitch = wasm.pitchYin(tone, SAMPLE_RATE, 512, 128, 65, 1_000, 0.3);
-    expectFiniteArray(pitch.f0);
+    expectF0Track(pitch.f0, pitch.f0.length / 2);
     expect(pitch.medianF0).toBeGreaterThan(300);
     expect(pitch.medianF0).toBeLessThan(600);
 
     const pyin = wasm.pitchPyin(tone, SAMPLE_RATE, 512, 128, 65, 1_000, 0.3);
-    expectFiniteArray(pyin.f0);
+    expectF0Track(pyin.f0, pyin.f0.length / 2);
 
     const onset = new Float32Array([0, 1, 0, 1, 0, 1, 0, 1]);
     expect(wasm.tempogram(onset, SAMPLE_RATE, 512, 4).nFrames).toBe(onset.length);
@@ -211,7 +248,13 @@ describe('wasm package integration', () => {
     expect(wasm.percussive(tone, SAMPLE_RATE).length).toBe(tone.length);
     expect(wasm.pitchShift(tone, SAMPLE_RATE, 2).length).toBeGreaterThan(0);
     expect(wasm.pitchCorrectToMidi(tone, SAMPLE_RATE, 69, 72).length).toBeGreaterThan(0);
-    expect(wasm.noteStretch(tone, SAMPLE_RATE, 0, tone.length, 1.1).length).toBeGreaterThan(0);
+    expect(
+      wasm.noteStretch(tone, SAMPLE_RATE, {
+        onsetSample: 0,
+        offsetSample: tone.length,
+        stretchRatio: 1.1,
+      }).length,
+    ).toBeGreaterThan(0);
     expect(wasm.voiceChange(tone, SAMPLE_RATE, 1, 1.05).length).toBeGreaterThan(0);
     expect(wasm.timeStretch(tone, SAMPLE_RATE, 1.25).length).toBeLessThan(tone.length);
     expect(wasm.normalize(tone, SAMPLE_RATE, -3).length).toBe(tone.length);
@@ -320,7 +363,9 @@ describe('wasm package integration', () => {
     expect(audio.timeStretch(1.25).length).toBeLessThan(tone.length);
     expect(audio.pitchShift(1).length).toBeGreaterThan(0);
     expect(audio.pitchCorrectToMidi(69, 72)).toHaveLength(tone.length);
-    expect(audio.noteStretch(0, tone.length, 1.1).length).toBeGreaterThan(tone.length);
+    expect(
+      audio.noteStretch({ onsetSample: 0, offsetSample: tone.length, stretchRatio: 1.1 }).length,
+    ).toBeGreaterThan(tone.length);
     expect(audio.voiceChange(1, 1.05).length).toBeGreaterThan(0);
     expect(audio.normalize(-3)).toHaveLength(tone.length);
     expect(audio.mastering(-14, -1).samples).toHaveLength(tone.length);
@@ -343,8 +388,8 @@ describe('wasm package integration', () => {
     expectFiniteArray(audio.spectralFlatness(512, 128));
     expectFiniteArray(audio.zeroCrossingRate(512, 128));
     expectFiniteArray(audio.rmsEnergy(512, 128));
-    expectFiniteArray(audio.pitchYin(512, 128, 65, 1_000, 0.3).f0);
-    expectFiniteArray(audio.pitchPyin(512, 128, 65, 1_000, 0.3).f0);
+    expectF0Track(audio.pitchYin(512, 128, 65, 1_000, 0.3).f0);
+    expectF0Track(audio.pitchPyin(512, 128, 65, 1_000, 0.3).f0);
     expect(audio.resample(SAMPLE_RATE / 2)).toHaveLength(tone.length / 2);
   });
 
@@ -596,12 +641,13 @@ describe('wasm package integration', () => {
   it('processes streaming analyzer, equalizer and realtime engine blocks', () => {
     const { left, right } = stereoBlock(512, SHORT_SAMPLE_RATE);
 
+    // computeMagnitude was removed: magnitude frames are not exposed by any
+    // StreamAnalyzer read path, so the constructor now rejects it.
     const analyzer = new wasm.StreamAnalyzer({
       sampleRate: SHORT_SAMPLE_RATE,
       nFft: 256,
       hopLength: 128,
       nMels: 16,
-      computeMagnitude: true,
       computeMel: true,
       computeChroma: true,
       computeOnset: true,

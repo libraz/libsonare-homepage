@@ -42,6 +42,7 @@ Start with the page that matches where you will run libsonare:
 | Build a mixer, routing view, or stem renderer | Mixing engine through WASM, Python, Node, or C++ | [Mixing Engine](/docs/mixing) |
 | Build a mastering UI with explainable suggestions | Mastering assistant/profile/preview APIs | [Mastering Assistant](/docs/mastering-assistant) |
 | Build live visualizations or playback tools | Streaming analyzer and realtime engine | [Realtime and Streaming](/docs/realtime-streaming) |
+| Compose, arrange, or render MIDI to audio | Built-in instruments and headless-DAW project editing | [Built-in Instruments](/docs/native-synth), [Project Editing](/docs/project-editing) |
 | Estimate, synthesize, or morph room acoustics | Room-acoustic helpers | [Room Acoustics](/docs/acoustic-analysis) |
 | Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
 | Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |

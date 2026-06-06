@@ -20,6 +20,12 @@ const demoRoutes = [
   'ja/mixing.html',
   'realtime-fx.html',
   'ja/realtime-fx.html',
+  'spatial.html',
+  'ja/spatial.html',
+  'synth.html',
+  'ja/synth.html',
+  'studio.html',
+  'ja/studio.html',
 ];
 
 const siteUrl = 'https://sonare.libraz.net';

@@ -42,6 +42,12 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Mastering presets/chains/processors | Yes | Partial |
 | Mastering assistant/profile/preview JSON | Yes | No dedicated command |
 | Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
+| Project and arrangement editing (headless DAW) | Yes — see [Project Editing](./project-editing.md) | Yes |
+| Built-in instruments (NativeSynth presets/patches) | Yes — see [Built-in Instruments](./native-synth.md) | Yes |
+| SoundFont 2 player | Yes — see [SoundFont 2 Player](./soundfont-player.md) | No (Project API only) |
+| Realtime engine live MIDI input | Yes — see [MIDI Input](./midi-input.md) | No |
+| Web MIDI bridge (`bindWebMidi`) and microphone glue (`bindMicrophoneInput`) | WASM / browser only | No |
+| External-instrument bounce protocol (`ExternalInstrument`) | Python only — see [Project Bounce](./project-bounce.md) | No |
 | Editing DSP | Yes | Yes |
 | Metering (meters, clipping/dynamic-range, stereo image, spectrum) | Yes | C++ CLI only (`meter`, `clipping`, `dynamic-range`) |
 | Scale quantization | Yes | No |
@@ -76,18 +82,19 @@ A few signatures don't line up across all three bindings:
 |-------|--------------|
 | Mastering chain config | `masteringChain(...)` and `StreamingMasteringChain` use nested config objects; `masterAudio(...)` overrides use flat dot-notation keys |
 | `StreamingMasteringChain` scope | Block-safe stages only — it rejects repair stages that need lookaround/file context and the whole-file `loudness` stage; use one-shot mastering APIs for those |
-| `analyze(...)` return | WASM returns the full `quick::analyze` shape; Python, Node native, and the C ABI return the compact C result |
+| `analyze(...)` return | All bindings (C ABI, Python, Node native, WASM) return the complete `analyze` result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — so the field set matches across runtimes |
 | `normalize(...)` defaults | Module-level `normalize(...)` (Python, WASM, Node native) defaults to `0.0` (full scale); the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0` |
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM; pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
 | Automation curves | Shared `AutomationCurve` across engine and mixing APIs (`linear`, `exponential`, `hold`, `s-curve`); update older per-module curve enum names to this shared name |
 | Scene JSON | Interchange format for persistent mixers; prefer `Mixer.toSceneJson()` (WASM/Node) or `Mixer.to_scene_json()` (Python) over hand-written JSON when preserving runtime edits |
+| Project bounce variants | The headless-DAW `Project` bounces to audio across bindings; instrument-bound bounce (`bounceWithBuiltinInstrument` / `bounceWithSynthInstrument` / `bounceWithSf2Instrument`) and the take/comp arrangement model are shared — see [Project Bounce](./project-bounce.md) and [Recording and Takes](./recording-and-takes.md). The `ExternalInstrument` bounce protocol is Python-only |
 | Mastering chain JSON | Chain JSON and named-processor parameter maps round-trip the same field set: `repair.declip` `lpcBlend`, multiband per-band parameters, compressor detector / sidechain-HPF / PDR settings, and realtime voice-changer ISP limiter settings |
 | Acoustic analysis | Measurement and blind-estimation entry points return `AcousticResult`; geometric room acoustics adds equivalent-room estimates, RIR synthesis, and creative room morphing (display blind estimates and equivalent-room estimates with confidence) |
 | CLI surface | Some availability depends on whether the command is the PyPI Python CLI or the source-built C++ CLI — see [CLI](./cli.md) |
 
 ::: info Rich analysis fields
-The full WASM `analyze(...)` shape includes chords, sections, timbre, dynamics, rhythm, and form. In Python, Node native, and the C ABI, call the focused helpers for those richer fields: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
+The `analyze(...)` result carries chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength on every binding. When you only need one family, the focused helpers stay available across runtimes: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
 :::
 
 ## Verification Sources

@@ -284,7 +284,7 @@ function detectOnsets(samples: Float32Array, sampleRate: number): Float32Array
 function analyze(samples: Float32Array, sampleRate: number): AnalysisResult
 ```
 
-**戻り値:** BPM、キー、ビート、コード、セクション、音色、ダイナミクス、リズムを含む完全な `AnalysisResult`
+**戻り値:** 完全な `AnalysisResult`。`analyze()` を 1 回呼ぶだけで、コード、セクション、音色、ダイナミクス、リズム、メロディ、楽曲形式、拍ごとの強度まで含む完全な結果が、どのバインディングでも返ります。そのため、1 つのフィールドだけが欲しい場合を除き、個別のヘルパーを使う必要はほとんどありません。
 
 ```typescript
 const result = analyze(samples, sampleRate);
@@ -353,6 +353,26 @@ const chords = detectChords(samples, sampleRate, {
 });
 
 const sections = analyzeSections(samples, sampleRate);
+```
+
+### `chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate?, options?)`
+
+指定したキーを基準に、検出されたコード進行を機能（ローマ数字）和声解析します。内部でコード検出を実行し、検出された各コードにラベルを付けるため、`detectKey(...)` から得た `keyRoot`／`keyMode` と、`detectChords(...)` に渡すのと同じ `options` をそのまま渡します。
+
+```typescript
+function chordFunctionalAnalysis(
+  samples: Float32Array,
+  keyRoot: PitchClass,
+  keyMode: Mode,
+  sampleRate?: number,
+  options?: ChordDetectionOptions,
+): string[]   // 検出されたコードごとに 1 つのローマ数字ラベル。例: ["I", "IV", "V", "vi"]
+```
+
+```typescript
+const key = detectKey(samples, sampleRate);
+const roman = chordFunctionalAnalysis(samples, key.root, key.mode, sampleRate);
+console.log(roman);  // 例: ["I", "IV", "V", "vi"]
 ```
 
 `detectKey(...)` と `detectKeyCandidates(...)` は同じ `KeyDetectionOptions` を受け取ります。
@@ -507,19 +527,37 @@ function pitchCorrectToMidi(
   targetMidi: number,
 ): Float32Array
 
+// 追跡したピッチ輪郭を、フレーム単位で固定のターゲット音にリチューンします。
+// f0Hz は hopLength に揃えたフレームごとの f0 トラック（例: pitchYin/pitchPyin の出力）です。
+// 対応する voicedFlag/voicedProb 配列を渡すと無声音フレームをスキップでき、
+// 無声音または NaN のフレームはそのまま残ります。
+function pitchCorrectToMidiTimevarying(
+  samples: Float32Array,
+  f0Hz: Float32Array,
+  targetMidi: number,
+  sampleRate: number,
+  hopLength: number,
+  voicedFlag?: Int32Array,
+  voicedProb?: Float32Array,
+): Float32Array
+
 function noteStretch(
   samples: Float32Array,
   sampleRate: number,
-  onsetSample: number,
-  offsetSample: number,
-  stretchRatio: number,  // >1 で区間を長くし、<1 で短くする
+  options?: {
+    onsetSample?: number,    // ノートのオンセット位置（サンプル）
+    offsetSample?: number,   // ノートのオフセット位置（サンプル）
+    stretchRatio?: number,   // >1 で区間を長くし、<1 で短くする
+  },
 ): Float32Array
 
 function voiceChange(
   samples: Float32Array,
   sampleRate: number,
-  pitchSemitones: number,
-  formantFactor: number,  // 1.0 = 変更なし
+  options?: {
+    pitchSemitones?: number,  // 負の値で下げる。既定 0
+    formantFactor?: number,   // >1 で明るく、<1 で暗く。既定 1.0
+  },
 ): Float32Array
 ```
 
@@ -614,7 +652,10 @@ function melSpectrogram(
   sampleRate: number,
   nFft?: number,      // デフォルト: 2048
   hopLength?: number, // デフォルト: 512
-  nMels?: number      // デフォルト: 128
+  nMels?: number,     // デフォルト: 128
+  fmin?: number,      // デフォルト: 0（librosa の既定）
+  fmax?: number,      // デフォルト: 0 = sampleRate / 2
+  htk?: boolean       // デフォルト: false = Slaney 式。true で HTK
 ): MelSpectrogramResult
 
 interface MelSpectrogramResult {
@@ -645,8 +686,13 @@ function mfcc(
   nFft?: number,      // デフォルト: 2048
   hopLength?: number, // デフォルト: 512
   nMels?: number,     // デフォルト: 128
-  nMfcc?: number      // デフォルト: 20
+  nMfcc?: number,     // デフォルト: 20
+  fmin?: number,      // デフォルト: 0（librosa の既定）
+  fmax?: number,      // デフォルト: 0 = sampleRate / 2
+  htk?: boolean       // デフォルト: false = Slaney 式。true で HTK
 ): MfccResult
+
+`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るため、両側で同じ値を保てば往復しても結果が一致します。
 
 interface MfccResult {
   nMfcc: number;
@@ -1188,6 +1234,8 @@ function resample(
 const audio = Audio.fromBuffer(samples, 44100);
 ```
 
+`sampleRate` は省略可能で、既定は `48000` です。保持された値はすべてのインスタンスメソッドに渡されるため、必ずバッファ本来のサンプルレートを指定してください。
+
 ### プロパティ
 
 | プロパティ | 型 | 説明 |
@@ -1236,8 +1284,8 @@ const acoustic = detectAcoustic(audio.data, audio.sampleRate);
 // エフェクト
 const { harmonic, percussive } = audio.hpss();
 const corrected = audio.pitchCorrectToMidi(68.7, 69);
-const held = audio.noteStretch(12000, 24000, 1.25);
-const voice = audio.voiceChange(3, 1.05);
+const held = audio.noteStretch({ onsetSample: 12000, offsetSample: 24000, stretchRatio: 1.25 });
+const voice = audio.voiceChange({ pitchSemitones: 3, formantFactor: 1.05 });
 const stretched = audio.timeStretch(1.5);
 const shifted = audio.pitchShift(2);
 const normalized = audio.normalize(-3.0);
@@ -1287,7 +1335,6 @@ interface StreamConfig {
   fmin?: number;               // デフォルト: 0
   fmax?: number;               // デフォルト: 0（= sr/2）
   tuningRefHz?: number;        // デフォルト: 440
-  computeMagnitude?: boolean;  // デフォルト: true
   computeMel?: boolean;        // デフォルト: true
   computeChroma?: boolean;     // デフォルト: true
   computeOnset?: boolean;      // デフォルト: true
@@ -1303,6 +1350,8 @@ interface StreamConfig {
 
 `outputFormat` は `readFramesU8`／`readFramesI16` が出力時にどう量子化するかを
 制御します（内部解析は常に float）。[リアルタイムとストリーミング](./realtime-streaming.md#フレームの読み出しと出力フォーマット) を参照してください。
+
+旧来の `computeMagnitude` フラグはサポートされなくなり、指定するとコンストラクタが例外を投げます。マグニチュードのフレームは StreamAnalyzer の読み出し経路では公開されないため、このフラグは削除されました。マグニチュードのデータが必要な場合は、オフラインで `stft`／`stftDb` を使うか、スペクトラムメータリングのヘルパーを使ってください。
 
 ### StreamAnalyzer クラス
 
@@ -1350,7 +1399,8 @@ class StreamAnalyzer {
   // チューニング基準周波数を設定（デフォルト: 440 Hz）
   setTuningRefHz(refHz: number): void;
 
-  // リソースを解放（使用終了時に呼び出し）
+  // リソースを解放（使用終了時に呼び出し）。`delete()` が正規で、`dispose()` はその alias。
+  delete(): void;
   dispose(): void;
 }
 ```
@@ -1508,8 +1558,8 @@ function processChunk(samples: Float32Array) {
   }
 }
 
-// 使用終了時にクリーンアップ
-analyzer.dispose();
+// 使用終了時にクリーンアップ（delete() が正規で、dispose() はその alias）
+analyzer.delete();
 ```
 
 ::: details なぜ `dispose()` / `delete()` を呼ぶのか？（embind ハンドル）
@@ -2053,6 +2103,7 @@ chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 | 音源解析からマスタリングの提案を取得 | `masteringAssistantSuggest()` |
 | 配信先ごとのラウドネス見込みをプレビュー | `masteringStreamingPreview()` |
 | 名前付きプロセッサ一覧（モノラル／ステレオ） | `masteringProcessorNames()` |
+| チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
 | モノラル音声を処理 | `masteringProcess()` |
 | ステレオ音声を処理 | `masteringProcessStereo()` |
 | ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
@@ -2219,6 +2270,30 @@ mixer.delete();
 ```
 
 AudioWorklet のようにレンダーブロックごとのアロケーションを避けたいループでは、`Mixer.createRealtimeBuffer()` と `processStereoInto(...)` を使います。シーンやルーティングの詳細は [ミキシングエンジン](./mixing.md) を参照してください。
+
+## プロジェクト、楽器、ライブ MIDI
+
+このパッケージは、MIDI／クリップのアレンジを音声に変換するための、プロジェクト・シンセシス・ライブ入力のインターフェースも公開しています。ここでは概要のみを示し、各トピックには個別のガイドがあります。
+
+| 目的 | 使う API | ガイド |
+|------|----------|--------|
+| クリップ＋MIDI アレンジの作成・読み込み・編集 | `Project`（`Project.fromJson`、`toSceneJson`、MIDI イベントヘルパー） | [プロジェクト編集](./project-editing.md) |
+| プロジェクトを音声にレンダー | `project.bounceWithSynthInstrument(s)` | [プロジェクトバウンス](./project-bounce.md) |
+| 組み込みシンセボイスを選ぶ | `synthPresetNames()`、`synthPresetPatch(name)`、`engine.setSynthInstrument(...)` | [NativeSynth](./native-synth.md) |
+| SoundFont で再生 | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont プレイヤー](./soundfont-player.md) |
+| ハードウェア／Web MIDI デバイスからエンジンを駆動 | `bindWebMidi(engine, ...)` <Badge type="info" text="ブラウザ専用" /> | [MIDI 入力](./midi-input.md) |
+| ライブのマイク入力をエンジンに流す | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="ブラウザ専用" /> | [録音とテイク](./recording-and-takes.md) |
+
+```typescript
+import { Project, synthPresetNames } from '@libraz/libsonare';
+
+const project = Project.fromJson(projectJson);
+const audio = project.bounceWithSynthInstrument(synthPresetNames()[0]);
+```
+
+`bounceWithSynthInstrument(...)` は単一の楽器、または出力先ごとに 1 つの楽器を並べた配列を受け取ります。各要素には、プリセット名（`"va:"` ルーティングプレフィックス可）、明示的な `SynthPatch`、または初期パッチを表す `null` を指定できます。
+
+`bindWebMidi(...)` と `bindMicrophoneInput(...)` はブラウザ専用のヘルパーで、Web MIDI や `MediaStream` をライブの `RealtimeEngine` に接続します。エンジン本体は [リアルタイムとストリーミング](./realtime-streaming.md#realtimeengine) を参照してください。
 
 ## 型エクスポート索引
 

@@ -113,7 +113,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 
 | librosa | libsonare | 備考 |
 |---------|-----------|-------|
-| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | メルパワー → 線形 STFT 振幅 |
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | メルパワー → 線形 STFT パワー。`fmin`／`fmax`／`htk` でカスタムメル域・HTK も往復可 |
 | _（mel_to_stft + `librosa.griffinlim`）_ | `melToAudio()` / `mel_to_audio()` | メルパワー → 音声（Griffin-Lim） |
 | `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → メルパワー |
 | `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → 音声（Griffin-Lim） |

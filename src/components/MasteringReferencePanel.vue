@@ -3,10 +3,7 @@ import { computed } from 'vue';
 import MasteringWaveform from '@/components/MasteringWaveform.vue';
 import { AudioTransport, MetricItem, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
-import type {
-  DecodedMasteringAudio,
-  ReferenceAnalysisReport,
-} from '@/composables/useMastering';
+import type { DecodedMasteringAudio, ReferenceAnalysisReport } from '@/composables/useMastering';
 
 interface ReferenceMetrics {
   duration: string;

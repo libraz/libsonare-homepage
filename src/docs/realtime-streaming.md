@@ -124,6 +124,27 @@ const u8 = analyzer.readFramesU8(analyzer.availableFrames());
 `outputFormat` only changes how `readFramesU8`/`readFramesI16` quantize on the way out — the internal analysis still runs in float. Pick `Uint8` when the data ends up as pixels, `Int16` when it crosses a thread/network boundary and you want roughly half the bytes, and the default `Float32` when something downstream does more math on it.
 :::
 
+::: info Magnitude frames are not a read path
+`StreamAnalyzer` does not expose per-frame magnitude spectra. There is no `readFrames*` field for them, so the constructor rejects `computeMagnitude: true` rather than silently doing nothing. Use mel for a spectrogram view, or run [`meteringSpectrumFrame(...)`](./mastering-processors.md) on a buffered window when you need a raw single-frame FFT.
+:::
+
+#### Custom quantization ranges
+
+Both quantized read paths accept an optional `StreamQuantizeConfig` second argument. The defaults assume a "normal" signal; a stream that is much louder or quieter than that will saturate to all-`255` or collapse to `0` once quantized. Widen the ranges so the visible detail survives the 8-bit/16-bit squeeze:
+
+```typescript
+// A hot live input: lift the mel floor and raise the onset/RMS ceilings.
+const u8 = analyzer.readFramesU8(analyzer.availableFrames(), {
+  melDbMin: -60,    // default -80; raise the floor for a loud stream
+  melDbMax: 0,      // default 0
+  onsetMax: 80,     // default 50; avoid clipping strong transients
+  rmsMax: 1.5,      // default 1
+  centroidMax: 11025,
+});
+```
+
+The same `StreamQuantizeConfig` applies to `readFramesI16(...)`. Omit the argument to keep the defaults. Only the *output* mapping changes; the internal float analysis is unaffected.
+
 ### Progressive estimates: BPM, key, chord, and pattern
 
 `stats()` returns an `AnalyzerStats` whose `estimate` field is a **`ProgressiveEstimate`** — the analyzer's running best guess at the music, refined as more audio arrives. Check `estimate.updated` before reading: it is `true` only on frames where the estimate actually changed, so you can avoid redundant UI work.
@@ -232,6 +253,18 @@ engine.destroy();
 
 `RealtimeEngine` can also register parameter metadata, set automation lanes, seek to markers, configure metronome clicks, process with monitor output, capture audio, run offline bounces, freeze clips, and drain meter telemetry.
 
+For recording, the capture surface adds a few controls:
+
+- `setCaptureSource('output' | 'input')` — record the engine's rendered output bus or the raw input you pass to `process(...)`.
+- `setRecordOffsetSamples(offset)` — shift the captured audio to compensate for monitoring round-trip latency.
+- `setInputMonitor(enabled, gain?)` — mix the live input into the output so the performer can hear themselves.
+
+`captureStatus()` reports both the active capture `source` (`'output'` or `'input'`) and the current `recordOffsetSamples`, so the UI can confirm what is being recorded. See [Recording and Takes](./recording-and-takes.md) for the full flow.
+
+::: info Live MIDI and recording
+The engine also accepts **live MIDI** into its instruments and **records** what plays back. Those surfaces have their own pages: [MIDI Input](./midi-input.md) for the Web MIDI → engine bridge (port management, CC binding, NativeSynth/SF2 destinations), and [Recording and Takes](./recording-and-takes.md) for capture, loop-recording takes/comp lanes, and the browser microphone helper `bindMicrophoneInput(...)` that wires `getUserMedia` into an engine node.
+:::
+
 ::: warning Check the engine ABI before constructing
 `engineCapabilities().abiCompatible` confirms the loaded WASM matches the JS wrapper's expected engine ABI. The realtime engine is the most version-sensitive surface in the library; constructing it against a mismatched binary is undefined. Guard with the check above; if it fails, update your `@libraz/libsonare` package so the WASM binary and JS wrapper come from the same release.
 :::
@@ -328,6 +361,83 @@ await rtNode.ready; // resolves after the reduced module is loaded in the workle
 | Meter telemetry drain | The reduced runtime exposes only the basic telemetry path |
 
 Use the full package on the main thread when you need scene editing, parameter inspection, graph operations, capture readback, or offline export. Use `sonare-rt` inside an AudioWorklet processor when the render callback must stay allocation- and GC-conscious.
+
+## Paged clip audio streaming
+
+A long arrangement can hold more clip audio than fits in memory at once. The engine streams clip audio in **pages**: instead of one giant buffer, a clip is backed by a *clip page provider* that hands the engine fixed-size pages on demand.
+
+The flow is lock-free by design:
+
+1. The render thread needs a page it does not have yet and pushes a request onto a **wait-free page-request queue**.
+2. The main thread drains that queue with `engine.popClipPageRequest()`, reads the audio for the requested page from storage, and calls `provider.supply(pageIndex, channels)`.
+3. When a page is no longer needed, `provider.clear(pageIndex)` releases it.
+
+Because the audio thread only enqueues requests and reads already-supplied pages, it never blocks on storage or allocation.
+
+::: info Lock-free and wait-free, for beginners
+A realtime audio thread must not pause — if it stalls for even a moment, the output glitches. **Lock-free** means the audio thread never waits to acquire a lock that another thread holds. **Wait-free** is the stronger guarantee used here: pushing a page-miss request onto the page-request queue always finishes in a bounded number of steps, so the audio thread never spins or blocks waiting on it. The slow part — reading the page from storage — happens on the main thread instead.
+:::
+
+### OPFS-backed provider in the browser
+
+The package ships a ready-made provider that reads pages from the [Origin Private File System (OPFS)](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) on a worker, so disk reads stay off the main thread:
+
+```typescript
+import { createOpfsClipPageProvider } from '@libraz/libsonare/worklet';
+
+const binding = createOpfsClipPageProvider(engine, {
+  path: 'clips/long-take.f32',  // interleaved Float32 in OPFS
+  numChannels: 2,
+  numSamples: totalFrames,      // total frames in the file
+  pageFrames: 65536,            // page size in frames
+  // dataOffsetBytes?: skip a header; worker?: reuse your own Worker
+});
+
+// In a UI tick, service whatever the render thread asked for:
+let request;
+while ((request = engine.popClipPageRequest()) !== null) {
+  await binding.supplyRequest(request);  // reads + supplies that page
+}
+
+// Later:
+binding.close();  // releases the provider and (if owned) terminates the worker
+```
+
+`createOpfsClipPageProvider(...)` builds the engine-side `ClipPageProvider` for you and pairs it with a worker. By default it spins up an inline worker via `createOpfsClipPageWorker()`, whose body is exported as `opfsClipPageWorkerSource` if you prefer to bundle it yourself or pass your own `Worker`. `supplyRequest(request)` maps a popped request's sample position to a page index; `supplyPage(pageIndex)` lets you prefetch a page directly.
+
+::: warning OPFS support varies by browser
+The OPFS provider relies on `navigator.storage.getDirectory()` and synchronous access handles, which are available in current Chromium and Firefox and in WebKit on recent Safari, but not in older browsers. Feature-detect before using it, and keep a fully-in-memory fallback (or your own `ClipPageProvider` filled from any source) for environments without OPFS.
+:::
+
+## Display waveform peaks
+
+Drawing a clip at an arbitrary zoom does not need every sample — it needs the min/max envelope per screen column. `waveformPeaks(...)` reduces interleaved audio to per-channel min/max **buckets** you can stroke directly:
+
+```typescript
+import { init, waveformPeaks, waveformPeakPyramid } from '@libraz/libsonare';
+
+await init();
+
+// interleaved stereo (L0,R0,L1,R1,...); here `mono` is channels = 1
+const peaks = waveformPeaks(samples, /* channels */ 1, { samplesPerBucket: 512 });
+// peaks.min / peaks.max are channel-major Float32Array of length
+// peaks.channels * peaks.bucketCount; draw a vertical line per bucket
+for (let b = 0; b < peaks.bucketCount; b++) {
+  drawColumn(b, peaks.min[b], peaks.max[b]);
+}
+```
+
+For a clip the user can zoom freely, precompute several bucket sizes once with `waveformPeakPyramid(...)` and pick the level closest to the current pixels-per-second:
+
+```typescript
+const pyramid = waveformPeakPyramid(samples, 1, {
+  samplesPerBucketLevels: [512, 1024, 2048, 4096],
+});
+// pyramid[i] is a WaveformPeaksReport for that bucket size; coarser levels
+// have fewer buckets and are cheaper to draw when zoomed out
+```
+
+Both are batch reductions for a buffered clip, not audio-callback work. `samplesPerBucket` is the bucket width in frames; a smaller bucket means more detail and more buckets.
 
 ## Related
 

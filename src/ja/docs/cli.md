@@ -61,7 +61,6 @@ Python CLI はすでに解析・特徴量・編集・マスタリング・`mix` 
 - 特徴量: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env`（`onset-envelope` の短縮エイリアス）, `fourier-tempogram`, `tempogram-ratio`
 - librosa 互換ユーティリティ: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
 - マスタリング: `mastering-pair-processor`（ソース／リファレンスのペア処理）, `mastering-stereo-analyses`, `mastering-stereo-analyze`
-- ミキシングシーンツール: `mixing-presets`, `mixing-preset`（一覧／シーン JSON 書き出し）
 :::
 
 ## 概要
@@ -215,7 +214,14 @@ sonare onsets music.mp3 --json
 ```bash
 sonare mel music.mp3
 sonare mel music.mp3 --n-mels 80
+sonare mel music.mp3 --fmin 40 --fmax 16000 --htk
 ```
+
+| オプション | デフォルト | 説明 |
+|------------|------------|------|
+| `--fmin FREQ` | 0 | メルバンドの最低周波数（Hz） |
+| `--fmax FREQ` | 0 | メルバンドの最高周波数（Hz）。0 ならナイキスト周波数を使う |
+| `--htk` | 無効 | Slaney スケールではなく HTK メルスケールを使う |
 
 **出力:**
 ```
@@ -504,7 +510,7 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-Python CLI のペア解析では、ソースとリファレンスが同じサンプル数にデコードされている必要があり、サンプルレートも事前に揃えておくべきです。長さが違う場合、CLI はエラーとして表示します。比較前にリサンプリングやトリムが必要な場合は Python API を使ってください。
+ペア解析では、比較の前に CLI がリファレンスをソースのサンプルレートへリサンプリングするため、2 つのファイルでサンプルレートを揃えておく必要はありません。リサンプリングやトリムをより細かく制御したい場合は Python API を使ってください。
 
 `/ja/mastering` ブラウザデモも同じマスタリングプロセッサ群を呼び出しています。デモから書き出したレポートを CLI 自動化の起点として活用できます。
 
@@ -531,10 +537,16 @@ RT60、EDT、C50、C80、D50、体積、寸法、吸音率バンド、DRR、RIR 
 ::: info コマンドの提供範囲
 PyPI の Python CLI には `mix` が含まれます。JSON ファイルまたは組み込みプリセットからミキサーシーンを読み込み、必要ならストリップごとの入力 WAV をレンダリングします。
 
-ソースからビルドした C++ CLI では `mixing-presets` と `mixing-preset` も利用できます。シーン一覧の確認や、WASM／Python／Node／C++ のミキサー API に読み込ませるシーン JSON の書き出しに使えます。
+`mixing-presets` と `mixing-preset` も含まれます。シーン一覧の確認や、WASM／Python／Node／C++ のミキサー API に読み込ませるシーン JSON の出力に使えます。
 :::
 
 ```bash
+# 組み込みミキサーシーンプリセットを一覧表示
+sonare mixing-presets
+
+# 1 つのプリセットのシーンを JSON で出力（既定: basic）
+sonare mixing-preset --preset vocalReverbSend > scene.json
+
 # 組み込みシーンプリセットを読み込み、ストリップ入力をステレオ WAV にレンダリング
 sonare mix \
   --preset vocalReverbSend \
@@ -543,7 +555,7 @@ sonare mix \
   --sample-rate 48000 \
   -o mixed.wav
 
-# または JSON からシーンを読み込む（例: C++ の `mixing-preset` で書き出したもの）
+# または JSON からシーンを読み込む（例: `mixing-preset` で出力したもの）
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
@@ -551,6 +563,66 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 `--input` を 1 つ渡し、ファイルへのレンダリングには `-o/--output` が必要です。
 
 関連: [ミキシングエンジン](./mixing.md)。
+
+### プロジェクト＆ MIDI ワークフロー
+
+`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`midi-render` はプロジェクトの MIDI を NativeSynth でレンダリングし、`synth-presets` は組み込みの楽器パッチを一覧表示します。
+
+```bash
+# プロジェクトの ABI バージョンを表示
+sonare project abi
+
+# 指定サンプルレートで空のプロジェクト JSON を作成
+sonare project new --sample-rate 48000 -o project.json
+
+# プロジェクト JSON を検証・コンパイル
+sonare project validate --in project.json
+sonare project compile --in project.json -o compiled.json
+
+# プロジェクトをステレオ WAV にレンダリング（マルチチャンネルのバウンスもステレオ出力）
+sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
+
+# クリップ音声ではなくプロジェクトの MIDI を NativeSynth プリセットでレンダリング
+sonare project bounce --in project.json --synth -o synth-bounce.wav
+```
+
+| コマンド | 説明 | 主なオプション |
+|----------|------|----------------|
+| `sonare project abi` | プロジェクトの ABI バージョンを表示 | — |
+| `sonare project new` | 空のプロジェクト JSON を作成 | `--sample-rate`, `-o` |
+| `sonare project validate` | プロジェクト JSON を検証 | `--in` |
+| `sonare project compile` | プロジェクト JSON をコンパイル | `--in`, `-o` |
+| `sonare project bounce` | プロジェクトをステレオ WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
+| `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
+| `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
+| `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |
+| `sonare project import-midi2` | MIDI 2.0 Clip File からプロジェクトを構築 | `--midi2`, `-o` |
+| `sonare project synth-presets` | 組み込み NativeSynth プリセットを一覧表示 | `--json` |
+
+```bash
+# プロジェクトを Standard MIDI File 形式でラウンドトリップ
+sonare project export-smf --in project.json -o project.mid
+sonare project import-smf --smf project.mid -o roundtrip.json
+
+# MIDI 2.0 Clip File 形式でラウンドトリップ
+sonare project export-midi2 --in project.json -o project.midi2
+sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
+
+# MIDI プロジェクトを NativeSynth でステレオ WAV にレンダリング
+sonare midi-render --in project.json --synth acoustic-piano --sample-rate 48000 -o render.wav
+
+# 組み込みシンセプリセットを一覧表示
+sonare synth-presets
+```
+
+| コマンド | 説明 | 主なオプション |
+|----------|------|----------------|
+| `sonare midi-render` | MIDI プロジェクトを NativeSynth でレンダリング | `--in`, `--synth`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `-o` |
+| `sonare synth-presets` | 組み込み NativeSynth プリセットを一覧表示 | `--json` |
+
+バウンスやレンダリングのコマンドはステレオ WAV を出力します。SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
+
+関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
 
 ## 対応オーディオ形式
 

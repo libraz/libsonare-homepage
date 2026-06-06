@@ -152,6 +152,13 @@
   padding: 0;
   text-align: left;
   touch-action: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Pre-drag affordance: clips light up under the pointer. */
+.mix-clip:hover {
+  border-color: var(--demo-accent);
+  box-shadow: 0 0 10px var(--demo-accent-dim);
 }
 
 .mix-clip:active {
@@ -305,10 +312,23 @@
   cursor: grab;
   padding: 0;
   touch-action: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.mix-autolane__node:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 8px var(--demo-accent-dim);
 }
 
 .mix-autolane__node:active {
   cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-clip,
+  .mix-autolane__node {
+    transition: none;
+  }
 }
 
 .mix-autolane__hint {

@@ -135,12 +135,41 @@ describe('validate-mastering-presets script helpers', () => {
         ],
       }),
     ).resolves.toEqual([
-      'lufs: output LUFS -25.00 is quieter than input -18.00',
+      'lufs: output LUFS -25.00 fell below floor -18.50 (input -18.00, target -14)',
       'stages: no mastering stages were applied',
       `length: unexpected output length 1/${length}`,
       'peak: invalid peak 1.2000000476837158',
       'reference analysis: empty pair analysis report',
     ]);
+  });
+
+  it('allows denoise presets to land below target within the headroom shortfall', async () => {
+    // loudness.optimize cannot boost past the true-peak ceiling, so denoise
+    // presets may fall short of the target after the repair removes loudness.
+    const denoiseConfig = buildConfig({
+      targetLufs: -14,
+      tiltDb: 0,
+      ratio: 2,
+      air: 0.2,
+      width: 1,
+      denoise: true,
+    });
+    const api = {
+      init: vi.fn().mockResolvedValue(undefined),
+      version: vi.fn(() => 'test-version'),
+      masteringChainStereo: vi.fn(() =>
+        validOutput({
+          inputLufs: -15.5,
+          outputLufs: -18.9,
+          stages: ['repair.denoise', 'loudness.optimize'],
+        }),
+      ),
+      masteringPairAnalyze: vi.fn(() => 'report'),
+    };
+
+    await expect(
+      validateMasteringPresets({ api, presetEntries: [['aiMusic', denoiseConfig]] }),
+    ).resolves.toEqual([]);
   });
 
   it('throws helpful errors for non-finite scalar values', () => {

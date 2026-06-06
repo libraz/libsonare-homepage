@@ -7,7 +7,7 @@ description: libsonare の説明可能なマスタリング補助 API、masterin
 
 libsonare は、レンダリング済み音声だけでなく*判断根拠*を扱いたいアプリ向けに、**JSON を返す**マスタリング補助 API を 3 つ提供します。**ローカル DSP 解析のみ**で動作し、アップロードも外部モデルも隠れたプリセットも使わず、UI 表示やレポート保存に使える構造化 JSON を返します。
 
-「LUFS」「トゥルーピーク」「クレストファクター」「トーンバランス」に馴染みがなければ、先に [マスタリングとは?](./glossary/concepts/what-is-mastering.md) と [メーターの読み方](./glossary/mastering/meter-reading.md) を読んでください。本ページは用語を前提に JSON の契約に集中します。
+「LUFS」「トゥルーピーク」「クレストファクター」「トーナルバランス」に馴染みがなければ、先に [マスタリングとは?](./glossary/concepts/what-is-mastering.md) と [メーターの読み方](./glossary/mastering/meter-reading.md) を読んでください。本ページは用語を前提に JSON の契約に集中します。
 
 ::: info 「アシスタント」は自動仕上げボタンではない
 ここでのアシスタントは、音源を測定し、なぜその処理が妥当そうかを JSON で説明する補助 API です。実際の音作りは、提案をユーザーが確認・調整し、別のレンダリング API に渡して行います。

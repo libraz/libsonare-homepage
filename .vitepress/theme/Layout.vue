@@ -8,6 +8,8 @@ import MixingStudio from '@/components/MixingStudio.vue';
 import MusicAnalysisStudio from '@/components/MusicAnalysisStudio.vue';
 import RealtimeFxLab from '@/components/RealtimeFxLab.vue';
 import SpatialScanner from '@/components/SpatialScanner.vue';
+import StudioDemo from '@/components/StudioDemo.vue';
+import SynthDemo from '@/components/SynthDemo.vue';
 import { createTheme } from '@/composables/useTheme';
 import DemosLayout from './DemosLayout.vue';
 import LandingLayout from './LandingLayout.vue';
@@ -25,6 +27,8 @@ const isAnalysisStudio = computed(() => frontmatter.value.layout === 'analysis-s
 const isMixingStudio = computed(() => frontmatter.value.layout === 'mixing-studio');
 const isRealtimeFx = computed(() => frontmatter.value.layout === 'realtime-fx');
 const isSpatial = computed(() => frontmatter.value.layout === 'spatial');
+const isSynth = computed(() => frontmatter.value.layout === 'synth');
+const isStudio = computed(() => frontmatter.value.layout === 'studio');
 </script>
 
 <template>
@@ -36,5 +40,7 @@ const isSpatial = computed(() => frontmatter.value.layout === 'spatial');
   <MixingStudio v-else-if="isMixingStudio" />
   <RealtimeFxLab v-else-if="isRealtimeFx" />
   <SpatialScanner v-else-if="isSpatial" />
+  <SynthDemo v-else-if="isSynth" />
+  <StudioDemo v-else-if="isStudio" />
   <DefaultLayout v-else />
 </template>

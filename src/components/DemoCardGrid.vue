@@ -57,7 +57,7 @@ onBeforeUnmount(() => {
 const prevLabel = computed(() => (ja.value ? '前のデモを表示' : 'Show previous demos'));
 const nextLabel = computed(() => (ja.value ? '次のデモを表示' : 'Show more demos'));
 
-type DemoVisual = 'spectrum' | 'lufs' | 'chroma' | 'faders' | 'fx' | 'room';
+type DemoVisual = 'spectrum' | 'lufs' | 'chroma' | 'faders' | 'fx' | 'room' | 'keys' | 'steps';
 
 interface DemoEntry {
   id: string;
@@ -152,6 +152,30 @@ const cards = computed<DemoEntry[]>(() => {
         chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
         cta,
       },
+      {
+        id: 'synth',
+        path: `${base.value}/synth`,
+        visual: 'keys',
+        accent: false,
+        status: 'NEW',
+        eyebrow: 'INSTRUMENTS',
+        title: 'シンセプレイグラウンド',
+        tagline: '内蔵ポリフォニックシンセを PC キーボードや USB MIDI 鍵盤で演奏。',
+        chips: ['7 ENGINES', '16 PRESETS', 'MIDI', 'PATCH'],
+        cta,
+      },
+      {
+        id: 'studio',
+        path: `${base.value}/studio`,
+        visual: 'steps',
+        accent: false,
+        status: 'NEW',
+        eyebrow: 'HEADLESS DAW',
+        title: 'スタジオミニ',
+        tagline: '3 トラックをステップ入力し、ミックスして WAV にバウンスするミニ DAW。',
+        chips: ['PROJECT', 'STEPS', 'MIX', 'BOUNCE'],
+        cta,
+      },
     ];
   }
   return [
@@ -225,6 +249,30 @@ const cards = computed<DemoEntry[]>(() => {
       title: 'Spatial Room Scanner',
       tagline: 'Estimate room geometry, reverb, and source distance in 3D from a recording.',
       chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
+      cta,
+    },
+    {
+      id: 'synth',
+      path: `${base.value}/synth`,
+      visual: 'keys',
+      accent: false,
+      status: 'NEW',
+      eyebrow: 'INSTRUMENTS',
+      title: 'Synth Playground',
+      tagline: 'Play the built-in polyphonic synth from your keyboard or a USB MIDI keyboard.',
+      chips: ['7 ENGINES', '16 PRESETS', 'MIDI', 'PATCH'],
+      cta,
+    },
+    {
+      id: 'studio',
+      path: `${base.value}/studio`,
+      visual: 'steps',
+      accent: false,
+      status: 'NEW',
+      eyebrow: 'HEADLESS DAW',
+      title: 'Studio Mini',
+      tagline: 'Step-sequence three tracks, mix them, and bounce the loop to WAV.',
+      chips: ['PROJECT', 'STEPS', 'MIX', 'BOUNCE'],
       cta,
     },
   ];
@@ -344,6 +392,32 @@ const cards = computed<DemoEntry[]>(() => {
             <circle class="demo-grid__room-ring demo-grid__room-ring--2" cx="108" cy="30" r="9" />
             <!-- listener -->
             <circle class="demo-grid__room-listener" cx="138" cy="38" r="2.6" />
+          </g>
+        </svg>
+
+        <!-- Piano keys -->
+        <svg v-else-if="card.visual === 'keys'" viewBox="0 0 220 60" preserveAspectRatio="none">
+          <g class="demo-grid__keys">
+            <rect v-for="i in 8" :key="`w${i}`" :x="(i - 1) * 27.5 + 1" y="2" width="25.5" height="56" rx="2" class="demo-grid__key-white" :class="{ 'demo-grid__key-white--lit': i === 3 || i === 6 }" :style="{ '--d': `${i * 160}ms` }" />
+            <rect v-for="(bx, i) in [19, 47, 102, 130, 158]" :key="`b${i}`" :x="bx" y="2" width="15" height="33" rx="2" class="demo-grid__key-black" />
+          </g>
+        </svg>
+
+        <!-- Step sequencer -->
+        <svg v-else-if="card.visual === 'steps'" viewBox="0 0 220 60" preserveAspectRatio="none">
+          <g class="demo-grid__steps">
+            <rect
+              v-for="(cell, i) in 24"
+              :key="i"
+              :x="(i % 8) * 27.5 + 2"
+              :y="Math.floor(i / 8) * 20 + 2"
+              width="23.5"
+              height="16"
+              rx="2"
+              class="demo-grid__step"
+              :class="{ 'demo-grid__step--on': [0, 3, 5, 9, 14, 16, 18, 20, 22].includes(i) }"
+              :style="{ '--d': `${(i % 8) * 110}ms` }"
+            />
           </g>
         </svg>
 
@@ -714,6 +788,49 @@ html:not(.dark) .demo-grid__card:hover {
   100% { transform: scale(1.7); opacity: 0; }
 }
 
+/* Piano keys */
+.demo-grid__key-white {
+  fill: var(--demo-screen-bg-alpha, rgba(255, 255, 255, 0.08));
+  stroke: var(--demo-border-strong, rgba(139, 92, 246, 0.25));
+  stroke-width: 1;
+}
+
+.demo-grid__key-white--lit {
+  fill: var(--demo-accent, #8b5cf6);
+  animation: demo-grid-keypress 2.4s ease-in-out infinite;
+  animation-delay: var(--d);
+}
+
+.demo-grid__key-black {
+  fill: var(--demo-bg, #0b0d12);
+  stroke: var(--demo-border-strong, rgba(139, 92, 246, 0.25));
+  stroke-width: 1;
+}
+
+html:not(.dark) .demo-grid__key-white {
+  fill: rgba(255, 255, 255, 0.85);
+}
+
+html:not(.dark) .demo-grid__key-black {
+  fill: #2a2d38;
+}
+
+@keyframes demo-grid-keypress {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* Step sequencer */
+.demo-grid__step {
+  fill: var(--demo-border, rgba(139, 92, 246, 0.12));
+}
+
+.demo-grid__step--on {
+  fill: var(--demo-accent, #8b5cf6);
+  animation: demo-grid-keypress 1.8s ease-in-out infinite;
+  animation-delay: var(--d);
+}
+
 .demo-grid__title {
   margin: 2px 0 0;
   font-family: 'Space Grotesk', sans-serif;
@@ -830,6 +947,8 @@ html:not(.dark) .demo-grid__visual {
   .demo-grid__fader-cap,
   .demo-grid__wave,
   .demo-grid__room-ring,
+  .demo-grid__key-white--lit,
+  .demo-grid__step--on,
   .demo-grid__status-dot {
     animation: none;
   }

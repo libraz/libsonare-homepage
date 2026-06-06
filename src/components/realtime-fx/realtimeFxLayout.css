@@ -42,6 +42,17 @@
   padding: 14px;
 }
 
+/* Balance the three columns: the voice panel stretches to match the meters
+   column, and its controls spread through the extra room like a rack unit. */
+.rt-lab__center > .tech-panel {
+  flex: 1;
+}
+
+.rt-controls {
+  min-height: 100%;
+  align-content: space-evenly;
+}
+
 .rt-input__badge {
   display: grid;
   place-items: center;
@@ -169,8 +180,35 @@
   }
 }
 
-.rt-error {
-  color: var(--demo-danger) !important;
+/* Scoped under .rt-input so it outranks the generic `.rt-input p` rule
+   without needing !important. */
+.rt-input .rt-error {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--demo-danger) 38%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--demo-danger) 9%, transparent);
+  color: var(--demo-danger);
+  font-size: 11.5px;
+  line-height: 1.5;
+  animation: rt-error-in 0.25s ease;
+}
+
+@keyframes rt-error-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-input .rt-error {
+    animation: none;
+  }
 }
 
 .rt-slider {

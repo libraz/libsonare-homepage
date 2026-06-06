@@ -20,7 +20,7 @@ These helpers assume you already produce mel spectrograms or MFCCs. If you are j
 By the end of this page you should be able to:
 
 - explain why mel/MFCC inversion is approximate and why phase cannot be recovered from the feature alone;
-- keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, and `nMfcc` values needed for a correct round trip;
+- keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, `nMfcc`, `fmin`, `fmax`, and `htk` values needed for a correct round trip;
 - choose `melToStft`, `melToAudio`, `mfccToMel`, or `mfccToAudio` based on whether you need a matrix or preview audio;
 - compare JavaScript and Python return shapes without confusing row counts, frame counts, and flattened data.
 
@@ -115,12 +115,12 @@ import { init, melSpectrogram, melToAudio, mfcc, mfccToAudio } from '@libraz/lib
 await init();
 
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
-const preview = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048, 512, 32);
-// nFft=2048, hopLength=512, nIter=32 (Griffin-Lim iterations)
+const preview = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048, 512, 0, 0, 32);
+// nFft=2048, hopLength=512, nIter=32 (fmin/fmax left at default 0; nIter is the Griffin-Lim iteration count)
 
 const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);
-const fromMfcc = mfccToAudio(coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames, 128, sampleRate, 2048, 512, 32);
-// note the extra nMels (128) argument before sampleRate
+const fromMfcc = mfccToAudio(coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames, 128, sampleRate, 2048, 512, 0, 0, 32);
+// note the extra nMels (128) before sampleRate; nFft=2048, hopLength=512, nIter=32 (fmin/fmax default 0)
 ```
 
 ```python [Python]
@@ -153,7 +153,11 @@ Griffin-Lim is an iterative magnitude-only reconstruction. Given a target magnit
 Each pass nudges the phase toward something that an actual signal could have produced. `nIter` controls how many passes run. More iterations converge closer (smoother, fewer artifacts) at linear cost; fewer iterations are faster but "phasier". 32 is a reasonable default; drop to 8–16 for fast UI previews, raise to 60+ when preview quality matters.
 :::
 
-`nIter` is the main quality/latency dial. Everything else (`nFft`, `hopLength`, `fmin`, `fmax`) must match the **forward** transform — see below.
+`nIter` is the main quality/latency dial. Everything else (`nFft`, `hopLength`, `fmin`, `fmax`, `htk`) must match the **forward** transform — see below. The helper signatures default `fmin`/`fmax` to `0` (full range) and `htk` to `false` (Slaney); pass the same values you gave the forward transform, in the same positional slots.
+
+::: info Slaney vs HTK Mel scale
+There are two common conventions for spacing the Mel bands: the **Slaney** formula (librosa's and libsonare's default) and the **HTK** formula. They place the band edges differently, so the forward and inverse transforms must use the *same* convention — pass `htk: true` (or `htk=True`) to the inverse only if the forward transform used it.
+:::
 
 ## A round-trip sanity check
 
@@ -163,7 +167,7 @@ A common use is to confirm a feature pipeline is wired correctly: extract featur
 
 ```typescript [Browser]
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
-const preview = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048, 512, 32);
+const preview = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048, 512, 0, 0, 32);
 
 // Same length? Recognizable envelope? Play it back or compare loudness.
 console.log(samples.length, preview.length);
@@ -185,7 +189,7 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 :::
 
 ::: warning Keep the same parameters on both sides
-Inverse helpers are only meaningful with the **same** `sampleRate`, `nFft`, `hopLength`, `nMels`, `fmin`, and `fmax` used for the forward transform. A mismatch silently produces a wrong-but-plausible spectrum, which is the hardest kind of bug to spot. Store these values alongside your features so the inverse call cannot drift. `mel_to_stft(...)` does not need `hop_length` because it stays in the frequency domain; the audio-producing helpers do.
+Inverse helpers are only meaningful with the **same** `sampleRate`, `nFft`, `hopLength`, `nMels`, `fmin`, `fmax`, and `htk` used for the forward transform. A mismatch silently produces a wrong-but-plausible spectrum, which is the hardest kind of bug to spot. In particular, if the forward transform used `htk: true` or a custom `fmin`/`fmax`, the inverse **must** pass the same `htk`/`fmin`/`fmax` — otherwise the Mel filterbank is built differently and the reconstruction is silently wrong. Store these values alongside your features so the inverse call cannot drift. `mel_to_stft(...)` does not need `hop_length` because it stays in the frequency domain; the audio-producing helpers do.
 :::
 
 ## Related

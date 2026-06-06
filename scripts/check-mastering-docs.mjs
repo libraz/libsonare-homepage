@@ -54,20 +54,23 @@ export function checkMasteringDocs({ root = process.cwd() } = {}) {
 }
 
 function checkWasmExports({ root, failures, jsApis }) {
-  const dts = read(root, 'src/wasm/index.d.ts');
-  const exportLine = (dts.match(/^export \{.*\};$/gm) ?? []).join('\n');
+  // Function declarations live in worklet.d.ts; index.d.ts is a re-export
+  // barrel whose entries alias the mangled names to the public API names.
+  const workletDts = read(root, 'src/wasm/worklet.d.ts');
+  const indexDts = read(root, 'src/wasm/index.d.ts');
+  const exportLine = (indexDts.match(/^export \{.*\}(?: from '[^']+')?;$/gm) ?? []).join('\n');
   for (const api of jsApis) {
-    requireText(failures, 'src/wasm/index.d.ts', dts, `declare function ${api}(`);
+    requireText(failures, 'src/wasm/worklet.d.ts', workletDts, `declare function ${api}(`);
     requireText(failures, 'src/wasm/index.d.ts export list', exportLine, api);
   }
 }
 
 export function extractMasteringJsApis({ root, failures = [] }) {
-  const dts = read(root, 'src/wasm/index.d.ts');
+  const dts = read(root, 'src/wasm/worklet.d.ts');
   const apis = [...dts.matchAll(/^declare function ((?:mastering|masterAudio)[A-Za-z0-9]*)\(/gm)]
     .map((match) => match[1])
     .sort();
-  if (apis.length === 0) failures.push('src/wasm/index.d.ts: no mastering JS APIs found');
+  if (apis.length === 0) failures.push('src/wasm/worklet.d.ts: no mastering JS APIs found');
   return apis;
 }
 

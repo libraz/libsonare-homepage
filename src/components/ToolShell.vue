@@ -8,7 +8,15 @@ import { useTheme } from '@/composables/useTheme';
 const props = withDefaults(
   defineProps<{
     /** Active demo, used to highlight its tab. */
-    demoId: 'analyzer' | 'mastering' | 'analysis' | 'mixing' | 'fx' | 'spatial';
+    demoId:
+      | 'analyzer'
+      | 'mastering'
+      | 'analysis'
+      | 'mixing'
+      | 'fx'
+      | 'spatial'
+      | 'synth'
+      | 'studio';
     title: string;
     subtitle?: string;
     version?: string;
@@ -73,6 +81,16 @@ const demoTabs = computed(() => [
     id: 'spatial',
     label: ja.value ? '空間 3D' : 'Spatial 3D',
     path: ja.value ? '/ja/spatial' : '/spatial',
+  },
+  {
+    id: 'synth',
+    label: ja.value ? 'シンセ' : 'Synth',
+    path: ja.value ? '/ja/synth' : '/synth',
+  },
+  {
+    id: 'studio',
+    label: ja.value ? 'スタジオ' : 'Studio',
+    path: ja.value ? '/ja/studio' : '/studio',
   },
 ]);
 
@@ -666,4 +684,88 @@ html:not(.dark) .tool-page .tool-page__header {
 /* Global (non-scoped) selectors for html.dark — scoped CSS can't target <html> ancestor reliably */
 html.dark .tool-page__icon-sun { display: block; }
 html.dark .tool-page__icon-moon { display: none; }
+
+/* ===== Shared fader styling for native range inputs =====
+   One hardware-fader look for every demo slider (FX, mixing, mastering,
+   spatial, …). AudioSource / AudioTransport keep their invisible overlay
+   ranges, so they are excluded. Theme-aware via the --demo-* tokens. */
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range) {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  border: 1px solid var(--demo-border);
+  background: var(--demo-track-bg);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  border: 1px solid var(--demo-border);
+  background: var(--demo-track-bg);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+/* Fader cap: rectangular, with a center indicator groove. */
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 16px;
+  margin-top: -6px;
+  border: 1px solid color-mix(in srgb, var(--demo-accent) 55%, #000);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.92) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(180deg, color-mix(in srgb, var(--demo-accent) 78%, #fff) 0%, var(--demo-accent) 52%, color-mix(in srgb, var(--demo-accent) 70%, #000) 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--demo-accent-subtle);
+  transition: box-shadow 0.15s ease;
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-thumb {
+  width: 12px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--demo-accent) 55%, #000);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.92) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(180deg, color-mix(in srgb, var(--demo-accent) 78%, #fff) 0%, var(--demo-accent) 52%, color-mix(in srgb, var(--demo-accent) 70%, #000) 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--demo-accent-subtle);
+  transition: box-shadow 0.15s ease;
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):hover:not(:disabled)::-webkit-slider-thumb {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 12px var(--demo-accent-dim);
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):hover:not(:disabled)::-moz-range-thumb {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 12px var(--demo-accent-dim);
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.tool-page input[type='range']:not(.audio-source__range):not(.transport__range):disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-webkit-slider-thumb,
+  .tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-thumb {
+    transition: none;
+  }
+}
 </style>

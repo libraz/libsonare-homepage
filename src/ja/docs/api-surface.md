@@ -83,6 +83,8 @@
 | マスタリング | プリセット、フルチェーン、名前付きプロセッサ、ペア解析、ステレオ解析、ストリーミングチェーン | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、逐次 BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、キャプチャ、モニターバス、テレメトリ、バウンス／フリーズ | [リアルタイムとストリーミング](./realtime-streaming.md) |
+| プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、アンドゥ/リドゥ、テイク／コンピング、ワープ、MIDI シーケンス、SMF 入出力、JSON 保存／読込、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生 | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声 | [逆変換特徴量](./inverse-features.md) |
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz | [librosa 互換性](./librosa-compatibility.md) |
 

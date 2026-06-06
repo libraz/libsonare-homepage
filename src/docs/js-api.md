@@ -296,7 +296,10 @@ This is the heaviest API. For long audio files (>3 minutes), consider using `ana
 function analyze(samples: Float32Array, sampleRate: number): AnalysisResult
 ```
 
-**Returns:** Complete `AnalysisResult` with BPM, key, beats, chords, sections, timbre, dynamics, and rhythm.
+**Returns:** Complete `AnalysisResult`. A single `analyze()` call returns the
+full result — chords, sections, timbre, dynamics, rhythm, melody, form, and
+per-beat strength — on every binding, so you rarely need the focused helpers
+unless you only want one field.
 
 ```typescript
 const result = analyze(samples, sampleRate);
@@ -371,6 +374,29 @@ const chords = detectChords(samples, sampleRate, {
 });
 
 const sections = analyzeSections(samples, sampleRate);
+```
+
+### `chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate?, options?)`
+
+Functional (Roman-numeral) harmonic analysis of the detected chord progression,
+relative to the given key. It runs chord detection internally and labels each
+detected chord, so pass the same `keyRoot`/`keyMode` you get from `detectKey(...)`
+and the same `options` you would give `detectChords(...)`.
+
+```typescript
+function chordFunctionalAnalysis(
+  samples: Float32Array,
+  keyRoot: PitchClass,
+  keyMode: Mode,
+  sampleRate?: number,
+  options?: ChordDetectionOptions,
+): string[]   // one Roman-numeral label per detected chord, e.g. ["I", "IV", "V", "vi"]
+```
+
+```typescript
+const key = detectKey(samples, sampleRate);
+const roman = chordFunctionalAnalysis(samples, key.root, key.mode, sampleRate);
+console.log(roman);  // e.g. ["I", "IV", "V", "vi"]
 ```
 
 `detectKey(...)` and `detectKeyCandidates(...)` accept the same
@@ -528,19 +554,37 @@ function pitchCorrectToMidi(
   targetMidi: number,
 ): Float32Array
 
+// Retune a tracked pitch contour to a fixed target note, frame by frame.
+// f0Hz is a per-frame f0 track (e.g. from pitchYin/pitchPyin), aligned to
+// hopLength. Pass the matching voicedFlag/voicedProb arrays to skip unvoiced
+// frames; unvoiced or NaN frames are left untouched.
+function pitchCorrectToMidiTimevarying(
+  samples: Float32Array,
+  f0Hz: Float32Array,
+  targetMidi: number,
+  sampleRate: number,
+  hopLength: number,
+  voicedFlag?: Int32Array,
+  voicedProb?: Float32Array,
+): Float32Array
+
 function noteStretch(
   samples: Float32Array,
   sampleRate: number,
-  onsetSample: number,
-  offsetSample: number,
-  stretchRatio: number,  // >1 lengthens the region, <1 shortens it
+  options?: {
+    onsetSample?: number,    // note onset position in samples
+    offsetSample?: number,   // note offset position in samples
+    stretchRatio?: number,   // >1 lengthens the region, <1 shortens it
+  },
 ): Float32Array
 
 function voiceChange(
   samples: Float32Array,
   sampleRate: number,
-  pitchSemitones: number,
-  formantFactor: number,  // 1.0 = unchanged
+  options?: {
+    pitchSemitones?: number,  // negative shifts down; default 0
+    formantFactor?: number,   // >1 brightens, <1 darkens; default 1.0
+  },
 ): Float32Array
 ```
 
@@ -635,7 +679,10 @@ function melSpectrogram(
   sampleRate: number,
   nFft?: number,      // default: 2048
   hopLength?: number, // default: 512
-  nMels?: number      // default: 128
+  nMels?: number,     // default: 128
+  fmin?: number,      // default: 0 (librosa default)
+  fmax?: number,      // default: 0 = sampleRate / 2
+  htk?: boolean       // default: false = Slaney formula; true = HTK
 ): MelSpectrogramResult
 
 interface MelSpectrogramResult {
@@ -666,8 +713,16 @@ function mfcc(
   nFft?: number,      // default: 2048
   hopLength?: number, // default: 512
   nMels?: number,     // default: 128
-  nMfcc?: number      // default: 20
+  nMfcc?: number,     // default: 20
+  fmin?: number,      // default: 0 (librosa default)
+  fmax?: number,      // default: 0 = sampleRate / 2
+  htk?: boolean       // default: false = Slaney formula; true = HTK
 ): MfccResult
+
+Set `fmin`/`fmax` to bound the Mel band edges, and pass `htk: true` to use the
+HTK Mel formula instead of Slaney. The inverse helpers (`melToStft`,
+`melToAudio`, `mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, so a
+round-trip stays consistent when you keep the same values on both sides.
 
 interface MfccResult {
   nMfcc: number;
@@ -1259,6 +1314,9 @@ Create an Audio instance from raw sample data.
 const audio = Audio.fromBuffer(samples, 44100);
 ```
 
+`sampleRate` is optional and defaults to `48000`. Always pass the buffer's
+actual sample rate, since the stored value feeds every instance method.
+
 ### Properties
 
 | Property | Type | Description |
@@ -1305,8 +1363,8 @@ const acoustic = detectAcoustic(audio.data, audio.sampleRate);
 // Effects
 const { harmonic, percussive } = audio.hpss();
 const corrected = audio.pitchCorrectToMidi(68.7, 69);
-const held = audio.noteStretch(12000, 24000, 1.25);
-const voice = audio.voiceChange(3, 1.05);
+const held = audio.noteStretch({ onsetSample: 12000, offsetSample: 24000, stretchRatio: 1.25 });
+const voice = audio.voiceChange({ pitchSemitones: 3, formantFactor: 1.05 });
 const stretched = audio.timeStretch(1.5);
 const shifted = audio.pitchShift(2);
 const normalized = audio.normalize(-3.0);
@@ -1356,7 +1414,6 @@ interface StreamConfig {
   fmin?: number;               // default: 0
   fmax?: number;               // default: 0 (= sr/2)
   tuningRefHz?: number;        // default: 440
-  computeMagnitude?: boolean;  // default: true
   computeMel?: boolean;        // default: true
   computeChroma?: boolean;     // default: true
   computeOnset?: boolean;      // default: true
@@ -1373,6 +1430,11 @@ interface StreamConfig {
 `outputFormat` controls how `readFramesU8`/`readFramesI16` quantize on the way
 out (the analysis itself always runs in float). See
 [Realtime and Streaming](./realtime-streaming.md#reading-frames-and-output-format).
+
+The legacy `computeMagnitude` flag is no longer supported; passing it makes the
+constructor throw. The flag was removed because magnitude frames are not exposed
+by the StreamAnalyzer read paths; use `stft`/`stftDb` offline or the spectrum
+metering helpers for magnitude data.
 
 ### StreamAnalyzer Class
 
@@ -1420,7 +1482,8 @@ class StreamAnalyzer {
   // Set tuning reference frequency (default: 440 Hz)
   setTuningRefHz(refHz: number): void;
 
-  // Release resources (call when done)
+  // Release resources (call when done). `delete()` is canonical; `dispose()` is an alias.
+  delete(): void;
   dispose(): void;
 }
 ```
@@ -1578,8 +1641,8 @@ function processChunk(samples: Float32Array) {
   }
 }
 
-// Clean up when done
-analyzer.dispose();
+// Clean up when done (delete() is canonical; dispose() is an alias)
+analyzer.delete();
 ```
 
 ::: details Why call `dispose()` / `delete()`? (embind handles)
@@ -2131,6 +2194,7 @@ The named mastering API families are:
 | Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
 | Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
 | List mono/stereo processors | `masteringProcessorNames()` |
+| List chain insert processors | `masteringInsertNames()` |
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
 | List pair processors | `masteringPairProcessorNames()` |
@@ -2295,6 +2359,37 @@ mixer.delete();
 ```
 
 `Mixer.createRealtimeBuffer()` and `processStereoInto(...)` are intended for AudioWorklet-style render loops where avoiding per-block allocation matters. See [Mixing Engine](./mixing.md) for scene and routing details.
+
+## Projects, instruments & live MIDI
+
+The package also exposes the project, synthesis, and live-input surface used to
+turn MIDI/clip arrangements into audio. These are summarized here; each topic has
+a dedicated guide.
+
+| Goal | Use | Guide |
+|------|-----|-------|
+| Build/load a clip + MIDI arrangement and edit it | `Project` (`Project.fromJson`, `toSceneJson`, MIDI event helpers) | [Project Editing](./project-editing.md) |
+| Render a project to audio | `project.bounceWithSynthInstrument(s)` | [Project Bounce](./project-bounce.md) |
+| Pick a built-in synth voice | `synthPresetNames()`, `synthPresetPatch(name)`, `engine.setSynthInstrument(...)` | [Native Synth](./native-synth.md) |
+| Play through a SoundFont | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont Player](./soundfont-player.md) |
+| Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |
+| Feed a live microphone into the engine | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="Browser only" /> | [Recording and Takes](./recording-and-takes.md) |
+
+```typescript
+import { Project, synthPresetNames } from '@libraz/libsonare';
+
+const project = Project.fromJson(projectJson);
+const audio = project.bounceWithSynthInstrument(synthPresetNames()[0]);
+```
+
+`bounceWithSynthInstrument(...)` accepts either one instrument or an array of
+instruments, one per destination. Each entry may be a preset name (a `"va:"`
+routing prefix is allowed), an explicit `SynthPatch`, or `null` for the init
+patch.
+
+`bindWebMidi(...)` and `bindMicrophoneInput(...)` are browser-only helpers that
+wire Web MIDI / a `MediaStream` into a live `RealtimeEngine`. See
+[Realtime and Streaming](./realtime-streaming.md#realtimeengine) for the engine itself.
 
 ## Type Export Index
 

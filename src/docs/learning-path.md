@@ -26,6 +26,9 @@ If you want to read the docs linearly, use this order:
 | Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#audio-effects) |
 | A browser or native mixer | [Mixing Engine](./mixing.md) | [Mixing Scene JSON](./mixing-scene-json.md) |
 | A mastering UI or automatic mastering workflow | [Mastering Assistant](./mastering-assistant.md) | [Mastering Processors](./mastering-processors.md) |
+| A synth or instrument app that renders MIDI to audio | [Built-in Instruments](./native-synth.md) | [MIDI Input](./midi-input.md), [Realtime and Streaming](./realtime-streaming.md) |
+| A DAW, arrangement, or MIDI-sequencing tool | [Project Editing](./project-editing.md) | [MIDI Input](./midi-input.md), [Project Bounce](./project-bounce.md) |
+| SoundFont (SF2) playback through a built-in player | [SoundFont 2 Player](./soundfont-player.md) | [Built-in Instruments](./native-synth.md), [MIDI Input](./midi-input.md) |
 | A live visualizer, rhythm game helper, or AudioWorklet tool | [Realtime and Streaming](./realtime-streaming.md) | [WebAssembly Guide](./wasm.md#streaming-analysis) |
 | A realtime microphone voice changer | [Realtime Voice Changer](./realtime-voice-changer.md) | [WebAssembly Guide](./wasm.md#realtime-voice-changer) |
 | Room sound, estimates, or generated room character | [Room Acoustics](./acoustic-analysis.md) | [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |

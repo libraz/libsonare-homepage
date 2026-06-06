@@ -198,6 +198,12 @@
   outline-offset: 2px;
 }
 
+/* Keyboard users get the same affordance as hover. */
+.sp-room:focus-visible:not(:disabled) {
+  border-color: var(--demo-accent);
+  transform: translateX(2px);
+}
+
 .sp-room:disabled {
   opacity: 0.5;
   cursor: not-allowed;

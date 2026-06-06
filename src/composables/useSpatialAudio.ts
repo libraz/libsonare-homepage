@@ -98,7 +98,10 @@ export function useSpatialAudio() {
     contentLabel.value = '';
   }
 
-  async function renderRoomMorph(geometry: MorphGeometry, options: { demoUrl?: string; label: string }) {
+  async function renderRoomMorph(
+    geometry: MorphGeometry,
+    options: { demoUrl?: string; label: string },
+  ) {
     const ctxLocal = getCtx();
     const input = dryBuffer ?? (await loadDemoBuffer(options.demoUrl ?? '/demo.mp3'));
     dryBuffer = dryBuffer ?? input;

@@ -61,6 +61,28 @@ These pages expand the editing-DSP terms behind the [Editing DSP](./editing-dsp.
 | [Pitch Correction and Note Editing](./glossary/editing/pitch-correction.md) | MIDI-targeted correction, note regions, and sample-accurate edits. |
 | [Voice and Formant](./glossary/editing/voice-formant.md) | Formants, the vocal tract, and pitch vs formant independence. |
 
+## Instruments and MIDI
+
+These pages explain how libsonare turns MIDI into sound — the built-in [NativeSynth](./native-synth.md), the [SoundFont player](./soundfont-player.md), and the MIDI vocabulary they share.
+
+| Guide | Covers |
+|-------|--------|
+| [Synthesis Basics](./glossary/instruments/synthesis-basics.md) | Oscillators, filters, and the synthesis families NativeSynth uses: subtractive, FM, physical modeling, modal, and additive. |
+| [Envelopes and Modulation](./glossary/instruments/envelopes-modulation.md) | ADSR envelopes, LFOs, velocity, key tracking, and the mod matrix. |
+| [MIDI Basics](./glossary/instruments/midi-basics.md) | Notes, velocity, channels, CC, program change, banks, General MIDI, pitch bend, and MIDI 2.0. |
+| [SoundFont and Sampled Instruments](./glossary/instruments/soundfont.md) | Sampled vs synthesized sound, SF2 banks and programs, and the General MIDI fallback. |
+
+## Arrangement and Projects
+
+These pages expand the headless-DAW terms used by [Project Editing](./project-editing.md), [Recording and Takes](./recording-and-takes.md), and [Project Bounce](./project-bounce.md).
+
+| Guide | Covers |
+|-------|--------|
+| [Clips and Tracks](./glossary/arrangement/clips-and-tracks.md) | The project model: tracks, clips, the timeline, MIDI destinations, and clip edits. |
+| [Takes and Comping](./glossary/arrangement/takes-and-comping.md) | Multiple recorded takes in a clip, the active take, comp segments, and loop recording. |
+| [Warp and Tempo Sync](./glossary/arrangement/warp-and-tempo.md) | Warp modes, anchors, tempo maps, time signatures, and pitch-preserving stretch. |
+| [Bounce and Rendering](./glossary/arrangement/bounce-and-rendering.md) | Rendering an arrangement to audio, the mixer scene, instrument bounces, and latency compensation. |
+
 ## Realtime Guides
 
 These pages expand the realtime/streaming terms used by `StreamAnalyzer`, the `RealtimeEngine`, and the AudioWorklet path.

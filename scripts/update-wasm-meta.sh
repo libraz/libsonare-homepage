@@ -2,6 +2,10 @@
 WASM_FILE="src/wasm/sonare.wasm"
 SONARE_JS_FILE="src/wasm/sonare.js"
 INDEX_JS_FILE="src/wasm/index.js"
+WORKLET_JS_FILE="src/wasm/worklet.js"
+RT_WASM_FILE="src/wasm/sonare-rt.wasm"
+RT_JS_FILE="src/wasm/sonare-rt.js"
+RT_MODULE_JS_FILE="src/wasm/sonare-rt-module.js"
 META_FILE="src/wasm/meta.json"
 LIBSONARE_DIR="../libsonare"
 
@@ -33,8 +37,19 @@ gzip_size() {
   gzip -c "$1" | wc -c | tr -d '[:space:]'
 }
 
+# Emit one JSON asset entry: asset_entry <path>
+asset_entry() {
+  local path="$1"
+  local size gzip_bytes
+  size=$(file_size "$path")
+  gzip_bytes=$(gzip_size "$path")
+  printf '{\n      "size": %s,\n      "sizeKB": %s,\n      "gzipSize": %s,\n      "gzipKB": %s\n    }' \
+    "$size" "$((size / 1024))" "$gzip_bytes" "$((gzip_bytes / 1024))"
+}
+
 if [ -f "$WASM_FILE" ]; then
-  for REQUIRED_FILE in "$SONARE_JS_FILE" "$INDEX_JS_FILE"; do
+  for REQUIRED_FILE in "$SONARE_JS_FILE" "$INDEX_JS_FILE" "$WORKLET_JS_FILE" \
+    "$RT_WASM_FILE" "$RT_JS_FILE" "$RT_MODULE_JS_FILE"; do
     if [ ! -f "$REQUIRED_FILE" ]; then
       echo "❌ Asset file not found: $REQUIRED_FILE"
       exit 1
@@ -107,7 +122,11 @@ if [ -f "$WASM_FILE" ]; then
       "sizeKB": $SIZE_KB,
       "gzipSize": $GZIP_SIZE,
       "gzipKB": $GZIP_KB
-    }
+    },
+    "worklet.js": $(asset_entry "$WORKLET_JS_FILE"),
+    "sonare-rt.wasm": $(asset_entry "$RT_WASM_FILE"),
+    "sonare-rt.js": $(asset_entry "$RT_JS_FILE"),
+    "sonare-rt-module.js": $(asset_entry "$RT_MODULE_JS_FILE")
   },
   "total": {
     "size": $TOTAL_SIZE,

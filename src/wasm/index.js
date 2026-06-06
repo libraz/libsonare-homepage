@@ -1,68 +1,16 @@
-// src/public_types.ts
-var PitchClass = {
-  C: 0,
-  Cs: 1,
-  D: 2,
-  Ds: 3,
-  E: 4,
-  F: 5,
-  Fs: 6,
-  G: 7,
-  Gs: 8,
-  A: 9,
-  As: 10,
-  B: 11
-};
-var Mode = {
-  Major: 0,
-  Minor: 1,
-  Dorian: 2,
-  Phrygian: 3,
-  Lydian: 4,
-  Mixolydian: 5,
-  Locrian: 6
-};
-var KeyProfile = {
-  KrumhanslSchmuckler: 0,
-  Temperley: 1,
-  Shaath: 2,
-  FaraldoEDMT: 3,
-  FaraldoEDMA: 4,
-  FaraldoEDMM: 5,
-  BellmanBudge: 6
-};
-var ChordQuality = {
-  Major: 0,
-  Minor: 1,
-  Diminished: 2,
-  Augmented: 3,
-  Dominant7: 4,
-  Major7: 5,
-  Minor7: 6,
-  Sus2: 7,
-  Sus4: 8,
-  Unknown: 9,
-  Add9: 10,
-  MinorAdd9: 11,
-  Dim7: 12,
-  HalfDim7: 13,
-  Major9: 14,
-  Dominant9: 15,
-  Sus2Add4: 16
-};
-var SectionType = {
-  Intro: 0,
-  Verse: 1,
-  PreChorus: 2,
-  Chorus: 3,
-  Bridge: 4,
-  Instrumental: 5,
-  Outro: 6,
-  Unknown: 7
-};
+// src/module_state.ts
+var wasmModule = null;
+function setSonareModule(module2) {
+  wasmModule = module2;
+}
+function getSonareModule() {
+  if (!wasmModule) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return wasmModule;
+}
 
-// src/index.ts
-var EXPECTED_ENGINE_ABI_VERSION = 2;
+// src/codes.ts
 function automationCurveCode(curve) {
   switch (curve) {
     case "linear":
@@ -113,1150 +61,396 @@ function meterTapCode(tap) {
 function sendTimingCode(timing) {
   return timing === "preFader" || timing === 0 ? 0 : 1;
 }
-var module = null;
-var initPromise = null;
-function assertNonEmptySamples(fnName, samples, argName = "samples") {
-  if (samples.length === 0) {
-    throw new RangeError(`${fnName}: ${argName} must not be empty`);
+
+// src/mixer.ts
+var Mixer = class _Mixer {
+  constructor(mixer) {
+    this.mixer = mixer;
   }
-}
-function assertFiniteSamples(fnName, samples, validate, argName = "samples") {
-  if (!validate) {
-    return;
+  /**
+   * Build a mixer from a scene JSON string.
+   *
+   * @param json - Scene JSON (strips, buses, sends, connections, inserts)
+   * @param sampleRate - Sample rate in Hz (default: 48000)
+   * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
+   */
+  static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
+    const module2 = getSonareModule();
+    return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize));
   }
-  for (let i = 0; i < samples.length; i++) {
-    const v = samples[i];
-    if (!Number.isFinite(v)) {
-      throw new RangeError(`${fnName}: ${argName} contains NaN or Inf at index ${i}`);
+  /** Rebuild and compile the routing graph from the current scene topology. */
+  compile() {
+    this.mixer.compile();
+  }
+  /**
+   * Mix one block of per-strip stereo audio into the stereo master.
+   *
+   * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
+   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
+   * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
+   */
+  processStereo(leftChannels, rightChannels) {
+    if (leftChannels.length !== rightChannels.length) {
+      throw new Error("leftChannels and rightChannels must have the same length.");
     }
+    return this.mixer.processStereo(leftChannels, rightChannels);
   }
-}
-function assertSamples(fnName, samples, validate, argName = "samples") {
-  assertNonEmptySamples(fnName, samples, argName);
-  assertFiniteSamples(fnName, samples, validate, argName);
-}
-function assertFiniteScalar(fnName, value, argName) {
-  if (!Number.isFinite(value)) {
-    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
-  }
-}
-async function init(options) {
-  if (module) {
-    return;
-  }
-  if (initPromise) {
-    return initPromise;
-  }
-  initPromise = (async () => {
-    try {
-      const createModule = (await import("./sonare.js")).default;
-      module = await createModule(options);
-    } catch (error) {
-      initPromise = null;
-      throw error;
+  /**
+   * Mix one block into caller-owned output arrays.
+   *
+   * This avoids allocating the result object and result `Float32Array`s. It is
+   * intended for realtime bridges such as AudioWorklet; the input channel count
+   * must match the scene strip count and all arrays must have the same length.
+   */
+  processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
+    if (leftChannels.length !== rightChannels.length) {
+      throw new Error("leftChannels and rightChannels must have the same length.");
     }
-  })();
-  return initPromise;
-}
-function isInitialized() {
-  return module !== null;
-}
-function version() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.version();
-}
-function engineAbiVersion() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.engineAbiVersion();
-}
-function voiceChangerAbiVersion() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.voiceChangerAbiVersion();
-}
-var VOICE_PRESET_ORDINALS = [
-  "neutral-monitor",
-  "bright-idol",
-  "soft-whisper",
-  "deep-narrator",
-  "robot-mascot",
-  "dark-villain"
-];
-function resolveVoicePresetOrdinal(preset) {
-  if (typeof preset === "number") {
-    return preset;
-  }
-  const ordinal = VOICE_PRESET_ORDINALS.indexOf(preset);
-  if (ordinal < 0) {
-    throw new Error(`Unknown voice character preset: ${preset}`);
-  }
-  return ordinal;
-}
-function voiceCharacterPresetId(preset) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.voiceCharacterPresetId(resolveVoicePresetOrdinal(preset));
-}
-function realtimeVoiceChangerPresetConfig(preset) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.realtimeVoiceChangerPresetConfig(resolveVoicePresetOrdinal(preset));
-}
-function engineCapabilities() {
-  const abiVersion = engineAbiVersion();
-  const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
-  const atomics = typeof globalThis.Atomics === "object";
-  const audioWorklet = typeof AudioWorkletNode !== "undefined" || typeof globalThis.AudioWorkletProcessor !== "undefined";
-  return {
-    engineAbiVersion: abiVersion,
-    expectedEngineAbiVersion: EXPECTED_ENGINE_ABI_VERSION,
-    abiCompatible: abiVersion === EXPECTED_ENGINE_ABI_VERSION,
-    sharedArrayBuffer,
-    atomics,
-    audioWorklet,
-    mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
-  };
-}
-var RealtimeEngine = class {
-  constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024) {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
+    if (outLeft.length !== outRight.length) {
+      throw new Error("outLeft and outRight must have the same length.");
     }
-    const capabilities = engineCapabilities();
-    if (!capabilities.abiCompatible) {
-      throw new Error(
-        `Engine ABI mismatch: wasm=${capabilities.engineAbiVersion}, expected=${capabilities.expectedEngineAbiVersion}`
-      );
-    }
-    this.native = new module.RealtimeEngine(
-      sampleRate,
-      maxBlockSize,
-      commandCapacity,
-      telemetryCapacity
+    this.mixer.processStereoInto(leftChannels, rightChannels, outLeft, outRight);
+  }
+  /**
+   * Create reusable WASM-heap input/output views for realtime-style processing.
+   *
+   * Fill `leftInputs[i]` / `rightInputs[i]`, call `process()`, then read
+   * `outLeft` / `outRight`. The views are owned by this mixer and become invalid
+   * after {@link delete}.
+   */
+  createRealtimeBuffer() {
+    const stripCount = this.stripCount();
+    let leftInputs = [];
+    let rightInputs = [];
+    let outLeft = this.mixer.outputLeftView();
+    let outRight = this.mixer.outputRightView();
+    const acquire = () => {
+      leftInputs = [];
+      rightInputs = [];
+      for (let index = 0; index < stripCount; index++) {
+        leftInputs.push(this.mixer.inputLeftView(index));
+        rightInputs.push(this.mixer.inputRightView(index));
+      }
+      outLeft = this.mixer.outputLeftView();
+      outRight = this.mixer.outputRightView();
+    };
+    acquire();
+    const reacquireIfDetached = () => {
+      if (outLeft.byteLength === 0 || (leftInputs[0]?.byteLength ?? 1) === 0) {
+        acquire();
+      }
+    };
+    return {
+      get leftInputs() {
+        reacquireIfDetached();
+        return leftInputs;
+      },
+      get rightInputs() {
+        reacquireIfDetached();
+        return rightInputs;
+      },
+      get outLeft() {
+        reacquireIfDetached();
+        return outLeft;
+      },
+      get outRight() {
+        reacquireIfDetached();
+        return outRight;
+      },
+      process: (numSamples = outLeft.length) => {
+        reacquireIfDetached();
+        this.mixer.processPreparedStereo(numSamples);
+      }
+    };
+  }
+  /** Number of strips in the mixer (e.g. strips loaded from the scene). */
+  stripCount() {
+    return this.mixer.stripCount();
+  }
+  /**
+   * Schedule sample-accurate insert-parameter automation on a strip's insert.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param insertIndex - Index into the strip's combined insert sequence
+   *   (`[pre-inserts... post-inserts...]`)
+   * @param paramId - Processor-specific parameter id
+   * @param samplePos - Absolute samples from the start of processing (the mixer
+   *   advances an internal position from 0 on the first {@link processStereo}
+   *   call; recompiling resets it to 0)
+   * @param value - Target parameter value
+   * @param curve - Interpolation curve (default: `'linear'`)
+   * @throws If the strip index is out of range or the schedule call fails
+   *   (unknown curve, out-of-range insert index, or full event lane)
+   */
+  scheduleInsertAutomation(stripIndex, insertIndex, paramId, samplePos, value, curve = "linear") {
+    this.mixer.scheduleInsertAutomation(
+      stripIndex,
+      insertIndex,
+      paramId,
+      samplePos,
+      value,
+      automationCurveCode(curve)
     );
   }
-  prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024) {
-    this.native.prepare(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity);
-  }
-  /** Queue a sample-accurate parameter change (engine kSetParam). */
-  setParameter(paramId, value, renderFrame = -1) {
-    this.native.setParameter(paramId, value, renderFrame);
-  }
-  /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
-  setParameterSmoothed(paramId, value, renderFrame = -1) {
-    this.native.setParameterSmoothed(paramId, value, renderFrame);
-  }
-  /** Read back the current transport state snapshot. */
-  getTransportState() {
-    return this.native.getTransportState();
-  }
-  play(renderFrame = -1) {
-    this.native.play(renderFrame);
-  }
-  stop(renderFrame = -1) {
-    this.native.stop(renderFrame);
-  }
-  seekSample(timelineSample, renderFrame = -1) {
-    this.native.seekSample(timelineSample, renderFrame);
-  }
-  seekPpq(ppq, renderFrame = -1) {
-    this.native.seekPpq(ppq, renderFrame);
-  }
-  setTempo(bpm) {
-    this.native.setTempo(bpm);
-  }
-  setTimeSignature(numerator, denominator) {
-    this.native.setTimeSignature(numerator, denominator);
-  }
-  setLoop(startPpq, endPpq, enabled = true) {
-    this.native.setLoop(startPpq, endPpq, enabled);
-  }
-  addParameter(info) {
-    this.native.addParameter(info);
-  }
-  parameterCount() {
-    return this.native.parameterCount();
-  }
-  parameterInfoByIndex(index) {
-    return this.native.parameterInfoByIndex(index);
-  }
-  parameterInfo(id) {
-    return this.native.parameterInfo(id);
-  }
-  setAutomationLane(paramId, points) {
-    this.native.setAutomationLane(paramId, points);
-  }
-  automationLaneCount() {
-    return this.native.automationLaneCount();
-  }
-  setMarkers(markers) {
-    this.native.setMarkers(markers);
-  }
-  markerCount() {
-    return this.native.markerCount();
-  }
-  markerByIndex(index) {
-    return this.native.markerByIndex(index);
-  }
-  marker(id) {
-    return this.native.marker(id);
-  }
-  seekMarker(markerId, renderFrame = -1) {
-    this.native.seekMarker(markerId, renderFrame);
-  }
-  setLoopFromMarkers(startMarkerId, endMarkerId) {
-    this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
-  }
-  setMetronome(config) {
-    this.native.setMetronome(config);
-  }
-  metronome() {
-    return this.native.metronome();
-  }
-  countInEndSample(startSample, bars) {
-    return Number(this.native.countInEndSample(startSample, bars));
-  }
-  setGraph(spec) {
-    this.native.setGraph(spec);
-  }
-  graphNodeCount() {
-    return this.native.graphNodeCount();
-  }
-  graphConnectionCount() {
-    return this.native.graphConnectionCount();
-  }
-  setClips(clips) {
-    this.native.setClips(clips);
-  }
-  clipCount() {
-    return this.native.clipCount();
-  }
-  setCaptureBuffer(numChannels, capacityFrames) {
-    this.native.setCaptureBuffer(numChannels, capacityFrames);
-  }
-  armCapture(armed = true) {
-    this.native.armCapture(armed);
-  }
-  setCapturePunch(startSample, endSample, enabled = true) {
-    this.native.setCapturePunch(startSample, endSample, enabled);
-  }
-  resetCapture() {
-    this.native.resetCapture();
-  }
-  captureStatus() {
-    return this.native.captureStatus();
-  }
-  capturedAudio() {
-    return this.native.capturedAudio();
-  }
-  process(channels) {
-    return this.native.process(channels);
+  /**
+   * Resolve a strip's index in `[0, stripCount())` from its scene id, or `null`
+   * when no strip with that id exists (matches the Node binding's `number | null`).
+   */
+  stripById(id) {
+    const index = this.mixer.stripById(id);
+    return index < 0 ? null : index;
   }
   /**
-   * Allocates persistent per-channel WASM-heap scratch for the zero-copy
-   * `getChannelBuffer` / `processPrepared` realtime path. Call once (off the
-   * audio thread) before driving `processPrepared` from an AudioWorklet so the
-   * render callback never allocates on the C++/JS heap.
+   * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
+   * `'submix'` (defaults to `'aux'`). Marks the routing graph dirty; call
+   * {@link compile} (or {@link processStereo}) to rebuild.
    */
-  prepareChannels(numChannels, maxFrames) {
-    this.native.prepareChannels(numChannels, maxFrames);
+  addBus(id, role = "aux") {
+    this.mixer.addBus(id, role);
+  }
+  /** Remove a bus by id. Marks the routing graph dirty. */
+  removeBus(id) {
+    this.mixer.removeBus(id);
+  }
+  /** Number of buses in the mixer topology. */
+  busCount() {
+    return this.mixer.busCount();
   }
   /**
-   * Returns a Float32Array view onto the persistent WASM-heap scratch for one
-   * channel (valid for up to `numFrames`). Fill it, call `processPrepared`, then
-   * read the same view back. Re-acquire after WASM memory growth.
+   * Add a VCA group with the given gain offset (dB). `members` is a list of
+   * strip ids governed by the group (may be empty).
    */
-  getChannelBuffer(channel, numFrames) {
-    return this.native.getChannelBuffer(channel, numFrames);
+  addVcaGroup(id, gainDb = 0, members = []) {
+    this.mixer.addVcaGroup(id, gainDb, members);
+  }
+  /** Set an existing VCA group's gain in dB. */
+  setVcaGroupGainDb(id, gainDb) {
+    this.mixer.setVcaGroupGainDb(id, gainDb);
+  }
+  /** Remove a VCA group by id. */
+  removeVcaGroup(id) {
+    this.mixer.removeVcaGroup(id);
+  }
+  /** Number of VCA groups in the mixer topology. */
+  vcaGroupCount() {
+    return this.mixer.vcaGroupCount();
+  }
+  /** Set the strip's input trim in dB. */
+  setInputTrimDb(stripIndex, db) {
+    this.mixer.setInputTrimDb(stripIndex, db);
+  }
+  /** Set the strip's fader level in dB. */
+  setFaderDb(stripIndex, db) {
+    this.mixer.setFaderDb(stripIndex, db);
   }
   /**
-   * Runs the engine in place over the prepared per-channel scratch buffers.
-   * Allocation-free: safe to call on the AudioWorklet render thread after
-   * `prepareChannels`.
+   * Set the strip's pan position.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param pan - Pan position in `[-1, 1]`
+   * @param panMode - Optional pan mode. When omitted the strip's current pan
+   *   mode is kept (passes `SONARE_PAN_MODE_KEEP`), so a plain pan nudge does
+   *   not reset a scene-defined `'stereoPan'` / `'dualPan'` mode back to
+   *   balance. Pass `'balance'` (or `0`) explicitly to force balance mode.
    */
-  processPrepared(numFrames) {
-    this.native.processPrepared(numFrames);
+  setPan(stripIndex, pan, panMode) {
+    const mode = panMode === void 0 ? -1 : panModeCode(panMode);
+    this.mixer.setPan(stripIndex, pan, mode);
   }
-  processWithMonitor(channels) {
-    return this.native.processWithMonitor(channels);
+  /** Set the strip's stereo width. */
+  setWidth(stripIndex, width) {
+    this.mixer.setWidth(stripIndex, width);
   }
-  renderOffline(channels, blockSize = 128) {
-    return this.native.renderOffline(channels, blockSize);
+  /** Set the strip's mute state. */
+  setMuted(stripIndex, muted) {
+    this.mixer.setMuted(stripIndex, muted);
   }
-  bounceOffline(options) {
-    return this.native.bounceOffline(options);
+  /**
+   * Set a strip's solo state. Takes effect on the next process without a
+   * graph recompile.
+   */
+  setSoloed(stripIndex, soloed) {
+    this.mixer.setSoloed(stripIndex, soloed);
   }
-  freezeOffline(options) {
-    return this.native.freezeOffline(options);
+  /**
+   * Mark a strip solo-safe so it is never implied-muted by another strip's
+   * solo. Takes effect on the next process without a graph recompile.
+   */
+  setSoloSafe(stripIndex, soloSafe) {
+    this.mixer.setSoloSafe(stripIndex, soloSafe);
   }
-  drainTelemetry(maxRecords = 1024) {
-    return this.native.drainTelemetry(maxRecords);
+  /** Invert the polarity of the left and/or right channel of a strip. */
+  setPolarityInvert(stripIndex, invertLeft, invertRight) {
+    this.mixer.setPolarityInvert(stripIndex, invertLeft, invertRight);
   }
-  drainMeterTelemetry(maxRecords = 1024) {
-    return this.native.drainMeterTelemetry(maxRecords);
+  /** Set the strip's pan law. */
+  setPanLaw(stripIndex, panLaw) {
+    this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
   }
+  /**
+   * Set a per-strip channel delay in samples. This changes the strip's reported
+   * latency; recompile to re-run latency compensation.
+   */
+  setChannelDelaySamples(stripIndex, delaySamples) {
+    this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
+  }
+  /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
+  setVcaOffsetDb(stripIndex, offsetDb) {
+    this.mixer.setVcaOffsetDb(stripIndex, offsetDb);
+  }
+  /** Set independent left/right pan positions (dual-pan mode). */
+  setDualPan(stripIndex, leftPan, rightPan) {
+    this.mixer.setDualPan(stripIndex, leftPan, rightPan);
+  }
+  /**
+   * Add a send to a strip after construction.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param id - Send id
+   * @param destinationBusId - Destination bus id
+   * @param sendDb - Initial send level in dB
+   * @param timing - `'preFader'` or `'postFader'` (default: `'postFader'`)
+   * @returns The new send's index
+   */
+  addSend(stripIndex, id, destinationBusId, sendDb = 0, timing = "postFader") {
+    return this.mixer.addSend(stripIndex, id, destinationBusId, sendDb, sendTimingCode(timing));
+  }
+  /** Set the send level (in dB) for an existing send by index. */
+  setSendDb(stripIndex, sendIndex, sendDb) {
+    this.mixer.setSendDb(stripIndex, sendIndex, sendDb);
+  }
+  /**
+   * Remove an existing send from a strip by index.
+   *
+   * Sends are addressed in add order. After removal, sends with a higher index
+   * than `sendIndex` shift down by one. Recompile (or process) before reading
+   * results so the routing graph rebuilds.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param sendIndex - Send index in add order
+   */
+  removeSend(stripIndex, sendIndex) {
+    this.mixer.removeSend(stripIndex, sendIndex);
+  }
+  /**
+   * Read a strip's meter snapshot at the given tap point.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param tap - `'preFader'` or `'postFader'` (default: `'postFader'`)
+   */
+  meterTap(stripIndex, tap = "postFader") {
+    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
+  }
+  /**
+   * Read a strip's meter snapshot.
+   *
+   * With no `tap` argument this reads the strip's own (post-fader) meter,
+   * matching the Node/Python tap-less `stripMeter` contract. Pass an optional
+   * `tap` (`'preFader'` / `'postFader'`) to read the tap-selectable snapshot
+   * instead — the same backing call as {@link meterTap}.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param tap - Optional tap point (`'preFader'` / `'postFader'`); when omitted
+   *   the tap-less post-fader strip meter is read.
+   */
+  stripMeter(stripIndex, tap) {
+    if (tap === void 0) {
+      return this.mixer.stripMeter(stripIndex);
+    }
+    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
+  }
+  /**
+   * Schedule sample-accurate fader automation on a strip.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param samplePos - Absolute samples from the start of processing
+   * @param faderDb - Target fader level in dB
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  scheduleFaderAutomation(stripIndex, samplePos, faderDb, curve = "linear") {
+    this.mixer.scheduleFaderAutomation(stripIndex, samplePos, faderDb, automationCurveCode(curve));
+  }
+  /**
+   * Schedule sample-accurate pan automation on a strip.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param samplePos - Absolute samples from the start of processing
+   * @param pan - Target pan position
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  schedulePanAutomation(stripIndex, samplePos, pan, curve = "linear") {
+    this.mixer.schedulePanAutomation(stripIndex, samplePos, pan, automationCurveCode(curve));
+  }
+  /**
+   * Schedule sample-accurate width automation on a strip.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param samplePos - Absolute samples from the start of processing
+   * @param width - Target stereo width
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  scheduleWidthAutomation(stripIndex, samplePos, width, curve = "linear") {
+    this.mixer.scheduleWidthAutomation(stripIndex, samplePos, width, automationCurveCode(curve));
+  }
+  /**
+   * Schedule sample-accurate send-level automation on a strip's send.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param sendIndex - Send index in the strip's add order
+   * @param samplePos - Absolute samples from the start of processing
+   * @param db - Target send level in dB
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  scheduleSendAutomation(stripIndex, sendIndex, samplePos, db, curve = "linear") {
+    this.mixer.scheduleSendAutomation(
+      stripIndex,
+      sendIndex,
+      samplePos,
+      db,
+      automationCurveCode(curve)
+    );
+  }
+  /**
+   * Read up to `maxPoints` of a strip's most recent goniometer samples
+   * (oldest to newest).
+   */
+  readGoniometerLatest(stripIndex, maxPoints) {
+    return this.mixer.readGoniometerLatest(stripIndex, maxPoints);
+  }
+  /** Serialize the current scene (strips, buses, sends, connections) to JSON. */
+  toSceneJson() {
+    return this.mixer.toSceneJson();
+  }
+  /**
+   * Maximum processor tail length (samples) in the compiled mixer graph. Lazily
+   * compiles the routing graph if the topology is dirty.
+   */
+  tailSamples() {
+    return this.mixer.tailSamples();
+  }
+  /**
+   * Drain delayed / tail audio by processing a zero-input block of `numSamples`
+   * frames after the host stops feeding strip inputs. Returns the mixed stereo
+   * master (`left`, `right`, `sampleRate`).
+   */
+  drainTailStereo(numSamples) {
+    return this.mixer.drainTailStereo(numSamples);
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.mixer.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
   destroy() {
-    this.native.delete();
+    this.delete();
   }
 };
-function detectBpm(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.detectBpm(samples, sampleRate);
-}
-function detectKey(samples, sampleRate = 22050, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const result = module._detectKeyWithOptions(
-    samples,
-    sampleRate,
-    options.nFft ?? 4096,
-    options.hopLength ?? 512,
-    options.useHpss ?? false,
-    options.loudnessWeighted ?? false,
-    options.highPassHz ?? 0,
-    keyModeValues(options.modes),
-    keyProfileValue(options.profile),
-    options.genreHint ?? ""
-  );
-  return {
-    root: result.root,
-    mode: result.mode,
-    confidence: result.confidence,
-    name: result.name,
-    shortName: result.shortName
-  };
-}
-function convertKeyCandidate(wasm) {
-  return {
-    key: {
-      root: wasm.key.root,
-      mode: wasm.key.mode,
-      confidence: wasm.key.confidence,
-      name: wasm.key.name,
-      shortName: wasm.key.shortName
-    },
-    correlation: wasm.correlation
-  };
-}
-function keyModeValues(modes) {
-  if (!modes) {
-    return [];
-  }
-  if (modes === "major-minor") {
-    return [Mode.Major, Mode.Minor];
-  }
-  if (modes === "all" || modes === "modal") {
-    return [
-      Mode.Major,
-      Mode.Minor,
-      Mode.Dorian,
-      Mode.Phrygian,
-      Mode.Lydian,
-      Mode.Mixolydian,
-      Mode.Locrian
-    ];
-  }
-  const names = {
-    major: Mode.Major,
-    minor: Mode.Minor,
-    dorian: Mode.Dorian,
-    phrygian: Mode.Phrygian,
-    lydian: Mode.Lydian,
-    mixolydian: Mode.Mixolydian,
-    locrian: Mode.Locrian
-  };
-  return modes.map((mode) => typeof mode === "number" ? mode : names[mode]);
-}
-function keyProfileValue(profile) {
-  if (profile === void 0) {
-    return -1;
-  }
-  if (typeof profile === "number") {
-    return profile;
-  }
-  const names = {
-    ks: KeyProfile.KrumhanslSchmuckler,
-    krumhansl: KeyProfile.KrumhanslSchmuckler,
-    temperley: KeyProfile.Temperley,
-    shaath: KeyProfile.Shaath,
-    keyfinder: KeyProfile.Shaath,
-    "faraldo-edmt": KeyProfile.FaraldoEDMT,
-    edmt: KeyProfile.FaraldoEDMT,
-    "faraldo-edma": KeyProfile.FaraldoEDMA,
-    edma: KeyProfile.FaraldoEDMA,
-    "faraldo-edmm": KeyProfile.FaraldoEDMM,
-    edmm: KeyProfile.FaraldoEDMM,
-    "bellman-budge": KeyProfile.BellmanBudge,
-    bellman: KeyProfile.BellmanBudge
-  };
-  return names[profile];
-}
-function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module._detectKeyCandidates(
-    samples,
-    sampleRate,
-    options.nFft ?? 4096,
-    options.hopLength ?? 512,
-    options.useHpss ?? false,
-    options.loudnessWeighted ?? false,
-    options.highPassHz ?? 0,
-    keyModeValues(options.modes),
-    keyProfileValue(options.profile),
-    options.genreHint ?? ""
-  ).map(convertKeyCandidate);
-}
-function detectOnsets(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.detectOnsets(samples, sampleRate);
-}
-function detectBeats(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.detectBeats(samples, sampleRate);
-}
-function detectDownbeats(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.detectDownbeats(samples, sampleRate);
-}
-function convertChordAnalysisResult(wasm) {
-  return {
-    chords: wasm.chords.map((c) => ({
-      root: c.root,
-      bass: c.bass,
-      quality: c.quality,
-      start: c.start,
-      end: c.end,
-      confidence: c.confidence,
-      name: c.name
-    }))
-  };
-}
-function detectChords(samples, sampleRate = 22050, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const result = module.detectChords(
-    samples,
-    sampleRate,
-    options.minDuration ?? 0.3,
-    options.smoothingWindow ?? 2,
-    options.threshold ?? 0.5,
-    options.useTriadsOnly ?? false,
-    options.nFft ?? 2048,
-    options.hopLength ?? 512,
-    options.useBeatSync ?? true,
-    options.useHmm ?? false,
-    options.hmmBeamWidth ?? 24,
-    options.useKeyContext ?? false,
-    options.keyRoot ?? PitchClass.C,
-    options.keyMode ?? Mode.Major,
-    options.detectInversions ?? false,
-    chordChromaMethodValue(options.chromaMethod ?? "stft")
-  );
-  return convertChordAnalysisResult(result);
-}
-function chordChromaMethodValue(method) {
-  if (method === "stft") {
-    return 0;
-  }
-  if (method === "nnls") {
-    return 1;
-  }
-  throw new Error(`Invalid chord chroma method: ${method}`);
-}
-function convertAnalysisResult(wasm) {
-  const beatTimes = new Float32Array(wasm.beats.length);
-  for (let i = 0; i < wasm.beats.length; i++) {
-    beatTimes[i] = wasm.beats[i].time;
-  }
-  return {
-    bpm: wasm.bpm,
-    bpmConfidence: wasm.bpmConfidence,
-    key: {
-      root: wasm.key.root,
-      mode: wasm.key.mode,
-      confidence: wasm.key.confidence,
-      name: wasm.key.name,
-      shortName: wasm.key.shortName
-    },
-    timeSignature: wasm.timeSignature,
-    beatTimes,
-    beats: wasm.beats,
-    chords: wasm.chords.map((c) => ({
-      root: c.root,
-      bass: c.bass,
-      quality: c.quality,
-      start: c.start,
-      end: c.end,
-      confidence: c.confidence,
-      name: c.name
-    })),
-    sections: wasm.sections.map((s) => ({
-      type: s.type,
-      start: s.start,
-      end: s.end,
-      energyLevel: s.energyLevel,
-      confidence: s.confidence,
-      name: s.name
-    })),
-    timbre: wasm.timbre,
-    dynamics: wasm.dynamics,
-    rhythm: wasm.rhythm,
-    form: wasm.form
-  };
-}
-function analyze(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const result = module.analyze(samples, sampleRate);
-  return convertAnalysisResult(result);
-}
-function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const result = module.analyzeImpulseResponse(
-    samples,
-    sampleRate,
-    nOctaveBands
-  );
-  return result;
-}
-function detectAcoustic(samples, sampleRate = 48e3, nOctaveBands = 6, nThirdOctaveSubbands = 24, minDecayDb = 30, noiseFloorMarginDb = 10) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const result = module.detectAcoustic(
-    samples,
-    sampleRate,
-    nOctaveBands,
-    nThirdOctaveSubbands,
-    minDecayDb,
-    noiseFloorMarginDb
-  );
-  return result;
-}
-function synthesizeRir(options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (typeof module.synthesizeRir !== "function") {
-    throw new Error("libsonare was built without acoustic-simulation support");
-  }
-  return module.synthesizeRir(options);
-}
-function estimateRoom(samples, sampleRate = 48e3, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (typeof module.estimateRoom !== "function") {
-    throw new Error("libsonare was built without acoustic-simulation support");
-  }
-  return module.estimateRoom(samples, sampleRate, options);
-}
-function roomMorph(samples, sampleRate, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (typeof module.roomMorph !== "function") {
-    throw new Error("libsonare was built without acoustic-simulation support");
-  }
-  return module.roomMorph(samples, sampleRate, options);
-}
-function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const result = module.analyzeWithProgress(samples, sampleRate, onProgress);
-  return convertAnalysisResult(result);
-}
-function analyzeBpm(samples, sampleRate = 22050, bpmMin = 30, bpmMax = 300, startBpm = 120, nFft = 2048, hopLength = 512, maxCandidates = 5) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.analyzeBpm(
-    samples,
-    sampleRate,
-    bpmMin,
-    bpmMax,
-    startBpm,
-    nFft,
-    hopLength,
-    maxCandidates
-  );
-}
-function analyzeRhythm(samples, sampleRate = 22050, bpmMin = 60, bpmMax = 200, startBpm = 120, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.analyzeRhythm(samples, sampleRate, bpmMin, bpmMax, startBpm, nFft, hopLength);
-}
-function analyzeDynamics(samples, sampleRate = 22050, windowSec = 0.4, hopLength = 512, compressionThreshold = 6) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.analyzeDynamics(samples, sampleRate, windowSec, hopLength, compressionThreshold);
-}
-function analyzeTimbre(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 13, windowSec = 0.5) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.analyzeTimbre(samples, sampleRate, nFft, hopLength, nMels, nMfcc, windowSec);
-}
-function hasFfmpegSupport() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.hasFfmpegSupport();
-}
-function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.hpss(samples, sampleRate, kernelHarmonic, kernelPercussive);
-}
-function harmonic(samples, sampleRate, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("harmonic", samples, options.validate !== false);
-  return module.harmonic(samples, sampleRate);
-}
-function percussive(samples, sampleRate, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("percussive", samples, options.validate !== false);
-  return module.percussive(samples, sampleRate);
-}
-function timeStretch(samples, sampleRate, rate, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("timeStretch", samples, options.validate !== false);
-  return module.timeStretch(samples, sampleRate, rate);
-}
-function pitchShift(samples, sampleRate, semitones, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("pitchShift", samples, options.validate !== false);
-  return module.pitchShift(samples, sampleRate, semitones);
-}
-function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("pitchCorrectToMidi", samples, options.validate !== false);
-  return module.pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
-}
-function noteStretch(samples, sampleRate = 22050, onsetSample = 0, offsetSample = 0, stretchRatio = 1, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("noteStretch", samples, options.validate !== false);
-  return module.noteStretch(samples, sampleRate, onsetSample, offsetSample, stretchRatio);
-}
-function voiceChange(samples, sampleRate = 22050, pitchSemitones = 0, formantFactor = 1, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("voiceChange", samples, options.validate !== false);
-  return module.voiceChange(samples, sampleRate, pitchSemitones, formantFactor);
-}
-function voiceChangeRealtime(samples, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("voiceChangeRealtime", samples, options.validate !== false);
-  const channels = options.channels ?? 1;
-  if (channels !== 1 && channels !== 2) {
-    throw new Error("voiceChangeRealtime: channels must be 1 or 2.");
-  }
-  const sampleRate = options.sampleRate ?? 48e3;
-  const blockSize = Math.max(1, Math.floor(options.blockSize ?? 512));
-  const changer = new RealtimeVoiceChanger(options.preset ?? "neutral-monitor");
-  try {
-    changer.prepare(sampleRate, blockSize, channels);
-    const out = new Float32Array(samples.length);
-    if (channels === 1) {
-      for (let offset = 0; offset < samples.length; offset += blockSize) {
-        const block = samples.subarray(offset, Math.min(offset + blockSize, samples.length));
-        out.set(changer.processMono(block), offset);
-      }
-    } else {
-      const frameStride = blockSize * 2;
-      for (let offset = 0; offset < samples.length; offset += frameStride) {
-        const block = samples.subarray(offset, Math.min(offset + frameStride, samples.length));
-        out.set(changer.processInterleaved(block, 2), offset);
-      }
-    }
-    return out;
-  } finally {
-    changer.delete();
-  }
-}
-function normalize(samples, sampleRate, targetDb = 0, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("normalize", samples, options.validate !== false);
-  return module.normalize(samples, sampleRate, targetDb);
-}
-function mastering(samples, sampleRate = 22050, targetLufs = -14, ceilingDb = -1, truePeakOversample = 4) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.mastering(samples, sampleRate, targetLufs, ceilingDb, truePeakOversample);
-}
-function masteringProcessorNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringProcessorNames();
-}
-function masteringPairProcessorNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringPairProcessorNames();
-}
-function masteringPairAnalysisNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringPairAnalysisNames();
-}
-function masteringStereoAnalysisNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringStereoAnalysisNames();
-}
-function masteringProcess(processorName, samples, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringProcess(processorName, samples, sampleRate, params);
-}
-function masteringProcessStereo(processorName, left, right, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return module.masteringProcessStereo(processorName, left, right, sampleRate, params);
-}
-function masteringPairProcess(processorName, source, reference, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringPairProcess(processorName, source, reference, sampleRate, params);
-}
-function masteringPairAnalyze(analysisName, source, reference, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringPairAnalyze(analysisName, source, reference, sampleRate, params);
-}
-function masteringStereoAnalyze(analysisName, left, right, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringStereoAnalyze(analysisName, left, right, sampleRate, params);
-}
-function masteringAssistantSuggest(samples, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringAssistantSuggest(samples, sampleRate, params);
-}
-function masteringAudioProfile(samples, sampleRate = 22050, params = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringAudioProfile(samples, sampleRate, params);
-}
-function masteringStreamingPreview(samples, sampleRate = 22050, platforms = []) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringStreamingPreview(samples, sampleRate, platforms);
-}
-function masteringRepairDeclick(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDeclick(samples, sampleRate, options);
-}
-function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDenoiseClassical(samples, sampleRate, options);
-}
-function masteringRepairDeclip(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDeclip(samples, sampleRate, options);
-}
-function masteringRepairDecrackle(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDecrackle(samples, sampleRate, options);
-}
-function masteringRepairDehum(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDehum(samples, sampleRate, options);
-}
-function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDereverbClassical(samples, sampleRate, options);
-}
-function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairTrimSilence(samples, sampleRate, options);
-}
-var COMPRESSOR_DETECTOR_MAP = {
-  peak: 0,
-  rms: 1,
-  log_rms: 2
-};
-function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
-  assertSamples("masteringDynamicsCompressor", samples, options.validate !== false);
-  const detector = typeof options.detector === "string" ? COMPRESSOR_DETECTOR_MAP[options.detector] : options.detector;
-  const opts = { ...options };
-  if (detector !== void 0) {
-    opts.detector = detector;
-  }
-  return requireModule().masteringDynamicsCompressor(samples, sampleRate, opts);
-}
-function masteringDynamicsGate(samples, sampleRate, options = {}) {
-  assertSamples("masteringDynamicsGate", samples, options.validate !== false);
-  return requireModule().masteringDynamicsGate(samples, sampleRate, options);
-}
-function masteringDynamicsTransientShaper(samples, sampleRate, options = {}) {
-  assertSamples("masteringDynamicsTransientShaper", samples, options.validate !== false);
-  return requireModule().masteringDynamicsTransientShaper(samples, sampleRate, options);
-}
-function masteringChain(samples, sampleRate = 22050, config) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringChain(samples, sampleRate, config);
-}
-function masteringChainStereo(left, right, sampleRate = 22050, config) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return module.masteringChainStereo(left, right, sampleRate, config);
-}
-function masteringChainWithProgress(samples, sampleRate = 22050, config, onProgress) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringChainWithProgress(
-    samples,
-    sampleRate,
-    config,
-    onProgress
-  );
-}
-function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config, onProgress) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return module.masteringChainStereoWithProgress(
-    left,
-    right,
-    sampleRate,
-    config,
-    onProgress
-  );
-}
-function masteringPresetNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masteringPresetNames();
-}
-function masterAudio(samples, sampleRate = 22050, presetName, overrides = null) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masterAudio(presetName, samples, sampleRate, overrides);
-}
-function masterAudioStereo(left, right, sampleRate = 22050, presetName, overrides = null) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return module.masterAudioStereo(presetName, left, right, sampleRate, overrides);
-}
-function masterAudioWithProgress(samples, sampleRate = 22050, presetName, onProgress, overrides = null) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.masterAudioWithProgress(presetName, samples, sampleRate, overrides, onProgress);
-}
-function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetName, onProgress, overrides = null) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return module.masterAudioStereoWithProgress(
-    presetName,
-    left,
-    right,
-    sampleRate,
-    overrides,
-    onProgress
-  );
-}
-function mixingScenePresetNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.mixingScenePresetNames();
-}
-function mixingScenePresetJson(presetName) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.mixingScenePresetJson(presetName);
-}
-function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  if (leftChannels.length === 0 || leftChannels.length !== rightChannels.length) {
-    throw new Error("leftChannels and rightChannels must have the same non-zero length.");
-  }
-  return module.mixStereo(
-    leftChannels,
-    rightChannels,
-    sampleRate,
-    options
-  );
-}
-var StreamingMasteringChain = class {
-  constructor(config) {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
-    }
-    this.chain = module.createStreamingMasteringChain(config);
-  }
-  /**
-   * Initialize processors for the given sample rate and block layout.
-   *
-   * @param sampleRate - Sample rate in Hz
-   * @param maxBlockSize - Maximum block size per process call
-   * @param numChannels - 1 (mono) or 2 (stereo)
-   */
-  prepare(sampleRate, maxBlockSize, numChannels) {
-    this.chain.prepare(sampleRate, maxBlockSize, numChannels);
-  }
-  /**
-   * Process one mono block, returning the processed samples (same length).
-   */
-  processMono(samples) {
-    return this.chain.processMono(samples);
-  }
-  /**
-   * Process one stereo block, returning the processed channels.
-   */
-  processStereo(left, right) {
-    if (left.length !== right.length) {
-      throw new Error("Stereo channel lengths must match.");
-    }
-    return this.chain.processStereo(left, right);
-  }
-  /** Reset all processor state without rebuilding. */
-  reset() {
-    this.chain.reset();
-  }
-  /** Total reported latency in samples across all active processors. */
-  latencySamples() {
-    return this.chain.latencySamples();
-  }
-  /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
-  stageNames() {
-    return this.chain.stageNames();
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.chain.delete();
-  }
-};
-var StreamingEqualizer = class {
-  constructor(config = {}) {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
-    }
-    this.eq = module.createEqualizer(config);
-  }
-  /**
-   * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
-   */
-  setBand(index, band) {
-    this.eq.setBand(index, band);
-  }
-  /** Disable and reset every band. */
-  clear() {
-    this.eq.clear();
-  }
-  /**
-   * Set the global phase mode: 1=ZeroLatency, 2=NaturalPhase, 3=LinearPhase.
-   */
-  setPhaseMode(mode) {
-    this.eq.setPhaseMode(mode);
-  }
-  /** Enable or disable output auto-gain compensation. */
-  setAutoGain(enabled) {
-    this.eq.setAutoGain(enabled);
-  }
-  /** Set all-band EQ gain scale as a 0.0..2.0 multiplier. */
-  setGainScale(scale) {
-    this.eq.setGainScale(scale);
-  }
-  /** Set post-EQ output gain in dB. */
-  setOutputGainDb(gainDb) {
-    this.eq.setOutputGainDb(gainDb);
-  }
-  /** Set post-EQ stereo balance in -1.0..1.0; mono input ignores pan. */
-  setOutputPan(pan) {
-    this.eq.setOutputPan(pan);
-  }
-  /**
-   * Provide a mono external sidechain key for dynamic bands that opt into
-   * `external_sidechain`. The samples are copied into an owned buffer.
-   */
-  setSidechainMono(samples) {
-    this.eq.setSidechainMono(samples);
-  }
-  /**
-   * Provide a stereo external sidechain key. Both channels must match length.
-   */
-  setSidechainStereo(left, right) {
-    if (left.length !== right.length) {
-      throw new Error("Sidechain channel lengths must match.");
-    }
-    this.eq.setSidechainStereo(left, right);
-  }
-  /** Release any borrowed external sidechain buffers. */
-  clearSidechain() {
-    this.eq.clearSidechain();
-  }
-  /** Auto-gain applied on the most recent block, in dB. */
-  lastAutoGainDb() {
-    return this.eq.lastAutoGainDb();
-  }
-  /** Reported processing latency in samples (non-zero for linear-phase bands). */
-  latencySamples() {
-    return this.eq.latencySamples();
-  }
-  /**
-   * Process one mono block, returning the equalized samples (same length).
-   */
-  processMono(samples) {
-    return this.eq.processMono(samples);
-  }
-  /**
-   * Process one stereo block, returning the equalized channels.
-   */
-  processStereo(left, right) {
-    if (left.length !== right.length) {
-      throw new Error("Stereo channel lengths must match.");
-    }
-    return this.eq.processStereo(left, right);
-  }
-  /**
-   * Read the latest pre/post spectrum snapshot for metering. `seq` increments
-   * each time a new snapshot is published.
-   */
-  spectrum() {
-    return this.eq.spectrum();
-  }
-  /**
-   * Configure bands so the source spectrum matches the reference spectrum.
-   *
-   * @param source - Source audio (mono samples)
-   * @param reference - Reference audio (mono samples)
-   * @param options - `sampleRate` (default 48000) and `maxBands` (default 8)
-   */
-  match(source, reference, options = {}) {
-    this.eq.match(source, reference, options);
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.eq.delete();
-  }
-};
-var StreamingRetune = class {
-  constructor(config = {}) {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
-    }
-    this.retune = module.createStreamingRetune(config);
-  }
-  /**
-   * Allocate and initialize native state for the given sample rate and maximum
-   * process block size.
-   */
-  prepare(sampleRate, maxBlockSize) {
-    this.retune.prepare(sampleRate, maxBlockSize);
-  }
-  /** Reset delay, grain, and overlap-add state without changing config. */
-  reset() {
-    this.retune.reset();
-  }
-  /**
-   * Update retune settings. Changing `grainSize` takes effect after the next
-   * {@link prepare} call.
-   */
-  setConfig(config) {
-    this.retune.setConfig(config);
-  }
-  /** Current native config. */
-  config() {
-    return this.retune.config();
-  }
-  /** Resolved grain size in samples after {@link prepare}. */
-  grainSize() {
-    return this.retune.grainSize();
-  }
-  /** Process one mono block, returning the shifted samples (same length). */
-  processMono(samples) {
-    return this.retune.processMono(samples);
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.retune.delete();
-  }
-};
+
+// src/realtime_voice_changer.ts
 var RealtimeVoiceChanger = class {
   constructor(config = "neutral-monitor") {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
-    }
-    this.changer = module.createRealtimeVoiceChanger(config);
+    const module2 = getSonareModule();
+    this.changer = module2.createRealtimeVoiceChanger(config);
   }
   prepare(sampleRate, maxBlockSize = 128, channels = 1) {
     this.changer.prepare(sampleRate, maxBlockSize, channels);
@@ -1347,23 +541,53 @@ var RealtimeVoiceChanger = class {
    * views are reused across calls and become invalid after {@link delete}.
    */
   createRealtimeMonoBuffer(numSamples) {
-    const input = this.getMonoInputBuffer(numSamples);
-    const output = this.getMonoOutputBuffer(numSamples);
+    let input = this.getMonoInputBuffer(numSamples);
+    let output = this.getMonoOutputBuffer(numSamples);
+    const reacquireIfDetached = () => {
+      if (input.byteLength === 0 || output.byteLength === 0) {
+        input = this.getMonoInputBuffer(numSamples);
+        output = this.getMonoOutputBuffer(numSamples);
+      }
+    };
     return {
-      input,
-      output,
-      process: () => this.processPreparedMono(numSamples)
+      get input() {
+        reacquireIfDetached();
+        return input;
+      },
+      get output() {
+        reacquireIfDetached();
+        return output;
+      },
+      process: () => {
+        reacquireIfDetached();
+        this.processPreparedMono(numSamples);
+      }
     };
   }
   /** Same as {@link createRealtimeMonoBuffer} but for interleaved I/O. */
   createRealtimeInterleavedBuffer(numFrames, numChannels) {
-    const input = this.getInterleavedInputBuffer(numFrames, numChannels);
-    const output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+    let input = this.getInterleavedInputBuffer(numFrames, numChannels);
+    let output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+    const reacquireIfDetached = () => {
+      if (input.byteLength === 0 || output.byteLength === 0) {
+        input = this.getInterleavedInputBuffer(numFrames, numChannels);
+        output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+      }
+    };
     return {
-      input,
-      output,
+      get input() {
+        reacquireIfDetached();
+        return input;
+      },
+      get output() {
+        reacquireIfDetached();
+        return output;
+      },
       channels: numChannels,
-      process: () => this.processPreparedInterleaved(numFrames, numChannels)
+      process: () => {
+        reacquireIfDetached();
+        this.processPreparedInterleaved(numFrames, numChannels);
+      }
     };
   }
   /**
@@ -1373,13 +597,28 @@ var RealtimeVoiceChanger = class {
    * become invalid after {@link delete}.
    */
   createRealtimePlanarBuffer(numFrames, numChannels) {
-    const channels = [];
-    for (let ch = 0; ch < numChannels; ch++) {
-      channels.push(this.getPlanarChannelBuffer(ch, numFrames));
-    }
+    let channels = [];
+    const acquire = () => {
+      channels = [];
+      for (let ch = 0; ch < numChannels; ch++) {
+        channels.push(this.getPlanarChannelBuffer(ch, numFrames));
+      }
+    };
+    acquire();
+    const reacquireIfDetached = () => {
+      if ((channels[0]?.byteLength ?? 0) === 0) {
+        acquire();
+      }
+    };
     return {
-      channels,
-      process: () => this.processPreparedPlanar(numFrames)
+      get channels() {
+        reacquireIfDetached();
+        return channels;
+      },
+      process: () => {
+        reacquireIfDetached();
+        this.processPreparedPlanar(numFrames);
+      }
     };
   }
   delete() {
@@ -1387,525 +626,804 @@ var RealtimeVoiceChanger = class {
   }
 };
 function realtimeVoiceChangerPresetNames() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.realtimeVoiceChangerPresetNames();
+  return getSonareModule().realtimeVoiceChangerPresetNames();
 }
 function realtimeVoiceChangerPresetJson(name) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.realtimeVoiceChangerPresetJson(name);
+  return getSonareModule().realtimeVoiceChangerPresetJson(name);
 }
 function validateRealtimeVoiceChangerPresetJson(json) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.validateRealtimeVoiceChangerPresetJson(json);
+  return getSonareModule().validateRealtimeVoiceChangerPresetJson(json);
 }
-var Mixer = class _Mixer {
-  constructor(mixer) {
-    this.mixer = mixer;
+
+// src/streaming_processors.ts
+var EQ_PHASE_MODES = {
+  zero: 1,
+  "zero-latency": 1,
+  zero_latency: 1,
+  natural: 2,
+  "natural-phase": 2,
+  natural_phase: 2,
+  linear: 3,
+  "linear-phase": 3,
+  linear_phase: 3
+};
+var StreamingMasteringChain = class {
+  constructor(config) {
+    const module2 = getSonareModule();
+    this.chain = module2.createStreamingMasteringChain(config);
   }
   /**
-   * Build a mixer from a scene JSON string.
+   * Initialize processors for the given sample rate and block layout.
    *
-   * @param json - Scene JSON (strips, buses, sends, connections, inserts)
-   * @param sampleRate - Sample rate in Hz (default: 48000)
-   * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
+   * @param sampleRate - Sample rate in Hz
+   * @param maxBlockSize - Maximum block size per process call
+   * @param numChannels - 1 (mono) or 2 (stereo)
    */
-  static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
+  prepare(sampleRate, maxBlockSize, numChannels) {
+    this.chain.prepare(sampleRate, maxBlockSize, numChannels);
+  }
+  /**
+   * Process one mono block, returning the processed samples (same length).
+   */
+  processMono(samples) {
+    return this.chain.processMono(samples);
+  }
+  /**
+   * Process one stereo block, returning the processed channels.
+   */
+  processStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Stereo channel lengths must match.");
     }
-    return new _Mixer(module.createMixerFromSceneJson(json, sampleRate, blockSize));
+    return this.chain.processStereo(left, right);
   }
-  /** Rebuild and compile the routing graph from the current scene topology. */
-  compile() {
-    this.mixer.compile();
+  /** Reset all processor state without rebuilding. */
+  reset() {
+    this.chain.reset();
   }
-  /**
-   * Mix one block of per-strip stereo audio into the stereo master.
-   *
-   * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
-   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
-   * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
-   */
-  processStereo(leftChannels, rightChannels) {
-    if (leftChannels.length !== rightChannels.length) {
-      throw new Error("leftChannels and rightChannels must have the same length.");
-    }
-    return this.mixer.processStereo(leftChannels, rightChannels);
+  /** Total reported latency in samples across all active processors. */
+  latencySamples() {
+    return this.chain.latencySamples();
   }
-  /**
-   * Mix one block into caller-owned output arrays.
-   *
-   * This avoids allocating the result object and result `Float32Array`s. It is
-   * intended for realtime bridges such as AudioWorklet; the input channel count
-   * must match the scene strip count and all arrays must have the same length.
-   */
-  processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
-    if (leftChannels.length !== rightChannels.length) {
-      throw new Error("leftChannels and rightChannels must have the same length.");
-    }
-    if (outLeft.length !== outRight.length) {
-      throw new Error("outLeft and outRight must have the same length.");
-    }
-    this.mixer.processStereoInto(leftChannels, rightChannels, outLeft, outRight);
-  }
-  /**
-   * Create reusable WASM-heap input/output views for realtime-style processing.
-   *
-   * Fill `leftInputs[i]` / `rightInputs[i]`, call `process()`, then read
-   * `outLeft` / `outRight`. The views are owned by this mixer and become invalid
-   * after {@link delete}.
-   */
-  createRealtimeBuffer() {
-    const stripCount = this.stripCount();
-    const leftInputs = [];
-    const rightInputs = [];
-    for (let index = 0; index < stripCount; index++) {
-      leftInputs.push(this.mixer.inputLeftView(index));
-      rightInputs.push(this.mixer.inputRightView(index));
-    }
-    const outLeft = this.mixer.outputLeftView();
-    const outRight = this.mixer.outputRightView();
-    return {
-      leftInputs,
-      rightInputs,
-      outLeft,
-      outRight,
-      process: (numSamples = outLeft.length) => this.mixer.processPreparedStereo(numSamples)
-    };
-  }
-  /** Number of strips in the mixer (e.g. strips loaded from the scene). */
-  stripCount() {
-    return this.mixer.stripCount();
-  }
-  /**
-   * Schedule sample-accurate insert-parameter automation on a strip's insert.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param insertIndex - Index into the strip's combined insert sequence
-   *   (`[pre-inserts... post-inserts...]`)
-   * @param paramId - Processor-specific parameter id
-   * @param samplePos - Absolute samples from the start of processing (the mixer
-   *   advances an internal position from 0 on the first {@link processStereo}
-   *   call; recompiling resets it to 0)
-   * @param value - Target parameter value
-   * @param curve - Interpolation curve (default: `'linear'`)
-   * @throws If the strip index is out of range or the schedule call fails
-   *   (unknown curve, out-of-range insert index, or full event lane)
-   */
-  scheduleInsertAutomation(stripIndex, insertIndex, paramId, samplePos, value, curve = "linear") {
-    this.mixer.scheduleInsertAutomation(
-      stripIndex,
-      insertIndex,
-      paramId,
-      samplePos,
-      value,
-      automationCurveCode(curve)
-    );
-  }
-  /**
-   * Resolve a strip's index in `[0, stripCount())` from its scene id, or `null`
-   * when no strip with that id exists (matches the Node binding's `number | null`).
-   */
-  stripById(id) {
-    const index = this.mixer.stripById(id);
-    return index < 0 ? null : index;
-  }
-  /**
-   * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
-   * `'submix'` (defaults to `'aux'`). Marks the routing graph dirty; call
-   * {@link compile} (or {@link processStereo}) to rebuild.
-   */
-  addBus(id, role = "aux") {
-    this.mixer.addBus(id, role);
-  }
-  /** Remove a bus by id. Marks the routing graph dirty. */
-  removeBus(id) {
-    this.mixer.removeBus(id);
-  }
-  /** Number of buses in the mixer topology. */
-  busCount() {
-    return this.mixer.busCount();
-  }
-  /**
-   * Add a VCA group with the given gain offset (dB). `members` is a list of
-   * strip ids governed by the group (may be empty).
-   */
-  addVcaGroup(id, gainDb = 0, members = []) {
-    this.mixer.addVcaGroup(id, gainDb, members);
-  }
-  /** Remove a VCA group by id. */
-  removeVcaGroup(id) {
-    this.mixer.removeVcaGroup(id);
-  }
-  /** Number of VCA groups in the mixer topology. */
-  vcaGroupCount() {
-    return this.mixer.vcaGroupCount();
-  }
-  /** Set the strip's input trim in dB. */
-  setInputTrimDb(stripIndex, db) {
-    this.mixer.setInputTrimDb(stripIndex, db);
-  }
-  /** Set the strip's fader level in dB. */
-  setFaderDb(stripIndex, db) {
-    this.mixer.setFaderDb(stripIndex, db);
-  }
-  /** Set the strip's pan position. */
-  setPan(stripIndex, pan, panMode = 0) {
-    this.mixer.setPan(stripIndex, pan, panModeCode(panMode));
-  }
-  /** Set the strip's stereo width. */
-  setWidth(stripIndex, width) {
-    this.mixer.setWidth(stripIndex, width);
-  }
-  /** Set the strip's mute state. */
-  setMuted(stripIndex, muted) {
-    this.mixer.setMuted(stripIndex, muted);
-  }
-  /**
-   * Set a strip's solo state. Takes effect on the next process without a
-   * graph recompile.
-   */
-  setSoloed(stripIndex, soloed) {
-    this.mixer.setSoloed(stripIndex, soloed);
-  }
-  /**
-   * Mark a strip solo-safe so it is never implied-muted by another strip's
-   * solo. Takes effect on the next process without a graph recompile.
-   */
-  setSoloSafe(stripIndex, soloSafe) {
-    this.mixer.setSoloSafe(stripIndex, soloSafe);
-  }
-  /** Invert the polarity of the left and/or right channel of a strip. */
-  setPolarityInvert(stripIndex, invertLeft, invertRight) {
-    this.mixer.setPolarityInvert(stripIndex, invertLeft, invertRight);
-  }
-  /** Set the strip's pan law. */
-  setPanLaw(stripIndex, panLaw) {
-    this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
-  }
-  /**
-   * Set a per-strip channel delay in samples. This changes the strip's reported
-   * latency; recompile to re-run latency compensation.
-   */
-  setChannelDelaySamples(stripIndex, delaySamples) {
-    this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
-  }
-  /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
-  setVcaOffsetDb(stripIndex, offsetDb) {
-    this.mixer.setVcaOffsetDb(stripIndex, offsetDb);
-  }
-  /** Set independent left/right pan positions (dual-pan mode). */
-  setDualPan(stripIndex, leftPan, rightPan) {
-    this.mixer.setDualPan(stripIndex, leftPan, rightPan);
-  }
-  /**
-   * Add a send to a strip after construction.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param id - Send id
-   * @param destinationBusId - Destination bus id
-   * @param sendDb - Initial send level in dB
-   * @param timing - `'preFader'` or `'postFader'` (default: `'postFader'`)
-   * @returns The new send's index
-   */
-  addSend(stripIndex, id, destinationBusId, sendDb, timing = "postFader") {
-    return this.mixer.addSend(stripIndex, id, destinationBusId, sendDb, sendTimingCode(timing));
-  }
-  /** Set the send level (in dB) for an existing send by index. */
-  setSendDb(stripIndex, sendIndex, sendDb) {
-    this.mixer.setSendDb(stripIndex, sendIndex, sendDb);
-  }
-  /**
-   * Read a strip's meter snapshot at the given tap point.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param tap - `'preFader'` or `'postFader'` (default: `'postFader'`)
-   */
-  meterTap(stripIndex, tap = "postFader") {
-    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
-  }
-  /**
-   * Read a strip's meter snapshot. Alias of {@link meterTap}, provided for
-   * cross-binding (Node/Python) parity.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param tap - `'preFader'` or `'postFader'` (default: `'postFader'`)
-   */
-  stripMeter(stripIndex, tap = "postFader") {
-    return this.mixer.stripMeter(stripIndex, meterTapCode(tap));
-  }
-  /**
-   * Schedule sample-accurate fader automation on a strip.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param samplePos - Absolute samples from the start of processing
-   * @param faderDb - Target fader level in dB
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  scheduleFaderAutomation(stripIndex, samplePos, faderDb, curve = "linear") {
-    this.mixer.scheduleFaderAutomation(stripIndex, samplePos, faderDb, automationCurveCode(curve));
-  }
-  /**
-   * Schedule sample-accurate pan automation on a strip.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param samplePos - Absolute samples from the start of processing
-   * @param pan - Target pan position
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  schedulePanAutomation(stripIndex, samplePos, pan, curve = "linear") {
-    this.mixer.schedulePanAutomation(stripIndex, samplePos, pan, automationCurveCode(curve));
-  }
-  /**
-   * Schedule sample-accurate width automation on a strip.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param samplePos - Absolute samples from the start of processing
-   * @param width - Target stereo width
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  scheduleWidthAutomation(stripIndex, samplePos, width, curve = "linear") {
-    this.mixer.scheduleWidthAutomation(stripIndex, samplePos, width, automationCurveCode(curve));
-  }
-  /**
-   * Schedule sample-accurate send-level automation on a strip's send.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param sendIndex - Send index in the strip's add order
-   * @param samplePos - Absolute samples from the start of processing
-   * @param db - Target send level in dB
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  scheduleSendAutomation(stripIndex, sendIndex, samplePos, db, curve = "linear") {
-    this.mixer.scheduleSendAutomation(
-      stripIndex,
-      sendIndex,
-      samplePos,
-      db,
-      automationCurveCode(curve)
-    );
-  }
-  /**
-   * Read up to `maxPoints` of a strip's most recent goniometer samples
-   * (oldest to newest).
-   */
-  readGoniometerLatest(stripIndex, maxPoints) {
-    return this.mixer.readGoniometerLatest(stripIndex, maxPoints);
-  }
-  /** Serialize the current scene (strips, buses, sends, connections) to JSON. */
-  toSceneJson() {
-    return this.mixer.toSceneJson();
+  /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
+  stageNames() {
+    return this.chain.stageNames();
   }
   /** Release the underlying WASM object. Safe to call only once. */
   delete() {
-    this.mixer.delete();
-  }
-  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
-  destroy() {
-    this.delete();
+    this.chain.delete();
   }
 };
-function trim(samples, sampleRate, thresholdDb = -60) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+var StreamingEqualizer = class {
+  constructor(config = {}) {
+    const module2 = getSonareModule();
+    this.eq = module2.createEqualizer(config);
   }
-  return module.trim(samples, sampleRate, thresholdDb);
+  /**
+   * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
+   */
+  setBand(index, band) {
+    this.eq.setBand(index, band);
+  }
+  /** Disable and reset every band. */
+  clear() {
+    this.eq.clear();
+  }
+  /**
+   * Set the global phase mode: `'zero'` | `'natural'` | `'linear'` or 1/2/3.
+   */
+  setPhaseMode(mode) {
+    const value = typeof mode === "number" ? mode : EQ_PHASE_MODES[mode.toLowerCase()];
+    if (value === void 0) {
+      throw new Error(`unknown EQ phase mode: ${mode}`);
+    }
+    this.eq.setPhaseMode(value);
+  }
+  /** Enable or disable output auto-gain compensation. */
+  setAutoGain(enabled) {
+    this.eq.setAutoGain(enabled);
+  }
+  /** Set all-band EQ gain scale as a 0.0..2.0 multiplier. */
+  setGainScale(scale) {
+    this.eq.setGainScale(scale);
+  }
+  /** Set post-EQ output gain in dB. */
+  setOutputGainDb(gainDb) {
+    this.eq.setOutputGainDb(gainDb);
+  }
+  /** Set post-EQ stereo balance in -1.0..1.0; mono input ignores pan. */
+  setOutputPan(pan) {
+    this.eq.setOutputPan(pan);
+  }
+  /**
+   * Provide a mono external sidechain key for dynamic bands that opt into
+   * `external_sidechain`. The samples are copied into an owned buffer.
+   */
+  setSidechainMono(samples) {
+    this.eq.setSidechainMono(samples);
+  }
+  /**
+   * Provide a stereo external sidechain key. Both channels must match length.
+   */
+  setSidechainStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Sidechain channel lengths must match.");
+    }
+    this.eq.setSidechainStereo(left, right);
+  }
+  /** Release any borrowed external sidechain buffers. */
+  clearSidechain() {
+    this.eq.clearSidechain();
+  }
+  /** Auto-gain applied on the most recent block, in dB. */
+  lastAutoGainDb() {
+    return this.eq.lastAutoGainDb();
+  }
+  /** Reported processing latency in samples (non-zero for linear-phase bands). */
+  latencySamples() {
+    return this.eq.latencySamples();
+  }
+  /**
+   * Process one mono block, returning the equalized samples (same length).
+   */
+  processMono(samples) {
+    return this.eq.processMono(samples);
+  }
+  /**
+   * Process one stereo block, returning the equalized channels.
+   */
+  processStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Stereo channel lengths must match.");
+    }
+    return this.eq.processStereo(left, right);
+  }
+  /**
+   * Read the latest pre/post spectrum snapshot for metering. `seq` increments
+   * each time a new snapshot is published.
+   */
+  spectrum() {
+    return this.eq.spectrum();
+  }
+  /**
+   * Configure bands so the source spectrum matches the reference spectrum.
+   *
+   * @param source - Source audio (mono samples)
+   * @param reference - Reference audio (mono samples)
+   * @param options - `sampleRate` (default 48000) and `maxBands` (default 8)
+   */
+  match(source, reference, options = {}) {
+    this.eq.match(source, reference, options);
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.eq.delete();
+  }
+};
+var StreamingRetune = class {
+  constructor(config = {}) {
+    const module2 = getSonareModule();
+    this.retune = module2.createStreamingRetune(config);
+  }
+  /**
+   * Allocate and initialize native state for the given sample rate and maximum
+   * process block size.
+   */
+  prepare(sampleRate, maxBlockSize) {
+    this.retune.prepare(sampleRate, maxBlockSize);
+  }
+  /** Reset delay, grain, and overlap-add state without changing config. */
+  reset() {
+    this.retune.reset();
+  }
+  /**
+   * Update retune settings. Changing `grainSize` takes effect after the next
+   * {@link prepare} call.
+   */
+  setConfig(config) {
+    this.retune.setConfig(config);
+  }
+  /** Current native config. */
+  config() {
+    return this.retune.config();
+  }
+  /** Resolved grain size in samples after {@link prepare}. */
+  grainSize() {
+    return this.retune.grainSize();
+  }
+  /** Process one mono block, returning the shifted samples (same length). */
+  processMono(samples) {
+    return this.retune.processMono(samples);
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.retune.delete();
+  }
+};
+
+// src/validation.ts
+function assertNonEmptySamples(fnName, samples, argName = "samples") {
+  if (samples.length === 0) {
+    throw new RangeError(`${fnName}: ${argName} must not be empty`);
+  }
 }
-function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function assertFiniteSamples(fnName, samples, validate, argName = "samples") {
+  if (!validate) {
+    return;
   }
-  return module.stft(samples, sampleRate, nFft, hopLength);
+  for (let i = 0; i < samples.length; i++) {
+    const v = samples[i];
+    if (!Number.isFinite(v)) {
+      throw new RangeError(`${fnName}: ${argName} contains NaN or Inf at index ${i}`);
+    }
+  }
 }
-function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.stftDb(samples, sampleRate, nFft, hopLength);
+function assertSamples(fnName, samples, validate, argName = "samples") {
+  assertNonEmptySamples(fnName, samples, argName);
+  assertFiniteSamples(fnName, samples, validate, argName);
 }
-function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function assertFiniteScalar(fnName, value, argName) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
   }
-  return module.melSpectrogram(samples, sampleRate, nFft, hopLength, nMels);
 }
-function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function assertSampleRate(fnName, sampleRate) {
+  if (!Number.isInteger(sampleRate) || sampleRate < 8e3 || sampleRate > 384e3) {
+    throw new RangeError(`${fnName}: sampleRate out of supported range [8000, 384000]`);
   }
-  return module.mfcc(samples, sampleRate, nFft, hopLength, nMels, nMfcc);
 }
-function melToStft(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function assertNonNegativeInteger(fnName, value, argName) {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${fnName}: ${argName} must be a non-negative integer`);
   }
-  return module.melToStft(melPower, nMels, nFrames, sampleRate, nFft, fmin, fmax);
 }
-function melToAudio(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function assertPositiveInteger(fnName, value, argName) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new RangeError(`${fnName}: ${argName} must be a positive integer`);
   }
-  return module.melToAudio(
-    melPower,
-    nMels,
-    nFrames,
+}
+function assertInterleavedSamples(fnName, samples, channels, validate) {
+  assertSamples(fnName, samples, validate);
+  assertPositiveInteger(fnName, channels, "channels");
+  if (samples.length % channels !== 0) {
+    throw new RangeError(`${fnName}: samples length must be a multiple of channels`);
+  }
+}
+
+// src/effects_mastering.ts
+function requireModule() {
+  return getSonareModule();
+}
+function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
+  return requireModule().hpss(samples, sampleRate, kernelHarmonic, kernelPercussive);
+}
+function harmonic(samples, sampleRate, options = {}) {
+  assertSamples("harmonic", samples, options.validate !== false);
+  return requireModule().harmonic(samples, sampleRate);
+}
+function percussive(samples, sampleRate, options = {}) {
+  assertSamples("percussive", samples, options.validate !== false);
+  return requireModule().percussive(samples, sampleRate);
+}
+function timeStretch(samples, sampleRate, rate, options = {}) {
+  assertSamples("timeStretch", samples, options.validate !== false);
+  return requireModule().timeStretch(samples, sampleRate, rate);
+}
+function pitchShift(samples, sampleRate, semitones, options = {}) {
+  assertSamples("pitchShift", samples, options.validate !== false);
+  return requireModule().pitchShift(samples, sampleRate, semitones);
+}
+function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
+  assertSamples("pitchCorrectToMidi", samples, options.validate !== false);
+  return requireModule().pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
+}
+function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 22050, hopLength = 512, voiced, voicedProb, options = {}) {
+  assertSamples("pitchCorrectToMidiTimevarying", samples, options.validate !== false);
+  if (voiced && voiced.length !== f0Hz.length) {
+    throw new RangeError("pitchCorrectToMidiTimevarying: voiced length must match f0Hz length");
+  }
+  if (voicedProb && voicedProb.length !== f0Hz.length) {
+    throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
+  }
+  const voicedF32 = voiced ? Float32Array.from(voiced) : void 0;
+  return requireModule().pitchCorrectToMidiTimevarying(
+    samples,
     sampleRate,
-    nFft,
+    f0Hz,
+    targetMidi,
     hopLength,
-    fmin,
-    fmax,
-    nIter
+    voicedF32,
+    voicedProb
   );
 }
-function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
-}
-function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.mfccToAudio(
-    mfccCoefficients,
-    nMfcc,
-    nFrames,
-    nMels,
+function noteStretch(samples, sampleRate = 22050, options = {}) {
+  assertSamples("noteStretch", samples, options.validate !== false);
+  return requireModule().noteStretch(
+    samples,
     sampleRate,
-    nFft,
-    hopLength,
-    fmin,
-    fmax,
-    nIter
+    options.onsetSample ?? 0,
+    options.offsetSample ?? 0,
+    options.stretchRatio ?? 1
   );
 }
-function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.chroma(samples, sampleRate, nFft, hopLength);
+function voiceChange(samples, sampleRate = 22050, options = {}) {
+  assertSamples("voiceChange", samples, options.validate !== false);
+  return requireModule().voiceChange(
+    samples,
+    sampleRate,
+    options.pitchSemitones ?? 0,
+    options.formantFactor ?? 1
+  );
 }
-function spectralCentroid(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function latencyCompensatedVoiceChange(changer, samples, channels, blockFrames) {
+  const latencyFrames = Math.max(0, changer.latencySamples());
+  if (channels === 1) {
+    const total = samples.length + latencyFrames;
+    const input2 = new Float32Array(total);
+    input2.set(samples);
+    const processed2 = new Float32Array(total);
+    for (let offset = 0; offset < total; offset += blockFrames) {
+      const block = input2.subarray(offset, Math.min(offset + blockFrames, total));
+      processed2.set(changer.processMono(block), offset);
+    }
+    return processed2.slice(latencyFrames, latencyFrames + samples.length);
   }
-  return module.spectralCentroid(samples, sampleRate, nFft, hopLength);
+  const frames = samples.length / 2;
+  const totalFrames = frames + latencyFrames;
+  const input = new Float32Array(totalFrames * 2);
+  input.set(samples);
+  const processed = new Float32Array(totalFrames * 2);
+  const frameStride = blockFrames * 2;
+  for (let offset = 0; offset < input.length; offset += frameStride) {
+    const block = input.subarray(offset, Math.min(offset + frameStride, input.length));
+    processed.set(changer.processInterleaved(block, 2), offset);
+  }
+  const start = latencyFrames * 2;
+  return processed.slice(start, start + samples.length);
 }
-function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nBands = 6, fmin = 200, quantile = 0.02) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function voiceChangeRealtime(samples, options = {}) {
+  assertSamples("voiceChangeRealtime", samples, options.validate !== false);
+  const channels = options.channels ?? 1;
+  if (channels !== 1 && channels !== 2) {
+    throw new Error("voiceChangeRealtime: channels must be 1 or 2.");
   }
-  return module.spectralContrast(samples, sampleRate, nFft, hopLength, nBands, fmin, quantile);
+  if (channels === 2 && samples.length % 2 !== 0) {
+    throw new Error("voiceChangeRealtime: stereo input length must be a multiple of 2.");
+  }
+  const sampleRate = options.sampleRate ?? 48e3;
+  const blockSize = Math.max(1, Math.floor(options.blockSize ?? 512));
+  const changer = new RealtimeVoiceChanger(options.preset ?? "neutral-monitor");
+  try {
+    changer.prepare(sampleRate, blockSize, channels);
+    return latencyCompensatedVoiceChange(changer, samples, channels, blockSize);
+  } finally {
+    changer.delete();
+  }
 }
-function polyFeatures(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, order = 1) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.polyFeatures(samples, sampleRate, nFft, hopLength, order);
+function normalize(samples, sampleRate, targetDb = 0, options = {}) {
+  assertSamples("normalize", samples, options.validate !== false);
+  return requireModule().normalize(samples, sampleRate, targetDb);
 }
-function zeroCrossings(samples, threshold = 1e-10, refMagnitude = false, pad = true, zeroPos = true) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.zeroCrossings(samples, threshold, refMagnitude, pad, zeroPos);
+function mastering(samples, sampleRate = 22050, options = {}) {
+  return requireModule().mastering(
+    samples,
+    sampleRate,
+    options.targetLufs ?? -14,
+    options.ceilingDb ?? -1,
+    options.truePeakOversample ?? 4
+  );
 }
-function pitchTuning(frequencies, resolution = 0.01, binsPerOctave = 12) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.pitchTuning(frequencies, resolution, binsPerOctave);
+function masteringProcessorNames() {
+  return requireModule().masteringProcessorNames();
 }
-function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, resolution = 0.01, binsPerOctave = 12) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.estimateTuning(samples, sampleRate, nFft, hopLength, resolution, binsPerOctave);
+function masteringInsertNames() {
+  return requireModule().masteringInsertNames();
 }
-function decompose(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.decompose(s, nFeatures, nFrames, nComponents, nIter, beta);
+function masteringPairProcessorNames() {
+  return requireModule().masteringPairProcessorNames();
 }
-function nnFilter(s, nFeatures, nFrames, aggregate = "mean", k = 7, width = 1) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.nnFilter(s, nFeatures, nFrames, aggregate, k, width);
+function masteringPairAnalysisNames() {
+  return requireModule().masteringPairAnalysisNames();
 }
-function remix(samples, intervals, sampleRate = 22050, alignZeros = false) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  const intervalsI32 = intervals instanceof Int32Array ? intervals : Int32Array.from(intervals, (v) => Math.trunc(v));
-  return module.remix(samples, intervalsI32, sampleRate, alignZeros);
+function masteringStereoAnalysisNames() {
+  return requireModule().masteringStereoAnalysisNames();
 }
-function phaseVocoder(samples, rate, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
+function masteringProcess(processorName, samples, sampleRate = 22050, params = {}) {
+  return requireModule().masteringProcess(processorName, samples, sampleRate, params);
 }
-function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function masteringProcessStereo(processorName, left, right, sampleRate = 22050, params = {}) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
   }
-  return module.hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
+  return requireModule().masteringProcessStereo(processorName, left, right, sampleRate, params);
 }
-function lufsInterleaved(samples, channels, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.lufsInterleaved(samples, channels, sampleRate);
+function masteringPairProcess(processorName, source, reference, sampleRate = 22050, params = {}) {
+  return requireModule().masteringPairProcess(processorName, source, reference, sampleRate, params);
 }
-function ebur128LoudnessRange(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.ebur128LoudnessRange(samples, sampleRate);
+function masteringPairAnalyze(analysisName, source, reference, sampleRate = 22050, params = {}) {
+  return requireModule().masteringPairAnalyze(analysisName, source, reference, sampleRate, params);
 }
-function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.spectralBandwidth(samples, sampleRate, nFft, hopLength);
+function masteringStereoAnalyze(analysisName, left, right, sampleRate = 22050, params = {}) {
+  return requireModule().masteringStereoAnalyze(analysisName, left, right, sampleRate, params);
 }
-function spectralRolloff(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.spectralRolloff(samples, sampleRate, nFft, hopLength, rollPercent);
+function masteringAssistantSuggest(samples, sampleRate = 22050, params = {}) {
+  return requireModule().masteringAssistantSuggest(samples, sampleRate, params);
 }
-function spectralFlatness(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.spectralFlatness(samples, sampleRate, nFft, hopLength);
+function masteringAudioProfile(samples, sampleRate = 22050, params = {}) {
+  return requireModule().masteringAudioProfile(samples, sampleRate, params);
 }
-function zeroCrossingRate(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.zeroCrossingRate(samples, sampleRate, frameLength, hopLength);
+function masteringStreamingPreview(samples, sampleRate = 22050, platforms = []) {
+  return requireModule().masteringStreamingPreview(samples, sampleRate, platforms);
 }
-function rmsEnergy(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+function masteringRepairDeclick(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDeclick(samples, sampleRate, options);
+}
+function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDenoiseClassical(samples, sampleRate, options);
+}
+function masteringRepairDeclip(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDeclip(samples, sampleRate, options);
+}
+function masteringRepairDecrackle(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDecrackle(samples, sampleRate, options);
+}
+function masteringRepairDehum(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDehum(samples, sampleRate, options);
+}
+function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairDereverbClassical(samples, sampleRate, options);
+}
+function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
+  return requireModule().masteringRepairTrimSilence(samples, sampleRate, options);
+}
+var COMPRESSOR_DETECTOR_MAP = {
+  peak: 0,
+  rms: 1,
+  log_rms: 2
+};
+function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
+  assertSamples("masteringDynamicsCompressor", samples, options.validate !== false);
+  const detector = typeof options.detector === "string" ? COMPRESSOR_DETECTOR_MAP[options.detector] : options.detector;
+  const opts = { ...options };
+  if (detector !== void 0) {
+    opts.detector = detector;
   }
-  return module.rmsEnergy(samples, sampleRate, frameLength, hopLength);
+  return requireModule().masteringDynamicsCompressor(samples, sampleRate, opts);
+}
+function masteringDynamicsGate(samples, sampleRate, options = {}) {
+  assertSamples("masteringDynamicsGate", samples, options.validate !== false);
+  return requireModule().masteringDynamicsGate(samples, sampleRate, options);
+}
+function masteringDynamicsTransientShaper(samples, sampleRate, options = {}) {
+  assertSamples("masteringDynamicsTransientShaper", samples, options.validate !== false);
+  return requireModule().masteringDynamicsTransientShaper(samples, sampleRate, options);
+}
+function masteringChain(samples, sampleRate = 22050, config) {
+  return requireModule().masteringChain(samples, sampleRate, config);
+}
+function masteringChainStereo(left, right, sampleRate = 22050, config) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule().masteringChainStereo(
+    left,
+    right,
+    sampleRate,
+    config
+  );
+}
+function masteringChainWithProgress(samples, sampleRate = 22050, config, onProgress) {
+  return requireModule().masteringChainWithProgress(
+    samples,
+    sampleRate,
+    config,
+    onProgress
+  );
+}
+function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config, onProgress) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule().masteringChainStereoWithProgress(
+    left,
+    right,
+    sampleRate,
+    config,
+    onProgress
+  );
+}
+function masteringPresetNames() {
+  return requireModule().masteringPresetNames();
+}
+function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}) {
+  return requireModule().masterAudio(presetName, samples, sampleRate, overrides);
+}
+function masterAudioStereo(left, right, sampleRate = 22050, presetName = "pop", overrides = {}) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule().masterAudioStereo(presetName, left, right, sampleRate, overrides);
+}
+function masterAudioWithProgress(samples, sampleRate = 22050, presetName, onProgress, overrides = null) {
+  return requireModule().masterAudioWithProgress(
+    presetName,
+    samples,
+    sampleRate,
+    overrides,
+    onProgress
+  );
+}
+function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetName, onProgress, overrides = null) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule().masterAudioStereoWithProgress(
+    presetName,
+    left,
+    right,
+    sampleRate,
+    overrides,
+    onProgress
+  );
+}
+function mixingScenePresetNames() {
+  return requireModule().mixingScenePresetNames();
+}
+function mixingScenePresetJson(presetName) {
+  return requireModule().mixingScenePresetJson(presetName);
+}
+function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {}) {
+  if (leftChannels.length === 0 || leftChannels.length !== rightChannels.length) {
+    throw new Error("leftChannels and rightChannels must have the same non-zero length.");
+  }
+  return requireModule().mixStereo(
+    leftChannels,
+    rightChannels,
+    sampleRate,
+    options
+  );
+}
+
+// src/feature_core.ts
+function requireModule2() {
+  return getSonareModule();
+}
+function hzToMel(hz) {
+  return requireModule2().hzToMel(hz);
+}
+function melToHz(mel) {
+  return requireModule2().melToHz(mel);
+}
+function hzToMidi(hz) {
+  return requireModule2().hzToMidi(hz);
+}
+function midiToHz(midi) {
+  return requireModule2().midiToHz(midi);
+}
+function hzToNote(hz) {
+  return requireModule2().hzToNote(hz);
+}
+function noteToHz(note) {
+  return requireModule2().noteToHz(note);
+}
+function framesToTime(frames, sr = 22050, hopLength = 512) {
+  return requireModule2().framesToTime(frames, sr, hopLength);
+}
+function timeToFrames(time, sr = 22050, hopLength = 512) {
+  return requireModule2().timeToFrames(time, sr, hopLength);
+}
+function framesToSamples(frames, hopLength = 512, nFft = 0) {
+  return requireModule2().framesToSamples(frames, hopLength, nFft);
+}
+function samplesToFrames(samples, hopLength = 512, nFft = 0) {
+  return requireModule2().samplesToFrames(samples, hopLength, nFft);
+}
+function powerToDb(values, ref = 1, amin = 1e-10, topDb = 80) {
+  return requireModule2().powerToDb(values, ref, amin, topDb);
+}
+function amplitudeToDb(values, ref = 1, amin = 1e-5, topDb = 80) {
+  return requireModule2().amplitudeToDb(values, ref, amin, topDb);
+}
+function dbToPower(values, ref = 1) {
+  return requireModule2().dbToPower(values, ref);
+}
+function dbToAmplitude(values, ref = 1) {
+  return requireModule2().dbToAmplitude(values, ref);
+}
+function preemphasis(samples, coef = 0.97, zi) {
+  return requireModule2().preemphasis(samples, coef, zi ?? null);
+}
+function deemphasis(samples, coef = 0.97, zi) {
+  return requireModule2().deemphasis(samples, coef, zi ?? null);
+}
+function trimSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
+  return requireModule2().trimSilence(samples, topDb, frameLength, hopLength);
+}
+function splitSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
+  return requireModule2().splitSilence(samples, topDb, frameLength, hopLength);
+}
+function frameSignal(samples, frameLength, hopLength) {
+  return requireModule2().frameSignal(samples, frameLength, hopLength);
+}
+function padCenter(values, targetSize, padValue = 0) {
+  return requireModule2().padCenter(values, targetSize, padValue);
+}
+function fixLength(values, targetSize, padValue = 0) {
+  return requireModule2().fixLength(values, targetSize, padValue);
+}
+function fixFrames(frames, xMin = 0, xMax = -1, pad = true) {
+  return requireModule2().fixFrames(frames, xMin, xMax, pad);
+}
+function peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait) {
+  return requireModule2().peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait);
+}
+function vectorNormalize(values, normType = 0, threshold = 0) {
+  return requireModule2().vectorNormalize(values, normType, threshold);
+}
+function pcen(values, nBins, nFrames, options = {}) {
+  return requireModule2().pcen(values, nBins, nFrames, options);
+}
+function tonnetz(chromagram, nChroma, nFrames) {
+  return requireModule2().tonnetz(chromagram, nChroma, nFrames);
+}
+function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation") {
+  return requireModule2().tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
+}
+function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
+  return requireModule2().cyclicTempogram(
+    onsetEnvelope2,
+    sampleRate,
+    hopLength,
+    winLength,
+    bpmMin,
+    nBins
+  );
+}
+function plp(onsetEnvelope2, sampleRate = 22050, hopLength = 512, tempoMin = 30, tempoMax = 300, winLength = 384) {
+  return requireModule2().plp(onsetEnvelope2, sampleRate, hopLength, tempoMin, tempoMax, winLength);
+}
+
+// src/feature_music.ts
+function requireModule3() {
+  return getSonareModule();
+}
+function validateMusicSamples(fnName, samples, sampleRate, options = {}) {
+  assertSampleRate(fnName, sampleRate);
+  assertSamples(fnName, samples, options.validate !== false);
+}
+function validatePositiveIntegers(fnName, values) {
+  for (const [name, value] of Object.entries(values)) {
+    assertPositiveInteger(fnName, value, name);
+  }
+}
+function validateFrequencyBounds(fnName, fmin, fmax) {
+  assertFiniteScalar(fnName, fmin, "fmin");
+  if (fmin < 0) {
+    throw new RangeError(`${fnName}: fmin must be non-negative`);
+  }
+  if (fmax !== void 0) {
+    assertFiniteScalar(fnName, fmax, "fmax");
+    if (fmax <= fmin) {
+      throw new RangeError(`${fnName}: fmax must be greater than fmin`);
+    }
+  }
+}
+function nnlsChroma(samples, sampleRate = 22050, options = {}) {
+  validateMusicSamples("nnlsChroma", samples, sampleRate, options);
+  return requireModule3().nnlsChroma(samples, sampleRate);
+}
+function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  validateMusicSamples("cqt", samples, sampleRate, options);
+  validatePositiveIntegers("cqt", { hopLength, nBins, binsPerOctave });
+  validateFrequencyBounds("cqt", fmin);
+  return requireModule3().cqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
+}
+function pseudoCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  validateMusicSamples("pseudoCqt", samples, sampleRate, options);
+  validatePositiveIntegers("pseudoCqt", { hopLength, nBins, binsPerOctave });
+  validateFrequencyBounds("pseudoCqt", fmin);
+  return requireModule3().pseudoCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
+}
+function hybridCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  validateMusicSamples("hybridCqt", samples, sampleRate, options);
+  validatePositiveIntegers("hybridCqt", { hopLength, nBins, binsPerOctave });
+  validateFrequencyBounds("hybridCqt", fmin);
+  return requireModule3().hybridCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
+}
+function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma = 0, options = {}) {
+  validateMusicSamples("vqt", samples, sampleRate, options);
+  validatePositiveIntegers("vqt", { hopLength, nBins, binsPerOctave });
+  validateFrequencyBounds("vqt", fmin);
+  assertFiniteScalar("vqt", gamma, "gamma");
+  if (gamma < 0) {
+    throw new RangeError("vqt: gamma must be non-negative");
+  }
+  return requireModule3().vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
+}
+function analyzeSections(samples, sampleRate = 22050, options = {}) {
+  validateMusicSamples("analyzeSections", samples, sampleRate, options);
+  validatePositiveIntegers("analyzeSections", {
+    nFft: options.nFft ?? 2048,
+    hopLength: options.hopLength ?? 512
+  });
+  assertFiniteScalar("analyzeSections", options.minSectionSec ?? 4, "minSectionSec");
+  if ((options.minSectionSec ?? 4) <= 0) {
+    throw new RangeError("analyzeSections: minSectionSec must be positive");
+  }
+  return requireModule3().analyzeSections(
+    samples,
+    sampleRate,
+    options.nFft ?? 2048,
+    options.hopLength ?? 512,
+    options.minSectionSec ?? 4
+  ).map((s) => ({ ...s, type: s.type }));
+}
+function analyzeMelody(samples, sampleRate = 22050, options = {}) {
+  validateMusicSamples("analyzeMelody", samples, sampleRate, options);
+  const fmin = options.fmin ?? 65;
+  const fmax = options.fmax ?? 2093;
+  validateFrequencyBounds("analyzeMelody", fmin, fmax);
+  validatePositiveIntegers("analyzeMelody", {
+    frameLength: options.frameLength ?? 2048,
+    hopLength: options.hopLength ?? 256
+  });
+  assertFiniteScalar("analyzeMelody", options.threshold ?? 0.1, "threshold");
+  return requireModule3().analyzeMelody(
+    samples,
+    sampleRate,
+    options.fmin ?? 65,
+    options.fmax ?? 2093,
+    options.frameLength ?? 2048,
+    options.hopLength ?? 256,
+    options.threshold ?? 0.1,
+    options.usePyin ?? false,
+    options.center ?? true
+  );
+}
+function onsetEnvelope(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, options = {}) {
+  validateMusicSamples("onsetEnvelope", samples, sampleRate, options);
+  validatePositiveIntegers("onsetEnvelope", { nFft, hopLength, nMels });
+  return requireModule3().onsetEnvelope(samples, sampleRate, nFft, hopLength, nMels);
+}
+function onsetStrengthMulti(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nBands = 3, options = {}) {
+  validateMusicSamples("onsetStrengthMulti", samples, sampleRate, options);
+  validatePositiveIntegers("onsetStrengthMulti", { nFft, hopLength, nMels, nBands });
+  return requireModule3().onsetStrengthMulti(samples, sampleRate, nFft, hopLength, nMels, nBands);
+}
+function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, options = {}) {
+  assertSampleRate("fourierTempogram", sampleRate);
+  assertSamples("fourierTempogram", onsetEnvelope2, options.validate !== false, "onsetEnvelope");
+  validatePositiveIntegers("fourierTempogram", { hopLength, winLength });
+  return requireModule3().fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
+}
+function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, options = {}) {
+  assertSampleRate("tempogramRatio", sampleRate);
+  assertSamples("tempogramRatio", tempogramData, options.validate !== false, "tempogramData");
+  validatePositiveIntegers("tempogramRatio", { winLength, hopLength });
+  return requireModule3().tempogramRatio(tempogramData, winLength, sampleRate, hopLength);
+}
+function lufs(samples, sampleRate = 22050, options = {}) {
+  assertSampleRate("lufs", sampleRate);
+  assertSamples("lufs", samples, options.validate !== false);
+  return requireModule3().lufs(samples, sampleRate);
+}
+function momentaryLufs(samples, sampleRate = 22050, options = {}) {
+  assertSampleRate("momentaryLufs", sampleRate);
+  assertSamples("momentaryLufs", samples, options.validate !== false);
+  return requireModule3().momentaryLufs(samples, sampleRate);
+}
+function shortTermLufs(samples, sampleRate = 22050, options = {}) {
+  assertSampleRate("shortTermLufs", sampleRate);
+  assertSamples("shortTermLufs", samples, options.validate !== false);
+  return requireModule3().shortTermLufs(samples, sampleRate);
+}
+
+// src/feature_pitch.ts
+function requireModule4() {
+  return getSonareModule();
 }
 function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.pitchYin(
+  return requireModule4().pitchYin(
     samples,
     sampleRate,
     frameLength,
@@ -1917,10 +1435,7 @@ function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 5
   );
 }
 function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.pitchPyin(
+  return requireModule4().pitchPyin(
     samples,
     sampleRate,
     frameLength,
@@ -1931,346 +1446,743 @@ function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 
     fillNa
   );
 }
-function hzToMel(hz) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.hzToMel(hz);
-}
-function melToHz(mel) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.melToHz(mel);
-}
-function hzToMidi(hz) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.hzToMidi(hz);
-}
-function midiToHz(midi) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.midiToHz(midi);
-}
-function hzToNote(hz) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.hzToNote(hz);
-}
-function noteToHz(note) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.noteToHz(note);
-}
-function framesToTime(frames, sr = 22050, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.framesToTime(frames, sr, hopLength);
-}
-function timeToFrames(time, sr = 22050, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.timeToFrames(time, sr, hopLength);
-}
-function framesToSamples(frames, hopLength = 512, nFft = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.framesToSamples(frames, hopLength, nFft);
-}
-function samplesToFrames(samples, hopLength = 512, nFft = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.samplesToFrames(samples, hopLength, nFft);
-}
-function powerToDb(values, ref = 1, amin = 1e-10, topDb = 80) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.powerToDb(values, ref, amin, topDb);
-}
-function amplitudeToDb(values, ref = 1, amin = 1e-5, topDb = 80) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.amplitudeToDb(values, ref, amin, topDb);
-}
-function dbToPower(values, ref = 1) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.dbToPower(values, ref);
-}
-function dbToAmplitude(values, ref = 1) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.dbToAmplitude(values, ref);
-}
-function preemphasis(samples, coef = 0.97, zi) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.preemphasis(samples, coef, zi ?? null);
-}
-function deemphasis(samples, coef = 0.97, zi) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.deemphasis(samples, coef, zi ?? null);
-}
-function trimSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.trimSilence(samples, topDb, frameLength, hopLength);
-}
-function splitSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.splitSilence(samples, topDb, frameLength, hopLength);
-}
-function frameSignal(samples, frameLength, hopLength) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.frameSignal(samples, frameLength, hopLength);
-}
-function padCenter(values, targetSize, padValue = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.padCenter(values, targetSize, padValue);
-}
-function fixLength(values, targetSize, padValue = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.fixLength(values, targetSize, padValue);
-}
-function fixFrames(frames, xMin = 0, xMax = -1, pad = true) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.fixFrames(frames, xMin, xMax, pad);
-}
-function peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait);
-}
-function vectorNormalize(values, normType = 0, threshold = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.vectorNormalize(values, normType, threshold);
-}
-function pcen(values, nBins, nFrames, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.pcen(values, nBins, nFrames, options);
-}
-function tonnetz(chromagram, nChroma, nFrames) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.tonnetz(chromagram, nChroma, nFrames);
-}
-function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation") {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
-}
-function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.cyclicTempogram(onsetEnvelope2, sampleRate, hopLength, winLength, bpmMin, nBins);
-}
-function plp(onsetEnvelope2, sampleRate = 22050, hopLength = 512, tempoMin = 30, tempoMax = 300, winLength = 384) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.plp(onsetEnvelope2, sampleRate, hopLength, tempoMin, tempoMax, winLength);
-}
-function nnlsChroma(samples, sampleRate = 22050) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.nnlsChroma(samples, sampleRate);
-}
-function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.cqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
-}
-function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma = 0) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
-}
-function analyzeSections(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, minSectionSec = 4) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.analyzeSections(samples, sampleRate, nFft, hopLength, minSectionSec).map((s) => ({ ...s, type: s.type }));
-}
-function analyzeMelody(samples, sampleRate = 22050, fmin = 65, fmax = 2093, frameLength = 2048, hopLength = 256, threshold = 0.1) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.analyzeMelody(samples, sampleRate, fmin, fmax, frameLength, hopLength, threshold);
-}
-function onsetEnvelope(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.onsetEnvelope(samples, sampleRate, nFft, hopLength, nMels);
-}
-function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
-}
-function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module.tempogramRatio(tempogramData, winLength, sampleRate, hopLength);
-}
-function lufs(samples, sampleRate = 22050, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("lufs", samples, options.validate !== false);
-  return module.lufs(samples, sampleRate);
-}
-function momentaryLufs(samples, sampleRate = 22050, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("momentaryLufs", samples, options.validate !== false);
-  return module.momentaryLufs(samples, sampleRate);
-}
-function shortTermLufs(samples, sampleRate = 22050, options = {}) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  assertSamples("shortTermLufs", samples, options.validate !== false);
-  return module.shortTermLufs(samples, sampleRate);
-}
-function requireModule() {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
-  }
-  return module;
-}
-function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringPeakDb", samples, options.validate !== false);
-  return requireModule().meteringPeakDb(samples, sampleRate);
-}
-function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringRmsDb", samples, options.validate !== false);
-  return requireModule().meteringRmsDb(samples, sampleRate);
-}
-function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringCrestFactorDb", samples, options.validate !== false);
-  return requireModule().meteringCrestFactorDb(samples, sampleRate);
-}
-function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDcOffset", samples, options.validate !== false);
-  return requireModule().meteringDcOffset(samples, sampleRate);
-}
-function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
-  assertSamples("meteringTruePeakDb", samples, options.validate !== false);
-  return requireModule().meteringTruePeakDb(samples, sampleRate, oversampleFactor);
-}
-function meteringDetectClipping(samples, sampleRate = 22050, threshold = 0.999, minRegionSamples = 1, options = {}) {
-  assertSamples("meteringDetectClipping", samples, options.validate !== false);
-  return requireModule().meteringDetectClipping(samples, sampleRate, threshold, minRegionSamples);
-}
-function meteringDynamicRange(samples, sampleRate = 22050, windowSec = 0, hopSec = 0, lowPercentile = 0, highPercentile = 0, options = {}) {
-  assertSamples("meteringDynamicRange", samples, options.validate !== false);
-  return requireModule().meteringDynamicRange(
-    samples,
-    sampleRate,
-    windowSec,
-    hopSec,
-    lowPercentile,
-    highPercentile
-  );
-}
-function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringStereoCorrelation", left, validate, "left");
-  assertSamples("meteringStereoCorrelation", right, validate, "right");
-  return requireModule().meteringStereoCorrelation(left, right, sampleRate);
-}
-function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringStereoWidth", left, validate, "left");
-  assertSamples("meteringStereoWidth", right, validate, "right");
-  return requireModule().meteringStereoWidth(left, right, sampleRate);
-}
-function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringVectorscope", left, validate, "left");
-  assertSamples("meteringVectorscope", right, validate, "right");
-  return requireModule().meteringVectorscope(left, right, sampleRate);
-}
-function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringPhaseScope", left, validate, "left");
-  assertSamples("meteringPhaseScope", right, validate, "right");
-  return requireModule().meteringPhaseScope(left, right, sampleRate);
-}
-function meteringSpectrum(samples, sampleRate = 22050, options) {
-  const validate = options?.validate !== false;
-  assertSamples("meteringSpectrum", samples, validate);
-  return requireModule().meteringSpectrum(samples, sampleRate, options ?? {});
-}
-function scaleQuantizeMidi(root, modeMask, midi, referenceMidi = 0) {
-  assertFiniteScalar("scaleQuantizeMidi", midi, "midi");
-  assertFiniteScalar("scaleQuantizeMidi", referenceMidi, "referenceMidi");
-  return requireModule().scaleQuantizeMidi(root, modeMask, midi, referenceMidi);
-}
-function scaleCorrectionSemitones(root, modeMask, midi, referenceMidi = 0) {
-  assertFiniteScalar("scaleCorrectionSemitones", midi, "midi");
-  assertFiniteScalar("scaleCorrectionSemitones", referenceMidi, "referenceMidi");
-  return requireModule().scaleCorrectionSemitones(root, modeMask, midi, referenceMidi);
-}
-function scalePitchClassEnabled(root, modeMask, pitchClass) {
-  return requireModule().scalePitchClassEnabled(root, modeMask, pitchClass);
+
+// src/feature_resample.ts
+function requireModule5() {
+  return getSonareModule();
 }
 function resample(samples, srcSr, targetSr) {
-  if (!module) {
-    throw new Error("Module not initialized. Call init() first.");
+  return requireModule5().resample(samples, srcSr, targetSr);
+}
+
+// src/feature_spectral.ts
+function requireModule6() {
+  return getSonareModule();
+}
+function spectralCentroid(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  return requireModule6().spectralCentroid(samples, sampleRate, nFft, hopLength);
+}
+function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nBands = 6, fmin = 200, quantile = 0.02) {
+  return requireModule6().spectralContrast(
+    samples,
+    sampleRate,
+    nFft,
+    hopLength,
+    nBands,
+    fmin,
+    quantile
+  );
+}
+function polyFeatures(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, order = 1) {
+  return requireModule6().polyFeatures(samples, sampleRate, nFft, hopLength, order);
+}
+function zeroCrossings(samples, threshold = 1e-10, refMagnitude = false, pad = true, zeroPos = true) {
+  return requireModule6().zeroCrossings(samples, threshold, refMagnitude, pad, zeroPos);
+}
+function pitchTuning(frequencies, resolution = 0.01, binsPerOctave = 12) {
+  return requireModule6().pitchTuning(frequencies, resolution, binsPerOctave);
+}
+function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, resolution = 0.01, binsPerOctave = 12) {
+  return requireModule6().estimateTuning(
+    samples,
+    sampleRate,
+    nFft,
+    hopLength,
+    resolution,
+    binsPerOctave
+  );
+}
+function decompose(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2) {
+  return requireModule6().decompose(s, nFeatures, nFrames, nComponents, nIter, beta);
+}
+function decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2, init2 = "random") {
+  return requireModule6().decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter, beta, init2);
+}
+function nnFilter(s, nFeatures, nFrames, aggregate = "mean", k = 7, width = 1) {
+  return requireModule6().nnFilter(s, nFeatures, nFrames, aggregate, k, width);
+}
+function remix(samples, intervals, sampleRate = 22050, alignZeros = false) {
+  const intervalsI32 = intervals instanceof Int32Array ? intervals : Int32Array.from(intervals, (v) => Math.trunc(v));
+  return requireModule6().remix(samples, intervalsI32, sampleRate, alignZeros);
+}
+function phaseVocoder(samples, rate, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  return requireModule6().phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
+}
+function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
+  return requireModule6().hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
+}
+function lufsInterleaved(samples, channels, sampleRate = 22050, options = {}) {
+  assertSampleRate("lufsInterleaved", sampleRate);
+  assertInterleavedSamples("lufsInterleaved", samples, channels, options.validate !== false);
+  return requireModule6().lufsInterleaved(samples, channels, sampleRate);
+}
+function ebur128LoudnessRange(samples, sampleRate = 22050) {
+  return requireModule6().ebur128LoudnessRange(samples, sampleRate);
+}
+function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  return requireModule6().spectralBandwidth(samples, sampleRate, nFft, hopLength);
+}
+function spectralRolloff(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
+  return requireModule6().spectralRolloff(samples, sampleRate, nFft, hopLength, rollPercent);
+}
+function spectralFlatness(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  return requireModule6().spectralFlatness(samples, sampleRate, nFft, hopLength);
+}
+function zeroCrossingRate(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
+  return requireModule6().zeroCrossingRate(samples, sampleRate, frameLength, hopLength);
+}
+function rmsEnergy(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
+  return requireModule6().rmsEnergy(samples, sampleRate, frameLength, hopLength);
+}
+
+// src/feature_spectrogram.ts
+function requireModule7() {
+  return getSonareModule();
+}
+function validateSpectrogramSamples(fnName, samples, sampleRate, options = {}) {
+  assertSampleRate(fnName, sampleRate);
+  assertSamples(fnName, samples, options.validate !== false);
+}
+function validatePositiveIntegers2(fnName, values) {
+  for (const [name, value] of Object.entries(values)) {
+    assertPositiveInteger(fnName, value, name);
   }
-  return module.resample(samples, srcSr, targetSr);
+}
+function validateMelFrequencyRange(fnName, fmin, fmax, sampleRate) {
+  assertFiniteScalar(fnName, fmin, "fmin");
+  assertFiniteScalar(fnName, fmax, "fmax");
+  if (fmin < 0) {
+    throw new RangeError(`${fnName}: fmin must be non-negative`);
+  }
+  if (fmax < 0) {
+    throw new RangeError(`${fnName}: fmax must be non-negative`);
+  }
+  const effectiveFmax = fmax === 0 ? sampleRate / 2 : fmax;
+  if (effectiveFmax <= fmin) {
+    throw new RangeError(`${fnName}: fmax must be greater than fmin`);
+  }
+}
+function validateMatrix(fnName, data, rows, frames, dataName, rowName, options = {}) {
+  validatePositiveIntegers2(fnName, { [rowName]: rows, nFrames: frames });
+  assertSamples(fnName, data, options.validate !== false, dataName);
+  const expectedLength = rows * frames;
+  if (!Number.isSafeInteger(expectedLength) || data.length !== expectedLength) {
+    throw new RangeError(`${fnName}: ${dataName} length must equal ${rowName} * nFrames`);
+  }
+}
+function trim(samples, sampleRate, thresholdDb = -60, options = {}) {
+  validateSpectrogramSamples("trim", samples, sampleRate, options);
+  assertFiniteScalar("trim", thresholdDb, "thresholdDb");
+  return requireModule7().trim(samples, sampleRate, thresholdDb);
+}
+function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  validateSpectrogramSamples("stft", samples, sampleRate, options);
+  validatePositiveIntegers2("stft", { nFft, hopLength });
+  return requireModule7().stft(samples, sampleRate, nFft, hopLength);
+}
+function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  validateSpectrogramSamples("stftDb", samples, sampleRate, options);
+  validatePositiveIntegers2("stftDb", { nFft, hopLength });
+  return requireModule7().stftDb(samples, sampleRate, nFft, hopLength);
+}
+function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  validateSpectrogramSamples("chromaCens", samples, sampleRate, options);
+  validatePositiveIntegers2("chromaCens", { hopLength, nChroma });
+  return requireModule7().chromaCens(samples, sampleRate, hopLength, nChroma);
+}
+function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  validateSpectrogramSamples("bassChroma", samples, sampleRate, options);
+  validatePositiveIntegers2("bassChroma", { hopLength, nChroma });
+  return requireModule7().bassChroma(samples, sampleRate, hopLength, nChroma);
+}
+function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, fmin = 0, fmax = 0, htk = false, options = {}) {
+  validateSpectrogramSamples("melSpectrogram", samples, sampleRate, options);
+  validatePositiveIntegers2("melSpectrogram", { nFft, hopLength, nMels });
+  validateMelFrequencyRange("melSpectrogram", fmin, fmax, sampleRate);
+  return requireModule7().melSpectrogram(
+    samples,
+    sampleRate,
+    nFft,
+    hopLength,
+    nMels,
+    fmin,
+    fmax,
+    htk
+  );
+}
+function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20, fmin = 0, fmax = 0, htk = false, options = {}) {
+  validateSpectrogramSamples("mfcc", samples, sampleRate, options);
+  validatePositiveIntegers2("mfcc", { nFft, hopLength, nMels, nMfcc });
+  validateMelFrequencyRange("mfcc", fmin, fmax, sampleRate);
+  return requireModule7().mfcc(samples, sampleRate, nFft, hopLength, nMels, nMfcc, fmin, fmax, htk);
+}
+function melToStft(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0, htk = false, options = {}) {
+  assertSampleRate("melToStft", sampleRate);
+  validateMatrix("melToStft", melPower, nMels, nFrames, "melPower", "nMels", options);
+  validatePositiveIntegers2("melToStft", { nFft });
+  validateMelFrequencyRange("melToStft", fmin, fmax, sampleRate);
+  return requireModule7().melToStft(melPower, nMels, nFrames, sampleRate, nFft, fmin, fmax, htk);
+}
+function melToAudio(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+  assertSampleRate("melToAudio", sampleRate);
+  validateMatrix("melToAudio", melPower, nMels, nFrames, "melPower", "nMels", options);
+  validatePositiveIntegers2("melToAudio", { nFft, hopLength, nIter });
+  validateMelFrequencyRange("melToAudio", fmin, fmax, sampleRate);
+  return requireModule7().melToAudio(
+    melPower,
+    nMels,
+    nFrames,
+    sampleRate,
+    nFft,
+    hopLength,
+    fmin,
+    fmax,
+    nIter,
+    htk
+  );
+}
+function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128, options = {}) {
+  validateMatrix(
+    "mfccToMel",
+    mfccCoefficients,
+    nMfcc,
+    nFrames,
+    "mfccCoefficients",
+    "nMfcc",
+    options
+  );
+  validatePositiveIntegers2("mfccToMel", { nMels });
+  return requireModule7().mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
+}
+function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+  assertSampleRate("mfccToAudio", sampleRate);
+  validateMatrix(
+    "mfccToAudio",
+    mfccCoefficients,
+    nMfcc,
+    nFrames,
+    "mfccCoefficients",
+    "nMfcc",
+    options
+  );
+  validatePositiveIntegers2("mfccToAudio", { nMels, nFft, hopLength, nIter });
+  validateMelFrequencyRange("mfccToAudio", fmin, fmax, sampleRate);
+  return requireModule7().mfccToAudio(
+    mfccCoefficients,
+    nMfcc,
+    nFrames,
+    nMels,
+    sampleRate,
+    nFft,
+    hopLength,
+    fmin,
+    fmax,
+    nIter,
+    htk
+  );
+}
+function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  validateSpectrogramSamples("chroma", samples, sampleRate, options);
+  validatePositiveIntegers2("chroma", { nFft, hopLength });
+  return requireModule7().chroma(samples, sampleRate, nFft, hopLength);
+}
+
+// src/public_types.ts
+var PitchClass = {
+  C: 0,
+  Cs: 1,
+  D: 2,
+  Ds: 3,
+  E: 4,
+  F: 5,
+  Fs: 6,
+  G: 7,
+  Gs: 8,
+  A: 9,
+  As: 10,
+  B: 11
+};
+var Mode = {
+  Major: 0,
+  Minor: 1,
+  Dorian: 2,
+  Phrygian: 3,
+  Lydian: 4,
+  Mixolydian: 5,
+  Locrian: 6
+};
+var KeyProfile = {
+  KrumhanslSchmuckler: 0,
+  Temperley: 1,
+  Shaath: 2,
+  FaraldoEDMT: 3,
+  FaraldoEDMA: 4,
+  FaraldoEDMM: 5,
+  BellmanBudge: 6
+};
+var ChordQuality = {
+  Major: 0,
+  Minor: 1,
+  Diminished: 2,
+  Augmented: 3,
+  Dominant7: 4,
+  Major7: 5,
+  Minor7: 6,
+  Sus2: 7,
+  Sus4: 8,
+  Unknown: 9,
+  Add9: 10,
+  MinorAdd9: 11,
+  Dim7: 12,
+  HalfDim7: 13,
+  Major9: 14,
+  Dominant9: 15,
+  Sus2Add4: 16
+};
+var SectionType = {
+  Intro: 0,
+  Verse: 1,
+  PreChorus: 2,
+  Chorus: 3,
+  Bridge: 4,
+  Instrumental: 5,
+  Outro: 6,
+  Unknown: 7
+};
+
+// src/analysis_helpers.ts
+function convertKeyCandidate(wasm) {
+  return {
+    key: {
+      root: wasm.key.root,
+      mode: wasm.key.mode,
+      confidence: wasm.key.confidence,
+      name: wasm.key.name,
+      shortName: wasm.key.shortName
+    },
+    correlation: wasm.correlation
+  };
+}
+function keyModeValues(modes) {
+  if (!modes) {
+    return [];
+  }
+  if (modes === "major-minor") {
+    return [Mode.Major, Mode.Minor];
+  }
+  if (modes === "all" || modes === "modal") {
+    return [
+      Mode.Major,
+      Mode.Minor,
+      Mode.Dorian,
+      Mode.Phrygian,
+      Mode.Lydian,
+      Mode.Mixolydian,
+      Mode.Locrian
+    ];
+  }
+  const names = {
+    major: Mode.Major,
+    minor: Mode.Minor,
+    dorian: Mode.Dorian,
+    phrygian: Mode.Phrygian,
+    lydian: Mode.Lydian,
+    mixolydian: Mode.Mixolydian,
+    locrian: Mode.Locrian
+  };
+  return modes.map((mode) => typeof mode === "number" ? mode : names[mode]);
+}
+function keyProfileValue(profile) {
+  if (profile === void 0) {
+    return -1;
+  }
+  if (typeof profile === "number") {
+    return profile;
+  }
+  const names = {
+    ks: KeyProfile.KrumhanslSchmuckler,
+    krumhansl: KeyProfile.KrumhanslSchmuckler,
+    temperley: KeyProfile.Temperley,
+    shaath: KeyProfile.Shaath,
+    keyfinder: KeyProfile.Shaath,
+    "faraldo-edmt": KeyProfile.FaraldoEDMT,
+    edmt: KeyProfile.FaraldoEDMT,
+    "faraldo-edma": KeyProfile.FaraldoEDMA,
+    edma: KeyProfile.FaraldoEDMA,
+    "faraldo-edmm": KeyProfile.FaraldoEDMM,
+    edmm: KeyProfile.FaraldoEDMM,
+    "bellman-budge": KeyProfile.BellmanBudge,
+    bellman: KeyProfile.BellmanBudge
+  };
+  return names[profile];
+}
+function convertChordAnalysisResult(wasm) {
+  return {
+    chords: wasm.chords.map((c) => ({
+      root: c.root,
+      bass: c.bass,
+      quality: c.quality,
+      start: c.start,
+      end: c.end,
+      confidence: c.confidence,
+      name: c.name
+    }))
+  };
+}
+function chordChromaMethodValue(method) {
+  if (method === "stft") {
+    return 0;
+  }
+  if (method === "nnls") {
+    return 1;
+  }
+  throw new Error(`Invalid chord chroma method: ${method}`);
+}
+function convertAnalysisResult(wasm) {
+  const beatTimes = new Float32Array(wasm.beats.length);
+  for (let i = 0; i < wasm.beats.length; i++) {
+    beatTimes[i] = wasm.beats[i].time;
+  }
+  return {
+    bpm: wasm.bpm,
+    bpmConfidence: wasm.bpmConfidence,
+    key: {
+      root: wasm.key.root,
+      mode: wasm.key.mode,
+      confidence: wasm.key.confidence,
+      name: wasm.key.name,
+      shortName: wasm.key.shortName
+    },
+    timeSignature: wasm.timeSignature,
+    beatTimes,
+    beats: wasm.beats,
+    chords: wasm.chords.map((c) => ({
+      root: c.root,
+      bass: c.bass,
+      quality: c.quality,
+      start: c.start,
+      end: c.end,
+      confidence: c.confidence,
+      name: c.name
+    })),
+    sections: wasm.sections.map((s) => ({
+      type: s.type,
+      start: s.start,
+      end: s.end,
+      energyLevel: s.energyLevel,
+      confidence: s.confidence,
+      name: s.name
+    })),
+    timbre: wasm.timbre,
+    dynamics: wasm.dynamics,
+    rhythm: wasm.rhythm,
+    melody: wasm.melody,
+    form: wasm.form
+  };
+}
+
+// src/quick_analysis.ts
+function requireModule8() {
+  return getSonareModule();
+}
+function validateAnalysisInput(fnName, samples, sampleRate, options = {}) {
+  assertSampleRate(fnName, sampleRate);
+  assertSamples(fnName, samples, options.validate !== false);
+}
+function detectBpm(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectBpm", samples, sampleRate, options);
+  return requireModule8().detectBpm(samples, sampleRate);
+}
+function detectKey(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectKey", samples, sampleRate, options);
+  const result = requireModule8()._detectKeyWithOptions(
+    samples,
+    sampleRate,
+    options.nFft ?? 4096,
+    options.hopLength ?? 512,
+    options.useHpss ?? false,
+    options.loudnessWeighted ?? false,
+    options.highPassHz ?? 0,
+    keyModeValues(options.modes),
+    keyProfileValue(options.profile),
+    options.genreHint ?? ""
+  );
+  return {
+    root: result.root,
+    mode: result.mode,
+    confidence: result.confidence,
+    name: result.name,
+    shortName: result.shortName
+  };
+}
+function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectKeyCandidates", samples, sampleRate, options);
+  return requireModule8()._detectKeyCandidates(
+    samples,
+    sampleRate,
+    options.nFft ?? 4096,
+    options.hopLength ?? 512,
+    options.useHpss ?? false,
+    options.loudnessWeighted ?? false,
+    options.highPassHz ?? 0,
+    keyModeValues(options.modes),
+    keyProfileValue(options.profile),
+    options.genreHint ?? ""
+  ).map(convertKeyCandidate);
+}
+function detectOnsets(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectOnsets", samples, sampleRate, options);
+  return requireModule8().detectOnsets(samples, sampleRate);
+}
+function detectBeats(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectBeats", samples, sampleRate, options);
+  return requireModule8().detectBeats(samples, sampleRate);
+}
+function detectDownbeats(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectDownbeats", samples, sampleRate, options);
+  return requireModule8().detectDownbeats(samples, sampleRate);
+}
+function detectChords(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("detectChords", samples, sampleRate, options);
+  const result = requireModule8().detectChords(
+    samples,
+    sampleRate,
+    options.minDuration ?? 0.3,
+    options.smoothingWindow ?? 2,
+    options.threshold ?? 0.5,
+    options.useTriadsOnly ?? false,
+    options.nFft ?? 2048,
+    options.hopLength ?? 512,
+    options.useBeatSync ?? true,
+    options.useHmm ?? false,
+    options.hmmBeamWidth ?? 24,
+    options.useKeyContext ?? false,
+    options.keyRoot ?? PitchClass.C,
+    options.keyMode ?? Mode.Major,
+    options.detectInversions ?? false,
+    chordChromaMethodValue(options.chromaMethod ?? "stft")
+  );
+  return convertChordAnalysisResult(result);
+}
+function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("chordFunctionalAnalysis", samples, sampleRate, options);
+  return requireModule8().chordFunctionalAnalysis(
+    samples,
+    keyRoot,
+    keyMode,
+    sampleRate,
+    options.minDuration ?? 0.3,
+    options.smoothingWindow ?? 2,
+    options.threshold ?? 0.5,
+    options.useTriadsOnly ?? false,
+    options.nFft ?? 2048,
+    options.hopLength ?? 512,
+    options.useBeatSync ?? true,
+    options.useHmm ?? false,
+    options.hmmBeamWidth ?? 24,
+    options.useKeyContext ?? false,
+    options.detectInversions ?? false,
+    chordChromaMethodValue(options.chromaMethod ?? "stft")
+  );
+}
+function analyze(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("analyze", samples, sampleRate, options);
+  const result = requireModule8().analyze(samples, sampleRate);
+  return convertAnalysisResult(result);
+}
+function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
+  validateAnalysisInput("analyzeImpulseResponse", samples, sampleRate);
+  const result = requireModule8().analyzeImpulseResponse(
+    samples,
+    sampleRate,
+    nOctaveBands
+  );
+  return result;
+}
+function detectAcoustic(samples, sampleRate = 48e3, options = {}) {
+  validateAnalysisInput("detectAcoustic", samples, sampleRate);
+  const result = requireModule8().detectAcoustic(
+    samples,
+    sampleRate,
+    options.nOctaveBands ?? 6,
+    options.nThirdOctaveSubbands ?? 24,
+    options.minDecayDb ?? 30,
+    options.noiseFloorMarginDb ?? 10
+  );
+  return result;
+}
+function synthesizeRir(options = {}) {
+  const module2 = requireModule8();
+  if (typeof module2.synthesizeRir !== "function") {
+    throw new Error("libsonare was built without acoustic-simulation support");
+  }
+  return module2.synthesizeRir(options);
+}
+function estimateRoom(samples, sampleRate = 48e3, options = {}) {
+  const module2 = requireModule8();
+  if (typeof module2.estimateRoom !== "function") {
+    throw new Error("libsonare was built without acoustic-simulation support");
+  }
+  validateAnalysisInput("estimateRoom", samples, sampleRate);
+  return module2.estimateRoom(samples, sampleRate, options);
+}
+function roomMorph(samples, sampleRate, options = {}) {
+  const module2 = requireModule8();
+  if (typeof module2.roomMorph !== "function") {
+    throw new Error("libsonare was built without acoustic-simulation support");
+  }
+  validateAnalysisInput("roomMorph", samples, sampleRate);
+  return module2.roomMorph(samples, sampleRate, options);
+}
+function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
+  validateAnalysisInput("analyzeWithProgress", samples, sampleRate);
+  const result = requireModule8().analyzeWithProgress(samples, sampleRate, onProgress);
+  return convertAnalysisResult(result);
+}
+function analyzeBpm(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("analyzeBpm", samples, sampleRate, options);
+  assertNonNegativeInteger("analyzeBpm", options.maxCandidates ?? 5, "maxCandidates");
+  return requireModule8().analyzeBpm(
+    samples,
+    sampleRate,
+    options.bpmMin ?? 30,
+    options.bpmMax ?? 300,
+    options.startBpm ?? 120,
+    options.nFft ?? 2048,
+    options.hopLength ?? 512,
+    options.maxCandidates ?? 5
+  );
+}
+function analyzeRhythm(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("analyzeRhythm", samples, sampleRate, options);
+  return requireModule8().analyzeRhythm(
+    samples,
+    sampleRate,
+    options.bpmMin ?? 60,
+    options.bpmMax ?? 200,
+    options.startBpm ?? 120,
+    options.nFft ?? 2048,
+    options.hopLength ?? 512
+  );
+}
+function analyzeDynamics(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("analyzeDynamics", samples, sampleRate, options);
+  return requireModule8().analyzeDynamics(
+    samples,
+    sampleRate,
+    options.windowSec ?? 0.4,
+    options.hopLength ?? 512,
+    options.compressionThreshold ?? 6
+  );
+}
+function analyzeTimbre(samples, sampleRate = 22050, options = {}) {
+  validateAnalysisInput("analyzeTimbre", samples, sampleRate, options);
+  return requireModule8().analyzeTimbre(
+    samples,
+    sampleRate,
+    options.nFft ?? 2048,
+    options.hopLength ?? 512,
+    options.nMels ?? 128,
+    options.nMfcc ?? 13,
+    options.windowSec ?? 0.5
+  );
+}
+function hasFfmpegSupport() {
+  return requireModule8().hasFfmpegSupport();
+}
+
+// src/audio.ts
+function encodedBytesToArrayBuffer(bytes) {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+function getBrowserAudioContextFactory() {
+  const root = globalThis;
+  const Ctor = root.AudioContext ?? root.webkitAudioContext;
+  return Ctor ? (options) => new Ctor(options) : void 0;
+}
+function audioBufferToMono(buffer) {
+  const samples = new Float32Array(buffer.length);
+  if (buffer.numberOfChannels <= 0) {
+    return samples;
+  }
+  if (buffer.numberOfChannels === 1) {
+    samples.set(buffer.getChannelData(0));
+    return samples;
+  }
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < buffer.length; i++) {
+      samples[i] += data[i] / buffer.numberOfChannels;
+    }
+  }
+  return samples;
+}
+async function closeCreatedContext(context) {
+  const maybeClosable = context;
+  if (maybeClosable.close) {
+    await maybeClosable.close();
+  }
 }
 var Audio = class _Audio {
   constructor(samples, sampleRate) {
     this._samples = samples;
     this._sampleRate = sampleRate;
   }
-  /** Create an Audio instance from raw sample data. */
-  static fromBuffer(samples, sampleRate) {
+  /**
+   * Create an Audio instance from raw sample data.
+   *
+   * @param samples - Mono float samples.
+   * @param sampleRate - Sample rate in Hz (default `48000`, matching the
+   *   Node/Python surfaces).
+   */
+  static fromBuffer(samples, sampleRate = 48e3) {
     return new _Audio(samples, sampleRate);
+  }
+  /**
+   * Create an Audio instance by decoding audio bytes in memory.
+   *
+   * @param bytes - Encoded audio bytes such as WAV or MP3.
+   */
+  static fromMemory(bytes) {
+    const decoded = getSonareModule().audioFromMemory(bytes);
+    return new _Audio(decoded.samples, decoded.sampleRate);
+  }
+  /**
+   * Decode audio bytes with the native WASM decoder first, then fall back to the
+   * browser codec stack (`AudioContext.decodeAudioData`) for formats such as
+   * AAC, OGG, and FLAC when available. Browser-decoded multi-channel audio is
+   * mixed down to mono to match the `Audio` wrapper contract.
+   */
+  static async fromMemoryWithBrowserFallback(bytes, options = {}) {
+    try {
+      return _Audio.fromMemory(bytes);
+    } catch (nativeError) {
+      let createdContext = false;
+      const contextFactory = options.createAudioContext ?? getBrowserAudioContextFactory();
+      const context = options.audioContext ?? contextFactory?.(
+        options.targetSampleRate ? { sampleRate: options.targetSampleRate } : void 0
+      );
+      if (!context) {
+        throw new Error(
+          `Audio.fromMemory failed and browser decodeAudioData is unavailable: ${nativeError instanceof Error ? nativeError.message : String(nativeError)}`
+        );
+      }
+      createdContext = !options.audioContext;
+      try {
+        const decoded = await context.decodeAudioData(encodedBytesToArrayBuffer(bytes));
+        return new _Audio(audioBufferToMono(decoded), decoded.sampleRate || context.sampleRate);
+      } catch (fallbackError) {
+        throw new Error(
+          `Audio.fromMemory failed and browser decodeAudioData fallback failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+        );
+      } finally {
+        if (createdContext) {
+          await closeCreatedContext(context);
+        }
+      }
+    }
   }
   /** The raw audio samples. */
   get data() {
@@ -2310,6 +2222,9 @@ var Audio = class _Audio {
   detectChords(options = {}) {
     return detectChords(this._samples, this._sampleRate, options);
   }
+  chordFunctionalAnalysis(keyRoot, keyMode, options = {}) {
+    return chordFunctionalAnalysis(this._samples, keyRoot, keyMode, this._sampleRate, options);
+  }
   analyze() {
     return analyze(this._samples, this._sampleRate);
   }
@@ -2335,23 +2250,23 @@ var Audio = class _Audio {
   pitchCorrectToMidi(currentMidi = 69, targetMidi = 69) {
     return pitchCorrectToMidi(this._samples, this._sampleRate, currentMidi, targetMidi);
   }
-  noteStretch(onsetSample = 0, offsetSample = 0, stretchRatio = 1) {
-    return noteStretch(this._samples, this._sampleRate, onsetSample, offsetSample, stretchRatio);
+  noteStretch(options = {}) {
+    return noteStretch(this._samples, this._sampleRate, options);
   }
-  voiceChange(pitchSemitones = 0, formantFactor = 1) {
-    return voiceChange(this._samples, this._sampleRate, pitchSemitones, formantFactor);
+  voiceChange(options = {}) {
+    return voiceChange(this._samples, this._sampleRate, options);
   }
   normalize(targetDb = 0) {
     return normalize(this._samples, this._sampleRate, targetDb);
   }
-  mastering(targetLufs = -14, ceilingDb = -1, truePeakOversample = 4) {
-    return mastering(this._samples, this._sampleRate, targetLufs, ceilingDb, truePeakOversample);
+  mastering(options = {}) {
+    return mastering(this._samples, this._sampleRate, options);
   }
   masteringChain(config) {
     return masteringChain(this._samples, this._sampleRate, config);
   }
-  masterAudio(presetName, overrides = null) {
-    return masterAudio(this._samples, this._sampleRate, presetName, overrides);
+  masterAudio(presetName = "pop", overrides = null) {
+    return masterAudio(this._samples, this._sampleRate, presetName, overrides ?? {});
   }
   masteringProcess(processorName, params = {}) {
     return masteringProcess(processorName, this._samples, this._sampleRate, params);
@@ -2366,11 +2281,11 @@ var Audio = class _Audio {
   stftDb(nFft = 2048, hopLength = 512) {
     return stftDb(this._samples, this._sampleRate, nFft, hopLength);
   }
-  melSpectrogram(nFft = 2048, hopLength = 512, nMels = 128) {
-    return melSpectrogram(this._samples, this._sampleRate, nFft, hopLength, nMels);
+  melSpectrogram(nFft = 2048, hopLength = 512, nMels = 128, fmin = 0, fmax = 0, htk = false) {
+    return melSpectrogram(this._samples, this._sampleRate, nFft, hopLength, nMels, fmin, fmax, htk);
   }
-  mfcc(nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20) {
-    return mfcc(this._samples, this._sampleRate, nFft, hopLength, nMels, nMfcc);
+  mfcc(nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20, fmin = 0, fmax = 0, htk = false) {
+    return mfcc(this._samples, this._sampleRate, nFft, hopLength, nMels, nMfcc, fmin, fmax, htk);
   }
   chroma(nFft = 2048, hopLength = 512) {
     return chroma(this._samples, this._sampleRate, nFft, hopLength);
@@ -2436,35 +2351,1449 @@ var Audio = class _Audio {
     return resample(this._samples, this._sampleRate, targetSr);
   }
 };
+
+// src/live_audio.ts
+async function bindMicrophoneInput(context, engine, options = {}) {
+  const { stream: providedStream, stopTracksOnClose = true, ...constraints } = options;
+  const stream = providedStream ?? await navigator.mediaDevices.getUserMedia({
+    ...constraints,
+    audio: constraints.audio ?? true,
+    video: constraints.video ?? false
+  });
+  const source = context.createMediaStreamSource(stream);
+  const node = "node" in engine ? engine.node : engine;
+  source.connect(node);
+  let closed = false;
+  return {
+    stream,
+    source,
+    close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      source.disconnect();
+      if (stopTracksOnClose) {
+        for (const track of stream.getAudioTracks()) {
+          track.stop();
+        }
+      }
+    }
+  };
+}
+
+// src/metering.ts
+function requireModule9() {
+  return getSonareModule();
+}
+function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringPeakDb", samples, options.validate !== false);
+  return requireModule9().meteringPeakDb(samples, sampleRate);
+}
+function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringRmsDb", samples, options.validate !== false);
+  return requireModule9().meteringRmsDb(samples, sampleRate);
+}
+function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringCrestFactorDb", samples, options.validate !== false);
+  return requireModule9().meteringCrestFactorDb(samples, sampleRate);
+}
+function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDcOffset", samples, options.validate !== false);
+  return requireModule9().meteringDcOffset(samples, sampleRate);
+}
+function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
+  assertSamples("meteringTruePeakDb", samples, options.validate !== false);
+  const factor = oversampleFactor === 0 ? 4 : oversampleFactor;
+  if (factor < 1 || factor > 16 || (factor & factor - 1) !== 0) {
+    throw new RangeError(
+      "meteringTruePeakDb: oversampleFactor must be 0 or a power of two from 1 to 16"
+    );
+  }
+  return requireModule9().meteringTruePeakDb(samples, sampleRate, oversampleFactor);
+}
+function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDetectClipping", samples, options.validate !== false);
+  return requireModule9().meteringDetectClipping(
+    samples,
+    sampleRate,
+    options.threshold ?? 0.999,
+    options.minRegionSamples ?? 1
+  );
+}
+function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDynamicRange", samples, options.validate !== false);
+  return requireModule9().meteringDynamicRange(
+    samples,
+    sampleRate,
+    options.windowSec ?? 0,
+    options.hopSec ?? 0,
+    options.lowPercentile ?? -1,
+    options.highPercentile ?? -1
+  );
+}
+function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringStereoCorrelation", left, validate, "left");
+  assertSamples("meteringStereoCorrelation", right, validate, "right");
+  return requireModule9().meteringStereoCorrelation(left, right, sampleRate);
+}
+function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringStereoWidth", left, validate, "left");
+  assertSamples("meteringStereoWidth", right, validate, "right");
+  return requireModule9().meteringStereoWidth(left, right, sampleRate);
+}
+function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringVectorscope", left, validate, "left");
+  assertSamples("meteringVectorscope", right, validate, "right");
+  return requireModule9().meteringVectorscope(left, right, sampleRate);
+}
+function meteringVectorscopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringVectorscopeDecimated", left, validate, "left");
+  assertSamples("meteringVectorscopeDecimated", right, validate, "right");
+  return requireModule9().meteringVectorscopeDecimated(left, right, sampleRate, maxPoints);
+}
+function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringPhaseScope", left, validate, "left");
+  assertSamples("meteringPhaseScope", right, validate, "right");
+  return requireModule9().meteringPhaseScope(left, right, sampleRate);
+}
+function meteringPhaseScopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringPhaseScopeDecimated", left, validate, "left");
+  assertSamples("meteringPhaseScopeDecimated", right, validate, "right");
+  return requireModule9().meteringPhaseScopeDecimated(left, right, sampleRate, maxPoints);
+}
+function meteringSpectrum(samples, sampleRate = 22050, options) {
+  const validate = options?.validate !== false;
+  assertSamples("meteringSpectrum", samples, validate);
+  return requireModule9().meteringSpectrum(samples, sampleRate, options ?? {});
+}
+function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, options) {
+  const validate = options?.validate !== false;
+  assertSamples("meteringSpectrumFrame", samples, validate);
+  return requireModule9().meteringSpectrumFrame(samples, sampleRate, frameOffset, options ?? {});
+}
+function waveformPeaks(samples, channels, options = {}) {
+  assertSamples("waveformPeaks", samples, options.validate !== false);
+  if (channels <= 0 || samples.length % channels !== 0) {
+    throw new RangeError("waveformPeaks: samples length must be a multiple of channels");
+  }
+  const samplesPerBucket = options.samplesPerBucket ?? 512;
+  if (samplesPerBucket <= 0) {
+    throw new RangeError("waveformPeaks: samplesPerBucket must be > 0");
+  }
+  return requireModule9().waveformPeaks(samples, channels, samplesPerBucket);
+}
+function waveformPeakPyramid(samples, channels, options = {}) {
+  assertSamples("waveformPeakPyramid", samples, options.validate !== false);
+  if (channels <= 0 || samples.length % channels !== 0) {
+    throw new RangeError("waveformPeakPyramid: samples length must be a multiple of channels");
+  }
+  const levels = options.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
+  if (levels.length === 0 || levels.some((level) => level <= 0)) {
+    throw new RangeError("waveformPeakPyramid: samplesPerBucketLevels must be non-empty and > 0");
+  }
+  return requireModule9().waveformPeakPyramid(samples, channels, levels);
+}
+
+// src/opfs_clip_pages.ts
+var opfsClipPageWorkerSource = `
+self.onmessage = async (event) => {
+  const message = event.data;
+  if (!message || message.type !== 'sonare:read-clip-page') return;
+  const { requestId, path, pageIndex, numChannels, numSamples, pageFrames, dataOffsetBytes = 0 } = message;
+  try {
+    if (pageIndex < 0) {
+      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
+      return;
+    }
+    const startFrame = pageIndex * pageFrames;
+    if (startFrame >= numSamples) {
+      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
+      return;
+    }
+    const root = await self.navigator.storage.getDirectory();
+    let dir = root;
+    const parts = String(path).split('/').filter(Boolean);
+    for (let i = 0; i < parts.length - 1; ++i) {
+      dir = await dir.getDirectoryHandle(parts[i]);
+    }
+    const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);
+    const access = await fileHandle.createSyncAccessHandle();
+    try {
+      const frames = Math.min(pageFrames, numSamples - startFrame);
+      const frameBytes = numChannels * 4;
+      const bytes = new Uint8Array(frames * frameBytes);
+      let bytesReadTotal = 0;
+      const readOffset = dataOffsetBytes + startFrame * frameBytes;
+      while (bytesReadTotal < bytes.byteLength) {
+        const bytesRead = access.read(bytes.subarray(bytesReadTotal), {
+          at: readOffset + bytesReadTotal,
+        });
+        if (bytesRead <= 0) {
+          break;
+        }
+        bytesReadTotal += bytesRead;
+      }
+      if (bytesReadTotal !== bytes.byteLength || bytesReadTotal % frameBytes !== 0) {
+        self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
+        return;
+      }
+      const framesRead = bytesReadTotal / frameBytes;
+      const view = new DataView(bytes.buffer, 0, framesRead * frameBytes);
+      const channelBuffers = Array.from({ length: numChannels }, () => new ArrayBuffer(framesRead * 4));
+      for (let ch = 0; ch < numChannels; ++ch) {
+        const channel = new Float32Array(channelBuffers[ch]);
+        for (let frame = 0; frame < framesRead; ++frame) {
+          channel[frame] = view.getFloat32((frame * numChannels + ch) * 4, true);
+        }
+      }
+      self.postMessage(
+        { type: 'sonare:clip-page', requestId, pageIndex, ok: true, frames: framesRead, channelBuffers },
+        channelBuffers,
+      );
+    } finally {
+      access.close();
+    }
+  } catch (error) {
+    self.postMessage({
+      type: 'sonare:clip-page',
+      requestId,
+      pageIndex,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+`;
+function createOpfsClipPageWorker() {
+  const blob = new Blob([opfsClipPageWorkerSource], { type: "text/javascript" });
+  return new Worker(URL.createObjectURL(blob));
+}
+function createOpfsClipPageProvider(engine, options) {
+  if (options.numChannels <= 0 || options.numSamples <= 0 || options.pageFrames <= 0) {
+    throw new Error("numChannels, numSamples, and pageFrames must be positive");
+  }
+  const provider = engine.createClipPageProvider(
+    options.numChannels,
+    options.numSamples,
+    options.pageFrames
+  );
+  const worker = options.worker ?? createOpfsClipPageWorker();
+  const ownsWorker = options.worker === void 0 || options.terminateWorkerOnClose === true;
+  let nextRequestId = 1;
+  let closed = false;
+  const pending = /* @__PURE__ */ new Map();
+  const onMessage = (event) => {
+    const response = event.data;
+    if (response?.type !== "sonare:clip-page") {
+      return;
+    }
+    const entry = pending.get(response.requestId);
+    if (!entry) {
+      return;
+    }
+    pending.delete(response.requestId);
+    if (!response.ok) {
+      entry.resolve(false);
+      return;
+    }
+    const channels = response.channels ?? response.channelBuffers?.map(
+      (buffer) => new Float32Array(buffer, 0, response.frames ?? buffer.byteLength / 4)
+    );
+    if (!channels || channels.length === 0) {
+      entry.resolve(false);
+      return;
+    }
+    try {
+      provider.supply(response.pageIndex, channels);
+    } catch {
+      entry.resolve(false);
+      return;
+    }
+    entry.resolve(true);
+  };
+  worker.addEventListener("message", onMessage);
+  const supplyPage = (pageIndex) => {
+    if (closed) {
+      return Promise.reject(new Error("OpfsClipPageProvider is closed"));
+    }
+    const requestId = nextRequestId++;
+    const promise = new Promise((resolve, reject) => {
+      pending.set(requestId, { resolve, reject });
+    });
+    worker.postMessage({
+      type: "sonare:read-clip-page",
+      requestId,
+      path: options.path,
+      pageIndex,
+      numChannels: options.numChannels,
+      numSamples: options.numSamples,
+      pageFrames: options.pageFrames,
+      dataOffsetBytes: options.dataOffsetBytes ?? 0
+    });
+    return promise;
+  };
+  return {
+    provider,
+    supplyPage,
+    supplyRequest(request) {
+      return supplyPage(Math.floor(request.sample / options.pageFrames));
+    },
+    close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      worker.removeEventListener("message", onMessage);
+      for (const entry of pending.values()) {
+        entry.reject(new Error("OpfsClipPageProvider is closed"));
+      }
+      pending.clear();
+      provider.destroy();
+      if (ownsWorker) {
+        worker.terminate();
+      }
+    }
+  };
+}
+
+// src/project.ts
+var EXPECTED_PROJECT_ABI_VERSION = 1;
+var SYNTH_ENGINE_MODES = [
+  "default",
+  "subtractive",
+  "fm",
+  "karplus-strong",
+  "modal",
+  "additive",
+  "percussion",
+  "piano"
+];
+var SYNTH_OSC_WAVEFORMS = [
+  "default",
+  "sine",
+  "saw",
+  "square",
+  "triangle",
+  "noise"
+];
+var SYNTH_FILTER_MODELS = [
+  "default",
+  "svf",
+  "moog-ladder",
+  "diode-ladder",
+  "sallen-key"
+];
+var SYNTH_FILTER_OUTPUTS = ["default", "lowpass", "bandpass", "highpass"];
+var SYNTH_BODY_TYPES = ["default", "none", "guitar", "violin", "wood-tube"];
+var SYNTH_MOD_SOURCES = [
+  "none",
+  "amp-env",
+  "filter-env",
+  "lfo1",
+  "lfo2",
+  "velocity",
+  "key-track",
+  "mod-wheel",
+  "random"
+];
+var SYNTH_MOD_DESTINATIONS = [
+  "none",
+  "pitch-cents",
+  "cutoff-cents",
+  "amp-gain",
+  "pan-units"
+];
+function projectModule() {
+  const candidate = getSonareModule();
+  if (typeof candidate.projectAbiVersion !== "function" || candidate.Project === void 0) {
+    throw new Error("libsonare was built without arrangement (headless DAW) support");
+  }
+  return candidate;
+}
+function assertProjectU7(fnName, value, argName) {
+  if (!Number.isInteger(value) || value < 0 || value > 127) {
+    throw new RangeError(`${fnName}: ${argName} must be an integer in [0, 127]`);
+  }
+  return value;
+}
+function assertProjectNibble(fnName, value, argName) {
+  if (!Number.isInteger(value) || value < 0 || value > 15) {
+    throw new RangeError(`${fnName}: ${argName} must be an integer in [0, 15]`);
+  }
+  return value;
+}
+function projectMidi1Event(fnName, ppq, group, status, channel, data1, data2 = 0) {
+  if (!Number.isFinite(ppq) || ppq < 0) {
+    throw new RangeError(`${fnName}: ppq must be a non-negative finite number`);
+  }
+  const g = assertProjectNibble(fnName, group, "group");
+  const ch = assertProjectNibble(fnName, channel, "channel");
+  const d1 = assertProjectU7(fnName, data1, "data1");
+  const d2 = assertProjectU7(fnName, data2, "data2");
+  const word = (2 << 28 | g << 24 | status << 20 | ch << 16 | d1 << 8 | d2) >>> 0;
+  return { ppq, data0: word, data1: 0 };
+}
+function assertProjectU32(fnName, value, argName) {
+  if (!Number.isInteger(value) || value < 0 || value > 4294967295) {
+    throw new RangeError(`${fnName}: ${argName} must be an integer in [0, 4294967295]`);
+  }
+}
+function assertProjectMidiEvents(fnName, events) {
+  if (!Array.isArray(events)) {
+    throw new TypeError(`${fnName}: events must be an array`);
+  }
+  events.forEach((event, index) => {
+    const prefix = `events[${index}]`;
+    if (Array.isArray(event)) {
+      if (event.length < 3) {
+        throw new TypeError(`${fnName}: ${prefix} must contain [ppq, data0, data1]`);
+      }
+      if (!Number.isFinite(event[0]) || event[0] < 0) {
+        throw new RangeError(`${fnName}: ${prefix}.ppq must be a non-negative finite number`);
+      }
+      assertProjectU32(fnName, event[1], `${prefix}.data0`);
+      assertProjectU32(fnName, event[2], `${prefix}.data1`);
+      return;
+    }
+    if (event === null || typeof event !== "object") {
+      throw new TypeError(`${fnName}: ${prefix} must be a MIDI event object or tuple`);
+    }
+    if (!Number.isFinite(event.ppq) || event.ppq < 0) {
+      throw new RangeError(`${fnName}: ${prefix}.ppq must be a non-negative finite number`);
+    }
+    assertProjectU32(fnName, event.data0, `${prefix}.data0`);
+    if (event.data1 !== void 0) {
+      assertProjectU32(fnName, event.data1, `${prefix}.data1`);
+    }
+  });
+}
+function projectAbiVersion() {
+  return projectModule().projectAbiVersion();
+}
+function synthPresetNames() {
+  return projectModule().synthPresetNames();
+}
+function synthPresetPatch(name) {
+  return projectModule().synthPresetPatch(name);
+}
+function synthEnumTables() {
+  return projectModule()._synthEnumTables();
+}
+var Project = class _Project {
+  constructor() {
+    this.native = new (projectModule()).Project();
+  }
+  /** Pack a MIDI 1.0 note-on event accepted by {@link setMidiEvents}. */
+  static midiNoteOn(ppq, group, channel, note, velocity) {
+    return projectMidi1Event("Project.midiNoteOn", ppq, group, 9, channel, note, velocity);
+  }
+  /** Pack a MIDI 1.0 note-off event accepted by {@link setMidiEvents}. */
+  static midiNoteOff(ppq, group, channel, note, velocity = 0) {
+    return projectMidi1Event("Project.midiNoteOff", ppq, group, 8, channel, note, velocity);
+  }
+  /** Pack a MIDI 1.0 control-change event. */
+  static midiCc(ppq, group, channel, controller, value) {
+    return projectMidi1Event("Project.midiCc", ppq, group, 11, channel, controller, value);
+  }
+  /** Pack a MIDI 1.0 poly-pressure event. */
+  static midiPolyPressure(ppq, group, channel, note, pressure) {
+    return projectMidi1Event("Project.midiPolyPressure", ppq, group, 10, channel, note, pressure);
+  }
+  /** Pack a MIDI 1.0 program-change event. */
+  static midiProgram(ppq, group, channel, program) {
+    return projectMidi1Event("Project.midiProgram", ppq, group, 12, channel, program, 0);
+  }
+  /** Return the General MIDI instrument name for `program`, or `null` when out of range. */
+  static gmInstrumentName(program) {
+    return projectModule().midiGmInstrumentName(program);
+  }
+  /** Return the General MIDI program number for a canonical instrument name, or `-1`. */
+  static gmProgramForName(name) {
+    return projectModule().midiGmProgramForName(name);
+  }
+  /** Return the General MIDI family name for `family`, or `null` when out of range. */
+  static gmFamilyName(family) {
+    return projectModule().midiGmFamilyName(family);
+  }
+  /** Return the first General MIDI program number in `family`, or `-1`. */
+  static gmFamilyFirstProgram(family) {
+    return projectModule().midiGmFamilyFirstProgram(family);
+  }
+  /** Return the GM2 bank/program instrument variation name, or `null` when unavailable. */
+  static gm2InstrumentName(bankLsb, program) {
+    return projectModule().midiGm2InstrumentName(bankLsb, program);
+  }
+  /** Return the General MIDI drum name for `note`, or `null` when out of range. */
+  static gmDrumName(note) {
+    return projectModule().midiGmDrumName(note);
+  }
+  /** Return the General MIDI drum note for a canonical drum name, or `-1`. */
+  static gmDrumNoteForName(name) {
+    return projectModule().midiGmDrumNoteForName(name);
+  }
+  /** Return the GM2 drum-set name for `bankLsb`, or `null` when unavailable. */
+  static gm2DrumSetName(bankLsb) {
+    return projectModule().midiGm2DrumSetName(bankLsb);
+  }
+  /** Return the GM2 drum name for `bankLsb`/`note`, or `null` when unavailable. */
+  static gm2DrumName(bankLsb, note) {
+    return projectModule().midiGm2DrumName(bankLsb, note);
+  }
+  /** Return the MIDI CC name for `controller`, or `null` when out of range. */
+  static midiCcName(controller) {
+    return projectModule().midiCcName(controller);
+  }
+  /** Return the MIDI CC number for a canonical controller name, or `-1`. */
+  static midiCcIndexForName(name) {
+    return projectModule().midiCcIndexForName(name);
+  }
+  /** Return the MIDI 2.0 per-note controller name for `index`, or `null`. */
+  static perNoteControllerName(index) {
+    return projectModule().midiPerNoteControllerName(index);
+  }
+  /** Expand bank-select + program-change into MIDI events accepted by {@link setMidiEvents}. */
+  static midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program) {
+    return projectModule().midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program);
+  }
+  /** Route MIDI events through the native MidiRouter filter/remap/thru logic. */
+  static midiRouteEvents(events, config = {}) {
+    return projectModule().midiRouteEvents(events, config);
+  }
+  /** Run native MIDI learn over an event stream; returns `null` when nothing is learned. */
+  static midiCcLearn(events, paramId, options = {}) {
+    return projectModule().midiCcLearn(
+      events,
+      paramId,
+      options.minValue ?? 0,
+      options.maxValue ?? 1,
+      options.minMovement ?? 0
+    );
+  }
+  /** Convert one CC event to an automation breakpoint using native CcMap. */
+  static midiCcToBreakpoint(bindings, event) {
+    return projectModule().midiCcToBreakpoint(bindings, event);
+  }
+  /** Convert one automation value back to a CC UMP event using native CcMap. */
+  static midiParamToCc(bindings, paramId, unitValue, group, ppq = 0) {
+    return projectModule().midiParamToCc(bindings, paramId, unitValue, group, ppq);
+  }
+  /** Pack a MIDI 1.0 channel-pressure event. */
+  static midiChannelPressure(ppq, group, channel, pressure) {
+    return projectMidi1Event("Project.midiChannelPressure", ppq, group, 13, channel, pressure, 0);
+  }
+  /** Pack a MIDI 1.0 pitch-bend event (`bend` is unsigned 14-bit, center = 8192). */
+  static midiPitchBend(ppq, group, channel, bend) {
+    if (!Number.isInteger(bend) || bend < 0 || bend > 16383) {
+      throw new RangeError("Project.midiPitchBend: bend must be an integer in [0, 16383]");
+    }
+    return projectMidi1Event(
+      "Project.midiPitchBend",
+      ppq,
+      group,
+      14,
+      channel,
+      bend & 127,
+      bend >> 7
+    );
+  }
+  /**
+   * Deserialize project JSON into a new {@link Project}. Throws if the JSON is
+   * malformed, surfacing the joined diagnostic messages.
+   */
+  static fromJson(json) {
+    const project = new _Project();
+    const restored = (() => {
+      try {
+        return projectModule().Project.fromJson(json);
+      } catch (error) {
+        project.native.delete();
+        throw error;
+      }
+    })();
+    project.native.delete();
+    project.native = restored;
+    return project;
+  }
+  /**
+   * Deserialize project JSON and return native warning diagnostics emitted on
+   * successful loads, such as dangling source references preserved for repair.
+   */
+  static fromJsonWithDiagnostics(json) {
+    const project = new _Project();
+    const restored = (() => {
+      try {
+        return projectModule().Project.fromJsonWithDiagnostics(json);
+      } catch (error) {
+        project.native.delete();
+        throw error;
+      }
+    })();
+    project.native.delete();
+    project.native = restored.project;
+    return { project, diagnostics: restored.diagnostics };
+  }
+  /** Serialize the project (+ MIDI content) to deterministic JSON. */
+  toJson() {
+    return this.native.toJson();
+  }
+  /** Set the project sample rate in Hz. Must be > 0. */
+  setSampleRate(sampleRate) {
+    this.native.setSampleRate(sampleRate);
+  }
+  /** Add a track and return its allocated stable id. */
+  addTrack(desc = {}) {
+    return this.native.addTrack({ ...desc, kind: projectTrackKindValue(desc.kind) });
+  }
+  /** Add an audio or MIDI clip and return its allocated clip id. */
+  addClip(desc) {
+    return this.native.addClip(desc);
+  }
+  /** Split captured loop-recording audio into takes and add one clip. */
+  addLoopRecordingTakes(desc) {
+    return this.native.addLoopRecordingTakes(desc);
+  }
+  /** Create a MIDI track + clip; returns `{ trackId, clipId }`. */
+  addMidiClip(startPpq, lengthPpq) {
+    return this.native.addMidiClip(startPpq, lengthPpq);
+  }
+  /** Split a clip at `splitPpq` and return the new clip id. */
+  splitClip(clipId, splitPpq) {
+    return this.native.splitClip(clipId, splitPpq);
+  }
+  /** Trim a clip's start / length in PPQ. */
+  trimClip(clipId, newStartPpq, newLengthPpq) {
+    this.native.trimClip(clipId, newStartPpq, newLengthPpq);
+  }
+  /** Move a clip to `newStartPpq` and optionally another track. */
+  moveClip(clipId, newStartPpq, newTrackId = 0) {
+    this.native.moveClip(clipId, newStartPpq, newTrackId);
+  }
+  /** Change a track kind via an undoable edit. */
+  setTrackKind(trackId, kind) {
+    this.native.setTrackKind(trackId, projectTrackKindValue(kind));
+  }
+  /** Set a clip's warp reference id (0 clears it). */
+  setClipWarpRef(clipId, warpRefId) {
+    this.native.setClipWarpRef(clipId, warpRefId);
+  }
+  /** Set a clip's warp playback mode. */
+  setClipWarpMode(clipId, mode) {
+    this.native.setClipWarpMode(clipId, projectWarpModeValue(mode));
+  }
+  /** Add or replace a first-class warp map referenced by clip warp ids. */
+  setWarpMap(map) {
+    this.native.setWarpMap(map);
+  }
+  /** Remove a first-class warp map by id. */
+  removeWarpMap(warpRefId) {
+    this.native.removeWarpMap(warpRefId);
+  }
+  /**
+   * Route a track's MIDI to host-instrument `destinationId` (0 = default). The
+   * compiler stamps every MIDI clip on the track with this id so the engine
+   * dispatches its events to the instrument registered for that destination.
+   * Routes through an undoable edit command.
+   */
+  setTrackMidiDestination(trackId, destinationId) {
+    this.native.setTrackMidiDestination(trackId, destinationId);
+  }
+  /** Undo the most recent edit. */
+  undo() {
+    this.native.undo();
+  }
+  /** Redo the most recently undone edit. */
+  redo() {
+    this.native.redo();
+  }
+  /** Replace a MIDI clip's entire event list. */
+  setMidiEvents(clipId, events) {
+    assertProjectMidiEvents("Project.setMidiEvents", events);
+    this.native.setMidiEvents(clipId, events);
+  }
+  /** Import an in-memory SMF buffer; returns the first added clip id. */
+  importSmf(data) {
+    return this.native.importSmf(data);
+  }
+  /** Export the project's tempo map + MIDI clips to an SMF byte buffer. */
+  exportSmf() {
+    return this.native.exportSmf();
+  }
+  /**
+   * Import a MIDI 2.0 Clip File (`SMF2CLIP`); returns the first added clip id.
+   * Unlike {@link importSmf}, MIDI 2.0 channel-voice messages (16-bit velocity,
+   * 32-bit CC, per-note / registered controllers, bank-valid Program Change)
+   * survive without loss.
+   */
+  importClipFile(data) {
+    return this.native.importClipFile(data);
+  }
+  /**
+   * Export the project's tempo map + MIDI clips to a MIDI 2.0 Clip File
+   * (`SMF2CLIP`) byte buffer. MIDI 2.0-only events are written without loss —
+   * prefer this over {@link exportSmf} when MIDI 2.0 fidelity matters.
+   */
+  exportClipFile() {
+    return this.native.exportClipFile();
+  }
+  /**
+   * Set a MIDI clip's channel-0 program / bank at source PPQ 0. `bank` defaults
+   * to `-1` (no Bank Select emitted), matching `setProgramOnChannel` and the
+   * Node/Python surfaces; pass `>= 0` to emit a Bank Select.
+   */
+  setProgram(clipId, program, bank = -1) {
+    this.native.setProgram(clipId, program, bank);
+  }
+  /** Set a MIDI clip's program / bank for one UMP group and channel. */
+  setProgramOnChannel(clipId, group, channel, program, bank = -1) {
+    this.native.setProgramOnChannel(clipId, group, channel, program, bank);
+  }
+  /** Destructively bake a MIDI-FX chain into a clip's stored MIDI events. */
+  bakeMidiFx(clipId, configJson) {
+    this.native.bakeMidiFx(clipId, configJson);
+  }
+  /** Backward alias for {@link bakeMidiFx}. */
+  setMidiFx(clipId, configJson) {
+    this.bakeMidiFx(clipId, configJson);
+  }
+  /**
+   * Pre-flight check for hanging / unmatched notes in a MIDI clip: reports
+   * whether every note-on has a matching note-off (FIFO per channel+note).
+   * Useful before bouncing to catch a stuck note. Throws if `clipId` is unknown
+   * or not a MIDI clip.
+   */
+  validateMidiNotes(clipId) {
+    return this.native.validateMidiNotes(clipId);
+  }
+  /** Detect tempo from a mono buffer and install it; returns the primary BPM. */
+  autoTempo(audio, sampleRate) {
+    return this.native.autoTempo(audio, sampleRate);
+  }
+  /** Snap a PPQ coordinate to the nearest beat of the project grid. */
+  snapToGrid(ppq, strength = 1) {
+    return this.native.snapToGrid(ppq, strength);
+  }
+  /** Compile the project into a renderable timeline, surfacing diagnostics. */
+  compile() {
+    return this.native.compile();
+  }
+  /**
+   * Compile + render the project offline to interleaved float audio. MIDI
+   * tracks render silently here (no instrument is bound) — use
+   * {@link bounceWithBuiltinInstrument} to make MIDI audible.
+   *
+   * When `totalFrames` is omitted (or `<= 0`) the render length is auto-derived
+   * from the arrangement, so a project with content renders without computing a
+   * frame count; an empty project yields an empty buffer.
+   *
+   * @example
+   * ```typescript
+   * const audio = project.bounce({ numChannels: 2 });
+   * ```
+   */
+  bounce(options = {}) {
+    return this.native.bounce(options);
+  }
+  /**
+   * Compile + render the project offline, routing MIDI tracks through the
+   * built-in oscillator synth so a MIDI-only arrangement bounces to audible
+   * audio. Pass a {@link BuiltinSynthBinding} (or an array of them) to choose
+   * the patch and MIDI destination; omit it (or pass `{}`) for one
+   * default-destination sine patch. An explicitly empty array `[]` (or
+   * `undefined` / `null`) produces zero bindings, so MIDI tracks render silently.
+   *
+   * Like {@link bounce}, omitting `totalFrames` auto-derives the render length
+   * from the arrangement plus the synth's release tail.
+   *
+   * @example
+   * ```typescript
+   * // MIDI-only project -> non-silent stereo audio.
+   * const audio = project.bounceWithBuiltinInstrument(
+   *   { waveform: 'saw' },
+   *   { numChannels: 2 },
+   * );
+   * ```
+   */
+  bounceWithBuiltinInstrument(instrument = {}, options = {}) {
+    return this.native.bounceWithBuiltinInstrument(instrument, options);
+  }
+  /**
+   * Compile + render the project offline, routing MIDI tracks through the
+   * patch-driven NativeSynth — the full synthesizer (subtractive / FM /
+   * Karplus-Strong / modal / additive / percussion / extended-waveguide-piano
+   * engines plus the realism layer). Pass a {@link SynthPatch}, a preset-name
+   * string (`'saw-lead'` / `'va:saw-lead'`; see {@link synthPresetNames}), or
+   * an array of either; each object entry may carry a `destinationId` binding
+   * convenience (default 0), which is not part of the NativeSynth patch itself.
+   * An explicitly empty array (or `undefined` / `null`) produces zero bindings.
+   * Unknown preset names throw. Deterministic for a fixed project + options +
+   * patch.
+   */
+  bounceWithSynthInstrument(instrument = {}, options = {}) {
+    return this.native.bounceWithSynthInstrument(instrument, options);
+  }
+  /**
+   * Load (parse) SoundFont 2 bytes into the project: presets / instruments /
+   * sample headers plus the sample PCM decoded to a float pool. The host
+   * fetches the `.sf2` and passes the raw bytes; they are copied into linear
+   * memory for the call and not referenced afterwards. Replaces any previously
+   * loaded SoundFont; throws on malformed input (the previous SoundFont is
+   * kept).
+   */
+  loadSoundFont(data) {
+    this.native.loadSoundFont(data);
+  }
+  /** Release the project's loaded SoundFont (no-op when none is loaded). */
+  clearSoundFont() {
+    this.native.clearSoundFont();
+  }
+  /** Number of presets in the loaded SoundFont (0 when none is loaded). */
+  soundFontPresetCount() {
+    return this.native.soundFontPresetCount();
+  }
+  /**
+   * Enumerate every (channel, bank, program) combination the arrangement plays
+   * a note through, in first-use order, reporting whether each resolves in the
+   * loaded SoundFont (`'sf2'`, GS variation/drum fallbacks included) or would
+   * fall back to the built-in synth (`'synth'`). Without a loaded SoundFont
+   * every entry is a synth fallback.
+   */
+  soundFontManifest() {
+    return this.native.soundFontManifest();
+  }
+  /**
+   * Like {@link bounceWithBuiltinInstrument}, but each bound destination
+   * renders through a GS-compatible SoundFont player fed by the project's
+   * loaded SoundFont ({@link loadSoundFont}): 16 MIDI channels per player,
+   * channel 10 drums via bank 128, GS NRPN part edits and GS/GM SysEx resets
+   * honored. Programs the SoundFont does not cover — including bouncing with
+   * no SoundFont loaded at all — play through the built-in synthesizer GM
+   * fallback bank (the data-free floor; see {@link soundFontManifest} for the
+   * per-program backend). An explicitly empty array `[]` (or `undefined` /
+   * `null`) produces zero bindings, so MIDI tracks render silently.
+   */
+  bounceWithSf2Instrument(instrument = {}, options = {}) {
+    return this.native.bounceWithSf2Instrument(instrument, options);
+  }
+  /** Remove a clip (undoable). */
+  removeClip(clipId) {
+    this.native.removeClip(clipId);
+  }
+  /** Set a clip's linear playback gain (>= 0; undoable). */
+  setClipGain(clipId, gain) {
+    this.native.setClipGain(clipId, gain);
+  }
+  /** Set a clip's fade-in / fade-out regions (undoable). */
+  setClipFade(clipId, fadeIn = {}, fadeOut = {}) {
+    this.native.setClipFade(clipId, fadeIn, fadeOut);
+  }
+  /** Replace a clip's take list and active take id (undoable). */
+  setClipTakes(clipId, takes, activeTakeId = 0) {
+    this.native.setClipTakes(clipId, takes, activeTakeId);
+  }
+  /** Replace a clip's comp segments (undoable). */
+  setClipCompSegments(clipId, segments) {
+    this.native.setClipCompSegments(clipId, segments);
+  }
+  /** Set a clip's loop mode + loop length in PPQ (undoable). */
+  setClipLoop(clipId, loopMode, loopLengthPpq = 0) {
+    this.native.setClipLoop(clipId, projectLoopModeValue(loopMode), loopLengthPpq);
+  }
+  /** Rebind a clip to a different (already-registered) source (undoable). */
+  setClipSource(clipId, sourceId) {
+    this.native.setClipSource(clipId, sourceId);
+  }
+  /** Duplicate a clip at `newStartPpq` (same track); returns the new clip id. */
+  duplicateClip(clipId, newStartPpq) {
+    return this.native.duplicateClip(clipId, newStartPpq);
+  }
+  /** Remove a track and its clips (undoable). */
+  removeTrack(trackId) {
+    this.native.removeTrack(trackId);
+  }
+  /** Rename a track (undoable). */
+  renameTrack(trackId, name) {
+    this.native.renameTrack(trackId, name);
+  }
+  /** Set a track's mixer-strip binding + output target (undoable; omit / '' clears). */
+  setTrackRoute(trackId, channelStripRef, outputTarget) {
+    this.native.setTrackRoute(trackId, channelStripRef ?? "", outputTarget ?? "");
+  }
+  /** Append an automation lane to a track; returns the lane index (undoable). */
+  addAutomationLane(trackId, desc) {
+    return this.native.addAutomationLane(trackId, {
+      targetParamId: desc.targetParamId,
+      points: desc.points
+    });
+  }
+  /** Replace an existing automation lane in place (undoable). */
+  editAutomationLane(trackId, laneIndex, desc) {
+    this.native.editAutomationLane(trackId, laneIndex, {
+      targetParamId: desc.targetParamId,
+      points: desc.points
+    });
+  }
+  /** Remove an automation lane from a track (undoable). */
+  removeAutomationLane(trackId, laneIndex) {
+    this.native.removeAutomationLane(trackId, laneIndex);
+  }
+  /** Replace the project's key annotation stream (undoable). */
+  annotateKeys(keys) {
+    this.native.annotateKeys(keys);
+  }
+  /** Replace the project's chord-symbol annotation stream (undoable). */
+  annotateChords(chords) {
+    this.native.annotateChords(chords);
+  }
+  /** Add or update an opaque assist sidecar by module id + target scope (undoable). */
+  setAssistSidecar(moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload) {
+    this.native.setAssistSidecar(
+      moduleId,
+      schemaVersion,
+      targetTrackId,
+      regionStartPpq,
+      regionEndPpq,
+      payload
+    );
+  }
+  /** Number of assist sidecars currently stored on the project. */
+  assistSidecarCount() {
+    return this.native.assistSidecarCount();
+  }
+  /** Read one assist sidecar by stable project order. */
+  getAssistSidecar(index) {
+    return this.native.getAssistSidecar(index);
+  }
+  /** Set the project's clip-overlap policy (SonareProjectOverlapPolicy ordinal). */
+  setOverlapPolicy(policy) {
+    this.native.setOverlapPolicy(policy);
+  }
+  /** Read the project's clip-overlap policy (SonareProjectOverlapPolicy ordinal). */
+  getOverlapPolicy() {
+    return this.native.getOverlapPolicy();
+  }
+  /** Read the project sample rate in Hz. */
+  getSampleRate() {
+    return this.native.getSampleRate();
+  }
+  /** Replace the project's mixer scene from a scene JSON string. */
+  setMixerSceneJson(sceneJson) {
+    this.native.setMixerSceneJson(sceneJson);
+  }
+  /**
+   * Add or replace a marker. Pass `markerId` 0 to allocate a new id; returns the
+   * stable marker id (the allocated id when 0 was passed).
+   */
+  setMarker(markerId, ppq, name) {
+    return this.native.setMarker(markerId, ppq, name);
+  }
+  /** Number of tracks in the project. */
+  trackCount() {
+    return this.native.trackCount();
+  }
+  /** Number of audio sources registered on the project. */
+  sourceCount() {
+    return this.native.sourceCount();
+  }
+  /** Number of tempo-map segments on the project. */
+  tempoSegmentCount() {
+    return this.native.tempoSegmentCount();
+  }
+  /** Number of time-signature segments on the project. */
+  timeSignatureCount() {
+    return this.native.timeSignatureCount();
+  }
+  /** Replace the project's tempo map with the given segments. */
+  setTempoSegments(segments) {
+    this.native.setTempoSegments(segments);
+  }
+  /** Replace the project's time-signature map with the given segments. */
+  setTimeSignatures(segments) {
+    this.native.setTimeSignatures(segments);
+  }
+  /**
+   * Compile diagnostics produced by the most recent bounce on this project
+   * (e.g. MIDI clips rendering silently without a bound instrument). When no
+   * bounce has run, the result is empty with `hasTimeline` set.
+   */
+  lastBounceCompileResult() {
+    return this.native.lastBounceCompileResult();
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.native.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+function projectTrackKindValue(kind) {
+  if (kind === void 0 || kind === "audio") {
+    return 0;
+  }
+  if (kind === "midi") {
+    return 1;
+  }
+  if (kind === "aux") {
+    return 2;
+  }
+  return kind;
+}
+function projectWarpModeValue(mode) {
+  if (mode === void 0 || mode === "off") {
+    return 0;
+  }
+  if (mode === "repitch") {
+    return 1;
+  }
+  if (mode === "tempo-sync") {
+    return 2;
+  }
+  return mode;
+}
+function projectLoopModeValue(mode) {
+  if (mode === void 0 || mode === "off") {
+    return 0;
+  }
+  if (mode === "loop") {
+    return 1;
+  }
+  return mode;
+}
+
+// src/realtime_engine.ts
+var EXPECTED_ENGINE_ABI_VERSION = 3;
+function engineCapabilities() {
+  const abiVersion = getSonareModule().engineAbiVersion();
+  const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
+  const atomics = typeof globalThis.Atomics === "object";
+  const audioWorklet = typeof AudioWorkletNode !== "undefined" || typeof globalThis.AudioWorkletProcessor !== "undefined";
+  return {
+    engineAbiVersion: abiVersion,
+    expectedEngineAbiVersion: EXPECTED_ENGINE_ABI_VERSION,
+    abiCompatible: abiVersion === EXPECTED_ENGINE_ABI_VERSION,
+    sharedArrayBuffer,
+    atomics,
+    audioWorklet,
+    mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
+  };
+}
+var RealtimeEngine = class {
+  nativeExt() {
+    return this.native;
+  }
+  constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024) {
+    const module2 = getSonareModule();
+    const capabilities = engineCapabilities();
+    if (!capabilities.abiCompatible) {
+      throw new Error(
+        `Engine ABI mismatch: wasm=${capabilities.engineAbiVersion}, expected=${capabilities.expectedEngineAbiVersion}`
+      );
+    }
+    this.native = new module2.RealtimeEngine(
+      sampleRate,
+      maxBlockSize,
+      commandCapacity,
+      telemetryCapacity
+    );
+  }
+  prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024) {
+    this.native.prepare(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity);
+  }
+  /** Queue a sample-accurate parameter change (engine kSetParam). */
+  setParameter(paramId, value, renderFrame = -1) {
+    this.native.setParameter(paramId, value, renderFrame);
+  }
+  /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
+  setParameterSmoothed(paramId, value, renderFrame = -1) {
+    this.native.setParameterSmoothed(paramId, value, renderFrame);
+  }
+  setBuiltinInstrument(config = {}, destinationId = config.destinationId ?? 0) {
+    this.nativeExt().setBuiltinInstrument(destinationId, config);
+  }
+  /**
+   * Bind the patch-driven NativeSynth to a realtime MIDI destination. `patch`
+   * is a {@link SynthPatch} or a preset-name string (`'saw-lead'` /
+   * `'va:saw-lead'`; see {@link synthPresetNames}), resolving exactly like
+   * {@link Project.bounceWithSynthInstrument}. Live note/CC commands and
+   * scheduled MIDI clips routed to that destination render through the synth.
+   * Unknown preset names throw. An object patch's `destinationId` is a JS
+   * binding convenience, not part of the NativeSynth patch itself.
+   */
+  setSynthInstrument(patch = {}, destinationId = (typeof patch === "object" ? patch.destinationId : void 0) ?? 0) {
+    this.nativeExt().setSynthInstrument(destinationId, patch);
+  }
+  /**
+   * Load (parse) SoundFont 2 bytes into the engine so SF2 instruments can be
+   * bound with {@link setSf2Instrument}. The host fetches the `.sf2` and
+   * passes the raw bytes; they are copied into linear memory for the call and
+   * not referenced afterwards. Replaces any previously loaded SoundFont.
+   */
+  loadSoundFont(data) {
+    this.nativeExt().loadSoundFont(data);
+  }
+  /**
+   * Bind a GS-compatible SoundFont player to a realtime MIDI destination, fed
+   * by the engine's loaded SoundFont ({@link loadSoundFont}). Live note/CC
+   * commands and scheduled MIDI clips routed to that destination render
+   * through the player (16 MIDI channels, channel 10 drums, GS NRPN part
+   * edits, GS/GM SysEx resets). Without a loaded SoundFont — or for programs
+   * the SoundFont does not cover — notes play through the built-in
+   * synthesizer GM fallback bank (the data-free floor).
+   */
+  setSf2Instrument(config = {}, destinationId = config.destinationId ?? 0) {
+    this.nativeExt().setSf2Instrument(destinationId, config);
+  }
+  clearMidiInstrument(destinationId = 0) {
+    this.nativeExt().clearMidiInstrument(destinationId);
+  }
+  midiInstrumentCount() {
+    return this.nativeExt().midiInstrumentCount();
+  }
+  /**
+   * Bind a live MIDI CC to an engine automation parameter. The MIDI event still
+   * reaches the destination instrument; when bound, its 7-bit value is also
+   * mapped into [minValue, maxValue] for `paramId`.
+   */
+  bindMidiCc(channel, controller, paramId, options = {}) {
+    this.nativeExt().bindMidiCc(
+      channel,
+      controller,
+      paramId,
+      options.minValue ?? 0,
+      options.maxValue ?? 1
+    );
+  }
+  clearMidiCcBindings() {
+    this.nativeExt().clearMidiCcBindings();
+  }
+  midiCcBindingCount() {
+    return this.nativeExt().midiCcBindingCount();
+  }
+  /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
+  setMidiFx(destinationId, configJson) {
+    this.nativeExt().setMidiFx(destinationId, configJson);
+  }
+  clearMidiFx(destinationId = 0) {
+    this.nativeExt().clearMidiFx(destinationId);
+  }
+  /** Enable the engine-owned live MIDI input source for a destination. */
+  setMidiInputSource(destinationId = 0) {
+    this.nativeExt().setMidiInputSource(destinationId);
+  }
+  clearMidiInputSource() {
+    this.nativeExt().clearMidiInputSource();
+  }
+  midiInputPendingCount() {
+    return this.nativeExt().midiInputPendingCount();
+  }
+  pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
+    this.nativeExt().pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
+  }
+  pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
+    this.nativeExt().pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
+  }
+  pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
+    this.nativeExt().pushMidiInputCc(group, channel, controller, value, portTimeSamples);
+  }
+  pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
+    this.nativeExt().pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
+  }
+  pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame = -1) {
+    this.nativeExt().pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI control change to a MIDI destination
+   * (engine kMidiCcImmediate). `group`/`channel` are 0..15; `controller`/`value`
+   * are 7-bit (0..127). `renderFrame` is the frame to fire at, or -1 for
+   * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
+   */
+  pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
+    this.nativeExt().pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  }
+  /**
+   * Queue a MIDI panic (all-notes-off) releasing every sounding note at
+   * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
+   */
+  pushMidiPanic(renderFrame = -1) {
+    this.nativeExt().pushMidiPanic(renderFrame);
+  }
+  /**
+   * Remove all registered parameters (and their automation lanes). Control-thread
+   * only; not realtime-safe. Mirrors the C-ABI `clearParameters`.
+   */
+  clearParameters() {
+    this.nativeExt().clearParameters();
+  }
+  /** Read back the current transport state snapshot. */
+  getTransportState() {
+    return this.native.getTransportState();
+  }
+  play(renderFrame = -1) {
+    this.native.play(renderFrame);
+  }
+  stop(renderFrame = -1) {
+    this.native.stop(renderFrame);
+  }
+  seekSample(timelineSample, renderFrame = -1) {
+    this.native.seekSample(timelineSample, renderFrame);
+  }
+  seekPpq(ppq, renderFrame = -1) {
+    this.native.seekPpq(ppq, renderFrame);
+  }
+  setTempo(bpm) {
+    this.native.setTempo(bpm);
+  }
+  setTimeSignature(numerator, denominator) {
+    this.native.setTimeSignature(numerator, denominator);
+  }
+  setLoop(startPpq, endPpq, enabled = true) {
+    this.native.setLoop(startPpq, endPpq, enabled);
+  }
+  addParameter(info) {
+    this.native.addParameter(info);
+  }
+  parameterCount() {
+    return this.native.parameterCount();
+  }
+  parameterInfoByIndex(index) {
+    return this.native.parameterInfoByIndex(index);
+  }
+  parameterInfo(id) {
+    return this.native.parameterInfo(id);
+  }
+  setAutomationLane(paramId, points) {
+    this.native.setAutomationLane(paramId, points);
+  }
+  automationLaneCount() {
+    return this.native.automationLaneCount();
+  }
+  setMarkers(markers) {
+    this.native.setMarkers(markers);
+  }
+  markerCount() {
+    return this.native.markerCount();
+  }
+  markerByIndex(index) {
+    return this.native.markerByIndex(index);
+  }
+  marker(id) {
+    return this.native.marker(id);
+  }
+  seekMarker(markerId, renderFrame = -1) {
+    this.native.seekMarker(markerId, renderFrame);
+  }
+  setLoopFromMarkers(startMarkerId, endMarkerId) {
+    this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
+  }
+  setMetronome(config) {
+    this.native.setMetronome(config);
+  }
+  metronome() {
+    return this.native.metronome();
+  }
+  countInEndSample(startSample, bars) {
+    return Number(this.native.countInEndSample(startSample, bars));
+  }
+  setGraph(spec) {
+    this.native.setGraph(spec);
+  }
+  graphNodeCount() {
+    return this.native.graphNodeCount();
+  }
+  graphConnectionCount() {
+    return this.native.graphConnectionCount();
+  }
+  setClips(clips) {
+    this.native.setClips(
+      clips.map((clip) => ({
+        ...clip,
+        pageProvider: typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider
+      }))
+    );
+  }
+  clipCount() {
+    return this.native.clipCount();
+  }
+  createClipPageProvider(numChannels, numSamples, pageFrames) {
+    const id = this.nativeExt().createClipPageProvider(numChannels, numSamples, pageFrames);
+    return new ClipPageProvider(this, id);
+  }
+  supplyClipPage(providerId, pageIndex, channels) {
+    this.nativeExt().supplyClipPage(providerId, pageIndex, channels);
+  }
+  clearClipPage(providerId, pageIndex) {
+    this.nativeExt().clearClipPage(providerId, pageIndex);
+  }
+  destroyClipPageProvider(providerId) {
+    this.nativeExt().destroyClipPageProvider(providerId);
+  }
+  popClipPageRequest() {
+    return this.nativeExt().popClipPageRequest();
+  }
+  setCaptureBuffer(numChannels, capacityFrames) {
+    this.native.setCaptureBuffer(numChannels, capacityFrames);
+  }
+  armCapture(armed = true) {
+    this.native.armCapture(armed);
+  }
+  setCapturePunch(startSample, endSample, enabled = true) {
+    this.native.setCapturePunch(startSample, endSample, enabled);
+  }
+  setCaptureSource(source) {
+    this.native.setCaptureSource(source);
+  }
+  setRecordOffsetSamples(offsetSamples) {
+    this.native.setRecordOffsetSamples(offsetSamples);
+  }
+  setInputMonitor(enabled, gain = 1) {
+    this.native.setInputMonitor(enabled, gain);
+  }
+  resetCapture() {
+    this.native.resetCapture();
+  }
+  captureStatus() {
+    return this.native.captureStatus();
+  }
+  capturedAudio() {
+    return this.native.capturedAudio();
+  }
+  process(channels) {
+    return this.native.process(channels);
+  }
+  /**
+   * Allocates persistent per-channel WASM-heap scratch for the zero-copy
+   * `getChannelBuffer` / `processPrepared` realtime path. Call once (off the
+   * audio thread) before driving `processPrepared` from an AudioWorklet so the
+   * render callback never allocates on the C++/JS heap.
+   */
+  prepareChannels(numChannels, maxFrames) {
+    this.native.prepareChannels(numChannels, maxFrames);
+  }
+  /**
+   * Returns a Float32Array view onto the persistent WASM-heap scratch for one
+   * channel (valid for up to `numFrames`). Fill it, call `processPrepared`, then
+   * read the same view back. Re-acquire after WASM memory growth.
+   */
+  getChannelBuffer(channel, numFrames) {
+    return this.native.getChannelBuffer(channel, numFrames);
+  }
+  /**
+   * Runs the engine in place over the prepared per-channel scratch buffers.
+   * Allocation-free: safe to call on the AudioWorklet render thread after
+   * `prepareChannels`.
+   */
+  processPrepared(numFrames) {
+    this.native.processPrepared(numFrames);
+  }
+  processWithMonitor(channels) {
+    return this.native.processWithMonitor(channels);
+  }
+  renderOffline(channels, blockSize = 128) {
+    return this.native.renderOffline(channels, blockSize);
+  }
+  bounceOffline(options) {
+    return this.native.bounceOffline(options);
+  }
+  freezeOffline(options) {
+    return this.native.freezeOffline(options);
+  }
+  drainTelemetry(maxRecords = 1024) {
+    return this.native.drainTelemetry(maxRecords);
+  }
+  drainMeterTelemetry(maxRecords = 1024) {
+    return this.native.drainMeterTelemetry(maxRecords);
+  }
+  destroy() {
+    this.native.delete();
+  }
+};
+var ClipPageProvider = class {
+  constructor(engine, id) {
+    this.engine = engine;
+    this.id = id;
+    this.disposed = false;
+  }
+  supply(pageIndex, channels) {
+    if (this.disposed) {
+      throw new Error("ClipPageProvider is destroyed");
+    }
+    this.engine.supplyClipPage(this.id, pageIndex, channels);
+  }
+  clear(pageIndex) {
+    if (this.disposed) {
+      return;
+    }
+    this.engine.clearClipPage(this.id, pageIndex);
+  }
+  destroy() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.engine.destroyClipPageProvider(this.id);
+  }
+};
+
+// src/scale.ts
+function scaleQuantizeMidi(root, modeMask, midi, referenceMidi = 0) {
+  assertFiniteScalar("scaleQuantizeMidi", midi, "midi");
+  assertFiniteScalar("scaleQuantizeMidi", referenceMidi, "referenceMidi");
+  return getSonareModule().scaleQuantizeMidi(root, modeMask, midi, referenceMidi);
+}
+function scaleCorrectionSemitones(root, modeMask, midi, referenceMidi = 0) {
+  assertFiniteScalar("scaleCorrectionSemitones", midi, "midi");
+  assertFiniteScalar("scaleCorrectionSemitones", referenceMidi, "referenceMidi");
+  return getSonareModule().scaleCorrectionSemitones(root, modeMask, midi, referenceMidi);
+}
+function scalePitchClassEnabled(root, modeMask, pitchClass) {
+  return getSonareModule().scalePitchClassEnabled(root, modeMask, pitchClass);
+}
+
+// src/stream_analyzer.ts
+function streamAnalyzerConfigDefaults() {
+  return getSonareModule().streamAnalyzerConfigDefault();
+}
 var StreamAnalyzer = class {
   /**
    * Create a new StreamAnalyzer.
    *
    * @param config - Configuration options
    */
-  constructor(config) {
-    if (!module) {
-      throw new Error("Module not initialized. Call init() first.");
+  constructor(config = {}) {
+    if (config.computeMagnitude) {
+      throw new Error(
+        "computeMagnitude is not supported because magnitude frames are not exposed by StreamAnalyzer read paths."
+      );
     }
-    this.analyzer = new module.StreamAnalyzer(
-      config.sampleRate ?? 44100,
-      config.nFft ?? 2048,
-      config.hopLength ?? 512,
-      config.nMels ?? 128,
-      config.fmin ?? 0,
-      config.fmax ?? 0,
-      config.tuningRefHz ?? 440,
-      config.computeMagnitude ?? true,
-      config.computeMel ?? true,
-      config.computeChroma ?? true,
-      config.computeOnset ?? true,
-      config.computeSpectral ?? true,
-      config.emitEveryNFrames ?? 1,
-      config.magnitudeDownsample ?? 1,
-      config.keyUpdateIntervalSec ?? 5,
-      config.bpmUpdateIntervalSec ?? 10,
-      config.window ?? 0,
-      config.outputFormat ?? 0
+    const module2 = getSonareModule();
+    const defaults = streamAnalyzerConfigDefaults();
+    this.analyzer = new module2.StreamAnalyzer(
+      config.sampleRate ?? defaults.sampleRate,
+      config.nFft ?? defaults.nFft,
+      config.hopLength ?? defaults.hopLength,
+      config.nMels ?? defaults.nMels,
+      config.fmin ?? defaults.fmin,
+      config.fmax ?? defaults.fmax,
+      config.tuningRefHz ?? defaults.tuningRefHz,
+      config.computeMagnitude ?? defaults.computeMagnitude,
+      config.computeMel ?? defaults.computeMel,
+      config.computeChroma ?? defaults.computeChroma,
+      config.computeOnset ?? defaults.computeOnset,
+      config.computeSpectral ?? defaults.computeSpectral,
+      config.emitEveryNFrames ?? defaults.emitEveryNFrames,
+      config.magnitudeDownsample ?? defaults.magnitudeDownsample,
+      config.keyUpdateIntervalSec ?? defaults.keyUpdateIntervalSec,
+      config.bpmUpdateIntervalSec ?? defaults.bpmUpdateIntervalSec,
+      config.window ?? defaults.window,
+      config.outputFormat ?? defaults.outputFormat
     );
   }
   /**
@@ -2485,6 +3814,12 @@ var StreamAnalyzer = class {
     this.analyzer.processWithOffset(samples, sampleOffset);
   }
   /**
+   * Flush the final partial frame with zero-padding.
+   */
+  finalize() {
+    this.analyzer.finalize();
+  }
+  /**
    * Get the number of frames available to read.
    */
   availableFrames() {
@@ -2499,11 +3834,25 @@ var StreamAnalyzer = class {
   readFrames(maxFrames) {
     return this.analyzer.readFramesSoa(maxFrames);
   }
-  readFramesU8(maxFrames) {
-    return this.analyzer.readFramesU8(maxFrames);
+  /**
+   * Read frames as uint8-quantized arrays.
+   *
+   * @param maxFrames - Maximum number of frames to read
+   * @param quantizeConfig - Optional quantization ranges; widen these for a
+   *   stream louder or quieter than the defaults (omitted keeps the defaults)
+   */
+  readFramesU8(maxFrames, quantizeConfig) {
+    return this.analyzer.readFramesU8(maxFrames, quantizeConfig);
   }
-  readFramesI16(maxFrames) {
-    return this.analyzer.readFramesI16(maxFrames);
+  /**
+   * Read frames as int16-quantized arrays.
+   *
+   * @param maxFrames - Maximum number of frames to read
+   * @param quantizeConfig - Optional quantization ranges; widen these for a
+   *   stream louder or quieter than the defaults (omitted keeps the defaults)
+   */
+  readFramesI16(maxFrames, quantizeConfig) {
+    return this.analyzer.readFramesI16(maxFrames, quantizeConfig);
   }
   /**
    * Reset the analyzer state.
@@ -2617,24 +3966,333 @@ var StreamAnalyzer = class {
   setTuningRefHz(refHz) {
     this.analyzer.setTuningRefHz(refHz);
   }
-  /**
-   * Release resources. Call when done using the analyzer.
-   */
-  dispose() {
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
     this.analyzer.delete();
   }
+  /** Alias for {@link delete}, kept for backward compatibility (historical name). */
+  dispose() {
+    this.delete();
+  }
 };
+
+// src/web_midi.ts
+function isWebMidiAvailable() {
+  return typeof globalThis.navigator?.requestMIDIAccess === "function";
+}
+async function bindWebMidi(engine, options = {}) {
+  const navigatorWithMidi = globalThis.navigator;
+  if (typeof navigatorWithMidi?.requestMIDIAccess !== "function") {
+    throw new Error("Web MIDI is not available in this environment");
+  }
+  const group = options.group ?? 0;
+  assertNibble("bindWebMidi", group, "group");
+  const destinationId = options.destinationId ?? 0;
+  const selectedIds = new Set(options.inputIds ?? []);
+  const access = await navigatorWithMidi.requestMIDIAccess({
+    sysex: options.sysex ?? false,
+    software: options.software ?? true
+  });
+  for (const binding of options.ccBindings ?? []) {
+    engine.bindMidiCc(binding.channel, binding.controller, binding.paramId, binding.options);
+  }
+  engine.setMidiInputSource(destinationId);
+  const bound = /* @__PURE__ */ new Map();
+  let closed = false;
+  let runningStatus = 0;
+  const shouldBind = (input) => input.state !== "disconnected" && (selectedIds.size === 0 || selectedIds.has(input.id));
+  const snapshotInputs = () => Array.from(iterInputs(access), ([id, input]) => ({
+    id,
+    name: input.name ?? "",
+    manufacturer: input.manufacturer ?? "",
+    state: input.state ?? "connected"
+  }));
+  const notify = () => options.onInputsChanged?.(snapshotInputs());
+  const bindInput = (input) => {
+    if (bound.has(input.id) || !shouldBind(input)) {
+      return;
+    }
+    const listener = (event) => {
+      const status = dispatchMidiMessage(
+        engine,
+        event,
+        group,
+        runningStatus,
+        options.timestampToSamples
+      );
+      runningStatus = status;
+    };
+    if (input.addEventListener) {
+      input.addEventListener("midimessage", listener);
+    } else {
+      input.onmidimessage = listener;
+    }
+    bound.set(input.id, { input, listener });
+  };
+  const unbindInput = (input) => {
+    const entry = bound.get(input.id);
+    if (!entry) {
+      return;
+    }
+    if (entry.input.removeEventListener) {
+      entry.input.removeEventListener("midimessage", entry.listener);
+    } else if (entry.input.onmidimessage === entry.listener) {
+      entry.input.onmidimessage = null;
+    }
+    bound.delete(input.id);
+  };
+  const refreshInputs = () => {
+    for (const [, entry] of bound) {
+      if (!shouldBind(entry.input)) {
+        unbindInput(entry.input);
+      }
+    }
+    for (const [, input] of iterInputs(access)) {
+      bindInput(input);
+    }
+    notify();
+  };
+  const stateListener = (event) => {
+    if (closed) {
+      return;
+    }
+    if (event.port && "onmidimessage" in event.port) {
+      const input = event.port;
+      if (shouldBind(input)) {
+        bindInput(input);
+      } else {
+        unbindInput(input);
+      }
+    } else {
+      refreshInputs();
+    }
+    notify();
+  };
+  refreshInputs();
+  if (access.addEventListener) {
+    access.addEventListener("statechange", stateListener);
+  } else {
+    access.onstatechange = stateListener;
+  }
+  return {
+    access,
+    inputs: snapshotInputs,
+    close() {
+      closed = true;
+      if (access.removeEventListener) {
+        access.removeEventListener("statechange", stateListener);
+      } else if (access.onstatechange === stateListener) {
+        access.onstatechange = null;
+      }
+      for (const [, entry] of Array.from(bound)) {
+        unbindInput(entry.input);
+      }
+      engine.clearMidiInputSource();
+    }
+  };
+}
+function dispatchMidiMessage(engine, event, group, runningStatus, timestampToSamples) {
+  const data = event.data;
+  if (data.length === 0) {
+    return 0;
+  }
+  const first = data[0];
+  if (first > 255) {
+    dispatchUmpMessage(
+      engine,
+      data,
+      timestampToSamples?.(event.receivedTime ?? event.timeStamp ?? 0) ?? 0
+    );
+    return 0;
+  }
+  let offset = 0;
+  let status = first & 255;
+  if (status < 128) {
+    if (runningStatus === 0) {
+      return 0;
+    }
+    status = runningStatus;
+  } else {
+    offset = 1;
+  }
+  const message = status & 240;
+  const channel = status & 15;
+  if (message < 128 || message > 224) {
+    return status >= 248 ? runningStatus : 0;
+  }
+  const a = readU7(data, offset);
+  const b = readU7(data, offset + 1);
+  if (a < 0 || b < 0) {
+    return status;
+  }
+  const portTimeSamples = timestampToSamples ? timestampToSamples(event.receivedTime ?? event.timeStamp ?? 0) : 0;
+  if (message === 128) {
+    engine.pushMidiInputNoteOff(group, channel, a, b, portTimeSamples);
+  } else if (message === 144) {
+    if (b === 0) {
+      engine.pushMidiInputNoteOff(group, channel, a, 0, portTimeSamples);
+    } else {
+      engine.pushMidiInputNoteOn(group, channel, a, b, portTimeSamples);
+    }
+  } else if (message === 176 && b >= 0) {
+    engine.pushMidiInputCc(group, channel, a, b, portTimeSamples);
+  }
+  return status;
+}
+function dispatchUmpMessage(engine, words, portTimeSamples) {
+  const word0 = words[0] >>> 0;
+  const messageType = word0 >>> 28;
+  const group = word0 >>> 24 & 15;
+  if (messageType === 2) {
+    const status = word0 >>> 16 & 255;
+    const message = status & 240;
+    const channel = status & 15;
+    const a = word0 >>> 8 & 127;
+    const b = word0 & 127;
+    if (message === 128) {
+      engine.pushMidiInputNoteOff(group, channel, a, b, portTimeSamples);
+    } else if (message === 144) {
+      if (b === 0) {
+        engine.pushMidiInputNoteOff(group, channel, a, 0, portTimeSamples);
+      } else {
+        engine.pushMidiInputNoteOn(group, channel, a, b, portTimeSamples);
+      }
+    } else if (message === 176) {
+      engine.pushMidiInputCc(group, channel, a, b, portTimeSamples);
+    }
+    return;
+  }
+  if (messageType === 4 && words.length >= 2) {
+    const status = word0 >>> 20 & 15;
+    const channel = word0 >>> 16 & 15;
+    const data1 = word0 >>> 8 & 127;
+    const word1 = words[1] >>> 0;
+    if (status === 8) {
+      engine.pushMidiInputNoteOff(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
+    } else if (status === 9) {
+      const velocity = word1 >>> 25 & 127;
+      if (velocity === 0) {
+        engine.pushMidiInputNoteOff(group, channel, data1, 0, portTimeSamples);
+      } else {
+        engine.pushMidiInputNoteOn(group, channel, data1, velocity, portTimeSamples);
+      }
+    } else if (status === 11) {
+      engine.pushMidiInputCc(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
+    }
+  }
+}
+function readU7(data, index) {
+  if (index >= data.length) {
+    return -1;
+  }
+  const value = data[index];
+  if (!Number.isInteger(value) || value < 0 || value > 127) {
+    return -1;
+  }
+  return value;
+}
+function assertNibble(fnName, value, field) {
+  if (!Number.isInteger(value) || value < 0 || value > 15) {
+    throw new RangeError(`${fnName}: ${field} must be an integer in [0, 15]`);
+  }
+}
+function iterInputs(access) {
+  return access.inputs instanceof Map ? access.inputs.entries() : access.inputs;
+}
+
+// src/index.ts
+var module = null;
+var initPromise = null;
+async function init(options) {
+  if (module) {
+    return;
+  }
+  if (initPromise) {
+    return initPromise;
+  }
+  initPromise = (async () => {
+    try {
+      const createModule = (await import("./sonare.js")).default;
+      module = await createModule(options);
+      setSonareModule(module);
+    } catch (error) {
+      initPromise = null;
+      throw error;
+    }
+  })();
+  return initPromise;
+}
+function isInitialized() {
+  return module !== null;
+}
+function version() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.version();
+}
+function engineAbiVersion() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.engineAbiVersion();
+}
+function voiceChangerAbiVersion() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.voiceChangerAbiVersion();
+}
+var VOICE_PRESET_ORDINALS = [
+  "neutral-monitor",
+  "bright-idol",
+  "soft-whisper",
+  "deep-narrator",
+  "robot-mascot",
+  "dark-villain"
+];
+function resolveVoicePresetOrdinal(preset) {
+  if (typeof preset === "number") {
+    return preset;
+  }
+  const ordinal = VOICE_PRESET_ORDINALS.indexOf(preset);
+  if (ordinal < 0) {
+    throw new Error(`Unknown voice character preset: ${preset}`);
+  }
+  return ordinal;
+}
+function voiceCharacterPresetId(preset) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.voiceCharacterPresetId(resolveVoicePresetOrdinal(preset));
+}
+function realtimeVoiceChangerPresetConfig(preset) {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.realtimeVoiceChangerPresetConfig(resolveVoicePresetOrdinal(preset));
+}
 export {
   Audio,
   ChordQuality,
   EXPECTED_ENGINE_ABI_VERSION,
+  EXPECTED_PROJECT_ABI_VERSION,
   KeyProfile,
   Mixer,
   Mode,
   PitchClass as Pitch,
   PitchClass,
+  Project,
   RealtimeEngine,
   RealtimeVoiceChanger,
+  SYNTH_BODY_TYPES,
+  SYNTH_ENGINE_MODES,
+  SYNTH_FILTER_MODELS,
+  SYNTH_FILTER_OUTPUTS,
+  SYNTH_MOD_DESTINATIONS,
+  SYNTH_MOD_SOURCES,
+  SYNTH_OSC_WAVEFORMS,
   SectionType,
   StreamAnalyzer,
   StreamingEqualizer,
@@ -2650,12 +4308,20 @@ export {
   analyzeSections,
   analyzeTimbre,
   analyzeWithProgress,
+  bassChroma,
+  bindMicrophoneInput,
+  bindWebMidi,
+  chordFunctionalAnalysis,
   chroma,
+  chromaCens,
   cqt,
+  createOpfsClipPageProvider,
+  createOpfsClipPageWorker,
   cyclicTempogram,
   dbToAmplitude,
   dbToPower,
   decompose,
+  decomposeWithInit,
   deemphasis,
   detectAcoustic,
   detectBeats,
@@ -2680,11 +4346,13 @@ export {
   hasFfmpegSupport,
   hpss,
   hpssWithResidual,
+  hybridCqt,
   hzToMel,
   hzToMidi,
   hzToNote,
   init,
   isInitialized,
+  isWebMidiAvailable,
   lufs,
   lufsInterleaved,
   masterAudio,
@@ -2701,6 +4369,7 @@ export {
   masteringDynamicsCompressor,
   masteringDynamicsGate,
   masteringDynamicsTransientShaper,
+  masteringInsertNames,
   masteringPairAnalysisNames,
   masteringPairAnalyze,
   masteringPairProcess,
@@ -2729,12 +4398,15 @@ export {
   meteringDynamicRange,
   meteringPeakDb,
   meteringPhaseScope,
+  meteringPhaseScopeDecimated,
   meteringRmsDb,
   meteringSpectrum,
+  meteringSpectrumFrame,
   meteringStereoCorrelation,
   meteringStereoWidth,
   meteringTruePeakDb,
   meteringVectorscope,
+  meteringVectorscopeDecimated,
   mfcc,
   mfccToAudio,
   mfccToMel,
@@ -2749,12 +4421,15 @@ export {
   noteStretch,
   noteToHz,
   onsetEnvelope,
+  onsetStrengthMulti,
+  opfsClipPageWorkerSource,
   padCenter,
   pcen,
   peakPick,
   percussive,
   phaseVocoder,
   pitchCorrectToMidi,
+  pitchCorrectToMidiTimevarying,
   pitchPyin,
   pitchShift,
   pitchTuning,
@@ -2763,6 +4438,8 @@ export {
   polyFeatures,
   powerToDb,
   preemphasis,
+  projectAbiVersion,
+  pseudoCqt,
   realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetJson,
   realtimeVoiceChangerPresetNames,
@@ -2783,6 +4460,10 @@ export {
   splitSilence,
   stft,
   stftDb,
+  streamAnalyzerConfigDefaults,
+  synthEnumTables,
+  synthPresetNames,
+  synthPresetPatch,
   synthesizeRir,
   tempogram,
   tempogramRatio,
@@ -2799,6 +4480,8 @@ export {
   voiceChangerAbiVersion,
   voiceCharacterPresetId,
   vqt,
+  waveformPeakPyramid,
+  waveformPeaks,
   zeroCrossingRate,
   zeroCrossings
 };

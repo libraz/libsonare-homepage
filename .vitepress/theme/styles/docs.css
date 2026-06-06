@@ -126,9 +126,12 @@
 /* --- Body type --- */
 .vp-doc p,
 .vp-doc li {
-  font-family: var(--font-body);
+  font-family: var(--font-reading);
   font-size: 16px;
   line-height: 1.72;
+  /* cv05 gives lowercase 'l' a tail so it can't be mistaken for 1 or I —
+     worth it in docs dense with API identifiers. */
+  font-feature-settings: 'cv05' 1;
 }
 
 .vp-doc p {
@@ -142,6 +145,31 @@
 
 .vp-doc li + li {
   margin-top: 0.35rem;
+}
+
+/* --- Japanese reading tuning ---
+   Japanese sets best with more leading and a touch of tracking than Latin;
+   Noto Sans JP at the Latin body size reads dense otherwise. Headings and
+   tables enable 'palt' so fullwidth punctuation (、。「」（）) doesn't leave
+   large gaps in tight, large type. */
+html[lang='ja'] .vp-doc p,
+html[lang='ja'] .vp-doc li {
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+}
+
+html[lang='ja'] .vp-doc h1,
+html[lang='ja'] .vp-doc h2,
+html[lang='ja'] .vp-doc h3,
+html[lang='ja'] .vp-doc h4 {
+  letter-spacing: 0;
+  line-height: 1.45;
+  font-feature-settings: 'palt' 1;
+}
+
+html[lang='ja'] .vp-doc .custom-block p,
+html[lang='ja'] .vp-doc .custom-block li {
+  line-height: 1.8;
 }
 
 /* --- Inline code --- */
@@ -219,7 +247,7 @@
   overflow-x: auto;
   margin: 1.5rem 0;
   border-collapse: collapse;
-  font-family: var(--font-body);
+  font-family: var(--font-reading);
 }
 
 .vp-doc thead {
@@ -249,12 +277,16 @@
   font-size: 0.95rem;
   border: none;
   border-top: 1px solid var(--vp-c-divider);
+  /* Numeric columns (sample rates, dB, sizes) align cleanly. */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Japanese pages: wider columns read better */
 html[lang='ja'] .vp-doc td,
 html[lang='ja'] .vp-doc th {
   letter-spacing: 0.02em;
+  line-height: 1.7;
+  font-feature-settings: 'palt' 1;
 }
 
 /* --- Links --- */
@@ -386,7 +418,7 @@ html[lang='ja'] .vp-doc th {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  font-family: var(--font-body);
+  font-family: var(--font-reading);
   font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.5;
@@ -478,6 +510,13 @@ html[lang='ja'] .vp-doc th {
   margin: 1.5rem 0;
 }
 
+/* Mermaid sizes each node's foreignObject by measuring its HTML label, and
+   the computed width can land a few px short of the rendered text — clipping
+   the last glyph. Let the label overflow its box instead of being cut. */
+.vp-doc .mermaid foreignObject {
+  overflow: visible;
+}
+
 /* --- Sidebar --- */
 .VPSidebarItem.level-0 > .item > .text {
   font-family: var(--font-mono);
@@ -489,7 +528,7 @@ html[lang='ja'] .vp-doc th {
 }
 
 .VPSidebarItem .link {
-  font-family: var(--font-body);
+  font-family: var(--font-reading);
   font-size: 0.88rem;
   line-height: 1.5;
 }
@@ -516,7 +555,7 @@ html[lang='ja'] .vp-doc th {
 }
 
 .VPDocAside .outline-link {
-  font-family: var(--font-body);
+  font-family: var(--font-reading);
   font-size: 0.84rem;
   line-height: 1.55;
   padding: 6px 0;
@@ -537,7 +576,7 @@ html[lang='ja'] .vp-doc th {
 .VPDocFooter .edit-info,
 .VPDocFooter .edit-link-button,
 .VPDocFooter .last-updated {
-  font-family: var(--font-body);
+  font-family: var(--font-reading);
   font-size: 0.85rem;
 }
 
