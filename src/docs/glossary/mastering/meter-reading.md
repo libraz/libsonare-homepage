@@ -24,6 +24,8 @@ No single reading proves a master is good. Loudness + peak answer "is it on targ
 | Phase Scope | Is the stereo field balanced or unstable? |
 | Stereo Image | Is width coming from useful side energy or risky spread? |
 
+<SonareDemo id="loudness-meter" />
+
 ## What To Check First
 
 Start with loudness and peak safety. A master that misses the target or clips is not ready.

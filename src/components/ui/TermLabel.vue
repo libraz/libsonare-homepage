@@ -73,14 +73,14 @@ withDefaults(
 
 .term-label__text {
   border-bottom: 1px dotted color-mix(in srgb, var(--demo-accent, #8B5CF6) 55%, transparent);
-  transition: border-color 0.18s ease, color 0.18s ease;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .term-label--mono .term-label__text {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   text-transform: uppercase;
 }
 
@@ -101,12 +101,13 @@ withDefaults(
   border: 1px solid color-mix(in srgb, var(--demo-accent, #8B5CF6) 45%, transparent);
   border-radius: 50%;
   color: var(--demo-accent-light, #A78BFA);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 700;
   font-style: italic;
   line-height: 1;
-  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .term-label:hover .term-label__text,
@@ -119,7 +120,7 @@ withDefaults(
 .term-label:focus-visible .term-label__dot {
   background: var(--demo-accent, #8B5CF6);
   border-color: var(--demo-accent, #8B5CF6);
-  color: #fff;
+  color: var(--demo-on-accent, #fff);
 }
 
 html:not(.dark) .term-label__dot {

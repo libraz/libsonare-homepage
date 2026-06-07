@@ -1,6 +1,5 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import BpmVisualizer from '@/components/BpmVisualizer.vue';
 import MatrixHeatmap from '@/components/MatrixHeatmap.vue';
 import WaveformVisualizer from '@/components/WaveformVisualizer.vue';
 
@@ -106,48 +105,6 @@ describe('analysis visualizer components', () => {
     calls.length = 0;
     await wrapper.setProps({ max: 2 });
     expect(calls.filter((call) => call.method === 'fillRect')).toHaveLength(7);
-  });
-
-  it('pulses BpmVisualizer from detected beats and clears the beat state', async () => {
-    vi.useFakeTimers();
-    const wrapper = mount(BpmVisualizer, {
-      props: {
-        bpm: 119.6,
-        isPlaying: false,
-        currentTime: 0,
-        beats: new Float32Array([0.5, 1.0]),
-      },
-    });
-
-    expect(wrapper.find('.bpm-value').text()).toBe('120');
-
-    await wrapper.setProps({ isPlaying: true, currentTime: 0.51 });
-    expect(wrapper.find('.bpm-circle').classes()).toContain('bpm-circle--beating');
-    expect(wrapper.findAll('.bpm-bar--active')).toHaveLength(2);
-
-    await vi.advanceTimersByTimeAsync(200);
-    expect(wrapper.find('.bpm-circle').classes()).not.toContain('bpm-circle--beating');
-    expect(wrapper.findAll('.bpm-bar--active')).toHaveLength(0);
-  });
-
-  it('starts fallback BPM pulse when beat data is unavailable', async () => {
-    vi.useFakeTimers();
-    const wrapper = mount(BpmVisualizer, {
-      props: {
-        bpm: 120,
-        isPlaying: false,
-        currentTime: 0,
-        beats: [],
-      },
-    });
-
-    await wrapper.setProps({ isPlaying: true });
-    await vi.advanceTimersByTimeAsync(500);
-    expect(wrapper.find('.bpm-circle').classes()).toContain('bpm-circle--beating');
-
-    await wrapper.setProps({ isPlaying: false });
-    await vi.advanceTimersByTimeAsync(200);
-    expect(wrapper.find('.bpm-circle').classes()).not.toContain('bpm-circle--beating');
   });
 
   it('renders WaveformVisualizer progress and emits seek times from clicks', async () => {

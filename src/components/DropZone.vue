@@ -51,6 +51,13 @@ function handleClick() {
   fileInput.value?.click();
 }
 
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    fileInput.value?.click();
+  }
+}
+
 function handleFileSelect(e: Event) {
   const input = e.target as HTMLInputElement;
   const files = input.files;
@@ -74,11 +81,15 @@ function isValidAudioFile(file: File): boolean {
   <div
     class="dropzone"
     :class="{ 'dropzone--dragging': isDragging, 'dropzone--hover': isHovering }"
+    role="button"
+    tabindex="0"
+    :aria-label="t('demo.dropzone.title')"
     @dragenter="handleDragEnter"
     @dragleave="handleDragLeave"
     @dragover="handleDragOver"
     @drop="handleDrop"
     @click="handleClick"
+    @keydown="handleKeydown"
     @mouseenter="isHovering = true"
     @mouseleave="isHovering = false"
   >
@@ -120,10 +131,10 @@ function isValidAudioFile(file: File): boolean {
 
 <style scoped>
 .dropzone {
-  --accent: var(--demo-accent, #8B5CF6);
-  --accent-dim: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
-  --bg: var(--demo-dropzone-bg, rgba(8, 10, 14, 0.9));
-  --border: var(--demo-accent-border, rgba(139, 92, 246, 0.2));
+  --accent: var(--demo-accent);
+  --accent-dim: var(--demo-accent-dim);
+  --bg: var(--demo-dropzone-bg);
+  --border: var(--demo-accent-border);
 
   position: relative;
   display: flex;
@@ -137,8 +148,8 @@ function isValidAudioFile(file: File): boolean {
   border: 1px solid var(--border);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.25s ease;
-  font-family: 'JetBrains Mono', monospace;
+  transition: all var(--transition-default);
+  font-family: var(--font-mono);
   overflow: hidden;
 }
 
@@ -204,7 +215,7 @@ function isValidAudioFile(file: File): boolean {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: var(--demo-text-strong, rgba(255, 255, 255, 0.85));
+  color: var(--demo-text-strong);
   text-transform: uppercase;
 }
 
@@ -212,7 +223,7 @@ function isValidAudioFile(file: File): boolean {
   font-size: 11px;
   font-weight: 400;
   letter-spacing: 0.05em;
-  color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
+  color: var(--demo-text-muted);
 }
 
 .dropzone__formats {
@@ -229,7 +240,7 @@ function isValidAudioFile(file: File): boolean {
   font-size: 8px;
   font-weight: 500;
   letter-spacing: 0.1em;
-  color: var(--demo-text-faint, rgba(255, 255, 255, 0.35));
+  color: var(--demo-text-faint);
 }
 
 .dropzone__format-list {

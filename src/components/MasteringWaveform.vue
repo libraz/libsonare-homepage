@@ -181,6 +181,7 @@ function draw() {
   const compareColor = cs.getPropertyValue('--wave-compare').trim() || 'rgba(148, 163, 184, 0.5)';
   const placeholderColor =
     cs.getPropertyValue('--wave-placeholder').trim() || 'rgba(255, 255, 255, 0.22)';
+  const monoFont = cs.getPropertyValue('--font-mono').trim() || 'ui-monospace, monospace';
 
   const mid = h / 2;
 
@@ -194,7 +195,7 @@ function draw() {
 
   if (!props.audio) {
     ctx.fillStyle = placeholderColor;
-    ctx.font = '600 9px "JetBrains Mono", ui-monospace, monospace';
+    ctx.font = `600 9px ${monoFont}`;
     ctx.letterSpacing = '0.16em' as unknown as string;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -341,7 +342,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: var(--master-scope-bg);
   overflow: hidden;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 html:not(.dark) .wave-panel {
@@ -368,7 +369,7 @@ html:not(.dark) .wave-panel {
   align-items: center;
   gap: 6px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.14em;

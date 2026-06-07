@@ -36,6 +36,13 @@ let resizeObserver: ResizeObserver | null = null;
 let frame = 0;
 let target = { x: 0, y: 1.5, z: 0 };
 
+// Honour the OS reduced-motion preference: keep drag-to-orbit interactive but
+// stop autonomous rotation / wavefront / pulse animation and render statically.
+const reduceMotion =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 // Orbit state (spherical around target).
 const orbit = { radius: 18, theta: Math.PI * 0.62, phi: Math.PI * 0.42 };
 let dragging = false;
@@ -186,22 +193,28 @@ function buildScene() {
   const listener = toScene(res.listener, room);
   const source = toScene(res.source, room);
 
+  // On the light demo panel the brand purple washes out against the lavender
+  // background, so the room is recoloured to a deep violet with stronger fills.
+  // Dark mode keeps the flagship brand-purple look.
+  const lineColor = props.isDark ? props.accent : '#4C1D95';
+  const wallColor = props.isDark ? props.accent : '#5B21B6';
+
   // Wall opacity scales with absorption: damped rooms read as more solid.
   const meanAbs = res.bands.length
     ? res.bands.reduce((s, b) => s + b.absorption, 0) / res.bands.length
     : 0.2;
-  const wallOpacity = props.isDark ? 0.05 + meanAbs * 0.16 : 0.04 + meanAbs * 0.1;
+  const wallOpacity = props.isDark ? 0.05 + meanAbs * 0.16 : 0.1 + meanAbs * 0.16;
 
-  addWalls(roomGroup, room.length, room.width, room.height, props.accent, wallOpacity);
+  addWalls(roomGroup, room.length, room.width, room.height, wallColor, wallOpacity);
   addWireBox(
     roomGroup,
     room.length,
     room.width,
     room.height,
-    props.accent,
-    props.isDark ? 0.85 : 0.7,
+    lineColor,
+    props.isDark ? 0.85 : 0.95,
   );
-  addFloorGrid(roomGroup, room.length, room.width, props.accent, props.isDark ? 0.22 : 0.18);
+  addFloorGrid(roomGroup, room.length, room.width, lineColor, props.isDark ? 0.22 : 0.42);
 
   // Ground-truth room overlay for built-in presets.
   if (res.truth) {
@@ -237,7 +250,7 @@ function buildScene() {
     props.isDark ? 0.16 : 0.12,
   );
 
-  addMarker(roomGroup, listener, props.isDark ? '#ffffff' : props.accent, markerR);
+  addMarker(roomGroup, listener, props.isDark ? '#ffffff' : '#1E1B4B', markerR);
   addMarker(roomGroup, source, props.amber, markerR * 1.05, 1);
 
   // Wavefront emitters from the source.
@@ -282,28 +295,33 @@ function updateCamera() {
 
 function animate() {
   frame = requestAnimationFrame(animate);
-  if (props.autoRotate && !dragging) orbit.theta += 0.0024;
 
-  const t = performance.now() * 0.001;
-  // Playback level drives emission: faster, brighter wavefronts and a larger source
-  // pulse while audio is loud, so the 3D scene reflects what you hear.
-  const lvl = Math.max(0, Math.min(1, props.level));
-  const speed = 0.3 + lvl * 0.7;
-  for (const wf of wavefronts) {
-    const p = (t * speed + wf.userData.offset) % 1;
-    const scale = Math.max(0.001, p * wf.userData.maxR);
-    wf.scale.setScalar(scale);
-    wf.material.opacity = (1 - p) * (0.12 + lvl * 0.5);
+  // Autonomous motion (auto-rotate, expanding wavefronts, source pulse) is
+  // suppressed under reduced-motion; drag-to-orbit below still re-renders.
+  if (!reduceMotion) {
+    if (props.autoRotate && !dragging) orbit.theta += 0.0024;
+
+    const t = performance.now() * 0.001;
+    // Playback level drives emission: faster, brighter wavefronts and a larger source
+    // pulse while audio is loud, so the 3D scene reflects what you hear.
+    const lvl = Math.max(0, Math.min(1, props.level));
+    const speed = 0.3 + lvl * 0.7;
+    for (const wf of wavefronts) {
+      const p = (t * speed + wf.userData.offset) % 1;
+      const scale = Math.max(0.001, p * wf.userData.maxR);
+      wf.scale.setScalar(scale);
+      wf.material.opacity = (1 - p) * (0.12 + lvl * 0.5);
+    }
+    roomGroup?.traverse?.((obj: any) => {
+      if (obj.userData?.pulse) {
+        const s = 1 + Math.sin(t * 3.2) * 0.08 + lvl * 0.5;
+        obj.scale.setScalar(s);
+      }
+      if (obj.userData?.pulseHalo) {
+        obj.material.opacity = 0.1 + (Math.sin(t * 3.2) * 0.5 + 0.5) * 0.1 + lvl * 0.28;
+      }
+    });
   }
-  roomGroup?.traverse?.((obj: any) => {
-    if (obj.userData?.pulse) {
-      const s = 1 + Math.sin(t * 3.2) * 0.08 + lvl * 0.5;
-      obj.scale.setScalar(s);
-    }
-    if (obj.userData?.pulseHalo) {
-      obj.material.opacity = 0.1 + (Math.sin(t * 3.2) * 0.5 + 0.5) * 0.1 + lvl * 0.28;
-    }
-  });
 
   updateCamera();
   renderer.render(scene, camera);

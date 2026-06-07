@@ -45,7 +45,7 @@ const emit = defineEmits<(e: 'toggle', step: number) => void>();
 .step-row__label {
   flex: 0 0 34px;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -136,6 +136,15 @@ html:not(.dark) .step-row__cell {
     var(--demo-control-bg-strong);
 }
 
+/* On the light deck a white tint vanishes — tint the column with the accent
+   so the running playhead stays clearly visible. */
+html:not(.dark) .step-row__cell--playhead {
+  border-color: var(--track-hue, var(--demo-accent));
+  background:
+    linear-gradient(180deg, var(--demo-accent-subtle) 0%, transparent 55%),
+    var(--demo-control-bg-strong);
+}
+
 .step-row__cell--on.step-row__cell--playhead {
   border-color: var(--track-hue, var(--demo-accent));
   background: var(--track-hue, var(--demo-accent));
@@ -145,5 +154,22 @@ html:not(.dark) .step-row__cell {
 .step-row__cell--on.step-row__cell--playhead .step-row__led {
   background: #fff;
   box-shadow: 0 0 8px #fff;
+}
+
+/* A white LED disappears against the lit accent pad on the light deck. */
+html:not(.dark) .step-row__cell--on.step-row__cell--playhead .step-row__led {
+  background: var(--color-purple-600);
+  box-shadow: 0 0 8px var(--color-purple-600);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-row__cell,
+  .step-row__led {
+    transition: none;
+  }
+
+  .step-row__cell:active {
+    transform: none;
+  }
 }
 </style>

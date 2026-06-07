@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ===== LOADING ===== */
@@ -182,5 +182,25 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
+}
+
+/* Pause the looping loading animations for users who prefer reduced motion;
+   leave the bars at a legible static state instead of mid-cycle. */
+@media (prefers-reduced-motion: reduce) {
+  .analyzer__loading-bar,
+  .analyzer__loading-icon,
+  .analyzer__loading-dot {
+    animation: none;
+  }
+
+  .analyzer__loading-bar {
+    transform: scaleY(0.6);
+    opacity: 0.7;
+  }
+
+  .analyzer__loading-progress-fill,
+  .analyzer__progress-fill {
+    transition: none;
+  }
 }
 

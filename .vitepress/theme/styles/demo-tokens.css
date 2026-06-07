@@ -1,0 +1,188 @@
+/* =========================================
+   libsonare Demo Token Layer
+
+   Single source of truth for every `--demo-*` token consumed by the
+   demo pages (ToolShell), the demo index (DemosLayout), and the demo
+   components. Light values live on :root (matching tokens.css), dark
+   values under html.dark.
+
+   Page surfaces (.landing, .master-page) may still override a token,
+   but only as a visible, commented decision — never re-declare the
+   whole table.
+   ========================================= */
+
+:root {
+  /* Surfaces */
+  --demo-bg: #f8f6ff;
+  --demo-bg-overlay: rgba(248, 246, 255, 0.95);
+  --demo-bg-elevated: rgba(245, 243, 255, 0.88);
+  --demo-bg-header: rgba(250, 248, 255, 0.9);
+
+  /* Text */
+  --demo-text-strong: #1a1a2e;
+  --demo-text: rgba(0, 0, 0, 0.62);
+  --demo-text-muted: rgba(0, 0, 0, 0.42);
+  --demo-text-faint: rgba(0, 0, 0, 0.22);
+
+  /* Brand accents */
+  --demo-accent: #7C3AED;
+  --demo-accent-light: #8B5CF6;
+  --demo-accent-dim: rgba(124, 58, 237, 0.25);
+  --demo-accent-subtle: rgba(124, 58, 237, 0.06);
+  --demo-accent-border: rgba(124, 58, 237, 0.2);
+  --demo-on-accent: #ffffff;
+
+  /* Functional accents — mid-tones that keep AA contrast on light panels */
+  --demo-cyan: #0891B2;
+  --demo-amber: #B45309;
+  --demo-success: rgba(16, 132, 110, 0.95);
+  --demo-danger: #B91C1C;
+  --demo-status-ok: #15803D;
+  --demo-status-warn: var(--demo-amber);
+  --demo-status-error: #DC2626;
+  --demo-clip: #DC2626;
+  --demo-playhead: var(--demo-amber);
+
+  /* Borders */
+  --demo-border: rgba(0, 0, 0, 0.08);
+  --demo-border-strong: rgba(0, 0, 0, 0.15);
+
+  /* Controls / tracks */
+  --demo-control-bg: rgba(255, 255, 255, 0.58);
+  --demo-control-bg-strong: rgba(255, 255, 255, 0.72);
+  --demo-track-bg: rgba(255, 255, 255, 0.54);
+  --demo-clip-base: rgba(255, 255, 255, 0.68);
+  --demo-clip-label-shadow: rgba(255, 255, 255, 0.72);
+  --demo-dropzone-bg: rgba(245, 243, 255, 0.88);
+  --demo-indicator-bg: rgba(255, 255, 255, 0.72);
+
+  /* Backdrop texture — hidden in light mode for an editorial feel */
+  --demo-grid-color: transparent;
+  --demo-grid-minor: transparent;
+  --demo-scanline: transparent;
+
+  /* Visualizer bezel/screen — light so players don't stay dark */
+  --demo-bezel: #e6e1f5;
+  --demo-bezel-start: #f1edfb;
+  --demo-bezel-end: #d8d0ee;
+  --demo-bezel-inset-light: rgba(255, 255, 255, 0.6);
+  --demo-bezel-inset-dark: rgba(80, 60, 140, 0.08);
+  --demo-bezel-shadow-deep: rgba(80, 60, 140, 0.18);
+  --demo-screen-bg: rgb(245, 243, 255);
+  --demo-screen-bg-alpha: rgba(245, 243, 255, 0.6);
+  --demo-screen-inset-1: rgba(124, 58, 237, 0.14);
+  --demo-screen-inset-2: rgba(124, 58, 237, 0.07);
+
+  /* Warnings */
+  --demo-warn: #B45309;
+  --demo-warn-text: #92400E;
+  --demo-warn-border: rgba(180, 83, 9, 0.34);
+  --demo-warn-bg: rgba(245, 158, 11, 0.12);
+
+  /* Shadows */
+  --demo-shadow: rgba(0, 0, 0, 0.08);
+  --demo-shadow-glow: 0 4px 24px -6px rgba(124, 58, 237, 0.18);
+
+  /* Shared interaction constants */
+  --demo-disabled-opacity: 0.45;
+
+  /* Micro-label rhythm (mono uppercase instrument labels) */
+  --demo-label-size: 9px;
+  --demo-label-tracking: 0.12em;
+  --demo-label-weight: 600;
+}
+
+.dark {
+  /* Surfaces — #030405 matches landing and demo index for seamless nav */
+  --demo-bg: #030405;
+  --demo-bg-overlay: rgba(12, 14, 20, 0.95);
+  --demo-bg-elevated: rgba(16, 18, 26, 0.88);
+  --demo-bg-header: rgba(22, 24, 32, 0.85);
+
+  /* Text */
+  --demo-text-strong: #ffffff;
+  --demo-text: rgba(255, 255, 255, 0.78);
+  --demo-text-muted: rgba(255, 255, 255, 0.5);
+  --demo-text-faint: rgba(255, 255, 255, 0.32);
+
+  /* Brand accents */
+  --demo-accent: #8B5CF6;
+  --demo-accent-light: #A78BFA;
+  --demo-accent-dim: rgba(139, 92, 246, 0.3);
+  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
+  --demo-accent-border: rgba(139, 92, 246, 0.2);
+  --demo-on-accent: #ffffff;
+
+  /* Functional accents — bright tones for the deep surface */
+  --demo-cyan: #22D3EE;
+  --demo-amber: #F59E0B;
+  --demo-success: #34D399;
+  --demo-danger: #FCA5A5;
+  --demo-status-ok: #22C55E;
+  --demo-status-warn: var(--demo-amber);
+  --demo-status-error: #EF4444;
+  --demo-clip: #EF4444;
+  --demo-playhead: var(--demo-amber);
+
+  /* Borders */
+  --demo-border: rgba(139, 92, 246, 0.26);
+  --demo-border-strong: rgba(160, 132, 250, 0.44);
+
+  /* Controls / tracks */
+  --demo-control-bg: rgba(0, 0, 0, 0.18);
+  --demo-control-bg-strong: rgba(0, 0, 0, 0.28);
+  --demo-track-bg: rgba(0, 0, 0, 0.2);
+  --demo-clip-base: rgba(0, 0, 0, 0.28);
+  --demo-clip-label-shadow: rgba(0, 0, 0, 0.72);
+  --demo-dropzone-bg: rgba(8, 10, 14, 0.9);
+  --demo-indicator-bg: rgba(0, 0, 0, 0.35);
+
+  /* Backdrop texture */
+  --demo-grid-color: rgba(139, 92, 246, 0.04);
+  --demo-grid-minor: rgba(139, 92, 246, 0.02);
+  --demo-scanline: rgba(0, 0, 0, 0.03);
+
+  /* Visualizer bezel/screen — dark hardware shell */
+  --demo-bezel: #1a1b22;
+  --demo-bezel-start: #232531;
+  --demo-bezel-end: #121319;
+  --demo-bezel-inset-light: rgba(255, 255, 255, 0.06);
+  --demo-bezel-inset-dark: rgba(0, 0, 0, 0.5);
+  --demo-bezel-shadow-deep: rgba(0, 0, 0, 0.55);
+  --demo-screen-bg: rgb(6, 8, 12);
+  --demo-screen-bg-alpha: rgba(6, 8, 12, 0.6);
+  --demo-screen-inset-1: rgba(139, 92, 246, 0.18);
+  --demo-screen-inset-2: rgba(139, 92, 246, 0.09);
+
+  /* Warnings */
+  --demo-warn: #F59E0B;
+  --demo-warn-text: #FCD9A0;
+  --demo-warn-border: rgba(245, 158, 11, 0.4);
+  --demo-warn-bg: rgba(245, 158, 11, 0.1);
+
+  /* Shadows */
+  --demo-shadow: rgba(0, 0, 0, 0.4);
+  --demo-shadow-glow: 0 0 40px -10px rgba(139, 92, 246, 0.2);
+}
+
+/* --- Shared micro-label utility -------------------------------------
+   The one typographic spec for mono uppercase instrument labels.
+   Components apply the class (or mirror the tokens) instead of
+   hand-tuning size/weight/tracking per panel. */
+.demo-label {
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
+}
+
+/* --- Shared focus ring ----------------------------------------------
+   Every interactive element inside a demo surface gets a visible
+   keyboard focus ring by default; components may tighten it locally. */
+.tool-page :focus-visible,
+.demos-page :focus-visible,
+.master-page :focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}

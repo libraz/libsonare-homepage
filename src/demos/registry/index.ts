@@ -9,9 +9,17 @@
 import type { SonareDemoDef } from '../types';
 import { acousticsDemos } from './acoustics';
 import { analysisDemos } from './analysis';
+import { editingDemos } from './editing';
 import { instrumentsDemos } from './instruments';
+import { masteringDemos } from './mastering';
 
-const allDemos: SonareDemoDef[] = [...analysisDemos, ...instrumentsDemos, ...acousticsDemos];
+const allDemos: SonareDemoDef[] = [
+  ...analysisDemos,
+  ...instrumentsDemos,
+  ...acousticsDemos,
+  ...editingDemos,
+  ...masteringDemos,
+];
 
 const byId = new Map<string, SonareDemoDef>();
 for (const def of allDemos) {

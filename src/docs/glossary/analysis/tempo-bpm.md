@@ -14,6 +14,8 @@ If the music has a steady pulse, its onset envelope is **periodic**: peaks recur
 - **Autocorrelation** slides the onset envelope against a time-shifted copy of itself and measures how well they match at each lag. Lags where the curve lines up with itself reveal the repeating period — and the period converts directly to BPM.
 - **The tempogram** turns that into a picture: a time × tempo map showing the strength of every candidate tempo at each moment. A strong horizontal band is a stable tempo; a band that drifts shows a track that speeds up or slows down.
 
+<SonareDemo id="beat-tracking" />
+
 ## Octave errors: the classic tempo trap
 
 Tempo estimates famously land at **half or double** the "true" tempo — 75 BPM reported as 150, or 140 as 70. This is not a bug; it is genuinely ambiguous. A listener tapping along to the same groove can reasonably tap at half-time or double-time, and the periodicity supports both. These are called **octave errors** (by analogy with pitch octaves).

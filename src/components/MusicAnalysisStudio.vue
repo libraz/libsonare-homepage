@@ -471,6 +471,51 @@ function seekFromEvent(event: MouseEvent) {
   transport.value?.seekFraction(Math.max(0, Math.min(1, fraction)));
 }
 
+// Step size for keyboard scrubbing on time-aligned visuals.
+const KEYBOARD_SEEK_SECONDS = 2;
+
+// Nudge the transport by a number of seconds, mapped to the shared 0..1 position.
+function seekRelative(deltaSeconds: number) {
+  const total = result.value?.duration || 0;
+  if (total <= 0) return;
+  const next = playFraction.value + deltaSeconds / total;
+  transport.value?.seekFraction(Math.max(0, Math.min(1, next)));
+}
+
+// Keyboard scrubbing for the time-aligned surfaces: arrows nudge by a fixed
+// step, Home/End jump to the edges, and Enter seeks to the start of the clip.
+function seekFromKey(event: KeyboardEvent) {
+  if (!hasPlayback.value) return;
+  switch (event.key) {
+    case 'ArrowLeft':
+      event.preventDefault();
+      seekRelative(-KEYBOARD_SEEK_SECONDS);
+      break;
+    case 'ArrowRight':
+      event.preventDefault();
+      seekRelative(KEYBOARD_SEEK_SECONDS);
+      break;
+    case 'Home':
+      event.preventDefault();
+      transport.value?.seekFraction(0);
+      break;
+    case 'End':
+      event.preventDefault();
+      transport.value?.seekFraction(1);
+      break;
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      transport.value?.seekFraction(0);
+      break;
+    default:
+      break;
+  }
+}
+
+// Current playback position in whole seconds, for aria-valuenow on seek sliders.
+const playSeconds = computed(() => Math.round((result.value?.duration || 0) * playFraction.value));
+
 function confidencePct(value: number): number {
   return Math.round(Math.max(0, Math.min(1, value)) * 100);
 }
@@ -738,7 +783,14 @@ function waveformPath(): string {
               class="timeline-rows"
               :class="{ 'is-seekable': hasPlayback }"
               :style="playheadStyle"
+              :role="hasPlayback ? 'slider' : undefined"
+              :tabindex="hasPlayback ? 0 : undefined"
+              :aria-label="hasPlayback ? copy.panels.timeline : undefined"
+              :aria-valuemin="hasPlayback ? 0 : undefined"
+              :aria-valuemax="hasPlayback ? Math.round(result.duration) : undefined"
+              :aria-valuenow="hasPlayback ? playSeconds : undefined"
               @click="seekFromEvent"
+              @keydown="seekFromKey"
             >
               <div class="timeline-row timeline-row--sections">
                 <span

@@ -9,7 +9,7 @@
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .scope__bezel {

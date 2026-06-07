@@ -38,7 +38,7 @@
   background: color-mix(in srgb, var(--demo-accent) 18%, transparent);
   color: var(--demo-accent);
   font-style: normal;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -49,7 +49,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
 }
@@ -91,7 +91,7 @@
   border-radius: 10px;
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -120,11 +120,11 @@ html:not(.dark) .master-page .studio-source__demo {
   border: 1px dashed var(--demo-border-strong);
   border-radius: 10px;
   background:
-    linear-gradient(rgba(139, 92, 246, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 92, 246, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--demo-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--demo-grid-color) 1px, transparent 1px);
   background-size: 24px 24px;
   cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .studio-source__drop:hover {
@@ -150,7 +150,7 @@ html:not(.dark) .master-page .studio-source__demo {
   border: 1px solid var(--demo-border-strong);
   border-radius: 8px;
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -168,7 +168,7 @@ html:not(.dark) .master-page .studio-source__icon {
 
 .studio-source__meta strong {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 700;
   overflow: hidden;
@@ -178,7 +178,7 @@ html:not(.dark) .master-page .studio-source__icon {
 
 .studio-source__meta em {
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-style: normal;
   letter-spacing: 0.04em;
@@ -190,7 +190,7 @@ html:not(.dark) .master-page .studio-source__icon {
   border-radius: 6px;
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;

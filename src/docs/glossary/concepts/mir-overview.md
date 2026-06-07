@@ -62,6 +62,8 @@ The timing family builds up in layers:
 BPM, beats, and tempograms all start from the same onset-strength envelope. If you want the time × tempo picture behind a BPM estimate, see the tempogram family in [Realtime and Streaming](../../realtime-streaming.md#tempograms-from-an-onset-envelope).
 :::
 
+<SonareDemo id="beat-tracking" />
+
 ## Harmony: key, chord, chroma
 
 **Chroma** compresses frequency content into 12 pitch-class bins (C, C♯, … B), folding every octave of the same note together. That makes it the natural substrate for harmony: **key detection** estimates the tonal center from the overall chroma distribution, and **chord recognition** estimates local harmony frame by frame.
@@ -69,6 +71,8 @@ BPM, beats, and tempograms all start from the same onset-strength envelope. If y
 ::: warning Chroma trades octave and timbre detail for harmonic clarity
 Folding octaves together is exactly what makes chroma good for key/chord work — and exactly what makes it the wrong tool for melody or timbre, where octave and spectral shape matter. Match the representation to the question.
 :::
+
+<SonareDemo id="chromagram" />
 
 ## Spectrum: FFT, STFT, spectrogram
 
@@ -79,6 +83,8 @@ The **STFT** repeats that over many short, overlapping windows so frequency cont
 A **spectrogram** is the visual result: time on one axis, frequency on another, intensity as brightness.
 
 Two parameters recur everywhere: `nFft` (window size — bigger means finer frequency resolution but blurrier timing) and `hopLength` (step between windows — smaller means more frames and smoother motion). The trade-off between frequency and time resolution is fundamental, not a libsonare quirk.
+
+<SonareDemo id="stft-basics" />
 
 ## Perceptual features: mel, MFCC, CQT, VQT
 

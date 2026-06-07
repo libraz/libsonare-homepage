@@ -36,6 +36,8 @@ Fractional values are normal because singers are rarely exactly on a note.
 
 Correction is a pitch shift applied over a region, so the same artifact rules apply: small intervals stay transparent, large ones expose phase-vocoder smearing. For natural vocals, correct by small amounts toward the nearest scale tone rather than forcing a big jump. Hard, full-snap correction is a creative effect, not a transparent fix.
 
+<SonareDemo id="pitch-shift" />
+
 ## Note regions: samples, not seconds
 
 Region-based edits like `noteStretch` take **sample offsets**, not seconds, because sample positions are exact and never drift. Convert with `samples = round(seconds × sampleRate)` — at 48 kHz, 0.25 s is sample 12000. A region has an onset sample and an offset sample; `stretchRatio > 1` lengthens that region while leaving the surrounding audio in place.

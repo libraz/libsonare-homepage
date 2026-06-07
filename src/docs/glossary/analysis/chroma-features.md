@@ -21,6 +21,8 @@ This deliberate forgetting is the point. Harmony is about *which notes*, not *wh
 
 Stack a chroma vector for every frame and you get a **chromagram** — a 12-row image showing how pitch-class energy moves through the song. Sustained chords appear as steady horizontal bands; a key change shifts which bins stay lit. Visualizers draw it directly; analyzers read patterns out of it.
 
+<SonareDemo id="chromagram" />
+
 ## Why chroma is right for harmony — and wrong for melody
 
 | Question | Use chroma? | Why |

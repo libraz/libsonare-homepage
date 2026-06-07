@@ -125,7 +125,7 @@ const { t } = useI18n();
 .venue-option__icon {
   align-self: start;
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
@@ -177,7 +177,7 @@ const { t } = useI18n();
 }
 
 .venue-option__info > span {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
 }

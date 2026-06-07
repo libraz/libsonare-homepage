@@ -52,10 +52,10 @@ defineProps<{
 }
 
 .tech-panel__title {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   color: var(--panel-text);
   text-transform: uppercase;
 }

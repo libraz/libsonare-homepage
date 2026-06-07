@@ -121,55 +121,17 @@ function switchLocale(event: Event) {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
+/* Tokens come from the shared demo token layer
+   (.vitepress/theme/styles/demo-tokens.css) — do not re-declare here. */
 .demos-page {
-  --demo-bg: #030405;
-  --demo-bg-overlay: rgba(10, 12, 18, 0.95);
-  --demo-bg-elevated: rgba(8, 10, 14, 0.85);
-  --demo-text-strong: #ffffff;
-  --demo-text: rgba(255, 255, 255, 0.7);
-  --demo-text-muted: rgba(255, 255, 255, 0.4);
-  --demo-accent: #8B5CF6;
-  --demo-accent-light: #A78BFA;
-  --demo-accent-dim: rgba(139, 92, 246, 0.3);
-  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
-  --demo-accent-border: rgba(139, 92, 246, 0.2);
-  --demo-cyan: #22D3EE;
-  --demo-success: #34D399;
-  --demo-border: rgba(139, 92, 246, 0.2);
-  --demo-border-strong: rgba(139, 92, 246, 0.34);
-  --demo-grid-color: rgba(139, 92, 246, 0.05);
-  --demo-screen-bg-alpha: rgba(6, 8, 12, 0.6);
-
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--demo-bg);
   color: var(--demo-text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   overflow-x: hidden;
-}
-
-html:not(.dark) .demos-page {
-  --demo-bg: #f8f6ff;
-  --demo-bg-overlay: rgba(248, 246, 255, 0.95);
-  --demo-bg-elevated: rgba(245, 243, 255, 0.85);
-  --demo-text-strong: #1a1a2e;
-  --demo-text: rgba(0, 0, 0, 0.6);
-  --demo-text-muted: rgba(0, 0, 0, 0.42);
-  --demo-accent: #7C3AED;
-  --demo-accent-light: #8B5CF6;
-  --demo-accent-dim: rgba(124, 58, 237, 0.25);
-  --demo-accent-subtle: rgba(124, 58, 237, 0.06);
-  --demo-accent-border: rgba(124, 58, 237, 0.2);
-  --demo-cyan: #0891B2;
-  --demo-success: rgba(16, 132, 110, 0.95);
-  --demo-border: rgba(0, 0, 0, 0.08);
-  --demo-border-strong: rgba(0, 0, 0, 0.13);
-  --demo-grid-color: transparent;
-  --demo-screen-bg-alpha: rgba(255, 255, 255, 0.55);
 }
 
 .demos-page__backdrop {
@@ -211,7 +173,7 @@ html:not(.dark) .demos-page .demos-page__header {
 
 .demos-page__brand {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -220,7 +182,7 @@ html:not(.dark) .demos-page .demos-page__header {
 
 .demos-page__tagline {
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
 }
@@ -233,7 +195,7 @@ html:not(.dark) .demos-page .demos-page__header {
   text-decoration: none;
   padding: 6px 8px;
   border-radius: 6px;
-  transition: color 0.2s ease, background-color 0.2s ease;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .demos-page__nav-link:hover {
@@ -246,7 +208,7 @@ html:not(.dark) .demos-page .demos-page__header {
   align-items: center;
   height: 32px;
   padding: 0 10px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -255,7 +217,7 @@ html:not(.dark) .demos-page .demos-page__header {
   background: var(--demo-accent-subtle);
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .demos-page__lang-switch:hover {
@@ -274,7 +236,7 @@ html:not(.dark) .demos-page .demos-page__header {
   background: var(--demo-accent-subtle);
   color: var(--demo-text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .demos-page__theme-toggle:hover {
@@ -297,7 +259,7 @@ html:not(.dark) .demos-page .demos-page__header {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-decoration: none;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .demos-page__cta:hover {
@@ -320,7 +282,7 @@ html:not(.dark) .demos-page .demos-page__header {
 
 .demos-page__eyebrow {
   margin: 0 0 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -330,7 +292,7 @@ html:not(.dark) .demos-page .demos-page__header {
 
 .demos-page__title {
   margin: 0 0 14px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: clamp(32px, 5vw, 46px);
   font-weight: 700;
   line-height: 1.05;
@@ -367,12 +329,12 @@ html:not(.dark) .demos-page .demos-page__header {
 
 .demos-page__footer-link {
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color var(--transition-fast);
 }
 
 .demos-page__footer-link:hover {

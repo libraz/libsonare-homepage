@@ -381,6 +381,9 @@ const midiEngineProxy = {
   setMidiInputSource: () => {
     /* the worklet already bound the input source at startup */
   },
+  clearMidiInputSource: () => {
+    /* called by binding.close() on unmount; engine.dispose() handles the panic */
+  },
   bindMidiCc: () => {
     /* no CC-to-parameter bindings in this demo */
   },
@@ -844,7 +847,7 @@ function onKeyUp(event: KeyboardEvent) {
   align-items: baseline;
   gap: 6px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -875,12 +878,25 @@ function onKeyUp(event: KeyboardEvent) {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   overflow: hidden;
+  /* Subtle rise as the deck mounts. */
+  animation: sy-deck-rise 0.45s ease-out both;
 }
 
 html:not(.dark) .sy-deck {
   box-shadow:
     0 20px 40px -24px rgba(80, 60, 140, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+@keyframes sy-deck-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sy-deck {
+    animation: none;
+  }
 }
 
 /* ===== DISPLAY ROW ===== */
@@ -900,7 +916,7 @@ html:not(.dark) .sy-deck {
 
 .sy-brand__name {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -909,7 +925,7 @@ html:not(.dark) .sy-deck {
 
 .sy-brand__model {
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -918,7 +934,7 @@ html:not(.dark) .sy-deck {
 
 .sy-brand__tag {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -963,7 +979,7 @@ html:not(.dark) .sy-deck {
   position: absolute;
   top: 8px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1008,7 +1024,7 @@ html:not(.dark) .sy-deck {
 .sy-sec__title {
   margin: 0;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -1039,7 +1055,7 @@ html:not(.dark) .sy-deck {
 }
 
 .sy-sec__info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 8px;
   font-style: italic;
   font-weight: 700;
@@ -1098,7 +1114,7 @@ html:not(.dark) .sy-deck {
 .sy-program__no {
   flex: 0 0 auto;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1113,7 +1129,7 @@ html:not(.dark) .sy-deck {
   min-width: 0;
   overflow: hidden;
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
   line-height: 1.2;
@@ -1173,7 +1189,7 @@ html:not(.dark) .sy-deck {
   align-items: center;
   height: 12px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -1185,7 +1201,7 @@ html:not(.dark) .sy-deck {
 
 .sy-wave__label {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 7.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1206,7 +1222,7 @@ html:not(.dark) .sy-deck {
   border-radius: 5px;
   background: var(--demo-control-bg);
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8.5px;
   line-height: 1.3;
   font-weight: 700;
@@ -1277,7 +1293,7 @@ html:not(.dark) .sy-deck {
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(0deg, var(--demo-success) 0%, var(--demo-success) 60%, var(--demo-amber) 82%, #ef4444 96%);
+  background: linear-gradient(0deg, var(--demo-success) 0%, var(--demo-success) 60%, var(--demo-amber) 82%, var(--demo-clip) 96%);
   /* LED segments */
   -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
   mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
@@ -1326,7 +1342,7 @@ html:not(.dark) .sy-deck {
 
 .sy-cheek__label {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -1350,7 +1366,7 @@ html:not(.dark) .sy-deck {
 .sy-cheek__value {
   min-width: 34px;
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 800;
   text-align: center;
@@ -1358,7 +1374,7 @@ html:not(.dark) .sy-deck {
 
 .sy-cheek__zx {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -1393,7 +1409,7 @@ html:not(.dark) .sy-deck {
   align-items: center;
   gap: 7px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -1422,7 +1438,7 @@ html:not(.dark) .sy-deck {
 .sy-midi__docs {
   margin-left: auto;
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;

@@ -39,6 +39,10 @@ Formants shape the vowel sound and the perceived size or character of a voice, *
 That is why `voiceChange` separates the two controls. Lowering the formant factor makes a voice sound larger and darker. Raising it makes the voice sound smaller and brighter. The pitch stays where you set it.
 :::
 
+<SonareDemo id="pitch-shift" />
+
+<SonareDemo id="time-stretch" />
+
 ## Functions
 
 | Task | WASM / browser JavaScript | Python |

@@ -204,7 +204,7 @@ html:not(.dark) .demo-disclaimer__banner {
   border-radius: 5px;
   background: var(--demo-warn, #F59E0B);
   color: var(--warn-badge-fg);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -234,13 +234,13 @@ html:not(.dark) .demo-disclaimer__banner {
   border-radius: 5px;
   background: var(--demo-warn-bg, rgba(245, 158, 11, 0.1));
   color: var(--demo-warn-text, #FCD9A0);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: border-color 0.18s ease, color 0.18s ease;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .demo-disclaimer__reopen:hover {
@@ -263,19 +263,11 @@ html:not(.dark) .demo-disclaimer__banner {
 }
 
 /* ===== OVERLAY ===== */
-/* Teleported to <body>, so it sits outside .tool-page and cannot inherit the
-   --demo-* theme tokens. Redefine the tokens it needs here for each theme. */
+/* Teleported to <body>; --demo-* tokens are global (demo-tokens.css) so
+   they reach here too. Only the modal panel surface is overridden — a
+   dialog wants an opaque panel, not the translucent elevated surface. */
 .demo-disclaimer__overlay {
   --demo-bg-elevated: rgba(8, 10, 14, 0.92);
-  --demo-text-strong: #ffffff;
-  --demo-text: rgba(255, 255, 255, 0.72);
-  --demo-text-muted: rgba(255, 255, 255, 0.45);
-  --demo-accent: #8B5CF6;
-  --demo-accent-light: #A78BFA;
-  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
-  --demo-accent-border: rgba(139, 92, 246, 0.25);
-  --demo-border: rgba(139, 92, 246, 0.14);
-  --demo-warn: #F59E0B;
 
   position: fixed;
   inset: 0;
@@ -294,15 +286,6 @@ html:not(.dark) .demo-disclaimer__banner {
 
 html:not(.dark) .demo-disclaimer__overlay {
   --demo-bg-elevated: #ffffff;
-  --demo-text-strong: #1a1a2e;
-  --demo-text: rgba(0, 0, 0, 0.62);
-  --demo-text-muted: rgba(0, 0, 0, 0.45);
-  --demo-accent: #7C3AED;
-  --demo-accent-light: #8B5CF6;
-  --demo-accent-subtle: rgba(124, 58, 237, 0.07);
-  --demo-accent-border: rgba(124, 58, 237, 0.22);
-  --demo-border: rgba(0, 0, 0, 0.1);
-  --demo-warn: #B45309;
 
   background: radial-gradient(
       circle at 50% 30%,
@@ -368,7 +351,7 @@ html:not(.dark) .demo-disclaimer__scan {
 }
 
 .demo-disclaimer__kicker {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -377,7 +360,7 @@ html:not(.dark) .demo-disclaimer__scan {
 
 .demo-disclaimer__title {
   margin: 0 0 14px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 25px;
   font-weight: 700;
   line-height: 1.18;
@@ -416,7 +399,7 @@ html:not(.dark) .demo-disclaimer__scan {
 }
 
 .demo-disclaimer__point-key {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -444,13 +427,13 @@ html:not(.dark) .demo-disclaimer__scan {
   border: 0;
   border-radius: 8px;
   background: var(--demo-accent, #8B5CF6);
-  color: #fff;
-  font-family: 'Space Grotesk', sans-serif;
+  color: var(--demo-on-accent, #fff);
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .demo-disclaimer__confirm:hover {
@@ -460,7 +443,7 @@ html:not(.dark) .demo-disclaimer__scan {
 }
 
 .demo-disclaimer__confirm svg {
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-fast);
 }
 
 .demo-disclaimer__confirm:hover svg {
@@ -468,14 +451,14 @@ html:not(.dark) .demo-disclaimer__scan {
 }
 
 .demo-disclaimer__source {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-decoration: none;
   color: var(--demo-text-muted, rgba(255, 255, 255, 0.45));
-  transition: color 0.2s ease;
+  transition: color var(--transition-fast);
 }
 
 .demo-disclaimer__source:hover {

@@ -697,14 +697,14 @@ function mfcc(
   htk?: boolean       // デフォルト: false = Slaney 式。true で HTK
 ): MfccResult
 
-`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るため、両側で同じ値を保てば往復しても結果が一致します。
-
 interface MfccResult {
   nMfcc: number;
   nFrames: number;
   coefficients: Float32Array;
 }
 ```
+
+`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るため、両側で同じ値を保てば往復しても結果が一致します。
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="中負荷" />
 
@@ -1646,6 +1646,27 @@ class AnalyzerProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('analyzer-processor', AnalyzerProcessor);
+```
+
+### データフロー図
+
+```mermaid
+flowchart LR
+    subgraph 入力
+        A[オーディオソース] --> B[AudioWorklet]
+    end
+
+    subgraph 処理
+        B --> C[StreamAnalyzer]
+        C --> D[readFrames]
+        D --> E[FrameBuffer]
+    end
+
+    subgraph 出力
+        E --> F[postMessage]
+        F --> G[メインスレッド]
+        G --> H[ビジュアライゼーション]
+    end
 ```
 
 ### タイムスタンプ同期

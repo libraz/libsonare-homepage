@@ -27,6 +27,8 @@ Start low. A little remaining noise is often better than smeared drums, softened
 Stop as soon as the noise is unobtrusive. Pushing denoise further wobbles cymbal tails, vacuums room tone, and clips vocal breaths. And never use Input Gain to chase loudness — that belongs to the optimizer and limiter, and big input moves change what every downstream detector sees.
 :::
 
+<SonareDemo id="repair-denoise" />
+
 ## Signs to Back Off
 
 If raising denoise produces wobbling cymbal tails, an unnaturally vacuumed room tone, or vocal breaths that cut off awkwardly, the repair stage is eating into the music itself. Noise is something to make unobtrusive, not something to erase completely.

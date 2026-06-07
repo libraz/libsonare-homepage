@@ -179,7 +179,7 @@ const isLouderThanRecommended = computed(
 .platform-option strong,
 .master-slider strong {
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -212,7 +212,7 @@ const isLouderThanRecommended = computed(
 }
 
 .platform-option__info > span {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
 }
@@ -234,7 +234,7 @@ const isLouderThanRecommended = computed(
   border-radius: 999px;
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
 }
@@ -263,8 +263,8 @@ const isLouderThanRecommended = computed(
   margin-top: 1px;
   border-radius: 999px;
   background: var(--demo-warn);
-  color: var(--demo-bg);
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--demo-on-accent);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
   line-height: 1;

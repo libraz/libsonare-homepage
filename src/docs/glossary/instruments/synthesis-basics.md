@@ -35,6 +35,8 @@ The **oscillator** produces a continuous, repeating wave at the pitch of the not
 | **Triangle** | Soft, mellow | Odd harmonics, but much weaker — close to a sine |
 | **Noise** | A hiss, no pitch | All frequencies at once — used for percussion, wind, breath |
 
+<SonareDemo id="waveform-harmonics" />
+
 ### 2. Filter — shaping the tone
 
 A **filter** removes or boosts part of the frequency content. The most common is a **lowpass filter**, which keeps the low frequencies and rolls off the highs. Two controls matter:

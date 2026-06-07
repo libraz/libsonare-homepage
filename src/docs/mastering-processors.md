@@ -132,6 +132,8 @@ They are **not** DNN source separation or neural spectral repair.
 - Design reason: the repair path stays deterministic and dependency-free.
 :::
 
+<SonareDemo id="repair-denoise" />
+
 ::: tip Registry names and chain keys differ
 The named processor registry exposes one-shot repair processors as `repair.denoiseClassical` and `repair.dereverbClassical`.
 

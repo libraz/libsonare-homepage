@@ -248,6 +248,8 @@ sonare mel song.wav --n-fft 2048 --hop-length 512 --n-mels 128 --json
 ```
 :::
 
+<SonareDemo id="mel-spectrogram" />
+
 ### MFCC
 
 **librosa:**
@@ -473,18 +475,12 @@ auto energy = chroma.mean_energy();
 
 ## Performance Comparison
 
-| Operation | librosa (Python) | libsonare (C++) | Speedup |
-|-----------|------------------|-----------------|---------|
-| STFT | 13ms | 14ms | tied |
-| Mel spectrogram | 20ms | 23ms | tied |
-| MFCC | 22ms | 24ms | tied |
-| Beat tracking | 36ms | 24ms | 1.5x |
-| Chroma | 45ms | 15ms | 2.9x |
-| HPSS | 1,762ms | 89ms | **19.7x** |
-| pYIN | 5,825ms | 474ms | **12.3x** |
-| Full analysis | 36.4s | 0.67s | **~54x** |
-
-*Benchmarked on Apple M5 Max (16 cores, 128GB), 73-second WAV at 44100 Hz stereo, all per-feature calls measured standalone from raw audio. See [Benchmarks](/docs/benchmarks) for full methodology and reproduction steps.*
+The short version: core spectral transforms (STFT, Mel, MFCC) are roughly tied
+with librosa, while iterative algorithms (HPSS, pYIN) and the full analysis
+pipeline are dramatically faster. The per-feature numbers, hardware details,
+methodology, and reproduction steps live in one place — see
+[Benchmarks](/docs/benchmarks) — so this page doesn't carry a copy that can
+drift out of date.
 
 WebAssembly is generally slower than native C++; exact performance depends on
 the feature, browser, input length, and build settings. See

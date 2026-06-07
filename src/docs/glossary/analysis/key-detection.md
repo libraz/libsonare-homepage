@@ -28,6 +28,8 @@ Key detection starts from a mean chroma vector: the 12 pitch-class bins are aver
 
 The default compatible profile is Krumhansl-Schmuckler. The implementation can also use profile families such as Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
 
+<SonareDemo id="chromagram" />
+
 ## Confidence is relative
 
 The confidence value reflects how strongly the best profile wins against alternatives. It is not proof that the track has one unambiguous key. Modal mixture, key changes, sparse arrangements, heavy percussion, or detuned material can all lower confidence or make neighboring keys plausible.

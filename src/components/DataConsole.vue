@@ -230,7 +230,7 @@ onUnmounted(() => {
   --console-note: rgba(255, 180, 100, 0.9);
 
   height: 100%;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* The default palette is tuned for a dark terminal; in light mode the panel
@@ -302,6 +302,18 @@ html:not(.dark) .console {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console__line {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+
+  .console__cursor {
+    animation: none;
+  }
 }
 
 @media (max-width: 768px) {

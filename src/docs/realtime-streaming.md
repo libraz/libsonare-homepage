@@ -235,6 +235,8 @@ const pulse = plp(env, sampleRate, 512, 30, 300, 384);
 The default **autocorrelation** tempogram correlates the onset envelope with a lagged copy of itself, mirroring `librosa.feature.tempogram`. The **cosine** mode instead measures the cosine similarity between window-local lagged onset slices. Cosine emphasizes the *shape* match of the onset pattern rather than its raw energy, so it can be steadier when onset amplitude varies a lot across a window. Both produce a `[winLength x nFrames]` matrix where row `i` is the strength at lag `i`; switch with the fifth `mode` argument (`'autocorrelation'` | `'cosine'`).
 :::
 
+<SonareDemo id="beat-tracking" />
+
 ## RealtimeEngine
 
 `RealtimeEngine` is the broader transport and playback engine. It exposes sample-accurate commands for parameters and transport, plus offline render helpers for non-realtime export.

@@ -441,7 +441,7 @@ const softwareApplicationJsonLd = {
   featureList: [
     'Browser-local analysis, mastering, mixing, and realtime FX demos',
     'BPM, key, chord, beat, downbeat, section, melody, loudness, room-acoustic analysis, and geometric room tools',
-    '66 named mastering DSP processors with an 18-processor default chain',
+    '76 named mastering DSP processors with an 18-stage default chain',
     'Real-time-safe mixing, routing, metering, offline rendering, editing DSP, and creative FX',
     'Built-in instruments: 7-engine synthesizer with GM fallback and SoundFont 2 player',
     'Headless DAW runtime: MIDI sequencing, arrangement editing, offline bounce',
@@ -497,7 +497,9 @@ export default withMermaid(
       [
         'link',
         {
-          href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
+          // JetBrains Mono 600-800 are used by the demo instrument labels;
+          // loading them here replaces the per-component Google Fonts @imports.
+          href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
           rel: 'stylesheet',
         },
       ],

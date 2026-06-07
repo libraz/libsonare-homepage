@@ -20,6 +20,8 @@ If two masters are compared without matching loudness, the louder one usually so
 
 Loudness is only one delivery constraint. A master also needs enough [True Peak Safety](./concepts/true-peak-safety.md), and its [Dynamic Range](./concepts/dynamic-range.md) should fit the musical intent.
 
+<SonareDemo id="loudness-meter" />
+
 ## Choosing a Target
 
 If you are unsure, start at -14 LUFS. It is a practical target for many music and video platforms, and it usually does not require crushing the limiter to reach.

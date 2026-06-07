@@ -17,7 +17,7 @@
 
 .analysis-statusbar__key,
 .analysis-statusbar__value {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
 }
@@ -66,7 +66,7 @@
 }
 
 .analysis-drop {
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .analysis-drop:hover {
@@ -102,7 +102,7 @@
   border: 1px solid var(--demo-accent-border);
   border-radius: 8px;
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -132,7 +132,7 @@
   background: var(--demo-bg-elevated);
   color: var(--demo-text);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -140,7 +140,7 @@
 }
 
 .analysis-button {
-  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .analysis-button:not(.analysis-button--primary):not(:disabled):hover {
@@ -220,7 +220,7 @@
   display: flex;
   justify-content: space-between;
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -284,7 +284,7 @@
 
 .analysis-empty--compact {
   padding: 22px 16px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
 }

@@ -11,7 +11,7 @@
   display: inline-flex;
   gap: 6px;
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
 }
 
@@ -42,6 +42,21 @@
   padding: 14px;
 }
 
+/* Staggered entrance mirroring the spatial metrics rhythm. */
+.rt-metric-list > * {
+  animation: rt-rise 0.4s ease both;
+}
+
+.rt-metric-list > *:nth-child(2) { animation-delay: 0.04s; }
+.rt-metric-list > *:nth-child(3) { animation-delay: 0.08s; }
+.rt-metric-list > *:nth-child(4) { animation-delay: 0.12s; }
+.rt-metric-list > *:nth-child(5) { animation-delay: 0.16s; }
+
+@keyframes rt-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* Balance the three columns: the voice panel stretches to match the meters
    column, and its controls spread through the extra room like a rack unit. */
 .rt-lab__center > .tech-panel {
@@ -61,7 +76,7 @@
   border: 1px solid var(--demo-accent-border);
   border-radius: 8px;
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 800;
 }
 
@@ -97,7 +112,7 @@
   background: var(--demo-bg-elevated);
   color: var(--demo-text);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -109,6 +124,21 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+/* Live monitoring routes mic to output (a feedback-risk state), so the active
+   monitor button pulses to stay an unmistakable live indicator. */
+.rt-monitor--active {
+  animation: rt-armed-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rt-armed-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--demo-accent-dim);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
 }
 
 .rt-monitor__icon {
@@ -143,7 +173,7 @@
 .rt-preset--active {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
 }
 
 /* Keep the filled/active variants reading as solid on hover (white on accent). */
@@ -152,7 +182,7 @@
 .rt-preset--active:hover:not(:disabled) {
   background: var(--demo-accent-light);
   border-color: var(--demo-accent-light);
-  color: #fff;
+  color: var(--demo-on-accent);
 }
 
 .rt-button:disabled,
@@ -177,6 +207,14 @@
   .rt-monitor,
   .rt-preset {
     transition: none;
+  }
+
+  .rt-monitor--active {
+    animation: none;
+  }
+
+  .rt-metric-list > * {
+    animation: none;
   }
 }
 
@@ -215,7 +253,7 @@
   display: grid;
   gap: 8px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -239,6 +277,6 @@
   align-items: center;
   justify-content: flex-start;
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }

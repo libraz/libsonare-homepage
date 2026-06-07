@@ -15,6 +15,8 @@ A **bar** groups a fixed number of beats, and the **time signature** says how ma
 
 The **downbeat** is the first beat of each bar, the accent you feel as the start of the cycle. Beat tracking gives you the grid; downbeat detection tells you where the grid *starts repeating*. That is what you align loops, lyrics, and sections to.
 
+<SonareDemo id="downbeat-tracking" />
+
 ## Why beats are not just tempo ÷ meter
 
 You might expect beats to be trivial once the tempo is known: divide the timeline evenly. Real music makes that unreliable:

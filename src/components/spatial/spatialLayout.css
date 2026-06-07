@@ -8,7 +8,7 @@
   border-bottom: 1px solid var(--demo-border);
   background: var(--demo-bg-overlay);
   backdrop-filter: blur(16px);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--demo-text-muted);
 }
@@ -237,7 +237,7 @@
   overflow: hidden;
   background:
     radial-gradient(120% 80% at 50% 0%, var(--demo-accent-subtle), transparent 70%),
-    var(--demo-screen-bg, rgba(6, 8, 12, 0.72));
+    var(--demo-screen-bg);
 }
 
 /* Faint instrument grid behind the WebGL canvas (canvas renders with alpha). */
@@ -247,11 +247,17 @@
   inset: 0;
   z-index: 0;
   background:
-    linear-gradient(var(--demo-grid-minor, rgba(139, 92, 246, 0.06)) 1px, transparent 1px),
-    linear-gradient(90deg, var(--demo-grid-minor, rgba(139, 92, 246, 0.06)) 1px, transparent 1px);
+    linear-gradient(var(--sp-scene-grid, var(--demo-grid-minor)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sp-scene-grid, var(--demo-grid-minor)) 1px, transparent 1px);
   background-size: 28px 28px;
   opacity: 0.5;
   pointer-events: none;
+}
+
+/* The global minor-grid token is transparent in light mode (editorial panels),
+   but the WebGL scene needs a visible backdrop, so give it an explicit grid. */
+html:not(.dark) .sp-scene {
+  --sp-scene-grid: rgba(124, 58, 237, 0.07);
 }
 
 /* Scanning sweep — feedback while estimation runs (the canvas is empty until done). */
@@ -268,9 +274,10 @@
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--demo-accent), var(--demo-cyan), transparent);
+  /* Mirror the shared ScanLine motif: single accent-based sweep, same easing. */
+  background: linear-gradient(90deg, transparent, var(--demo-accent), transparent);
   box-shadow: 0 0 14px var(--demo-accent);
-  animation: sp-scan 1.5s ease-in-out infinite;
+  animation: sp-scan 3s ease-in-out infinite;
 }
 
 .sp-scene__scan-label {
@@ -278,12 +285,12 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--demo-text-muted);
-  animation: sp-pulse 1.5s ease-in-out infinite;
+  animation: sp-pulse 3s ease-in-out infinite;
 }
 
 .sp-scene__placeholder {
@@ -326,7 +333,7 @@
   background: var(--demo-control-bg-strong);
   border: 1px solid var(--demo-border);
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.06em;
   pointer-events: none;
@@ -341,7 +348,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -422,7 +429,7 @@
   border: 1px solid var(--demo-border);
   border-radius: 999px;
   background: var(--demo-control-bg-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -459,7 +466,7 @@
 }
 
 .sp-bands__head {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -472,7 +479,7 @@
 }
 
 .sp-band__freq {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   color: var(--demo-text);
@@ -505,14 +512,14 @@
   right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-style: normal;
   color: var(--demo-text-strong);
 }
 
 .sp-band__abs {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--demo-text-muted);
 }
@@ -543,8 +550,8 @@
 /* ===== Motion ===== */
 @keyframes sp-scan {
   0% { top: 0; opacity: 0; }
-  12% { opacity: 1; }
-  88% { opacity: 1; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
   100% { top: 100%; opacity: 0; }
 }
 

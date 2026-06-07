@@ -80,11 +80,11 @@ watch(() => [props.rows, props.columns, props.values, props.min, props.max, isDa
   border: 1px solid var(--demo-border, rgba(139, 92, 246, 0.12));
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--demo-control-bg-strong);
 }
 
 html:not(.dark) .heatmap {
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--demo-control-bg);
 }
 
 .heatmap__canvas {

@@ -306,7 +306,7 @@ function onKeyDown(event: KeyboardEvent) {
 
 .fader__label {
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -334,7 +334,7 @@ function onKeyDown(event: KeyboardEvent) {
 }
 
 .fader__info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 9px;
   font-style: italic;
   font-weight: 700;
@@ -359,7 +359,7 @@ function onKeyDown(event: KeyboardEvent) {
   border-radius: 4px;
   background: var(--master-code-bg);
   color: inherit;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
   cursor: text;
@@ -368,7 +368,7 @@ function onKeyDown(event: KeyboardEvent) {
 
 button.fader__readout {
   font: inherit;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -417,7 +417,7 @@ button.fader__readout {
   background: transparent;
   color: var(--demo-text-strong);
   font: inherit;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;

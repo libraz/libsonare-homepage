@@ -30,6 +30,8 @@ flowchart LR
 
 A plucked sound is fast attack, fast decay, zero sustain, short release. A pad is slow attack, high sustain, long release. Same oscillator — completely different instrument, just from the envelope.
 
+<SonareDemo id="synth-note" />
+
 ::: info Attack/Decay/Release are times; Sustain is a level
 Three of the four ADSR controls are durations (in milliseconds). Sustain is the odd one out: it is a *volume level*, the amount held for as long as you keep the key down. That is why a "zero sustain" patch goes silent even while the key is still pressed.
 :::

@@ -829,11 +829,11 @@ onMounted(() => {
   background: var(--demo-bg);
   color: var(--demo-text-muted);
   cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .analyzer__info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 8px;
   font-style: italic;
   font-weight: 700;
@@ -864,7 +864,7 @@ onMounted(() => {
 .analyzer__overlay-tip .analyzer__info {
   width: 18px;
   height: 18px;
-  background: var(--demo-bg-overlay, rgba(8, 10, 14, 0.7));
+  background: var(--demo-bg-overlay);
   backdrop-filter: blur(6px);
 }
 </style>

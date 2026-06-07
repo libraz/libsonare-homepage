@@ -12,6 +12,19 @@ function unref(v: string | Ref<string>): string {
   return typeof v === 'string' ? v : v.value;
 }
 
+/**
+ * Resolves the global --color-accent-pink token into a semi-transparent stroke
+ * for beat markers, falling back to the brand pink (#EC4899) at 0.5 alpha.
+ */
+function beatMarkerColor(): string {
+  if (typeof document === 'undefined') return 'rgba(236, 72, 153, 0.5)';
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-accent-pink')
+    .trim();
+  if (!raw) return 'rgba(236, 72, 153, 0.5)';
+  return `color-mix(in srgb, ${raw} 50%, transparent)`;
+}
+
 export function useWaveform(
   canvasRef: { value: HTMLCanvasElement | null },
   options: WaveformOptions = {},
@@ -140,9 +153,10 @@ export function useWaveform(
       ctx.fill();
     }
 
-    // Draw beat markers
+    // Draw beat markers — keep the brand pink but derive it from the global
+    // --color-accent-pink token so it stays in sync with the design system.
     if (beatMarkers.value.length > 0) {
-      ctx.strokeStyle = 'rgba(236, 72, 153, 0.5)';
+      ctx.strokeStyle = beatMarkerColor();
       ctx.lineWidth = 1;
 
       for (const beatPos of beatMarkers.value) {

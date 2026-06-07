@@ -33,17 +33,17 @@ defineProps<{
 }
 
 .metric-item__label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   color: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
   text-transform: uppercase;
   flex-shrink: 0;
 }
 
 .metric-item__value {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   color: var(--demo-text-strong, rgba(255, 255, 255, 0.8));

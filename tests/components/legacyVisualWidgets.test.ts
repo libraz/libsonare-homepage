@@ -1,6 +1,5 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import BpmVisualizer from '@/components/BpmVisualizer.vue';
 import DataConsole from '@/components/DataConsole.vue';
 import WaveformVisualizer from '@/components/WaveformVisualizer.vue';
 
@@ -46,58 +45,6 @@ function installCanvasMocks() {
 
   return ctx;
 }
-
-describe('BpmVisualizer', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('pulses on detected beat frames and clears the pulse state', async () => {
-    const wrapper = mount(BpmVisualizer, {
-      props: {
-        bpm: 128.4,
-        isPlaying: false,
-        currentTime: 0,
-        beats: new Float32Array([0.5, 1.0]),
-      },
-    });
-
-    expect(wrapper.find('.bpm-value').text()).toBe('128');
-
-    await wrapper.setProps({ isPlaying: true, currentTime: 0.51 });
-    expect(wrapper.find('.bpm-circle').classes()).toContain('bpm-circle--beating');
-    expect(wrapper.find('.bpm-circle').attributes('style')).toContain('scale(1.15)');
-    expect(wrapper.findAll('.bpm-bar--active')).toHaveLength(2);
-
-    vi.advanceTimersByTime(100);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.bpm-circle').attributes('style')).toContain('scale(1)');
-
-    vi.advanceTimersByTime(100);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.bpm-circle').classes()).not.toContain('bpm-circle--beating');
-  });
-
-  it('uses BPM interval fallback when no explicit beats are available', async () => {
-    const wrapper = mount(BpmVisualizer, {
-      props: { bpm: 120, isPlaying: false, currentTime: 0, beats: [] },
-    });
-
-    await wrapper.setProps({ isPlaying: true });
-    vi.advanceTimersByTime(500);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.bpm-circle').classes()).toContain('bpm-circle--beating');
-
-    await wrapper.setProps({ isPlaying: false });
-    vi.advanceTimersByTime(200);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('.bpm-circle').classes()).not.toContain('bpm-circle--beating');
-  });
-});
 
 describe('DataConsole', () => {
   beforeEach(() => {

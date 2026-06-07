@@ -203,7 +203,7 @@ function switchLocale(event: Event) {
     <DemoDisclaimer />
 
     <slot name="modes" />
-    <slot name="statusbar" />
+    <div class="tool-page__statusbar"><slot name="statusbar" /></div>
 
     <div v-if="guideTitle || guideBody" class="tool-page__guide">
       <div class="tool-page__guide-copy">
@@ -222,93 +222,15 @@ function switchLocale(event: Event) {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
+/* Tokens come from the shared demo token layer
+   (.vitepress/theme/styles/demo-tokens.css) — do not re-declare here. */
 .tool-page {
-  --demo-bg: #070809;
-  --demo-bg-overlay: rgba(16, 18, 25, 0.96);
-  --demo-bg-elevated: rgba(23, 26, 34, 0.92);
-  --demo-bg-header: rgba(32, 35, 45, 0.9);
-  --demo-text-strong: #ffffff;
-  --demo-text: rgba(255, 255, 255, 0.82);
-  --demo-text-muted: rgba(255, 255, 255, 0.56);
-  --demo-text-faint: rgba(255, 255, 255, 0.4);
-  --demo-accent: #8B5CF6;
-  --demo-accent-light: #A78BFA;
-  --demo-accent-dim: rgba(139, 92, 246, 0.3);
-  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
-  --demo-accent-border: rgba(139, 92, 246, 0.2);
-  --demo-cyan: #22D3EE;
-  --demo-amber: #F59E0B;
-  --demo-success: rgba(100, 200, 180, 0.9);
-  --demo-danger: #FCA5A5;
-  --demo-border: rgba(139, 92, 246, 0.3);
-  --demo-border-strong: rgba(160, 132, 250, 0.46);
-  --demo-control-bg: rgba(0, 0, 0, 0.18);
-  --demo-control-bg-strong: rgba(0, 0, 0, 0.28);
-  --demo-track-bg: rgba(0, 0, 0, 0.2);
-  --demo-clip-base: rgba(0, 0, 0, 0.28);
-  --demo-clip-label-shadow: rgba(0, 0, 0, 0.72);
-  --demo-grid-color: rgba(139, 92, 246, 0.04);
-  --demo-grid-minor: rgba(139, 92, 246, 0.02);
-  --demo-scanline: rgba(0, 0, 0, 0.03);
-  --demo-warn: #F59E0B;
-  --demo-warn-text: #FCD9A0;
-  --demo-warn-border: rgba(245, 158, 11, 0.4);
-  --demo-warn-bg: rgba(245, 158, 11, 0.1);
-
   position: relative;
   min-height: 100vh;
   background: var(--demo-bg);
   color: var(--demo-text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   overflow-x: hidden;
-}
-
-html:not(.dark) .tool-page {
-  --demo-bg: #f8f6ff;
-  --demo-bg-overlay: rgba(248, 246, 255, 0.95);
-  --demo-bg-elevated: rgba(245, 243, 255, 0.88);
-  --demo-bg-header: rgba(250, 248, 255, 0.9);
-  --demo-text-strong: #1a1a2e;
-  --demo-text: rgba(0, 0, 0, 0.62);
-  --demo-text-muted: rgba(0, 0, 0, 0.42);
-  --demo-text-faint: rgba(0, 0, 0, 0.22);
-  --demo-accent: #7C3AED;
-  --demo-accent-light: #8B5CF6;
-  --demo-accent-dim: rgba(124, 58, 237, 0.25);
-  --demo-accent-subtle: rgba(124, 58, 237, 0.06);
-  --demo-accent-border: rgba(124, 58, 237, 0.2);
-  --demo-cyan: #0891B2;
-  --demo-amber: #B45309;
-  --demo-success: rgba(16, 132, 110, 0.95);
-  --demo-danger: #B91C1C;
-  --demo-border: rgba(0, 0, 0, 0.08);
-  --demo-border-strong: rgba(0, 0, 0, 0.15);
-  --demo-control-bg: rgba(255, 255, 255, 0.58);
-  --demo-control-bg-strong: rgba(255, 255, 255, 0.72);
-  --demo-track-bg: rgba(255, 255, 255, 0.54);
-  --demo-clip-base: rgba(255, 255, 255, 0.68);
-  --demo-clip-label-shadow: rgba(255, 255, 255, 0.72);
-  --demo-grid-color: transparent;
-  --demo-grid-minor: transparent;
-  --demo-scanline: transparent;
-  --demo-warn: #B45309;
-  --demo-warn-text: #92400E;
-  --demo-warn-border: rgba(180, 83, 9, 0.34);
-  --demo-warn-bg: rgba(245, 158, 11, 0.12);
-
-  /* Visualizer scope — light bezel/screen so the player doesn't stay dark */
-  --demo-bezel: #e6e1f5;
-  --demo-bezel-start: #f1edfb;
-  --demo-bezel-end: #d8d0ee;
-  --demo-bezel-inset-light: rgba(255, 255, 255, 0.6);
-  --demo-bezel-inset-dark: rgba(80, 60, 140, 0.08);
-  --demo-bezel-shadow-deep: rgba(80, 60, 140, 0.18);
-  --demo-screen-bg: rgb(245, 243, 255);
-  --demo-screen-inset-1: rgba(124, 58, 237, 0.14);
-  --demo-screen-inset-2: rgba(124, 58, 237, 0.07);
-  --demo-indicator-bg: rgba(255, 255, 255, 0.72);
 }
 
 .tool-page__backdrop {
@@ -328,6 +250,41 @@ html:not(.dark) .tool-page .tool-page__backdrop {
   opacity: 0.02;
   background-image: radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0);
   background-size: 4px 4px;
+}
+
+/* ===== ENTRANCE =====
+   Staggered fade/rise of the page chrome on mount — mirrors the
+   demo-grid-rise rhythm used by the demo cards. */
+.tool-page__header,
+.tool-page__tabs,
+.tool-page__statusbar,
+.tool-page__main {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: tool-page-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.tool-page__header { animation-delay: 0s; }
+.tool-page__tabs { animation-delay: 0.07s; }
+.tool-page__statusbar { animation-delay: 0.14s; }
+.tool-page__main { animation-delay: 0.21s; }
+
+@keyframes tool-page-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-page__header,
+  .tool-page__tabs,
+  .tool-page__statusbar,
+  .tool-page__main {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ===== HEADER (matches mastering chrome) ===== */
@@ -361,12 +318,12 @@ html:not(.dark) .tool-page .tool-page__header {
 .tool-page__brand {
   flex: 0 0 auto;
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.15em;
   text-decoration: none;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .tool-page__brand:hover {
@@ -388,7 +345,7 @@ html:not(.dark) .tool-page .tool-page__header {
 
 .tool-page__title {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -418,7 +375,7 @@ html:not(.dark) .tool-page .tool-page__header {
   background: var(--demo-accent-subtle);
   border-radius: 4px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -432,7 +389,7 @@ html:not(.dark) .tool-page .tool-page__header {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-decoration: none;
-  transition: color 0.2s ease, background-color 0.2s ease;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .tool-page__docs-link:hover {
@@ -445,7 +402,7 @@ html:not(.dark) .tool-page .tool-page__header {
   align-items: center;
   height: 32px;
   padding: 0 10px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -454,7 +411,7 @@ html:not(.dark) .tool-page .tool-page__header {
   background: var(--demo-accent-subtle);
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .tool-page__lang-switch:hover {
@@ -475,7 +432,7 @@ html:not(.dark) .tool-page .tool-page__header {
   background: var(--demo-accent-subtle);
   color: var(--demo-text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .tool-page__theme-toggle:hover {
@@ -494,12 +451,12 @@ html:not(.dark) .tool-page .tool-page__header {
   padding: 6px 14px;
   border-radius: 6px;
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-decoration: none;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .tool-page__cta:hover {
@@ -508,7 +465,7 @@ html:not(.dark) .tool-page .tool-page__header {
 }
 
 .tool-page__cta svg {
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-fast);
 }
 
 .tool-page__cta:hover svg {
@@ -552,7 +509,7 @@ html:not(.dark) .tool-page .tool-page__header {
 .tool-page__tab {
   padding: 9px 16px 11px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -560,7 +517,7 @@ html:not(.dark) .tool-page .tool-page__header {
   text-transform: uppercase;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
-  transition: color 0.18s ease, border-color 0.18s ease;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .tool-page__tab:hover {
@@ -601,7 +558,7 @@ html:not(.dark) .tool-page .tool-page__header {
 
 .tool-page__guide-copy strong {
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -622,7 +579,7 @@ html:not(.dark) .tool-page .tool-page__header {
   padding: 6px 8px;
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -728,7 +685,7 @@ html.dark .tool-page__icon-moon { display: none; }
     linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.92) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
     linear-gradient(180deg, color-mix(in srgb, var(--demo-accent) 78%, #fff) 0%, var(--demo-accent) 52%, color-mix(in srgb, var(--demo-accent) 70%, #000) 100%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--demo-accent-subtle);
-  transition: box-shadow 0.15s ease;
+  transition: box-shadow var(--transition-fast);
 }
 
 .tool-page input[type='range']:not(.audio-source__range):not(.transport__range)::-moz-range-thumb {
@@ -740,7 +697,7 @@ html.dark .tool-page__icon-moon { display: none; }
     linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.92) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
     linear-gradient(180deg, color-mix(in srgb, var(--demo-accent) 78%, #fff) 0%, var(--demo-accent) 52%, color-mix(in srgb, var(--demo-accent) 70%, #000) 100%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--demo-accent-subtle);
-  transition: box-shadow 0.15s ease;
+  transition: box-shadow var(--transition-fast);
 }
 
 .tool-page input[type='range']:not(.audio-source__range):not(.transport__range):hover:not(:disabled)::-webkit-slider-thumb {

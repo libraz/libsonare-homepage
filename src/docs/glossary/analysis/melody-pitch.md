@@ -36,6 +36,8 @@ To track a melody inside a busy track, isolate the line first with a stem, [HPSS
 
 Not every frame has a pitch. Rests, unvoiced consonants ("s", "t"), and percussion have no clear F0. A naive tracker will still report some number for these frames, producing a jumpy, meaningless line. Voicing detection, which pYIN is designed to provide, marks those frames as unpitched so the melody line has gaps where the music does.
 
+<SonareDemo id="melody-contour" />
+
 ::: details How libsonare tracks pitch
 libsonare implements YIN and pYIN for F0 estimation on monophonic audio. `analyzeMelody` / `MelodyAnalyzer` uses frame-by-frame YIN frequency and confidence, then computes mean frequency, pitch range, stability, and a simple vibrato-rate estimate. Lower-level `pitchYin` / `pitchPyin` APIs expose YIN and pYIN tracks directly. Results can be converted to MIDI note numbers for tuning and editing workflows. Pitch tracking is most reliable on isolated, clearly pitched material and degrades on polyphonic or noisy mixes.
 :::

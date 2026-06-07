@@ -26,7 +26,7 @@ defineProps<{
 /* Status colors */
 .status-indicator--online,
 .status-indicator--active {
-  --status-color: #22C55E;
+  --status-color: var(--demo-status-ok);
 }
 
 .status-indicator--offline {
@@ -38,11 +38,11 @@ defineProps<{
 }
 
 .status-indicator--warning {
-  --status-color: #F59E0B;
+  --status-color: var(--demo-status-warn);
 }
 
 .status-indicator--error {
-  --status-color: #EF4444;
+  --status-color: var(--demo-status-error);
 }
 
 .status-indicator__dot {
@@ -54,15 +54,20 @@ defineProps<{
   flex-shrink: 0;
 }
 
+/* The neon dot glow is a dark-mode effect; soften on light panels. */
+html:not(.dark) .status-indicator__dot {
+  box-shadow: none;
+}
+
 .status-indicator--pulse .status-indicator__dot {
   animation: status-pulse 2s ease-in-out infinite;
 }
 
 .status-indicator__label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.15em;
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   color: var(--status-color);
   text-transform: uppercase;
   opacity: 0.9;

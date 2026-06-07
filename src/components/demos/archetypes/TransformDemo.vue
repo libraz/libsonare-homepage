@@ -2,9 +2,11 @@
 /**
  * `transform` archetype: source audio → WASM spectral transform → 2D visualization.
  *
- * Renders an STFT magnitude spectrogram into the shared {@link DemoFrame} screen.
- * The audio source is either a generated test signal or a pre-rendered clip; the
- * reader can audition it, and a playback-synced playhead sweeps the screen.
+ * Renders a time–feature heatmap into the shared {@link DemoFrame} screen. The
+ * transform is config-driven (`config.transform`): an STFT magnitude spectrogram, a
+ * mel spectrogram, a chromagram (12 pitch classes), or an MFCC map. The audio source
+ * is either a generated test signal or a pre-rendered clip; the reader can audition
+ * it, and a playback-synced playhead sweeps the screen.
  *
  * The WASM/data wiring is independent of presentation; the frame owns all chrome
  * and the playback visuals (beam, reveal, progress ring) via its props.
@@ -30,6 +32,28 @@ const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
 const errorMsg = ref('');
 const isPlaying = computed(() => playingId.value === props.def.id);
 
+type TransformKind = 'stft' | 'mel' | 'chroma' | 'mfcc';
+const transform = computed<TransformKind>(
+  () => (props.def.config?.transform as TransformKind) ?? 'stft',
+);
+const EYEBROWS: Record<TransformKind, string> = {
+  stft: 'STFT · SPECTRAL',
+  mel: 'MEL · SPECTRAL',
+  chroma: 'CHROMA · PITCH CLASS',
+  mfcc: 'MFCC · TIMBRE',
+};
+const eyebrow = computed(() => EYEBROWS[transform.value]);
+const axisFreq = computed(() => {
+  switch (transform.value) {
+    case 'chroma':
+      return 'NOTE';
+    case 'mfcc':
+      return 'COEF';
+    default:
+      return 'FREQ';
+  }
+});
+
 // ---- presentation-only derived values (no effect on data flow) -------------
 const tone = computed(() => {
   if (status.value === 'error') return 'error' as const;
@@ -47,6 +71,7 @@ const stateLabel = computed(() => {
 });
 
 let audio: MonoAudio | null = null;
+type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
 /** Resolve the demo's audio: generated in-browser, or decoded from a clip. */
 async function resolveAudio(): Promise<MonoAudio> {
@@ -65,7 +90,85 @@ function ramp(v: number, out: Uint8ClampedArray, o: number): void {
   out[o + 3] = 255;
 }
 
-/** Compute STFT and paint it as a spectrogram. */
+/**
+ * Build a normalized `[rows × cols]` grid (values 0..1, row 0 = bottom of the
+ * image) for the configured transform. Each transform has its own natural scaling:
+ * STFT/mel use dB, chroma/MFCC are min–max normalized over the whole map.
+ */
+type Grid = { rows: number; cols: number; norm: Float32Array };
+
+function gridFromStft(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number): Grid {
+  const r = wasm.stft(a.samples, a.sampleRate, nFft, hop);
+  const { nBins, nFrames, magnitude } = r;
+  const norm = new Float32Array(nBins * nFrames);
+  const floorDb = -90;
+  for (let bin = 0; bin < nBins; bin++) {
+    for (let frame = 0; frame < nFrames; frame++) {
+      const db = 20 * Math.log10(magnitude[bin * nFrames + frame] + 1e-9);
+      norm[bin * nFrames + frame] = (db - floorDb) / -floorDb;
+    }
+  }
+  return { rows: nBins, cols: nFrames, norm };
+}
+
+function gridFromMel(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number, nMels: number): Grid {
+  const r = wasm.melSpectrogram(a.samples, a.sampleRate, nFft, hop, nMels);
+  const { nFrames, db } = r;
+  // mel `db` is power-to-dB without a fixed reference, so values are not bounded to
+  // ≤0. Display the top 80 dB below the peak (librosa's top_db convention).
+  let peak = Number.NEGATIVE_INFINITY;
+  for (const v of db) if (v > peak) peak = v;
+  const range = 80;
+  const floorDb = peak - range;
+  const norm = new Float32Array(nMels * nFrames);
+  for (let i = 0; i < norm.length; i++) {
+    norm[i] = Math.max(0, Math.min(1, (db[i] - floorDb) / range));
+  }
+  return { rows: nMels, cols: nFrames, norm };
+}
+
+function gridFromChroma(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number): Grid {
+  const r = wasm.chroma(a.samples, a.sampleRate, nFft, hop);
+  const { nChroma, nFrames, features } = r;
+  let max = 1e-9;
+  for (const v of features) if (v > max) max = v;
+  const norm = new Float32Array(features.length);
+  for (let i = 0; i < norm.length; i++) norm[i] = features[i] / max;
+  return { rows: nChroma, cols: nFrames, norm };
+}
+
+function gridFromMfcc(
+  wasm: WasmModule,
+  a: MonoAudio,
+  nFft: number,
+  hop: number,
+  nMfcc: number,
+): Grid {
+  const r = wasm.mfcc(a.samples, a.sampleRate, nFft, hop, 40, nMfcc);
+  const { nFrames, coefficients } = r;
+  // Drop the 0th coefficient (overall energy) so the timbral detail is visible,
+  // then min–max normalize the rest across the whole map.
+  const rows = Math.max(1, nMfcc - 1);
+  let lo = Number.POSITIVE_INFINITY;
+  let hi = Number.NEGATIVE_INFINITY;
+  for (let c = 1; c < nMfcc; c++) {
+    for (let frame = 0; frame < nFrames; frame++) {
+      const v = coefficients[c * nFrames + frame];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  const span = hi - lo || 1;
+  const norm = new Float32Array(rows * nFrames);
+  for (let c = 1; c < nMfcc; c++) {
+    for (let frame = 0; frame < nFrames; frame++) {
+      norm[(c - 1) * nFrames + frame] = (coefficients[c * nFrames + frame] - lo) / span;
+    }
+  }
+  return { rows, cols: nFrames, norm };
+}
+
+/** Compute the configured transform and paint it as a time–feature heatmap. */
 async function run(): Promise<void> {
   status.value = 'loading';
   errorMsg.value = '';
@@ -75,27 +178,36 @@ async function run(): Promise<void> {
     const cfg = props.def.config ?? {};
     const nFft = (cfg.nFft as number) ?? 1024;
     const hop = (cfg.hopLength as number) ?? 256;
-    const r = wasm.stft(audio.samples, audio.sampleRate, nFft, hop);
 
-    const { nBins, nFrames, magnitude } = r;
+    let grid: Grid;
+    switch (transform.value) {
+      case 'mel':
+        grid = gridFromMel(wasm, audio, nFft, hop, (cfg.nMels as number) ?? 64);
+        break;
+      case 'chroma':
+        grid = gridFromChroma(wasm, audio, nFft, hop);
+        break;
+      case 'mfcc':
+        grid = gridFromMfcc(wasm, audio, nFft, hop, (cfg.nMfcc as number) ?? 20);
+        break;
+      default:
+        grid = gridFromStft(wasm, audio, nFft, hop);
+    }
+
+    const { rows, cols, norm } = grid;
     const el = canvas.value;
     if (!el) return;
-    el.width = nFrames;
-    el.height = nBins;
+    el.width = cols;
+    el.height = rows;
     const ctx = el.getContext('2d');
     if (!ctx) return;
 
-    // Normalize on a log (dB) scale for legibility.
-    const img = ctx.createImageData(nFrames, nBins);
-    const floorDb = -90;
-    for (let bin = 0; bin < nBins; bin++) {
-      for (let frame = 0; frame < nFrames; frame++) {
-        const mag = magnitude[bin * nFrames + frame];
-        const db = 20 * Math.log10(mag + 1e-9);
-        const v = (db - floorDb) / -floorDb; // floorDb..0 → 0..1
-        // Low frequencies at the bottom of the image.
-        const y = nBins - 1 - bin;
-        ramp(v, img.data, (y * nFrames + frame) * 4);
+    const img = ctx.createImageData(cols, rows);
+    for (let r = 0; r < rows; r++) {
+      // Row 0 is the bottom of the image (low freq / first pitch class / first coef).
+      const y = rows - 1 - r;
+      for (let frame = 0; frame < cols; frame++) {
+        ramp(norm[r * cols + frame], img.data, (y * cols + frame) * 4);
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -122,7 +234,7 @@ watch(
 
 <template>
   <DemoFrame
-    eyebrow="STFT · SPECTRAL"
+    :eyebrow="eyebrow"
     :title="title"
     :caption="caption"
     :state="stateLabel"
@@ -132,7 +244,7 @@ watch(
     :disabled="status === 'loading'"
     :error="status === 'error' ? errorMsg : null"
     loading-label="ANALYZING…"
-    axis-freq="FREQ"
+    :axis-freq="axisFreq"
     axis-time="TIME →"
     @toggle="onPlay"
   >

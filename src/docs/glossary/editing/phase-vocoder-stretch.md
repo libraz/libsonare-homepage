@@ -35,6 +35,10 @@ The hard part is **phase coherence**. When frames are spaced differently than th
 
 This is why pitch shift and time stretch share a backend: a pitch shift is a time stretch followed by resampling. `rate > 1.0` shortens a clip; `semitones = 12` shifts up an octave.
 
+<SonareDemo id="time-stretch" />
+
+<SonareDemo id="pitch-shift" />
+
 ## Why large moves create artifacts
 
 Both operations invent or discard information.

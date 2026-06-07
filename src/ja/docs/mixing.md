@@ -339,6 +339,8 @@ mixer.scheduleInsertAutomation(stripIndex, insertIndex, paramId, sampleRate * 4,
 | `gainReductionDb` | ストリップ上のダイナミクスがどれだけ働いているか |
 | `seq` | 変化検出用の単調増加スナップショットカウンター |
 
+<SonareDemo id="loudness-meter" />
+
 ::: info ゴニオメーターとは
 ゴニオメーター（ベクトルスコープとも呼びます）は、左信号と右信号を点群として描く表示です。ステレオ像を一目で示します。ほぼ垂直な線はモノラル、横に広がった塊は広いステレオ展開、横方向ににじむ表示はモノラルで打ち消し合いかねない位相の問題を警告します。`correlation` メーターを絵にしたものです。
 :::

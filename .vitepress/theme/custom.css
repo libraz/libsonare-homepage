@@ -1,3 +1,4 @@
 @import './styles/tokens.css';
+@import './styles/demo-tokens.css';
 @import './styles/vitepress-overrides.css';
 @import './styles/docs.css';

@@ -45,7 +45,7 @@
 .mix-strip__number,
 .mix-strip__empty-number,
 .mix-strip__empty-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--demo-text-muted);
 }
@@ -75,7 +75,7 @@
   border-radius: 5px;
   background: var(--demo-control-bg);
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 6px;
 }
@@ -144,7 +144,7 @@
   left: 0;
   width: 100%;
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 7px;
   text-align: center;
   text-shadow: 0 1px 2px var(--demo-clip-label-shadow);
@@ -163,7 +163,7 @@
 }
 
 .mix-flag {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 7px;
   font-weight: 600;
   letter-spacing: 0.04em;

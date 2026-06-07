@@ -40,6 +40,13 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
   let animationFrame: number | null = null;
   let canvasSize = 520;
 
+  // Honour reduced-motion: skip the continuous rAF loop and only redraw on
+  // meaningful state changes (a static frame at the current playback position).
+  const reducedMotion =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+
   // Note names - chromatic circle
   const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
@@ -587,7 +594,7 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
         const labelX = centerX + Math.cos(labelAngle) * labelRadius;
         const labelY = centerY + Math.sin(labelAngle) * labelRadius;
         const labelAlpha = 0.2 + value * 0.4 + value * 0.4 * noteScale;
-        ctx.font = `${value > 0.35 && noteScale > 0.5 ? '600' : '400'} 11px "IBM Plex Mono", monospace`;
+        ctx.font = `${value > 0.35 && noteScale > 0.5 ? '600' : '400'} 11px 'JetBrains Mono', monospace`;
         ctx.fillStyle = hsl(color.h, color.s - 20, 55 + value * 25 * noteScale, labelAlpha);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';

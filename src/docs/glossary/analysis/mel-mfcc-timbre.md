@@ -19,6 +19,8 @@ The **mel scale** is a perceptual frequency scale that matches this behavior: fi
 
 A **mel spectrogram** re-maps the STFT onto that scale. Its detail is concentrated where our ears can actually discriminate, which is why it is the default front-end for many audio machine-learning systems.
 
+<SonareDemo id="mel-spectrogram" />
+
 ## MFCC: a compact timbre fingerprint
 
 **MFCCs (Mel-Frequency Cepstral Coefficients)** compress a mel spectrogram into a small set of numbers.
@@ -32,6 +34,8 @@ The calculation has three main steps:
 3. Apply a DCT, a cosine-basis transform that concentrates information into the first few coefficients.
 
 The result is a compact timbre "fingerprint" used to classify instruments, voices, and sound types.
+
+<SonareDemo id="mfcc-map" />
 
 ## Single-number brightness: centroid and flatness
 

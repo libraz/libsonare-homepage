@@ -14,15 +14,15 @@
   border: 1px dashed var(--demo-border-strong);
   border-radius: 8px;
   background:
-    linear-gradient(rgba(139, 92, 246, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 92, 246, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--demo-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--demo-grid-color) 1px, transparent 1px);
   background-size: 24px 24px;
   cursor: pointer;
   overflow: hidden;
 }
 
 .master-drop {
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .master-drop:hover {
@@ -52,7 +52,7 @@
 
 .master-drop__title {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 20px;
   font-weight: 700;
   text-align: center;
@@ -73,7 +73,7 @@
   border-radius: 8px;
   background: var(--demo-accent-subtle);
   color: var(--demo-accent-light);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -118,7 +118,7 @@ html:not(.dark) .master-page .master-demo-button {
   border: 1px solid var(--demo-accent);
   border-radius: 8px;
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
   cursor: pointer;
   font: inherit;
   font-size: 11px;

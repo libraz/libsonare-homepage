@@ -211,7 +211,7 @@ button.led-meter:not(:disabled):focus-visible,
   justify-content: space-between;
   gap: 10px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -282,6 +282,8 @@ button.led-meter:not(:disabled):focus-visible,
   border-radius: 50%;
   background: var(--demo-cyan);
   transform: translate(-50%, -50%);
+  /* Glide between readings instead of teleporting on re-render. */
+  transition: left 0.1s linear, top 0.1s linear, opacity 0.1s linear;
 }
 
 .stereo-field {
@@ -297,5 +299,33 @@ button.led-meter:not(:disabled):focus-visible,
   margin: 0 auto;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--demo-cyan), var(--demo-accent));
+}
+
+/* Staggered reveal so the meter stack composes in with the result panels. */
+.meter-stack > * {
+  animation: meter-rise 0.35s ease both;
+}
+
+.meter-stack > *:nth-child(2) { animation-delay: 0.05s; }
+.meter-stack > *:nth-child(3) { animation-delay: 0.1s; }
+.meter-stack > *:nth-child(4) { animation-delay: 0.15s; }
+.meter-stack > *:nth-child(5) { animation-delay: 0.2s; }
+.meter-stack > *:nth-child(6) { animation-delay: 0.25s; }
+.meter-stack > *:nth-child(7) { animation-delay: 0.3s; }
+.meter-stack > *:nth-child(n + 8) { animation-delay: 0.35s; }
+
+@keyframes meter-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase-scope span {
+    transition: none;
+  }
+
+  .meter-stack > * {
+    animation: none;
+  }
 }
 </style>

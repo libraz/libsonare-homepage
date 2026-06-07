@@ -210,7 +210,7 @@ defineExpose({ setVolume, togglePlayback, seekFraction });
   flex-shrink: 0;
   min-width: 34px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -232,7 +232,7 @@ defineExpose({ setVolume, togglePlayback, seekFraction });
   width: 100%;
   height: 4px;
   border-radius: 999px;
-  background: var(--master-surface-strong, var(--demo-track-bg));
+  background: var(--master-surface-strong, var(--demo-control-bg-strong));
   overflow: visible;
 }
 

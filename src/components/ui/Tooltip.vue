@@ -269,7 +269,7 @@ onBeforeUnmount(() => {
     0 0 0 1px rgba(139, 92, 246, 0.08),
     0 24px 56px -28px rgba(0, 0, 0, 0.7),
     0 0 28px -8px rgba(139, 92, 246, 0.35);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   pointer-events: auto;
 }
 
@@ -372,7 +372,7 @@ html:not(.dark) .tt-popover {
 
 .tt-popover__eyebrow {
   color: var(--tt-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -441,7 +441,7 @@ html:not(.dark) .tt-popover {
   align-items: center;
   gap: 7px;
   color: var(--tt-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -481,7 +481,7 @@ html:not(.dark) .tt-popover {
   grid-column: 1;
   grid-row: 1;
   color: var(--tt-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.18em;
@@ -493,7 +493,7 @@ html:not(.dark) .tt-popover {
   grid-row: 1;
   justify-self: start;
   color: var(--tt-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -521,7 +521,7 @@ html:not(.dark) .tt-popover {
   border-radius: 999px;
   background: transparent;
   color: var(--tt-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;

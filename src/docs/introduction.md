@@ -287,6 +287,26 @@ libsonare also goes beyond librosa's scope with features like **chord recognitio
 
 See [librosa Compatibility](/docs/librosa-compatibility) for detailed comparison and migration guides.
 
+## Project Status & Support
+
+libsonare is an actively developed open-source project (Apache-2.0) maintained
+by a single developer. It is past 1.0 and releases carry semantic-version tags,
+but treat it the way you would any young library: read the release notes before
+upgrading, and pin versions in production.
+
+- **Releases & changes** — every release is tagged on
+  [GitHub Releases](https://github.com/libraz/libsonare/releases) with notes on
+  what changed. The npm and PyPI packages track the same tags.
+- **Bug reports & questions** — open an issue on the
+  [libsonare issue tracker](https://github.com/libraz/libsonare/issues). For
+  problems with this documentation site or the demos, use the
+  [homepage repository](https://github.com/libraz/libsonare-homepage/issues).
+- **What "tested" means here** — features covered by reference tests are listed
+  in [Implementation Validation](/docs/implementation-validation), and known
+  behavior differences between bindings are recorded in
+  [Binding Parity](/docs/binding-parity). Anything not listed there should be
+  validated against your own material before you depend on it.
+
 ## Next Steps
 
 - [Learning Path](/docs/learning-path) — Choose the right route for your first project

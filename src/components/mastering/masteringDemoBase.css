@@ -1,37 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
-/* ===== THEME TOKENS (Dark - default) ===== */
+/* ===== THEME TOKENS =====
+   The shared `--demo-*` table lives in
+   .vitepress/theme/styles/demo-tokens.css. This block keeps only the
+   mastering-specific `--master-*` surfaces plus one deliberate
+   override: the dense panel grid wants hairline borders, not the
+   default demo border weight. */
 .master-page {
-  --demo-bg: #030405;
-  --demo-bg-overlay: rgba(10, 12, 18, 0.95);
-  --demo-bg-elevated: rgba(8, 10, 14, 0.85);
-  --demo-bg-header: rgba(20, 22, 28, 0.8);
-  --demo-text-strong: #ffffff;
-  --demo-text: rgba(255, 255, 255, 0.7);
-  --demo-text-muted: rgba(255, 255, 255, 0.35);
-  --demo-text-faint: rgba(255, 255, 255, 0.2);
-  --demo-accent: #8B5CF6;
-  --demo-accent-light: #A78BFA;
-  --demo-accent-dim: rgba(139, 92, 246, 0.3);
-  --demo-accent-subtle: rgba(139, 92, 246, 0.08);
-  --demo-accent-border: rgba(139, 92, 246, 0.2);
-  --demo-cyan: #22D3EE;
-  --demo-amber: #F59E0B;
-  --demo-success: rgba(100, 200, 180, 0.9);
-  --demo-danger: #FCA5A5;
+  /* Hairline borders for the dense mastering panel grid */
   --demo-border: rgba(139, 92, 246, 0.12);
   --demo-border-strong: rgba(139, 92, 246, 0.25);
-  --demo-shadow: rgba(0, 0, 0, 0.4);
-  --demo-shadow-glow: 0 0 40px -10px rgba(139, 92, 246, 0.2);
-  --demo-grid-color: rgba(139, 92, 246, 0.04);
-  --demo-grid-minor: rgba(139, 92, 246, 0.02);
-  --demo-scanline: rgba(0, 0, 0, 0.03);
-  --demo-screen-bg: rgb(6, 8, 12);
-  --demo-screen-bg-alpha: rgba(6, 8, 12, 0.6);
-  --demo-warn: #F59E0B;
-  --demo-warn-text: #FCD9A0;
-  --demo-warn-border: rgba(245, 158, 11, 0.4);
-  --demo-warn-bg: rgba(245, 158, 11, 0.1);
 
   /* Surface variants used by master-specific affordances */
   --master-surface: rgba(255, 255, 255, 0.025);
@@ -43,41 +19,12 @@
   /* .master-page is now a CSS-variable carrier wrapping ToolShell slot content;
      the page frame (background, min-height, fonts) is provided by ToolShell. */
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
-/* ===== THEME TOKENS (Light) ===== */
 html:not(.dark) .master-page {
-  --demo-bg: #f8f6ff;
-  --demo-bg-overlay: rgba(248, 246, 255, 0.95);
-  --demo-bg-elevated: rgba(245, 243, 255, 0.85);
-  --demo-bg-header: rgba(250, 248, 255, 0.85);
-  --demo-text-strong: #1a1a2e;
-  --demo-text: rgba(0, 0, 0, 0.6);
-  --demo-text-muted: rgba(0, 0, 0, 0.42);
-  --demo-text-faint: rgba(0, 0, 0, 0.22);
-  --demo-accent: #7C3AED;
-  --demo-accent-light: #8B5CF6;
-  --demo-accent-dim: rgba(124, 58, 237, 0.28);
-  --demo-accent-subtle: rgba(124, 58, 237, 0.07);
-  --demo-accent-border: rgba(124, 58, 237, 0.22);
-  --demo-cyan: #0891B2;
-  --demo-amber: #B45309;
-  --demo-success: rgba(16, 132, 110, 0.95);
-  --demo-danger: #B91C1C;
   --demo-border: rgba(0, 0, 0, 0.08);
   --demo-border-strong: rgba(0, 0, 0, 0.15);
-  --demo-shadow: rgba(0, 0, 0, 0.08);
-  --demo-shadow-glow: 0 4px 24px -6px rgba(124, 58, 237, 0.18);
-  --demo-grid-color: transparent;
-  --demo-grid-minor: transparent;
-  --demo-scanline: transparent;
-  --demo-screen-bg: rgb(245, 243, 255);
-  --demo-screen-bg-alpha: rgba(245, 243, 255, 0.6);
-  --demo-warn: #B45309;
-  --demo-warn-text: #92400E;
-  --demo-warn-border: rgba(180, 83, 9, 0.34);
-  --demo-warn-bg: rgba(245, 158, 11, 0.12);
 
   --master-surface: rgba(124, 58, 237, 0.04);
   --master-surface-strong: rgba(124, 58, 237, 0.07);
@@ -126,7 +73,7 @@ html:not(.dark) .master-page .master-page__header {
 
 .master-page__brand {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -175,7 +122,7 @@ html:not(.dark) .master-page .master-page__header {
   align-items: center;
   height: 32px;
   padding: 0 10px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -224,7 +171,7 @@ html:not(.dark) .master-page .master-page__header {
   padding: 6px 14px;
   border-radius: 6px;
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -271,7 +218,7 @@ html:not(.dark) .master-page .master-page__header {
 .master-page__tab {
   padding: 9px 16px 11px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -312,7 +259,7 @@ html:not(.dark) .master-page .master-page__header {
   border-radius: 5px;
   padding: 3px 7px;
   color: var(--demo-warn, #F59E0B);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.14em;

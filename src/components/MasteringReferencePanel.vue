@@ -216,6 +216,12 @@ function formatBand(band: TonalBand): string {
   cursor: pointer;
   text-align: center;
   overflow-wrap: anywhere;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.reference-panel__drop:hover {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
 }
 
 .reference-panel__drop input {
@@ -246,19 +252,32 @@ function formatBand(band: TonalBand): string {
 .reference-panel__button {
   min-height: 34px;
   width: 100%;
-  border: 1px solid var(--demo-border-strong);
+  border: 1px solid var(--demo-accent-border);
   border-radius: 8px;
-  background: rgba(139, 92, 246, 0.14);
+  background: var(--demo-accent-subtle);
   color: var(--demo-text-strong);
   cursor: pointer;
   font: inherit;
   font-size: 10px;
   font-weight: 800;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.reference-panel__button:not(:disabled):hover,
+.reference-panel__button:not(:disabled):focus-visible {
+  border-color: var(--demo-accent);
+  background: color-mix(in srgb, var(--demo-accent) 18%, transparent);
+  color: var(--demo-text-strong);
+}
+
+.reference-panel__button:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 .reference-panel__button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: var(--demo-disabled-opacity);
 }
 
 .meter-stack {
@@ -287,7 +306,7 @@ function formatBand(band: TonalBand): string {
 }
 
 .reference-panel__analysis-title {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -303,7 +322,7 @@ function formatBand(band: TonalBand): string {
   border: 1px solid var(--demo-border);
   border-radius: 999px;
   background: var(--demo-control-bg-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.06em;

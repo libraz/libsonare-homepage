@@ -246,7 +246,7 @@ function onKeyDown(event: KeyboardEvent): void {
 }
 
 .rotary-knob--disabled {
-  opacity: 0.45;
+  opacity: var(--demo-disabled-opacity);
   pointer-events: none;
 }
 
@@ -279,11 +279,12 @@ function onKeyDown(event: KeyboardEvent): void {
   background: var(--demo-bg);
   color: var(--demo-text-muted);
   cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .rotary-knob__info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 8px;
   font-style: italic;
   font-weight: 700;
@@ -346,6 +347,11 @@ function onKeyDown(event: KeyboardEvent): void {
   transition: d 0.04s linear;
 }
 
+/* The arc glow is a dark-mode effect; drop it on light panels. */
+html:not(.dark) .rotary-knob__value-arc {
+  filter: none;
+}
+
 .rotary-knob__cap {
   fill: var(--demo-control-bg-strong);
 }
@@ -378,7 +384,7 @@ html:not(.dark) .rotary-knob__cap-light {
 .rotary-knob__display {
   min-height: 13px;
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1.25;

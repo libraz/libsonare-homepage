@@ -28,6 +28,8 @@ The important point is that formants stay in roughly the **same frequency region
 
 A plain pitch shift moves *everything* up, formants included. Shift a voice up several semitones and the formants rise too, shrinking the apparent size of the singer — the "chipmunk" effect. Shift down and you get an unnatural, oversized voice. The problem is that pitch and formants were never meant to move together.
 
+<SonareDemo id="pitch-shift" />
+
 ## Pitch and formant on separate controls
 
 Good voice editing exposes the two independently:

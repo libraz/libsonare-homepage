@@ -512,7 +512,7 @@ async function downloadWav() {
   align-items: baseline;
   gap: 6px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -547,12 +547,25 @@ async function downloadWav() {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   overflow: hidden;
+  /* Subtle rise as the deck mounts. */
+  animation: st-deck-rise 0.45s ease-out both;
 }
 
 html:not(.dark) .st-deck {
   box-shadow:
     0 20px 40px -24px rgba(80, 60, 140, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+@keyframes st-deck-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-deck {
+    animation: none;
+  }
 }
 
 /* ===== TRANSPORT ===== */
@@ -572,7 +585,7 @@ html:not(.dark) .st-deck {
 
 .st-brand__name {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -580,7 +593,7 @@ html:not(.dark) .st-deck {
 
 .st-brand__model {
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -593,10 +606,10 @@ html:not(.dark) .st-brand__model {
 
 .st-brand__tag {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 7.5px;
+  font-family: var(--font-mono);
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
 }
 
 .st-play {
@@ -637,7 +650,7 @@ html:not(.dark) .st-play:not(.st-play--on) {
 .st-play--on {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
   box-shadow: 0 0 18px var(--demo-accent-dim);
   animation: st-play-pulse 1.4s ease-in-out infinite;
 }
@@ -647,7 +660,7 @@ html:not(.dark) .st-play:not(.st-play--on) {
 .st-play--on:hover:not(:disabled) {
   border-color: var(--demo-accent-light);
   background: var(--demo-accent-light);
-  color: #fff;
+  color: var(--demo-on-accent);
 }
 
 @keyframes st-play-pulse {
@@ -685,7 +698,7 @@ html:not(.dark) .st-lcd {
 
 .st-lcd__key {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 7.5px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -694,7 +707,7 @@ html:not(.dark) .st-lcd {
 
 .st-lcd__value {
   color: var(--demo-accent-light);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -830,7 +843,7 @@ html:not(.dark) .st-lcd__value {
 .st-sec-title {
   margin: 0;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -853,7 +866,7 @@ html:not(.dark) .st-lcd__value {
 }
 
 .st-sec-info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 8px;
   font-style: italic;
   font-weight: 700;
@@ -892,7 +905,7 @@ html:not(.dark) .st-lcd__value {
 
 .st-ruler__cell {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -932,7 +945,7 @@ html:not(.dark) .st-lcd__value {
 
 .st-lane__name {
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -943,7 +956,7 @@ html:not(.dark) .st-lcd__value {
   border: 1px solid var(--demo-border);
   border-radius: 4px;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1042,7 +1055,7 @@ html:not(.dark) .st-lcd__value {
   align-items: center;
   gap: 6px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -1051,7 +1064,7 @@ html:not(.dark) .st-lcd__value {
 .st-vu__legend {
   overflow: hidden;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 7.5px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -1087,7 +1100,7 @@ html:not(.dark) .st-vu__meter {
   position: absolute;
   inset: 2px 0;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--demo-accent) 0%, var(--demo-accent) 80%, var(--demo-amber) 90%, #ef4444 98%);
+  background: linear-gradient(90deg, var(--demo-accent) 0%, var(--demo-accent) 80%, var(--demo-amber) 90%, var(--demo-clip) 98%);
   -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
   mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
   transition: clip-path 0.06s linear;
@@ -1104,7 +1117,7 @@ html:not(.dark) .st-vu__meter {
   top: 0;
   transform: translateX(-50%);
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 7.5px;
   font-weight: 700;
   letter-spacing: 0.06em;

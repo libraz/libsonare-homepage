@@ -1,6 +1,6 @@
 ---
 title: ライブ MIDI 入力と Web MIDI
-description: ハードウェアキーボードから libsonare のリアルタイムエンジンを演奏する方法。MIDI デスティネーション、ノート／CC イベントのサンプルタイムスタンプ付きキューイング、CC からパラメータへのバインド、パニック復帰、ブラウザの Web MIDI ブリッジ（bindWebMidi）のホットプラグ・権限・タイムスタンプ変換、そして「USB キーボードでシンセを鳴らす」レシピを、そのまま使えるコード付きで解説します。
+description: ハードウェアキーボードから libsonare のリアルタイムエンジンを演奏する方法。MIDI デスティネーション、ノート／CC イベントのサンプルタイムスタンプ付きキューイング、CC からパラメータへのバインド、パニック復帰、ブラウザの Web MIDI ブリッジ（bindWebMidi）のホットプラグ・権限・タイムスタンプ変換、そして AudioWorklet 内エンジン + MIDI フォワーダーの 2 スレッド構成で「USB キーボードでシンセを実際に鳴らす」完全なレシピを、そのまま使えるコード付きで解説します。
 ---
 
 # ライブ MIDI 入力と Web MIDI
@@ -50,6 +50,7 @@ sequenceDiagram
 - デスティネーションごとの MIDI FX インサートを、ノートを残さず差し替えられる。
 - **MIDI パニック**でスタックノートから復帰できる。
 - ブラウザで `bindWebMidi` を使い、ホットプラグ・権限・CC バインド・タイムスタンプからサンプルへの変換まで含めてハードウェアキーボードを接続できる。
+- エンジンを AudioWorklet 内でホストし、MIDI をスレッド境界を越えて転送して、演奏を実際に音として出せる。
 - 出荷前に現在のブラウザ対応状況を把握できる。
 
 ## MIDI デスティネーションモデル
@@ -222,34 +223,142 @@ Web MIDI の対応はまちまちなので、`isWebMidiAvailable()` で実行時
 
 ## レシピ: USB キーボードでブラウザのシンセを鳴らす
 
-「キーボードを挿した」から「スピーカーから音が出る」までの完全な最小経路です。エンジンのセットアップと MIDI ブリッジは素の JS ですが、音声出力の配線にはブラウザの `AudioContext` / `AudioWorklet` が必要です。
+「キーボードを挿した」から「スピーカーから音が出る」までの、完全にそのまま動く経路です。処理が 2 つのスレッドにまたがるため、ファイルも 2 つになります。
+
+- **音声スレッド** — AudioWorklet プロセッサがエンジンをホストし、レンダークォンタムごとにブロックをレンダリングします。エンジンはここに置く必要があります。メインスレッドのエンジンには `process(...)` を駆動するものがなく、音が出ないままになります。
+- **メインスレッド** — Web MIDI アクセス（`bindWebMidi`）を持ち、すべてのイベントをノードのポート経由でワークレットへ転送します。
+
+::: info 代役オブジェクトが bindWebMidi を満たせる理由
+`bindWebMidi` が渡されたエンジンに触れるのは、ライブ入力の面だけです。`setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、そして close 時の `clearMidiInputSource`。この 6 メソッドを実装したオブジェクトなら何でもエンジンの代役になれます。つまり、各イベントをワークレットのポートへ post する小さな*フォワーダー*が、バインディングをスレッド境界の向こうへ運んでくれます。
+:::
+
+### 音声スレッド: ワークレットがエンジンをホストする
+
+`AudioWorkletGlobalScope` は動的 `import()` を禁止しているため、高レベルラッパーは使えません（その `init()` は WASM モジュールを動的にインポートします）。代わりに Emscripten ファクトリ `sonare.js` を静的にインポートし、それが公開する生のエンジンを駆動します。この生の面について知っておくことは 2 つです。
+
+- ワークレットは `.wasm` のバイト列も fetch できません。メインスレッドで fetch して `processorOptions` 経由で渡します。
+- 一部の引数順が JS ラッパーと異なります。特に `setSynthInstrument(destinationId, patch)` です。
+
+```js
+// synth-worklet.js — context.audioWorklet.addModule(...) で読み込む。
+// sonare.js と sonare.wasm は @libraz/libsonare パッケージから静的アセットへ
+// コピーしておく。import 指定子はワークレットが解決できる URL であること。
+import createModule from '/wasm/sonare.js';
+
+const BLOCK = 128; // エンジンのスクラッチを準備するレンダークォンタムサイズ
+
+class KeyboardSynthProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    this.engine = null;
+    this.channels = [];
+    this.port.onmessage = (event) => this.onMessage(event.data);
+
+    createModule({
+      wasmBinary: options.processorOptions.wasmBinary,
+      locateFile: () => 'sonare.wasm', // ワークレットからネットワークへは出ない
+    })
+      .then((mod) => {
+        const engine = new mod.RealtimeEngine(sampleRate, BLOCK, 1024, 1024);
+        engine.setSynthInstrument(0, 'saw-lead'); // ネイティブの順序: (destinationId, patch)
+        engine.setMidiInputSource(0);
+        // ゼロコピーのレンダー経路: 準備済みスクラッチを埋めて processPrepared を呼ぶ。
+        engine.prepareChannels(2, BLOCK);
+        this.channels = [engine.getChannelBuffer(0, BLOCK), engine.getChannelBuffer(1, BLOCK)];
+        this.engine = engine;
+        this.port.postMessage({ type: 'ready' });
+      })
+      .catch((err) => this.port.postMessage({ type: 'error', error: String(err) }));
+  }
+
+  onMessage(msg) {
+    const engine = this.engine;
+    if (!engine) return;
+    if (msg.type === 'noteOn') {
+      engine.pushMidiInputNoteOn(msg.group, msg.channel, msg.note, msg.velocity, 0);
+    } else if (msg.type === 'noteOff') {
+      engine.pushMidiInputNoteOff(msg.group, msg.channel, msg.note, msg.velocity, 0);
+    } else if (msg.type === 'cc') {
+      engine.pushMidiInputCc(msg.group, msg.channel, msg.controller, msg.value, 0);
+    } else if (msg.type === 'panic') {
+      engine.pushMidiPanic(-1);
+    }
+  }
+
+  process(_inputs, outputs) {
+    const output = outputs[0];
+    if (!output?.length) return true;
+    if (!this.engine) {
+      for (const channel of output) channel.fill(0);
+      return true;
+    }
+    // WASM メモリの成長でヒープビューが切り離されたら取得し直す。
+    if (this.channels[0].byteLength === 0) {
+      this.channels = [this.engine.getChannelBuffer(0, BLOCK), this.engine.getChannelBuffer(1, BLOCK)];
+    }
+    const frames = Math.min(output[0].length, BLOCK);
+    // シンセはジェネレータなので、レンダー前に入力スクラッチをクリアする。
+    for (const channel of this.channels) channel.fill(0, 0, frames);
+    this.engine.processPrepared(frames);
+    for (let ch = 0; ch < output.length; ch++) {
+      output[ch].set((this.channels[ch] ?? this.channels[0]).subarray(0, frames));
+    }
+    return true;
+  }
+}
+
+registerProcessor('keyboard-synth', KeyboardSynthProcessor);
+```
+
+### メインスレッド: Web MIDI がワークレットへ流し込む
+
+ここに `init()` はありません。この構成では WASM は音声スレッドだけで動きます。メインスレッドはワークレットを起動し、6 メソッドをポートへ post するフォワーダーを `bindWebMidi` に渡します。
 
 ```typescript
-import { init, RealtimeEngine, isWebMidiAvailable, bindWebMidi } from '@libraz/libsonare';
+import { bindWebMidi, isWebMidiAvailable, type RealtimeEngine } from '@libraz/libsonare';
 
 async function startKeyboardSynth() {
-  await init();
-
   if (!isWebMidiAvailable()) {
     throw new Error('Web MIDI が使えません — オンスクリーンキーボードでフォールバックします');
   }
 
-  // --- エンジン + 楽器（どこでも動く） ---
-  const sampleRate = 48000;
-  const engine = new RealtimeEngine(sampleRate, 128);
-  engine.setSynthInstrument('saw-lead', 0);
+  // --- ワークレットを起動（コンテキストが動くようユーザージェスチャーから呼ぶ） ---
+  const context = new AudioContext({ latencyHint: 'interactive' });
+  await context.audioWorklet.addModule('/synth-worklet.js');
+  const wasmBinary = await (await fetch('/wasm/sonare.wasm')).arrayBuffer();
+  const node = new AudioWorkletNode(context, 'keyboard-synth', {
+    numberOfInputs: 0,
+    numberOfOutputs: 1,
+    outputChannelCount: [2],
+    processorOptions: { wasmBinary },
+  });
+  node.connect(context.destination);
+  await new Promise<void>((resolve, reject) => {
+    node.port.onmessage = (event) =>
+      event.data?.type === 'ready' ? resolve() : reject(new Error(event.data?.error));
+  });
 
-  // --- 音声出力（ブラウザ専用） ---
-  // engine.process(...) を AudioWorkletNode から駆動し、出力をスピーカーへ届ける。
-  // 完全なワークレットブリッジは「リアルタイムとストリーミング」を参照。
-  // 以下のエンジン・楽器バインド・MIDI 配線がライブ MIDI 入力に固有の部分です。
-  const context = new AudioContext({ sampleRate });   // ブラウザ
-  await context.resume();                             // ブラウザ（ジェスチャー必須）
+  // --- フォワーダー: bindWebMidi が触るエンジンの面をポートへ post する ---
+  const forwarder = {
+    setMidiInputSource: () => {
+      // ワークレットが起動時にデスティネーション 0 をバインド済み。
+    },
+    clearMidiInputSource: () => {
+      node.port.postMessage({ type: 'panic' }); // close 時に押しっぱなしのノートを解放
+    },
+    bindMidiCc: () => {
+      // このレシピでは CC からパラメータへのバインドは使わない。
+    },
+    pushMidiInputNoteOn: (group: number, channel: number, note: number, velocity: number) =>
+      node.port.postMessage({ type: 'noteOn', group, channel, note, velocity }),
+    pushMidiInputNoteOff: (group: number, channel: number, note: number, velocity: number) =>
+      node.port.postMessage({ type: 'noteOff', group, channel, note, velocity }),
+    pushMidiInputCc: (group: number, channel: number, controller: number, value: number) =>
+      node.port.postMessage({ type: 'cc', group, channel, controller, value }),
+  };
 
-  // --- MIDI ブリッジ（ブラウザ専用） ---
-  const binding = await bindWebMidi(engine, {
+  const binding = await bindWebMidi(forwarder as unknown as RealtimeEngine, {
     destinationId: 0,
-    timestampToSamples: (ms) => Math.round((ms / 1000) * sampleRate),
     onInputsChanged: (inputs) =>
       console.log('keyboards:', inputs.map((i) => i.name).join(', ')),
   });
@@ -258,16 +367,18 @@ async function startKeyboardSynth() {
 
   return {
     stop() {
-      binding.close();   // MIDI ポートを切り離し、エンジンの入力ソースをクリア
-      engine.destroy();  // ネイティブハンドルを解放
-      void context.close();
+      binding.close();      // MIDI ポートを切り離す（forwarder.clearMidiInputSource() が呼ばれる）
+      node.disconnect();
+      void context.close(); // ワークレットと、その中のエンジンを破棄する
     },
   };
 }
 ```
 
+`timestampToSamples` を省略すると、すべてのイベントは次のレンダーブロックの先頭で発火します。ライブ演奏にはこれで十分なタイトさです。ブロック内精度が必要なら、前述の「タイムスタンプからサンプルへの変換が重要な理由」のとおりタイムスタンプを変換し、フォワーダーの最後の引数を `0` の代わりにその値にして渡してください。
+
 ::: warning ブラウザのジェスチャーと後始末
-`AudioContext` はユーザージェスチャー（クリック）から生成／再開する必要があり、多くのブラウザはセキュアコンテキストからのみ MIDI アクセスを促します。ポートとネイティブメモリがページ破棄時に解放されるよう、`bindWebMidi` には必ず `binding.close()` と `engine.destroy()` を組み合わせてください。
+`AudioContext` はユーザージェスチャー（クリック）から生成／再開する必要があり、多くのブラウザはセキュアコンテキストからのみ MIDI アクセスを促します。`bindWebMidi` には必ず `binding.close()` を組み合わせ、ページ破棄時には `AudioContext` を close してください。このレシピでは、それがワークレットとエンジンのネイティブメモリを解放する手段です。
 :::
 
 ## ほかの実行環境では

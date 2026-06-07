@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useTheme } from '@/composables/useTheme';
 import { useWaveform } from '@/composables/useWaveform';
 
@@ -15,13 +15,43 @@ const emit = defineEmits<(e: 'seek', time: number) => void>();
 const { isDark } = useTheme();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-const bgColor = computed(() => (isDark.value ? 'rgba(6, 8, 12, 1)' : 'rgba(245, 243, 255, 1)'));
-const barCol = computed(() =>
-  isDark.value ? 'rgba(139, 92, 246, 0.25)' : 'rgba(139, 92, 246, 0.3)',
-);
-const progCol = computed(() =>
-  isDark.value ? 'rgba(139, 92, 246, 0.85)' : 'rgba(124, 58, 237, 0.8)',
-);
+// Canvas colors track the global demo tokens so the waveform recolors with the
+// theme; read them off the live element (tokens flip on html.dark) instead of
+// hard-coding per-theme RGBA. The bg uses the screen surface; the bars/progress
+// derive from the accent at fixed alphas.
+const bgColor = ref('rgb(6, 8, 12)');
+const barCol = ref('rgba(139, 92, 246, 0.25)');
+const progCol = ref('rgba(139, 92, 246, 0.85)');
+
+/**
+ * Resolves a CSS color into "r, g, b" channels via a probe element so the
+ * accent (any format) can be re-emitted at custom alphas.
+ */
+function rgbChannels(color: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = color;
+  probe.style.display = 'none';
+  document.body.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  probe.remove();
+  const match = resolved.match(/rgba?\(([^)]+)\)/);
+  if (!match) return '139, 92, 246';
+  const [r, g, b] = match[1].split(',');
+  return `${r.trim()}, ${g.trim()}, ${b.trim()}`;
+}
+
+function syncColors() {
+  if (!canvasRef.value) return;
+  const styles = getComputedStyle(canvasRef.value);
+  const screen = styles.getPropertyValue('--demo-screen-bg').trim();
+  const accent = styles.getPropertyValue('--demo-accent').trim();
+  if (screen) bgColor.value = screen;
+  if (accent) {
+    const ch = rgbChannels(accent);
+    barCol.value = `rgba(${ch}, 0.28)`;
+    progCol.value = `rgba(${ch}, 0.85)`;
+  }
+}
 
 const { setAudioBuffer, setBeats, setProgress, draw } = useWaveform(canvasRef, {
   barWidth: 2,
@@ -31,8 +61,11 @@ const { setAudioBuffer, setBeats, setProgress, draw } = useWaveform(canvasRef, {
   backgroundColor: bgColor,
 });
 
-// Redraw when theme changes
-watch(isDark, () => draw());
+// Re-read tokens and redraw when theme changes
+watch(isDark, () => {
+  syncColors();
+  draw();
+});
 
 watch(
   () => props.audioBuffer,
@@ -67,6 +100,7 @@ function handleClick(e: MouseEvent) {
 }
 
 onMounted(() => {
+  syncColors();
   if (props.audioBuffer) {
     setAudioBuffer(props.audioBuffer);
   }
@@ -120,11 +154,13 @@ onMounted(() => {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #ef4444;
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.8), 0 0 24px rgba(239, 68, 68, 0.4);
+  background: var(--demo-playhead);
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--demo-playhead) 80%, transparent),
+    0 0 24px color-mix(in srgb, var(--demo-playhead) 40%, transparent);
   z-index: 3;
   pointer-events: none;
-  transition: left 0.05s linear;
+  transition: left 0.03s linear;
 }
 
 .waveform__playhead::before {
@@ -137,8 +173,8 @@ onMounted(() => {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 7px solid #ef4444;
-  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8));
+  border-top: 7px solid var(--demo-playhead);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--demo-playhead) 80%, transparent));
 }
 
 .waveform__playhead::after {
@@ -151,8 +187,8 @@ onMounted(() => {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-bottom: 7px solid #ef4444;
-  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8));
+  border-bottom: 7px solid var(--demo-playhead);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--demo-playhead) 80%, transparent));
 }
 
 .waveform__grid {
@@ -182,6 +218,8 @@ onMounted(() => {
 }
 
 .waveform:hover .waveform__playhead {
-  box-shadow: 0 0 16px rgba(239, 68, 68, 1), 0 0 32px rgba(239, 68, 68, 0.6);
+  box-shadow:
+    0 0 16px var(--demo-playhead),
+    0 0 32px color-mix(in srgb, var(--demo-playhead) 60%, transparent);
 }
 </style>

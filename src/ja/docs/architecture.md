@@ -266,7 +266,7 @@ src/
 │   └── stream_frame.h      # フレームとバッファ型
 │
 ├── mastering/          # マスタリングエンジン
-│   ├── api/            # チェーン・レジストリ・25 プリセット・57 solo processors ＋ pair/stereo registries
+│   ├── api/            # チェーン・レジストリ・25 プリセット・76 solo processors ＋ pair/stereo registries
 │   ├── eq/ dynamics/ spectral/ stereo/ final/
 │   ├── maximizer/ multiband/ saturation/ repair/
 │   ├── match/ assistant/                 # リファレンスマッチ＋アシスタント/プロファイル

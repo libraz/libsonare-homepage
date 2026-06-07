@@ -267,7 +267,7 @@ function formatTime(seconds: number): string {
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .audio-source--busy {
@@ -289,8 +289,8 @@ function formatTime(seconds: number): string {
   border-radius: 8px;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast),
+    transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .audio-source__drop:hover,
@@ -411,7 +411,8 @@ function formatTime(seconds: number): string {
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .audio-source__demo:hover:not(:disabled) {

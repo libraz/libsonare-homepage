@@ -48,6 +48,11 @@ async function renderChart() {
   }
 
   const isDark = document.documentElement.classList.contains('dark');
+  // Resolve --font-body so canvas/Chart.js text uses the shared body stack
+  // (incl. the IBM Plex Sans JP fallback); canvas does not evaluate CSS vars.
+  const bodyFont =
+    getComputedStyle(document.documentElement).getPropertyValue('--font-body').trim() ||
+    "'Space Grotesk', sans-serif";
   const textColor = isDark ? '#ffffffde' : '#1a1a1a';
   const textDim = isDark ? '#ffffff80' : '#00000066';
   const librosaColor = isDark ? '#ff6b6b' : '#d63031';
@@ -108,7 +113,7 @@ async function renderChart() {
         y: {
           ticks: {
             color: textColor,
-            font: { size: 12, weight: '500' as any, family: "'Space Grotesk', sans-serif" },
+            font: { size: 12, weight: '500' as any, family: bodyFont },
             padding: 6,
           },
           grid: { display: false },
@@ -122,7 +127,7 @@ async function renderChart() {
           align: 'start' as const,
           labels: {
             color: textColor,
-            font: { size: 11, family: "'Space Grotesk', sans-serif" },
+            font: { size: 11, family: bodyFont },
             boxWidth: 12,
             boxHeight: 12,
             borderRadius: 3,
@@ -151,7 +156,7 @@ async function renderChart() {
             const d = props.data[i];
 
             ctx.save();
-            ctx.font = '500 10px "Space Grotesk", sans-serif';
+            ctx.font = `500 10px ${bodyFont}`;
             ctx.textBaseline = 'middle';
             const librosaText = formatValue(d.librosa);
             const libsonareText = formatValue(d.libsonare);
@@ -183,7 +188,7 @@ async function renderChart() {
               const badgeX = chart.chartArea.right + 8;
               const badgeY = (bar0.y + bar1.y) / 2;
 
-              ctx.font = '700 11px "Space Grotesk", sans-serif';
+              ctx.font = `700 11px ${bodyFont}`;
               const spW = ctx.measureText(sp).width;
 
               ctx.fillStyle = isDark ? '#55efc420' : '#00b89415';

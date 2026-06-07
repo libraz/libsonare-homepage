@@ -183,7 +183,7 @@ function onKeyDown(event: KeyboardEvent): void {
   border-radius: 4px;
   background: var(--strip-glow);
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -204,11 +204,12 @@ function onKeyDown(event: KeyboardEvent): void {
   background: var(--demo-bg);
   color: var(--demo-text-muted);
   cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .channel-strip__info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 8px;
   font-style: italic;
   font-weight: 700;
@@ -226,7 +227,7 @@ function onKeyDown(event: KeyboardEvent): void {
 
 .channel-strip__db {
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -324,10 +325,16 @@ function onKeyDown(event: KeyboardEvent): void {
 .channel-strip__meter-fill {
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, var(--strip-hue) 0%, var(--strip-hue) 80%, var(--demo-amber) 90%, #ef4444 98%);
+  background: linear-gradient(0deg, var(--strip-hue) 0%, var(--strip-hue) 80%, var(--demo-amber) 90%, var(--demo-clip) 98%);
   -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
   mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
   transition: clip-path 0.06s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .channel-strip__meter-fill {
+    transition: none;
+  }
 }
 
 .channel-strip__mute {
@@ -338,11 +345,11 @@ function onKeyDown(event: KeyboardEvent): void {
   border-radius: 5px;
   background: var(--demo-control-bg);
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: all var(--transition-fast);
 }
 
 .channel-strip__mute:hover {

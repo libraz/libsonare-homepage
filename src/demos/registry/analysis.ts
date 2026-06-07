@@ -66,4 +66,129 @@ export const analysisDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'chromagram',
+    archetype: 'transform',
+    // The band clip walks C–Am–F–G, so the lit pitch classes shift chord to chord.
+    source: { kind: 'clip', clip: 'band' },
+    viz: 'chroma',
+    config: { transform: 'chroma', nFft: 2048, hopLength: 512 },
+    title: {
+      en: 'Chromagram — harmony folded into 12 bins',
+      ja: 'クロマグラム — ハーモニーを12ビンに畳む',
+    },
+    caption: {
+      en: 'Every frequency is folded onto one of twelve pitch classes, so octave is forgotten and only the harmony remains. This clip walks a C–Am–F–G turnaround: watch the lit rows shift as each chord changes, then play to follow the progression.',
+      ja: 'すべての周波数を12のピッチクラスのどれかへ畳み込むため、オクターブは忘れられ、ハーモニーだけが残ります。このクリップは C–Am–F–G を循環します。コードが変わるたびに点灯する行が移るのを見て、再生して進行を追ってください。',
+    },
+  },
+  {
+    id: 'mel-spectrogram',
+    archetype: 'transform',
+    // A vowel-like tone: formant bands are clearer on a perceptual mel axis.
+    source: { kind: 'clip', clip: 'vowel' },
+    viz: 'spectrogram',
+    config: { transform: 'mel', nFft: 2048, hopLength: 512, nMels: 96 },
+    title: {
+      en: 'Mel spectrogram — frequency the way we hear it',
+      ja: 'メルスペクトログラム — 人の聞こえ方の周波数',
+    },
+    caption: {
+      en: 'The same STFT, re-mapped onto the mel scale: fine resolution low down where the ear discriminates, coarser up high. The harmonic stack and formant bands of this vowel-like tone sit closer together than on a linear axis — the view our ears (and most ML front-ends) actually use.',
+      ja: '同じ STFT をメル尺度へ写し直したものです。耳が聞き分ける低域は細かく、高域は粗くなります。この母音的なトーンの倍音列とフォルマントの帯は、リニア軸より近くに並びます — 耳（そして多くの機械学習の前処理）が実際に使う見え方です。',
+    },
+  },
+  {
+    id: 'mfcc-map',
+    archetype: 'transform',
+    // The same vowel source so mel ↔ MFCC can be compared on one page.
+    source: { kind: 'clip', clip: 'vowel' },
+    viz: 'heatmap',
+    config: { transform: 'mfcc', nFft: 2048, hopLength: 512, nMfcc: 20 },
+    title: {
+      en: 'MFCC map — a compact timbre fingerprint',
+      ja: 'MFCC マップ — コンパクトな音色の指紋',
+    },
+    caption: {
+      en: 'MFCCs compress the mel spectrogram into a handful of coefficients that capture the spectral envelope while discarding pitch detail. Each row is one coefficient over time (the 0th energy term is dropped); steady timbre reads as steady rows. This is the fingerprint instrument and voice classifiers actually compare.',
+      ja: 'MFCC はメルスペクトログラムを少数の係数へ圧縮し、ピッチの詳細を捨ててスペクトル包絡を捉えます。各行が時間に対する1係数（0次のエネルギー項は除外）で、音色が安定していれば行も安定します。これが楽器や声の分類器が実際に比較する指紋です。',
+    },
+  },
+  {
+    id: 'beat-tracking',
+    archetype: 'detector',
+    // A kit groove: onsets are every hit, beats are the inferred pulse.
+    source: { kind: 'clip', clip: 'drum' },
+    viz: 'overlay',
+    title: {
+      en: 'Onsets vs beats — from attacks to a pulse',
+      ja: 'オンセットとビート — 打点から拍へ',
+    },
+    caption: {
+      en: 'Onset detection marks every attack in the audio; beat tracking distils those into the steady pulse you would tap along to. Switch the view, then press play to watch each marker fire as the playhead reaches it.',
+      ja: 'オンセット検出は音の打点をすべて捉え、ビート追跡はそこから手拍子を打つような一定の拍を導き出す。表示を切り替え、再生するとプレイヘッドが到達するたびにマーカーが光る。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'onset',
+        label: { en: 'Detect', ja: '検出' },
+        options: [
+          { value: 'onset', label: { en: 'Onsets', ja: 'オンセット' } },
+          { value: 'beat', label: { en: 'Beats', ja: 'ビート' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'downbeat-tracking',
+    archetype: 'detector',
+    // Same groove: beats are the pulse, downbeats are the "1" of each bar.
+    source: { kind: 'clip', clip: 'drum' },
+    viz: 'overlay',
+    title: {
+      en: 'Beats vs downbeats — finding the bar line',
+      ja: 'ビートとダウンビート — 小節の頭を見つける',
+    },
+    caption: {
+      en: 'Beats are the steady pulse; downbeats are the stronger "one" that starts each bar. Switch the view to see the tracker thin the full pulse down to just the bar lines — far fewer markers, spaced a whole measure apart. Press play to feel where the count resets.',
+      ja: 'ビートは一定の拍、ダウンビートは各小節の頭にあたる強い「1」です。表示を切り替えると、すべての拍から小節の頭だけへと絞り込まれ、マーカーがぐっと減って1小節ごとの間隔になります。再生すると、カウントがリセットされる位置が体感できます。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'beat',
+        label: { en: 'Detect', ja: '検出' },
+        options: [
+          { value: 'beat', label: { en: 'Beats', ja: 'ビート' } },
+          { value: 'downbeat', label: { en: 'Downbeats', ja: 'ダウンビート' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'melody-contour',
+    archetype: 'contour',
+    // A monophonic lead line: one note at a time, so YIN tracks one clear fundamental.
+    source: { kind: 'clip', clip: 'lead' },
+    viz: 'overlay',
+    title: {
+      en: 'Pitch contour — tracing a melody as f0',
+      ja: 'ピッチコンター — メロディを f0 として描く',
+    },
+    caption: {
+      en: 'Pitch tracking estimates the fundamental frequency at every frame, turning a sung or played line into a contour you can see. The line breaks where the tracker hears no clear pitch. Toggle Smooth to watch the raw estimate — which jumps the odd octave at note attacks — settle into a clean melody once a median filter and octave correction are applied. Press play and the dot rides the pitch you hear.',
+      ja: 'ピッチ追跡はフレームごとに基音の周波数を推定し、歌ったり弾いたりした旋律を目に見えるコンターに変えます。明確なピッチが聞こえない箇所では線が途切れます。「平滑化」を切り替えると、音の立ち上がりで時おりオクターブが飛ぶ生の推定が、メディアンフィルタとオクターブ補正によってきれいな旋律へ落ち着く様子が見えます。再生すると、聞こえるピッチの上をドットが進みます。',
+    },
+    params: [
+      {
+        key: 'smooth',
+        kind: 'toggle',
+        default: true,
+        label: { en: 'Smooth', ja: '平滑化' },
+      },
+    ],
+  },
 ];

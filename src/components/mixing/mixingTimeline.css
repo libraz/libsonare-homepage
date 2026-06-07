@@ -22,7 +22,7 @@
   gap: 8px;
   align-items: center;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -35,7 +35,7 @@
 
 .mix-playhead-readout {
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   text-align: right;
@@ -69,7 +69,7 @@
   border-left: 1px solid var(--demo-border);
   padding-left: 5px;
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   line-height: 30px;
   transform: translateX(-1px);
@@ -116,7 +116,7 @@
 .mix-lane__header span,
 .mix-lane__header small {
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
 }
 
@@ -190,7 +190,7 @@
   overflow: hidden;
   padding: 5px 7px;
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   text-shadow: 0 1px 2px var(--demo-clip-label-shadow);
   text-overflow: ellipsis;
@@ -225,7 +225,7 @@
   align-items: center;
   gap: 6px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -265,7 +265,7 @@
   border-radius: 8px 0 0 8px;
   background: var(--demo-control-bg);
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -308,7 +308,7 @@
   margin: -6px 0 0 -6px;
   border: 1px solid var(--demo-accent);
   border-radius: 50%;
-  background: var(--demo-accent-light, #A78BFA);
+  background: var(--demo-accent-light);
   cursor: grab;
   padding: 0;
   touch-action: none;

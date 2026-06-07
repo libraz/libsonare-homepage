@@ -19,7 +19,7 @@ defineProps<{
 
 <style scoped>
 .scan-line {
-  --scan-color: #8B5CF6;
+  --scan-color: var(--demo-accent);
   --scan-duration: 3s;
 
   position: absolute;
@@ -51,6 +51,12 @@ defineProps<{
   100% {
     top: calc(100% - 2px);
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-line--active {
+    animation: none;
   }
 }
 </style>

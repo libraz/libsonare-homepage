@@ -31,6 +31,8 @@ The envelope matters because the *shape* of the curve, not just the peak list, i
 
 A steady groove makes the onset envelope **periodic** — peaks recur at roughly even spacing. Tempo estimation looks for that period; beat tracking then places a pulse train onto the peaks. Both read the same envelope, which is why improving onset detection improves tempo and beat accuracy together.
 
+<SonareDemo id="beat-tracking" />
+
 ::: details How libsonare computes onset strength
 libsonare derives the onset-strength envelope from STFT magnitudes by summing positive frame-to-frame spectral differences, optionally per mel band, then aggregating into a single curve. The envelope feeds the tempogram (for BPM) and the beat-tracking dynamic program, and it is also exposed for visualizers that want onset-driven motion. Because it is built on the shared STFT, requesting onsets alongside other features does not recompute the spectrogram.
 :::

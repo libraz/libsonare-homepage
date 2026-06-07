@@ -19,6 +19,8 @@ The catch: one FFT describes a whole block as if its frequency content never cha
 
 The **Short-Time Fourier Transform (STFT)** fixes this by chopping the audio into short, overlapping windows and running an FFT on each. The result is a 2-D grid — frequency content for each moment in time. A **spectrogram** is that grid drawn as an image: time on one axis, frequency on the other, energy as brightness.
 
+<SonareDemo id="stft-basics" />
+
 Two parameters appear everywhere because they control this grid:
 
 | Parameter | What it sets | Trade-off |

@@ -15,6 +15,8 @@ For recognition, what matters is the *set of pitch classes* present, not the oct
 
 That is why recognition works on chroma rather than the raw spectrum.
 
+<SonareDemo id="chromagram" />
+
 ## Templates over chroma
 
 libsonare compares each frame or beat-synchronous chroma summary against chord templates. The template set covers triads and extended qualities such as seventh, add9, diminished, half-diminished, ninth, and sus forms. The result is a best matching root and quality for each region.

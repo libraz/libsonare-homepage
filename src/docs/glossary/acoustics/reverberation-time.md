@@ -46,6 +46,8 @@ Because perception tracks EDT, two rooms with identical RT60 can feel quite diff
 
 RT60 scales with **room volume** and falls with **absorption**: a big, hard-surfaced space rings long; a small, soft-furnished one does not. That relationship is what lets libsonare estimate an equivalent room from a decay alone.
 
+<SonareDemo id="room-decay" />
+
 ::: details How libsonare measures decay time
 libsonare derives reverberation time from the energy decay curve (the Schroeder backward integral of the squared impulse response). It fits a line to the decay over the T20/T30 region, rejects segments where the curve is not linear enough, and extrapolates the slope to 60 dB; EDT is fit over the first 10 dB. Per-band reverberation time is computed by running the same fit on octave-band-filtered versions of the response, which is what the per-band decay table shows. When the input is ordinary music rather than a clean impulse, the decay is recovered blindly from the signal's gaps and offsets, and the confidence score reflects how clean that recovered decay was.
 :::

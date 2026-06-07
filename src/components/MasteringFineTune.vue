@@ -290,7 +290,7 @@ function updateDiagnosticBypass(key: DiagnosticBypassKey, value: boolean) {
 
 .master-param-info > span {
   display: block;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 10px;
   font-weight: 700;
   font-style: italic;

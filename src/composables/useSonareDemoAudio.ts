@@ -130,7 +130,10 @@ export function useSonareDemoAudio() {
       let buf: ArrayBuffer | null = null;
       for (const url of candidates) {
         const res = await fetch(url);
-        if (res.ok) {
+        // A missing file can resolve to the SPA fallback (200 text/html) under the
+        // dev server; only accept a response that is actually an audio payload.
+        const type = res.headers.get('content-type') ?? '';
+        if (res.ok && !type.includes('text/html')) {
           buf = await res.arrayBuffer();
           break;
         }

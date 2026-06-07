@@ -37,11 +37,11 @@ const emit = defineEmits<{
   padding: 3px;
   border: 1px solid var(--demo-border);
   border-radius: 8px;
-  background: var(--master-code-bg);
+  background: var(--master-code-bg, var(--demo-control-bg-strong));
 }
 
 html:not(.dark) .tool-mode-tabs {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--demo-control-bg);
 }
 
 .tool-mode-tabs__button {
@@ -57,15 +57,20 @@ html:not(.dark) .tool-mode-tabs {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .tool-mode-tabs__button:hover {
   color: var(--demo-text-strong);
 }
 
+.tool-mode-tabs__button:active {
+  transform: scale(0.97);
+}
+
 .tool-mode-tabs__button--active {
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
 }
 </style>

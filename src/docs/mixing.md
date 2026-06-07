@@ -330,6 +330,8 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 | `gainReductionDb` | How hard dynamics on the strip are working |
 | `seq` | Monotonic snapshot counter for change detection |
 
+<SonareDemo id="loudness-meter" />
+
 ::: info What is a goniometer?
 A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It shows the stereo image at a glance: a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter.
 :::

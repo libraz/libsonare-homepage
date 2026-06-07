@@ -213,7 +213,7 @@ function formatSuggestion(move: string): string {
 
 .master-insights__head > span {
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -307,7 +307,7 @@ function formatSuggestion(move: string): string {
   justify-self: end;
   min-width: 52px;
   color: var(--demo-text-strong);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -332,7 +332,7 @@ function formatSuggestion(move: string): string {
   border-radius: 999px;
   background: var(--demo-warn-bg);
   color: var(--demo-warn-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -344,7 +344,7 @@ function formatSuggestion(move: string): string {
 .master-insights__safe-ceiling {
   min-width: 0;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
@@ -362,7 +362,7 @@ function formatSuggestion(move: string): string {
   background: var(--demo-bg-elevated);
   color: var(--demo-text);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -371,7 +371,7 @@ function formatSuggestion(move: string): string {
 .master-insights__button--apply {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent);
-  color: var(--demo-bg);
+  color: var(--demo-on-accent);
 }
 
 .master-insights__button--refresh {
@@ -383,6 +383,25 @@ function formatSuggestion(move: string): string {
 .master-insights__button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+/* Staggered reveal so the insight columns compose in with the result panels. */
+.master-insights__panel {
+  animation: insights-rise 0.35s ease both;
+}
+
+.master-insights__panel:nth-child(2) { animation-delay: 0.05s; }
+.master-insights__panel:nth-child(3) { animation-delay: 0.1s; }
+
+@keyframes insights-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .master-insights__panel {
+    animation: none;
+  }
 }
 
 @media (max-width: 980px) {

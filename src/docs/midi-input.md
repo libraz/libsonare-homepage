@@ -1,6 +1,6 @@
 ---
 title: Live MIDI Input & Web MIDI
-description: Play libsonare's realtime engine from a hardware keyboard — MIDI destinations, queueing live note/CC events with sample timestamps, CC-to-parameter bindings, panic recovery, and the browser Web MIDI bridge (bindWebMidi) with hot-plug, permissions, and timestamp mapping, plus a copy-paste USB-keyboard-plays-a-synth recipe.
+description: Play libsonare's realtime engine from a hardware keyboard — MIDI destinations, queueing live note/CC events with sample timestamps, CC-to-parameter bindings, panic recovery, and the browser Web MIDI bridge (bindWebMidi) with hot-plug, permissions, and timestamp mapping, plus a complete two-thread recipe (AudioWorklet-hosted engine + MIDI forwarder) that makes a USB keyboard audibly play a synth.
 ---
 
 # Live MIDI Input & Web MIDI
@@ -50,6 +50,7 @@ By the end of this page you should be able to:
 - swap a per-destination MIDI-FX insert without leaving notes stuck;
 - recover from stuck notes with a **MIDI panic**;
 - connect a hardware keyboard in the browser with `bindWebMidi`, including hot-plug, permissions, CC bindings, and timestamp-to-sample mapping;
+- host the engine in an AudioWorklet and forward MIDI across the thread boundary, so what you play is actually audible;
 - know the current browser support picture before you ship.
 
 ## The MIDI destination model
@@ -222,53 +223,162 @@ Because the landscape shifts, treat the feature check as the source of truth in 
 
 ## Recipe: a USB keyboard plays a synth in the browser
 
-A complete minimal path from "keyboard plugged in" to "sound out of the speakers". The engine setup and the MIDI bridge are plain JS; the audio-output wiring requires a browser `AudioContext` / `AudioWorklet`.
+A complete, runnable path from "keyboard plugged in" to "sound out of the speakers". It takes two files because the work spans two threads:
+
+- **Audio thread** — an AudioWorklet processor hosts the engine and renders a block every render quantum. The engine must live here: a main-thread engine has nothing driving its `process(...)`, so it would stay silent.
+- **Main thread** — owns the Web MIDI access (`bindWebMidi`) and forwards every event to the worklet through the node's port.
+
+::: info Why a stand-in object satisfies bindWebMidi
+`bindWebMidi` only touches the live-input surface of the engine it is given: `setMidiInputSource`, `bindMidiCc`, the three `pushMidiInput*` methods, and `clearMidiInputSource` on close. Any object implementing those six methods can stand in for the engine — so a small *forwarder* that posts each event over the worklet port carries the binding across the thread boundary.
+:::
+
+### Audio thread: the worklet hosts the engine
+
+An `AudioWorkletGlobalScope` forbids dynamic `import()`, which rules out the high-level wrapper (its `init()` imports the WASM module dynamically). Statically import the Emscripten factory `sonare.js` instead and drive the raw engine it exposes. Two things to know about that raw surface:
+
+- The worklet cannot fetch the `.wasm` bytes either — fetch them on the main thread and hand them in through `processorOptions`.
+- Some argument orders differ from the JS wrapper — notably `setSynthInstrument(destinationId, patch)`.
+
+```js
+// synth-worklet.js — load with context.audioWorklet.addModule(...).
+// Copy sonare.js and sonare.wasm from the @libraz/libsonare package into your
+// static assets; the import specifier must be a URL the worklet can resolve.
+import createModule from '/wasm/sonare.js';
+
+const BLOCK = 128; // render-quantum size the engine scratch is prepared for
+
+class KeyboardSynthProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    this.engine = null;
+    this.channels = [];
+    this.port.onmessage = (event) => this.onMessage(event.data);
+
+    createModule({
+      wasmBinary: options.processorOptions.wasmBinary,
+      locateFile: () => 'sonare.wasm', // never hit the network from the worklet
+    })
+      .then((mod) => {
+        const engine = new mod.RealtimeEngine(sampleRate, BLOCK, 1024, 1024);
+        engine.setSynthInstrument(0, 'saw-lead'); // native order: (destinationId, patch)
+        engine.setMidiInputSource(0);
+        // Zero-copy render path: fill the prepared scratch, call processPrepared.
+        engine.prepareChannels(2, BLOCK);
+        this.channels = [engine.getChannelBuffer(0, BLOCK), engine.getChannelBuffer(1, BLOCK)];
+        this.engine = engine;
+        this.port.postMessage({ type: 'ready' });
+      })
+      .catch((err) => this.port.postMessage({ type: 'error', error: String(err) }));
+  }
+
+  onMessage(msg) {
+    const engine = this.engine;
+    if (!engine) return;
+    if (msg.type === 'noteOn') {
+      engine.pushMidiInputNoteOn(msg.group, msg.channel, msg.note, msg.velocity, 0);
+    } else if (msg.type === 'noteOff') {
+      engine.pushMidiInputNoteOff(msg.group, msg.channel, msg.note, msg.velocity, 0);
+    } else if (msg.type === 'cc') {
+      engine.pushMidiInputCc(msg.group, msg.channel, msg.controller, msg.value, 0);
+    } else if (msg.type === 'panic') {
+      engine.pushMidiPanic(-1);
+    }
+  }
+
+  process(_inputs, outputs) {
+    const output = outputs[0];
+    if (!output?.length) return true;
+    if (!this.engine) {
+      for (const channel of output) channel.fill(0);
+      return true;
+    }
+    // Re-acquire the heap views if WASM memory growth detached them.
+    if (this.channels[0].byteLength === 0) {
+      this.channels = [this.engine.getChannelBuffer(0, BLOCK), this.engine.getChannelBuffer(1, BLOCK)];
+    }
+    const frames = Math.min(output[0].length, BLOCK);
+    // The synth is a generator — clear the input scratch before rendering.
+    for (const channel of this.channels) channel.fill(0, 0, frames);
+    this.engine.processPrepared(frames);
+    for (let ch = 0; ch < output.length; ch++) {
+      output[ch].set((this.channels[ch] ?? this.channels[0]).subarray(0, frames));
+    }
+    return true;
+  }
+}
+
+registerProcessor('keyboard-synth', KeyboardSynthProcessor);
+```
+
+### Main thread: Web MIDI feeds the worklet
+
+No `init()` here — in this architecture the WASM runs only on the audio thread. The main thread boots the worklet, then hands `bindWebMidi` a forwarder whose six methods post to the port.
 
 ```typescript
-import { init, RealtimeEngine, isWebMidiAvailable, bindWebMidi } from '@libraz/libsonare';
+import { bindWebMidi, isWebMidiAvailable, type RealtimeEngine } from '@libraz/libsonare';
 
 async function startKeyboardSynth() {
-  await init();
-
   if (!isWebMidiAvailable()) {
     throw new Error('Web MIDI not available — use an on-screen keyboard fallback.');
   }
 
-  // --- Engine + instrument (runs anywhere) ---
-  const sampleRate = 48000;
-  const engine = new RealtimeEngine(sampleRate, 128);
-  engine.setSynthInstrument('saw-lead', 0);
+  // --- Boot the worklet (call this from a user gesture so the context runs) ---
+  const context = new AudioContext({ latencyHint: 'interactive' });
+  await context.audioWorklet.addModule('/synth-worklet.js');
+  const wasmBinary = await (await fetch('/wasm/sonare.wasm')).arrayBuffer();
+  const node = new AudioWorkletNode(context, 'keyboard-synth', {
+    numberOfInputs: 0,
+    numberOfOutputs: 1,
+    outputChannelCount: [2],
+    processorOptions: { wasmBinary },
+  });
+  node.connect(context.destination);
+  await new Promise<void>((resolve, reject) => {
+    node.port.onmessage = (event) =>
+      event.data?.type === 'ready' ? resolve() : reject(new Error(event.data?.error));
+  });
 
-  // --- Audio output (browser only) ---
-  // Drive engine.process(...) from an AudioWorkletNode so its output reaches
-  // the speakers. See "Realtime and Streaming" for the full worklet bridge;
-  // the engine, instrument binding, and MIDI wiring below are the parts unique
-  // to live MIDI input.
-  const context = new AudioContext({ sampleRate });   // browser
-  await context.resume();                             // browser (gesture-gated)
+  // --- The forwarder: bindWebMidi's engine surface, posted over the port ---
+  const forwarder = {
+    setMidiInputSource: () => {
+      // The worklet already bound destination 0 at startup.
+    },
+    clearMidiInputSource: () => {
+      node.port.postMessage({ type: 'panic' }); // release held notes on close
+    },
+    bindMidiCc: () => {
+      // No CC-to-parameter bindings in this recipe.
+    },
+    pushMidiInputNoteOn: (group: number, channel: number, note: number, velocity: number) =>
+      node.port.postMessage({ type: 'noteOn', group, channel, note, velocity }),
+    pushMidiInputNoteOff: (group: number, channel: number, note: number, velocity: number) =>
+      node.port.postMessage({ type: 'noteOff', group, channel, note, velocity }),
+    pushMidiInputCc: (group: number, channel: number, controller: number, value: number) =>
+      node.port.postMessage({ type: 'cc', group, channel, controller, value }),
+  };
 
-  // --- MIDI bridge (browser only) ---
-  const binding = await bindWebMidi(engine, {
+  const binding = await bindWebMidi(forwarder as unknown as RealtimeEngine, {
     destinationId: 0,
-    timestampToSamples: (ms) => Math.round((ms / 1000) * sampleRate),
     onInputsChanged: (inputs) =>
       console.log('keyboards:', inputs.map((i) => i.name).join(', ')),
   });
 
-  // Now pressing a key on the USB keyboard sounds the 'saw-lead' patch.
+  // Pressing a key on the USB keyboard now sounds the 'saw-lead' patch.
 
   return {
     stop() {
-      binding.close();   // detach MIDI ports, clear the engine input source
-      engine.destroy();  // release the native handle
-      void context.close();
+      binding.close();      // detach MIDI ports; calls forwarder.clearMidiInputSource()
+      node.disconnect();
+      void context.close(); // tears down the worklet and the engine inside it
     },
   };
 }
 ```
 
+Without `timestampToSamples`, every event fires at the start of the next render block — tight enough for live playing. For sub-block accuracy, convert timestamps as described in "Why timestamp → sample mapping matters" above and pass the result through the forwarder's last argument instead of `0`.
+
 ::: warning Browser gestures and cleanup
-An `AudioContext` must be created/resumed from a user gesture (a click), and most browsers only prompt for MIDI access from a secure context. Always pair `bindWebMidi` with `binding.close()` and `engine.destroy()` so ports and native memory are released when the page tears down.
+An `AudioContext` must be created/resumed from a user gesture (a click), and most browsers only prompt for MIDI access from a secure context. Pair `bindWebMidi` with `binding.close()`, and close the `AudioContext` when the page tears down — in this recipe that is what releases the worklet and the engine's native memory.
 :::
 
 ## On other runtimes

@@ -724,17 +724,17 @@ function mfcc(
   htk?: boolean       // default: false = Slaney formula; true = HTK
 ): MfccResult
 
-Set `fmin`/`fmax` to bound the Mel band edges, and pass `htk: true` to use the
-HTK Mel formula instead of Slaney. The inverse helpers (`melToStft`,
-`melToAudio`, `mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, so a
-round-trip stays consistent when you keep the same values on both sides.
-
 interface MfccResult {
   nMfcc: number;
   nFrames: number;
   coefficients: Float32Array;
 }
 ```
+
+Set `fmin`/`fmax` to bound the Mel band edges, and pass `htk: true` to use the
+HTK Mel formula instead of Slaney. The inverse helpers (`melToStft`,
+`melToAudio`, `mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, so a
+round-trip stays consistent when you keep the same values on both sides.
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="Medium" />
 

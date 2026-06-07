@@ -43,12 +43,13 @@ defineEmits<(e: 'click') => void>();
   border: 1px solid var(--btn-border);
   border-radius: var(--btn-radius);
   color: var(--btn-color);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.08em;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
 .transport-btn:hover:not(:disabled) {
@@ -62,15 +63,20 @@ defineEmits<(e: 'click') => void>();
 
 /* Variants */
 .transport-btn--primary {
-  --btn-bg: var(--demo-accent, #8B5CF6);
-  --btn-border: var(--demo-accent, #8B5CF6);
-  --btn-color: #fff;
+  --btn-bg: var(--demo-accent);
+  --btn-border: var(--demo-accent);
+  --btn-color: var(--demo-on-accent);
 }
 
 .transport-btn--primary:hover:not(:disabled) {
-  background: #7C3AED;
-  border-color: #7C3AED;
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+  background: var(--demo-accent-light);
+  border-color: var(--demo-accent-light);
+  box-shadow: 0 0 20px var(--demo-accent-dim);
+}
+
+/* The bloom on the primary button is a dark-mode effect; drop it on light panels. */
+html:not(.dark) .transport-btn--primary:hover:not(:disabled) {
+  box-shadow: none;
 }
 
 .transport-btn--ghost {
@@ -101,7 +107,7 @@ defineEmits<(e: 'click') => void>();
 /* Disabled */
 .transport-btn--disabled,
 .transport-btn:disabled {
-  opacity: 0.4;
+  opacity: var(--demo-disabled-opacity);
   cursor: not-allowed;
 }
 </style>

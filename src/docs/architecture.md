@@ -266,7 +266,7 @@ src/
 │   └── stream_frame.h      # Frame and buffer types
 │
 ├── mastering/          # Mastering engine
-│   ├── api/            # Chain, registry, 25 presets, 57 solo processors + pair/stereo registries
+│   ├── api/            # Chain, registry, 25 presets, 76 solo processors + pair/stereo registries
 │   ├── eq/ dynamics/ spectral/ stereo/ final/
 │   ├── maximizer/ multiband/ saturation/ repair/
 │   ├── match/ assistant/                 # Reference match + assistant/profile

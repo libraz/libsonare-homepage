@@ -1,6 +1,6 @@
 # ベンチマーク
 
-libsonareとlibrosa (Python) の音声解析タスクにおける性能比較。
+libsonare と librosa (Python) の音声解析タスクにおける性能比較。
 
 このページは性能の文脈を確認するための資料であり、機能チュートリアルではありません。API を先に学ぶ場合は [はじめに](./getting-started.md)、[機能マップ](./api-surface.md)、利用する言語の実行環境別ページを読んでください。
 

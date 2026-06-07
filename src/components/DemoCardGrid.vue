@@ -600,10 +600,10 @@ html:not(.dark) .demo-grid__card:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   color: var(--demo-success, #34D399);
 }
 
@@ -620,8 +620,13 @@ html:not(.dark) .demo-grid__card:hover {
   animation: demo-grid-blink 2.4s ease-in-out infinite;
 }
 
+/* The bloom reads as a dark-mode neon effect; drop it on light panels. */
+html:not(.dark) .demo-grid__status-dot {
+  box-shadow: none;
+}
+
 .demo-grid__eyebrow {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -685,7 +690,7 @@ html:not(.dark) .demo-grid__card:hover {
 
 .demo-grid__gauge-label {
   fill: var(--demo-text-muted, rgba(255, 255, 255, 0.4));
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   letter-spacing: 0.08em;
 }
@@ -733,6 +738,11 @@ html:not(.dark) .demo-grid__card:hover {
   box-shadow: 0 0 6px var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
   animation: demo-grid-fader 3s ease-in-out infinite;
   animation-delay: var(--d);
+}
+
+/* The cap glow is a dark-mode effect; soften it on light panels. */
+html:not(.dark) .demo-grid__fader-cap {
+  box-shadow: none;
 }
 
 /* FX wave */
@@ -833,7 +843,7 @@ html:not(.dark) .demo-grid__key-black {
 
 .demo-grid__title {
   margin: 2px 0 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -861,10 +871,10 @@ html:not(.dark) .demo-grid__key-black {
   border: 1px solid var(--demo-border, rgba(139, 92, 246, 0.12));
   border-radius: 4px;
   background: var(--demo-accent-subtle, rgba(139, 92, 246, 0.06));
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
   color: var(--demo-text-muted, rgba(255, 255, 255, 0.45));
 }
 
@@ -875,7 +885,7 @@ html:not(.dark) .demo-grid__key-black {
   align-items: center;
   gap: 8px;
   align-self: flex-start;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;

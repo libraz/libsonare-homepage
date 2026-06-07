@@ -62,6 +62,7 @@ load more formats directly.
 ### Browser (WebAssembly)
 
 Decode the file first, then pass mono `Float32Array` samples to libsonare.
+This snippet is complete — paste it into any module script and replace the URL:
 
 ```typescript
 import { init, analyze } from '@libraz/libsonare';
@@ -69,8 +70,15 @@ import { init, analyze } from '@libraz/libsonare';
 // Initialize the WASM module
 await init();
 
+// Decode audio with the Web Audio API (the browser decodes; libsonare analyzes)
+const audioContext = new AudioContext();
+const response = await fetch('audio.mp3');
+const arrayBuffer = await response.arrayBuffer();
+const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+const samples = audioBuffer.getChannelData(0); // mono Float32Array
+
 // Analyze audio samples
-const result = analyze(samples, sampleRate);
+const result = analyze(samples, audioBuffer.sampleRate);
 
 console.log('BPM:', result.bpm);
 console.log('Key:', result.key.name);
@@ -178,3 +186,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 ## Try It Now
 
 Visit the [Demos](/demos) to try libsonare in your browser. Simply drag and drop an audio file to see the analysis results.
+
+Or right here: this is a short-time Fourier transform running live in the page, computed by the same WASM build you are about to install.
+
+<SonareDemo id="stft-basics" />

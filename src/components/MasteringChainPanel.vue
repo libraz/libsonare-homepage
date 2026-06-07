@@ -179,7 +179,7 @@ const { t } = useI18n();
   border-radius: 4px;
   background: var(--master-code-bg);
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -189,7 +189,7 @@ const { t } = useI18n();
 .signal-flow__row--active .signal-flow__stage {
   border-color: var(--demo-accent);
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
 }
 
 .signal-flow__led {
@@ -211,7 +211,7 @@ const { t } = useI18n();
 .signal-flow__label {
   overflow: hidden;
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: -0.005em;
@@ -261,7 +261,7 @@ const { t } = useI18n();
   color: var(--demo-text);
   cursor: pointer;
   font: inherit;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;

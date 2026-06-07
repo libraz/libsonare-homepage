@@ -22,7 +22,7 @@
   right: 4px;
   transform: translateY(-50%);
   color: var(--demo-text-faint);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-variant-numeric: tabular-nums;
 }
@@ -67,7 +67,7 @@
   flex-wrap: wrap;
   gap: 8px 16px;
   padding: 10px 14px 14px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--demo-text-muted);
 }
@@ -116,14 +116,14 @@
   background: transparent;
   color: var(--demo-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .heatmap-tabs__button {
-  transition: border-color 0.16s ease, color 0.16s ease;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .heatmap-tabs__button:not(.heatmap-tabs__button--active):hover {
@@ -159,7 +159,7 @@
   padding: 8px 0;
   border-bottom: 1px solid var(--demo-border);
   color: var(--demo-text);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -216,7 +216,7 @@
 }
 
 .conf-chip {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   font-style: normal;
   font-weight: 600;
@@ -297,7 +297,7 @@
 .vectorscope__axis {
   position: absolute;
   top: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.08em;
   color: var(--demo-text-faint);

@@ -28,6 +28,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `synth`       — patch params → live audio + scope / envelope figure
  * - `signal`      — generate a test signal (tone/sweep/noise) and observe it; no clip required
  * - `room`        — simple geometry → RIR synthesis → audition
+ * - `contour`     — clip → pitch tracking → melody f0 contour line over time
  */
 export type DemoArchetype =
   | 'transform'
@@ -37,7 +38,8 @@ export type DemoArchetype =
   | 'param-sweep'
   | 'synth'
   | 'signal'
-  | 'room';
+  | 'room'
+  | 'contour';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

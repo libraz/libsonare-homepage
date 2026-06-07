@@ -16,6 +16,14 @@ let freqData: Uint8Array<ArrayBuffer> | null = null;
 /** Log-spaced spectrum bars look musical; linear bins crowd the bass. */
 const SPECTRUM_BARS = 56;
 
+const reduceMotion =
+  typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+/** True when the surrounding theme is light; trace alphas/glow adapt to it. */
+function isLightTheme(): boolean {
+  return typeof document !== 'undefined' && !document.documentElement.classList.contains('dark');
+}
+
 function colors(canvas: HTMLCanvasElement) {
   const style = getComputedStyle(canvas);
   return {
@@ -25,8 +33,12 @@ function colors(canvas: HTMLCanvasElement) {
   };
 }
 
+/**
+ * Render one scope frame. Under reduced motion this runs once per analyser
+ * change instead of every animation frame; otherwise it schedules the next.
+ */
 function draw(): void {
-  rafId = requestAnimationFrame(draw);
+  if (!reduceMotion?.matches) rafId = requestAnimationFrame(draw);
   const canvas = canvasRef.value;
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
@@ -45,11 +57,12 @@ function draw(): void {
   g.clearRect(0, 0, width, height);
 
   const { trace, spectrum, grid } = colors(canvas);
+  const light = isLightTheme();
 
   // Graticule.
   g.save();
   g.strokeStyle = grid;
-  g.globalAlpha = 0.07;
+  g.globalAlpha = light ? 0.12 : 0.07;
   g.lineWidth = 1;
   g.beginPath();
   for (let i = 1; i < 4; i++) {
@@ -68,7 +81,7 @@ function draw(): void {
   const analyser = props.analyser;
   if (!analyser) {
     g.strokeStyle = trace;
-    g.globalAlpha = 0.4;
+    g.globalAlpha = light ? 0.6 : 0.4;
     g.beginPath();
     g.moveTo(0, height / 2);
     g.lineTo(width, height / 2);
@@ -86,7 +99,7 @@ function draw(): void {
   const barWidth = width / SPECTRUM_BARS;
   g.save();
   g.fillStyle = spectrum;
-  g.globalAlpha = 0.22;
+  g.globalAlpha = light ? 0.42 : 0.22;
   for (let i = 0; i < SPECTRUM_BARS; i++) {
     // Log-spaced bin range for this bar.
     const from = Math.floor(bins ** (i / SPECTRUM_BARS)) - 1;
@@ -108,10 +121,13 @@ function draw(): void {
   analyser.getFloatTimeDomainData(timeData);
   g.save();
   g.strokeStyle = trace;
-  g.lineWidth = 1.7;
+  // Crisper, slightly heavier trace on the light screen; glow suits the dark one.
+  g.lineWidth = light ? 2 : 1.7;
   g.lineJoin = 'round';
-  g.shadowColor = trace;
-  g.shadowBlur = 7;
+  if (!light) {
+    g.shadowColor = trace;
+    g.shadowBlur = 7;
+  }
   g.beginPath();
   const mid = height / 2;
   const samples = timeData.length;
@@ -125,17 +141,30 @@ function draw(): void {
   g.restore();
 }
 
+/** Reduced motion: the live loop is paused, so redraw on size/preference changes. */
+function staticDraw(): void {
+  if (reduceMotion?.matches) draw();
+}
+
 onMounted(() => {
-  resizeObserver = new ResizeObserver(() => {
-    /* size is re-read every frame; the observer just keeps layout honest */
-  });
+  resizeObserver = new ResizeObserver(staticDraw);
   if (canvasRef.value) resizeObserver.observe(canvasRef.value);
-  rafId = requestAnimationFrame(draw);
+  reduceMotion?.addEventListener('change', onMotionPreferenceChange);
+  if (reduceMotion?.matches) draw();
+  else rafId = requestAnimationFrame(draw);
 });
+
+/** Switch between the live rAF loop and a single static frame on the fly. */
+function onMotionPreferenceChange(): void {
+  cancelAnimationFrame(rafId);
+  if (reduceMotion?.matches) draw();
+  else rafId = requestAnimationFrame(draw);
+}
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(rafId);
   resizeObserver?.disconnect();
+  reduceMotion?.removeEventListener('change', onMotionPreferenceChange);
 });
 
 watch(
@@ -143,6 +172,7 @@ watch(
   () => {
     timeData = null;
     freqData = null;
+    staticDraw();
   },
 );
 </script>

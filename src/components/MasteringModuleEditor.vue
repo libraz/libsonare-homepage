@@ -170,14 +170,14 @@ function docHref(slug: string | null | undefined): string | undefined {
   border-radius: 8px;
   background: var(--master-surface);
   color: var(--demo-text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12.5px;
   line-height: 1.55;
 }
 
 .module-editor__note strong {
   color: var(--demo-cyan);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .module-editor__platform {
@@ -218,7 +218,7 @@ function docHref(slug: string | null | undefined): string | undefined {
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
   background: var(--demo-accent-subtle);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -274,10 +274,16 @@ html:not(.dark) .module-editor__stage strong {
   50%      { opacity: 0.55; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .module-editor__led {
+    animation: none;
+  }
+}
+
 .module-editor__id h3 {
   margin: 0;
   color: var(--demo-text-strong);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -286,7 +292,7 @@ html:not(.dark) .module-editor__stage strong {
 
 .module-editor__id small {
   color: var(--demo-text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 11.5px;
   font-weight: 400;
   line-height: 1.45;
@@ -313,7 +319,7 @@ html:not(.dark) .module-editor__stage strong {
 }
 
 .module-editor__info > span {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 11px;
   font-style: italic;
   font-weight: 700;
@@ -355,7 +361,7 @@ html:not(.dark) .module-editor__stage strong {
   background: var(--master-surface);
   color: var(--demo-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;

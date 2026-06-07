@@ -46,9 +46,14 @@ onBeforeUnmount(() => observer?.disconnect());
 const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defineAsyncComponent>>> =
   {
     transform: defineAsyncComponent(() => import('./archetypes/TransformDemo.vue')),
+    detector: defineAsyncComponent(() => import('./archetypes/DetectorDemo.vue')),
+    'ab-process': defineAsyncComponent(() => import('./archetypes/AbProcessDemo.vue')),
+    'param-sweep': defineAsyncComponent(() => import('./archetypes/ParamSweepDemo.vue')),
+    meters: defineAsyncComponent(() => import('./archetypes/MetersDemo.vue')),
     signal: defineAsyncComponent(() => import('./archetypes/SignalDemo.vue')),
     synth: defineAsyncComponent(() => import('./archetypes/SynthDemo.vue')),
     room: defineAsyncComponent(() => import('./archetypes/RoomDemo.vue')),
+    contour: defineAsyncComponent(() => import('./archetypes/ContourDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

@@ -38,7 +38,7 @@
 }
 
 .mix-gonio__label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
 }
 
@@ -53,7 +53,7 @@
   display: grid;
   gap: 4px;
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
 }
 
@@ -88,7 +88,7 @@
   background: transparent;
   color: var(--demo-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
 }
@@ -133,7 +133,7 @@
 
 .mix-field__label {
   color: var(--demo-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
 }
 
@@ -155,7 +155,7 @@
   background: transparent;
   color: var(--demo-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 8px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -178,7 +178,7 @@
 
 .mix-segment__btn--active {
   background: var(--demo-accent);
-  color: #fff;
+  color: var(--demo-on-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -211,7 +211,7 @@
 
 .mix-toggle--on {
   border-color: var(--demo-accent);
-  color: var(--demo-accent-light, #A78BFA);
+  color: var(--demo-accent-light);
   background: color-mix(in srgb, var(--demo-accent) 12%, transparent);
 }
 

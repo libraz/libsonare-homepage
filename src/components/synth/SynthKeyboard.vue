@@ -118,6 +118,11 @@ function release(note: number): void {
 
 <style scoped>
 .synth-keyboard {
+  /* Keybed palette — explicit per theme so both reads as intentional hardware.
+     Dark is the flagship look (deep bed, near-black sharps); light is a true
+     light keybed (lavender felt, near-white naturals, deep-grey sharps). */
+  --kb-bed: #0c0d12;
+  --kb-bed-shadow: rgba(0, 0, 0, 0.8);
   --kb-white: linear-gradient(180deg, #fcfcfd 0%, #f4f4f7 78%, #e4e4ea 96%, #cfcfd8 100%);
   --kb-white-pressed: linear-gradient(180deg, #ddd4f6 0%, #cdbef2 80%, #b9a6ec 100%);
   --kb-black: linear-gradient(180deg, #3a3d47 0%, #23252d 18%, #15161c 85%, #2c2e38 100%);
@@ -127,6 +132,16 @@ function release(note: number): void {
   width: 100%;
   user-select: none;
   touch-action: none;
+}
+
+html:not(.dark) .synth-keyboard {
+  /* Lavender felt bed derived from the elevated-surface tones. */
+  --kb-bed: #d7cfec;
+  --kb-bed-shadow: rgba(80, 60, 140, 0.35);
+  --kb-white: linear-gradient(180deg, #ffffff 0%, #f6f4fc 74%, #e6e1f3 96%, #d6cfe8 100%);
+  --kb-white-pressed: linear-gradient(180deg, var(--color-purple-200) 0%, var(--color-purple-300) 85%, #c9aef6 100%);
+  --kb-black: linear-gradient(180deg, #4b4658 0%, #393546 22%, #2c2937 85%, #423d50 100%);
+  --kb-black-pressed: linear-gradient(180deg, var(--color-purple-600) 0%, var(--color-purple-700) 60%, var(--color-purple-800) 100%);
 }
 
 /* Felt strip above the keybed. */
@@ -146,14 +161,9 @@ html:not(.dark) .synth-keyboard__rail {
   display: flex;
   height: 140px;
   border-radius: 0 0 8px 8px;
-  background: #0c0d12;
+  background: var(--kb-bed);
   padding: 0 1px 4px;
-  box-shadow: inset 0 6px 10px -6px rgba(0, 0, 0, 0.8);
-}
-
-html:not(.dark) .synth-keyboard__bed {
-  background: #b9b2cf;
-  box-shadow: inset 0 5px 8px -5px rgba(60, 45, 110, 0.45);
+  box-shadow: inset 0 6px 10px -6px var(--kb-bed-shadow);
 }
 
 .synth-keyboard__white {
@@ -176,6 +186,12 @@ html:not(.dark) .synth-keyboard__bed {
   padding-bottom: 8px;
   transform-origin: top center;
   transition: transform 0.04s ease, background 0.05s ease;
+}
+
+/* Inset ring: an outer ring would be clipped between adjacent keys. */
+.synth-keyboard__white:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: -3px;
 }
 
 .synth-keyboard__white.is-active {
@@ -212,6 +228,12 @@ html:not(.dark) .synth-keyboard__bed {
   transition: transform 0.04s ease, background 0.05s ease;
 }
 
+/* Inset ring: an outer ring would be clipped between adjacent keys. */
+.synth-keyboard__black:focus-visible {
+  outline: 2px solid var(--demo-accent-light);
+  outline-offset: -3px;
+}
+
 .synth-keyboard__black.is-active {
   background: var(--kb-black-pressed);
   transform: translateX(-50%) scaleY(1.04);
@@ -233,7 +255,7 @@ html:not(.dark) .synth-keyboard__bed {
   background: rgba(255, 255, 255, 0.6);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.14);
   color: rgba(0, 0, 0, 0.42);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.58rem;
   font-weight: 700;
   line-height: 1;
@@ -253,10 +275,25 @@ html:not(.dark) .synth-keyboard__bed {
   color: rgba(255, 255, 255, 0.62);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .synth-keyboard__white,
+  .synth-keyboard__black {
+    transition: background 0.05s ease;
+  }
+
+  .synth-keyboard__white.is-active {
+    transform: none;
+  }
+
+  .synth-keyboard__black.is-active {
+    transform: translateX(-50%);
+  }
+}
+
 /* Note name printed above the keycap hint, so the keycap row stays aligned. */
 .synth-keyboard__name {
   color: rgba(0, 0, 0, 0.3);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.52rem;
   font-weight: 700;
   letter-spacing: 0.04em;
