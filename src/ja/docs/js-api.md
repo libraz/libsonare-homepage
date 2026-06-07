@@ -333,7 +333,7 @@ function analyzeWithProgress(
 | リズム傾向 | `analyzeRhythm(samples, sampleRate, ...)` | グルーヴ、シンコペーション、規則性を見ます。 |
 | ダイナミクス | `analyzeDynamics(samples, sampleRate, ...)` | ダイナミックレンジ、ラウドネスレンジ、クレストファクター、圧縮傾向を見ます。 |
 | 音色 | `analyzeTimbre(samples, sampleRate, ...)` | ブライトネス、ウォームス、密度、粗さ、複雑さを返します。 |
-| コード | `detectChords(samples, sampleRate, options?)` | HMM 平滑化、キー文脈、転回形、`chromaMethod: 'stft' \| 'nnls'` を指定できます。 |
+| コード | `detectChords(samples, sampleRate, options?)` | コード区間を `{ chords }` として返します。HMM 平滑化、キー文脈、転回形、`chromaMethod: 'stft' \| 'nnls'` を指定できます。 |
 | セクション | `analyzeSections(samples, sampleRate, ...)` | イントロ、ヴァース、コーラス、ブリッジ、アウトロなどの構造を推定します。 |
 | メロディ | `analyzeMelody(samples, sampleRate, ...)` | ピッチ追跡ベースの単音メロディ輪郭です。 |
 
@@ -344,11 +344,11 @@ const keys = detectKeyCandidates(samples, sampleRate, {
   genreHint: 'pop',
 });
 
-const chords = detectChords(samples, sampleRate, {
+const { chords } = detectChords(samples, sampleRate, {
   useHmm: true,
   useKeyContext: true,
-  keyRoot: keys[0].root,
-  keyMode: keys[0].mode,
+  keyRoot: keys[0].key.root,
+  keyMode: keys[0].key.mode,
   chromaMethod: 'nnls',
 });
 
@@ -403,7 +403,12 @@ console.log(roman);  // 例: ["I", "IV", "V", "vi"]
 const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6);
 console.log(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence);
 
-const blind = detectAcoustic(roomRecording, sampleRate, 6, 24, 30, 10);
+const blind = detectAcoustic(roomRecording, sampleRate, {
+  nOctaveBands: 6,
+  nThirdOctaveSubbands: 24,
+  minDecayDb: 30,
+  noiseFloorMarginDb: 10,
+});
 console.log(blind.isBlind, blind.rt60Bands);
 
 const estimate = estimateRoom(roomRecording, sampleRate, {
@@ -1682,6 +1687,7 @@ interface AnalysisResult {
   timbre: Timbre;
   dynamics: Dynamics;
   rhythm: RhythmFeatures;
+  melody: MelodyContour;
   form: string;  // 例: "IABABCO"
 }
 ```
@@ -1764,6 +1770,8 @@ interface TimbreAnalysisResult extends TimbreFrame {
 ```typescript
 interface Dynamics {
   dynamicRangeDb: number;
+  peakDb: number;
+  rmsDb: number;
   loudnessRangeDb: number;
   crestFactor: number;
   isCompressed: boolean;
@@ -1777,6 +1785,8 @@ interface RhythmFeatures {
   syncopation: number;
   grooveType: string;  // "straight", "shuffle", "swing"
   patternRegularity: number;
+  tempoStability: number;
+  timeSignature: TimeSignature;
 }
 ```
 

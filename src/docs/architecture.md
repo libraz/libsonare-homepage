@@ -387,7 +387,7 @@ A phase vocoder is the standard way to time-stretch audio (or, combined with res
 
 ### Streaming Pipeline
 
-The streaming pipeline processes audio in real-time, maintaining overlap state between chunks.
+The streaming pipeline processes audio in real time, maintaining overlap state between chunks.
 
 ```mermaid
 flowchart LR
@@ -442,7 +442,7 @@ The streaming pipeline also accumulates chroma and onset data for progressive BP
 
 ### Lazy Initialization
 
-MusicAnalyzer initialises sub-analyzers on demand. Each intermediate (STFT, chroma, onset envelope, etc.) is computed the first time it's needed and reused afterwards.
+MusicAnalyzer initializes sub-analyzers on demand. Each intermediate (STFT, chroma, onset envelope, etc.) is computed the first time it's needed and reused afterwards.
 
 ```cpp
 // BPM only (computes onset envelope)

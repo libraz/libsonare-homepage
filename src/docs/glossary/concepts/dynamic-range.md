@@ -39,7 +39,7 @@ Use loudness-matched A/B comparison. Otherwise, the denser version may seem bett
 
 ## Common Pitfalls
 
-If the post-processing chorus no longer lifts, the kick rounds off, only the vocal consonants jump forward, or the air in quiet sections disappears, the chain is probably taking too much dynamic range away. A higher LUFS alone is not evidence of improvement; confirm with loudness-matched A/B that the musical undulation is still there.
+If the post-processing chorus no longer lifts, the kick rounds off, only the vocal consonants jump forward, or the air in quiet sections disappears, the chain is probably taking too much dynamic range away. A higher LUFS alone is not evidence of improvement; verify with loudness-matched A/B that the musical movement is still there.
 
 The opposite mistake is leaving too much movement, which makes the master hard to follow on small speakers or in noisy rooms. The goal is not to erase movement but to land in a range where the intended movement still reaches the listener.
 

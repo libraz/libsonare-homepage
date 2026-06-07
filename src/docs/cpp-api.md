@@ -297,7 +297,7 @@ struct StreamConfig {
   WindowType window = WindowType::Hann;
 
   // Feature flags
-  bool compute_magnitude = true;
+  bool compute_magnitude = false;
   bool compute_mel = true;
   bool compute_chroma = true;
   bool compute_onset = true;
@@ -633,7 +633,7 @@ std::vector<float> spectral_centroid(const Spectrogram& spec, int sr);
 std::vector<float> spectral_bandwidth(const Spectrogram& spec, int sr);
 
 // Per-frame spectral rolloff (Hz)
-std::vector<float> spectral_rolloff(const Spectrogram& spec, int sr, float percent = 0.85f);
+std::vector<float> spectral_rolloff(const Spectrogram& spec, int sr, float roll_percent = 0.85f);
 
 // Per-frame spectral flatness
 std::vector<float> spectral_flatness(const Spectrogram& spec);
@@ -780,8 +780,8 @@ auto normalized = normalize(audio, 0.0f);      // Target peak level in dB
 // RMS normalization
 auto rms_norm = normalize_rms(audio, -20.0f);  // Target RMS level in dB
 
-// Silence trimming
-auto trimmed = trim(audio, -60.0f);            // Threshold in dB
+// Silence trimming (absolute dBFS threshold)
+auto trimmed = trim_absolute(audio, -60.0f);   // Threshold in dBFS
 
 // Level measurement
 float peak = peak_db(audio);  // Peak amplitude in dB
@@ -807,9 +807,9 @@ full mapping.
 
 ::: tip What each helper is for
 - **`preemphasis` / `deemphasis`** — classic one-tap IIR pre-processing for the waveform.
-- **`trim_silence` / `split_silence`** — trim leading/trailing silence or split on silent gaps.
-- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — framing and size-alignment utilities for fixed-frame DSP.
-- **`peak_pick` / `vector_normalize`** — peak detection on 1-D signals and vector-norm normalisation.
+- **`trim` / `split`** — trim leading/trailing silence or split on silent gaps.
+- **`frame` / `pad_center` / `fix_length` / `fix_frames`** — framing and size-alignment utilities for fixed-frame DSP.
+- **`peak_pick` / `vector_normalize`** — peak detection on 1-D signals and vector-norm normalization.
 - **`pcen`** — dynamic range compression for mel spectrograms.
 - **`tonnetz`** — projects chroma into a 6-D harmonic space.
 - **`tempogram` / `plp`** — time-varying tempo representation and dominant local pulse.
@@ -820,12 +820,12 @@ full mapping.
 auto pre   = preemphasis(audio, /*coef=*/0.97f);
 auto deemp = deemphasis(audio, /*coef=*/0.97f);
 
-// Silence trim / split (librosa.effects.trim / split)
-auto [trimmed, start_sample, end_sample] = trim_silence(audio, /*top_db=*/60.0f);
-auto intervals = split_silence(audio, /*top_db=*/60.0f);  // std::vector<std::pair<int,int>>
+// Silence trim / split (librosa.effects.trim / split) — buffer in, sample-index ranges out
+TrimResult trimmed = trim(samples, /*top_db=*/60.0f);  // {audio, start_sample, end_sample}
+auto intervals = split(samples, /*top_db=*/60.0f);     // std::vector<std::pair<int,int>>
 
 // Frame / pad / length helpers (librosa.util.*)
-auto frames = frame_signal(samples, /*frame_length=*/2048, /*hop_length=*/512);
+auto frames = frame(samples, /*frame_length=*/2048, /*hop_length=*/512);
 auto padded = pad_center(values, /*size=*/4096);
 auto fixed  = fix_length(values, /*size=*/4096);
 auto bounds = fix_frames(frame_indices, /*x_min=*/0, /*x_max=*/-1);
@@ -953,8 +953,8 @@ float frames_to_time(int frames, int sr, int hop_length);
 int time_to_frames(float time, int sr, int hop_length);
 
 // Frames <-> Samples (librosa.frames_to_samples / samples_to_frames)
-int frames_to_samples(int frames, int hop_length = 512, int n_fft = 0);
-int samples_to_frames(int samples, int hop_length = 512, int n_fft = 0);
+int frames_to_samples(int frames, int hop_length, int n_fft = 0);
+int samples_to_frames(int samples, int hop_length, int n_fft = 0);
 
 // dB conversions (librosa.power_to_db / amplitude_to_db / inverses)
 std::vector<float> power_to_db(const std::vector<float>& values,
@@ -1123,10 +1123,11 @@ Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset
 ## Error Handling
 
 ```cpp
-class SonareException : public std::exception {
+class SonareException : public std::runtime_error {
 public:
+  explicit SonareException(ErrorCode code);
+  SonareException(ErrorCode code, const std::string& message);
   ErrorCode code() const;
-  const char* what() const noexcept override;
 };
 
 try {

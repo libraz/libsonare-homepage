@@ -268,8 +268,8 @@ chords = sonare.detect_chords(
     audio.sample_rate,
     use_hmm=True,
     use_key_context=True,
-    key_root=keys[0].root,
-    key_mode=keys[0].mode,
+    key_root=keys[0].key.root,
+    key_mode=keys[0].key.mode,
     chroma_method="nnls",
 )
 
@@ -290,8 +290,8 @@ result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress
 ```python
 labels = sonare.chord_functional_analysis(
     audio.data,
-    key_root=keys[0].root,
-    key_mode=keys[0].mode,
+    key_root=keys[0].key.root,
+    key_mode=keys[0].key.mode,
     sample_rate=audio.sample_rate,
     use_key_context=True,
 )
@@ -350,18 +350,18 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `hpss(samples, sr, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS） |
-| `harmonic(samples, sr)` | `list[float]` | 倍音成分を抽出 |
-| `percussive(samples, sr)` | `list[float]` | 打撃成分を抽出 |
-| `time_stretch(samples, sr, rate)` | `list[float]` | ピッチを変えずにテンポ変更 |
-| `pitch_shift(samples, sr, semitones)` | `list[float]` | テンポを変えずにピッチ変更 |
-| `pitch_correct_to_midi(samples, sr, current_midi?, target_midi?)` | `list[float]` | 目標 MIDI ノートへピッチ補正 |
-| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sr?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | コントゥアに沿うピッチ補正。フレームごとの `f0_hz` コントゥアに沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
-| `note_stretch(samples, sr, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
-| `voice_change(samples, sr, pitch_semitones?, formant_factor?)` | `list[float]` | ピッチとフォルマントを独立にシフト |
-| `voice_change_realtime(samples, sr?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
-| `normalize(samples, sr, target_db?)` | `list[float]` | 目標 dB にノーマライズ（デフォルト: 0.0） |
-| `trim(samples, sr, threshold_db?)` | `list[float]` | 無音区間をトリム（デフォルト: -60.0 dB） |
+| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS） |
+| `harmonic(samples, sample_rate)` | `list[float]` | 倍音成分を抽出 |
+| `percussive(samples, sample_rate)` | `list[float]` | 打撃成分を抽出 |
+| `time_stretch(samples, sample_rate, rate)` | `list[float]` | ピッチを変えずにテンポ変更 |
+| `pitch_shift(samples, sample_rate, semitones)` | `list[float]` | テンポを変えずにピッチ変更 |
+| `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | 目標 MIDI ノートへピッチ補正 |
+| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | コントゥアに沿うピッチ補正。フレームごとの `f0_hz` コントゥアに沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
+| `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
+| `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | ピッチとフォルマントを独立にシフト |
+| `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
+| `normalize(samples, sample_rate, target_db?)` | `list[float]` | 目標 dB にノーマライズ（デフォルト: 0.0） |
+| `trim(samples, sample_rate, threshold_db?)` | `list[float]` | 無音区間をトリム（デフォルト: -60.0 dB） |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | 目標サンプルレートへリサンプリング |
 
 `trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の librosa 互換 `trim_silence(...)` はフレーム RMS と `top_db` を使い、トリム後の音声と元音源上のサンプル範囲を返します。
@@ -404,35 +404,35 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `stft(samples, sr, n_fft?, hop_length?)` | `StftResult` | 短時間フーリエ変換 |
-| `stft_db(samples, sr, n_fft?, hop_length?)` | `tuple` | デシベル単位の STFT |
-| `mel_spectrogram(samples, sr, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | メルスペクトログラム。`fmin`/`fmax` で帯域の端を指定し、`htk=True` で HTK 方式のメル公式を使います |
-| `mfcc(samples, sr, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?)` | `MfccResult` | メル周波数ケプストラム係数 |
-| `chroma(samples, sr, n_fft?, hop_length?)` | `ChromaResult` | クロマ特徴（ピッチクラス分布） |
-| `spectral_centroid(samples, sr, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル重心 |
-| `spectral_bandwidth(samples, sr, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル帯域幅 |
-| `spectral_rolloff(samples, sr, n_fft?, hop_length?, roll_percent?)` | `list[float]` | フレームごとのスペクトルロールオフ |
-| `spectral_flatness(samples, sr, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル平坦度 |
-| `spectral_contrast(samples, sr?, n_fft?, hop_length?, n_bands?, fmin?, quantile?)` | `MatrixResult` | スペクトルコントラスト。形状は `(n_bands + 1, n_frames)` |
-| `poly_features(samples, sr?, n_fft?, hop_length?, order?)` | `MatrixResult` | フレームごとの多項式スペクトル係数 |
-| `zero_crossing_rate(samples, sr, frame_length?, hop_length?)` | `list[float]` | フレームごとのゼロ交差率 |
-| `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `list[int]` | 波形がゼロを横切るサンプル位置 |
-| `rms_energy(samples, sr, frame_length?, hop_length?)` | `list[float]` | フレームごとの RMS エネルギー |
-| `pitch_yin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
-| `pitch_pyin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
+| `stft(samples, sample_rate, n_fft?, hop_length?)` | `StftResult` | 短時間フーリエ変換 |
+| `stft_db(samples, sample_rate, n_fft?, hop_length?)` | `tuple` | デシベル単位の STFT |
+| `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | メルスペクトログラム。`fmin`/`fmax` で帯域の端を指定し、`htk=True` で HTK 方式のメル公式を使います |
+| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?)` | `MfccResult` | メル周波数ケプストラム係数 |
+| `chroma(samples, sample_rate, n_fft?, hop_length?)` | `ChromaResult` | クロマ特徴（ピッチクラス分布） |
+| `spectral_centroid(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル重心 |
+| `spectral_bandwidth(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル帯域幅 |
+| `spectral_rolloff(samples, sample_rate, n_fft?, hop_length?, roll_percent?)` | `list[float]` | フレームごとのスペクトルロールオフ |
+| `spectral_flatness(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | フレームごとのスペクトル平坦度 |
+| `spectral_contrast(samples, sample_rate?, n_fft?, hop_length?, n_bands?, fmin?, quantile?)` | `np.ndarray` | スペクトルコントラスト。形状は `(n_bands + 1, n_frames)` |
+| `poly_features(samples, sample_rate?, n_fft?, hop_length?, order?)` | `np.ndarray` | フレームごとの多項式スペクトル係数 |
+| `zero_crossing_rate(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | フレームごとのゼロ交差率 |
+| `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `np.ndarray` | 波形がゼロを横切るサンプル位置 |
+| `rms_energy(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | フレームごとの RMS エネルギー |
+| `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
+| `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
 | `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | 検出済み周波数からビン単位のチューニングずれを推定 |
-| `estimate_tuning(samples, sr?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | 音声からチューニングずれを直接推定 |
-| `cqt(samples, sr, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | 定Q変換の振幅 |
-| `vqt(samples, sr, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | 可変Q変換の振幅 |
-| `nnls_chroma(samples, sr)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す |
+| `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | 音声からチューニングずれを直接推定 |
+| `cqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | 定Q変換の振幅 |
+| `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | 可変Q変換の振幅 |
+| `nnls_chroma(samples, sample_rate)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | 行優先スペクトログラムから NMF 分解係数 `(w, h)` を返す |
-| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `MatrixResult` | 行優先スペクトログラムの近傍フィルタ |
-| `onset_envelope(samples, sr, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度包絡（テンポグラム系の入力） |
-| `lufs(samples, sr)` | `LufsResult` | Integrated／momentary／short-term LUFS とラウドネスレンジ（EBU R128） |
-| `lufs_interleaved(samples, channels, sr?)` | `LufsResult` | インターリーブされたサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
-| `ebur128_loudness_range(samples, sr?)` | `float` | EBU R128 loudness range（LRA、LU 単位） |
-| `momentary_lufs(samples, sr)` | `list[float]` | フレームごとの momentary LUFS |
-| `short_term_lufs(samples, sr)` | `list[float]` | フレームごとの short-term LUFS |
+| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルタ |
+| `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度包絡（テンポグラム系の入力） |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／momentary／short-term LUFS とラウドネスレンジ（EBU R128） |
+| `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | インターリーブされたサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
+| `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range（LRA、LU 単位） |
+| `momentary_lufs(samples, sample_rate)` | `list[float]` | フレームごとの momentary LUFS |
+| `short_term_lufs(samples, sample_rate)` | `list[float]` | フレームごとの short-term LUFS |
 
 デフォルトパラメータ: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, ピッチ検出の `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`。CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。
 
@@ -646,7 +646,7 @@ class StreamConfig:
     fmin: float = 0.0
     fmax: float = 0.0
     tuning_ref_hz: float = 440.0
-    compute_magnitude: bool = True
+    compute_magnitude: bool = False
     compute_mel: bool = True
     compute_chroma: bool = True
     compute_onset: bool = True
@@ -856,7 +856,7 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 
 パラメータはキーワード専用で、対応する `MasteringChainConfig` のキーを snake_case にしたものです。
 
-ダイナミクス系は `(処理後サンプル, ゲインリダクションサンプル)` を返します。リペア系は処理後サンプル（`np.ndarray`）を返します。
+ダイナミクス系は `(processed_samples, latency_samples)` のタプルを返し、`latency_samples` は `int` です。リペア系は処理後サンプル（`np.ndarray`）を返します。
 
 | 関数 | 戻り値 | 主なパラメータ |
 |------|--------|----------------|

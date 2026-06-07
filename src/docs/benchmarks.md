@@ -123,7 +123,7 @@ libsonare replaces this with a custom sliding median:
 - Result: ~20x faster end-to-end than the scipy version on this hardware
 
 ::: details What is a median filter (and a sliding median)?
-A **median filter** replaces each value with the *median* of its neighbours in a small window. Unlike averaging, it removes spikes and outliers while keeping edges sharp — which is exactly why HPSS uses it: a horizontal median pass keeps steady (harmonic) lines, a vertical pass keeps sharp (percussive) hits. A **sliding median** computes this efficiently as the window moves across the data, instead of re-sorting from scratch at every step.
+A **median filter** replaces each value with the *median* of its neighbors in a small window. Unlike averaging, it removes spikes and outliers while keeping edges sharp — which is exactly why HPSS uses it: a horizontal median pass keeps steady (harmonic) lines, a vertical pass keeps sharp (percussive) hits. A **sliding median** computes this efficiently as the window moves across the data, instead of re-sorting from scratch at every step.
 :::
 
 ### pYIN (12.3x): native Viterbi + parallelized candidates

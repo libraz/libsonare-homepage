@@ -297,7 +297,7 @@ key = detect_key(result.harmonic, result.sample_rate)
 # The Python CLI reports harmonic/percussive energies:
 sonare hpss song.mp3 --json
 
-# Writing harmonic/percussive WAV stems is provided by the C++ sonare_cli build:
+# Writing harmonic/percussive WAV stems is available in the C++ sonare_cli build:
 #   sonare hpss song.wav -o separated
 ```
 

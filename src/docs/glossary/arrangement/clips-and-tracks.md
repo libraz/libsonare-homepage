@@ -67,7 +67,7 @@ Once the structure exists, arranging is mostly a handful of operations.
 **Clip operations** — the everyday moves:
 
 - **Move** a clip to a new position (and optionally to another track).
-- **Set gain** to make one clip louder or quieter than its neighbours.
+- **Set gain** to make one clip louder or quieter than its neighbors.
 - **Fade in / fade out** so a clip enters and leaves smoothly instead of clicking.
 - **Loop** a clip so a short block repeats across a longer region.
 - **Duplicate** a clip to copy a part somewhere else.

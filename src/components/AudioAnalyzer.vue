@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { MetricItem, TechPanel, TransportButton } from '@/components/ui';
+import {
+  ANALYZER_TERM_SLUGS,
+  type AnalyzerTermKey,
+  enCopy as analyzerEnCopy,
+  jaCopy as analyzerJaCopy,
+} from '@/components/analyzer/analyzerCopy';
+import { MetricItem, TechPanel, TermLabel, Tooltip, TransportButton } from '@/components/ui';
 import { useAudioAnalysis } from '@/composables/useAudioAnalysis';
 import { useAudioPlayer } from '@/composables/useAudioPlayer';
 import { useI18n } from '@/composables/useI18n';
@@ -14,7 +20,28 @@ defineProps<{
   libVersion?: string;
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+
+const termCopy = computed(() => (locale.value === 'ja' ? analyzerJaCopy : analyzerEnCopy));
+const glossaryBase = computed(() =>
+  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
+);
+
+/** Build rich-tooltip props for a metric from the copy + slug tables. */
+function term(key: AnalyzerTermKey) {
+  const c = termCopy.value;
+  const item = c.items[key];
+  const slug = ANALYZER_TERM_SLUGS[key];
+  return {
+    eyebrow: c.eyebrow,
+    title: item.title,
+    body: item.body,
+    tip: item.tip,
+    tipLabel: c.tipLabel,
+    href: slug ? `${glossaryBase.value}/${slug}` : undefined,
+    linkLabel: c.linkLabel,
+  };
+}
 const isLoadingDemo = ref(false);
 const isStreamingMode = ref(true); // Enable streaming by default
 
@@ -612,10 +639,20 @@ onMounted(() => {
             :duration="duration"
             :is-playing="isPlaying"
           />
+          <Tooltip v-bind="term('visualizer')" class="analyzer__overlay-tip">
+            <button type="button" class="analyzer__info" :aria-label="term('visualizer').title">
+              <span aria-hidden="true">i</span>
+            </button>
+          </Tooltip>
         </div>
 
         <!-- Waveform & Transport -->
         <div class="analyzer__transport">
+          <Tooltip v-bind="term('waveform')" class="analyzer__overlay-tip">
+            <button type="button" class="analyzer__info" :aria-label="term('waveform').title">
+              <span aria-hidden="true">i</span>
+            </button>
+          </Tooltip>
           <WaveformVisualizer
             :audio-buffer="audioBuffer"
             :beats="beats ?? undefined"
@@ -683,7 +720,14 @@ onMounted(() => {
           <div class="analyzer__metrics-body">
             <!-- Primary Analysis Results -->
             <div class="analyzer__metric-hero">
-              <span class="analyzer__metric-hero-label">{{ t('demo.panel.bpm') }}</span>
+              <span class="analyzer__metric-hero-label">
+                {{ t('demo.panel.bpm') }}
+                <Tooltip v-bind="term('bpm')">
+                  <button type="button" class="analyzer__info" :aria-label="term('bpm').title">
+                    <span aria-hidden="true">i</span>
+                  </button>
+                </Tooltip>
+              </span>
               <span class="analyzer__metric-hero-value">
                 <span v-if="bpmPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
                   <i></i><i></i><i></i>
@@ -694,7 +738,14 @@ onMounted(() => {
               <span v-else-if="displayBpmConfidence > 0" class="analyzer__metric-hero-conf">{{ displayBpmConfidence }}%</span>
             </div>
             <div class="analyzer__metric-hero">
-              <span class="analyzer__metric-hero-label">{{ t('demo.panel.key') }}</span>
+              <span class="analyzer__metric-hero-label">
+                {{ t('demo.panel.key') }}
+                <Tooltip v-bind="term('key')">
+                  <button type="button" class="analyzer__info" :aria-label="term('key').title">
+                    <span aria-hidden="true">i</span>
+                  </button>
+                </Tooltip>
+              </span>
               <span class="analyzer__metric-hero-value">
                 <span v-if="keyPending" class="analyzer__metric-pending" role="status" :aria-label="t('demo.analyzing')">
                   <i></i><i></i><i></i>
@@ -707,7 +758,14 @@ onMounted(() => {
             <!-- Chord Progression Pattern (C++ computed) -->
             <div v-if="displayVotedPattern.length >= 4" class="analyzer__pattern">
               <div class="analyzer__pattern-header">
-                <span class="analyzer__pattern-label">{{ t('demo.panel.pattern') }}</span>
+                <span class="analyzer__pattern-label">
+                  {{ t('demo.panel.pattern') }}
+                  <Tooltip v-bind="term('pattern')">
+                    <button type="button" class="analyzer__info" :aria-label="term('pattern').title">
+                      <span aria-hidden="true">i</span>
+                    </button>
+                  </Tooltip>
+                </span>
                 <span v-if="displayDetectedPatternName" class="analyzer__pattern-name">{{ displayDetectedPatternName }}</span>
               </div>
               <div class="analyzer__pattern-chords">
@@ -717,12 +775,20 @@ onMounted(() => {
             </div>
             <div class="analyzer__metrics-divider"></div>
             <!-- Secondary Info -->
-            <MetricItem :label="t('demo.panel.timeSig')" :value="displayTimeSignature" />
-            <MetricItem :label="t('demo.panel.duration')" :value="formatTime(duration)" />
-            <MetricItem :label="t('demo.panel.rate')" :value="`${(sampleRate / 1000).toFixed(1)}kHz`" />
+            <MetricItem :value="displayTimeSignature">
+              <template #label><TermLabel v-bind="term('timeSig')">{{ t('demo.panel.timeSig') }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="formatTime(duration)">
+              <template #label><TermLabel v-bind="term('duration')">{{ t('demo.panel.duration') }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="`${(sampleRate / 1000).toFixed(1)}kHz`">
+              <template #label><TermLabel v-bind="term('rate')">{{ t('demo.panel.rate') }}</TermLabel></template>
+            </MetricItem>
             <div class="analyzer__metrics-divider"></div>
             <!-- Source -->
-            <MetricItem :label="t('demo.panel.source')" :value="fileName" variant="success" />
+            <MetricItem :value="fileName" variant="success">
+              <template #label><TermLabel v-bind="term('source')">{{ t('demo.panel.source') }}</TermLabel></template>
+            </MetricItem>
           </div>
         </TechPanel>
       </aside>
@@ -740,4 +806,66 @@ onMounted(() => {
 <style scoped src="./analyzer/audioAnalyzerLayout.css"></style>
 <style scoped src="./analyzer/audioAnalyzerMetrics.css"></style>
 <style scoped src="./analyzer/audioAnalyzerResponsive.css"></style>
+
+<style scoped>
+/* Info dot beside the hero / pattern labels (secondary metrics use TermLabel). */
+.analyzer__metric-hero-label,
+.analyzer__pattern-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.analyzer__info {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.analyzer__info > span {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.analyzer__info:hover,
+.analyzer__info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
+}
+
+/* Overlay info dot pinned to the top-right of a visualization panel. */
+.analyzer__transport {
+  position: relative;
+}
+
+.analyzer__overlay-tip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+}
+
+.analyzer__overlay-tip .analyzer__info {
+  width: 18px;
+  height: 18px;
+  background: var(--demo-bg-overlay, rgba(8, 10, 14, 0.7));
+  backdrop-filter: blur(6px);
+}
+</style>
 

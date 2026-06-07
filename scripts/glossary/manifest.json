@@ -363,6 +363,45 @@
           "title": { "en": "Bounce and Rendering", "ja": "バウンスとレンダリング" }
         }
       ]
+    },
+    {
+      "id": "acoustics",
+      "label": { "en": "Room Acoustics", "ja": "室内音響" },
+      "entries": [
+        {
+          "id": "reverberation-time",
+          "status": "published",
+          "title": { "en": "Reverberation Time (RT60 and EDT)", "ja": "残響時間（RT60 と EDT）" }
+        },
+        {
+          "id": "clarity-definition",
+          "status": "published",
+          "title": {
+            "en": "Clarity and Definition (C50, C80, D50)",
+            "ja": "明瞭度と明瞭性（C50・C80・D50）"
+          }
+        },
+        {
+          "id": "source-distance",
+          "status": "published",
+          "title": { "en": "Source Distance and DRR", "ja": "音源距離と DRR" }
+        },
+        {
+          "id": "room-geometry",
+          "status": "published",
+          "title": { "en": "Room Geometry and Volume", "ja": "部屋の形状と容積" }
+        },
+        {
+          "id": "absorption-bands",
+          "status": "published",
+          "title": { "en": "Per-Band Decay and Absorption", "ja": "帯域別の減衰と吸音" }
+        },
+        {
+          "id": "inverse-estimation",
+          "status": "published",
+          "title": { "en": "Inverse Room Estimation", "ja": "逆問題による部屋推定" }
+        }
+      ]
     }
   ]
 }

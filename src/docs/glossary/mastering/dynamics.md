@@ -10,7 +10,7 @@ Dynamics controls decide how much movement the master keeps. In the demo they dr
 This is one topic, not five separate decisions. Threshold, ratio, attack, release, and knee only make sense together.
 
 ::: tip Tune the five together, with your ears
-Changing one control shifts what the others do, so judge the *result*, not each knob in isolation. Always confirm with loudness-matched [A/B Comparison](../ab-comparison.md): compression that only sounds "better" because it got louder is not actually better.
+Changing one control shifts what the others do, so judge the *result*, not each knob in isolation. Always check it against a loudness-matched [A/B Comparison](../ab-comparison.md): compression that only sounds "better" because it got louder is not actually better.
 :::
 
 ## Threshold, Ratio, Attack, Release, Knee

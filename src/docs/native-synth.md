@@ -75,6 +75,8 @@ Every preset selects one `engineMode`. The wrapper sections (filter, envelopes, 
 
 The classic oscillator → filter → amp voice. Detuned unison, drift, a pre-filter drive stage, and a choice of four filter models give it everything from fat saw leads to wide pads. Good for **leads, basses, pads, and plucks** — anything you'd reach for an analog synth to do. Presets: `sine`, `saw-lead`, `square-lead`, `sub-bass`, `warm-pad`.
 
+<SonareDemo id="synth-note" />
+
 The filter model is the heart of the "character". Four classic models are available via `filterModel`:
 
 | Model | Voicing it emulates | Notes |

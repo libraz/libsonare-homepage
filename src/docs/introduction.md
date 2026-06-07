@@ -8,7 +8,7 @@ By the end of this page you should be able to:
 
 - explain what libsonare is and which kinds of music/audio tools it supports;
 - understand the basic MIR pipeline from waveform to spectrogram, features, and higher-level music analysis;
-- tell analysis, editing, mixing, mastering, realtime streaming, room acoustics, built-in instruments, the headless-DAW runtime, and inverse features apart;
+- distinguish between analysis, editing, mixing, mastering, realtime streaming, room acoustics, built-in instruments, the headless-DAW runtime, and inverse features;
 - choose the next page from the [Learning Path](./learning-path.md) without needing DSP background.
 
 ## What is libsonare?
@@ -28,13 +28,13 @@ It covers several related jobs:
 | Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
 
 ::: info Loudness, LUFS, and true peak
-LUFS (Loudness Units Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including peaks that occur between samples, which ordinary peak meters miss — important to avoid distortion on playback.
+LUFS (Loudness Units Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including peaks that occur between samples, which ordinary peak meters miss — important for avoiding distortion on playback.
 :::
 
 It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
 
 ::: details What is WebAssembly?
-WebAssembly (WASM) is a binary instruction format that runs in web browsers at near-native speed. It allows code written in languages like C++ to be compiled and executed in the browser, without needing a server or installing anything. libsonare uses this to bring C++-level audio analysis performance directly to web applications.
+WebAssembly (WASM) is a binary instruction format that runs in web browsers at near-native speed. It lets code written in languages like C++ be compiled and run in the browser, with no server and nothing to install. libsonare uses this to bring C++-level audio analysis performance directly to web applications.
 :::
 
 ## What is Music Information Retrieval?
@@ -72,7 +72,7 @@ A DAW (Digital Audio Workstation) is software for recording, editing, and produc
 
 - **Audio researchers** — If you use [librosa](https://librosa.org/) in Python, libsonare provides a familiar API with compatible parameters and algorithms, but runs the heavy pipeline in native C++ and also works in the browser.
 
-- **Game / interactive media developers** — Analyze music in real-time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
+- **Game / interactive media developers** — Analyze music in real time for rhythm games, music visualizers, or adaptive audio systems using the streaming API.
 
 ::: tip Try it in the browser
 Open [Demos](/demos) for the browser-local tools. Use [Music Analysis Studio](/music-analysis) for MIR features, or open the [Mastering Studio](/mastering) to render a local-only WAV master with no upload.
@@ -114,6 +114,8 @@ The **Short-Time** variant (STFT) applies this repeatedly to overlapping windows
 
 This spectrogram is the foundation for everything that follows.
 
+<SonareDemo id="stft-basics" />
+
 ### Stage 2: Feature Extraction
 
 From the spectrogram, libsonare computes various **features** — each designed to capture a specific aspect of the audio:
@@ -141,6 +143,8 @@ The mel scale is a perceptual scale of pitch. Humans don't perceive frequency li
 ::: details What is timbre?
 Timbre (pronounced "TAM-ber") is what makes a piano and a guitar sound different even when playing the same note at the same volume. It's the "color" or "texture" of a sound, determined by the relative strengths of its harmonic frequencies. MFCC features capture this spectral shape in a compact form, making them useful for distinguishing between different instruments, voices, or sound types.
 :::
+
+<SonareDemo id="waveform-harmonics" />
 
 - **CQT / VQT** — Transforms with frequency resolution that matches musical pitch, unlike the standard FFT where resolution is uniform across frequencies.
 

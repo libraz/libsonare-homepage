@@ -82,7 +82,7 @@ A few signatures don't line up across all three bindings:
 |-------|--------------|
 | Mastering chain config | `masteringChain(...)` and `StreamingMasteringChain` use nested config objects; `masterAudio(...)` overrides use flat dot-notation keys |
 | `StreamingMasteringChain` scope | Block-safe stages only — it rejects repair stages that need lookaround/file context and the whole-file `loudness` stage; use one-shot mastering APIs for those |
-| `analyze(...)` return | All bindings (C ABI, Python, Node native, WASM) return the complete `analyze` result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — so the field set matches across runtimes |
+| `analyze(...)` return | C ABI, Node native, and WASM return the complete `analyze` result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Python is the exception: its `AnalysisResult` carries only BPM, BPM confidence, key, time signature, and beat times; reach for the dedicated functions (`detect_chords`, `analyze_sections`, …) for the other families |
 | `normalize(...)` defaults | Module-level `normalize(...)` (Python, WASM, Node native) defaults to `0.0` (full scale); the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0` |
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM; pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
@@ -94,7 +94,7 @@ A few signatures don't line up across all three bindings:
 | CLI surface | Some availability depends on whether the command is the PyPI Python CLI or the source-built C++ CLI — see [CLI](./cli.md) |
 
 ::: info Rich analysis fields
-The `analyze(...)` result carries chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength on every binding. When you only need one family, the focused helpers stay available across runtimes: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
+On C ABI, Node native, and WASM, the `analyze(...)` result carries chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Python is the exception: its `analyze(...)` returns only BPM, BPM confidence, key, time signature, and beat times. When you only need one family — or you are on Python and need anything beyond the core summary — the focused helpers stay available across runtimes: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
 :::
 
 ## Verification Sources

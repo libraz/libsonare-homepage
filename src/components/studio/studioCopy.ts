@@ -151,6 +151,62 @@ export const enCopy = {
     body: 'Every edit rebuilds a libsonare Project — MIDI clips routed to three NativeSynth destinations — and bounces it offline to audio in milliseconds. The loop you hear and the WAV you download are the same deterministic render. This is a deliberately small session; the Project API goes much further.',
     docs: 'Project docs',
   },
+  terms: {
+    eyebrow: 'Studio',
+    tipLabel: 'How to use',
+    linkLabel: 'Open glossary',
+    resetLabel: 'Reset',
+    items: {
+      step: {
+        title: 'Step sequencer',
+        body: 'Each lane is one NativeSynth track; every row is a fixed pitch and every column a 16th-note step. Click a cell to arm or clear that note. The pattern is one 4/4 bar that loops.',
+        tip: 'Armed pads are auditioned while the transport is stopped, so you can build a part by ear before pressing play.',
+      },
+      mixer: {
+        title: 'Mixer',
+        body: 'Three channel strips feed a master bus. Levels and mutes apply to the live loop and to the WAV you bounce — they are the same render.',
+        tip: 'Balance the tracks here; pull a part down or mute it to hear how the arrangement changes.',
+      },
+      tempo: {
+        title: 'Tempo',
+        body: 'Playback speed in beats per minute (80–160). Changing it re-renders the loop at the new tempo.',
+        tip: 'Nudge tempo to find the groove — the bounce uses whatever value is set here.',
+        defaultRationale: 'Double-click the knob to restore 120 BPM.',
+      },
+      transport: {
+        title: 'Transport',
+        body: 'Starts and stops the loop. Playback needs a click first — browsers only start audio on a gesture — and the spacebar toggles it too.',
+        tip: 'Press play to hear the pattern; edits made while playing re-render the loop seamlessly.',
+      },
+      position: {
+        title: 'Position',
+        body: 'The play head as bar.beat.sixteenth. The loop is a single bar, so the bar stays at 1 while beat and sixteenth count through it.',
+        tip: 'Watch the run lights above to follow the same position visually.',
+      },
+      bounce: {
+        title: 'Bounce to WAV',
+        body: 'Renders the session offline to a 48 kHz WAV and downloads it. The file is the exact deterministic render of the loop you hear — nothing is captured in real time.',
+        tip: 'Bounce any time to save the current pattern, levels, and tempo as audio.',
+      },
+      level: {
+        title: 'Channel level',
+        body: 'The track fader, in dB (−∞ up to about +3). The LED meter beside it shows live post-fader peak, and the M button mutes the channel.',
+        tip: 'Set levels so no single track dominates; double-click the fader to return to unity.',
+        defaultRationale: 'Double-click the fader to reset the level.',
+      },
+      master: {
+        title: 'Master level',
+        body: 'The final output fader feeding the master bus and the bounce. Everything passes through it after the channel strips.',
+        tip: 'Trim the master so the bounce peaks comfortably below 0 dB.',
+        defaultRationale: 'Double-click the fader to reset the level.',
+      },
+      vu: {
+        title: 'Master meter',
+        body: 'Post-master peak level on a dB scale (−60 to 0). 0 dB is the digital ceiling; readings into the amber and red risk clipping the bounce.',
+        tip: 'Keep the loudest moments out of the red so the exported WAV stays clean.',
+      },
+    },
+  },
 };
 
 export const jaCopy: typeof enCopy = {
@@ -203,4 +259,79 @@ export const jaCopy: typeof enCopy = {
     body: '編集のたびに libsonare の Project（3 つの NativeSynth デスティネーションへルーティングされた MIDI クリップ）を再構築し、ミリ秒単位でオフラインレンダーします。聴いているループとダウンロードする WAV は同一の決定的レンダーです。これは意図的に小さなセッションで、Project API 自体はさらに多くの機能を持ちます。',
     docs: 'Project ドキュメント',
   },
+  terms: {
+    eyebrow: 'スタジオ',
+    tipLabel: '使い方',
+    linkLabel: '用語集を開く',
+    resetLabel: 'リセット',
+    items: {
+      step: {
+        title: 'ステップシーケンサー',
+        body: '各レーンが 1 つの NativeSynth トラックで、行は固定の音程、列は 16 分音符のステップです。セルをクリックするとそのノートのオン／オフを切り替えられます。パターンはループする 4/4 の 1 小節です。',
+        tip: '停止中はオンにしたパッドの音をその場で試聴できるので、再生前に耳で組み立てられます。',
+      },
+      mixer: {
+        title: 'ミキサー',
+        body: '3 本のチャンネルストリップがマスターバスへ送られます。レベルとミュートは再生中のループにもバウンスする WAV にも同じように反映されます（同一のレンダーです）。',
+        tip: 'ここでトラックのバランスを取ります。下げたりミュートしたりして、アレンジの変化を確認しましょう。',
+      },
+      tempo: {
+        title: 'テンポ',
+        body: '再生速度（BPM、80〜160）。変更するとループが新しいテンポで再レンダーされます。',
+        tip: 'テンポを動かしてグルーヴを探します。バウンスはここで設定した値を使います。',
+        defaultRationale: 'ノブをダブルクリックすると 120 BPM に戻ります。',
+      },
+      transport: {
+        title: 'トランスポート',
+        body: 'ループの再生／停止です。ブラウザはユーザー操作がないと音を鳴らせないため、最初は必ずクリックが必要です。スペースキーでも切り替えられます。',
+        tip: '再生でパターンを聴けます。再生中の編集もシームレスにループへ再レンダーされます。',
+      },
+      position: {
+        title: '位置',
+        body: '再生ヘッドを 小節.拍.16分 で表示します。ループは 1 小節なので小節は 1 のまま、拍と 16 分が進みます。',
+        tip: '上のランライトでも同じ位置を視覚的に追えます。',
+      },
+      bounce: {
+        title: 'WAV にバウンス',
+        body: 'セッションをオフラインで 48 kHz の WAV にレンダーしてダウンロードします。ファイルは聴いているループの決定的レンダーそのもので、リアルタイム録音ではありません。',
+        tip: 'いつでもバウンスして、現在のパターン・レベル・テンポを音声として保存できます。',
+      },
+      level: {
+        title: 'チャンネルレベル',
+        body: 'トラックのフェーダー（dB、−∞ から約 +3）。横の LED メーターはフェーダー後のライブピーク、M ボタンはチャンネルのミュートです。',
+        tip: '特定のトラックが突出しないようレベルを整えます。フェーダーをダブルクリックでユニティに戻ります。',
+        defaultRationale: 'フェーダーをダブルクリックするとレベルがリセットされます。',
+      },
+      master: {
+        title: 'マスターレベル',
+        body: 'マスターバスとバウンスへ送る最終出力フェーダーです。チャンネルストリップの後段で、すべてがここを通ります。',
+        tip: 'バウンスが 0 dB に十分な余裕を持って収まるようマスターを調整します。',
+        defaultRationale: 'フェーダーをダブルクリックするとレベルがリセットされます。',
+      },
+      vu: {
+        title: 'マスターメーター',
+        body: 'マスター後のピークレベルを dB スケール（−60〜0）で表示します。0 dB がデジタルの上限で、アンバー／レッドに入るとバウンスがクリップする恐れがあります。',
+        tip: '最も大きい瞬間がレッドに入らないようにすれば、書き出した WAV はクリーンに保てます。',
+      },
+    },
+  },
+};
+
+/** Help-tooltip term keys, derived from the English copy. */
+export type StudioTermKey = keyof typeof enCopy.terms.items;
+
+/**
+ * Glossary slug each term deep-links to (relative to `/docs/glossary/`).
+ * `undefined` terms still show a tooltip but render no docs link.
+ */
+export const STUDIO_TERM_SLUGS: Record<StudioTermKey, string | undefined> = {
+  step: 'arrangement/clips-and-tracks',
+  mixer: 'mixing/channel-strip',
+  tempo: 'arrangement/warp-and-tempo',
+  transport: 'realtime/realtime-engine',
+  position: undefined,
+  bounce: 'arrangement/bounce-and-rendering',
+  level: 'mixing/channel-strip',
+  master: 'concepts/gain-staging',
+  vu: 'mixing/automation-metering',
 };

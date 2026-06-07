@@ -205,6 +205,30 @@ const glossarySidebar = [
         ],
       },
       {
+        text: 'Room Acoustics',
+        collapsed: true,
+        items: [
+          {
+            text: 'Reverberation Time',
+            link: '/docs/glossary/acoustics/reverberation-time',
+          },
+          {
+            text: 'Clarity and Definition',
+            link: '/docs/glossary/acoustics/clarity-definition',
+          },
+          { text: 'Source Distance and DRR', link: '/docs/glossary/acoustics/source-distance' },
+          { text: 'Room Geometry and Volume', link: '/docs/glossary/acoustics/room-geometry' },
+          {
+            text: 'Per-Band Decay and Absorption',
+            link: '/docs/glossary/acoustics/absorption-bands',
+          },
+          {
+            text: 'Inverse Room Estimation',
+            link: '/docs/glossary/acoustics/inverse-estimation',
+          },
+        ],
+      },
+      {
         text: 'Mastering Concepts',
         collapsed: true,
         items: [
@@ -340,6 +364,18 @@ const jaGlossarySidebar = [
         ],
       },
       {
+        text: '室内音響',
+        collapsed: true,
+        items: [
+          { text: '残響時間', link: '/ja/docs/glossary/acoustics/reverberation-time' },
+          { text: '明瞭度と明瞭性', link: '/ja/docs/glossary/acoustics/clarity-definition' },
+          { text: '音源距離と DRR', link: '/ja/docs/glossary/acoustics/source-distance' },
+          { text: '部屋の形状と容積', link: '/ja/docs/glossary/acoustics/room-geometry' },
+          { text: '帯域別の減衰と吸音', link: '/ja/docs/glossary/acoustics/absorption-bands' },
+          { text: '逆問題による部屋推定', link: '/ja/docs/glossary/acoustics/inverse-estimation' },
+        ],
+      },
+      {
         text: 'マスタリング概念',
         collapsed: true,
         items: [
@@ -461,7 +497,7 @@ export default withMermaid(
       [
         'link',
         {
-          href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
+          href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
           rel: 'stylesheet',
         },
       ],

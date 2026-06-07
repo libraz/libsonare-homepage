@@ -125,7 +125,7 @@ type WasmModule = {
   detectAcoustic: (
     samples: Float32Array,
     sampleRate?: number,
-    nOctaveBands?: number,
+    options?: { nOctaveBands?: number },
   ) => AcousticResult;
   synthesizeRir: (options?: Record<string, unknown>) => RirResult;
   roomMorph: (
@@ -250,7 +250,7 @@ function analyse(
   onProgress?.(0.5);
   const acoustic = isIR
     ? wasm.analyzeImpulseResponse(samples, sampleRate, N_BANDS)
-    : wasm.detectAcoustic(samples, sampleRate, N_BANDS);
+    : wasm.detectAcoustic(samples, sampleRate, { nOctaveBands: N_BANDS });
   onProgress?.(1);
 
   // A blind estimate of ordinary audio can come back degenerate (no usable decay):

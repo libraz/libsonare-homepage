@@ -224,7 +224,7 @@ The `Audio` wrapper exposes the same operations as instance methods. In file-bas
 
 ### Creative effect inserts
 
-Beyond pitch and time transforms, two of the mixer/mastering insert processors are reach-for-them voice and instrument colour tools:
+Beyond pitch and time transforms, two of the mixer/mastering insert processors are go-to voice and instrument color tools:
 
 - `effects.modulation.ensemble` — a BBD-style (an analog bucket-brigade delay chorus) string-machine ensemble that thickens a thin source into a wide, chorused pad.
 - `saturation.ampSim` — a guitar amp simulation that adds drive and speaker-cabinet character.
@@ -240,5 +240,5 @@ The functions on this page are **offline** transforms: you hand them a buffer an
 These APIs are intentionally lightweight editing tools, not a full non-destructive pitch editor. For transparent vocals, keep pitch correction intervals small and avoid extreme formant factors. For sound design, larger `pitchSemitones` and `formantFactor` moves are valid, but expect stronger artifacts.
 
 ::: info Why big moves sound worse
-These transforms work by analysing the sound into short overlapping frames and re-spacing or re-pitching them. Small shifts stay close to the original frames and sound clean; large shifts force the engine to invent material that was never recorded, so you hear smearing, a "watery" or robotic quality, and a less natural voice. That is why the advice is to keep correction intervals small for transparent results.
+These transforms work by analyzing the sound into short overlapping frames and re-spacing or re-pitching them. Small shifts stay close to the original frames and sound clean; large shifts force the engine to invent material that was never recorded, so you hear smearing, a "watery" or robotic quality, and a less natural voice. That is why the advice is to keep correction intervals small for transparent results.
 :::

@@ -266,8 +266,8 @@ chords = sonare.detect_chords(
     audio.sample_rate,
     use_hmm=True,
     use_key_context=True,
-    key_root=keys[0].root,
-    key_mode=keys[0].mode,
+    key_root=keys[0].key.root,
+    key_mode=keys[0].key.mode,
     chroma_method="nnls",
 )
 
@@ -288,8 +288,8 @@ To label chords with Roman numerals relative to a key, use `chord_functional_ana
 ```python
 labels = sonare.chord_functional_analysis(
     audio.data,
-    key_root=keys[0].root,
-    key_mode=keys[0].mode,
+    key_root=keys[0].key.root,
+    key_mode=keys[0].key.mode,
     sample_rate=audio.sample_rate,
     use_key_context=True,
 )
@@ -348,18 +348,18 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `hpss(samples, sr, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | Harmonic-Percussive Source Separation |
-| `harmonic(samples, sr)` | `list[float]` | Extract harmonic component |
-| `percussive(samples, sr)` | `list[float]` | Extract percussive component |
-| `time_stretch(samples, sr, rate)` | `list[float]` | Time-stretch without pitch change |
-| `pitch_shift(samples, sr, semitones)` | `list[float]` | Pitch-shift without tempo change |
-| `pitch_correct_to_midi(samples, sr, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
-| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sr?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
-| `note_stretch(samples, sr, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
-| `voice_change(samples, sr, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
-| `voice_change_realtime(samples, sr?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
-| `normalize(samples, sr, target_db?)` | `list[float]` | Normalize to target dB (default: 0.0) |
-| `trim(samples, sr, threshold_db?)` | `list[float]` | Trim silence (default: -60.0 dB) |
+| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | Harmonic-Percussive Source Separation |
+| `harmonic(samples, sample_rate)` | `list[float]` | Extract harmonic component |
+| `percussive(samples, sample_rate)` | `list[float]` | Extract percussive component |
+| `time_stretch(samples, sample_rate, rate)` | `list[float]` | Time-stretch without pitch change |
+| `pitch_shift(samples, sample_rate, semitones)` | `list[float]` | Pitch-shift without tempo change |
+| `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
+| `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
+| `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
+| `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
+| `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
+| `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize to target dB (default: 0.0) |
+| `trim(samples, sample_rate, threshold_db?)` | `list[float]` | Trim silence (default: -60.0 dB) |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
 
 `trim(...)` is the simple threshold-based edit helper. The librosa-compatible `trim_silence(...)` helper below uses frame RMS and `top_db`, and returns the trimmed audio together with its original sample range.
@@ -398,35 +398,35 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `stft(samples, sr, n_fft?, hop_length?)` | `StftResult` | Short-Time Fourier Transform |
-| `stft_db(samples, sr, n_fft?, hop_length?)` | `tuple` | STFT in decibels |
-| `mel_spectrogram(samples, sr, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; `fmin`/`fmax` bound the band edges, `htk=True` uses the HTK Mel formula |
-| `mfcc(samples, sr, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients |
-| `chroma(samples, sr, n_fft?, hop_length?)` | `ChromaResult` | Chroma features (pitch class distribution) |
-| `spectral_centroid(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral centroid per frame |
-| `spectral_bandwidth(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral bandwidth per frame |
-| `spectral_rolloff(samples, sr, n_fft?, hop_length?, roll_percent?)` | `list[float]` | Spectral rolloff per frame |
-| `spectral_flatness(samples, sr, n_fft?, hop_length?)` | `list[float]` | Spectral flatness per frame |
-| `spectral_contrast(samples, sr?, n_fft?, hop_length?, n_bands?, fmin?, quantile?)` | `MatrixResult` | Spectral contrast, shape `(n_bands + 1, n_frames)` |
-| `poly_features(samples, sr?, n_fft?, hop_length?, order?)` | `MatrixResult` | Per-frame polynomial spectral coefficients |
-| `zero_crossing_rate(samples, sr, frame_length?, hop_length?)` | `list[float]` | Zero-crossing rate per frame |
-| `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `list[int]` | Sample indices where the waveform crosses zero |
-| `rms_energy(samples, sr, frame_length?, hop_length?)` | `list[float]` | RMS energy per frame |
-| `pitch_yin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
-| `pitch_pyin(samples, sr, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
+| `stft(samples, sample_rate, n_fft?, hop_length?)` | `StftResult` | Short-Time Fourier Transform |
+| `stft_db(samples, sample_rate, n_fft?, hop_length?)` | `tuple` | STFT in decibels |
+| `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; `fmin`/`fmax` bound the band edges, `htk=True` uses the HTK Mel formula |
+| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients |
+| `chroma(samples, sample_rate, n_fft?, hop_length?)` | `ChromaResult` | Chroma features (pitch class distribution) |
+| `spectral_centroid(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral centroid per frame |
+| `spectral_bandwidth(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral bandwidth per frame |
+| `spectral_rolloff(samples, sample_rate, n_fft?, hop_length?, roll_percent?)` | `list[float]` | Spectral rolloff per frame |
+| `spectral_flatness(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral flatness per frame |
+| `spectral_contrast(samples, sample_rate?, n_fft?, hop_length?, n_bands?, fmin?, quantile?)` | `np.ndarray` | Spectral contrast, shape `(n_bands + 1, n_frames)` |
+| `poly_features(samples, sample_rate?, n_fft?, hop_length?, order?)` | `np.ndarray` | Per-frame polynomial spectral coefficients |
+| `zero_crossing_rate(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | Zero-crossing rate per frame |
+| `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `np.ndarray` | Sample indices where the waveform crosses zero |
+| `rms_energy(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | RMS energy per frame |
+| `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
+| `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
 | `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | Global tuning offset from detected frequencies, in fractions of a bin |
-| `estimate_tuning(samples, sr?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio |
-| `cqt(samples, sr, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Constant-Q Transform magnitude |
-| `vqt(samples, sr, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | Variable-Q Transform magnitude |
-| `nnls_chroma(samples, sr)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)` |
+| `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio |
+| `cqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Constant-Q Transform magnitude |
+| `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | Variable-Q Transform magnitude |
+| `nnls_chroma(samples, sample_rate)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
-| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `MatrixResult` | Nearest-neighbour filtering of a row-major spectrogram |
-| `onset_envelope(samples, sr, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
-| `lufs(samples, sr)` | `LufsResult` | Integrated/momentary/short-term LUFS + loudness range (EBU R128) |
-| `lufs_interleaved(samples, channels, sr?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
-| `ebur128_loudness_range(samples, sr?)` | `float` | EBU R128 loudness range (LRA) in LU |
-| `momentary_lufs(samples, sr)` | `list[float]` | Momentary LUFS per frame |
-| `short_term_lufs(samples, sr)` | `list[float]` | Short-term LUFS per frame |
+| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
+| `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/momentary/short-term LUFS + loudness range (EBU R128) |
+| `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
+| `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range (LRA) in LU |
+| `momentary_lufs(samples, sample_rate)` | `list[float]` | Momentary LUFS per frame |
+| `short_term_lufs(samples, sample_rate)` | `list[float]` | Short-term LUFS per frame |
 
 Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`.
 
@@ -484,7 +484,7 @@ helper matches.
 - **`preemphasis` / `deemphasis`** — classic one-tap IIR pre-processing that boosts (or undoes) high frequencies.
 - **`trim_silence` / `split_silence`** — trim leading/trailing silence or split on silent gaps.
 - **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — framing and size-alignment utilities for fixed-frame DSP.
-- **`peak_pick` / `vector_normalize`** — peak detection on 1-D signals (e.g. onset envelopes) and vector-norm normalisation.
+- **`peak_pick` / `vector_normalize`** — peak detection on 1-D signals (e.g. onset envelopes) and vector-norm normalization.
 - **`pcen`** — dynamic range compression for mel spectrograms; features that are robust to gain and background noise.
 - **`tonnetz`** — projects chroma into a 6-D harmonic space for chord-relation and modulation analysis.
 - **`tempogram` / `plp`** — time-varying tempo representation from the onset envelope (autocorrelation or `mode="cosine"`), and the dominant local pulse on top.
@@ -632,7 +632,7 @@ class StreamConfig:
     fmin: float = 0.0
     fmax: float = 0.0
     tuning_ref_hz: float = 440.0
-    compute_magnitude: bool = True
+    compute_magnitude: bool = False
     compute_mel: bool = True
     compute_chroma: bool = True
     compute_onset: bool = True
@@ -836,7 +836,7 @@ Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pai
 
 ### Standalone dynamics and repair
 
-Every named stage is also a one-shot module-level function, so you can run a single processor without assembling a chain. Parameters are keyword-only and mirror the corresponding `MasteringChainConfig` keys in snake_case. The dynamics processors return `(processed_samples, gain_reduction_samples)`; the repair processors return processed samples (`np.ndarray`).
+Every named stage is also a one-shot module-level function, so you can run a single processor without assembling a chain. Parameters are keyword-only and mirror the corresponding `MasteringChainConfig` keys in snake_case. The dynamics processors return `(processed_samples, latency_samples)`, where `latency_samples` is an `int`; the repair processors return processed samples (`np.ndarray`).
 
 | Function | Returns | Key parameters |
 |----------|---------|----------------|

@@ -267,7 +267,7 @@ For example, pull the "drums" VCA down 2 dB and the kick, snare, and overheads a
 
 The group's `gainDb` is summed into each member's fader stage (step 7 above) as a **delta** on top of whatever fader value the strip already has. Because only the difference is applied, a per-strip fader trim you set inside the group survives — the group fader rides the whole set without overwriting the individual balance.
 
-Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)` and adjust it with `setVcaGroupGainDb(...)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset for the current session and is *not* persisted to the scene.
+Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)` and adjust it with `setVcaGroupGainDb(...)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset you can adjust during a session; it is also persisted as the strip's `vcaOffsetDb` and round-trips through scene JSON.
 
 ### Solo and mute logic
 

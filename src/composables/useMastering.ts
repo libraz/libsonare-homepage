@@ -621,7 +621,6 @@ function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainCo
       targetLufs,
       ceilingDb,
       truePeakOversample: 4,
-      applyGainAtInputRate: safeMode,
     },
   };
 

@@ -10,7 +10,7 @@ Mastering meters are useful only when read together. A single number cannot tell
 The browser demo shows loudness, peak level, crest factor, correlation, phase scope, and stereo image. These meters answer different questions: how loud it is, how safe it is, how dense it is, and whether the stereo image will translate.
 
 ::: tip Read meters in groups, then trust your ears
-No single reading proves a master is good. Loudness + peak answer "is it on target and safe"; crest factor + correlation answer "is it still alive and mono-safe". Use the meters to *catch* problems, then confirm by listening.
+No single reading proves a master is good. Loudness + peak answer "is it on target and safe"; crest factor + correlation answer "is it still alive and mono-safe". Use the meters to *catch* problems, then confirm them by listening.
 :::
 
 ## The Main Readings
@@ -34,7 +34,7 @@ Then check crest factor and correlation. A track can hit the target and still fe
 
 Different genres behave differently. Dense EDM, sparse acoustic music, speech, and AI-generated music should not land on identical crest factor or stereo values.
 
-Use the meters to catch problems, then confirm by listening:
+Use the meters to catch problems, then confirm them by listening:
 
 1. Compare before and after with loudness matching enabled.
 2. Listen for lost punch, harshness, pumping, and stereo imbalance.

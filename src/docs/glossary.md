@@ -93,6 +93,19 @@ These pages expand the realtime/streaming terms used by `StreamAnalyzer`, the `R
 | [Realtime Engine](./glossary/realtime/realtime-engine.md) | Transport, clip scheduling, the metronome, and telemetry. |
 | [Realtime Safety](./glossary/realtime/realtime-safety.md) | The audio-callback deadline, no-allocation/lock-free rules, and the AudioWorklet. |
 
+## Room Acoustics
+
+These pages expand the room-acoustic terms used by the [Spatial Room Scanner](/spatial) and the [Acoustic Analysis](./acoustic-analysis.md) guide — what a room's decay reveals about its size, surfaces, and the distance to a source.
+
+| Guide | Covers |
+|-------|--------|
+| [Reverberation Time (RT60 and EDT)](./glossary/acoustics/reverberation-time.md) | RT60, early decay time, the T20/T30 extrapolation, and why the two measures disagree. |
+| [Clarity and Definition (C50, C80, D50)](./glossary/acoustics/clarity-definition.md) | Early-to-late energy ratios for speech and music, and definition as a percentage. |
+| [Source Distance and DRR](./glossary/acoustics/source-distance.md) | Direct-to-reverberant ratio, critical distance, and why one channel resolves distance but not direction. |
+| [Room Geometry and Volume](./glossary/acoustics/room-geometry.md) | The equivalent shoebox, volume, and Sabine's volume/absorption trade-off. |
+| [Per-Band Decay and Absorption](./glossary/acoustics/absorption-bands.md) | Per-band RT60, absorption coefficients, and the high-frequency rolloff. |
+| [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md) | Impulse-response vs blind estimation and how to read the confidence score. |
+
 ## Mastering Concepts
 
 These guides explain the listening and measurement ideas behind the mastering demo.

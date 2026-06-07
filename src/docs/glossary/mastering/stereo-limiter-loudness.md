@@ -15,7 +15,7 @@ Stereo Width adjusts side energy. Wider settings can make a master feel larger, 
 
 Use loudness-matched A/B and check correlation. For speech, keep width conservative.
 
-A reliable warning sign is checking mono: if the vocal, kick, bass, or snare cores get thinner when you collapse to mono, back off. A setting that sounds impressive in stereo but hollows out the center is not a mastering improvement — it is a balance shift in disguise.
+The most reliable warning sign is the mono check: if the core of the vocal, kick, bass, or snare thins out when you collapse to mono, back off. A setting that sounds impressive in stereo but hollows out the center is not a mastering improvement — it is a balance shift in disguise.
 
 ::: warning Always check width in mono
 Collapse to mono before committing to a width setting. If the center cores thin out, the width is too high. The limiter is your last safety net, not a density tool — if it is working deep at all times, fix the low end, compressor, and input gain earlier in the chain instead of raising the ceiling.

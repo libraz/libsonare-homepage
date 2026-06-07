@@ -20,12 +20,16 @@ This is different from music analysis. `detectBpm(...)` and `analyze(...)` descr
 An impulse response (IR) records how a room rings and decays after a short excitation such as a clap, balloon pop, or sweep. Because it captures the room reaction rather than the song, it is a cleaner input for RT60, clarity, and other room-acoustic metrics.
 :::
 
+<SonareDemo id="room-decay" />
+
 ::: info First-time terms
 - **Equivalent room** means a simple room model that matches the measured sound well enough for analysis or UI feedback. It is not a scan of the exact real room.
 - **RIR** means room impulse response: audio samples that represent how a room would respond to a short sound.
 - **Shoebox room** means a rectangular room model with length, width, and height.
 - **DRR** means direct-to-reverberant ratio: how much direct sound there is compared with reflected room sound.
 - **Room morphing** means adding a target room character as an effect. It is not dereverberation, which tries to remove reverb.
+
+For fuller explanations of every metric below, see the [Room Acoustics glossary](./glossary.md#room-acoustics).
 :::
 
 ::: tip Try it in the browser
@@ -198,7 +202,7 @@ Python `Audio` exposes the same calls as instance methods: `audio.analyze_impuls
 
 Use this section when you are not only measuring a recording, but also creating or applying a room model.
 
-`synthesizeRir(...)` builds a mono RIR from a rectangular room. You provide dimensions in metres, one wall-absorption value, and source/listener coordinates inside the room. If the geometry is invalid, JavaScript returns `hasError: true` and an empty `rir`; Python exposes the same state as `has_error`.
+`synthesizeRir(...)` builds a mono RIR from a rectangular room. You provide dimensions in meters, one wall-absorption value, and source/listener coordinates inside the room. If the geometry is invalid, JavaScript returns `hasError: true` and an empty `rir`; Python exposes the same state as `has_error`.
 
 `estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay.
 
@@ -237,7 +241,7 @@ const custom = synthesizeRir({
 
 ### Late-reverb model and tail controls
 
-The shared geometry also exposes the late-tail behaviour. `RirSynthOptions` and `RoomMorphOptions` both carry:
+The shared geometry also exposes the late-tail behavior. `RirSynthOptions` and `RoomMorphOptions` both carry:
 
 | Field | Meaning |
 |-------|---------|
@@ -247,7 +251,7 @@ The shared geometry also exposes the late-tail behaviour. `RirSynthOptions` and 
 | `ismOrder` | Image-source reflection order for the early part. |
 | `seed`, `maxSeconds` | Late-tail random seed and the maximum RIR length to generate. |
 
-The **mixing time** is where the response transitions from discrete image-source early reflections to the deterministic statistical late tail; the **crossfade** blends the two so the seam is inaudible. Sabine and Eyring are the two classical RT60 estimators behind the late tail; Eyring tends to be more accurate in more absorptive rooms.
+The **mixing time** is where the response transitions from discrete image-source early reflections to the deterministic statistical late tail; the **crossfade** blends the two so the seam is inaudible. Sabine and Eyring are the two classical RT60 estimators behind the late tail; Eyring tends to be more accurate in highly absorptive rooms.
 
 ::: tip Sabine vs Eyring (you can usually ignore this)
 Both are classic formulas that predict a room's RT60 from its size and how absorptive its surfaces are. Eyring is generally more accurate in very absorptive (well-treated) rooms; Sabine is the older, simpler one. Leave the default unless you are matching a specific reference.
@@ -295,3 +299,10 @@ For reliable numbers, record a clean impulse response:
 A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
 
 If you need live visual frames or progressive BPM/key/chord estimates, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).
+
+## Related
+
+- [Reverberation Time (RT60 and EDT)](./glossary/acoustics/reverberation-time.md) · [Clarity and Definition (C50, C80, D50)](./glossary/acoustics/clarity-definition.md) — what the headline decay and clarity numbers mean
+- [Source Distance and DRR](./glossary/acoustics/source-distance.md) · [Room Geometry and Volume](./glossary/acoustics/room-geometry.md) — distance, the equivalent shoebox, and Sabine's volume/absorption trade
+- [Per-Band Decay and Absorption](./glossary/acoustics/absorption-bands.md) · [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md) — octave-band decay, and impulse-response vs blind estimation with the confidence score
+- [Spatial Room Scanner](/spatial) — run this whole pipeline locally as an interactive 3D scene

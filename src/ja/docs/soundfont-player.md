@@ -191,7 +191,8 @@ try:
     project.load_soundfont(sf2_bytes)
 
     audio = project.bounce_with_sf2_instrument(
-        sonare.Sf2InstrumentConfig(destination_id=0, gain=1.0),
+        sonare.Sf2InstrumentConfig(gain=1.0),
+        destination_id=0,
         total_frames=4096, num_channels=2, sample_rate=48000,
     )
     # audio は (frames, channels) の float32 ndarray

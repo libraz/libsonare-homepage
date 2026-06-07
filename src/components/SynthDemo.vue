@@ -2,9 +2,16 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import ScopeDisplay from '@/components/synth/ScopeDisplay.vue';
 import SynthKeyboard from '@/components/synth/SynthKeyboard.vue';
-import { DEFAULT_PRESET, enCopy, jaCopy, KEY_LAYOUT } from '@/components/synth/synthCopy';
+import {
+  DEFAULT_PRESET,
+  enCopy,
+  jaCopy,
+  KEY_LAYOUT,
+  SYNTH_TERM_SLUGS,
+  type SynthTermKey,
+} from '@/components/synth/synthCopy';
 import ToolShell from '@/components/ToolShell.vue';
-import { RotaryKnob, StatusIndicator } from '@/components/ui';
+import { RotaryKnob, StatusIndicator, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useSynthEngine } from '@/composables/useSynthEngine';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
@@ -175,6 +182,28 @@ const envPath = computed(() => {
     `Q ${(hx + rw * 0.22).toFixed(1)} ${h - p} ${rx.toFixed(1)} ${h - p}`,
   ].join(' ');
 });
+
+const glossaryBase = computed(() =>
+  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
+);
+
+/** Build the rich-tooltip props for a control from the copy + slug tables. */
+function term(key: SynthTermKey) {
+  const t = copy.value.terms;
+  const item = t.items[key];
+  const slug = SYNTH_TERM_SLUGS[key];
+  return {
+    eyebrow: t.eyebrow,
+    title: item.title,
+    body: item.body,
+    tip: item.tip,
+    tipLabel: t.tipLabel,
+    defaultRationale: 'defaultRationale' in item ? item.defaultRationale : undefined,
+    defaultLabel: t.resetLabel,
+    href: slug ? `${glossaryBase.value}/${slug}` : undefined,
+    linkLabel: t.linkLabel,
+  };
+}
 
 const docsPath = computed(() =>
   locale.value === 'ja' ? '/ja/docs/native-synth' : '/docs/native-synth',
@@ -520,7 +549,14 @@ function onKeyUp(event: KeyboardEvent) {
       <!-- ===== CONTROL SECTIONS ===== -->
       <div class="sy-deck__controls">
         <section class="sy-sec sy-sec--program">
-          <h3 class="sy-sec__title">{{ copy.sections.program }}</h3>
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.program }}</h3>
+            <Tooltip v-bind="term('program')">
+              <button type="button" class="sy-sec__info" :aria-label="term('program').title">
+                <span aria-hidden="true">i</span>
+              </button>
+            </Tooltip>
+          </div>
           <div class="sy-programs">
             <button
               v-for="(name, i) in presetNames"
@@ -537,7 +573,14 @@ function onKeyUp(event: KeyboardEvent) {
         </section>
 
         <section class="sy-sec">
-          <h3 class="sy-sec__title">{{ copy.sections.osc }}</h3>
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.osc }}</h3>
+            <Tooltip v-bind="term('waveform')">
+              <button type="button" class="sy-sec__info" :aria-label="term('waveform').title">
+                <span aria-hidden="true">i</span>
+              </button>
+            </Tooltip>
+          </div>
           <div class="sy-waves">
             <button
               v-for="w in waveforms"
@@ -558,9 +601,17 @@ function onKeyUp(event: KeyboardEvent) {
         </section>
 
         <section class="sy-sec">
-          <h3 class="sy-sec__title">{{ copy.sections.filter }}</h3>
+          <div class="sy-sec__head">
+            <h3 class="sy-sec__title">{{ copy.sections.filter }}</h3>
+            <Tooltip v-bind="term('filterModel')">
+              <button type="button" class="sy-sec__info" :aria-label="term('filterModel').title">
+                <span aria-hidden="true">i</span>
+              </button>
+            </Tooltip>
+          </div>
           <div class="sy-knob-row">
             <RotaryKnob
+              v-bind="term('cutoff')"
               :model-value="cutoffNorm"
               :min="0" :max="1" :step="0.005"
               :label="copy.patch.cutoff"
@@ -570,6 +621,7 @@ function onKeyUp(event: KeyboardEvent) {
               @update:model-value="(v) => setTweak('cutoffHz', v)"
             />
             <RotaryKnob
+              v-bind="term('resonance')"
               :model-value="resonanceQ"
               :min="0.5" :max="12" :step="0.05"
               :label="copy.patch.resonance"
@@ -596,6 +648,7 @@ function onKeyUp(event: KeyboardEvent) {
           <h3 class="sy-sec__title">{{ copy.sections.envelope }}</h3>
           <div class="sy-knob-row">
             <RotaryKnob
+              v-bind="term('attack')"
               :model-value="attackNorm"
               :min="0" :max="1" :step="0.005"
               :label="copy.patch.attack"
@@ -606,6 +659,7 @@ function onKeyUp(event: KeyboardEvent) {
               @update:model-value="(v) => setTweak('ampAttackMs', v)"
             />
             <RotaryKnob
+              v-bind="term('release')"
               :model-value="releaseNorm"
               :min="0" :max="1" :step="0.005"
               :label="copy.patch.release"
@@ -625,6 +679,7 @@ function onKeyUp(event: KeyboardEvent) {
           <h3 class="sy-sec__title">{{ copy.sections.voice }}</h3>
           <div class="sy-knob-row">
             <RotaryKnob
+              v-bind="term('glide')"
               :model-value="glideMs"
               :min="0" :max="300" :step="1"
               :label="copy.patch.glide"
@@ -634,6 +689,7 @@ function onKeyUp(event: KeyboardEvent) {
               @update:model-value="(v) => setTweak('glideMs', v)"
             />
             <RotaryKnob
+              v-bind="term('spread')"
               :model-value="stereoSpread"
               :min="0" :max="1" :step="0.01"
               :label="copy.patch.spread"
@@ -657,6 +713,7 @@ function onKeyUp(event: KeyboardEvent) {
           <h3 class="sy-sec__title">{{ copy.sections.output }}</h3>
           <div class="sy-output">
             <RotaryKnob
+              v-bind="term('gain')"
               :model-value="outputGain"
               :min="0" :max="1.5" :step="0.01"
               :label="copy.output.gain"
@@ -666,27 +723,38 @@ function onKeyUp(event: KeyboardEvent) {
               accent="var(--demo-amber)"
               @update:model-value="(v) => { outputGain = v; applyGain(); }"
             />
-            <div class="sy-vmeter" :aria-label="copy.output.peak">
-              <div class="sy-vmeter__track">
-                <div class="sy-vmeter__fill" :style="{ height: `${meterFillPercent(meter.peak)}%` }"></div>
-                <i
-                  v-if="peakHold > 0"
-                  class="sy-vmeter__hold"
-                  :style="{ bottom: `${meterFillPercent(peakHold)}%` }"
-                ></i>
+            <Tooltip v-bind="term('peak')">
+              <div class="sy-vmeter" :aria-label="copy.output.peak" tabindex="0">
+                <div class="sy-vmeter__track">
+                  <div class="sy-vmeter__fill" :style="{ height: `${meterFillPercent(meter.peak)}%` }"></div>
+                  <i
+                    v-if="peakHold > 0"
+                    class="sy-vmeter__hold"
+                    :style="{ bottom: `${meterFillPercent(peakHold)}%` }"
+                  ></i>
+                </div>
               </div>
-            </div>
+            </Tooltip>
           </div>
-          <button type="button" class="sy-chipbtn sy-panic" @click="panic">
-            {{ copy.controls.panic }}
-          </button>
+          <Tooltip v-bind="term('panic')">
+            <button type="button" class="sy-chipbtn sy-panic" @click="panic">
+              {{ copy.controls.panic }}
+            </button>
+          </Tooltip>
         </section>
       </div>
 
       <!-- ===== KEYBED ROW ===== -->
       <div class="sy-deck__keys">
         <div class="sy-cheek">
-          <span class="sy-cheek__label">{{ copy.controls.octave }}</span>
+          <span class="sy-cheek__label">
+            {{ copy.controls.octave }}
+            <Tooltip v-bind="term('octave')">
+              <button type="button" class="sy-sec__info" :aria-label="term('octave').title">
+                <span aria-hidden="true">i</span>
+              </button>
+            </Tooltip>
+          </span>
           <div class="sy-cheek__row">
             <button
               type="button"
@@ -722,6 +790,11 @@ function onKeyUp(event: KeyboardEvent) {
         <span class="sy-midi__title">
           <i class="sy-led" :class="{ 'sy-led--on': midiBinding && midiInputs.length > 0 }"></i>
           {{ copy.sections.midi }}
+          <Tooltip v-bind="term('midi')">
+            <button type="button" class="sy-sec__info" :aria-label="term('midi').title">
+              <span aria-hidden="true">i</span>
+            </button>
+          </Tooltip>
         </span>
         <p v-if="midiSupported === false" class="sy-midi__note">{{ copy.midi.unavailable }}</p>
         <template v-else>
@@ -941,6 +1014,45 @@ html:not(.dark) .sy-deck {
   letter-spacing: 0.18em;
   line-height: 1.2;
   text-transform: uppercase;
+}
+
+.sy-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sy-sec__info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.sy-sec__info > span {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.sy-sec__info:hover,
+.sy-sec__info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
 }
 
 .sy-knob-row {

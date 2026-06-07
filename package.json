@@ -16,11 +16,12 @@
     "lint:fix": "biome check --write .",
     "ncu": "NO_UPDATE_NOTIFIER=1 ncu",
     "ncu:update": "NO_UPDATE_NOTIFIER=1 ncu -u",
-    "check": "yarn check:docs && yarn check:glossary && yarn check:i18n && yarn check:mastering-docs && yarn check:mastering",
+    "check": "yarn check:docs && yarn check:glossary && yarn check:i18n && yarn check:demos && yarn check:mastering-docs && yarn check:mastering",
     "verify": "yarn check && yarn test && yarn build && yarn check:built-routes",
     "check:docs": "node scripts/check-doc-links.mjs",
     "check:glossary": "node scripts/check-glossary-coverage.mjs",
     "check:i18n": "node scripts/check-i18n-parity.mjs",
+    "check:demos": "node scripts/check-demos.mjs",
     "check:mastering-docs": "node scripts/check-mastering-docs.mjs",
     "check:built-routes": "node scripts/check-built-routes.mjs",
     "check:mastering": "node scripts/validate-mastering-presets.mjs"

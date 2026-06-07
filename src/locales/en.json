@@ -169,7 +169,7 @@
         "name": "Hip-Hop / R&B",
         "tagline": "Solid low end with focused vocal presence.",
         "description": "Pivot shifted to 850 Hz with a slight downward tilt to keep weight in the low end, plus a stronger compressor ratio for cohesion.",
-        "tip": "Hip-hop, trap, R&B, lo-fi — anything that lives off a powerful low-end."
+        "tip": "Hip-hop, trap, R&B, lo-fi — anything that lives off a powerful low end."
       },
       "aiMusic": {
         "name": "AI-Generated",
@@ -461,7 +461,7 @@
       "loudnessMatch": "Match loudness",
       "loudnessMatchTooltip": "Attenuates whichever side is louder so you compare tonal/dynamic changes, not just volume — required for fair A/B.",
       "loudnessMatchNote": "A/B playback lowers the louder side so the comparison is not biased by volume.",
-      "rawCompareNote": "Raw comparison is using each file at its rendered level.",
+      "rawCompareNote": "Raw comparison: each file plays at its rendered level.",
       "empty": "Master your audio to compare before and after here."
     },
     "reference": {

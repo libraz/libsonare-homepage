@@ -95,7 +95,7 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 A few capabilities sit underneath the maximizer/final and analysis surfaces:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the BS.1770 channel weights.
-- The internal oversampler and true-peak stages accept oversampling factors of 1 and 16 (the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
+- The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
 - For UI consumption there are display-decimated metering variants — `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series to at most `maxPoints` points — plus `meteringSpectrumFrame(...)`, a single-frame (non-time-averaged) spectrum reader for spectrum-analyzer snapshots.
 - A **stereo imager** (widens or narrows the stereo field per band) and a **dynamic EQ** (an EQ whose boost/cut reacts to level, like a frequency-targeted compressor) are available in multiband form: `multiband.imager` and `multiband.dynamicEq` expose per-band parameters and accept a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three.
 :::
@@ -208,7 +208,7 @@ They are different ways to synthesize a reverb tail. Pick by the character you w
 A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintage string synths. It runs three delay taps per channel, swept simultaneously by a slow and a fast 3-phase LFO bank, so the modulation is dense rather than a single chorus wobble. A BBD bucket-bandwidth lowpass darkens the wet path, emulating the analog bucket-brigade delay lines. The right-channel LFO polarity is inverted, which spreads a mono source into a wide stereo image. It is exposed through the insert factory and its parameters are automatable through `set_parameter` on every binding.
 :::
 
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. They are not returned by `masteringProcessorNames()` because they are mixer insert processors, not one-shot mastering processors.
+Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, most of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, and `effects.reverb.convolution` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry- and modulation-driven inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, and `effects.modulation.ensemble` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
 
 ## How to call them
 

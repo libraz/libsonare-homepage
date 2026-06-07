@@ -78,10 +78,15 @@ This installs the Python library and the `sonare` CLI command. See [CLI Referenc
 
 The PyPI wheels are built for deterministic installation and decode WAV and
 MP3 by default. To load M4A, AAC, FLAC, OGG, Opus, or other FFmpeg-supported
-formats directly, rebuild from source with FFmpeg enabled:
+formats directly, build a wheel from source with FFmpeg enabled. The
+`SONARE_FFMPEG` flag is consumed by the wheel-builder script, not by `pip`, so
+clone the repository and run the build script:
 
 ```bash
-SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
+git clone https://github.com/libraz/libsonare.git
+cd libsonare
+SONARE_FFMPEG=1 bash bindings/python/build_wheel.sh
+pip install bindings/python/dist/*.whl
 ```
 
 FFmpeg-enabled builds require FFmpeg development libraries. On macOS, install

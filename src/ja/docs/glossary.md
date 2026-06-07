@@ -93,6 +93,19 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 | [リアルタイムエンジン](./glossary/realtime/realtime-engine.md) | トランスポート、クリップスケジューリング、メトロノーム、テレメトリ。 |
 | [リアルタイム安全性](./glossary/realtime/realtime-safety.md) | 音声コールバックの締め切り、確保なし／ロックフリーの規則、AudioWorklet。 |
 
+## 室内音響
+
+[空間ルームスキャナー](/ja/spatial) と [音響解析](./acoustic-analysis.md) で使う室内音響の用語を掘り下げます。部屋の減衰が、その大きさ・面・音源までの距離について何を明かすか。
+
+| ガイド | 扱う内容 |
+|--------|----------|
+| [残響時間（RT60 と EDT）](./glossary/acoustics/reverberation-time.md) | RT60、初期減衰時間、T20／T30 外挿、2 つの指標が食い違う理由。 |
+| [明瞭度と明瞭性（C50・C80・D50）](./glossary/acoustics/clarity-definition.md) | 音声と音楽の初期／後期エネルギー比、割合としての明瞭性。 |
+| [音源距離と DRR](./glossary/acoustics/source-distance.md) | 直接音／残響音比、臨界距離、1 チャンネルが距離は解けても方向は解けない理由。 |
+| [部屋の形状と容積](./glossary/acoustics/room-geometry.md) | 等価なシューボックス、容積、サビーンの容積／吸音のトレードオフ。 |
+| [帯域別の減衰と吸音](./glossary/acoustics/absorption-bands.md) | 帯域別 RT60、吸音係数、高域のロールオフ。 |
+| [逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md) | インパルス応答とブラインドの推定、信頼度スコアの読み方。 |
+
 ## マスタリング概念
 
 マスタリングデモの判断に必要な聴感・計測の考え方です。

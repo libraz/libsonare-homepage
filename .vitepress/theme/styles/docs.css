@@ -11,6 +11,21 @@
   --vp-layout-max-width: 1536px;
 }
 
+/* Japanese sidebar labels run longer than the 272px default allows
+   (e.g. リアルタイムボイスチェンジャー = 15 fullwidth chars ≈ 210px vs
+   ~208px of usable width, ~191px for nested glossary items), which
+   wraps mid-word and strands a lone trailing character. Widen the
+   rail for the ja locale so every current label fits on one line. */
+html[lang='ja'] {
+  --vp-sidebar-width: 300px;
+}
+
+/* If a future label still has to wrap, split it evenly across lines
+   instead of orphaning a single character. */
+.VPSidebarItem .text {
+  text-wrap: balance;
+}
+
 /* Widen the reading column on docs pages. VitePress defaults are
    tuned for narrow prose (688px with aside / 752px without); for
    API docs with code blocks and tables a wider rail reads better. */
@@ -149,7 +164,7 @@
 
 /* --- Japanese reading tuning ---
    Japanese sets best with more leading and a touch of tracking than Latin;
-   Noto Sans JP at the Latin body size reads dense otherwise. Headings and
+   IBM Plex Sans JP at the Latin body size reads dense otherwise. Headings and
    tables enable 'palt' so fullwidth punctuation (、。「」（）) doesn't leave
    large gaps in tight, large type. */
 html[lang='ja'] .vp-doc p,
@@ -329,13 +344,13 @@ html[lang='ja'] .vp-doc th {
 }
 
 /* --- Custom containers (:::tip / info / warning / danger / details) ---
-   Each type sets a single --cb-accent; border, background tint, the left
-   bar, and the title color are all derived from it so the semantic color
-   reads at a glance instead of every block looking purple. */
+   Each type sets a single --cb-accent; border, background tint, and the
+   title color are all derived from it so the semantic color reads at a
+   glance instead of every block looking purple. */
 .vp-doc .custom-block {
   --cb-accent: var(--cb-tip);
   border-radius: 10px;
-  padding: 1rem 1.25rem 1rem 1.4rem;
+  padding: 1rem 1.25rem;
   margin: 1.5rem 0;
   position: relative;
   border: 1px solid color-mix(in srgb, var(--cb-accent) 32%, transparent);
@@ -350,17 +365,6 @@ html[lang='ja'] .vp-doc th {
 .vp-doc .custom-block.info { --cb-accent: var(--cb-info); }
 .vp-doc .custom-block.warning { --cb-accent: var(--cb-warning); }
 .vp-doc .custom-block.danger { --cb-accent: var(--cb-danger); }
-
-.vp-doc .custom-block::before {
-  content: '';
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  width: 3px;
-  background: var(--cb-accent);
-  border-radius: 0 2px 2px 0;
-}
 
 .vp-doc .custom-block-title {
   font-family: var(--font-mono);
@@ -407,62 +411,172 @@ html[lang='ja'] .vp-doc th {
   margin-bottom: 0;
 }
 
-/* Details (collapsible) — neutral note accent, sized as a compact aside so
-   it reads as supplementary detail rather than primary body copy. */
+/* Details (collapsible) — styled as an interactive disclosure, not a filled
+   callout: a quiet hairline container at rest, brand accents on interaction,
+   and the site's signature gradient hairline across the top while open. */
 .vp-doc details.custom-block {
   --cb-accent: var(--cb-note);
-  padding: 0.8rem 1.25rem 0.8rem 1.4rem;
+  padding: 0 1.15rem;
+  border: 1px solid var(--vp-c-divider);
+  background: transparent;
+  overflow: clip;
+  transition:
+    border-color var(--transition-default),
+    background-color var(--transition-default);
+}
+
+.vp-doc details.custom-block:hover {
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 38%, transparent);
+}
+
+.vp-doc details.custom-block[open] {
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 30%, transparent);
+  background: color-mix(in srgb, var(--vp-c-brand-1) 4%, transparent);
+}
+
+/* Top hairline shared with h2 rules and code blocks, revealed while open. */
+.vp-doc details.custom-block::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 1px;
+  background: linear-gradient(to right, var(--vp-c-brand-1), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-default);
+}
+
+.vp-doc details.custom-block[open]::before {
+  opacity: 1;
+}
+
+/* Consecutive details read as one grouped accordion list. The negative
+   margin collapses with the previous block's 1.5rem into a 0.5rem gap. */
+.vp-doc details.custom-block + details.custom-block {
+  margin-top: -1rem;
 }
 
 .vp-doc details.custom-block summary {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 0 -1.15rem;
+  padding: 0.78rem 1.15rem;
   font-family: var(--font-reading);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
   line-height: 1.5;
   cursor: pointer;
   list-style: none;
   color: var(--vp-c-text-1);
   user-select: none;
-  transition: color 0.18s ease;
+  border-bottom: 1px solid transparent;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-default);
 }
 
 .vp-doc details.custom-block summary:hover {
-  color: var(--cb-accent);
+  color: var(--vp-c-brand-1);
+}
+
+/* Ring sits inside the container (overflow: clip would eat an outer ring). */
+.vp-doc details.custom-block summary:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: -2px;
+  border-radius: 10px;
 }
 
 .vp-doc details.custom-block summary::-webkit-details-marker {
   display: none;
 }
 
-/* Marker is a small tinted badge laid out as the first flex item, so the
-   whole row (badge + label) is vertically centered together. */
-.vp-doc details.custom-block summary::before {
-  content: '+';
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.2rem;
-  height: 1.2rem;
-  margin-right: 0.55rem;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--cb-accent) 14%, transparent);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--cb-accent);
-}
-
-.vp-doc details.custom-block[open] summary::before {
-  content: '−';
-}
-
+/* Hairline between the summary row and the revealed body. Always present
+   (transparent) so toggling never shifts layout. */
 .vp-doc details.custom-block[open] summary {
-  margin-bottom: 0.7rem;
+  border-bottom-color: color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent);
+}
+
+/* Marker: a right-aligned chip with a CSS-drawn plus. On open it spins 180°
+   while the vertical bar collapses to zero, morphing the plus into a minus. */
+.vp-doc details.custom-block summary::after {
+  content: '';
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 6px;
+  color: var(--cb-accent);
+  border: 1px solid color-mix(in srgb, var(--cb-accent) 32%, transparent);
+  background-color: transparent;
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-size: 9px 1.5px, 1.5px 9px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  transition:
+    transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    background-size 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.vp-doc details.custom-block summary:hover::after {
+  color: var(--vp-c-brand-1);
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 45%, transparent);
+  background-color: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
+}
+
+.vp-doc details.custom-block[open] summary::after {
+  color: var(--vp-c-brand-1);
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 40%, transparent);
+  background-color: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
+  transform: rotate(180deg);
+  background-size: 9px 1.5px, 1.5px 0px;
+}
+
+/* Smooth expand/collapse where ::details-content is supported
+   (Chromium 131+ / Safari 18.4+); other browsers toggle instantly. */
+@supports (interpolate-size: allow-keywords) {
+  .vp-doc details.custom-block {
+    interpolate-size: allow-keywords;
+  }
+  .vp-doc details.custom-block::details-content {
+    height: 0;
+    overflow: clip;
+    transition:
+      height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+      content-visibility 0.32s allow-discrete;
+  }
+  .vp-doc details.custom-block[open]::details-content {
+    height: auto;
+  }
+}
+
+/* Body spacing lives on the content children (inside ::details-content) so
+   it animates with the reveal instead of snapping in via container padding. */
+.vp-doc details.custom-block > summary + p:first-of-type,
+.vp-doc details.custom-block > summary + ul,
+.vp-doc details.custom-block > summary + ol,
+.vp-doc details.custom-block > summary + div {
+  margin-top: 0.9rem;
+}
+
+.vp-doc details.custom-block > p:last-child,
+.vp-doc details.custom-block > ul:last-child,
+.vp-doc details.custom-block > ol:last-child,
+.vp-doc details.custom-block > div:last-child {
+  margin-bottom: 0.95rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-doc details.custom-block summary::after,
+  .vp-doc details.custom-block::details-content {
+    transition: none;
+  }
 }
 
 /* Compact body copy inside the collapsible (overrides the 16px doc default). */

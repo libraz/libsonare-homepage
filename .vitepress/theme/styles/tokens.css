@@ -55,16 +55,19 @@ html, body {
   --color-border-strong: rgba(124, 58, 237, 0.32);
 
   /* Typography
-     'Noto Sans JP' is appended to every Latin-first stack so Japanese
+     'IBM Plex Sans JP' is appended to every Latin-first stack so Japanese
      glyphs (which Outfit / Space Grotesk / Inter lack) route to it
      automatically via the font-family fallback chain — giving mixed
      JA/Latin text an intentional pairing instead of an OS default.
+     Plex Sans JP's slightly condensed kana and engineered character sit
+     closer to Inter's density and the JetBrains Mono aesthetic than the
+     looser Noto Sans JP it replaced.
      --font-reading is the docs long-form reading face (Inter, self-hosted
      by VitePress); --font-body stays Space Grotesk for landing/demo UI. */
-  --font-display: 'Outfit', 'Noto Sans JP', sans-serif;
-  --font-body: 'Space Grotesk', 'Noto Sans JP', sans-serif;
-  --font-reading: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Noto Sans JP', monospace;
+  --font-display: 'Outfit', 'IBM Plex Sans JP', sans-serif;
+  --font-body: 'Space Grotesk', 'IBM Plex Sans JP', sans-serif;
+  --font-reading: 'Inter', 'IBM Plex Sans JP', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Sans JP', monospace;
 
   /* Spacing */
   --space-1: 0.25rem;

@@ -7,9 +7,18 @@ import {
   PRESET_GEOMETRY,
   PRESET_ORDER,
   type PresetId,
+  SPATIAL_TERM_SLUGS,
+  type SpatialTermKey,
 } from '@/components/spatial/spatialCopy';
 import ToolShell from '@/components/ToolShell.vue';
-import { AudioSource, MetricItem, StatusIndicator, TechPanel } from '@/components/ui';
+import {
+  AudioSource,
+  MetricItem,
+  StatusIndicator,
+  TechPanel,
+  TermLabel,
+  Tooltip,
+} from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useSpatialAudio } from '@/composables/useSpatialAudio';
 import { useSpatialScanner } from '@/composables/useSpatialScanner';
@@ -32,7 +41,24 @@ const ja = computed(() => locale.value === 'ja');
 const docsPath = computed(() =>
   ja.value ? '/ja/docs/acoustic-analysis' : '/docs/acoustic-analysis',
 );
+const glossaryBase = computed(() => (ja.value ? '/ja/docs/glossary' : '/docs/glossary'));
 const oppositeLocalePath = computed(() => (ja.value ? '/spatial' : '/ja/spatial'));
+
+/** Build rich-tooltip props for a metric/term from the copy table. */
+function term(key: SpatialTermKey) {
+  const t = copy.value.terms;
+  const item = t.items[key];
+  const slug = SPATIAL_TERM_SLUGS[key];
+  return {
+    eyebrow: t.eyebrow,
+    title: item.title,
+    body: item.body,
+    tip: item.tip,
+    tipLabel: t.tipLabel,
+    href: slug ? `${glossaryBase.value}/${slug}` : docsPath.value,
+    linkLabel: slug ? t.linkLabel : copy.value.help.docs,
+  };
+}
 
 const sceneColors = computed(() =>
   isDark.value
@@ -326,17 +352,31 @@ async function initVersion() {
       <aside class="sp-lab__right">
         <TechPanel :title="copy.panels.geometry">
           <template #header-right>
-            <span v-if="sceneResult" class="sp-conf" :class="{ 'sp-conf--low': sceneResult.confidence < 0.35 }">
-              <i aria-hidden="true"></i>{{ copy.metrics.confidence }} {{ fmtPct(sceneResult.confidence) }}
-            </span>
+            <Tooltip v-if="sceneResult" v-bind="term('confidence')">
+              <span class="sp-conf" :class="{ 'sp-conf--low': sceneResult.confidence < 0.35 }">
+                <i aria-hidden="true"></i>{{ copy.metrics.confidence }} {{ fmtPct(sceneResult.confidence) }}
+              </span>
+            </Tooltip>
           </template>
           <div v-if="sceneResult" class="sp-metrics">
-            <MetricItem :label="copy.metrics.dimensions" :value="`${result.room.length.toFixed(1)} × ${result.room.width.toFixed(1)} × ${result.room.height.toFixed(1)} m`" variant="accent" />
-            <MetricItem :label="copy.metrics.volume" :value="fmtVol(result.room.volume)" />
-            <MetricItem :label="copy.metrics.sourceDistance" :value="fmtM(result.sourceDistance)" variant="accent" />
-            <MetricItem :label="copy.metrics.criticalDistance" :value="fmtM(result.criticalDistance)" />
-            <MetricItem :label="copy.metrics.drr" :value="fmtDb(result.drrDb)" />
-            <MetricItem :label="copy.metrics.mode" :value="result.isBlind ? copy.metrics.modeBlind : copy.metrics.modeIr" variant="muted" />
+            <MetricItem :value="`${result.room.length.toFixed(1)} × ${result.room.width.toFixed(1)} × ${result.room.height.toFixed(1)} m`" variant="accent">
+              <template #label><TermLabel v-bind="term('dimensions')">{{ copy.metrics.dimensions }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtVol(result.room.volume)">
+              <template #label><TermLabel v-bind="term('volume')">{{ copy.metrics.volume }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtM(result.sourceDistance)" variant="accent">
+              <template #label><TermLabel v-bind="term('sourceDistance')">{{ copy.metrics.sourceDistance }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtM(result.criticalDistance)">
+              <template #label><TermLabel v-bind="term('criticalDistance')">{{ copy.metrics.criticalDistance }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtDb(result.drrDb)">
+              <template #label><TermLabel v-bind="term('drr')">{{ copy.metrics.drr }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="result.isBlind ? copy.metrics.modeBlind : copy.metrics.modeIr" variant="muted">
+              <template #label><TermLabel v-bind="term('mode')">{{ copy.metrics.mode }}</TermLabel></template>
+            </MetricItem>
           </div>
           <p v-else-if="invalid" class="sp-empty">{{ copy.notes.invalid }}</p>
           <p v-else class="sp-empty">{{ copy.scene.placeholder }}</p>
@@ -344,20 +384,30 @@ async function initVersion() {
 
         <TechPanel v-if="sceneResult" :title="copy.panels.acoustics">
           <div class="sp-metrics">
-            <MetricItem :label="copy.metrics.rt60" :value="fmtS(result.acoustic.rt60)" variant="accent" />
-            <MetricItem :label="copy.metrics.edt" :value="fmtS(result.acoustic.edt)" />
-            <MetricItem :label="copy.metrics.c50" :value="fmtDb(result.acoustic.c50)" />
-            <MetricItem :label="copy.metrics.c80" :value="fmtDb(result.acoustic.c80)" />
-            <MetricItem :label="copy.metrics.d50" :value="fmtPct(result.acoustic.d50)" />
+            <MetricItem :value="fmtS(result.acoustic.rt60)" variant="accent">
+              <template #label><TermLabel v-bind="term('rt60')">{{ copy.metrics.rt60 }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtS(result.acoustic.edt)">
+              <template #label><TermLabel v-bind="term('edt')">{{ copy.metrics.edt }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtDb(result.acoustic.c50)">
+              <template #label><TermLabel v-bind="term('c50')">{{ copy.metrics.c50 }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtDb(result.acoustic.c80)">
+              <template #label><TermLabel v-bind="term('c80')">{{ copy.metrics.c80 }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="fmtPct(result.acoustic.d50)">
+              <template #label><TermLabel v-bind="term('d50')">{{ copy.metrics.d50 }}</TermLabel></template>
+            </MetricItem>
           </div>
         </TechPanel>
 
         <TechPanel v-if="sceneResult && sceneResult.bands.length" :title="copy.panels.bands">
           <div class="sp-bands">
             <div class="sp-bands__head">
-              <span>{{ copy.bands.freq }}</span>
-              <span>{{ copy.bands.rt60 }}</span>
-              <span>{{ copy.bands.absorption }}</span>
+              <span><TermLabel v-bind="term('band')">{{ copy.bands.freq }}</TermLabel></span>
+              <span><TermLabel v-bind="term('rt60')">{{ copy.bands.rt60 }}</TermLabel></span>
+              <span><TermLabel v-bind="term('absorption')">{{ copy.bands.absorption }}</TermLabel></span>
             </div>
             <div v-for="band in result.bands" :key="band.freq" class="sp-band">
               <span class="sp-band__freq">{{ band.label }}<small>{{ copy.bands.hz }}</small></span>

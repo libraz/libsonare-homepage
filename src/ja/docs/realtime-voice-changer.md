@@ -114,7 +114,7 @@ const json = realtimeVoiceChangerPresetJson('bright-idol');
 const validation = validateRealtimeVoiceChangerPresetJson(json);
 
 if (!validation.ok) {
-  throw new Error(validation.errors.join('\n'));
+  throw new Error(validation.error);
 }
 ```
 

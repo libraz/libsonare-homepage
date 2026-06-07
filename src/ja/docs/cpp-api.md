@@ -288,7 +288,7 @@ struct StreamConfig {
   WindowType window = WindowType::Hann;
 
   // 特徴フラグ
-  bool compute_magnitude = true;
+  bool compute_magnitude = false;
   bool compute_mel = true;
   bool compute_chroma = true;
   bool compute_onset = true;
@@ -595,7 +595,7 @@ std::vector<float> spectral_centroid(const Spectrogram& spec, int sr);
 std::vector<float> spectral_bandwidth(const Spectrogram& spec, int sr);
 
 // フレームごとのスペクトルロールオフ (Hz)
-std::vector<float> spectral_rolloff(const Spectrogram& spec, int sr, float percent = 0.85f);
+std::vector<float> spectral_rolloff(const Spectrogram& spec, int sr, float roll_percent = 0.85f);
 
 // フレームごとのスペクトル平坦度
 std::vector<float> spectral_flatness(const Spectrogram& spec);
@@ -740,8 +740,8 @@ auto normalized = normalize(audio, 0.0f);      // 目標ピークレベル (dB)
 // RMS 正規化
 auto rms_norm = normalize_rms(audio, -20.0f);  // 目標 RMS レベル (dB)
 
-// 無音トリミング
-auto trimmed = trim(audio, -60.0f);            // 閾値 (dB)
+// 無音トリミング（絶対 dBFS 閾値）
+auto trimmed = trim_absolute(audio, -60.0f);   // 閾値 (dBFS)
 
 // レベル測定
 float peak = peak_db(audio);  // ピーク振幅 (dB)
@@ -767,8 +767,8 @@ auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 
 ::: tip 各ヘルパーの位置づけ
 - **`preemphasis` / `deemphasis`** — 高域を持ち上げる／戻す古典的な 1 タップ IIR の前処理。
-- **`trim_silence` / `split_silence`** — 前後無音のトリムや、無音区間での区切り出し。
-- **`frame_signal` / `pad_center` / `fix_length` / `fix_frames`** — 固定フレーム DSP に通すためのフレーミング・サイズ揃え。
+- **`trim` / `split`** — 前後無音のトリムや、無音区間での区切り出し。
+- **`frame` / `pad_center` / `fix_length` / `fix_frames`** — 固定フレーム DSP に通すためのフレーミング・サイズ揃え。
 - **`peak_pick` / `vector_normalize`** — 1 次元信号のピーク検出と、ベクトルのノルム正規化。
 - **`pcen`** — メルスペクトログラム向けの動的レンジ圧縮。
 - **`tonnetz`** — クロマを 6 次元のハーモニック空間へ射影。
@@ -780,12 +780,12 @@ auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 auto pre   = preemphasis(audio, /*coef=*/0.97f);
 auto deemp = deemphasis(audio, /*coef=*/0.97f);
 
-// 無音トリム／分割（librosa.effects.trim / split）
-auto [trimmed, start_sample, end_sample] = trim_silence(audio, /*top_db=*/60.0f);
-auto intervals = split_silence(audio, /*top_db=*/60.0f);  // std::vector<std::pair<int,int>>
+// 無音トリム／分割（librosa.effects.trim / split）— バッファ入力、サンプル区間を返す
+TrimResult trimmed = trim(samples, /*top_db=*/60.0f);  // {audio, start_sample, end_sample}
+auto intervals = split(samples, /*top_db=*/60.0f);     // std::vector<std::pair<int,int>>
 
 // フレーミング／パディングのヘルパー（librosa.util.*）
-auto frames = frame_signal(samples, /*frame_length=*/2048, /*hop_length=*/512);
+auto frames = frame(samples, /*frame_length=*/2048, /*hop_length=*/512);
 auto padded = pad_center(values, /*size=*/4096);
 auto fixed  = fix_length(values, /*size=*/4096);
 auto bounds = fix_frames(frame_indices, /*x_min=*/0, /*x_max=*/-1);
@@ -898,8 +898,8 @@ float frames_to_time(int frames, int sr, int hop_length);
 int time_to_frames(float time, int sr, int hop_length);
 
 // フレーム <-> サンプル（librosa.frames_to_samples / samples_to_frames）
-int frames_to_samples(int frames, int hop_length = 512, int n_fft = 0);
-int samples_to_frames(int samples, int hop_length = 512, int n_fft = 0);
+int frames_to_samples(int frames, int hop_length, int n_fft = 0);
+int samples_to_frames(int samples, int hop_length, int n_fft = 0);
 
 // dB 変換（librosa.power_to_db / amplitude_to_db とその逆）
 std::vector<float> power_to_db(const std::vector<float>& values,
@@ -1029,10 +1029,11 @@ C ABI のルーム音響では、次の設定を公開します。
 ## エラーハンドリング
 
 ```cpp
-class SonareException : public std::exception {
+class SonareException : public std::runtime_error {
 public:
+  explicit SonareException(ErrorCode code);
+  SonareException(ErrorCode code, const std::string& message);
   ErrorCode code() const;
-  const char* what() const noexcept override;
 };
 
 try {

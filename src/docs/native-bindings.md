@@ -196,7 +196,7 @@ Node native's `Audio` wrapper is broader because it can call into the native add
 | Extra `Audio` methods | More focused analysis and room-acoustic methods are available as instance methods | Use standalone focused helpers where available |
 | File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)` only |
 
-Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `estimateRoom(...)`, `synthesizeRir(...)`, `roomMorph(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and positional `detectChords(...)` to `Audio`.
+Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and `detectChords(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions.
 
 ### StreamingMasteringChain
 
@@ -209,7 +209,7 @@ worker, or audio capture pipeline. It accepts the same nested config as
 import { StreamingMasteringChain } from '@libraz/libsonare-native';
 
 const chain = new StreamingMasteringChain({
-  eq: { tiltDb: 0.5 },
+  eq: { tilt: { tiltDb: 0.5 } },
   dynamics: { compressor: { thresholdDb: -20 } },
   maximizer: { truePeakLimiter: { ceilingDb: -1, oversampleFactor: 4 } },
 });
@@ -395,15 +395,15 @@ those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
 | `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | Downbeat (bar-start) timestamps |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | Ranked key candidates with correlation scores |
-| `analyze(samples, sampleRate?)` | `AnalysisResult` | Core analysis: `bpm`, `bpmConfidence`, `key`, `timeSignature`, `beatTimes`, `beats`. Richer data (chords, sections, timbre, dynamics, rhythm) comes from the dedicated `detect*`/`analyze*` functions below |
+| `analyze(samples, sampleRate?)` | `AnalysisResult` | Full analysis in one call: `bpm`, `bpmConfidence`, `key`, `timeSignature`, `beatTimes`, `beats`, plus `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, and `form`. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
 | `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback for long inputs |
-| `analyzeBpm(samples, sampleRate?, bpmMin?, bpmMax?, startBpm?, nFft?, hopLength?, maxCandidates?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates |
-| `analyzeRhythm(samples, sampleRate?, bpmMin?, bpmMax?, startBpm?, nFft?, hopLength?)` | `RhythmResult` | Time signature, groove, syncopation |
-| `analyzeDynamics(samples, sampleRate?, windowSec?, hopLength?, compressionThreshold?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
-| `analyzeTimbre(samples, sampleRate?, nFft?, hopLength?, nMels?, nMfcc?, windowSec?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime` |
-| `analyzeSections(samples, sampleRate?, nFft?, hopLength?, minSectionSec?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings |
-| `analyzeMelody(samples, sampleRate?, fmin?, fmax?, frameLength?, hopLength?, threshold?)` | `MelodyResult` | Lead-melody contour (F0 per frame) |
-| `detectAcoustic(samples, sampleRate?, nOctaveBands?, nThirdOctaveSubbands?, minDecayDb?, noiseFloorMarginDb?)` | `AcousticResult` | Room acoustics from a recording (RT60, etc.) |
+| `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
+| `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | Time signature, groove, syncopation. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength` |
+| `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor. `options`: `windowSec`, `hopLength`, `compressionThreshold` |
+| `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime`. `options`: `nFft`, `hopLength`, `nMels`, `nMfcc`, `windowSec` |
+| `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings. `options`: `nFft`, `hopLength`, `minSectionSec` |
+| `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | Lead-melody contour (F0 per frame). `options`: `fmin`, `fmax`, `frameLength`, `hopLength`, `threshold`, `usePyin`, `center` |
+| `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | Room acoustics from a recording (RT60, etc.). `options`: `nOctaveBands`, `nThirdOctaveSubbands`, `minDecayDb`, `noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?)` | `AcousticResult` | Room acoustics from a measured impulse response |
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
 | `synthesizeRir(options?)` | `RirResult` | Mono room impulse response from shoebox geometry |
@@ -492,7 +492,7 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | Variable-Q transform magnitude (`gamma` controls Q) |
 | `nnlsChroma(samples, sr?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma) |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | NMF factor matrices from a row-major spectrogram |
-| `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbour filtering |
+| `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbor filtering |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope (the input to the tempogram family) |
 
 Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`.
@@ -503,12 +503,10 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `melToStft(mel, nMels, nFrames, sr?, nFft?, hopLength?, fmin?, fmax?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
+| `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
 | `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfccToMel(mfcc, nMfcc, nFrames, nMels?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
-| `mfccToAudio(mfcc, nMfcc, nFrames, sr?, nFft?, hopLength?, nMels?, nIter?, fmin?, fmax?)` | `Float32Array` | Audio from MFCC coefficients |
-
-Node native puts `sampleRate` before `nMels` in `mfccToAudio(...)`; the WASM package keeps `nMels` before `sampleRate` for that helper. Check the runtime-specific table when porting inverse-reconstruction snippets.
+| `mfccToAudio(mfcc, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from MFCC coefficients |
 
 #### librosa-Compatible Helpers
 
@@ -519,7 +517,7 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 - **`preemphasis` / `deemphasis`** — classic one-tap IIR pre-processing on the waveform.
 - **`trimSilence` / `splitSilence`** — trim leading/trailing silence or split on silent gaps.
 - **`frameSignal` / `padCenter` / `fixLength` / `fixFrames`** — framing and size-alignment utilities for fixed-frame DSP.
-- **`peakPick` / `vectorNormalize`** — peak detection on 1-D signals and vector-norm normalisation.
+- **`peakPick` / `vectorNormalize`** — peak detection on 1-D signals and vector-norm normalization.
 - **`pcen`** — dynamic range compression for mel spectrograms.
 - **`tonnetz`** — projects chroma into a 6-D harmonic space.
 - **`tempogram` / `plp`** — time-varying tempo representation and dominant local pulse.
@@ -555,8 +553,8 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `midiToHz(midi)` | MIDI note number → Hertz |
 | `hzToNote(hz)` | Hertz → note name (e.g., "A4") |
 | `noteToHz(note)` | Note name → Hertz |
-| `framesToTime(frames, sr, hopLength)` | Frame index → seconds |
-| `timeToFrames(time, sr, hopLength)` | Seconds → frame index |
+| `framesToTime(frames, sr?, hopLength?)` | Frame index → seconds (`sr` default `22050`, `hopLength` default `512`) |
+| `timeToFrames(time, sr?, hopLength?)` | Seconds → frame index (`sr` default `22050`, `hopLength` default `512`) |
 | `framesToSamples(frames, hopLength?, nFft?)` | Frame index → sample index (`librosa.frames_to_samples`) |
 | `samplesToFrames(samples, hopLength?, nFft?)` | Sample index → frame index (`librosa.samples_to_frames`) |
 | `powerToDb(values, ref?, amin?, topDb?)` | Power → dB (`librosa.power_to_db`) |
@@ -575,8 +573,8 @@ Standalone level, dynamics, and stereo-image meters. Each accepts an optional `o
 | `meteringCrestFactorDb(samples, sr?, options?)` | `number` | Crest factor, peak − RMS (dB) |
 | `meteringDcOffset(samples, sr?, options?)` | `number` | Mean (DC) offset, linear amplitude |
 | `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | Inter-sample (true) peak (dBFS); `oversampleFactor` is a power of two in 1..16 (default 4) |
-| `meteringDetectClipping(samples, sr?, threshold?, minRegionSamples?, options?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `minRegionSamples` default `1` |
-| `meteringDynamicRange(samples, sr?, windowSec?, hopSec?, lowPercentile?, highPercentile?, options?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0` for defaults (window 3 s, hop 1 s, low 0.10, high 0.95) |
+| `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | Clipped-sample runs; `options` adds `threshold` (default `0.999`) and `minRegionSamples` (default `1`) |
+| `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | Sliding-window dynamic range; `options` adds `windowSec`, `hopSec`, `lowPercentile`, `highPercentile` (omit for defaults: window 3 s, hop 1 s, low 0.10, high 0.95) |
 | `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | Pearson correlation, −1..1 |
 | `meteringStereoWidth(left, right, sr?, options?)` | `number` | Mid/side stereo width |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | Per-sample mid/side point series |
@@ -678,12 +676,18 @@ interface AnalysisResult {
   bpmConfidence: number;
   key: Key;
   timeSignature: TimeSignature;
-  beatTimes: Float32Array;
-  beats: Array<{ time: number; strength: undefined }>;  // strength is not populated here
+  beatTimes: Float32Array;                       // Derived from beats[].time
+  beats: Array<{ time: number; strength: number }>;
+  chords: AnalysisChord[];                       // Detected chord progression
+  sections: AnalysisSection[];                   // Song-structure sections
+  timbre: AnalysisTimbre;                        // Aggregate timbre summary
+  dynamics: AnalysisDynamics;                    // Aggregate dynamics summary
+  rhythm: AnalysisRhythm;                        // Aggregate rhythm summary
+  melody: AnalysisMelody;                        // Melody-contour summary
+  form: string;                                  // Musical form label, e.g. "AABA"
 }
-// Chords, sections, timbre, dynamics, rhythm, and acoustics are NOT part of
-// AnalysisResult. Call the dedicated functions instead: detectChords(),
-// analyzeSections(), analyzeTimbre(), analyzeDynamics(), analyzeRhythm().
+// analyze() returns the full result above. The dedicated detect*/analyze*
+// functions remain available for targeted or parameterized analysis.
 
 interface HpssResult {
   harmonic: Float32Array;

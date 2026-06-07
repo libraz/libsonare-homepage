@@ -115,7 +115,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | librosa / standard | libsonare | Notes |
 |--------------------|-----------|-------|
 | `librosa.decompose.decompose()` | `decompose()` | NMF factor matrices from a row-major spectrogram |
-| `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbour filtering |
+| `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbor filtering |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | Multichannel integrated loudness from interleaved samples |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | Loudness range in LU |
 

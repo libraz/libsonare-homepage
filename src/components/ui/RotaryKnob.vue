@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import Tooltip from './Tooltip.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +20,21 @@ const props = withDefaults(
     /** Accent color for the value arc and pointer. */
     accent?: string;
     disabled?: boolean;
+    /**
+     * Help content. When `body` is set, an "i" info dot appears next to the
+     * label and opens a rich {@link Tooltip}. The remaining props mirror the
+     * Tooltip API so a `term()` helper can be spread straight onto the knob.
+     */
+    eyebrow?: string;
+    /** Tooltip heading; falls back to {@link label}. Declared so it is not echoed as a native DOM title. */
+    title?: string;
+    body?: string;
+    tip?: string;
+    tipLabel?: string;
+    defaultRationale?: string;
+    defaultLabel?: string;
+    href?: string;
+    linkLabel?: string;
   }>(),
   {
     step: undefined,
@@ -27,6 +43,15 @@ const props = withDefaults(
     size: 56,
     accent: 'var(--demo-accent)',
     disabled: false,
+    eyebrow: undefined,
+    title: undefined,
+    body: undefined,
+    tip: undefined,
+    tipLabel: undefined,
+    defaultRationale: undefined,
+    defaultLabel: undefined,
+    href: undefined,
+    linkLabel: undefined,
   },
 );
 
@@ -151,7 +176,25 @@ function onKeyDown(event: KeyboardEvent): void {
     :class="{ 'rotary-knob--dragging': dragging, 'rotary-knob--disabled': disabled }"
     :style="{ '--knob-size': `${size}px`, '--knob-accent': accent }"
   >
-    <span class="rotary-knob__label">{{ label }}</span>
+    <span class="rotary-knob__head">
+      <span class="rotary-knob__label">{{ label }}</span>
+      <Tooltip
+        v-if="body"
+        :eyebrow="eyebrow"
+        :title="title || label"
+        :body="body"
+        :tip="tip"
+        :tip-label="tipLabel"
+        :default-rationale="defaultRationale"
+        :default-label="defaultLabel"
+        :href="href"
+        :link-label="linkLabel"
+      >
+        <button type="button" class="rotary-knob__info" :aria-label="title || label">
+          <span aria-hidden="true">i</span>
+        </button>
+      </Tooltip>
+    </span>
     <div
       class="rotary-knob__control"
       role="slider"
@@ -207,6 +250,12 @@ function onKeyDown(event: KeyboardEvent): void {
   pointer-events: none;
 }
 
+.rotary-knob__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .rotary-knob__label {
   color: var(--demo-text-muted);
   font-size: 9px;
@@ -215,6 +264,39 @@ function onKeyDown(event: KeyboardEvent): void {
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.rotary-knob__info {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.rotary-knob__info > span {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.rotary-knob__info:hover,
+.rotary-knob__info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
 }
 
 .rotary-knob__control {

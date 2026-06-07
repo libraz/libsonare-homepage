@@ -536,7 +536,8 @@ loadable by the WASM, Python, Node, or C++ mixer APIs.
 # List the built-in mixer scene presets
 sonare mixing-presets
 
-# Print one preset's scene as JSON (default: basic)
+# Print one preset's scene as JSON
+# (pass --preset one of: vocalReverbSend, drumBusSubgroup, commentaryDucking)
 sonare mixing-preset --preset vocalReverbSend > scene.json
 
 # Load a built-in scene preset and render per-strip inputs to a stereo WAV
@@ -560,8 +561,8 @@ Related: [Mixing Engine](./mixing.md).
 
 The `sonare project` command group runs headless project and Standard MIDI File
 (SMF) / MIDI 2.0 workflows from JSON project files. `midi-render` renders a MIDI
-project through the native synthesizer, and `synth-presets` lists the built-in
-instrument patches.
+project through the native synthesizer, and `project synth-presets` lists the
+built-in instrument patches.
 
 ```bash
 # Print the project ABI version
@@ -607,13 +608,13 @@ sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 sonare midi-render --in project.json --synth acoustic-piano --sample-rate 48000 -o render.wav
 
 # List the built-in synth presets
-sonare synth-presets
+sonare project synth-presets
 ```
 
 | Command | Description | Notable options |
 |---------|-------------|-----------------|
 | `sonare midi-render` | Render a MIDI project through NativeSynth | `--in`, `--synth`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `-o` |
-| `sonare synth-presets` | List the built-in NativeSynth presets | `--json` |
+| `sonare project synth-presets` | List the built-in NativeSynth presets | `--json` |
 
 Bounce and render commands write stereo WAV output. SoundFont (SF2) and
 per-destination synth JSON are not wired through these CLI commands; use the
@@ -648,6 +649,6 @@ Check the active build from Python with `libsonare.has_ffmpeg_support()`.
    sonare analyze sample.wav
    ```
 
-2. **FFT size**: Smaller FFT size (`--n-fft 1024`) is faster but less frequency resolution.
+2. **FFT size**: A smaller FFT size (`--n-fft 1024`) is faster but gives less frequency resolution.
 
-3. **Hop length**: Larger hop length (`--hop-length 1024`) is faster but less time resolution.
+3. **Hop length**: A larger hop length (`--hop-length 1024`) is faster but gives less time resolution.

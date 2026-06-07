@@ -7,10 +7,12 @@ import {
   enCopy,
   jaCopy,
   STEP_COUNT,
+  STUDIO_TERM_SLUGS,
   STUDIO_TRACKS,
+  type StudioTermKey,
 } from '@/components/studio/studioCopy';
 import ToolShell from '@/components/ToolShell.vue';
-import { RotaryKnob, StatusIndicator } from '@/components/ui';
+import { RotaryKnob, StatusIndicator, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useStudioEngine } from '@/composables/useStudioEngine';
 import { meterFillPercent } from '@/utils/scale';
@@ -74,6 +76,28 @@ const docsPath = computed(() =>
   locale.value === 'ja' ? '/ja/docs/project-editing' : '/docs/project-editing',
 );
 const oppositeLocalePath = computed(() => (locale.value === 'ja' ? '/studio' : '/ja/studio'));
+
+const glossaryBase = computed(() =>
+  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
+);
+
+/** Build the rich-tooltip props for a control from the copy + slug tables. */
+function term(key: StudioTermKey) {
+  const t = copy.value.terms;
+  const item = t.items[key];
+  const slug = STUDIO_TERM_SLUGS[key];
+  return {
+    eyebrow: t.eyebrow,
+    title: item.title,
+    body: item.body,
+    tip: item.tip,
+    tipLabel: t.tipLabel,
+    defaultRationale: 'defaultRationale' in item ? item.defaultRationale : undefined,
+    defaultLabel: t.resetLabel,
+    href: slug ? `${glossaryBase.value}/${slug}` : undefined,
+    linkLabel: t.linkLabel,
+  };
+}
 
 const canvases = ref<(HTMLCanvasElement | null)[]>(STUDIO_TRACKS.map(() => null));
 
@@ -258,23 +282,26 @@ async function downloadWav() {
           <span class="st-brand__tag">{{ copy.deck.tagline }}</span>
         </div>
 
-        <button
-          type="button"
-          class="st-play"
-          :class="{ 'st-play--on': isPlaying }"
-          :aria-label="isPlaying ? copy.transport.stop : copy.transport.play"
-          :disabled="!isReady"
-          @click="togglePlay"
-        >
-          <svg v-if="!isPlaying" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M6 6h12v12H6z" />
-          </svg>
-        </button>
+        <Tooltip v-bind="term('transport')">
+          <button
+            type="button"
+            class="st-play"
+            :class="{ 'st-play--on': isPlaying }"
+            :aria-label="isPlaying ? copy.transport.stop : copy.transport.play"
+            :disabled="!isReady"
+            @click="togglePlay"
+          >
+            <svg v-if="!isPlaying" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 6h12v12H6z" />
+            </svg>
+          </button>
+        </Tooltip>
 
-        <div class="st-lcd" role="status">
+        <Tooltip v-bind="term('position')">
+        <div class="st-lcd" role="status" tabindex="0">
           <div class="st-lcd__cell">
             <span class="st-lcd__key">{{ copy.statusbar.bpm }}</span>
             <span class="st-lcd__value st-lcd__value--big">{{ bpm }}</span>
@@ -286,8 +313,10 @@ async function downloadWav() {
           </div>
           <i class="st-lcd__dot" :class="{ 'st-lcd__dot--on': isPlaying }"></i>
         </div>
+        </Tooltip>
 
         <RotaryKnob
+          v-bind="term('tempo')"
           :model-value="bpm"
           :min="80" :max="160" :step="1"
           :label="copy.transport.tempo"
@@ -309,22 +338,31 @@ async function downloadWav() {
           ></i>
         </div>
 
-        <button
-          type="button"
-          class="st-bounce"
-          :disabled="downloading || !isReady"
-          @click="downloadWav"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />
-          </svg>
-          {{ downloading ? copy.transport.downloading : copy.transport.download }}
-        </button>
+        <Tooltip v-bind="term('bounce')" class="st-bounce-tip">
+          <button
+            type="button"
+            class="st-bounce"
+            :disabled="downloading || !isReady"
+            @click="downloadWav"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />
+            </svg>
+            {{ downloading ? copy.transport.downloading : copy.transport.download }}
+          </button>
+        </Tooltip>
       </div>
 
       <!-- ===== SEQUENCER ===== -->
       <div class="st-deck__seq">
-        <h3 class="st-sec-title">{{ copy.sections.sequencer }}</h3>
+        <div class="st-sec-head">
+          <h3 class="st-sec-title">{{ copy.sections.sequencer }}</h3>
+          <Tooltip v-bind="term('step')">
+            <button type="button" class="st-sec-info" :aria-label="term('step').title">
+              <span aria-hidden="true">i</span>
+            </button>
+          </Tooltip>
+        </div>
         <div class="st-ruler" aria-hidden="true">
           <span class="st-ruler__gutter"></span>
           <div class="st-ruler__cells">
@@ -377,7 +415,14 @@ async function downloadWav() {
 
       <!-- ===== MIXER ===== -->
       <div class="st-deck__mixer">
-        <h3 class="st-sec-title">{{ copy.sections.mixer }}</h3>
+        <div class="st-sec-head">
+          <h3 class="st-sec-title">{{ copy.sections.mixer }}</h3>
+          <Tooltip v-bind="term('mixer')">
+            <button type="button" class="st-sec-info" :aria-label="term('mixer').title">
+              <span aria-hidden="true">i</span>
+            </button>
+          </Tooltip>
+        </div>
         <div class="st-mix-row">
           <div class="st-strips">
           <ChannelStrip
@@ -386,6 +431,7 @@ async function downloadWav() {
             :label="copy.tracks[track.id]"
             :gain="trackGains[t]"
             :level="engine.levels.value[t]"
+            :help="term('level')"
             mutable
             :muted="trackMutes[t]"
             :mute-label="copy.mixer.mute"
@@ -402,6 +448,7 @@ async function downloadWav() {
             :label="copy.mixer.master"
             :gain="masterGain"
             :level="engine.masterLevel.value"
+            :help="term('master')"
             class="st-strips__master"
             @update:gain="setMaster"
           />
@@ -410,7 +457,14 @@ async function downloadWav() {
           <!-- Decorative hardware "master section": real master level on a dB scale. -->
           <div class="st-vu" aria-hidden="true">
             <div class="st-vu__head">
-              <span class="st-vu__title">MASTER OUT</span>
+              <span class="st-vu__title">
+                MASTER OUT
+                <Tooltip v-bind="term('vu')">
+                  <button type="button" class="st-sec-info" :aria-label="term('vu').title">
+                    <span aria-hidden="true">i</span>
+                  </button>
+                </Tooltip>
+              </span>
               <span class="st-vu__legend">PROJECT ENGINE · OFFLINE BOUNCE · 48K</span>
             </div>
             <div class="st-vu__meter">
@@ -724,11 +778,14 @@ html:not(.dark) .st-lcd__value {
   }
 }
 
+.st-bounce-tip {
+  margin-left: auto;
+}
+
 .st-bounce {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   padding: 9px 16px;
   border: 1px solid var(--demo-accent-border);
   border-radius: 6px;
@@ -763,14 +820,53 @@ html:not(.dark) .st-lcd__value {
   border-top: 1px solid var(--demo-border);
 }
 
+.st-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
 .st-sec-title {
-  margin: 0 0 12px;
+  margin: 0;
   color: var(--demo-text-faint);
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+}
+
+.st-sec-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.st-sec-info > span {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.st-sec-info:hover,
+.st-sec-info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
 }
 
 /* Step-number ruler. Mirrors StepRow's metrics (34px gutter + 10px gap,
@@ -942,6 +1038,9 @@ html:not(.dark) .st-lcd__value {
 }
 
 .st-vu__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--demo-text-muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
@@ -1040,7 +1139,7 @@ html:not(.dark) .st-vu__meter {
     gap: 12px;
   }
 
-  .st-bounce {
+  .st-bounce-tip {
     margin-left: 0;
   }
 

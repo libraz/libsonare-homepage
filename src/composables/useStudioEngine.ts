@@ -197,7 +197,7 @@ export function useStudioEngine() {
         const report = mod.waveformPeaks(interleaved, 2, {
           samplesPerBucket: Math.max(64, Math.floor(frames / 240)),
         });
-        const buckets = report.min.length / 2;
+        const buckets = report.bucketCount;
         views.push({ min: report.min.subarray(0, buckets), max: report.max.subarray(0, buckets) });
       }
       buffers = nextBuffers;

@@ -41,7 +41,7 @@ The instinct to fix a bad master with *more* processing usually deepens the prob
 | Flat or lifeless | Raise Threshold, lower Ratio, or slow Attack. |
 | Pumping | Slow Release or reduce compression. |
 | Narrow or phasey | Lower Stereo Width and check correlation. |
-| Distorted peaks | Lower loudness target or limiter ceiling pressure. |
+| Distorted peaks | Lower the loudness target or ease off the limiter. |
 
 ## When To Revisit The Mix
 

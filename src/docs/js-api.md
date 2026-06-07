@@ -354,7 +354,7 @@ Use the focused helpers when the default `analyze(...)` result is either too bro
 | Rhythm character | `analyzeRhythm(samples, sampleRate, ...)` | Reports groove, syncopation, and regularity style features. |
 | Dynamics | `analyzeDynamics(samples, sampleRate, ...)` | Dynamic range, loudness range, crest factor, and compression flag. |
 | Timbre | `analyzeTimbre(samples, sampleRate, ...)` | Brightness, warmth, density, roughness, and complexity. |
-| Chords | `detectChords(samples, sampleRate, options?)` | Chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' \| 'nnls'`. |
+| Chords | `detectChords(samples, sampleRate, options?)` | Returns `{ chords }` of chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' \| 'nnls'`. |
 | Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. |
 | Melody | `analyzeMelody(samples, sampleRate, ...)` | Monophonic melody contour based on pitch tracking. |
 
@@ -365,11 +365,11 @@ const keys = detectKeyCandidates(samples, sampleRate, {
   genreHint: 'pop',
 });
 
-const chords = detectChords(samples, sampleRate, {
+const { chords } = detectChords(samples, sampleRate, {
   useHmm: true,
   useKeyContext: true,
-  keyRoot: keys[0].root,
-  keyMode: keys[0].mode,
+  keyRoot: keys[0].key.root,
+  keyMode: keys[0].key.mode,
   chromaMethod: 'nnls',
 });
 
@@ -428,7 +428,12 @@ These functions describe or apply the recording space rather than the song itsel
 const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6);
 console.log(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence);
 
-const blind = detectAcoustic(roomRecording, sampleRate, 6, 24, 30, 10);
+const blind = detectAcoustic(roomRecording, sampleRate, {
+  nOctaveBands: 6,
+  nThirdOctaveSubbands: 24,
+  minDecayDb: 30,
+  noiseFloorMarginDb: 10,
+});
 console.log(blind.isBlind, blind.rt60Bands);
 
 const estimate = estimateRoom(roomRecording, sampleRate, {
@@ -853,7 +858,7 @@ These functions are not just "more features"; they solve different modeling prob
 | Chord-friendly chroma | `nnlsChroma(...)` | NNLS note activations can be cleaner for chord work than STFT chroma. |
 | Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)` | Librosa-compatible contrast bands, polynomial coefficients, and zero-crossing indices. |
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
-| Decomposition and remixing | `decompose(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, nearest-neighbour filtering, interval remixing, time scaling, and HPSS residual output. |
+| Decomposition and remixing | `decompose(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, nearest-neighbor filtering, interval remixing, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. |
 | Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA. |
 
@@ -1093,7 +1098,7 @@ Pair `scaleQuantizeMidi(...)` with `pitchCorrectToMidi(...)` to retune a detecte
 ## librosa-Compatible Helpers
 
 These librosa-parity helpers mirror the
-behaviour of the corresponding `librosa` functions and are exposed across the
+behavior of the corresponding `librosa` functions and are exposed across the
 WASM, Node, and Python bindings. See [librosa Compatibility](/docs/librosa-compatibility)
 for the librosa function each helper matches.
 
@@ -1101,7 +1106,7 @@ for the librosa function each helper matches.
 - **Pre / De-emphasis** — Classic one-tap IIR pre-processing that boosts (or undoes) high frequencies before analysis.
 - **Silence Trim / Split** — Practical helpers that cut leading/trailing silence or split a recording on silent gaps.
 - **Frame / Pad / Length** — Utilities to slice a waveform into fixed-length frames, or align array sizes before feeding fixed-frame DSP.
-- **Peak Picking / Vector Normalize** — Post-processing on 1-D signals (e.g. onset envelopes) to extract peak indices or normalise vectors under a chosen norm.
+- **Peak Picking / Vector Normalize** — Post-processing on 1-D signals (e.g. onset envelopes) to extract peak indices or normalize vectors under a chosen norm.
 - **PCEN** — Dynamic range compression for mel spectrograms; produces features that are more robust to background noise and gain changes.
 - **Tonnetz** — Projects a chromagram into a 6-D harmonic space — useful for chord-relation and modulation analysis.
 - **Tempogram / PLP** — A time-varying tempo representation built from the onset envelope, and the predominant local pulse extracted from it.
@@ -1194,12 +1199,12 @@ Used as a post-processing step on 1-D signals such as onset envelopes.
 :::
 
 ::: details `vectorNormalize` `normType`
-- `0` (**inf**, default) — divide by max absolute value, mapping into `[-1, 1]` (peak-style normalisation).
+- `0` (**inf**, default) — divide by max absolute value, mapping into `[-1, 1]` (peak-style normalization).
 - `1` (**L1**) — divide by sum of absolute values (probability-distribution style).
 - `2` (**L2**) — divide by sqrt of sum of squares (common feature-vector pre-processing).
-- `3` (**power**) — divide by sum of squares (energy normalisation).
+- `3` (**power**) — divide by sum of squares (energy normalization).
 
-`threshold` skips normalisation when the chosen norm is below it — guards against amplifying near-silent frames.
+`threshold` skips normalization when the chosen norm is below it — guards against amplifying near-silent frames.
 :::
 
 ### PCEN (Per-Channel Energy Normalization)
@@ -1786,6 +1791,7 @@ interface AnalysisResult {
   timbre: Timbre;
   dynamics: Dynamics;
   rhythm: RhythmFeatures;
+  melody: MelodyContour;
   form: string;  // e.g., "IABABCO"
 }
 ```
@@ -1868,6 +1874,8 @@ interface TimbreAnalysisResult extends TimbreFrame {
 ```typescript
 interface Dynamics {
   dynamicRangeDb: number;
+  peakDb: number;
+  rmsDb: number;
   loudnessRangeDb: number;
   crestFactor: number;
   isCompressed: boolean;
@@ -1881,6 +1889,8 @@ interface RhythmFeatures {
   syncopation: number;
   grooveType: string;  // "straight", "shuffle", "swing"
   patternRegularity: number;
+  tempoStability: number;
+  timeSignature: TimeSignature;
 }
 ```
 

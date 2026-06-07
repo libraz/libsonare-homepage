@@ -544,7 +544,8 @@ PyPI の Python CLI には `mix` が含まれます。JSON ファイルまたは
 # 組み込みミキサーシーンプリセットを一覧表示
 sonare mixing-presets
 
-# 1 つのプリセットのシーンを JSON で出力（既定: basic）
+# 1 つのプリセットのシーンを JSON で出力
+# （--preset には vocalReverbSend, drumBusSubgroup, commentaryDucking のいずれかを指定）
 sonare mixing-preset --preset vocalReverbSend > scene.json
 
 # 組み込みシーンプリセットを読み込み、ストリップ入力をステレオ WAV にレンダリング
@@ -566,7 +567,7 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 
 ### プロジェクト＆ MIDI ワークフロー
 
-`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`midi-render` はプロジェクトの MIDI を NativeSynth でレンダリングし、`synth-presets` は組み込みの楽器パッチを一覧表示します。
+`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`midi-render` はプロジェクトの MIDI を NativeSynth でレンダリングし、`project synth-presets` は組み込みの楽器パッチを一覧表示します。
 
 ```bash
 # プロジェクトの ABI バージョンを表示
@@ -612,13 +613,13 @@ sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 sonare midi-render --in project.json --synth acoustic-piano --sample-rate 48000 -o render.wav
 
 # 組み込みシンセプリセットを一覧表示
-sonare synth-presets
+sonare project synth-presets
 ```
 
 | コマンド | 説明 | 主なオプション |
 |----------|------|----------------|
 | `sonare midi-render` | MIDI プロジェクトを NativeSynth でレンダリング | `--in`, `--synth`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `-o` |
-| `sonare synth-presets` | 組み込み NativeSynth プリセットを一覧表示 | `--json` |
+| `sonare project synth-presets` | 組み込み NativeSynth プリセットを一覧表示 | `--json` |
 
 バウンスやレンダリングのコマンドはステレオ WAV を出力します。SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 

@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import Tooltip from '@/components/ui/Tooltip.vue';
 import { meterFillPercent } from '@/utils/scale';
+
+/** Rich-tooltip content, shaped to spread straight onto {@link Tooltip}. */
+interface StripHelp {
+  eyebrow?: string;
+  title?: string;
+  body?: string;
+  tip?: string;
+  tipLabel?: string;
+  defaultRationale?: string;
+  defaultLabel?: string;
+  href?: string;
+  linkLabel?: string;
+}
 
 const props = withDefaults(
   defineProps<{
@@ -18,6 +32,8 @@ const props = withDefaults(
     /** Fader range and double-click reset point. */
     max?: number;
     defaultGain?: number;
+    /** Optional help shown via an info dot next to the strip name. */
+    help?: StripHelp;
   }>(),
   {
     mutable: false,
@@ -26,6 +42,7 @@ const props = withDefaults(
     unmuteLabel: 'Unmute',
     max: 1.4,
     defaultGain: 0.9,
+    help: undefined,
   },
 );
 
@@ -84,7 +101,14 @@ function onKeyDown(event: KeyboardEvent): void {
 
 <template>
   <div class="channel-strip" :class="{ 'channel-strip--muted': muted }">
-    <span class="channel-strip__name">{{ label }}</span>
+    <span class="channel-strip__name">
+      {{ label }}
+      <Tooltip v-if="help" v-bind="help">
+        <button type="button" class="channel-strip__info" :aria-label="help.title || label">
+          <span aria-hidden="true">i</span>
+        </button>
+      </Tooltip>
+    </span>
     <span class="channel-strip__db">{{ gainToDb(gain) }}<small>dB</small></span>
     <div class="channel-strip__bay">
       <div
@@ -151,8 +175,10 @@ function onKeyDown(event: KeyboardEvent): void {
 }
 
 .channel-strip__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   max-width: 100%;
-  overflow: hidden;
   padding: 2px 8px;
   border-radius: 4px;
   background: var(--strip-glow);
@@ -161,9 +187,41 @@ function onKeyDown(event: KeyboardEvent): void {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.channel-strip__info {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.channel-strip__info > span {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.channel-strip__info:hover,
+.channel-strip__info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
 }
 
 .channel-strip__db {

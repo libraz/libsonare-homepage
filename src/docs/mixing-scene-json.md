@@ -75,9 +75,11 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 | `sends` | array | `[]` | Parallel sends to buses (see [Send](#send)) |
 
 ::: info Enums are integers in the file, strings in the API
-The scene **file** stores `panMode`, `panLaw`, and insert/send timing as integers or short tokens. The JavaScript runtime **methods** accept friendly strings — `setPanLaw(strip, 'const3dB')`, `addSend(..., 'postFader')`. Python accepts the same send/tap names, but pan-law strings use normalized names such as `'const-3db'`, `'const-4.5db'`, `'const-6db'`, or `'linear-0db'` (or the enum/int value). Both map to the same underlying value; the difference is just file format vs. ergonomic API.
+The scene **file** stores `panMode` and `panLaw` as integers, but insert `slot` and send `timing` are stored as the short string tokens `"pre"` / `"post"`. The JavaScript runtime **methods** accept friendly strings — `setPanLaw(strip, 'const3dB')`, `addSend(..., 'postFader')`. Python accepts the same send/tap names, but pan-law strings use normalized names such as `'const-3db'`, `'const-4.5db'`, `'const-6db'`, or `'linear-0db'` (or the enum/int value). Both map to the same underlying value; the difference is just file format vs. ergonomic API.
 
 Serializing a scene after runtime pan edits preserves the strip's current `panMode`. Use `Mixer.toSceneJson()` / `Mixer.to_scene_json()` instead of rebuilding the pan fields by hand.
+
+**Insert `slot` and send `timing` must be strings.** The parser reads them only when the value is a JSON string, so a numeric `"timing": 1` is silently dropped and the field falls back to its default. Always write `"pre"` or `"post"`.
 :::
 
 ::: details Field terms: dual pan, polarity invert, pan law, PDC
@@ -237,12 +239,16 @@ saved = mixer.to_scene_json()   # round-trips back to the same schema
 mixer.close()                   # release the native handle
 ```
 
-```bash [C++ CLI]
+```bash [Python CLI]
 # Export a built-in scene, edit the JSON file, then render it.
-sonare mixing-preset vocalReverbSend > my-scene.json
+sonare mixing-preset --preset vocalReverbSend > my-scene.json
 sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav
 ```
 
+:::
+
+::: info `mix --scene` with per-strip inputs is Python-CLI only
+Rendering a whole scene from a JSON file with one `--input` per strip is implemented by the Python CLI. The C++ CLI's `mix` command is a single-strip, single-input processor (no `--scene`); use it for quick per-strip checks, not full scene renders.
 :::
 
 ::: tip When to recompile
@@ -252,6 +258,8 @@ Structural edits — adding/removing buses, sends, VCA groups, or connections �
 ## Browser demo project JSON
 
 The `/mixing` demo exports a *different*, smaller file for browser sessions. It is a UI project, not a mixer scene: it stores per-track arrangement settings, **not** decoded audio.
+
+The example below is abbreviated — it shows a representative subset of keys. A real export also carries additional top-level fields (such as `reverb` and `vcaGains`) and more per-track settings.
 
 ```json
 {

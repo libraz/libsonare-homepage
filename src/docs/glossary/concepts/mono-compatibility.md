@@ -41,7 +41,7 @@ Use width as a finishing move, not a way to fix arrangement problems.
 
 ## Verification Order
 
-A/B in stereo first to confirm that the added width is musically useful. Then switch to mono and check that lead vocal, kick, bass, and snare are still anchored. Look at correlation last: even when the meter looks safe, back off if the central elements weaken in mono.
+A/B in stereo first to verify that the added width is musically useful. Then switch to mono and check that lead vocal, kick, bass, and snare are still anchored. Look at correlation last: even when the meter looks safe, back off if the central elements weaken in mono.
 
 Widening tends to flatter on first listen, so it is important to compare short, loudness-matched phrases. If the side energy increased while the center merely feels smaller, that is a balance shift in disguise — not an actual mastering improvement.
 

@@ -116,7 +116,7 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 | `dynamics.duckingProcessor` | Sidechain envelope lowers the program path when the key signal is active | Voice-over music ducking and broadcast-style mixes | Attack/release shape determines speech intelligibility |
 | `dynamics.transientShaper` | Separates attack and sustain envelopes and applies independent gain | Emphasize or soften hits | Fast detector path is sensitive to block size |
 | `dynamics.upwardCompressor` | Raises material below a threshold instead of pushing loud material down | Increase detail and perceived density | Can raise noise floor; pair with denoise or gating when needed |
-| `dynamics.upwardExpander` | Emphasizes material above a lower threshold while leaving quiet portions lower | Restore articulation without hard gating | More musical than a gate for ambience-heavy sources |
+| `dynamics.upwardExpander` | Lifts material above a lower threshold while leaving the quietest portions untouched | Restore articulation without hard gating | More musical than a gate for ambience-heavy sources |
 | `dynamics.vocalRider` | Slow envelope follower adjusts vocal level toward a target range | Automatic level riding for vocals or speech | Designed as gradual gain automation, not a peak limiter |
 
 ::: details Dynamics terms: knee, makeup gain, sidechain, ducking
@@ -232,7 +232,7 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 |-----|----------------|----------|-----------------|
 | HPSS / harmonic / percussive | Median filtering on spectral representation separates horizontal harmonic energy and vertical percussive energy | Remixing, preprocessing, analysis cleanup | Offline-oriented for full files |
 | Time stretch | Phase-vocoder style processing | Change duration without changing pitch | Streaming requires overlap/state discipline |
-| Pitch shift | Resampling plus time-stretch relationship | Transpose pitch while preserving approximate duration | Formants are not preserved unless using voice-change path |
+| Pitch shift | Resampling combined with time stretching | Transpose pitch while preserving approximate duration | Formants are not preserved unless using the voice-change path |
 | Pitch correction | Pitch estimation and correction toward a target MIDI note | Vocal or monophonic note tuning | Best on monophonic material |
 | Note stretch | Region-based stretch around a note span | Edit note duration | Offline editing operation |
 | Voice change | Pitch and formant controls | Voice transformation | More expensive than simple pitch shift |

@@ -716,10 +716,10 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 
 | 関数 | 戻り値 | 備考 |
 |------|--------|------|
-| `melToStft(melPower, nMels, nFrames, sampleRate, nFft?, hopLength?, fmin?, fmax?)` | `StftPowerResult` `{ nBins, nFrames, power }` | メルフィルタバンクの擬似逆変換 |
-| `melToAudio(melPower, nMels, nFrames, sampleRate, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | Griffin-Lim による音声合成 |
+| `melToStft(melPower, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | メルフィルタバンクの擬似逆変換 |
+| `melToAudio(melPower, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Griffin-Lim による音声合成 |
 | `mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels?)` | `MelPowerResult` `{ nMels, nFrames, power }` | 逆 DCT でメルスペクトログラムへ |
-| `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | MFCC → メル → 音声を一度に |
+| `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | MFCC → メル → 音声を一度に |
 
 ::: warning ロスのある往復
 これらは*振幅*を再構成し、位相を Griffin-Lim で推定するため、出力は近似です。ソニフィケーション・試聴・可視化には十分ですが、ビット精度の復元には使えません。完全なパイプラインと注意点は [逆変換特徴量](./inverse-features.md) を参照してください。

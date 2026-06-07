@@ -187,6 +187,83 @@ export const enCopy = {
     morph: 'Room morph failed.',
   },
   help: { docs: 'Open docs' },
+  terms: {
+    eyebrow: 'Acoustics',
+    tipLabel: 'How to read it',
+    linkLabel: 'Open glossary',
+    items: {
+      dimensions: {
+        title: 'Dimensions',
+        body: 'The estimated length × width × height of an equivalent shoebox room, in meters. It reproduces the measured decay, not the literal floor plan.',
+        tip: 'On preset rooms, compare against the ground truth to see how close the blind estimate lands.',
+      },
+      volume: {
+        title: 'Volume',
+        body: 'Enclosed volume of the estimated room in cubic meters, derived from the dimensions. Larger volumes decay more slowly.',
+        tip: 'Big volume plus low absorption is what gives halls their long tails.',
+      },
+      sourceDistance: {
+        title: 'Source distance',
+        body: 'Estimated distance from the listener/mic to the source, in meters. One channel reveals how far, not which direction — so it is drawn as a shell around the listener.',
+        tip: 'Driven mainly by the direct-to-reverberant ratio: a drier direct sound reads as closer.',
+      },
+      criticalDistance: {
+        title: 'Critical distance',
+        body: 'The distance at which the direct sound and the reverberant field are equally loud. Beyond it, the room dominates what you hear.',
+        tip: 'A source past critical distance gives a washy, room-heavy recording.',
+      },
+      drr: {
+        title: 'Direct-to-reverberant ratio',
+        body: 'The level of the direct sound relative to the reverberant tail, in dB. Higher means closer and drier; lower means more distant, more room.',
+        tip: 'DRR is the main cue behind the source-distance estimate.',
+      },
+      mode: {
+        title: 'Estimation mode',
+        body: 'Impulse response uses a clean clap, pop, or sweep directly. Blind estimate infers the room from ordinary music or speech — useful for ranking, not architectural measurement.',
+        tip: 'Toggle "Treat as impulse response" to switch how an uploaded file is analyzed.',
+      },
+      rt60: {
+        title: 'RT60',
+        body: "Reverberation time: how long the tail takes to decay by 60 dB after the sound stops, in seconds. The headline measure of a room's liveness.",
+        tip: 'Short RT60 reads as a treated, intimate room; long RT60 as a large, reflective space.',
+      },
+      edt: {
+        title: 'Early decay time',
+        body: 'Decay measured over the first 10 dB and scaled to 60 dB, in seconds. It tracks the perceived reverberance of the early field better than RT60.',
+        tip: 'EDT well below RT60 hints at strong early reflections over a longer late tail.',
+      },
+      c50: {
+        title: 'Clarity (C50)',
+        body: 'The energy ratio of the first 50 ms to everything after, in dB. A speech-clarity measure — higher is more intelligible.',
+        tip: 'Aim high for spoken word; low C50 smears consonants.',
+      },
+      c80: {
+        title: 'Clarity (C80)',
+        body: 'The energy ratio of the first 80 ms to the rest, in dB. The music counterpart of C50 — higher is more articulate, lower more blended.',
+        tip: 'Concert halls balance C80 so music stays clear without sounding dry.',
+      },
+      d50: {
+        title: 'Definition (D50)',
+        body: 'The fraction of energy arriving within the first 50 ms, as a percentage. Closely related to C50 and speech definition.',
+        tip: 'Higher D50 means a clearer, more direct-sounding room.',
+      },
+      confidence: {
+        title: 'Confidence',
+        body: 'How reliable the estimate is, from the quality of the decay region found. Clean impulse responses score high; noisy or reverb-light material scores low.',
+        tip: 'Below about 35% the estimate is rough — try an impulse-response recording (clap, pop, sweep).',
+      },
+      band: {
+        title: 'Per-band decay',
+        body: 'RT60 measured separately in frequency bands. Real rooms absorb highs faster than lows, so the tail is rarely uniform across the spectrum.',
+        tip: 'A steep high-band rolloff means soft, absorptive surfaces; flat bands mean hard, reflective ones.',
+      },
+      absorption: {
+        title: 'Absorption',
+        body: "The estimated fraction of sound energy each band loses per reflection, as a percentage. Higher absorption shortens that band's RT60.",
+        tip: 'Bright, reflective rooms show low absorption; damped rooms show high.',
+      },
+    },
+  },
 };
 
 export const jaCopy: typeof enCopy = {
@@ -304,4 +381,106 @@ export const jaCopy: typeof enCopy = {
     morph: 'ルームモーフに失敗しました。',
   },
   help: { docs: 'ドキュメントを開く' },
+  terms: {
+    eyebrow: '音響',
+    tipLabel: '読み方',
+    linkLabel: '用語集を開く',
+    items: {
+      dimensions: {
+        title: '寸法',
+        body: '測定された減衰を再現する等価なシューボックス型の部屋の、奥行き × 幅 × 高さ（メートル）です。実際の間取りそのものではありません。',
+        tip: 'プリセットの部屋では正解値と比べて、ブラインド推定の精度を確認できます。',
+      },
+      volume: {
+        title: '容積',
+        body: '寸法から求めた推定室の容積（立方メートル）です。容積が大きいほど減衰はゆっくりになります。',
+        tip: '大きな容積と低い吸音率の組み合わせが、ホール特有の長い残響を生みます。',
+      },
+      sourceDistance: {
+        title: '音源までの距離',
+        body: 'リスナー／マイクから音源までの推定距離（メートル）です。1 チャンネルでは「どれだけ遠いか」は分かっても「どの方向か」は分からないため、リスナーを囲むシェルとして描かれます。',
+        tip: '主に直接音／残響音比で決まります。直接音が乾いているほど近いと判断されます。',
+      },
+      criticalDistance: {
+        title: '臨界距離',
+        body: '直接音と残響音場が同じ大きさになる距離です。これを超えると、聞こえる音は部屋の響きが支配的になります。',
+        tip: '音源が臨界距離より遠いと、残響に埋もれた録音になりやすくなります。',
+      },
+      drr: {
+        title: '直接音／残響音比（DRR）',
+        body: '残響の尾に対する直接音のレベル（dB）です。高いほど近く乾いた音、低いほど遠く部屋の響きが多い音になります。',
+        tip: 'DRR は音源距離推定の主要な手がかりです。',
+      },
+      mode: {
+        title: '推定モード',
+        body: 'インパルス応答はクリーンな拍手・破裂音・スイープをそのまま使います。ブラインド推定は通常の音楽や音声から部屋を推測するもので、比較には有用ですが建築的な測定値ではありません。',
+        tip: '「インパルス応答として扱う」を切り替えると、アップロード音源の解析方法が変わります。',
+      },
+      rt60: {
+        title: 'RT60',
+        body: '残響時間。音が止まってから尾が 60 dB 減衰するまでの時間（秒）で、部屋の響きの豊かさを表す代表的な指標です。',
+        tip: '短い RT60 は音響処理された親密な部屋、長い RT60 は大きく反射の多い空間を示します。',
+      },
+      edt: {
+        title: '初期減衰時間（EDT）',
+        body: '最初の 10 dB の減衰から測り 60 dB に換算した時間（秒）です。初期音場の体感的な残響感は RT60 より EDT のほうがよく表します。',
+        tip: 'EDT が RT60 より大きく短い場合、強い初期反射と長い後部残響が示唆されます。',
+      },
+      c50: {
+        title: '明瞭度（C50）',
+        body: '最初の 50 ms とそれ以降のエネルギー比（dB）です。音声明瞭度の指標で、高いほど聞き取りやすくなります。',
+        tip: '話し言葉では高めを狙います。C50 が低いと子音がにじみます。',
+      },
+      c80: {
+        title: '明瞭度（C80）',
+        body: '最初の 80 ms とそれ以降のエネルギー比（dB）です。C50 の音楽版で、高いほど分離がよく、低いほど溶け合った響きになります。',
+        tip: 'コンサートホールは、乾きすぎず明瞭さを保つよう C80 を整えています。',
+      },
+      d50: {
+        title: '明瞭度（D50）',
+        body: '最初の 50 ms に到達するエネルギーの割合（パーセント）です。C50 や音声の明瞭さと密接に関係します。',
+        tip: 'D50 が高いほど、明瞭で直接音の強い部屋になります。',
+      },
+      confidence: {
+        title: '信頼度',
+        body: '見つかった減衰領域の質から求めた推定の信頼度です。クリーンなインパルス応答は高く、ノイズが多い・残響の乏しい素材は低くなります。',
+        tip: '約 35% を下回ると推定は粗くなります。インパルス応答の録音（拍手・破裂音・スイープ）をお試しください。',
+      },
+      band: {
+        title: '帯域別の減衰',
+        body: '周波数帯域ごとに測った RT60 です。実際の部屋は低域より高域を速く吸音するため、尾はスペクトル全体で一様にはなりません。',
+        tip: '高域が急に落ちるほど柔らかく吸音性の高い面、各帯域が平坦なほど硬く反射的な面を示します。',
+      },
+      absorption: {
+        title: '吸音率',
+        body: '各帯域が 1 回の反射で失う音響エネルギーの推定割合（パーセント）です。吸音率が高いほどその帯域の RT60 は短くなります。',
+        tip: '明るく反射的な部屋は低く、吸音の効いた部屋は高くなります。',
+      },
+    },
+  },
+};
+
+/** Help-tooltip term keys, derived from the English copy. */
+export type SpatialTermKey = keyof typeof enCopy.terms.items;
+
+/**
+ * Glossary slug each term deep-links to (relative to `/docs/glossary/`).
+ * Room-acoustic terms are grouped into a handful of pages, so several keys
+ * intentionally point at the same guide.
+ */
+export const SPATIAL_TERM_SLUGS: Record<SpatialTermKey, string | undefined> = {
+  dimensions: 'acoustics/room-geometry',
+  volume: 'acoustics/room-geometry',
+  sourceDistance: 'acoustics/source-distance',
+  criticalDistance: 'acoustics/source-distance',
+  drr: 'acoustics/source-distance',
+  mode: 'acoustics/inverse-estimation',
+  rt60: 'acoustics/reverberation-time',
+  edt: 'acoustics/reverberation-time',
+  c50: 'acoustics/clarity-definition',
+  c80: 'acoustics/clarity-definition',
+  d50: 'acoustics/clarity-definition',
+  confidence: 'acoustics/inverse-estimation',
+  band: 'acoustics/absorption-bands',
+  absorption: 'acoustics/absorption-bands',
 };
