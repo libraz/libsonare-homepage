@@ -58,7 +58,15 @@ Quick Master exposes musical choices. Studio exposes grouped controls. Both rout
 | Source/reference comparison | Pair analysis | [Reference Match](./glossary/mastering/reference-match.md) |
 | LUFS, true peak, crest, correlation | Metering | [Reading Mastering Meters](./glossary/mastering/meter-reading.md) |
 
+::: info Reading correlation
+Correlation (phase correlation, roughly −1 to +1) measures how similar the left and right channels are. Near +1 is mono-safe; near 0 is wide; negative values warn that the mix may partly cancel when folded to mono.
+:::
+
 The grouped pages are intentionally broad. A compressor page can explain threshold, ratio, attack, release, knee, detector behavior, and gain-reduction reading together; splitting those into one page per parameter would hide the actual decision.
+
+::: info Compressor vocabulary
+*Threshold* is the level where compression starts; *ratio* is how hard it clamps above that; *attack*/*release* are how fast it reacts and recovers; *knee* is how gradually it eases in around the threshold; *gain reduction* is how many dB it is currently turning the signal down.
+:::
 
 ## Algorithm Boundaries
 

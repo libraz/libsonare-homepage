@@ -27,6 +27,10 @@ It covers several related jobs:
 | Built-in instruments and MIDI | Render MIDI through a multi-engine synth with a GM fallback bank or a SoundFont 2 player ([Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md)) |
 | Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
 
+::: info Loudness, LUFS, and true peak
+LUFS (Loudness Units Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including peaks that occur between samples, which ordinary peak meters miss — important to avoid distortion on playback.
+:::
+
 It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
 
 ::: details What is WebAssembly?
@@ -47,6 +51,10 @@ Common MIR tasks include:
 | **Chord recognition** | What chords are being played and when? |
 | **Structural analysis** | Where are the verse, chorus, and bridge? |
 | **Pitch tracking** | What notes are being sung or played? |
+
+::: info What is BPM?
+BPM stands for beats per minute — the speed of a song's pulse. 60 BPM is one beat per second; most pop songs sit around 90–130 BPM.
+:::
 
 libsonare provides all of these capabilities in a single library.
 
@@ -233,6 +241,10 @@ In the browser, it integrates with the Web Audio API's AudioWorklet for real-tim
 ### Mixing and Routing
 
 The libsonare mixing engine provides channel strips, pan modes, stereo width controls, sends, FX buses, VCA groups, scene presets, automation lanes, goniometer/true-peak metering, and offline stereo rendering. Use the [Mixing Engine](./mixing.md) guide when you need a persistent mixer scene rather than a one-shot analysis or mastering render.
+
+::: details Mixer terms in one place
+A **send** taps a copy of a channel to a shared effect; a **bus** is a sub-mix several channels feed into; a **VCA group** is one fader that controls the level of many channels at once. A **goniometer** visualizes the stereo image, and **true-peak** metering catches peaks that appear only between samples.
+:::
 
 ## Platform Support
 

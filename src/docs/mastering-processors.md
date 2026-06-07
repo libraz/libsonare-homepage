@@ -62,6 +62,10 @@ A goal-first index into the registry below. This is a starting point, not a rule
 | Clean up noise / clicks / clipping | `repair.denoiseClassical`, `repair.declick`, `repair.declip` | [Repair and Input](./glossary/mastering/repair.md) |
 | Match a reference track | `match.applyMatchEq`, `match.referenceLoudness` | [Reference Match](./glossary/mastering/reference-match.md) |
 
+::: details What is sidechaining / ducking?
+Sidechaining lets one signal control a processor applied to another. The most common use is **ducking**: a music bed is automatically turned down whenever a voice is present, then comes back up in the gaps — the way background music drops under a narrator.
+:::
+
 ::: details What is parallel compression?
 A normal compressor turns the loud parts down.
 
@@ -96,6 +100,10 @@ A few capabilities sit underneath the maximizer/final and analysis surfaces:
 - A **stereo imager** (widens or narrows the stereo field per band) and a **dynamic EQ** (an EQ whose boost/cut reacts to level, like a frequency-targeted compressor) are available in multiband form: `multiband.imager` and `multiband.dynamicEq` expose per-band parameters and accept a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three.
 :::
 
+::: info What is a crossover?
+A crossover splits the signal into frequency bands (e.g. lows / mids / highs) so each band can be processed separately. The "crossover cutoffs" are the frequencies where one band ends and the next begins; more cutoffs means more bands and finer control.
+:::
+
 ## Solo processors
 
 | Family | Processor names |
@@ -109,6 +117,10 @@ A few capabilities sit underneath the maximizer/final and analysis surfaces:
 | Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
+
+::: details What is dither?
+When you reduce bit depth (e.g. 24-bit down to 16-bit for CD/streaming), rounding creates a faint distortion on quiet tails. Dither adds a tiny, carefully shaped noise that masks that distortion so fades sound smooth instead of grainy. Apply it once, last, at the final bit-depth reduction.
+:::
 
 ::: warning Repair is classical DSP, by design
 `repair.denoiseClassical`, `repair.dereverbClassical`, and related processors use spectral subtraction / MMSE-STSA / LogMMSE with explicit noise estimation.

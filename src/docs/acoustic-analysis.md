@@ -56,6 +56,10 @@ By the end of this page you should be able to:
 
 `analyzeImpulseResponse(...)` and `detectAcoustic(...)` return `AcousticResult`: full-band metrics plus octave-band arrays. `estimateRoom(...)` returns `RoomEstimateResult`, `synthesizeRir(...)` returns `RirResult`, and `roomMorph(...)` returns processed samples.
 
+::: info Why per-band (octave bands)?
+A room does not absorb all frequencies equally — bass often rings longer than treble. Splitting the analysis into octave bands (each band roughly doubling in frequency: 125, 250, 500, 1k, 2k, 4k Hz) reports RT60 and clarity separately per band instead of as one average. Third-octave subbands are a finer split used internally during blind estimation.
+:::
+
 ## Direct measurement vs blind estimation
 
 `analyzeImpulseResponse(...)` looks directly at the decay after a short excitation. It is the right choice for a clap, pop, sweep-derived IR, or any recording where the initial sound and the following room decay are easy to separate.
@@ -244,6 +248,14 @@ The shared geometry also exposes the late-tail behaviour. `RirSynthOptions` and 
 | `seed`, `maxSeconds` | Late-tail random seed and the maximum RIR length to generate. |
 
 The **mixing time** is where the response transitions from discrete image-source early reflections to the deterministic statistical late tail; the **crossfade** blends the two so the seam is inaudible. Sabine and Eyring are the two classical RT60 estimators behind the late tail; Eyring tends to be more accurate in more absorptive rooms.
+
+::: tip Sabine vs Eyring (you can usually ignore this)
+Both are classic formulas that predict a room's RT60 from its size and how absorptive its surfaces are. Eyring is generally more accurate in very absorptive (well-treated) rooms; Sabine is the older, simpler one. Leave the default unless you are matching a specific reference.
+:::
+
+::: details What are image-source reflections?
+When sound bounces off walls, each reflection can be modeled as if it came from a mirror-image copy of the source behind the wall. `ismOrder` sets how many bounces are computed this way: higher orders add more (but progressively weaker) early echoes at higher CPU cost. The diffuse late tail is generated separately.
+:::
 
 ::: details Implementation notes for room synthesis
 `synthesizeRir(...)` uses image-source early reflections plus a deterministic late tail. `acoustic::RirSynthConfig` exposes the reflection order, Sabine/Eyring late-tail model, seed, maximum RIR length, mixing time, and crossfade width.

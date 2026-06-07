@@ -105,6 +105,10 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 
 ### Time-varying pitch correction
 
+::: info F0, frames, and "voiced"
+**F0** is the fundamental frequency — the pitch — measured in Hz. A pitch detector reports one F0 per short time slice (a **frame**, here one `hopLength` of samples), giving an F0 **contour** that traces how the pitch moves. A frame is **voiced** when the singer is actually producing pitched sound (a sung vowel) rather than a breath or silence; only voiced frames are worth retuning.
+:::
+
 `pitchCorrectToMidi(...)` applies a single constant transpose, which flattens any vibrato or drift in the take. When you want to keep that expression while still pulling the note toward a target, use `pitchCorrectToMidiTimevarying(...)`. Instead of one current-pitch number, it follows a caller-supplied **per-frame F0 contour** and retunes every voiced frame toward `targetMidi`, so the natural pitch movement is tracked rather than ironed out.
 
 ```typescript
@@ -222,7 +226,7 @@ The `Audio` wrapper exposes the same operations as instance methods. In file-bas
 
 Beyond pitch and time transforms, two of the mixer/mastering insert processors are reach-for-them voice and instrument colour tools:
 
-- `effects.modulation.ensemble` — a BBD-style string-machine ensemble that thickens a thin source into a wide, chorused pad.
+- `effects.modulation.ensemble` — a BBD-style (an analog bucket-brigade delay chorus) string-machine ensemble that thickens a thin source into a wide, chorused pad.
 - `saturation.ampSim` — a guitar amp simulation that adds drive and speaker-cabinet character.
 
 Load them as inserts on a strip (see [Mixing Engine](./mixing.md)) rather than as standalone functions on a raw buffer.
@@ -234,3 +238,7 @@ The functions on this page are **offline** transforms: you hand them a buffer an
 ## Practical Notes
 
 These APIs are intentionally lightweight editing tools, not a full non-destructive pitch editor. For transparent vocals, keep pitch correction intervals small and avoid extreme formant factors. For sound design, larger `pitchSemitones` and `formantFactor` moves are valid, but expect stronger artifacts.
+
+::: info Why big moves sound worse
+These transforms work by analysing the sound into short overlapping frames and re-spacing or re-pitching them. Small shifts stay close to the original frames and sound clean; large shifts force the engine to invent material that was never recorded, so you hear smearing, a "watery" or robotic quality, and a less natural voice. That is why the advice is to keep correction intervals small for transparent results.
+:::

@@ -98,6 +98,10 @@ An insert is a named processor running in series inside the strip (or a bus).
 | `params` | string | The processor's parameters, as a **JSON string** (escaped object), e.g. `"{\"thresholdDb\":-18,\"ratio\":2.5}"`. |
 | `sidechainKey` | string | *Optional.* Strip id whose signal feeds this insert's external sidechain (e.g. ducking). Omitted when empty. |
 
+::: info Sidechain and ducking
+Normally a processor reacts to the audio passing through it. A **sidechain** makes it react to a *different* track instead: `sidechainKey` names that other strip. The classic use is **ducking** — a compressor on the music that turns the music down whenever the named voice strip is loud, so speech stays clear over a music bed.
+:::
+
 ::: warning `params` is a string, not an object
 Inside the scene JSON, `params` holds an **escaped JSON string**, not a nested object — `"params": "{\"ratio\":2.5}"`. This keeps each processor's parameter schema opaque to the scene parser. Parse it yourself if you need to read individual values.
 :::

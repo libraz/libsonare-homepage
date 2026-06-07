@@ -180,6 +180,12 @@ One more rule: a non-empty `modRoutings` array **replaces** the base mod matrix 
 
 The patch exposes the wrapper sections every engine shares:
 
+::: info Cents, velocity, and key tracking
+- **Cent** — 1/100 of a semitone; 100 cents = one piano key, 1200 = an octave. Pitch and detune amounts are in cents.
+- **Velocity** — how hard a note was struck (0–127); presets use it to control brightness or loudness.
+- **Key tracking** — making a parameter (like filter cutoff) follow the note's pitch up the keyboard.
+:::
+
 | Group | Fields |
 |-------|--------|
 | Oscillator | `engineMode`, `waveform`, `unison` (1-7), `detuneCents`, `driftCents`, `drive` (0-1) |
@@ -190,6 +196,8 @@ The patch exposes the wrapper sections every engine shares:
 | Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube`), `bodyMix` (0-1) |
 | Stereo & output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
 | Mod matrix | `modRoutings` (up to 8) |
+
+(*Polyphony* is how many notes can sound at once; a *voice* is one sounding note, and *voice stealing* cuts the oldest note when you run out.)
 
 Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets envelopes, LFOs, velocity, key tracking, the mod wheel, and a seeded per-voice random source modulate pitch, filter cutoff, amplitude, and pan. `depth` is in destination units at full source deflection.
 

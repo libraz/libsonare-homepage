@@ -95,6 +95,10 @@ try {
 `Project`, like every embind object, holds a WASM heap handle the JavaScript garbage collector cannot reclaim. Call `project.delete()` in a `finally` block (Node also accepts `destroy()`; Python uses `project.close()`). Leaking handles slowly exhausts WASM memory in long sessions.
 :::
 
+::: info Interleaved audio
+"Interleaved" means the channels are woven into one array, sample by sample: `[L0, R0, L1, R1, …]` — left sample, right sample, left, right. (The alternative, "planar", keeps each channel in its own array.) The WAV writer walks this single array straight through, so a 2-channel bounce of N frames is `2 × N` floats long.
+:::
+
 ### Bounce options
 
 Every field of the options object is optional:
@@ -186,6 +190,10 @@ const audio = project.bounceWithSf2Instrument(
   { numChannels: 2, sampleRate: 48000 },
 );
 ```
+
+::: info General MIDI, banks, and drums
+General MIDI (GM) is the standard 128-instrument set every SoundFont maps to, so program numbers pick the same kind of instrument across files. By convention channel 10 is reserved for drums, addressed as bank 128. NRPN and SysEx are extra MIDI messages for finer or vendor-specific tweaks; you rarely set them by hand.
+:::
 
 Programs the SoundFont does not cover — including bouncing with no SoundFont loaded at all — fall back to the built-in synth's GM bank. Call [`soundFontManifest()`](./soundfont-player.md) to see, per `(channel, bank, program)`, whether each note resolves to `'sf2'` or falls back to `'synth'`.
 

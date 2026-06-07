@@ -92,6 +92,10 @@ A read-only summary of the input: how loud it is, how its energy is spread acros
 
 Optional `params` are numeric and accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`), and `truePeakOversample`/`true_peak_oversample` (default `4`).
 
+::: info Why oversample for true peak?
+Digital peaks are sampled at fixed points, but the real waveform can rise *between* those samples. Oversampling re-measures the signal at a higher rate (here 4×) to catch these inter-sample peaks, so the reported `truePeakDb` reflects what a converter actually outputs. Higher factors are more accurate but cost more CPU.
+:::
+
 Use this result to explain the input, not to judge it. A profile can tell you that the source is already loud, dark, dense, or transient-heavy. It does not mean the source has passed or failed mastering.
 
 | What it does | What it does not do |
@@ -138,10 +142,15 @@ Use this result to explain the input, not to judge it. A profile can tell you th
 | | `sustainRatio` | How sustained vs. transient the material is |
 | `genreCandidates` | `[{name, score}]` | Best-matching styles; the top one seeds the suggestion's base preset |
 
+::: info Reading the spectral bands
+The `*RmsDb` fields go from low to high frequency: `sub` (deep bass) → `low`/`lowMid` (bass and warmth) → `mid` (body, vocals) → `highMid`/`high` (presence, clarity) → `air` (top-end sparkle). Comparing them tells you whether a mix leans dark (strong lows) or bright (strong air).
+:::
+
 ::: details What do loudness range, attack density, and sustain ratio mean?
 - **Loudness range (LRA, in LU)** — how much the perceived loudness swings across the track. A high value means it gets noticeably quieter and louder (a dynamic classical piece); a low value means it stays at roughly one level (a dense EDM master). "LU" (loudness units) is the same scale as LUFS, measured as a spread rather than an absolute.
 - **Attack density** — roughly how many sharp note/drum onsets happen per second. High = busy and percussive, low = sparse or sustained.
 - **Sustain ratio** (0–1) — whether the material is dominated by long held tones (near 1) or short bursts and attacks (near 0). It is measured separately from attack density (from the RMS envelope, not the onsets) but usually moves in the opposite direction.
+- **Short-term LUFS std-dev** — how much the moment-to-moment loudness wobbles. A higher number means the level is restless; near zero means it sits very steadily.
 :::
 
 ::: warning These are measurements, not verdicts
@@ -153,6 +162,10 @@ A `crestFactorDb` of 5.8 is not "bad" — it just describes the signal. Use the 
 Builds on the profile to propose a complete mastering chain, plus a human-readable rationale. The third argument carries your intent (`targetLufs`, `ceilingDb`, …).
 
 Accepted intent keys are `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`.
+
+::: details What the optional intent keys do
+`enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. `preferStreamingSafe` biases the suggestion toward a safe ceiling and target for streaming delivery rather than maximum loudness. `speechMonoAmount` (0–1) collapses the low/center of speech toward mono for intelligibility on small or mono speakers.
+:::
 
 Think of this helper as a preset generator with an explanation. It returns a complete starting point that your app can render directly, but the intended workflow is still editable.
 

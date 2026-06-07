@@ -33,6 +33,10 @@ A forward feature transform is **lossy on purpose**. Two kinds of information ar
 
 MFCCs add a third loss on top: they keep only the first `nMfcc` cepstral coefficients (often 13–20), discarding the fine spectral envelope. Inverting MFCCs therefore reconstructs a *smoothed* mel spectrogram before any audio is recovered.
 
+::: details What is a cepstral coefficient?
+A cepstrum is the result of taking a transform (a DCT) of the log spectrum. It separates the broad shape of the spectrum (timbre) from its fine detail. MFCCs keep only the first several of these coefficients, which is why they describe overall tonal color compactly but cannot reconstruct fine spectral detail.
+:::
+
 ::: warning Reconstruction is an approximation, never a restoration
 The output is meant for inspection and preview, not for getting your original recording back. Expect a recognizable but "phasey" or smeared result, especially from MFCCs or with few Griffin-Lim iterations. If you need the real audio, keep the real audio.
 :::

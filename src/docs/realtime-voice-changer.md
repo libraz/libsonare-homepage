@@ -4,6 +4,10 @@
 
 For a one-shot offline pitch/formant edit, use [`voiceChange(...)`](./editing-dsp.md#offline-voicechange-vs-realtimevoicechanger). For a live or chunked preset chain, use this page.
 
+::: info Blocks, sample rate, and DSP state
+Realtime audio is processed in small **blocks** (groups of samples) one after another — in the browser an AudioWorklet hands you a fixed **render quantum** of 128 samples at a time. **Sample rate** (e.g. 48000) is how many samples make one second. **DSP state** is the memory an effect carries between blocks (a reverb tail, a compressor's current gain), which is why the voice changer is a reusable object rather than a one-shot function.
+:::
+
 ::: info Why this is a class, not just a function
 Live voice processing has memory: gates, compressors, reverbs, and smooth pitch/formant changes all depend on previous blocks. `RealtimeVoiceChanger` keeps that state across calls. Recreating it for every block would sound worse and add unnecessary setup cost.
 :::
@@ -40,6 +44,8 @@ For live browser processing, call `init()` and `prepare(sampleRate, maxBlockSize
 | Output buffer | Use `processMono(...)` for a simple implementation. In an AudioWorklet hot path, write into preallocated output with `processMonoInto(...)` or the heap-backed buffer path. |
 | Cleanup | Call `delete()` exactly once when the component unmounts, the worklet stops, or recording ends. |
 
+*Interleaved* means the channels are stored alternately in one array (L, R, L, R…), whereas *mono* is a single channel; use `processInterleaved(...)` for the former and `processMono(...)` for the latter.
+
 ::: warning Do not mix up live processing and batch rendering
 `RealtimeVoiceChanger` is the class for processing short blocks in sequence while preserving gate/compressor/reverb state. The Python and CLI examples apply the same preset chain to a whole file or array; they are not code you run inside a browser AudioWorklet callback.
 :::
@@ -58,6 +64,14 @@ The realtime chain is more than a pitch shifter. Built-in presets combine these 
 | De-esser | Controls harsh sibilance |
 | Reverb | Adds or shapes space |
 | Limiter | Catches peaks at the end of the chain |
+
+::: info Voice-chain terms in one place
+- **Formant** — the resonances that make a voice sound large/small or male/female; shifting them changes vocal character without changing the note.
+- **Gate** — mutes the signal when it drops below a threshold, removing low-level mic/room noise between phrases.
+- **Compressor** — automatically evens out loud and quiet parts so the level stays steady.
+- **De-esser** — tames harsh "s"/"sh" sounds (sibilance).
+- **Limiter** — a safety catch that stops peaks from clipping at the very end of the chain.
+:::
 
 Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`. Treat these as starting points, not genre or identity labels.
 
@@ -170,6 +184,10 @@ If you pass realtime preset options, the command uses the preset chain and ignor
 Realtime voice processing is stateful. Reuse the same changer across blocks, keep block sizes within the prepared maximum, and release handles when the component or stream stops.
 
 Large pitch, formant, or ambience moves can be useful for sound design, but they will be less transparent. For natural monitoring, keep preset edits conservative and watch latency with `latencySamples()`.
+
+::: info What "latency" means here
+**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds. Lower is better for live monitoring, and large pitch/formant moves tend to add latency.
+:::
 
 ## Related Pages
 

@@ -34,6 +34,10 @@ Use this table before scanning the long compatibility matrix:
 | Convert units or reshape feature arrays | `framesToSamples`, `samplesToFrames`, `frameSignal`, `padCenter`, `fixLength`, `vectorNormalize` | JS names are camelCase, Python names are snake_case |
 | Reconstruct approximate audio from features | `melToAudio`, `mfccToAudio` | Griffin-Lim reconstruction is lossy and phase-estimated |
 
+::: info What is PCEN?
+PCEN (Per-Channel Energy Normalization) is an alternative to log-scaling a mel spectrogram. It applies automatic gain control per frequency band, which suppresses steady background noise and evens out loudness — often improving robustness for ML and sound-event detection.
+:::
+
 ## Validation Coverage
 
 Compatibility here means "checked against reference behavior", not "the APIs are identical".
@@ -114,6 +118,10 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbour filtering |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | Multichannel integrated loudness from interleaved samples |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | Loudness range in LU |
+
+::: details What are NMF and NNLS here?
+NMF (non-negative matrix factorization) breaks a spectrogram into a small set of recurring spectral "templates" and how strongly each is active over time — useful for pulling apart layered sounds. NNLS (non-negative least squares) is the related fit used by `nnlsChroma` to estimate how much each musical note is active, giving a cleaner chroma than a raw spectrogram.
+:::
 
 #### Inverse reconstruction
 

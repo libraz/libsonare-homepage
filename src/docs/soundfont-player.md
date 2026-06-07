@@ -225,13 +225,17 @@ When the player runs out of voices it uses **deterministic voice stealing**, so 
 
 The player is a faithful SF2 synthesis core with a Roland-GS architecture layer on top. You do not call these features directly — they are driven by the MIDI events, CCs, NRPNs, and SysEx in your arrangement — but knowing what is honored explains *why* a part sounds the way it does.
 
+::: info SoundFont engine terms (you don't call these directly)
+**TVF** (Time-Variant Filter) is the per-note filter and **TVA** (Time-Variant Amplifier) is its volume envelope. **NRPN** and **SysEx** are MIDI messages for extra or vendor-specific parameters. An **exclusive class** is the rule that one drum cuts off another — an open hi-hat is silenced the instant the closed hi-hat plays.
+:::
+
 ### SF2 synthesis semantics
 
 - **Preset / instrument zone layering** — a note resolves through the SF2 two-level zone structure (preset zones over instrument zones), so layered and split presets play correctly. Generators set sample selection, tuning, loop mode, and exclusive classes (e.g. a closed hi-hat cutting an open one).
 - **DAHDSR envelopes** — separate volume and modulation envelopes with Delay/Attack/Hold/Decay/Sustain/Release stages.
 - **LFOs** — a vibrato LFO and a modulation LFO drive pitch/filter/amplitude per the SF2 generators.
 - **Low-pass filter with velocity tracking** — initial cutoff and resonance, with velocity influencing brightness.
-- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) drives vibrato; **CC91** (reverb send) and **CC93** (chorus send) feed the effect sends.
+- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) drives vibrato; **CC91** (reverb send) and **CC93** (chorus send) feed the effect sends. (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
 - **Pitch bend** — honored, with the bend range set by **RPN 0** (entered via Data Entry / RPN), so a part can request its own semitone range.
 
 ### The GS architecture layer

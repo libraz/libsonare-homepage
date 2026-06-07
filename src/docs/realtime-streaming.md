@@ -10,10 +10,14 @@ libsonare has two realtime-oriented surfaces:
 - **`StreamAnalyzer`** — feeds in blocks of audio and emits *analysis frames* (mel, chroma, onset, spectral) plus progressive musical estimates (BPM, key, chord, chord progression, pattern). Use it for visualizers and live "what is this song doing" displays.
 - **`RealtimeEngine`** — transport, automation, clip playback, graph routing, metronome, capture, offline bounce, freeze, and telemetry. Use it for playback engines.
 
-In realtime docs, "chunk" or "block" means a short slice of audio processed repeatedly, often inside a Web Audio `AudioWorklet`. Realtime code should avoid heavy allocation inside the audio callback: prepare objects first, then process blocks.
+In realtime docs, "chunk" or "block" means a short slice of audio processed repeatedly, often inside a Web Audio `AudioWorklet` — the audio-callback context that runs your DSP on the realtime audio thread, separate from the main/UI thread. Realtime code should avoid heavy allocation inside the audio callback: prepare objects first, then process blocks.
 
 ::: info Chunk, block, and frame
 **Chunks** and **blocks** are short groups of input samples from a realtime stream. **Frames** are time steps of analysis data produced from those blocks. Think "blocks go in, frames come out" when wiring a UI.
+:::
+
+::: info Sample rate and resampling
+**Sample rate** is how many audio samples make one second (44100 and 48000 are common). When a stream's rate does not match what an analyzer expects, the audio must be **resampled** (rebuilt at the other rate) before processing, which costs extra CPU — so matching rates up front is faster.
 :::
 
 ## What You Will Learn
@@ -61,6 +65,12 @@ If you need to analyze the same file from Python or CLI, use [Python API](./pyth
 ## StreamAnalyzer
 
 `StreamAnalyzer` processes blocks and emits frame buffers for UI rendering. It is the right tool for spectrograms, chroma displays, onset-driven visuals, and incremental musical estimates. You construct it once, `process()` each incoming block, then drain whatever frames have accumulated.
+
+::: info Mel, chroma, onset in one line
+- **Mel** — a spectrogram (energy per frequency band over time) on a perceptual pitch scale; good for a "what does this sound like" heatmap.
+- **Chroma** — energy folded into the 12 pitch classes (C, C#, … B); good for showing harmony and key.
+- **Onset** — a strength curve that spikes when a new note or beat starts; drives beat/tempo visuals.
+:::
 
 ::: tip `nFft` and `hopLength` in one line
 The analyzer runs an STFT under the hood. `nFft` is the analysis window size in samples (bigger = finer frequency detail, coarser timing); `hopLength` is how far the window advances between frames (smaller = more frames per second, more CPU). The `2048`/`512` defaults below are the common starting point. See [MIR Overview](./glossary/concepts/mir-overview.md) if these are new.

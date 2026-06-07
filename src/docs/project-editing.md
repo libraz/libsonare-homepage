@@ -31,6 +31,10 @@ A project nests a few simple parts, each one a container for the next:
 - A MIDI track points at an instrument **destination** (the synth or sampler that will actually make its notes audible).
 - Every track routes through a strip in the **mixer scene** — its channel of EQ, fader, pan, and sends — on its way to the master.
 
+::: info What is a MIDI "destination"?
+MIDI notes are just instructions (play note 60 now), not sound. A **destination** is the instrument those instructions are sent to — the synth or sampler that turns them into audio. A MIDI track names a destination; you bind an actual instrument to it when you render. See [Project Bounce](./project-bounce.md).
+:::
+
 ```mermaid
 flowchart TD
   P[Project] --> T1[Audio track]
@@ -198,6 +202,8 @@ const drums = project.addTrack({ kind: 'audio', name: 'drums' });
 project.renameTrack(drums, 'drum-bus');
 project.setTrackRoute(drums, 'strip-drums', 'master'); // wire to a mixer scene strip
 ```
+
+An **aux** track carries no clips of its own — it is a routing/return lane (for example an effect return or a submix) rather than a place to record content.
 
 `setTrackRoute` links a project track to a strip in the project's [mixer scene](./mixing-scene-json.md) (set with `setMixerSceneJson`) so the bounced track flows through that channel strip's processing.
 

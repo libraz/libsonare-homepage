@@ -5,9 +5,9 @@ description: How to capture audio from the libsonare realtime engine, take brows
 
 # Recording, Takes & Comping
 
-**This page is about getting live sound into a project and turning many imperfect attempts into one good performance.** **Recording** is capturing live audio — a vocal, a guitar DI, a synth performance — into a buffer you can keep, edit, and arrange. **Comping** (short for "compilation") is what you do afterwards: you record the same part several times as alternate **takes**, then assemble one keeper by stitching the best moments of each take together — like choosing the best line from each of several photos to build one perfect group shot.
+**This page is about getting live sound into a project and turning many imperfect attempts into one good performance.** **Recording** is capturing live audio — a vocal, a guitar DI (plugged in directly, no amp mic), a synth performance — into a buffer you can keep, edit, and arrange. **Comping** (short for "compilation") is what you do afterwards: you record the same part several times as alternate **takes**, then assemble one keeper by stitching the best moments of each take together — like choosing the best line from each of several photos to build one perfect group shot.
 
-libsonare splits this into two cooperating pieces. The [realtime engine](./realtime-streaming.md) owns the live **capture path** — arming, the capture buffer, input monitoring, and punch in/out. The [project model](./project-editing.md) owns the *result* — clips that carry **takes** and **comp segments** that the edit compiler renders into one continuous performance.
+libsonare splits this into two cooperating pieces. The [realtime engine](./realtime-streaming.md) owns the live **capture path** — arming, the capture buffer, input monitoring, and punch in/out (re-record only a chosen region, leaving the rest of the take untouched). The [project model](./project-editing.md) owns the *result* — clips that carry **takes** and **comp segments** that the edit compiler renders into one continuous performance.
 
 ::: info Two clocks, two layers
 The capture path works in **samples** on the audio thread. The project works in **PPQ** (musical position): one PPQ unit is one quarter note, so at 120 BPM `ppq: 1` lasts 0.5 s. You record in samples, then describe the result in beats. Keep the two straight and everything below falls into place.
@@ -116,7 +116,7 @@ A live monitoring chain has latency: by the time a player hears the click and pl
 
 ### Punch in/out
 
-Punch recording arms capture only inside a chosen timeline region, so a fixed take is left untouched outside it. `setCapturePunch(startSample, endSample, enabled?)` sets the in/out points in timeline samples; while `punchEnabled` is true the engine appends only when the transport is inside `[startSample, endSample)`. Pass `enabled: false` (or `resetCapture()`) to clear the region and return to free recording.
+Punch recording arms capture only inside a chosen timeline region, so a fixed take is left untouched outside it. `setCapturePunch(startSample, endSample, enabled?)` sets the in/out points in timeline samples; while `punchEnabled` is true the engine appends only when the transport (the moving play position) is inside `[startSample, endSample)`. Pass `enabled: false` (or `resetCapture()`) to clear the region and return to free recording.
 
 :::: details Track a part, then read it back
 ```typescript

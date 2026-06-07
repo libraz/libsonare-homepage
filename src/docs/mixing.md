@@ -261,7 +261,7 @@ Compiling (or processing) a scene emits a **non-fatal** warning when an explicit
 
 ### VCA groups
 
-A **VCA group** is a single fader that trims the level of several strips *without* re-routing their audio.
+A **VCA group** is a single fader that trims the level of several strips *without* re-routing their audio. VCA stands for *voltage-controlled amplifier* — historically a control voltage trimmed several console channels at once; here it is the same idea in software, one fader offsetting a group without re-routing audio.
 
 For example, pull the "drums" VCA down 2 dB and the kick, snare, and overheads all drop 2 dB while still flowing to their own buses.
 
@@ -329,6 +329,10 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 | `monoCompatWidth` / `monoCompatPeak` / `monoCompatSideRms` / `likelyMonoCompatible` | [Mono-compatibility](./glossary/concepts/mono-compatibility.md) summary |
 | `gainReductionDb` | How hard dynamics on the strip are working |
 | `seq` | Monotonic snapshot counter for change detection |
+
+::: info What is a goniometer?
+A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It shows the stereo image at a glance: a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter.
+:::
 
 The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope. The latest-read path is allocation-free, so UI polling does not add audio-thread pressure.
 

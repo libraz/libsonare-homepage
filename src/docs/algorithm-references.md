@@ -42,12 +42,17 @@ By the end of this page you should be able to:
 | Time stretch and pitch shift | Native spectral stretch, phase-vocoder fallback, pitch shift by time stretch followed by resampling | `src/effects/time_stretch.h`, `src/effects/pitch_shift.h` |
 | Reverb families | Convolution, Dattorro plate, FDN, velvet-noise, and geometric room reverb engines | `README.md`, `src/effects/reverb/*`, `src/effects/acoustic/*`, `tests/effects/*` |
 
+::: info What is Tonnetz?
+Tonnetz ("tone network") is a feature that maps harmony onto a geometric space where musically related chords sit close together. It is derived from chroma and is useful for measuring harmonic change and chord relationships.
+:::
+
 ::: details Plain-language gloss of the named algorithms
 This page cites algorithms by name; here is what the less-obvious ones do.
 
 - **Viterbi decoding** — picks the most likely *sequence* of states (e.g. pitch candidates over time) rather than the best guess at each isolated frame, so pYIN produces a smooth note line.
 - **DTW (dynamic time warping)** — aligns two sequences that may run at different speeds by stretching/compressing time, used to compare performances or feature sequences.
 - **MMSE-STSA / LogMMSE** — statistical denoisers that estimate, per frequency bin, how much is signal vs. noise before subtracting (see [Mastering Processors](./mastering-processors.md) for the plain version). **Over-subtraction** removes a bit extra to kill residue, at the cost of some signal.
+- **Spectral subtraction / MCRA / IMCRA** — spectral subtraction estimates the noise spectrum and subtracts it from each frame; MCRA and IMCRA track that noise floor over time even while speech or music is present, so the subtraction adapts instead of using a fixed guess.
 - **Jiles-Atherton hysteresis** — a physics model of how magnetic tape "remembers" its recent signal, giving tape saturation its nonlinear, history-dependent character.
 - **ADAA (antiderivative anti-aliasing)** — a trick that runs a distortion curve through its mathematical integral to suppress the aliasing that nonlinear processing would otherwise create.
 - **Schroeder energy-decay curve** — integrates a room impulse response backward in time to get a smooth decay curve, which is what RT60/EDT are measured from.
