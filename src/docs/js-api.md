@@ -1941,18 +1941,38 @@ const SectionType = {
 
 ## Error Handling
 
-All functions throw if the module is not initialized.
+All functions throw if the module is not initialized — call `await init()` first.
+
+Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same numeric code on every binding (WASM, Node native, Python, C ABI), so you can branch on the cause instead of matching message text. The package exports the `ErrorCode` enum, the `SonareError` class, and an `isSonareError(value)` type guard.
 
 ```typescript
+import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
+
 try {
-  const bpm = detectBpm(samples, sampleRate);
+  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
 } catch (error) {
-  if (error.message.includes('not initialized')) {
-    await init();
-    // retry
+  if (isSonareError(error) && error.code === ErrorCode.InvalidParameter) {
+    // e.g. 'send timing must be a string ("pre" or "post")'
+    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
+  } else {
+    throw error;
   }
 }
 ```
+
+| `ErrorCode` | Value |
+|-------------|-------|
+| `Ok` | `0` |
+| `FileNotFound` | `1` |
+| `InvalidFormat` | `2` |
+| `DecodeFailed` | `3` |
+| `InvalidParameter` | `4` |
+| `OutOfMemory` | `5` |
+| `NotSupported` | `6` |
+| `InvalidState` | `7` |
+| `Unknown` | `99` |
+
+The codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).
 
 ## Mastering API
 
@@ -2205,6 +2225,7 @@ The named mastering API families are:
 | Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
 | List mono/stereo processors | `masteringProcessorNames()` |
 | List chain insert processors | `masteringInsertNames()` |
+| List the parameter keys an insert accepts | `masteringInsertParamNames(name)` |
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
 | List pair processors | `masteringPairProcessorNames()` |
@@ -2356,6 +2377,7 @@ const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
 });
 
 const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
+mixer.sceneWarnings(); // non-fatal scene-load warnings: insert params no processor reads (typos)
 const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
 const meter = mixer.stripMeter(0, 'postFader');
 

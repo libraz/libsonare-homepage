@@ -995,6 +995,8 @@ void sonare_free_floats(float* ptr);
 void sonare_free_ints(int* ptr);
 void sonare_free_result(SonareAnalysisResult* result);
 const char* sonare_error_message(SonareError error);
+const char* sonare_last_error_message(void);    // 直近の失敗のスレッドローカルな詳細メッセージ
+const char* sonare_last_warning_message(void);  // スレッドローカルな非致命的警告（例: どのプロセッサも読まなかったシーンインサートのパラメータ）
 const char* sonare_version(void);
 ```
 

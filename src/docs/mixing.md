@@ -207,6 +207,10 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 
 The full scene schema, every field, and annotated preset JSON live in [Mixing Scene JSON](./mixing-scene-json.md). The three built-in presets (`vocalReverbSend`, `drumBusSubgroup`, `commentaryDucking`) are not opaque — load one, edit it, and re-serialize it with `toSceneJson()` (or Python `to_scene_json()`) to learn the format by example.
 
+::: tip Check `sceneWarnings()` after loading a scene
+Loading a scene audits every insert's `params`: keys that no processor reads (usually typos, or keys meant for a different processor) are collected as **non-fatal warnings**, readable with `mixer.sceneWarnings()` (Python `mixer.scene_warnings()`). The scene still loads; those keys just take no effect. Reading the warnings right after `fromSceneJson(...)` is the cheapest way to catch a knob that silently "does nothing". `masteringInsertParamNames(name)` lists the keys an insert accepts.
+:::
+
 ### Inserts vs sends
 
 These are the two ways a strip uses a processor, and they answer different questions:

@@ -537,7 +537,8 @@ loadable by the WASM, Python, Node, or C++ mixer APIs.
 sonare mixing-presets
 
 # Print one preset's scene as JSON
-# (pass --preset one of: vocalReverbSend, drumBusSubgroup, commentaryDucking)
+# (--preset is one of: vocalReverbSend, drumBusSubgroup, commentaryDucking;
+#  it defaults to vocalReverbSend when omitted)
 sonare mixing-preset --preset vocalReverbSend > scene.json
 
 # Load a built-in scene preset and render per-strip inputs to a stereo WAV
@@ -635,10 +636,22 @@ Check the active build from Python with `libsonare.has_ffmpeg_support()`.
 
 ## Exit Codes
 
+Python CLI failures map to exit codes aligned with the C-ABI error codes (the same values the bindings carry in `SonareError.code` / `ErrorCode`), so scripts can distinguish failure classes:
+
 | Code | Description |
 |------|-------------|
 | 0 | Success |
-| 1 | Error (invalid arguments, file not found, processing error) |
+| 2 | Usage error (bad arguments; argparse's native code) |
+| 3 | Invalid parameter |
+| 4 | File not found |
+| 5 | Invalid format |
+| 6 | Decode failed |
+| 7 | Out of memory |
+| 8 | Not supported |
+| 9 | Invalid state |
+| 10 | Other error |
+
+Set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The source-built C++ CLI keeps the plain `0` (success) / `1` (error) convention.
 
 ## Performance Tips
 

@@ -1858,18 +1858,38 @@ const SectionType = {
 
 ## エラーハンドリング
 
-モジュールが初期化されていない場合、すべての関数はエラーをスローします。
+モジュールが未初期化の場合、すべての関数はエラーをスローします。まず `await init()` を呼んでください。
+
+ネイティブ(C++)側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング(WASM / Node ネイティブ / Python / C ABI)でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
 
 ```typescript
+import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
+
 try {
-  const bpm = detectBpm(samples, sampleRate);
+  const mixer = Mixer.fromSceneJson(sceneJson, 48000, 512);
 } catch (error) {
-  if (error.message.includes('not initialized')) {
-    await init();
-    // リトライ
+  if (isSonareError(error) && error.code === ErrorCode.InvalidParameter) {
+    // 例: 'send timing must be a string ("pre" or "post")'
+    console.error(`scene rejected: ${error.codeName}: ${error.message}`);
+  } else {
+    throw error;
   }
 }
 ```
+
+| `ErrorCode` | 値 |
+|-------------|----|
+| `Ok` | `0` |
+| `FileNotFound` | `1` |
+| `InvalidFormat` | `2` |
+| `DecodeFailed` | `3` |
+| `InvalidParameter` | `4` |
+| `OutOfMemory` | `5` |
+| `NotSupported` | `6` |
+| `InvalidState` | `7` |
+| `Unknown` | `99` |
+
+このコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
 
 ## マスタリング API
 
@@ -2135,6 +2155,7 @@ chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 | 配信先ごとのラウドネス見込みをプレビュー | `masteringStreamingPreview()` |
 | 名前付きプロセッサ一覧（モノラル／ステレオ） | `masteringProcessorNames()` |
 | チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
+| インサートが受け付けるパラメータキー一覧 | `masteringInsertParamNames(name)` |
 | モノラル音声を処理 | `masteringProcess()` |
 | ステレオ音声を処理 | `masteringProcessStereo()` |
 | ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
@@ -2288,6 +2309,7 @@ const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
 });
 
 const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
+mixer.sceneWarnings(); // シーン読み込み時の非致命的な警告（どのプロセッサも読まない insert パラメータ＝タイプミス）
 const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
 const meter = mixer.stripMeter(0, 'postFader');
 

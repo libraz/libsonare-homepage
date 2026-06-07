@@ -142,6 +142,12 @@ function peakingEq(buf, freq, q, gainDb) {
 /**
  * Render a list of MIDI notes through one NativeSynth preset, offline.
  *
+ * Note timings are authored in PPQ ticks ({@link PPQ} per quarter) for readability,
+ * but the Project MIDI API positions events in quarter-note units (1.0 = one quarter),
+ * so every tick value is divided by {@link PPQ} at the API boundary. Passing raw ticks
+ * would place each event hundreds of quarter-notes into the timeline — far past the
+ * bounce — leaving only the note at tick 0 audible.
+ *
  * @param {object} wasm The initialized libsonare module.
  * @param {string} preset A `synthPresetNames()` entry.
  * @param {Array<[number, number, number, number]>} notes `[startPpq, lengthPpq, midi, velocity]`.
@@ -160,11 +166,13 @@ function renderPart(wasm, preset, notes, totalSec, patchOverride = {}) {
     for (const [startPpq, lengthPpq] of notes) {
       lastEnd = Math.max(lastEnd, startPpq + lengthPpq + BAR);
     }
-    const { clipId } = project.addMidiClip(0, lastEnd);
+    // Ticks -> quarter-note units for the MIDI API.
+    const toQuarters = (ticks) => ticks / PPQ;
+    const { clipId } = project.addMidiClip(0, toQuarters(lastEnd));
     const events = [];
     for (const [startPpq, lengthPpq, midi, velocity] of notes) {
-      events.push(Project.midiNoteOn(startPpq, 0, 0, midi, velocity));
-      events.push(Project.midiNoteOff(startPpq + lengthPpq, 0, 0, midi, 0));
+      events.push(Project.midiNoteOn(toQuarters(startPpq), 0, 0, midi, velocity));
+      events.push(Project.midiNoteOff(toQuarters(startPpq + lengthPpq), 0, 0, midi, 0));
     }
     project.setMidiEvents(clipId, events);
     const patch = { ...wasm.synthPresetPatch(preset), ...patchOverride };
@@ -307,13 +315,19 @@ function buildLead(wasm) {
     [12 * Q, H, 72], // C5 (held)
     [14 * Q, H, 67], // G4 (resolve, held)
   ];
-  const totalSec = (16 * Q) * SEC_PER_PPQ + 0.6; // four bars + release tail
+  const totalSec = 16 * Q * SEC_PER_PPQ + 0.6; // four bars + release tail
   const len = Math.round(SR * totalSec);
   const out = new Float32Array(len);
   // NativeSynth is monophonic per bounce — sequential notes in one bounce all keep
   // the first note's pitch. Render each note as its own single-note voice (which does
   // track pitch) and place it at its time offset, so pitchYin sees a true melody.
-  const patch = { cutoffHz: 4200, resonanceQ: 0.7, ampAttackMs: 6, ampSustain: 0.85, ampReleaseMs: 30 };
+  const patch = {
+    cutoffHz: 4200,
+    resonanceQ: 0.7,
+    ampAttackMs: 6,
+    ampSustain: 0.85,
+    ampReleaseMs: 30,
+  };
   for (const [at, lenPpq, midi] of phrase) {
     // Render only the note body (short, no long release) so voices barely overlap —
     // overlapping decay tails make a monophonic pitch tracker pick octave subharmonics.
@@ -394,13 +408,62 @@ const CLIPS = {
   lead: buildLead,
 };
 
+/**
+ * Guard against a frozen multi-note render. The Project MIDI API positions events
+ * in quarter-note units; feeding it raw PPQ ticks places every event past the
+ * first far beyond the bounce, so only the note at tick 0 sounds and the clip
+ * freezes on one pitch. This counts distinct dominant pitch classes across the
+ * clip via chroma and throws if a clip that should move harmonically does not.
+ *
+ * @param {object} wasm The initialized libsonare module.
+ * @param {string} name Clip name (for the error message).
+ * @param {Float32Array} samples The rendered clip.
+ * @param {number} minDistinct Minimum distinct dominant pitch classes expected.
+ */
+function assertHarmonicMovement(wasm, name, samples, minDistinct) {
+  const ch = wasm.chroma(samples, SR, 2048, 512);
+  const feats = ch.features ?? ch.chroma;
+  const nFrames = ch.nFrames ?? Math.floor(feats.length / 12);
+  const seen = new Set();
+  const windows = 8;
+  for (let w = 0; w < windows; w++) {
+    const f0 = Math.floor((nFrames * w) / windows);
+    const f1 = Math.floor((nFrames * (w + 1)) / windows);
+    let best = -1;
+    let bestVal = -1;
+    for (let p = 0; p < 12; p++) {
+      let sum = 0;
+      for (let f = f0; f < f1; f++) sum += feats[p * nFrames + f];
+      if (sum > bestVal) {
+        bestVal = sum;
+        best = p;
+      }
+    }
+    if (best >= 0) seen.add(best);
+  }
+  if (seen.size < minDistinct) {
+    throw new Error(
+      `clip "${name}" looks frozen: only ${seen.size} distinct dominant pitch class(es) ` +
+        `across the clip (expected >= ${minDistinct}). Are MIDI event times in quarter-note ` +
+        'units, not PPQ ticks? See renderPart().',
+    );
+  }
+}
+
 async function main() {
   const wasm = await import(WASM_ENTRY);
   await wasm.init();
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
+  // Clips whose musical point is harmonic/melodic movement over time. A frozen
+  // render (the classic ticks-vs-quarter-notes bug) collapses these to one pitch.
+  const movementFloor = { band: 3, lead: 3 };
+
   for (const [name, build] of Object.entries(CLIPS)) {
     const samples = build(wasm);
+    if (movementFloor[name] !== undefined) {
+      assertHarmonicMovement(wasm, name, samples, movementFloor[name]);
+    }
     const wav = encodeWav(samples, SR);
     const file = path.join(OUT_DIR, `${name}.wav`);
     fs.writeFileSync(file, wav);

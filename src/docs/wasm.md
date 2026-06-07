@@ -876,3 +876,7 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
   // Analyze chunk
 }
 ```
+
+### Native Failures Throw `SonareError`
+
+When the C++ core rejects an input, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api.md#error-handling).

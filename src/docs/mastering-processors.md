@@ -173,7 +173,7 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 
 ## Mixer Insert Names
 
-Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. The full insert list is enumerable at runtime with `masteringInsertNames()`. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
+Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. The full insert list is enumerable at runtime with `masteringInsertNames()`, and each insert's accepted parameter keys with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`) — band/sub-band processors enumerate their indexed `band{i}.*` keys, and an unknown name returns an empty array. Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
 
 | Insert ID | Meaning |
 |-----------|---------|

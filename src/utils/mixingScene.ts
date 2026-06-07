@@ -99,10 +99,12 @@ function buildStripInserts(strip: SceneStripInput) {
     });
   }
   if (strip.eqAirDb && strip.eqAirDb > 0) {
+    // The airBand insert reads a normalized `amount` (0-1) driving its dynamic
+    // shelf + harmonic lift, not a dB value; map the UI's 0-12 dB range onto it.
     inserts.push({
       slot: 'pre',
       processor: 'spectral.airBand',
-      params: JSON.stringify({ airDb: strip.eqAirDb }),
+      params: JSON.stringify({ amount: Math.min(1, strip.eqAirDb / 12) }),
     });
   }
   return inserts;

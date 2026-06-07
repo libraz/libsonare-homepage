@@ -1069,6 +1069,8 @@ void sonare_free_result(SonareAnalysisResult* result);
 
 // Utility
 const char* sonare_error_message(SonareError error);
+const char* sonare_last_error_message(void);    // thread-local detail for the last failure
+const char* sonare_last_warning_message(void);  // thread-local non-fatal warnings (e.g. scene-insert params no processor read)
 const char* sonare_version(void);
 ```
 

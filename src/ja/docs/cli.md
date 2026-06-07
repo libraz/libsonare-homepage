@@ -545,7 +545,8 @@ PyPI の Python CLI には `mix` が含まれます。JSON ファイルまたは
 sonare mixing-presets
 
 # 1 つのプリセットのシーンを JSON で出力
-# （--preset には vocalReverbSend, drumBusSubgroup, commentaryDucking のいずれかを指定）
+# （--preset は vocalReverbSend, drumBusSubgroup, commentaryDucking のいずれか。
+#   省略時は vocalReverbSend）
 sonare mixing-preset --preset vocalReverbSend > scene.json
 
 # 組み込みシーンプリセットを読み込み、ストリップ入力をステレオ WAV にレンダリング
@@ -637,10 +638,22 @@ sonare project synth-presets
 
 ## 終了コード
 
+Python CLI の失敗は、C ABI のエラーコード(バインディングが `SonareError.code` / `ErrorCode` として持つのと同じ値)に揃えた終了コードに対応付けられるため、スクリプトから失敗の種類を区別できます。
+
 | コード | 説明 |
 |------|-------------|
 | 0 | 成功 |
-| 1 | エラー（無効な引数、ファイル未検出、処理エラー） |
+| 2 | 使用方法エラー(不正な引数。argparse 標準のコード) |
+| 3 | 無効なパラメータ |
+| 4 | ファイル未検出 |
+| 5 | 無効なフォーマット |
+| 6 | デコード失敗 |
+| 7 | メモリ不足 |
+| 8 | 非対応 |
+| 9 | 無効な状態 |
+| 10 | その他のエラー |
+
+`SONARE_LEGACY_EXIT=1` を設定すると、「失敗はすべて `1`」という旧来の挙動に戻せます(終了コード 1 を前提に書かれたスクリプト向け)。ソースビルドの C++ CLI は従来どおり `0`(成功)/ `1`(エラー)のままです。
 
 ## パフォーマンスのヒント
 

@@ -46,8 +46,10 @@ The fastest way to understand the schema is to print a built-in preset and read 
 | `vcaGroups` | array | Level groups that trim several strips at once (see [VCA group](#vca-group)). |
 | `connections` | array | The routing graph edges (see [Connection](#connection)). |
 
-::: warning Unknown keys are skipped, not errors
-The parser ignores fields it does not recognize, so a forward-compatible producer can add metadata without breaking older readers. The flip side: a **misspelled key is silently dropped**. If a setting seems to have no effect, check the spelling against the tables below — `processorName` (wrong) vs `processor` (right) is a classic.
+::: warning Unknown keys are skipped — but insert params are audited
+The parser ignores scene fields it does not recognize, so a forward-compatible producer can add metadata without breaking older readers. The flip side: a **misspelled scene key is silently dropped** — `processorName` (wrong) vs `processor` (right) is a classic. If a setting seems to have no effect, check the spelling against the tables below.
+
+Insert `params` keys get a safety net: after a scene loads, every param key that no processor consumed is reported as a **non-fatal warning** through `Mixer.sceneWarnings()` (Python `scene_warnings()`). The scene still loads and the unknown keys simply take no effect — read the warnings right after loading to surface typos instead of hunting for a knob that "does nothing". Enumerate the keys an insert actually reads with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`).
 :::
 
 ## Strip
@@ -79,7 +81,7 @@ The scene **file** stores `panMode` and `panLaw` as integers, but insert `slot` 
 
 Serializing a scene after runtime pan edits preserves the strip's current `panMode`. Use `Mixer.toSceneJson()` / `Mixer.to_scene_json()` instead of rebuilding the pan fields by hand.
 
-**Insert `slot` and send `timing` must be strings.** The parser reads them only when the value is a JSON string, so a numeric `"timing": 1` is silently dropped and the field falls back to its default. Always write `"pre"` or `"post"`.
+**Insert `slot` and send `timing` must be strings.** A non-string value — e.g. a numeric `"timing": 1` — is rejected at load time with an `InvalidParameter` error (`send timing must be a string ("pre" or "post")`). Always write `"pre"` or `"post"`.
 :::
 
 ::: details Field terms: dual pan, polarity invert, pan law, PDC
@@ -170,7 +172,8 @@ This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (default
       "id": "vocal",
       "faderDb": -3,
       "inserts": [
-        { "slot": "pre", "processor": "eq.parametric",      "params": "{\"highPassHz\":80,\"presenceDb\":2}" },
+        { "slot": "pre", "processor": "eq.parametric",
+          "params": "{\"band0.type\":4,\"band0.frequencyHz\":80,\"band1.frequencyHz\":4000,\"band1.gainDb\":2}" },
         { "slot": "pre", "processor": "dynamics.compressor", "params": "{\"thresholdDb\":-18,\"ratio\":2.5}" }
       ],
       "sends": [
@@ -201,15 +204,12 @@ This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (default
 
 Trace the reverb: the **vocal** strip's post-fader send feeds the **vocal-verb** aux bus; that bus connects to the **vocal-verb-return** strip (which hosts the plate reverb); the return connects to **master**. The dry vocal also connects straight to **master**. One reverb instance, dry and wet kept separate.
 
-::: warning The `eq.parametric` insert ignores `highPassHz` / `presenceDb`
-This preset is shown verbatim, but two of its `eq.parametric` params do **nothing**. The shipped `eq.parametric` insert reads only **band-indexed** numeric keys — frequency, gain, and Q per band, addressed by index — so named keys like `highPassHz` and `presenceDb` are silently ignored. They are inert here.
+::: tip The `eq.parametric` insert uses band-indexed keys
+The `eq.parametric` insert reads **band-indexed** keys — `band{N}.type`, `band{N}.frequencyHz`, `band{N}.gainDb`, `band{N}.q`, and the per-band dynamic-EQ fields. In this preset, `band0` is an 80 Hz high-pass (`"band0.type": 4` is `HighPass` in the EQ band-type enum) and `band1` is a +2 dB presence bell at 4 kHz — a working high-pass + presence boost.
 
-For tonal moves that actually take effect through a scene insert, use:
+List the full key set with `masteringInsertParamNames('eq.parametric')`. Keys outside that list (say, a flat `highPassHz`) load fine but take no effect, and `Mixer.sceneWarnings()` reports them after the scene loads.
 
-- `eq.tilt` with `tiltDb` — a broad bright/dark tilt.
-- `spectral.airBand` with `airDb` — a high-shelf "air" lift.
-
-So treat the EQ params in this preset as illustrative of the *shape* of a scene, not as a working high-pass + presence boost.
+For one-knob tonal moves, simpler inserts remain: `eq.tilt` (`tiltDb`, `pivotHz`) for a broad bright/dark tilt, and `spectral.airBand` (`amount`, `shelfFrequencyHz`) for a high-shelf "air" lift.
 :::
 
 ## Editing and re-saving
@@ -219,6 +219,8 @@ So treat the EQ params in this preset as illustrative of the *shape* of a scene,
 ```typescript [Browser]
 const json = mixingScenePresetJson('vocalReverbSend');
 const mixer = Mixer.fromSceneJson(json, 48000, 512);
+
+mixer.sceneWarnings();  // [] — typo'd insert params would be listed here, non-fatally
 
 mixer.addSend(0, 'more-verb', 'vocal-verb', -18, 'postFader');  // topology change
 mixer.compile();                                                 // rebuild before timing-critical work
@@ -231,6 +233,8 @@ import libsonare as sonare
 
 scene_json = sonare.mixing_scene_preset_json('vocalReverbSend')
 mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
+
+mixer.scene_warnings()  # [] — typo'd insert params would be listed here, non-fatally
 
 mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # topology change
 mixer.compile()                                                  # rebuild before timing-critical work

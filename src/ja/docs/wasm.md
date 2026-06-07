@@ -871,3 +871,7 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
   // チャンクを解析
 }
 ```
+
+### ネイティブ側の失敗は `SonareError` をスロー
+
+C++ コアが入力を拒否したとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照。

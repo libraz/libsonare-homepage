@@ -34,7 +34,7 @@ Read this page in three passes:
 
 A single `analyze(...)` call returns the complete result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — matching the other bindings. Reach for the focused functions below when you only need one field or want per-call options.
 
-Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code.
+Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code. The codes are the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), and the CLI maps them onto its [exit codes](./cli.md#exit-codes).
 
 ## Pick The Smallest API That Solves The Job
 
@@ -927,6 +927,7 @@ offline = sonare.mix_stereo(
 # Mixer is not a context manager — call close() when done.
 mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 try:
+    print(mixer.scene_warnings())  # non-fatal: insert params no processor reads (typos)
     block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
     meter = mixer.strip_meter(0, tap="postFader")
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")

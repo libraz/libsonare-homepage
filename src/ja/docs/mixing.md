@@ -222,6 +222,10 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 
 シーンスキーマの全体、各フィールド、注釈つきのプリセット JSON は [ミキシングシーン JSON](./mixing-scene-json.md) にあります。3 つの組み込みプリセット（`vocalReverbSend`、`drumBusSubgroup`、`commentaryDucking`）はブラックボックスではありません。読み込んで編集し、`toSceneJson()`（Python では `to_scene_json()`）で再シリアライズすれば、実例で形式を学べます。
 
+::: tip シーン読み込み後は `sceneWarnings()` を確認する
+シーンを読み込むと、各インサートの `params` が監査されます。どのプロセッサも読まないキー(たいていはタイプミスか、別のプロセッサ向けのキー)は**非致命的な警告**として収集され、`mixer.sceneWarnings()`(Python は `mixer.scene_warnings()`)で読み出せます。シーン自体は読み込まれ、該当キーは単に効果を持ちません。`fromSceneJson(...)` の直後に警告を読むのが、黙って「何もしないつまみ」を見つける最も安上がりな方法です。インサートが受け付けるキーは `masteringInsertParamNames(name)` で列挙できます。
+:::
+
 ### インサートとセンド
 
 これらはストリップがプロセッサを使う 2 つの方法で、それぞれ別の問いに答えます。

@@ -106,6 +106,7 @@ interface MixerInstance {
     curve?: AutomationCurve,
   ): void;
   toSceneJson(): string;
+  sceneWarnings(): string[];
   delete(): void;
 }
 
@@ -186,6 +187,10 @@ function bounce(request: WorkerRequest): MixingBounceResult {
 
   const sceneJson = buildSceneJson(activeTracks, request.reverb, request.vcaGroups);
   const mixer = wasmModule.Mixer.fromSceneJson(sceneJson, sampleRate, BLOCK_SIZE);
+  // Insert params no processor consumed (typos / renamed keys) load silently but
+  // take no effect — surface them so a broken control never ships unnoticed.
+  const sceneWarnings = mixer.sceneWarnings();
+  if (sceneWarnings.length > 0) console.warn('[mixing] scene warnings:', sceneWarnings);
   applyAutomation(mixer, activeTracks, sampleRate);
 
   postProgress(request.id, 0.5, 'Running mixer');

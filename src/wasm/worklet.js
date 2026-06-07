@@ -1,13 +1,91 @@
+// src/errors.ts
+var SonareError = class extends Error {
+  constructor(code, codeName, message) {
+    super(message);
+    this.name = "SonareError";
+    this.code = code;
+    this.codeName = codeName;
+  }
+};
+
 // src/module_state.ts
-var wasmModule = null;
+var wrappedModule = null;
+function nativeExceptionPtr(error) {
+  if (typeof error === "number") {
+    return error;
+  }
+  if (error !== null && typeof error === "object") {
+    const ptr = error.excPtr;
+    if (typeof ptr === "number") {
+      return ptr;
+    }
+  }
+  return null;
+}
+function makeSonareError(raw, thrown) {
+  let code = 99 /* Unknown */;
+  let codeName = "Unknown";
+  let message = `libsonare native exception (${thrown})`;
+  try {
+    const info = raw.sonareExceptionInfo?.(thrown);
+    if (info) {
+      code = info.code ?? code;
+      codeName = info.codeName ?? codeName;
+      message = info.message || message;
+    }
+  } catch {
+  }
+  return new SonareError(code, codeName, message);
+}
+function wrapModuleErrors(raw) {
+  const cache = /* @__PURE__ */ new Map();
+  const convert = (error) => {
+    const ptr = nativeExceptionPtr(error);
+    if (ptr !== null) {
+      throw makeSonareError(raw, ptr);
+    }
+    throw error;
+  };
+  return new Proxy(raw, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") {
+        return value;
+      }
+      const cached = cache.get(prop);
+      if (cached) {
+        return cached;
+      }
+      const fn = value;
+      const wrapped = new Proxy(fn, {
+        apply(t, thisArg, args) {
+          try {
+            return Reflect.apply(t, thisArg, args);
+          } catch (error) {
+            return convert(error);
+          }
+        },
+        construct(t, args, newTarget) {
+          try {
+            return Reflect.construct(t, args, newTarget);
+          } catch (error) {
+            return convert(error);
+          }
+        }
+      });
+      cache.set(prop, wrapped);
+      return wrapped;
+    }
+  });
+}
 function setSonareModule(module2) {
-  wasmModule = module2;
+  wrappedModule = wrapModuleErrors(module2);
 }
 function getSonareModule() {
-  if (!wasmModule) {
+  if (!wrappedModule) {
     throw new Error("Module not initialized. Call init() first.");
   }
-  return wasmModule;
+  return wrappedModule;
 }
 
 // src/codes.ts
@@ -81,6 +159,16 @@ var Mixer = class _Mixer {
   /** Rebuild and compile the routing graph from the current scene topology. */
   compile() {
     this.mixer.compile();
+  }
+  /**
+   * Non-fatal warnings captured when this mixer was built from scene JSON: one
+   * entry per channel-strip insert that was handed param keys it does not read
+   * (a likely typo, or a key meant for a different processor). The scene still
+   * loaded; these keys simply took no effect. Empty when every key was consumed.
+   * Use {@link masteringInsertParamNames} to discover the keys an insert accepts.
+   */
+  sceneWarnings() {
+    return this.mixer.sceneWarnings();
   }
   /**
    * Mix one block of per-strip stereo audio into the stereo master.

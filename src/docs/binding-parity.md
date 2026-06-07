@@ -91,6 +91,7 @@ A few signatures don't line up across all three bindings:
 | Project bounce variants | The headless-DAW `Project` bounces to audio across bindings; instrument-bound bounce (`bounceWithBuiltinInstrument` / `bounceWithSynthInstrument` / `bounceWithSf2Instrument`) and the take/comp arrangement model are shared — see [Project Bounce](./project-bounce.md) and [Recording and Takes](./recording-and-takes.md). The `ExternalInstrument` bounce protocol is Python-only |
 | Mastering chain JSON | Chain JSON and named-processor parameter maps round-trip the same field set: `repair.declip` `lpcBlend`, multiband per-band parameters, compressor detector / sidechain-HPF / PDR settings, and realtime voice-changer ISP limiter settings |
 | Acoustic analysis | Measurement and blind-estimation entry points return `AcousticResult`; geometric room acoustics adds equivalent-room estimates, RIR synthesis, and creative room morphing (display blind estimates and equivalent-room estimates with confidence) |
+| Errors | Every binding raises a structured `SonareError` with the same C-ABI numeric code: WASM and Node throw an `Error` subclass with `code` + `codeName` (exported `ErrorCode` enum and `isSonareError` guard); Python raises a `RuntimeError` subclass with `.code`; the Python CLI maps the codes to exit codes (the C++ CLI keeps plain `0`/`1`) |
 | CLI surface | Some availability depends on whether the command is the PyPI Python CLI or the source-built C++ CLI — see [CLI](./cli.md) |
 
 ::: info Rich analysis fields
