@@ -50,7 +50,9 @@ const processor = computed<Processor>(
 const semitones = computed<number>(() => Number(values.semitones ?? 0));
 const rate = computed<number>(() => Number(values.rate ?? 1));
 /** The value that triggers a re-render, whichever processor is active. */
-const activeValue = computed(() => (processor.value === 'time-stretch' ? rate.value : semitones.value));
+const activeValue = computed(() =>
+  processor.value === 'time-stretch' ? rate.value : semitones.value,
+);
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
 const eyebrow = computed(() =>
   processor.value === 'time-stretch' ? 'PARAM SWEEP · TIME STRETCH' : 'PARAM SWEEP · PITCH SHIFT',
@@ -72,7 +74,9 @@ const stateLabel = computed(() => {
   if (status.value === 'error') return 'ERROR';
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
   if (status.value !== 'ready') return 'IDLE';
-  return processor.value === 'time-stretch' ? `${outDur.value.toFixed(1)} s` : `${Math.round(fundHz.value)} Hz`;
+  return processor.value === 'time-stretch'
+    ? `${outDur.value.toFixed(1)} s`
+    : `${Math.round(fundHz.value)} Hz`;
 });
 
 // ---- audio + figure data ---------------------------------------------------

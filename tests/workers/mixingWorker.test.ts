@@ -67,6 +67,10 @@ const wasmMock = vi.hoisted(() => {
       return JSON.stringify({ rendered: true, scene: JSON.parse(this.sceneJson) });
     }
 
+    sceneWarnings() {
+      return [];
+    }
+
     delete() {
       this.deleted = true;
     }

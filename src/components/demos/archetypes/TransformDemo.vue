@@ -111,7 +111,13 @@ function gridFromStft(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number)
   return { rows: nBins, cols: nFrames, norm };
 }
 
-function gridFromMel(wasm: WasmModule, a: MonoAudio, nFft: number, hop: number, nMels: number): Grid {
+function gridFromMel(
+  wasm: WasmModule,
+  a: MonoAudio,
+  nFft: number,
+  hop: number,
+  nMels: number,
+): Grid {
   const r = wasm.melSpectrogram(a.samples, a.sampleRate, nFft, hop, nMels);
   const { nFrames, db } = r;
   // mel `db` is power-to-dB without a fixed reference, so values are not bounded to

@@ -629,7 +629,13 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
       drawScanLines(size);
     }
 
-    animationFrame = requestAnimationFrame(draw);
+    if (reducedMotion?.matches) {
+      // Reduced motion: render this frame statically; redraws are driven by the
+      // state watcher below instead of a continuous loop.
+      animationFrame = null;
+    } else {
+      animationFrame = requestAnimationFrame(draw);
+    }
   }
 
   function setupCanvas() {
@@ -693,10 +699,25 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
     },
   );
 
+  // Reduced motion: with the rAF loop parked, repaint one static frame whenever
+  // the playback position or theme changes.
+  watch(
+    () => [props.currentTime, props.isPlaying, isDark.value] as const,
+    () => {
+      if (reducedMotion?.matches && animationFrame === null) draw();
+    },
+  );
+
+  // Restart the loop if the user turns the OS reduce-motion preference off.
+  function onReducedMotionChange() {
+    if (!reducedMotion?.matches && animationFrame === null) draw();
+  }
+
   onMounted(() => {
     setupCanvas();
     draw();
     window.addEventListener('resize', setupCanvas);
+    reducedMotion?.addEventListener?.('change', onReducedMotionChange);
   });
 
   onUnmounted(() => {
@@ -704,6 +725,7 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
       cancelAnimationFrame(animationFrame);
     }
     window.removeEventListener('resize', setupCanvas);
+    reducedMotion?.removeEventListener?.('change', onReducedMotionChange);
   });
 
   return { canvas };

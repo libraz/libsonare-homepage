@@ -301,7 +301,11 @@ function paint(): void {
   ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
   ctx.fillText(`INT ${integrated.value.toFixed(1)} LUFS`, plotX + plotW, top - 4);
   ctx.fillStyle = truePeak.value > -1 ? 'rgba(251, 191, 36, 0.95)' : 'rgba(186, 230, 224, 0.7)';
-  ctx.fillText(`TP ${truePeak.value >= 0 ? '+' : ''}${truePeak.value.toFixed(1)} dBTP`, plotX + plotW, top + 9);
+  ctx.fillText(
+    `TP ${truePeak.value >= 0 ? '+' : ''}${truePeak.value.toFixed(1)} dBTP`,
+    plotX + plotW,
+    top + 9,
+  );
   ctx.fillStyle = 'rgba(186, 230, 224, 0.7)';
   ctx.fillText(`LRA ${lra.value.toFixed(1)} LU`, plotX + plotW, top + 22);
   ctx.textAlign = 'left';

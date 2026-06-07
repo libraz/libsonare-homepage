@@ -337,7 +337,11 @@ function paint(): void {
   ctx.textBaseline = 'top';
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(45, 212, 191, 0.95)';
-  ctx.fillText(`FLOOR ${floorDb.value <= 0 ? '' : '+'}${floorDb.value.toFixed(1)} dB`, padX + innerW, specTop + 2);
+  ctx.fillText(
+    `FLOOR ${floorDb.value <= 0 ? '' : '+'}${floorDb.value.toFixed(1)} dB`,
+    padX + innerW,
+    specTop + 2,
+  );
   ctx.textAlign = 'left';
 
   // Legend.
