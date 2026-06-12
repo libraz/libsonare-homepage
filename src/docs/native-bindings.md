@@ -173,7 +173,7 @@ For persistent mixers, Node native accepts a `StripRef` (`number | string`) for 
 
 ## Projects, Instruments & Live MIDI
 
-The Node native addon exposes the same headless-DAW surface as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The browser-only glue (`bindWebMidi`, `bindMicrophoneInput`) is WASM-specific and not part of the native addon.
+The Node native addon exposes the same headless-DAW surface as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, the per-track, master, and bus strip JSON setters, queueable `setSoloMute`, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM (see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips)). The browser-only glue (`bindWebMidi`, `bindMicrophoneInput`) is WASM-specific and not part of the native addon.
 
 The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
@@ -241,12 +241,12 @@ Related mastering guides: [Browser local processing](./glossary/concepts/browser
 
 It is useful when you need an EQ that keeps state across `processMono` / `processStereo` calls. It can also publish a spectrum snapshot and configure bands from a reference match.
 
-Phase mode support differs slightly by runtime:
+Node native and WASM accept the same phase mode values; Python additionally supports context-manager usage:
 
 | Runtime | Phase mode values |
 |---------|-------------------|
 | Node native | `'zero'`, `'natural'`, `'linear'`, or `1` / `2` / `3` |
-| WASM | Numeric modes |
+| WASM | `'zero'`, `'natural'`, `'linear'`, or `1` / `2` / `3` (same as Node native) |
 | Python | String or numeric modes; also supports `with StreamingEqualizer(...) as eq:` / `eq.close()` |
 
 ```typescript
@@ -420,7 +420,7 @@ those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
 | `version()` | `string` | Library version |
 | `voiceChangerAbiVersion()` | `number` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
 | `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | Canonical voice-character preset ID for an ordinal or ID |
-| `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig \| null` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
+| `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing. Throws on an unknown preset name or out-of-range ordinal |
 | `hasFfmpegSupport()` | `boolean` | Whether the loaded native addon can decode via FFmpeg |
 
 Default sample rates differ by helper family:

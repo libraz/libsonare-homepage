@@ -9,6 +9,8 @@ Dynamic range is the distance between quieter and louder parts of audio. In musi
 
 Mastering often reduces dynamic range a little so the track feels controlled and translates across playback systems. Reducing it too much can make the master loud but tiring, small, or lifeless.
 
+<SonareDemo id="loudness-meter" />
+
 ## Macro And Micro Dynamics
 
 There are two useful ways to think about dynamics:

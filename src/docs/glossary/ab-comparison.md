@@ -7,6 +7,8 @@ description: How to compare source and mastered audio without volume bias.
 
 A/B comparison switches between source and processed audio. Loudness matching lowers the louder side so the comparison is based on tone, dynamics, width, and peak behavior rather than simple volume.
 
+<SonareDemo id="repair-denoise" />
+
 For a deeper explanation of the listening bias and when to disable matching, see [Loudness Matching](./concepts/loudness-matching.md).
 
 ## Recommended Workflow

@@ -56,7 +56,7 @@ Keep this mental model in mind before reading the API list. You edit a `Project`
 flowchart LR
   A[Decoded audio or MIDI events] --> B[Project tracks and clips]
   B --> C[Undoable edits]
-  C --> D[compile()]
+  C --> D["compile()"]
   D --> E{Diagnostics}
   E -->|no errors| F[bounce / instrument bounce]
   E -->|errors| G[Fix clip, track, or routing]
@@ -282,7 +282,7 @@ project.getOverlapPolicy();  // read it back
 | `'tempo-sync'` | Time-stretch to follow the tempo while preserving pitch |
 
 ::: info How tempo-sync keeps the pitch
-`'tempo-sync'` time-stretches the audio with a **phase vocoder** — an STFT-based time-stretch that changes the timing without changing the pitch (unlike `'repitch'`, which moves both like a tape). The same algorithm runs in both realtime playback and offline [bounce](./project-bounce.md), so a warped clip sounds identical whichever way you render it.
+`'tempo-sync'` time-stretches the audio with a **phase vocoder** — an STFT-based time-stretch that changes the timing without changing the pitch (unlike `'repitch'`, which moves both like a tape). The same algorithm runs in both realtime playback and offline [bounce](./project-bounce.md), so a warped clip sounds identical whichever way you render it. On stereo and multichannel clips, all channels are stretched by one peak-locked vocoder pass, so the stretch stays phase-coherent across channels and the stereo image does not drift.
 :::
 
 <SonareDemo id="time-stretch" />

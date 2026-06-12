@@ -9,6 +9,8 @@ description: 公開先ごとのラウドネスターゲット、True Peak シー
 
 デモでは Spotify、YouTube、Apple Music、TikTok、カスタムなど、プラットフォームを想定したターゲットを選べます。これらはあくまで実用的な出発点であり、絶対的なルールではありません。
 
+<SonareDemo id="loudness-meter" />
+
 ## ラウドネス目標
 
 ラウドネス目標は、処理後ファイルが目指す Integrated LUFS の値です。

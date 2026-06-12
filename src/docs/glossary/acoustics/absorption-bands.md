@@ -18,6 +18,8 @@ The usual shape is a **high-frequency rolloff**: short RT60 up top, longer RT60 
 
 The result is that bass decays slowest, which is why untreated rooms sound "boomy" and why bass trapping (low-frequency absorption) is the hardest part of room treatment.
 
+<SonareDemo id="room-decay" />
+
 ## Absorption coefficients
 
 **Absorption** is the fraction of sound energy a surface removes at each reflection, from 0 (perfectly reflective) to 1 (perfectly absorptive), reported here per band as a percentage. It is the material counterpart to the decay: high absorption in a band shortens that band's RT60.

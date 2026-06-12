@@ -7,6 +7,8 @@ description: Sample rate, bit depth, mono/stereo, amplitude, dB, clipping, headr
 
 These are the audio terms you need before reading analysis or mastering pages. They are grouped here because they explain the same signal path: how sound is represented, measured, clipped, delayed, and played back.
 
+<SonareDemo id="waveform-harmonics" />
+
 ## Sample Rate
 
 Sample rate is how many audio samples are stored per second. `44.1 kHz` and `48 kHz` are common delivery rates. Higher sample rates can represent higher frequencies, but they also use more CPU and memory.

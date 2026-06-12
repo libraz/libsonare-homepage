@@ -15,6 +15,8 @@ You usually **edit** individual parts (timing, pitch, noise), then **mix** them 
 
 A **track** is one recorded part: a lead vocal, a bass DI, a stereo drum overhead pair. In a mixer, each track flows through a **channel strip** — a vertical lane of controls that processes just that part. The whole art of mixing is setting each strip so the parts combine well, then routing them to a common output.
 
+<SonareDemo id="engine-lane-mixer" />
+
 ## Level: trim, fader, and gain staging
 
 There are two level controls on a strip and they do different jobs:

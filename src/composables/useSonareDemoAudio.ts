@@ -121,11 +121,12 @@ export function useSonareDemoAudio() {
 
     const promise = (async () => {
       const ctx = getAudioContext();
-      // Prefer Opus/Ogg, fall back to wav. The generator emits one of these.
+      // The generator emits wav, so probe it first — the compressed names stay
+      // as fallbacks for hand-supplied assets without 404ing on every load.
       const candidates = [
+        `/demo-clips/${name}.wav`,
         `/demo-clips/${name}.opus`,
         `/demo-clips/${name}.ogg`,
-        `/demo-clips/${name}.wav`,
       ];
       let buf: ArrayBuffer | null = null;
       for (const url of candidates) {

@@ -100,14 +100,12 @@ await init();
 const measured = analyzeImpulseResponse(irSamples, sampleRate, 6);
 console.log(measured.rt60, measured.edt, measured.c50, measured.c80);
 
-const blind = detectAcoustic(
-  roomRecording,
-  sampleRate,
-  6,     // octave bands
-  24,    // third-octave subbands used by blind estimation
-  30,    // minimum usable decay in dB
-  10,    // noise-floor margin in dB
-);
+const blind = detectAcoustic(roomRecording, sampleRate, {
+  nOctaveBands: 6,            // octave bands
+  nThirdOctaveSubbands: 24,   // third-octave subbands used by blind estimation
+  minDecayDb: 30,             // minimum usable decay in dB
+  noiseFloorMarginDb: 10,     // noise-floor margin in dB
+});
 console.log(blind.confidence, blind.isBlind);
 
 const estimate = estimateRoom(roomRecording, sampleRate, {

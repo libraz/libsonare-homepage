@@ -783,9 +783,9 @@ auto rms_norm = normalize_rms(audio, -20.0f);  // Target RMS level in dB
 // Silence trimming (absolute dBFS threshold)
 auto trimmed = trim_absolute(audio, -60.0f);   // Threshold in dBFS
 
-// Level measurement
-float peak = peak_db(audio);  // Peak amplitude in dB
-float rms = rms_db(audio);    // RMS level in dB
+// Level measurement (metering/basic.h, namespace sonare::metering)
+float peak = sonare::metering::peak_db(audio);  // Peak amplitude in dB
+float rms = sonare::metering::rms_db(audio);    // RMS level in dB
 
 // Gain application
 auto louder = apply_gain(audio, 6.0f);   // +6 dB

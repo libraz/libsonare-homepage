@@ -9,6 +9,8 @@ Delivery Targets are the loudness and peak-safety choices you make for the place
 
 The demo exposes common platform-style targets such as Spotify, YouTube, Apple Music, TikTok, and Custom. These are practical starting points, not universal rules.
 
+<SonareDemo id="loudness-meter" />
+
 ## Loudness Target
 
 The loudness target is the integrated LUFS value the renderer aims for after processing.

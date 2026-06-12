@@ -22,6 +22,8 @@ Inside the project are **tracks**. A track is a single lane of content — think
 
 Inside each track are **clips**. A clip is one block of content placed at a specific spot on the timeline. An audio clip points at a piece of audio; a MIDI clip contains a list of note events. You can have many clips on one track, side by side or with gaps between them.
 
+<SonareDemo id="engine-lane-mixer" />
+
 ```mermaid
 graph TD
   P[Project] --> T1[Audio track: Vocals]

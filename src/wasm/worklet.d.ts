@@ -1,4 +1,4 @@
-import { ProgressCallback, WasmNnlsChromaResult, WasmFourierTempogramResult, WasmCyclicTempogramResult, WasmFrameResult, WasmTempogramResult, WasmTrimResult, WasmDecomposeResult, WasmHpssWithResidualResult, WasmLufsResult, WasmMatrix2dResult, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineTelemetry, WasmEngineTransportState, WasmClipPageRequest, WasmEngineProcessWithMonitorResult } from './sonare.js';
+import { ProgressCallback, WasmNnlsChromaResult, WasmFourierTempogramResult, WasmCyclicTempogramResult, WasmFrameResult, WasmTempogramResult, WasmTrimResult, WasmDecomposeResult, WasmHpssWithResidualResult, WasmLufsResult, WasmMatrix2dResult, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineTelemetry, WasmEngineTempoSegment, WasmEngineTimeSignatureSegment, WasmEngineTransportState, WasmClipPageRequest, WasmEngineProcessWithMonitorResult, SonareModule } from './sonare.js';
 
 /**
  * Per-call validation options accepted by guarded wrappers. Empty-buffer
@@ -2171,6 +2171,9 @@ interface SonareRealtimeEngineWorkletProcessorOptions {
     runtimeTarget?: 'embind' | 'sonare-rt';
     rtModuleUrl?: string;
     rtWasmBinary?: ArrayBuffer | Uint8Array;
+    wasmBinary?: ArrayBuffer | Uint8Array;
+    initialSyncMessages?: SonareEngineSyncMessage[];
+    initialCommands?: SonareEngineCommandRecord[];
     sampleRate?: number;
     blockSize?: number;
     channelCount?: number;
@@ -2209,6 +2212,7 @@ interface SonareRealtimeEngineNodeCapabilities {
     expectedEngineAbiVersion?: number;
     abiCompatible?: boolean;
     degradedReason?: string;
+    readyMessage?: boolean;
 }
 interface SonareRealtimeEngineNodeOptions extends SonareRealtimeEngineWorkletProcessorOptions {
     processorName?: string;
@@ -2242,6 +2246,7 @@ interface SonareEngineTransportFacade {
     seekPpq(ppq: number, sampleTime?: number): boolean;
     seekSeconds(seconds: number, sampleTime?: number): boolean;
     setTempo(bpm: number): void;
+    setTempoSegments(segments: readonly EngineTempoSegment[]): void;
     setLoop(startPpq: number, endPpq: number, enabled?: boolean): boolean;
 }
 type WorkletInput = readonly (readonly Float32Array[])[];
@@ -2265,12 +2270,19 @@ interface SonareWorkletDestroyMessage {
 type SonareWorkletMessage = SonareWorkletScheduleInsertAutomationMessage | SonareWorkletSetMeterIntervalMessage | SonareWorkletDestroyMessage;
 interface SonareWorkletMeterSnapshot {
     type: 'meter';
+    targetId: number;
     frame: number;
     peakDbL: number;
     peakDbR: number;
     rmsDbL: number;
     rmsDbR: number;
     correlation: number;
+    truePeakDbL: number;
+    truePeakDbR: number;
+    momentaryLufs: number;
+    shortTermLufs: number;
+    integratedLufs: number;
+    gainReductionDb: number;
 }
 interface SonareWorkletSpectrumSnapshot {
     type: 'spectrum';
@@ -2279,7 +2291,7 @@ interface SonareWorkletSpectrumSnapshot {
 }
 type SonareWorkletTransportMessage = SonareWorkletMeterSnapshot | SonareWorkletSpectrumSnapshot | SonareEngineTelemetryRecord;
 declare const SONARE_METER_RING_HEADER_INTS = 4;
-declare const SONARE_METER_RING_RECORD_FLOATS = 7;
+declare const SONARE_METER_RING_RECORD_FLOATS = 14;
 declare const SONARE_SPECTRUM_RING_HEADER_INTS = 5;
 /** Low 24 bits of a frame index (exact in Float32). */
 declare function encodeFrameLo(frame: number): number;
@@ -2331,7 +2343,7 @@ declare enum SonareEngineTelemetryError {
     SmoothedParameterCapacity = 13
 }
 interface WorkletTransport {
-    postMessage?: (message: SonareWorkletTransportMessage) => void;
+    postMessage?: (message: SonareWorkletTransportMessage | SonareEngineCaptureResponseMessage | SonareEngineTransportResponseMessage, transfer?: Transferable[]) => void;
     onMeter?: (meter: SonareWorkletMeterSnapshot) => void;
     onSpectrum?: (spectrum: SonareWorkletSpectrumSnapshot) => void;
 }
@@ -2367,6 +2379,15 @@ interface SonareEngineSyncClipsMessage {
     type: 'syncClips';
     clips: EngineClip[];
 }
+interface SonareEngineSyncClipsDeltaMessage {
+    type: 'syncClipsDelta';
+    upserts: EngineClip[];
+    removeIds: number[];
+}
+interface SonareEngineSyncMidiClipsMessage {
+    type: 'syncMidiClips';
+    clips: EngineMidiClipSchedule[];
+}
 interface SonareEngineSyncMarkersMessage {
     type: 'syncMarkers';
     markers: EngineMarker[];
@@ -2380,7 +2401,113 @@ interface SonareEngineSyncAutomationMessage {
     paramId: number;
     points: EngineAutomationPoint[];
 }
-type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage;
+interface SonareEngineSyncTempoMessage {
+    type: 'syncTempo';
+    bpm: number;
+    timeSignature: {
+        numerator: number;
+        denominator: number;
+    };
+    tempoSegments?: EngineTempoSegment[];
+    timeSignatureSegments?: EngineTimeSignatureSegment[];
+}
+interface SonareEngineSyncMixerMessage {
+    type: 'syncMixer';
+    lanes: EngineTrackLane[];
+    buses?: EngineBus[];
+    trackStrips?: Array<{
+        trackId: number;
+        sceneJson: string;
+    }>;
+    busStrips?: Array<{
+        busId: number;
+        sceneJson: string;
+    }>;
+    masterStripJson?: string;
+}
+interface SonareEngineSyncCaptureMessage {
+    type: 'syncCapture';
+    bufferFrames: number;
+    channels: number;
+    source: EngineCaptureStatus['source'];
+    recordOffsetSamples: number;
+    inputMonitor: {
+        enabled: boolean;
+        gain: number;
+    };
+}
+interface SonareEngineSyncTrackStripEqBandMessage {
+    type: 'syncTrackStripEqBand';
+    trackId: number;
+    bandIndex: number;
+    bandJson: string;
+}
+interface SonareEngineSyncMasterStripEqBandMessage {
+    type: 'syncMasterStripEqBand';
+    bandIndex: number;
+    bandJson: string;
+}
+interface SonareEngineSyncTrackStripInsertBypassedMessage {
+    type: 'syncTrackStripInsertBypassed';
+    trackId: number;
+    insertIndex: number;
+    bypassed: boolean;
+    resetOnBypass: boolean;
+}
+interface SonareEngineSyncMasterStripInsertBypassedMessage {
+    type: 'syncMasterStripInsertBypassed';
+    insertIndex: number;
+    bypassed: boolean;
+    resetOnBypass: boolean;
+}
+interface SonareEngineSyncBuiltinInstrumentMessage {
+    type: 'syncBuiltinInstrument';
+    destinationId: number;
+    config: {
+        destinationId?: number;
+    } & Record<string, unknown>;
+}
+interface SonareEngineSyncSynthInstrumentMessage {
+    type: 'syncSynthInstrument';
+    destinationId: number;
+    patch: Record<string, unknown> | string;
+}
+interface SonareEngineSyncSf2InstrumentMessage {
+    type: 'syncSf2Instrument';
+    destinationId: number;
+    config: {
+        destinationId?: number;
+        gain?: number;
+        polyphony?: number;
+    };
+}
+interface SonareEngineSyncLoadSoundFontMessage {
+    type: 'syncLoadSoundFont';
+    data: Uint8Array;
+}
+interface SonareEngineSyncMidiNoteMessage {
+    type: 'syncMidiNoteOn' | 'syncMidiNoteOff';
+    destinationId: number;
+    group: number;
+    channel: number;
+    note: number;
+    velocity: number;
+    renderFrame: number;
+}
+interface SonareEngineSyncMidiCcMessage {
+    type: 'syncMidiCc';
+    destinationId: number;
+    group: number;
+    channel: number;
+    controller: number;
+    value: number;
+    renderFrame: number;
+}
+interface SonareEngineSyncMidiPanicMessage {
+    type: 'syncMidiPanic';
+    renderFrame: number;
+}
+type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiPanicMessage;
 interface SonareEngineTelemetryRecord {
     type: SonareEngineTelemetryType | number;
     error: SonareEngineTelemetryError | number;
@@ -2405,6 +2532,41 @@ interface SonareEngineTelemetryRingBuffer {
 interface SonareEngineTelemetryRingReadResult {
     nextReadIndex: number;
     telemetry: SonareEngineTelemetryRecord[];
+}
+interface WorkletPort {
+    postMessage?: (message: unknown, transfer?: Transferable[]) => void;
+    onmessage?: (event: {
+        data: unknown;
+    }) => void;
+    addEventListener?: (type: 'message', listener: (event: {
+        data: unknown;
+    }) => void) => void;
+    start?: () => void;
+}
+interface SonareEngineCaptureRequestMessage {
+    type: 'captureRequest';
+    requestId: number;
+    op: 'status' | 'read' | 'reset';
+}
+interface SonareEngineCaptureResponseMessage {
+    type: 'captureResponse';
+    requestId: number;
+    ok: boolean;
+    status?: EngineCaptureStatus;
+    channels?: Float32Array[] | number[][];
+    error?: string;
+}
+interface SonareEngineTransportRequestMessage {
+    type: 'transportRequest';
+    requestId: number;
+    op: 'state';
+}
+interface SonareEngineTransportResponseMessage {
+    type: 'transportResponse';
+    requestId: number;
+    ok: boolean;
+    state?: EngineTransportState;
+    error?: string;
 }
 declare function sonareMeterRingBufferByteLength(capacity: number): number;
 declare function createSonareMeterRingBuffer(capacity?: number): SonareMeterRingBuffer;
@@ -2476,11 +2638,14 @@ declare class SonareRealtimeEngineWorkletProcessor {
     private lastMeterFrame;
     private metronomeConfig;
     private channelBuffers;
+    private readonly liveClips;
     constructor(options?: SonareRealtimeEngineWorkletProcessorOptions, transport?: WorkletTransport);
     process(inputs: WorkletInput, outputs: WorkletOutput): boolean;
     private reacquireChannelBuffers;
     receiveCommand(command: SonareEngineCommandRecord): void;
     receiveSync(message: SonareEngineSyncMessage): void;
+    receiveCaptureRequest(message: SonareEngineCaptureRequestMessage): void;
+    receiveTransportRequest(message: SonareEngineTransportRequestMessage): void;
     destroy(): void;
     private drainCommands;
     private applyCommand;
@@ -2510,6 +2675,8 @@ declare class SonareRtRealtimeEngineRuntime {
     process(inputs: WorkletInput, outputs: WorkletOutput): boolean;
     receiveCommand(command: SonareEngineCommandRecord): void;
     receiveSync(message: SonareEngineSyncMessage): void;
+    receiveCaptureRequest(message: SonareEngineCaptureRequestMessage, port?: WorkletPort): void;
+    receiveTransportRequest(message: SonareEngineTransportRequestMessage, port?: WorkletPort): void;
     destroy(): void;
     private writeChannelPointers;
     private drainCommands;
@@ -2529,6 +2696,10 @@ declare class SonareRealtimeEngineNode {
     private meterReadIndex;
     private telemetryListeners;
     private meterListeners;
+    private captureRequestId;
+    private readonly captureRequests;
+    private transportRequestId;
+    private readonly transportRequests;
     private resolveReady;
     private rejectReady;
     private destroyed;
@@ -2539,6 +2710,10 @@ declare class SonareRealtimeEngineNode {
     seekSample(timelineSample: number, sampleTime?: number): boolean;
     seekPpq(ppq: number, sampleTime?: number): boolean;
     sendCommand(command: SonareEngineCommandRecord): boolean;
+    requestCaptureStatus(): Promise<EngineCaptureStatus>;
+    requestCapturedAudio(): Promise<Float32Array[]>;
+    requestCaptureReset(): Promise<void>;
+    requestTransportState(): Promise<EngineTransportState>;
     pollTelemetry(): SonareEngineTelemetryRecord[];
     pollMeters(): SonareWorkletMeterSnapshot[];
     onTelemetry(callback: (telemetry: SonareEngineTelemetryRecord) => void): () => void;
@@ -2546,6 +2721,8 @@ declare class SonareRealtimeEngineNode {
     destroy(): void;
     private emitTelemetry;
     private emitMeter;
+    private sendCaptureRequest;
+    private sendTransportRequest;
 }
 declare class SonareEngine {
     readonly node: AudioWorkletNode;
@@ -2559,41 +2736,183 @@ declare class SonareEngine {
     private readonly offlineChannelCount;
     private readonly automationLanes;
     private readonly clips;
+    private readonly midiClips;
     private readonly markers;
+    private readonly trackLaneIds;
+    private readonly trackSends;
+    private readonly buses;
+    private readonly trackStripJson;
+    private readonly busStripJson;
+    private masterStripJson;
+    private captureConfig;
+    private tempoBpm;
+    private timeSignature;
+    private tempoSegments;
+    private timeSignatureSegments;
+    private latestTransportState;
     private nextClipId;
     private nextMarkerId;
+    private transportPlaying;
+    private readonly pendingInstrumentSync;
     private destroyed;
     private constructor();
     static create(context: BaseAudioContext, options?: SonareEngineOptions): Promise<SonareEngine>;
     suspend(): Promise<void>;
     resume(): Promise<void>;
     setTempo(bpm: number): void;
+    setTempoSegments(segments: readonly EngineTempoSegment[]): void;
+    setTimeSignature(numerator: number, denominator: number): void;
+    setTimeSignatureSegments(segments: readonly EngineTimeSignatureSegment[]): void;
     setLoop(startPpq: number, endPpq: number, enabled?: boolean): boolean;
+    countInEndSample(startSample: number, bars: number): number;
+    getTransportState(): Promise<EngineTransportState>;
+    cachedTransportState(): EngineTransportState | undefined;
     setParam(nodeId: string, param: string | number, value: number): boolean;
     scheduleParam(nodeId: string, param: string | number, ppq: number, value: number, curve?: number | 'linear' | 'exponential'): void;
     addAutomationPoint(laneId: string | number, ppq: number, value: number, curve?: number | 'linear' | 'exponential'): void;
+    /**
+     * Replaces the automation lane for `paramId` with the given breakpoints.
+     *
+     * Unlike scheduleParam (which appends a single point), this sets the whole
+     * lane at once; an empty array clears the lane. The points are defensively
+     * copied and sorted by ppq before being mirrored to the offline engine and
+     * the live worklet engine.
+     *
+     * @param paramId Automation target id (registered parameter or a reserved
+     *   engine mixer target from automationParamId/busAutomationParamId).
+     * @param points Lane breakpoints; order does not matter.
+     */
+    setAutomationLane(paramId: number, points: ReadonlyArray<EngineAutomationPoint>): void;
+    /**
+     * Returns the automation target id for a mixer strip parameter.
+     *
+     * The id addresses the engine's reserved mixer namespace, so it can be fed
+     * straight to setAutomationLane to automate a fader or pan without
+     * registering a parameter.
+     *
+     * @param target Track id (declares a mixer lane on first use) or 'master'.
+     * @param kind Strip parameter to address.
+     * @returns Reserved engine parameter id for the strip parameter.
+     */
+    automationParamId(target: string | number, kind: 'faderDb' | 'pan'): number;
+    /**
+     * Returns the automation target id for a bus fader.
+     *
+     * @param busId Bus id (declares the mixer bus on first use).
+     * @returns Reserved engine parameter id for the bus fader gain (dB).
+     */
+    busAutomationParamId(busId: number): number;
+    /**
+     * Returns the number of automation lanes installed on the engine, including
+     * lanes whose breakpoint list is currently empty.
+     *
+     * @returns Engine-side automation lane count.
+     */
+    automationLaneCount(): number;
     listParameters(): EngineParameterInfo[];
     setSoloMute(target: string | number, solo: boolean, mute: boolean): boolean;
+    setStripGain(target: string | number, db: number): boolean;
+    setStripPan(target: string | number, pan: number): boolean;
+    /**
+     * Declares the mixer track lanes in an explicit order.
+     *
+     * Lane indices are append-only: once a track id occupies a lane, its index
+     * stays fixed for the engine's lifetime. The given list must therefore start
+     * with the already-declared lane ids in their current order and may only
+     * append new track ids after them. Entries carrying `sends` replace that
+     * track's send list; entries without `sends` leave existing sends untouched.
+     *
+     * @param lanes Track ids or lane descriptors in the desired lane order.
+     */
+    setTrackLanes(lanes: ReadonlyArray<number | EngineTrackLane>): void;
+    setSends(target: string | number, sends: EngineTrackSend[]): void;
+    setTrackBuses(buses: EngineBus[]): void;
+    setBusGain(busId: number, db: number): boolean;
+    setTrackStripJson(target: string | number, sceneJson: string): void;
+    setTrackStripEqBand(target: string | number, bandIndex: number, band: EqBand | string): void;
+    setTrackStripInsertBypassed(target: string | number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
+    setStripEq(target: string | number, bandIndex: number, band: EqBand | string): void;
+    setStripInsertBypassed(target: string | number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
+    setStripInserts(target: string | number, sceneJson: string): void;
+    setBusStripJson(busId: number, sceneJson: string): void;
+    setMasterStripJson(sceneJson: string): void;
+    setMasterStripEqBand(bandIndex: number, band: EqBand | string): void;
+    setMasterStripInsertBypassed(insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
+    setMasterChain(sceneJson: string): void;
     addClip(trackId: string | number, buffer: Float32Array[], startPpq: number, opts?: Partial<Omit<EngineClip, 'channels' | 'startPpq'>>): number;
     removeClip(clipId: number): void;
+    setMidiClips(clips: readonly EngineMidiClipSchedule[]): void;
+    setBuiltinInstrument(trackId: string | number, config?: {
+        destinationId?: number;
+    } & Record<string, unknown>): void;
+    setSynthInstrument(trackId: string | number, patch?: Record<string, unknown> | string): void;
+    loadSoundFont(data: Uint8Array): void;
+    setSf2Instrument(trackId: string | number, config?: {
+        destinationId?: number;
+        gain?: number;
+        polyphony?: number;
+    }): void;
+    pushMidiNoteOn(trackId: string | number, group: number, channel: number, note: number, velocity: number, renderFrame?: number): void;
+    pushMidiNoteOff(trackId: string | number, group: number, channel: number, note: number, velocity?: number, renderFrame?: number): void;
+    pushMidiCc(trackId: string | number, group: number, channel: number, controller: number, value: number, renderFrame?: number): void;
+    pushMidiPanic(renderFrame?: number): void;
+    configureCapture(options: {
+        bufferFrames: number;
+        channels?: number;
+        source?: EngineCaptureStatus['source'];
+        recordOffsetSamples?: number;
+        inputMonitor?: {
+            enabled: boolean;
+            gain?: number;
+        };
+    }): void;
     armRecord(trackId: string | number, enabled: boolean): boolean;
     punch(inPpq: number, outPpq: number): boolean;
+    captureStatus(): Promise<EngineCaptureStatus>;
+    capturedAudio(): Promise<Float32Array[]>;
+    resetCapture(): Promise<void>;
     setMetronome(opts: EngineMetronomeConfig): void;
     addMarker(ppq: number, name?: string): number;
+    /**
+     * Replaces the whole marker set in one call.
+     *
+     * Entries without an `id` are assigned fresh ids; entries carrying an `id`
+     * keep it (ids must be positive and unique within the list). Returns the
+     * resolved markers in the order given, so a caller can map its own marker
+     * identities to the engine ids used by `seekMarker`/`setLoopFromMarkers`.
+     *
+     * @param markers The full marker list (an empty list clears all markers).
+     * @returns The markers with their resolved engine ids.
+     */
+    setMarkers(markers: ReadonlyArray<{
+        ppq: number;
+        name?: string;
+        id?: number;
+    }>): EngineMarker[];
+    markerCount(): number;
+    markerByIndex(index: number): EngineMarker;
+    marker(markerId: number): EngineMarker;
     seekMarker(markerId: number): boolean;
+    setLoopFromMarkers(startMarkerId: number, endMarkerId: number): boolean;
     renderOffline(totalFrames: number): Promise<Float32Array[]>;
     onMeter(callback: (meter: SonareWorkletMeterSnapshot) => void): () => void;
     onTelemetry(callback: (telemetry: SonareEngineTelemetryRecord) => void): () => void;
     pollTelemetry(): SonareEngineTelemetryRecord[];
     pollMeters(): SonareWorkletMeterSnapshot[];
     destroy(): void;
-    private syncClips;
+    private syncClipsDelta;
+    private syncMidiClips;
+    private syncMixer;
     private syncMarkers;
+    private postInstrumentSync;
+    private flushPendingInstrumentSync;
+    private postTempoSync;
     private postSync;
     private resolveParamId;
     private resolveTargetId;
+    private ensureTrackLane;
+    private ensureBus;
     private curveCode;
-    private ppqToApproxSample;
 }
 declare class SonareRealtimeVoiceChangerWorkletProcessor {
     private static warnedMonoOverflow;
@@ -3586,6 +3905,44 @@ type EngineFreezeResult = WasmEngineFreezeResult;
 type EngineTelemetry = WasmEngineTelemetry;
 type EngineMeterTelemetry = WasmEngineMeterTelemetry;
 type EngineTransportState = WasmEngineTransportState;
+type EngineTempoSegment = WasmEngineTempoSegment;
+type EngineTimeSignatureSegment = WasmEngineTimeSignatureSegment;
+interface EngineTrackSend {
+    busId: number;
+    levelDb?: number;
+    enabled?: boolean;
+}
+interface EngineTrackLane {
+    trackId: number;
+    sends?: EngineTrackSend[];
+}
+interface EngineBus {
+    busId: number;
+    gainDb?: number;
+}
+interface EngineMidiEvent {
+    renderFrame: number;
+    word0?: number;
+    word1?: number;
+    word2?: number;
+    word3?: number;
+    wordCount?: number;
+    group?: number;
+    sysexHandle?: number;
+    data0?: number;
+    data1?: number;
+}
+interface EngineMidiClipSchedule {
+    id?: number;
+    trackId?: number;
+    destinationId?: number;
+    startSample?: number;
+    startPpq?: number;
+    lengthSamples?: number;
+    loop?: boolean;
+    loopLengthSamples?: number;
+    events: EngineMidiEvent[];
+}
 declare const EXPECTED_ENGINE_ABI_VERSION = 3;
 /** Options for {@link RealtimeEngine.bindMidiCc}. All fields are optional. */
 interface MidiCcBindOptions {
@@ -3606,13 +3963,14 @@ interface EngineCapabilities {
 declare function engineCapabilities(): EngineCapabilities;
 declare class RealtimeEngine {
     private native;
-    private nativeExt;
     constructor(sampleRate?: number, maxBlockSize?: number, commandCapacity?: number, telemetryCapacity?: number);
     prepare(sampleRate: number, maxBlockSize: number, commandCapacity?: number, telemetryCapacity?: number): void;
     /** Queue a sample-accurate parameter change (engine kSetParam). */
     setParameter(paramId: number, value: number, renderFrame?: number): void;
     /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
     setParameterSmoothed(paramId: number, value: number, renderFrame?: number): void;
+    setSoloMute(laneIndex: number, solo: boolean, mute: boolean, renderFrame?: number): void;
+    setMidiClips(clips: readonly EngineMidiClipSchedule[]): void;
     setBuiltinInstrument(config?: {
         destinationId?: number;
     } & Record<string, unknown>, destinationId?: number): void;
@@ -3693,7 +4051,10 @@ declare class RealtimeEngine {
     seekSample(timelineSample: number, renderFrame?: number): void;
     seekPpq(ppq: number, renderFrame?: number): void;
     setTempo(bpm: number): void;
+    setTempoSegments(segments: readonly EngineTempoSegment[]): void;
     setTimeSignature(numerator: number, denominator: number): void;
+    setTimeSignatureSegments(segments: readonly EngineTimeSignatureSegment[]): void;
+    sampleAtPpq(ppq: number): number;
     setLoop(startPpq: number, endPpq: number, enabled?: boolean): void;
     addParameter(info: EngineParameterInfo): void;
     parameterCount(): number;
@@ -3715,6 +4076,17 @@ declare class RealtimeEngine {
     graphConnectionCount(): number;
     setClips(clips: EngineClip[]): void;
     clipCount(): number;
+    setTrackLanes(lanes: Array<number | EngineTrackLane>): void;
+    setTrackBuses(buses: EngineBus[]): void;
+    setBusStripJson(busId: number, sceneJson: string): void;
+    setTrackStripJson(trackId: number, sceneJson: string): void;
+    setTrackStripEqBand(trackId: number, bandIndex: number, band: EqBand | string): void;
+    setTrackStripEqBandJson(trackId: number, bandIndex: number, bandJson: string): void;
+    setTrackStripInsertBypassed(trackId: number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
+    setMasterStripJson(sceneJson: string): void;
+    setMasterStripEqBand(bandIndex: number, band: EqBand | string): void;
+    setMasterStripEqBandJson(bandIndex: number, bandJson: string): void;
+    setMasterStripInsertBypassed(insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
     createClipPageProvider(numChannels: number, numSamples: number, pageFrames: number): ClipPageProvider;
     supplyClipPage(providerId: number, pageIndex: number, channels: Float32Array[]): void;
     clearClipPage(providerId: number, pageIndex: number): void;
@@ -3782,7 +4154,7 @@ interface OpfsClipPageProviderBinding {
     supplyRequest(request: ClipPageRequest): Promise<boolean>;
     close(): void;
 }
-declare const opfsClipPageWorkerSource = "\nself.onmessage = async (event) => {\n  const message = event.data;\n  if (!message || message.type !== 'sonare:read-clip-page') return;\n  const { requestId, path, pageIndex, numChannels, numSamples, pageFrames, dataOffsetBytes = 0 } = message;\n  try {\n    if (pageIndex < 0) {\n      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });\n      return;\n    }\n    const startFrame = pageIndex * pageFrames;\n    if (startFrame >= numSamples) {\n      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });\n      return;\n    }\n    const root = await self.navigator.storage.getDirectory();\n    let dir = root;\n    const parts = String(path).split('/').filter(Boolean);\n    for (let i = 0; i < parts.length - 1; ++i) {\n      dir = await dir.getDirectoryHandle(parts[i]);\n    }\n    const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);\n    const access = await fileHandle.createSyncAccessHandle();\n    try {\n      const frames = Math.min(pageFrames, numSamples - startFrame);\n      const frameBytes = numChannels * 4;\n      const bytes = new Uint8Array(frames * frameBytes);\n      let bytesReadTotal = 0;\n      const readOffset = dataOffsetBytes + startFrame * frameBytes;\n      while (bytesReadTotal < bytes.byteLength) {\n        const bytesRead = access.read(bytes.subarray(bytesReadTotal), {\n          at: readOffset + bytesReadTotal,\n        });\n        if (bytesRead <= 0) {\n          break;\n        }\n        bytesReadTotal += bytesRead;\n      }\n      if (bytesReadTotal !== bytes.byteLength || bytesReadTotal % frameBytes !== 0) {\n        self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });\n        return;\n      }\n      const framesRead = bytesReadTotal / frameBytes;\n      const view = new DataView(bytes.buffer, 0, framesRead * frameBytes);\n      const channelBuffers = Array.from({ length: numChannels }, () => new ArrayBuffer(framesRead * 4));\n      for (let ch = 0; ch < numChannels; ++ch) {\n        const channel = new Float32Array(channelBuffers[ch]);\n        for (let frame = 0; frame < framesRead; ++frame) {\n          channel[frame] = view.getFloat32((frame * numChannels + ch) * 4, true);\n        }\n      }\n      self.postMessage(\n        { type: 'sonare:clip-page', requestId, pageIndex, ok: true, frames: framesRead, channelBuffers },\n        channelBuffers,\n      );\n    } finally {\n      access.close();\n    }\n  } catch (error) {\n    self.postMessage({\n      type: 'sonare:clip-page',\n      requestId,\n      pageIndex,\n      ok: false,\n      error: error instanceof Error ? error.message : String(error),\n    });\n  }\n};\n";
+declare const opfsClipPageWorkerSource = "\nconst sonareClipPageReadQueues = new Map();\n\nfunction sonareEnqueueClipPageRead(key, task) {\n  const previous = sonareClipPageReadQueues.get(key) || Promise.resolve();\n  const next = previous.catch(() => undefined).then(task);\n  const queued = next.finally(() => {\n    if (sonareClipPageReadQueues.get(key) === queued) {\n      sonareClipPageReadQueues.delete(key);\n    }\n  });\n  sonareClipPageReadQueues.set(key, queued);\n  return next;\n}\n\nself.onmessage = async (event) => {\n  const message = event.data;\n  if (!message || message.type !== 'sonare:read-clip-page') return;\n  const { requestId, path, pageIndex, numChannels, numSamples, pageFrames, dataOffsetBytes = 0 } = message;\n  await sonareEnqueueClipPageRead(String(path), async () => {\n  try {\n    if (pageIndex < 0) {\n      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });\n      return;\n    }\n    const startFrame = pageIndex * pageFrames;\n    if (startFrame >= numSamples) {\n      self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });\n      return;\n    }\n    const root = await self.navigator.storage.getDirectory();\n    let dir = root;\n    const parts = String(path).split('/').filter(Boolean);\n    for (let i = 0; i < parts.length - 1; ++i) {\n      dir = await dir.getDirectoryHandle(parts[i]);\n    }\n    const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);\n    const access = await fileHandle.createSyncAccessHandle();\n    try {\n      const frames = Math.min(pageFrames, numSamples - startFrame);\n      const frameBytes = numChannels * 4;\n      const bytes = new Uint8Array(frames * frameBytes);\n      let bytesReadTotal = 0;\n      const readOffset = dataOffsetBytes + startFrame * frameBytes;\n      while (bytesReadTotal < bytes.byteLength) {\n        const bytesRead = access.read(bytes.subarray(bytesReadTotal), {\n          at: readOffset + bytesReadTotal,\n        });\n        if (bytesRead <= 0) {\n          break;\n        }\n        bytesReadTotal += bytesRead;\n      }\n      if (bytesReadTotal !== bytes.byteLength || bytesReadTotal % frameBytes !== 0) {\n        self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });\n        return;\n      }\n      const framesRead = bytesReadTotal / frameBytes;\n      const view = new DataView(bytes.buffer, 0, framesRead * frameBytes);\n      const channelBuffers = Array.from({ length: numChannels }, () => new ArrayBuffer(framesRead * 4));\n      for (let ch = 0; ch < numChannels; ++ch) {\n        const channel = new Float32Array(channelBuffers[ch]);\n        for (let frame = 0; frame < framesRead; ++frame) {\n          channel[frame] = view.getFloat32((frame * numChannels + ch) * 4, true);\n        }\n      }\n      self.postMessage(\n        { type: 'sonare:clip-page', requestId, pageIndex, ok: true, frames: framesRead, channelBuffers },\n        channelBuffers,\n      );\n    } finally {\n      access.close();\n    }\n  } catch (error) {\n    self.postMessage({\n      type: 'sonare:clip-page',\n      requestId,\n      pageIndex,\n      ok: false,\n      error: error instanceof Error ? error.message : String(error),\n    });\n  }\n  });\n};\n";
 declare function createOpfsClipPageWorker(): Worker;
 declare function createOpfsClipPageProvider(engine: RealtimeEngine, options: OpfsClipPageProviderOptions): OpfsClipPageProviderBinding;
 
@@ -4902,6 +5274,11 @@ type HpssWithResidualResult = WasmHpssWithResidualResult;
  */
 declare function init(options?: {
     locateFile?: (path: string, prefix: string) => string;
+    wasmBinary?: ArrayBuffer | Uint8Array;
+    moduleFactory?: (options?: {
+        locateFile?: (path: string, prefix: string) => string;
+        wasmBinary?: ArrayBuffer | Uint8Array;
+    }) => Promise<SonareModule>;
 }): Promise<void>;
 /**
  * Check if the module is initialized.
@@ -4925,4 +5302,4 @@ declare function voiceCharacterPresetId(preset: VoicePresetId | number): string 
  */
 declare function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null;
 
-export { type EngineClip as $, type AcousticOptions as A, type BarChord as B, type Chord as C, type CompressorDetector as D, type CompressorOptions as E, type CqtResult as F, type DeclickOptions as G, type DeclipOptions as H, type DecomposeResult as I, type DecrackleMode as J, type DecrackleOptions as K, type DehumOptions as L, type DenoiseClassicalMode as M, type DenoiseClassicalNoiseEstimator as N, type DenoiseClassicalOptions as O, type DereverbClassicalOptions as P, type DynamicRangeReport as Q, type Dynamics as R, type DynamicsAnalysisResult as S, SONARE_ENGINE_COMMAND_RECORD_BYTES, SONARE_ENGINE_RING_HEADER_INTS, SONARE_ENGINE_TELEMETRY_RECORD_BYTES, SONARE_METER_RING_HEADER_INTS, SONARE_METER_RING_RECORD_FLOATS, SONARE_SPECTRUM_RING_HEADER_INTS, SonareEngine, type SonareEngineCommandRecord, type SonareEngineCommandRingBuffer, SonareEngineCommandType, type SonareEngineOptions, type SonareEngineSyncAutomationMessage, type SonareEngineSyncClipsMessage, type SonareEngineSyncMarkersMessage, type SonareEngineSyncMessage, type SonareEngineSyncMetronomeMessage, SonareEngineTelemetryError, type SonareEngineTelemetryRecord, type SonareEngineTelemetryRingBuffer, type SonareEngineTelemetryRingReadResult, SonareEngineTelemetryType, type SonareEngineTransportFacade, type SonareMeterRingBuffer, type SonareMeterRingReadResult, SonareRealtimeEngineNode, type SonareRealtimeEngineNodeCapabilities, type SonareRealtimeEngineNodeOptions, SonareRealtimeEngineWorkletProcessor, type SonareRealtimeEngineWorkletProcessorOptions, type SonareRealtimeVoiceChangerDestroyMessage, type SonareRealtimeVoiceChangerMessage, type SonareRealtimeVoiceChangerResetMessage, type SonareRealtimeVoiceChangerSetConfigMessage, SonareRealtimeVoiceChangerWorkletProcessor, type SonareRealtimeVoiceChangerWorkletProcessorOptions, SonareRtRealtimeEngineRuntime, type SonareRtRealtimeEngineRuntimeOptions, type SonareSpectrumRingBuffer, type SonareSpectrumRingReadResult, type SonareWorkletDestroyMessage, type SonareWorkletMessage, type SonareWorkletMeterSnapshot, SonareWorkletProcessor, type SonareWorkletProcessorOptions, type SonareWorkletScheduleInsertAutomationMessage, type SonareWorkletSetMeterIntervalMessage, type SonareWorkletSpectrumSnapshot, type SonareWorkletTransportMessage, type DynamicsResult as T, EXPECTED_ENGINE_ABI_VERSION as U, EXPECTED_PROJECT_ABI_VERSION as V, type EngineAutomationPoint as W, type EngineBounceOptions as X, type EngineBounceResult as Y, type EngineCapabilities as Z, type EngineCaptureStatus as _, type AcousticResult as a, type PatternScore as a$, type EngineFreezeOptions as a0, type EngineFreezeResult as a1, type EngineGraphSpec as a2, type EngineMarker as a3, type EngineMeterTelemetry as a4, type EngineMetronomeConfig as a5, type EngineParameterInfo as a6, type EngineTelemetry as a7, type EngineTransportState as a8, type EqBand as a9, type Matrix2dResult as aA, type MelPowerResult as aB, type MelSpectrogramResult as aC, type MelodyOptions as aD, type MelodyPoint as aE, type MelodyResult as aF, type MeterTap as aG, type MeteringDetectClippingOptions as aH, type MeteringDynamicRangeOptions as aI, type MfccResult as aJ, type MicrophoneInputBinding as aK, type MidiCcBindOptions as aL, type MidiCcLearnOptions as aM, type MixMeterSnapshot as aN, type MixOptions as aO, type MixResult as aP, Mixer as aQ, type MixerProcessResult as aR, type MixerRealtimeBuffer as aS, Mode as aT, type NoteStretchOptions as aU, type OpfsClipPageProviderBinding as aV, type OpfsClipPageProviderOptions as aW, type PairAnalysis as aX, type PairProcessor as aY, type PanLaw as aZ, type PanMode as a_, type EqBandPhase as aa, type EqBandType as ab, type EqCoeffMode as ac, type EqMatchOptions as ad, type EqSpectrumSnapshot as ae, type EqStereoPlacement as af, ErrorCode as ag, type FrameBuffer as ah, type GateOptions as ai, type GoniometerPoint as aj, type HpssResult as ak, type HpssWithResidualResult as al, type Key as am, type KeyCandidate as an, type KeyDetectionOptions as ao, KeyProfile as ap, type KeyProfileName as aq, type LufsResult as ar, type MasteringChainConfig as as, type MasteringChainResult as at, type MasteringOptions as au, type MasteringPreset as av, type MasteringProcessorParams as aw, type MasteringResult as ax, type MasteringStereoChainResult as ay, type MasteringStereoResult as az, type AnalysisResult as b, StreamAnalyzer as b$, type PhaseScopeReport as b0, PitchClass as b1, type PitchResult as b2, type ProgressiveEstimate as b3, Project as b4, type ProjectAssistSidecar as b5, type ProjectAutomationCurve as b6, type ProjectAutomationLaneDesc as b7, type ProjectAutomationPoint as b8, type ProjectBounceOptions as b9, type RhythmFeatures as bA, type RirResult as bB, type RirSynthOptions as bC, type RoomEstimateOptions as bD, type RoomEstimateResult as bE, type RoomGeometryOptions as bF, type RoomMorphOptions as bG, SYNTH_BODY_TYPES as bH, SYNTH_ENGINE_MODES as bI, SYNTH_FILTER_MODELS as bJ, SYNTH_FILTER_OUTPUTS as bK, SYNTH_MOD_DESTINATIONS as bL, SYNTH_MOD_SOURCES as bM, SYNTH_OSC_WAVEFORMS as bN, type Section as bO, SectionType as bP, type SendTiming as bQ, type Sf2InstrumentConfig as bR, type Sf2ProgramStatus as bS, type SoloProcessor as bT, SonareError as bU, type SourceBackend as bV, type SpectrumOptions as bW, type SpectrumReport as bX, type StereoAnalysis as bY, type StftPowerResult as bZ, type StftResult as b_, type ProjectChordSymbol as ba, type ProjectClipCompSegment as bb, type ProjectClipDesc as bc, type ProjectClipFade as bd, type ProjectClipTake as be, type ProjectCompileResult as bf, type ProjectFadeCurve as bg, type ProjectKeySegment as bh, type ProjectLoopMode as bi, type ProjectLoopRecordingDesc as bj, type ProjectLoopRecordingResult as bk, type ProjectMidiClipResult as bl, type ProjectMidiEvent as bm, type ProjectNotePairValidation as bn, type ProjectTrackDesc as bo, type ProjectTrackKind as bp, type ProjectWarpAnchor as bq, type ProjectWarpMapDesc as br, RealtimeEngine as bs, RealtimeVoiceChanger as bt, type RealtimeVoiceChangerConfigInput as bu, type RealtimeVoiceChangerInterleavedBuffer as bv, type RealtimeVoiceChangerMonoBuffer as bw, type RealtimeVoiceChangerPlanarBuffer as bx, type RealtimeVoiceChangerPodConfig as by, type RhythmAnalysisResult as bz, type AnalyzeBpmOptions as c, decompose as c$, type StreamConfig as c0, type StreamConfigDefaults as c1, type StreamFramesI16 as c2, type StreamFramesU8 as c3, type StreamQuantizeConfig as c4, StreamingEqualizer as c5, type StreamingEqualizerConfig as c6, StreamingMasteringChain as c7, type StreamingMasteringChainConfig as c8, type StreamingPlatform as c9, type WaveformPeaksOptions as cA, type WaveformPeaksReport as cB, type WebMidiBinding as cC, type WebMidiCcBinding as cD, type WebMidiInputInfo as cE, amplitudeToDb as cF, analyze as cG, analyzeBpm as cH, analyzeDynamics as cI, analyzeImpulseResponse as cJ, analyzeMelody as cK, analyzeRhythm as cL, analyzeSections as cM, analyzeTimbre as cN, analyzeWithProgress as cO, bassChroma as cP, bindMicrophoneInput as cQ, bindWebMidi as cR, chordFunctionalAnalysis as cS, chroma as cT, chromaCens as cU, cqt as cV, createOpfsClipPageProvider as cW, createOpfsClipPageWorker as cX, cyclicTempogram as cY, dbToAmplitude as cZ, dbToPower as c_, StreamingRetune as ca, type StreamingRetuneConfig as cb, type SynthBodyType as cc, type SynthEngineMode as cd, type SynthEnumTables as ce, type SynthFilterModel as cf, type SynthFilterOutput as cg, type SynthModDestination as ch, type SynthModRouting as ci, type SynthModSource as cj, type SynthOscWaveform as ck, type SynthPatch as cl, type TempogramMode as cm, type Timbre as cn, type TimbreAnalysisResult as co, type TimbreFrame as cp, type TimeSignature as cq, type TransientShaperOptions as cr, createSonareEngineCommandRingBuffer, createSonareEngineTelemetryRingBuffer, createSonareMeterRingBuffer, createSonareSpectrumRingBuffer, type TrimSilenceMode as cs, type TrimSilenceOptions as ct, type ValidateOptions as cu, type VectorscopeReport as cv, type VoiceChangeOptions as cw, type VoiceChangeRealtimeOptions as cx, type VoicePresetId as cy, type WaveformPeakPyramidOptions as cz, type AnalyzeDynamicsOptions as d, masteringRepairDereverbClassical as d$, decomposeWithInit as d0, deemphasis as d1, detectAcoustic as d2, detectBeats as d3, detectBpm as d4, detectChords as d5, detectDownbeats as d6, detectKey as d7, detectKeyCandidates as d8, detectOnsets as d9, masterAudioStereoWithProgress as dA, masterAudioWithProgress as dB, mastering as dC, masteringAssistantSuggest as dD, masteringAudioProfile as dE, masteringChain as dF, masteringChainStereo as dG, masteringChainStereoWithProgress as dH, masteringChainWithProgress as dI, masteringDynamicsCompressor as dJ, masteringDynamicsGate as dK, masteringDynamicsTransientShaper as dL, masteringInsertNames as dM, masteringInsertParamNames as dN, masteringPairAnalysisNames as dO, masteringPairAnalyze as dP, masteringPairProcess as dQ, masteringPairProcessorNames as dR, masteringPresetNames as dS, masteringProcess as dT, masteringProcessStereo as dU, masteringProcessorNames as dV, masteringRepairDeclick as dW, masteringRepairDeclip as dX, masteringRepairDecrackle as dY, masteringRepairDehum as dZ, masteringRepairDenoiseClassical as d_, ebur128LoudnessRange as da, engineAbiVersion as db, engineCapabilities as dc, estimateRoom as dd, estimateTuning as de, decodeFrame, fixFrames as df, fixLength as dg, fourierTempogram as dh, frameSignal as di, framesToSamples as dj, framesToTime as dk, harmonic as dl, hasFfmpegSupport as dm, hpss as dn, hpssWithResidual as dp, hybridCqt as dq, hzToMel as dr, hzToMidi as ds, hzToNote as dt, isSonareError as du, isWebMidiAvailable as dv, lufs as dw, lufsInterleaved as dx, masterAudio as dy, masterAudioStereo as dz, type AnalyzeRhythmOptions as e, samplesToFrames as e$, masteringRepairTrimSilence as e0, masteringStereoAnalysisNames as e1, masteringStereoAnalyze as e2, masteringStreamingPreview as e3, melSpectrogram as e4, melToAudio as e5, melToHz as e6, melToStft as e7, meteringCrestFactorDb as e8, meteringDcOffset as e9, onsetEnvelope as eA, onsetStrengthMulti as eB, opfsClipPageWorkerSource as eC, padCenter as eD, pcen as eE, peakPick as eF, percussive as eG, phaseVocoder as eH, pitchCorrectToMidi as eI, pitchCorrectToMidiTimevarying as eJ, pitchPyin as eK, pitchShift as eL, pitchTuning as eM, pitchYin as eN, plp as eO, polyFeatures as eP, powerToDb as eQ, preemphasis as eR, projectAbiVersion as eS, pseudoCqt as eT, realtimeVoiceChangerPresetConfig as eU, realtimeVoiceChangerPresetJson as eV, realtimeVoiceChangerPresetNames as eW, remix as eX, resample as eY, rmsEnergy as eZ, roomMorph as e_, meteringDetectClipping as ea, meteringDynamicRange as eb, meteringPeakDb as ec, meteringPhaseScope as ed, meteringPhaseScopeDecimated as ee, meteringRmsDb as ef, meteringSpectrum as eg, meteringSpectrumFrame as eh, meteringStereoCorrelation as ei, meteringStereoWidth as ej, meteringTruePeakDb as ek, meteringVectorscope as el, meteringVectorscopeDecimated as em, mfcc as en, encodeFrameHi, encodeFrameLo, mfccToAudio as eo, mfccToMel as ep, midiToHz as eq, mixStereo as er, mixingScenePresetJson as es, mixingScenePresetNames as et, momentaryLufs as eu, nnFilter as ev, nnlsChroma as ew, normalize as ex, noteStretch as ey, noteToHz as ez, type AnalyzeSectionsOptions as f, scaleCorrectionSemitones as f0, scalePitchClassEnabled as f1, scaleQuantizeMidi as f2, shortTermLufs as f3, spectralBandwidth as f4, spectralCentroid as f5, spectralContrast as f6, spectralFlatness as f7, spectralRolloff as f8, splitSilence as f9, stft as fa, stftDb as fb, streamAnalyzerConfigDefaults as fc, synthEnumTables as fd, synthPresetNames as fe, synthPresetPatch as ff, synthesizeRir as fg, tempogram as fh, tempogramRatio as fi, timeStretch as fj, timeToFrames as fk, tonnetz as fl, trim as fm, trimSilence as fn, validateRealtimeVoiceChangerPresetJson as fo, vectorNormalize as fp, version as fq, voiceChange as fr, voiceChangeRealtime as fs, voiceChangerAbiVersion as ft, voiceCharacterPresetId as fu, vqt as fv, waveformPeakPyramid as fw, waveformPeaks as fx, zeroCrossingRate as fy, zeroCrossings as fz, type AnalyzeTimbreOptions as g, type AnalyzerStats as h, Audio as i, init, isInitialized, type AutomationCurve as j, type Beat as k, type BindMicrophoneInputOptions as l, type BindWebMidiOptions as m, type BpmAnalysisResult as n, type BpmCandidate as o, type BrowserAudioDecodeOptions as p, popSonareEngineCommandRingBuffer, pushSonareEngineCommandRingBuffer, type BuiltinSynthBinding as q, type BuiltinSynthConfig as r, readSonareEngineTelemetryRingBuffer, readSonareMeterRingBuffer, readSonareSpectrumRingBuffer, registerSonareRealtimeEngineWorkletProcessor, registerSonareRealtimeVoiceChangerWorkletProcessor, registerSonareWorkletProcessor, type BuiltinSynthWaveform as s, sonareEngineCommandRingBufferByteLength, sonareEngineTelemetryRingBufferByteLength, sonareMeterRingBufferByteLength, sonareSpectrumRingBufferByteLength, type ChordAnalysisResult as t, type ChordChange as u, type ChordDetectionOptions as v, ChordQuality as w, writeSonareEngineTelemetryRingBuffer, type ChromaResult as x, type ClippingRegion as y, type ClippingReport as z };
+export { type EngineCaptureStatus as $, type AcousticOptions as A, type BarChord as B, type Chord as C, type CompressorDetector as D, type CompressorOptions as E, type CqtResult as F, type DeclickOptions as G, type DeclipOptions as H, type DecomposeResult as I, type DecrackleMode as J, type DecrackleOptions as K, type DehumOptions as L, type DenoiseClassicalMode as M, type DenoiseClassicalNoiseEstimator as N, type DenoiseClassicalOptions as O, type DereverbClassicalOptions as P, type DynamicRangeReport as Q, type Dynamics as R, type DynamicsAnalysisResult as S, SONARE_ENGINE_COMMAND_RECORD_BYTES, SONARE_ENGINE_RING_HEADER_INTS, SONARE_ENGINE_TELEMETRY_RECORD_BYTES, SONARE_METER_RING_HEADER_INTS, SONARE_METER_RING_RECORD_FLOATS, SONARE_SPECTRUM_RING_HEADER_INTS, SonareEngine, type SonareEngineCaptureRequestMessage, type SonareEngineCaptureResponseMessage, type SonareEngineCommandRecord, type SonareEngineCommandRingBuffer, SonareEngineCommandType, type SonareEngineOptions, type SonareEngineSyncAutomationMessage, type SonareEngineSyncBuiltinInstrumentMessage, type SonareEngineSyncCaptureMessage, type SonareEngineSyncClipsDeltaMessage, type SonareEngineSyncClipsMessage, type SonareEngineSyncLoadSoundFontMessage, type SonareEngineSyncMarkersMessage, type SonareEngineSyncMasterStripEqBandMessage, type SonareEngineSyncMasterStripInsertBypassedMessage, type SonareEngineSyncMessage, type SonareEngineSyncMetronomeMessage, type SonareEngineSyncMidiCcMessage, type SonareEngineSyncMidiClipsMessage, type SonareEngineSyncMidiNoteMessage, type SonareEngineSyncMidiPanicMessage, type SonareEngineSyncMixerMessage, type SonareEngineSyncSf2InstrumentMessage, type SonareEngineSyncSynthInstrumentMessage, type SonareEngineSyncTempoMessage, type SonareEngineSyncTrackStripEqBandMessage, type SonareEngineSyncTrackStripInsertBypassedMessage, SonareEngineTelemetryError, type SonareEngineTelemetryRecord, type SonareEngineTelemetryRingBuffer, type SonareEngineTelemetryRingReadResult, SonareEngineTelemetryType, type SonareEngineTransportFacade, type SonareEngineTransportRequestMessage, type SonareEngineTransportResponseMessage, type SonareMeterRingBuffer, type SonareMeterRingReadResult, SonareRealtimeEngineNode, type SonareRealtimeEngineNodeCapabilities, type SonareRealtimeEngineNodeOptions, SonareRealtimeEngineWorkletProcessor, type SonareRealtimeEngineWorkletProcessorOptions, type SonareRealtimeVoiceChangerDestroyMessage, type SonareRealtimeVoiceChangerMessage, type SonareRealtimeVoiceChangerResetMessage, type SonareRealtimeVoiceChangerSetConfigMessage, SonareRealtimeVoiceChangerWorkletProcessor, type SonareRealtimeVoiceChangerWorkletProcessorOptions, SonareRtRealtimeEngineRuntime, type SonareRtRealtimeEngineRuntimeOptions, type SonareSpectrumRingBuffer, type SonareSpectrumRingReadResult, type SonareWorkletDestroyMessage, type SonareWorkletMessage, type SonareWorkletMeterSnapshot, SonareWorkletProcessor, type SonareWorkletProcessorOptions, type SonareWorkletScheduleInsertAutomationMessage, type SonareWorkletSetMeterIntervalMessage, type SonareWorkletSpectrumSnapshot, type SonareWorkletTransportMessage, type DynamicsResult as T, EXPECTED_ENGINE_ABI_VERSION as U, EXPECTED_PROJECT_ABI_VERSION as V, type EngineAutomationPoint as W, type EngineBounceOptions as X, type EngineBounceResult as Y, type EngineBus as Z, type EngineCapabilities as _, type AcousticResult as a, type NoteStretchOptions as a$, type EngineClip as a0, type EngineFreezeOptions as a1, type EngineFreezeResult as a2, type EngineGraphSpec as a3, type EngineMarker as a4, type EngineMeterTelemetry as a5, type EngineMetronomeConfig as a6, type EngineMidiClipSchedule as a7, type EngineMidiEvent as a8, type EngineParameterInfo as a9, type MasteringChainResult as aA, type MasteringOptions as aB, type MasteringPreset as aC, type MasteringProcessorParams as aD, type MasteringResult as aE, type MasteringStereoChainResult as aF, type MasteringStereoResult as aG, type Matrix2dResult as aH, type MelPowerResult as aI, type MelSpectrogramResult as aJ, type MelodyOptions as aK, type MelodyPoint as aL, type MelodyResult as aM, type MeterTap as aN, type MeteringDetectClippingOptions as aO, type MeteringDynamicRangeOptions as aP, type MfccResult as aQ, type MicrophoneInputBinding as aR, type MidiCcBindOptions as aS, type MidiCcLearnOptions as aT, type MixMeterSnapshot as aU, type MixOptions as aV, type MixResult as aW, Mixer as aX, type MixerProcessResult as aY, type MixerRealtimeBuffer as aZ, Mode as a_, type EngineTelemetry as aa, type EngineTempoSegment as ab, type EngineTimeSignatureSegment as ac, type EngineTrackLane as ad, type EngineTrackSend as ae, type EngineTransportState as af, type EqBand as ag, type EqBandPhase as ah, type EqBandType as ai, type EqCoeffMode as aj, type EqMatchOptions as ak, type EqSpectrumSnapshot as al, type EqStereoPlacement as am, ErrorCode as an, type FrameBuffer as ao, type GateOptions as ap, type GoniometerPoint as aq, type HpssResult as ar, type HpssWithResidualResult as as, type Key as at, type KeyCandidate as au, type KeyDetectionOptions as av, KeyProfile as aw, type KeyProfileName as ax, type LufsResult as ay, type MasteringChainConfig as az, type AnalysisResult as b, SonareError as b$, type OpfsClipPageProviderBinding as b0, type OpfsClipPageProviderOptions as b1, type PairAnalysis as b2, type PairProcessor as b3, type PanLaw as b4, type PanMode as b5, type PatternScore as b6, type PhaseScopeReport as b7, PitchClass as b8, type PitchResult as b9, RealtimeVoiceChanger as bA, type RealtimeVoiceChangerConfigInput as bB, type RealtimeVoiceChangerInterleavedBuffer as bC, type RealtimeVoiceChangerMonoBuffer as bD, type RealtimeVoiceChangerPlanarBuffer as bE, type RealtimeVoiceChangerPodConfig as bF, type RhythmAnalysisResult as bG, type RhythmFeatures as bH, type RirResult as bI, type RirSynthOptions as bJ, type RoomEstimateOptions as bK, type RoomEstimateResult as bL, type RoomGeometryOptions as bM, type RoomMorphOptions as bN, SYNTH_BODY_TYPES as bO, SYNTH_ENGINE_MODES as bP, SYNTH_FILTER_MODELS as bQ, SYNTH_FILTER_OUTPUTS as bR, SYNTH_MOD_DESTINATIONS as bS, SYNTH_MOD_SOURCES as bT, SYNTH_OSC_WAVEFORMS as bU, type Section as bV, SectionType as bW, type SendTiming as bX, type Sf2InstrumentConfig as bY, type Sf2ProgramStatus as bZ, type SoloProcessor as b_, type ProgressiveEstimate as ba, Project as bb, type ProjectAssistSidecar as bc, type ProjectAutomationCurve as bd, type ProjectAutomationLaneDesc as be, type ProjectAutomationPoint as bf, type ProjectBounceOptions as bg, type ProjectChordSymbol as bh, type ProjectClipCompSegment as bi, type ProjectClipDesc as bj, type ProjectClipFade as bk, type ProjectClipTake as bl, type ProjectCompileResult as bm, type ProjectFadeCurve as bn, type ProjectKeySegment as bo, type ProjectLoopMode as bp, type ProjectLoopRecordingDesc as bq, type ProjectLoopRecordingResult as br, type ProjectMidiClipResult as bs, type ProjectMidiEvent as bt, type ProjectNotePairValidation as bu, type ProjectTrackDesc as bv, type ProjectTrackKind as bw, type ProjectWarpAnchor as bx, type ProjectWarpMapDesc as by, RealtimeEngine as bz, type AnalyzeBpmOptions as c, chromaCens as c$, type SourceBackend as c0, type SpectrumOptions as c1, type SpectrumReport as c2, type StereoAnalysis as c3, type StftPowerResult as c4, type StftResult as c5, StreamAnalyzer as c6, type StreamConfig as c7, type StreamConfigDefaults as c8, type StreamFramesI16 as c9, type TrimSilenceOptions as cA, type ValidateOptions as cB, type VectorscopeReport as cC, type VoiceChangeOptions as cD, type VoiceChangeRealtimeOptions as cE, type VoicePresetId as cF, type WaveformPeakPyramidOptions as cG, type WaveformPeaksOptions as cH, type WaveformPeaksReport as cI, type WebMidiBinding as cJ, type WebMidiCcBinding as cK, type WebMidiInputInfo as cL, amplitudeToDb as cM, analyze as cN, analyzeBpm as cO, analyzeDynamics as cP, analyzeImpulseResponse as cQ, analyzeMelody as cR, analyzeRhythm as cS, analyzeSections as cT, analyzeTimbre as cU, analyzeWithProgress as cV, bassChroma as cW, bindMicrophoneInput as cX, bindWebMidi as cY, chordFunctionalAnalysis as cZ, chroma as c_, type StreamFramesU8 as ca, type StreamQuantizeConfig as cb, StreamingEqualizer as cc, type StreamingEqualizerConfig as cd, StreamingMasteringChain as ce, type StreamingMasteringChainConfig as cf, type StreamingPlatform as cg, StreamingRetune as ch, type StreamingRetuneConfig as ci, type SynthBodyType as cj, type SynthEngineMode as ck, type SynthEnumTables as cl, type SynthFilterModel as cm, type SynthFilterOutput as cn, type SynthModDestination as co, type SynthModRouting as cp, type SynthModSource as cq, type SynthOscWaveform as cr, createSonareEngineCommandRingBuffer, createSonareEngineTelemetryRingBuffer, createSonareMeterRingBuffer, createSonareSpectrumRingBuffer, type SynthPatch as cs, type TempogramMode as ct, type Timbre as cu, type TimbreAnalysisResult as cv, type TimbreFrame as cw, type TimeSignature as cx, type TransientShaperOptions as cy, type TrimSilenceMode as cz, type AnalyzeDynamicsOptions as d, masteringProcessStereo as d$, cqt as d0, createOpfsClipPageProvider as d1, createOpfsClipPageWorker as d2, cyclicTempogram as d3, dbToAmplitude as d4, dbToPower as d5, decompose as d6, decomposeWithInit as d7, deemphasis as d8, detectAcoustic as d9, hzToNote as dA, isSonareError as dB, isWebMidiAvailable as dC, lufs as dD, lufsInterleaved as dE, masterAudio as dF, masterAudioStereo as dG, masterAudioStereoWithProgress as dH, masterAudioWithProgress as dI, mastering as dJ, masteringAssistantSuggest as dK, masteringAudioProfile as dL, masteringChain as dM, masteringChainStereo as dN, masteringChainStereoWithProgress as dO, masteringChainWithProgress as dP, masteringDynamicsCompressor as dQ, masteringDynamicsGate as dR, masteringDynamicsTransientShaper as dS, masteringInsertNames as dT, masteringInsertParamNames as dU, masteringPairAnalysisNames as dV, masteringPairAnalyze as dW, masteringPairProcess as dX, masteringPairProcessorNames as dY, masteringPresetNames as dZ, masteringProcess as d_, detectBeats as da, detectBpm as db, detectChords as dc, detectDownbeats as dd, detectKey as de, decodeFrame, detectKeyCandidates as df, detectOnsets as dg, ebur128LoudnessRange as dh, engineAbiVersion as di, engineCapabilities as dj, estimateRoom as dk, estimateTuning as dl, fixFrames as dm, fixLength as dn, fourierTempogram as dp, frameSignal as dq, framesToSamples as dr, framesToTime as ds, harmonic as dt, hasFfmpegSupport as du, hpss as dv, hpssWithResidual as dw, hybridCqt as dx, hzToMel as dy, hzToMidi as dz, type AnalyzeRhythmOptions as e, realtimeVoiceChangerPresetConfig as e$, masteringProcessorNames as e0, masteringRepairDeclick as e1, masteringRepairDeclip as e2, masteringRepairDecrackle as e3, masteringRepairDehum as e4, masteringRepairDenoiseClassical as e5, masteringRepairDereverbClassical as e6, masteringRepairTrimSilence as e7, masteringStereoAnalysisNames as e8, masteringStereoAnalyze as e9, mixingScenePresetNames as eA, momentaryLufs as eB, nnFilter as eC, nnlsChroma as eD, normalize as eE, noteStretch as eF, noteToHz as eG, onsetEnvelope as eH, onsetStrengthMulti as eI, opfsClipPageWorkerSource as eJ, padCenter as eK, pcen as eL, peakPick as eM, percussive as eN, phaseVocoder as eO, pitchCorrectToMidi as eP, pitchCorrectToMidiTimevarying as eQ, pitchPyin as eR, pitchShift as eS, pitchTuning as eT, pitchYin as eU, plp as eV, polyFeatures as eW, powerToDb as eX, preemphasis as eY, projectAbiVersion as eZ, pseudoCqt as e_, masteringStreamingPreview as ea, melSpectrogram as eb, melToAudio as ec, melToHz as ed, melToStft as ee, meteringCrestFactorDb as ef, meteringDcOffset as eg, meteringDetectClipping as eh, meteringDynamicRange as ei, meteringPeakDb as ej, meteringPhaseScope as ek, meteringPhaseScopeDecimated as el, meteringRmsDb as em, meteringSpectrum as en, encodeFrameHi, encodeFrameLo, meteringSpectrumFrame as eo, meteringStereoCorrelation as ep, meteringStereoWidth as eq, meteringTruePeakDb as er, meteringVectorscope as es, meteringVectorscopeDecimated as et, mfcc as eu, mfccToAudio as ev, mfccToMel as ew, midiToHz as ex, mixStereo as ey, mixingScenePresetJson as ez, type AnalyzeSectionsOptions as f, realtimeVoiceChangerPresetJson as f0, realtimeVoiceChangerPresetNames as f1, remix as f2, resample as f3, rmsEnergy as f4, roomMorph as f5, samplesToFrames as f6, scaleCorrectionSemitones as f7, scalePitchClassEnabled as f8, scaleQuantizeMidi as f9, voiceChangerAbiVersion as fA, voiceCharacterPresetId as fB, vqt as fC, waveformPeakPyramid as fD, waveformPeaks as fE, zeroCrossingRate as fF, zeroCrossings as fG, shortTermLufs as fa, spectralBandwidth as fb, spectralCentroid as fc, spectralContrast as fd, spectralFlatness as fe, spectralRolloff as ff, splitSilence as fg, stft as fh, stftDb as fi, streamAnalyzerConfigDefaults as fj, synthEnumTables as fk, synthPresetNames as fl, synthPresetPatch as fm, synthesizeRir as fn, tempogram as fo, tempogramRatio as fp, timeStretch as fq, timeToFrames as fr, tonnetz as fs, trim as ft, trimSilence as fu, validateRealtimeVoiceChangerPresetJson as fv, vectorNormalize as fw, version as fx, voiceChange as fy, voiceChangeRealtime as fz, type AnalyzeTimbreOptions as g, type AnalyzerStats as h, Audio as i, init, isInitialized, type AutomationCurve as j, type Beat as k, type BindMicrophoneInputOptions as l, type BindWebMidiOptions as m, type BpmAnalysisResult as n, type BpmCandidate as o, type BrowserAudioDecodeOptions as p, popSonareEngineCommandRingBuffer, pushSonareEngineCommandRingBuffer, type BuiltinSynthBinding as q, type BuiltinSynthConfig as r, readSonareEngineTelemetryRingBuffer, readSonareMeterRingBuffer, readSonareSpectrumRingBuffer, registerSonareRealtimeEngineWorkletProcessor, registerSonareRealtimeVoiceChangerWorkletProcessor, registerSonareWorkletProcessor, type BuiltinSynthWaveform as s, sonareEngineCommandRingBufferByteLength, sonareEngineTelemetryRingBufferByteLength, sonareMeterRingBufferByteLength, sonareSpectrumRingBufferByteLength, type ChordAnalysisResult as t, type ChordChange as u, type ChordDetectionOptions as v, ChordQuality as w, writeSonareEngineTelemetryRingBuffer, type ChromaResult as x, type ClippingRegion as y, type ClippingReport as z };

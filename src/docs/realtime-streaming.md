@@ -8,7 +8,7 @@ description: libsonare realtime surfaces — StreamAnalyzer for live MIR (mel/ch
 libsonare has two realtime-oriented surfaces:
 
 - **`StreamAnalyzer`** — feeds in blocks of audio and emits *analysis frames* (mel, chroma, onset, spectral) plus progressive musical estimates (BPM, key, chord, chord progression, pattern). Use it for visualizers and live "what is this song doing" displays.
-- **`RealtimeEngine`** — transport, automation, clip playback, graph routing, metronome, capture, offline bounce, freeze, and telemetry. Use it for playback engines.
+- **`RealtimeEngine`** — transport, automation, clip playback, a per-track lane mixer (lanes, buses, sends, channel strips), MIDI clip scheduling, graph routing, metronome, capture, offline bounce, freeze, and telemetry. Use it for playback engines.
 
 In realtime docs, "chunk" or "block" means a short slice of audio processed repeatedly, often inside a Web Audio `AudioWorklet` — the audio-callback context that runs your DSP on the realtime audio thread, separate from the main/UI thread. Realtime code should avoid heavy allocation inside the audio callback: prepare objects first, then process blocks.
 
@@ -37,7 +37,8 @@ By the end of this page you should be able to:
 | A visualizer that draws a spectrogram, chroma, onset strength, or live BPM/key estimate | `StreamAnalyzer` |
 | A live chord / progression / pattern display | `StreamAnalyzer.stats()` |
 | A playback engine with tempo, loop points, markers, metronome, clips, and automation | `RealtimeEngine` |
-| A mixer with strips, sends, and meters | [Mixing Engine](./mixing.md) |
+| A playback engine that also mixes its own tracks live (lanes, buses, sends, strips) | `RealtimeEngine` [lane mixer](#track-lanes-buses-and-channel-strips) |
+| A standalone mixer with strips, sends, and meters (one-shot or scene-driven) | [Mixing Engine](./mixing.md) |
 | A simple offline script | [Getting Started](./getting-started.md), not this page |
 
 ## Which API to use
@@ -47,6 +48,8 @@ By the end of this page you should be able to:
 | Mel/chroma/onset frames from a microphone or playing file | `StreamAnalyzer` |
 | Progressive BPM, key, current chord, chord progression, and pattern scores | `StreamAnalyzer.stats()` |
 | Transport, tempo, loop points, markers, metronome, clip scheduling, and automation | `RealtimeEngine` |
+| Per-track lanes, buses, sends, and channel strips inside the playback engine | `RealtimeEngine` lane mixer (`setTrackLanes`, `setTrackBuses`, strip JSON setters) |
+| Sample-accurate MIDI clip playback into engine instruments | `RealtimeEngine.setMidiClips()` + `sampleAtPpq()` |
 | AudioWorklet bridge for engine-style playback with telemetry | `RealtimeEngine` or the reduced `sonare-rt` module |
 | Stem or strip mixing with sends and meters | [Mixing Engine](./mixing.md) |
 
@@ -265,6 +268,8 @@ engine.destroy();
 
 `RealtimeEngine` can also register parameter metadata, set automation lanes, seek to markers, configure metronome clicks, process with monitor output, capture audio, run offline bounces, freeze clips, and drain meter telemetry.
 
+Scheduled clips and sequenced MIDI only sound while the transport is rolling — on a stopped engine they stay silent rather than leaking audio. The offline helpers (`renderOffline`, `bounceOffline`, `freezeOffline`) roll the transport for the render duration and restore the prior state afterwards, so offline clip and MIDI rendering needs no manual `play()`.
+
 For recording, the capture surface adds a few controls:
 
 - `setCaptureSource('output' | 'input')` — record the engine's rendered output bus or the raw input you pass to `process(...)`.
@@ -280,6 +285,82 @@ The engine also accepts **live MIDI** into its instruments and **records** what 
 ::: warning Check the engine ABI before constructing
 `engineCapabilities().abiCompatible` confirms the loaded WASM matches the JS wrapper's expected engine ABI. The realtime engine is the most version-sensitive surface in the library; constructing it against a mismatched binary is undefined. Guard with the check above; if it fails, update your `@libraz/libsonare` package so the WASM binary and JS wrapper come from the same release.
 :::
+
+### Track lanes, buses, and channel strips
+
+The engine carries its own realtime-safe **lane mixer**, so a playback engine can mix the tracks it plays without a second mixing pass. Each track occupies a **lane**; lanes can feed **aux sends** into numbered **buses**; and tracks, buses, and the master each own a full **channel strip** — the same strip model (EQ, inserts, fader, pan, sends) as the [Mixing Engine](./mixing.md). Plugin delay compensation is recomputed automatically whenever the lane layout is republished.
+
+```typescript
+// Declare buses first, then the lane order with sends.
+engine.setTrackBuses([{ busId: 1, gainDb: 0 }]);
+engine.setTrackLanes([
+  { trackId: 1, sends: [{ busId: 1, levelDb: -12, enabled: true }] },
+  2, // a bare track id appends a lane with no sends
+]);
+
+// Strips reuse mixer scene JSON: the scene's first strips[0] entry becomes the strip spec.
+engine.setTrackStripJson(1, vocalSceneJson);
+engine.setBusStripJson(1, reverbSceneJson);   // the bus must already exist via setTrackBuses
+engine.setMasterStripJson(masterSceneJson);
+
+// Tweak one embedded EQ band without rebuilding the strip
+// (same band JSON schema as eq.parametric / StreamingEqualizer):
+engine.setTrackStripEqBandJson(1, 0,
+  JSON.stringify({ type: 'peak', frequencyHz: 250, gainDb: -2, q: 1.0 }));
+
+// Bypass an insert in place; pass true as the 4th argument to also reset its state.
+engine.setTrackStripInsertBypassed(1, 0, true);
+
+// Queueable solo/mute: takes a lane index and an optional renderFrame
+// (-1 = apply immediately; a future frame applies sample-accurately).
+engine.setSoloMute(0, true, false, -1);
+```
+
+::: info Lane indices are append-only
+Once a track id occupies a lane, its lane index stays fixed for the engine's lifetime. Each `setTrackLanes(...)` call must list the already-declared lane ids in their current order and may only append new track ids after them. Entries carrying `sends` replace that track's send list; entries without `sends` (including bare ids) leave existing sends untouched. `setSoloMute` addresses lanes by that fixed index.
+:::
+
+::: warning Structural strip calls belong on the control thread
+`setTrackLanes`, `setTrackBuses`, and the strip JSON setters build internal structures and must not run concurrently with `process(...)` — issue them between renders or while stopped. The lightweight live controls are `setSoloMute` (queued sample-accurately) and the EQ-band updates, which mutate one band in place.
+:::
+
+<SonareDemo id="engine-lane-mixer" />
+
+### MIDI clip scheduling and `sampleAtPpq`
+
+Audio clips have the clip schedule and page providers; **MIDI clips** have their own realtime schedule. `setMidiClips(clips)` replaces the engine's whole MIDI clip schedule in one call, and each clip routes its events to a MIDI **destination id** — the instrument bound with `setBuiltinInstrument`, `setSynthInstrument`, or `setSf2Instrument` (see [MIDI Input](./midi-input.md) for the destination model).
+
+The schedule is *compiled*: timing is in **absolute samples on the engine timeline**, not PPQ. Use `sampleAtPpq(ppq)` to convert musical positions through the engine's tempo map — it integrates every `setTempo` / `setTempoSegments` change, so the result stays correct across tempo ramps.
+
+```typescript
+// UMP MIDI 1.0 channel-voice words (note-on = status 0x9, note-off = 0x8).
+const noteOn  = (ch: number, note: number, vel: number) =>
+  (0x2 << 28) | (0x9 << 20) | (ch << 16) | (note << 8) | vel;
+const noteOff = (ch: number, note: number) =>
+  (0x2 << 28) | (0x8 << 20) | (ch << 16) | (note << 8);
+
+const start = engine.sampleAtPpq(8);                  // tempo-map-aware
+const length = engine.sampleAtPpq(16) - start;
+
+engine.setMidiClips([{
+  id: 1,
+  trackId: 1,
+  destinationId: 0,            // the instrument destination that renders these events
+  startSample: start,
+  startPpq: 8,
+  lengthSamples: length,
+  loop: true,
+  loopLengthSamples: length,
+  events: [
+    // renderFrame is an absolute engine-timeline sample. wordCount may be
+    // omitted for one-word MIDI 1.0 events (it is inferred from word0).
+    { renderFrame: start,                          word0: noteOn(0, 60, 100) },
+    { renderFrame: start + Math.floor(length / 2), word0: noteOff(0, 60) },
+  ],
+}]);
+```
+
+Looping clips repeat their event list every `loopLengthSamples`. To clear the schedule, call `setMidiClips([])`. If you work at the *project* level instead (notes in PPQ, takes, comping), build the arrangement with [Project Editing](./project-editing.md) and bounce it — this realtime schedule is the lower-level surface a DAW front end compiles into.
 
 ## AudioWorklet notes
 
@@ -328,7 +409,22 @@ For app code that wants a higher-level facade, `SonareEngine` combines two piece
 | Worklet node | Runs the realtime audio side. |
 | Main-thread `RealtimeEngine` | Handles offline and timeline operations. |
 
-Its `transport` facade covers play/stop, seek by seconds or PPQ, tempo, and loop updates. It also mirrors automation lanes, clips, recording arm/punch, metronome, offline render, meter listeners, and telemetry polling.
+Its `transport` facade covers play/stop, seek by seconds or PPQ, tempo, and loop updates. Beyond transport, the facade mirrors essentially the whole engine to the worklet through control messages — the main thread stays the single source of truth and the audio thread receives synced snapshots:
+
+| Need | Facade API |
+|------|-----------|
+| Track routing, fader, pan, solo/mute | `setTrackLanes`, `setStripGain`, `setStripPan`, `setSoloMute` |
+| Track and master inserts and EQ | `setTrackStripJson`, `setMasterStripJson`, `setTrackStripEqBand`, `setMasterStripEqBand`, insert-bypass methods |
+| Sends and buses | `setSends`, `setBusGain`, `setBusStripJson` |
+| MIDI clips and live MIDI | `setMidiClips`, `pushMidiNoteOn`, `pushMidiNoteOff`, `pushMidiCc`, `pushMidiPanic` |
+| Instruments | `setBuiltinInstrument`, `setSynthInstrument`, `loadSoundFont`, `setSf2Instrument` |
+| Recording and monitoring | `configureCapture` (incl. `inputMonitor`), `armRecord`, `punch`, `capturedAudio`, `captureStatus` |
+| Transport, tempo, markers | `getTransportState`, `cachedTransportState`, `setTempoSegments`, `setTimeSignatureSegments`, marker methods (incl. the replace-all `setMarkers`, which returns the resolved marker list — each entry carries its engine `id`), `setLoopFromMarkers` |
+| Clip updates | `addClip`, `removeClip` — the facade sends incremental clip deltas to the worklet |
+| Meters and telemetry | `onMeter` / `onTelemetry`, `pollMeters` / `pollTelemetry`; meter records carry master, lane, bus, and input target ids |
+| Offline export | `renderOffline` on the main-thread mirror |
+
+On the facade, strip-addressing methods take a track id *or name* (`target: string | number`), and `setSoloMute(target, solo, mute)` resolves the lane index for you. `setTrackStripEqBand` accepts an `EqBand` object directly, so you rarely hand-build band JSON.
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';
@@ -339,7 +435,10 @@ const engine = await SonareEngine.create(audioCtx, {
   channelCount: 2,
 });
 
-engine.transport.setTempo(120);
+engine.setTrackLanes([{ trackId: 1 }]);
+engine.setTrackStripJson(1, trackSceneJson);
+engine.addClip(1, [clipL, clipR], 0);
+engine.setTempoSegments([{ startPpq: 0, bpm: 120 }]);
 engine.transport.setLoop(0, 4, true);
 engine.transport.play();
 engine.onMeter((meter) => console.log(meter.rmsDbL, meter.rmsDbR));
@@ -349,6 +448,10 @@ console.log(offline[0].length);
 
 engine.destroy();
 ```
+
+::: tip Embind is the default runtime target
+`SonareEngine` defaults to the full embind engine inside the worklet (`runtimeTarget: 'embind'`); the reduced `sonare-rt` runtime remains a transport-focused fallback. If your host worklet entry filters message names before forwarding, allowlist every `sync*`, `captureRequest`, and `transportRequest` message — otherwise lane/strip/MIDI sync messages are silently dropped.
+:::
 
 The separate `sonare-rt` module is intentionally smaller and designed for the AudioWorklet hot path: transport, tempo/loop, marker seek, metronome enablement, capture arming/punch commands, block processing, and basic telemetry drain. It omits the embind-heavy surfaces that are better kept on the main thread:
 
@@ -395,7 +498,7 @@ A realtime audio thread must not pause — if it stalls for even a moment, the o
 The package ships a ready-made provider that reads pages from the [Origin Private File System (OPFS)](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) on a worker, so disk reads stay off the main thread:
 
 ```typescript
-import { createOpfsClipPageProvider } from '@libraz/libsonare/worklet';
+import { createOpfsClipPageProvider } from '@libraz/libsonare';
 
 const binding = createOpfsClipPageProvider(engine, {
   path: 'clips/long-take.f32',  // interleaved Float32 in OPFS

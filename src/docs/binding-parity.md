@@ -39,6 +39,7 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Streaming analyzer | Yes | No |
 | Mel/MFCC inverse reconstruction | Yes | No |
 | Realtime engine | Yes | No |
+| Engine lane mixer (lanes, buses, sends, channel strips) and MIDI clip schedule | Yes — see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) | No |
 | Mastering presets/chains/processors | Yes | Partial |
 | Mastering assistant/profile/preview JSON | Yes | No dedicated command |
 | Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
@@ -64,7 +65,6 @@ These functions exist across the library bindings but take their arguments diffe
 
 | Function | WASM | Node native | Python |
 |----------|------|-------------|--------|
-| `mfccToAudio` / `mfcc_to_audio` | `(mfcc, nMfcc, nFrames, nMels, sampleRate, …)` | `(mfcc, nMfcc, nFrames, sampleRate, nFft, hopLength, nMels, …)` | C-API order: `n_mels` before `sample_rate` |
 | `detectChords` / `detect_chords` | options object | positional / keyword params | positional / keyword params |
 | Streaming reads | `process`, `readFrames`, `stats` | float Structure-of-Arrays read is `readFramesSoa` | `process`, `read_frames`, `stats` |
 | Quantized stream reads | `readFramesI16` / `readFramesU8`, `StreamConfig.outputFormat` | same as WASM | `read_frames_i16` / `read_frames_u8`, `output_format` |
@@ -91,6 +91,7 @@ A few signatures don't line up across all three bindings:
 | Project bounce variants | The headless-DAW `Project` bounces to audio across bindings; instrument-bound bounce (`bounceWithBuiltinInstrument` / `bounceWithSynthInstrument` / `bounceWithSf2Instrument`) and the take/comp arrangement model are shared — see [Project Bounce](./project-bounce.md) and [Recording and Takes](./recording-and-takes.md). The `ExternalInstrument` bounce protocol is Python-only |
 | Mastering chain JSON | Chain JSON and named-processor parameter maps round-trip the same field set: `repair.declip` `lpcBlend`, multiband per-band parameters, compressor detector / sidechain-HPF / PDR settings, and realtime voice-changer ISP limiter settings |
 | Acoustic analysis | Measurement and blind-estimation entry points return `AcousticResult`; geometric room acoustics adds equivalent-room estimates, RIR synthesis, and creative room morphing (display blind estimates and equivalent-room estimates with confidence) |
+| Engine lane mixer / MIDI clips | The compiled shapes are identical everywhere (`EngineTrackLane` / `EngineTrackSend` / `EngineBus`; MIDI events carry absolute-sample `renderFrame` UMP words). Python exposes `EngineMidiClipSchedule` / `EngineMidiEvent` dataclasses where JS/Node take plain objects. The raw engine's `setSoloMute` addresses a fixed lane index; the browser `SonareEngine` worklet facade instead accepts a track id *or name*; both surfaces accept strip EQ bands as `EqBand` objects or band JSON strings (`setTrackStripEqBand` / `setMasterStripEqBand`, with `…EqBandJson` variants for raw JSON) |
 | Errors | Every binding raises a structured `SonareError` with the same C-ABI numeric code: WASM and Node throw an `Error` subclass with `code` + `codeName` (exported `ErrorCode` enum and `isSonareError` guard); Python raises a `RuntimeError` subclass with `.code`; the Python CLI maps the codes to exit codes (the C++ CLI keeps plain `0`/`1`) |
 | CLI surface | Some availability depends on whether the command is the PyPI Python CLI or the source-built C++ CLI — see [CLI](./cli.md) |
 

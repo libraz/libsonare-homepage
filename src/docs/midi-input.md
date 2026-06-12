@@ -57,6 +57,8 @@ By the end of this page you should be able to:
 
 The engine does not play notes directly — it routes them to **MIDI destinations**, and each destination has an instrument bound to it. A destination is identified by a small integer id (default `0`). You bind an instrument once, then every live event or scheduled clip aimed at that id renders through it.
 
+<SonareDemo id="synth-note" />
+
 Three instrument kinds can sit on a destination:
 
 | Bind with | Instrument | See |
@@ -87,7 +89,7 @@ Live events are *queued*, not played synchronously. Each call hands the engine a
 
 There are two queueing surfaces, and you should pick one per destination:
 
-- **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` / `pushMidiPanic`. Each takes a `destinationId` and a `renderFrame` (or `-1` for "as soon as possible").
+- **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and a `renderFrame` (or `-1` for "as soon as possible"). `pushMidiPanic(renderFrame)` takes only the `renderFrame` — it releases every sounding note on *all* destinations at once.
 - **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` feed it with a `portTimeSamples` timestamp. This is the lane the Web MIDI bridge drives for you.
 
 ```typescript
@@ -129,7 +131,7 @@ Each destination can carry one **MIDI-FX insert** — a non-destructive transfor
 
 ```typescript
 engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ /* MIDI-FX config */ }));
-engine.clearMidiFx(0);   // omit the id to clear every destination
+engine.clearMidiFx(0);   // clears this destination only (the id defaults to 0 if omitted)
 ```
 
 `setMidiFx` *replaces* the insert in place without resetting the instrument's voices, so the common case — swapping one transform for another between phrases — leaves sounding notes untouched. Two safety notes for changing FX while keys are held:

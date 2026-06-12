@@ -743,9 +743,9 @@ auto rms_norm = normalize_rms(audio, -20.0f);  // 目標 RMS レベル (dB)
 // 無音トリミング（絶対 dBFS 閾値）
 auto trimmed = trim_absolute(audio, -60.0f);   // 閾値 (dBFS)
 
-// レベル測定
-float peak = peak_db(audio);  // ピーク振幅 (dB)
-float rms = rms_db(audio);    // RMS レベル (dB)
+// レベル測定 (metering/basic.h, namespace sonare::metering)
+float peak = sonare::metering::peak_db(audio);  // ピーク振幅 (dB)
+float rms = sonare::metering::rms_db(audio);    // RMS レベル (dB)
 
 // ゲイン適用
 auto louder = apply_gain(audio, 6.0f);   // +6 dB

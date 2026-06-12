@@ -7,6 +7,8 @@ description: The channel strip signal order — trim, polarity, delay, EQ, inser
 
 A **channel strip** is one track's lane in the mixer. It is the column of controls that processes a single part, such as a vocal, bass, or drum bus, before it reaches the master.
 
+<SonareDemo id="engine-lane-mixer" />
+
 The processing order matters. Once you know the order, it becomes much easier to predict what every control does.
 
 This page goes deeper than [Mixing Basics](../concepts/mixing-basics.md) and grounds the model in libsonare's `ChannelStrip`.

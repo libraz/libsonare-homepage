@@ -9,6 +9,8 @@ The final part of the mastering chain decides how wide the master feels, how saf
 
 These controls should be judged together. A wider master can change peak behavior. A louder target can force the limiter harder. A lower ceiling can protect codec conversion but may reduce available loudness.
 
+<SonareDemo id="loudness-meter" />
+
 ## Stereo Width
 
 Stereo Width adjusts side energy. Wider settings can make a master feel larger, but they can weaken mono compatibility or make low frequencies unstable.

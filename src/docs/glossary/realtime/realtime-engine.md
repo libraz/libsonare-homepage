@@ -19,6 +19,8 @@ Use it when you are building a playback engine rather than just a live analyzer.
 
 The engine plays **clips** — buffers of audio placed on the timeline at scheduled positions. Scheduling means deciding *when* a clip starts and stops relative to the transport, so playback can be assembled from many pieces rather than one continuous stream. This is how an arrangement, a backing track, or a rhythm-game chart is driven.
 
+<SonareDemo id="engine-lane-mixer" />
+
 ## Metronome
 
 A **metronome** generates click events locked to the transport's tempo and meter — useful for monitoring, recording, and lining up performance. Because it is derived from the same transport clock, it stays in sync with clips and automation automatically.

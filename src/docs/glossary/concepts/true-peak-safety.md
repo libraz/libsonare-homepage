@@ -9,6 +9,8 @@ True peak safety is the practice of leaving enough margin so a mastered file doe
 
 Sample peaks only show the values stored in the digital file. Playback systems and encoders reconstruct a continuous waveform between those samples. That reconstructed waveform can exceed the stored sample peaks, creating an inter-sample peak. A master that looks safe at sample level can still distort after conversion.
 
+<SonareDemo id="loudness-meter" />
+
 ## Why Sample Peak Is Not Enough
 
 A digital audio file is a series of points, not a complete curve. When a DAC or encoder turns those points back into sound, it reconstructs the curve implied by the samples. The curve can rise above the points.

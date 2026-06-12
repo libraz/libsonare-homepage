@@ -12,6 +12,7 @@ import { analysisDemos } from './analysis';
 import { editingDemos } from './editing';
 import { instrumentsDemos } from './instruments';
 import { masteringDemos } from './mastering';
+import { realtimeDemos } from './realtime';
 
 const allDemos: SonareDemoDef[] = [
   ...analysisDemos,
@@ -19,6 +20,7 @@ const allDemos: SonareDemoDef[] = [
   ...acousticsDemos,
   ...editingDemos,
   ...masteringDemos,
+  ...realtimeDemos,
 ];
 
 const byId = new Map<string, SonareDemoDef>();

@@ -47,6 +47,8 @@ The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI
 
 A **channel strip** is one track lane. Understanding the order in which a strip processes audio is the key to predicting what every control does — for example, *why* a post-fader send follows the fader but a pre-fader send does not.
 
+<SonareDemo id="engine-lane-mixer" />
+
 libsonare processes each block of a strip in this exact order:
 
 ```mermaid
@@ -202,7 +204,7 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 :::
 
 ::: danger Always release the mixer
-`Mixer`, like every embind object, holds a WASM heap handle that JavaScript's garbage collector cannot reclaim. Call `mixer.delete()` (Node also accepts `destroy()`) in a `finally` block. Leaking handles will slowly exhaust WASM memory in long sessions.
+`Mixer`, like every embind object, holds a WASM heap handle that JavaScript's garbage collector cannot reclaim. Call `mixer.delete()` (or its alias `destroy()` — both bindings accept either name) in a `finally` block. Leaking handles will slowly exhaust WASM memory in long sessions.
 :::
 
 The full scene schema, every field, and annotated preset JSON live in [Mixing Scene JSON](./mixing-scene-json.md). The three built-in presets (`vocalReverbSend`, `drumBusSubgroup`, `commentaryDucking`) are not opaque — load one, edit it, and re-serialize it with `toSceneJson()` (or Python `to_scene_json()`) to learn the format by example.
@@ -236,15 +238,14 @@ A **bus** is a shared destination. Strips connect to buses, buses connect to oth
 
 Only `master` and `aux` are special tokens; any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
 
-Connections form a graph. `Mixer.fromSceneJson` compiles that graph lazily on the first `processStereo` call.
+Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph while constructing the mixer, so the returned mixer is ready to process immediately. After construction, a topology change marks the graph dirty, and it is recompiled lazily on the next `processStereo` call — or eagerly when you call `compile()`.
 
 Call `compile()` after a **topology** change, before the next timing-critical block. Topology changes include:
 
 - adding or removing a bus
 - adding or removing a send
-- adding or removing a VCA group
 
-Parameter changes and automation changes do **not** need a recompile.
+Parameter changes, automation changes, and VCA group changes (adding, removing, or adjusting group gain) do **not** need a recompile — VCA groups only adjust live strip gain offsets and are not part of the routing graph.
 
 Strip addressing differs by runtime:
 
@@ -356,7 +357,7 @@ Denormals are extremely small floating-point numbers (close to zero) that many C
 :::
 
 ::: warning Topology changes are not realtime-safe
-Adding buses, sends, or VCA groups marks the graph dirty and the next `processStereo` will recompile (which may allocate). Do structural changes during setup or a non-critical block, call `compile()`, *then* enter your tight render loop. Fader/pan/send/insert moves and automation are fine inside the loop.
+Adding buses or sends marks the graph dirty and the next `processStereo` will recompile (which may allocate). Do structural changes during setup or a non-critical block, call `compile()`, *then* enter your tight render loop. Fader/pan/send/insert moves, automation, and VCA group changes are fine inside the loop.
 :::
 
 ### Latency and plugin-delay compensation (PDC)

@@ -57,6 +57,8 @@ sequenceDiagram
 
 エンジンはノートを直接鳴らすのではなく、**MIDI デスティネーション**へ送り、各デスティネーションには楽器がバインドされています。デスティネーションは小さな整数 ID（既定は `0`）で識別します。楽器を一度バインドすれば、その ID 宛のライブイベントやスケジュール済みクリップはすべてその楽器でレンダリングされます。
 
+<SonareDemo id="synth-note" />
+
 デスティネーションには 3 種類の楽器を置けます。
 
 | バインド方法 | 楽器 | 参照 |
@@ -87,7 +89,7 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 キューイングの面は 2 つあり、デスティネーションごとにどちらかを選ぶべきです。
 
-- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` / `pushMidiPanic`。それぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。
+- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべての destination の発音中ノートを一括で解放します。
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きに供給します。Web MIDI ブリッジが駆動するのはこのレーンです。
 
 ```typescript
@@ -129,7 +131,7 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 
 ```typescript
 engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ /* MIDI FX 設定 */ }));
-engine.clearMidiFx(0);   // ID を省略すると全デスティネーションを解除
+engine.clearMidiFx(0);   // 指定したデスティネーションのみ解除（ID 省略時は 0）
 ```
 
 `setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ます。そのため、よくあるケース（フレーズ間で 1 つの変換を別の変換へ差し替える）では、鳴っているノートはそのまま保たれます。鍵を押したまま FX を変える場合の注意点が 2 つあります。

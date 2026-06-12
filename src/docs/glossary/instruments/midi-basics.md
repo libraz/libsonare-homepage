@@ -7,6 +7,8 @@ description: MIDI carries performance instructions, not audio — note-on/off, v
 
 **MIDI** (Musical Instrument Digital Interface) is a language for describing a *performance*, not the sound itself. A MIDI message says "play note 60 fairly hard now" or "let go of note 60" — it never carries audio. Something downstream (a synthesizer, a [SoundFont player](./soundfont.md), or a piece of hardware) reads those instructions and *produces* the sound.
 
+<SonareDemo id="synth-note" />
+
 That separation is powerful: the same MIDI performance can be played back through a piano sound, a guitar sound, or an orchestra, just by pointing it at a different instrument. This page explains the vocabulary you need to read or write MIDI. It is concepts only — no code.
 
 ::: info Performance, not audio

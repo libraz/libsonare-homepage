@@ -457,12 +457,13 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | Mean (DC) offset, linear amplitude |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | Inter-sample (true) peak (dBFS); `oversample_factor` is a power of two in 1..16 (0 = default 4) |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `min_region_samples` default `1` |
-| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for defaults (window 3 s, hop 1 s, low 0.10, high 0.95) |
+| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for `window_sec`/`hop_sec` defaults (3 s / 1 s); pass a negative value (the default `-1.0`) for `low_percentile`/`high_percentile` defaults (0.10 / 0.95) — `0.0` requests the 0th percentile, not the default |
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Pearson correlation, −1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | Mid/side stereo width |
 | `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | Per-sample mid/side point series |
 | `metering_phase_scope(left, right, sample_rate?, *, validate?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
-| `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | Single-frame magnitude/power/dB spectrum; pass `0` for `n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults (2048 / 3 / 1.0 / floor) |
+| `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | Welch-averaged magnitude/power/dB spectrum over the whole buffer (Hann-windowed, 50%-overlapping `n_fft` frames; not a single-frame snapshot); pass `0` for `n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults (2048 / 3 / 1.0 / floor) |
+| `metering_spectrum_frame(samples, sample_rate?, frame_offset?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | True single-frame spectrum (one Hann-windowed FFT) spanning `[frame_offset, frame_offset + n_fft)`, zero-padded past the end; pass `0` for `frame_offset`/`n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults |
 
 ### Scale Quantization
 
@@ -948,6 +949,8 @@ The headless-DAW surface is available in Python as well: author arrangements wit
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
 | Play instruments live from MIDI events | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
+| Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
+| Mix the engine's tracks live with lanes, buses, sends, and strips | `RealtimeEngine.set_track_lanes(...)`, `set_track_buses(...)`, `set_track_strip_json(...)`, `set_master_strip_json(...)`, `set_bus_strip_json(...)`, `set_solo_mute(...)` | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
 
 ```python
 import libsonare as sonare

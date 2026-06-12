@@ -41,7 +41,7 @@ By the end of this page you should be able to:
 | Propose a chain | `masteringAssistantSuggest(samples, sr, params)` | `mastering_assistant_suggest(...)` | A full chain config + rationale |
 | Preview delivery | `masteringStreamingPreview(samples, sr, platforms)` | `mastering_streaming_preview(...)` | Per-platform normalization |
 
-All three return a **JSON string** — call `JSON.parse` (JS) or `json.loads` (Python). The schema is identical across the C, Node, Python, and WASM bindings. These helpers have no `sonare` CLI subcommand; use the browser or Python binding.
+All three return a **JSON string** — call `JSON.parse` (JS) or `json.loads` (Python). The schema is identical across the C, Node, Python, and WASM bindings. The PyPI `sonare` CLI also exposes all three: `sonare mastering-profile`, `sonare mastering-suggest`, and `sonare mastering-streaming` print the same JSON to stdout.
 
 The three helpers answer different questions:
 

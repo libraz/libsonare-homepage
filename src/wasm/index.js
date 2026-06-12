@@ -54,12 +54,90 @@ function makeSonareError(raw, thrown) {
 }
 function wrapModuleErrors(raw) {
   const cache = /* @__PURE__ */ new Map();
+  const objectCache = /* @__PURE__ */ new WeakMap();
   const convert = (error) => {
     const ptr = nativeExceptionPtr(error);
     if (ptr !== null) {
       throw makeSonareError(raw, ptr);
     }
     throw error;
+  };
+  const wrapNativeObject = (value) => {
+    if (value === null || typeof value !== "object") {
+      return value;
+    }
+    if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || value instanceof Promise) {
+      return value;
+    }
+    const objectValue = value;
+    const cached = objectCache.get(objectValue);
+    if (cached) {
+      return cached;
+    }
+    const methodCache = /* @__PURE__ */ new Map();
+    const wrapped = new Proxy(objectValue, {
+      get(target, prop, receiver) {
+        const member = Reflect.get(target, prop, receiver);
+        if (typeof member !== "function") {
+          return member;
+        }
+        const cachedMethod = methodCache.get(prop);
+        if (cachedMethod) {
+          return cachedMethod;
+        }
+        const method = member;
+        const wrappedMethod = (...args) => {
+          try {
+            return wrapNativeObject(Reflect.apply(method, target, args));
+          } catch (error) {
+            return convert(error);
+          }
+        };
+        methodCache.set(prop, wrappedMethod);
+        return wrappedMethod;
+      }
+    });
+    objectCache.set(objectValue, wrapped);
+    return wrapped;
+  };
+  const wrapFunction = (value) => {
+    const fnCache = /* @__PURE__ */ new Map();
+    return new Proxy(value, {
+      get(target, prop, receiver) {
+        const member = Reflect.get(target, prop, receiver);
+        if (typeof member !== "function") {
+          return member;
+        }
+        const cachedMember = fnCache.get(prop);
+        if (cachedMember) {
+          return cachedMember;
+        }
+        const fn = member;
+        const wrappedMember = (...args) => {
+          try {
+            return wrapNativeObject(Reflect.apply(fn, target, args));
+          } catch (error) {
+            return convert(error);
+          }
+        };
+        fnCache.set(prop, wrappedMember);
+        return wrappedMember;
+      },
+      apply(t, thisArg, args) {
+        try {
+          return wrapNativeObject(Reflect.apply(t, thisArg, args));
+        } catch (error) {
+          return convert(error);
+        }
+      },
+      construct(t, args, newTarget) {
+        try {
+          return wrapNativeObject(Reflect.construct(t, args, newTarget));
+        } catch (error) {
+          return convert(error);
+        }
+      }
+    });
   };
   return new Proxy(raw, {
     get(target, prop, receiver) {
@@ -71,23 +149,7 @@ function wrapModuleErrors(raw) {
       if (cached) {
         return cached;
       }
-      const fn = value;
-      const wrapped = new Proxy(fn, {
-        apply(t, thisArg, args) {
-          try {
-            return Reflect.apply(t, thisArg, args);
-          } catch (error) {
-            return convert(error);
-          }
-        },
-        construct(t, args, newTarget) {
-          try {
-            return Reflect.construct(t, args, newTarget);
-          } catch (error) {
-            return convert(error);
-          }
-        }
-      });
+      const wrapped = wrapFunction(value);
       cache.set(prop, wrapped);
       return wrapped;
     }
@@ -2609,10 +2671,25 @@ function waveformPeakPyramid(samples, channels, options = {}) {
 
 // src/opfs_clip_pages.ts
 var opfsClipPageWorkerSource = `
+const sonareClipPageReadQueues = new Map();
+
+function sonareEnqueueClipPageRead(key, task) {
+  const previous = sonareClipPageReadQueues.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(task);
+  const queued = next.finally(() => {
+    if (sonareClipPageReadQueues.get(key) === queued) {
+      sonareClipPageReadQueues.delete(key);
+    }
+  });
+  sonareClipPageReadQueues.set(key, queued);
+  return next;
+}
+
 self.onmessage = async (event) => {
   const message = event.data;
   if (!message || message.type !== 'sonare:read-clip-page') return;
   const { requestId, path, pageIndex, numChannels, numSamples, pageFrames, dataOffsetBytes = 0 } = message;
+  await sonareEnqueueClipPageRead(String(path), async () => {
   try {
     if (pageIndex < 0) {
       self.postMessage({ type: 'sonare:clip-page', requestId, pageIndex, ok: false });
@@ -2675,6 +2752,7 @@ self.onmessage = async (event) => {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+  });
 };
 `;
 function createOpfsClipPageWorker() {
@@ -2694,6 +2772,7 @@ function createOpfsClipPageProvider(engine, options) {
   const ownsWorker = options.worker === void 0 || options.terminateWorkerOnClose === true;
   let nextRequestId = 1;
   let closed = false;
+  let readQueue = Promise.resolve();
   const pending = /* @__PURE__ */ new Map();
   const onMessage = (event) => {
     const response = event.data;
@@ -2733,15 +2812,29 @@ function createOpfsClipPageProvider(engine, options) {
     const promise = new Promise((resolve, reject) => {
       pending.set(requestId, { resolve, reject });
     });
-    worker.postMessage({
-      type: "sonare:read-clip-page",
-      requestId,
-      path: options.path,
-      pageIndex,
-      numChannels: options.numChannels,
-      numSamples: options.numSamples,
-      pageFrames: options.pageFrames,
-      dataOffsetBytes: options.dataOffsetBytes ?? 0
+    readQueue = readQueue.catch(() => void 0).then(() => {
+      if (closed) {
+        const entry = pending.get(requestId);
+        pending.delete(requestId);
+        entry?.reject(new Error("OpfsClipPageProvider is closed"));
+        return;
+      }
+      worker.postMessage({
+        type: "sonare:read-clip-page",
+        requestId,
+        path: options.path,
+        pageIndex,
+        numChannels: options.numChannels,
+        numSamples: options.numSamples,
+        pageFrames: options.pageFrames,
+        dataOffsetBytes: options.dataOffsetBytes ?? 0
+      });
+      return promise.then(
+        () => void 0,
+        () => void 0
+      );
+    });
+    readQueue.catch(() => {
     });
     return promise;
   };
@@ -3492,9 +3585,6 @@ function engineCapabilities() {
   };
 }
 var RealtimeEngine = class {
-  nativeExt() {
-    return this.native;
-  }
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024) {
     const module2 = getSonareModule();
     const capabilities = engineCapabilities();
@@ -3521,8 +3611,14 @@ var RealtimeEngine = class {
   setParameterSmoothed(paramId, value, renderFrame = -1) {
     this.native.setParameterSmoothed(paramId, value, renderFrame);
   }
+  setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
+    this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
+  }
+  setMidiClips(clips) {
+    this.native.setMidiClips(clips);
+  }
   setBuiltinInstrument(config = {}, destinationId = config.destinationId ?? 0) {
-    this.nativeExt().setBuiltinInstrument(destinationId, config);
+    this.native.setBuiltinInstrument(destinationId, config);
   }
   /**
    * Bind the patch-driven NativeSynth to a realtime MIDI destination. `patch`
@@ -3534,7 +3630,7 @@ var RealtimeEngine = class {
    * binding convenience, not part of the NativeSynth patch itself.
    */
   setSynthInstrument(patch = {}, destinationId = (typeof patch === "object" ? patch.destinationId : void 0) ?? 0) {
-    this.nativeExt().setSynthInstrument(destinationId, patch);
+    this.native.setSynthInstrument(destinationId, patch);
   }
   /**
    * Load (parse) SoundFont 2 bytes into the engine so SF2 instruments can be
@@ -3543,7 +3639,7 @@ var RealtimeEngine = class {
    * not referenced afterwards. Replaces any previously loaded SoundFont.
    */
   loadSoundFont(data) {
-    this.nativeExt().loadSoundFont(data);
+    this.native.loadSoundFont(data);
   }
   /**
    * Bind a GS-compatible SoundFont player to a realtime MIDI destination, fed
@@ -3555,13 +3651,13 @@ var RealtimeEngine = class {
    * synthesizer GM fallback bank (the data-free floor).
    */
   setSf2Instrument(config = {}, destinationId = config.destinationId ?? 0) {
-    this.nativeExt().setSf2Instrument(destinationId, config);
+    this.native.setSf2Instrument(destinationId, config);
   }
   clearMidiInstrument(destinationId = 0) {
-    this.nativeExt().clearMidiInstrument(destinationId);
+    this.native.clearMidiInstrument(destinationId);
   }
   midiInstrumentCount() {
-    return this.nativeExt().midiInstrumentCount();
+    return this.native.midiInstrumentCount();
   }
   /**
    * Bind a live MIDI CC to an engine automation parameter. The MIDI event still
@@ -3569,7 +3665,7 @@ var RealtimeEngine = class {
    * mapped into [minValue, maxValue] for `paramId`.
    */
   bindMidiCc(channel, controller, paramId, options = {}) {
-    this.nativeExt().bindMidiCc(
+    this.native.bindMidiCc(
       channel,
       controller,
       paramId,
@@ -3578,42 +3674,42 @@ var RealtimeEngine = class {
     );
   }
   clearMidiCcBindings() {
-    this.nativeExt().clearMidiCcBindings();
+    this.native.clearMidiCcBindings();
   }
   midiCcBindingCount() {
-    return this.nativeExt().midiCcBindingCount();
+    return this.native.midiCcBindingCount();
   }
   /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
   setMidiFx(destinationId, configJson) {
-    this.nativeExt().setMidiFx(destinationId, configJson);
+    this.native.setMidiFx(destinationId, configJson);
   }
   clearMidiFx(destinationId = 0) {
-    this.nativeExt().clearMidiFx(destinationId);
+    this.native.clearMidiFx(destinationId);
   }
   /** Enable the engine-owned live MIDI input source for a destination. */
   setMidiInputSource(destinationId = 0) {
-    this.nativeExt().setMidiInputSource(destinationId);
+    this.native.setMidiInputSource(destinationId);
   }
   clearMidiInputSource() {
-    this.nativeExt().clearMidiInputSource();
+    this.native.clearMidiInputSource();
   }
   midiInputPendingCount() {
-    return this.nativeExt().midiInputPendingCount();
+    return this.native.midiInputPendingCount();
   }
   pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
-    this.nativeExt().pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
+    this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
   }
   pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
-    this.nativeExt().pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
+    this.native.pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
   }
   pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
-    this.nativeExt().pushMidiInputCc(group, channel, controller, value, portTimeSamples);
+    this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
   }
   pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
-    this.nativeExt().pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
+    this.native.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
   }
   pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame = -1) {
-    this.nativeExt().pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
+    this.native.pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
   }
   /**
    * Queue an immediate (live) MIDI control change to a MIDI destination
@@ -3622,21 +3718,21 @@ var RealtimeEngine = class {
    * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
    */
   pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
-    this.nativeExt().pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+    this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
   }
   /**
    * Queue a MIDI panic (all-notes-off) releasing every sounding note at
    * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
    */
   pushMidiPanic(renderFrame = -1) {
-    this.nativeExt().pushMidiPanic(renderFrame);
+    this.native.pushMidiPanic(renderFrame);
   }
   /**
    * Remove all registered parameters (and their automation lanes). Control-thread
    * only; not realtime-safe. Mirrors the C-ABI `clearParameters`.
    */
   clearParameters() {
-    this.nativeExt().clearParameters();
+    this.native.clearParameters();
   }
   /** Read back the current transport state snapshot. */
   getTransportState() {
@@ -3657,8 +3753,17 @@ var RealtimeEngine = class {
   setTempo(bpm) {
     this.native.setTempo(bpm);
   }
+  setTempoSegments(segments) {
+    this.native.setTempoSegments([...segments]);
+  }
   setTimeSignature(numerator, denominator) {
     this.native.setTimeSignature(numerator, denominator);
+  }
+  setTimeSignatureSegments(segments) {
+    this.native.setTimeSignatureSegments([...segments]);
+  }
+  sampleAtPpq(ppq) {
+    return Number(this.native.sampleAtPpq(ppq));
   }
   setLoop(startPpq, endPpq, enabled = true) {
     this.native.setLoop(startPpq, endPpq, enabled);
@@ -3728,21 +3833,81 @@ var RealtimeEngine = class {
   clipCount() {
     return this.native.clipCount();
   }
+  setTrackLanes(lanes) {
+    this.native.setTrackLanes(
+      lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane)
+    );
+  }
+  setTrackBuses(buses) {
+    this.native.setTrackBuses(buses);
+  }
+  setBusStripJson(busId, sceneJson) {
+    try {
+      JSON.parse(sceneJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid bus strip JSON";
+      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
+    }
+    this.native.setBusStripJson(busId, sceneJson);
+  }
+  setTrackStripJson(trackId, sceneJson) {
+    try {
+      JSON.parse(sceneJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid track strip JSON";
+      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
+    }
+    this.native.setTrackStripJson(trackId, sceneJson);
+  }
+  setTrackStripEqBand(trackId, bandIndex, band) {
+    this.native.setTrackStripEqBandJson(
+      trackId,
+      bandIndex,
+      typeof band === "string" ? band : JSON.stringify(band)
+    );
+  }
+  setTrackStripEqBandJson(trackId, bandIndex, bandJson) {
+    this.native.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
+  }
+  setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
+  }
+  setMasterStripJson(sceneJson) {
+    try {
+      JSON.parse(sceneJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid master strip JSON";
+      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
+    }
+    this.native.setMasterStripJson(sceneJson);
+  }
+  setMasterStripEqBand(bandIndex, band) {
+    this.native.setMasterStripEqBandJson(
+      bandIndex,
+      typeof band === "string" ? band : JSON.stringify(band)
+    );
+  }
+  setMasterStripEqBandJson(bandIndex, bandJson) {
+    this.native.setMasterStripEqBandJson(bandIndex, bandJson);
+  }
+  setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
+  }
   createClipPageProvider(numChannels, numSamples, pageFrames) {
-    const id = this.nativeExt().createClipPageProvider(numChannels, numSamples, pageFrames);
+    const id = this.native.createClipPageProvider(numChannels, numSamples, pageFrames);
     return new ClipPageProvider(this, id);
   }
   supplyClipPage(providerId, pageIndex, channels) {
-    this.nativeExt().supplyClipPage(providerId, pageIndex, channels);
+    this.native.supplyClipPage(providerId, pageIndex, channels);
   }
   clearClipPage(providerId, pageIndex) {
-    this.nativeExt().clearClipPage(providerId, pageIndex);
+    this.native.clearClipPage(providerId, pageIndex);
   }
   destroyClipPageProvider(providerId) {
-    this.nativeExt().destroyClipPageProvider(providerId);
+    this.native.destroyClipPageProvider(providerId);
   }
   popClipPageRequest() {
-    return this.nativeExt().popClipPageRequest();
+    return this.native.popClipPageRequest();
   }
   setCaptureBuffer(numChannels, capacityFrames) {
     this.native.setCaptureBuffer(numChannels, capacityFrames);
@@ -4105,7 +4270,6 @@ async function bindWebMidi(engine, options = {}) {
   engine.setMidiInputSource(destinationId);
   const bound = /* @__PURE__ */ new Map();
   let closed = false;
-  let runningStatus = 0;
   const shouldBind = (input) => input.state !== "disconnected" && (selectedIds.size === 0 || selectedIds.has(input.id));
   const snapshotInputs = () => Array.from(iterInputs(access), ([id, input]) => ({
     id,
@@ -4118,22 +4282,26 @@ async function bindWebMidi(engine, options = {}) {
     if (bound.has(input.id) || !shouldBind(input)) {
       return;
     }
-    const listener = (event) => {
-      const status = dispatchMidiMessage(
-        engine,
-        event,
-        group,
-        runningStatus,
-        options.timestampToSamples
-      );
-      runningStatus = status;
+    const entry = {
+      input,
+      listener: (event) => {
+        entry.runningStatus = dispatchMidiMessage(
+          engine,
+          event,
+          group,
+          entry.runningStatus,
+          options.timestampToSamples
+        );
+      },
+      runningStatus: 0
     };
+    const listener = entry.listener;
     if (input.addEventListener) {
       input.addEventListener("midimessage", listener);
     } else {
       input.onmidimessage = listener;
     }
-    bound.set(input.id, { input, listener });
+    bound.set(input.id, entry);
   };
   const unbindInput = (input) => {
     const entry = bound.get(input.id);
@@ -4318,7 +4486,7 @@ async function init(options) {
   }
   initPromise = (async () => {
     try {
-      const createModule = (await import("./sonare.js")).default;
+      const createModule = options?.moduleFactory ?? (await import("./sonare.js")).default;
       module = await createModule(options);
       setSonareModule(module);
     } catch (error) {

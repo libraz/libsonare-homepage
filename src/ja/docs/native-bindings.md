@@ -177,7 +177,7 @@ Node の `stripMeter(strip)` はポストフェーダーメーターを読みま
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
 
-Node ネイティブアドオンは、WASM や Python と同じヘッドレス DAW サーフェスを公開しています。`Project` クラス（トラック、クリップ、テンポ、undo/redo、SMF／MIDI 2.0 入出力）、インストゥルメント付きバウンス（`bounceWithSynthInstrument(s)` と SoundFont のロード）、NativeSynth プリセットカタログ（`synthPresetNames()`／`synthPresetPatch()`／`SynthPatch`）、`chordFunctionalAnalysis(...)`、そしてライブ MIDI 入力付きの `RealtimeEngine` が使えます。ブラウザ専用のグルー（`bindWebMidi`、`bindMicrophoneInput`）は WASM 固有で、ネイティブアドオンには含まれません。
+Node ネイティブアドオンは、WASM や Python と同じヘッドレス DAW サーフェスを公開しています。`Project` クラス（トラック、クリップ、テンポ、undo/redo、SMF／MIDI 2.0 入出力）、インストゥルメント付きバウンス（`bounceWithSynthInstrument(s)` と SoundFont のロード）、NativeSynth プリセットカタログ（`synthPresetNames()`／`synthPresetPatch()`／`SynthPatch`）、`chordFunctionalAnalysis(...)`、そしてライブ MIDI 入力付きの `RealtimeEngine` が使えます。エンジンには他のバインディングと同じレーンミキサーと MIDI クリップスケジュールが載っています — `setTrackLanes` / `setTrackBuses`、トラック／マスター／バスのストリップ JSON セッター、キュー可能な `setSoloMute`、`setMidiClips`、`sampleAtPpq` を、WASM と同じ camelCase 名で使えます（[リアルタイムとストリーミング](./realtime-streaming.md#レーンミキサー)を参照）。ブラウザ専用のグルー（`bindWebMidi`、`bindMicrophoneInput`）は WASM 固有で、ネイティブアドオンには含まれません。
 
 詳細は各ガイドを参照してください: [プロジェクト編集](./project-editing.md)、[プロジェクトのバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md)。
 
@@ -237,12 +237,12 @@ chain.reset();   // 状態だけクリア（prepare し直さない）
 
 `processMono` / `processStereo` の呼び出しをまたいで EQ の状態を保持し、スペクトラムスナップショットを出せます。リファレンスマッチからバンドを設定することもできます。
 
-フェーズモードの指定方法はランタイムごとに少し違います。
+Node ネイティブと WASM は同じフェーズモード値を受け取ります。Python はさらにコンテキストマネージャ構文もサポートします。
 
 | ランタイム | フェーズモード |
 |---------|------------|
 | Node ネイティブ | `'zero'`, `'natural'`, `'linear'`, または `1`/`2`/`3` |
-| WASM ラッパー | 数値モード |
+| WASM ラッパー | `'zero'`, `'natural'`, `'linear'`, または `1`/`2`/`3`（Node ネイティブと同じ） |
 | Python | 文字列または数値モード |
 
 Python では `with StreamingEqualizer(...) as eq:` / `eq.close()` で解放できます。
@@ -343,7 +343,7 @@ console.log(`ビート数: ${result.beatTimes.length}`);
 | `version()` | `string` | ライブラリバージョン |
 | `voiceChangerAbiVersion()` | `number` | リアルタイムボイスチェンジャー POD 設定の ABI バージョン。プリセット JSON の `schemaVersion` とは別 |
 | `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | 序数または ID から正規の voice-character プリセット ID を返す |
-| `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig \| null` | JSON 解析なしで、組み込みボイスプリセットの解決済みフラット POD 設定を返す |
+| `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig` | JSON 解析なしで、組み込みボイスプリセットの解決済みフラット POD 設定を返す。未知のプリセット名や範囲外の序数では例外を投げる |
 | `hasFfmpegSupport()` | `boolean` | 読み込まれたネイティブアドオンが FFmpeg デコードに対応しているか |
 
 デフォルトの `sampleRate` は、ヘルパーの種類によって異なります。
@@ -387,8 +387,8 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | 無音区間をトリム（デフォルト: -60.0 dB） |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | 目標サンプルレートへリサンプリング |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | 保持された音を MIDI ピッチ間で補正 |
-| `noteStretch(samples, sr, onsetSample, offsetSample, stretchRatio)` | `Float32Array` | 1 つの音の区間をその場でタイムストレッチ |
-| `voiceChange(samples, sr, pitchSemitones, formantFactor?)` | `Float32Array` | ボイス変換のためのピッチ＋フォルマントシフト |
+| `noteStretch(samples, sr?, options?)` | `Float32Array` | 1 つの音の区間をその場でタイムストレッチ。`options` は `{ onsetSample, offsetSample, stretchRatio }` |
+| `voiceChange(samples, sr?, options?)` | `Float32Array` | ボイス変換のためのピッチ＋フォルマントシフト。`options` は `{ pitchSemitones, formantFactor }` |
 
 `trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の `trimSilence(...)` は
 librosa 互換のフレーム RMS ベースのヘルパーで、元音源上のサンプル範囲も返します。

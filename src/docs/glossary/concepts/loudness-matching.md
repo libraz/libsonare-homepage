@@ -9,6 +9,8 @@ Loudness matching means comparing two versions at the same perceived volume. It 
 
 Without loudness matching, the louder version usually wins the first impression. That can be useful when checking final delivery level, but it is a poor way to judge whether EQ, compression, stereo width, saturation, or limiting actually improved the track.
 
+<SonareDemo id="loudness-meter" />
+
 ## Why Louder Feels Better
 
 When two similar sounds are played back at different levels, the louder one often seems clearer, brighter, wider, and more exciting. This happens even when the only difference is gain.

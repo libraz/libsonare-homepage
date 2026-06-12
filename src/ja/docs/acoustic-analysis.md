@@ -100,14 +100,12 @@ await init();
 const measured = analyzeImpulseResponse(irSamples, sampleRate, 6);
 console.log(measured.rt60, measured.edt, measured.c50, measured.c80);
 
-const blind = detectAcoustic(
-  roomRecording,
-  sampleRate,
-  6,     // オクターブバンド数
-  24,    // ブラインド推定で使う 1/3 オクターブ相当のサブバンド数
-  30,    // 有効な減衰として扱う最小 dB
-  10,    // ノイズフロアに対する余裕 dB
-);
+const blind = detectAcoustic(roomRecording, sampleRate, {
+  nOctaveBands: 6,            // オクターブバンド数
+  nThirdOctaveSubbands: 24,   // ブラインド推定で使う 1/3 オクターブ相当のサブバンド数
+  minDecayDb: 30,             // 有効な減衰として扱う最小 dB
+  noiseFloorMarginDb: 10,     // ノイズフロアに対する余裕 dB
+});
 console.log(blind.confidence, blind.isBlind);
 
 const estimate = estimateRoom(roomRecording, sampleRate, {

@@ -10,6 +10,8 @@ True Peak estimates the highest level after audio is reconstructed between digit
 A file can have sample peaks below 0 dBFS and still clip after conversion or playback reconstruction.
 This is the inter-sample peak problem. The visible sample points can look safe while the reconstructed analog-like waveform rises above the limit between those points.
 
+<SonareDemo id="loudness-meter" />
+
 ## Practical Starting Point
 
 A common release ceiling is around `-1 dBTP`. The libsonare demo uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode.

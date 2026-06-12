@@ -467,12 +467,13 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | 平均（DC）オフセット、リニア振幅 |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | インターサンプル（トゥルー）ピーク（dBFS）。`oversample_factor` は 1..16 の 2 の冪（0 で既定 4） |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | クリップしたサンプルの連続区間。`threshold` 既定 `0.999`、`min_region_samples` 既定 `1` |
-| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`0.0` で既定値（窓 3 秒・ホップ 1 秒・low 0.10・high 0.95） |
+| `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`window_sec`/`hop_sec` は `0.0` で既定値（窓 3 秒・ホップ 1 秒）。`low_percentile`/`high_percentile` は負値（既定 `-1.0`）で既定値（low 0.10・high 0.95）。`0.0` は既定ではなく 0 パーセンタイルの指定 |
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | ピアソン相関、−1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | ミッド/サイドのステレオ幅 |
 | `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | サンプルごとのミッド/サイド点列 |
 | `metering_phase_scope(left, right, sample_rate?, *, validate?)` | `PhaseScopeReport` | フェーズスコープの点列と要約統計 |
-| `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | 単一フレームの振幅/パワー/dB スペクトラム。`n_fft`/`octave_fraction`/`db_ref`/`db_amin` に `0` で既定値（2048 / 3 / 1.0 / 下限値） |
+| `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | バッファ全体の Welch 平均による振幅/パワー/dB スペクトラム（Hann 窓・50% オーバーラップの `n_fft` フレームを平均。単一フレームのスナップショットではない）。`n_fft`/`octave_fraction`/`db_ref`/`db_amin` に `0` で既定値（2048 / 3 / 1.0 / 下限値） |
+| `metering_spectrum_frame(samples, sample_rate?, frame_offset?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | 真の単一フレームスペクトラム（Hann 窓 FFT 1 回）。`[frame_offset, frame_offset + n_fft)` の範囲を処理し、末尾はゼロパディング。`frame_offset`/`n_fft`/`octave_fraction`/`db_ref`/`db_amin` に `0` で既定値 |
 
 ### スケール量子化
 
@@ -968,6 +969,8 @@ finally:
 | SoundFont で MIDI をレンダーする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。**Python 専用です**。 | [プロジェクトのバウンス](./project-bounce.md) |
 | MIDI イベントからインストゥルメントをライブ演奏する | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
+| ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)` | [リアルタイムとストリーミング](./realtime-streaming.md#midi-クリップスケジューリングと-sampleatppq) |
+| エンジンのトラックをレーン・バス・センド・ストリップでライブミックスする | `RealtimeEngine.set_track_lanes(...)`、`set_track_buses(...)`、`set_track_strip_json(...)`、`set_master_strip_json(...)`、`set_bus_strip_json(...)`、`set_solo_mute(...)` | [リアルタイムとストリーミング](./realtime-streaming.md#レーンミキサー) |
 
 ```python
 import libsonare as sonare

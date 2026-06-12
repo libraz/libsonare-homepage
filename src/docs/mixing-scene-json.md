@@ -61,14 +61,15 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 | `id` | string | — (required) | Unique strip identifier used by connections, sends, and VCA members |
 | `inputTrimDb` | number | `0` | Gain before any processing (the first stage in the [strip signal flow](./mixing.md#the-channel-strip-signal-by-signal)) |
 | `faderDb` | number | `0` | Main fader level |
+| `vcaOffsetDb` | number | `0` | Per-strip VCA trim summed into the fader stage (the live `setVcaOffsetDb(...)` value; separate from any [VCA group](#vca-group) `gainDb`, which is applied as a delta on top and is not stored in this field) |
 | `pan` | number | `0` | Pan position, `-1` (left) … `+1` (right) |
 | `width` | number | `1` | Stereo width / side multiplier (`0` = mono, `>1` = wider) |
 | `muted` | boolean | `false` | Silences the strip |
 | `soloed` | boolean | `false` | Implies-mutes other (non-solo-safe) strips |
 | `soloSafe` | boolean | `false` | Never implied-muted by another strip's solo |
 | `panMode` | integer | `0` | `0` = balance, `1` = stereo pan, `2` = dual pan |
-| `dualPanLeft` | number | `0` | Left position in dual-pan mode |
-| `dualPanRight` | number | `0` | Right position in dual-pan mode |
+| `dualPanLeft` | number | `-1` | Left position in dual-pan mode (default is identity hard-left, preserving the stereo image) |
+| `dualPanRight` | number | `1` | Right position in dual-pan mode (default is identity hard-right) |
 | `polarityInvertLeft` | boolean | `false` | Inverts the left channel polarity |
 | `polarityInvertRight` | boolean | `false` | Inverts the right channel polarity |
 | `panLaw` | integer | `0` | `0` = const 3 dB, `1` = const 4.5 dB, `2` = const 6 dB, `3` = linear 0 dB |
@@ -256,7 +257,7 @@ Rendering a whole scene from a JSON file with one `--input` per strip is impleme
 :::
 
 ::: tip When to recompile
-Structural edits — adding/removing buses, sends, VCA groups, or connections — mark the graph dirty and need `compile()` before the next timing-critical block. Parameter moves (`setSendDb` / Python `set_send_db`, `setPanLaw`) and scheduled automation do **not** need a recompile.
+Structural edits — adding/removing buses, sends, or connections — mark the graph dirty and need `compile()` before the next timing-critical block. Parameter moves (`setSendDb` / Python `set_send_db`, `setPanLaw`), VCA group changes (add/remove/gain — applied live as control-only gain offsets on member strips), and scheduled automation do **not** need a recompile.
 :::
 
 ## Browser demo project JSON

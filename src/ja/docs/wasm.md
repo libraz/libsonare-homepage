@@ -506,9 +506,10 @@ async function setupStreaming() {
 
 リアルタイムエンジン再生では、このパッケージに `@libraz/libsonare/worklet` の
 AudioWorklet bridge と `@libraz/libsonare/rt` の軽量 realtime module も含まれます。
+ブリッジの `SonareEngine` ファサードは、トラックレーン、チャンネルストリップ、バス、MIDI クリップ、ライブ MIDI、楽器、キャプチャといったエンジンの全面を Worklet へミラーします。
 そのエンジン向け経路は [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。下の例は独自の analyzer worklet を作る場合のものです。
 
-worklet エントリには、2 つのブラウザ連携ヘルパーも同梱されています。`bindMicrophoneInput(...)` は `getUserMedia` を AudioWorklet のエンジンノードへつなぎ（[録音とテイク](./recording-and-takes.md) を参照）、`bindWebMidi(...)` は Web MIDI 入力をエンジンへ橋渡しします（[MIDI 入力](./midi-input.md) を参照）。
+メインエントリ（`@libraz/libsonare`）には、メインスレッド用のブラウザ連携ヘルパーが 2 つ同梱されています。`bindMicrophoneInput(...)` は `getUserMedia` を AudioWorklet のエンジンノードへつなぎ（[録音とテイク](./recording-and-takes.md) を参照）、`bindWebMidi(...)` は Web MIDI 入力をエンジンへ橋渡しします（[MIDI 入力](./midi-input.md) を参照）。
 
 ::: warning AudioWorklet での WASM 利用
 AudioWorklet での WASM ロードには、特別な扱いが必要です。WASM モジュールはワークレットのコンテキスト内でロード・インスタンス化する必要があります。
@@ -816,13 +817,13 @@ try {
 公開パッケージには、連携するいくつかの構成物が含まれます。
 
 - **メインモジュール** — `sonare.js` と `sonare.wasm`。解析・マスタリング・ミキシング・編集の各 API を支える完全な Emscripten ビルドです。
-- **バレルエントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は worklet バンドルを再エクスポートする薄い tsup バンドルです。そのため `@libraz/libsonare` からのインポートと `@libraz/libsonare/worklet` は同じ surface に解決されます。
-- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。`AudioWorkletGlobalScope` 内で動かすためのバンドルです。
+- **メイン API エントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
+- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine`、worklet プロセッサクラス、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
 - **realtime ランタイム** — 専用の軽量 AudioWorklet ランタイム（`sonare-rt.wasm` とローダー、C ABI 専用）です。完全なモジュールが不要なエンジン再生では、ランタイムターゲットとして選べます。`@libraz/libsonare/rt` から参照できます。詳しくは [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。
 
 ## バンドルサイズ
 
-このサイズ表が対象とするのはメインモジュールとバレルエントリです。realtime
+このサイズ表が対象とするのはメインモジュールとメイン API エントリです。realtime
 ランタイムと worklet バンドルは別の構成物で、ここには記載していません。
 
 | ファイル | サイズ | Gzip |

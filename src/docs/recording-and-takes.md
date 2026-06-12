@@ -28,11 +28,11 @@ Recording crosses the realtime layer and the project layer. The engine captures 
 ```mermaid
 flowchart LR
   A[Microphone or engine output] --> B[RealtimeEngine capture buffer]
-  B --> C[capturedAudio()]
+  B --> C["capturedAudio()"]
   C --> D[Project.addLoopRecordingTakes]
   D --> E[Clip takes]
   E --> F[Comp segments]
-  F --> G[compile() / bounce()]
+  F --> G["compile() / bounce()"]
 ```
 
 Do not put `Project` editing calls in the audio callback. Capture in the realtime engine first, then update the project from the main/control thread after the take is finished.
@@ -231,6 +231,8 @@ project.setClipCompSegments(clipId, [
 ```
 
 Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId? }`. Take ids must be unique, and every `takeId` referenced by a comp segment must exist — both rules throw if violated, so a bad edit fails loudly rather than corrupting the clip.
+
+Comping also composes safely with the other clip edits: `splitClip` and trims carry the takes, their `sourceOffsetPpq` values, and the covering comp segments over to the resulting clips, so cutting a comped clip does not lose the comp. The one combination that is refused is **loop mode with comp segments that split the clip** — a looped clip repeats one continuous region, so an edit that would create both is rejected instead of producing a comp that cannot loop.
 
 ::: tip Active take vs comp segments
 The **active take** is the single take that plays when there are no comp segments — handy while you are still auditioning. **Comp segments** override that per region: wherever a segment covers a position, its `takeId` wins; outside every segment the active take fills in. Build the comp by adding segments over the active take, not by replacing it.

@@ -513,10 +513,13 @@ For production use, run `StreamAnalyzer` in an AudioWorklet to avoid main thread
 
 For realtime-engine playback, the package also ships an AudioWorklet bridge at
 `@libraz/libsonare/worklet` and a reduced realtime module at
-`@libraz/libsonare/rt`; see [Realtime and Streaming](./realtime-streaming.md)
-for that engine-focused path. The example below shows a custom analyzer worklet.
+`@libraz/libsonare/rt`. The bridge's `SonareEngine` facade mirrors the full
+engine to the worklet — track lanes, channel strips, buses, MIDI clips, live
+MIDI, instruments, and capture; see
+[Realtime and Streaming](./realtime-streaming.md) for that engine-focused
+path. The example below shows a custom analyzer worklet.
 
-The worklet entry point also ships two browser-glue helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
+The main package entry (`@libraz/libsonare`) also ships two main-thread browser-glue helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
 
 ::: warning WASM in AudioWorklet
 Loading WASM in AudioWorklet requires special handling. The WASM module must be loaded and instantiated within the worklet context.
@@ -821,13 +824,13 @@ Requirements:
 The published package ships a few coordinated pieces:
 
 - **Main module** — `sonare.js` plus `sonare.wasm`, the full Emscripten build behind every analysis, mastering, mixing, and editing API.
-- **Barrel entry** — the package `index` (`index.js` / `index.d.ts`) is a thin tsup bundle that re-exports the worklet bundle, so importing from `@libraz/libsonare` and `@libraz/libsonare/worklet` resolves to the same surface.
-- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, the bundle meant to run inside an `AudioWorkletGlobalScope`.
+- **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the full analysis, mastering, mixing, and editing API.
+- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries `SonareEngine`, the worklet processor classes, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
 - **Realtime runtime** — a dedicated lightweight AudioWorklet runtime (`sonare-rt.wasm` plus loaders, C-ABI only) you can select as a runtime target for engine playback when you do not need the full module. It is reachable via `@libraz/libsonare/rt`; see [Realtime and Streaming](./realtime-streaming.md).
 
 ## Bundle Size
 
-The size table covers the main module and the barrel entry. The realtime
+The size table covers the main module and the main API entry. The realtime
 runtime and worklet bundle are separate artifacts and are not listed here.
 
 | File | Size | Gzipped |

@@ -185,6 +185,10 @@ Mixer scene inserts use the same processor factory as mastering inserts, but the
 | `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
 | `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
 | `effects.modulation.ensemble` | Solina-style BBD string-machine ensemble |
+| `effects.modulation.chorus` | Stereo chorus |
+| `effects.modulation.flanger` | Flanger |
+| `effects.modulation.phaser` | Phaser |
+| `effects.delay.stereo` | Stereo delay |
 
 These insert IDs are available only in builds with `SONARE_HAVE_FX`. The geometric room inserts also require `BUILD_ACOUSTIC_SIM`.
 
@@ -210,7 +214,7 @@ They are different ways to synthesize a reverb tail. Pick by the character you w
 A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintage string synths. It runs three delay taps per channel, swept simultaneously by a slow and a fast 3-phase LFO bank, so the modulation is dense rather than a single chorus wobble. A BBD bucket-bandwidth lowpass darkens the wet path, emulating the analog bucket-brigade delay lines. The right-channel LFO polarity is inverted, which spreads a mono source into a wide stereo image. It is exposed through the insert factory and its parameters are automatable through `set_parameter` on every binding.
 :::
 
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, most of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, and `effects.reverb.convolution` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry- and modulation-driven inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, and `effects.modulation.ensemble` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
+Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, most of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven inserts and the ensemble — `effects.reverb.room`, `effects.acoustic.roomMorph`, and `effects.modulation.ensemble` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
 
 ## How to call them
 

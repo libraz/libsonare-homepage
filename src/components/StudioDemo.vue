@@ -16,10 +16,12 @@ import { RotaryKnob, StatusIndicator, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useStudioEngine } from '@/composables/useStudioEngine';
 import { meterFillPercent } from '@/utils/scale';
+import sonareJsUrl from '@/wasm/sonare.js?url';
+import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
 const { locale } = useI18n();
 const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
-const engine = useStudioEngine();
+const engine = useStudioEngine(sonareJsUrl, sonareWasmUrl);
 
 const pattern = ref(defaultPattern());
 const bpm = ref(120);
@@ -70,6 +72,13 @@ const VU_MARKS = [-60, -40, -24, -12, -6, 0].map((db) => ({
 }));
 const masterVuPercent = computed(() =>
   isReady.value ? meterFillPercent(engine.masterLevel.value, -60, 0) : 0,
+);
+
+/** Exports render nothing when every audible track is empty or muted. */
+const hasExportableNotes = computed(() =>
+  STUDIO_TRACKS.some(
+    (_, t) => !trackMutes.value[t] && pattern.value[t].some((row) => row.some(Boolean)),
+  ),
 );
 
 const docsPath = computed(() =>
@@ -230,6 +239,15 @@ function drawWaveforms(views: { min: Float32Array; max: Float32Array }[]) {
   }
 }
 
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 async function downloadWav() {
   if (downloading.value) return;
   downloading.value = true;
@@ -237,16 +255,15 @@ async function downloadWav() {
     // Yield a frame so the button label updates before the offline render.
     await new Promise((resolve) => setTimeout(resolve, 30));
     const blob = engine.exportWav(pattern.value, bpm.value);
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `libsonare-studio-${bpm.value}bpm.wav`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    if (blob) triggerDownload(blob, `libsonare-studio-${bpm.value}bpm.wav`);
   } finally {
     downloading.value = false;
   }
+}
+
+function downloadMidi() {
+  const blob = engine.exportMidi(pattern.value, bpm.value);
+  if (blob) triggerDownload(blob, `libsonare-studio-${bpm.value}bpm.mid`);
 }
 </script>
 
@@ -338,19 +355,36 @@ async function downloadWav() {
           ></i>
         </div>
 
-        <Tooltip v-bind="term('bounce')" class="st-bounce-tip">
-          <button
-            type="button"
-            class="st-bounce"
-            :disabled="downloading || !isReady"
-            @click="downloadWav"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />
-            </svg>
-            {{ downloading ? copy.transport.downloading : copy.transport.download }}
-          </button>
-        </Tooltip>
+        <div class="st-exports">
+          <Tooltip v-bind="term('bounce')">
+            <button
+              type="button"
+              class="st-bounce"
+              :disabled="downloading || !isReady || !hasExportableNotes"
+              @click="downloadWav"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />
+              </svg>
+              {{ downloading ? copy.transport.downloading : copy.transport.download }}
+            </button>
+          </Tooltip>
+          <Tooltip v-bind="term('midi')">
+            <button
+              type="button"
+              class="st-bounce st-bounce--ghost"
+              :disabled="!isReady || !hasExportableNotes"
+              @click="downloadMidi"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 18V6l10-2v12" />
+                <circle cx="6.5" cy="18" r="2.5" />
+                <circle cx="16.5" cy="16" r="2.5" />
+              </svg>
+              {{ copy.transport.midi }}
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       <!-- ===== SEQUENCER ===== -->
@@ -465,7 +499,7 @@ async function downloadWav() {
                   </button>
                 </Tooltip>
               </span>
-              <span class="st-vu__legend">PROJECT ENGINE · OFFLINE BOUNCE · 48K</span>
+              <span class="st-vu__legend">REALTIME ENGINE · LANE MIXER · MIDI CLIPS</span>
             </div>
             <div class="st-vu__meter">
               <i
@@ -791,7 +825,10 @@ html:not(.dark) .st-lcd__value {
   }
 }
 
-.st-bounce-tip {
+.st-exports {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
 }
 
@@ -825,6 +862,13 @@ html:not(.dark) .st-lcd__value {
 .st-bounce:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Secondary export: quiet next to the primary bounce, accent on hover. */
+.st-bounce--ghost {
+  border-color: var(--demo-border);
+  background: transparent;
+  color: var(--demo-text-muted);
 }
 
 /* ===== SEQUENCER ===== */
@@ -1152,7 +1196,7 @@ html:not(.dark) .st-vu__meter {
     gap: 12px;
   }
 
-  .st-bounce-tip {
+  .st-exports {
     margin-left: 0;
   }
 

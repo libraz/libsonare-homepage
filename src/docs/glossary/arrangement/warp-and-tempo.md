@@ -36,6 +36,8 @@ Every audio clip has a **warp mode** that decides *how* (or whether) it follows 
 - **tempo-sync** — follow the tempo while **keeping the original pitch**. The clip is time-stretched so its timing matches the grid, but a phase vocoder holds the pitch constant. This is what you want for vocals, melodic loops, and anything where the notes must stay in tune.
 :::
 
+<SonareDemo id="time-stretch" />
+
 | Mode | Timing follows tempo? | Pitch stays the same? | Typical use |
 |------|----------------------|----------------------|-------------|
 | off | No | Yes | One-shots, SFX |
@@ -49,7 +51,7 @@ A tempo change tells the clip *how fast* to play, but real performances are not 
 Each anchor ties a position in the source audio to a position on the project timeline. The downbeat of the loop snaps to bar 1, the snare hit snaps to beat 2, and the stretching between anchors is computed automatically. With enough anchors you can straighten a loose performance onto the grid, or deliberately bend a tight one to groove.
 
 ::: warning tempo-sync is real time-stretching, with limits
-Because tempo-sync changes duration while preserving pitch, it uses a phase vocoder under the hood — the same family of algorithm described in [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md). Small stretches are transparent; very large ones can smear transients or add a "phasey" quality. repitch has no such artifacts (it is just resampling) but it moves the pitch, so the two modes trade different costs.
+Because tempo-sync changes duration while preserving pitch, it uses a phase vocoder under the hood — the same family of algorithm described in [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md). Small stretches are transparent; very large ones can smear transients or add a "phasey" quality. On stereo and multichannel clips the stretch is phase-locked across channels, so the stereo image does not drift between left and right. repitch has no such artifacts (it is just resampling) but it moves the pitch, so the two modes trade different costs.
 :::
 
 ## How playback and bounce stay consistent

@@ -7,6 +7,8 @@ description: Estimated dimensions and volume — the equivalent shoebox room tha
 
 From a recording's reverberant tail, libsonare estimates an **equivalent room**: a length, width, and height — and the volume they enclose — that would decay the way the recording does.
 
+<SonareDemo id="room-decay" />
+
 ## The equivalent shoebox
 
 The estimate is a **shoebox model**: a simple rectangular room described by three dimensions. Real rooms have alcoves, balconies, furniture, and angled walls, but their *decay behavior* is governed mostly by two bulk properties — how much air the space encloses and how absorptive its surfaces are. The shoebox is the simplest shape that captures both, so libsonare solves for the rectangular room whose decay best matches what was measured.

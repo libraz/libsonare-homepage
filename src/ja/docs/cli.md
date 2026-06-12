@@ -525,6 +525,19 @@ Python CLI の名前付きマスタリングコマンド:
 | ペアプロセッサ一覧 | `sonare mastering-pair-processors` |
 | ペア解析一覧 | `sonare mastering-pair-analyses` |
 | ソース／リファレンスのペア解析 | `sonare mastering-pair-analyze` |
+| オーディオプロファイル解析（JSON を出力） | `sonare mastering-profile` |
+| アシスタントによるチェーン提案（JSON を出力） | `sonare mastering-suggest` |
+| ストリーミングプラットフォームのノーマライズプレビュー（JSON を出力） | `sonare mastering-streaming` |
+
+3 つのアシスタントコマンドはいずれもオーディオファイルを受け取り、JSON オブジェクトを標準出力に出力します。
+
+| コマンド | 主なオプション | 出力 |
+|---------|--------------|------|
+| `sonare mastering-profile track.wav` | `--params key=val,...` | オーディオプロファイル JSON（ラウドネス・ダイナミクス・スペクトル特性） |
+| `sonare mastering-suggest track.wav` | `--params key=val,...` | 推奨マスタリングチェーン JSON |
+| `sonare mastering-streaming track.wav` | `--platforms '[...]'`, `--platforms-file f.json` | プラットフォームごとのノーマライズプレビュー JSON |
+
+`--platforms` は `{name, targetLufs, ceilingDb}` オブジェクトの JSON 配列を受け取ります。`--params` はカンマ区切りの `key=value` 浮動小数点ペアをアシスタント呼び出しに渡します。
 
 ソースビルド C++ CLI のみ: `sonare mastering-pair-processor`、`sonare mastering-stereo-analyses`、`sonare mastering-stereo-analyze`。
 
@@ -577,9 +590,12 @@ sonare project abi
 # 指定サンプルレートで空のプロジェクト JSON を作成
 sonare project new --sample-rate 48000 -o project.json
 
-# プロジェクト JSON を検証・コンパイル
+# プロジェクト JSON を検証（診断を表示。-o を付けると正規化 JSON も書き出す）
 sonare project validate --in project.json
-sonare project compile --in project.json -o compiled.json
+sonare project validate --in project.json -o canonical.json
+
+# プロジェクト JSON をコンパイルチェック（診断を表示。エラー時は非ゼロで終了。ファイルは書き出さない）
+sonare project compile --in project.json
 
 # プロジェクトをステレオ WAV にレンダリング（マルチチャンネルのバウンスもステレオ出力）
 sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
@@ -592,8 +608,8 @@ sonare project bounce --in project.json --synth -o synth-bounce.wav
 |----------|------|----------------|
 | `sonare project abi` | プロジェクトの ABI バージョンを表示 | — |
 | `sonare project new` | 空のプロジェクト JSON を作成 | `--sample-rate`, `-o` |
-| `sonare project validate` | プロジェクト JSON を検証 | `--in` |
-| `sonare project compile` | プロジェクト JSON をコンパイル | `--in`, `-o` |
+| `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o` |
+| `sonare project compile` | プロジェクト JSON をコンパイルチェック。診断を表示し、エラー時は非ゼロで終了（ファイルは書き出さない） | `--in`, `--json` |
 | `sonare project bounce` | プロジェクトをステレオ WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
 | `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |

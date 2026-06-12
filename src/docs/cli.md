@@ -516,6 +516,19 @@ Named mastering commands in the Python CLI:
 | List pair processors | `sonare mastering-pair-processors` |
 | List pair analyses | `sonare mastering-pair-analyses` |
 | Analyze a source/reference pair | `sonare mastering-pair-analyze` |
+| Audio profile analysis (prints JSON) | `sonare mastering-profile` |
+| Chain suggestion from assistant (prints JSON) | `sonare mastering-suggest` |
+| Streaming-platform normalization preview (prints JSON) | `sonare mastering-streaming` |
+
+The three assistant commands each take an audio file and print a JSON object to stdout:
+
+| Command | Key options | Output |
+|---------|------------|--------|
+| `sonare mastering-profile track.wav` | `--params key=val,...` | Audio profile JSON (loudness, dynamics, spectral character) |
+| `sonare mastering-suggest track.wav` | `--params key=val,...` | Suggested mastering chain as JSON |
+| `sonare mastering-streaming track.wav` | `--platforms '[...]'`, `--platforms-file f.json` | Per-platform normalization preview as JSON |
+
+`--platforms` accepts a JSON array of `{name, targetLufs, ceilingDb}` objects. `--params` accepts comma-separated `key=value` float pairs passed to the underlying assistant call.
 
 Source-built C++ CLI only: `sonare mastering-pair-processor`, `sonare mastering-stereo-analyses`, and `sonare mastering-stereo-analyze`.
 
@@ -572,9 +585,12 @@ sonare project abi
 # Create an empty project JSON at a given sample rate
 sonare project new --sample-rate 48000 -o project.json
 
-# Validate or compile a project JSON
+# Validate a project JSON (prints diagnostics; optionally writes canonicalized JSON with -o)
 sonare project validate --in project.json
-sonare project compile --in project.json -o compiled.json
+sonare project validate --in project.json -o canonical.json
+
+# Compile-check a project JSON (prints diagnostics; exits non-zero on errors; does not write a file)
+sonare project compile --in project.json
 
 # Render a project to a stereo WAV (multi-channel bounces write stereo output)
 sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
@@ -587,8 +603,8 @@ sonare project bounce --in project.json --synth -o synth-bounce.wav
 |---------|-------------|-----------------|
 | `sonare project abi` | Print the project ABI version | — |
 | `sonare project new` | Create an empty project JSON | `--sample-rate`, `-o` |
-| `sonare project validate` | Validate a project JSON | `--in` |
-| `sonare project compile` | Compile a project JSON | `--in`, `-o` |
+| `sonare project validate` | Validate a project JSON; optionally write canonicalized JSON | `--in`, `-o` |
+| `sonare project compile` | Compile-check a project JSON; prints diagnostics, exits non-zero on errors (writes no file) | `--in`, `--json` |
 | `sonare project bounce` | Render a project to a stereo WAV | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
 | `sonare project export-smf` | Export the project to a Standard MIDI File | `--in`, `-o` |
 | `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |

@@ -161,7 +161,21 @@ for dest_file in "$DEST_DIR"/$JS_CHUNK_GLOB; do
 done
 shopt -u nullglob
 
+# Keep an untransformed copy of the worklet bridge in src/public/. The studio
+# demo's AudioWorklet imports it raw: the bundled src/wasm/worklet.js gets a
+# Vite /@vite/client import injected in dev, which fails silently inside
+# AudioWorkletGlobalScope, so the worklet must load the public copy instead.
+# Runs on the no-change path too, repairing a deleted or stale public copy.
+sync_public_worklet() {
+  PUBLIC_WORKLET="src/public/sonare-worklet.js"
+  if ! cmp -s "$DEST_DIR/worklet.js" "$PUBLIC_WORKLET" 2>/dev/null; then
+    cp "$DEST_DIR/worklet.js" "$PUBLIC_WORKLET"
+    echo "   ✓ src/public/sonare-worklet.js (worklet bridge for AudioWorklet)"
+  fi
+}
+
 if ! $WASM_CHANGED && ! $JS_CHANGED && ! $OBSOLETE_PRESENT && [ ${#STALE_CHUNKS[@]} -eq 0 ]; then
+  sync_public_worklet
   echo ""
   echo "✅ No changes detected — all files are identical"
   echo "   WASM MD5: $NEW_MD5"
@@ -214,6 +228,8 @@ if $JS_CHANGED; then
 else
   echo "   JS API unchanged, skipping"
 fi
+
+sync_public_worklet
 
 # Remove obsolete sub-module files left over from the previous layout
 if $OBSOLETE_PRESENT; then

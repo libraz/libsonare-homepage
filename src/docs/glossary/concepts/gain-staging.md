@@ -9,6 +9,8 @@ Gain staging means keeping signal levels in a useful range as audio moves throug
 
 Good gain staging is not about making everything quiet. It is about leaving enough room for processing decisions to remain meaningful.
 
+<SonareDemo id="engine-lane-mixer" />
+
 ## Why It Matters
 
 If the source is too hot, every processor may behave as if the track needs heavy control. Compression can become too dense, saturation can get harsh, and the limiter can work harder than needed.

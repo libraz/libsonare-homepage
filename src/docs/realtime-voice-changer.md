@@ -54,6 +54,8 @@ For live browser processing, call `init()` and `prepare(sampleRate, maxBlockSize
 
 The realtime chain is more than a pitch shifter. Built-in presets combine these stages:
 
+<SonareDemo id="pitch-shift" />
+
 | Stage | Purpose |
 |-------|---------|
 | Retune | Nudges pitch toward the preset target behavior |

@@ -334,6 +334,7 @@ function analyzeWithProgress(
 | `"timbre"` | Timbre analysis | 0.70 |
 | `"dynamics"` | Dynamics analysis | 0.80 |
 | `"rhythm"` | Rhythm analysis | 0.90 |
+| `"melody"` | Melody contour extraction | 0.95 |
 | `"complete"` | Finished | 1.0 |
 
 ```typescript
@@ -990,20 +991,26 @@ function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversamp
 function meteringDetectClipping(
   samples: Float32Array,
   sampleRate?: number,
-  threshold?: number,         // default: 0.999
-  minRegionSamples?: number,  // default: 1
-  options?: ValidateOptions
+  options?: MeteringDetectClippingOptions
 ): ClippingReport
+
+interface MeteringDetectClippingOptions extends ValidateOptions {
+  threshold?: number;        // linear absolute threshold, default 0.999
+  minRegionSamples?: number; // minimum run length to report, default 1
+}
 
 function meteringDynamicRange(
   samples: Float32Array,
   sampleRate?: number,
-  windowSec?: number,      // 0 / omit = 3 s
-  hopSec?: number,         // 0 / omit = 1 s
-  lowPercentile?: number,  // 0 / omit = 0.10
-  highPercentile?: number, // 0 / omit = 0.95
-  options?: ValidateOptions
+  options?: MeteringDynamicRangeOptions
 ): DynamicRangeReport
+
+interface MeteringDynamicRangeOptions extends ValidateOptions {
+  windowSec?: number;      // 0 / omit = 3 s
+  hopSec?: number;         // 0 / omit = 1 s
+  lowPercentile?: number;  // omit or negative = 0.10 (0 is a literal 0th percentile)
+  highPercentile?: number; // omit or negative = 0.95
+}
 
 interface ClippingReport {
   clippedSamples: number;
@@ -1412,7 +1419,7 @@ Configuration options for StreamAnalyzer.
 
 ```typescript
 interface StreamConfig {
-  sampleRate: number;          // e.g., 44100 (stream default, not 22050)
+  sampleRate?: number;         // default: 44100 (stream default, not 22050)
   nFft?: number;               // default: 2048
   hopLength?: number;          // default: 512
   nMels?: number;              // default: 128
@@ -1460,8 +1467,10 @@ class StreamAnalyzer {
   readFrames(maxFrames: number): FrameBuffer;
 
   // Quantized reads for bandwidth-reduced transfer / visualization
-  readFramesU8(maxFrames: number): StreamFramesU8;   // Uint8 feature arrays
-  readFramesI16(maxFrames: number): StreamFramesI16; // Int16 feature arrays
+  // (optional quantizeConfig widens quantization ranges for unusually loud/quiet streams;
+  // see Realtime and Streaming → custom quantization ranges)
+  readFramesU8(maxFrames: number, quantizeConfig?: StreamQuantizeConfig): StreamFramesU8;   // Uint8 feature arrays
+  readFramesI16(maxFrames: number, quantizeConfig?: StreamQuantizeConfig): StreamFramesI16; // Int16 feature arrays
 
   // Reset state for new stream
   reset(baseSampleOffset?: number): void;
@@ -1657,11 +1666,11 @@ Each object owns a block of WASM heap memory. The JavaScript garbage collector c
 
 | Class | Cleanup method |
 |-------|----------------|
-| `StreamAnalyzer` | `dispose()` |
+| `StreamAnalyzer` | `delete()` |
 | `Mixer` | `delete()` |
 | `StreamingMasteringChain` | `delete()` |
 
-Some WASM classes also expose `destroy()` as an alias. Skipping cleanup slowly leaks WASM memory in long-running pages.
+`StreamAnalyzer` also keeps `dispose()` as a backward-compatibility alias for `delete()`. Some WASM classes also expose `destroy()` as an alias. Skipping cleanup slowly leaks WASM memory in long-running pages.
 
 Plain functions like `analyze()` return ordinary JS values and need no cleanup. Node native cleanup differs; see [Native Bindings](./native-bindings.md).
 :::
@@ -1772,7 +1781,7 @@ const audioTime = startTime + frame.timestamps[i];
 1. **Throttle with `emitEveryNFrames`**: Set to 4 for 60fps visualizations
 2. **Process in AudioWorklet**: Avoid main thread blocking
 3. **Batch reads**: Read multiple frames at once when available
-4. **Call `dispose()`**: Release resources when done to prevent memory leaks
+4. **Call `delete()`**: Release resources when done to prevent memory leaks
 
 ## Types
 
@@ -2288,7 +2297,8 @@ interface MasteringChainConfig {
                    releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
                    autoMakeup?: boolean; };
     deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
-                attackMs?: number; releaseMs?: number; rangeDb?: number; };
+                attackMs?: number; releaseMs?: number; rangeDb?: number;
+                bandpassQ?: number; };
     transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
                         fastAttackMs?: number; fastReleaseMs?: number;
                         slowAttackMs?: number; slowReleaseMs?: number;
@@ -2344,6 +2354,19 @@ interface MasteringStereoResult {
   outputLufs: number;
   appliedGainDb: number;
   latencySamples: number;
+}
+// Returned by masteringChainStereo / masterAudioStereo (and their
+// WithProgress variants); MasteringStereoResult is the return type of
+// masteringProcessStereo.
+interface MasteringStereoChainResult {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  stages: string[];
+  latencySamples?: number;
 }
 ```
 
@@ -2404,6 +2427,8 @@ a dedicated guide.
 | Render a project to audio | `project.bounceWithSynthInstrument(s)` | [Project Bounce](./project-bounce.md) |
 | Pick a built-in synth voice | `synthPresetNames()`, `synthPresetPatch(name)`, `engine.setSynthInstrument(...)` | [Native Synth](./native-synth.md) |
 | Play through a SoundFont | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont Player](./soundfont-player.md) |
+| Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
+| Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
 | Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |
 | Feed a live microphone into the engine | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="Browser only" /> | [Recording and Takes](./recording-and-takes.md) |
 
@@ -2430,6 +2455,7 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Area | Exported types/constants |
 |------|--------------------------|
 | Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
+| Engine lane mixer and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMidiClipSchedule`, `EngineMidiEvent` |
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | Spectral and feature transforms | `MelPowerResult`, `StftPowerResult`, `TempogramMode` |
 | Mastering | `MasteringProcessorParams`, `MasteringStereoChainResult` |
