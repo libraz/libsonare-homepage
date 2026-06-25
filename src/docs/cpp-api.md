@@ -159,6 +159,8 @@ auto reconstructed = spec.to_audio();
 `Spectrogram` objects are **not thread-safe**. The cached `magnitude()` and `power()` results use lazy initialization. If you need to access the same `Spectrogram` from multiple threads, create separate copies or synchronize access externally.
 :::
 
+<SonareDemo id="stft-basics" />
+
 ## Quick API
 
 Simple, single-shot functions for common analysis tasks. Use these when you want exactly one result (BPM, key, beats, downbeats, onsets, or room acoustics).
@@ -712,9 +714,10 @@ Audio icqt(const CqtResult& cqt_result, int length = 0);
 Audio ivqt(const VqtResult& vqt_result, int length = 0);
 ```
 
-**Migration:** For preview audio reconstruction, use the Griffin-Lim paths from
-the inverse feature helpers, or keep phase information in your own STFT-domain
-pipeline when quality matters.
+**Migration:** `griffinlim_cqt` and `griffinlim_vqt` are declared in the same
+`<feature/cqt.h>` / `<feature/vqt.h>` headers as `cqt()` and `vqt()`, so no extra
+include is needed. For preview audio reconstruction, use these Griffin-Lim paths,
+or keep phase information in your own STFT-domain pipeline when quality matters.
 
 ```cpp
 const auto& cqt_magnitude = cqt_result.magnitude();
@@ -1046,6 +1049,8 @@ SonareError sonare_audio_detect_bpm(const SonareAudio* audio, float* out_bpm);
 SonareError sonare_audio_detect_key(const SonareAudio* audio, SonareKey* out_key);
 SonareError sonare_audio_detect_beats(const SonareAudio* audio,
                                       float** out_times, size_t* out_count);
+SonareError sonare_audio_detect_downbeats(const SonareAudio* audio,
+                                          float** out_times, size_t* out_count);
 SonareError sonare_audio_detect_onsets(const SonareAudio* audio,
                                        float** out_times, size_t* out_count);
 SonareError sonare_audio_analyze(const SonareAudio* audio, SonareAnalysisResult* out);
@@ -1057,14 +1062,27 @@ SonareError sonare_detect_key(const float* samples, size_t length, int sample_ra
                               SonareKey* out_key);
 SonareError sonare_detect_beats(const float* samples, size_t length, int sample_rate,
                                 float** out_times, size_t* out_count);
+SonareError sonare_detect_downbeats(const float* samples, size_t length, int sample_rate,
+                                    float** out_times, size_t* out_count);
 SonareError sonare_detect_onsets(const float* samples, size_t length, int sample_rate,
                                  float** out_times, size_t* out_count);
 SonareError sonare_analyze(const float* samples, size_t length, int sample_rate,
                            SonareAnalysisResult* out);
 
+// Full-result analysis serialized to a camelCase JSON object (chords, sections,
+// timbre, dynamics, rhythm, melody, form, per-beat strength). *out_json is
+// heap-allocated; release it with sonare_free_string.
+SonareError sonare_analyze_json(const float* samples, size_t length, int sample_rate,
+                                char** out_json);
+SonareError sonare_analyze_json_with_progress(const float* samples, size_t length, int sample_rate,
+                                              SonareAnalyzeProgressCallback callback,
+                                              void* user_data, char** out_json);
+
 // Memory management
 void sonare_free_floats(float* ptr);
 void sonare_free_ints(int* ptr);
+void sonare_free_string(char* ptr);             // heap char* from *_json and other string-returning C ABI calls
+void sonare_free_key_candidates(SonareKeyCandidate* ptr);  // arrays from sonare_detect_key_candidates*
 void sonare_free_result(SonareAnalysisResult* result);
 
 // Utility
@@ -1072,20 +1090,24 @@ const char* sonare_error_message(SonareError error);
 const char* sonare_last_error_message(void);    // thread-local detail for the last failure
 const char* sonare_last_warning_message(void);  // thread-local non-fatal warnings (e.g. scene-insert params no processor read)
 const char* sonare_version(void);
+uint32_t    sonare_abi_version(void);            // packed aggregate ABI version; compare against compile-time SONARE_ABI_VERSION to detect a struct-layout/contract mismatch before exchanging POD across the boundary
+int         sonare_has_ffmpeg_support(void);     // 1 if the loaded build can decode FFmpeg-only formats (M4A/AAC/FLAC/OGG), 0 otherwise
 ```
 
 `SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
 
 `SonareAnalysisResult` is the compact C ABI result: BPM, BPM confidence, key,
-time signature, and beat times. The richer C++ `AnalysisResult` fields such as
-chords, sections, timbre, dynamics, rhythm, melody, and form are exposed through
-their dedicated C ABI functions or higher-level C++ APIs.
+time signature, and beat times. For the full analysis (chords, sections, timbre,
+dynamics, rhythm, melody, and form, with per-beat strength), call
+`sonare_analyze_json` (or `sonare_analyze_json_with_progress` for per-stage
+progress), which returns a camelCase JSON string you free with
+`sonare_free_string`.
 
 Several helper families also have sample-based C ABI entry points:
 
 | Family | Examples |
 |--------|----------|
-| Effects | `sonare_hpss`, `sonare_time_stretch`, `sonare_pitch_shift`, `sonare_normalize`, `sonare_trim` |
+| Effects | `sonare_hpss`, `sonare_time_stretch`, `sonare_phase_vocoder`, `sonare_pitch_shift`, `sonare_spectral_edit`, `sonare_normalize`, `sonare_trim` |
 | Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
 | Geometric room acoustics | `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
 | Conversions and resampling | See `src/sonare_c.h` for the full list |
@@ -1100,17 +1122,19 @@ The librosa-parity helpers are also exposed through the C API:
 | Feature utilities | `sonare_pcen`, `sonare_tonnetz`, `sonare_tempogram`, `sonare_plp` |
 | dB conversions | `sonare_power_to_db`, `sonare_amplitude_to_db`, `sonare_db_to_power`, `sonare_db_to_amplitude` |
 | Time/frame conversion | `sonare_frames_to_samples`, `sonare_samples_to_frames` |
+| Decomposition / denoising | `sonare_decompose`, `sonare_decompose_with_init` (init `"random"`/`"nndsvd"`), `sonare_nn_filter` |
 
 The current C ABI is split across focused headers. Use this index when a symbol is not in the compact examples above:
 
 | Header | Surface |
 |--------|---------|
-| `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, error/version/FFmpeg helpers |
+| `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, engine lane/bus/send structs (`SonareEngineTrackLane`, `SonareEngineBus`, `SonareEngineTrackSend`) and the `SonareChannelLayout` enum, error/version/FFmpeg helpers |
+| `sonare_c_project.h` | Headless project/arrangement lifecycle, track/clip and MIDI-clip editing, MIDI events and MIDI-FX (`sonare_project_set_midi_events`, `set_midi_fx`, `bake_midi_fx`), compile/bounce (incl. `bounce_with_builtin_instruments`/`bounce_with_synth_instruments`), warp maps, loop-recording takes and comp segments, NativeSynth and SoundFont/SF2 instrument bindings, assist sidecar, chord/key annotations, `SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | Focused analysis, STFT/mel/MFCC/chroma, inverse features, CQT/VQT, pitch, tempogram/PLP, LUFS |
-| `sonare_c_effects.h` | HPSS/editing DSP, realtime voice changer, realtime engine, decomposition/remix helpers |
+| `sonare_c_effects.h` | HPSS/editing DSP, region-based spectral editing (`sonare_spectral_edit`, modes GAIN/ATTENUATE/MUTE/HEAL), realtime voice changer, realtime engine, decomposition/remix helpers |
 | `sonare_c_acoustic.h` | RIR synthesis from room geometry, equivalent-room estimation, offline room-character morphing, `SONARE_ACOUSTIC_ABI_VERSION` |
-| `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum |
-| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors, assistant/profile/preview JSON, streaming mastering chain, streaming EQ, repair/dynamics one-shot helpers |
+| `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum, multi-channel interleaved LUFS (`sonare_lufs_interleaved`) and EBU R128 loudness range (`sonare_ebur128_loudness_range`) |
+| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON, streaming mastering chain, streaming EQ, repair/dynamics one-shot helpers |
 | `sonare_c_mixing.h` | Channel strip controls, sends, buses, VCA groups, automation, meters, goniometer, scene presets |
 | `sonare_c_streaming.h` | `StreamAnalyzer`, quantized frame reads, progressive stats, tuning/normalization controls |
 
@@ -1120,7 +1144,15 @@ For room acoustics in the C ABI:
 - `SonareRoomEstimateConfig` covers aspect/absorption priors, `min_decay_db`, `noise_floor_margin_db`, and analyzer `mode`.
 - Analyzer mode is one of `SONARE_ACOUSTIC_MODE_AUTO`, `SONARE_ACOUSTIC_MODE_BLIND`, or `SONARE_ACOUSTIC_MODE_IMPULSE_RESPONSE`.
 
-Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
+For surround/multichannel engine buses in the C ABI:
+
+- `SonareChannelLayout` enumerates the speaker bed: `SONARE_CHANNEL_LAYOUT_MONO` (0), `SONARE_CHANNEL_LAYOUT_STEREO` (1), `SONARE_CHANNEL_LAYOUT_5_1` (2), and `SONARE_CHANNEL_LAYOUT_7_1` (3). Values match `sonare::ChannelLayout` and are part of the ABI/JSON wire format.
+- `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo) and `SonareEngineTrackLane.source_channel_layout` declares the input layout feeding a lane.
+- The bus layout drives plane-by-plane summing and per-plane (wide) meters today, but the per-lane surround **panning** DSP is staged: `source_channel_layout` (and a strip's `surroundPan` position) round-trips through config JSON yet is inert until the surround DSP path lands. See [realtime engine surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters).
+
+To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly"}, ...]`, where `kind` is `realtime`/`offline`/`pair` and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker by realtime-insertability without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
+
+Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The typed preset selector is the `SonareVoiceCharacterPreset` enum (`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 through `SONARE_VC_PRESET_DARK_VILLAIN` = 5); `sonare_voice_character_preset_id(preset)` returns its canonical id string (NULL for unknown values), and the `SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` macro provides the newline-separated id list for compile-time binding generation. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
 
 ## Error Handling
 

@@ -29,8 +29,11 @@
 
 Node.js 18.0.0 以上が必要です。
 
-`@libraz/libsonare` は WebAssembly パッケージです。ファイルデコード機能は含まないため、
-Web Audio API などでデコード済みのモノラル `Float32Array` サンプルを渡します。
+`@libraz/libsonare` は WebAssembly パッケージです。多くの API はサンプルベースなので、
+デコード済みのモノラル `Float32Array` サンプルを渡します。読み込み用途では
+`Audio.fromMemory(...)` が WAV/MP3 のバイト列をメモリ内でデコードでき、
+`Audio.fromMemoryWithBrowserFallback(...)` は AAC、OGG、FLAC などをブラウザの
+コーデックスタックへフォールバックできます。
 
 この npm パッケージはブラウザ / WebAssembly 向けです。`sonare` CLI はインストールされません。コマンドラインツールを使う場合は、PyPI の Python パッケージを `pip install libsonare` でインストールしてください。
 

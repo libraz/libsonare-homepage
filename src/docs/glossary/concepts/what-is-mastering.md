@@ -53,6 +53,8 @@ Studio mode exposes the same idea as modules: repair, EQ, dynamics, air band, st
 
 Use loudness-matched A/B comparison when judging whether processing helped. Louder usually sounds better for a few seconds, even when it is not actually better.
 
+<SonareDemo id="loudness-meter" />
+
 Then check three things:
 
 - **Translation:** Does it still work on small speakers and headphones?

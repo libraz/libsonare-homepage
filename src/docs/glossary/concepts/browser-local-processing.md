@@ -13,7 +13,7 @@ This is one of libsonare's main product differences: it demonstrates serious DSP
 
 Across the browser demos:
 
-- File decoding happens through browser audio APIs.
+- File decoding happens through browser audio APIs or the WASM `Audio.fromMemory*` helpers.
 - Analysis, rendering, mixing, or realtime FX processing runs in the page, a Web Worker, or an AudioWorklet depending on the demo.
 - DSP runs through libsonare WebAssembly.
 - WAV export, JSON report generation, and visualization data are produced in the browser.

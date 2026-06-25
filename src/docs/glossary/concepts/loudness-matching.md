@@ -23,7 +23,7 @@ That bias is especially dangerous in mastering because many processors change lo
 | Compression | Average level rises even if peaks are controlled. |
 | Saturation | Added harmonics can increase perceived loudness. |
 | Limiting | Peaks are reduced, then makeup level makes the master denser. |
-| Stereo widening | Side energy may feel larger even if mono focus worsens. |
+| Stereo widening | A wider image can feel larger and more exciting even when it weakens the centered, mono-safe core of the mix. |
 
 Matching loudness does not make the comparison perfect, but it removes the most obvious trap: choosing the louder version because it is louder.
 

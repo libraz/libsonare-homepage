@@ -19,10 +19,12 @@ You usually **edit** individual parts (fix timing, tune a note, change a voice),
 
 Speed up a tape and the music gets both faster *and* higher — the two are coupled. The whole point of modern editing DSP is to **separate** them, so you can change one without dragging the other along:
 
-- **Time stretch** changes the duration without changing the pitch (a `rate` above `1.0` makes the clip shorter, below `1.0` makes it longer).
+- **Time stretch** changes the duration without changing the pitch. Here `rate` is a playback-speed multiplier: a `rate` above `1.0` plays faster, so the clip gets *shorter*; below `1.0` plays slower, so it gets *longer*.
 - **Pitch shift** changes the pitch without changing the duration.
 
 Doing this cleanly is hard: the algorithm has to invent or remove time while keeping each note's frequency, so very large moves always leave some artifacts (smearing, a "phasey" or robotic tone). Small moves stay transparent.
+
+<SonareDemo id="time-stretch" />
 
 ## Semitones and cents
 

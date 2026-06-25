@@ -87,12 +87,12 @@ sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 :::
 
 ::: warning 短いクリップ: profile と suggest には実際のスペクトル成分が必要
-`masteringAudioProfile` と `masteringAssistantSuggest` は STFT ベースの解析全体を実行し（既定の `nFft` は 2048）、解析するには短すぎるクリップ、つまり解析窓より短い入力では `SonareError` を投げます（実用上の下限はおおよそ ~512 サンプル）。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファと空でないプラットフォームのリストさえあれば、どんなバッファでも受け付けます。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを最小長チェックで守り、`isSonareError` を使った `try`／`catch` で囲んでから、バッファを渡してください。
+`masteringAudioProfile` と `masteringAssistantSuggest` は STFT ベースの解析全体を実行し（既定の `nFft` は 2048）、解析窓を満たせないほど短いクリップでは `SonareError` を投げます。しきい値は 2 つあります。~512 サンプルより短いバッファはそのまま例外になり、1 窓ぶん（`nFft`、既定 2048 サンプル）より短いバッファは、意味のあるプロファイルを取るにはスペクトル成分が足りません。安全のため 1 窓ぶんを下限として守ってください。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファと空でないプラットフォームのリストさえあれば、どんなバッファでも受け付けます。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを最小長チェックで守り、`isSonareError` を使った `try`／`catch` で囲んでから、バッファを渡してください。
 
 ```typescript [ブラウザ]
 import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
 
-const MIN_ANALYSIS_SAMPLES = 2048; // 解析窓 1 つ分。~512 が下限
+const MIN_ANALYSIS_SAMPLES = 2048; // 既定の解析窓 1 つ分（nFft）
 if (samples.length < MIN_ANALYSIS_SAMPLES) {
   // 短すぎてプロファイルできない — スキップするか、解析前にパディングする
 } else {
@@ -171,7 +171,7 @@ if (samples.length < MIN_ANALYSIS_SAMPLES) {
 :::
 
 ::: details ラウドネスレンジ・アタック密度・サステイン比とは？
-- **ラウドネスレンジ（LRA、単位 LU）** — 体感ラウドネスが曲全体でどれだけ変動するか。値が大きいほど、はっきり静かになったり大きくなったりします（ダイナミックなクラシック曲）。小さいほど、ほぼ一定の音量です（密度の高い EDM マスター）。「LU」（ラウドネス単位）は LUFS と同じ尺度で、絶対値ではなく振れ幅として測ります。
+- **ラウドネスレンジ**（LRA、単位 LU） — 体感ラウドネスが曲全体でどれだけ変動するか。値が大きいほど、はっきり静かになったり大きくなったりします（ダイナミックなクラシック曲）。小さいほど、ほぼ一定の音量です（密度の高い EDM マスター）。「LU」（ラウドネス単位）は LUFS と同じ尺度で、絶対値ではなく振れ幅として測ります。
 - **アタック密度** — 1 秒あたりおおよそ何回、鋭いノート／ドラムのオンセットが起こるか。高い＝忙しく打撃的、低い＝まばらまたは持続的。
 - **サステイン比**（0〜1） — 素材が長く伸びた音（1 に近い）に支配されているか、短いバーストやアタック（0 に近い）に支配されているか。アタック密度とは別に（オンセットではなく RMS 包絡から）測られますが、傾向としては逆向きに動きます。
 - **短時間 LUFS の標準偏差** — 瞬間ごとのラウドネスがどれだけ揺れるか。値が大きいほどレベルが落ち着かず、ゼロに近いほど非常に安定して保たれています。
@@ -243,7 +243,7 @@ if (samples.length < MIN_ANALYSIS_SAMPLES) {
 
 ### 提案をマスターとしてレンダリングする
 
-`chainConfig.params` は `masterAudio` の上書きキーを使うので、提案のレンダリングは 1 回の呼び出しです。先頭のジャンル候補をベースプリセットにし、params を上書き値として渡します。
+`chainConfig.params` は `masterAudio` の上書きキーを使うので、提案のレンダリングは 1 回の呼び出しです。先頭のジャンル候補をベースプリセットにし、params マップ全体（上に示した数キーだけでなく、チェーン全体です）を上書き値として渡します。
 
 ::: code-group
 
@@ -311,6 +311,8 @@ sonare mastering-processors
 ::: warning ストリーミングでは大きい＝良いではない
 −8 LUFS のマスターは YouTube で「大きく」はなりません。プラットフォームは `normalizationGainDb`（ここでは −5.3 dB）を適用して全員をほぼ同じラウドネスに揃えるので、過度なコンプはラウドネス上の利点なしにダイナミクスを犠牲にするだけです。[配信ターゲット](./glossary/mastering/delivery-targets.md) と [ラウドネスマッチング](./glossary/concepts/loudness-matching.md) を参照してください。
 :::
+
+<SonareDemo id="loudness-meter" />
 
 ## 関連
 

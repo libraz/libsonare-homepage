@@ -21,6 +21,8 @@ In practice the tail rarely stays clean across a full 60 dB before noise swamps 
 | T30 | −5 dB to −35 dB | ×2 → 60 dB |
 | EDT | 0 dB to −10 dB | ×6 → 60 dB |
 
+T20 and T30 are the same RT60 number measured over different spans: T30 uses more of the decay and is the usual reported value, while T20 falls back to a shorter span when noise swamps the tail early. EDT is the odd one out — it measures only the first 10 dB and answers a different question (below).
+
 The first few dB are skipped because the very start of the decay is dominated by the direct sound and the strongest early reflections, which are not yet "reverberant."
 
 ## EDT: what the ear actually hears

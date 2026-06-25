@@ -1,8 +1,11 @@
 # WebAssembly Guide
 
 libsonare can be compiled to WebAssembly for audio analysis directly in web
-browsers. The npm package expects decoded mono `Float32Array` samples; file
-decoding is handled by the Web Audio API or another JavaScript decoder.
+browsers. The key rule: its APIs work on decoded audio samples (a mono
+`Float32Array` of numbers), not on a raw `.mp3`/`.wav` file. You get those
+samples either by decoding the file yourself with the Web Audio API or another
+JavaScript decoder, or by handing the encoded bytes to the `Audio.fromMemory*`
+helpers, which decode for you. The table below shows the full path.
 
 Use this page when you are building a browser app. If you are writing a Python script, terminal batch job, or native desktop tool, start with [Getting Started](./getting-started.md) and choose another runtime.
 
@@ -11,7 +14,7 @@ Use this page when you are building a browser app. If you are writing a Python s
 | Step | What happens |
 |------|--------------|
 | 1. Load a file | Use `fetch`, an `<input type="file">`, drag-and-drop, or another browser source |
-| 2. Decode audio | Use `AudioContext.decodeAudioData(...)` or your own decoder |
+| 2. Decode audio | Use `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)`, `AudioContext.decodeAudioData(...)`, or your own decoder |
 | 3. Choose samples | Pass one mono channel, downmix stereo yourself, or call stereo APIs where available |
 | 4. Call libsonare | Pass samples plus `sampleRate` to analysis, editing, mastering, or mixing APIs |
 
@@ -101,7 +104,7 @@ sonare key music.mp3
 sonare analyze music.mp3 --json
 ```
 
-The browser build also exposes the full librosa-parity helper set, grouped by intent:
+The browser build also exposes the full librosa-parity helper set — functions that mirror the popular Python audio library librosa, so existing librosa recipes port over — grouped by intent:
 
 - **Waveform pre-processing** — `preemphasis` / `deemphasis`, `trimSilence` / `splitSilence`
 - **Framing / size alignment** — `frameSignal`, `padCenter`, `fixLength`, `fixFrames`
@@ -212,8 +215,11 @@ sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 
 ## File Input
 
-WASM builds do not bundle WAV/MP3/M4A decoders. Browser support for compressed
-formats depends on `AudioContext.decodeAudioData()` and the user's browser.
+Most WASM APIs take decoded PCM samples. For encoded bytes, use
+`Audio.fromMemory(...)` for WAV/MP3 or
+`Audio.fromMemoryWithBrowserFallback(...)` to try the native decoder first and
+then use `AudioContext.decodeAudioData()` for browser-supported formats such as
+AAC, OGG, and FLAC.
 
 ```typescript
 async function analyzeFile(file: File) {
@@ -429,6 +435,8 @@ The Streaming API enables real-time audio analysis with low latency. Unlike batc
 | **Streaming** | Live audio, visualization | Low (~10ms) | Mel, chroma, onset, progressive BPM/key |
 :::
 
+<SonareDemo id="loudness-meter" />
+
 ### Architecture Overview
 
 ```mermaid
@@ -509,17 +517,7 @@ async function setupStreaming() {
 
 ### AudioWorklet Integration
 
-For production use, run `StreamAnalyzer` in an AudioWorklet to avoid main thread blocking.
-
-For realtime-engine playback, the package also ships an AudioWorklet bridge at
-`@libraz/libsonare/worklet` and a reduced realtime module at
-`@libraz/libsonare/rt`. The bridge's `SonareEngine` facade mirrors the full
-engine to the worklet — track lanes, channel strips, buses, MIDI clips, live
-MIDI, instruments, and capture; see
-[Realtime and Streaming](./realtime-streaming.md) for that engine-focused
-path. The example below shows a custom analyzer worklet.
-
-The main package entry (`@libraz/libsonare`) also ships two main-thread browser-glue helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
+For production use, run `StreamAnalyzer` in an AudioWorklet so analysis does not block the main thread. The example below shows a self-contained analyzer worklet.
 
 ::: warning WASM in AudioWorklet
 Loading WASM in AudioWorklet requires special handling. The WASM module must be loaded and instantiated within the worklet context.
@@ -609,6 +607,12 @@ const source = audioCtx.createMediaStreamSource(stream);
 source.connect(workletNode);
 ```
 
+::: details Related entry points (realtime engine, MIDI)
+The example above builds a custom analyzer worklet. If you instead want to run the full engine in a worklet — track lanes, channel strips, buses, MIDI clips, live MIDI, instruments, and capture — the package ships an AudioWorklet bridge at `@libraz/libsonare/worklet` and a reduced realtime module at `@libraz/libsonare/rt`. The bridge's `SonareEngine` facade mirrors that engine to the worklet; see [Realtime and Streaming](./realtime-streaming.md).
+
+The main package entry (`@libraz/libsonare`) also ships two main-thread browser-glue helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
+:::
+
 ### Bandwidth Optimization
 
 The TypeScript `StreamAnalyzer` wrapper has three read methods. Choose them by how much precision your UI needs and how much data you can afford to move between threads.
@@ -627,7 +631,7 @@ Set `StreamConfig.outputFormat` to document the transfer format you plan to read
 | `1` | `readFramesI16()` |
 | `2` | `readFramesU8()` |
 
-The analyzer still computes internally in float. `readFramesI16()` and `readFramesU8()` quantize in the C++/WASM read path, so you do not need to quantize manually before `postMessage`.
+The analyzer still computes internally in float. `readFramesI16()` and `readFramesU8()` quantize (pack each float into a smaller 16-bit or 8-bit integer) in the C++/WASM read path, so you do not need to quantize manually before `postMessage`.
 
 Both quantized read paths accept an optional `StreamQuantizeConfig` to widen the quantization ranges for unusually loud or quiet streams that would otherwise saturate; see [custom quantization ranges](./realtime-streaming.md#custom-quantization-ranges).
 

@@ -5,7 +5,7 @@ description: The gap between peak level and average level, and how it helps inte
 
 # Crest Factor
 
-Crest factor is the gap between peak level and average level. In mastering, it is a quick way to understand how peaky, dense, or transient-heavy a signal is.
+Crest factor is the gap between peak level and average level. The "average" here is the RMS level — a measure of the signal's sustained energy rather than its momentary spikes — and crest factor is the difference between the two, reported in dB. In mastering, it is a quick way to understand how peaky, dense, or transient-heavy a signal is.
 
 A high crest factor means peaks rise far above the average level. A low crest factor means the signal is dense or heavily controlled. Neither is automatically good or bad.
 
@@ -24,6 +24,8 @@ A solo snare can have a high crest factor and still be healthy. A dense synth pa
 ## Why It Matters
 
 Limiters react to peaks. If a mix has a few peaks much louder than the rest, the limiter may work hard on those moments while the overall master remains quieter than expected.
+
+<SonareDemo id="loudness-meter" />
 
 Compression, clipping, saturation, and transient shaping can reduce crest factor. Used carefully, that can make a master feel more controlled. Used carelessly, it removes punch and makes the track tiring.
 

@@ -113,7 +113,7 @@ const estimate = estimateRoom(roomRecording, sampleRate, {
   nOctaveBands: 6,
 });
 console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
-console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands, estimate.rt60Bands);
 
 const { rir, hasError } = synthesizeRir({
   lengthM: 7,
@@ -157,7 +157,7 @@ print(blind.confidence, blind.is_blind)
 
 estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
 print(estimate.volume, estimate.length, estimate.width, estimate.height)
-print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+print(estimate.drr_db, estimate.confidence, estimate.absorption_bands, estimate.rt60_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
 print(rir.sample_rate, len(rir.rir), rir.has_error)
@@ -194,7 +194,7 @@ sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.
 
 :::
 
-Python `Audio` exposes the same calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. The new geometric room-acoustics helpers are module-level calls in Python and standalone functions in the WASM wrapper.
+Python `Audio` exposes the same calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. The geometric room-acoustics helpers (`synthesizeRir`, `estimateRoom`, `roomMorph`) are module-level calls in Python and standalone functions in the WASM wrapper.
 
 ## Geometric room acoustics
 
@@ -204,7 +204,7 @@ Use this section when you are not only measuring a recording, but also creating 
 
 `estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay.
 
-`roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. It should not be documented or sold as dereverberation.
+`roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. Do not treat or present its output as dereverberation: it adds room character, it does not remove existing reverb.
 
 ### Wall absorption and materials
 
@@ -217,7 +217,9 @@ Both `synthesizeRir(...)` and `roomMorph(...)` accept the shared shoebox geometr
 | `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. |
 | `materialPreset` | number | A named wall-material preset. A non-zero preset wins over both `bandAbsorption` and `absorption`. |
 
-The material presets map to integer codes: `0` none, `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it. Because a non-zero `materialPreset` wins over the explicit band arrays, set `materialPreset: 0` when you want your own `bandAbsorption`/`bandScattering` to take effect.
+Precedence, highest first: a non-zero `materialPreset` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own `bandAbsorption`/`bandScattering`, leave `materialPreset` at `0`.
+
+The material presets map to integer codes: `0` none, `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it.
 
 ```typescript
 // A concrete shoebox: bright, long tail

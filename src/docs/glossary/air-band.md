@@ -18,7 +18,7 @@ This region carries more of the breath, cymbal edge, room tail, and surface text
 
 ## AI-Generated Sources
 
-Some generated music has a dull or sharply limited upper band. Air-band synthesis and high-frequency excitation can help restore perceived openness.
+Some generated music has a dull or sharply limited upper band. Air-band synthesis and high-frequency excitation can help restore perceived openness. An exciter does not boost existing high frequencies; it generates new harmonic content from the signal it is given, which is why it can add brightness even where little high-frequency material remains. See [Tone and Air Controls](./mastering/tone-air.md).
 
 Use restraint: too much air can sound brittle or noisy.
 

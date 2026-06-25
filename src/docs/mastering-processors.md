@@ -96,7 +96,7 @@ A few capabilities sit underneath the maximizer/final and analysis surfaces:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the BS.1770 channel weights.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
-- For UI consumption there are display-decimated metering variants — `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series to at most `maxPoints` points — plus `meteringSpectrumFrame(...)`, a single-frame (non-time-averaged) spectrum reader for spectrum-analyzer snapshots.
+- For UI metering there are display-decimated variants: `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - A **stereo imager** (widens or narrows the stereo field per band) and a **dynamic EQ** (an EQ whose boost/cut reacts to level, like a frequency-targeted compressor) are available in multiband form: `multiband.imager` and `multiband.dynamicEq` expose per-band parameters and accept a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three.
 :::
 
@@ -153,7 +153,7 @@ This reduces the warbly "musical noise" that naive subtraction can leave. These 
 :::
 
 ::: details What is `saturation.ampSim`?
-A guitar-amp-style coloration stage in the form drive → tone stack → cab. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then a fixed, data-free cab voicing (low cut, body bump, presence peak, and a steep roll-off around 4.8 kHz) that can be bypassed for a clean DI tone. The drive, tone, presence, and level controls are automatable through `set_parameter` on every binding.
+A guitar-amp-style coloration stage in the form drive → tone stack → cab. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then a fixed, data-free cab voicing (low cut, body bump, presence peak, and a steep roll-off around 4.8 kHz) that can be bypassed for a clean DI tone. The drive, tone, presence, and level controls are automatable through `set_parameter` on every binding. Construction/param keys: `drive` (0–1, overdrives the 12AX7 triode stage), `bassDb`, `midDb`, `trebleDb` (tone-stack gains in dB at 120 Hz / 550 Hz / 3 kHz), `presenceDb` (presence-peak gain in dB on the cab voicing, ~3.8 kHz), and `levelDb` (output trim in dB) — these six are also the `set_parameter` automation lanes. The `cab` boolean (default `true`) is a discrete topology switch: set it `false` to bypass the cabinet voicing for a clean DI tone; unlike the others it is not exposed to `set_parameter`.
 :::
 
 ## Pair processors and analyses
@@ -173,9 +173,18 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 
 ## Mixer Insert Names
 
-Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. The full insert list is enumerable at runtime with `masteringInsertNames()`, and each insert's accepted construction keys with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`) — band/sub-band processors enumerate their indexed `band{i}.*` keys, and an unknown name returns an empty array. Use `masteringInsertParamInfo(name)` (Python `mastering_insert_param_info(name)`) when you need the realtime-automatable subset: it returns each parameter's JSON key, numeric automation id, and realtime-safety flag. Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
+Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. Four runtime APIs describe what is available and how to configure it:
 
-For picker UIs, `masteringProcessorCatalog()` (Python `mastering_processor_catalog()`) returns machine-readable entries with `kind`, `realtimeInsertable`, `stereoOnly`, and `channelPolicy`, so hosts can filter offline-only, pair, stereo-only, and surround-wrapping behavior without hard-coding processor IDs.
+| API | Returns |
+|-----|---------|
+| `masteringInsertNames()` | The full list of valid insert ids |
+| `masteringInsertParamNames(name)` | The construction keys one insert accepts (band/sub-band processors list their indexed `band{i}.*` keys; an unknown name returns an empty array) |
+| `masteringInsertParamInfo(name)` | The realtime-automatable subset: each parameter's JSON key, numeric automation id, and realtime-safety flag |
+| `masteringProcessorCatalog()` | Machine-readable entries (`kind`, `realtimeInsertable`, `stereoOnly`, `channelPolicy`) for picker/filter UIs, so hosts can filter offline-only, pair, stereo-only, and surround-wrapping behavior without hard-coding processor IDs |
+
+The Python equivalents are `mastering_insert_param_names(name)`, `mastering_insert_param_info(name)`, and `mastering_processor_catalog()`.
+
+Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
 
 | Insert ID | Meaning |
 |-----------|---------|
@@ -199,7 +208,12 @@ There are a few practical details to know:
 | Detail | Meaning |
 |--------|---------|
 | `effects.reverb.plate` and `effects.reverb.dattorro` | Two names for the same Dattorro processor |
-| JSON scene params | Can tune scalar controls such as `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, and `enableShelf`, depending on the algorithm |
+| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
+| `effects.modulation.chorus` params | `rateHz`, `depthMs`, `centerDelayMs`, `dryWet` |
+| `effects.modulation.flanger` params | `rateHz`, `depthMs`, `centerDelayMs`, `feedback`, `dryWet` |
+| `effects.modulation.phaser` params | `rateHz`, `minHz`, `maxHz`, `stages`, `dryWet` |
+| `effects.modulation.ensemble` params | `rateSlowHz`, `rateFastHz`, `depthSlowMs`, `depthFastMs`, `centerDelayMs`, `toneHz`, `dryWet` |
+| `effects.delay.stereo` params | `delayTimeLMs`, `delayTimeRMs`, `feedback`, `pingPong`, `dryWet` |
 | `effects.reverb.convolution` | Needs an impulse response supplied through native insert construction |
 | Convolution insert without an IR | Effectively behaves as a passthrough |
 

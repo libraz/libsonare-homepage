@@ -19,7 +19,7 @@ That is why recognition works on chroma rather than the raw spectrum.
 
 ## Templates over chroma
 
-libsonare compares each frame or beat-synchronous chroma summary against chord templates. The template set covers triads and extended qualities such as seventh, add9, diminished, half-diminished, ninth, and sus forms. The result is a best matching root and quality for each region.
+libsonare compares each frame or beat-synchronous chroma summary against a set of chord templates. These cover plain three-note chords (triads, like C major) as well as richer qualities that add or alter notes — sevenths, ninths, add9, diminished, half-diminished, and sus chords. The result is a best matching root and quality for each region.
 
 By default, richer chords must beat the simpler triad by an extra margin before they are preferred. This keeps noisy chroma from turning plain triads into unstable extensions.
 
@@ -27,7 +27,7 @@ By default, richer chords must beat the simpler triad by an extra margin before 
 
 The chord detector can run on frame-level chroma or beat-synchronized chroma. Beat sync usually gives musically cleaner changes because chord boundaries often align with beats. Smoothing and minimum-duration merging avoid very short flickering labels.
 
-Optional HMM smoothing can run a Viterbi pass over chord candidates, with optional key context. In streaming mode, chord estimates are progressive and should be treated as provisional until enough context accumulates.
+Optional HMM smoothing (a hidden Markov model, which favors sequences of chords that follow one another plausibly rather than judging each region in isolation) can run over the chord candidates, with optional key context, to further suppress jitter. In streaming mode, chord estimates are progressive and should be treated as provisional until enough context accumulates.
 
 ## Common confusions
 

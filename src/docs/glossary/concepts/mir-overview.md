@@ -41,7 +41,7 @@ Because these intermediates are shared, asking for BPM, key, chord, and section 
 | What key is it in? | key detection | chroma |
 | What chord is playing? | chord recognition | chroma |
 | Where does the chorus start? | section analysis | rhythm + harmony + timbre |
-| What note is the melody? | pitch / melody tracking | (V)QT, autocorrelation |
+| What note is the melody? | pitch / melody tracking | pitch tracking (see Separation and pitch below) |
 | What does it *sound* like (timbre)? | MFCC | mel spectrogram |
 | Can I separate drums from the rest? | HPSS | spectrogram structure |
 | What is the raw frequency content over time? | STFT / spectrogram | the waveform |
@@ -93,7 +93,7 @@ These perceptual features answer different questions:
 | Feature | What it emphasizes |
 |---------|--------------------|
 | **Mel spectrogram** | Frequency resolution shaped toward human hearing: fine detail low, coarser detail high. |
-| **MFCCs** | A compact "timbre fingerprint" from the DCT of the log-mel power spectrum. |
+| **MFCCs** | A compact "timbre fingerprint". It is computed by taking the mel spectrogram, compressing its loudness with a logarithm, then summarizing each frame into a handful of numbers that capture overall spectral shape rather than exact pitch. |
 | **CQT** / **VQT** | Musically spaced bins, useful when pitch relationships matter more than equal-Hz spacing. |
 
 You can also run these transforms backwards for previews and debugging — see [Inverse Features](../../inverse-features.md).
@@ -109,7 +109,7 @@ You can also run these transforms backwards for previews and debugging — see [
 
 Separating them first often improves downstream tasks because drums and pitched instruments otherwise confuse each other.
 
-**Pitch estimation** tracks the fundamental frequency — useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
+**Pitch estimation** tracks the fundamental frequency — the lowest, strongest frequency that we hear as the note's pitch — useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
 
 ## Adjacent: room acoustics
 

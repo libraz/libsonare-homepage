@@ -22,6 +22,8 @@ By the end of this page you should be able to:
 | Get only key | `sonare key music.mp3` |
 | Produce script-friendly output | `sonare analyze music.mp3 --json` |
 
+These four commands work from the pip-installed CLI. Later sections mark commands that need the source-built C++ CLI — if a command turns up missing, check that label before assuming you typed it wrong.
+
 ::: info What is a CLI?
 CLI means Command Line Interface: a tool you run from a terminal. It is good for quick checks before integration, batch processing many files, and piping JSON into another script. If you are building a visual UI or live audio path, a WASM, Python, or C++ API is usually the better entry point.
 :::
@@ -692,7 +694,7 @@ Python CLI failures map to exit codes aligned with the C-ABI error codes (the sa
 | 9 | Invalid state |
 | 10 | Other error |
 
-Set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The source-built C++ CLI keeps the plain `0` (success) / `1` (error) convention.
+For the Python CLI, set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The source-built C++ CLI is unaffected by this variable — it always uses the plain `0` (success) / `1` (error) convention.
 
 ## Performance Tips
 

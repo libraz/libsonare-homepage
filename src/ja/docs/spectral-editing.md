@@ -20,6 +20,8 @@ description: "libsonare の領域指定 STFT 編集。JavaScript/WASM と Python
 | 選択した矩形を完全に消す | `mute` |
 | 小さなアーティファクトを近傍フレームから補う | `heal` |
 
+`gain` と `attenuate` は内部の計算がまったく同じで、コードを意図どおりに読ませるために名前が 2 つあります。持ち上げたいときは `gain` を、下げたいときは（負の `gainDb` を渡して）`attenuate` を使ってください。
+
 ピッチ、時間、ノート、声質の編集は [編集 DSP](./editing-dsp.md) を参照してください。曲全体のトーン、ダイナミクス、リペア、配信向け処理は [マスタリングプロセッサ](./mastering-processors.md) を使います。
 
 ## 使い方

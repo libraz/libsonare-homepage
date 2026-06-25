@@ -47,6 +47,15 @@ function onParams(next: Record<string, ParamValue>): void {
 const waveform = computed<GeneratedSignal>(() => (values.waveform as GeneratedSignal) ?? 'saw');
 const cutoff = computed<number>(() => Number(values.cutoff ?? 2200));
 const attack = computed<number>(() => Number(values.attack ?? 8));
+// Optional patch controls. Each falls back to the value the original `synth-note`
+// patch hardcoded, so a demo that omits the param renders exactly as before. The
+// engine reads `0` / `'default'` as "keep the base value", so the range minimums
+// below stay strictly positive and the filter selector passes real model names.
+const decay = computed<number>(() => Number(values.decay ?? 140));
+const sustain = computed<number>(() => Number(values.sustain ?? 0.75));
+const release = computed<number>(() => Number(values.release ?? 280));
+const resonance = computed<number>(() => Number(values.resonance ?? 0.9));
+const filterModel = computed<string>(() => String(values.filterModel ?? 'svf'));
 
 // ---- presentation state ----------------------------------------------------
 const tone = computed(() => {
@@ -130,12 +139,13 @@ function renderNote(wasm: WasmModule): Float32Array {
     const patch = {
       engineMode: 'subtractive',
       waveform: waveform.value,
+      filterModel: filterModel.value,
       cutoffHz: cutoff.value,
-      resonanceQ: 0.9,
+      resonanceQ: resonance.value,
       ampAttackMs: attack.value,
-      ampDecayMs: 140,
-      ampSustain: 0.75,
-      ampReleaseMs: 280,
+      ampDecayMs: decay.value,
+      ampSustain: sustain.value,
+      ampReleaseMs: release.value,
       gain: 0.5,
     };
     return project.bounceWithSynthInstrument(patch, {
@@ -333,7 +343,16 @@ function scheduleCompute(): void {
 }
 
 watch(
-  () => [waveform.value, cutoff.value, attack.value],
+  () => [
+    waveform.value,
+    cutoff.value,
+    attack.value,
+    decay.value,
+    sustain.value,
+    release.value,
+    resonance.value,
+    filterModel.value,
+  ],
   () => {
     if (props.active) scheduleCompute();
   },

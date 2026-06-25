@@ -47,9 +47,11 @@ Start with the page that matches where you will run libsonare:
 | Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
 | Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |
 
-The browser package is sample-based: it does not decode files by itself. The
-Python package and CLI can load WAV/MP3 by default, and FFmpeg-enabled builds can
-load more formats directly.
+The browser package is primarily sample-based: most APIs take decoded
+`Float32Array` PCM. Its `Audio.fromMemory(...)` helper can decode WAV/MP3 bytes,
+and `Audio.fromMemoryWithBrowserFallback(...)` can use browser codecs for
+supported formats. The Python package and CLI can load WAV/MP3 by default, and
+FFmpeg-enabled builds can load more formats directly.
 
 ::: info Package names
 - Browser / WASM: install `@libraz/libsonare` from npm.
@@ -160,7 +162,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **BPM Detection** - Tempo estimation using tempogram and autocorrelation
 - **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles
 - **Beat Tracking** - Dynamic programming-based beat extraction
-- **Chord Recognition** - Template matching with 108 chord types
+- **Chord Recognition** - Template matching across 192 templates (16 chord qualities × 12 roots)
 - **Section Detection** - Structural segmentation such as intro, verse, and chorus
 - **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
 - **Audio Characteristics** - Timbre, dynamics, and rhythm analysis

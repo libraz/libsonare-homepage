@@ -88,6 +88,8 @@ The filter model is the heart of the "character". Four classic models are availa
 
 All four stay stable and zipper-free under per-sample cutoff/resonance modulation, and self-oscillation is deterministic.
 
+<SonareDemo id="synth-filter" />
+
 ### `fm` — frequency modulation
 
 A phase-modulation operator stack (one oscillator's pitch modulates another → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clav/harpsichord, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`, `bell`, `brass`.
@@ -173,9 +175,9 @@ A preset name may carry a `va:` prefix (for example `va:saw-lead`, `va:e-piano`)
 Think of a `SynthPatch` as "a preset, plus your tweaks". It starts from a **base** — the named `preset` (omit it for the default subtractive init patch) — and every field you set overrides that base. Leave a field out and the base value stays.
 
 ::: warning Zero means "keep the base", not "set to zero"
-Each numeric field follows one rule: **0 (or omitted) keeps the base value; any non-zero value overrides it** (clamped to its audible range). Enum fields use `'default'` for "keep".
+Watch out: writing `ampSustain: 0` does **not** silence the sustain — it leaves the preset's sustain untouched. Across this object, **0 (or an omitted field) means "keep the base value"; any non-zero value overrides it** (clamped to its audible range). Enum fields use `'default'` for "keep".
 
-The catch: you cannot force a field to literally zero. Writing `ampSustain: 0` does **not** silence the sustain — it just keeps the preset's sustain. (This is because the frozen C ABI has no per-field "is this set?" flag, so zero has to mean "untouched".)
+You therefore cannot force a numeric field to literally zero. (This is because the frozen C ABI has no per-field "is this set?" flag, so zero has to mean "untouched".) If you genuinely need a value at or near the bottom of a field's range, use the smallest non-zero value instead — for example `ampSustain: 0.001`, which overrides the base and is effectively silent.
 
 One more rule: a non-empty `modRoutings` array **replaces** the base mod matrix entirely, rather than adding to it.
 :::
@@ -198,8 +200,13 @@ The patch exposes the wrapper sections every engine shares:
 | Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube`), `bodyMix` (0-1) |
 | Stereo & output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
 | Mod matrix | `modRoutings` (up to 8) |
+| Binding (JS only) | `destinationId` (default `0`) |
 
 (*Polyphony* is how many notes can sound at once; a *voice* is one sounding note, and *voice stealing* cuts the oldest note when you run out.)
+
+::: info LFO 2 needs a routing
+The two LFOs behave differently. LFO 1 (`lfoRateHz` + `lfoToPitchCents`) is hardwired to pitch and produces vibrato on its own. LFO 2 is matrix-only: setting `lfo2RateHz` does nothing until a `modRoutings` entry uses `source: 'lfo2'` to send it to a destination.
+:::
 
 Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets envelopes, LFOs, velocity, key tracking, the mod wheel, and a seeded per-voice random source modulate pitch, filter cutoff, amplitude, and pan. `depth` is in destination units at full source deflection.
 
@@ -237,7 +244,7 @@ The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYN
 
 ## Render offline: `bounceWithSynthInstrument`
 
-To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either (one per destination). The render is deterministic for a fixed project, options, and patch.
+To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either to bind several destinations at once. When you pass an array, each `SynthPatch` may set `destinationId` (default `0`) to choose which MIDI destination it binds to — for example `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` feeds two destinations from one render call. `destinationId` is a JS binding convenience, not part of the NativeSynth patch itself (Python takes the destination as a separate argument instead). An explicitly empty array (or `undefined` / `null`) produces zero bindings. The render is deterministic for a fixed project, options, and patch.
 
 ::: code-group
 

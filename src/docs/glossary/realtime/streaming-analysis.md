@@ -9,9 +9,11 @@ Offline analysis sees the whole file at once. **Streaming analysis** sees the au
 
 libsonare's `StreamAnalyzer` runs the same MIR pipeline incrementally. It emits per-frame features and progressive musical estimates for visualizers and live displays.
 
+Use it when audio is arriving live — from a microphone, an AudioWorklet, or a playback graph — and you want meters, a spectrogram, or running BPM/key estimates to update in real time. For a fixed file you already have in full, batch (offline) analysis is simpler and more accurate.
+
 This page explains the streaming model. For the API recipe, see [Realtime and Streaming](../../realtime-streaming.md).
 
-## Block, frame, hop — not the same thing
+## Block, frame, hop, nFft — four things people confuse
 
 Four words are easy to confuse, and mixing them up causes most streaming bugs:
 

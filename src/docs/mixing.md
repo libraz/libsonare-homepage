@@ -76,7 +76,7 @@ Reading the chain top to bottom:
 4. **EQ** — a built-in parametric EQ. It sits **pre-fader by default** (so the fader rides the EQ'd signal), but can be moved post-fader.
 5. **Pre-fader inserts** — your named processors (compressor, de-esser, …) running *before* the fader.
 6. **Pre-fader tap** — the point a *pre-fader* send and the pre-fader meter read from. Because it is before the fader, moving the fader does **not** change a pre-fader send level.
-7. **Fader (+ VCA offset)** — the main level control. A [VCA group](#vca-groups) offset is summed in here, so one group fader can trim many strips at once.
+7. **Fader (+ VCA offset)** — the main level control. A [VCA group](#vca-groups) (one fader that trims several strips at once) adds its offset here, so a single group fader can ride many strips without re-routing their audio.
 8. **Pan** — places the signal in the stereo field using the strip's [pan mode and pan law](#pan-modes-and-pan-laws).
 9. **Post-fader inserts** (and EQ, if you moved it post-fader) — processors that should react to the post-fader level.
 10. **Stereo width** — narrows or widens the side signal (see [mono compatibility](./glossary/concepts/mono-compatibility.md)).
@@ -297,11 +297,18 @@ The persistent `Mixer` also drives the other in-strip stages live, each a **para
 - `setWidth(strip, width)` — the **Stereo width** stage (`width` `mixStereo` option): `0` = mono, `1` = original, `>1` = widened.
 - `setPolarityInvert(strip, invertLeft, invertRight)` — the **Polarity invert** stage; flip the sign of the strip's left and/or right channel.
 
-Pan law options are `const3dB`, `const4.5dB`, `const6dB`, and `linear0dB` in the JavaScript APIs.
+Pan law options are `const3dB`, `const4.5dB`, `const6dB`, and `linear0dB` in the JavaScript APIs. Python accepts the same values as enums/ints, or normalized strings such as `const-3db` and `linear-0db`.
 
-Python accepts the same values as enums/ints, or normalized strings such as `const-3db` and `linear-0db`.
+Each law dips the center by a fixed amount, so a sound panned to the center is not louder than one panned hard left or right:
 
-Constant-power laws, usually 3 dB or 4.5 dB, keep *perceived* loudness steady as you pan. `linear0dB` keeps the summed level steady instead.
+| Law | Center dip | Use for |
+|-----|-----------|---------|
+| `const3dB` | −3 dB | most material (default) |
+| `const4.5dB` | −4.5 dB | a compromise often used on consoles |
+| `const6dB` | −6 dB | already-mono sources you want to feel centered, not boosted |
+| `linear0dB` | 0 dB | keeps the summed (mono) level steady instead of perceived loudness |
+
+The constant-power laws (3 / 4.5 / 6 dB) keep *perceived* loudness even as you pan; `linear0dB` keeps the *summed* level even instead.
 
 ### Surround and multichannel
 
@@ -359,12 +366,22 @@ The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip,
 
 The mixer core is built for predictable audio callbacks: denormal guards, lock-free parameter changes, pre-allocated state, and graph-level [plugin-delay compensation](#latency-and-plugin-delay-compensation-pdc).
 
-In the WASM wrapper, render loops where allocations are forbidden can avoid `processStereo` because it allocates a result. Use one of:
+In the WASM wrapper, `processStereo` allocates a fresh result array on every call. That is fine offline but forbidden inside a realtime audio callback. For those tight loops, use one of these allocation-free paths instead:
 
 - **`processStereoInto(inL, inR, outL, outR)`** — writes into caller-owned arrays.
 - **`createRealtimeBuffer()`** — returns reusable WASM-heap input/output views; fill the inputs, call `process()`, read `outLeft`/`outRight`, repeat. The views are owned by the mixer and become invalid after `delete()`.
 
-When the host stops feeding strip inputs, lookahead, reverb, and delay processors still hold audio in flight. Call `mixer.tailSamples()` to read the maximum processor-tail length (samples) in the compiled graph, then call `mixer.drainTailStereo(numSamples)` to render a zero-input block that flushes that tail into the master. `drainTailStereo` renders one block — it does not loop — and `numSamples` is bounded by the block size the mixer was built with, so drain in block-sized chunks until you have pulled `tailSamples()` frames.
+When the host stops feeding strip inputs, lookahead, reverb, and delay processors still hold audio in flight. Call `mixer.tailSamples()` to read the maximum processor-tail length (samples) in the compiled graph, then call `mixer.drainTailStereo(numSamples)` to render a zero-input block that flushes that tail into the master. `drainTailStereo` renders one block — it does not loop — and `numSamples` is bounded by the block size the mixer was built with, so drain in block-sized chunks until you have pulled `tailSamples()` frames:
+
+```typescript
+let remaining = mixer.tailSamples();
+while (remaining > 0) {
+  const n = Math.min(remaining, blockSize);
+  const tail = mixer.drainTailStereo(n);   // one zero-input block
+  exportBlock(tail.left, tail.right);
+  remaining -= n;
+}
+```
 
 ::: details What are denormal guards?
 Denormals are extremely small floating-point numbers (close to zero) that many CPUs process far more slowly than ordinary values. In an audio callback this bites when a reverb or delay tail fades out: as the samples shrink toward zero they slip into the denormal range and processing time can spike, causing dropouts. Denormal guards flush these tiny values to zero so each block takes a predictable amount of time.

@@ -20,6 +20,8 @@ It is an offline transform. The output keeps the same sample rate and length as 
 | Remove a selected rectangle completely | `mute` |
 | Fill a small artifact from nearby frames | `heal` |
 
+`gain` and `attenuate` run the identical math; they exist as two names so your code reads by intent. Use `gain` when you mean to boost and `attenuate` (with a negative `gainDb`) when you mean to cut.
+
 Use [Editing DSP](./editing-dsp.md) for pitch, time, note, and voice edits. Use [Mastering Processors](./mastering-processors.md) for whole-track tone, dynamics, repair, and delivery processing.
 
 ## Usage

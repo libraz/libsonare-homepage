@@ -34,7 +34,9 @@ Read this page in three passes:
 
 A single `analyze(...)` call returns the complete result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — matching the other bindings. Reach for the focused functions below when you only need one field or want per-call options.
 
-Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code. The codes are the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), and the CLI maps them onto its [exit codes](./cli.md#exit-codes).
+::: info Default sample rate varies by family
+Music-analysis and metering helpers default to `sample_rate=22050`; room-acoustic helpers (`analyze_impulse_response`, `detect_acoustic`, `estimate_room`) default to `48000`. When you load with `Audio.from_file(...)`, always pass `audio.sample_rate` so the per-family default never silently applies to audio recorded at a different rate.
+:::
 
 ## Pick The Smallest API That Solves The Job
 
@@ -113,6 +115,10 @@ print(f"Time Signature: {result.time_signature}")
 print(f"Beats: {len(result.beat_times)} detected")
 ```
 
+### Error handling
+
+Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code. The codes are the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), and the CLI maps them onto its [exit codes](./cli.md#exit-codes).
+
 ## Audio Effects
 
 ```python
@@ -165,6 +171,8 @@ pitch_yin = audio.pitch_yin(fmin=65.0, fmax=2093.0)
 pitch_pyin = audio.pitch_pyin(fmin=65.0, fmax=2093.0)
 print(f"Median F0: {pitch_pyin.median_f0:.1f} Hz")
 ```
+
+<SonareDemo id="mel-spectrogram" />
 
 ::: details Pitch and feature terms: YIN/pYIN, zero-crossing rate, MIDI note
 - **YIN / pYIN** — algorithms that estimate the *fundamental frequency* (the perceived pitch) of monophonic audio. YIN uses autocorrelation; pYIN adds probabilistic smoothing so the pitch line stays steadier over time. Both track one note at a time, not chords.
@@ -739,7 +747,7 @@ Additional Python result classes used by focused APIs:
 | Metering | `ClippingRegion`, `StreamFramesU8`, `StreamFramesI16`, `WaveformPeaksReport` |
 | Mastering | `MasteringResult`, `MasteringStereoResult` |
 | Mixing | `MixerStereoResult` |
-| Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing.md#assist-sidecars)), `ProjectDiagnostic`, `NotePairValidation` |
+| Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing.md#assist-sidecars)), `NotePairValidation` |
 | Realtime engine telemetry | `MeterTelemetryRecord` |
 
 ## Streaming Analysis API

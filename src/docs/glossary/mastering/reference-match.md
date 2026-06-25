@@ -53,7 +53,7 @@ When you choose reference matching, the worker compares source and reference cha
 
 :::: details Implementation notes
 
-The worker trims the source and reference to a shared duration, then runs `match.applyMatchEq` for left and right channels. The current demo uses a maximum match gain of 6 dB and 5 smoothing bins. Those limits matter because a raw spectral difference curve can contain narrow notches and spikes that are not musically useful.
+The worker trims the source and reference to a shared duration, then runs `match.applyMatchEq` for left and right channels. The current demo uses a maximum match gain of 6 dB and smooths the difference curve across 5 frequency bins (a bin is one slice of the spectrum the analysis measures). Those limits matter because a raw spectral difference curve can contain narrow notches and spikes that are not musically useful.
 
 The operation compares one source file with one reference file, so sample rate matters.
 

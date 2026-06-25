@@ -29,9 +29,11 @@ For a browser UI, start with npm / WASM. For notebooks or local scripts, start w
 
 Requires Node.js 18.0.0 or later.
 
-`@libraz/libsonare` is the WebAssembly package. It does not decode files by
-itself; pass decoded mono `Float32Array` samples from the Web Audio API or
-another JavaScript decoder.
+`@libraz/libsonare` is the WebAssembly package. Most APIs are sample-based:
+pass decoded mono `Float32Array` samples. For loading convenience,
+`Audio.fromMemory(...)` can decode WAV/MP3 bytes in memory, and
+`Audio.fromMemoryWithBrowserFallback(...)` can fall back to the browser codec
+stack for formats such as AAC, OGG, and FLAC.
 
 This npm package is for browser/WebAssembly use. It does not install the
 `sonare` CLI. For the command-line tool, install the Python package from PyPI

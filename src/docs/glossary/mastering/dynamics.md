@@ -48,7 +48,7 @@ over_db = input_db - threshold_db
 gain_reduction_db = over_db * (1 - 1 / ratio)
 ```
 
-Soft knee replaces the abrupt corner around threshold with a quadratic transition. Attack and release then smooth the target reduction into a continuous gain envelope. The detector can use peak, RMS, or log-RMS style measurement; that detector smoothing is separate from attack/release envelope timing.
+Soft knee replaces the abrupt corner around threshold with a quadratic transition. Attack and release then smooth the target reduction into a continuous gain envelope. The detector can measure the incoming level in different ways: peak (the instantaneous maximum, reacts fastest), RMS (a short running average, closer to perceived loudness), or log-RMS (that same average computed in decibels). The choice changes how twitchy the compressor is. That detector smoothing is separate from attack/release envelope timing.
 
 When auto-makeup is enabled, the compressor restores the average level that compression removed before passing the signal downstream. The restoration tracks average loudness, not peak level — final loudness landing is still the responsibility of the loudness optimizer that sits after the compressor in the chain.
 

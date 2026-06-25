@@ -13,7 +13,7 @@ Good gain staging is not about making everything quiet. It is about leaving enou
 
 ## Why It Matters
 
-If the source is too hot, every processor may behave as if the track needs heavy control. Compression can become too dense, saturation can get harsh, and the limiter can work harder than needed.
+If the source is too hot (its level is too high), every processor may behave as if the track needs heavy control. Compression can become too dense, saturation can get harsh, and the limiter can work harder than needed.
 
 If the source is too quiet, processors may barely react. You may then overcompensate later with loudness or limiting, which hides the real issue.
 

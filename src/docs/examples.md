@@ -75,8 +75,9 @@ console.log(result.bpm, result.key.name);
 ## Feature Recipes
 
 Each recipe shows the same task across runtimes — pick the tab for where you run
-libsonare. The browser package decodes nothing on its own, so you pass decoded
-mono `Float32Array` samples; the Python package and `sonare` CLI load WAV/MP3
+libsonare. Browser examples pass decoded mono `Float32Array` samples; use Web
+Audio, another JavaScript decoder, or `Audio.fromMemory*` before that step when
+your input is encoded bytes. The Python package and `sonare` CLI load WAV/MP3
 files directly. C++ programs are collected separately in the C++ section below.
 
 ### Basic BPM and Key Detection
@@ -125,9 +126,17 @@ sonare key song.mp3
 
 ### Full Music Analysis
 
-In the browser, `analyze()` returns chords, sections, and form in one call. The
-Python `analyze()` returns the core summary (BPM, key, time signature, beats);
-chords and sections are separate calls (`detect_chords()` and `analyze_sections()`).
+In both the browser and Python, `analyze()` returns chords, sections, and form
+(plus timbre, dynamics, rhythm, and melody) in one call. `detect_chords()` and
+`analyze_sections()` stay available as standalone calls for when you want only
+that one element without running the full analysis.
+
+::: tip Python: function vs. method
+The module-level `analyze(samples, sample_rate)` returns the complete result.
+The `Audio.analyze()` method returns only the core summary (BPM, key, time
+signature, beats), so pass the samples to the function when you need chords,
+sections, and form together.
+:::
 
 ::: code-group
 
@@ -157,12 +166,10 @@ console.log(`\nForm: ${result.form}`);
 ```
 
 ```python [Python]
-from libsonare import Audio, analyze_sections
+from libsonare import Audio, analyze
 
 with Audio.from_file("song.mp3") as audio:
-    result = audio.analyze()
-    chords = audio.detect_chords().chords
-    sections = analyze_sections(audio.data, audio.sample_rate).sections
+    result = analyze(audio.data, audio.sample_rate)
 
 print("=== Music Analysis ===")
 print(f"BPM: {result.bpm} (confidence: {result.bpm_confidence * 100:.0f}%)")
@@ -170,12 +177,18 @@ print(f"Key: {result.key.name}")
 print(f"Time Signature: {result.time_signature}")
 
 print("\nChords:")
-for chord in chords:
+for chord in result.chords:
     print(f"  {chord.name} [{chord.start:.2f}s - {chord.end:.2f}s]")
 
 print("\nSections:")
-for section in sections:
+for section in result.sections:
     print(f"  {section.name} [{section.start:.2f}s - {section.end:.2f}s]")
+
+print(f"\nForm: {result.form}")
+
+# Want only one element? Call it standalone instead of the full analysis:
+#   chords = audio.detect_chords().chords
+#   sections = analyze_sections(audio.data, audio.sample_rate).sections
 ```
 
 ```bash [CLI]
@@ -277,7 +290,8 @@ const result = hpss(samples, sampleRate);
 // result.harmonic - melodic content
 // result.percussive - drums/percussion
 
-// Use harmonic for key detection (cleaner)
+// Drums and transients smear the chroma estimate; running key
+// detection on just the harmonic part gives a cleaner result.
 const key = detectKey(result.harmonic, result.sampleRate);
 ```
 
@@ -289,7 +303,8 @@ with Audio.from_file("song.mp3") as audio:
     # result.harmonic - melodic content
     # result.percussive - drums/percussion
 
-# Use the harmonic component for cleaner key detection
+# Drums and transients smear the chroma estimate, so running key
+# detection on just the harmonic component gives a cleaner result.
 key = detect_key(result.harmonic, result.sample_rate)
 ```
 
@@ -429,6 +444,8 @@ sonare pitch song.mp3 --algorithm pyin --json
 ::: details What do "voiced" frames mean?
 Pitch trackers label each frame as **voiced** or **unvoiced**. *Voiced* means a clear periodic pitch was found (a sung vowel, a held note); *unvoiced* means there is no definite pitch (silence, breaths, consonants like "s"/"t", or noisy/percussive sound). `voicedFlag` / `voiced_flag` is that per-frame boolean, so counting the `true` values tells you how much of the clip actually carried a trackable melody.
 :::
+
+<SonareDemo id="melody-contour" />
 
 ### Streaming Analysis
 

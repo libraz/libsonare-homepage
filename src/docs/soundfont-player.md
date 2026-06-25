@@ -13,13 +13,15 @@ A **SoundFont (SF2)** is a single file that bundles those recorded instrument sa
 **No SoundFont ships with the library** — an SF2 is licensed instrument data, not code, and nothing is baked into the binaries. You fetch a `.sf2` and hand its bytes to the player. If you have no SF2 (or a program your SF2 does not cover), playback does **not** go silent: it falls through to the built-in [NativeSynth](./native-synth.md) GM bank, the data-free floor.
 :::
 
-::: info Three words to know first
+::: info Terms to know first
 A **preset** is one selectable sound (a "program") in the SoundFont. A **program change** picks a preset on a MIDI channel. A **bank** groups 128 programs; GS uses extra banks for tonal variations and reserves **bank 128** for drum kits. Channel 10 is the drum channel by GS convention.
+
+**Multitimbral** means the player can sound several different instruments at once, one per MIDI channel (up to 16). **GS** is Roland's General MIDI extension set — extra banks and per-part controls layered on top of plain General MIDI; a "GS-compatible" player honors those extras so GS-authored songs play as intended.
 :::
 
 ## How each note picks its sound
 
-For every note, the player asks one question: *does the loaded SoundFont cover this sound?* If yes, the note plays from the SF2 sample. If not — or if you loaded no SoundFont at all — the note falls through to the built-in [NativeSynth](./native-synth.md) General MIDI bank. Either way, the note makes sound: **MIDI never renders silent here.**
+For every note, the player asks one question: *does the loaded SoundFont contain a preset for the program this note selects (its channel, bank, and program)?* We call that the SoundFont **covering** the sound. If it does, the note plays from the SF2 sample. If not — or if you loaded no SoundFont at all — the note falls through to the built-in [NativeSynth](./native-synth.md) General MIDI bank. Either way, the note makes sound: **MIDI never renders silent here.**
 
 ```mermaid
 flowchart TD
@@ -251,7 +253,7 @@ On top of GM, the player implements the Roland-GS extensions a GS-authored arran
 - **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change and resolves the **GM2 Bank Select LSB** to the variation bank, so GM2-authored material maps to the right tone.
 
 ::: tip Author GS banks with the MIDI helpers
-`Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` expands a bank-select-plus-program-change into the MIDI events `setMidiEvents` accepts — the right way to select a GS variation or a drum kit. Static helpers like `Project.gmDrumName(note)`, `Project.gm2InstrumentName(bankLsb, program)`, and `Project.midiCcName(controller)` name the slots so your authoring code reads clearly.
+`Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` expands a bank-select-plus-program-change into the MIDI events `setMidiEvents` accepts — the right way to select a GS variation or a drum kit. Static helpers like `Project.gmInstrumentName(program)`, `Project.gmDrumName(note)`, `Project.gm2InstrumentName(bankLsb, program)`, and `Project.midiCcName(controller)` name the slots so your authoring code reads clearly. The reverse direction is symmetric: `Project.gmProgramForName(name)`, `Project.gmDrumNoteForName(name)`, and `Project.midiCcIndexForName(name)` return the number for a canonical name (`-1` when unknown), while `Project.gmFamilyName(family)` and `Project.gmFamilyFirstProgram(family)` enumerate the 16 GM instrument families. `Project.gm2DrumSetName(bankLsb)` and `Project.gm2DrumName(bankLsb, note)` name the GM2 drum-set variations.
 :::
 
 ## Live engine playback

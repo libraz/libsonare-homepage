@@ -46,6 +46,8 @@ A **filter** removes or boosts part of the frequency content. The most common is
 
 Sweeping the cutoff over time is the single most recognizable synth gesture — see [Envelopes and Modulation](./envelopes-modulation.md) for how that movement is driven.
 
+<SonareDemo id="synth-filter" />
+
 ### 3. Amplifier — the loudness over time
 
 The **amplifier** controls the volume of the note from the instant a key is pressed until it fully fades. A raw oscillator just drones forever; the amplifier (driven by an envelope) gives the note a beginning, a body, and an end — a plucked attack, a slow swell, a long tail.

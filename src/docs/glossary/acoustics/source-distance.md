@@ -26,7 +26,7 @@ The **critical distance** is the distance from the source at which the direct so
 
 Closer than the critical distance, the direct sound wins and the source reads as clear and localized. Farther, the reverberant field wins and the sound becomes diffuse and room-dominated. Critical distance depends on the room: a dead room (high absorption, short RT60) pushes it far out, so you can stand well back and still hear a direct sound; a live room pulls it close, so even a few steps back drowns the source in reverberation.
 
-Roughly, critical distance grows with the square root of the room's absorption — which is why the same talker sounds intelligible across a treated studio but muddy across a cathedral at the same distance.
+Roughly, the more absorptive the room, the weaker its reverberant field, so the direct sound stays dominant farther out — critical distance grows with the square root of the room's *total* absorption (the A in Sabine's equation: surface area weighted by how absorptive each surface is). That is why the same talker sounds intelligible across a treated studio but muddy across a cathedral at the same distance.
 
 ## Source distance
 

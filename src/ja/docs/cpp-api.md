@@ -150,12 +150,14 @@ auto reconstructed = spec.to_audio();
 `Spectrogram` オブジェクトは**スレッドセーフではありません**。キャッシュされた `magnitude()` および `power()` の結果は遅延初期化を使用します。複数のスレッドから同じ `Spectrogram` にアクセスする必要がある場合は、別々のコピーを作成するか、外部で同期を行ってください。
 :::
 
+<SonareDemo id="stft-basics" />
+
 ## Quick API
 
 一般的な解析タスクのためのシンプルな関数群です。1 回限りの BPM・キー・ビート・ダウンビート・オンセット検出やルーム音響解析に向きます。
 
 ::: info Quick API と MusicAnalyzer の使い分け
-- **Quick API（`sonare::quick::...`）** — 1 つの結果だけが欲しいとき。内部で必要なステージだけを走らせます。
+- **Quick API**（`sonare::quick::...`） — 1 つの結果だけが欲しいとき。内部で必要なステージだけを走らせます。
 - **MusicAnalyzer** — 同じ音源から BPM・キー・コード・セクションなど複数の結果が必要なとき。中間特徴量（STFT・クロマ・オンセット包絡線）を共有して二重計算を避けます。
 :::
 
@@ -396,8 +398,8 @@ analyzer.read_frames_soa(max_frames, buffer);
 ```
 
 ::: details レイアウト用語: Structure-of-Arrays・row-major・量子化
-- **Structure-of-Arrays（SoA）** — フレームごとの構造体の配列ではなく、各フィールドを独立した連続配列（`timestamps`、`mel`、`chroma`…）に持ちます。キャッシュ効率・SIMD 効率がよく、別スレッドへの受け渡しも安価です。
-- **row-major（行優先）** — `mel`（`[n_frames * n_mels]`）のような 2 次元データを、1 行ずつ連続して格納します。フレーム 0 のメル全ビン、次にフレーム 1…という順です。要素 `(f, m)` は `f * n_mels + m` で参照します。
+- **Structure-of-Arrays**（SoA） — フレームごとの構造体の配列ではなく、各フィールドを独立した連続配列（`timestamps`、`mel`、`chroma`…）に持ちます。キャッシュ効率・SIMD 効率がよく、別スレッドへの受け渡しも安価です。
+- **row-major**（行優先） — `mel`（`[n_frames * n_mels]`）のような 2 次元データを、1 行ずつ連続して格納します。フレーム 0 のメル全ビン、次にフレーム 1…という順です。要素 `(f, m)` は `f * n_mels + m` で参照します。
 - **量子化**（後述） — 各 32bit float を固定の min/max 範囲で 8bit / 16bit 整数に詰め、精度と引き換えにバッファを約 1/4・1/2 に縮めます。UI スレッドへフレームを渡すのに向いています。
 :::
 
@@ -673,8 +675,9 @@ Audio icqt(const CqtResult& cqt_result, int length = 0);
 Audio ivqt(const VqtResult& vqt_result, int length = 0);
 ```
 
-**移行方法:** プレビュー音声の再構成には逆変換ヘルパー側の Griffin-Lim 経路を使い、
-品質が重要な場合は独自の STFT ドメイン処理で位相情報を保持してください。
+**移行方法:** `griffinlim_cqt` と `griffinlim_vqt` は、`cqt()` / `vqt()` と同じ
+`<feature/cqt.h>` / `<feature/vqt.h>` ヘッダーで宣言されているため、追加のインクルードは不要です。
+プレビュー音声の再構成にはこれらの Griffin-Lim 経路を使い、品質が重要な場合は独自の STFT ドメイン処理で位相情報を保持してください。
 
 ```cpp
 const auto& cqt_magnitude = cqt_result.magnitude();
@@ -991,19 +994,33 @@ SonareError sonare_detect_key(const float* samples, size_t length, int sample_ra
 SonareError sonare_analyze(const float* samples, size_t length, int sample_rate,
                            SonareAnalysisResult* out);
 
+// フル解析を camelCase の JSON オブジェクトに直列化（コード、セクション、音色、
+// ダイナミクス、リズム、メロディ、form、拍ごとの強度）。*out_json はヒープ確保され、
+// sonare_free_string で解放します。
+SonareError sonare_analyze_json(const float* samples, size_t length, int sample_rate,
+                                char** out_json);
+SonareError sonare_analyze_json_with_progress(const float* samples, size_t length, int sample_rate,
+                                              SonareAnalyzeProgressCallback callback,
+                                              void* user_data, char** out_json);
+
 void sonare_free_floats(float* ptr);
 void sonare_free_ints(int* ptr);
+void sonare_free_string(char* ptr);             // *_json など char* を返す C ABI 呼び出しのヒープ文字列
+void sonare_free_key_candidates(SonareKeyCandidate* ptr);  // sonare_detect_key_candidates* が返す配列
 void sonare_free_result(SonareAnalysisResult* result);
 const char* sonare_error_message(SonareError error);
 const char* sonare_last_error_message(void);    // 直近の失敗のスレッドローカルな詳細メッセージ
 const char* sonare_last_warning_message(void);  // スレッドローカルな非致命的警告（例: どのプロセッサも読まなかったシーンインサートのパラメータ）
 const char* sonare_version(void);
+uint32_t    sonare_abi_version(void);            // 集約 ABI バージョン。コンパイル時の SONARE_ABI_VERSION と比較し、POD 受け渡し前に構造体レイアウト／契約の不一致を検出します
+int         sonare_has_ffmpeg_support(void);     // FFmpeg 専用フォーマット（M4A/AAC/FLAC/OGG）をデコードできるビルドなら 1、そうでなければ 0
 ```
 
 `SonareAnalysisResult` は C ABI 用のコンパクトな結果で、BPM、BPM 確信度、キー、
-拍子、ビート時刻を保持します。C++ の `AnalysisResult` にあるコード、セクション、
-音色、ダイナミクス、リズム、メロディ、form などは、専用の C ABI 関数または
-高レベル C++ API から取得します。
+拍子、ビート時刻を保持します。フル解析（コード、セクション、音色、ダイナミクス、
+リズム、メロディ、form、拍ごとの強度）が必要なときは `sonare_analyze_json`
+（段階ごとの進捗が要るなら `sonare_analyze_json_with_progress`）を呼び出します。
+camelCase の JSON 文字列を返し、`sonare_free_string` で解放します。
 
 エフェクト、特徴量、幾何ベースのルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。幾何ベースのルーム音響は `sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。完全な一覧は `src/sonare_c.h` を参照してください。
 
@@ -1011,12 +1028,13 @@ const char* sonare_version(void);
 
 | ヘッダー | 公開範囲 |
 |----------|---------|
-| `sonare_c_types.h` | オーディオハンドル、コンパクト解析、キー候補、ダウンビート、エラー／バージョン／FFmpeg ヘルパー |
+| `sonare_c_types.h` | オーディオハンドル、コンパクト解析、キー候補、ダウンビート、エンジンのレーン／バス／センド構造体（`SonareEngineTrackLane`、`SonareEngineBus`、`SonareEngineTrackSend`）と `SonareChannelLayout` 列挙、エラー／バージョン／FFmpeg ヘルパー |
+| `sonare_c_project.h` | ヘッドレスのプロジェクト／アレンジメントのライフサイクル、トラック／クリップと MIDI クリップの編集、MIDI イベントと MIDI-FX（`sonare_project_set_midi_events`、`set_midi_fx`、`bake_midi_fx`）、コンパイル／バウンス（`bounce_with_builtin_instruments`／`bounce_with_synth_instruments` を含む）、ワープマップ、ループ録音のテイクとコンプ区間、NativeSynth と SoundFont/SF2 楽器バインディング、アシストサイドカー、コード／キー注釈、`SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | 個別解析、STFT／メル／MFCC／クロマ、逆変換特徴量、CQT/VQT、ピッチ、テンポグラム／PLP、LUFS |
-| `sonare_c_effects.h` | HPSS／編集 DSP、リアルタイムボイスチェンジャー、リアルタイムエンジン、分解／リミックスヘルパー |
+| `sonare_c_effects.h` | HPSS／編集 DSP、領域ベースのスペクトル編集（`sonare_spectral_edit`、モード GAIN/ATTENUATE/MUTE/HEAL）、リアルタイムボイスチェンジャー、リアルタイムエンジン、分解／リミックスヘルパー |
 | `sonare_c_acoustic.h` | ルーム形状からの RIR 合成、等価ルーム推定、オフラインのルームモーフィング、`SONARE_ACOUSTIC_ABI_VERSION` |
-| `sonare_c_metering.h` | ピーク／RMS／クレストファクター／DC オフセット／トゥルーピーク、クリッピング、ダイナミックレンジ、ステレオ相関／幅、ベクトルスコープ、位相スコープ、スペクトル |
-| `sonare_c_mastering.h` | プリセット、フルチェーン、進捗コールバック、名前付きプロセッサ、アシスタント／プロファイル／プレビュー JSON、ストリーミングマスタリングチェーン、ストリーミング EQ、リペア／ダイナミクスの単発ヘルパー |
+| `sonare_c_metering.h` | ピーク／RMS／クレストファクター／DC オフセット／トゥルーピーク、クリッピング、ダイナミックレンジ、ステレオ相関／幅、ベクトルスコープ、位相スコープ、スペクトル、マルチチャンネルのインターリーブ LUFS（`sonare_lufs_interleaved`）と EBU R128 ラウドネスレンジ（`sonare_ebur128_loudness_range`） |
+| `sonare_c_mastering.h` | プリセット、フルチェーン、進捗コールバック、名前付きプロセッサと機械可読なプロセッサカタログ、アシスタント／プロファイル／プレビュー JSON、ストリーミングマスタリングチェーン、ストリーミング EQ、リペア／ダイナミクスの単発ヘルパー |
 | `sonare_c_mixing.h` | チャンネルストリップ制御、センド、バス、VCA グループ、オートメーション、メーター、ゴニオメーター、シーンプリセット |
 | `sonare_c_streaming.h` | `StreamAnalyzer`、量子化フレーム読み出し、逐次統計、チューニング／正規化制御 |
 
@@ -1026,7 +1044,15 @@ C ABI のルーム音響では、次の設定を公開します。
 - `SonareRoomEstimateConfig`: アスペクト比と吸音率の事前条件、`min_decay_db`、`noise_floor_margin_db`、解析 `mode`。
 - 解析 `mode`: `SONARE_ACOUSTIC_MODE_AUTO`、`SONARE_ACOUSTIC_MODE_BLIND`、`SONARE_ACOUSTIC_MODE_IMPULSE_RESPONSE`。
 
-リアルタイムボイスプリセットは C では `sonare_realtime_voice_changer_preset_names()`、`sonare_realtime_voice_changer_preset_json()`、`sonare_realtime_voice_changer_validate_preset_json()` から扱えます。ネイティブ POD 設定の ABI は `SONARE_VOICE_CHANGER_ABI_VERSION` で、プリセット JSON の `schemaVersion` とは別です。
+C ABI でのサラウンド／マルチチャンネルのエンジンバスでは、次を扱えます。
+
+- `SonareChannelLayout` はスピーカーベッドを列挙します。`SONARE_CHANNEL_LAYOUT_MONO`（0）、`SONARE_CHANNEL_LAYOUT_STEREO`（1）、`SONARE_CHANNEL_LAYOUT_5_1`（2）、`SONARE_CHANNEL_LAYOUT_7_1`（3）。値は `sonare::ChannelLayout` と一致し、ABI／JSON のワイヤフォーマットの一部です。
+- `SonareEngineBus.channel_layout` はバスのスピーカーベッドを設定し（マスターバスはプロジェクト出力レイアウトを担い、既定はステレオ）、`SonareEngineTrackLane.source_channel_layout` はレーンへ入力するレイアウトを宣言します。
+- バスのレイアウトは現状、プレーンごとの合算とプレーン別（ワイド）メーターを駆動します。一方でレーンごとのサラウンド**パンニング** DSP は段階導入中で、`source_channel_layout`（およびストリップの `surroundPan` 位置）は config JSON を往復しますが、サラウンド DSP パスが入るまでは反映されません。[リアルタイムエンジンのサラウンドグループバス](./realtime-streaming.md#サラウンドグループバスとワイドメーター)を参照してください。
+
+C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにリアルタイム挿入可否でプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
+
+リアルタイムボイスプリセットは C では `sonare_realtime_voice_changer_preset_names()`、`sonare_realtime_voice_changer_preset_json()`、`sonare_realtime_voice_changer_validate_preset_json()` から扱えます。型付きのプリセット選択子は `SonareVoiceCharacterPreset` 列挙です（`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 から `SONARE_VC_PRESET_DARK_VILLAIN` = 5）。`sonare_voice_character_preset_id(preset)` は正規の id 文字列を返し（不明値には NULL）、`SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` マクロはコンパイル時のバインディング生成向けに改行区切りの id 一覧を提供します。ネイティブ POD 設定の ABI は `SONARE_VOICE_CHANGER_ABI_VERSION` で、プリセット JSON の `schemaVersion` とは別です。
 
 ## エラーハンドリング
 

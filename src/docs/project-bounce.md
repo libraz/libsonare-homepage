@@ -56,7 +56,7 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI you just need to *hear* | `bounceWithBuiltinInstrument` | Simple oscillator synth |
 | MIDI that needs real instrument character | `bounceWithSynthInstrument` | Full [NativeSynth](./native-synth.md) (subtractive / FM / modal / piano …) |
 | MIDI that should play a SoundFont | `bounceWithSf2Instrument` | GS-compatible [SF2 player](./soundfont-player.md) |
-| MIDI driven by your own (Python) synth | `bounce_with_instruments` (Python) | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
+| MIDI driven by your own (Python) synth | `bounce_with_instruments` — **Python only** | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
 
 ::: info One Project, every runtime
 The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce`, `project midi-render`, SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.

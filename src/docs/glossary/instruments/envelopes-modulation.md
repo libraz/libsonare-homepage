@@ -25,12 +25,12 @@ flowchart LR
 |-------|------------------|------------------------|-------------------------|
 | **Attack** | Time to rise from silence to full level | Slow swell (pad, strings) | Instant hit (pluck, piano) |
 | **Decay** | Time to fall from the peak down to the sustain level | Gradual settle | Quick drop |
-| **Sustain** | The *level* held while the key stays down (not a time) | Loud held body | Note dies away even while held |
+| **Sustain** | The *level* held while the key stays down (not a time) | Loud held body (high level) | Quiet or silent even while held (low/zero level) |
 | **Release** | Time to fade after the key is let go | Long tail, reverb-like | Abrupt cut-off |
 
 A plucked sound is fast attack, fast decay, zero sustain, short release. A pad is slow attack, high sustain, long release. Same oscillator — completely different instrument, just from the envelope.
 
-<SonareDemo id="synth-note" />
+<SonareDemo id="synth-adsr" />
 
 ::: info Attack/Decay/Release are times; Sustain is a level
 Three of the four ADSR controls are durations (in milliseconds). Sustain is the odd one out: it is a *volume level*, the amount held for as long as you keep the key down. That is why a "zero sustain" patch goes silent even while the key is still pressed.

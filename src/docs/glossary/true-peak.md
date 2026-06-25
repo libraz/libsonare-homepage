@@ -5,7 +5,7 @@ description: Why true peak limiting matters for browser and streaming mastering.
 
 # True Peak
 
-True Peak estimates the highest level after audio is reconstructed between digital samples.
+True Peak estimates the highest level a signal will actually reach when it is played back. Digital audio is stored as a series of separate sample points; on playback those points are smoothed back into a continuous waveform. That reconstructed waveform can rise higher between two samples than either sample itself, and True Peak estimates that in-between maximum.
 
 A file can have sample peaks below 0 dBFS and still clip after conversion or playback reconstruction.
 This is the inter-sample peak problem. The visible sample points can look safe while the reconstructed analog-like waveform rises above the limit between those points.

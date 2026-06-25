@@ -24,7 +24,7 @@ At a high level, it does three things:
 2. Resample those frames along the time axis, changing how quickly they advance.
 3. Rebuild phase so partials stay continuous instead of smearing.
 
-The hard part is **phase coherence**. When frames are spaced differently than they were analyzed, each bin's phase has to be re-propagated. If that goes wrong, you hear the classic "phasey" or metallic artifact.
+The hard part is **phase coherence**. The STFT splits each frame into frequency *bins* — one slot per narrow band of frequencies. When frames are spaced differently than they were analyzed, the phase in each bin has to be re-propagated so the individual frequency components (the *partials* that make up the sound) stay continuous. If that goes wrong, you hear the classic "phasey" or metallic artifact.
 
 ## Two operations, one backend
 

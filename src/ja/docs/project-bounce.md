@@ -56,7 +56,7 @@ flowchart TD
 | MIDI をとにかく*鳴らしたい* | `bounceWithBuiltinInstrument` | シンプルなオシレーターシンセ |
 | 本格的な楽器のキャラクターが必要な MIDI | `bounceWithSynthInstrument` | フル [NativeSynth](./native-synth.md)（減算 / FM / モーダル / ピアノ …） |
 | SoundFont で鳴らしたい MIDI | `bounceWithSf2Instrument` | GS 互換 [SF2 プレイヤー](./soundfont-player.md) |
-| 自前の（Python）シンセで駆動する MIDI | `bounce_with_instruments`（Python 専用） | ホスト供給の [`ExternalInstrument`](#python-自前のインストゥルメントをホストする) |
+| 自前の（Python）シンセで駆動する MIDI | `bounce_with_instruments` — **Python 専用** | ホスト供給の [`ExternalInstrument`](#python-自前のインストゥルメントをホストする) |
 
 ::: info 1 つの Project、すべての実行環境
 同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`、`project midi-render`、SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、出力先ごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジメントモデル・コンパイラ・DSP は実行環境を問わず同一です。

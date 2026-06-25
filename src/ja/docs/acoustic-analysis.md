@@ -113,7 +113,7 @@ const estimate = estimateRoom(roomRecording, sampleRate, {
   nOctaveBands: 6,
 });
 console.log(estimate.volume, estimate.length, estimate.width, estimate.height);
-console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands);
+console.log(estimate.drrDb, estimate.confidence, estimate.absorptionBands, estimate.rt60Bands);
 
 const { rir, hasError } = synthesizeRir({
   lengthM: 7,
@@ -157,7 +157,7 @@ print(blind.confidence, blind.is_blind)
 
 estimate = sonare.estimate_room(audio.data, audio.sample_rate, n_octave_bands=6)
 print(estimate.volume, estimate.length, estimate.width, estimate.height)
-print(estimate.drr_db, estimate.confidence, estimate.absorption_bands)
+print(estimate.drr_db, estimate.confidence, estimate.absorption_bands, estimate.rt60_bands)
 
 rir = sonare.synthesize_rir(7.0, 5.0, 3.0, absorption=0.2, sample_rate=audio.sample_rate)
 print(rir.sample_rate, len(rir.rir), rir.has_error)
@@ -194,7 +194,7 @@ sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.
 
 :::
 
-Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。新しい幾何ベースのルーム音響ヘルパーは、Python ではモジュールレベル関数、WASM ラッパーではスタンドアロン関数です。
+Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。幾何ベースのルーム音響ヘルパー（`synthesizeRir`・`estimateRoom`・`roomMorph`）は、Python ではモジュールレベル関数、WASM ラッパーではスタンドアロン関数です。
 
 ## 幾何ベースのルーム音響
 
@@ -204,7 +204,7 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 `estimateRoom(...)` は、録音から等価ルームを推定します。正確な実空間を復元するものではありません。通常録音には部屋の減衰がはっきり出ていないことがあるため、必ず `confidence` を確認してください。
 
-`roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響尾部を少し弱めることがあります。残響除去として説明・提供すべきものではありません。
+`roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響尾部を少し弱めることがあります。この出力を残響除去として扱ったり説明したりしないでください。ルームの響きを足す処理であり、既存の残響を取り除く処理ではありません。
 
 ### 壁の吸音率と材質
 
@@ -217,7 +217,9 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 | `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。 |
 | `materialPreset` | number | 名前付きの壁材質プリセット。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。 |
 
-材質プリセットは整数コードに対応します。`0` なし、`1` コンクリート、`2` 木材、`3` カーテン、`4` カーペット、`5` ガラスです。コンクリートとガラスは反射的で高域のテールが残りやすく、カーテンとカーペットは吸音的でテールが短くなります。非ゼロの `materialPreset` はバンド配列より優先されるため、自分の `bandAbsorption`／`bandScattering` を効かせたいときは `materialPreset: 0` を指定してください。
+優先順位は高い順に次のとおりです。非ゼロの `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分の `bandAbsorption`／`bandScattering` を効かせたいときは `materialPreset` を `0` のままにしてください。
+
+材質プリセットは整数コードに対応します。`0` なし、`1` コンクリート、`2` 木材、`3` カーテン、`4` カーペット、`5` ガラスです。コンクリートとガラスは反射的で高域のテールが残りやすく、カーテンとカーペットは吸音的でテールが短くなります。
 
 ```typescript
 // コンクリートのシューボックス: 明るく長いテール
@@ -280,9 +282,9 @@ const custom = synthesizeRir({
 いずれも、音が止まったあとに空間でどう減衰するかから求める標準的なルーム音響指標です。
 
 - **RT60** — 残響が 60 dB 減衰するまでの秒数。「どれだけ響くか」を表す代表値で、小さな部屋なら約 0.3 秒、大聖堂なら数秒になります。
-- **EDT（早期減衰時間）** — 減衰の最初の部分から測った減衰速度を 60 dB 降下に換算したもの。体感上の響きの豊かさは、RT60 より EDT の方がよく一致することが多いです。
-- **C50 / C80（明瞭度）** — 初期エネルギー（最初の 50 ms / 80 ms）と、その後の残響との比を dB で表したもの。高いほど明瞭で直接音的です。C50 は会話、C80 は音楽の基準です。
-- **D50（定義）** — 全エネルギーのうち最初の 50 ms に到達する割合（0〜1）。高いほど直接音的で、ぼやけが少なくなります。
+- **EDT**（早期減衰時間） — 減衰の最初の部分から測った減衰速度を 60 dB 降下に換算したもの。体感上の響きの豊かさは、RT60 より EDT の方がよく一致することが多いです。
+- **C50 / C80**（明瞭度） — 初期エネルギー（最初の 50 ms / 80 ms）と、その後の残響との比を dB で表したもの。高いほど明瞭で直接音的です。C50 は会話、C80 は音楽の基準です。
+- **D50**（定義） — 全エネルギーのうち最初の 50 ms に到達する割合（0〜1）。高いほど直接音的で、ぼやけが少なくなります。
 :::
 
 ## 実用上の注意

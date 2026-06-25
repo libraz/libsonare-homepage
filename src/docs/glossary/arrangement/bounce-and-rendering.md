@@ -58,7 +58,7 @@ You usually do not need to specify how long the bounce should be. If you omit th
 
 Some instruments and effects introduce **latency**: they need a few samples of lookahead before they can produce output, so their sound comes out slightly late. If nothing corrected for this, a latent instrument would drift behind the rest of the mix.
 
-The fix is **latency compensation**, also called **PDC** (plugin delay compensation). You tell the bounce how many samples of latency the instrument adds, and the compiler shifts the timeline so that instrument lines back up with everything else. The result stays perfectly in time.
+The fix is **latency compensation**, also called **PDC** (plugin delay compensation). You tell the bounce how many samples of latency the instrument adds, and the step that turns your arrangement into samples (the *compile* step) shifts the timeline so that instrument lines back up with everything else. The result stays perfectly in time.
 
 ::: warning Match the number to the real latency
 PDC only works when the latency figure you provide matches what the instrument actually introduces. Too small and it still drags; too large and it leads. When in doubt, query the instrument's reported latency rather than guessing.

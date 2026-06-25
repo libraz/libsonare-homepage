@@ -44,7 +44,7 @@ That means an even-Hz grid can waste resolution high up and lack resolution down
 |-----------|-------------------------|----------|
 | STFT | Evenly in Hz | You want a general time-frequency view |
 | CQT | By musical interval, often one set per semitone | Pitch relationships matter |
-| VQT | Like CQT, but relaxed for better low-frequency timing | You need pitch-aware bins with better timing tradeoffs |
+| VQT | Like CQT, but it loosens the strict per-note spacing in the low range so low notes do not smear in time | You want CQT-style pitch-aware bins but cleaner timing on bass and low percussion |
 
 ::: details How libsonare computes the STFT
 libsonare's STFT and framing utilities apply a window (Hann by default), advance by `hopLength`, and run a real FFT per frame, producing the magnitude/power spectra that mel, chroma, onset, and tempogram stages reuse. Because the intermediate spectrogram is shared, asking for several features on one source does not recompute the FFT each time. The `nFft`/`hopLength` defaults (`2048`/`512`) mirror common librosa usage so reference tests can compare outputs. CQT/VQT use log-frequency bins layered on top of the same framing conventions.

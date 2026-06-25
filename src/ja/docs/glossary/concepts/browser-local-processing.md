@@ -13,7 +13,7 @@ description: libsonare が「音声はブラウザの外に出ない」と言う
 
 ブラウザデモでは以下がブラウザ内で実行されます。
 
-- ファイルデコードはブラウザの Web Audio API で行う。
+- ファイルデコードはブラウザの Web Audio API または WASM の `Audio.fromMemory*` ヘルパーで行う。
 - 解析、レンダリング、ミキシング、リアルタイム FX は、デモに応じてページ、Web Worker、AudioWorklet 上で動く。
 - DSP は libsonare の WebAssembly モジュール内で動く。
 - WAV 書き出し、JSON レポート生成、可視化用データの生成もブラウザ内で完結。

@@ -56,9 +56,11 @@ The realtime chain is more than a pitch shifter. Built-in presets combine these 
 
 <SonareDemo id="pitch-shift" />
 
+The demo above isolates just the **Retune** stage (pitch shift) so you can hear it on its own. A full preset layers the formant, EQ, dynamics, and ambience stages from the table below on top of it.
+
 | Stage | Purpose |
 |-------|---------|
-| Retune | Nudges pitch toward the preset target behavior |
+| Retune | Shifts the note pitch up or down by the preset's semitone amount (e.g. for a higher or lower voice), and where the preset enables it, pulls held notes toward the nearest scale tone — the pitch-shift stage of the chain |
 | Formant | Changes perceived vocal size or character independently of note pitch |
 | EQ | Shapes tone before dynamics and ambience |
 | Gate | Reduces low-level room or mic noise |
@@ -68,6 +70,7 @@ The realtime chain is more than a pitch shifter. Built-in presets combine these 
 | Limiter | Catches peaks at the end of the chain |
 
 ::: info Voice-chain terms in one place
+- **Retune** — moves the sung note up or down in pitch; separate from formant, which changes vocal character without moving the note.
 - **Formant** — the resonances that make a voice sound large/small or male/female; shifting them changes vocal character without changing the note.
 - **Gate** — mutes the signal when it drops below a threshold, removing low-level mic/room noise between phrases.
 - **Compressor** — automatically evens out loud and quiet parts so the level stays steady.

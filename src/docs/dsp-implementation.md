@@ -46,7 +46,7 @@ This page is source-grounded rather than generated from marketing names. It uses
 |----------|----------|
 | Registry | `src/mastering/api/named_processor_registry.cpp` for public processor names |
 | Header comments | `compressor.h` describes a feed-forward compressor with soft knee and makeup gain; `linear_phase.h` describes an FFT-domain linear-phase FIR equalizer |
-| Config fields | `TruePeakLimiterConfig` exposes `lookahead_ms`, `oversample_factor`, and `apply_gain_at_input_rate`; `DenoiseClassicalConfig` exposes LogMMSE, MMSE-STSA, spectral subtraction, MCRA, and IMCRA |
+| Config fields | `TruePeakLimiterConfig` exposes `lookahead_ms`, `oversample_factor`, and `apply_gain_at_input_rate`; `DenoiseClassicalConfig` exposes three gain functions (LogMMSE, MMSE-STSA, spectral subtraction) and three noise estimators (Quantile, MCRA, IMCRA) |
 | Runtime contracts | Several processors mark which parameters are real-time safe, and which changes resize buffers or rebuild FIR kernels |
 | Implementation includes | Repair code includes LPC helpers for declick/declip; denoise uses `NoiseTracker`; convolution reverb and linear-phase EQ use partitioned convolution |
 
@@ -77,7 +77,7 @@ Where this page says "main use", it describes the public intent implied by the p
 
 ## Analysis And Feature DSP
 
-The MIR side is built from reusable feature stages rather than one monolithic analyzer. STFT and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, pitch trackers, and section features. Higher-level analyzers then reuse those representations where possible.
+The analysis side — music information retrieval (MIR): extracting tempo, key, chords, and similar musical facts from audio — is built from reusable feature stages rather than one monolithic analyzer. STFT and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, pitch trackers, and section features. Higher-level analyzers then reuse those representations where possible.
 
 | Family | Implementation role | Main use |
 |--------|---------------------|----------|
@@ -93,9 +93,9 @@ Feature inversion, blind acoustic estimation, and equivalent-room estimation are
 
 ## Mastering Chain
 
-`masteringChain(...)` builds a deterministic processor chain from a structured configuration.
+`masteringChain(...)` builds a fixed processor chain from a structured configuration: the same configuration and input always produce the same stage order and the same output, with no run-to-run variation. That is what "deterministic" means here.
 
-The streaming variant uses the same stage order, but it keeps processor state between blocks.
+The streaming variant, `StreamingMasteringChain`, runs the same stages in the same order, but it keeps each processor's state between audio blocks so it can run live.
 
 Offline-only processors can still appear in high-level workflows. Real-time render paths are limited by each processor's contract; changes that resize buffers or rebuild FIR kernels are not audio-thread safe.
 
@@ -157,6 +157,8 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 | `maximizer.maximizer` | Loudness-oriented limiting with ceiling management | Raise perceived loudness | Use true-peak stage after aggressive settings |
 | `maximizer.softKneeMax` | Soft-knee limiting curve before hard ceiling | Less abrupt limiting | Useful before final true-peak protection |
 | `maximizer.truePeakLimiter` | Oversampled true-peak estimation and ceiling control | Avoid inter-sample overs | Adds oversampling cost and lookahead-style latency |
+
+<SonareDemo id="loudness-meter" />
 
 ## Multiband
 

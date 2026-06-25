@@ -43,7 +43,7 @@ Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the
 | libsonare | C++ | 0.67s | 1x |
 | bpm-detector `--comprehensive` (librosa-based) | Python | 36.4s | ~54x slower |
 
-The full-pipeline figure is where libsonare's design pays off most: shared spectrograms, parallel feature paths, automatic 44.1 → 22.05 kHz downsampling, and no Python boundary inside the pipeline.
+The full-pipeline figure is where libsonare's design pays off most: shared spectrograms, parallel feature paths, automatic 44.1 → 22.05 kHz downsampling done once inside the C++ pipeline (the librosa pipeline resamples too, so the comparison stays apples-to-apples), and no Python boundary inside the pipeline.
 
 ## Per-Feature Comparison
 
@@ -77,6 +77,11 @@ Individual feature extraction on the same 73-second audio (resampled to 22050 Hz
 | Spectral Centroid | 24.8ms | 16.5ms | 1.5x |
 
 ## WASM Mastering ISP Guard
+
+An inter-sample peak (ISP) is a peak that falls *between* two samples — silent in
+the raw numbers but real once a DAC reconstructs the waveform — so the limiter
+must oversample to catch it. This benchmark confirms that detector is fast enough
+to run in the browser.
 
 The mastering true-peak path is also checked in WebAssembly with a 48 kHz stereo
 1 ms block, 4x oversampling, and the same sliding-max guard used by the final
@@ -125,6 +130,8 @@ libsonare replaces this with a custom sliding median:
 ::: details What is a median filter (and a sliding median)?
 A **median filter** replaces each value with the *median* of its neighbors in a small window. Unlike averaging, it removes spikes and outliers while keeping edges sharp — which is exactly why HPSS uses it: a horizontal median pass keeps steady (harmonic) lines, a vertical pass keeps sharp (percussive) hits. A **sliding median** computes this efficiently as the window moves across the data, instead of re-sorting from scratch at every step.
 :::
+
+<SonareDemo id="waveform-harmonics" />
 
 ### pYIN (12.3x): native Viterbi + parallelized candidates
 

@@ -28,6 +28,7 @@
 | 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
 | ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md) | [CLI リファレンス](./cli.md) |
 | ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#オーディオエフェクト) |
+| 領域指定のスペクトル編集（時間×周波数の矩形を減衰・ミュート・ゲイン・修復） | [スペクトル編集](./spectral-editing.md) | [編集 DSP](./editing-dsp.md) |
 | ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
 | マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
 | MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [組み込み楽器](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
@@ -59,7 +60,7 @@
 
 | 確認すること | 見る場所 | 判断のしかた |
 |--------------|----------|--------------|
-| 入力がファイルか、デコード済みサンプルか、ライブブロックか | 各ページの「いつ使うか」「どちらを使うか」 | ブラウザ / WASM は多くの場合 `Float32Array` と `sampleRate`、Python / CLI はファイル入力を直接扱えます。 |
+| 入力がファイルか、エンコード済みバイト列か、デコード済みサンプルか、ライブブロックか | 各ページの「いつ使うか」「どちらを使うか」 | ブラウザ / WASM は多くの場合 `Float32Array` と `sampleRate` を受け取ります。エンコード済みバイト列には `Audio.fromMemory*` やブラウザ codec を使います。Python / CLI はファイル入力を直接扱えます。 |
 | 同じ処理をどの実行環境で呼ぶか | `::: code-group` のブラウザ / Python / CLI 例 | 3 つを併記しているページでは、API 名、引数名、戻り値の形の違いを見比べてください。 |
 | 用語を UI や実装コメントで説明できるか | ページ内の `::: tip` / `::: info` / `::: warning` / `::: details` と [用語集](./glossary.md) | 実装判断に効く用語は本文に短く置き、長い背景は VitePress の補足ボックスや用語集へ逃がしています。 |
 | ランタイム差分があるか | [バインディング対応表](./binding-parity.md) と各 API リファレンス | 目的別ページの例がないランタイムでは、対応 API が未公開または用途違いの可能性があります。 |

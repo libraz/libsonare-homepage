@@ -41,7 +41,7 @@ graph TD
 
 多くの初心者がつまずくのがここです。クリップの位置は秒ではなく **音楽的な時間** で記録されます。
 
-クリップは「4.27 秒の位置」から始まるのではありません。「3 小節目の 1 拍目」から始まります。その下にある単位が **ティック** で、解像度を表すのが **PPQ**（4 分音符あたりのパルス数）です。4 分音符あたり 960 ティックなら、4/4 の 1 小節は 4 × 960 = 3840 ティックです。設定するクリップの開始位置や長さは、すべてティック数です。
+クリップは「4.27 秒の位置」から始まるのではありません。「3 小節目の 1 拍目」から始まります。その下にある単位は **4 分音符** で、位置と長さは浮動小数点数で表します。`1.0` がちょうど 4 分音符 1 個ぶんです。たとえば 4/4 の 1 小節は 4 分音符 4 個ぶんなので `4.0`、8 分音符 1 個は `0.5`、付点 4 分音符は `1.5` です。整数のティックや 960 ベースの分解能ではありません。パラメータ名に `Ppq`（`startPpq`、`lengthPpq` など）が付いていても同様です。設定するクリップの開始位置や長さは、すべてこの 4 分音符単位（浮動小数点数）で、`lengthPpq: 4` は 4 分音符 4 個ぶんの長さです。
 
 ::: tip 音楽的な時間が大切な理由
 位置が音楽的に記録されているため、テンポを変えてもアレンジは正しいまま保たれます。120 BPM から 100 BPM に変えれば「3 小節目の 1 拍目」は秒で見れば後ろにずれますが、それでも 3 小節目の 1 拍目です。ノートがグリッドから外れて流れていくことはありません。音楽的な時間から実際のサンプル位置への変換は、後でプロジェクトをコンパイル・レンダリングするときに行われます。テンポとグリッドの関係は [ワープとテンポ同期](./warp-and-tempo.md) を参照してください。
@@ -83,7 +83,7 @@ graph TD
 :::
 
 ::: details libsonare での実装
-このモデルは編集エンジンの `Project` クラスにあります。`addTrack` がトラック（audio または midi）を作り、`addMidiClip(startPpq, lengthPpq)` は新しい MIDI トラック + クリップに対して `{ trackId, clipId }` を返します。`addClip` は既存トラックへオーディオ / MIDI クリップを追加します。すべての位置は PPQ ティックなので、`moveClip(clipId, newStartPpq, newTrackId?)`、`setClipGain(clipId, gain)`、`setClipFade(clipId, fadeIn, fadeOut)`、`setClipLoop`、`duplicateClip`、`setClipSource`、`removeClip` はすべて音楽的な時間で動きます。トラックのライフサイクルは `removeTrack`、`renameTrack`、`setTrackKind`、`setTrackRoute` です。MIDI トラックは `setTrackMidiDestination(trackId, destinationId)` で楽器へつながります。コンパイラが各 MIDI クリップにその id を刻印するため、エンジンはその宛先にバインドされた楽器へイベントを送ります。プロジェクト全体は `toJson()` / `Project.fromJson(json)` で JSON を往復し、音楽的な時間は `compile()` / `bounce()` のときに初めてサンプルへ変換されます。
+このモデルは編集エンジンの `Project` クラスにあります。`addTrack` がトラック（audio または midi）を作り、`addMidiClip(startPpq, lengthPpq)` は新しい MIDI トラック + クリップに対して `{ trackId, clipId }` を返します。`addClip` は既存トラックへオーディオ / MIDI クリップを追加します。すべての位置は 4 分音符単位（浮動小数点数、`1.0` = 4 分音符 1 個）なので、`moveClip(clipId, newStartPpq, newTrackId?)`、`setClipGain(clipId, gain)`、`setClipFade(clipId, fadeIn, fadeOut)`、`setClipLoop`、`duplicateClip`、`setClipSource`、`removeClip` はすべて音楽的な時間で動きます。トラックのライフサイクルは `removeTrack`、`renameTrack`、`setTrackKind`、`setTrackRoute` です。MIDI トラックは `setTrackMidiDestination(trackId, destinationId)` で楽器へつながります。コンパイラが各 MIDI クリップにその id を刻印するため、エンジンはその宛先にバインドされた楽器へイベントを送ります。プロジェクト全体は `toJson()` / `Project.fromJson(json)` で JSON を往復し、音楽的な時間は `compile()` / `bounce()` のときに初めてサンプルへ変換されます。
 :::
 
 関連: [Project Editing](../../project-editing.md)、[テイクとコンピング](./takes-and-comping.md)、[ミキシングの基礎](../concepts/mixing-basics.md)

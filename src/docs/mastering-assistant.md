@@ -87,12 +87,12 @@ sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 :::
 
 ::: warning Short clips: profile and suggest need real spectral content
-`masteringAudioProfile` and `masteringAssistantSuggest` run a full STFT-based analysis (default `nFft` = 2048) and throw a `SonareError` on clips that are too short to analyze — anything shorter than an analysis window (so the practical floor is roughly ~512 samples). `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty buffer (it just requires a non-empty audio buffer and a non-empty platform list). When feeding short captures or file-picker selections from the UI, guard the profile/suggest calls with a minimum-length check, and wrap them in `try`/`catch` using `isSonareError`, before passing the buffer.
+`masteringAudioProfile` and `masteringAssistantSuggest` run a full STFT-based analysis (default `nFft` = 2048) and throw a `SonareError` on clips too short to fill an analysis window. Two thresholds matter: a buffer shorter than ~512 samples will throw outright, and a buffer shorter than one full window (`nFft`, default 2048 samples) has too little spectral content for a meaningful profile. Guard at one full window to be safe. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty buffer (it just requires a non-empty audio buffer and a non-empty platform list). When feeding short captures or file-picker selections from the UI, guard the profile/suggest calls with a minimum-length check, and wrap them in `try`/`catch` using `isSonareError`, before passing the buffer.
 
 ```typescript [Browser]
 import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
 
-const MIN_ANALYSIS_SAMPLES = 2048; // one analysis window; ~512 is the hard floor
+const MIN_ANALYSIS_SAMPLES = 2048; // one default analysis window (nFft)
 if (samples.length < MIN_ANALYSIS_SAMPLES) {
   // Too short to profile — skip or pad before analyzing.
 } else {
@@ -243,7 +243,7 @@ The example above is trimmed. The real `params` map contains **every** parameter
 
 ### Turning a suggestion into a master
 
-Because `chainConfig.params` uses `masterAudio`'s override keys, rendering the suggestion is one call — use the top genre candidate as the base preset and pass the params as overrides:
+Because `chainConfig.params` uses `masterAudio`'s override keys, rendering the suggestion is one call — use the top genre candidate as the base preset and pass the whole params map (it is the complete chain, not just the few keys shown above) as overrides:
 
 ::: code-group
 
@@ -311,6 +311,8 @@ This helper is easiest to read as a "what will the platform do?" report.
 ::: warning Louder is not better on streaming
 A master at −8 LUFS is not "louder" on YouTube — the platform applies the `normalizationGainDb` (here −5.3 dB) to bring everyone to roughly the same loudness, so over-compressing just sacrifices dynamics for no loudness gain. See [Delivery Targets](./glossary/mastering/delivery-targets.md) and [Loudness Matching](./glossary/concepts/loudness-matching.md).
 :::
+
+<SonareDemo id="loudness-meter" />
 
 ## Related
 

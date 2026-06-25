@@ -190,7 +190,7 @@ try {
   const loopLengthQuarters = 4;
   const passes = 3;
   const passSamples = Math.round((loopLengthQuarters * 60 / 120) * sampleRate); // 96000
-  const recorded = new Float32Array(passes * passSamples);                       // your concatenated takes
+  const recorded = new Float32Array(passes * passSamples);                       // your concatenated passes (interleaved if audioChannels > 1)
 
   const result = project.addLoopRecordingTakes({
     trackId,
@@ -210,7 +210,11 @@ try {
 `loopLengthPpq` is measured in quarter notes, so its duration depends on tempo: a 4-quarter-note loop is 2 s at 120 BPM but 4 s at 60 BPM. Set the project tempo first, work out the per-pass sample count from it, and supply `passes * passSamples` frames. Hand in less and you simply get fewer takes than you expected.
 :::
 
-The call adds one clip whose alternate takes are the loop passes, and sets the **active take** to the last full pass. From here you comp across those takes.
+::: warning Interleave the audio for multi-channel takes
+The `audio` Float32Array is read as **interleaved** when `audioChannels > 1` (L, R, L, R, …). `engine.capturedAudio()` returns **planar** channels (one `Float32Array` per channel), so for a stereo loop you must interleave those channels before passing them to `addLoopRecordingTakes` — or record the loop with `audioChannels: 1` (mono) and pass the single channel straight through.
+:::
+
+The call adds one clip whose alternate takes are the loop passes, and sets the **active take** to the newest (last) pass. Note that if your captured audio did not end exactly on a loop boundary, that last pass is a short, partial take — so by default the clip plays the truncated take until you pick another take or build a comp. From here you comp across those takes.
 
 ## Takes and comp segments
 
@@ -230,7 +234,9 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId? }`. Take ids must be unique, and every `takeId` referenced by a comp segment must exist — both rules throw if violated, so a bad edit fails loudly rather than corrupting the clip.
+Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId? }`. Take ids must be unique, and any *non-zero* `takeId` referenced by a comp segment must match an existing take — a bad non-zero reference throws, so the edit fails loudly rather than corrupting the clip. A `takeId` of `0` (or omitted) is the deliberate exception: it falls back to the clip's active/base take for that region, so you can leave a segment on the active take without naming an id.
+
+The third argument, `activeTakeId`, is optional and defaults to `0`. Pass `0` (or omit it) and the clip keeps playing its **base source** with no active-take override — useful when you have defined takes but do not want any of them to replace the original clip audio by default. Any non-zero `activeTakeId` must match the `id` of one of the takes you pass; take ids themselves are always non-zero, so `0` unambiguously means 'no active take'.
 
 Comping also composes safely with the other clip edits: `splitClip` and trims carry the takes, their `sourceOffsetPpq` values, and the covering comp segments over to the resulting clips, so cutting a comped clip does not lose the comp. The one combination that is refused is **loop mode with comp segments that split the clip** — a looped clip repeats one continuous region, so an edit that would create both is rejected instead of producing a comp that cannot loop.
 

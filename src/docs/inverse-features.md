@@ -28,7 +28,7 @@ By the end of this page you should be able to:
 
 A forward feature transform is **lossy on purpose**. Two kinds of information are thrown away, and no inverse can invent them back:
 
-- **The mel filterbank is not square.** A mel spectrogram folds ~1025 STFT bins (for `nFft = 2048`) down to, say, 128 mel bands. Inverting it spreads each mel band's energy back across the bins it came from — a least-squares best guess, not the original detail.
+- **The mel filterbank is not square.** A mel spectrogram folds the STFT's frequency bins (~1025 bins for `nFft = 2048`, i.e. `nFft/2 + 1`) down to, say, 128 mel bands. Inverting it spreads each mel band's energy back across the bins it came from — a least-squares best guess, not the original detail.
 - **Phase is discarded entirely.** A magnitude or power spectrogram keeps *how much* energy sits at each frequency, but not *where in the waveform cycle* it sits. Audio reconstruction has to **invent a plausible phase**, which is what Griffin-Lim does.
 
 MFCCs add a third loss on top: they keep only the first `nMfcc` cepstral coefficients (often 13–20), discarding the fine spectral envelope. Inverting MFCCs therefore reconstructs a *smoothed* mel spectrogram before any audio is recovered.
@@ -75,7 +75,7 @@ await init();
 
 // Mel power -> STFT power
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
-const stft = melToStft(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048, 512);
+const stft = melToStft(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048);
 // stft: { nBins, nFrames, power }   nBins = nFft/2 + 1 = 1025
 
 // MFCCs -> mel power
@@ -119,12 +119,27 @@ import { init, melSpectrogram, melToAudio, mfcc, mfccToAudio } from '@libraz/lib
 await init();
 
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
-const preview = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048, 512, 0, 0, 32);
-// nFft=2048, hopLength=512, nIter=32 (fmin/fmax left at default 0; nIter is the Griffin-Lim iteration count)
+const preview = melToAudio(
+  mel.power, mel.nMels, mel.nFrames, // the mel matrix and its shape
+  sampleRate,
+  2048, // nFft      (must match the forward transform)
+  512,  // hopLength (must match the forward transform)
+  0,    // fmin      (0 = default, full range)
+  0,    // fmax      (0 = default, sampleRate / 2)
+  32,   // nIter     (Griffin-Lim iterations)
+);
 
 const coeffs = mfcc(samples, sampleRate, 2048, 512, 128, 20);
-const fromMfcc = mfccToAudio(coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames, 128, sampleRate, 2048, 512, 0, 0, 32);
-// note the extra nMels (128) before sampleRate; nFft=2048, hopLength=512, nIter=32 (fmin/fmax default 0)
+const fromMfcc = mfccToAudio(
+  coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames,
+  128,  // nMels — NOTE: this extra argument comes before sampleRate
+  sampleRate,
+  2048, // nFft
+  512,  // hopLength
+  0,    // fmin (default)
+  0,    // fmax (default)
+  32,   // nIter
+);
 ```
 
 ```python [Python]

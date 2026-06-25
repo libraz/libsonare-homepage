@@ -43,7 +43,7 @@ The browser demo renders locally and exports stereo 16-bit PCM WAV plus a JSON r
 
 :::: details Implementation notes
 
-libsonare's stereo imager uses mid/side processing with energy preservation and optional decorrelation.
+libsonare's stereo imager uses mid/side processing: it splits the stereo signal into a "mid" part (what is common to both channels, the center) and a "side" part (what differs between them, the width), then adjusts the side level. This is the mechanism behind the side energy that Stereo Width controls. It preserves overall energy and offers optional decorrelation.
 
 The true-peak limiter uses lookahead, linked peak detection, and an oversampled true-peak path.
 

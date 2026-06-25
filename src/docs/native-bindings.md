@@ -1,11 +1,17 @@
 # Native Bindings
 
-libsonare provides native bindings for desktop platforms. See the individual API pages for each language:
+libsonare ships three bindings: browser **WASM**, **Python**, and a **Node.js native addon**. This page compares all three so you can pick one, and documents the Node native addon in detail. See the individual API pages for each language:
 
 - **[Python API](/docs/python-api)** — ctypes-based bindings with wheels on PyPI
 - **Node.js (N-API)** — Native addon for direct C++ performance (documented below)
 
 For beginners, the choice is usually simple: use Python for scripts and notebooks, use WASM for browser apps, and use Node native only when you specifically need native file decoding or native runtime performance from Node.js.
+
+| You are building | Use | Package |
+|------------------|-----|---------|
+| A browser app | WASM | `@libraz/libsonare` |
+| A Python script or notebook | Python | `pip install libsonare` |
+| A Node.js app needing native decode or performance | Node native | `@libraz/libsonare-native` |
 
 ## What You Will Learn
 
@@ -25,7 +31,7 @@ By the end of this page you should be able to:
 | **Build** | Emscripten | Pre-built wheels (or CMake + pip) | CMake + cmake-js |
 | **Performance** | Near-native | Native | Native |
 | **Streaming** | Yes | Yes | Yes |
-| **File I/O** | No; pass decoded samples | WAV/MP3 by default; FFmpeg formats in FFmpeg builds | WAV/MP3 by default; FFmpeg formats in FFmpeg builds |
+| **File I/O** | Sample-based APIs; `Audio.fromMemory(...)` decodes WAV/MP3 bytes and browser fallback can decode supported formats | WAV/MP3 by default; FFmpeg formats in FFmpeg builds | WAV/MP3 by default; FFmpeg formats in FFmpeg builds |
 | **Effects** | Yes | Yes | Yes |
 | **Feature Extraction** | Yes | Yes | Yes |
 | **Inverse reconstruction** | Yes | Yes | Yes |
@@ -198,7 +204,7 @@ Node native's `Audio` wrapper is broader because it can call into the native add
 | Capability | Node native | WASM |
 |------------|-------------|------|
 | Extra `Audio` methods | More focused analysis and room-acoustic methods are available as instance methods | Use standalone focused helpers where available |
-| File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)` only |
+| File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)`, `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)` |
 
 Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and `detectChords(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions.
 
@@ -519,10 +525,16 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | Variable-Q transform magnitude (`gamma` controls Q) |
 | `nnlsChroma(samples, sr?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma) |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | NMF factor matrices from a row-major spectrogram |
+| `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Hybrid CQT magnitude (true CQT in low bins, pseudo-CQT in high bins) |
+| `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude (single FFT) |
+| `bassChroma(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
+| `chromaCens(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
+| `onsetStrengthMulti(samples, sr?, nFft?, hopLength?, nMels?, nBands?)` | `{ nBands, nFrames, data }` | Multi-band onset strength (`nBands` default 3; `data` row-major `[nBands x nFrames]`) |
+| `decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | NMF factor matrices with selectable `init` (`'random'` default, `'nndsvd'`) |
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbor filtering |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope (the input to the tempogram family) |
 
-Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`.
+Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. `bassChroma`/`chromaCens` default `nChroma=12`; `onsetStrengthMulti` defaults `nBands=3`; `decomposeWithInit` defaults `nIter=50`, `beta=2`, `init='random'`.
 
 #### Inverse Reconstruction Functions
 

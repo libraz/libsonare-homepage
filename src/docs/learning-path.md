@@ -24,6 +24,7 @@ If you want to read the docs linearly, use this order:
 | A Python script or notebook for audio analysis | [Getting Started](./getting-started.md#python) | [Python API](./python-api.md) |
 | A terminal workflow for quick checks or batch analysis | [Getting Started](./getting-started.md#cli) | [CLI Reference](./cli.md) |
 | Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#audio-effects) |
+| Region-based spectral edits (attenuate, mute, gain, or heal a time-frequency rectangle) | [Spectral Editing](./spectral-editing.md) | [Editing DSP](./editing-dsp.md) |
 | A browser or native mixer | [Mixing Engine](./mixing.md) | [Mixing Scene JSON](./mixing-scene-json.md) |
 | A mastering UI or automatic mastering workflow | [Mastering Assistant](./mastering-assistant.md) | [Mastering Processors](./mastering-processors.md) |
 | A synth or instrument app that renders MIDI to audio | [Built-in Instruments](./native-synth.md) | [MIDI Input](./midi-input.md), [Realtime and Streaming](./realtime-streaming.md) |
@@ -55,7 +56,7 @@ Before implementing from a task page, check these points.
 
 | Check | Where to look | How to decide |
 |-------|---------------|---------------|
-| Whether your input is a file, decoded samples, or live blocks | The page's "when to use" / "which API" section | Browser / WASM usually takes `Float32Array` plus `sampleRate`; Python / CLI often read files directly. |
+| Whether your input is a file, encoded bytes, decoded samples, or live blocks | The page's "when to use" / "which API" section | Browser / WASM usually takes `Float32Array` plus `sampleRate`; use `Audio.fromMemory*` or browser codecs for encoded bytes. Python / CLI often read files directly. |
 | Which runtime calls the workflow | The Browser / Python / CLI examples in `::: code-group` blocks | When all three are shown, compare API names, argument names, and result shapes before porting code. |
 | Whether the terminology is clear enough for UI copy or implementation comments | Inline `::: tip` / `::: info` / `::: warning` / `::: details` blocks and the [Glossary](./glossary.md) | Terms that affect implementation decisions stay close to the code; longer background belongs in callouts or glossary pages. |
 | Whether a runtime gap exists | [Binding Parity](./binding-parity.md) and the runtime references | If a task page does not show an example for a runtime, the API may be unavailable there or the runtime may be the wrong fit. |

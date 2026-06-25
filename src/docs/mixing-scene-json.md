@@ -114,7 +114,7 @@ Inside the scene JSON, `params` holds an **escaped JSON string**, not a nested o
 
 ## Send
 
-A send routes a post-gain copy of the strip's signal to a destination bus.
+A send routes a *copy* of the strip's signal to a destination bus. The `timing` field chooses whether the copy is tapped before the fader (`"pre"`) or after it (`"post"`) — see the [channel-strip signal flow](./mixing.md#the-channel-strip-signal-by-signal).
 
 | Field | Type | Meaning |
 |-------|------|---------|

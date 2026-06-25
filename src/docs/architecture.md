@@ -2,7 +2,7 @@
 
 This document describes the internal architecture of libsonare.
 
-Use this page after the task and runtime guides. It is an internal map for contributors and integrators who need to understand how public APIs connect to the C++ core.
+Read this page once you are comfortable with the [Getting Started guide](./getting-started.md) and your language's runtime page. It is an internal map for people extending libsonare or wiring it into a larger system, not a tutorial — if you only need to call an API, start with [Getting Started](./getting-started.md). It shows how public APIs connect to the C++ core.
 
 ::: info How to read the layers
 The outer API layers are what apps call. The core and feature layers are where reusable signal-processing work happens. Bindings should stay thin: they translate language shapes into the same C++ behavior rather than reimplementing DSP.
@@ -385,6 +385,8 @@ flowchart TB
 A phase vocoder is the standard way to time-stretch audio (or, combined with resampling, pitch-shift it) without obvious artifacts. It takes the STFT and *advances the phase* of each frequency bin to fit the new timeline before reconstructing, so a sound can be made longer or shorter while its pitch and spectral character stay intact. libsonare uses it for `timeStretch` / `pitchShift` and the editing-DSP voice tools.
 :::
 
+<SonareDemo id="time-stretch" />
+
 ### Streaming Pipeline
 
 The streaming pipeline processes audio in real time, maintaining overlap state between chunks.
@@ -435,7 +437,7 @@ flowchart LR
 ```
 
 ::: info Progressive Estimation
-The streaming pipeline also accumulates chroma and onset data for progressive BPM/key estimation. Estimates are updated periodically (default: BPM every 10s, key every 5s) and improve in confidence over time.
+As more audio streams in, the pipeline accumulates chroma and onset data, so its BPM/key estimates have more evidence to work from. Estimates are refreshed periodically (default: BPM every 10s, key every 5s) and grow more confident the longer the stream runs.
 :::
 
 ## Key Design Decisions
@@ -473,10 +475,15 @@ auto chorus = full.slice(60, 90);   // 60-90 sec
 
 ### WASM Compatibility
 
-The npm/WebAssembly package exposes sample-based APIs. It expects decoded mono
-`Float32Array` samples and does not bundle file decoding. Browser applications
-typically decode files with the Web Audio API or another JavaScript decoder
-before calling libsonare.
+"Decoded samples" means raw audio amplitude values (a `Float32Array`), not the
+bytes of a `.mp3` or `.wav` file — decoding is the step that turns the compressed
+file into those values. Most WASM calls expect samples that are already decoded.
+
+The npm/WebAssembly package exposes mostly sample-based APIs. Most calls expect
+decoded mono `Float32Array` samples. For encoded bytes, `Audio.fromMemory(...)`
+decodes WAV/MP3 in memory, while `Audio.fromMemoryWithBrowserFallback(...)`
+can fall back to the Web Audio API or another browser codec path before calling
+the same sample-based methods.
 
 WASM builds avoid native file I/O and FFmpeg-backed decoding. Runtime behavior is
 single-threaded unless a future build explicitly enables browser threading.

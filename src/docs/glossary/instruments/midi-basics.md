@@ -50,7 +50,7 @@ A **Program Change** message picks *which* instrument a channel plays, by progra
 
 ## Pitch bend, RPN, and NRPN
 
-**Pitch bend** is its own high-resolution message (not a CC) that slides a note's pitch up or down continuously — for guitar bends, vibrato, or a whammy effect. How far the maximum bend reaches is set separately:
+**Pitch bend** is its own high-resolution message (not a CC) that slides a note's pitch up or down continuously — for guitar bends, vibrato, or a whammy effect. How far a full bend reaches (the *pitch-bend range*) is not part of the pitch-bend message itself; it is set separately with the RPN message described below:
 
 ::: info RPN / NRPN
 A **Registered Parameter Number (RPN)** is a standardized setting addressed through CC messages. **RPN 0** is the **pitch-bend range** — how many semitones a full bend covers. A **Non-Registered Parameter Number (NRPN)** uses the same mechanism for *device-specific* parameters that are not part of the standard.

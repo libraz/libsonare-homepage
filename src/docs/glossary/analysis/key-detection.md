@@ -24,9 +24,9 @@ Relative pairs such as C major and A minor share the same seven notes, so mode i
 
 ## From chroma to key
 
-Key detection starts from a mean chroma vector: the 12 pitch-class bins are averaged over the material, optionally after preparation such as HPSS, loudness weighting, or high-pass filtering. libsonare compares that vector with rotated key profiles for each candidate root and mode.
+Key detection starts from a mean chroma vector: the 12 pitch-class bins are averaged over the material, optionally after preparation such as [HPSS](./mel-mfcc-timbre.md) (which suppresses percussion so harmony reads more cleanly), loudness weighting, or high-pass filtering. libsonare compares that vector with rotated key profiles for each candidate root and mode.
 
-The default compatible profile is Krumhansl-Schmuckler. The implementation can also use profile families such as Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
+A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default compatible profile is Krumhansl-Schmuckler, a classic set of reference pitch-class weights derived from listener experiments. The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
 
 <SonareDemo id="chromagram" />
 

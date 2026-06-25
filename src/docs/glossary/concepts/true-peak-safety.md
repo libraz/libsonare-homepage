@@ -7,7 +7,7 @@ description: How true-peak margin prevents clipping after reconstruction, codec 
 
 True peak safety is the practice of leaving enough margin so a mastered file does not clip after reconstruction, codec conversion, or streaming playback.
 
-Sample peaks only show the values stored in the digital file. Playback systems and encoders reconstruct a continuous waveform between those samples. That reconstructed waveform can exceed the stored sample peaks, creating an inter-sample peak. A master that looks safe at sample level can still distort after conversion.
+Sample peaks only show the values stored in the digital file. Playback systems and encoders reconstruct a continuous waveform between those samples. That reconstructed waveform can rise above the stored sample peaks; the part that pokes above is called an **inter-sample peak**. A master that looks safe at sample level can still distort after conversion.
 
 <SonareDemo id="loudness-meter" />
 
@@ -40,7 +40,7 @@ In offline mastering, a few milliseconds of lookahead is usually acceptable beca
 
 ## In libsonare
 
-The libsonare mastering chain uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode. The WASM ISP benchmark checks the browser path with 4x oversampling (the minimum required by ITU-R BS.1770-4 for true-peak measurement) and a sliding-max guard so peak detection stays fast enough for local rendering.
+The libsonare mastering chain uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode. The WASM inter-sample-peak (ISP) benchmark checks the browser path with 4x oversampling (the minimum required by ITU-R BS.1770-4 for true-peak measurement) and a sliding-max guard so peak detection stays fast enough for local rendering.
 
 :::: details Implementation notes
 

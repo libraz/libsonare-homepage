@@ -11,7 +11,7 @@ Many playback situations still collapse stereo partially or completely: phones, 
 
 ## Why Width Can Break
 
-Stereo width often comes from differences between left and right channels. Some differences are healthy: panned instruments, room reflections, or natural stereo recording. Other differences create phase cancellation.
+Stereo width often comes from differences between left and right channels. Some differences are healthy: panned instruments, room reflections, or natural stereo recording. Other differences create phase cancellation, where left and right partly cancel each other out when summed. This happens when the two channels are very dissimilar, or "decorrelated".
 
 When left and right are summed, opposite-polarity or highly decorrelated content can cancel. The result can be:
 
@@ -23,7 +23,7 @@ When left and right are summed, opposite-polarity or highly decorrelated content
 
 ## Correlation
 
-Correlation is a meter that estimates how similar the left and right channels are.
+Correlation is a single number, from +1 to -1, that estimates how similar the left and right channels are. Meters display it so you can watch it while you work.
 
 | Correlation | Practical reading |
 |-------------|-------------------|

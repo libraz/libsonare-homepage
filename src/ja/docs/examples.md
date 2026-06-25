@@ -71,9 +71,9 @@ console.log(result.bpm, result.key.name);
 ## 機能別レシピ
 
 各レシピは同じ処理を実行環境ごとに示します。libsonare を動かす環境のタブを選んでください。
-ブラウザパッケージ自体はデコードを行わないため、デコード済みのモノラル `Float32Array`
-サンプルを渡します。Python パッケージと `sonare` CLI は WAV/MP3 ファイルを直接読み込めます。
-C++ プログラムは下の C++ セクションにまとめています。
+ブラウザ例ではデコード済みのモノラル `Float32Array` サンプルを渡します。入力がエンコード済み
+バイト列の場合は、その前段で Web Audio、別の JavaScript デコーダ、または `Audio.fromMemory*`
+を使います。Python パッケージと `sonare` CLI は WAV/MP3 ファイルを直接読み込めます。C++ プログラムは下の C++ セクションにまとめています。
 
 ### 基本的な BPM とキー検出
 
@@ -121,9 +121,11 @@ sonare key song.mp3
 
 ### 完全な音楽解析
 
-ブラウザでは `analyze()` がコード・セクション・楽曲形式まで一度に返します。Python の
-`analyze()` は基本サマリー（BPM・キー・拍子・ビート）を返し、コードとセクションは別の呼び出し
-（`detect_chords()` と `analyze_sections()`）になります。
+ブラウザでも Python でも `analyze()` がコード・セクション・楽曲形式（form）に加えて、音色・ダイナミクス・リズム・メロディまで一度に返します。`detect_chords()` や `analyze_sections()` は、解析全体を実行せずにその要素だけが欲しいときのオプションとして残しています。
+
+::: tip Python：関数とメソッドの違い
+モジュールレベルの `analyze(samples, sample_rate)` 関数は完全な結果を返します。`Audio.analyze()` メソッドは基本サマリー（BPM・キー・拍子・ビート）のみを返すので、コード・セクション・楽曲形式をまとめて取得したいときはサンプルを関数に渡してください。
+:::
 
 ::: code-group
 
@@ -153,12 +155,10 @@ console.log(`\n楽曲形式: ${result.form}`);
 ```
 
 ```python [Python]
-from libsonare import Audio, analyze_sections
+from libsonare import Audio, analyze
 
 with Audio.from_file("song.mp3") as audio:
-    result = audio.analyze()
-    chords = audio.detect_chords().chords
-    sections = analyze_sections(audio.data, audio.sample_rate).sections
+    result = analyze(audio.data, audio.sample_rate)
 
 print("=== 音楽解析 ===")
 print(f"BPM: {result.bpm} (信頼度: {result.bpm_confidence * 100:.0f}%)")
@@ -166,12 +166,18 @@ print(f"キー: {result.key.name}")
 print(f"拍子: {result.time_signature}")
 
 print("\nコード:")
-for chord in chords:
+for chord in result.chords:
     print(f"  {chord.name} [{chord.start:.2f}秒 - {chord.end:.2f}秒]")
 
 print("\nセクション:")
-for section in sections:
+for section in result.sections:
     print(f"  {section.name} [{section.start:.2f}秒 - {section.end:.2f}秒]")
+
+print(f"\n楽曲形式: {result.form}")
+
+# 1 要素だけ欲しいときは、解析全体ではなく単体で呼び出します:
+#   chords = audio.detect_chords().chords
+#   sections = analyze_sections(audio.data, audio.sample_rate).sections
 ```
 
 ```bash [CLI]
@@ -277,7 +283,8 @@ const result = hpss(samples, sampleRate);
 // result.harmonic   — 倍音成分（ボーカル／メロディ／和音）
 // result.percussive — 打撃成分（ドラム／パーカッション）
 
-// キー検出は倍音成分のほうがクリーンに当たります
+// ドラムやトランジェントはクロマ推定をにじませるため、倍音成分だけで
+// キー検出するとクリーンな結果が得られます
 const key = detectKey(result.harmonic, result.sampleRate);
 ```
 
@@ -289,7 +296,8 @@ with Audio.from_file("song.mp3") as audio:
     # result.harmonic   — 倍音成分（ボーカル／メロディ／和音）
     # result.percussive — 打撃成分（ドラム／パーカッション）
 
-# 倍音成分を使うとキー検出がクリーンに当たります
+# ドラムやトランジェントはクロマ推定をにじませるため、倍音成分だけで
+# キー検出するとクリーンな結果が得られます
 key = detect_key(result.harmonic, result.sample_rate)
 ```
 
@@ -427,7 +435,7 @@ sonare pitch song.mp3 --algorithm pyin --json
 :::
 
 ::: details 「有声（voiced）」フレームとは？
-ピッチ追跡は各フレームを **有声（voiced）** か **無声（unvoiced）** に分類します。
+ピッチ追跡は各フレームを **有声**（voiced） か **無声**（unvoiced） に分類します。
 
 *有声*は、明確な周期的ピッチが見つかったフレームです。歌の母音や持続音がこれに当たります。
 
@@ -435,6 +443,8 @@ sonare pitch song.mp3 --algorithm pyin --json
 
 `voicedFlag` / `voiced_flag` は、そのフレームごとの真偽値です。`true` の数を数えると、クリップのどれだけが追跡可能なメロディを含んでいたかが分かります。
 :::
+
+<SonareDemo id="melody-contour" />
 
 ### ストリーミング解析
 

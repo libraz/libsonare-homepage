@@ -87,7 +87,7 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 ライブイベントは同期実行ではなく*キューイング*されます。各呼び出しは、イベントを発火させるサンプル位置をエンジンへ渡します。次の `process(...)` ブロックが、そのブロックで処理すべきイベントをすべて消費します。これがタイミングを正確にする仕組みです。イベントは「メッセージが届いた時」ではなく、正確なフレームに着地します。
 
-キューイングの面は 2 つあり、デスティネーションごとにどちらかを選ぶべきです。
+キューイングの面は 2 つあり、デスティネーションごとにどちらかを選ぶべきです。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべての destination の発音中ノートを一括で解放します。
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きに供給します。Web MIDI ブリッジが駆動するのはこのレーンです。

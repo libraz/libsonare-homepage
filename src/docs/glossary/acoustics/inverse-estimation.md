@@ -23,7 +23,7 @@ Turn on "Treat as impulse response" when the uploaded file is one of these clean
 
 In **blind mode**, the input is ordinary material — music, speech, a field recording — that was never meant to expose the room. There is no clean click; the reverberation is tangled up with the source signal. The analyzer must *blindly* recover the decay from the gaps, note offsets, and pauses in the audio, where the tail is briefly audible on its own.
 
-Blind estimation is genuinely useful for ranking and visualizing spaces — comparing two rooms, getting a feel for a recording's environment — but it is **not an architectural measurement**. It is an informed inference, and it inherits whatever the source signal happened to reveal.
+Blind estimation is genuinely useful for ranking and visualizing spaces — comparing two rooms, getting a feel for a recording's environment — but it is **not an architectural measurement**. It is an informed inference: it can only recover decay the source signal actually exposed, so dense, gapless material — a loud, continuous master with no quiet moments — yields a weaker estimate than music with clear note releases and pauses.
 
 ## Confidence
 

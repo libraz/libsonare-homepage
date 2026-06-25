@@ -5,8 +5,8 @@ description: Loudness Units relative to Full Scale for mastering and streaming t
 
 # LUFS
 
-LUFS measures perceived loudness. It is more useful for mastering than raw peak level because it approximates how loud audio feels over time.
-Two tracks can have the same peak value while one feels much louder because it is denser for more of its duration. LUFS is the meter that helps describe that difference.
+LUFS measures perceived loudness — how loud audio actually feels to a listener over time. This is more useful for mastering than raw peak level (the highest instantaneous sample value), because a single loud peak says little about how loud the whole track feels.
+Two tracks can have the same peak value while one feels much louder because it stays close to its peak for more of its duration — its waveform is "denser", fuller, with less variation between loud and quiet moments. LUFS is the meter that helps describe that difference.
 
 | Target | Common Use |
 |--------|------------|

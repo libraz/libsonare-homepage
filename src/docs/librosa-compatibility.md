@@ -10,9 +10,10 @@ This document describes how libsonare functions correspond to Python's librosa l
 
 ## Overview
 
-libsonare provides many of the same MIR building blocks as
-[librosa](https://librosa.org/), but targets C++, Python bindings, Node.js
-native bindings, and WebAssembly.
+libsonare provides many of the same MIR (music information retrieval —
+extracting tempo, key, pitch, and other musical features from audio) building
+blocks as [librosa](https://librosa.org/), but targets C++, Python bindings,
+Node.js native bindings, and WebAssembly.
 
 It is not a drop-in replacement for librosa. APIs, defaults, and numerical
 details can differ.
@@ -26,7 +27,7 @@ Use this table before scanning the long compatibility matrix:
 
 | If your librosa code does... | Use in libsonare | Watch out for |
 |------------------------------|------------------|---------------|
-| Load files and run one-off analysis | `Audio.from_file(...)`, then `detect_bpm`, `detect_key`, `analyze` | Browser/WASM does not decode files; decode with Web Audio first |
+| Load files and run one-off analysis | `Audio.from_file(...)`, then `detect_bpm`, `detect_key`, `analyze` | Browser/WASM APIs usually take decoded PCM; use Web Audio or `Audio.fromMemory*` to turn encoded bytes into samples |
 | Build spectrogram features for ML | `stft`, `melSpectrogram` / `mel_spectrogram`, `mfcc`, `pcen` | Pass `n_fft`, `hop_length`, `n_mels`, and `n_mfcc` explicitly when comparing |
 | Compute chroma or harmonic features | `chroma`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `nnlsChroma` is not a strict `librosa.feature.chroma_cqt` clone |
 | Track tempo, beats, onsets, or pulse | `onsetEnvelope`, `detectOnsets`, `detectBeats`, `detectBpm`, `tempogram`, `plp` | libsonare returns beat/onset times in seconds for high-level detectors |
@@ -86,7 +87,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney normalization |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; output is L-infinity (max) normalized per frame, matching librosa's default `norm=np.inf` |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; each frame is scaled so its largest of the 12 pitch-class values is 1.0 (L-infinity / max normalization), matching librosa's default `norm=np.inf` |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | Per-frame |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` supported |
@@ -100,6 +101,10 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.cqt()` | `cqt()` | Constant-Q transform magnitude |
 | `librosa.vqt()` | `vqt()` | Variable-Q transform; `gamma` controls Q |
 | `librosa.feature.chroma_cqt()` (closest) | `nnlsChroma()` / `nnls_chroma()` | NNLS note-activation chroma; no exact librosa equivalent |
+| `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS (Energy Normalized Statistics) chroma; smoothed/L1-normalized |
+| _(no exact librosa equivalent)_ | `bassChroma()` / `bass_chroma()` | CQT-based low-register chroma for bass/inversion estimation |
+| `librosa.hybrid_cqt()` | `hybridCqt()` / `hybrid_cqt()` | Hybrid CQT (CQT for low bins, pseudo-CQT for high bins) |
+| `librosa.pseudo_cqt()` | `pseudoCqt()` / `pseudo_cqt()` | Approximate (lower-fidelity) CQT |
 | `librosa.feature.tempogram()` | `tempogram()` | Autocorrelation (default) or `mode='cosine'` window-local cosine similarity |
 | `librosa.feature.fourier_tempogram()` | `fourierTempogram()` / `fourier_tempogram()` | Complex Fourier tempogram |
 | _(tempo-octave-invariant variant)_ | `cyclicTempogram()` / `cyclic_tempogram()` | Cyclic tempogram; no exact librosa equivalent |
@@ -115,6 +120,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | librosa / standard | libsonare | Notes |
 |--------------------|-----------|-------|
 | `librosa.decompose.decompose()` | `decompose()` | NMF factor matrices from a row-major spectrogram |
+| `librosa.decompose.decompose(init=...)` | `decomposeWithInit()` / `decompose_with_init()` | NMF with selectable init: `init='random'` (default) or `init='nndsvd'` (SVD warm start) |
 | `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbor filtering |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | Multichannel integrated loudness from interleaved samples |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | Loudness range in LU |
@@ -139,6 +145,7 @@ These mirror `librosa.feature.inverse.*` and use Griffin-Lim for phase, so round
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
 | `librosa.onset.onset_strength()` | `onsetEnvelope()` / `onset_envelope()` | Spectral flux (C++ free function is `compute_onset_strength()`) |
+| `librosa.onset.onset_strength_multi()` | `onsetStrengthMulti()` / `onset_strength_multi()` | Multi-band onset strength (default `nBands=3`); WASM/Node return `{ nBands, nFrames, data }` |
 | `librosa.onset.onset_detect()` | `detectOnsets()` / `detect_onsets()` | Returns onset times |
 | `librosa.beat.beat_track()` | `BeatAnalyzer` / `detectBeats()` | DP-based |
 | `librosa.beat.tempo()` | `BpmAnalyzer` / `detectBpm()` | Tempogram |
@@ -410,8 +417,9 @@ This can slightly change downstream features after resampling.
 - **librosa**: Normalizes window for COLA
 - **libsonare**: Uses raw window values
 
-Expect small amplitude differences in iSTFT-style reconstruction. Apply
-normalization after reconstruction if your workflow depends on level matching.
+Expect small amplitude differences after an inverse STFT. If your workflow
+depends on the absolute output level matching librosa, rescale the reconstructed
+audio (for example, to the source's peak or RMS) after reconstruction.
 
 ::: details What is COLA?
 **COLA** stands for *Constant Overlap-Add*. When you reconstruct audio from an STFT, the overlapping windowed frames are added back together. If those overlapping windows sum to a constant value at every sample position, the reconstruction has even gain everywhere — that is the COLA condition. librosa normalizes the window so this holds exactly; libsonare uses the raw window, so the summed level can differ slightly. It only matters if you depend on the absolute output level after an inverse STFT.

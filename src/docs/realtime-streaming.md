@@ -206,7 +206,7 @@ Pattern voting needs enough bars to be confident. If you know the clip length up
 
 `StreamAnalyzer` gives you a live **onset strength** stream: the `onsetStrength` array on each frame.
 
-A *tempogram* turns an onset envelope into a time × tempo image. This is the offline view behind the progressive BPM estimate.
+A *tempogram* turns an onset envelope into a time × tempo image: at each moment it shows how strongly each candidate tempo is present. The progressive BPM estimate is essentially this image collapsed to its strongest tempo over time; the tempogram is the full picture that estimate is drawn from.
 
 Compute it from the accumulated envelope, or from any onset envelope returned by `onsetEnvelope(...)`. This is a batch step for a buffered window, not work to run inside the audio callback.
 
@@ -266,7 +266,14 @@ engine.stop();
 engine.destroy();
 ```
 
-`RealtimeEngine` can also register parameter metadata, set automation lanes, seek to markers, configure metronome clicks, process with monitor output, capture audio, run offline bounces, freeze clips, and drain telemetry. For meters, use `drainMeterTelemetry()` for the stereo fast path and `drainMeterTelemetryWide()` for per-plane records on surround/offline targets. For UI scopes, `configureScopeTelemetry(intervalFrames, bandCount)` enables per-target spectrum + vectorscope capture and `drainScopeTelemetry()` reads the snapshots. `intervalFrames` is the minimum render-frame gap between snapshots (`0` disables capture); `bandCount` is the FFT band resolution, clamped to `1..64` — the call returns the band count actually applied. Each drained snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds an interleaved stereo goniometer cloud `[l0, r0, l1, r1, …]` (up to 32 stereo points) for a vectorscope display. Band levels are block-size-independent: the amplitude normalization accounts for short blocks, so the dB readings stay stable regardless of the AudioWorklet block size.
+Beyond transport, `RealtimeEngine` also registers parameter metadata, sets automation lanes, seeks to markers, configures metronome clicks, processes with monitor output, captures audio, runs offline bounces, and freezes clips. Two telemetry families matter when wiring a UI:
+
+- **Meters** — `drainMeterTelemetry()` for the stereo fast path, and `drainMeterTelemetryWide()` for per-plane records on surround/offline targets.
+- **Scopes** — call `configureScopeTelemetry(intervalFrames, bandCount)` once to enable per-target spectrum + vectorscope capture, then read snapshots with `drainScopeTelemetry()`:
+  - `intervalFrames` — the minimum render-frame gap between snapshots (`0` disables capture).
+  - `bandCount` — the FFT band resolution, clamped to `1..64`; the call returns the band count actually applied.
+
+Each drained scope snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds an interleaved stereo goniometer cloud `[l0, r0, l1, r1, …]` (up to 32 stereo points) for a vectorscope display. Band levels are block-size-independent: the amplitude normalization accounts for short blocks, so the dB readings stay stable regardless of the AudioWorklet block size.
 
 Each record returned by `drainMeterTelemetry()`, `drainMeterTelemetryWide()`, and `drainScopeTelemetry()` carries a `droppedRecords` count of snapshots lost from the lock-free telemetry ring since the previous drain. A non-zero value means the consumer is draining too slowly (back-pressure) — poll more frequently to keep the meters and scopes glitch-free.
 

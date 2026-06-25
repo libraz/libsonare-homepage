@@ -13,9 +13,9 @@ By the end of this page you should be able to:
 
 ## What is libsonare?
 
-libsonare is a dependency-free audio engine for browser-native and native music tools, covering everything from analysis to arrangement.
+libsonare is a dependency-free audio engine for browser-native and native music tools. It covers the whole chain from analyzing existing audio (tempo, key, chords) to producing new audio (mixing, mastering, and sequencing MIDI into finished tracks).
 
-It covers several related jobs:
+libsonare covers several related jobs:
 
 | Area | What libsonare can do |
 |------|-----------------------|
@@ -31,7 +31,7 @@ It covers several related jobs:
 LUFS (Loudness Units Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including peaks that occur between samples, which ordinary peak meters miss — important for avoiding distortion on playback.
 :::
 
-It is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
+libsonare is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.
 
 ::: details What is WebAssembly?
 WebAssembly (WASM) is a binary instruction format that runs in web browsers at near-native speed. It lets code written in languages like C++ be compiled and run in the browser, with no server and nothing to install. libsonare uses this to bring C++-level audio analysis performance directly to web applications.
@@ -126,6 +126,8 @@ From the spectrogram, libsonare computes various **features** — each designed 
 In music, a pitch class groups all octaves of the same note together. For example, every C note (C2, C3, C4, ...) belongs to the pitch class "C." There are 12 pitch classes in Western music: C, C#, D, D#, E, F, F#, G, G#, A, A#, B. A chroma feature represents audio as the energy distribution across these 12 classes at each moment, ignoring which octave the notes are in.
 :::
 
+<SonareDemo id="chromagram" />
+
 - **Onset Envelope** — Measures how much the spectral energy changes between frames, highlighting moments where new notes or hits begin. This drives beat and rhythm analysis.
 
 ::: details What is an onset?
@@ -146,7 +148,7 @@ Timbre (pronounced "TAM-ber") is what makes a piano and a guitar sound different
 
 <SonareDemo id="waveform-harmonics" />
 
-- **CQT / VQT** — Transforms with frequency resolution that matches musical pitch, unlike the standard FFT where resolution is uniform across frequencies.
+- **CQT / VQT** — Transforms with frequency resolution that matches musical pitch, unlike the standard Fourier transform (FFT, the same math behind the STFT above) where the resolution is the same width at every frequency.
 
 ::: details Why does musical pitch need special frequency resolution?
 Musical notes are spaced logarithmically: the frequency doubles with each octave (A3 = 220 Hz, A4 = 440 Hz, A5 = 880 Hz).
@@ -165,7 +167,7 @@ The high-level results that most users care about are built **on top of** the fe
 | Analysis | Built from | What it does |
 |----------|-----------|-------------|
 | **Key Detection** | Chroma → Krumhansl-Schmuckler algorithm | Determines the musical key (e.g., "A minor") by comparing chroma profiles against key templates |
-| **Chord Recognition** | Chroma → template matching | Identifies chords over time by matching chroma frames against 108 chord type templates |
+| **Chord Recognition** | Chroma → template matching | Identifies chords over time by matching chroma frames against 192 chord templates (16 qualities × 12 roots) |
 | **BPM Detection** | Onset envelope → tempogram + autocorrelation | Estimates tempo by finding periodic patterns in onset strength |
 | **Beat Tracking** | Onset envelope → dynamic programming | Finds exact beat timestamps by optimizing for rhythmic regularity |
 | **Section Detection** | Chroma + spectral features → self-similarity | Segments the song into Intro, Verse, Chorus, etc. by detecting boundaries where musical character changes |
@@ -182,6 +184,8 @@ Self-similarity analysis compares every part of a song against every other part,
 ::: details What is the fundamental frequency (F0)?
 The fundamental frequency (F0) is the lowest frequency of a periodic sound — the frequency that determines the perceived pitch. When a singer sings an A4 note, the F0 is 440 Hz, even though many higher harmonics (880 Hz, 1320 Hz, ...) are also present. Pitch tracking algorithms like YIN and pYIN estimate this F0 over time to extract the melody line from audio.
 :::
+
+<SonareDemo id="beat-tracking" />
 
 This layered design means libsonare doesn't just give you answers — it exposes each stage, so you can use low-level features for your own analysis or plug them into ML pipelines.
 
@@ -207,7 +211,7 @@ An **equivalent room** is a practical model inferred from audio. A **shoebox geo
 
 See [Room Acoustics](./acoustic-analysis.md) for when to use each mode.
 
-libsonare also exposes inverse helpers for debugging and ML workflows: mel spectrograms and MFCCs can be mapped back to approximate spectra or preview audio. These are not restoration tools; they are lossy previews. See [Inverse Features](./inverse-features.md).
+libsonare also exposes inverse helpers for debugging and ML workflows: once you have a mel spectrogram or MFCC, these helpers run the transform in reverse to recover an approximate spectrum or a rough preview of what that feature "sounds like" — useful for sanity-checking an ML pipeline. They are not restoration tools; they are lossy previews. See [Inverse Features](./inverse-features.md).
 
 ### Audio Effects
 
@@ -261,7 +265,7 @@ A **send** taps a copy of a channel to a shared effect; a **bus** is a sub-mix s
 | **Linux / macOS** | C++ | Native applications, CLI tools |
 | **Any (via C API)** | C | FFI integration with other languages |
 
-The current site bundle includes about ~1.7 MB of WebAssembly/JavaScript assets before compression. See the [WebAssembly Guide](/docs/wasm#bundle-size) for the current breakdown.
+The current site bundle includes about ~{{ wasmMeta.total.sizeKB }} KB of WebAssembly/JavaScript assets before compression. See the [WebAssembly Guide](/docs/wasm#bundle-size) for the current breakdown.
 
 ## Relationship with librosa
 

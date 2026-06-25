@@ -28,7 +28,7 @@ A project nests a few simple parts, each one a container for the next:
 - Each **track** holds **clips** (blocks of content placed on the timeline).
 - An audio clip can carry alternate **takes** plus a **comp** that stitches the best parts of those takes into one performance.
 - A track can have **automation lanes** — recorded curves that move a parameter (volume, a filter cutoff, …) over time, the way a fader moving on its own would.
-- A MIDI track points at an instrument **destination** (the synth or sampler that will actually make its notes audible).
+- A MIDI track points at an instrument **destination** — the synth or sampler that will actually make its notes audible (defined just below).
 - Every track routes through a strip in the **mixer scene** — its channel of EQ, fader, pan, and sends — on its way to the master.
 
 ::: info What is a MIDI "destination"?
@@ -169,12 +169,8 @@ const copyId = project.duplicateClip(tailId, 8);
 
 Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping.
 
-::: warning setClipGain applies to audio clips only
-`setClipGain` affects **audio clips** only. On a MIDI clip the value is stored (undoably, and round-trips through `toJson()`), but the bounce compiler never applies it — neither as a level nor as a velocity scale — so per-clip gain has no audible effect on MIDI clips. To change a MIDI track's volume, set the track gain with `setTrackGain(trackId, gain)` (it is folded into the track's channel-strip fader); a track gain of `0` also silences the track's MIDI notes entirely.
-:::
-
 ::: warning `setClipGain` / `setClipFade` apply to audio clips only
-`setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip they are stored but never reach the rendered notes — the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades are dropped. To control the volume of a MIDI-driven instrument, use the **track fader** (`setTrackGain`, or the channel strip in the [mixer scene](./mixing.md)), which the compiler folds into the strip uniformly across a track's audio and MIDI stems.
+`setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades are silently dropped. To control the volume of a MIDI-driven instrument, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
 :::
 
 In Python the same operations are snake_case, and fades take separate length/curve arguments:
@@ -326,11 +322,11 @@ project.setOverlapPolicy(1); // allow overlap (e.g. crossfades, layered takes)
 project.getOverlapPolicy();  // read it back
 ```
 
-`0` disallows overlaps; `1` allows them. Allow overlaps when you intend layered clips or crossfades; disallow to keep a track strictly sequential.
+`0` disallows overlaps; `1` allows them. Allow overlaps when you intend layered clips or crossfades; disallow to keep a track strictly sequential. The policy is a plain integer because it mirrors the native enum directly: only `0` (disallow) and `1` (allow) are defined, and any other value is treated as disallow.
 
 ## Warp: stretching clips to the grid
 
-**Warp** lets a recorded audio clip follow the project's tempo instead of playing back at its fixed original speed — think of nudging and stretching a recording so its beats land on the grid. It does this by decoupling the clip's recorded timeline from project time. Each clip has a warp **mode** and an optional **warp map** of anchors.
+**Warp** lets a recorded audio clip follow the project's tempo instead of playing back at its fixed original speed — think of nudging and stretching a recording so its beats land on the grid. Internally, the clip keeps its own recorded timeline; warp maps positions on that recorded timeline onto positions in project time, so changing the project tempo restretches the clip. Each clip has a warp **mode** and an optional **warp map** of anchors.
 
 | Warp mode | Meaning |
 |-----------|---------|
@@ -399,7 +395,13 @@ project.annotateChords([
 ]);
 ```
 
-Pitch classes are `0..11` (C = 0) or `255` for unknown; `mode` and `quality` are small ordinals (key mode `1` = major, `2` = minor; chord quality `1` = major, `2` = minor, …).
+The numeric fields are small fixed encodings:
+
+- **Pitch class** (`tonicPc`, `rootPc`): `0..11` with C = 0, C#/Db = 1, … B = 11; `255` means unknown.
+- **Key mode** (`mode`): `1` = major, `2` = minor.
+- **Chord quality** (`quality`): `1` = major, `2` = minor, `3` = diminished, `4` = augmented (see [Chord Recognition](./glossary/analysis/chord-recognition.md) for the full list).
+
+So `{ tonicPc: 0, mode: 1 }` is C major and `{ rootPc: 7, quality: 1 }` is a G major chord.
 
 ## Assist sidecars
 

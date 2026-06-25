@@ -24,7 +24,7 @@ By the end of this page you should be able to:
 
 | Goal | Use | Beginner note |
 |------|-----|---------------|
-| Make a clip longer or shorter without changing the note | Time stretch | A `rate` above `1.0` makes the result shorter; below `1.0` makes it longer |
+| Make a clip longer or shorter without changing the note | Time stretch | `rate` is a playback-speed multiplier: `rate=2.0` plays twice as fast, so the clip is half as long; `rate=0.5` is half speed and twice as long. The pitch does not change. (Note: `noteStretch`'s `stretchRatio` is a length multiplier, so it works the opposite way.) |
 | Move the whole clip up or down in pitch | Pitch shift | `semitones=12` means one octave up; `-12` means one octave down |
 | Nudge a vocal note toward a target note | Pitch correction | You must know or estimate the current pitch first |
 | Hold or shorten one note region | Note stretch | Region positions are sample offsets, not seconds; `stretchRatio > 1` lengthens the region |
@@ -45,6 +45,8 @@ That is why `voiceChange` separates the two controls. Lowering the formant facto
 <SonareDemo id="time-stretch" />
 
 ## Functions
+
+Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` are defined under [Time-varying pitch correction](#time-varying-pitch-correction) below.
 
 | Task | WASM / browser JavaScript | Python |
 |------|---------------------------|--------|
@@ -142,7 +144,7 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced` (non-zero = voiced) and `voicedProb` are optional; omit them to treat every frame as voiced. Match `hopLength` to whatever produced `f0Hz` so frame `i` lines up with sample `i * hopLength`.
+`voiced` (non-zero = voiced) and `voicedProb` are optional; omit them to treat every frame as voiced. Use the same `hopLength` that produced the F0 contour, so frame `i` lines up with sample `i * hopLength`.
 
 ::: tip Constant vs contour-following correction
 Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.

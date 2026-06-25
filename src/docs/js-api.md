@@ -194,6 +194,10 @@ function detectBpm(samples: Float32Array, sampleRate?: number): number
 | `samples` | `Float32Array` | Mono audio samples (range -1.0 to 1.0) |
 | `sampleRate?` | `number` | Sample rate in Hz (default: 22050; e.g., 44100) |
 
+::: warning Always pass the real sample rate
+Although `sampleRate` is optional here (defaulting to 22050 Hz), decoded browser audio is almost always 44100 or 48000 Hz. Pass the buffer's actual `audioBuffer.sampleRate`, or the reported BPM will be wrong. Unlike `detectBpm`, the other analysis functions (`detectKey`, `detectBeats`, `analyze`) make `sampleRate` required for exactly this reason.
+:::
+
 **Returns:** Detected BPM as a number.
 
 ```typescript
@@ -353,6 +357,10 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 
 ### Focused analysis helpers
 
+::: tip One call is usually enough
+`analyze()` already returns chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Reach for a focused helper only when you want a single field or need options the high-level call hides.
+:::
+
 Use the focused helpers when the default `analyze(...)` result is either too broad or not detailed enough. They share the same mono `Float32Array` input model but expose options that are hidden by the high-level call.
 
 | Task | Function | Notes |
@@ -473,6 +481,8 @@ Harmonic-Percussive Source Separation. Splits audio into tonal (vocals, synths) 
 - **Drum Extraction**: Get just the percussion for sampling
 :::
 
+<SonareDemo id="waveform-harmonics" />
+
 ::: tip Performance
 HPSS requires STFT computation and median filtering. Processing time scales with audio duration.
 :::
@@ -518,6 +528,8 @@ Time-stretch audio without changing pitch. Rate < 1.0 = slower, > 1.0 = faster.
 - **Podcast Editing**: Speed up/slow down speech
 - **Music Production**: Fit samples to project tempo
 :::
+
+<SonareDemo id="time-stretch" />
 
 ::: tip Performance
 Uses phase vocoder algorithm. Processing time increases with audio duration.
@@ -570,7 +582,7 @@ function pitchCorrectToMidi(
 
 // Retune a tracked pitch contour to a fixed target note, frame by frame.
 // f0Hz is a per-frame f0 track (e.g. from pitchYin/pitchPyin), aligned to
-// hopLength. Pass the matching voicedFlag/voicedProb arrays to skip unvoiced
+// hopLength. Pass the matching voiced/voicedProb arrays to skip unvoiced
 // frames; unvoiced or NaN frames are left untouched.
 function pitchCorrectToMidiTimevarying(
   samples: Float32Array,
@@ -578,7 +590,7 @@ function pitchCorrectToMidiTimevarying(
   targetMidi: number,
   sampleRate: number,
   hopLength: number,
-  voicedFlag?: Int32Array,
+  voiced?: Int32Array,
   voicedProb?: Float32Array,
 ): Float32Array
 
@@ -777,6 +789,8 @@ Compute chromagram (pitch class distribution). Maps all frequencies to 12 pitch 
 - **Music Similarity**: Compare harmonic content between tracks
 :::
 
+<SonareDemo id="chromagram" />
+
 ```typescript
 function chroma(
   samples: Float32Array,
@@ -883,26 +897,32 @@ These functions are not just "more features"; they solve different modeling prob
 
 | Need | Use | Why |
 |------|-----|-----|
-| Log-frequency pitch representation | `cqt(...)` | Constant-Q bins align well with musical pitch over octaves. |
+| Log-frequency pitch representation | `cqt(...)`, `pseudoCqt(...)`, `hybridCqt(...)` | Constant-Q bins align well with musical pitch over octaves; pseudo/hybrid variants trade accuracy and speed across bins. |
 | Variable bandwidth pitch representation | `vqt(...)` | Like CQT, but with a bandwidth offset for low-frequency stability. |
-| Chord-friendly chroma | `nnlsChroma(...)` | NNLS note activations can be cleaner for chord work than STFT chroma. |
-| Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)` | Librosa-compatible contrast bands, polynomial coefficients, and zero-crossing indices. |
+| Chord-friendly chroma | `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | NNLS, CENS, and low-register chroma variants can be cleaner for chord or bass-register work than plain STFT chroma. |
+| Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | Librosa-compatible contrast bands, polynomial coefficients, zero-crossing indices, and multi-band onset strength. |
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
-| Decomposition and remixing | `decompose(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, nearest-neighbor filtering, interval remixing, time scaling, and HPSS residual output. |
+| Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, nearest-neighbor filtering, interval remixing, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. |
 | Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA. |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
+const pseudo = pseudoCqt(samples, sampleRate);
+const hybrid = hybridCqt(samples, sampleRate);
 const nnls = nnlsChroma(samples, sampleRate);
+const cens = chromaCens(samples, sampleRate);
+const bass = bassChroma(samples, sampleRate);
 const loudness = lufs(samples, sampleRate);
 
 const contrast = spectralContrast(samples, sampleRate);
 const poly = polyFeatures(samples, sampleRate);
 const crossings = zeroCrossings(samples);
+const onsetBands = onsetStrengthMulti(samples, sampleRate);
 const tuning = estimateTuning(samples, sampleRate);
 const offset = pitchTuning(pitch.f0);
 const { w, h } = decompose(spectrogram, nFeatures, nFrames, 8);
+const warmStarted = decomposeWithInit(spectrogram, nFeatures, nFrames, 8, 50, 2.0, 'nndsvd');
 const filtered = nnFilter(spectrogram, nFeatures, nFrames);
 const remixed = remix(samples, Int32Array.from([0, sampleRate, sampleRate, 2 * sampleRate]));
 const stretched = phaseVocoder(samples, 1.5, sampleRate);
@@ -1974,6 +1994,28 @@ interface RhythmFeatures {
 }
 ```
 
+### MelodyContour
+
+```typescript
+interface MelodyContour {
+  pitchRangeOctaves: number;
+  pitchStability: number;
+  meanFrequency: number;
+  vibratoRate: number;     // Hz
+  pitches: MelodyPoint[];  // per-frame pitch trajectory
+}
+```
+
+### MelodyPoint
+
+```typescript
+interface MelodyPoint {
+  time: number;        // frame time in seconds
+  frequency: number;   // estimated f0 in Hz (0 when unvoiced)
+  confidence: number;  // voicing confidence, 0.0 to 1.0
+}
+```
+
 ## Enumerations
 
 ### PitchClass
@@ -2301,16 +2343,15 @@ chain.delete();  // release the WASM handle (call when done)
 
 Stereo-only stages are skipped when `numChannels === 1`.
 
-Offline-only repair stages that need whole-file context are not accepted by the streaming constructor:
+Repair stages exposed by the chain config are offline-only and throw if enabled on the streaming constructor:
 
 - `repair.declick`
-- `repair.declip`
-- `repair.decrackle`
-- `repair.dehum`
 - `repair.dereverb`
 - `repair.denoise`
 
-Use `masteringChain*` or `masterAudio*` when you need those stages.
+These are the only repair stages the chain config surfaces (per the shipped `MasteringChainConfig.repair` type), and the streaming constructor throws when any of them is enabled. The other repair processors (`declip`, `decrackle`, `dehum`) are not part of the chain config at all and run only through the one-shot helpers `masteringRepairDeclip` / `masteringRepairDecrackle` / `masteringRepairDehum`.
+
+Use `masteringChain*` or `masterAudio*` when you need the chain-config repair stages.
 
 The `loudness` stage is a special case. The streaming chain cannot measure whole-signal integrated LUFS, so an enabled `loudness` stage throws at construction **unless** you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`). With those fields set, the chain applies the precomputed static gain plus the loudness stage's true-peak limiter per block instead of throwing.
 
@@ -2355,7 +2396,7 @@ Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and
 
 ### Standalone dynamics and repair processors
 
-Every named stage is also a one-shot function, so you can run a single processor without assembling a chain. The dynamics processors return a `DynamicsResult` (processed samples plus gain-reduction telemetry); the repair processors return a `Float32Array`.
+Every named stage is also a one-shot function, so you can run a single processor without assembling a chain. The dynamics processors return a `DynamicsResult` (the processed `samples` plus `latencySamples`, the processor's look-ahead latency in samples); the repair processors return a `Float32Array`.
 
 ```typescript
 // Offline dynamics

@@ -51,7 +51,7 @@ The demo uses two measurement paths:
 | Lightweight UI metrics | Immediate feedback while interacting | Vue components |
 | Authoritative render metrics | Values to keep in the report | libsonare render result and JSON report |
 
-Peak, RMS, crest factor, and correlation in the UI are sampled from the source or rendered buffers with a stride so the interface stays responsive. The phase scope and stereo image are visualization aids.
+Peak, RMS, crest factor, and correlation in the UI are sampled from the source or rendered buffers with a stride — reading every Nth sample rather than all of them — so the interface stays responsive. The phase scope and stereo image are visualization aids.
 
 Because the UI metrics and the post-render metrics come from separate paths, the numbers can differ slightly. Treat the JSON report as the processing record.
 

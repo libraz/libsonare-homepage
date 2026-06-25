@@ -44,7 +44,7 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Mastering presets/chains/processors | Yes | Partial |
 | Mastering assistant/profile/preview JSON | Yes | No dedicated command |
 | Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
-| Surround and multichannel mixing | Yes — scene/pan round-trip plus realtime [surround group buses](./mixing.md#surround-and-multichannel); surround **panning** is staged (the `setSurroundPan` position round-trips in scene JSON but is inert until the surround DSP path lands — the surround group bus + wide-meter telemetry are the functional parts) | No |
+| Surround and multichannel mixing | Yes for scene/pan round-trip plus realtime [surround group buses](./mixing.md#surround-and-multichannel). **Surround panning is staged:** `setSurroundPan` positions save and reload in scene JSON but do not move the sound yet, because the surround DSP path is not implemented. The parts that work today are the surround group bus and wide-meter telemetry. | No |
 | Project and arrangement editing (headless DAW) | Yes — see [Project Editing](./project-editing.md) | Yes |
 | Built-in instruments (NativeSynth presets/patches) | Yes — see [Built-in Instruments](./native-synth.md) | Partial — `project bounce --synth` exposes the simple built-in synth waveform path, not the NativeSynth preset/patch catalog |
 | SoundFont 2 player | Yes — see [SoundFont 2 Player](./soundfont-player.md) | No (Project API only) |
@@ -56,7 +56,7 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Metering (meters, clipping/dynamic-range, stereo image, spectrum) | Yes | C++ CLI only (`meter`, `clipping`, `dynamic-range`) |
 | Scale quantization | Yes | No |
 | Room acoustics | Yes | `sonare acoustic [--ir]`, `estimate-room`, `synthesize-rir`, `room-morph` |
-| File decoding | Native: WAV/MP3 (FFmpeg builds add more); WASM: pass decoded samples | Same as the native build |
+| File decoding | Native: WAV/MP3 (FFmpeg builds add more); WASM: most APIs take decoded samples, while `Audio.fromMemory(...)` decodes WAV/MP3 bytes and browser fallback can decode supported formats | Same as the native build |
 
 ## Known Shape Differences
 
@@ -86,7 +86,7 @@ A few signatures don't line up across all three bindings:
 | Mastering chain config | `masteringChain(...)` and `StreamingMasteringChain` use nested config objects; `masterAudio(...)` overrides use flat dot-notation keys |
 | `StreamingMasteringChain` scope | Block-safe stages only — it rejects repair stages that need lookaround/file context and the whole-file `loudness` stage; use one-shot mastering APIs for those |
 | `analyze(...)` return | Every binding — C ABI, Python, Node native, and WASM — returns the complete `analyze` result: chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. The dedicated functions (`detect_chords`, `analyze_sections`, …) stay useful when you need extra parameters or just one family without running the full pipeline |
-| `normalize(...)` defaults | Module-level `normalize(...)` (Python, WASM, Node native) defaults to `0.0` (full scale); the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0` |
+| `normalize(...)` defaults | Module-level `normalize(...)` (Python, WASM, Node native) defaults to `0.0` dBFS — that is, normalize the peak to full scale, not a gain of zero; the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0` |
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM; pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
 | Automation curves | Shared `AutomationCurve` across engine and mixing APIs (`linear`, `exponential`, `hold`, `s-curve`); update older per-module curve enum names to this shared name |
