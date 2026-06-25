@@ -191,4 +191,33 @@ export const analysisDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'griffin-lim',
+    archetype: 'param-sweep',
+    config: { processor: 'griffin-lim' },
+    // A sustained vowel reconstructs quickly and stays recognizable, so the iteration
+    // count's effect on phase quality is what you hear, not the choice of material.
+    source: { kind: 'clip', clip: 'vowel' },
+    viz: 'waveform',
+    title: {
+      en: 'Griffin-Lim — how iterations recover phase',
+      ja: 'Griffin-Lim — 反復で位相を取り戻す',
+    },
+    caption: {
+      en: 'A mel spectrogram keeps how much energy sits at each frequency but throws phase away, so reconstructing audio means inventing a plausible phase. Griffin-Lim does that by repetition: each pass nudges the phase toward something a real waveform could have produced. Drag the iteration count and press play — at one or two passes the result is hollow and "phasey"; by 30–40 it settles into a recognizable voice. The averaged spectrum barely changes because the magnitude is fixed throughout; it is the phase, and therefore the clarity, that improves.',
+      ja: 'メルスペクトログラムは各周波数のエネルギー量は残しますが位相を捨てるため、音声を再構成するにはもっともらしい位相を作り出す必要があります。Griffin-Lim はそれを反復で行い、各パスごとに、実際の波形が生み出しうる位相へと近づけていきます。反復回数をドラッグして再生してみてください — 1〜2 パスでは虚ろで「位相っぽい」音ですが、30〜40 パスでは聞き取れる声に落ち着きます。マグニチュードは終始固定されているため平均スペクトルはほとんど変わりません — 改善するのは位相、つまり明瞭さです。',
+    },
+    params: [
+      {
+        key: 'iters',
+        kind: 'range',
+        default: 16,
+        min: 1,
+        max: 60,
+        step: 1,
+        unit: { en: 'iter', ja: '反復' },
+        label: { en: 'Iterations', ja: '反復回数' },
+      },
+    ],
+  },
 ];

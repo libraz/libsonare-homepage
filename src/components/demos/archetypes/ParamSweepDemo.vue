@@ -2,13 +2,20 @@
 /**
  * `param-sweep` archetype: drag one control and hear + see a DSP transform respond.
  *
- * Two processors share this component, selected by `config.processor`:
+ * Four processors share this component, selected by `config.processor`:
  * - `pitch-shift` — drag the semitone slider and the whole harmonic comb slides while
  *   the duration stays fixed. The marker tracks the fundamental in Hz. Pitch shifting
  *   here is not formant-preserving, so formants ride along — the "chipmunk" effect.
  * - `time-stretch` — drag the rate slider and the waveform grows or shrinks in time
  *   while the spectrum stays put: same pitch, different length. The two are exact
  *   opposites, which is the whole point of placing them side by side.
+ * - `formant-shift` — drag the formant factor and the spectral envelope (the formant
+ *   peaks that give a voice its character) shifts while the harmonic comb and the
+ *   fundamental marker stay put: timbre moves, pitch does not. The counterpart to
+ *   pitch-shift, where the comb moves and the envelope rides along.
+ * - `griffin-lim` — reconstruct audio from a mel spectrogram and drag the iteration
+ *   count: more Griffin-Lim passes settle the invented phase into something cleaner
+ *   and less "phasey". The magnitude is fixed; only the phase quality improves.
  *
  * The top panel is the waveform you hear; the bottom is the averaged magnitude
  * spectrum. A playback-synced beam sweeps the waveform.
@@ -43,19 +50,43 @@ function onParams(next: Record<string, ParamValue>): void {
   Object.assign(values, next);
 }
 
-type Processor = 'pitch-shift' | 'time-stretch';
+type Processor = 'pitch-shift' | 'time-stretch' | 'formant-shift' | 'griffin-lim';
 const processor = computed<Processor>(
   () => (props.def.config?.processor as Processor) ?? 'pitch-shift',
 );
 const semitones = computed<number>(() => Number(values.semitones ?? 0));
 const rate = computed<number>(() => Number(values.rate ?? 1));
+const formant = computed<number>(() => Number(values.formant ?? 1));
+const iters = computed<number>(() => Number(values.iters ?? 16));
 /** The value that triggers a re-render, whichever processor is active. */
-const activeValue = computed(() =>
-  processor.value === 'time-stretch' ? rate.value : semitones.value,
-);
+const activeValue = computed(() => {
+  switch (processor.value) {
+    case 'time-stretch':
+      return rate.value;
+    case 'formant-shift':
+      return formant.value;
+    case 'griffin-lim':
+      return iters.value;
+    default:
+      return semitones.value;
+  }
+});
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
-const eyebrow = computed(() =>
-  processor.value === 'time-stretch' ? 'PARAM SWEEP · TIME STRETCH' : 'PARAM SWEEP · PITCH SHIFT',
+const eyebrow = computed(() => {
+  switch (processor.value) {
+    case 'time-stretch':
+      return 'PARAM SWEEP · TIME STRETCH';
+    case 'formant-shift':
+      return 'PARAM SWEEP · FORMANT';
+    case 'griffin-lim':
+      return 'PARAM SWEEP · GRIFFIN-LIM';
+    default:
+      return 'PARAM SWEEP · PITCH SHIFT';
+  }
+});
+/** The fundamental marker is meaningful only when there is a fixed pitch to mark. */
+const showFundamental = computed(
+  () => processor.value === 'pitch-shift' || processor.value === 'formant-shift',
 );
 
 // ---- presentation state ----------------------------------------------------
@@ -74,9 +105,16 @@ const stateLabel = computed(() => {
   if (status.value === 'error') return 'ERROR';
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
   if (status.value !== 'ready') return 'IDLE';
-  return processor.value === 'time-stretch'
-    ? `${outDur.value.toFixed(1)} s`
-    : `${Math.round(fundHz.value)} Hz`;
+  switch (processor.value) {
+    case 'time-stretch':
+      return `${outDur.value.toFixed(1)} s`;
+    case 'formant-shift':
+      return `×${formant.value.toFixed(2)}`;
+    case 'griffin-lim':
+      return `${iters.value} iter`;
+    default:
+      return `${Math.round(fundHz.value)} Hz`;
+  }
 });
 
 // ---- audio + figure data ---------------------------------------------------
@@ -140,6 +178,18 @@ function minRate(): number {
   return props.def.params?.find((p) => p.key === 'rate')?.min ?? 0.5;
 }
 
+/** Scale to a fixed peak so reconstructions at different iteration counts audition equally loud. */
+function peakNormalize(samples: Float32Array, target: number): Float32Array {
+  let max = 1e-6;
+  for (let i = 0; i < samples.length; i++) {
+    const a = Math.abs(samples[i]);
+    if (a > max) max = a;
+  }
+  const g = target / max;
+  for (let i = 0; i < samples.length; i++) samples[i] *= g;
+  return samples;
+}
+
 async function compute(): Promise<void> {
   try {
     if (status.value === 'idle') status.value = 'loading';
@@ -158,6 +208,34 @@ async function compute(): Promise<void> {
       // The slowest rate gives the longest clip; draw every render against that width.
       const refDur = baseDur / minRate();
       widthFrac = Math.max(0.04, Math.min(1, outDur.value / refDur));
+    } else if (processor.value === 'formant-shift') {
+      const f = formant.value;
+      // Shift only the spectral envelope; pitch is held, so the fundamental marker
+      // stays put while the formant peaks slide — pitch and formant on separate axes.
+      samples =
+        f === 1 ? baseClip.samples : wasm.voiceChange(baseClip.samples, sr, { formantFactor: f });
+      fundHz.value = BASE_F0;
+      outDur.value = baseDur;
+      widthFrac = 1;
+    } else if (processor.value === 'griffin-lim') {
+      // Forward to a mel spectrogram, then reconstruct with N Griffin-Lim passes.
+      // The magnitude is fixed; more iterations only settle the invented phase.
+      const mel = wasm.melSpectrogram(baseClip.samples, sr, 2048, 512, 128);
+      const out = wasm.melToAudio(
+        mel.power,
+        mel.nMels,
+        mel.nFrames,
+        sr,
+        2048,
+        512,
+        0,
+        0,
+        iters.value,
+      );
+      samples = peakNormalize(out, 0.7);
+      fundHz.value = 0;
+      outDur.value = samples.length / sr;
+      widthFrac = 1;
     } else {
       const st = semitones.value;
       samples = st === 0 ? baseClip.samples : wasm.pitchShift(baseClip.samples, sr, st);
@@ -293,9 +371,10 @@ function paint(): void {
   }
   ctx.stroke();
 
-  // Fundamental marker (pitch-shift only: for time-stretch the spectrum is the
-  // constant, not a moving fundamental, so a Hz marker would mislead).
-  if (processor.value === 'pitch-shift' && fundHz.value > 0 && fundHz.value < SPEC_MAX_HZ) {
+  // Fundamental marker. Drawn when there is a fixed pitch to mark: pitch-shift (it
+  // moves) and formant-shift (it deliberately holds). For time-stretch and griffin-lim
+  // the spectrum is the constant — a moving Hz marker would mislead.
+  if (showFundamental.value && fundHz.value > 0 && fundHz.value < SPEC_MAX_HZ) {
     const mx = padX + (fundHz.value / SPEC_MAX_HZ) * innerW;
     ctx.strokeStyle = 'rgba(45, 212, 191, 0.9)';
     ctx.lineWidth = 1.4;

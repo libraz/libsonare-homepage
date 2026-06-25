@@ -40,6 +40,10 @@ Good voice editing exposes the two independently:
 
 That independence is what makes natural transposition (shift pitch, hold formants) and creative voice design (warp formants freely) both possible from one tool. As always, small moves stay natural; large moves are an effect.
 
+<SonareDemo id="formant-shift" />
+
+Compare this with the [pitch shift](#why-pitch-shifting-alone-sounds-wrong) above: there the harmonic comb slides and the formants ride along; here the comb and the fundamental hold still while only the envelope moves. Those are the two independent axes `voiceChange` exposes.
+
 ::: details How libsonare changes a voice
 `voiceChange` takes `pitchSemitones` and `formantFactor` as separate arguments. The pitch path reuses the phase-vocoder/resampling backend from [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md), while `FormantWarp` (`FormantWarpConfig`) shifts the spectral envelope independently of the harmonic structure — so the vocal-tract character moves without retuning the note. Lowering the formant factor makes a voice larger and darker; raising it makes it smaller and brighter; the pitch stays where `pitchSemitones` puts it. It operates on decoded mono samples like the other editing helpers.
 :::

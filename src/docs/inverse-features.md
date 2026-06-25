@@ -174,6 +174,10 @@ Each pass nudges the phase toward something that an actual signal could have pro
 
 `nIter` is the main quality/latency dial. Everything else (`nFft`, `hopLength`, `fmin`, `fmax`, `htk`) must match the **forward** transform — see below. The helper signatures default `fmin`/`fmax` to `0` (full range) and `htk` to `false` (Slaney); pass the same values you gave the forward transform, in the same positional slots.
 
+<SonareDemo id="griffin-lim" />
+
+The demo runs exactly the `melSpectrogram` → `melToAudio` round trip above on a short vowel: drag the iteration count and listen. Notice that the averaged spectrum hardly moves while the *sound* clears up — the magnitude was always there; iterations only recover a usable phase.
+
 ::: info Slaney vs HTK Mel scale
 There are two common conventions for spacing the Mel bands: the **Slaney** formula (librosa's and libsonare's default) and the **HTK** formula. They place the band edges differently, so the forward and inverse transforms must use the *same* convention — pass `htk: true` (or `htk=True`) to the inverse only if the forward transform used it.
 :::

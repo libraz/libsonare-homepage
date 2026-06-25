@@ -65,6 +65,35 @@ export const editingDemos: SonareDemoDef[] = [
     ],
   },
   {
+    id: 'formant-shift',
+    archetype: 'param-sweep',
+    config: { processor: 'formant-shift' },
+    // The same sustained vowel as pitch-shift, so the two demos read as a matched pair:
+    // there the comb slides; here it stays and only the envelope moves.
+    source: { kind: 'clip', clip: 'vowel' },
+    viz: 'waveform',
+    title: {
+      en: 'Formant shift — changing character, not pitch',
+      ja: 'フォルマントシフト — 音程はそのまま、声の質感を変える',
+    },
+    caption: {
+      en: "Formant shifting is pitch shift's counterpart: it moves the spectral envelope — the formant peaks that make a voice feel small and bright or large and dark — while leaving the note alone. Drag the factor and watch the harmonic comb and the fundamental marker hold their place as the envelope slides. Above 1.0 the voice brightens and shrinks; below 1.0 it darkens and enlarges; the pitch never changes. Press play to hear the character shift with no retuning.",
+      ja: 'フォルマントシフトはピッチシフトの相方で、音程はそのままに、スペクトル包絡 — 声を小さく明るく、あるいは大きく暗く感じさせるフォルマントの山 — を動かします。係数をドラッグすると、倍音の櫛と基音マーカーは位置を保ったまま、包絡だけがスライドします。1.0 より上では声が明るく小さく、1.0 より下では暗く大きくなりますが、音程は変わりません。再生すると、音程を変えずに声の質感だけが動くのが聴けます。',
+    },
+    params: [
+      {
+        key: 'formant',
+        kind: 'range',
+        default: 1,
+        min: 0.7,
+        max: 1.4,
+        step: 0.05,
+        unit: '×',
+        label: { en: 'Formant', ja: 'フォルマント' },
+      },
+    ],
+  },
+  {
     id: 'spectral-edit',
     archetype: 'spectral-edit',
     // A sustained pad gives a stable harmonic bed so the injected whistle — and the
