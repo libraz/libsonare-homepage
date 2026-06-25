@@ -130,9 +130,12 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 各デスティネーションは 1 つの **MIDI FX インサート** を持てます。イベントストリームへの非破壊な変換（トランスポーズ、チャンネルフィルタ、ベロシティカーブなど）を JSON で設定します。
 
 ```typescript
-engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ /* MIDI FX 設定 */ }));
+// 入力されたノートをすべて 1 オクターブ上げる
+engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ transpose_semitones: 12 }));
 engine.clearMidiFx(0);   // 指定したデスティネーションのみ解除（ID 省略時は 0）
 ```
+
+設定 JSON は [`bakeMidiFx`](./project-editing.md) と同じスキーマです。各ステージはそのパラメータをキーにするので、ステージのキーを含めれば有効になり、省けばスキップされます。主なキーは `transpose_semitones`、`velocity_scale` / `velocity_offset` / `velocity_gamma`、`quantize_ppq` / `quantize_strength`、`chord_intervals`、`arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq` です。キーの全一覧と例は [プロジェクト編集](./project-editing.md) を参照してください。
 
 `setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ます。そのため、よくあるケース（フレーズ間で 1 つの変換を別の変換へ差し替える）では、鳴っているノートはそのまま保たれます。鍵を押したまま FX を変える場合の注意点が 2 つあります。
 
@@ -403,6 +406,10 @@ finally:
 ```
 
 これらのエンジンを実機から鳴らすには、プラットフォームのライブラリ（たとえば CoreMIDI/ALSA のラッパー）で MIDI を読み、同じ `push_midi_input_*` メソッドを呼びます。タイムスタンプからサンプルへの変換は、ブラウザの `timestampToSamples` と同様に自分で用意します。
+
+::: info 実験的なネイティブ macOS バックエンド
+C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_COREAUDIO`・`BUILD_COREMIDI`・`BUILD_AU_HOST` でネイティブ macOS ホストバックエンド（CoreAudio 出力、CoreMIDI 入出力、Audio Unit 楽器ホスト）を有効化できます。これらは C-ABI を追加せず、公開パッケージ（npm／PyPI／WASM）にも含まれません。macOS 専用かつソースビルドでのオプトインで、今後変更される可能性があります。
+:::
 
 ## マイク入力について
 

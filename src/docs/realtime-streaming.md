@@ -266,9 +266,21 @@ engine.stop();
 engine.destroy();
 ```
 
-`RealtimeEngine` can also register parameter metadata, set automation lanes, seek to markers, configure metronome clicks, process with monitor output, capture audio, run offline bounces, freeze clips, and drain meter telemetry.
+`RealtimeEngine` can also register parameter metadata, set automation lanes, seek to markers, configure metronome clicks, process with monitor output, capture audio, run offline bounces, freeze clips, and drain telemetry. For meters, use `drainMeterTelemetry()` for the stereo fast path and `drainMeterTelemetryWide()` for per-plane records on surround/offline targets. For UI scopes, `configureScopeTelemetry(intervalFrames, bandCount)` enables per-target spectrum + vectorscope capture and `drainScopeTelemetry()` reads the snapshots. `intervalFrames` is the minimum render-frame gap between snapshots (`0` disables capture); `bandCount` is the FFT band resolution, clamped to `1..64` — the call returns the band count actually applied. Each drained snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds an interleaved stereo goniometer cloud `[l0, r0, l1, r1, …]` (up to 32 stereo points) for a vectorscope display. Band levels are block-size-independent: the amplitude normalization accounts for short blocks, so the dB readings stay stable regardless of the AudioWorklet block size.
+
+Each record returned by `drainMeterTelemetry()`, `drainMeterTelemetryWide()`, and `drainScopeTelemetry()` carries a `droppedRecords` count of snapshots lost from the lock-free telemetry ring since the previous drain. A non-zero value means the consumer is draining too slowly (back-pressure) — poll more frequently to keep the meters and scopes glitch-free.
+
+All dB-valued level and loudness fields in a meter record — `peakDbL`/`R`, `rmsDbL`/`R`, `truePeakDbL`/`R`, `maxTruePeakDb`, and `momentaryLufs`/`shortTermLufs`/`integratedLufs` — have a defined floor of −120 dBFS and never carry `NaN` or `-Infinity`. An uninitialized, silent, or unwritten plane (e.g. the right channel of a mono lane) reports −120 dBFS, not 0 dBFS, so records are always JSON-safe. (Non-dB fields like `correlation`, `monoCompatWidth`, and `gainReductionDb` default to 0.) The integrating-meter fields — `momentaryLufs`/`shortTermLufs`/`integratedLufs` and the true-peak fields — only rise above the floor after sustained streaming; on a short or one-shot render they stay at −120.
 
 Scheduled clips and sequenced MIDI only sound while the transport is rolling — on a stopped engine they stay silent rather than leaking audio. The offline helpers (`renderOffline`, `bounceOffline`, `freezeOffline`) roll the transport for the render duration and restore the prior state afterwards, so offline clip and MIDI rendering needs no manual `play()`.
+
+For a **manual** offline render — when you drive `process()` yourself instead of using those helpers — run one priming `process()` block after seeking (it drains queued commands and applies automation at the seek position), then call `engine.settleParameters()` to snap every in-flight parameter ramp (engine-level smoothed params, mixer lane fader/pan/gate, and bus gains) to its target value, so the first audible block renders at settled values instead of ramping in from defaults. `settleParameters()` must not run concurrently with a live audio thread — it is offline / main-thread only.
+
+```typescript
+// Prime: drains queued commands and applies automation at the seek position.
+engine.process([new Float32Array(blockSize), new Float32Array(blockSize)]);
+engine.settleParameters(); // snap all smoothed ramps to target before the first audible block
+```
 
 For recording, the capture surface adds a few controls:
 
@@ -325,6 +337,60 @@ Once a track id occupies a lane, its lane index stays fixed for the engine's lif
 :::
 
 <SonareDemo id="engine-lane-mixer" />
+
+### Group routing, sidechains, and live strip controls
+
+Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan without rebuilding a strip:
+
+| Goal | Raw `RealtimeEngine` | `SonareEngine` worklet facade |
+|------|----------------------|-------------------------------|
+| Fold a lane into a group bus (or pass `busId 0` to restore it to the master mix) | lane `outputBusId` in `setTrackLanes(...)` (`0` or absent = master mix) | `setTrackOutputBus(target, busId)` (`busId 0` restores the master mix) |
+| Key one lane's insert off another lane (ducking) | `setLaneSidechain(trackId, insertIndex, sourceTrackId)` (pass `0` to clear) | `setLaneSidechain(target, insertIndex, sourceTarget)` (pass `null` to clear) |
+| Pan a lane | `setTrackStripPan(trackId, pan)` | `setTrackStripPan(target, pan)` |
+| Pan law / pan mode | `setTrackStripPanLaw(...)`, `setTrackStripPanMode(...)` | same names |
+| Independent L/R (dual) pan | `setTrackStripDualPan(trackId, left, right)` | `setTrackStripDualPan(target, left, right)` |
+| Per-lane sample delay | `setTrackStripChannelDelaySamples(trackId, samples)` | same |
+| Set one insert parameter by name | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)` (master: `setMasterStripInsertParamByName(...)`) | same, plus `setStripInsertParamByName(target, ...)` |
+
+`setTrackStripInsertParamByName(...)` is the realtime automation entry point — it addresses a parameter by the JSON key reported by [`masteringInsertParamInfo(name)`](./mastering-processors.md), so a host can drive an insert's automatable parameters live without rebuilding the strip JSON. On the facade, `target` is a track id *or name*.
+
+### Parameter automation
+
+`RealtimeEngine` carries an engine-level parameter registry separate from the strip-insert params of [`setTrackStripInsertParamByName`](#group-routing-sidechains-and-live-strip-controls). Register a parameter once with `addParameter(info)`, then drive it live with `setParameter(id, value, renderFrame?)` (or `setParameterSmoothed(...)` for a ramp), or schedule it along the timeline with `setAutomationLane(id, points)`.
+
+```typescript
+// EngineParameterInfo: id, name, unit, min/max/default, rtSafe, defaultCurve (0=linear)
+engine.addParameter({
+  id: 1, name: 'volume', unit: 'lin',
+  minValue: 0, maxValue: 1, defaultValue: 1,
+  rtSafe: true, defaultCurve: 0,
+});
+
+// Automation points are positioned in PPQ (quarter-note units), with an
+// optional curveToNext code (0=linear, 1=exponential, 2=hold, 3=s-curve).
+engine.setAutomationLane(1, [
+  { ppq: 0, value: 1, curveToNext: 0 },
+  { ppq: 4, value: 0 },
+]);
+
+// Or set it imperatively from the control thread (renderFrame -1 = immediate):
+engine.setParameter(1, 0.5);
+```
+
+On the `SonareEngine` facade you can also automate a mixer fader/pan without registering a parameter: `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (a bus id resolves to its fader gain in dB). The `target`/`busId` declares the mixer lane/bus on first use.
+
+### Surround group buses and wide meters
+
+A bus declared with a surround `channelLayout` (`SonareChannelLayout`: `0` mono, `1` stereo, `2` 5.1, `3` 7.1) becomes a **surround group bus**: it sums into the master plane-by-plane and exposes per-plane meters. The per-lane surround panning DSP — which would place each lane from its strip [`surroundPan`](./mixing.md#surround-and-multichannel) position — is staged: a lane's `surroundPan` value (and its own `sourceChannelLayout`) is stored on the scene and round-trips through config JSON, but does not yet drive audio panning. Declare the bus `channelLayout` today; per-lane panning activates when the surround DSP path lands.
+
+```typescript
+engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]); // a 5.1 group bus
+engine.setTrackOutputBus(1, 1);                          // route the lane into it
+```
+
+Call `setTrackOutputBus(1, 0)` (or set `outputBusId: 0` in `setTrackLanes`) to fold the lane back onto the master mix.
+
+Surround meters do not travel over the live worklet meter ring. Read them on an offline or main-thread engine with `drainMeterTelemetryWide(maxRecords?)`, which returns per-plane (wide) records; `drainMeterTelemetry()` stays the stereo fast path. The two drains pop the same single-consumer telemetry queue, so call only one per engine instance — the live AudioWorklet path already owns the queue via the stereo drain, which is why `drainMeterTelemetryWide()` is meant for an offline (non-worklet) engine; running both on one engine makes their records starve each other.
 
 ### MIDI clip scheduling and `sampleAtPpq`
 
@@ -413,18 +479,23 @@ Its `transport` facade covers play/stop, seek by seconds or PPQ, tempo, and loop
 
 | Need | Facade API |
 |------|-----------|
-| Track routing, fader, pan, solo/mute | `setTrackLanes`, `setStripGain`, `setStripPan`, `setSoloMute` |
-| Track and master inserts and EQ | `setTrackStripJson`, `setMasterStripJson`, `setTrackStripEqBand`, `setMasterStripEqBand`, insert-bypass methods |
+| Track routing, fader, pan, solo/mute | `setTrackLanes`, `setStripGain`, `setStripPan`, `setTrackStripPan`, `setTrackStripPanLaw`, `setTrackStripPanMode`, `setTrackStripDualPan`, `setTrackStripChannelDelaySamples`, `setSoloMute` |
+| Track and master inserts and EQ | `setTrackStripJson`, `setMasterStripJson`, `setTrackStripEqBand`, `setMasterStripEqBand`, `setTrackStripInsertParamByName`, `setMasterStripInsertParamByName`, insert-bypass methods |
 | Sends and buses | `setSends`, `setBusGain`, `setBusStripJson` |
 | MIDI clips and live MIDI | `setMidiClips`, `pushMidiNoteOn`, `pushMidiNoteOff`, `pushMidiCc`, `pushMidiPanic` |
+| Parameter automation | `setAutomationLane`, `addAutomationPoint`, `automationParamId(target, kind)`, `busAutomationParamId(busId)`, `listParameters`, `automationLaneCount` |
 | Instruments | `setBuiltinInstrument`, `setSynthInstrument`, `loadSoundFont`, `setSf2Instrument` |
 | Recording and monitoring | `configureCapture` (incl. `inputMonitor`), `armRecord`, `punch`, `capturedAudio`, `captureStatus` |
 | Transport, tempo, markers | `getTransportState`, `cachedTransportState`, `setTempoSegments`, `setTimeSignatureSegments`, marker methods (incl. the replace-all `setMarkers`, which returns the resolved marker list — each entry carries its engine `id`), `setLoopFromMarkers` |
 | Clip updates | `addClip`, `removeClip` — the facade sends incremental clip deltas to the worklet |
-| Meters and telemetry | `onMeter` / `onTelemetry`, `pollMeters` / `pollTelemetry`; meter records carry master, lane, bus, and input target ids |
+| Meters and telemetry | `onMeter` / `onTelemetry` / `onScope`, `pollMeters` / `pollTelemetry` / `pollScope`; meter records carry master, lane, bus, and input target ids. Offline/main-thread engines can also drain wide meter records and scope snapshots |
 | Offline export | `renderOffline` on the main-thread mirror |
 
 On the facade, strip-addressing methods take a track id *or name* (`target: string | number`), and `setSoloMute(target, solo, mute)` resolves the lane index for you. `setTrackStripEqBand` accepts an `EqBand` object directly, so you rarely hand-build band JSON.
+
+`automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (which resolves to its fader gain in dB), without first registering a custom parameter via `addParameter`. The `target`/`busId` declares the mixer lane/bus on first use.
+
+For Worklet-side scope snapshots, pass `scopeIntervalFrames`, `scopeBands`, and optionally `scopeSharedBuffer` / `scopeRingCapacity` to `SonareRealtimeEngineNode.create(...)`. The lower-level `createSonareScopeRingBuffer(...)` and `readSonareScopeRingBuffer(...)` helpers are exported for custom bridges that want to move spectrum plus vectorscope snapshots through a shared ring.
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';

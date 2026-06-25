@@ -13,6 +13,7 @@ const ARCHETYPES = new Set([
   'room',
   'contour',
   'lane-mixer',
+  'spectral-edit',
 ]);
 
 function expectBilingual(text: I18nText | undefined, where: string) {

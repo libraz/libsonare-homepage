@@ -130,9 +130,12 @@ For an offline "wiggle a knob, capture which CC moved" flow, the project API exp
 Each destination can carry one **MIDI-FX insert** — a non-destructive transform on the event stream (transpose, channel filter, velocity curve, …) configured from JSON.
 
 ```typescript
-engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ /* MIDI-FX config */ }));
+// Transpose every incoming note up an octave.
+engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ transpose_semitones: 12 }));
 engine.clearMidiFx(0);   // clears this destination only (the id defaults to 0 if omitted)
 ```
+
+The JSON schema is the same one [`bakeMidiFx`](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
 
 `setMidiFx` *replaces* the insert in place without resetting the instrument's voices, so the common case — swapping one transform for another between phrases — leaves sounding notes untouched. Two safety notes for changing FX while keys are held:
 
@@ -403,6 +406,10 @@ finally:
 ```
 
 To feed those engines from real hardware, read MIDI with a platform library (for example a CoreMIDI/ALSA wrapper) and call the same `push_midi_input_*` methods — the timestamp-to-sample mapping is yours to supply, just as `timestampToSamples` is in the browser.
+
+::: info Experimental native macOS backends
+A C++ source build can opt into native macOS host backends behind the off-by-default `BUILD_COREAUDIO`, `BUILD_COREMIDI`, and `BUILD_AU_HOST` CMake options — a CoreAudio output, a CoreMIDI input/output, and an Audio Unit instrument host. They add no C-ABI surface and ship in no published package (npm / PyPI / WASM), so they are a macOS-only, source-build opt-in that may still change.
+:::
 
 ## A note on microphone input
 

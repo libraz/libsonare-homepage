@@ -238,7 +238,7 @@ A **bus** is a shared destination. Strips connect to buses, buses connect to oth
 
 Only `master` and `aux` are special tokens; any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
 
-Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph while constructing the mixer, so the returned mixer is ready to process immediately. After construction, a topology change marks the graph dirty, and it is recompiled lazily on the next `processStereo` call — or eagerly when you call `compile()`.
+Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph while constructing the mixer, so the returned mixer is ready to process immediately. After construction, buses are added and removed with `mixer.addBus(id, role?)` (`role` defaults to `'aux'`) and `mixer.removeBus(id)`, and `mixer.busCount()` reports the current count. A topology change marks the graph dirty, and it is recompiled lazily on the next `processStereo` call — or eagerly when you call `compile()`.
 
 Call `compile()` after a **topology** change, before the next timing-critical block. Topology changes include:
 
@@ -272,7 +272,7 @@ For example, pull the "drums" VCA down 2 dB and the kick, snare, and overheads a
 
 The group's `gainDb` is summed into each member's fader stage (step 7 above) as a **delta** on top of whatever fader value the strip already has. Because only the difference is applied, a per-strip fader trim you set inside the group survives — the group fader rides the whole set without overwriting the individual balance.
 
-Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)` and adjust it with `setVcaGroupGainDb(...)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset you can adjust during a session; it is also persisted as the strip's `vcaOffsetDb` and round-trips through scene JSON.
+Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)`, adjust it with `setVcaGroupGainDb(...)`, and remove it with `removeVcaGroup(id)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset you can adjust during a session; it is also persisted as the strip's `vcaOffsetDb` and round-trips through scene JSON.
 
 ### Solo and mute logic
 
@@ -289,11 +289,23 @@ Solo, mute, and solo-safe take effect on the next block **without** a graph reco
 - `stereoPan` — a true pan that moves a mono-ish source across the field.
 - `dualPan` — independent left and right positions (set with `setDualPan(...)`), e.g. collapse a wide stereo track inward.
 
+A strip can also delay its own signal by a whole number of samples with `setChannelDelaySamples(...)` — a per-strip alignment nudge for time-aligning a close mic against a room mic, or compensating a parallel path, without touching the pan.
+
+The persistent `Mixer` also drives the other in-strip stages live, each a **parameter** change that takes effect on the next block with no graph recompile:
+
+- `setInputTrimDb(strip, db)` — the **Input trim** stage from the signal flow (the same gain as the `inputTrimDb` `mixStereo` option); distinct from the fader.
+- `setWidth(strip, width)` — the **Stereo width** stage (`width` `mixStereo` option): `0` = mono, `1` = original, `>1` = widened.
+- `setPolarityInvert(strip, invertLeft, invertRight)` — the **Polarity invert** stage; flip the sign of the strip's left and/or right channel.
+
 Pan law options are `const3dB`, `const4.5dB`, `const6dB`, and `linear0dB` in the JavaScript APIs.
 
 Python accepts the same values as enums/ints, or normalized strings such as `const-3db` and `linear-0db`.
 
 Constant-power laws, usually 3 dB or 4.5 dB, keep *perceived* loudness steady as you pan. `linear0dB` keeps the summed level steady instead.
+
+### Surround and multichannel
+
+For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the offline `Mixer` still renders stereo — the surround panner that consumes these values runs in the [realtime engine's surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters), so set the position here and render the surround mix through the engine.
 
 ## Automation
 
@@ -351,6 +363,8 @@ In the WASM wrapper, render loops where allocations are forbidden can avoid `pro
 
 - **`processStereoInto(inL, inR, outL, outR)`** — writes into caller-owned arrays.
 - **`createRealtimeBuffer()`** — returns reusable WASM-heap input/output views; fill the inputs, call `process()`, read `outLeft`/`outRight`, repeat. The views are owned by the mixer and become invalid after `delete()`.
+
+When the host stops feeding strip inputs, lookahead, reverb, and delay processors still hold audio in flight. Call `mixer.tailSamples()` to read the maximum processor-tail length (samples) in the compiled graph, then call `mixer.drainTailStereo(numSamples)` to render a zero-input block that flushes that tail into the master. `drainTailStereo` renders one block — it does not loop — and `numSamples` is bounded by the block size the mixer was built with, so drain in block-sized chunks until you have pulled `tailSamples()` frames.
 
 ::: details What are denormal guards?
 Denormals are extremely small floating-point numbers (close to zero) that many CPUs process far more slowly than ordinary values. In an audio callback this bites when a reverb or delay tail fades out: as the samples shrink toward zero they slip into the denormal range and processing time can spike, causing dropouts. Denormal guards flush these tiny values to zero so each block takes a predictable amount of time.

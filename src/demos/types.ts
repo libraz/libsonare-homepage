@@ -30,6 +30,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `room`        — simple geometry → RIR synthesis → audition
  * - `contour`     — clip → pitch tracking → melody f0 contour line over time
  * - `lane-mixer`  — MIDI clips → realtime-engine lane mixer (faders/mutes) → per-lane envelopes + audition
+ * - `spectral-edit` — clip + injected artifact → region `spectralEdit` → A/B audition + before/after spectrum
  */
 export type DemoArchetype =
   | 'transform'
@@ -41,7 +42,8 @@ export type DemoArchetype =
   | 'signal'
   | 'room'
   | 'contour'
-  | 'lane-mixer';
+  | 'lane-mixer'
+  | 'spectral-edit';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

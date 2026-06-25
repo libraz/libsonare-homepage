@@ -86,7 +86,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney normalization |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; output is L-infinity (max) normalized per frame, matching librosa's default `norm=np.inf` |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | Per-frame |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` supported |
@@ -332,7 +332,7 @@ sonare beats song.wav --json
 
 | Parameter | librosa | libsonare |
 |-----------|---------|-----------|
-| `sr` | 22050 | User-provided |
+| `sr` | 22050 | 22050 (default for all standalone analysis/feature/loudness helpers; pass the buffer's true rate for `lufs`/`true-peak`. `Audio`/`Spectrogram` class methods use the loaded file's rate.) |
 | `n_fft` | 2048 | 2048 |
 | `hop_length` | 512 | 512 |
 | `win_length` | n_fft | n_fft |

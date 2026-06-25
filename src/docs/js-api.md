@@ -4,25 +4,25 @@ Complete API reference for libsonare JavaScript/TypeScript interface.
 
 ## Overview
 
-libsonare provides audio analysis, mastering, mixing, and editing DSP capabilities for web applications. The npm package is the WebAssembly build and works on decoded `Float32Array` samples; it does not include a file decoder.
+libsonare provides audio analysis, mastering, mixing, and editing DSP capabilities for web applications. The npm package is the WebAssembly build, and most analysis/effect functions work on decoded `Float32Array` PCM. For loading, the `Audio.fromMemory*` factories can decode encoded bytes in memory (a native WASM decoder for WAV/MP3, plus an optional browser fallback for AAC/OGG/FLAC).
 
 | Category | Functions | Use Cases |
 |----------|-----------|-----------|
 | **Quick Analysis** | `detectBpm`, `detectKey`, `detectBeats` | DJ apps, music players, beat sync |
 | **Full Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
-| **Audio Effects** | `hpss`, `timeStretch`, `pitchShift` | Remixing, practice tools |
+| **Audio Effects** | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | Remixing, practice tools, region repair |
 | **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
 | **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS targets, true-peak limiting, presets, streaming chains |
 | **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
-| **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
-| **Audio Class** | `Audio.fromBuffer` | OOP wrapper for all functions |
+| **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
+| **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | OOP wrapper for all functions |
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
 :::
 
-::: info The JavaScript API is not a file loader
-Most browser functions do not take an MP3 or WAV path. They take decoded PCM samples plus `sampleRate`. Bytes from `fetch` or `<input type="file">` must be decoded to an `AudioBuffer` or equivalent sample array before calling libsonare.
+::: info Most functions take decoded PCM, not a file path
+Most browser functions do not take an MP3 or WAV path; they take decoded PCM samples plus `sampleRate`. To go from encoded bytes to samples, either decode with the Web Audio API (`AudioContext.decodeAudioData`) yourself, or use the `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` factories below — they decode encoded bytes in memory (native WASM decoder for WAV/MP3, optional browser fallback for AAC/OGG/FLAC) and hand back an `Audio` instance.
 :::
 
 For a cross-binding feature map, see [Feature Map](./api-surface.md). For the complete mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
@@ -48,7 +48,7 @@ The package is broad, so start from the task rather than the function list:
 | A live visualizer or progressive BPM/key/chord UI | `StreamAnalyzer` | Processes blocks and drains frame buffers for UI rendering |
 | Browser mastering or delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Use presets first, then move to named processors when you need control |
 | Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; persistent scene mixer when routing matters |
-| Vocal/note edits | `pitchCorrectToMidi`, `noteStretch`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
+| Vocal/note/spectral edits | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
 | Room decay, clarity, equivalent-room estimates, or generated room character | `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, `synthesizeRir`, `roomMorph` | These describe or apply the recording space, not the music |
 
 ## Installation
@@ -127,6 +127,14 @@ Get the library version.
 function version(): string  // e.g., "{{ wasmMeta.version }}"
 ```
 
+### `projectAbiVersion()`
+
+ABI version of the project/editing POD surface used by `Project` serialization, bounce, and realtime-engine clip exchange.
+
+```typescript
+function projectAbiVersion(): number
+```
+
 ### `voiceChangerAbiVersion()`
 
 ABI version of the realtime voice-changer POD config used by native and FFI APIs. This is separate from preset JSON `schemaVersion`, currently `1`. Check user-authored presets with `validateRealtimeVoiceChangerPresetJson(...)` before accepting them.
@@ -178,13 +186,13 @@ Detect BPM (tempo) from audio samples.
 :::
 
 ```typescript
-function detectBpm(samples: Float32Array, sampleRate: number): number
+function detectBpm(samples: Float32Array, sampleRate?: number): number
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `samples` | `Float32Array` | Mono audio samples (range -1.0 to 1.0) |
-| `sampleRate` | `number` | Sample rate in Hz (e.g., 44100) |
+| `sampleRate?` | `number` | Sample rate in Hz (default: 22050; e.g., 44100) |
 
 **Returns:** Detected BPM as a number.
 
@@ -584,6 +592,25 @@ function noteStretch(
   },
 ): Float32Array
 
+function spectralEdit(
+  samples: Float32Array,
+  sampleRate: number,
+  ops?: Array<{
+    startSample?: number;
+    endSample?: number;
+    lowHz?: number;
+    highHz?: number;
+    gainDb?: number;
+    mode?: 'gain' | 'attenuate' | 'mute' | 'heal';
+  }>,
+  options?: {
+    nFft?: number;
+    hopLength?: number;
+    window?: 'hann' | 'hamming' | 'blackman' | 'rectangular';
+    healRadiusFrames?: number;
+  },
+): Float32Array
+
 function voiceChange(
   samples: Float32Array,
   sampleRate: number,
@@ -601,6 +628,8 @@ sonare pitch-correct vocal.wav --current-midi 68.7 --target-midi 69 -o corrected
 sonare note-stretch take.wav --onset 12000 --offset 24000 --ratio 1.25 -o held.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice.wav
 ```
+
+See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
 
 ### `normalize(samples, sampleRate, targetDb?)`
 
@@ -1044,6 +1073,13 @@ function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate
 // Phase-scope point series plus summary stats
 function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): PhaseScopeReport
 
+// Display-sized mid/side vectorscope: like meteringVectorscope but the point series is
+// deterministically decimated to at most maxPoints (0 / >= length = one point per sample).
+function meteringVectorscopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): VectorscopeReport
+// Display-sized phase scope: like meteringPhaseScope but the point series is decimated to at
+// most maxPoints; summary stats are still computed over the full-resolution signal.
+function meteringPhaseScopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): PhaseScopeReport
+
 interface VectorscopeReport {
   mid: Float32Array;
   side: Float32Array;
@@ -1063,10 +1099,21 @@ interface PhaseScopeReport {
 
 ### Spectrum snapshot
 
+`meteringSpectrum` is Welch-averaged over the **whole** signal (split into 50%-overlapping Hann frames whose power spectra are averaged). For a true single-frame snapshot that is not time-averaged, use `meteringSpectrumFrame`, whose `frameOffset` positional argument selects where the analysis frame starts.
+
 ```typescript
 function meteringSpectrum(
   samples: Float32Array,
   sampleRate?: number,
+  options?: SpectrumOptions & ValidateOptions
+): SpectrumReport
+
+// True single-frame snapshot (one Hann-windowed nFft FFT), NOT time-averaged like meteringSpectrum.
+// The analysis frame spans [frameOffset, frameOffset + nFft); samples past the end are zero-padded.
+function meteringSpectrumFrame(
+  samples: Float32Array,
+  sampleRate?: number,
+  frameOffset?: number,
   options?: SpectrumOptions & ValidateOptions
 ): SpectrumReport
 
@@ -1329,6 +1376,24 @@ const audio = Audio.fromBuffer(samples, 44100);
 `sampleRate` is optional and defaults to `48000`. Always pass the buffer's
 actual sample rate, since the stored value feeds every instance method.
 
+### `Audio.fromMemory(bytes)`
+
+Decode encoded audio bytes (`Uint8Array`) such as WAV or MP3 with the native WASM decoder and return an `Audio` instance. Throws a `SonareError` when the format is not supported by the bundled decoder.
+
+```typescript
+const audio = Audio.fromMemory(new Uint8Array(await file.arrayBuffer()));
+```
+
+### `Audio.fromMemoryWithBrowserFallback(bytes, options?)`
+
+`async`; returns `Promise<Audio>`. Tries `Audio.fromMemory` first, then falls back to the browser codec stack (`AudioContext.decodeAudioData`) for formats the native decoder lacks, e.g. AAC, OGG, and FLAC. Browser-decoded multi-channel audio is mixed down to mono to match the `Audio` wrapper contract. Accepts an optional `BrowserAudioDecodeOptions` (`audioContext` / `createAudioContext` / `targetSampleRate`); a context this helper creates itself is closed afterward.
+
+```typescript
+const audio = await Audio.fromMemoryWithBrowserFallback(
+  new Uint8Array(await file.arrayBuffer()),
+);
+```
+
 ### Properties
 
 | Property | Type | Description |
@@ -1447,6 +1512,12 @@ The legacy `computeMagnitude` flag is no longer supported; passing it makes the
 constructor throw. The flag was removed because magnitude frames are not exposed
 by the StreamAnalyzer read paths; use `stft`/`stftDb` offline or the spectrum
 metering helpers for magnitude data.
+
+`streamAnalyzerConfigDefaults()` returns a fully-populated `StreamConfigDefaults`
+object (a `Required<StreamConfig>`) holding the library's default values for
+every field above. Use it to seed a settings UI or to compute a diff against a
+user-supplied config; `StreamAnalyzer` itself applies these same defaults for any
+field you omit.
 
 ### StreamAnalyzer Class
 
@@ -2169,9 +2240,42 @@ try {
 
 The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, and `createRealtimePlanarBuffer`) return WASM heap views owned by the changer. Reuse them inside a realtime loop, and discard them after `delete()`.
 
+### `voiceChangeRealtime(samples, options?)`
+
+`voiceChangeRealtime(...)` is the offline whole-buffer convenience wrapper around `RealtimeVoiceChanger`. It internally constructs and prepares a changer, runs the per-block render loop for you, then disposes it — matching the Python `voice_change_realtime` and Node wrappers — so callers do not manage the stateful object themselves.
+
+```typescript
+function voiceChangeRealtime(
+  samples: Float32Array,
+  options?: {
+    sampleRate?: number;
+    preset?: VoicePresetId | number | RealtimeVoiceChangerConfigInput;
+    channels?: 1 | 2;   // default 1 (mono); 2 = interleaved stereo (L0,R0,L1,R1,...)
+    blockSize?: number; // default 512
+  },
+): Float32Array  // same layout/length as the input
+```
+
+```typescript
+import { init, voiceChangeRealtime, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
+await init();
+
+const preset = realtimeVoiceChangerPresetNames()[1]; // e.g. "bright-idol"
+const out = voiceChangeRealtime(vocal, { sampleRate: 48000, preset });
+```
+
+`channels` defaults to `1` (a plain mono buffer); pass `channels: 2` for interleaved stereo input. The output has the same layout and length as the input.
+
+Use this when you have the full buffer already. Reach for [`RealtimeVoiceChanger`](#realtimevoicechanger) directly for manual block-by-block live use, and for `voiceChange(...)` when you only need a one-shot pitch/formant change without the full preset chain. See [Realtime Voice Changer](./realtime-voice-changer.md) for the preset list and chain stages.
+
 ### StreamingMasteringChain
 
-For real-time or memory-constrained use cases, such as processing audio block-by-block from `AudioWorklet` or a stream, the WASM module exposes `StreamingMasteringChain`. It accepts the same nested config as `masteringChain()`, prepares processor state for a fixed block size, and applies the chain incrementally.
+For real-time or memory-constrained use cases, such as processing audio block-by-block from `AudioWorklet` or a stream, the WASM module exposes `StreamingMasteringChain`. It accepts a `StreamingMasteringChainConfig`, which extends `masteringChain()`'s `MasteringChainConfig` with two optional streaming-only fields:
+
+- `loudnessStaticGainDb` — a precomputed static loudness gain in dB (e.g. `targetLufs - measuredIntegratedLufs`), applied per block so a preset's streaming preview matches its offline render with a `loudness` stage enabled.
+- `loudnessStaticGainPeakDb` — the offline-measured source true-peak in dBFS. When set, the static gain is clamped to `loudness.ceilingDb - loudnessStaticGainPeakDb` so the streaming limiter is not driven harder than the offline chain.
+
+It otherwise prepares processor state for a fixed block size and applies the chain incrementally.
 
 ```typescript
 import { init, StreamingMasteringChain } from '@libraz/libsonare';
@@ -2197,7 +2301,7 @@ chain.delete();  // release the WASM handle (call when done)
 
 Stereo-only stages are skipped when `numChannels === 1`.
 
-Offline-only stages that need whole-file context are not accepted by the streaming constructor:
+Offline-only repair stages that need whole-file context are not accepted by the streaming constructor:
 
 - `repair.declick`
 - `repair.declip`
@@ -2205,9 +2309,10 @@ Offline-only stages that need whole-file context are not accepted by the streami
 - `repair.dehum`
 - `repair.dereverb`
 - `repair.denoise`
-- `loudness`
 
 Use `masteringChain*` or `masterAudio*` when you need those stages.
+
+The `loudness` stage is a special case. The streaming chain cannot measure whole-signal integrated LUFS, so an enabled `loudness` stage throws at construction **unless** you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`). With those fields set, the chain applies the precomputed static gain plus the loudness stage's true-peak limiter per block instead of throwing.
 
 Use `reset()` between independent songs that share the same chain. Use `delete()` to free the underlying handle.
 
@@ -2233,8 +2338,10 @@ The named mastering API families are:
 | Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
 | Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
 | List mono/stereo processors | `masteringProcessorNames()` |
+| Get machine-readable processor classifications | `masteringProcessorCatalog()` |
 | List chain insert processors | `masteringInsertNames()` |
 | List the parameter keys an insert accepts | `masteringInsertParamNames(name)` |
+| List realtime-automatable insert parameters | `masteringInsertParamInfo(name)` |
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
 | List pair processors | `masteringPairProcessorNames()` |
@@ -2454,15 +2561,15 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 
 | Area | Exported types/constants |
 |------|--------------------------|
-| Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
-| Engine lane mixer and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMidiClipSchedule`, `EngineMidiEvent` |
+| Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
+| Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `MarkerKind`, `ProjectMarker`, `SurroundPan` |
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
-| Spectral and feature transforms | `MelPowerResult`, `StftPowerResult`, `TempogramMode` |
-| Mastering | `MasteringProcessorParams`, `MasteringStereoChainResult` |
+| Spectral and feature transforms | `MelPowerResult`, `StftPowerResult`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
+| Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringStereoChainResult` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
-| Mixing realtime buffers | `MixerRealtimeBuffer` |
+| Mixing and Worklet realtime buffers | `MixerRealtimeBuffer`, `SonareScopeRingBuffer`, `SonareScopeRingReadResult`, `SonareWorkletScopeSnapshot` |
 
 ## Performance Summary
 

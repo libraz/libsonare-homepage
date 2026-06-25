@@ -284,9 +284,21 @@ engine.stop();
 engine.destroy();
 ```
 
-`RealtimeEngine` では、パラメータ情報の登録、オートメーションレーンの設定、マーカーへのシーク、メトロノームクリックの設定、モニター出力付き処理、キャプチャ、オフラインバウンス、クリップのフリーズ、メーターテレメトリの読み出しも扱えます。
+`RealtimeEngine` では、パラメータ情報の登録、オートメーションレーンの設定、マーカーへのシーク、メトロノームクリックの設定、モニター出力付き処理、キャプチャ、オフラインバウンス、クリップのフリーズ、テレメトリの読み出しも扱えます。メーターはステレオ高速経路なら `drainMeterTelemetry()`、サラウンド／オフライン対象のプレーン別レコードなら `drainMeterTelemetryWide()` を使います。UI 用スコープは `configureScopeTelemetry(intervalFrames, bandCount)` でターゲットごとのスペクトラム＋ベクトルスコープ取得を有効化し、`drainScopeTelemetry()` でスナップショットを読み出します。`intervalFrames` はスナップショット間の最小レンダーフレーム間隔（`0` で取得を無効化）、`bandCount` は FFT のバンド分解能で `1..64` にクランプされ、実際に適用されたバンド数が戻り値として返ります。読み出した各スナップショットは `targetId`（マスター・レーン・バスのいずれか）で識別され、2 本の配列を持ちます。`bands` は線形バンドの FFT マグニチュード（dB、長さ＝適用されたバンド数）、`points` はベクトルスコープ表示用のインターリーブステレオのゴニオメータ点群 `[l0, r0, l1, r1, …]`（最大 32 ステレオ点）です。バンドのレベルはブロックサイズに依存しません。振幅の正規化が短いブロックを考慮するため、AudioWorklet のブロックサイズによらず dB 値が安定します。
+
+`drainMeterTelemetry()`／`drainMeterTelemetryWide()`／`drainScopeTelemetry()` が返す各レコードには `droppedRecords` が含まれます。これは前回のドレイン以降にロックフリーのテレメトリリングから失われたスナップショット数です。値が 0 以外なら、消費側のドレインが追いついておらず（バックプレッシャー）、メーターやスコープがちらつかないようにポーリング頻度を上げる必要があります。
+
+メーターレコードの dB 値を持つレベル／ラウドネスのフィールド（`peakDbL`／`R`、`rmsDbL`／`R`、`truePeakDbL`／`R`、`maxTruePeakDb`、`momentaryLufs`／`shortTermLufs`／`integratedLufs`）はすべて −120 dBFS のフロアを持ち、`NaN` や `-Infinity` を返しません。未初期化・無音・未書き込みのプレーン（例: モノラルレーンの右チャンネル）は 0 dBFS ではなく −120 dBFS を返すので、レコードは常に JSON セーフです（`correlation`・`monoCompatWidth`・`gainReductionDb` などの非 dB フィールドは 0 が既定）。積分系メーターのフィールド（`momentaryLufs`／`shortTermLufs`／`integratedLufs` と true-peak 系）は、ストリーミングが一定時間続いて初めてフロアより上に上がります。短いレンダーやワンショットのレンダーでは −120 のままです。
 
 スケジュール済みのクリップとシーケンス MIDI が鳴るのは、トランスポートが走っている間だけです。停止中のエンジンでは音が漏れず無音のままです。オフラインヘルパー（`renderOffline`、`bounceOffline`、`freezeOffline`）はレンダー期間だけトランスポートを走らせ、終了後に元の状態へ戻すので、オフラインのクリップ／MIDI レンダリングに手動の `play()` は不要です。
+
+**手動**でオフラインレンダーする場合、つまりこれらのヘルパーを使わず自分で `process()` を回す場合は、シーク後にまずプライミング用の `process()` ブロックを 1 回流し（これでキュー済みコマンドが排出され、シーク位置のオートメーションが適用されます）、続いて `engine.settleParameters()` を呼んで、進行中のあらゆるパラメータランプ（エンジンレベルのスムーズ化パラメータ、ミキサーレーンのフェーダー／パン／ゲート、バスゲイン）をターゲット値へスナップさせてください。これで最初に聴こえるブロックが、既定値からランプインせず確定値でレンダーされます。`settleParameters()` はライブ音声スレッドと同時に実行してはならず、オフライン／メインスレッド専用です。
+
+```typescript
+// プライミング: キュー済みコマンドを排出し、シーク位置のオートメーションを適用する。
+engine.process([new Float32Array(blockSize), new Float32Array(blockSize)]);
+engine.settleParameters(); // 最初に聴こえるブロックの前に、全スムーズ化ランプをターゲットへスナップ
+```
 
 録音まわりでは、キャプチャ面にいくつかのコントロールが加わります。
 
@@ -344,6 +356,60 @@ engine.setSoloMute(0, true, false, -1);
 :::
 
 <SonareDemo id="engine-lane-mixer" />
+
+### グループルーティング・サイドチェイン・ライブストリップ操作
+
+レーン／センドのグラフ以外にも、ストリップを作り直さずにルーティングとパンを変えるリアルタイムセーフな操作がいくつかあります。
+
+| 目的 | 生の `RealtimeEngine` | `SonareEngine` ワークレットファサード |
+|------|----------------------|--------------------------------------|
+| レーンをグループバスへ折り込む（`busId 0` でマスターミックスへ戻す） | `setTrackLanes(...)` のレーン `outputBusId`（`0` または未指定でマスターミックス） | `setTrackOutputBus(target, busId)`（`busId 0` でマスターミックスへ戻す） |
+| あるレーンのインサートを別レーンでキーイング（ダッキング） | `setLaneSidechain(trackId, insertIndex, sourceTrackId)`（`0` で解除） | `setLaneSidechain(target, insertIndex, sourceTarget)`（`null` で解除） |
+| レーンをパンする | `setTrackStripPan(trackId, pan)` | `setTrackStripPan(target, pan)` |
+| パンロー／パンモード | `setTrackStripPanLaw(...)`、`setTrackStripPanMode(...)` | 同名 |
+| 左右独立（デュアル）パン | `setTrackStripDualPan(trackId, left, right)` | `setTrackStripDualPan(target, left, right)` |
+| レーンごとのサンプル遅延 | `setTrackStripChannelDelaySamples(trackId, samples)` | 同名 |
+| インサートパラメータを名前で設定 | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)`（マスター: `setMasterStripInsertParamByName(...)`） | 同名、加えて `setStripInsertParamByName(target, ...)` |
+
+`setTrackStripInsertParamByName(...)` はリアルタイムオートメーションの入り口です。[`masteringInsertParamInfo(name)`](./mastering-processors.md) が返す JSON キーでパラメータを指定するため、ホストはストリップ JSON を作り直さずにインサートの自動化可能なパラメータをライブで駆動できます。ファサードでは `target` はトラック id または名前です。
+
+### パラメータオートメーション
+
+`RealtimeEngine` は、[`setTrackStripInsertParamByName`](#グループルーティング・サイドチェイン・ライブストリップ操作) のストリップインサートパラメータとは別に、エンジンレベルのパラメータレジストリを持ちます。`addParameter(info)` でパラメータを 1 度登録し、`setParameter(id, value, renderFrame?)`（ランプには `setParameterSmoothed(...)`）でライブに駆動するか、`setAutomationLane(id, points)` でタイムライン上にスケジュールします。
+
+```typescript
+// EngineParameterInfo: id, name, unit, min/max/default, rtSafe, defaultCurve（0=linear）
+engine.addParameter({
+  id: 1, name: 'volume', unit: 'lin',
+  minValue: 0, maxValue: 1, defaultValue: 1,
+  rtSafe: true, defaultCurve: 0,
+});
+
+// オートメーション点は PPQ（4 分音符単位）で位置づけ、任意で curveToNext コード
+// （0=linear、1=exponential、2=hold、3=s-curve）を持ちます。
+engine.setAutomationLane(1, [
+  { ppq: 0, value: 1, curveToNext: 0 },
+  { ppq: 4, value: 0 },
+]);
+
+// あるいはコントロールスレッドから命令的に設定する（renderFrame -1 = 即時）。
+engine.setParameter(1, 0.5);
+```
+
+`SonareEngine` ファサードでは、パラメータを登録せずにミキサーのフェーダー／パンを自動化することもできます。`automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` はミキサー名前空間の予約済みエンジンパラメータ id を返すので、それをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（バス id はそのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。
+
+### サラウンドグループバスとワイドメーター
+
+サラウンドの `channelLayout`（`SonareChannelLayout`: `0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）で宣言したバスは**サラウンドグループバス**になります。バスはプレーンごとにマスターへ合算し、プレーン別メーターを公開します。レーンごとのサラウンドパン DSP（各レーンをストリップの [`surroundPan`](./mixing.md#サラウンドとマルチチャンネル) 位置へ配置するもの）は段階導入中で、`surroundPan` 値（およびレーン自身の `sourceChannelLayout`）はシーンに保存され config JSON を往復しますが、まだ音声のパンニングには反映されません。現状はバスの `channelLayout` を宣言し、レーンごとのパンはサラウンド DSP パスが入った時点で有効になります。
+
+```typescript
+engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]); // 5.1 のグループバス
+engine.setTrackOutputBus(1, 1);                          // レーンをそこへルーティング
+```
+
+`setTrackOutputBus(1, 0)`（または `setTrackLanes` で `outputBusId: 0` を指定）を呼ぶと、レーンをマスターミックスへ戻せます。
+
+サラウンドメーターはライブのワークレットメーターリングを通りません。オフラインまたはメインスレッドのエンジンで `drainMeterTelemetryWide(maxRecords?)` を使って読み取ると、プレーンごとの（ワイドな）レコードが返ります。`drainMeterTelemetry()` はステレオの高速パスのままです。この 2 つのドレインは同じシングルコンシューマのテレメトリキューを消費するため、1 つのエンジンインスタンスにつきどちらか一方だけを呼んでください。ライブの AudioWorklet 経路はステレオドレインでキューを所有しており、そのため `drainMeterTelemetryWide()` はオフライン（非ワークレット）エンジン向けです。両方を 1 つのエンジンで回すと、互いのレコードを奪い合います。
 
 ### MIDI クリップスケジューリングと `sampleAtPpq`
 
@@ -429,18 +495,23 @@ engineNode.destroy();
 
 | やりたいこと | ファサード API |
 |--------------|----------------|
-| トラックルーティング、フェーダー、パン、ソロ／ミュート | `setTrackLanes`、`setStripGain`、`setStripPan`、`setSoloMute` |
-| トラック／マスターのインサートと EQ | `setTrackStripJson`、`setMasterStripJson`、`setTrackStripEqBand`、`setMasterStripEqBand`、インサートバイパス系メソッド |
+| トラックルーティング、フェーダー、パン、ソロ／ミュート | `setTrackLanes`、`setStripGain`、`setStripPan`、`setTrackStripPan`、`setTrackStripPanLaw`、`setTrackStripPanMode`、`setTrackStripDualPan`、`setTrackStripChannelDelaySamples`、`setSoloMute` |
+| トラック／マスターのインサートと EQ | `setTrackStripJson`、`setMasterStripJson`、`setTrackStripEqBand`、`setMasterStripEqBand`、`setTrackStripInsertParamByName`、`setMasterStripInsertParamByName`、インサートバイパス系メソッド |
 | センドとバス | `setSends`、`setBusGain`、`setBusStripJson` |
 | MIDI クリップとライブ MIDI | `setMidiClips`、`pushMidiNoteOn`、`pushMidiNoteOff`、`pushMidiCc`、`pushMidiPanic` |
+| パラメータオートメーション | `setAutomationLane`、`addAutomationPoint`、`automationParamId(target, kind)`、`busAutomationParamId(busId)`、`listParameters`、`automationLaneCount` |
 | 楽器 | `setBuiltinInstrument`、`setSynthInstrument`、`loadSoundFont`、`setSf2Instrument` |
 | 録音とモニタリング | `configureCapture`（`inputMonitor` を含む）、`armRecord`、`punch`、`capturedAudio`、`captureStatus` |
 | トランスポート、テンポ、マーカー | `getTransportState`、`cachedTransportState`、`setTempoSegments`、`setTimeSignatureSegments`、マーカー系メソッド（全置換の `setMarkers` を含む。解決後のマーカー一覧（各エントリがエンジン `id` を持つ）を返す）、`setLoopFromMarkers` |
 | クリップ更新 | `addClip`、`removeClip` — ファサードは差分（クリップデルタ）を Worklet へ送る |
-| メーターとテレメトリ | `onMeter` / `onTelemetry`、`pollMeters` / `pollTelemetry`。メーターレコードはマスター・レーン・バス・入力のターゲット id を持つ |
+| メーターとテレメトリ | `onMeter` / `onTelemetry` / `onScope`、`pollMeters` / `pollTelemetry` / `pollScope`。メーターレコードはマスター・レーン・バス・入力のターゲット id を持つ。オフライン／メインスレッド側エンジンではワイドメーターレコードとスコープスナップショットも読み出せる |
 | オフライン書き出し | メインスレッド側ミラーの `renderOffline` |
 
 ファサードでは、ストリップを指定するメソッドはトラック id *または名前*（`target: string | number`）を受け取り、`setSoloMute(target, solo, mute)` はレーンインデックスの解決まで行います。`setTrackStripEqBand` は `EqBand` オブジェクトを直接受け取るので、バンド JSON を手書きする必要はほとんどありません。
+
+`automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` はミキサー名前空間の予約済みエンジンパラメータ id を返すので、`addParameter` でカスタムパラメータを登録しなくても、それらをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（そのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。
+
+Worklet 側でスコープスナップショットを流す場合は、`SonareRealtimeEngineNode.create(...)` に `scopeIntervalFrames`、`scopeBands`、必要に応じて `scopeSharedBuffer` / `scopeRingCapacity` を渡します。独自ブリッジでスペクトラムとベクトルスコープのスナップショットを共有リングに流したい場合は、低レベルの `createSonareScopeRingBuffer(...)` と `readSonareScopeRingBuffer(...)` を使えます。
 
 ```typescript
 import { SonareEngine } from '@libraz/libsonare/worklet';

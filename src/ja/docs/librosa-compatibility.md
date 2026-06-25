@@ -78,7 +78,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney 正規化 |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II。librosa と合わせる場合は `n_mfcc` を明示してください |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース。出力はフレームごとに L-infinity（最大値）正規化され、librosa の既定 `norm=np.inf` と一致 |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | フレーム単位 |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | フレーム単位 |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` 対応 |
@@ -324,7 +324,7 @@ sonare beats song.wav --json
 
 | パラメータ | librosa | libsonare |
 |-----------|---------|-----------|
-| `sr` | 22050 | ユーザー指定 |
+| `sr` | 22050 | 単体の解析／特徴量／ラウドネスヘルパーはすべて既定 22050。`lufs`／`true-peak` にはバッファの実レートを渡してください。`Audio`／`Spectrogram` クラスのメソッドは読み込んだファイルのレートを使います。 |
 | `n_fft` | 2048 | 2048 |
 | `hop_length` | 512 | 512 |
 | `win_length` | n_fft | n_fft |

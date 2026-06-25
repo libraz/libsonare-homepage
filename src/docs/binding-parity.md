@@ -40,16 +40,19 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Mel/MFCC inverse reconstruction | Yes | No |
 | Realtime engine | Yes | No |
 | Engine lane mixer (lanes, buses, sends, channel strips) and MIDI clip schedule | Yes — see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) | No |
+| Realtime scope and wide meter telemetry | Yes — see [Realtime and Streaming](./realtime-streaming.md#surround-group-buses-and-wide-meters) | No |
 | Mastering presets/chains/processors | Yes | Partial |
 | Mastering assistant/profile/preview JSON | Yes | No dedicated command |
 | Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
+| Surround and multichannel mixing | Yes — scene/pan round-trip plus realtime [surround group buses](./mixing.md#surround-and-multichannel); surround **panning** is staged (the `setSurroundPan` position round-trips in scene JSON but is inert until the surround DSP path lands — the surround group bus + wide-meter telemetry are the functional parts) | No |
 | Project and arrangement editing (headless DAW) | Yes — see [Project Editing](./project-editing.md) | Yes |
-| Built-in instruments (NativeSynth presets/patches) | Yes — see [Built-in Instruments](./native-synth.md) | Yes |
+| Built-in instruments (NativeSynth presets/patches) | Yes — see [Built-in Instruments](./native-synth.md) | Partial — `project bounce --synth` exposes the simple built-in synth waveform path, not the NativeSynth preset/patch catalog |
 | SoundFont 2 player | Yes — see [SoundFont 2 Player](./soundfont-player.md) | No (Project API only) |
 | Realtime engine live MIDI input | Yes — see [MIDI Input](./midi-input.md) | No |
 | Web MIDI bridge (`bindWebMidi`) and microphone glue (`bindMicrophoneInput`) | WASM / browser only | No |
 | External-instrument bounce protocol (`ExternalInstrument`) | Python only — see [Project Bounce](./project-bounce.md) | No |
 | Editing DSP | Yes | Yes |
+| Region-based spectral editing (`spectralEdit`) | Yes — see [Spectral Editing](./spectral-editing.md) | No |
 | Metering (meters, clipping/dynamic-range, stereo image, spectrum) | Yes | C++ CLI only (`meter`, `clipping`, `dynamic-range`) |
 | Scale quantization | Yes | No |
 | Room acoustics | Yes | `sonare acoustic [--ir]`, `estimate-room`, `synthesize-rir`, `room-morph` |
@@ -82,7 +85,7 @@ A few signatures don't line up across all three bindings:
 |-------|--------------|
 | Mastering chain config | `masteringChain(...)` and `StreamingMasteringChain` use nested config objects; `masterAudio(...)` overrides use flat dot-notation keys |
 | `StreamingMasteringChain` scope | Block-safe stages only — it rejects repair stages that need lookaround/file context and the whole-file `loudness` stage; use one-shot mastering APIs for those |
-| `analyze(...)` return | C ABI, Node native, and WASM return the complete `analyze` result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Python is the exception: its `AnalysisResult` carries only BPM, BPM confidence, key, time signature, and beat times; reach for the dedicated functions (`detect_chords`, `analyze_sections`, …) for the other families |
+| `analyze(...)` return | Every binding — C ABI, Python, Node native, and WASM — returns the complete `analyze` result: chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. The dedicated functions (`detect_chords`, `analyze_sections`, …) stay useful when you need extra parameters or just one family without running the full pipeline |
 | `normalize(...)` defaults | Module-level `normalize(...)` (Python, WASM, Node native) defaults to `0.0` (full scale); the Python `Audio.normalize()` convenience method still defaults to `target_db=-3.0` |
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM; pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
@@ -96,8 +99,18 @@ A few signatures don't line up across all three bindings:
 | CLI surface | Some availability depends on whether the command is the PyPI Python CLI or the source-built C++ CLI — see [CLI](./cli.md) |
 
 ::: info Rich analysis fields
-On C ABI, Node native, and WASM, the `analyze(...)` result carries chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. Python is the exception: its `analyze(...)` returns only BPM, BPM confidence, key, time signature, and beat times. When you only need one family — or you are on Python and need anything beyond the core summary — the focused helpers stay available across runtimes: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
+On C ABI, Python, Node native, and WASM, the `analyze(...)` result carries chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength. When you only need one family — or you want to tune parameters the all-in-one call doesn't expose — the focused helpers stay available across runtimes: `detectChords` / `detect_chords`, `analyzeSections` / `analyze_sections`, `analyzeTimbre` / `analyze_timbre`, `analyzeDynamics` / `analyze_dynamics`, and `analyzeRhythm` / `analyze_rhythm`.
 :::
+
+## Porting Checklist
+
+When moving a JavaScript example to Python, or Python verification code to C++, work through these checks in order:
+
+1. Rename functions using the conventions table — `detectBpm` becomes `detect_bpm`, `melSpectrogram` becomes `mel_spectrogram`, and so on.
+2. Match the input shape. Most APIs take a decoded, mono sample array plus `sampleRate`.
+3. Check option names and defaults — especially `nFft` / `n_fft`, `hopLength` / `hop_length`, and `nMels` / `n_mels`, which directly affect the result.
+4. Confirm matrix orientation. Returned `[rows x nFrames]` row-major arrays must not be read as column-major in another language.
+5. Don't expect bit-exact numbers. Allow for small differences from floating-point, windowing, and decoder behavior; verify the tolerance fits your use case.
 
 ## Verification Sources
 

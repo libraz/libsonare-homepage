@@ -441,7 +441,7 @@ const softwareApplicationJsonLd = {
   featureList: [
     'Browser-local analysis, mastering, mixing, and realtime FX demos',
     'BPM, key, chord, beat, downbeat, section, melody, loudness, room-acoustic analysis, and geometric room tools',
-    '76 named mastering DSP processors with an 18-stage default chain',
+    '76 named mastering DSP processors with preset, chain, solo, pair, and stereo entry points',
     'Real-time-safe mixing, routing, metering, offline rendering, editing DSP, and creative FX',
     'Built-in instruments: 7-engine synthesizer with GM fallback and SoundFont 2 player',
     'Headless DAW runtime: MIDI sequencing, arrangement editing, offline bounce',
@@ -644,6 +644,7 @@ export default withMermaid(
                 text: 'Build By Task',
                 items: [
                   { text: 'Editing DSP', link: '/docs/editing-dsp' },
+                  { text: 'Spectral Editing', link: '/docs/spectral-editing' },
                   { text: 'Mixing Engine', link: '/docs/mixing' },
                   { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
                   { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
@@ -746,6 +747,7 @@ export default withMermaid(
                 text: '作りたいもの別',
                 items: [
                   { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
+                  { text: 'スペクトル編集', link: '/ja/docs/spectral-editing' },
                   { text: 'ミキシングエンジン', link: '/ja/docs/mixing' },
                   { text: 'ミキシングシーン JSON', link: '/ja/docs/mixing-scene-json' },
                   { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },

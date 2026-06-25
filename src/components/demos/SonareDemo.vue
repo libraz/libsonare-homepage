@@ -55,6 +55,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     room: defineAsyncComponent(() => import('./archetypes/RoomDemo.vue')),
     contour: defineAsyncComponent(() => import('./archetypes/ContourDemo.vue')),
     'lane-mixer': defineAsyncComponent(() => import('./archetypes/LaneMixerDemo.vue')),
+    'spectral-edit': defineAsyncComponent(() => import('./archetypes/SpectralEditDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

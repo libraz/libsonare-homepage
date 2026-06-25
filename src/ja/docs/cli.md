@@ -479,7 +479,7 @@ done
 ### マスタリングのワークフロー
 
 ::: info コマンドの提供範囲
-PyPI の Python CLI には `mastering`、`mastering-processor`、`eq`、`mastering-processors`、および下記のペア解析コマンドが含まれます。
+PyPI の Python CLI には `mastering`、`master`、`mastering-processor`、`mastering-processors`、`mastering-chain`、`mastering-presets`、`eq`、`declip`、および下記のペア解析コマンドが含まれます。
 
 ソースからビルドした C++ CLI では、ソース／リファレンスを処理する `mastering-pair-processor`、ステレオ解析一覧、ステレオ解析実行などの追加マスタリングコマンドも利用できます。
 
@@ -502,6 +502,18 @@ sonare mastering-processor track.wav \
 # 統合イコライザを適用（1 回に 1 バンド、または --params で複数指定）
 sonare eq track.wav --type 2 --frequency-hz 12000 --gain-db 2.5 --q 0.7 -o eq.wav
 
+# 名前付きマスタリングプリセットを適用（デフォルトのプリセット: pop）
+sonare master track.wav --preset pop -o mastered.wav
+
+# JSON 設定から構成可能なマスタリングチェーンを実行
+sonare mastering-chain track.wav --config-file chain.json -o chained.wav
+
+# 利用可能なマスタリングプリセット名を一覧表示
+sonare mastering-presets
+
+# LPC 再構成でクリップしたオーディオを修復
+sonare declip clipped.wav -o fixed.wav
+
 # リファレンスを使ったラウドネス／トーン解析
 sonare mastering-pair-analyses
 sonare mastering-pair-analyze track.wav \
@@ -519,6 +531,10 @@ Python CLI の名前付きマスタリングコマンド:
 | 目的 | コマンド |
 |------|---------|
 | 目標ラウドネス＋トゥルーピーク上限でノーマライズ | `sonare mastering` |
+| 名前付きマスタリングプリセットを適用 | `sonare master` |
+| 構成可能なマスタリングチェーンを実行 | `sonare mastering-chain` |
+| マスタリングプリセット名を一覧表示 | `sonare mastering-presets` |
+| クリップしたオーディオを修復（LPC 再構成） | `sonare declip` |
 | 統合イコライザを適用 | `sonare eq` |
 | モノラル／ステレオプロセッサ一覧 | `sonare mastering-processors` |
 | 名前付きプロセッサを適用 | `sonare mastering-processor` |
@@ -538,6 +554,15 @@ Python CLI の名前付きマスタリングコマンド:
 | `sonare mastering-streaming track.wav` | `--platforms '[...]'`, `--platforms-file f.json` | プラットフォームごとのノーマライズプレビュー JSON |
 
 `--platforms` は `{name, targetLufs, ceilingDb}` オブジェクトの JSON 配列を受け取ります。`--params` はカンマ区切りの `key=value` 浮動小数点ペアをアシスタント呼び出しに渡します。
+
+プリセット・チェーン・修復系のコマンドはオーディオファイルを受け取り、`-o` で WAV を書き出します。ただし `mastering-presets` は名前を一覧表示するだけです。
+
+| コマンド | 主なオプション | 備考 |
+|---------|--------------|------|
+| `sonare master track.wav -o out.wav` | `--preset NAME`（デフォルト `pop`）, `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | 名前付きマスタリングプリセットを適用する。`--config`／`--config-file`／`--params` でプリセット値を上書きできる |
+| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | JSON 設定から構成可能なマスタリングチェーンを実行する |
+| `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
+| `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |
 
 ソースビルド C++ CLI のみ: `sonare mastering-pair-processor`、`sonare mastering-stereo-analyses`、`sonare mastering-stereo-analyze`。
 

@@ -214,7 +214,10 @@ function meterTapCode(tap) {
   return tap === "preFader" || tap === 0 ? 0 : 1;
 }
 function sendTimingCode(timing) {
-  return timing === "preFader" || timing === 0 ? 0 : 1;
+  if (typeof timing === "number") {
+    return timing;
+  }
+  return timing === "preFader" ? 1 : 0;
 }
 
 // src/mixer.ts
@@ -466,6 +469,13 @@ var Mixer = class _Mixer {
   /** Set independent left/right pan positions (dual-pan mode). */
   setDualPan(stripIndex, leftPan, rightPan) {
     this.mixer.setDualPan(stripIndex, leftPan, rightPan);
+  }
+  /**
+   * Set the strip's surround pan position, used when it feeds a >2-channel bus.
+   * Stored on the scene; inert until the surround DSP path applies it.
+   */
+  setSurroundPan(stripIndex, pan) {
+    this.mixer.setSurroundPan(stripIndex, pan);
   }
   /**
    * Add a send to a strip after construction.
@@ -1169,6 +1179,11 @@ function normalize(samples, sampleRate, targetDb = 0, options = {}) {
   assertSamples("normalize", samples, options.validate !== false);
   return requireModule().normalize(samples, sampleRate, targetDb);
 }
+function spectralEdit(samples, sampleRate, ops = [], options = {}) {
+  assertSamples("spectralEdit", samples, options.validate !== false);
+  assertSampleRate("spectralEdit", sampleRate);
+  return requireModule().spectralEdit(samples, sampleRate, ops, options);
+}
 function mastering(samples, sampleRate = 22050, options = {}) {
   return requireModule().mastering(
     samples,
@@ -1186,6 +1201,14 @@ function masteringInsertNames() {
 }
 function masteringInsertParamNames(name) {
   return requireModule().masteringInsertParamNames(name);
+}
+function masteringInsertParamInfo(name) {
+  const json = requireModule().masteringInsertParamInfo(name);
+  return JSON.parse(json);
+}
+function masteringProcessorCatalog() {
+  const json = requireModule().masteringProcessorCatalog();
+  return JSON.parse(json);
 }
 function masteringPairProcessorNames() {
   return requireModule().masteringPairProcessorNames();
@@ -1531,11 +1554,18 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   const fmin = options.fmin ?? 65;
   const fmax = options.fmax ?? 2093;
   validateFrequencyBounds("analyzeMelody", fmin, fmax);
+  if (fmin <= 0) {
+    throw new RangeError("analyzeMelody: fmin must be positive");
+  }
   validatePositiveIntegers("analyzeMelody", {
     frameLength: options.frameLength ?? 2048,
     hopLength: options.hopLength ?? 256
   });
-  assertFiniteScalar("analyzeMelody", options.threshold ?? 0.1, "threshold");
+  const threshold = options.threshold ?? 0.1;
+  assertFiniteScalar("analyzeMelody", threshold, "threshold");
+  if (threshold <= 0) {
+    throw new RangeError("analyzeMelody: threshold must be positive");
+  }
   return requireModule3().analyzeMelody(
     samples,
     sampleRate,
@@ -2864,6 +2894,13 @@ function createOpfsClipPageProvider(engine, options) {
 
 // src/project.ts
 var EXPECTED_PROJECT_ABI_VERSION = 1;
+var MarkerKind = {
+  marker: 0,
+  text: 1,
+  lyric: 2,
+  cuePoint: 3,
+  keySignature: 4
+};
 var SYNTH_ENGINE_MODES = [
   "default",
   "subtractive",
@@ -3203,6 +3240,22 @@ var Project = class _Project {
   setTrackMidiDestination(trackId, destinationId) {
     this.native.setTrackMidiDestination(trackId, destinationId);
   }
+  /** Set a track's linear playback gain (1.0 = unity; >= 0) via an undoable edit. */
+  setTrackGain(trackId, gain) {
+    this.native.setTrackGain(trackId, gain);
+  }
+  /** Set a track's mute flag via an undoable edit (a muted track is silent). */
+  setTrackMute(trackId, mute) {
+    this.native.setTrackMute(trackId, mute);
+  }
+  /** Set a track's solo flag via an undoable edit (when any track is soloed, only soloed tracks sound). */
+  setTrackSolo(trackId, solo) {
+    this.native.setTrackSolo(trackId, solo);
+  }
+  /** Set a track's stereo balance in [-1, +1] (0 = center) via an undoable edit. */
+  setTrackPan(trackId, pan) {
+    this.native.setTrackPan(trackId, pan);
+  }
   /** Undo the most recent edit. */
   undo() {
     this.native.undo();
@@ -3492,6 +3545,22 @@ var Project = class _Project {
   setMarker(markerId, ppq, name) {
     return this.native.setMarker(markerId, ppq, name);
   }
+  /**
+   * Add or replace a marker from a full {@link ProjectMarker}, including its
+   * {@link MarkerKind} and (for key signatures) the key. Pass `id` 0 to allocate
+   * a new id; returns the stable marker id.
+   */
+  setMarkerEx(marker) {
+    return this.native.setMarkerEx(marker);
+  }
+  /** Read a project marker by index (0-based, in stored order). */
+  markerByIndex(index) {
+    return this.native.markerByIndex(index);
+  }
+  /** Number of markers in the project. */
+  markerCount() {
+    return this.native.markerCount();
+  }
   /** Number of tracks in the project. */
   trackCount() {
     return this.native.trackCount();
@@ -3747,6 +3816,15 @@ var RealtimeEngine = class {
   seekSample(timelineSample, renderFrame = -1) {
     this.native.seekSample(timelineSample, renderFrame);
   }
+  /**
+   * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
+   * lane fader/pan/gate, bus gains) to its target value. Offline renders call
+   * this after a priming process() block so the first audible block renders at
+   * settled values instead of ramping in from defaults.
+   */
+  settleParameters() {
+    this.native.settleParameters();
+  }
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
   }
@@ -3835,8 +3913,30 @@ var RealtimeEngine = class {
   }
   setTrackLanes(lanes) {
     this.native.setTrackLanes(
-      lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane)
+      lanes.map((lane) => {
+        if (typeof lane === "number") {
+          return { trackId: lane };
+        }
+        if (!lane.sends) {
+          return lane;
+        }
+        return {
+          ...lane,
+          sends: lane.sends.map((send) => ({
+            ...send,
+            // Post-fader (0) is the default for an omitted sendTiming.
+            sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
+          }))
+        };
+      })
     );
+  }
+  /**
+   * Keys one insert of a lane strip from another lane's post-strip audio
+   * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
+   */
+  setLaneSidechain(trackId, insertIndex, sourceTrackId) {
+    this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
   }
   setTrackBuses(buses) {
     this.native.setTrackBuses(buses);
@@ -3892,6 +3992,43 @@ var RealtimeEngine = class {
   }
   setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
     this.native.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
+  }
+  /**
+   * Changes one track-strip insert parameter in realtime, addressed by the
+   * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
+   * Applied at the next block head via the engine command queue; safe during
+   * playback. Throws if the track, insert, or name is unknown, the param is not
+   * realtime-safe, or the command queue is full.
+   */
+  setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
+    this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+  }
+  /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
+  setMasterStripInsertParamByName(insertIndex, paramName, value) {
+    this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
+  }
+  /** Sets a track lane strip's pan position in realtime (glitch-free). */
+  setTrackStripPan(trackId, pan) {
+    this.native.setTrackStripPan(trackId, pan);
+  }
+  /** Sets a track lane strip's pan law in realtime. */
+  setTrackStripPanLaw(trackId, panLaw) {
+    this.native.setTrackStripPanLaw(trackId, panLawCode(panLaw));
+  }
+  /** Sets a track lane strip's pan mode in realtime. */
+  setTrackStripPanMode(trackId, panMode) {
+    this.native.setTrackStripPanMode(trackId, panModeCode(panMode));
+  }
+  /** Sets a track lane strip's dual-pan left/right positions in realtime. */
+  setTrackStripDualPan(trackId, leftPan, rightPan) {
+    this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
+  }
+  /**
+   * Sets a track lane strip's inter-channel alignment delay (whole samples).
+   * Adjusts strip latency, so PDC and reported graph latency are refreshed.
+   */
+  setTrackStripChannelDelaySamples(trackId, delaySamples) {
+    this.native.setTrackStripChannelDelaySamples(trackId, delaySamples);
   }
   createClipPageProvider(numChannels, numSamples, pageFrames) {
     const id = this.native.createClipPageProvider(numChannels, numSamples, pageFrames);
@@ -3981,6 +4118,30 @@ var RealtimeEngine = class {
   }
   drainMeterTelemetry(maxRecords = 1024) {
     return this.native.drainMeterTelemetry(maxRecords);
+  }
+  /**
+   * Drains pending meter telemetry as per-plane (wide) records for a surround
+   * target. Use this for a surround mix target; {@link drainMeterTelemetry}
+   * stays the stereo fast path. The two share one queue — call only one per
+   * target. The live AudioWorklet path owns the queue via the stereo drain, so
+   * this wide drain is for an offline (non-worklet) engine instance; per-plane
+   * surround meters are not delivered over the live worklet meter ring.
+   */
+  drainMeterTelemetryWide(maxRecords = 1024) {
+    return this.native.drainMeterTelemetryWide(maxRecords);
+  }
+  /**
+   * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
+   * the minimum render-frame gap between snapshots (0 disables). @param bandCount
+   * is the FFT band resolution (1..64); changing it re-prepares the tap. Returns
+   * the band count actually applied.
+   */
+  configureScopeTelemetry(intervalFrames, bandCount) {
+    return this.native.configureScopeTelemetry(intervalFrames, bandCount);
+  }
+  /** Drains pending spectrum + vectorscope snapshots (per mix target). */
+  drainScopeTelemetry(maxRecords = 1024) {
+    return this.native.drainScopeTelemetry(maxRecords);
   }
   destroy() {
     this.native.delete();
@@ -4554,6 +4715,7 @@ export {
   EXPECTED_PROJECT_ABI_VERSION,
   ErrorCode,
   KeyProfile,
+  MarkerKind,
   Mixer,
   Mode,
   PitchClass as Pitch,
@@ -4647,6 +4809,7 @@ export {
   masteringDynamicsGate,
   masteringDynamicsTransientShaper,
   masteringInsertNames,
+  masteringInsertParamInfo,
   masteringInsertParamNames,
   masteringPairAnalysisNames,
   masteringPairAnalyze,
@@ -4655,6 +4818,7 @@ export {
   masteringPresetNames,
   masteringProcess,
   masteringProcessStereo,
+  masteringProcessorCatalog,
   masteringProcessorNames,
   masteringRepairDeclick,
   masteringRepairDeclip,
@@ -4733,6 +4897,7 @@ export {
   spectralBandwidth,
   spectralCentroid,
   spectralContrast,
+  spectralEdit,
   spectralFlatness,
   spectralRolloff,
   splitSilence,

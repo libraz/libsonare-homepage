@@ -70,6 +70,7 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 | `panMode` | integer | `0` | `0` = balance, `1` = stereo pan, `2` = dual pan |
 | `dualPanLeft` | number | `-1` | Left position in dual-pan mode (default is identity hard-left, preserving the stereo image) |
 | `dualPanRight` | number | `1` | Right position in dual-pan mode (default is identity hard-right) |
+| `surroundPan` | object | identity | Surround-pan metadata for wider-than-stereo hosts: `azimuth`, `divergence`, and `lfe` are the fields it carries (`elevation` and `distance` are reserved). It is validated and round-tripped through the scene JSON, but **the surround-panning DSP is staged** — the values are persisted yet currently inert. The offline `Mixer` never applies them, and the [realtime engine's surround buses](./realtime-streaming.md#surround-group-buses-and-wide-meters) will consume them only once the surround DSP path ships |
 | `polarityInvertLeft` | boolean | `false` | Inverts the left channel polarity |
 | `polarityInvertRight` | boolean | `false` | Inverts the right channel polarity |
 | `panLaw` | integer | `0` | `0` = const 3 dB, `1` = const 4.5 dB, `2` = const 6 dB, `3` = linear 0 dB |

@@ -474,7 +474,7 @@ done
 ### Mastering Workflow
 
 ::: info Command availability
-The PyPI Python CLI includes `mastering`, `mastering-processor`, `eq`, `mastering-processors`, and the pair-analysis commands shown below. Source-built C++ CLI builds expose additional mastering commands: `mastering-pair-processor` for source/reference processing, plus stereo-analysis lists and runners. See [Building from Source](/docs/installation#building-from-source).
+The PyPI Python CLI includes `mastering`, `master`, `mastering-processor`, `mastering-processors`, `mastering-chain`, `mastering-presets`, `eq`, `declip`, and the pair-analysis commands shown below. Source-built C++ CLI builds expose additional mastering commands: `mastering-pair-processor` for source/reference processing, plus stereo-analysis lists and runners. See [Building from Source](/docs/installation#building-from-source).
 :::
 
 ```bash
@@ -493,6 +493,18 @@ sonare mastering-processor track.wav \
 # Apply the unified equalizer (one band per call, or --params for several)
 sonare eq track.wav --type 2 --frequency-hz 12000 --gain-db 2.5 --q 0.7 -o eq.wav
 
+# Apply a named mastering preset (default preset: pop)
+sonare master track.wav --preset pop -o mastered.wav
+
+# Run a configurable mastering chain from a JSON config
+sonare mastering-chain track.wav --config-file chain.json -o chained.wav
+
+# List the available mastering preset names
+sonare mastering-presets
+
+# Repair clipped audio via LPC reconstruction
+sonare declip clipped.wav -o fixed.wav
+
 # Reference-based loudness / tonal analysis
 sonare mastering-pair-analyses
 sonare mastering-pair-analyze track.wav \
@@ -510,6 +522,10 @@ Named mastering commands in the Python CLI:
 | Purpose | Command |
 |---------|---------|
 | Loudness-normalize with a true-peak ceiling | `sonare mastering` |
+| Apply a named mastering preset | `sonare master` |
+| Run a configurable mastering chain | `sonare mastering-chain` |
+| List mastering preset names | `sonare mastering-presets` |
+| Repair clipped audio (LPC reconstruction) | `sonare declip` |
 | Apply the unified equalizer | `sonare eq` |
 | List mono/stereo processors | `sonare mastering-processors` |
 | Apply a named processor | `sonare mastering-processor` |
@@ -529,6 +545,15 @@ The three assistant commands each take an audio file and print a JSON object to 
 | `sonare mastering-streaming track.wav` | `--platforms '[...]'`, `--platforms-file f.json` | Per-platform normalization preview as JSON |
 
 `--platforms` accepts a JSON array of `{name, targetLufs, ceilingDb}` objects. `--params` accepts comma-separated `key=value` float pairs passed to the underlying assistant call.
+
+The preset, chain, and repair commands take an audio file and write a WAV with `-o`, except `mastering-presets`, which only lists names:
+
+| Command | Key options | Notes |
+|---------|------------|-------|
+| `sonare master track.wav -o out.wav` | `--preset NAME` (default `pop`), `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | Applies a named mastering preset; `--config`/`--config-file`/`--params` override preset values |
+| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | Runs a configurable mastering chain from JSON config |
+| `sonare mastering-presets` | honors the global `--json` flag | Lists the available mastering preset names |
+| `sonare declip clipped.wav -o out.wav` | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |
 
 Source-built C++ CLI only: `sonare mastering-pair-processor`, `sonare mastering-stereo-analyses`, and `sonare mastering-stereo-analyze`.
 

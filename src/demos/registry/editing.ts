@@ -64,4 +64,43 @@ export const editingDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'spectral-edit',
+    archetype: 'spectral-edit',
+    // A sustained pad gives a stable harmonic bed so the injected whistle — and the
+    // surgical region edit that removes it — stand out cleanly in the spectrum.
+    source: { kind: 'clip', clip: 'pad' },
+    viz: 'spectrogram',
+    title: {
+      en: 'Spectral editing — erase one region, leave the rest',
+      ja: 'スペクトル編集 — 一区画だけ消し、ほかは残す',
+    },
+    caption: {
+      en: 'A steady pad is given a narrow whistle over a middle time window (Artifact). One `spectralEdit` region op — the same time x frequency rectangle the whistle occupies — removes it (Edited), and the averaged spectra show the in-band spike collapse while everything outside the shaded band is untouched. Switch the mode to compare attenuate (turn the bins down by gainDb), mute (silence them) and heal (rebuild them from neighbouring frames), and flip Compare to audition each side. NOTCH is the in-band reduction in dB.',
+      ja: '安定したパッドの中間の時間帯に細い「ホイッスル」を乗せたものが「アーティファクト」です。`spectralEdit` の領域オペレーション一つ — ホイッスルが占める時間×周波数の矩形と同じ範囲 — でそれを取り除いたものが「編集後」で、平均スペクトルを見ると帯域内のスパイクだけが崩れ、網掛けの帯域の外はそのまま残ります。モードを切り替えると attenuate（gainDb 分だけビンを下げる）・mute（無音化する）・heal（隣接フレームから作り直す）を比べられ、Compare で両方を聴き比べできます。NOTCH は帯域内の低減量（dB）です。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'artifact',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'artifact', label: { en: 'Artifact', ja: 'アーティファクト' } },
+          { value: 'edited', label: { en: 'Edited', ja: '編集後' } },
+        ],
+      },
+      {
+        key: 'mode',
+        kind: 'select',
+        default: 'heal',
+        label: { en: 'Mode', ja: 'モード' },
+        options: [
+          { value: 'heal', label: { en: 'Heal', ja: 'ヒール' } },
+          { value: 'mute', label: { en: 'Mute', ja: 'ミュート' } },
+          { value: 'attenuate', label: { en: 'Attenuate', ja: 'アッテネート' } },
+        ],
+      },
+    ],
+  },
 ];

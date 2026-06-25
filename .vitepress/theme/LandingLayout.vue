@@ -122,13 +122,13 @@ const locales = {
           tag: 'ANALYSIS',
           title: 'Deep MIR analysis for music tools.',
           body: 'BPM, key, chords with Viterbi/HMM smoothing, beats, downbeats, time signature, sections, timbre, dynamics, YIN/pYIN pitch, tempogram/PLP, NNLS chroma, LUFS, room-acoustic estimates, and geometric room tools. Defaults are validated against generated reference values in CI.',
-          link: { label: 'Benchmarks', path: '/docs/benchmarks' },
+          link: { label: 'Feature map', path: '/docs/api-surface' },
         },
         {
           tag: 'MASTERING & MIXING',
           title: 'Broadcast-grade mastering and real-time-safe mixing.',
           body: '76 named mastering DSP processors against published references — loudness, true peak, crossovers, clippers, tube saturation, oversampling — plus a real-time-safe mixer with channel strips, buses, sends, metering, scene presets, editing DSP, and creative FX.',
-          link: { label: 'Mixing engine', path: '/docs/mixing' },
+          link: { label: 'Mastering processors', path: '/docs/mastering-processors' },
         },
         {
           tag: 'INSTRUMENTS & DAW',
@@ -223,13 +223,13 @@ const locales = {
           tag: 'ANALYSIS',
           title: '音楽ツール向けの深い MIR 解析。',
           body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、ルーム音響推定。デフォルト値は CI で生成した参照値と照合しています。',
-          link: { label: 'ベンチマーク', path: '/docs/benchmarks' },
+          link: { label: '機能マップ', path: '/docs/api-surface' },
         },
         {
           tag: 'MASTERING & MIXING',
           title: '放送品質のマスタリングとリアルタイム安全なミキシング。',
           body: '公開リファレンスに基づく 76 個の名前付きマスタリング DSP プロセッサ（ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリング）に加え、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP、クリエイティブ FX を備えたリアルタイム安全なミキサー。',
-          link: { label: 'ミキシングエンジン', path: '/docs/mixing' },
+          link: { label: 'マスタリングプロセッサ', path: '/docs/mastering-processors' },
         },
         {
           tag: 'INSTRUMENTS & DAW',

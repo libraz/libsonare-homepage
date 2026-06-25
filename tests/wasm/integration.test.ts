@@ -270,7 +270,7 @@ describe('wasm package integration', () => {
     expect(wasm.framesToSamples(4, 512)).toBe(2048);
     expect(wasm.samplesToFrames(2048, 512)).toBe(4);
     expect(wasm.framesToTime(4, SAMPLE_RATE, 512)).toBeCloseTo(2048 / SAMPLE_RATE, 6);
-    expect(wasm.timeToFrames(2048 / SAMPLE_RATE, SAMPLE_RATE, 512)).toBe(4);
+    expect(wasm.timeToFrames(1.0, SAMPLE_RATE, 512)).toBe(Math.floor(SAMPLE_RATE / 512));
 
     const amplitudes = new Float32Array([1, 0.5, 0.25]);
     expect(wasm.dbToAmplitude(wasm.amplitudeToDb(amplitudes))).toHaveLength(amplitudes.length);

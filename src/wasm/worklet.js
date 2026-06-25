@@ -1,3 +1,58 @@
+// src/codes.ts
+function automationCurveCode(curve) {
+  switch (curve) {
+    case "linear":
+      return 0;
+    case "exponential":
+      return 1;
+    case "hold":
+      return 2;
+    case "s-curve":
+      return 3;
+    default:
+      throw new Error(`Invalid automation curve: ${curve}`);
+  }
+}
+function panLawCode(panLaw) {
+  if (typeof panLaw === "number") {
+    return panLaw;
+  }
+  switch (panLaw) {
+    case "const4.5dB":
+      return 1;
+    case "const6dB":
+      return 2;
+    case "linear0dB":
+      return 3;
+    default:
+      return 0;
+  }
+}
+function panModeCode(panMode) {
+  if (typeof panMode === "number") {
+    return panMode;
+  }
+  switch (panMode) {
+    case "stereoPan":
+    case "stereo-pan":
+      return 1;
+    case "dualPan":
+    case "dual-pan":
+      return 2;
+    default:
+      return 0;
+  }
+}
+function meterTapCode(tap) {
+  return tap === "preFader" || tap === 0 ? 0 : 1;
+}
+function sendTimingCode(timing) {
+  if (typeof timing === "number") {
+    return timing;
+  }
+  return timing === "preFader" ? 1 : 0;
+}
+
 // src/errors.ts
 var SonareError = class extends Error {
   constructor(code, codeName, message) {
@@ -148,58 +203,6 @@ function getSonareModule() {
     throw new Error("Module not initialized. Call init() first.");
   }
   return wrappedModule;
-}
-
-// src/codes.ts
-function automationCurveCode(curve) {
-  switch (curve) {
-    case "linear":
-      return 0;
-    case "exponential":
-      return 1;
-    case "hold":
-      return 2;
-    case "s-curve":
-      return 3;
-    default:
-      throw new Error(`Invalid automation curve: ${curve}`);
-  }
-}
-function panLawCode(panLaw) {
-  if (typeof panLaw === "number") {
-    return panLaw;
-  }
-  switch (panLaw) {
-    case "const4.5dB":
-      return 1;
-    case "const6dB":
-      return 2;
-    case "linear0dB":
-      return 3;
-    default:
-      return 0;
-  }
-}
-function panModeCode(panMode) {
-  if (typeof panMode === "number") {
-    return panMode;
-  }
-  switch (panMode) {
-    case "stereoPan":
-    case "stereo-pan":
-      return 1;
-    case "dualPan":
-    case "dual-pan":
-      return 2;
-    default:
-      return 0;
-  }
-}
-function meterTapCode(tap) {
-  return tap === "preFader" || tap === 0 ? 0 : 1;
-}
-function sendTimingCode(timing) {
-  return timing === "preFader" || timing === 0 ? 0 : 1;
 }
 
 // src/mixer.ts
@@ -451,6 +454,13 @@ var Mixer = class _Mixer {
   /** Set independent left/right pan positions (dual-pan mode). */
   setDualPan(stripIndex, leftPan, rightPan) {
     this.mixer.setDualPan(stripIndex, leftPan, rightPan);
+  }
+  /**
+   * Set the strip's surround pan position, used when it feeds a >2-channel bus.
+   * Stored on the scene; inert until the surround DSP path applies it.
+   */
+  setSurroundPan(stripIndex, pan) {
+    this.mixer.setSurroundPan(stripIndex, pan);
   }
   /**
    * Add a send to a strip after construction.
@@ -956,6 +966,15 @@ var RealtimeEngine = class {
   seekSample(timelineSample, renderFrame = -1) {
     this.native.seekSample(timelineSample, renderFrame);
   }
+  /**
+   * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
+   * lane fader/pan/gate, bus gains) to its target value. Offline renders call
+   * this after a priming process() block so the first audible block renders at
+   * settled values instead of ramping in from defaults.
+   */
+  settleParameters() {
+    this.native.settleParameters();
+  }
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
   }
@@ -1044,8 +1063,30 @@ var RealtimeEngine = class {
   }
   setTrackLanes(lanes) {
     this.native.setTrackLanes(
-      lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane)
+      lanes.map((lane) => {
+        if (typeof lane === "number") {
+          return { trackId: lane };
+        }
+        if (!lane.sends) {
+          return lane;
+        }
+        return {
+          ...lane,
+          sends: lane.sends.map((send) => ({
+            ...send,
+            // Post-fader (0) is the default for an omitted sendTiming.
+            sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
+          }))
+        };
+      })
     );
+  }
+  /**
+   * Keys one insert of a lane strip from another lane's post-strip audio
+   * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
+   */
+  setLaneSidechain(trackId, insertIndex, sourceTrackId) {
+    this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
   }
   setTrackBuses(buses) {
     this.native.setTrackBuses(buses);
@@ -1101,6 +1142,43 @@ var RealtimeEngine = class {
   }
   setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
     this.native.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
+  }
+  /**
+   * Changes one track-strip insert parameter in realtime, addressed by the
+   * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
+   * Applied at the next block head via the engine command queue; safe during
+   * playback. Throws if the track, insert, or name is unknown, the param is not
+   * realtime-safe, or the command queue is full.
+   */
+  setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
+    this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+  }
+  /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
+  setMasterStripInsertParamByName(insertIndex, paramName, value) {
+    this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
+  }
+  /** Sets a track lane strip's pan position in realtime (glitch-free). */
+  setTrackStripPan(trackId, pan) {
+    this.native.setTrackStripPan(trackId, pan);
+  }
+  /** Sets a track lane strip's pan law in realtime. */
+  setTrackStripPanLaw(trackId, panLaw) {
+    this.native.setTrackStripPanLaw(trackId, panLawCode(panLaw));
+  }
+  /** Sets a track lane strip's pan mode in realtime. */
+  setTrackStripPanMode(trackId, panMode) {
+    this.native.setTrackStripPanMode(trackId, panModeCode(panMode));
+  }
+  /** Sets a track lane strip's dual-pan left/right positions in realtime. */
+  setTrackStripDualPan(trackId, leftPan, rightPan) {
+    this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
+  }
+  /**
+   * Sets a track lane strip's inter-channel alignment delay (whole samples).
+   * Adjusts strip latency, so PDC and reported graph latency are refreshed.
+   */
+  setTrackStripChannelDelaySamples(trackId, delaySamples) {
+    this.native.setTrackStripChannelDelaySamples(trackId, delaySamples);
   }
   createClipPageProvider(numChannels, numSamples, pageFrames) {
     const id = this.native.createClipPageProvider(numChannels, numSamples, pageFrames);
@@ -1191,6 +1269,30 @@ var RealtimeEngine = class {
   drainMeterTelemetry(maxRecords = 1024) {
     return this.native.drainMeterTelemetry(maxRecords);
   }
+  /**
+   * Drains pending meter telemetry as per-plane (wide) records for a surround
+   * target. Use this for a surround mix target; {@link drainMeterTelemetry}
+   * stays the stereo fast path. The two share one queue — call only one per
+   * target. The live AudioWorklet path owns the queue via the stereo drain, so
+   * this wide drain is for an offline (non-worklet) engine instance; per-plane
+   * surround meters are not delivered over the live worklet meter ring.
+   */
+  drainMeterTelemetryWide(maxRecords = 1024) {
+    return this.native.drainMeterTelemetryWide(maxRecords);
+  }
+  /**
+   * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
+   * the minimum render-frame gap between snapshots (0 disables). @param bandCount
+   * is the FFT band resolution (1..64); changing it re-prepares the tap. Returns
+   * the band count actually applied.
+   */
+  configureScopeTelemetry(intervalFrames, bandCount) {
+    return this.native.configureScopeTelemetry(intervalFrames, bandCount);
+  }
+  /** Drains pending spectrum + vectorscope snapshots (per mix target). */
+  drainScopeTelemetry(maxRecords = 1024) {
+    return this.native.drainScopeTelemetry(maxRecords);
+  }
   destroy() {
     this.native.delete();
   }
@@ -1248,7 +1350,7 @@ function isInitialized() {
   return module !== null;
 }
 
-// src/worklet.ts
+// src/worklet/protocol.ts
 var ENGINE_MIXER_TARGET_BASE = 1297612800;
 var ENGINE_MIXER_PARAM_FADER_DB = 1;
 var ENGINE_MIXER_PARAM_PAN = 2;
@@ -1264,6 +1366,8 @@ function engineMixerMasterTarget(paramKind) {
 var SONARE_METER_RING_HEADER_INTS = 4;
 var SONARE_METER_RING_RECORD_FLOATS = 14;
 var SONARE_SPECTRUM_RING_HEADER_INTS = 5;
+var SONARE_SCOPE_RING_HEADER_INTS = 6;
+var SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS = 5;
 var SONARE_FRAME_LANE_BASE = 16777216;
 function encodeFrameLo(frame) {
   const f = Math.max(0, Math.floor(frame));
@@ -1322,62 +1426,11 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["SmoothedParameterCapacity"] = 13] = "SmoothedParameterCapacity";
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
-var DEFAULT_METRONOME_CONFIG = {
-  beatGain: 0.35,
-  accentGain: 0.7,
-  clickSamples: 96
-};
-function resolveMetronomeConfig(config) {
-  return {
-    beatGain: config.beatGain ?? DEFAULT_METRONOME_CONFIG.beatGain,
-    accentGain: config.accentGain ?? DEFAULT_METRONOME_CONFIG.accentGain,
-    clickSamples: config.clickSamples ?? DEFAULT_METRONOME_CONFIG.clickSamples
-  };
-}
 function toDb(value) {
   return value > 0 ? 20 * Math.log10(value) : Number.NEGATIVE_INFINITY;
 }
 function isRecord(value) {
   return typeof value === "object" && value !== null;
-}
-function isWorkletMessage(value) {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return false;
-  }
-  return value.type === "scheduleInsertAutomation" || value.type === "setMeterInterval" || value.type === "destroy";
-}
-function isEngineCommandRecord(value) {
-  return isRecord(value) && typeof value.type === "number";
-}
-function isEngineSyncMessage(value) {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return false;
-  }
-  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiPanic";
-}
-function isEngineCaptureRequestMessage(value) {
-  return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
-}
-function isEngineCaptureResponseMessage(value) {
-  return isRecord(value) && value.type === "captureResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
-}
-function isEngineTransportRequestMessage(value) {
-  return isRecord(value) && value.type === "transportRequest" && typeof value.requestId === "number" && value.op === "state";
-}
-function isEngineTransportResponseMessage(value) {
-  return isRecord(value) && value.type === "transportResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
-}
-function isRealtimeVoiceChangerMessage(value) {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return false;
-  }
-  return value.type === "setConfig" || value.type === "reset" || value.type === "destroy";
-}
-function isEngineTelemetryRecord(value) {
-  return isRecord(value) && typeof value.type === "number" && typeof value.error === "number" && typeof value.renderFrame === "number" && typeof value.timelineSample === "number" && typeof value.audibleTimelineSample === "number" && typeof value.graphLatencySamplesQ8 === "number" && typeof value.value === "number";
-}
-function isMeterSnapshot(value) {
-  return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && (typeof value.targetId === "number" || value.targetId === void 0);
 }
 function sonareMeterRingBufferByteLength(capacity) {
   const clampedCapacity = Math.max(1, Math.floor(capacity));
@@ -1463,6 +1516,102 @@ function readSonareSpectrumRingBuffer(ring, readIndex = 0) {
     });
   }
   return { nextReadIndex: writeIndex, spectra };
+}
+function sonareScopeRingRecordFloats(bands, maxPoints) {
+  return SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS + bands + 2 * maxPoints;
+}
+function sonareScopeRingBufferByteLength(capacity, bands = 48, maxPoints = 32) {
+  const clampedCapacity = Math.max(1, Math.floor(capacity));
+  const clampedBands = Math.max(1, Math.floor(bands));
+  const clampedPoints = Math.max(0, Math.floor(maxPoints));
+  return SONARE_SCOPE_RING_HEADER_INTS * Int32Array.BYTES_PER_ELEMENT + clampedCapacity * sonareScopeRingRecordFloats(clampedBands, clampedPoints) * Float32Array.BYTES_PER_ELEMENT;
+}
+function createSonareScopeRingBuffer(capacity = 64, bands = 48, maxPoints = 32) {
+  const clampedCapacity = Math.max(1, Math.floor(capacity));
+  const clampedBands = Math.max(1, Math.floor(bands));
+  const clampedPoints = Math.max(0, Math.floor(maxPoints));
+  const sharedBuffer = new SharedArrayBuffer(
+    sonareScopeRingBufferByteLength(clampedCapacity, clampedBands, clampedPoints)
+  );
+  const ring = scopeRingFromSharedBuffer(
+    sharedBuffer,
+    clampedCapacity,
+    clampedBands,
+    clampedPoints
+  );
+  Atomics.store(ring.header, 0, 0);
+  Atomics.store(ring.header, 1, clampedCapacity);
+  Atomics.store(ring.header, 2, ring.recordFloats);
+  Atomics.store(ring.header, 3, clampedBands);
+  Atomics.store(ring.header, 4, clampedPoints);
+  Atomics.store(ring.header, 5, 0);
+  return {
+    sharedBuffer,
+    header: ring.header,
+    records: ring.records,
+    capacity: ring.capacity,
+    bands: ring.bands,
+    maxPoints: ring.maxPoints
+  };
+}
+function readSonareScopeRingBuffer(ring, readIndex = 0) {
+  const writeIndex = Atomics.load(ring.header, 0);
+  const bands = Atomics.load(ring.header, 3) || ring.bands;
+  const maxPoints = Atomics.load(ring.header, 4);
+  const recordFloats = Atomics.load(ring.header, 2) || sonareScopeRingRecordFloats(bands, maxPoints);
+  const nextReadIndex = Math.max(0, Math.min(readIndex, writeIndex));
+  const firstReadable = Math.max(nextReadIndex, writeIndex - ring.capacity);
+  const scopes = [];
+  for (let index = firstReadable; index < writeIndex; index++) {
+    const offset = index % ring.capacity * recordFloats;
+    const bandCount = Math.min(bands, Math.max(0, ring.records[offset + 3]));
+    const pointCount = Math.min(maxPoints, Math.max(0, ring.records[offset + 4]));
+    const bandsView = new Float32Array(bandCount);
+    bandsView.set(
+      ring.records.subarray(
+        offset + SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS,
+        offset + SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS + bandCount
+      )
+    );
+    const pointsBase = offset + SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS + bands;
+    const pointsView = new Float32Array(pointCount * 2);
+    pointsView.set(ring.records.subarray(pointsBase, pointsBase + pointCount * 2));
+    scopes.push({
+      type: "scope",
+      frame: decodeFrame(ring.records[offset], ring.records[offset + 1]),
+      targetId: ring.records[offset + 2],
+      bands: bandsView,
+      points: pointsView
+    });
+  }
+  return { nextReadIndex: writeIndex, scopes };
+}
+function scopeRingFromSharedBuffer(sharedBuffer, fallbackCapacity, fallbackBands, fallbackMaxPoints) {
+  const headerBytes = SONARE_SCOPE_RING_HEADER_INTS * Int32Array.BYTES_PER_ELEMENT;
+  const header = new Int32Array(sharedBuffer, 0, SONARE_SCOPE_RING_HEADER_INTS);
+  const existingCapacity = Atomics.load(header, 1);
+  const existingBands = Atomics.load(header, 3);
+  const existingMaxPoints = Atomics.load(header, 4);
+  const capacity = Math.max(1, Math.floor(existingCapacity || fallbackCapacity || 1));
+  const bands = Math.max(1, Math.floor(existingBands || fallbackBands || 48));
+  const maxPoints = Math.max(0, Math.floor(existingMaxPoints || (fallbackMaxPoints ?? 32)));
+  const recordFloats = sonareScopeRingRecordFloats(bands, maxPoints);
+  const minBytes = sonareScopeRingBufferByteLength(capacity, bands, maxPoints);
+  if (sharedBuffer.byteLength < minBytes) {
+    throw new Error("scopeSharedBuffer is too small for the requested ring capacity.");
+  }
+  Atomics.store(header, 1, capacity);
+  Atomics.store(header, 2, recordFloats);
+  Atomics.store(header, 3, bands);
+  Atomics.store(header, 4, maxPoints);
+  return {
+    header,
+    records: new Float32Array(sharedBuffer, headerBytes, capacity * recordFloats),
+    capacity,
+    bands,
+    maxPoints,
+    recordFloats
+  };
 }
 function sonareEngineCommandRingBufferByteLength(capacity) {
   const clampedCapacity = Math.max(1, Math.floor(capacity));
@@ -1693,6 +1842,63 @@ function meterFromEngine(meter) {
 function magnitudeToDb(value) {
   return value > 1e-12 ? 20 * Math.log10(value) : -120;
 }
+
+// src/worklet/guards.ts
+function isWorkletMessage(value) {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  return value.type === "scheduleInsertAutomation" || value.type === "setMeterInterval" || value.type === "destroy";
+}
+function isEngineCommandRecord(value) {
+  return isRecord(value) && typeof value.type === "number";
+}
+function isEngineSyncMessage(value) {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiPanic";
+}
+function isEngineCaptureRequestMessage(value) {
+  return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
+}
+function isEngineCaptureResponseMessage(value) {
+  return isRecord(value) && value.type === "captureResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
+}
+function isEngineTransportRequestMessage(value) {
+  return isRecord(value) && value.type === "transportRequest" && typeof value.requestId === "number" && value.op === "state";
+}
+function isEngineTransportResponseMessage(value) {
+  return isRecord(value) && value.type === "transportResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
+}
+function isRealtimeVoiceChangerMessage(value) {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  return value.type === "setConfig" || value.type === "reset" || value.type === "destroy";
+}
+function isEngineTelemetryRecord(value) {
+  return isRecord(value) && typeof value.type === "number" && typeof value.error === "number" && typeof value.renderFrame === "number" && typeof value.timelineSample === "number" && typeof value.audibleTimelineSample === "number" && typeof value.graphLatencySamplesQ8 === "number" && typeof value.value === "number";
+}
+function isMeterSnapshot(value) {
+  return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && (typeof value.targetId === "number" || value.targetId === void 0);
+}
+
+// src/worklet/messages.ts
+var DEFAULT_METRONOME_CONFIG = {
+  beatGain: 0.35,
+  accentGain: 0.7,
+  clickSamples: 96
+};
+function resolveMetronomeConfig(config) {
+  return {
+    beatGain: config.beatGain ?? DEFAULT_METRONOME_CONFIG.beatGain,
+    accentGain: config.accentGain ?? DEFAULT_METRONOME_CONFIG.accentGain,
+    clickSamples: config.clickSamples ?? DEFAULT_METRONOME_CONFIG.clickSamples
+  };
+}
+
+// src/worklet.ts
 var SonareWorkletProcessor = class {
   constructor(options, transport) {
     this.closed = false;
@@ -1966,11 +2172,20 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       options.telemetryRingCapacity
     ) : void 0;
     this.meterRing = options.meterSharedBuffer ? meterRingFromSharedBuffer(options.meterSharedBuffer, options.meterRingCapacity) : void 0;
+    this.scopeRing = options.scopeSharedBuffer ? scopeRingFromSharedBuffer(
+      options.scopeSharedBuffer,
+      options.scopeRingCapacity,
+      options.scopeBands
+    ) : void 0;
     this.engine = new RealtimeEngine(this.sampleRate, this.blockSize);
     this.engine.prepareChannels(this.channelCount, this.blockSize);
     this.channelBuffers = new Array(this.channelCount);
     for (let ch = 0; ch < this.channelCount; ch++) {
       this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
+    }
+    if (this.scopeRing) {
+      const interval = Math.max(1, Math.floor(options.scopeIntervalFrames ?? this.blockSize));
+      this.engine.configureScopeTelemetry(interval, this.scopeRing.bands);
     }
   }
   process(inputs, outputs) {
@@ -2029,6 +2244,7 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
     this.publishTelemetry();
     this.publishMeters();
+    this.publishScope();
     return true;
   }
   reacquireChannelBuffers() {
@@ -2113,6 +2329,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         if (message.masterStripJson) {
           this.engine.setMasterStripJson(message.masterStripJson);
         }
+        for (const binding of message.laneSidechains ?? []) {
+          this.engine.setLaneSidechain(binding.trackId, binding.insertIndex, binding.sourceTrackId);
+        }
         break;
       case "syncCapture":
         this.engine.setCaptureBuffer(message.channels, message.bufferFrames);
@@ -2140,6 +2359,36 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.bypassed,
           message.resetOnBypass
         );
+        break;
+      case "syncTrackStripInsertParamByName":
+        this.engine.setTrackStripInsertParamByName(
+          message.trackId,
+          message.insertIndex,
+          message.paramName,
+          message.value
+        );
+        break;
+      case "syncMasterStripInsertParamByName":
+        this.engine.setMasterStripInsertParamByName(
+          message.insertIndex,
+          message.paramName,
+          message.value
+        );
+        break;
+      case "syncTrackStripPan":
+        this.engine.setTrackStripPan(message.trackId, message.pan);
+        break;
+      case "syncTrackStripPanLaw":
+        this.engine.setTrackStripPanLaw(message.trackId, message.panLaw);
+        break;
+      case "syncTrackStripPanMode":
+        this.engine.setTrackStripPanMode(message.trackId, message.panMode);
+        break;
+      case "syncTrackStripDualPan":
+        this.engine.setTrackStripDualPan(message.trackId, message.leftPan, message.rightPan);
+        break;
+      case "syncTrackStripChannelDelaySamples":
+        this.engine.setTrackStripChannelDelaySamples(message.trackId, message.delaySamples);
         break;
       case "syncBuiltinInstrument":
         this.engine.setBuiltinInstrument(message.config, message.destinationId);
@@ -2375,6 +2624,17 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
     this.transport?.postMessage?.(record);
   }
+  // Drains the engine meter telemetry queue into the stereo meter ring / transport.
+  //
+  // Shared-queue contract: `drainMeterTelemetry` and `drainMeterTelemetryWide`
+  // pop the SAME single-consumer telemetry queue, so exactly ONE of them may run
+  // per engine. The live worklet path owns the queue via the stereo drain below;
+  // the worklet meter ring (SONARE_METER_RING_RECORD_FLOATS) is a fixed stereo
+  // layout carrying planes 0/1 plus the correlation/LUFS summary. Per-plane
+  // surround meters are NOT delivered over the live worklet ring — a host that
+  // needs them must use the offline `drainMeterTelemetryWide()` API on a
+  // non-worklet engine instance (do not also call it on a worklet-driven engine,
+  // or the two drains will starve each other).
   publishMeters() {
     if (this.meterIntervalFrames <= 0 || !this.transport && !this.meterRing) {
       return;
@@ -2416,6 +2676,41 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     ring.records[offset + 11] = meter.shortTermLufs;
     ring.records[offset + 12] = meter.integratedLufs;
     ring.records[offset + 13] = meter.gainReductionDb;
+    Atomics.store(ring.header, 0, writeIndex + 1);
+  }
+  // Drains the engine's scope producer (FFT spectrum + goniometer points) into
+  // the lock-free SAB scope ring. Only the embind runtime publishes scope
+  // telemetry; the sonare-rt runtime owns its own transport. No allocation on
+  // the render path: records are written field-by-field into the ring.
+  publishScope() {
+    const ring = this.scopeRing;
+    if (!ring) {
+      return;
+    }
+    for (const item of this.engine.drainScopeTelemetry(64)) {
+      this.writeScopeRing(ring, item);
+    }
+  }
+  writeScopeRing(ring, record) {
+    const writeIndex = Atomics.load(ring.header, 0);
+    const base = writeIndex % ring.capacity * ring.recordFloats;
+    ring.records[base] = encodeFrameLo(record.renderFrame);
+    ring.records[base + 1] = encodeFrameHi(record.renderFrame);
+    ring.records[base + 2] = record.targetId;
+    const bandCount = Math.min(ring.bands, record.bands.length);
+    ring.records[base + 3] = bandCount;
+    const pointCount = Math.min(ring.maxPoints, record.points.length);
+    ring.records[base + 4] = pointCount;
+    const bandsBase = base + SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS;
+    for (let i = 0; i < bandCount; i++) {
+      ring.records[bandsBase + i] = record.bands[i];
+    }
+    const pointsBase = bandsBase + ring.bands;
+    for (let i = 0; i < pointCount; i++) {
+      const point = record.points[i];
+      ring.records[pointsBase + 2 * i] = point.left;
+      ring.records[pointsBase + 2 * i + 1] = point.right;
+    }
     Atomics.store(ring.header, 0, writeIndex + 1);
   }
   commandRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
@@ -2777,11 +3072,13 @@ var SonareRtRealtimeEngineRuntime = class {
   }
 };
 var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
-  constructor(node, capabilities, commandRing, telemetryRing, meterRing) {
+  constructor(node, capabilities, commandRing, telemetryRing, meterRing, scopeRing) {
     this.telemetryReadIndex = 0;
     this.meterReadIndex = 0;
+    this.scopeReadIndex = 0;
     this.telemetryListeners = /* @__PURE__ */ new Set();
     this.meterListeners = /* @__PURE__ */ new Set();
+    this.scopeListeners = /* @__PURE__ */ new Set();
     this.captureRequestId = 1;
     this.captureRequests = /* @__PURE__ */ new Map();
     this.transportRequestId = 1;
@@ -2792,6 +3089,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.commandRing = commandRing;
     this.telemetryRing = telemetryRing;
     this.meterRing = meterRing;
+    this.scopeRing = scopeRing;
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve;
       this.rejectReady = reject;
@@ -2861,6 +3159,8 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     const commandRing = mode === "sab" ? createSonareEngineCommandRingBuffer(options.commandRingCapacity ?? 128) : void 0;
     const telemetryRing = mode === "sab" ? createSonareEngineTelemetryRingBuffer(options.telemetryRingCapacity ?? 128) : void 0;
     const meterRing = mode === "sab" && runtimeTarget === "embind" ? createSonareMeterRingBuffer(options.meterRingCapacity ?? 128) : void 0;
+    const scopeIntervalFrames = Math.max(0, Math.floor(options.scopeIntervalFrames ?? 0));
+    const scopeRing = mode === "sab" && runtimeTarget === "embind" && scopeIntervalFrames > 0 ? createSonareScopeRingBuffer(options.scopeRingCapacity ?? 64, options.scopeBands ?? 48) : void 0;
     const channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
     const processorOptions = {
       runtimeTarget,
@@ -2875,6 +3175,10 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       telemetryRingCapacity: telemetryRing?.capacity,
       meterSharedBuffer: meterRing?.sharedBuffer,
       meterRingCapacity: meterRing?.capacity,
+      scopeSharedBuffer: scopeRing?.sharedBuffer,
+      scopeRingCapacity: scopeRing?.capacity,
+      scopeBands: scopeRing?.bands,
+      scopeIntervalFrames: scopeRing ? scopeIntervalFrames : void 0,
       wasmBinary: options.wasmBinary,
       initialSyncMessages: options.initialSyncMessages,
       initialCommands: options.initialCommands
@@ -2902,7 +3206,8 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       },
       commandRing,
       telemetryRing,
-      meterRing
+      meterRing,
+      scopeRing
     );
   }
   play(sampleTime = -1) {
@@ -2986,6 +3291,20 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     }
     return read.meters;
   }
+  // Drains scope telemetry (FFT spectrum + goniometer points) published into the
+  // SAB scope ring and forwards each record to onScope listeners. A no-op unless
+  // the node was created with scopeIntervalFrames > 0 (embind SAB mode).
+  pollScope() {
+    if (!this.scopeRing) {
+      return [];
+    }
+    const read = readSonareScopeRingBuffer(this.scopeRing, this.scopeReadIndex);
+    this.scopeReadIndex = read.nextReadIndex;
+    for (const scope of read.scopes) {
+      this.emitScope(scope);
+    }
+    return read.scopes;
+  }
   onTelemetry(callback) {
     this.telemetryListeners.add(callback);
     return () => {
@@ -2996,6 +3315,12 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.meterListeners.add(callback);
     return () => {
       this.meterListeners.delete(callback);
+    };
+  }
+  onScope(callback) {
+    this.scopeListeners.add(callback);
+    return () => {
+      this.scopeListeners.delete(callback);
     };
   }
   destroy() {
@@ -3015,6 +3340,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.transportRequests.clear();
     this.telemetryListeners.clear();
     this.meterListeners.clear();
+    this.scopeListeners.clear();
   }
   emitTelemetry(telemetry) {
     for (const listener of this.telemetryListeners) {
@@ -3024,6 +3350,11 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
   emitMeter(meter) {
     for (const listener of this.meterListeners) {
       listener(meter);
+    }
+  }
+  emitScope(scope) {
+    for (const listener of this.scopeListeners) {
+      listener(scope);
     }
   }
   sendCaptureRequest(op) {
@@ -3057,6 +3388,8 @@ var SonareEngine = class _SonareEngine {
     this.markers = /* @__PURE__ */ new Map();
     this.trackLaneIds = [];
     this.trackSends = /* @__PURE__ */ new Map();
+    this.trackOutputBus = /* @__PURE__ */ new Map();
+    this.laneSidechains = /* @__PURE__ */ new Map();
     this.buses = [];
     this.trackStripJson = /* @__PURE__ */ new Map();
     this.busStripJson = /* @__PURE__ */ new Map();
@@ -3368,9 +3701,56 @@ var SonareEngine = class _SonareEngine {
           entry.sends.map((send) => ({ ...send }))
         );
       }
+      if (entry.outputBusId !== void 0) {
+        if (entry.outputBusId === 0) {
+          this.trackOutputBus.delete(entry.trackId);
+        } else {
+          this.trackOutputBus.set(entry.trackId, entry.outputBusId);
+        }
+      }
     }
     this.trackLaneIds.splice(0, this.trackLaneIds.length, ...ids);
     this.syncMixer();
+  }
+  /**
+   * Routes a track lane's post-fader output into a declared bus instead of
+   * the master mix (group/folder routing); busId 0 restores the master mix.
+   */
+  setTrackOutputBus(target, busId) {
+    const laneIndex = this.ensureTrackLane(target);
+    const trackId = this.trackLaneIds[laneIndex];
+    if (busId === 0) {
+      this.trackOutputBus.delete(trackId);
+    } else {
+      this.trackOutputBus.set(trackId, busId);
+    }
+    this.syncMixer();
+  }
+  /**
+   * Keys one insert of a lane strip from another lane's post-strip pre-fader
+   * audio (ducking/sidechainRouter inserts). sourceTarget null removes the
+   * binding.
+   */
+  setLaneSidechain(target, insertIndex, sourceTarget) {
+    const laneIndex = this.ensureTrackLane(target);
+    const trackId = this.trackLaneIds[laneIndex];
+    const key = `${trackId}:${insertIndex}`;
+    let sourceTrackId = 0;
+    if (sourceTarget !== null) {
+      const sourceIndex = this.ensureTrackLane(sourceTarget);
+      sourceTrackId = this.trackLaneIds[sourceIndex];
+    }
+    if (sourceTrackId === 0) {
+      this.laneSidechains.delete(key);
+    } else {
+      this.laneSidechains.set(key, { trackId, insertIndex, sourceTrackId });
+    }
+    this.offlineEngine.setLaneSidechain(trackId, insertIndex, sourceTrackId);
+    this.postSync({
+      type: "syncMixer",
+      lanes: this.mixerLanes(),
+      laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
+    });
   }
   setSends(target, sends) {
     const laneIndex = this.ensureTrackLane(target);
@@ -3424,6 +3804,45 @@ var SonareEngine = class _SonareEngine {
       resetOnBypass
     });
   }
+  setTrackStripInsertParamByName(target, insertIndex, paramName, value) {
+    const laneIndex = this.ensureTrackLane(target);
+    const trackId = this.trackLaneIds[laneIndex];
+    this.offlineEngine.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+    this.postSync({
+      type: "syncTrackStripInsertParamByName",
+      trackId,
+      insertIndex,
+      paramName,
+      value
+    });
+  }
+  setTrackStripPan(target, pan) {
+    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
+    this.offlineEngine.setTrackStripPan(trackId, pan);
+    this.postSync({ type: "syncTrackStripPan", trackId, pan });
+  }
+  setTrackStripPanLaw(target, panLaw) {
+    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
+    const code = panLawCode(panLaw);
+    this.offlineEngine.setTrackStripPanLaw(trackId, code);
+    this.postSync({ type: "syncTrackStripPanLaw", trackId, panLaw: code });
+  }
+  setTrackStripPanMode(target, panMode) {
+    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
+    const code = panModeCode(panMode);
+    this.offlineEngine.setTrackStripPanMode(trackId, code);
+    this.postSync({ type: "syncTrackStripPanMode", trackId, panMode: code });
+  }
+  setTrackStripDualPan(target, leftPan, rightPan) {
+    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
+    this.offlineEngine.setTrackStripDualPan(trackId, leftPan, rightPan);
+    this.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
+  }
+  setTrackStripChannelDelaySamples(target, delaySamples) {
+    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
+    this.offlineEngine.setTrackStripChannelDelaySamples(trackId, delaySamples);
+    this.postSync({ type: "syncTrackStripChannelDelaySamples", trackId, delaySamples });
+  }
   setStripEq(target, bandIndex, band) {
     if (target === "master") {
       this.setMasterStripEqBand(bandIndex, band);
@@ -3469,6 +3888,22 @@ var SonareEngine = class _SonareEngine {
       bypassed,
       resetOnBypass
     });
+  }
+  setMasterStripInsertParamByName(insertIndex, paramName, value) {
+    this.offlineEngine.setMasterStripInsertParamByName(insertIndex, paramName, value);
+    this.postSync({
+      type: "syncMasterStripInsertParamByName",
+      insertIndex,
+      paramName,
+      value
+    });
+  }
+  setStripInsertParamByName(target, insertIndex, paramName, value) {
+    if (target === "master") {
+      this.setMasterStripInsertParamByName(insertIndex, paramName, value);
+      return;
+    }
+    this.setTrackStripInsertParamByName(target, insertIndex, paramName, value);
   }
   setMasterChain(sceneJson) {
     this.setMasterStripJson(sceneJson);
@@ -3699,6 +4134,9 @@ var SonareEngine = class _SonareEngine {
   onMeter(callback) {
     return this.realtimeNode.onMeter(callback);
   }
+  onScope(callback) {
+    return this.realtimeNode.onScope(callback);
+  }
   onTelemetry(callback) {
     return this.realtimeNode.onTelemetry(callback);
   }
@@ -3707,6 +4145,9 @@ var SonareEngine = class _SonareEngine {
   }
   pollMeters() {
     return this.realtimeNode.pollMeters();
+  }
+  pollScope() {
+    return this.realtimeNode.pollScope();
   }
   destroy() {
     if (this.destroyed) {
@@ -3732,11 +4173,19 @@ var SonareEngine = class _SonareEngine {
     this.offlineEngine.setMidiClips(clips);
     this.postSync({ type: "syncMidiClips", clips });
   }
-  syncMixer() {
-    const lanes = this.trackLaneIds.map((trackId) => {
+  mixerLanes() {
+    return this.trackLaneIds.map((trackId) => {
       const sends = this.trackSends.get(trackId);
-      return sends && sends.length > 0 ? { trackId, sends: sends.map((send) => ({ ...send })) } : { trackId };
+      const outputBusId = this.trackOutputBus.get(trackId);
+      return {
+        trackId,
+        ...sends && sends.length > 0 ? { sends: sends.map((send) => ({ ...send })) } : {},
+        ...outputBusId !== void 0 ? { outputBusId } : {}
+      };
     });
+  }
+  syncMixer() {
+    const lanes = this.mixerLanes();
     const buses = this.buses.map((bus) => ({ ...bus }));
     this.offlineEngine.setTrackBuses(buses);
     if (lanes.length > 0) {
@@ -3755,6 +4204,7 @@ var SonareEngine = class _SonareEngine {
       lanes,
       buses,
       trackStrips,
+      laneSidechains: Array.from(this.laneSidechains.values()),
       busStrips,
       masterStripJson: this.masterStripJson
     });
@@ -4216,6 +4666,7 @@ export {
   SONARE_ENGINE_TELEMETRY_RECORD_BYTES,
   SONARE_METER_RING_HEADER_INTS,
   SONARE_METER_RING_RECORD_FLOATS,
+  SONARE_SCOPE_RING_HEADER_INTS,
   SONARE_SPECTRUM_RING_HEADER_INTS,
   SonareEngine,
   SonareEngineCommandType,
@@ -4229,6 +4680,7 @@ export {
   createSonareEngineCommandRingBuffer,
   createSonareEngineTelemetryRingBuffer,
   createSonareMeterRingBuffer,
+  createSonareScopeRingBuffer,
   createSonareSpectrumRingBuffer,
   decodeFrame,
   encodeFrameHi,
@@ -4239,6 +4691,7 @@ export {
   pushSonareEngineCommandRingBuffer,
   readSonareEngineTelemetryRingBuffer,
   readSonareMeterRingBuffer,
+  readSonareScopeRingBuffer,
   readSonareSpectrumRingBuffer,
   registerSonareRealtimeEngineWorkletProcessor,
   registerSonareRealtimeVoiceChangerWorkletProcessor,
@@ -4246,6 +4699,7 @@ export {
   sonareEngineCommandRingBufferByteLength,
   sonareEngineTelemetryRingBufferByteLength,
   sonareMeterRingBufferByteLength,
+  sonareScopeRingBufferByteLength,
   sonareSpectrumRingBufferByteLength,
   writeSonareEngineTelemetryRingBuffer
 };

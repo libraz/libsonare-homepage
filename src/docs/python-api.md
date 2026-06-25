@@ -41,7 +41,7 @@ Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error 
 | You need | Start with | Why |
 |----------|------------|-----|
 | A script that reads files and prints metadata | `Audio.from_file(...)` + `detect_bpm` / `detect_key` / `analyze` | Python handles decoding and keeps the code short |
-| Detailed music analysis | `analyze_bpm`, `detect_chords`, `analyze_sections`, `analyze_timbre`, `analyze_dynamics`, `analyze_rhythm` | These expose more detail than the compact `analyze(...)` summary |
+| Detailed music analysis | `analyze_bpm`, `detect_chords`, `analyze_sections`, `analyze_timbre`, `analyze_dynamics`, `analyze_rhythm` | These run a single facet of analysis with extra parameters; `analyze(...)` already returns all of these fields in one `AnalysisResult` |
 | Feature arrays for notebooks or ML | `mel_spectrogram`, `mfcc`, `chroma`, `cqt`, `vqt`, `nnls_chroma` | Returns plain Python lists / result objects that can be converted to NumPy if desired |
 | Editing a clip | `time_stretch`, `pitch_shift`, `pitch_correct_to_midi`, `note_stretch`, `voice_change`, `RealtimeVoiceChanger` | These transform the signal itself |
 | Mastering a file | `master_audio`, `mastering_chain`, `StreamingMasteringChain` | Presets first, explicit chain config when you need control |
@@ -137,6 +137,8 @@ trimmed = audio.trim(threshold_db=-60.0)
 resampled = audio.resample(target_sr=44100)
 ```
 
+For region-based time/frequency edits, use `spectral_edit(samples, sample_rate, [SpectralRegionOp(...)])`; see [Spectral Editing](./spectral-editing.md).
+
 ## Feature Extraction
 
 ```python
@@ -224,7 +226,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | Downbeat timestamps (seconds) |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | Core analysis: BPM, key, time signature, beats |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | Full analysis: BPM, key, time signature, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
@@ -243,6 +245,7 @@ with Audio.from_file("music.mp3") as audio:
 | `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal |
 | `realtime_voice_changer_preset_config(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
 | `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
+| `project_abi_version()` | `int` | ABI version of the project/editing surface used by `Project` serialization, bounce, and realtime clip exchange |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
 Most core analysis, effects, feature, loudness, and mastering helpers are also
@@ -251,7 +254,7 @@ helpers such as `analyze_sections(...)`, `analyze_melody(...)`, `cqt(...)`, and
 `vqt(...)` remain standalone functions; pass `audio.data` and
 `audio.sample_rate` to those.
 
-Use the focused functions to avoid treating `analyze(...)` as a catch-all. In Python, `analyze(...)` returns the compact core summary: BPM, key, time signature, and beat times. Chords, sections, melody, timbre, dynamics, rhythm, and acoustic metrics are available through the dedicated functions listed above.
+In Python, `analyze(...)` calls `sonare_analyze_json` and returns the full `AnalysisResult`: BPM (with confidence), key, time signature, beat times and per-beat strengths, chords, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -411,6 +414,8 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `poly_features(samples, sample_rate?, n_fft?, hop_length?, order?)` | `np.ndarray` | Per-frame polynomial spectral coefficients |
 | `zero_crossing_rate(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | Zero-crossing rate per frame |
 | `zero_crossings(samples, threshold?, ref_magnitude?, pad?, zero_pos?)` | `np.ndarray` | Sample indices where the waveform crosses zero |
+| `waveform_peaks(samples, channels, *, samples_per_bucket=512, validate=True)` | `WaveformPeaksReport` | Reduce interleaved multichannel audio (length a multiple of `channels`) to per-channel min/max buckets for waveform drawing; `min`/`max` are channel-major (`channel * bucket_count + bucket`) |
+| `waveform_peak_pyramid(samples, channels, *, samples_per_bucket_levels=(512, 1024, 2048, 4096), validate=True)` | `list[WaveformPeaksReport]` | One peaks report per zoom level (one entry per bucket width) |
 | `rms_energy(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | RMS energy per frame |
 | `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
 | `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
@@ -418,10 +423,16 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio |
 | `cqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Constant-Q Transform magnitude |
 | `vqt(samples, sample_rate, hop_length?, fmin?, n_bins?, bins_per_octave?, gamma?)` | `CqtResult` | Variable-Q Transform magnitude |
+| `hybrid_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Hybrid CQT magnitude (CQT/pseudo-CQT blend across bins) |
+| `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude |
+| `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
+| `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
 | `nnls_chroma(samples, sample_rate)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
+| `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | NMF decomposition `(w, h)` with a selectable initialiser; `init` defaults to `'random'`, also accepts `'nndsvd'` (SVD warm start) |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
+| `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
 | `lufs(samples, sample_rate)` | `LufsResult` | Integrated/momentary/short-term LUFS + loudness range (EBU R128) |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range (LRA) in LU |
@@ -461,7 +472,9 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Pearson correlation, −1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | Mid/side stereo width |
 | `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | Per-sample mid/side point series |
+| `metering_vectorscope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | Display-sized mid/side vectorscope; `max_points` upper-bounds the point count (`0` or a value ≥ buffer length = one point per sample, identical to `metering_vectorscope`); otherwise deterministically decimated, keeping the largest-radius sample per bucket |
 | `metering_phase_scope(left, right, sample_rate?, *, validate?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
+| `metering_phase_scope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `PhaseScopeReport` | Display-sized phase-scope (Lissajous + summary stats); `max_points` upper-bounds the point cloud the same way; summary stats are always computed over the full-resolution signal |
 | `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | Welch-averaged magnitude/power/dB spectrum over the whole buffer (Hann-windowed, 50%-overlapping `n_fft` frames; not a single-frame snapshot); pass `0` for `n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults (2048 / 3 / 1.0 / floor) |
 | `metering_spectrum_frame(samples, sample_rate?, frame_offset?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | True single-frame spectrum (one Hann-windowed FFT) spanning `[frame_offset, frame_offset + n_fft)`, zero-padded past the end; pass `0` for `frame_offset`/`n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults |
 
@@ -577,9 +590,17 @@ class AnalysisResult:
     key: Key
     time_signature: TimeSignature
     beat_times: list[float]
+    beat_strengths: list[float]    # per-beat strength
     beats: list[Beat]              # property: per-beat objects with strength
-    # For chords, sections, timbre, dynamics, and rhythm, call the dedicated
-    # detect_chords() / analyze_sections() / analyze_timbre() / ... functions.
+    chords: list[Chord]
+    sections: list[Section]
+    timbre: AnalysisTimbre | None
+    dynamics: AnalysisDynamics | None
+    rhythm: AnalysisRhythm | None
+    melody: AnalysisMelody | None
+    form: str
+    # The focused detect_chords() / analyze_sections() / analyze_timbre() / ...
+    # functions remain useful for a single facet or per-call options.
 
 class HpssResult:
     harmonic: list[float]
@@ -624,6 +645,13 @@ class PitchResult:
     voiced_flag: list[bool]  # Voiced/unvoiced decision per frame
     median_f0: float
     mean_f0: float
+
+class WaveformPeaksReport:
+    min: NDArray[np.float32]   # channel-major: channel * bucket_count + bucket
+    max: NDArray[np.float32]   # channel-major
+    channels: int
+    bucket_count: int
+    samples_per_bucket: int
 
 class StreamConfig:
     sample_rate: int = 44100
@@ -708,8 +736,10 @@ Additional Python result classes used by focused APIs:
 
 | Area | Classes |
 |------|---------|
-| Metering | `ClippingRegion`, `StreamFramesU8`, `StreamFramesI16` |
+| Metering | `ClippingRegion`, `StreamFramesU8`, `StreamFramesI16`, `WaveformPeaksReport` |
 | Mastering | `MasteringResult`, `MasteringStereoResult` |
+| Mixing | `MixerStereoResult` |
+| Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing.md#assist-sidecars)), `ProjectDiagnostic`, `NotePairValidation` |
 | Realtime engine telemetry | `MeterTelemetryRecord` |
 
 ## Streaming Analysis API
@@ -746,8 +776,10 @@ For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(ma
 
 | Method | What changes |
 |--------|--------------|
-| `read_frames_u8(max_frames)` | Feature arrays are quantized to unsigned 8-bit values. |
-| `read_frames_i16(max_frames)` | Feature arrays are quantized to signed 16-bit values. |
+| `read_frames_u8(max_frames, quantize_config?)` | Feature arrays are quantized to unsigned 8-bit values. |
+| `read_frames_i16(max_frames, quantize_config?)` | Feature arrays are quantized to signed 16-bit values. |
+
+`quantize_config` is an optional `QuantizeConfig` (exported from `libsonare`) that widens the quantization ranges for streams much louder or quieter than the defaults; omit it to use the defaults. Its fields and defaults are `mel_db_min=-80.0`, `mel_db_max=0.0`, `onset_max=50.0`, `rms_max=1.0`, `centroid_max=11025.0`. The quantizers clamp normalized values to `[0, 1]`, so a signal outside these ranges otherwise saturates silently to the endpoints. This mirrors `StreamQuantizeConfig` in the JS/WASM streaming docs.
 
 Both return timestamps as floats. If you synchronize against an external audio clock, feed chunks with `process_with_offset(samples, sample_offset)` so returned timestamps follow that timeline.
 
@@ -795,6 +827,9 @@ report = sonare.mastering_stereo_analyze(
     sample_rate=sample_rate,
 )
 print(json.loads(report))
+
+catalog = sonare.mastering_processor_catalog()
+insert_params = sonare.mastering_insert_param_info("eq.parametric")
 
 # Preset-driven chain (one-shot)
 sonare.mastering_preset_names()
@@ -895,6 +930,10 @@ The named mastering API families are:
 | Generate assistant suggestions from source analysis | `mastering_assistant_suggest()` |
 | Preview delivery loudness by platform | `mastering_streaming_preview()` |
 | List mono/stereo processors | `mastering_processor_names()` |
+| Get machine-readable processor classifications | `mastering_processor_catalog()` |
+| List chain insert processors | `mastering_insert_names()` |
+| List the parameter keys an insert accepts | `mastering_insert_param_names(name)` |
+| List realtime-automatable insert parameters | `mastering_insert_param_info(name)` |
 | Process mono audio | `mastering_process()` |
 | Process stereo audio | `mastering_process_stereo()` |
 | List pair processors | `mastering_pair_processor_names()` |
@@ -936,6 +975,8 @@ finally:
     mixer.close()
 ```
 
+`mixer.process_stereo(...)` returns a `MixerStereoResult` named tuple with `.left` and `.right` (`list[float]`) and `.sample_rate` (`int`), mirroring the Node/WASM `{left, right, sampleRate}` shape.
+
 See [Mixing Engine](./mixing.md) for routing concepts, scene presets, and real-time notes.
 
 ## Projects, Instruments & Live MIDI
@@ -945,12 +986,12 @@ The headless-DAW surface is available in Python as well: author arrangements wit
 | Task | API | Guide |
 |------|-----|-------|
 | Author tracks, clips, tempo, markers, undo/redo | `Project` (a context manager — use `with`) | [Project Editing](./project-editing.md) |
-| Render MIDI through the built-in synthesizer | `Project.bounce_with_synth_instrument(...)`, `synth_preset_names()`, `SynthPatch` | [Built-in Synthesizer](./native-synth.md), [Bouncing Projects](./project-bounce.md) |
+| Render MIDI through the built-in synthesizer | `Project.bounce_with_synth_instrument(...)`, `synth_preset_names()`, `synth_preset_patch(name)`, `SynthPatch` | [Built-in Synthesizer](./native-synth.md), [Bouncing Projects](./project-bounce.md) |
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
 | Play instruments live from MIDI events | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
-| Mix the engine's tracks live with lanes, buses, sends, and strips | `RealtimeEngine.set_track_lanes(...)`, `set_track_buses(...)`, `set_track_strip_json(...)`, `set_master_strip_json(...)`, `set_bus_strip_json(...)`, `set_solo_mute(...)` | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
+| Mix the engine's tracks live with lanes, buses, sends, and strips | `RealtimeEngine.set_track_lanes(...)`, `set_track_buses(...)`, `set_track_strip_json(...)`, `set_master_strip_json(...)`, `set_bus_strip_json(...)`, `set_solo_mute(...)`, `set_track_strip_pan(...)`, `set_track_strip_pan_law(...)`, `set_track_strip_pan_mode(...)`, `set_track_strip_dual_pan(...)`, `set_track_strip_channel_delay_samples(...)`, `set_track_strip_insert_param_by_name(...)`, `set_master_strip_insert_param_by_name(...)`, `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
 
 ```python
 import libsonare as sonare
@@ -963,3 +1004,9 @@ with sonare.Project() as project:
 ```
 
 Note that `Project` supports `with` for automatic cleanup, while `Mixer` does not (call `mixer.close()` explicitly).
+
+For synth preset introspection, `synth_preset_patch(name)` returns a named catalog preset as a `SynthPatch` (it raises `SonareError` for unknown names and accepts a `'va:'` routing prefix) so you can inspect and tweak fields before binding it. `synth_enum_tables()` returns the runtime enum-name tables (`dict[str, tuple[str, ...]]`) for validating `SynthModRouting` source/destination names against the loaded build.
+
+### Opaque assist sidecars
+
+`Project` can carry per-project, undoable, module-owned opaque byte blobs (assist sidecars), scoped by module ID, target track, and a region. Set one with `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`; read them back with `project.assist_sidecar_count()`, `project.get_assist_sidecar(index) -> AssistSidecar`, and `project.assist_sidecars()`. See [Project Editing](./project-editing.md#assist-sidecars) for the cross-binding details.

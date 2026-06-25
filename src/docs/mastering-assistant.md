@@ -86,6 +86,30 @@ sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 
 :::
 
+::: warning Short clips: profile and suggest need real spectral content
+`masteringAudioProfile` and `masteringAssistantSuggest` run a full STFT-based analysis (default `nFft` = 2048) and throw a `SonareError` on clips that are too short to analyze — anything shorter than an analysis window (so the practical floor is roughly ~512 samples). `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty buffer (it just requires a non-empty audio buffer and a non-empty platform list). When feeding short captures or file-picker selections from the UI, guard the profile/suggest calls with a minimum-length check, and wrap them in `try`/`catch` using `isSonareError`, before passing the buffer.
+
+```typescript [Browser]
+import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
+
+const MIN_ANALYSIS_SAMPLES = 2048; // one analysis window; ~512 is the hard floor
+if (samples.length < MIN_ANALYSIS_SAMPLES) {
+  // Too short to profile — skip or pad before analyzing.
+} else {
+  try {
+    const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
+    // …
+  } catch (err) {
+    if (isSonareError(err)) {
+      // Surface a "clip too short / no spectral content" message in the UI.
+    } else {
+      throw err;
+    }
+  }
+}
+```
+:::
+
 ## `masteringAudioProfile` — measure the source
 
 A read-only summary of the input: how loud it is, how its energy is spread across the spectrum, how dynamic it is, and which genres it resembles. Nothing is processed.

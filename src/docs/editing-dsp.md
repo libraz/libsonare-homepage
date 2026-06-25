@@ -15,7 +15,7 @@ DSP means Digital Signal Processing: measuring or transforming audio as a signal
 By the end of this page you should be able to:
 
 - distinguish analysis APIs from editing APIs that actually rewrite the signal;
-- choose time stretch, pitch shift, pitch correction, note stretch, or voice change by musical intent;
+- choose time stretch, pitch shift, pitch correction, note stretch, spectral edit, or voice change by musical intent;
 - choose the offline `voiceChange(...)` helper versus the block-safe realtime voice changer;
 - convert between seconds, samples, semitones, and MIDI notes without guessing;
 - understand why large pitch/formant moves create artifacts and how to keep edits conservative.
@@ -28,6 +28,7 @@ By the end of this page you should be able to:
 | Move the whole clip up or down in pitch | Pitch shift | `semitones=12` means one octave up; `-12` means one octave down |
 | Nudge a vocal note toward a target note | Pitch correction | You must know or estimate the current pitch first |
 | Hold or shorten one note region | Note stretch | Region positions are sample offsets, not seconds; `stretchRatio > 1` lengthens the region |
+| Attenuate or heal a time-frequency region | Spectral edit | Draw a rectangle in samples and Hz, then apply `gain`, `attenuate`, `mute`, or `heal` |
 | Change vocal character | Voice change | Pitch changes the note; formant changes the perceived body or character of the voice |
 | Process live voice blocks with presets | Realtime voice changer | Use this for AudioWorklet, monitoring, or chunked processing where DSP state must continue across blocks |
 
@@ -52,6 +53,7 @@ That is why `voiceChange` separates the two controls. Lowering the formant facto
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | Follow a per-frame pitch contour toward a note | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
 | Stretch only a note region | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
+| Edit a time-frequency region | `spectralEdit(samples, sampleRate, ops, options?)` | `spectral_edit(samples, sample_rate, ops, ...)` |
 | Shift pitch and formants independently | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
 | Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
 | One-shot realtime voice preset render | Node native: `voiceChangeRealtime(samples, sampleRate, preset)` | `voice_change_realtime(samples, sample_rate, preset)` |
@@ -90,6 +92,8 @@ sonare voice-change vocal.wav --pitch-semitones 5 --formant-factor 1.1 -o charac
 ```
 
 :::
+
+For rectangular time/frequency edits such as whistle attenuation or short artifact repair, see [Spectral Editing](./spectral-editing.md).
 
 ### How `pitchCorrectToMidi(...)` works
 

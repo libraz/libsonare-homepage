@@ -205,8 +205,10 @@ Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets en
 
 The `body` field is NativeSynth's body/formant resonance layer — the resonant character of an instrument's physical shell. Acoustic guitars, harps, and wooden mallets carry a body; solid-body electrics intentionally do not, so leave `body` at `none` for those.
 
-::: info Pitch bend and controller reset
+::: info Pitch bend, MPE, and controller reset
 NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set via Data Entry). A MIDI **Reset All Controllers** message restores the default — bend range included. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
+
+It also tracks **per-note expression**: MPE-style per-note pitch-bend and per-note (polyphonic) pressure bend the matching voice individually rather than the whole channel, so overlapping notes can glide and swell independently. Live control changes are decoded at full resolution — **14-bit** CC pairs and **RPN / NRPN** values land with their fine bytes intact, and MIDI 2.0 note velocity is shaped in the full 16-bit domain rather than being truncated to 7 bits.
 :::
 
 ### Enum name tables

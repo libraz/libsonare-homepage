@@ -86,7 +86,7 @@ Every project starts empty. Set a sample rate, add tracks, then add clips. `addT
 
 ::: code-group
 
-```typescript [Browser / Node]
+```typescript [Browser / WASM]
 import { init, Project } from '@libraz/libsonare';
 
 await init();
@@ -136,7 +136,7 @@ with sonare.Project() as project:
 :::
 
 ::: danger Always release the project
-`Project`, like every WASM-backed object, holds a heap handle that JavaScript's garbage collector cannot reclaim. Call `project.delete()` (Node also accepts `destroy()`) in a `finally` block. In Python use `Project` as a context manager (`with sonare.Project() as project:`) or call `project.close()`. Leaking handles slowly exhausts WASM memory in long sessions.
+`Project`, like every WASM-backed object, holds a heap handle that JavaScript's garbage collector cannot reclaim. In the WASM package, construct it with `new Project()` and call `project.delete()` in a `finally` block. In Node native, construct it with `Project.create()` and call `project.destroy()` or `project.delete()`. In Python use `Project` as a context manager (`with sonare.Project() as project:`) or call `project.close()`. Leaking handles slowly exhausts native or WASM memory in long sessions.
 :::
 
 ## Editing clips
@@ -148,7 +148,7 @@ Every clip operation is a single undoable command and addresses the clip by its 
 | Split | `splitClip(clipId, splitPpq)` | Cuts the clip at an absolute PPQ; returns the new clip's id |
 | Trim | `trimClip(clipId, newStartPpq, newLengthPpq)` | Resets start and length |
 | Move | `moveClip(clipId, newStartPpq, newTrackId?)` | Slides the clip, optionally to another track |
-| Gain | `setClipGain(clipId, gain)` | Linear per-clip playback gain (`>= 0`) |
+| Gain | `setClipGain(clipId, gain)` | Linear per-clip playback gain (`>= 0`). Audio clips only — stored on MIDI clips but never applied at bounce |
 | Fade | `setClipFade(clipId, fadeIn, fadeOut)` | Fade-in / fade-out regions with a curve |
 | Loop | `setClipLoop(clipId, mode, loopLengthPpq?)` | `'off'` or `'loop'` with a loop length |
 | Re-source | `setClipSource(clipId, sourceId)` | Rebinds the clip to a different registered source |
@@ -168,6 +168,14 @@ const copyId = project.duplicateClip(tailId, 8);
 ```
 
 Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping.
+
+::: warning setClipGain applies to audio clips only
+`setClipGain` affects **audio clips** only. On a MIDI clip the value is stored (undoably, and round-trips through `toJson()`), but the bounce compiler never applies it — neither as a level nor as a velocity scale — so per-clip gain has no audible effect on MIDI clips. To change a MIDI track's volume, set the track gain with `setTrackGain(trackId, gain)` (it is folded into the track's channel-strip fader); a track gain of `0` also silences the track's MIDI notes entirely.
+:::
+
+::: warning `setClipGain` / `setClipFade` apply to audio clips only
+`setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip they are stored but never reach the rendered notes — the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades are dropped. To control the volume of a MIDI-driven instrument, use the **track fader** (`setTrackGain`, or the channel strip in the [mixer scene](./mixing.md)), which the compiler folds into the strip uniformly across a track's audio and MIDI stems.
+:::
 
 In Python the same operations are snake_case, and fades take separate length/curve arguments:
 
@@ -196,6 +204,11 @@ Track operations are likewise undoable.
 | Rename | `renameTrack(trackId, name)` | Renames the track |
 | Change kind | `setTrackKind(trackId, kind)` | Switches a track between `'audio'` / `'midi'` / `'aux'` |
 | Route | `setTrackRoute(trackId, channelStripRef, outputTarget)` | Binds the track to a mixer strip and output bus |
+| Gain | `setTrackGain(trackId, gain)` | Sets the track's linear output gain (negative or non-finite values are rejected) |
+| Mute | `setTrackMute(trackId, mute)` | Mutes or unmutes the track |
+| Solo | `setTrackSolo(trackId, solo)` | Solos the track, implies-muting the others |
+| Pan | `setTrackPan(trackId, pan)` | Pans the track in `[-1, 1]` (non-finite values are rejected) |
+| MIDI destination | `setTrackMidiDestination(trackId, destinationId)` | Routes the track's MIDI to an instrument destination id (see [Built-in Instruments](./native-synth.md)) |
 
 ```typescript
 const drums = project.addTrack({ kind: 'audio', name: 'drums' });
@@ -257,6 +270,50 @@ project.setMarker(0, 16, 'verse');
 project.setMarker(introId, 0, 'intro (edited)'); // update by reusing the id
 ```
 
+For structured markers, use `setMarkerEx(...)` with a full `ProjectMarker`. `MarkerKind` covers plain markers, text, lyrics, cue points, and key signatures; key-signature markers use `keyFifths` (`-7`...`+7`, sharps positive) plus `keyMinor`.
+
+::: code-group
+
+```typescript [Browser / WASM]
+import { MarkerKind } from '@libraz/libsonare';
+
+project.setMarkerEx({
+  id: 0,
+  ppq: 32,
+  name: 'drop cue',
+  kind: MarkerKind.cuePoint,
+  keyFifths: 0,
+  keyMinor: false,
+});
+
+project.setMarkerEx({
+  id: 0,
+  ppq: 64,
+  name: 'E minor',
+  kind: MarkerKind.keySignature,
+  keyFifths: 1,
+  keyMinor: true,
+});
+
+for (let i = 0; i < project.markerCount(); i += 1) {
+  console.log(project.markerByIndex(i));
+}
+```
+
+```python [Python]
+from libsonare import MarkerKind, ProjectMarker
+
+project.set_marker_ex(ProjectMarker(0, 32.0, "drop cue", MarkerKind.CUE_POINT))
+project.set_marker_ex(
+    ProjectMarker(0, 64.0, "E minor", MarkerKind.KEY_SIGNATURE, key_fifths=1, key_minor=True)
+)
+
+for index in range(project.marker_count()):
+    print(project.marker_by_index(index))
+```
+
+:::
+
 In Python: `set_tempo_segments`, `set_time_signatures`, and `set_marker` accept the same fields (mappings or tuples for the segment lists).
 
 ## Overlap policy
@@ -304,6 +361,8 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 // project.removeWarpMap(1);                 // remove the map by id when done
 ```
 
+A warp map is a first-class, id-keyed object: `setWarpMap({ id, name, anchors })` adds or replaces one, `setClipWarpRef(clipId, id)` assigns it to a clip (`0` clears the reference), and `project.removeWarpMap(id)` deletes it by id. Removing a map that a clip still references leaves that clip with a dangling warp ref, so clear those clips first with `setClipWarpRef(clipId, 0)`.
+
 ## Takes and comp lanes
 
 A clip can carry alternate **takes** and a **comp** (composite) that stitches the best parts of several takes into one performance. These are first-class on `Project` (`setClipTakes`, `setClipCompSegments`, `addLoopRecordingTakes`) and are covered in depth — including loop-recording capture — on the dedicated page. See [Recording & Takes](./recording-and-takes.md).
@@ -342,6 +401,31 @@ project.annotateChords([
 
 Pitch classes are `0..11` (C = 0) or `255` for unknown; `mode` and `quality` are small ordinals (key mode `1` = major, `2` = minor; chord quality `1` = major, `2` = minor, …).
 
+## Assist sidecars
+
+An **assist sidecar** is an opaque, undoable per-project metadata blob — a place to stash an AI-assist suggestion, a tooling payload, or any binary annotation that should travel with the arrangement. Each sidecar is keyed by a **module id** plus a **target scope** (a track id and a PPQ region), and the whole store serializes under the project JSON `assist_sidecars` key, so it survives `toJson()` / `fromJson()` round-trips.
+
+```typescript
+const payload = new TextEncoder().encode(JSON.stringify({ suggestion: 'tighten chorus' }));
+project.setAssistSidecar(
+  'my-assistant',  // moduleId (must be non-empty)
+  1,               // schemaVersion
+  0,               // targetTrackId (0 = project scope)
+  0,               // regionStartPpq
+  16,              // regionEndPpq
+  payload,         // Uint8Array (copied)
+);
+
+for (let i = 0; i < project.assistSidecarCount(); i += 1) {
+  const sc = project.getAssistSidecar(i);
+  // { moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload }
+}
+```
+
+A sidecar that shares the same `moduleId` + `targetTrackId` + region scope as an existing one **replaces** it; otherwise it is appended. `targetTrackId` `0` means project scope. Because the write is an undoable edit, `undo()` / `redo()` reverse it.
+
+The binding surfaces differ (consistent with the snake_case Python note elsewhere on this page). The WASM call above is positional and exposes only the count plus an index accessor. **Node** takes an options object — `project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })` — and Node/Python additionally offer `assistSidecars()` / `assist_sidecars()` to read them all at once. **Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`, `project.assist_sidecar_count()`, `project.get_assist_sidecar(index)`, `project.assist_sidecars()`.
+
 ## MIDI content
 
 A MIDI clip holds a flat event list. Build events with the `Project.midi*` static packers (which produce the canonical MIDI 1.0 words) and replace the clip's list with `setMidiEvents`.
@@ -355,6 +439,21 @@ project.setMidiEvents(midiClip, [
 ]);
 project.setProgram(midiClip, 4);          // GM program (e.g. 4 = electric piano)
 ```
+
+Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop into a `setMidiEvents` list:
+
+| Packer | Signature | Event |
+|--------|-----------|-------|
+| Note on | `Project.midiNoteOn(ppq, group, channel, note, velocity)` | Note-on |
+| Note off | `Project.midiNoteOff(ppq, group, channel, note, velocity?=0)` | Note-off |
+| Control change | `Project.midiCc(ppq, group, channel, controller, value)` | CC |
+| Program change | `Project.midiProgram(ppq, group, channel, program)` | Program-change |
+| Bank + program | `Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` | Bank-select + program-change (returns multiple events) |
+| Poly pressure | `Project.midiPolyPressure(ppq, group, channel, note, pressure)` | Per-note aftertouch |
+| Channel pressure | `Project.midiChannelPressure(ppq, group, channel, pressure)` | Channel aftertouch |
+| Pitch bend | `Project.midiPitchBend(ppq, group, channel, bend)` | Pitch-bend; `bend` is unsigned 14-bit (`0`..`16383`, center `8192`) — out-of-range throws `RangeError` |
+
+The event-level `Project.midiProgram(...)` packer places a program-change word inside a clip's event list; it is distinct from the clip-level `project.setProgram(midiClip, program)` convenience shown above, which sets the clip's default program directly.
 
 ### `validateMidiNotes`
 
@@ -370,13 +469,51 @@ if (!check.ok) {
 
 To make a MIDI arrangement audible you bind an instrument at render time — see [Rendering audio](#rendering-audio), the [native synth](./native-synth.md), and the [SoundFont player](./soundfont-player.md). For driving a project live from a controller, see [MIDI input](./midi-input.md).
 
+### Route a captured MIDI stream
+
+`Project.midiRouteEvents(events, config?)` is a static helper that runs a captured `ProjectMidiEvent` stream through the native `MidiRouter` (filter / remap / channel-thru) — the same router the live runtime uses — and returns a `ProjectMidiRouteResult`. Use it to pre-filter or remap recorded input offline before building clips.
+
+```typescript
+const routed = Project.midiRouteEvents(capturedEvents, {
+  filterGroup: 0,        // keep group 0 only (omit / null = any)
+  filterChannel: 9,      // keep channel 9 (the drum channel)
+  remapChannel: 0,       // rewrite surviving events onto channel 0
+  thru: true,            // pass matching events through
+});
+// routed.events       -> ProjectMidiEvent[]
+// routed.overflowed   -> true if the router buffer dropped events
+// routed.overflowCount-> number of dropped events
+project.setMidiEvents(midiClip, routed.events);
+```
+
+Config fields are all optional and camelCase in JS/WASM (`filterGroup`, `filterChannel`, `remapChannel`, `thru`); a `null` or omitted filter field means "any", and an omitted `remapChannel` leaves the channel unchanged. Python uses snake_case (`filter_group`, `filter_channel`, `remap_channel`, `thru`). The helper ships across WASM, Node, and Python. Pair it with the offline MIDI-learn flow (`Project.midiCcLearn`, covered in [MIDI input](./midi-input.md)).
+
 ### Bake a MIDI-FX chain into a clip
 
 A MIDI-FX chain (transpose, velocity curve, humanize, and so on) normally sits as a **non-destructive** layer over a clip's events. `bakeMidiFx` does the opposite: it runs the chain once and **rewrites the clip's stored MIDI events** with the result, so the transformed notes become the clip's real content. Bake when you want to freeze an effect into the arrangement; keep it non-destructive when you still want to tweak it.
 
 ```typescript
-const configJson = JSON.stringify({ transpose: 12 }); // up one octave
-project.bakeMidiFx(midiClip, configJson);              // events are now transposed in place
+const configJson = JSON.stringify({ transpose_semitones: 12 }); // up one octave
+project.bakeMidiFx(midiClip, configJson);                        // events are now transposed in place
+```
+
+The config is a JSON object whose **stages are keyed by their parameters** — include a stage's keys to enable it, omit them to skip it. Unknown keys are ignored, so a typo silently does nothing:
+
+| Stage | Keys |
+|-------|------|
+| Transpose | `transpose_semitones` |
+| Velocity curve | `velocity_scale`, `velocity_offset`, `velocity_gamma` (>0) |
+| Quantize | `quantize_ppq` (>0), `quantize_strength` (0–1, default 1) |
+| Chord | `chord_intervals` (array of semitone offsets) |
+| Arpeggiator | `arpeggiator_intervals` (array of semitone offsets), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
+
+```typescript
+// Turn each held note into a three-step up-arpeggio, one sixteenth per step.
+project.bakeMidiFx(midiClip, JSON.stringify({
+  arpeggiator_intervals: [0, 4, 7],
+  arpeggiator_step_ppq: 0.25,
+  arpeggiator_gate_ppq: 0.2,
+}));
 ```
 
 In Python this is `project.bake_midi_fx(clip_id, config_json)`. Because the rewrite is destructive, it is an undoable edit like any other — `undo()` restores the original events.
@@ -457,8 +594,10 @@ The project's tempo map and MIDI clips round-trip through two formats.
 
 ### Standard MIDI File (SMF)
 
+`exportSmf` always writes a format-1 (multi-track) file: track 0 carries the tempo + time-signature map, then one MTrk per clip, quantized to 480 ticks per quarter note.
+
 ```typescript
-const smf = project.exportSmf();        // Uint8Array, "MThd" header
+const smf = project.exportSmf();        // Uint8Array — SMF format-1, 480 PPQN
 // … write `smf` to a .mid file …
 
 const fresh = new Project();

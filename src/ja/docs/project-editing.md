@@ -86,7 +86,7 @@ flowchart LR
 
 ::: code-group
 
-```typescript [ブラウザ / Node]
+```typescript [ブラウザ / WASM]
 import { init, Project } from '@libraz/libsonare';
 
 await init();
@@ -136,7 +136,7 @@ with sonare.Project() as project:
 :::
 
 ::: danger プロジェクトは必ず解放する
-`Project` はすべての WASM オブジェクトと同様、JavaScript の GC では回収できないヒープハンドルを保持します。`finally` ブロックで `project.delete()`（Node は `destroy()` も可）を呼んでください。Python ではコンテキストマネージャ（`with sonare.Project() as project:`）として使うか、`project.close()` を呼びます。ハンドルをリークすると、長時間のセッションで WASM メモリが徐々に枯渇します。
+`Project` はすべての WASM オブジェクトと同様、JavaScript の GC では回収できないヒープハンドルを保持します。WASM パッケージでは `new Project()` で作り、`finally` ブロックで `project.delete()` を呼んでください。Node ネイティブでは `Project.create()` で作り、`project.destroy()` または `project.delete()` で解放します。Python ではコンテキストマネージャ（`with sonare.Project() as project:`）として使うか、`project.close()` を呼びます。ハンドルをリークすると、長時間のセッションでネイティブまたは WASM メモリが徐々に枯渇します。
 :::
 
 ## クリップを編集する
@@ -148,7 +148,7 @@ with sonare.Project() as project:
 | 分割 | `splitClip(clipId, splitPpq)` | 絶対 PPQ でクリップを切り、新しいクリップの ID を返す |
 | トリム | `trimClip(clipId, newStartPpq, newLengthPpq)` | 開始と長さを再設定する |
 | 移動 | `moveClip(clipId, newStartPpq, newTrackId?)` | クリップをずらす。別トラックへも移せる |
-| ゲイン | `setClipGain(clipId, gain)` | クリップごとの線形再生ゲイン（`>= 0`） |
+| ゲイン | `setClipGain(clipId, gain)` | クリップごとの線形再生ゲイン（`>= 0`）。オーディオクリップにのみ有効で、MIDI クリップには保存されるがバウンスでは適用されない |
 | フェード | `setClipFade(clipId, fadeIn, fadeOut)` | カーブつきのフェードイン／フェードアウト領域 |
 | ループ | `setClipLoop(clipId, mode, loopLengthPpq?)` | `'off'` または `'loop'` とループ長 |
 | ソース差し替え | `setClipSource(clipId, sourceId)` | クリップを別の登録済みソースへ再バインドする |
@@ -168,6 +168,14 @@ const copyId = project.duplicateClip(tailId, 8);
 ```
 
 フェードカーブは `'linear'`・`'equal-power'`・`'exponential'`・`'logarithmic'` です。ループモードは `'off'` または `'loop'` で、ループ時は正の `loopLengthPpq` が必要です。
+
+::: warning setClipGain はオーディオクリップにのみ効く
+`setClipGain` が効くのは**オーディオクリップ**だけです。MIDI クリップでは値が保存され（アンドゥ可能で `toJson()` でも往復しますが）、バウンスのコンパイラはそれを適用しません。レベルとしてもベロシティスケールとしても扱われないため、MIDI クリップでは聴感上の効果がありません。MIDI トラックの音量を変えるには `setTrackGain(trackId, gain)` でトラックゲインを設定してください（トラックのチャンネルストリップのフェーダーに畳み込まれます）。トラックゲイン `0` はそのトラックの MIDI ノートを完全に無音にします。
+:::
+
+::: warning `setClipGain` / `setClipFade` はオーディオクリップのみに効く
+`setClipGain` と `setClipFade` が効くのは**オーディオクリップのみ**です。MIDI クリップでは値が保存されるものの、レンダリングされるノートには反映されません。コンパイラは MIDI クリップのイベントをそのままレンダースケジュールへコピーし、クリップはトラックのミュート／ソロ／ゲインだけでゲートするため、クリップごとのゲインとフェードは破棄されます。MIDI で駆動する楽器の音量は、**トラックフェーダー**（`setTrackGain`、または[ミキサーシーン](./mixing.md)のチャンネルストリップ）で調整してください。コンパイラはこれをトラックのオーディオステムと MIDI ステムへ一様に折り込みます。
+:::
 
 Python では同じ操作が snake_case になり、フェードは長さとカーブを個別の引数で受け取ります。
 
@@ -196,6 +204,11 @@ copy_id = project.duplicate_clip(tail_id, 8.0)
 | 名前変更 | `renameTrack(trackId, name)` | トラック名を変える |
 | 種別変更 | `setTrackKind(trackId, kind)` | トラックを `'audio'` / `'midi'` / `'aux'` 間で切り替える |
 | ルーティング | `setTrackRoute(trackId, channelStripRef, outputTarget)` | トラックをミキサーストリップと出力バスに結びつける |
+| ゲイン | `setTrackGain(trackId, gain)` | トラックのリニア出力ゲインを設定する（負値や非有限値は拒否される） |
+| ミュート | `setTrackMute(trackId, mute)` | トラックをミュート／解除する |
+| ソロ | `setTrackSolo(trackId, solo)` | トラックをソロにし、他をミュート扱いにする |
+| パン | `setTrackPan(trackId, pan)` | トラックを `[-1, 1]` でパンする（非有限値は拒否される） |
+| MIDI 送り先 | `setTrackMidiDestination(trackId, destinationId)` | トラックの MIDI を楽器の送り先 ID へルーティングする（[内蔵楽器](./native-synth.md)を参照） |
 
 ```typescript
 const drums = project.addTrack({ kind: 'audio', name: 'drums' });
@@ -257,6 +270,50 @@ project.setMarker(0, 16, 'verse');
 project.setMarker(introId, 0, 'intro (edited)'); // ID を再利用して更新
 ```
 
+構造化マーカーには、完全な `ProjectMarker` を渡す `setMarkerEx(...)` を使います。`MarkerKind` は通常マーカー、テキスト、歌詞、キューポイント、調号を表します。調号マーカーでは `keyFifths`（`-7`...`+7`、シャープが正）と `keyMinor` を使います。
+
+::: code-group
+
+```typescript [ブラウザ / WASM]
+import { MarkerKind } from '@libraz/libsonare';
+
+project.setMarkerEx({
+  id: 0,
+  ppq: 32,
+  name: 'drop cue',
+  kind: MarkerKind.cuePoint,
+  keyFifths: 0,
+  keyMinor: false,
+});
+
+project.setMarkerEx({
+  id: 0,
+  ppq: 64,
+  name: 'E minor',
+  kind: MarkerKind.keySignature,
+  keyFifths: 1,
+  keyMinor: true,
+});
+
+for (let i = 0; i < project.markerCount(); i += 1) {
+  console.log(project.markerByIndex(i));
+}
+```
+
+```python [Python]
+from libsonare import MarkerKind, ProjectMarker
+
+project.set_marker_ex(ProjectMarker(0, 32.0, "drop cue", MarkerKind.CUE_POINT))
+project.set_marker_ex(
+    ProjectMarker(0, 64.0, "E minor", MarkerKind.KEY_SIGNATURE, key_fifths=1, key_minor=True)
+)
+
+for index in range(project.marker_count()):
+    print(project.marker_by_index(index))
+```
+
+:::
+
 Python では `set_tempo_segments`・`set_time_signatures`・`set_marker` が同じフィールドを受け取ります（セグメントリストはマッピングまたはタプル）。
 
 ## 重なりポリシー
@@ -304,6 +361,8 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 // project.removeWarpMap(1);                 // 不要になったら ID でマップを削除
 ```
 
+ワープマップは ID で管理される第一級オブジェクトです。`setWarpMap({ id, name, anchors })` で追加・置換し、`setClipWarpRef(clipId, id)`（`0` で解除）でクリップに割り当て、`project.removeWarpMap(id)` で ID を指定して削除します。クリップがまだ参照しているマップを削除すると、そのクリップにはワープ参照が宙ぶらりんで残るため、先に `setClipWarpRef(clipId, 0)` で参照を解除してください。
+
 ## テイクとコンプレーン
 
 クリップは代替の**テイク**と、複数テイクの良い箇所をつなぐ**コンプ**（合成）を持てます。これらは `Project` の第一級機能（`setClipTakes`・`setClipCompSegments`・`addLoopRecordingTakes`）で、ループ録音のキャプチャを含めて専用ページで詳しく扱います。[録音とテイク](./recording-and-takes.md)を参照してください。
@@ -342,6 +401,31 @@ project.annotateChords([
 
 ピッチクラスは `0..11`（C = 0）または不明を表す `255` です。`mode` と `quality` は小さな序数です（キーモード `1` = major、`2` = minor、コードクオリティ `1` = major、`2` = minor、…）。
 
+## アシストサイドカー
+
+**アシストサイドカー**は、プロジェクトごとの不透明でアンドゥ可能なメタデータブロブです。AI アシストの提案、ツール用ペイロード、その他アレンジとともに運びたいバイナリ注釈を格納する場所になります。各サイドカーは**モジュール ID** と**ターゲットスコープ**（トラック ID と PPQ 領域）でキー付けされ、ストア全体はプロジェクト JSON の `assist_sidecars` キーの下にシリアライズされるため、`toJson()` / `fromJson()` の往復でも残ります。
+
+```typescript
+const payload = new TextEncoder().encode(JSON.stringify({ suggestion: 'tighten chorus' }));
+project.setAssistSidecar(
+  'my-assistant',  // moduleId（空にできない）
+  1,               // schemaVersion
+  0,               // targetTrackId（0 = プロジェクトスコープ）
+  0,               // regionStartPpq
+  16,              // regionEndPpq
+  payload,         // Uint8Array（コピーされる）
+);
+
+for (let i = 0; i < project.assistSidecarCount(); i += 1) {
+  const sc = project.getAssistSidecar(i);
+  // { moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload }
+}
+```
+
+`moduleId` + `targetTrackId` + 領域スコープが既存のものと同じサイドカーは**置換**され、それ以外は追加されます。`targetTrackId` `0` はプロジェクトスコープを意味します。書き込みはアンドゥ可能な編集なので、`undo()` / `redo()` で取り消し・やり直しできます。
+
+バインディング面は異なります（本ページの他の Python snake_case の注記と同じ方針です）。上の WASM 呼び出しは位置引数で、件数とインデックスアクセサだけを公開します。**Node** はオプションオブジェクトを取り（`project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })`）、Node/Python はさらに `assistSidecars()` / `assist_sidecars()` で全件を一度に読めます。**Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index)`、`project.assist_sidecars()`。
+
 ## MIDI の内容
 
 MIDI クリップはフラットなイベントリストを保持します。`Project.midi*` 静的パッカー（正規の MIDI 1.0 ワードを生成します）でイベントを作り、`setMidiEvents` でクリップのリストを置き換えます。
@@ -355,6 +439,21 @@ project.setMidiEvents(midiClip, [
 ]);
 project.setProgram(midiClip, 4);          // GM プログラム（例: 4 = エレクトリックピアノ）
 ```
+
+各静的パッカーは、`setMidiEvents` のリストにそのまま渡せる MIDI 1.0 UMP ワード（1 つまたは複数）を返します。
+
+| パッカー | シグネチャ | イベント |
+|----------|------------|----------|
+| ノートオン | `Project.midiNoteOn(ppq, group, channel, note, velocity)` | ノートオン |
+| ノートオフ | `Project.midiNoteOff(ppq, group, channel, note, velocity?=0)` | ノートオフ |
+| コントロールチェンジ | `Project.midiCc(ppq, group, channel, controller, value)` | CC |
+| プログラムチェンジ | `Project.midiProgram(ppq, group, channel, program)` | プログラムチェンジ |
+| バンク + プログラム | `Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` | バンクセレクト + プログラムチェンジ（複数イベントを返す） |
+| ポリプレッシャー | `Project.midiPolyPressure(ppq, group, channel, note, pressure)` | ノート単位アフタータッチ |
+| チャンネルプレッシャー | `Project.midiChannelPressure(ppq, group, channel, pressure)` | チャンネルアフタータッチ |
+| ピッチベンド | `Project.midiPitchBend(ppq, group, channel, bend)` | ピッチベンド。`bend` は符号なし 14 ビット（`0`..`16383`、中央 `8192`）で、範囲外は `RangeError` を送出 |
+
+イベントレベルの `Project.midiProgram(...)` パッカーはプログラムチェンジワードをクリップのイベントリスト内に置きます。上で示したクリップレベルの `project.setProgram(midiClip, program)`（クリップの既定プログラムを直接設定する便利メソッド）とは別物です。
 
 ### `validateMidiNotes`
 
@@ -370,13 +469,51 @@ if (!check.ok) {
 
 MIDI アレンジを鳴らすには、レンダリング時に楽器をバインドします。[音声をレンダリングする](#音声をレンダリングする)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)を参照してください。コントローラからプロジェクトをライブで駆動するには、[MIDI 入力](./midi-input.md)を参照してください。
 
+### キャプチャした MIDI ストリームをルーティングする
+
+`Project.midiRouteEvents(events, config?)` は静的ヘルパーで、キャプチャした `ProjectMidiEvent` ストリームをネイティブの `MidiRouter`（フィルター／リマップ／チャンネルスルー）——ライブランタイムが使うものと同じルーター——に通し、`ProjectMidiRouteResult` を返します。録音した入力をクリップにする前に、オフラインで事前フィルターやリマップを行う用途に使えます。
+
+```typescript
+const routed = Project.midiRouteEvents(capturedEvents, {
+  filterGroup: 0,        // グループ 0 だけ残す（省略 / null = 任意）
+  filterChannel: 9,      // チャンネル 9（ドラムチャンネル）だけ残す
+  remapChannel: 0,       // 残ったイベントをチャンネル 0 へ書き換える
+  thru: true,            // 一致したイベントを通す
+});
+// routed.events       -> ProjectMidiEvent[]
+// routed.overflowed   -> ルーターのバッファがイベントを取りこぼすと true
+// routed.overflowCount-> 取りこぼしたイベント数
+project.setMidiEvents(midiClip, routed.events);
+```
+
+config のフィールドはすべて任意で、JS/WASM では camelCase（`filterGroup`・`filterChannel`・`remapChannel`・`thru`）です。フィルターフィールドが `null` または省略なら「任意」を意味し、`remapChannel` を省略するとチャンネルは変更されません。Python では snake_case（`filter_group`・`filter_channel`・`remap_channel`・`thru`）です。このヘルパーは WASM・Node・Python すべてで利用できます。オフラインの MIDI ラーン（`Project.midiCcLearn`、[MIDI 入力](./midi-input.md)で解説）と組み合わせて使えます。
+
 ### MIDI-FX チェーンをクリップに焼き込む
 
 MIDI-FX チェーン（トランスポーズ、ベロシティカーブ、ヒューマナイズなど）は通常、クリップのイベントに重なる**非破壊**のレイヤーとして働きます。`bakeMidiFx` はその逆で、チェーンを 1 回実行し、その結果で**クリップに保存された MIDI イベントを書き換えます**。これにより変換後のノートがクリップの実体になります。エフェクトをアレンジに固定したいときは焼き込み、まだ調整したいときは非破壊のままにしておきます。
 
 ```typescript
-const configJson = JSON.stringify({ transpose: 12 }); // 1 オクターブ上げる
-project.bakeMidiFx(midiClip, configJson);              // イベントがその場でトランスポーズされる
+const configJson = JSON.stringify({ transpose_semitones: 12 }); // 1 オクターブ上げる
+project.bakeMidiFx(midiClip, configJson);                        // イベントがその場でトランスポーズされる
+```
+
+config は JSON オブジェクトで、**各ステージはそのパラメータをキーに**します。ステージのキーを含めれば有効になり、省けばスキップされます。未知のキーは無視されるため、打ち間違いは静かに何もしません。
+
+| ステージ | キー |
+|----------|------|
+| トランスポーズ | `transpose_semitones` |
+| ベロシティカーブ | `velocity_scale`、`velocity_offset`、`velocity_gamma`（>0） |
+| クオンタイズ | `quantize_ppq`（>0）、`quantize_strength`（0–1、既定 1） |
+| コード | `chord_intervals`（半音オフセットの配列） |
+| アルペジエーター | `arpeggiator_intervals`（半音オフセットの配列）、`arpeggiator_step_ppq`（>0）、`arpeggiator_gate_ppq`（既定はステップ長で、それに丸められる） |
+
+```typescript
+// 押さえた各ノートを 3 ステップの上昇アルペジオにする（1 ステップ 16 分音符）。
+project.bakeMidiFx(midiClip, JSON.stringify({
+  arpeggiator_intervals: [0, 4, 7],
+  arpeggiator_step_ppq: 0.25,
+  arpeggiator_gate_ppq: 0.2,
+}));
 ```
 
 Python では `project.bake_midi_fx(clip_id, config_json)` です。書き換えは破壊的ですが、ほかの編集と同様にアンドゥ可能です。`undo()` で元のイベントに戻ります。
@@ -457,8 +594,10 @@ Python では `project.to_json()`・`Project.from_json(json)`・`Project.from_js
 
 ### 標準 MIDI ファイル (SMF)
 
+`exportSmf` は常にフォーマット1（マルチトラック）で書き出します。トラック0がテンポ／拍子マップを、以降は各クリップが1つの MTrk となり、四分音符あたり480ティックに量子化されます。
+
 ```typescript
-const smf = project.exportSmf();        // Uint8Array、"MThd" ヘッダ
+const smf = project.exportSmf();        // Uint8Array — SMF フォーマット1、480 PPQN
 // … `smf` を .mid ファイルへ書き出す …
 
 const fresh = new Project();

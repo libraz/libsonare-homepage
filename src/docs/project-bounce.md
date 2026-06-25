@@ -31,6 +31,8 @@ Project positions and clip lengths are expressed in **PPQ — quarter notes as a
 
 ::: tip Bounce reflects the full mixer, not raw clips
 Tracks do not sum naively. Each track renders through its channel strip — trim, EQ, inserts, fader, pan, sends, and buses — via the [scene mixer](./mixing.md). The bounce is the routed master, exactly what realtime playback would produce.
+
+`setClipGain` (and clip fades) shape **audio clips** only; they have no effect on MIDI clips during bounce. To set the volume of a MIDI-driven instrument, use the track fader / channel strip (the [mixer scene](./mixing.md)) — see [Project Editing](./project-editing.md#editing-clips).
 :::
 
 ## What You Will Learn
@@ -113,6 +115,10 @@ Every field of the options object is optional:
 
 ::: info What is PDC / latency compensation?
 Some instruments and effects need a few samples of "lookahead" and so report their audio a little late. **PDC** (plugin delay compensation) tells the compiler how many samples late an instrument is, so the engine can shift it back into alignment and keep every track in time. If your instrument has no latency, leave this at `0`.
+:::
+
+::: tip Determinism is independent of live state
+An offline bounce **settles** every smoothed gain and effect parameter to its target before rendering, so the result does not depend on where a fader or filter sweep happened to be when you started the render. Bouncing right after a live tweak produces the same samples as bouncing from a freshly loaded project.
 :::
 
 ### Omitting the length

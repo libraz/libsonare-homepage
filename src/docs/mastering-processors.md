@@ -173,7 +173,9 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 
 ## Mixer Insert Names
 
-Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. The full insert list is enumerable at runtime with `masteringInsertNames()`, and each insert's accepted parameter keys with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`) — band/sub-band processors enumerate their indexed `band{i}.*` keys, and an unknown name returns an empty array. Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
+Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. The full insert list is enumerable at runtime with `masteringInsertNames()`, and each insert's accepted construction keys with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`) — band/sub-band processors enumerate their indexed `band{i}.*` keys, and an unknown name returns an empty array. Use `masteringInsertParamInfo(name)` (Python `mastering_insert_param_info(name)`) when you need the realtime-automatable subset: it returns each parameter's JSON key, numeric automation id, and realtime-safety flag. Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
+
+For picker UIs, `masteringProcessorCatalog()` (Python `mastering_processor_catalog()`) returns machine-readable entries with `kind`, `realtimeInsertable`, `stereoOnly`, and `channelPolicy`, so hosts can filter offline-only, pair, stereo-only, and surround-wrapping behavior without hard-coding processor IDs.
 
 | Insert ID | Meaning |
 |-----------|---------|
@@ -222,6 +224,8 @@ Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fiel
 
 ```typescript [Browser]
 masteringProcessorNames();   // discover solo processor ids at runtime
+masteringProcessorCatalog(); // classify processors for picker/filter UIs
+masteringInsertParamInfo('eq.parametric'); // realtime automation metadata
 
 const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
   thresholdDb: -24,

@@ -157,7 +157,7 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
 | Offline repair (one-shot) | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
 | Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
-| Named processors | `masteringProcessorNames()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringProcess()`, `masteringProcessStereo()` |
+| Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name)`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
 
@@ -173,7 +173,7 @@ For persistent mixers, Node native accepts a `StripRef` (`number | string`) for 
 
 ## Projects, Instruments & Live MIDI
 
-The Node native addon exposes the same headless-DAW surface as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, the per-track, master, and bus strip JSON setters, queueable `setSoloMute`, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM (see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips)). The browser-only glue (`bindWebMidi`, `bindMicrophoneInput`) is WASM-specific and not part of the native addon.
+The Node native addon exposes the same headless-DAW surface as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, the per-track, master, and bus strip JSON setters, queueable `setSoloMute`, track pan/law/mode/dual-pan/channel-delay setters, insert-param-by-name setters, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM (see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips)). The browser-only glue (`bindWebMidi`, `bindMicrophoneInput`) is WASM-specific and not part of the native addon.
 
 The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
@@ -388,6 +388,28 @@ A few focused helpers remain standalone functions, including
 `analyzeSections(...)`, `analyzeMelody(...)`, `cqt(...)`, and `vqt(...)`. For
 those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
 
+#### Cleanup with `using` (Node 22+)
+
+Every native handle class — `Audio`, `RealtimeEngine`, `Project`, `Mixer`, and
+`ClipPageProvider` — implements `[Symbol.dispose]`, so on Node 22+ you can use
+the `using` keyword for automatic, throw-safe cleanup at scope exit:
+
+```typescript
+import { RealtimeEngine } from '@libraz/libsonare-native';
+
+function render() {
+  using engine = new RealtimeEngine(48000, 128);
+  engine.setTempo(120);
+  // ... the handle is released when this scope ends, even on an exception.
+}
+```
+
+On Node versions below 22, keep the explicit-release pattern in a `try/finally`.
+`destroy()` is the canonical native release method on every handle class;
+`Project` and `Mixer` also expose `delete()` as a WASM-compatible alias. GC also
+reclaims handles eventually, but `using`/explicit release gives deterministic
+cleanup that long-lived processes should prefer.
+
 #### Analysis Functions
 
 | Function | Return Type | Description |
@@ -484,6 +506,7 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 | `spectralRolloff(samples, sr?, nFft?, hopLength?, rollPercent?)` | `Float32Array` | Spectral rolloff per frame |
 | `spectralFlatness(samples, sr?, nFft?, hopLength?)` | `Float32Array` | Spectral flatness per frame |
 | `spectralContrast(samples, sr?, nFft?, hopLength?, nBands?, fmin?, quantile?)` | `Matrix2dResult` | Spectral contrast, shape `(nBands + 1) x nFrames` |
+| `spectralEdit(samples, sr, ops?, options?)` | `Float32Array` | Region-based STFT edit with `gain`, `attenuate`, `mute`, or `heal` ops |
 | `polyFeatures(samples, sr?, nFft?, hopLength?, order?)` | `Matrix2dResult` | Per-frame polynomial spectral coefficients |
 | `zeroCrossingRate(samples, sr?, frameLength?, hopLength?)` | `Float32Array` | Zero-crossing rate per frame |
 | `zeroCrossings(samples, threshold?, refMagnitude?, pad?, zeroPos?)` | `Int32Array` | Zero-crossing sample indices |

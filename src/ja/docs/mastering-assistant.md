@@ -86,6 +86,30 @@ sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 
 :::
 
+::: warning 短いクリップ: profile と suggest には実際のスペクトル成分が必要
+`masteringAudioProfile` と `masteringAssistantSuggest` は STFT ベースの解析全体を実行し（既定の `nFft` は 2048）、解析するには短すぎるクリップ、つまり解析窓より短い入力では `SonareError` を投げます（実用上の下限はおおよそ ~512 サンプル）。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファと空でないプラットフォームのリストさえあれば、どんなバッファでも受け付けます。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを最小長チェックで守り、`isSonareError` を使った `try`／`catch` で囲んでから、バッファを渡してください。
+
+```typescript [ブラウザ]
+import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
+
+const MIN_ANALYSIS_SAMPLES = 2048; // 解析窓 1 つ分。~512 が下限
+if (samples.length < MIN_ANALYSIS_SAMPLES) {
+  // 短すぎてプロファイルできない — スキップするか、解析前にパディングする
+} else {
+  try {
+    const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
+    // …
+  } catch (err) {
+    if (isSonareError(err)) {
+      // 「クリップが短すぎる／スペクトル成分がない」旨を UI に表示する
+    } else {
+      throw err;
+    }
+  }
+}
+```
+:::
+
 ## `masteringAudioProfile` — ソースを測る
 
 入力の読み取り専用の要約です。どれだけ大きいか、スペクトル全体にエネルギーがどう広がっているか、どれだけダイナミックか、どのジャンルに似ているか。何も処理しません。
