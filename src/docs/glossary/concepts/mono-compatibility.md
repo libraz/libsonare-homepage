@@ -33,6 +33,8 @@ Correlation is a single number, from +1 to -1, that estimates how similar the le
 
 Correlation is not a full answer. Some wide mixes are safe, and some narrow mixes still have local phase problems. Always listen in mono when width decisions matter.
 
+<SonareDemo id="mono-fold" />
+
 ## Mastering Tradeoff
 
 Stereo widening can make a master feel larger, but it should not weaken the center. Kick, bass, lead vocal, and snare usually need a stable mono foundation. Low frequencies are especially sensitive; widening the low end can make playback inconsistent.

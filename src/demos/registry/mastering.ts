@@ -179,4 +179,32 @@ export const masteringDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'mono-fold',
+    archetype: 'mono-fold',
+    // Source is unused for `mono-fold` (the centre tone is synthesized in-browser);
+    // a matching tone keeps the intent readable.
+    source: { kind: 'generate', signal: 'sine', freq: 220 },
+    viz: 'waveform',
+    title: {
+      en: 'Mono fold — when stereo width cancels',
+      ja: 'モノフォールド — ステレオ幅が打ち消されるとき',
+    },
+    caption: {
+      en: 'Phones, club PAs, and many broadcast paths sum left and right to mono. Here the left channel is a steady tone and the right is the same tone, swept from in-phase toward anti-phase. The mono sum averages the two, so as the right channel turns negative the sum shrinks — at full anti-phase it cancels to silence and the correlation meter reads −1. Press play to hear the mono sum: the more anti-phase the content, the quieter the fold-down. This is why width built from opposite-polarity content can vanish on a mono system.',
+      ja: 'スマホ、クラブの PA、多くの放送経路は左右をモノに合算します。ここでは左チャンネルが一定のトーン、右チャンネルが同じトーンで、同相から逆相へとスイープします。モノ合算は両者を平均するため、右チャンネルが負へ向かうほど合算は小さくなり、完全な逆相では無音まで打ち消されて相関メーターは −1 を指します。再生するとモノ合算が聴けます — 逆相成分が多いほどフォールドダウンは小さくなります。逆相の成分で作った幅がモノ環境で消えてしまうのは、このためです。',
+    },
+    params: [
+      {
+        key: 'antiphase',
+        kind: 'range',
+        default: 70,
+        min: 0,
+        max: 100,
+        step: 1,
+        unit: '%',
+        label: { en: 'Anti-phase', ja: '逆相' },
+      },
+    ],
+  },
 ];

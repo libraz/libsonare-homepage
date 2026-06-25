@@ -61,6 +61,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     compressor: defineAsyncComponent(() => import('./archetypes/CompressorDemo.vue')),
     'true-peak': defineAsyncComponent(() => import('./archetypes/TruePeakDemo.vue')),
     'send-routing': defineAsyncComponent(() => import('./archetypes/SendRoutingDemo.vue')),
+    'mono-fold': defineAsyncComponent(() => import('./archetypes/MonoFoldDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>
