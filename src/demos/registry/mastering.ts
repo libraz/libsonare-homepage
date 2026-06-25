@@ -207,4 +207,52 @@ export const masteringDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'parallel-compression',
+    archetype: 'compressor',
+    // No clip: the transfer curve, envelopes, and auditioned tone are computed from
+    // the sliders, the same as compressor-curve, plus a dry/compressed blend.
+    source: { kind: 'generate', signal: 'saw', freq: 150 },
+    viz: 'meters',
+    title: {
+      en: 'Parallel compression — squash a copy, keep the punch',
+      ja: 'パラレルコンプレッション — コピーを潰し、パンチは残す',
+    },
+    caption: {
+      en: 'Compression need not be all-or-nothing. Parallel ("New York") compression mixes a heavily compressed copy under the untouched dry signal: the dry copy keeps the transients and punch while the squashed copy lifts the quiet body. Set a low threshold and a high ratio to crush the copy, then drag Blend — at 100% you hear only the compressor (the transfer curve fully bent), and as you lower it the dry dynamics return and the curve straightens back toward 1:1. The envelope panel shows the transients surviving that a full compressor would have flattened.',
+      ja: 'コンプレッションは「全か無か」である必要はありません。パラレル（「ニューヨーク」）コンプレッションは、強く潰したコピーを、手を加えていないドライ信号の下に混ぜます。ドライのコピーが過渡音とパンチを保ち、潰したコピーが静かな胴体を持ち上げます。低いスレッショルドと高いレシオでコピーを潰し、ブレンドをドラッグしてください。100% ではコンプレッサーだけが聞こえ（伝達曲線は完全に曲がる）、下げるとドライのダイナミクスが戻って曲線は 1:1 に向かって戻ります。エンベロープのパネルでは、フルのコンプなら潰れていた過渡音が生き残るのが見えます。',
+    },
+    params: [
+      {
+        key: 'threshold',
+        kind: 'range',
+        default: -28,
+        min: -48,
+        max: 0,
+        step: 1,
+        unit: 'dB',
+        label: { en: 'Threshold', ja: 'スレッショルド' },
+      },
+      {
+        key: 'ratio',
+        kind: 'range',
+        default: 8,
+        min: 1,
+        max: 20,
+        step: 0.5,
+        unit: ':1',
+        label: { en: 'Ratio', ja: 'レシオ' },
+      },
+      {
+        key: 'mix',
+        kind: 'range',
+        default: 50,
+        min: 0,
+        max: 100,
+        step: 1,
+        unit: '%',
+        label: { en: 'Blend', ja: 'ブレンド' },
+      },
+    ],
+  },
 ];

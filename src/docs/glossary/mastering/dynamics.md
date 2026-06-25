@@ -35,6 +35,12 @@ Threshold decides where compression starts. Ratio decides how strongly levels ab
 4. Adjust release so the gain returns with the groove.
 5. Use loudness-matched A/B before deciding the compression is better.
 
+## Parallel compression
+
+Compression does not have to be all-or-nothing. **Parallel** (or "New York") compression blends a heavily compressed copy of the signal *under* the untouched dry signal. The dry copy keeps the transients and punch; the squashed copy adds body and lifts the quiet detail. A blend control sets how much of the compressed copy is mixed in — at 100% you hear only the compressor, and as you lower it the dry dynamics return.
+
+<SonareDemo id="parallel-compression" />
+
 ## In libsonare
 
 Studio exposes threshold, ratio, attack, and release directly. Knee is part of the underlying compressor model and preset design, but it is not a first-line control in the browser UI.

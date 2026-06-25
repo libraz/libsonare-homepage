@@ -45,6 +45,9 @@ const ratio = computed<number>(() => Number(values.ratio ?? 4));
 const knee = computed<number>(() => Number(values.knee ?? 6));
 const attackMs = computed<number>(() => Number(values.attack ?? 15));
 const releaseMs = computed<number>(() => Number(values.release ?? 160));
+// Parallel-compression blend: 100% = fully compressed (the default, so demos without
+// this param are unchanged); lower values mix the dry signal back in under the comp.
+const mix = computed<number>(() => Number(values.mix ?? 100) / 100);
 
 // ---- presentation state ----------------------------------------------------
 const tone = computed(() => {
@@ -57,7 +60,8 @@ const maxGr = ref(0);
 const stateLabel = computed(() => {
   if (status.value === 'error') return 'ERROR';
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
-  if (status.value === 'ready') return `${ratio.value.toFixed(1)}:1 · -${maxGr.value.toFixed(1)} dB`;
+  if (status.value === 'ready')
+    return `${ratio.value.toFixed(1)}:1 · -${maxGr.value.toFixed(1)} dB`;
   return 'IDLE';
 });
 
@@ -77,9 +81,19 @@ function gainComputer(xDb: number): number {
   const over = xDb - t;
   if (2 * over < -w) return xDb;
   if (2 * Math.abs(over) <= w) {
-    return xDb + (1 / r - 1) * (over + w / 2) ** 2 / (2 * w);
+    return xDb + ((1 / r - 1) * (over + w / 2) ** 2) / (2 * w);
   }
   return t + over / r;
+}
+
+/**
+ * Blend a dry and a compressed level (both dB) in the linear domain — parallel
+ * ("New York") compression. At full mix the compressed level is returned unchanged.
+ */
+function blendDb(dryDb: number, compDb: number, m: number): number {
+  if (m >= 1) return compDb;
+  const lin = (1 - m) * 10 ** (dryDb / 20) + m * 10 ** (compDb / 20);
+  return Math.max(FLOOR_DB, 20 * Math.log10(lin + 1e-12));
 }
 
 /** The fixed test program as an input level in dB at normalized time u∈[0,1). */
@@ -118,8 +132,9 @@ function compute(): void {
       // Attack when reduction deepens, release when it recovers.
       const coef = grTarget < gr ? aCoef : rCoef;
       gr = grTarget + (gr - grTarget) * coef;
-      targetOut[i] = inDb + gr;
-      peakGr = Math.min(peakGr, gr);
+      const outDb = blendDb(inDb, inDb + gr, mix.value);
+      targetOut[i] = outDb;
+      peakGr = Math.min(peakGr, outDb - inDb);
     }
     maxGr.value = -peakGr;
     status.value = 'ready';
@@ -228,7 +243,7 @@ function paint(): void {
   ctx.beginPath();
   for (let i = 0; i <= 96; i++) {
     const x = FLOOR_DB + (i / 96) * (0 - FLOOR_DB);
-    const y = gainComputer(x);
+    const y = blendDb(x, gainComputer(x), mix.value);
     const px = sx(x);
     const py = sy(y);
     i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
@@ -309,7 +324,7 @@ function buildAudio(): { samples: Float32Array; sampleRate: number } {
     const grTarget = gainComputer(inDb) - inDb;
     const coef = grTarget < gr ? aCoef : rCoef;
     gr = grTarget + (gr - grTarget) * coef;
-    const ampLin = 10 ** ((inDb + gr) / 20);
+    const ampLin = 10 ** (blendDb(inDb, inDb + gr, mix.value) / 20);
     ph += f / sampleRate;
     if (ph >= 1) ph -= 1;
     out[i] = (2 * ph - 1) * 0.6 * ampLin; // saw × envelope
@@ -332,7 +347,7 @@ function scheduleCompute(): void {
 }
 
 watch(
-  () => [threshold.value, ratio.value, knee.value, attackMs.value, releaseMs.value],
+  () => [threshold.value, ratio.value, knee.value, attackMs.value, releaseMs.value, mix.value],
   () => {
     if (props.active) scheduleCompute();
   },
