@@ -255,4 +255,32 @@ export const masteringDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'tilt-eq',
+    archetype: 'param-sweep',
+    // A broadband mix (drums + band) makes the spectral rotation easy to see and hear.
+    source: { kind: 'clip', clip: 'mix' },
+    viz: 'overlay',
+    config: { processor: 'tilt-eq' },
+    title: {
+      en: 'Tilt EQ — rebalance the whole spectrum at once',
+      ja: 'チルト EQ — スペクトル全体を一度に整える',
+    },
+    caption: {
+      en: 'Tilt EQ rotates the broad tonal balance around a fixed midrange pivot (the amber line). Positive tilt lifts the highs and trims the lows for a brighter master; negative tilt does the reverse for a warmer one. Loudness is matched on every render, so what you hear is tone, not level. Watch the averaged spectrum see-saw around the pivot as you drag. Use it for broad correction — reach for a narrow band, not tilt, to tame a single resonance.',
+      ja: 'チルト EQ は、固定したミッドレンジのピボット（橙色の線）を軸に、おおまかな音色バランスを回転させます。プラス方向は高域を持ち上げ低域を削って明るく、マイナス方向はその逆で温かくします。レンダーごとにラウドネスを揃えているので、聞こえる違いはレベルではなく音色です。ドラッグすると、平均スペクトルがピボットを軸にシーソーのように傾くのが見えます。用途は広い範囲の補正です。特定の共鳴を抑えたいときは、チルトではなく狭いバンドを使ってください。',
+    },
+    params: [
+      {
+        key: 'tilt',
+        kind: 'range',
+        default: 6,
+        min: -12,
+        max: 12,
+        step: 0.5,
+        unit: 'dB',
+        label: { en: 'Tilt', ja: 'チルト' },
+      },
+    ],
+  },
 ];

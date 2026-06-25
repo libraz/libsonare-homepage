@@ -15,6 +15,8 @@ Tilt EQ changes broad tonal balance around a midrange pivot. Positive tilt adds 
 
 Use it for broad correction. Do not use it to solve one narrow resonance.
 
+<SonareDemo id="tilt-eq" />
+
 ## Exciter Amount
 
 Exciter Amount adds controlled harmonic brightness. Unlike an EQ boost, an exciter creates new harmonic content from the existing signal.

@@ -2,7 +2,7 @@
 /**
  * `param-sweep` archetype: drag one control and hear + see a DSP transform respond.
  *
- * Four processors share this component, selected by `config.processor`:
+ * Five processors share this component, selected by `config.processor`:
  * - `pitch-shift` — drag the semitone slider and the whole harmonic comb slides while
  *   the duration stays fixed. The marker tracks the fundamental in Hz. Pitch shifting
  *   here is not formant-preserving, so formants ride along — the "chipmunk" effect.
@@ -16,6 +16,11 @@
  * - `griffin-lim` — reconstruct audio from a mel spectrogram and drag the iteration
  *   count: more Griffin-Lim passes settle the invented phase into something cleaner
  *   and less "phasey". The magnitude is fixed; only the phase quality improves.
+ * - `tilt-eq` — drag the tilt amount and the broadband spectrum rotates around a fixed
+ *   midrange pivot: positive tilt lifts the highs and trims the lows (brighter),
+ *   negative tilt does the reverse (warmer). Loudness is matched per render so the
+ *   change you hear is tone, not level. A complementary low-/high-shelf pair around
+ *   the pivot, the mastering-EQ way to rebalance the whole spectrum at once.
  *
  * The top panel is the waveform you hear; the bottom is the averaged magnitude
  * spectrum. A playback-synced beam sweeps the waveform.
@@ -50,7 +55,7 @@ function onParams(next: Record<string, ParamValue>): void {
   Object.assign(values, next);
 }
 
-type Processor = 'pitch-shift' | 'time-stretch' | 'formant-shift' | 'griffin-lim';
+type Processor = 'pitch-shift' | 'time-stretch' | 'formant-shift' | 'griffin-lim' | 'tilt-eq';
 const processor = computed<Processor>(
   () => (props.def.config?.processor as Processor) ?? 'pitch-shift',
 );
@@ -58,6 +63,7 @@ const semitones = computed<number>(() => Number(values.semitones ?? 0));
 const rate = computed<number>(() => Number(values.rate ?? 1));
 const formant = computed<number>(() => Number(values.formant ?? 1));
 const iters = computed<number>(() => Number(values.iters ?? 16));
+const tilt = computed<number>(() => Number(values.tilt ?? 0));
 /** The value that triggers a re-render, whichever processor is active. */
 const activeValue = computed(() => {
   switch (processor.value) {
@@ -67,6 +73,8 @@ const activeValue = computed(() => {
       return formant.value;
     case 'griffin-lim':
       return iters.value;
+    case 'tilt-eq':
+      return tilt.value;
     default:
       return semitones.value;
   }
@@ -80,6 +88,8 @@ const eyebrow = computed(() => {
       return 'PARAM SWEEP · FORMANT';
     case 'griffin-lim':
       return 'PARAM SWEEP · GRIFFIN-LIM';
+    case 'tilt-eq':
+      return 'PARAM SWEEP · TILT EQ';
     default:
       return 'PARAM SWEEP · PITCH SHIFT';
   }
@@ -91,6 +101,7 @@ const showFundamental = computed(
 
 // ---- presentation state ----------------------------------------------------
 const fundHz = ref(0);
+const pivotHz = ref(0); // tilt-eq rotation axis; 0 when not applicable
 const outDur = ref(0); // rendered duration in seconds
 let widthFrac = 1; // fraction of the waveform panel the rendered clip fills (time-stretch)
 const tone = computed(() => {
@@ -112,6 +123,8 @@ const stateLabel = computed(() => {
       return `×${formant.value.toFixed(2)}`;
     case 'griffin-lim':
       return `${iters.value} iter`;
+    case 'tilt-eq':
+      return `${tilt.value >= 0 ? '+' : ''}${tilt.value.toFixed(1)} dB`;
     default:
       return `${Math.round(fundHz.value)} Hz`;
   }
@@ -119,6 +132,7 @@ const stateLabel = computed(() => {
 
 // ---- audio + figure data ---------------------------------------------------
 const BASE_F0 = 220; // the vowel clip's fundamental (A3)
+const TILT_PIVOT_HZ = 800; // broad midrange axis the tilt rotates around
 const WAVE_COLS = 420;
 const SPEC_COLS = 300;
 const SPEC_MAX_HZ = 4500;
@@ -190,6 +204,67 @@ function peakNormalize(samples: Float32Array, target: number): Float32Array {
   return samples;
 }
 
+/**
+ * Apply one RBJ shelving biquad and return a fresh buffer. `gainDb` may be negative.
+ * Slope S is fixed at 1 (the gentle shelf a tilt EQ wants, not a surgical corner).
+ */
+function shelf(
+  samples: Float32Array,
+  sr: number,
+  kind: 'low' | 'high',
+  f0: number,
+  gainDb: number,
+): Float32Array {
+  const A = 10 ** (gainDb / 40);
+  const w0 = (2 * Math.PI * f0) / sr;
+  const cw = Math.cos(w0);
+  const sw = Math.sin(w0);
+  const sqA = Math.sqrt(A);
+  const alpha = (sw / 2) * Math.SQRT2; // S = 1
+  const tsa = 2 * sqA * alpha;
+  let b0: number;
+  let b1: number;
+  let b2: number;
+  let a0: number;
+  let a1: number;
+  let a2: number;
+  if (kind === 'low') {
+    b0 = A * (A + 1 - (A - 1) * cw + tsa);
+    b1 = 2 * A * (A - 1 - (A + 1) * cw);
+    b2 = A * (A + 1 - (A - 1) * cw - tsa);
+    a0 = A + 1 + (A - 1) * cw + tsa;
+    a1 = -2 * (A - 1 + (A + 1) * cw);
+    a2 = A + 1 + (A - 1) * cw - tsa;
+  } else {
+    b0 = A * (A + 1 + (A - 1) * cw + tsa);
+    b1 = -2 * A * (A - 1 + (A + 1) * cw);
+    b2 = A * (A + 1 + (A - 1) * cw - tsa);
+    a0 = A + 1 - (A - 1) * cw + tsa;
+    a1 = 2 * (A - 1 - (A + 1) * cw);
+    a2 = A + 1 - (A - 1) * cw - tsa;
+  }
+  const nb0 = b0 / a0;
+  const nb1 = b1 / a0;
+  const nb2 = b2 / a0;
+  const na1 = a1 / a0;
+  const na2 = a2 / a0;
+  const out = new Float32Array(samples.length);
+  let x1 = 0;
+  let x2 = 0;
+  let y1 = 0;
+  let y2 = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const x0 = samples[i];
+    const y0 = nb0 * x0 + nb1 * x1 + nb2 * x2 - na1 * y1 - na2 * y2;
+    out[i] = y0;
+    x2 = x1;
+    x1 = x0;
+    y2 = y1;
+    y1 = y0;
+  }
+  return out;
+}
+
 async function compute(): Promise<void> {
   try {
     if (status.value === 'idle') status.value = 'loading';
@@ -199,6 +274,7 @@ async function compute(): Promise<void> {
     const baseDur = baseClip.samples.length / sr;
 
     let samples: Float32Array;
+    pivotHz.value = 0; // only tilt-eq marks a pivot
     if (processor.value === 'time-stretch') {
       const r = rate.value;
       samples = r === 1 ? baseClip.samples : wasm.timeStretch(baseClip.samples, sr, r);
@@ -235,6 +311,23 @@ async function compute(): Promise<void> {
       samples = peakNormalize(out, 0.7);
       fundHz.value = 0;
       outDur.value = samples.length / sr;
+      widthFrac = 1;
+    } else if (processor.value === 'tilt-eq') {
+      // Complementary shelves around the pivot: cut one end by the same amount the
+      // other is boosted, so the spectrum rotates instead of just getting louder.
+      const t = tilt.value;
+      let s: Float32Array;
+      if (t === 0) {
+        s = Float32Array.from(baseClip.samples);
+      } else {
+        s = shelf(baseClip.samples, sr, 'low', TILT_PIVOT_HZ, -t / 2);
+        s = shelf(s, sr, 'high', TILT_PIVOT_HZ, t / 2);
+      }
+      // Match loudness per render so the lesson is tone, not level.
+      samples = peakNormalize(s, 0.7);
+      fundHz.value = 0;
+      pivotHz.value = TILT_PIVOT_HZ;
+      outDur.value = baseDur;
       widthFrac = 1;
     } else {
       const st = semitones.value;
@@ -388,6 +481,24 @@ function paint(): void {
     ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
     ctx.textBaseline = 'top';
     ctx.fillText(`${Math.round(fundHz.value)} Hz`, mx + 4, specTop);
+  }
+
+  // Tilt pivot: the rotation axis. The spectrum lifts on one side and drops on the
+  // other around this fixed line — drawn in amber to read as an axis, not a peak.
+  if (pivotHz.value > 0 && pivotHz.value < SPEC_MAX_HZ) {
+    const px = padX + (pivotHz.value / SPEC_MAX_HZ) * innerW;
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(px, specTop);
+    ctx.lineTo(px, specBot);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(252, 211, 77, 0.95)';
+    ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText('PIVOT', px + 4, specTop);
   }
 
   // Axis labels.
