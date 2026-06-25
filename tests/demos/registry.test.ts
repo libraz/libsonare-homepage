@@ -21,6 +21,7 @@ const ARCHETYPES = new Set([
   'send-routing',
   'mono-fold',
   'comping',
+  'hpss',
 ]);
 
 function expectBilingual(text: I18nText | undefined, where: string) {

@@ -220,4 +220,33 @@ export const analysisDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'hpss-separation',
+    archetype: 'hpss',
+    // The band phrase with the drum groove on top: sustained pitched lines and
+    // transient hits together, so the separation has both layers to pull apart.
+    source: { kind: 'clip', clip: 'mix' },
+    viz: 'spectrogram',
+    title: {
+      en: 'HPSS — splitting the tune from the drums',
+      ja: 'HPSS — 旋律と打楽器を分ける',
+    },
+    caption: {
+      en: 'On a spectrogram, sustained pitched notes draw horizontal ridges while drum hits draw vertical streaks. HPSS exploits exactly that: median-filtering along time keeps the horizontal (harmonic) content, along frequency keeps the vertical (percussive) content. Switch the view — Full shows both, Harmonic keeps the ridges (the chords and bass, drums gone), Percussive keeps the streaks (the kit, tune gone) — and press play to hear each layer on its own. Separating them first often cleans up downstream beat or pitch tracking.',
+      ja: 'スペクトログラムでは、持続する音程の音は横方向のすじを、打楽器の打点は縦方向のすじを描きます。HPSS はまさにそれを利用します。時間方向のメディアンフィルタは横（倍音成分）を、周波数方向のメディアンフィルタは縦（打撃成分）を残します。表示を切り替えると、Full は両方、Harmonic はすじ（和音とベース、打楽器なし）、Percussive は縦すじ（ドラム、旋律なし）になります。再生すると各レイヤーを単独で聴けます。先に分離しておくと、後段のビート追跡やピッチ追跡がきれいになることがよくあります。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'full',
+        label: { en: 'Layer', ja: 'レイヤー' },
+        options: [
+          { value: 'full', label: { en: 'Full mix', ja: 'フルミックス' } },
+          { value: 'harmonic', label: { en: 'Harmonic', ja: '倍音成分' } },
+          { value: 'percussive', label: { en: 'Percussive', ja: '打撃成分' } },
+        ],
+      },
+    ],
+  },
 ];

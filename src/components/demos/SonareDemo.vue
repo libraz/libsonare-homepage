@@ -63,6 +63,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     'send-routing': defineAsyncComponent(() => import('./archetypes/SendRoutingDemo.vue')),
     'mono-fold': defineAsyncComponent(() => import('./archetypes/MonoFoldDemo.vue')),
     comping: defineAsyncComponent(() => import('./archetypes/CompingDemo.vue')),
+    hpss: defineAsyncComponent(() => import('./archetypes/HpssDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

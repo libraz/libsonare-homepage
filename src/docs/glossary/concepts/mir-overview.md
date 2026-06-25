@@ -109,6 +109,8 @@ You can also run these transforms backwards for previews and debugging — see [
 
 Separating them first often improves downstream tasks because drums and pitched instruments otherwise confuse each other.
 
+<SonareDemo id="hpss-separation" />
+
 **Pitch estimation** tracks the fundamental frequency — the lowest, strongest frequency that we hear as the note's pitch — useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
 
 ## Adjacent: room acoustics

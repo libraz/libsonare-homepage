@@ -412,6 +412,19 @@ const buildCompTakeB = (wasm) =>
 const buildCompTakeC = (wasm) =>
   buildTake(wasm, { cutoffHz: 3600, vels: [60, 66, 74, 82, 90, 96, 102, 104] });
 
+/**
+ * `mix`: the band phrase with the drum groove on top — sustained pitched material
+ * and transient hits together, so HPSS / source-separation has both to pull apart.
+ */
+function buildMix(wasm) {
+  const band = buildBand(wasm);
+  const drum = buildDrum(wasm);
+  const len = Math.min(band.length, drum.length);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) out[i] = band[i] * 0.75 + drum[i] * 0.7;
+  return finalize(out, 0.89);
+}
+
 // ---- WAV encoding ---------------------------------------------------------
 
 /**
@@ -458,6 +471,7 @@ const CLIPS = {
   'comp-take-a': buildCompTakeA,
   'comp-take-b': buildCompTakeB,
   'comp-take-c': buildCompTakeC,
+  mix: buildMix,
 };
 
 /**
@@ -515,6 +529,7 @@ async function main() {
     'comp-take-a': 3,
     'comp-take-b': 3,
     'comp-take-c': 3,
+    mix: 3,
   };
 
   for (const [name, build] of Object.entries(CLIPS)) {
