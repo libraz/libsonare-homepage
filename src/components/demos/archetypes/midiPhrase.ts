@@ -44,8 +44,14 @@ export const PHRASE_VOICES: PhraseVoice[] = [
     hue: MELODY_HUE,
     velocity: 108,
     notes: [
-      [79, 1], [76, 1], [81, 1], [77, 1], // G5 E5 A5 F5
-      [79, 1], [76, 1], [77, 1], [72, 1], // G5 E5 F5 C5
+      [79, 1],
+      [76, 1],
+      [81, 1],
+      [77, 1], // G5 E5 A5 F5
+      [79, 1],
+      [76, 1],
+      [77, 1],
+      [72, 1], // G5 E5 F5 C5
     ],
   },
   {
@@ -57,10 +63,22 @@ export const PHRASE_VOICES: PhraseVoice[] = [
     hue: ARP_HUE,
     velocity: 74,
     notes: [
-      [60, 0.5], [64, 0.5], [67, 0.5], [64, 0.5], // C : C4 E4 G4 E4
-      [60, 0.5], [64, 0.5], [69, 0.5], [64, 0.5], // Am: C4 E4 A4 E4
-      [65, 0.5], [69, 0.5], [72, 0.5], [69, 0.5], // F : F4 A4 C5 A4
-      [67, 0.5], [71, 0.5], [74, 0.5], [71, 0.5], // G : G4 B4 D5 B4
+      [60, 0.5],
+      [64, 0.5],
+      [67, 0.5],
+      [64, 0.5], // C : C4 E4 G4 E4
+      [60, 0.5],
+      [64, 0.5],
+      [69, 0.5],
+      [64, 0.5], // Am: C4 E4 A4 E4
+      [65, 0.5],
+      [69, 0.5],
+      [72, 0.5],
+      [69, 0.5], // F : F4 A4 C5 A4
+      [67, 0.5],
+      [71, 0.5],
+      [74, 0.5],
+      [71, 0.5], // G : G4 B4 D5 B4
     ],
   },
   {
@@ -71,7 +89,10 @@ export const PHRASE_VOICES: PhraseVoice[] = [
     hue: BASS_HUE,
     velocity: 84,
     notes: [
-      [48, 2], [45, 2], [53, 2], [55, 2], // C3 A2 F3 G3
+      [48, 2],
+      [45, 2],
+      [53, 2],
+      [55, 2], // C3 A2 F3 G3
     ],
   },
 ];
@@ -88,15 +109,24 @@ export function midiToVexKey(midi: number): string {
 /** Duration in beats → VexFlow duration code (quarter = 1; a trailing `d` dots it). */
 export function durationCode(durBeat: number): string {
   switch (durBeat) {
-    case 4: return 'w';
-    case 3: return 'hd';
-    case 2: return 'h';
-    case 1.5: return 'qd';
-    case 1: return 'q';
-    case 0.75: return '8d';
-    case 0.5: return '8';
-    case 0.25: return '16';
-    default: return 'q';
+    case 4:
+      return 'w';
+    case 3:
+      return 'hd';
+    case 2:
+      return 'h';
+    case 1.5:
+      return 'qd';
+    case 1:
+      return 'q';
+    case 0.75:
+      return '8d';
+    case 0.5:
+      return '8';
+    case 0.25:
+      return '16';
+    default:
+      return 'q';
   }
 }
 

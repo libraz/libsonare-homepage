@@ -113,7 +113,10 @@ function stepEvents(notes: Array<[beat: number, note: number, gate?: number]>): 
   return notes
     .flatMap(([beat, note, gate = 0.45]) => [
       { renderFrame: Math.round(beat * Q), word0: noteOn(note, 100) },
-      { renderFrame: Math.min(BAR_FRAMES - 1, Math.round((beat + gate) * Q)), word0: noteOff(note) },
+      {
+        renderFrame: Math.min(BAR_FRAMES - 1, Math.round((beat + gate) * Q)),
+        word0: noteOff(note),
+      },
     ])
     .sort((a, b) => a.renderFrame - b.renderFrame);
 }
@@ -135,8 +138,9 @@ function midiClip(trackId: number, events: MidiEventLike[]): Record<string, unkn
 function ensureEngine(): Promise<EngineLike> {
   enginePromise ??= (async () => {
     const wasm = await ensureWasm();
-    const Engine = (wasm as unknown as { RealtimeEngine: new (sr: number, block: number) => EngineLike })
-      .RealtimeEngine;
+    const Engine = (
+      wasm as unknown as { RealtimeEngine: new (sr: number, block: number) => EngineLike }
+    ).RealtimeEngine;
     const e = new Engine(SR, 128);
     if (disposed) {
       e.destroy();
@@ -149,9 +153,32 @@ function ensureEngine(): Promise<EngineLike> {
     e.setSynthInstrument('sub-bass', 2);
     e.setSynthInstrument('drum-kit', 3);
     e.setMidiClips([
-      midiClip(1, stepEvents([[0, 72], [1, 76], [2, 79], [3, 76]])),
-      midiClip(2, stepEvents([[0, 45, 0.9], [2, 43, 0.9]])),
-      midiClip(3, stepEvents([[0, 36, 0.2], [1, 38, 0.2], [2, 36, 0.2], [2.5, 36, 0.2], [3, 38, 0.2]])),
+      midiClip(
+        1,
+        stepEvents([
+          [0, 72],
+          [1, 76],
+          [2, 79],
+          [3, 76],
+        ]),
+      ),
+      midiClip(
+        2,
+        stepEvents([
+          [0, 45, 0.9],
+          [2, 43, 0.9],
+        ]),
+      ),
+      midiClip(
+        3,
+        stepEvents([
+          [0, 36, 0.2],
+          [1, 38, 0.2],
+          [2, 36, 0.2],
+          [2.5, 36, 0.2],
+          [3, 38, 0.2],
+        ]),
+      ),
     ]);
     engine = e;
     return e;
@@ -160,7 +187,11 @@ function ensureEngine(): Promise<EngineLike> {
 }
 
 // ---- render + analysis -----------------------------------------------------
-const laneEnvs = [new Float32Array(ENV_COLS), new Float32Array(ENV_COLS), new Float32Array(ENV_COLS)];
+const laneEnvs = [
+  new Float32Array(ENV_COLS),
+  new Float32Array(ENV_COLS),
+  new Float32Array(ENV_COLS),
+];
 const masterEnv = new Float32Array(ENV_COLS);
 const dispLaneEnvs = laneEnvs.map((env) => new Float32Array(env.length));
 const dispMasterEnv = new Float32Array(ENV_COLS);
@@ -200,7 +231,10 @@ async function compute(): Promise<void> {
     // Apply the reader's faders + mutes — these are the engine's own controls.
     const ids = ['lead', 'bass', 'drums'];
     for (let t = 0; t < 3; t++) {
-      e.setTrackStripJson(t + 1, JSON.stringify({ strips: [{ id: ids[t], gainDb: faderDb.value[t] }] }));
+      e.setTrackStripJson(
+        t + 1,
+        JSON.stringify({ strips: [{ id: ids[t], gainDb: faderDb.value[t] }] }),
+      );
       e.setSoloMute(t, false, muted.value[t], -1);
     }
     const master = renderLoop(e);
@@ -299,13 +333,7 @@ function paint(): void {
   const gap = 7;
   const rowH = (h - 22 - gap * (rows - 1)) / rows;
 
-  const band = (
-    env: Float32Array,
-    top: number,
-    rgb: string,
-    label: string,
-    dim: boolean,
-  ) => {
+  const band = (env: Float32Array, top: number, rgb: string, label: string, dim: boolean) => {
     const mid = top + rowH / 2 + 4;
     const amp = (rowH / 2 - 2) * 0.95;
     // Center line so a silent (muted) lane still reads as a lane.

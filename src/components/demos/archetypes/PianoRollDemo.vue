@@ -121,8 +121,20 @@ interface ProjectLike {
 }
 interface ProjectCtor {
   new (): ProjectLike;
-  midiNoteOn(ppq: number, group: number, channel: number, note: number, velocity: number): ProjectMidiEvent;
-  midiNoteOff(ppq: number, group: number, channel: number, note: number, velocity?: number): ProjectMidiEvent;
+  midiNoteOn(
+    ppq: number,
+    group: number,
+    channel: number,
+    note: number,
+    velocity: number,
+  ): ProjectMidiEvent;
+  midiNoteOff(
+    ppq: number,
+    group: number,
+    channel: number,
+    note: number,
+    velocity?: number,
+  ): ProjectMidiEvent;
 }
 
 let lastAudio: { samples: Float32Array; sampleRate: number } | null = null;
@@ -157,7 +169,10 @@ function renderPassage(wasm: WasmModule): Float32Array {
       }
     }
     tagged.sort((a, b) => a.at - b.at || a.key - b.key);
-    project.setMidiEvents(clipId, tagged.map((t) => t.ev));
+    project.setMidiEvents(
+      clipId,
+      tagged.map((t) => t.ev),
+    );
 
     const phraseSec = (BEATS * 60) / tempo.value;
     const totalFrames = Math.round(SR * (phraseSec + TAIL_SEC));
@@ -385,7 +400,10 @@ watch(
 watch(isPlaying, (on) => {
   if (on) ensureLoop();
   // When playback stops, repaint once so the parked playhead clears.
-  else requestAnimationFrame(() => { if (!rafId) paint(); });
+  else
+    requestAnimationFrame(() => {
+      if (!rafId) paint();
+    });
 });
 
 watch(

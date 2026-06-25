@@ -52,7 +52,8 @@ const tone = computed(() => {
 });
 const stateLabel = computed(() => {
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
-  if (status.value === 'ready') return `FADER ${faderDb.value <= -40 ? '-∞' : `${faderDb.value} dB`}`;
+  if (status.value === 'ready')
+    return `FADER ${faderDb.value <= -40 ? '-∞' : `${faderDb.value} dB`}`;
   return 'IDLE';
 });
 
@@ -196,7 +197,9 @@ function buildAudio(): { samples: Float32Array; sampleRate: number } {
     // Pre-fader send = a soft, constant detuned pad standing in for a reverb/aux
     // return; it does NOT scale with the fader.
     const pre =
-      (Math.sin(2 * Math.PI * 330 * t) + Math.sin(2 * Math.PI * 332.5 * t)) * 0.12 * (PRE_LIN / 0.56);
+      (Math.sin(2 * Math.PI * 330 * t) + Math.sin(2 * Math.PI * 332.5 * t)) *
+      0.12 *
+      (PRE_LIN / 0.56);
     out[i] = env * (dry + pre);
   }
   return { samples: out, sampleRate };

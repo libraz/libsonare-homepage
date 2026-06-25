@@ -110,8 +110,20 @@ interface ProjectLike {
 }
 interface ProjectCtor {
   new (): ProjectLike;
-  midiNoteOn(ppq: number, group: number, channel: number, note: number, velocity: number): ProjectMidiEvent;
-  midiNoteOff(ppq: number, group: number, channel: number, note: number, velocity?: number): ProjectMidiEvent;
+  midiNoteOn(
+    ppq: number,
+    group: number,
+    channel: number,
+    note: number,
+    velocity: number,
+  ): ProjectMidiEvent;
+  midiNoteOff(
+    ppq: number,
+    group: number,
+    channel: number,
+    note: number,
+    velocity?: number,
+  ): ProjectMidiEvent;
 }
 
 let lastAudio: { samples: Float32Array; sampleRate: number } | null = null;
@@ -139,11 +151,18 @@ function renderPassage(wasm: WasmModule): Float32Array {
     const tagged: Array<{ at: number; key: number; ev: ProjectMidiEvent }> = [];
     for (const e of FLAT_EVENTS) {
       const offBeat = e.startBeat + e.durBeat * GATE;
-      tagged.push({ at: e.startBeat, key: 1, ev: Project.midiNoteOn(e.startBeat, 0, 0, e.midi, e.velocity) });
+      tagged.push({
+        at: e.startBeat,
+        key: 1,
+        ev: Project.midiNoteOn(e.startBeat, 0, 0, e.midi, e.velocity),
+      });
       tagged.push({ at: offBeat, key: 0, ev: Project.midiNoteOff(offBeat, 0, 0, e.midi, 0) });
     }
     tagged.sort((a, b) => a.at - b.at || a.key - b.key);
-    project.setMidiEvents(clipId, tagged.map((t) => t.ev));
+    project.setMidiEvents(
+      clipId,
+      tagged.map((t) => t.ev),
+    );
 
     const phraseSec = (BEATS * 60) / tempo.value;
     const totalFrames = Math.round(SR * (phraseSec + TAIL_SEC));
@@ -271,7 +290,10 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   probe.addTimeSignature(TIME);
   const modifierWidth = probe.getNoteStartX() - probe.getX();
   const minNoteWidth = formatter.preCalculateMinTotalWidth(allVoices);
-  const staveWidth = Math.max(BASE_WIDTH - LEFT - RIGHT, Math.ceil(modifierWidth + minNoteWidth + RIGHT_PAD));
+  const staveWidth = Math.max(
+    BASE_WIDTH - LEFT - RIGHT,
+    Math.ceil(modifierWidth + minNoteWidth + RIGHT_PAD),
+  );
   const renderWidth = LEFT + staveWidth + RIGHT;
 
   const renderer = new VF.Renderer(target, VF.Renderer.Backends.SVG);
@@ -304,7 +326,9 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   const noteArea = Math.min(...staves.map((s) => s.getNoteEndX() - s.getNoteStartX()));
   formatter.format(allVoices, noteArea - RIGHT_PAD);
 
-  voiceBuilds.forEach((vb) => vb.vfVoice.draw(context, staves[vb.staveIndex]));
+  voiceBuilds.forEach((vb) => {
+    vb.vfVoice.draw(context, staves[vb.staveIndex]);
+  });
 
   // Beam each voice's eighths (the accompaniment); quarters and halves are left
   // alone. maintainStemDirections keeps the inner voice's beamed stems pointing

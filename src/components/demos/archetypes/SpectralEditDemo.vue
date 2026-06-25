@@ -44,7 +44,7 @@ function onParams(next: Record<string, ParamValue>): void {
 
 type EditMode = 'attenuate' | 'mute' | 'heal';
 const view = computed<string>(() => String(values.view ?? 'artifact'));
-const mode = computed<EditMode>(() => (String(values.mode ?? 'heal') as EditMode));
+const mode = computed<EditMode>(() => String(values.mode ?? 'heal') as EditMode);
 const edited = computed(() => view.value === 'edited');
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
 
@@ -194,7 +194,8 @@ async function compute(): Promise<void> {
     // In-band reduction in dB (uses the underlying linear means, pre-compression).
     const artBand = bandMean(specArt) ** (1 / 0.6);
     const edBand = bandMean(specEd) ** (1 / 0.6);
-    notchDb.value = artBand > 0 ? 20 * Math.log10(Math.max(edBand, 1e-9) / Math.max(artBand, 1e-9)) : 0;
+    notchDb.value =
+      artBand > 0 ? 20 * Math.log10(Math.max(edBand, 1e-9) / Math.max(artBand, 1e-9)) : 0;
 
     fillWave((edited.value ? editedAudio : artifact).samples);
     status.value = 'ready';

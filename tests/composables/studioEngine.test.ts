@@ -294,9 +294,7 @@ describe('useStudioEngine', () => {
         rafQueue.push(cb);
         return rafQueue.length;
       });
-    const cafSpy = vi
-      .spyOn(globalThis, 'cancelAnimationFrame')
-      .mockImplementation(() => undefined);
+    const cafSpy = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => undefined);
     try {
       const engine = await loadEngine();
       await engine.start();
@@ -304,7 +302,9 @@ describe('useStudioEngine', () => {
       // Engine telemetry arrives, then the next UI frame surfaces it.
       facadeMock.state.meterCb?.({ targetId: 0, peakDbL: 0, peakDbR: 0 });
       facadeMock.state.meterCb?.({ targetId: 1, peakDbL: -6, peakDbR: -6 });
-      rafQueue.splice(0).forEach((cb) => cb(0));
+      rafQueue.splice(0).forEach((cb) => {
+        cb(0);
+      });
       expect(engine.masterLevel.value).toBeGreaterThan(0);
       expect(engine.levels.value[0]).toBeGreaterThan(0);
 

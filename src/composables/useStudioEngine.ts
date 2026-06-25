@@ -445,10 +445,13 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     engine.pushMidiNoteOn(trackId(trackIndex), 0, 0, note, def.velocity);
     const gateMs = ((def.gatePpq * 60) / currentBpm) * 1000;
     auditioning++;
-    window.setTimeout(() => {
-      auditioning--;
-      engine?.pushMidiNoteOff(trackId(trackIndex), 0, 0, note, 0);
-    }, Math.max(90, gateMs));
+    window.setTimeout(
+      () => {
+        auditioning--;
+        engine?.pushMidiNoteOff(trackId(trackIndex), 0, 0, note, 0);
+      },
+      Math.max(90, gateMs),
+    );
     cancelAnimationFrame(auditionRaf);
     auditionRaf = requestAnimationFrame(auditionTick);
   }
