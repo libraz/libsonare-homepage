@@ -50,6 +50,8 @@ An **LFO** (low-frequency oscillator) is an oscillator too slow to hear as pitch
 
 The two key LFO controls are **rate** (how fast it cycles) and **depth** (how far it pushes the destination).
 
+<SonareDemo id="synth-tremolo" />
+
 ## Velocity and key tracking
 
 Two modulation sources come from *how you play* rather than from the synth itself:

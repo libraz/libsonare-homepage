@@ -6,8 +6,9 @@
  * subtractive synth, then drawn as a DAW-style peak waveform. The outline *is*
  * the note's amplitude envelope, so the effect of the patch is immediate: raise
  * the attack and the note fades in more slowly, lower the cutoff and the inner
- * texture darkens, change the waveform and the timbre changes. Pressing play
- * auditions the exact buffer on screen — no clip, no external asset.
+ * texture darkens, change the waveform and the timbre changes. An optional LFO
+ * routed to amplitude makes the envelope ripple (tremolo). Pressing play auditions
+ * the exact buffer on screen — no clip, no external asset.
  */
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useI18n } from '@/composables/useI18n';
@@ -56,6 +57,10 @@ const sustain = computed<number>(() => Number(values.sustain ?? 0.75));
 const release = computed<number>(() => Number(values.release ?? 280));
 const resonance = computed<number>(() => Number(values.resonance ?? 0.9));
 const filterModel = computed<string>(() => String(values.filterModel ?? 'svf'));
+// Optional tremolo: an LFO routed to amplitude. Depth 0 (the default) adds no
+// routing, so demos that omit these params render exactly as before.
+const lfoRate = computed<number>(() => Number(values.lfoRate ?? 0));
+const lfoDepth = computed<number>(() => Number(values.lfoDepth ?? 0));
 
 // ---- presentation state ----------------------------------------------------
 const tone = computed(() => {
@@ -136,7 +141,7 @@ function renderNote(wasm: WasmModule): Float32Array {
       Project.midiNoteOn(0, 0, 0, NOTE, 100),
       Project.midiNoteOff(480, 0, 0, NOTE, 0),
     ]);
-    const patch = {
+    const patch: Record<string, unknown> = {
       engineMode: 'subtractive',
       waveform: waveform.value,
       filterModel: filterModel.value,
@@ -148,6 +153,12 @@ function renderNote(wasm: WasmModule): Float32Array {
       ampReleaseMs: release.value,
       gain: 0.5,
     };
+    // Route LFO 1 to amplitude for tremolo. A non-empty mod matrix replaces the
+    // base preset's, which is what we want — one clean, visible routing.
+    if (lfoDepth.value > 0) {
+      patch.lfoRateHz = lfoRate.value;
+      patch.modRoutings = [{ source: 'lfo1', destination: 'amp-gain', depth: lfoDepth.value }];
+    }
     return project.bounceWithSynthInstrument(patch, {
       numChannels: 1,
       sampleRate: SR,
@@ -352,6 +363,8 @@ watch(
     release.value,
     resonance.value,
     filterModel.value,
+    lfoRate.value,
+    lfoDepth.value,
   ],
   () => {
     if (props.active) scheduleCompute();

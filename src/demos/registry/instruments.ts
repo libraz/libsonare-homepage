@@ -116,6 +116,42 @@ export const instrumentsDemos: SonareDemoDef[] = [
     ],
   },
   {
+    id: 'synth-tremolo',
+    archetype: 'synth',
+    // Source is unused for `synth`; a matching tone keeps the intent readable.
+    source: { kind: 'generate', signal: 'saw', freq: 220 },
+    viz: 'waveform',
+    title: {
+      en: 'LFO tremolo — modulation you can see',
+      ja: 'LFO トレモロ — 目に見える変調',
+    },
+    caption: {
+      en: 'An LFO (low-frequency oscillator) is too slow to hear as a pitch; instead it moves something else. Here LFO 1 is routed to amplitude — tremolo — so the envelope ripples instead of holding flat. Rate sets how fast it pulses; depth sets how far. Turn depth to zero and the ripple disappears, leaving the plain held note. Press play to hear the pulsing. This is one routing in the mod matrix; the same LFO aimed at pitch would be vibrato, at the cutoff a filter wobble.',
+      ja: 'LFO（低周波オシレーター）はピッチとして聴くには遅すぎ、代わりに別の何かを動かします。ここでは LFO 1 を振幅に接続 — トレモロ — しているので、エンベロープが平らに保たれず波打ちます。レートは脈打つ速さを、深さはその振れ幅を決めます。深さを 0 にすると波打ちが消え、ただの持続音になります。再生すると脈動が聴けます。これはモッドマトリクスの 1 接続で、同じ LFO をピッチに向ければビブラート、カットオフに向ければフィルターのうねりになります。',
+    },
+    params: [
+      {
+        key: 'lfoRate',
+        kind: 'range',
+        default: 6,
+        min: 0.5,
+        max: 12,
+        step: 0.5,
+        unit: 'Hz',
+        label: { en: 'Rate', ja: 'レート' },
+      },
+      {
+        key: 'lfoDepth',
+        kind: 'range',
+        default: 0.6,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        label: { en: 'Depth', ja: '深さ' },
+      },
+    ],
+  },
+  {
     id: 'synth-filter',
     archetype: 'synth',
     // A saw is the most harmonically rich oscillator, so the lowpass has the most to
