@@ -62,6 +62,10 @@ That something is reached through the track's **MIDI destination**. A destinatio
 
 This separation is powerful: the same MIDI clip can be played by a synth today and a sampled instrument tomorrow, just by changing the destination's instrument.
 
+Step 2 — *the performance is written down* — is literally a score: a clip's note events are standard musical notation. Here is one such clip engraved, then performed; switch the instrument and the same written notes are rendered by a different voice.
+
+<SonareDemo id="midi-score" />
+
 ## What you can do to clips and tracks
 
 Once the structure exists, arranging is mostly a handful of operations.

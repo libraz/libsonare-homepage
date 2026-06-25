@@ -178,6 +178,10 @@ const c = project.bounceWithSynthInstrument(
 
 有効な名前はマジック文字列をハードコードせず [`synthPresetNames()`](./native-synth.md) で取得してください。未知の名前は例外を投げます。パッチオブジェクトは `preset` ベース（`preset` 省略時は既定の減算パッチ）から始まり、ラッパーセクションを上書きします。全フィールドの一覧は [NativeSynth](./native-synth.md) を参照してください。複数のデスティネーションをバインドするには配列を渡します。空配列は何もバインドしません。
 
+下のピアノロールはまさにこの呼び出しです。1 つの MIDI フレーズを `bounceWithSynthInstrument` に通し、プリセットを切り替えるたびに同じ音符が別の音色で鳴り直します。再生ヘッドはバウンスした音声に追従します。
+
+<SonareDemo id="midi-piano-roll" />
+
 ::: info 構造上、決定論的
 プロジェクト・オプション・パッチを固定すれば、`bounceWithSynthInstrument` はビット単位で再現可能です。これはすべてのバウンスメソッドに共通で、だからこそバウンスをテストのスナップショットに採ったり、ハッシュでキャッシュしたりしても安全です。
 :::

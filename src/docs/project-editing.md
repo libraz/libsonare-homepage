@@ -614,6 +614,10 @@ try {
 }
 ```
 
+What an SMF round-trips is a *performance* — and engraved, that same note list is a score. The grand staff below is the notation view of a MIDI clip; press play to hear the events it stores.
+
+<SonareDemo id="midi-score" />
+
 ### MIDI 2.0 Clip File (`SMF2CLIP`)
 
 SMF predates MIDI 2.0, so it cannot carry 16-bit velocity, 32-bit CC, per-note controllers, or bank-valid Program Change without loss. The **MIDI 2.0 Clip File** (`SMF2CLIP`) preserves all of that. Prefer it when MIDI 2.0 fidelity matters.

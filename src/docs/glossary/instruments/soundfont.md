@@ -37,6 +37,10 @@ flowchart LR
   SYN --> OUT
 ```
 
+The principle underneath is simple: a note list is instrument-agnostic, and the address decides which instrument performs it. The piano roll below makes that tangible — the notes never change; switching the instrument points the same MIDI at a different sound.
+
+<SonareDemo id="midi-piano-roll" />
+
 ## How libsonare resolves a note
 
 libsonare can load a SoundFont and play MIDI through it, but it adds one important guarantee. After you supply a `.sf2` file, every MIDI program is resolved to a backend:

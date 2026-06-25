@@ -16,6 +16,7 @@ import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import { PHRASE_BEATS, PHRASE_BEATS_PER_BAR, PHRASE_VOICES } from './midiPhrase';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -65,13 +66,10 @@ const stateLabel = computed(() => {
 // authored in beats (quarter notes) — the same unit the Project MIDI API uses
 // for `ppq`, see renderPassage — and the engine renders them at the reader's tempo.
 const SR = 44100;
-const BEATS = 8; // two 4/4 bars, in quarter notes
-const BEATS_PER_BAR = 4;
+const BEATS = PHRASE_BEATS; // two 4/4 bars, in quarter notes
+const BEATS_PER_BAR = PHRASE_BEATS_PER_BAR;
 const GATE = 0.94; // note held for 94% of its slot, so it re-articulates cleanly
 const TAIL_SEC = 1.2; // release tail captured past the last note-off
-const MELODY_HUE = '45, 212, 191'; // teal   — the lead line
-const ARP_HUE = '167, 139, 250'; //   violet — the broken-chord accompaniment
-const BASS_HUE = '34, 211, 238'; //   cyan   — the bass
 
 /** One note as `[startBeat, durationBeats, midi, velocity?]`. */
 type Note = [number, number, number, number?];
@@ -80,31 +78,18 @@ interface Voice {
   notes: Note[];
 }
 
-const VOICES: Voice[] = [
-  {
-    // Melody — a quarter-note line over the progression, the loudest voice.
-    hue: MELODY_HUE,
-    notes: [
-      [0, 1, 79, 108], [1, 1, 76, 108], [2, 1, 81, 108], [3, 1, 77, 108],
-      [4, 1, 79, 108], [5, 1, 76, 108], [6, 1, 77, 108], [7, 1, 72, 112],
-    ],
-  },
-  {
-    // Accompaniment — eighth-note broken chords: C, Am, F, G (two beats each).
-    hue: ARP_HUE,
-    notes: [
-      [0, 0.5, 60, 74], [0.5, 0.5, 64, 74], [1, 0.5, 67, 74], [1.5, 0.5, 64, 74],
-      [2, 0.5, 57, 74], [2.5, 0.5, 60, 74], [3, 0.5, 64, 74], [3.5, 0.5, 60, 74],
-      [4, 0.5, 65, 74], [4.5, 0.5, 69, 74], [5, 0.5, 72, 74], [5.5, 0.5, 69, 74],
-      [6, 0.5, 67, 74], [6.5, 0.5, 71, 74], [7, 0.5, 74, 74], [7.5, 0.5, 71, 74],
-    ],
-  },
-  {
-    // Bass — the chord roots, one per half bar.
-    hue: BASS_HUE,
-    notes: [[0, 2, 48, 84], [2, 2, 45, 84], [4, 2, 53, 84], [6, 2, 55, 84]],
-  },
-];
+// Built from the shared phrase so the piano roll and the score render the exact
+// same MIDI. Each voice's notes are contiguous, so the start beat is the running
+// sum of the durations before it.
+const VOICES: Voice[] = PHRASE_VOICES.map((voice) => {
+  let beat = 0;
+  const notes: Note[] = voice.notes.map(([midi, durBeat]) => {
+    const note: Note = [beat, durBeat, midi, voice.velocity];
+    beat += durBeat;
+    return note;
+  });
+  return { hue: voice.hue, notes };
+});
 
 // Pitch window the roll spans, padded a little above and below the extremes.
 const PITCH_PAD = 2;

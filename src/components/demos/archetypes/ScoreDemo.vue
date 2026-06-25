@@ -2,13 +2,14 @@
 /**
  * `score` archetype: a MIDI passage engraved as standard music notation.
  *
- * The same kind of phrase the piano roll shows as a grid, this archetype reads
- * as a grand staff: a melody over a bass line, with clefs, beamed eighths and a
- * time signature drawn by VexFlow. The notes, durations and pitches come from the
- * exact MIDI the engine plays — switching the instrument re-voices the identical
- * notes through a different NativeSynth preset, and the tempo restretches the
- * reading. Pressing play bounces the passage and lights each note the moment it
- * sounds, so the score reads back in time with the audio.
+ * The same phrase the piano roll shows as a grid, this archetype reads as a grand
+ * staff: melody and a broken-chord accompaniment on the treble staff (two voices),
+ * the bass on the bass staff, with clefs, beamed eighths and a time signature
+ * drawn by VexFlow. The notes come from the SHARED phrase the engine plays (see
+ * midiPhrase) — switching the instrument re-voices the identical notes through a
+ * different NativeSynth preset, and the tempo restretches the reading. Pressing
+ * play bounces the passage and lights every sounding note the moment it plays, so
+ * the score reads back in time with the audio.
  *
  * The notation is a visual enhancement: if VexFlow fails to engrave (e.g. fonts
  * unavailable), the demo still renders and auditions the audio.
@@ -19,6 +20,15 @@ import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import {
+  durationCode,
+  midiToVexKey,
+  PHRASE_BEATS,
+  PHRASE_BEATS_PER_BAR,
+  PHRASE_VOICES,
+  type TimedNote,
+  timedNotes,
+} from './midiPhrase';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -63,96 +73,23 @@ const stateLabel = computed(() => {
 });
 
 // ---- the passage -----------------------------------------------------------
-// A two-bar phrase in C major over a I–vi–IV–I bass: a singable melody on the
-// treble staff, the chord roots beneath it on the bass staff. Authored once as
-// notation (VexFlow key + duration) and read two ways — VexFlow engraves it, and
-// the same notes are converted to MIDI for the engine to play.
+// The shared three-voice phrase (see midiPhrase) read as a grand staff: the
+// melody and the broken-chord accompaniment on the treble staff (two voices),
+// the chord roots on the bass staff. These are the EXACT notes the engine plays —
+// the piano-roll demo shows the same phrase as a grid.
 const SR = 44100;
-const BEATS = 8; // two 4/4 bars, in quarter notes
+const BEATS = PHRASE_BEATS; // two 4/4 bars, in quarter notes
 const GATE = 0.92; // note held for 92% of its slot, so repeats re-articulate
 const TAIL_SEC = 1.2; // release tail captured past the last note-off
 const INK = '#26211a'; // deep sepia — the engraved noteheads, stems and clefs
 const STAFF_INK = '#6c6353'; // staff rules sit a touch lighter than the noteheads
 const HILITE = '#b07410'; // amber — the note sounding now, lit like candlelight
 
-/** One written note: a VexFlow key ("e/5") and a duration code ("q", "8", "h"). */
-interface ScoreNote {
-  key: string;
-  dur: string;
-}
-interface ScoreStaff {
-  clef: 'treble' | 'bass';
-  velocity: number;
-  notes: ScoreNote[];
-}
+// Which clef each physical staff of the grand staff carries, top to bottom.
+const STAFF_CLEFS = ['treble', 'bass'] as const;
 
-const STAVES: ScoreStaff[] = [
-  {
-    clef: 'treble',
-    velocity: 104,
-    notes: [
-      // bar 1
-      { key: 'e/5', dur: 'q' }, { key: 'g/5', dur: 'q' },
-      { key: 'a/5', dur: '8' }, { key: 'g/5', dur: '8' }, { key: 'e/5', dur: 'q' },
-      // bar 2
-      { key: 'd/5', dur: 'q' }, { key: 'f/5', dur: 'q' }, { key: 'e/5', dur: 'h' },
-    ],
-  },
-  {
-    clef: 'bass',
-    velocity: 80,
-    notes: [
-      // bar 1: C, A (minor)
-      { key: 'c/3', dur: 'h' }, { key: 'a/2', dur: 'h' },
-      // bar 2: F, C
-      { key: 'f/2', dur: 'h' }, { key: 'c/3', dur: 'h' },
-    ],
-  },
-];
-
-/** Beats covered by one duration code (quarter = 1); a trailing "d" dots it (×1.5). */
-function durBeats(dur: string): number {
-  const dotted = dur.endsWith('d');
-  const base = (() => {
-    switch (dotted ? dur.slice(0, -1) : dur) {
-      case 'w': return 4;
-      case 'h': return 2;
-      case '8': return 0.5;
-      case '16': return 0.25;
-      default: return 1;
-    }
-  })();
-  return dotted ? base * 1.5 : base;
-}
-
-const STEP: Record<string, number> = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
-/** VexFlow key ("c/4") → MIDI note number (middle C, "c/4", is 60). */
-function keyToMidi(key: string): number {
-  const [name, octText] = key.split('/');
-  const letter = name[0]?.toLowerCase() ?? 'c';
-  let semitone = STEP[letter] ?? 0;
-  if (name.includes('#')) semitone += 1;
-  if (name.length > 1 && name.slice(1).includes('b')) semitone -= 1;
-  return (Number(octText) + 1) * 12 + semitone;
-}
-
-/** Per-staff timed events: each note's MIDI, start beat and duration in beats. */
-interface TimedNote {
-  midi: number;
-  startBeat: number;
-  durBeat: number;
-  velocity: number;
-}
-const STAFF_EVENTS: TimedNote[][] = STAVES.map((staff) => {
-  let beat = 0;
-  return staff.notes.map((n) => {
-    const durBeat = durBeats(n.dur);
-    const ev: TimedNote = { midi: keyToMidi(n.key), startBeat: beat, durBeat, velocity: staff.velocity };
-    beat += durBeat;
-    return ev;
-  });
-});
-const FLAT_EVENTS: TimedNote[] = STAFF_EVENTS.flat();
+// Every voice flattened to absolute-beat events for the engine bounce.
+const FLAT_EVENTS: TimedNote[] = PHRASE_VOICES.flatMap((voice) => timedNotes(voice));
 
 // ---- engine render ---------------------------------------------------------
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
@@ -281,35 +218,50 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   const ink = { fillStyle: INK, strokeStyle: INK };
   const staffInk = { fillStyle: INK, strokeStyle: STAFF_INK };
 
-  /** Build a staff's StaveNotes (with dots) plus barlines between bars. */
-  const buildStaff = (staff: ScoreStaff) => {
+  // Build every phrase voice into VexFlow notes. The two treble voices (melody +
+  // accompaniment) share the treble staff with opposed stems; the bass has the
+  // bass staff to itself. Barlines are added to just the first voice of each staff
+  // so interior barlines are not drawn twice.
+  const STEM = { up: VF.Stem.UP, down: VF.Stem.DOWN } as const;
+  const barlinedStaves = new Set<number>();
+  const voiceBuilds = PHRASE_VOICES.map((pv) => {
+    const staveIndex = STAFF_CLEFS.indexOf(pv.clef);
+    const wantBarlines = !barlinedStaves.has(staveIndex);
+    barlinedStaves.add(staveIndex);
+    const events = timedNotes(pv);
     const staveNotes: InstanceType<typeof VF.StaveNote>[] = [];
     const tickables: InstanceType<typeof VF.Note>[] = [];
     let beat = 0;
-    for (const n of staff.notes) {
-      if (beat > 0 && beat % 4 === 0) tickables.push(new VF.BarNote());
-      const dotted = n.dur.endsWith('d');
-      // `autoStem` flips each stem by the note's position — without it VexFlow
-      // stems every note up, which points the high treble stems the wrong way.
-      const note = new VF.StaveNote({ clef: staff.clef, keys: [n.key], duration: n.dur, autoStem: true });
-      if (dotted) VF.Dot.buildAndAttach([note], { all: true });
+    for (const [midi, durBeat] of pv.notes) {
+      if (wantBarlines && beat > 0 && beat % PHRASE_BEATS_PER_BAR === 0) {
+        tickables.push(new VF.BarNote());
+      }
+      const note = new VF.StaveNote({
+        clef: pv.clef,
+        keys: [midiToVexKey(midi)],
+        duration: durationCode(durBeat),
+        // `autoStem` flips a lone voice's stems by pitch; the two treble voices
+        // force opposed directions so melody and accompaniment never collide.
+        autoStem: pv.stem === 'auto',
+      });
+      if (pv.stem !== 'auto') note.setStemDirection(STEM[pv.stem]);
       note.setStyle(ink);
       staveNotes.push(note);
       tickables.push(note);
-      beat += durBeats(n.dur);
+      beat += durBeat;
     }
-    return { staveNotes, tickables };
-  };
-
-  const built = STAVES.map(buildStaff);
-  const voices = built.map((b) => {
-    const voice = new VF.Voice({ numBeats: BEATS, beatValue: 4 });
-    voice.setMode(VF.VoiceMode.SOFT).addTickables(b.tickables);
-    return voice;
+    const vfVoice = new VF.Voice({ numBeats: BEATS, beatValue: 4 });
+    vfVoice.setMode(VF.VoiceMode.SOFT).addTickables(tickables);
+    return { staveIndex, staveNotes, vfVoice, events };
   });
+  const allVoices = voiceBuilds.map((vb) => vb.vfVoice);
 
   const formatter = new VF.Formatter();
-  voices.forEach((voice) => formatter.joinVoices([voice]));
+  // Voices sharing a staff are joined so they share tick contexts and align.
+  for (let s = 0; s < STAFF_CLEFS.length; s++) {
+    const staffVoices = voiceBuilds.filter((vb) => vb.staveIndex === s).map((vb) => vb.vfVoice);
+    if (staffVoices.length) formatter.joinVoices(staffVoices);
+  }
 
   // Size the figure so dense notes never run past the stave: measure the clef +
   // time-signature block and the formatter's minimum note width, then grow the
@@ -318,7 +270,7 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   probe.addClef('treble');
   probe.addTimeSignature(TIME);
   const modifierWidth = probe.getNoteStartX() - probe.getX();
-  const minNoteWidth = formatter.preCalculateMinTotalWidth(voices);
+  const minNoteWidth = formatter.preCalculateMinTotalWidth(allVoices);
   const staveWidth = Math.max(BASE_WIDTH - LEFT - RIGHT, Math.ceil(modifierWidth + minNoteWidth + RIGHT_PAD));
   const renderWidth = LEFT + staveWidth + RIGHT;
 
@@ -329,9 +281,9 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   context.setStrokeStyle(INK);
 
   const tops = [TOP_TREBLE, TOP_BASS];
-  const staves = STAVES.map((staff, i) => {
+  const staves = STAFF_CLEFS.map((clef, i) => {
     const stave = new VF.Stave(LEFT, tops[i], staveWidth);
-    stave.addClef(staff.clef);
+    stave.addClef(clef);
     stave.addTimeSignature(TIME);
     // A thin-then-thick final barline closes the piece like printed sheet music.
     stave.setEndBarType(VF.Barline.type.END);
@@ -350,14 +302,15 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   }
 
   const noteArea = Math.min(...staves.map((s) => s.getNoteEndX() - s.getNoteStartX()));
-  formatter.format(voices, noteArea - RIGHT_PAD);
+  formatter.format(allVoices, noteArea - RIGHT_PAD);
 
-  voices.forEach((voice, i) => voice.draw(context, staves[i]));
+  voiceBuilds.forEach((vb) => vb.vfVoice.draw(context, staves[vb.staveIndex]));
 
-  // Beam consecutive eighths (and shorter); generateBeams leaves quarters/halves
-  // alone, so the only beam here joins the two eighth notes in bar 1.
-  for (const b of built) {
-    for (const beam of VF.Beam.generateBeams(b.staveNotes)) {
+  // Beam each voice's eighths (the accompaniment); quarters and halves are left
+  // alone. maintainStemDirections keeps the inner voice's beamed stems pointing
+  // down so they stay clear of the melody above.
+  for (const vb of voiceBuilds) {
+    for (const beam of VF.Beam.generateBeams(vb.staveNotes, { maintainStemDirections: true })) {
       beam.setStyle(ink);
       beam.setContext(context).draw();
     }
@@ -365,14 +318,13 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
 
   const svg = target.querySelector('svg');
   if (!svg) return;
-  // Fit the viewBox tightly around what VexFlow ACTUALLY drew. Notes can sit well
-  // below the bass staff (and above the treble), past the nominal canvas height —
-  // measuring the drawn extent and letting preserveAspectRatio "meet" contain it
-  // means the engraving is always fully visible, never clipped by the screen.
-  let cTop = Math.min(staves[0].getYForLine(0), staves[1].getYForLine(0));
-  let cBot = Math.max(staves[0].getYForLine(4), staves[1].getYForLine(4));
-  for (const b of built) {
-    for (const sn of b.staveNotes) {
+  // Fit the viewBox tightly around what VexFlow ACTUALLY drew (notes sit well
+  // above the treble and below the bass staff), then let preserveAspectRatio
+  // "meet" contain it — so the engraving is always fully visible, never clipped.
+  let cTop = Math.min(...staves.map((s) => s.getYForLine(0)));
+  let cBot = Math.max(...staves.map((s) => s.getYForLine(4)));
+  for (const vb of voiceBuilds) {
+    for (const sn of vb.staveNotes) {
       for (const y of sn.getYs()) {
         cTop = Math.min(cTop, y);
         cBot = Math.max(cBot, y);
@@ -384,14 +336,15 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
   svg.style.width = '';
   svg.style.height = '';
 
-  // One hidden highlight mark per staff; the playback loop moves it to the
-  // sounding note. Built from the real rendered notehead positions.
-  for (let i = 0; i < STAVES.length; i++) {
-    const placed: PlacedNote[] = built[i].staveNotes.map((sn, j) => ({
+  // One hidden highlight mark per voice, so the melody, accompaniment and bass
+  // notes sounding at a given instant all light at once. Built from the real
+  // rendered notehead positions.
+  marks = voiceBuilds.map((vb) => {
+    const placed: PlacedNote[] = vb.staveNotes.map((sn, j) => ({
       x: sn.getAbsoluteX() + 6,
       y: sn.getYs()[0],
-      startBeat: STAFF_EVENTS[i][j].startBeat,
-      durBeat: STAFF_EVENTS[i][j].durBeat,
+      startBeat: vb.events[j].startBeat,
+      durBeat: vb.events[j].durBeat,
     }));
     const mark = document.createElementNS(SVG_NS, 'g');
     mark.style.visibility = 'hidden';
@@ -412,8 +365,8 @@ async function renderScore(target: HTMLDivElement): Promise<void> {
     mark.appendChild(halo);
     mark.appendChild(ring);
     svg.appendChild(mark);
-    marks.push({ el: mark, notes: placed });
-  }
+    return { el: mark, notes: placed };
+  });
 }
 
 /** Move each staff's highlight onto the note sounding at the current position. */

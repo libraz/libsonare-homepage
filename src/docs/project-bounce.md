@@ -178,6 +178,10 @@ const c = project.bounceWithSynthInstrument(
 
 Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the wrapper sections — see [NativeSynth](./native-synth.md) for the full field list. Pass an array to bind several destinations; an empty array binds nothing.
 
+The piano roll below is exactly this call at work — one MIDI passage routed through `bounceWithSynthInstrument` and re-voiced live as you switch the preset; the playhead tracks the bounced audio.
+
+<SonareDemo id="midi-piano-roll" />
+
 ::: info Deterministic by construction
 For a fixed project, options, and patch, `bounceWithSynthInstrument` is bit-for-bit reproducible. The same is true of every bounce method — that is what makes a bounce safe to snapshot in a test or cache by hash.
 :::
