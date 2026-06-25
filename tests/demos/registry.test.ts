@@ -15,6 +15,7 @@ const ARCHETYPES = new Set([
   'lane-mixer',
   'spectral-edit',
   'piano-roll',
+  'score',
   'compressor',
   'true-peak',
   'send-routing',

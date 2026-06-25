@@ -32,6 +32,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `lane-mixer`  — MIDI clips → realtime-engine lane mixer (faders/mutes) → per-lane envelopes + audition
  * - `spectral-edit` — clip + injected artifact → region `spectralEdit` → A/B audition + before/after spectrum
  * - `piano-roll`  — multi-voice MIDI passage → built-in instrument bounce → DAW-style piano roll + audition
+ * - `score`       — MIDI passage → VexFlow staff engraving → built-in instrument bounce + per-note highlight
  * - `compressor`  — threshold/ratio/knee/attack/release → transfer curve + gain-reduction envelope + audition
  * - `true-peak`   — sample-peak + frequency sliders → samples vs reconstructed waveform, inter-sample overshoot
  * - `send-routing` — channel fader → pre-fader vs post-fader send meters + audition
@@ -49,6 +50,7 @@ export type DemoArchetype =
   | 'lane-mixer'
   | 'spectral-edit'
   | 'piano-roll'
+  | 'score'
   | 'compressor'
   | 'true-peak'
   | 'send-routing';

@@ -240,4 +240,44 @@ export const instrumentsDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'midi-score',
+    archetype: 'score',
+    // Source is unused for `score` (the engine sequences the MIDI phrase and bounces
+    // it); the schema requires one, and a melodic tone keeps the intent readable.
+    source: { kind: 'generate', signal: 'triangle', freq: 262 },
+    viz: 'overlay',
+    title: {
+      en: 'The same MIDI, written as a score',
+      ja: '同じ MIDI を、楽譜で読む',
+    },
+    caption: {
+      en: 'The very same kind of MIDI phrase — a melody over a bass line — engraved as standard notation on a grand staff. Notes, durations, beams, and the clefs are read straight from the MIDI the engine plays; switch the instrument and the identical notes sound through a different built-in voice, drag the tempo and the reading speeds up. Press play to hear it: each note lights up the instant it sounds.',
+      ja: '同じ種類の MIDI フレーズ（低音の上に旋律）を、大譜表に標準記譜したものです。音符・音価・連桁・音部記号は、エンジンが鳴らす MIDI からそのまま起こしています。楽器を切り替えれば同一の音符が別の内蔵音色で鳴り、テンポを動かせば演奏が速くなります。再生すると、各音符が鳴った瞬間に光ります。',
+    },
+    params: [
+      {
+        key: 'instrument',
+        kind: 'select',
+        default: 'acoustic-piano',
+        label: { en: 'Instrument', ja: '楽器' },
+        options: [
+          { value: 'acoustic-piano', label: { en: 'Piano', ja: 'ピアノ' } },
+          { value: 'e-piano', label: { en: 'E-Piano', ja: 'エレピ' } },
+          { value: 'harp', label: { en: 'Harp', ja: 'ハープ' } },
+          { value: 'marimba', label: { en: 'Marimba', ja: 'マリンバ' } },
+        ],
+      },
+      {
+        key: 'tempo',
+        kind: 'range',
+        default: 96,
+        min: 60,
+        max: 160,
+        step: 1,
+        unit: 'BPM',
+        label: { en: 'Tempo', ja: 'テンポ' },
+      },
+    ],
+  },
 ];

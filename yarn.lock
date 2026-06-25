@@ -3503,6 +3503,7 @@ __metadata:
     npm-check-updates: "npm:^22.2.1"
     three: "npm:^0.184.0"
     typescript: "npm:^6.0.3"
+    vexflow: "npm:^5"
     vite: "npm:^8"
     vitepress: "npm:^1.6.4"
     vitepress-plugin-mermaid: "npm:^2.0.17"
@@ -4881,6 +4882,13 @@ __metadata:
   bin:
     uuid: dist-node/bin/uuid
   checksum: 10c0/a57ae7794c45005c1a9208989196c5baf79a7679c30f43c1bee9033a2c4d113a2cea216fa6fcc9663b08b0d55635df1a7c6eb7e7f3d21c3e50688c698fa39a50
+  languageName: node
+  linkType: hard
+
+"vexflow@npm:^5":
+  version: 5.0.0
+  resolution: "vexflow@npm:5.0.0"
+  checksum: 10c0/8737a4414bf90f960d4ef91d24ec43c9fabbac6cc95df67c593af9c51da8311bc907c562c7c4836ed0b1c8060b19838649b4540886b60a9de8b36d1d15aad8c1
   languageName: node
   linkType: hard
 

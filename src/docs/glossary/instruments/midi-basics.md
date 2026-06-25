@@ -13,6 +13,10 @@ That separation is powerful: the same MIDI performance can be played back throug
 
 <SonareDemo id="midi-piano-roll" />
 
+Because MIDI is structured musical information, the same notes can be read as *notation* just as easily as a grid. The score below is engraved straight from the MIDI the engine plays — same notes, same instrument switch, same tempo — and each note lights up as it sounds. The piano roll and the score are two views of one underlying performance.
+
+<SonareDemo id="midi-score" />
+
 This page explains the vocabulary you need to read or write MIDI. It is concepts only — no code.
 
 ::: info Performance, not audio
