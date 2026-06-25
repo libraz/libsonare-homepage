@@ -25,6 +25,8 @@ Threshold decides where compression starts. Ratio decides how strongly levels ab
 | Release | Whether the master breathes naturally or pumps. |
 | Knee | Whether compression grabs suddenly or eases in. |
 
+<SonareDemo id="compressor-curve" />
+
 ## Practical Workflow
 
 1. Start with moderate ratio and a soft knee.
