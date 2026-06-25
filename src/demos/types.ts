@@ -34,6 +34,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `piano-roll`  — multi-voice MIDI passage → built-in instrument bounce → DAW-style piano roll + audition
  * - `compressor`  — threshold/ratio/knee/attack/release → transfer curve + gain-reduction envelope + audition
  * - `true-peak`   — sample-peak + frequency sliders → samples vs reconstructed waveform, inter-sample overshoot
+ * - `send-routing` — channel fader → pre-fader vs post-fader send meters + audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -49,7 +50,8 @@ export type DemoArchetype =
   | 'spectral-edit'
   | 'piano-roll'
   | 'compressor'
-  | 'true-peak';
+  | 'true-peak'
+  | 'send-routing';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

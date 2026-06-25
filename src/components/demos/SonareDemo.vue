@@ -59,6 +59,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     'piano-roll': defineAsyncComponent(() => import('./archetypes/PianoRollDemo.vue')),
     compressor: defineAsyncComponent(() => import('./archetypes/CompressorDemo.vue')),
     'true-peak': defineAsyncComponent(() => import('./archetypes/TruePeakDemo.vue')),
+    'send-routing': defineAsyncComponent(() => import('./archetypes/SendRoutingDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

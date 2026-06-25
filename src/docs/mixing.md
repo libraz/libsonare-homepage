@@ -86,6 +86,8 @@ Reading the chain top to bottom:
 A **post-fader** send follows the fader: pull the fader down and the reverb sent from that track follows it down — the reverb stays proportional to the dry signal. A **pre-fader** send is independent of the fader, which is what you want for a headphone/cue mix or a fully wet effect return. Choosing the wrong one is the most common routing mistake.
 :::
 
+<SonareDemo id="pre-post-fader" />
+
 :::: details How this maps to the code
 The order above is exactly `ChannelStrip::process_segment`: `input_trim → polarity → alignment_delay → eq(pre) → pre-inserts → [pre tap] → fader(+VCA) → panner → eq(post) → post-inserts → width → [goniometer + post tap]`. The pre/post taps are pre-allocated scratch buffers, so a send never allocates on the audio thread. Each scheduled automation event (fader, pan, width, send, insert) is applied at its sample position inside this same per-segment loop, which is what makes automation sample-accurate.
 ::::
