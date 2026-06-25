@@ -58,6 +58,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     'spectral-edit': defineAsyncComponent(() => import('./archetypes/SpectralEditDemo.vue')),
     'piano-roll': defineAsyncComponent(() => import('./archetypes/PianoRollDemo.vue')),
     compressor: defineAsyncComponent(() => import('./archetypes/CompressorDemo.vue')),
+    'true-peak': defineAsyncComponent(() => import('./archetypes/TruePeakDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

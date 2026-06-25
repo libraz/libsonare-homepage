@@ -33,6 +33,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `spectral-edit` — clip + injected artifact → region `spectralEdit` → A/B audition + before/after spectrum
  * - `piano-roll`  — multi-voice MIDI passage → built-in instrument bounce → DAW-style piano roll + audition
  * - `compressor`  — threshold/ratio/knee/attack/release → transfer curve + gain-reduction envelope + audition
+ * - `true-peak`   — sample-peak + frequency sliders → samples vs reconstructed waveform, inter-sample overshoot
  */
 export type DemoArchetype =
   | 'transform'
@@ -47,7 +48,8 @@ export type DemoArchetype =
   | 'lane-mixer'
   | 'spectral-edit'
   | 'piano-roll'
-  | 'compressor';
+  | 'compressor'
+  | 'true-peak';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

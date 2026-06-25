@@ -142,4 +142,41 @@ export const masteringDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'inter-sample-peak',
+    archetype: 'true-peak',
+    // No clip: the samples and the reconstructed waveform are drawn from the two
+    // sliders, and the auditioned tone is synthesized at the sample level.
+    source: { kind: 'generate', signal: 'sine', freq: 660 },
+    viz: 'waveform',
+    title: {
+      en: 'Inter-sample peaks — why a master clips on playback',
+      ja: 'サンプル間ピーク — マスターが再生時にクリップする理由',
+    },
+    caption: {
+      en: 'The dots are the stored samples; the curve is the continuous waveform a converter rebuilds from them. They are aligned worst-case, so the true peak falls between two samples. Raise the frequency toward Nyquist and the samples land further down the slope — the reconstruction rises higher above them. Push the sample peak to 0 dBFS and the true peak pokes above it: every stored number looks safe, yet the signal clips on playback. That gap is what a true-peak meter catches and a true-peak limiter tames.',
+      ja: 'ドットは保存されたサンプル、曲線はそこからコンバーターが再構成する連続波形です。最悪条件で並べてあるため、真のピークは 2 つのサンプルのあいだに落ちます。周波数をナイキストへ近づけるほどサンプルは斜面の下側に来て、再構成はその上へより高く伸びます。サンプルピークを 0 dBFS まで上げると、真のピークがそれを超えます。保存された数値はどれも安全に見えるのに、再生すると信号はクリップします。この差こそ、トゥルーピークメーターが捉え、トゥルーピークリミッターが抑えるものです。',
+    },
+    params: [
+      {
+        key: 'level',
+        kind: 'range',
+        default: -0.3,
+        min: -6,
+        max: 0,
+        step: 0.1,
+        unit: 'dBFS',
+        label: { en: 'Sample peak', ja: 'サンプルピーク' },
+      },
+      {
+        key: 'nyquist',
+        kind: 'range',
+        default: 0.4,
+        min: 0.15,
+        max: 0.48,
+        step: 0.01,
+        label: { en: 'Frequency (×Nyquist)', ja: '周波数（×ナイキスト）' },
+      },
+    ],
+  },
 ];
