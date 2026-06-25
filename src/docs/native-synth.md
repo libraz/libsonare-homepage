@@ -118,6 +118,8 @@ A data-free grand-piano sketch with the four piano-defining elements: stiff-stri
 
 NativeSynth ships a small, named preset catalog. **Do not hardcode preset names** — list them from the runtime with `synthPresetNames()`, and inspect any one as a `SynthPatch` with `synthPresetPatch(name)`.
 
+<SonareDemo id="synth-presets" />
+
 ::: code-group
 
 ```typescript [Browser]

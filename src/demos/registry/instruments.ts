@@ -341,4 +341,46 @@ export const instrumentsDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'synth-presets',
+    archetype: 'synth',
+    // Source is unused for `synth`; a matching tone keeps the intent readable.
+    source: { kind: 'generate', signal: 'triangle', freq: 220 },
+    viz: 'waveform',
+    title: {
+      en: 'The preset catalog — one note, every engine',
+      ja: 'プリセットカタログ — 1 音で全エンジンを',
+    },
+    caption: {
+      en: 'The same single A3, auditioned through the named presets — one per synthesis engine. The patch is taken straight from `synthPresetPatch(name)`, so each preset sounds with its real character: the subtractive saw lead and warm pad, the FM electric piano and bell, the Karplus-Strong pluck, the modal marimba, the drawbar organ, and the physical-model grand piano. Watch the envelope and waveshape change with each choice, and press play to hear how different the engines are from one identical note.',
+      ja: '同じ A3 を 1 音、名前付きプリセット — 合成エンジンごとに 1 つ — で試聴します。パッチは `synthPresetPatch(name)` からそのまま取るので、各プリセットは本来の性格で鳴ります。減算方式のサウリードとウォームパッド、FM のエレピとベル、Karplus-Strong のプラック、モーダルのマリンバ、ドローバーオルガン、物理モデルのグランドピアノ。選ぶたびにエンベロープと波形が変わります。再生すると、同一の 1 音からエンジンごとにどれだけ音が違うかが聴けます。',
+    },
+    params: [
+      {
+        key: 'preset',
+        kind: 'select',
+        default: 'warm-pad',
+        label: { en: 'Preset', ja: 'プリセット' },
+        options: [
+          { value: 'saw-lead', label: { en: 'Saw lead (subtractive)', ja: 'サウリード（減算）' } },
+          {
+            value: 'warm-pad',
+            label: { en: 'Warm pad (subtractive)', ja: 'ウォームパッド（減算）' },
+          },
+          { value: 'e-piano', label: { en: 'E-piano (FM)', ja: 'エレピ（FM）' } },
+          { value: 'bell', label: { en: 'Bell (FM)', ja: 'ベル（FM）' } },
+          {
+            value: 'pluck',
+            label: { en: 'Pluck (Karplus-Strong)', ja: 'プラック（Karplus-Strong）' },
+          },
+          { value: 'marimba', label: { en: 'Marimba (modal)', ja: 'マリンバ（モーダル）' } },
+          { value: 'organ', label: { en: 'Organ (drawbar)', ja: 'オルガン（ドローバー）' } },
+          {
+            value: 'acoustic-piano',
+            label: { en: 'Piano (physical)', ja: 'ピアノ（物理モデル）' },
+          },
+        ],
+      },
+    ],
+  },
 ];

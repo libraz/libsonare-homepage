@@ -118,6 +118,8 @@ flowchart TD
 
 NativeSynth は小さな名前付きプリセットカタログを同梱します。**プリセット名をハードコードしないでください**。ランタイムから `synthPresetNames()` で一覧し、`synthPresetPatch(name)` で各プリセットを `SynthPatch` として確認します。
 
+<SonareDemo id="synth-presets" />
+
 ::: code-group
 
 ```typescript [ブラウザ]

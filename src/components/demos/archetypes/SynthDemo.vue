@@ -61,6 +61,10 @@ const filterModel = computed<string>(() => String(values.filterModel ?? 'svf'));
 // routing, so demos that omit these params render exactly as before.
 const lfoRate = computed<number>(() => Number(values.lfoRate ?? 0));
 const lfoDepth = computed<number>(() => Number(values.lfoDepth ?? 0));
+// Optional preset audition: when set, the patch is built from the named preset so
+// each engine's true character comes through, ignoring the subtractive-only sliders.
+const preset = computed<string>(() => String(values.preset ?? ''));
+const eyebrow = computed(() => (preset.value ? 'SYNTH · PRESET' : 'SYNTH · SUBTRACTIVE'));
 
 // ---- presentation state ----------------------------------------------------
 const tone = computed(() => {
@@ -74,7 +78,8 @@ const stateLabel = computed(() => {
   if (status.value === 'loading') return 'RENDERING';
   if (status.value === 'error') return 'ERROR';
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
-  if (status.value === 'ready') return `${cutoff.value} Hz`;
+  if (status.value === 'ready')
+    return preset.value ? preset.value.toUpperCase() : `${cutoff.value} Hz`;
   return 'IDLE';
 });
 
@@ -141,6 +146,17 @@ function renderNote(wasm: WasmModule): Float32Array {
       Project.midiNoteOn(0, 0, 0, NOTE, 100),
       Project.midiNoteOff(480, 0, 0, NOTE, 0),
     ]);
+    // Preset mode: take the named preset's full patch verbatim (just trim the gain)
+    // so each engine's real timbre is auditioned, not a subtractive override of it.
+    if (preset.value) {
+      const presetPatch = (
+        wasm as unknown as { synthPresetPatch: (name: string) => Record<string, unknown> }
+      ).synthPresetPatch(preset.value);
+      return project.bounceWithSynthInstrument(
+        { ...presetPatch, gain: 0.5 },
+        { numChannels: 1, sampleRate: SR, totalFrames: Math.round(SR * 1.3) },
+      );
+    }
     const patch: Record<string, unknown> = {
       engineMode: 'subtractive',
       waveform: waveform.value,
@@ -365,6 +381,7 @@ watch(
     filterModel.value,
     lfoRate.value,
     lfoDepth.value,
+    preset.value,
   ],
   () => {
     if (props.active) scheduleCompute();
@@ -387,7 +404,7 @@ onBeforeUnmount(() => {
 
 <template>
   <DemoFrame
-    eyebrow="SYNTH · SUBTRACTIVE"
+    :eyebrow="eyebrow"
     :title="title"
     :caption="caption"
     :state="stateLabel"
