@@ -44,6 +44,8 @@ comp:    take2     take3      gap        take1
 
 Each filled block is a **comp segment**: a start time, an end time, and the id of the take that plays there. Together the segments form the **comp lane** — the recipe for the final performance.
 
+<SonareDemo id="comping" />
+
 ## Why comping matters
 
 | Part | Why comping helps |

@@ -62,6 +62,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     'true-peak': defineAsyncComponent(() => import('./archetypes/TruePeakDemo.vue')),
     'send-routing': defineAsyncComponent(() => import('./archetypes/SendRoutingDemo.vue')),
     'mono-fold': defineAsyncComponent(() => import('./archetypes/MonoFoldDemo.vue')),
+    comping: defineAsyncComponent(() => import('./archetypes/CompingDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

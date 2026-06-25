@@ -20,6 +20,7 @@ const ARCHETYPES = new Set([
   'true-peak',
   'send-routing',
   'mono-fold',
+  'comping',
 ]);
 
 function expectBilingual(text: I18nText | undefined, where: string) {

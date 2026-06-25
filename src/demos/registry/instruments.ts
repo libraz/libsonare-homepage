@@ -252,8 +252,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: '同じ MIDI を、楽譜で読む',
     },
     caption: {
-      en: 'The very same kind of MIDI phrase — a melody over a bass line — engraved as standard notation on a grand staff. Notes, durations, beams, and the clefs are read straight from the MIDI the engine plays; switch the instrument and the identical notes sound through a different built-in voice, drag the tempo and the reading speeds up. Press play to hear it: each note lights up the instant it sounds.',
-      ja: '同じ種類の MIDI フレーズ（低音の上に旋律）を、大譜表に標準記譜したものです。音符・音価・連桁・音部記号は、エンジンが鳴らす MIDI からそのまま起こしています。楽器を切り替えれば同一の音符が別の内蔵音色で鳴り、テンポを動かせば演奏が速くなります。再生すると、各音符が鳴った瞬間に光ります。',
+      en: 'The very same three-voice phrase as the piano roll above — melody, broken chords, and bass — engraved as standard notation on a grand staff. The notes, durations, beams, and clefs are read straight from the MIDI the engine plays; switch the instrument and the identical notes sound through a different built-in voice, drag the tempo and the reading speeds up. Press play to hear it: every sounding note lights up the instant it plays.',
+      ja: '上のピアノロールとまったく同じ3声フレーズ（旋律・分散和音・低音）を、大譜表に標準記譜したものです。音符・音価・連桁・音部記号は、エンジンが鳴らす MIDI からそのまま起こしています。楽器を切り替えれば同一の音符が別の内蔵音色で鳴り、テンポを動かせば演奏が速くなります。再生すると、鳴っている音符が鳴った瞬間に光ります。',
     },
     params: [
       {
@@ -277,6 +277,67 @@ export const instrumentsDemos: SonareDemoDef[] = [
         step: 1,
         unit: 'BPM',
         label: { en: 'Tempo', ja: 'テンポ' },
+      },
+    ],
+  },
+  {
+    id: 'comping',
+    archetype: 'comping',
+    // Three takes share one clip name prefix; the archetype loads comp-take-a/b/c.
+    source: { kind: 'clip', clip: 'comp-take-a' },
+    viz: 'waveform',
+    title: {
+      en: 'Comping — one performance from three takes',
+      ja: 'コンピング — 3 つのテイクから 1 つの演奏を',
+    },
+    caption: {
+      en: "Three takes of the same phrase, each strong somewhere: Take A is warm and even, Take B is bright with an accented middle but fluffs a note in segment 3, Take C builds to an expressive finish. Pick a take for each of the four segments and the comp lane assembles them with short crossfades at the seams — the recipe for a performance that never happened in one pass. Press play to audition your comp; route around Take B's wrong note and keep its bright middle. The takes are never altered — you are only choosing which one plays when.",
+      ja: '同じフレーズの 3 テイクは、それぞれ得意な場所が違います。テイク A は温かく均一、テイク B は明るく中盤にアクセントがありますが第 3 区間で音を外し、テイク C は表情豊かな終わりへ向かって盛り上がります。4 つの区間それぞれにテイクを選ぶと、コンプレーンが継ぎ目に短いクロスフェードを入れて組み上げます — 一度の演奏では実現しなかった「いいとこ取り」のレシピです。再生して自分のコンプを試聴しましょう。テイク B の外した音を避けつつ、その明るい中盤は活かせます。テイク自体は一切変更されません — どれをいつ鳴らすかを選んでいるだけです。',
+    },
+    params: [
+      {
+        key: 'seg1',
+        kind: 'select',
+        default: 'a',
+        label: { en: 'Segment 1', ja: '区間 1' },
+        options: [
+          { value: 'a', label: { en: 'Take A', ja: 'テイク A' } },
+          { value: 'b', label: { en: 'Take B', ja: 'テイク B' } },
+          { value: 'c', label: { en: 'Take C', ja: 'テイク C' } },
+        ],
+      },
+      {
+        key: 'seg2',
+        kind: 'select',
+        default: 'b',
+        label: { en: 'Segment 2', ja: '区間 2' },
+        options: [
+          { value: 'a', label: { en: 'Take A', ja: 'テイク A' } },
+          { value: 'b', label: { en: 'Take B', ja: 'テイク B' } },
+          { value: 'c', label: { en: 'Take C', ja: 'テイク C' } },
+        ],
+      },
+      {
+        key: 'seg3',
+        kind: 'select',
+        default: 'a',
+        label: { en: 'Segment 3', ja: '区間 3' },
+        options: [
+          { value: 'a', label: { en: 'Take A', ja: 'テイク A' } },
+          { value: 'b', label: { en: 'Take B', ja: 'テイク B' } },
+          { value: 'c', label: { en: 'Take C', ja: 'テイク C' } },
+        ],
+      },
+      {
+        key: 'seg4',
+        kind: 'select',
+        default: 'c',
+        label: { en: 'Segment 4', ja: '区間 4' },
+        options: [
+          { value: 'a', label: { en: 'Take A', ja: 'テイク A' } },
+          { value: 'b', label: { en: 'Take B', ja: 'テイク B' } },
+          { value: 'c', label: { en: 'Take C', ja: 'テイク C' } },
+        ],
       },
     ],
   },

@@ -363,6 +363,55 @@ function buildVowel(wasm) {
   return finalize(src, 0.85);
 }
 
+/**
+ * `comp-take-*`: three takes of one short phrase for the comping demo. The note
+ * timing and total length are identical across takes so the demo's four segment
+ * boundaries line up; each take is given a distinct character — and take "b" a
+ * wrong note in the third segment — so different segments are best taken from
+ * different takes. Rendered per-note (monophonic) like {@link buildLead}.
+ */
+const COMP_PITCHES = [72, 74, 76, 79, 81, 79, 76, 72]; // C5 D5 E5 G5 A5 G5 E5 C5
+const COMP_E = PPQ / 2; // eighth note
+
+/**
+ * @param {object} wasm The initialized libsonare module.
+ * @param {{ cutoffHz: number, vels: number[], swap?: Record<number, number> }} spec
+ * @returns {Float32Array} Mono PCM at {@link SR}.
+ */
+function buildTake(wasm, { cutoffHz, vels, swap = {} }) {
+  const lastIdx = COMP_PITCHES.length - 1;
+  const heldExtra = COMP_E * 3; // the final note rings a little longer
+  const phraseEndPpq = lastIdx * COMP_E + COMP_E + heldExtra;
+  const totalSec = phraseEndPpq * SEC_PER_PPQ + 0.4;
+  const len = Math.round(SR * totalSec);
+  const out = new Float32Array(len);
+  const patch = { cutoffHz, resonanceQ: 0.8, ampAttackMs: 6, ampSustain: 0.8, ampReleaseMs: 60 };
+  for (let i = 0; i <= lastIdx; i++) {
+    const midi = swap[i] ?? COMP_PITCHES[i];
+    const lenPpq = (i === lastIdx ? COMP_E + heldExtra : COMP_E) - 20;
+    const noteSec = (lenPpq + PPQ / 8) * SEC_PER_PPQ;
+    const voice = renderPart(wasm, 'saw-lead', [[0, lenPpq, midi, vels[i]]], noteSec, patch);
+    const fade = Math.min(Math.round(SR * 0.02), Math.floor(voice.length / 4));
+    for (let k = 0; k < fade; k++) {
+      voice[voice.length - 1 - k] *= 0.5 - 0.5 * Math.cos((Math.PI * k) / fade);
+    }
+    const start = Math.round(i * COMP_E * SEC_PER_PPQ * SR);
+    const nCopy = Math.min(voice.length, len - start);
+    for (let k = 0; k < nCopy; k++) out[start + k] += voice[k];
+  }
+  return finalize(out, 0.85);
+}
+
+/** Take A — warm and even: a safe, slightly dark reading. */
+const buildCompTakeA = (wasm) =>
+  buildTake(wasm, { cutoffHz: 2400, vels: [86, 86, 86, 86, 86, 86, 86, 86] });
+/** Take B — bright with an accented middle, but a wrong note (A5→G#5) in segment 3. */
+const buildCompTakeB = (wasm) =>
+  buildTake(wasm, { cutoffHz: 5600, vels: [80, 80, 104, 104, 80, 80, 80, 80], swap: { 4: 80 } });
+/** Take C — a crescendo: weak opening, strong, expressive finish. */
+const buildCompTakeC = (wasm) =>
+  buildTake(wasm, { cutoffHz: 3600, vels: [60, 66, 74, 82, 90, 96, 102, 104] });
+
 // ---- WAV encoding ---------------------------------------------------------
 
 /**
@@ -406,6 +455,9 @@ const CLIPS = {
   pad: buildPad,
   vowel: buildVowel,
   lead: buildLead,
+  'comp-take-a': buildCompTakeA,
+  'comp-take-b': buildCompTakeB,
+  'comp-take-c': buildCompTakeC,
 };
 
 /**
@@ -457,7 +509,13 @@ async function main() {
 
   // Clips whose musical point is harmonic/melodic movement over time. A frozen
   // render (the classic ticks-vs-quarter-notes bug) collapses these to one pitch.
-  const movementFloor = { band: 3, lead: 3 };
+  const movementFloor = {
+    band: 3,
+    lead: 3,
+    'comp-take-a': 3,
+    'comp-take-b': 3,
+    'comp-take-c': 3,
+  };
 
   for (const [name, build] of Object.entries(CLIPS)) {
     const samples = build(wasm);

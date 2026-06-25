@@ -37,6 +37,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `true-peak`   — sample-peak + frequency sliders → samples vs reconstructed waveform, inter-sample overshoot
  * - `send-routing` — channel fader → pre-fader vs post-fader send meters + audition
  * - `mono-fold`    — stereo tone → in-phase to anti-phase sweep → L/R + mono-sum collapse + correlation
+ * - `comping`      — three takes → per-segment take selection → assembled comp lane + audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -55,7 +56,8 @@ export type DemoArchetype =
   | 'compressor'
   | 'true-peak'
   | 'send-routing'
-  | 'mono-fold';
+  | 'mono-fold'
+  | 'comping';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';
