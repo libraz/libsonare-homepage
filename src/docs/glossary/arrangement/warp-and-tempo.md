@@ -26,6 +26,10 @@ bars     1        2        3        4        5        6
          └ a clip warped to this map stretches to match each region
 ```
 
+The grid is the thing a clip warps *to*, so it helps to see how tempo turns musical positions into seconds. Drag the tempo below and watch the bars compress or spread against a fixed seconds ruler — that is exactly the mapping a clip has to follow.
+
+<SonareDemo id="tempo-grid" />
+
 ## The three warp modes
 
 Every audio clip has a **warp mode** that decides *how* (or whether) it follows the grid.

@@ -39,6 +39,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `mono-fold`    — stereo tone → in-phase to anti-phase sweep → L/R + mono-sum collapse + correlation
  * - `comping`      — three takes → per-segment take selection → assembled comp lane + audition
  * - `hpss`         — mix → harmonic/percussive separation → switchable spectrogram + per-layer audition
+ * - `tempo-grid`   — BPM + beats-per-bar → bar/beat grid over a fixed seconds axis + metronome audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -59,7 +60,8 @@ export type DemoArchetype =
   | 'send-routing'
   | 'mono-fold'
   | 'comping'
-  | 'hpss';
+  | 'hpss'
+  | 'tempo-grid';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

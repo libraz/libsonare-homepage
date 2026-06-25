@@ -64,6 +64,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     'mono-fold': defineAsyncComponent(() => import('./archetypes/MonoFoldDemo.vue')),
     comping: defineAsyncComponent(() => import('./archetypes/CompingDemo.vue')),
     hpss: defineAsyncComponent(() => import('./archetypes/HpssDemo.vue')),
+    'tempo-grid': defineAsyncComponent(() => import('./archetypes/TempoGridDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>

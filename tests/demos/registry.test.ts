@@ -22,6 +22,7 @@ const ARCHETYPES = new Set([
   'mono-fold',
   'comping',
   'hpss',
+  'tempo-grid',
 ]);
 
 function expectBilingual(text: I18nText | undefined, where: string) {

@@ -132,4 +132,42 @@ export const editingDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'tempo-grid',
+    archetype: 'tempo-grid',
+    // No clip: the bar/beat grid and the metronome click are computed from the tempo.
+    source: { kind: 'generate', signal: 'sine', freq: 1760 },
+    viz: 'overlay',
+    title: {
+      en: 'Tempo and the grid — how BPM maps musical time to seconds',
+      ja: 'テンポとグリッド — BPM が音楽的な時間を秒へ写す仕組み',
+    },
+    caption: {
+      en: 'The seconds axis on top never moves; the bar-and-beat grid below is computed from the tempo. Drag BPM and the grid slides — a faster tempo packs more bars into the same six seconds, a slower one spreads them out. The readout turns the tempo into the durations the engine actually counts in: one bar, one beat, and one tick at PPQ 480, the resolution libsonare uses for MIDI timing. Change the beats per bar to reshape where the accented downbeats land. Press play for a metronome at the chosen tempo — the grid you see is the click you hear.',
+      ja: '上の秒の目盛りは動きません。下の小節・拍のグリッドはテンポから計算されます。BPM をドラッグするとグリッドが動き、速いテンポは同じ 6 秒により多くの小節を詰め込み、遅いテンポは広げます。読み出しは、テンポをエンジンが実際に数える単位へ変換します。1 小節・1 拍、そして PPQ 480（libsonare が MIDI のタイミングに使う分解能）での 1 ティックです。1 小節の拍数を変えると、アクセントの付く強拍の位置が変わります。再生すると選んだテンポのメトロノームが鳴ります — 見えているグリッドが、そのまま聞こえるクリックです。',
+    },
+    params: [
+      {
+        key: 'bpm',
+        kind: 'range',
+        default: 120,
+        min: 60,
+        max: 180,
+        step: 1,
+        unit: 'BPM',
+        label: { en: 'Tempo', ja: 'テンポ' },
+      },
+      {
+        key: 'beats',
+        kind: 'select',
+        default: '4',
+        label: { en: 'Beats / bar', ja: '1 小節の拍数' },
+        options: [
+          { value: '3', label: { en: '3/4', ja: '3/4' } },
+          { value: '4', label: { en: '4/4', ja: '4/4' } },
+          { value: '6', label: { en: '6/8', ja: '6/8' } },
+        ],
+      },
+    ],
+  },
 ];
