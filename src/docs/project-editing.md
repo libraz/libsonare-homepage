@@ -442,6 +442,10 @@ project.setMidiEvents(midiClip, [
 project.setProgram(midiClip, 4);          // GM program (e.g. 4 = electric piano)
 ```
 
+::: warning `ppq` is in quarter notes, not ticks
+The `ppq` argument is a **position in quarter notes** (a float), *not* a MIDI tick count. `Project.midiNoteOn(1, …)` is one quarter note in; `Project.midiNoteOn(0.5, …)` is an eighth note in. Despite the name, it is **not** 480-ticks-per-quarter — `Project.midiNoteOn(480, …)` schedules the note 480 quarter notes (120 bars) away, almost always far past your render window, so it silently never sounds. If you are converting from a tick-based source (an SMF at 480 PPQ, say), divide by the source's ticks-per-quarter first. The same unit applies to `addMidiClip(startPpq, lengthPpq)` and every clip/automation position on this page.
+:::
+
 Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop into a `setMidiEvents` list:
 
 | Packer | Signature | Event |

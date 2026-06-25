@@ -162,6 +162,10 @@ The catalog maps to the engines like this (one preset per row is enough to feel 
 | `drum-kit` | `percussion` | GM drum map |
 | `acoustic-piano` | `piano` | acoustic piano |
 
+The roll below sequences one three-voice phrase and bounces it through `bounceWithSynthInstrument(presetName, …)`. The instrument selector walks across four engines — `acoustic-piano` (`piano`), `e-piano` (`fm`), `harp` (`karplus-strong`), and `marimba` (`modal`) — so the same notes audibly take on each engine's character.
+
+<SonareDemo id="midi-piano-roll" />
+
 ### The `va:` routing prefix
 
 A preset name may carry a `va:` prefix (for example `va:saw-lead`, `va:e-piano`). The prefix is **accepted everywhere a preset name is** — `synthPresetPatch`, `bounceWithSynthInstrument`, and `setSynthInstrument` — and resolves to the same patch as the bare name. It is a routing convention some hosts use to mark "this destination plays the virtual-analog NativeSynth"; the synth strips it before lookup.

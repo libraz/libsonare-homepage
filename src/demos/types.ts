@@ -31,6 +31,7 @@ export type DemoLocale = 'en' | 'ja';
  * - `contour`     — clip → pitch tracking → melody f0 contour line over time
  * - `lane-mixer`  — MIDI clips → realtime-engine lane mixer (faders/mutes) → per-lane envelopes + audition
  * - `spectral-edit` — clip + injected artifact → region `spectralEdit` → A/B audition + before/after spectrum
+ * - `piano-roll`  — multi-voice MIDI passage → built-in instrument bounce → DAW-style piano roll + audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -43,7 +44,8 @@ export type DemoArchetype =
   | 'room'
   | 'contour'
   | 'lane-mixer'
-  | 'spectral-edit';
+  | 'spectral-edit'
+  | 'piano-roll';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

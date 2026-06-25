@@ -164,4 +164,44 @@ export const instrumentsDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'midi-piano-roll',
+    archetype: 'piano-roll',
+    // Source is unused for `piano-roll` (the engine sequences the MIDI passage and
+    // bounces it), but the schema requires one; a melodic tone keeps the intent clear.
+    source: { kind: 'generate', signal: 'triangle', freq: 262 },
+    viz: 'overlay',
+    title: {
+      en: 'A MIDI passage — same notes, any instrument',
+      ja: 'MIDI のフレーズ — 同じ音符を、どの楽器でも',
+    },
+    caption: {
+      en: 'A three-voice phrase — melody, chords, and bass — drawn as a piano roll. The notes never change; switch the instrument and the engine bounces the exact same MIDI through a different built-in voice. Drag the tempo and the whole sequence speeds up or slows down. Press play to hear the passage; the playhead tracks the audio.',
+      ja: '旋律・和音・低音の3声フレーズをピアノロールで表示します。音符はそのまま、楽器を切り替えると、まったく同じ MIDI をエンジンが別の内蔵音色でバウンスします。テンポを動かせばシーケンス全体が速く・遅くなります。再生でフレーズを試聴でき、再生ヘッドは音声に追従します。',
+    },
+    params: [
+      {
+        key: 'instrument',
+        kind: 'select',
+        default: 'acoustic-piano',
+        label: { en: 'Instrument', ja: '楽器' },
+        options: [
+          { value: 'acoustic-piano', label: { en: 'Piano', ja: 'ピアノ' } },
+          { value: 'e-piano', label: { en: 'E-Piano', ja: 'エレピ' } },
+          { value: 'harp', label: { en: 'Harp', ja: 'ハープ' } },
+          { value: 'marimba', label: { en: 'Marimba', ja: 'マリンバ' } },
+        ],
+      },
+      {
+        key: 'tempo',
+        kind: 'range',
+        default: 100,
+        min: 60,
+        max: 168,
+        step: 1,
+        unit: 'BPM',
+        label: { en: 'Tempo', ja: 'テンポ' },
+      },
+    ],
+  },
 ];

@@ -9,7 +9,11 @@ description: MIDI carries performance instructions, not audio — note-on/off, v
 
 <SonareDemo id="synth-note" />
 
-That separation is powerful: the same MIDI performance can be played back through a piano sound, a guitar sound, or an orchestra, just by pointing it at a different instrument. This page explains the vocabulary you need to read or write MIDI. It is concepts only — no code.
+That separation is powerful: the same MIDI performance can be played back through a piano sound, a guitar sound, or an orchestra, just by pointing it at a different instrument. The piano roll below makes that concrete — the notes never move, but switching the instrument re-voices the identical MIDI through a different built-in sound.
+
+<SonareDemo id="midi-piano-roll" />
+
+This page explains the vocabulary you need to read or write MIDI. It is concepts only — no code.
 
 ::: info Performance, not audio
 A MIDI file is tiny — kilobytes — because it stores instructions, not waveforms. The trade-off is that it sounds different depending on which instrument renders it. An audio file always sounds the same but cannot be re-voiced or transposed for free.

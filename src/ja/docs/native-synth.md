@@ -162,6 +162,10 @@ pad = sonare.synth_preset_patch("warm-pad")
 | `drum-kit` | `percussion` | GM ドラムマップ |
 | `acoustic-piano` | `piano` | アコースティックピアノ |
 
+下のロールは1つの3声フレーズをシーケンスし、`bounceWithSynthInstrument(presetName, …)` でバウンスします。楽器セレクタは4つのエンジン — `acoustic-piano`（`piano`）、`e-piano`（`fm`）、`harp`（`karplus-strong`）、`marimba`（`modal`）— をまたぐので、同じ音符がそれぞれのエンジンの性格を帯びるのが聞き取れます。
+
+<SonareDemo id="midi-piano-roll" />
+
 ### `va:` ルーティング接頭辞
 
 プリセット名には `va:` 接頭辞を付けられます（例: `va:saw-lead`、`va:e-piano`）。この接頭辞はプリセット名を受け取るすべての場所 — `synthPresetPatch`、`bounceWithSynthInstrument`、`setSynthInstrument` — で**受け付けられ**、接頭辞なしと同じパッチに解決されます。これは「この出力先はバーチャルアナログの NativeSynth を鳴らす」と印を付けるためにホストが使うルーティング規約で、シンセは検索前に取り除きます。

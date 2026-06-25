@@ -56,6 +56,7 @@ const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defin
     contour: defineAsyncComponent(() => import('./archetypes/ContourDemo.vue')),
     'lane-mixer': defineAsyncComponent(() => import('./archetypes/LaneMixerDemo.vue')),
     'spectral-edit': defineAsyncComponent(() => import('./archetypes/SpectralEditDemo.vue')),
+    'piano-roll': defineAsyncComponent(() => import('./archetypes/PianoRollDemo.vue')),
   };
 
 const archetypeComponent = computed(() =>
