@@ -36,6 +36,7 @@ export function checkBuiltRoutes({
   }
 
   checkSitemap(dist, glossaryFiles, failures);
+  checkLlmsTxt(dist, failures);
 
   for (const file of listFiles(dist)) {
     const relativePath = path.relative(dist, file);
@@ -94,6 +95,22 @@ function checkSitemap(dist, glossaryFiles, failures) {
   for (const file of required) {
     const url = `${siteUrl}/${file}`;
     if (!sitemap.includes(`<loc>${url}</loc>`)) failures.push(`sitemap missing route: ${url}`);
+  }
+}
+
+function checkLlmsTxt(dist, failures) {
+  const llmsPath = path.join(dist, 'llms.txt');
+  if (!fs.existsSync(llmsPath)) {
+    failures.push('missing built llms.txt');
+    return;
+  }
+
+  const content = fs.readFileSync(llmsPath, 'utf8');
+  if (!content.startsWith('# libsonare')) {
+    failures.push('llms.txt missing expected "# libsonare" heading');
+  }
+  if (!content.includes(`${siteUrl}/docs/introduction.html`)) {
+    failures.push('llms.txt missing canonical docs links');
   }
 }
 

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitepress';
 import { withMermaid } from 'vitepress-plugin-mermaid';
+import { generateLlmsTxt } from './llms';
 
 const siteUrl = 'https://sonare.libraz.net';
 const githubUrl = 'https://github.com/libraz/libsonare';
@@ -417,6 +418,95 @@ const jaGlossarySidebar = [
   },
 ];
 
+// English demo menu — shared between the Demos nav and the llms.txt index.
+const enDemoMenu = [
+  { items: [{ text: 'All Demos', link: '/demos' }] },
+  {
+    text: 'Analysis',
+    items: [
+      { text: 'Visual Player', link: '/analyzer' },
+      { text: 'Music Analysis Studio', link: '/music-analysis' },
+      { text: 'Spatial Room Scanner', link: '/spatial' },
+    ],
+  },
+  {
+    text: 'Production',
+    items: [
+      { text: 'Mastering Studio', link: '/mastering' },
+      { text: 'Mixing Studio', link: '/mixing' },
+      { text: 'Realtime FX Lab', link: '/realtime-fx' },
+      { text: 'Synth Playground', link: '/synth' },
+      { text: 'Studio Mini', link: '/studio' },
+    ],
+  },
+];
+
+// English docs sidebar — shared between the `/docs/` sidebar and the llms.txt index.
+const enDocsSidebar = [
+  {
+    text: 'Learn First',
+    items: [
+      { text: 'Introduction', link: '/docs/introduction' },
+      { text: 'Learning Path', link: '/docs/learning-path' },
+      { text: 'Getting Started', link: '/docs/getting-started' },
+      { text: 'Installation', link: '/docs/installation' },
+      { text: 'Examples', link: '/docs/examples' },
+      { text: 'Feature Map', link: '/docs/api-surface' },
+    ],
+  },
+  {
+    text: 'Build By Task',
+    items: [
+      { text: 'Editing DSP', link: '/docs/editing-dsp' },
+      { text: 'Spectral Editing', link: '/docs/spectral-editing' },
+      { text: 'Mixing Engine', link: '/docs/mixing' },
+      { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
+      { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
+      { text: 'Mastering Processors', link: '/docs/mastering-processors' },
+      { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
+      { text: 'Realtime Voice Changer', link: '/docs/realtime-voice-changer' },
+      { text: 'Room Acoustics', link: '/docs/acoustic-analysis' },
+      { text: 'Inverse Features', link: '/docs/inverse-features' },
+    ],
+  },
+  {
+    text: 'Compose & Arrange',
+    items: [
+      { text: 'Project Editing', link: '/docs/project-editing' },
+      { text: 'MIDI Input', link: '/docs/midi-input' },
+      { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
+      { text: 'SoundFont Player', link: '/docs/soundfont-player' },
+      { text: 'Recording & Takes', link: '/docs/recording-and-takes' },
+      { text: 'Bouncing Projects', link: '/docs/project-bounce' },
+    ],
+  },
+  {
+    text: 'API By Runtime',
+    items: [
+      { text: 'Browser / WASM', link: '/docs/wasm' },
+      { text: 'JavaScript API', link: '/docs/js-api' },
+      { text: 'Python API', link: '/docs/python-api' },
+      { text: 'CLI Reference', link: '/docs/cli' },
+      { text: 'Node.js Native', link: '/docs/native-bindings' },
+      { text: 'C++ API', link: '/docs/cpp-api' },
+      { text: 'Binding Parity', link: '/docs/binding-parity' },
+    ],
+  },
+  {
+    text: 'Understand The Details',
+    items: [
+      { text: 'DSP Implementation Notes', link: '/docs/dsp-implementation' },
+      { text: 'Algorithm References', link: '/docs/algorithm-references' },
+      { text: 'Implementation Validation', link: '/docs/implementation-validation' },
+      { text: 'Mastering Implementation', link: '/docs/mastering-implementation' },
+      { text: 'Architecture', link: '/docs/architecture' },
+      { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
+      { text: 'Benchmarks', link: '/docs/benchmarks' },
+      ...glossarySidebar,
+    ],
+  },
+];
+
 // JSON-LD: SoftwareApplication schema
 const softwareApplicationJsonLd = {
   '@context': 'https://schema.org',
@@ -487,6 +577,20 @@ export default withMermaid(
     // Sitemap
     sitemap: {
       hostname: siteUrl,
+    },
+
+    // Emit an llms.txt index (https://llmstxt.org) into the build output.
+    buildEnd(siteConfig) {
+      generateLlmsTxt({
+        siteUrl,
+        srcDir: siteConfig.srcDir,
+        outDir: siteConfig.outDir,
+        summary:
+          'Dependency-free C++/WebAssembly audio engine: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
+        demoMenu: enDemoMenu,
+        docsSidebar: enDocsSidebar,
+        glossaryRoot: glossarySidebar[0],
+      });
     },
 
     head: [
@@ -600,98 +704,12 @@ export default withMermaid(
         lang: 'en',
         themeConfig: {
           nav: [
-            {
-              text: 'Demos',
-              items: [
-                { items: [{ text: 'All Demos', link: '/demos' }] },
-                {
-                  text: 'Analysis',
-                  items: [
-                    { text: 'Visual Player', link: '/analyzer' },
-                    { text: 'Music Analysis Studio', link: '/music-analysis' },
-                    { text: 'Spatial Room Scanner', link: '/spatial' },
-                  ],
-                },
-                {
-                  text: 'Production',
-                  items: [
-                    { text: 'Mastering Studio', link: '/mastering' },
-                    { text: 'Mixing Studio', link: '/mixing' },
-                    { text: 'Realtime FX Lab', link: '/realtime-fx' },
-                    { text: 'Synth Playground', link: '/synth' },
-                    { text: 'Studio Mini', link: '/studio' },
-                  ],
-                },
-              ],
-            },
+            { text: 'Demos', items: enDemoMenu },
             { text: 'Docs', link: '/docs/introduction' },
             { text: 'GitHub', link: githubUrl },
           ],
           sidebar: {
-            '/docs/': [
-              {
-                text: 'Learn First',
-                items: [
-                  { text: 'Introduction', link: '/docs/introduction' },
-                  { text: 'Learning Path', link: '/docs/learning-path' },
-                  { text: 'Getting Started', link: '/docs/getting-started' },
-                  { text: 'Installation', link: '/docs/installation' },
-                  { text: 'Examples', link: '/docs/examples' },
-                  { text: 'Feature Map', link: '/docs/api-surface' },
-                ],
-              },
-              {
-                text: 'Build By Task',
-                items: [
-                  { text: 'Editing DSP', link: '/docs/editing-dsp' },
-                  { text: 'Spectral Editing', link: '/docs/spectral-editing' },
-                  { text: 'Mixing Engine', link: '/docs/mixing' },
-                  { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
-                  { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
-                  { text: 'Mastering Processors', link: '/docs/mastering-processors' },
-                  { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
-                  { text: 'Realtime Voice Changer', link: '/docs/realtime-voice-changer' },
-                  { text: 'Room Acoustics', link: '/docs/acoustic-analysis' },
-                  { text: 'Inverse Features', link: '/docs/inverse-features' },
-                ],
-              },
-              {
-                text: 'Compose & Arrange',
-                items: [
-                  { text: 'Project Editing', link: '/docs/project-editing' },
-                  { text: 'MIDI Input', link: '/docs/midi-input' },
-                  { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
-                  { text: 'SoundFont Player', link: '/docs/soundfont-player' },
-                  { text: 'Recording & Takes', link: '/docs/recording-and-takes' },
-                  { text: 'Bouncing Projects', link: '/docs/project-bounce' },
-                ],
-              },
-              {
-                text: 'API By Runtime',
-                items: [
-                  { text: 'Browser / WASM', link: '/docs/wasm' },
-                  { text: 'JavaScript API', link: '/docs/js-api' },
-                  { text: 'Python API', link: '/docs/python-api' },
-                  { text: 'CLI Reference', link: '/docs/cli' },
-                  { text: 'Node.js Native', link: '/docs/native-bindings' },
-                  { text: 'C++ API', link: '/docs/cpp-api' },
-                  { text: 'Binding Parity', link: '/docs/binding-parity' },
-                ],
-              },
-              {
-                text: 'Understand The Details',
-                items: [
-                  { text: 'DSP Implementation Notes', link: '/docs/dsp-implementation' },
-                  { text: 'Algorithm References', link: '/docs/algorithm-references' },
-                  { text: 'Implementation Validation', link: '/docs/implementation-validation' },
-                  { text: 'Mastering Implementation', link: '/docs/mastering-implementation' },
-                  { text: 'Architecture', link: '/docs/architecture' },
-                  { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
-                  { text: 'Benchmarks', link: '/docs/benchmarks' },
-                  ...glossarySidebar,
-                ],
-              },
-            ],
+            '/docs/': enDocsSidebar,
           },
         },
       },
