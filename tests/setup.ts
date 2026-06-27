@@ -14,8 +14,59 @@ function installUrlMocks() {
   });
 }
 
+function createCanvasContextMock() {
+  const state: Record<string, unknown> = {
+    canvas: null,
+    fillStyle: '#000',
+    font: '10px sans-serif',
+    globalAlpha: 1,
+    lineCap: 'butt',
+    lineJoin: 'miter',
+    lineWidth: 1,
+    shadowBlur: 0,
+    shadowColor: 'transparent',
+    strokeStyle: '#000',
+    textAlign: 'start',
+    textBaseline: 'alphabetic',
+  };
+
+  return new Proxy(state, {
+    get(target, key) {
+      if (key in target) return target[key as string];
+      if (key === 'getImageData') {
+        return () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 });
+      }
+      if (key === 'measureText') {
+        return (text: string) => ({ width: String(text).length * 6 });
+      }
+      if (key === 'createLinearGradient' || key === 'createRadialGradient') {
+        return () => ({ addColorStop: vi.fn() });
+      }
+      if (key === 'createPattern') return () => null;
+      return vi.fn();
+    },
+    set(target, key, value) {
+      target[key as string] = value;
+      return true;
+    },
+  });
+}
+
+function installCanvasMocks() {
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    writable: true,
+    value: vi.fn((contextId: string) => {
+      if (contextId === '2d') return createCanvasContextMock();
+      return null;
+    }),
+  });
+}
+
 installUrlMocks();
+installCanvasMocks();
 
 beforeEach(() => {
   installUrlMocks();
+  installCanvasMocks();
 });

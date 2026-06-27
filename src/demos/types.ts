@@ -9,14 +9,15 @@
  * the data/behavior contract every archetype shares.
  */
 
-/** A short piece of text available in both supported locales. */
+/** A short piece of text with default English copy and optional locale-specific copy. */
 export interface I18nText {
   en: string;
   ja: string;
+  [locale: string]: string;
 }
 
-/** Supported UI locales. Mirrors VitePress's `en` / `ja` locale keys. */
-export type DemoLocale = 'en' | 'ja';
+/** Supported UI locale key. Mirrors VitePress locale keys. */
+export type DemoLocale = string;
 
 /**
  * The interaction shape of a demo. Each archetype maps to one archetype component.
@@ -139,8 +140,12 @@ export interface SonareDemoDef {
   config?: Record<string, unknown>;
 }
 
-/** Pick the string for a locale, falling back to English. */
+function nonBlank(value: string | undefined): string | undefined {
+  return value && value.trim().length > 0 ? value : undefined;
+}
+
+/** Pick the string for a locale, falling back to English. Blank overrides are ignored. */
 export function localized(text: I18nText | undefined, locale: DemoLocale): string {
   if (!text) return '';
-  return locale === 'ja' ? text.ja || text.en : text.en;
+  return nonBlank(text[locale]) ?? nonBlank(text[locale.split('-')[0]]) ?? text.en;
 }

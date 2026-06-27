@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import MasteringWaveform from '@/components/MasteringWaveform.vue';
 import { AudioTransport, MetricItem, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
@@ -16,7 +16,7 @@ interface MasterMetrics {
   peak: string;
 }
 
-defineProps<{
+const props = defineProps<{
   source: DecodedMasteringAudio | null;
   sourceMetrics: SourceMetrics | null;
   masterMetrics: MasterMetrics | null;
@@ -43,6 +43,10 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const transport = ref<InstanceType<typeof AudioTransport> | null>(null);
 const playProgress = ref(0);
+const loudnessMatchNote = computed(() => {
+  if (props.loudnessMatched) return t('master.result.loudnessMatchNote');
+  return t('master.result.rawCompareNote');
+});
 
 function setVolume(volume: number) {
   transport.value?.setVolume(volume);
@@ -169,7 +173,7 @@ defineExpose({ setVolume, togglePlayback });
           </Tooltip>
         </div>
         <p class="result-note">
-          {{ loudnessMatched ? t('master.result.loudnessMatchNote') : t('master.result.rawCompareNote') }}
+          {{ loudnessMatchNote }}
         </p>
         <p v-if="renderResultStages" class="result-stages">
           {{ renderResultStages }}

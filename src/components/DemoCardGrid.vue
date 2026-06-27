@@ -12,9 +12,7 @@ const props = withDefaults(
   },
 );
 
-const { locale } = useI18n();
-const ja = computed(() => locale.value === 'ja');
-const base = computed(() => (ja.value ? '/ja' : ''));
+const { localizedPath, localizedValue } = useI18n();
 const isGrid = computed(() => props.layout === 'grid');
 
 const scroller = ref<HTMLElement | null>(null);
@@ -54,13 +52,104 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
 });
 
-const prevLabel = computed(() => (ja.value ? '前のデモを表示' : 'Show previous demos'));
-const nextLabel = computed(() => (ja.value ? '次のデモを表示' : 'Show more demos'));
+const copy = computed(() =>
+  localizedValue({
+    en: {
+      prevLabel: 'Show previous demos',
+      nextLabel: 'Show more demos',
+      cta: 'Open demo',
+      cards: {
+        analyzer: {
+          title: 'Visual Player',
+          tagline: 'Audio player with real-time chroma & spectrum visualization.',
+        },
+        mastering: {
+          title: 'Mastering Studio',
+          tagline: 'Hit streaming loudness targets with presets. WAV export.',
+        },
+        analysis: {
+          title: 'Music Analysis Studio',
+          tagline: 'Structure, harmony, melody, loudness, and spectral views.',
+        },
+        mixing: {
+          title: 'Mixing Studio',
+          tagline: 'Up to eight stem tracks with scene JSON and WAV bounce.',
+        },
+        fx: {
+          title: 'Realtime Voice Changer',
+          tagline: 'Local microphone voice changer with library character presets.',
+        },
+        spatial: {
+          title: 'Spatial Room Scanner',
+          tagline: 'Estimate room geometry, reverb, and source distance in 3D from a recording.',
+        },
+        synth: {
+          title: 'Synth Playground',
+          tagline: 'Play the built-in polyphonic synth from your keyboard or a USB MIDI keyboard.',
+        },
+        studio: {
+          title: 'Studio Mini',
+          tagline: 'Step-sequence three tracks, mix them, and bounce the loop to WAV.',
+        },
+      },
+    },
+    ja: {
+      prevLabel: '前のデモを表示',
+      nextLabel: '次のデモを表示',
+      cta: '開く',
+      cards: {
+        analyzer: {
+          title: 'ビジュアルプレイヤー',
+          tagline: 'クロマ・スペクトルをリアルタイム可視化するオーディオプレイヤー。',
+        },
+        mastering: {
+          title: 'マスタリングスタジオ',
+          tagline: 'プリセットで配信向けラウドネスへ。WAV書き出し対応。',
+        },
+        analysis: {
+          title: '楽曲分析スタジオ',
+          tagline: '構造・ハーモニー・メロディ・ラウドネスとスペクトル表示。',
+        },
+        mixing: {
+          title: 'ミキシングスタジオ',
+          tagline: '最大8トラックのステム・ミキサー。シーンJSONとバウンス。',
+        },
+        fx: {
+          title: 'リアルタイムボイスチェンジャー',
+          tagline: 'マイク入力のボイスチェンジャー。ライブラリのキャラクタープリセット対応。',
+        },
+        spatial: {
+          title: '空間ルームスキャナー',
+          tagline: '録音から部屋の形状・残響・音源までの距離を 3D 推定。',
+        },
+        synth: {
+          title: 'シンセプレイグラウンド',
+          tagline: '内蔵ポリフォニックシンセを PC キーボードや USB MIDI 鍵盤で演奏。',
+        },
+        studio: {
+          title: 'スタジオミニ',
+          tagline: '3 トラックをステップ入力し、ミックスして WAV にバウンスするミニ DAW。',
+        },
+      },
+    },
+  }),
+);
+const prevLabel = computed(() => copy.value.prevLabel);
+const nextLabel = computed(() => copy.value.nextLabel);
 
 type DemoVisual = 'spectrum' | 'lufs' | 'chroma' | 'faders' | 'fx' | 'room' | 'keys' | 'steps';
+type DemoId =
+  | 'analyzer'
+  | 'mastering'
+  | 'analysis'
+  | 'mixing'
+  | 'fx'
+  | 'spatial'
+  | 'synth'
+  | 'studio';
 
 interface DemoEntry {
-  id: string;
+  id: DemoId;
   path: string;
   visual: DemoVisual;
   status: string;
@@ -76,206 +165,91 @@ const spectrumBars = [34, 52, 28, 60, 44, 70, 38, 56, 30, 64, 42, 50];
 const faderLevels = [62, 38, 78, 46, 70, 30, 54, 42];
 const chromaCells = [20, 70, 35, 90, 50, 25, 80, 45, 60, 30, 75, 40];
 
+const CARD_META: Array<
+  Pick<DemoEntry, 'id' | 'visual' | 'status' | 'accent' | 'eyebrow' | 'chips'> & { route: string }
+> = [
+  {
+    id: 'analyzer',
+    route: '/analyzer',
+    visual: 'spectrum',
+    accent: false,
+    status: 'LIVE',
+    eyebrow: 'VISUAL PLAYER',
+    chips: ['BPM', 'KEY', 'CHORD', 'SPECTRUM'],
+  },
+  {
+    id: 'mastering',
+    route: '/mastering',
+    visual: 'lufs',
+    accent: true,
+    status: 'STUDIO',
+    eyebrow: 'MASTERING',
+    chips: ['LUFS', 'EQ', 'DYNAMICS', 'WAV'],
+  },
+  {
+    id: 'analysis',
+    route: '/music-analysis',
+    visual: 'chroma',
+    accent: false,
+    status: 'STUDIO',
+    eyebrow: 'ANALYSIS',
+    chips: ['STRUCTURE', 'CHROMA', 'CQT', 'BEATS'],
+  },
+  {
+    id: 'mixing',
+    route: '/mixing',
+    visual: 'faders',
+    accent: false,
+    status: 'STUDIO',
+    eyebrow: 'MIXING',
+    chips: ['8 TRACKS', 'PAN', 'WIDTH', 'BOUNCE'],
+  },
+  {
+    id: 'fx',
+    route: '/realtime-fx',
+    visual: 'fx',
+    accent: false,
+    status: 'MIC',
+    eyebrow: 'REALTIME FX',
+    chips: ['PITCH', 'FORMANT', 'CHARACTER', 'PRESETS'],
+  },
+  {
+    id: 'spatial',
+    route: '/spatial',
+    visual: 'room',
+    accent: false,
+    status: 'NEW',
+    eyebrow: 'SPATIAL 3D',
+    chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
+  },
+  {
+    id: 'synth',
+    route: '/synth',
+    visual: 'keys',
+    accent: false,
+    status: 'NEW',
+    eyebrow: 'INSTRUMENTS',
+    chips: ['7 ENGINES', '16 PRESETS', 'MIDI', 'PATCH'],
+  },
+  {
+    id: 'studio',
+    route: '/studio',
+    visual: 'steps',
+    accent: false,
+    status: 'NEW',
+    eyebrow: 'HEADLESS DAW',
+    chips: ['PROJECT', 'STEPS', 'MIX', 'BOUNCE'],
+  },
+];
+
 const cards = computed<DemoEntry[]>(() => {
-  const cta = ja.value ? '開く' : 'Open demo';
-  if (ja.value) {
-    return [
-      {
-        id: 'analyzer',
-        path: `${base.value}/analyzer`,
-        visual: 'spectrum',
-        accent: false,
-        status: 'LIVE',
-        eyebrow: 'VISUAL PLAYER',
-        title: 'ビジュアルプレイヤー',
-        tagline: 'クロマ・スペクトルをリアルタイム可視化するオーディオプレイヤー。',
-        chips: ['BPM', 'KEY', 'CHORD', 'SPECTRUM'],
-        cta,
-      },
-      {
-        id: 'mastering',
-        path: `${base.value}/mastering`,
-        visual: 'lufs',
-        accent: true,
-        status: 'STUDIO',
-        eyebrow: 'MASTERING',
-        title: 'マスタリングスタジオ',
-        tagline: 'プリセットで配信向けラウドネスへ。WAV書き出し対応。',
-        chips: ['LUFS', 'EQ', 'DYNAMICS', 'WAV'],
-        cta,
-      },
-      {
-        id: 'analysis',
-        path: `${base.value}/music-analysis`,
-        visual: 'chroma',
-        accent: false,
-        status: 'STUDIO',
-        eyebrow: 'ANALYSIS',
-        title: '楽曲分析スタジオ',
-        tagline: '構造・ハーモニー・メロディ・ラウドネスとスペクトル表示。',
-        chips: ['STRUCTURE', 'CHROMA', 'CQT', 'BEATS'],
-        cta,
-      },
-      {
-        id: 'mixing',
-        path: `${base.value}/mixing`,
-        visual: 'faders',
-        accent: false,
-        status: 'STUDIO',
-        eyebrow: 'MIXING',
-        title: 'ミキシングスタジオ',
-        tagline: '最大8トラックのステム・ミキサー。シーンJSONとバウンス。',
-        chips: ['8 TRACKS', 'PAN', 'WIDTH', 'BOUNCE'],
-        cta,
-      },
-      {
-        id: 'fx',
-        path: `${base.value}/realtime-fx`,
-        visual: 'fx',
-        accent: false,
-        status: 'MIC',
-        eyebrow: 'REALTIME FX',
-        title: 'リアルタイムボイスチェンジャー',
-        tagline: 'マイク入力のボイスチェンジャー。ライブラリのキャラクタープリセット対応。',
-        chips: ['PITCH', 'FORMANT', 'CHARACTER', 'PRESETS'],
-        cta,
-      },
-      {
-        id: 'spatial',
-        path: `${base.value}/spatial`,
-        visual: 'room',
-        accent: false,
-        status: 'NEW',
-        eyebrow: 'SPATIAL 3D',
-        title: '空間ルームスキャナー',
-        tagline: '録音から部屋の形状・残響・音源までの距離を 3D 推定。',
-        chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
-        cta,
-      },
-      {
-        id: 'synth',
-        path: `${base.value}/synth`,
-        visual: 'keys',
-        accent: false,
-        status: 'NEW',
-        eyebrow: 'INSTRUMENTS',
-        title: 'シンセプレイグラウンド',
-        tagline: '内蔵ポリフォニックシンセを PC キーボードや USB MIDI 鍵盤で演奏。',
-        chips: ['7 ENGINES', '16 PRESETS', 'MIDI', 'PATCH'],
-        cta,
-      },
-      {
-        id: 'studio',
-        path: `${base.value}/studio`,
-        visual: 'steps',
-        accent: false,
-        status: 'NEW',
-        eyebrow: 'HEADLESS DAW',
-        title: 'スタジオミニ',
-        tagline: '3 トラックをステップ入力し、ミックスして WAV にバウンスするミニ DAW。',
-        chips: ['PROJECT', 'STEPS', 'MIX', 'BOUNCE'],
-        cta,
-      },
-    ];
-  }
-  return [
-    {
-      id: 'analyzer',
-      path: `${base.value}/analyzer`,
-      visual: 'spectrum',
-      accent: false,
-      status: 'LIVE',
-      eyebrow: 'VISUAL PLAYER',
-      title: 'Visual Player',
-      tagline: 'Audio player with real-time chroma & spectrum visualization.',
-      chips: ['BPM', 'KEY', 'CHORD', 'SPECTRUM'],
-      cta,
-    },
-    {
-      id: 'mastering',
-      path: `${base.value}/mastering`,
-      visual: 'lufs',
-      accent: true,
-      status: 'STUDIO',
-      eyebrow: 'MASTERING',
-      title: 'Mastering Studio',
-      tagline: 'Hit streaming loudness targets with presets. WAV export.',
-      chips: ['LUFS', 'EQ', 'DYNAMICS', 'WAV'],
-      cta,
-    },
-    {
-      id: 'analysis',
-      path: `${base.value}/music-analysis`,
-      visual: 'chroma',
-      accent: false,
-      status: 'STUDIO',
-      eyebrow: 'ANALYSIS',
-      title: 'Music Analysis Studio',
-      tagline: 'Structure, harmony, melody, loudness, and spectral views.',
-      chips: ['STRUCTURE', 'CHROMA', 'CQT', 'BEATS'],
-      cta,
-    },
-    {
-      id: 'mixing',
-      path: `${base.value}/mixing`,
-      visual: 'faders',
-      accent: false,
-      status: 'STUDIO',
-      eyebrow: 'MIXING',
-      title: 'Mixing Studio',
-      tagline: 'Up to eight stem tracks with scene JSON and WAV bounce.',
-      chips: ['8 TRACKS', 'PAN', 'WIDTH', 'BOUNCE'],
-      cta,
-    },
-    {
-      id: 'fx',
-      path: `${base.value}/realtime-fx`,
-      visual: 'fx',
-      accent: false,
-      status: 'MIC',
-      eyebrow: 'REALTIME FX',
-      title: 'Realtime Voice Changer',
-      tagline: 'Local microphone voice changer with library character presets.',
-      chips: ['PITCH', 'FORMANT', 'CHARACTER', 'PRESETS'],
-      cta,
-    },
-    {
-      id: 'spatial',
-      path: `${base.value}/spatial`,
-      visual: 'room',
-      accent: false,
-      status: 'NEW',
-      eyebrow: 'SPATIAL 3D',
-      title: 'Spatial Room Scanner',
-      tagline: 'Estimate room geometry, reverb, and source distance in 3D from a recording.',
-      chips: ['RT60', 'GEOMETRY', 'DRR', '3D'],
-      cta,
-    },
-    {
-      id: 'synth',
-      path: `${base.value}/synth`,
-      visual: 'keys',
-      accent: false,
-      status: 'NEW',
-      eyebrow: 'INSTRUMENTS',
-      title: 'Synth Playground',
-      tagline: 'Play the built-in polyphonic synth from your keyboard or a USB MIDI keyboard.',
-      chips: ['7 ENGINES', '16 PRESETS', 'MIDI', 'PATCH'],
-      cta,
-    },
-    {
-      id: 'studio',
-      path: `${base.value}/studio`,
-      visual: 'steps',
-      accent: false,
-      status: 'NEW',
-      eyebrow: 'HEADLESS DAW',
-      title: 'Studio Mini',
-      tagline: 'Step-sequence three tracks, mix them, and bounce the loop to WAV.',
-      chips: ['PROJECT', 'STEPS', 'MIX', 'BOUNCE'],
-      cta,
-    },
-  ];
+  return CARD_META.map((card) => ({
+    ...card,
+    path: localizedPath(card.route),
+    title: copy.value.cards[card.id].title,
+    tagline: copy.value.cards[card.id].tagline,
+    cta: copy.value.cta,
+  }));
 });
 </script>
 

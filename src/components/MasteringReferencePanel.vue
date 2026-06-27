@@ -31,6 +31,14 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const analysis = computed(() => buildAnalysisItems(props.referenceAnalysis, t));
+const matchButtonLabel = computed(() => {
+  if (props.isRendering) return t('master.reference.matching');
+  return t('master.reference.match');
+});
+const analysisStateLabel = computed(() => {
+  if (props.isAnalyzing) return t('master.reference.analyzing');
+  return analysis.value.status;
+});
 </script>
 
 <template>
@@ -68,7 +76,7 @@ const analysis = computed(() => buildAnalysisItems(props.referenceAnalysis, t));
             :disabled="!canMatch || isRendering"
             @click="emit('match')"
           >
-            {{ isRendering ? t('master.reference.matching') : t('master.reference.match') }}
+            {{ matchButtonLabel }}
           </button>
         </Tooltip>
       </div>
@@ -85,7 +93,7 @@ const analysis = computed(() => buildAnalysisItems(props.referenceAnalysis, t));
           :class="{ 'is-busy': isAnalyzing }"
         >
           <i aria-hidden="true"></i>
-          {{ isAnalyzing ? t('master.reference.analyzing') : analysis.status }}
+          {{ analysisStateLabel }}
         </span>
       </div>
       <div class="reference-panel__analysis-grid">
@@ -150,6 +158,10 @@ function buildAnalysisItems(report: ReferenceAnalysisReport | null, t: Translate
   const correlation = numberValue(mono.correlation);
   const width = numberValue(mono.width);
   const monoOk = typeof mono.likelyMonoCompatible === 'boolean' ? mono.likelyMonoCompatible : null;
+  let monoStatus = t('master.reference.monoOk');
+  if (monoOk === false) {
+    monoStatus = t('master.reference.monoRisk');
+  }
 
   return {
     loudness:
@@ -165,7 +177,7 @@ function buildAnalysisItems(report: ReferenceAnalysisReport | null, t: Translate
     mono:
       correlation === null
         ? '-'
-        : `${monoOk === false ? t('master.reference.monoRisk') : t('master.reference.monoOk')} / r ${correlation.toFixed(2)}${width === null ? '' : ` / w ${width.toFixed(2)}`}`,
+        : `${monoStatus} / r ${correlation.toFixed(2)}${width === null ? '' : ` / w ${width.toFixed(2)}`}`,
     status: t('master.reference.analysisReady'),
   };
 }

@@ -16,7 +16,7 @@ describe('useI18n', () => {
     expect(t('demo.title')).toBe((en as any).demo.title);
   });
 
-  it('falls back to the literal key when missing in both locales', () => {
+  it('falls back to the literal key when missing in locale messages', () => {
     const { t } = useI18n();
     expect(t('nonexistent.key.path')).toBe('nonexistent.key.path');
   });
@@ -41,5 +41,35 @@ describe('useI18n', () => {
     lang.value = 'fr';
     const { t } = useI18n();
     expect(t('demo.title')).toBe((en as any).demo.title);
+  });
+
+  it('normalizes regional locale codes', () => {
+    lang.value = 'ja-JP';
+    const { locale, isLocale } = useI18n();
+    expect(locale.value).toBe('ja');
+    expect(isLocale('ja')).toBe(true);
+  });
+
+  it('builds localized and alternate locale paths from the locale registry', () => {
+    lang.value = 'ja';
+    const { localizedPath, alternateLocalePath } = useI18n();
+    expect(localizedPath('/docs/wasm')).toBe('/ja/docs/wasm');
+    expect(localizedPath('/ja/docs/wasm', 'en')).toBe('/docs/wasm');
+    expect(alternateLocalePath('/analyzer')).toBe('/analyzer');
+  });
+
+  it('falls back to the default localized string when the active value is blank', () => {
+    lang.value = 'ja';
+    const { localizedValue } = useI18n();
+
+    expect(localizedValue({ en: 'English', ja: '   ' })).toBe('English');
+  });
+
+  it('keeps object localized values intact', () => {
+    lang.value = 'ja';
+    const { localizedValue } = useI18n();
+    const jaCopy = { title: '日本語' };
+
+    expect(localizedValue({ en: { title: 'English' }, ja: jaCopy })).toBe(jaCopy);
   });
 });

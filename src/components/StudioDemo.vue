@@ -19,8 +19,8 @@ import { meterFillPercent } from '@/utils/scale';
 import sonareJsUrl from '@/wasm/sonare.js?url';
 import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
-const { locale } = useI18n();
-const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
+const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
+const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 const engine = useStudioEngine(sonareJsUrl, sonareWasmUrl);
 
 const pattern = ref(defaultPattern());
@@ -81,14 +81,9 @@ const hasExportableNotes = computed(() =>
   ),
 );
 
-const docsPath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/project-editing' : '/docs/project-editing',
-);
-const oppositeLocalePath = computed(() => (locale.value === 'ja' ? '/studio' : '/ja/studio'));
-
-const glossaryBase = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const docsPath = computed(() => localizedPath('/docs/project-editing'));
+const oppositeLocalePath = computed(() => alternateLocalePath('/studio'));
+const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
 /** Build the rich-tooltip props for a control from the copy + slug tables. */
 function term(key: StudioTermKey) {

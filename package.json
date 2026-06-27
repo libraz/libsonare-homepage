@@ -9,6 +9,7 @@
     "dev": "vitepress dev",
     "build": "vitepress build",
     "preview": "vitepress preview",
+    "add:locale": "node scripts/add-locale.mjs",
     "copy:wasm": "./scripts/copy-wasm.sh",
     "generate:demos": "node scripts/generate-demo-assets.mjs",
     "test": "vitest run",

@@ -15,8 +15,8 @@ import type { VoicePresetId } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
 import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
-const { locale } = useI18n();
-const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
+const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
+const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 const fx = useRealtimeFx(sonareJsUrl, sonareWasmUrl);
 const libVersion = ref('');
 const isStarting = ref(false);
@@ -52,16 +52,9 @@ const localError = computed(() => {
   return code;
 });
 
-const docsPath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/realtime-streaming' : '/docs/realtime-streaming',
-);
-const oppositeLocalePath = computed(() =>
-  locale.value === 'ja' ? '/realtime-fx' : '/ja/realtime-fx',
-);
-
-const glossaryBase = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const docsPath = computed(() => localizedPath('/docs/realtime-streaming'));
+const oppositeLocalePath = computed(() => alternateLocalePath('/realtime-fx'));
+const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
 type TermKey = keyof typeof enCopy.terms.items;
 

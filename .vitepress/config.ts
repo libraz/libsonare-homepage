@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitepress';
 import { withMermaid } from 'vitepress-plugin-mermaid';
@@ -6,6 +6,24 @@ import { generateLlmsTxt } from './llms';
 
 const siteUrl = 'https://sonare.libraz.net';
 const githubUrl = 'https://github.com/libraz/libsonare';
+const defaultLocale = 'en';
+
+const siteLocales = (() => {
+  const localesDir = fileURLToPath(new URL('../src/locales', import.meta.url));
+  if (!existsSync(localesDir)) return [defaultLocale, 'ja'];
+  const locales = readdirSync(localesDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => entry.name.replace(/\.json$/, ''));
+  return [...new Set([defaultLocale, ...locales])].sort();
+})();
+
+const englishLanguageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+
+function languageLabel(locale: string): string {
+  const english = englishLanguageNames.of(locale) ?? locale;
+  const native = new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+  return english === native ? english : `${english} (${native})`;
+}
 
 type WasmAssetMeta = {
   sizeKB: number;
@@ -95,15 +113,37 @@ function pageSeoTitle(title: string): string {
   return title.startsWith('libsonare - ') ? title : pageTitle(title);
 }
 
-function localizedAlternate(relativePath: string): { lang: 'en' | 'ja'; path: string } | null {
-  if (relativePath.startsWith('ja/')) {
-    const enRelativePath = relativePath.replace(/^ja\//, '');
-    return { lang: 'en', path: routeFromRelativePath(enRelativePath) };
-  }
+function localeFromRelativePath(relativePath: string): string {
+  const [firstSegment] = relativePath.split('/');
+  return siteLocales.includes(firstSegment) && firstSegment !== defaultLocale
+    ? firstSegment
+    : defaultLocale;
+}
 
-  const jaFile = fileURLToPath(new URL(`../src/ja/${relativePath}`, import.meta.url));
-  if (!existsSync(jaFile)) return null;
-  return { lang: 'ja', path: routeFromRelativePath(`ja/${relativePath}`) };
+function unlocalizedRelativePath(relativePath: string): string {
+  const locale = localeFromRelativePath(relativePath);
+  return locale === defaultLocale
+    ? relativePath
+    : relativePath.replace(new RegExp(`^${locale}/`), '');
+}
+
+function relativePathForLocale(relativePath: string, locale: string): string {
+  const unlocalized = unlocalizedRelativePath(relativePath);
+  return locale === defaultLocale ? unlocalized : `${locale}/${unlocalized}`;
+}
+
+function localizedAlternates(relativePath: string): Array<{ lang: string; path: string }> {
+  const alternates = [];
+  for (const locale of siteLocales) {
+    const localizedRelativePath = relativePathForLocale(relativePath, locale);
+    const localizedFile = fileURLToPath(
+      new URL(`../src/${localizedRelativePath}`, import.meta.url),
+    );
+    if (existsSync(localizedFile)) {
+      alternates.push({ lang: locale, path: routeFromRelativePath(localizedRelativePath) });
+    }
+  }
+  return alternates;
 }
 
 const glossarySidebar = [
@@ -507,6 +547,46 @@ const enDocsSidebar = [
   },
 ];
 
+function prefixLocaleLink(link: string | undefined, locale: string): string | undefined {
+  if (!link?.startsWith('/') || link.startsWith('//')) return link;
+  const firstSegment = link.split('/')[1];
+  if (siteLocales.includes(firstSegment)) return link;
+  return `/${locale}${link}`;
+}
+
+function prefixLocaleLinks<T extends { link?: string; items?: T[] }>(
+  nodes: T[],
+  locale: string,
+): T[] {
+  return nodes.map((node) => ({
+    ...node,
+    link: prefixLocaleLink(node.link, locale),
+    items: node.items ? prefixLocaleLinks(node.items, locale) : undefined,
+  }));
+}
+
+const generatedLocaleConfigs = Object.fromEntries(
+  siteLocales
+    .filter((locale) => locale !== defaultLocale && locale !== 'ja')
+    .map((locale) => [
+      locale,
+      {
+        label: languageLabel(locale),
+        lang: locale,
+        themeConfig: {
+          nav: [
+            { text: 'Demos', items: prefixLocaleLinks(enDemoMenu, locale) },
+            { text: 'Docs', link: `/${locale}/docs/introduction` },
+            { text: 'GitHub', link: githubUrl },
+          ],
+          sidebar: {
+            [`/${locale}/docs/`]: prefixLocaleLinks(enDocsSidebar, locale),
+          },
+        },
+      },
+    ]),
+);
+
 // JSON-LD: SoftwareApplication schema
 const softwareApplicationJsonLd = {
   '@context': 'https://schema.org',
@@ -559,7 +639,7 @@ const webSiteJsonLd = {
   url: siteUrl,
   description:
     'Documentation and browser-local demos for the libsonare dependency-free audio engine.',
-  inLanguage: ['en', 'ja'],
+  inLanguage: siteLocales,
   publisher: {
     '@type': 'Person',
     name: 'libraz',
@@ -590,6 +670,21 @@ export default withMermaid(
         demoMenu: enDemoMenu,
         docsSidebar: enDocsSidebar,
         glossaryRoot: glossarySidebar[0],
+        localizedSections: siteLocales
+          .filter((locale) => locale !== defaultLocale)
+          .map((locale) => {
+            const label = languageLabel(locale);
+            return {
+              locale,
+              label,
+              docsLink: `/${locale}/docs/introduction`,
+              demosLink: `/${locale}/demos`,
+              docsText: `${label} documentation`,
+              demosText: `${label} demos`,
+              docsDescription: `Localized documentation for ${label}.`,
+              demosDescription: `Localized browser demos for ${label}.`,
+            };
+          }),
       });
     },
 
@@ -650,8 +745,9 @@ export default withMermaid(
     transformHead({ pageData, description }) {
       const path = routeFromRelativePath(pageData.relativePath);
       const url = absoluteUrl(path);
-      const alternate = localizedAlternate(pageData.relativePath);
-      const lang = pageData.relativePath.startsWith('ja/') ? 'ja' : 'en';
+      const alternates = localizedAlternates(pageData.relativePath);
+      const lang = localeFromRelativePath(pageData.relativePath);
+      const defaultAlternate = alternates.find((item) => item.lang === defaultLocale);
       const titleContent = pageSeoTitle(pageData.title || 'libsonare');
       const webPageJsonLd = {
         '@context': 'https://schema.org',
@@ -671,8 +767,7 @@ export default withMermaid(
         ['meta', { property: 'og:title', content: titleContent }],
         ['meta', { property: 'og:description', content: description }],
         ['meta', { property: 'og:url', content: url }],
-        ['meta', { property: 'og:locale', content: lang === 'ja' ? 'ja_JP' : 'en_US' }],
-        ['meta', { property: 'og:locale:alternate', content: lang === 'ja' ? 'en_US' : 'ja_JP' }],
+        ['meta', { property: 'og:locale', content: lang }],
         ['meta', { name: 'twitter:title', content: titleContent }],
         ['meta', { name: 'twitter:description', content: description }],
         ['meta', { name: 'robots', content: 'index,follow,max-image-preview:large' }],
@@ -682,13 +777,15 @@ export default withMermaid(
           {
             rel: 'alternate',
             hreflang: 'x-default',
-            href: lang === 'ja' && alternate ? absoluteUrl(alternate.path) : url,
+            href: defaultAlternate ? absoluteUrl(defaultAlternate.path) : url,
           },
         ],
         ['script', { type: 'application/ld+json' }, JSON.stringify(webPageJsonLd)],
       ] as any[];
 
-      if (alternate) {
+      for (const alternate of alternates) {
+        if (alternate.lang === lang) continue;
+        head.push(['meta', { property: 'og:locale:alternate', content: alternate.lang }]);
         head.push([
           'link',
           { rel: 'alternate', hreflang: alternate.lang, href: absoluteUrl(alternate.path) },
@@ -819,6 +916,7 @@ export default withMermaid(
           },
         },
       },
+      ...generatedLocaleConfigs,
     },
 
     themeConfig: {
@@ -831,6 +929,10 @@ export default withMermaid(
     },
 
     vite: {
+      build: {
+        // Heavy docs/demo chunks are checked explicitly by `check:built-routes`.
+        chunkSizeWarningLimit: 1280,
+      },
       worker: {
         format: 'es',
       },
@@ -838,6 +940,7 @@ export default withMermaid(
         alias: {
           '@': fileURLToPath(new URL('../src', import.meta.url)),
           '@theme': fileURLToPath(new URL('./theme', import.meta.url)),
+          'node:module': fileURLToPath(new URL('./shims/node-module.ts', import.meta.url)),
         },
       },
       optimizeDeps: {

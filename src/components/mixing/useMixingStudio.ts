@@ -43,8 +43,8 @@ import type {
 } from '@/workers/mixing.worker';
 
 export function useMixingStudio() {
-  const { locale } = useI18n();
-  const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
+  const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
+  const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
   const libVersion = ref('');
   const tracks = ref<MixTrack[]>([]);
   const selectedTrackId = ref<string | null>(null);
@@ -80,12 +80,9 @@ export function useMixingStudio() {
   let playheadRaf = 0;
   let activeDrag: { trackId: string; startX: number; startOffset: number } | null = null;
 
-  const docsPath = computed(() => (locale.value === 'ja' ? '/ja/docs/mixing' : '/docs/mixing'));
-  const oppositeLocalePath = computed(() => (locale.value === 'ja' ? '/mixing' : '/ja/mixing'));
-
-  const glossaryBase = computed(() =>
-    locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-  );
+  const docsPath = computed(() => localizedPath('/docs/mixing'));
+  const oppositeLocalePath = computed(() => alternateLocalePath('/mixing'));
+  const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
   function term(key: MixingTermKey, compact = false) {
     const item = copy.value.terms.items[key];

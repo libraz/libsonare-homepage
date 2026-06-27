@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { MetricItem, StatusIndicator, TechPanel, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import type { MasteringPreviewRow } from '@/composables/useMasteringInsights';
@@ -8,7 +9,7 @@ export interface MasteringInsightItem {
   value: string;
 }
 
-defineProps<{
+const props = defineProps<{
   analyzing: boolean;
   hasReport: boolean;
   profileItems: MasteringInsightItem[];
@@ -23,7 +24,41 @@ const emit = defineEmits<{
   apply: [];
 }>();
 
-const { locale, t } = useI18n();
+const { t, localizedValue } = useI18n();
+const profileStatus = computed(() => {
+  if (props.analyzing) return 'warning';
+  if (props.hasReport) return 'active';
+  return 'idle';
+});
+const profileStatusLabel = computed(() => {
+  if (props.analyzing) return t('master.insights.analyzing');
+  return t('master.insights.ready');
+});
+
+const suggestionCopy = {
+  en: {
+    genrePrefix: 'base preset selected from top genre candidate:',
+    moves: {},
+  },
+  ja: {
+    genrePrefix: '最上位ジャンル候補からベースプリセットを選択:',
+    moves: {
+      'target loudness and ceiling applied from AssistantConfig':
+        '目標ラウドネスとシーリングをアシスタント設定から適用',
+      'air band enabled because the spectral profile is dark':
+        'スペクトルが暗いため、Air Band を有効化',
+      'transient shaper enabled for dense attacks':
+        'アタックが密なため、トランジェントシェイパーを有効化',
+      'bass-heavy fast material gets mild tilt and tape drive':
+        '低域が強く速い素材のため、軽い Tilt とテープドライブを適用',
+      'Trim low end': '低域を整理',
+      'Limit true peak': 'True Peak を制御',
+      'Add air': 'Air を追加',
+      'Lower the limiter ceiling': 'リミッターのシーリングを下げる',
+      'Narrow the low end': '低域の広がりを抑える',
+    },
+  },
+};
 
 function formatGain(value: number): string {
   if (!Number.isFinite(value)) return '-';
@@ -41,28 +76,12 @@ function formatLufs(value: number): string {
 }
 
 function formatSuggestion(move: string): string {
-  if (locale.value !== 'ja') return move;
+  const copy = localizedValue(suggestionCopy);
 
   const genre = move.match(/^base preset selected from top genre candidate:\s*(.+)$/i);
-  if (genre) return `最上位ジャンル候補からベースプリセットを選択: ${genre[1]}`;
+  if (genre) return `${copy.genrePrefix} ${genre[1]}`;
 
-  const translations: Record<string, string> = {
-    'target loudness and ceiling applied from AssistantConfig':
-      '目標ラウドネスとシーリングをアシスタント設定から適用',
-    'air band enabled because the spectral profile is dark':
-      'スペクトルが暗いため、Air Band を有効化',
-    'transient shaper enabled for dense attacks':
-      'アタックが密なため、トランジェントシェイパーを有効化',
-    'bass-heavy fast material gets mild tilt and tape drive':
-      '低域が強く速い素材のため、軽い Tilt とテープドライブを適用',
-    'Trim low end': '低域を整理',
-    'Limit true peak': 'True Peak を制御',
-    'Add air': 'Air を追加',
-    'Lower the limiter ceiling': 'リミッターのシーリングを下げる',
-    'Narrow the low end': '低域の広がりを抑える',
-  };
-
-  return translations[move] ?? move;
+  return (copy.moves as Record<string, string>)[move] ?? move;
 }
 </script>
 
@@ -74,8 +93,8 @@ function formatSuggestion(move: string): string {
           <header class="master-insights__head">
             <span>{{ t('master.insights.profile') }}</span>
             <StatusIndicator
-              :status="analyzing ? 'warning' : hasReport ? 'active' : 'idle'"
-              :label="analyzing ? t('master.insights.analyzing') : t('master.insights.ready')"
+              :status="profileStatus"
+              :label="profileStatusLabel"
               :pulse="analyzing"
             />
           </header>

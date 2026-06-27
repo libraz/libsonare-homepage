@@ -21,8 +21,8 @@ import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
 type WasmModule = typeof import('@/wasm/index.js');
 
-const { locale } = useI18n();
-const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
+const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
+const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 const engine = useSynthEngine(sonareJsUrl, sonareWasmUrl);
 
 const libVersion = ref('');
@@ -183,9 +183,7 @@ const envPath = computed(() => {
   ].join(' ');
 });
 
-const glossaryBase = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
 /** Build the rich-tooltip props for a control from the copy + slug tables. */
 function term(key: SynthTermKey) {
@@ -205,13 +203,9 @@ function term(key: SynthTermKey) {
   };
 }
 
-const docsPath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/native-synth' : '/docs/native-synth',
-);
-const midiDocsPath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/midi-input' : '/docs/midi-input',
-);
-const oppositeLocalePath = computed(() => (locale.value === 'ja' ? '/synth' : '/ja/synth'));
+const docsPath = computed(() => localizedPath('/docs/native-synth'));
+const midiDocsPath = computed(() => localizedPath('/docs/midi-input'));
+const oppositeLocalePath = computed(() => alternateLocalePath('/synth'));
 
 onMounted(() => {
   const ric = (window as { requestIdleCallback?: (cb: () => void, opts?: object) => void })

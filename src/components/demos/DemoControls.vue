@@ -12,6 +12,8 @@
  * it emits a fresh object so parent reactivity (and watchers that regenerate
  * audio) fire on every change.
  */
+
+import { useId } from 'vue';
 import { type DemoLocale, localized, type ParamDef } from '@/demos/types';
 
 type ParamValue = number | string | boolean;
@@ -24,6 +26,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<(e: 'update:modelValue', value: Record<string, ParamValue>) => void>();
+const controlsId = useId();
 
 /** Emit a new record with one key changed, keeping the rest intact. */
 function set(key: string, value: ParamValue): void {
@@ -53,10 +56,17 @@ function fillPct(p: ParamDef): string {
 <template>
   <div class="dc">
     <div v-for="p in params" :key="p.key" class="dc__field" :class="`dc__field--${p.kind}`">
-      <span class="dc__label">{{ localized(p.label, locale) }}</span>
+      <span :id="`${controlsId}-${p.key}-label`" class="dc__label">
+        {{ localized(p.label, locale) }}
+      </span>
 
       <!-- select → segmented control -->
-      <div v-if="p.kind === 'select'" class="dc__seg" role="group">
+      <div
+        v-if="p.kind === 'select'"
+        class="dc__seg"
+        role="group"
+        :aria-labelledby="`${controlsId}-${p.key}-label`"
+      >
         <button
           v-for="opt in p.options"
           :key="opt.value"
@@ -82,10 +92,11 @@ function fillPct(p: ParamDef): string {
           :step="p.step ?? 1"
           :value="modelValue[p.key] as number"
           :disabled="disabled"
-          :aria-label="localized(p.label, locale)"
+          :aria-labelledby="`${controlsId}-${p.key}-label`"
+          :aria-describedby="`${controlsId}-${p.key}-value`"
           @input="set(p.key, Number(($event.target as HTMLInputElement).value))"
         />
-        <output class="dc__value">{{ readout(p) }}</output>
+        <output :id="`${controlsId}-${p.key}-value`" class="dc__value">{{ readout(p) }}</output>
       </div>
 
       <!-- toggle → switch -->
@@ -97,7 +108,7 @@ function fillPct(p: ParamDef): string {
         :disabled="disabled"
         role="switch"
         :aria-checked="modelValue[p.key] === true"
-        :aria-label="localized(p.label, locale)"
+        :aria-labelledby="`${controlsId}-${p.key}-label`"
         @click="set(p.key, modelValue[p.key] !== true)"
       >
         <span class="dc__switch-knob" aria-hidden="true" />

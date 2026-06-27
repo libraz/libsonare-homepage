@@ -32,6 +32,12 @@ function writeJson(root: string, relativePath: string, value: unknown) {
   writeFile(root, relativePath, JSON.stringify(value));
 }
 
+function seedLocales(root: string, locales: string[]) {
+  for (const locale of locales) {
+    writeJson(root, `src/locales/${locale}.json`, {});
+  }
+}
+
 function manifest() {
   return {
     categories: [
@@ -163,6 +169,38 @@ describe('check-glossary-coverage script helpers', () => {
     });
   });
 
+  it('checks every locale listed in src/locales for glossary pages, indexes and sidebars', () => {
+    const root = createWorkspace();
+    seedLocales(root, ['en', 'ja', 'fr']);
+    const data = manifest();
+    writeJson(root, 'scripts/glossary/manifest.json', {
+      categories: data.categories.map((category) => ({
+        ...category,
+        entries: category.entries.map((entry) => ({
+          ...entry,
+          title: { ...entry.title, fr: `FR ${entry.title.en}` },
+        })),
+      })),
+    });
+
+    for (const entry of glossaryEntries(data).filter((item) => item.status === 'published')) {
+      writeFile(root, `src/docs/glossary/${entry.path}`, publishedPage(entry.title.en));
+      writeFile(root, `src/ja/docs/glossary/${entry.path}`, publishedPage(entry.title.ja));
+    }
+    writeFile(root, 'src/docs/glossary.md', './glossary/concepts/audio-basics.md');
+    writeFile(root, 'src/ja/docs/glossary.md', './glossary/concepts/audio-basics.md');
+    writeFile(root, 'src/fr/docs/glossary.md', '');
+    writeFile(root, '.vitepress/config.ts', "link: '/docs/glossary/concepts/audio-basics'");
+
+    expect(checkGlossaryCoverage({ root }).failures).toEqual(
+      expect.arrayContaining([
+        'published entry missing fr page: concepts/audio-basics.md',
+        'fr glossary index missing link: ./glossary/concepts/audio-basics.md',
+        'fr sidebar missing glossary link: /fr/docs/glossary/concepts/audio-basics',
+      ]),
+    );
+  });
+
   it('reports thin published page content requirements', () => {
     const root = createWorkspace();
     const pagePath = writeFile(
@@ -204,7 +242,7 @@ describe('check-glossary-coverage script helpers', () => {
     expect(checkGlossaryCoverage({ root }).failures).toEqual(
       expect.arrayContaining([
         'concepts: missing id',
-        'missing-title: missing title.en/title.ja',
+        'missing-title: missing title.ja',
         'published entry missing en page: concepts/undefined.md',
         'published entry missing ja page: concepts/undefined.md',
         'published entry missing en page: concepts/missing-title.md',

@@ -46,17 +46,13 @@ import {
   moduleControlsFor,
 } from '@/utils/masteringUi';
 
-const { t, locale } = useI18n();
+const { t, locale, localizedPath, alternateLocalePath } = useI18n();
 const mastering = useMastering();
 
 const libVersion = ref<string>('');
-const docsPath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary/mastering' : '/docs/glossary/mastering',
-);
-const glossaryBasePath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
-const otherLocalePath = computed(() => (locale.value === 'ja' ? '/mastering' : '/ja/mastering'));
+const docsPath = computed(() => localizedPath('/docs/glossary/mastering'));
+const glossaryBasePath = computed(() => localizedPath('/docs/glossary'));
+const otherLocalePath = computed(() => alternateLocalePath('/mastering'));
 
 const mode = ref<MasteringMode>('quick');
 const selectedPreset = ref<MasteringPresetId>('pop');
@@ -165,6 +161,11 @@ const modeOptions = computed<ToolModeOption[]>(() => [
   { id: 'studio', label: t('master.studio.title') },
 ]);
 
+const matchEqStageKeys = {
+  left: 'master.renderStages.matchEqLeft',
+  right: 'master.renderStages.matchEqRight',
+} as const;
+
 function formatStageLabel(stage: string): string {
   if (!stage) return '';
   switch (stage) {
@@ -182,9 +183,8 @@ function formatStageLabel(stage: string): string {
       return t('master.renderStages.complete');
   }
   if (stage.startsWith('match.applyMatchEq')) {
-    return stage.endsWith('right')
-      ? t('master.renderStages.matchEqRight')
-      : t('master.renderStages.matchEqLeft');
+    const side = stage.endsWith('right') ? 'right' : 'left';
+    return t(matchEqStageKeys[side]);
   }
   // WASM emits dotted stage IDs like "eq.tilt", "dynamics.compressor" — pretty-print
   if (stage.includes('.')) {
@@ -224,9 +224,10 @@ const resultWaveVariant = computed<'source' | 'master'>(() =>
   listenTarget.value === 'master' && mastering.rendered.value ? 'master' : 'source',
 );
 
-const resultWaveLabel = computed<string | undefined>(() =>
-  listenTarget.value === 'reference' ? t('master.result.reference') : undefined,
-);
+const resultWaveLabel = computed<string | undefined>(() => {
+  if (listenTarget.value !== 'reference') return undefined;
+  return t('master.result.reference');
+});
 
 function docHref(slug: string | null | undefined): string | undefined {
   if (!slug) return undefined;
@@ -386,7 +387,10 @@ const statusBarChannels = computed(() => {
 });
 const statusBarTarget = computed(() => {
   const platform = selectedPlatform.value;
-  const label = platform === 'custom' ? 'CUSTOM' : t(`master.platforms.${platform}`).toUpperCase();
+  let label = 'CUSTOM';
+  if (platform !== 'custom') {
+    label = t(`master.platforms.${platform}`).toUpperCase();
+  }
   return `${label} · ${targetLufs.value.toFixed(1)} LUFS`;
 });
 const statusBarLoudness = computed(() => {
@@ -409,6 +413,32 @@ const statusBarFields = computed<ToolStatusField[]>(() => [
   { key: 'LUFS', value: statusBarLoudness.value },
   { key: 'GAIN', value: statusBarGain.value },
 ]);
+
+const quickRenderButtonLabel = computed(() => {
+  if (mastering.isRendering.value) return t('master.quick.processing');
+  return t('master.quick.processButton');
+});
+const quickProcessingSeconds = computed(() => (mastering.source.value ? '12' : '--'));
+const quickRenderProgressLabel = computed(() => {
+  if (mastering.isRendering.value) return renderStageLabel.value;
+  return t('master.quick.processingEta', { seconds: quickProcessingSeconds.value });
+});
+const studioSourceSummary = computed(() => {
+  if (!mastering.source.value) return t('master.quick.dropSubtitle');
+  return `${statusBarDuration.value} · ${statusBarRate.value} · ${statusBarChannels.value}`;
+});
+const studioSourceCtaLabel = computed(() => {
+  if (mastering.source.value) return t('master.studio.replaceSource');
+  return t('master.studio.loadSource');
+});
+const studioRenderHintLabel = computed(() => {
+  if (mastering.isRendering.value) return renderStageLabel.value;
+  return t('master.studio.renderHint');
+});
+const studioRenderButtonLabel = computed(() => {
+  if (mastering.isRendering.value) return t('master.studio.rendering');
+  return t('master.studio.render');
+});
 
 const canRender = computed(() => Boolean(mastering.source.value) && !mastering.isRendering.value);
 const playbackUrl = computed(() => {
@@ -812,10 +842,10 @@ function createReportUrl(): string {
 
         <div class="master-actions">
           <button type="button" class="master-action" :disabled="!canRender" @click="renderMaster">
-            {{ mastering.isRendering.value ? t('master.quick.processing') : t('master.quick.processButton') }}
+            {{ quickRenderButtonLabel }}
           </button>
           <div class="render-progress" :class="{ 'render-progress--active': mastering.isRendering.value }">
-            <span>{{ mastering.isRendering.value ? renderStageLabel : t('master.quick.processingEta', { seconds: mastering.source.value ? '12' : '--' }) }}</span>
+            <span>{{ quickRenderProgressLabel }}</span>
             <div class="render-progress__track" aria-hidden="true">
               <span :style="{ width: `${Math.round(mastering.renderProgress.value * 100)}%` }"></span>
             </div>
@@ -830,10 +860,10 @@ function createReportUrl(): string {
             <span class="studio-source__icon" aria-hidden="true">AUD</span>
             <span class="studio-source__meta">
               <strong>{{ mastering.source.value?.fileName || t('master.quick.dropTitle') }}</strong>
-              <em>{{ mastering.source.value ? statusBarDuration + ' · ' + statusBarRate + ' · ' + statusBarChannels : t('master.quick.dropSubtitle') }}</em>
+              <em>{{ studioSourceSummary }}</em>
             </span>
             <span class="studio-source__cta">
-              {{ mastering.source.value ? t('master.studio.replaceSource') : t('master.studio.loadSource') }}
+              {{ studioSourceCtaLabel }}
             </span>
           </label>
           <button
@@ -930,7 +960,7 @@ function createReportUrl(): string {
           <div class="studio-output" role="group" :aria-label="t('master.studio.render')">
             <div class="studio-output__meta">
               <em>OUT</em>
-              <span :title="mastering.isRendering.value ? renderStageLabel : t('master.studio.renderHint')">{{ mastering.isRendering.value ? renderStageLabel : t('master.studio.renderHint') }}</span>
+              <span :title="studioRenderHintLabel">{{ studioRenderHintLabel }}</span>
             </div>
             <div class="studio-output__bar render-progress" :class="{ 'render-progress--active': mastering.isRendering.value }" aria-hidden="true">
               <div class="render-progress__track">
@@ -938,7 +968,7 @@ function createReportUrl(): string {
               </div>
             </div>
             <button type="button" class="master-action studio-output__cta" :disabled="!canRender" @click="renderMaster">
-              {{ mastering.isRendering.value ? t('master.studio.rendering') : t('master.studio.render') }}
+              {{ studioRenderButtonLabel }}
             </button>
           </div>
         </div>

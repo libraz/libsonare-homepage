@@ -1,61 +1,96 @@
 import { useData } from 'vitepress';
 import { computed } from 'vue';
-import enMessages from '@/locales/en.json';
-import jaMessages from '@/locales/ja.json';
+import {
+  alternateLocaleFor,
+  DEFAULT_LOCALE,
+  type LocalizedValueMap,
+  localeMessages,
+  normalizeLocale,
+} from '@/locales';
 
-const messages: Record<string, Record<string, any>> = {
-  en: enMessages,
-  ja: jaMessages,
-};
+function ensureLeadingSlash(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function stripLocalePrefix(path: string): string {
+  const normalizedPath = ensureLeadingSlash(path);
+  const segments = normalizedPath.split('/');
+  return segments[1] && segments[1] in localeMessages
+    ? ensureLeadingSlash(segments.slice(2).join('/'))
+    : normalizedPath;
+}
+
+function prefixFor(locale: string): string {
+  return locale === DEFAULT_LOCALE ? '' : `/${locale}`;
+}
 
 export function useI18n() {
   const { lang } = useData();
 
-  const locale = computed(() => lang.value || 'en');
+  const locale = computed(() => normalizeLocale(lang.value));
 
-  const currentMessages = computed(() => messages[locale.value] || messages.en);
+  const currentMessages = computed(
+    () => localeMessages[locale.value] || localeMessages[DEFAULT_LOCALE],
+  );
+
+  function resolveMessage(messages: Record<string, unknown>, keys: string[]): unknown {
+    let value: unknown = messages;
+    for (const key of keys) {
+      if (value && typeof value === 'object' && key in value) {
+        value = (value as Record<string, unknown>)[key];
+      } else {
+        return undefined;
+      }
+    }
+    return value;
+  }
 
   function t(key: string, params?: Record<string, string>): string {
     const keys = key.split('.');
-    let value: any = currentMessages.value;
+    const value = resolveMessage(currentMessages.value, keys);
+    const fallbackValue = resolveMessage(localeMessages[DEFAULT_LOCALE], keys);
+    const message = typeof value === 'string' && value.trim().length > 0 ? value : fallbackValue;
 
-    for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
-      } else {
-        // Fallback to English
-        value = messages.en;
-        for (const fallbackKey of keys) {
-          if (value && typeof value === 'object' && fallbackKey in value) {
-            value = value[fallbackKey];
-          } else {
-            return key;
-          }
-        }
-        break;
-      }
-    }
-
-    if (typeof value !== 'string') {
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return key;
     }
 
     // Parameter interpolation
     if (params) {
-      return value.replace(/\{(\w+)\}/g, (_, paramKey) => params[paramKey] ?? `{${paramKey}}`);
+      return message.replace(/\{(\w+)\}/g, (_, paramKey) => params[paramKey] ?? `{${paramKey}}`);
     }
 
-    return value;
+    return message;
   }
 
   function isLocale(checkLocale: string): boolean {
-    return locale.value === checkLocale;
+    return locale.value === normalizeLocale(checkLocale);
+  }
+
+  function localizedPath(path: string, targetLocale = locale.value): string {
+    const normalizedLocale = normalizeLocale(targetLocale);
+    const basePath = stripLocalePrefix(path);
+    return `${prefixFor(normalizedLocale)}${basePath}`;
+  }
+
+  function alternateLocalePath(path: string, targetLocale?: string): string {
+    const normalizedLocale = targetLocale ?? alternateLocaleFor(locale.value);
+    return localizedPath(path, normalizedLocale);
+  }
+
+  function localizedValue<T>(values: LocalizedValueMap<T>): T {
+    const value = values[locale.value];
+    if (typeof value === 'string' && value.trim().length === 0) return values[DEFAULT_LOCALE];
+    return value ?? values[DEFAULT_LOCALE];
   }
 
   return {
     locale,
     t,
     isLocale,
+    localizedPath,
+    alternateLocalePath,
+    localizedValue,
     messages: currentMessages,
   };
 }

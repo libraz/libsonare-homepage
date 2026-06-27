@@ -92,7 +92,7 @@ export function resolveTargetPath(root, sourcePath, href) {
   if (!rawPath) return sourcePath;
 
   const base = rawPath.startsWith('/')
-    ? path.join(root, 'src', rawPath.replace(/^\/ja\//, 'ja/').replace(/^\//, ''))
+    ? path.join(root, 'src', rawPath.replace(/^\//, ''))
     : path.resolve(path.dirname(sourcePath), rawPath);
 
   if (path.extname(base) === '.md') return base;

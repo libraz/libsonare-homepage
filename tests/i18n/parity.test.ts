@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import en from '@/locales/en.json';
-import ja from '@/locales/ja.json';
+import { DEFAULT_LOCALE, localeMessages, supportedLocales } from '@/locales';
 
 function flattenKeys(value: unknown, prefix = ''): string[] {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -12,18 +11,23 @@ function flattenKeys(value: unknown, prefix = ''): string[] {
 }
 
 describe('locale parity', () => {
-  const enKeys = new Set(flattenKeys(en));
-  const jaKeys = new Set(flattenKeys(ja));
+  const defaultKeys = new Set(flattenKeys(localeMessages[DEFAULT_LOCALE]));
 
-  it('ja has every en key', () => {
-    expect([...enKeys].filter((k) => !jaKeys.has(k))).toEqual([]);
-  });
+  for (const locale of supportedLocales) {
+    if (locale === DEFAULT_LOCALE) continue;
 
-  it('en has every ja key', () => {
-    expect([...jaKeys].filter((k) => !enKeys.has(k))).toEqual([]);
-  });
+    it(`${locale} has every ${DEFAULT_LOCALE} key`, () => {
+      const localeKeys = new Set(flattenKeys(localeMessages[locale]));
+      expect([...defaultKeys].filter((key) => !localeKeys.has(key))).toEqual([]);
+    });
+
+    it(`${DEFAULT_LOCALE} has every ${locale} key`, () => {
+      const localeKeys = new Set(flattenKeys(localeMessages[locale]));
+      expect([...localeKeys].filter((key) => !defaultKeys.has(key))).toEqual([]);
+    });
+  }
 
   it('has a non-trivial number of keys', () => {
-    expect(enKeys.size).toBeGreaterThan(100);
+    expect(defaultKeys.size).toBeGreaterThan(100);
   });
 });

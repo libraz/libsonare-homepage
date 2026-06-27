@@ -5,61 +5,61 @@ import { useI18n } from '@/composables/useI18n';
 
 const STORAGE_KEY = 'libsonare-demo-disclaimer-v2';
 
-const { locale } = useI18n();
-const ja = computed(() => locale.value === 'ja');
+const { localizedValue } = useI18n();
+
+const copyByLocale = {
+  en: {
+    badge: 'NOTE',
+    kicker: 'OSS DEMO · LOCAL ONLY',
+    title: 'This is an open-source demo,\nnot a service',
+    lead: 'libsonare is an Apache-2.0 open-source audio library. This page is a demo for trying it out — it is not a paid service or product.',
+    points: [
+      {
+        key: 'NO UPLOAD',
+        text: 'Audio is processed only inside this browser. Nothing is uploaded to or stored on any server.',
+      },
+      { key: 'FREE / OSS', text: 'Every operation runs on your own device via WebAssembly.' },
+      {
+        key: 'NO ACCOUNT',
+        text: 'No login, no sign-up. Try it freely and close the tab when you are done.',
+      },
+    ],
+    dismiss: 'Got it',
+    source: 'View source',
+    bannerLabel: 'OSS DEMO',
+    bannerText:
+      'Everything runs locally on your device and nothing is sent anywhere. This is an open-source demo, not a service.',
+    reopen: 'Details',
+  },
+  ja: {
+    badge: '注意',
+    kicker: 'OSS DEMO · LOCAL ONLY',
+    title: 'これはサービスではなく\nオープンソースのデモです',
+    lead: 'libsonare は Apache-2.0 のオープンソース音声ライブラリです。このページはその機能を試すためのデモで、有料サービスでも製品でもありません。',
+    points: [
+      {
+        key: 'NO UPLOAD',
+        text: '音声はこのブラウザ内だけで処理され、サーバーへ送信・保存されることは一切ありません。',
+      },
+      {
+        key: 'FREE / OSS',
+        text: 'すべての処理はあなたの端末上で WebAssembly により実行されます。',
+      },
+      { key: 'NO ACCOUNT', text: 'ログイン不要・登録不要。気軽に試してそのまま閉じられます。' },
+    ],
+    dismiss: '理解しました',
+    source: 'ソースを見る',
+    bannerLabel: 'OSS デモ',
+    bannerText:
+      'すべての処理はあなたの端末内だけで行われ、データはどこにも送信されません。これは有料サービスではなくオープンソースのデモです。',
+    reopen: '詳細',
+  },
+};
 
 const showOverlay = ref(false);
 const mounted = ref(false);
 
-const copy = computed(() =>
-  ja.value
-    ? {
-        badge: '注意',
-        kicker: 'OSS DEMO · LOCAL ONLY',
-        title: 'これはサービスではなく\nオープンソースのデモです',
-        lead: 'libsonare は Apache-2.0 のオープンソース音声ライブラリです。このページはその機能を試すためのデモで、有料サービスでも製品でもありません。',
-        points: [
-          {
-            key: 'NO UPLOAD',
-            text: '音声はこのブラウザ内だけで処理され、サーバーへ送信・保存されることは一切ありません。',
-          },
-          {
-            key: 'FREE / OSS',
-            text: 'すべての処理はあなたの端末上で WebAssembly により実行されます。',
-          },
-          { key: 'NO ACCOUNT', text: 'ログイン不要・登録不要。気軽に試してそのまま閉じられます。' },
-        ],
-        dismiss: '理解しました',
-        source: 'ソースを見る',
-        bannerLabel: 'OSS デモ',
-        bannerText:
-          'すべての処理はあなたの端末内だけで行われ、データはどこにも送信されません。これは有料サービスではなくオープンソースのデモです。',
-        reopen: '詳細',
-      }
-    : {
-        badge: 'NOTE',
-        kicker: 'OSS DEMO · LOCAL ONLY',
-        title: 'This is an open-source demo,\nnot a service',
-        lead: 'libsonare is an Apache-2.0 open-source audio library. This page is a demo for trying it out — it is not a paid service or product.',
-        points: [
-          {
-            key: 'NO UPLOAD',
-            text: 'Audio is processed only inside this browser. Nothing is uploaded to or stored on any server.',
-          },
-          { key: 'FREE / OSS', text: 'Every operation runs on your own device via WebAssembly.' },
-          {
-            key: 'NO ACCOUNT',
-            text: 'No login, no sign-up. Try it freely and close the tab when you are done.',
-          },
-        ],
-        dismiss: 'Got it',
-        source: 'View source',
-        bannerLabel: 'OSS DEMO',
-        bannerText:
-          'Everything runs locally on your device and nothing is sent anywhere. This is an open-source demo, not a service.',
-        reopen: 'Details',
-      },
-);
+const copy = computed(() => localizedValue(copyByLocale));
 
 function dismiss() {
   showOverlay.value = false;

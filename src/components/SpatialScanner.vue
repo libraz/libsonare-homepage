@@ -24,9 +24,9 @@ import { useSpatialAudio } from '@/composables/useSpatialAudio';
 import { useSpatialScanner } from '@/composables/useSpatialScanner';
 import { useTheme } from '@/composables/useTheme';
 
-const { locale } = useI18n();
+const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const { isDark } = useTheme();
-const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
+const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 
 const scanner = useSpatialScanner();
 const { status, progress, error, fileName, activePreset, result } = scanner;
@@ -37,12 +37,9 @@ const treatAsIr = ref(false);
 const autoRotate = ref(true);
 const morphError = ref(false);
 
-const ja = computed(() => locale.value === 'ja');
-const docsPath = computed(() =>
-  ja.value ? '/ja/docs/acoustic-analysis' : '/docs/acoustic-analysis',
-);
-const glossaryBase = computed(() => (ja.value ? '/ja/docs/glossary' : '/docs/glossary'));
-const oppositeLocalePath = computed(() => (ja.value ? '/spatial' : '/ja/spatial'));
+const docsPath = computed(() => localizedPath('/docs/acoustic-analysis'));
+const glossaryBase = computed(() => localizedPath('/docs/glossary'));
+const oppositeLocalePath = computed(() => alternateLocalePath('/spatial'));
 
 /** Build rich-tooltip props for a metric/term from the copy table. */
 function term(key: SpatialTermKey) {

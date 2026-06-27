@@ -68,12 +68,14 @@ describe('check-doc-links script helpers', () => {
         '# Home',
         '[Guide](./docs/guide.md#details)',
         '[Japanese](/ja/docs/guide#詳細)',
+        '[French](/fr/docs/guide#details)',
         '[External](https://example.test/ignored)',
         '[Mail](mailto:team@example.test)',
       ].join('\n'),
     );
     writeFile(root, 'src/docs/guide.md', ['# Guide', '## Details'].join('\n'));
     writeFile(root, 'src/ja/docs/guide.md', ['# ガイド', '## 詳細'].join('\n'));
+    writeFile(root, 'src/fr/docs/guide.md', ['# Guide', '## Details'].join('\n'));
     writeFile(
       root,
       '.vitepress/config.ts',
@@ -113,10 +115,14 @@ describe('check-doc-links script helpers', () => {
     const sourcePath = writeFile(root, 'src/docs/source.md', '# Source');
     writeFile(root, 'src/docs/page.md', '# Page');
     writeFile(root, 'src/ja/docs/page.md', '# Page');
+    writeFile(root, 'src/fr/docs/page.md', '# Page');
 
     expect(resolveTargetPath(root, sourcePath, './page')).toBe(path.join(root, 'src/docs/page.md'));
     expect(resolveTargetPath(root, sourcePath, '/ja/docs/page')).toBe(
       path.join(root, 'src/ja/docs/page.md'),
+    );
+    expect(resolveTargetPath(root, sourcePath, '/fr/docs/page')).toBe(
+      path.join(root, 'src/fr/docs/page.md'),
     );
     expect(resolveTargetPath(root, sourcePath, '../outside')).toBe(
       path.join(root, 'src/outside.md'),

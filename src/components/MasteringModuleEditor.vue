@@ -41,10 +41,8 @@ const emit = defineEmits<{
   reset: [];
 }>();
 
-const { t, locale } = useI18n();
-const glossaryBasePath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const { t, locale, localizedPath, alternateLocalePath } = useI18n();
+const glossaryBasePath = computed(() => localizedPath('/docs/glossary'));
 
 function docHref(slug: string | null | undefined): string | undefined {
   return slug ? `${glossaryBasePath.value}/${slug}` : undefined;

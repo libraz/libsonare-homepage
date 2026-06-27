@@ -4,43 +4,58 @@ import { computed } from 'vue';
 import DemoCardGrid from '@/components/DemoCardGrid.vue';
 import { CornerBrackets, GridOverlay } from '@/components/ui';
 import { useTheme } from '@/composables/useTheme';
+import {
+  alternateLocaleFor,
+  type LocalizedValueMap,
+  localeLabels,
+  localizedRoute,
+  normalizeLocale,
+} from '@/locales';
 
 const { lang } = useData();
 const { isDark, toggle: toggleTheme } = useTheme();
 
-const ja = computed(() => lang.value === 'ja');
-const base = computed(() => (ja.value ? '/ja' : ''));
+const currentLocale = computed(() => normalizeLocale(lang.value));
+const alternateLocale = computed(() => alternateLocaleFor(currentLocale.value));
 
-const copy = computed(() =>
-  ja.value
-    ? {
-        home: 'ホーム',
-        docs: 'ドキュメント',
-        cta: 'はじめる',
-        eyebrow: 'ブラウザ内デモ',
-        title: 'デモ一覧',
-        subhead:
-          'すべて WebAssembly でブラウザ内完結。音声はアップロードされず、端末内だけで処理されます。',
-        otherLabel: 'EN',
-        footerNote: 'これらはオープンソース libsonare のデモであり、サービスではありません。',
-      }
-    : {
-        home: 'Home',
-        docs: 'Docs',
-        cta: 'Get Started',
-        eyebrow: 'In-browser demos',
-        title: 'Demos',
-        subhead:
-          'Every demo runs entirely in your browser via WebAssembly. Audio is never uploaded — it stays on your device.',
-        otherLabel: 'JA',
-        footerNote: 'These are demos of the open-source libsonare library, not a service.',
-      },
-);
+const copyByLocale = {
+  en: {
+    home: 'Home',
+    docs: 'Docs',
+    cta: 'Get Started',
+    eyebrow: 'In-browser demos',
+    title: 'Demos',
+    subhead:
+      'Every demo runs entirely in your browser via WebAssembly. Audio is never uploaded — it stays on your device.',
+    footerNote: 'These are demos of the open-source libsonare library, not a service.',
+  },
+  ja: {
+    home: 'ホーム',
+    docs: 'ドキュメント',
+    cta: 'はじめる',
+    eyebrow: 'ブラウザ内デモ',
+    title: 'デモ一覧',
+    subhead:
+      'すべて WebAssembly でブラウザ内完結。音声はアップロードされず、端末内だけで処理されます。',
+    footerNote: 'これらはオープンソース libsonare のデモであり、サービスではありません。',
+  },
+} satisfies LocalizedValueMap<{
+  home: string;
+  docs: string;
+  cta: string;
+  eyebrow: string;
+  title: string;
+  subhead: string;
+  footerNote: string;
+}>;
 
-const homePath = computed(() => `${base.value}/`);
-const docsPath = computed(() => `${base.value}/docs/introduction`);
-const ctaPath = computed(() => `${base.value}/docs/getting-started`);
-const otherLocalePath = computed(() => (ja.value ? '/demos' : '/ja/demos'));
+const copy = computed(() => copyByLocale[currentLocale.value] ?? copyByLocale.en);
+
+const homePath = computed(() => localizedRoute('/', currentLocale.value));
+const docsPath = computed(() => localizedRoute('/docs/introduction', currentLocale.value));
+const ctaPath = computed(() => localizedRoute('/docs/getting-started', currentLocale.value));
+const otherLocalePath = computed(() => localizedRoute('/demos', alternateLocale.value));
+const otherLocaleLabel = computed(() => localeLabels[alternateLocale.value].shortLabel);
 const githubUrl = 'https://github.com/libraz/libsonare';
 
 function switchLocale(event: Event) {
@@ -68,9 +83,9 @@ function switchLocale(event: Event) {
         <a
           :href="otherLocalePath"
           class="demos-page__lang-switch"
-          :aria-label="`Switch to ${copy.otherLabel}`"
+          :aria-label="`Switch to ${localeLabels[alternateLocale].label}`"
           @click.capture.stop.prevent="switchLocale"
-        >{{ copy.otherLabel }}</a>
+        >{{ otherLocaleLabel }}</a>
         <button
           type="button"
           class="demos-page__theme-toggle"

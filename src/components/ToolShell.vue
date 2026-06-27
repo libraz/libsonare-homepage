@@ -34,63 +34,98 @@ const props = withDefaults(
   },
 );
 
-const { locale } = useI18n();
+const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const { isDark, toggle: toggleTheme } = useTheme();
 
-const ja = computed(() => locale.value === 'ja');
-const homePath = computed(() => (ja.value ? '/ja/' : '/'));
-const demosPath = computed(() => (ja.value ? '/ja/demos' : '/demos'));
-const docsLabel = computed(() => (ja.value ? 'ドキュメント' : 'Docs'));
-const ctaLabel = computed(() => (ja.value ? 'はじめる' : 'Get Started'));
-const ctaPath = computed(() => (ja.value ? '/ja/docs/getting-started' : '/docs/getting-started'));
-const docsPath = computed(
-  () => props.docsPath || (ja.value ? '/ja/docs/introduction' : '/docs/introduction'),
+const copy = computed(() =>
+  localizedValue({
+    en: {
+      docsLabel: 'Docs',
+      ctaLabel: 'Get Started',
+      tabListLabel: 'Demo switcher',
+      guideLinkLabel: 'Open docs',
+      otherLocaleLabel: 'JA',
+      tabs: {
+        analyzer: 'Visual Player',
+        mastering: 'Mastering',
+        analysis: 'Analysis',
+        mixing: 'Mixing',
+        fx: 'Realtime FX',
+        spatial: 'Spatial 3D',
+        synth: 'Synth',
+        studio: 'Studio',
+      },
+    },
+    ja: {
+      docsLabel: 'ドキュメント',
+      ctaLabel: 'はじめる',
+      tabListLabel: 'デモ切り替え',
+      guideLinkLabel: 'ドキュメント',
+      otherLocaleLabel: 'EN',
+      tabs: {
+        analyzer: 'ビジュアルプレイヤー',
+        mastering: 'マスタリング',
+        analysis: '楽曲分析',
+        mixing: 'ミキシング',
+        fx: 'リアルタイムFX',
+        spatial: '空間 3D',
+        synth: 'シンセ',
+        studio: 'スタジオ',
+      },
+    },
+  }),
 );
+const homePath = computed(() => localizedPath('/'));
+const demosPath = computed(() => localizedPath('/demos'));
+const docsLabel = computed(() => copy.value.docsLabel);
+const ctaLabel = computed(() => copy.value.ctaLabel);
+const ctaPath = computed(() => localizedPath('/docs/getting-started'));
+const docsPath = computed(() => props.docsPath || localizedPath('/docs/introduction'));
 const otherLocalePath = computed(
-  () => props.oppositeLocalePath || (ja.value ? '/music-analysis' : '/ja/music-analysis'),
+  () => props.oppositeLocalePath || alternateLocalePath('/music-analysis'),
 );
-const otherLocaleLabel = computed(() => (ja.value ? 'EN' : 'JA'));
+const otherLocaleLabel = computed(() => copy.value.otherLocaleLabel);
 
 const demoTabs = computed(() => [
   {
     id: 'analyzer',
-    label: ja.value ? 'ビジュアルプレイヤー' : 'Visual Player',
-    path: ja.value ? '/ja/analyzer' : '/analyzer',
+    label: copy.value.tabs.analyzer,
+    path: localizedPath('/analyzer'),
   },
   {
     id: 'mastering',
-    label: ja.value ? 'マスタリング' : 'Mastering',
-    path: ja.value ? '/ja/mastering' : '/mastering',
+    label: copy.value.tabs.mastering,
+    path: localizedPath('/mastering'),
   },
   {
     id: 'analysis',
-    label: ja.value ? '楽曲分析' : 'Analysis',
-    path: ja.value ? '/ja/music-analysis' : '/music-analysis',
+    label: copy.value.tabs.analysis,
+    path: localizedPath('/music-analysis'),
   },
   {
     id: 'mixing',
-    label: ja.value ? 'ミキシング' : 'Mixing',
-    path: ja.value ? '/ja/mixing' : '/mixing',
+    label: copy.value.tabs.mixing,
+    path: localizedPath('/mixing'),
   },
   {
     id: 'fx',
-    label: ja.value ? 'リアルタイムFX' : 'Realtime FX',
-    path: ja.value ? '/ja/realtime-fx' : '/realtime-fx',
+    label: copy.value.tabs.fx,
+    path: localizedPath('/realtime-fx'),
   },
   {
     id: 'spatial',
-    label: ja.value ? '空間 3D' : 'Spatial 3D',
-    path: ja.value ? '/ja/spatial' : '/spatial',
+    label: copy.value.tabs.spatial,
+    path: localizedPath('/spatial'),
   },
   {
     id: 'synth',
-    label: ja.value ? 'シンセ' : 'Synth',
-    path: ja.value ? '/ja/synth' : '/synth',
+    label: copy.value.tabs.synth,
+    path: localizedPath('/synth'),
   },
   {
     id: 'studio',
-    label: ja.value ? 'スタジオ' : 'Studio',
-    path: ja.value ? '/ja/studio' : '/studio',
+    label: copy.value.tabs.studio,
+    path: localizedPath('/studio'),
   },
 ]);
 
@@ -188,7 +223,7 @@ function switchLocale(event: Event) {
       ref="tabsRef"
       class="tool-page__tabs"
       :class="{ 'tool-page__tabs--fade-left': tabsCanScrollLeft, 'tool-page__tabs--fade-right': tabsCanScrollRight }"
-      :aria-label="ja ? 'デモ切り替え' : 'Demo switcher'"
+      :aria-label="copy.tabListLabel"
     >
       <a
         v-for="tab in demoTabs"
@@ -211,7 +246,7 @@ function switchLocale(event: Event) {
         <p v-if="guideBody">{{ guideBody }}</p>
       </div>
       <a :href="docsPath" class="tool-page__guide-link">
-        {{ guideLinkLabel || (ja ? 'ドキュメント' : 'Open docs') }}
+        {{ guideLinkLabel || copy.guideLinkLabel }}
       </a>
     </div>
 

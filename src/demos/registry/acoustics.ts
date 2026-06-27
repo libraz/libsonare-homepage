@@ -1,7 +1,7 @@
 /**
  * Demo definitions for the room-acoustics cluster (acoustic-analysis).
  *
- * Definitions are data only — labels carry both locales so the i18n gate can verify
+ * Definitions are data only — labels carry localized copy so the i18n gate can verify
  * parity without a separate locale file. Add entries here; markdown references them
  * by `id` via `<SonareDemo id="..." />`.
  */

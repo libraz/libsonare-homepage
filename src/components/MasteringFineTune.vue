@@ -26,10 +26,8 @@ const emit = defineEmits<{
   'update:diagnosticBypass': [key: DiagnosticBypassKey, value: boolean];
 }>();
 
-const { t, locale } = useI18n();
-const glossaryBasePath = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const { t, locale, localizedPath, alternateLocalePath } = useI18n();
+const glossaryBasePath = computed(() => localizedPath('/docs/glossary'));
 const controls: FineTuneKey[] = ['tone', 'width', 'dynamics'];
 const diagnosticBypassControls: DiagnosticBypassKey[] = [
   'repair',
@@ -39,6 +37,10 @@ const diagnosticBypassControls: DiagnosticBypassKey[] = [
   'stereo',
   'loudnessLimiter',
 ];
+const disclosureLabel = computed(() => {
+  if (props.show) return t('master.quick.hideFineTune');
+  return t('master.quick.showFineTune');
+});
 
 function docHref(key: keyof typeof MASTERING_PARAMETER_GUIDE_SLUGS): string | undefined {
   const slug = MASTERING_PARAMETER_GUIDE_SLUGS[key];
@@ -67,7 +69,7 @@ function updateDiagnosticBypass(key: DiagnosticBypassKey, value: boolean) {
 
 <template>
   <button type="button" class="master-disclosure" @click="emit('update:show', !show)">
-    {{ show ? t('master.quick.hideFineTune') : t('master.quick.showFineTune') }}
+    {{ disclosureLabel }}
   </button>
   <div v-if="show" class="fine-tune">
     <label v-for="control in controls" :key="control" class="master-slider">

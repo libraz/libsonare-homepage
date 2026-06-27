@@ -10,9 +10,11 @@ const minimumDetailsBodyLength = 120;
 export function checkGlossaryCoverage({
   root = process.cwd(),
   manifestPath = path.join(root, 'scripts/glossary/manifest.json'),
+  defaultLocale = 'en',
 } = {}) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const failures = [];
+  const locales = listLocaleNames(path.join(root, 'src/locales'), defaultLocale);
   const entries = glossaryEntries(manifest);
   const byPath = new Map(entries.map((entry) => [entry.path, entry]));
   const published = entries.filter((entry) => entry.status === 'published');
@@ -20,29 +22,33 @@ export function checkGlossaryCoverage({
 
   for (const entry of entries) {
     if (!entry.id) failures.push(`${entry.category}: missing id`);
-    if (!entry.title?.en || !entry.title?.ja)
-      failures.push(`${entry.id}: missing title.en/title.ja`);
+    for (const locale of locales) {
+      if (!entry.title?.[locale]) failures.push(`${entry.id}: missing title.${locale}`);
+    }
     if (!entry.status) failures.push(`${entry.id}: missing status`);
   }
 
   for (const entry of published) {
-    const enPath = path.join(root, 'src/docs/glossary', entry.path);
-    const jaPath = path.join(root, 'src/ja/docs/glossary', entry.path);
-    if (!fs.existsSync(enPath)) failures.push(`published entry missing en page: ${entry.path}`);
-    if (!fs.existsSync(jaPath)) failures.push(`published entry missing ja page: ${entry.path}`);
-    if (fs.existsSync(enPath)) checkPublishedPage(failures, `en ${entry.path}`, enPath);
-    if (fs.existsSync(jaPath)) checkPublishedPage(failures, `ja ${entry.path}`, jaPath);
+    for (const locale of locales) {
+      const pagePath = path.join(glossaryDirFor(root, locale, defaultLocale), entry.path);
+      if (!fs.existsSync(pagePath)) {
+        failures.push(`published entry missing ${locale} page: ${entry.path}`);
+      } else {
+        checkPublishedPage(failures, `${locale} ${entry.path}`, pagePath);
+      }
+    }
   }
 
-  for (const relativePath of listMarkdownFiles(path.join(root, 'src/docs/glossary'))) {
-    if (!byPath.has(relativePath)) failures.push(`en page not listed in manifest: ${relativePath}`);
-  }
-  for (const relativePath of listMarkdownFiles(path.join(root, 'src/ja/docs/glossary'))) {
-    if (!byPath.has(relativePath)) failures.push(`ja page not listed in manifest: ${relativePath}`);
+  for (const locale of locales) {
+    for (const relativePath of listMarkdownFiles(glossaryDirFor(root, locale, defaultLocale))) {
+      if (!byPath.has(relativePath)) {
+        failures.push(`${locale} page not listed in manifest: ${relativePath}`);
+      }
+    }
   }
 
-  checkGlossaryIndexes({ root, published, failures });
-  checkMasteringSidebar({ root, published, failures });
+  checkGlossaryIndexes({ root, published, failures, locales, defaultLocale });
+  checkMasteringSidebar({ root, published, failures, locales, defaultLocale });
 
   return { failures, publishedCount: published.length, plannedCount: todo.length };
 }
@@ -55,6 +61,31 @@ export function glossaryEntries(manifest) {
       path: entry.path || `${category.id}/${entry.id}.md`,
     })),
   );
+}
+
+function listLocaleNames(localesDir, defaultLocale) {
+  if (!fs.existsSync(localesDir)) return [defaultLocale, 'ja'];
+  const locales = fs
+    .readdirSync(localesDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => path.basename(entry.name, '.json'));
+  return [...new Set([defaultLocale, ...locales])].sort();
+}
+
+function docsDirFor(root, locale, defaultLocale) {
+  return locale === defaultLocale
+    ? path.join(root, 'src/docs')
+    : path.join(root, 'src', locale, 'docs');
+}
+
+function glossaryDirFor(root, locale, defaultLocale) {
+  return path.join(docsDirFor(root, locale, defaultLocale), 'glossary');
+}
+
+function localizedDocsLink(locale, defaultLocale, cleanPath) {
+  return locale === defaultLocale
+    ? `/docs/glossary/${cleanPath}`
+    : `/${locale}/docs/glossary/${cleanPath}`;
 }
 
 export function checkPublishedPage(failures, label, filePath) {
@@ -89,28 +120,35 @@ export function checkRelatedLinks(failures, label, content) {
   }
 }
 
-function checkGlossaryIndexes({ root, published, failures }) {
-  const enIndex = fs.readFileSync(path.join(root, 'src/docs/glossary.md'), 'utf8');
-  const jaIndex = fs.readFileSync(path.join(root, 'src/ja/docs/glossary.md'), 'utf8');
+function checkGlossaryIndexes({ root, published, failures, locales, defaultLocale }) {
+  const indexes = new Map(
+    locales.map((locale) => {
+      const file = path.join(docsDirFor(root, locale, defaultLocale), 'glossary.md');
+      return [locale, fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''];
+    }),
+  );
 
   for (const entry of published) {
     const link = `./glossary/${entry.path}`;
-    if (!enIndex.includes(link)) failures.push(`en glossary index missing link: ${link}`);
-    if (!jaIndex.includes(link)) failures.push(`ja glossary index missing link: ${link}`);
+    for (const locale of locales) {
+      if (!indexes.get(locale)?.includes(link)) {
+        failures.push(`${locale} glossary index missing link: ${link}`);
+      }
+    }
   }
 }
 
-function checkMasteringSidebar({ root, published, failures }) {
+function checkMasteringSidebar({ root, published, failures, locales, defaultLocale }) {
   const config = fs.readFileSync(path.join(root, '.vitepress/config.ts'), 'utf8');
 
   for (const entry of published) {
     const cleanPath = entry.path.replace(/\.md$/, '');
-    const enLink = `/docs/glossary/${cleanPath}`;
-    const jaLink = `/ja/docs/glossary/${cleanPath}`;
-    if (!config.includes(`link: '${enLink}'`))
-      failures.push(`en sidebar missing glossary link: ${enLink}`);
-    if (!config.includes(`link: '${jaLink}'`))
-      failures.push(`ja sidebar missing glossary link: ${jaLink}`);
+    for (const locale of locales) {
+      const link = localizedDocsLink(locale, defaultLocale, cleanPath);
+      if (!config.includes(`link: '${link}'`)) {
+        failures.push(`${locale} sidebar missing glossary link: ${link}`);
+      }
+    }
   }
 }
 

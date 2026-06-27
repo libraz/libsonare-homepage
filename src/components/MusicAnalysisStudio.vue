@@ -36,9 +36,9 @@ type WorkerMessage =
 
 type HeatmapKey = 'chroma' | 'mel' | 'cqt';
 
-const { locale } = useI18n();
+const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 
-const copy = computed(() => (locale.value === 'ja' ? jaCopy : enCopy));
+const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 const libVersion = ref('');
 const localError = ref<string | null>(null);
 const warning = ref<string | null>(null);
@@ -60,18 +60,9 @@ let worker: Worker | null = null;
 let requestId = 0;
 let reportUrl: string | null = null;
 
-const docsPath = computed(() =>
-  locale.value === 'ja'
-    ? '/ja/docs/glossary/concepts/mir-overview'
-    : '/docs/glossary/concepts/mir-overview',
-);
-const oppositeLocalePath = computed(() =>
-  locale.value === 'ja' ? '/music-analysis' : '/ja/music-analysis',
-);
-
-const glossaryBase = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const docsPath = computed(() => localizedPath('/docs/glossary/concepts/mir-overview'));
+const oppositeLocalePath = computed(() => alternateLocalePath('/music-analysis'));
+const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
 type TermKey = keyof typeof enCopy.terms.items;
 

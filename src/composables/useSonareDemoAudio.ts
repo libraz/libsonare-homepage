@@ -70,6 +70,27 @@ function startProgressLoop(): void {
   rafId = requestAnimationFrame(tick);
 }
 
+function clearPlaybackState(): void {
+  currentSource = null;
+  stopProgressLoop();
+  progress.value = 0;
+  playingId.value = '';
+}
+
+function assertPlayableAudio(audio: MonoAudio): void {
+  if (audio.samples.length === 0) {
+    throw new Error('demo audio is empty');
+  }
+  if (!Number.isFinite(audio.sampleRate) || audio.sampleRate <= 0) {
+    throw new Error(`demo audio has invalid sample rate: ${audio.sampleRate}`);
+  }
+}
+
+function isAudioResponseType(type: string): boolean {
+  const normalized = type.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  return normalized.startsWith('audio/') || normalized === 'application/octet-stream';
+}
+
 /** Initialize the WASM module once; concurrent callers share the same promise. */
 export async function ensureWasm(): Promise<WasmModule> {
   if (wasmModule) return wasmModule;
@@ -80,7 +101,11 @@ export async function ensureWasm(): Promise<WasmModule> {
       wasmModule = mod;
       wasmReady.value = true;
       return mod;
-    })();
+    })().catch((error) => {
+      wasmInit = null;
+      wasmReady.value = false;
+      throw error;
+    });
   }
   return wasmInit;
 }
@@ -103,11 +128,8 @@ function stop(): void {
     } catch {
       // already stopped
     }
-    currentSource = null;
   }
-  stopProgressLoop();
-  progress.value = 0;
-  playingId.value = '';
+  clearPlaybackState();
 }
 
 export function useSonareDemoAudio() {
@@ -130,13 +152,17 @@ export function useSonareDemoAudio() {
       ];
       let buf: ArrayBuffer | null = null;
       for (const url of candidates) {
-        const res = await fetch(url);
-        // A missing file can resolve to the SPA fallback (200 text/html) under the
-        // dev server; only accept a response that is actually an audio payload.
-        const type = res.headers.get('content-type') ?? '';
-        if (res.ok && !type.includes('text/html')) {
-          buf = await res.arrayBuffer();
-          break;
+        try {
+          const res = await fetch(url);
+          // A missing file can resolve to the SPA fallback (200 text/html) under the
+          // dev server; only accept a response that is actually an audio payload.
+          const type = res.headers.get('content-type') ?? '';
+          if (res.ok && isAudioResponseType(type)) {
+            buf = await res.arrayBuffer();
+            break;
+          }
+        } catch {
+          // Try the next available encoding.
         }
       }
       if (!buf) throw new Error(`demo clip not found: ${name}`);
@@ -151,7 +177,10 @@ export function useSonareDemoAudio() {
         for (let i = 0; i < mono.length; i++) mono[i] /= decoded.numberOfChannels;
       }
       return { samples: mono, sampleRate: decoded.sampleRate };
-    })();
+    })().catch((error) => {
+      clipCache.delete(name);
+      throw error;
+    });
 
     clipCache.set(name, promise);
     return promise;
@@ -162,6 +191,7 @@ export function useSonareDemoAudio() {
    * Resumes the context (autoplay policy) — must be called from a user gesture.
    */
   async function play(id: string, audio: MonoAudio): Promise<void> {
+    assertPlayableAudio(audio);
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
 
@@ -177,7 +207,7 @@ export function useSonareDemoAudio() {
     node.buffer = buffer;
     node.connect(ctx.destination);
     node.onended = () => {
-      if (currentSource === node) stop();
+      if (currentSource === node) clearPlaybackState();
     };
     currentSource = node;
     playingId.value = id;

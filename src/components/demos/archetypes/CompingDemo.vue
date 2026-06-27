@@ -24,7 +24,7 @@ const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 const { locale } = useI18n();
 const { loadClip, play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed<DemoLocale>(() => (locale.value.startsWith('ja') ? 'ja' : 'en'));
+const loc = computed<DemoLocale>(() => locale.value);
 const title = computed(() => localized(props.def.title, loc.value));
 const caption = computed(() => localized(props.def.caption, loc.value));
 

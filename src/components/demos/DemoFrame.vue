@@ -11,6 +11,9 @@
  * any per-demo controls via `#controls`. All playback visuals are driven by the
  * `playing` + `progress` props so motion stays in lock-step with the audio clock.
  */
+import { computed } from 'vue';
+import { useI18n } from '@/composables/useI18n';
+
 type Tone = 'idle' | 'ready' | 'playing' | 'loading' | 'error';
 
 const props = withDefaults(
@@ -47,6 +50,15 @@ const props = withDefaults(
 
 defineEmits<(e: 'toggle') => void>();
 
+const { t } = useI18n();
+const transportLabelKeys = {
+  false: 'demo.player.play',
+  true: 'demo.player.stop',
+} as const;
+const transportLabel = computed(() =>
+  t(transportLabelKeys[String(props.playing) as keyof typeof transportLabelKeys]),
+);
+
 function pct(v: number): string {
   return `${Math.min(100, Math.max(0, v * 100))}%`;
 }
@@ -59,7 +71,9 @@ function pct(v: number): string {
         <i class="td__led" :class="`is-${tone}`" />
         {{ eyebrow }}
       </span>
-      <span class="td__state" :class="`is-${tone}`">{{ state }}</span>
+      <span class="td__state" :class="`is-${tone}`" role="status" aria-live="polite">
+        {{ state }}
+      </span>
     </header>
 
     <figcaption class="td__title">{{ title }}</figcaption>
@@ -94,14 +108,14 @@ function pct(v: number): string {
         <span v-if="axisTime" class="td__axis td__axis--time" aria-hidden="true">{{ axisTime }}</span>
 
         <transition name="td-fade">
-          <div v-if="tone === 'loading'" class="td__overlay">
+          <div v-if="tone === 'loading'" class="td__overlay" role="status" aria-live="polite">
             <span class="td__sweep" />
             <span class="td__overlay-label">{{ loadingLabel }}</span>
           </div>
         </transition>
         <transition name="td-fade">
-          <div v-if="error" class="td__overlay td__overlay--error">
-            <span class="td__overlay-label">SIGNAL ERROR</span>
+          <div v-if="error" class="td__overlay td__overlay--error" role="alert">
+            <span class="td__overlay-label">{{ t('demo.inline.signalError') }}</span>
             <code class="td__overlay-msg">{{ error }}</code>
           </div>
         </transition>
@@ -115,7 +129,8 @@ function pct(v: number): string {
         :class="{ 'is-playing': playing }"
         :style="{ '--ring': playing ? progress * 360 : 0 }"
         :disabled="disabled"
-        :aria-label="playing ? 'Stop' : 'Play'"
+        :aria-label="transportLabel"
+        :aria-pressed="playing"
         @click="$emit('toggle')"
       >
         <span class="td__play-ring" aria-hidden="true" />

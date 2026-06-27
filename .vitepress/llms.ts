@@ -39,6 +39,19 @@ export type GenerateLlmsTxtOptions = {
   docsSidebar: NavNode[];
   /** Root glossary node (skipped while walking docs, emitted as its own section). */
   glossaryRoot: NavNode;
+  /** Non-default localized entry points to surface without duplicating the full index. */
+  localizedSections?: LocalizedSection[];
+};
+
+export type LocalizedSection = {
+  locale: string;
+  label: string;
+  docsLink: string;
+  demosLink: string;
+  docsText?: string;
+  demosText?: string;
+  docsDescription?: string;
+  demosDescription?: string;
 };
 
 /** Collect every leaf (a node carrying a `link`) in document order. */
@@ -96,7 +109,16 @@ function renderSection(
 
 /** Build the full llms.txt body. */
 export function buildLlmsTxt(options: GenerateLlmsTxtOptions): string {
-  const { siteUrl, srcDir, summary, demoMenu, docsSidebar, glossaryRoot } = options;
+  const {
+    siteUrl,
+    srcDir,
+    summary,
+    demoMenu,
+    docsSidebar,
+    glossaryRoot,
+    localizedSections = [],
+  } = options;
+  const localizedPaths = localizedSections.map((section) => `\`/${section.locale}/\``).join(', ');
 
   const sections: string[] = [
     '# libsonare',
@@ -105,7 +127,9 @@ export function buildLlmsTxt(options: GenerateLlmsTxtOptions): string {
     '',
     'libsonare runs entirely client-side in the browser (WebAssembly) and natively',
     'in Node.js, Python, the CLI, and C++. The links below point to the canonical',
-    'HTML documentation. Japanese (日本語) versions live under `/ja/`.',
+    localizedPaths
+      ? `HTML documentation. Localized versions live under ${localizedPaths}.`
+      : 'HTML documentation.',
     '',
   ];
 
@@ -127,18 +151,40 @@ export function buildLlmsTxt(options: GenerateLlmsTxtOptions): string {
   );
   if (glossary) sections.push(glossary, '');
 
-  sections.push(
-    '## Japanese (日本語)',
-    '',
-    `- [日本語ドキュメント](${siteUrl}/ja/docs/introduction.html): 同じ内容の日本語版ドキュメント一式`,
-    `- [デモ一覧](${siteUrl}/ja/demos.html): ブラウザ内で動く全デモの日本語版`,
-    '',
-  );
+  for (const localized of localizedSections) {
+    sections.push(
+      `## ${localized.label}`,
+      '',
+      renderLocalizedBullet(
+        siteUrl,
+        localized.docsText ?? `${localized.label} Documentation`,
+        localized.docsLink,
+        localized.docsDescription,
+      ),
+      renderLocalizedBullet(
+        siteUrl,
+        localized.demosText ?? `${localized.label} Demos`,
+        localized.demosLink,
+        localized.demosDescription,
+      ),
+      '',
+    );
+  }
 
   return `${sections
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trimEnd()}\n`;
+}
+
+function renderLocalizedBullet(
+  siteUrl: string,
+  text: string,
+  link: string,
+  description?: string,
+): string {
+  const url = `${siteUrl}${link}.html`;
+  return description ? `- [${text}](${url}): ${description}` : `- [${text}](${url})`;
 }
 
 /** Generate `llms.txt` into the build output directory. */

@@ -4,11 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  checkConditionalTranslateCalls,
   checkI18nParity,
+  checkLocaleLeafValues,
+  checkScaffoldedTranslationTodos,
   flattenKeys,
   getByPath,
   listMarkdownFiles,
   listSourceFiles,
+  readLocales,
 } from '../../scripts/check-i18n-parity.mjs';
 
 const scriptPath = path.resolve('scripts/check-i18n-parity.mjs');
@@ -72,6 +76,23 @@ describe('check-i18n-parity script helpers', () => {
     expect(checkI18nParity({ root })).toEqual([]);
   });
 
+  it('discovers every locale json file and checks its docs mirror', () => {
+    const root = createWorkspace();
+    writeValidProject(root);
+    writeJson(root, 'src/locales/fr.json', {
+      common: { save: 'Enregistrer', cancel: 'Annuler' },
+      demo: { title: 'Démo' },
+    });
+    writeFile(root, 'src/fr/docs/guide.md', '# Guide');
+
+    expect([...readLocales(path.join(root, 'src/locales')).keys()].sort()).toEqual([
+      'en',
+      'fr',
+      'ja',
+    ]);
+    expect(checkI18nParity({ root })).toEqual([]);
+  });
+
   it('reports asymmetric locale keys, missing literal t() keys and docs mirror gaps', () => {
     const root = createWorkspace();
     writeJson(root, 'src/locales/en.json', {
@@ -93,6 +114,159 @@ describe('check-i18n-parity script helpers', () => {
       'docs: ja missing en-only.md',
       'docs: en missing ja-only.md',
     ]);
+  });
+
+  it('reports empty or non-string locale leaves', () => {
+    const failures: string[] = [];
+    checkLocaleLeafValues(failures, 'ja', {
+      common: {
+        save: '   ',
+        count: 3,
+      },
+    });
+
+    expect(failures).toEqual([
+      'locales: ja key common.save is empty',
+      'locales: ja key common.count must be a string',
+    ]);
+  });
+
+  it('reports invalid locale leaves through the full parity check', () => {
+    const root = createWorkspace();
+    writeJson(root, 'src/locales/en.json', {
+      common: { save: 'Save', cancel: 'Cancel' },
+    });
+    writeJson(root, 'src/locales/ja.json', {
+      common: { save: '', cancel: 1 },
+    });
+
+    expect(checkI18nParity({ root })).toEqual(
+      expect.arrayContaining([
+        'locales: ja key common.save is empty',
+        'locales: ja key common.cancel must be a string',
+      ]),
+    );
+  });
+
+  it('reports scaffolded translation TODO markers in markdown', () => {
+    const root = createWorkspace();
+    writeValidProject(root);
+    writeJson(root, 'src/locales/fr.json', {
+      common: { save: 'Enregistrer', cancel: 'Annuler' },
+      demo: { title: 'Démo' },
+    });
+    writeFile(
+      root,
+      'src/fr/docs/guide.md',
+      '<!-- TODO(i18n): Translate this scaffolded page. -->\n\n# Guide',
+    );
+
+    expect(checkI18nParity({ root })).toContain(
+      'docs: remove scaffold translation TODO in src/fr/docs/guide.md',
+    );
+  });
+
+  it('exposes the scaffolded translation TODO helper', () => {
+    const root = createWorkspace();
+    const failures: string[] = [];
+    writeFile(root, 'src/docs/guide.md', '# Guide');
+    writeFile(
+      root,
+      'src/fr/docs/guide.md',
+      '<!-- TODO(i18n): Translate this scaffolded page. -->\n\n# Guide',
+    );
+
+    checkScaffoldedTranslationTodos({ root, failures });
+
+    expect(failures).toEqual(['docs: remove scaffold translation TODO in src/fr/docs/guide.md']);
+  });
+
+  it('reports ternary t() calls through the full parity check', () => {
+    const root = createWorkspace();
+    writeValidProject(root);
+    writeFile(
+      root,
+      'src/App.vue',
+      ['<template>', "  {{ ready ? t('common.save') : t('common.cancel') }}", '</template>'].join(
+        '\n',
+      ),
+    );
+
+    expect(checkI18nParity({ root })).toContain(
+      'locale usage: avoid ternary t() call in src/App.vue:2',
+    );
+  });
+
+  it('checks literal t() usage in VitePress theme files', () => {
+    const root = createWorkspace();
+    writeValidProject(root);
+    writeFile(
+      root,
+      '.vitepress/theme/Layout.vue',
+      [
+        '<template>{{ ready ? t("common.save") : t("common.cancel") }}</template>',
+        '<script setup>',
+        'const missing = t("theme.missing")',
+        '</script>',
+      ].join('\n'),
+    );
+
+    expect(checkI18nParity({ root })).toEqual(
+      expect.arrayContaining([
+        'locale usage: avoid ternary t() call in .vitepress/theme/Layout.vue:1',
+        'locale usage: missing key theme.missing in .vitepress/theme/Layout.vue',
+      ]),
+    );
+  });
+
+  it('flags ternary branches that call t() directly', () => {
+    const root = createWorkspace();
+    const failures: string[] = [];
+    checkConditionalTranslateCalls({
+      root,
+      file: path.join(root, 'src/App.vue'),
+      source: [
+        '<template>',
+        "  {{ ready ? t('common.ready') : t('common.idle') }}",
+        '  {{',
+        '    busy',
+        '      ?',
+        "        t('common.busy')",
+        "      : 'idle'",
+        '  }}',
+        '</template>',
+        '<script setup>',
+        "const label = computed(() => { if (ready.value) return t('common.ready'); return t('common.idle'); })",
+        '</script>',
+      ].join('\n'),
+      failures,
+    });
+
+    expect(failures).toEqual([
+      'locale usage: avoid ternary t() call in src/App.vue:2',
+      'locale usage: avoid ternary t() call in src/App.vue:5',
+    ]);
+  });
+
+  it('does not flag ordinary t() calls after TypeScript generics or object labels', () => {
+    const root = createWorkspace();
+    const failures: string[] = [];
+    checkConditionalTranslateCalls({
+      root,
+      file: path.join(root, 'src/App.vue'),
+      source: [
+        '<script setup lang="ts">',
+        'const modeOptions = computed<ToolModeOption[]>(() => [',
+        "  { id: 'quick', label: t('common.save') },",
+        "  { id: 'studio', label: t('common.cancel') },",
+        ']);',
+        "const label = item?.name || t('demo.title');",
+        '</script>',
+      ].join('\n'),
+      failures,
+    });
+
+    expect(failures).toEqual([]);
   });
 
   it('lists markdown and source files while excluding wasm and public source assets', () => {

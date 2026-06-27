@@ -33,12 +33,12 @@ function writeFile(root: string, relativePath: string, content: string) {
   return filePath;
 }
 
-function relatedLine(locale: 'en' | 'ja') {
+function relatedLine(locale: string) {
   const prefix = locale === 'ja' ? '関連するマスタリングガイド:' : 'Related mastering guides:';
   return `${prefix} [One](./glossary/mastering.md), [Two](./glossary/mastering/tone-air.md), [Three](./glossary/mastering/dynamics.md)`;
 }
 
-function docsBody(locale: 'en' | 'ja', extra = '') {
+function docsBody(locale: string, extra = '') {
   return [
     relatedLine(locale),
     ...jsApis,
@@ -49,7 +49,7 @@ function docsBody(locale: 'en' | 'ja', extra = '') {
     '@libraz/libsonare-native',
     'progress * 100',
     'stage',
-    locale === 'ja' ? '/ja/mastering' : '/mastering',
+    locale === 'en' ? '/mastering' : `/${locale}/mastering`,
     locale === 'ja' ? 'ブラウザ内マスタリング' : 'Browser Mastering',
     './mastering-implementation.md',
     'WASM Mastering ISP Guard',
@@ -58,14 +58,14 @@ function docsBody(locale: 'en' | 'ja', extra = '') {
   ].join('\n');
 }
 
-function implementationDoc(locale: 'en' | 'ja') {
+function implementationDoc(locale: string) {
   const title = locale === 'ja' ? 'マスタリング実装' : 'Mastering Implementation';
   return [
     '---',
     `title: ${title}`,
     '---',
     `# ${title}`,
-    locale === 'ja' ? '/ja/mastering' : '/mastering',
+    locale === 'en' ? '/mastering' : `/${locale}/mastering`,
     'Mastering worker',
     'libsonare WASM',
     'JSON report',
@@ -125,7 +125,7 @@ function writeValidProject(root: string) {
     root,
     'src/components/MasteringDemo.vue',
     [
-      '<template><a href="/docs/glossary/mastering">Docs</a><a href="/ja/docs/glossary/mastering">Docs</a></template>',
+      "<script setup>const docsPath = computed(() => localizedPath('/docs/glossary/mastering'));</script>",
     ].join('\n'),
   );
   writeFile(root, 'src/mastering.md', '# Mastering');
@@ -159,6 +159,42 @@ describe('check-mastering-docs script helpers', () => {
   it('passes for a complete minimal mastering docs project', () => {
     const root = createWorkspace();
     writeValidProject(root);
+
+    expect(checkMasteringDocs({ root })).toEqual([]);
+  });
+
+  it('does not force English prose headings for additional locales', () => {
+    const root = createWorkspace();
+    writeValidProject(root);
+    writeFile(root, 'src/locales/en.json', '{}');
+    writeFile(root, 'src/locales/ja.json', '{}');
+    writeFile(root, 'src/locales/fr.json', '{}');
+
+    for (const file of [
+      'js-api.md',
+      'native-bindings.md',
+      'python-api.md',
+      'cli.md',
+      'wasm.md',
+      'benchmarks.md',
+    ]) {
+      writeFile(root, `src/fr/docs/${file}`, docsBody('fr'));
+    }
+    writeFile(
+      root,
+      'src/fr/docs/mastering-implementation.md',
+      implementationDoc('fr').replaceAll('Mastering Implementation', 'Implémentation du mastering'),
+    );
+    writeFile(
+      root,
+      '.vitepress/config.ts',
+      [
+        "link: '/docs/mastering-implementation'",
+        "link: '/ja/docs/mastering-implementation'",
+        "link: '/fr/docs/mastering-implementation'",
+      ].join('\n'),
+    );
+    writeFile(root, 'src/fr/mastering.md', '# Mastering');
 
     expect(checkMasteringDocs({ root })).toEqual([]);
   });

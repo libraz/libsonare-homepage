@@ -34,6 +34,11 @@
       "pause": "Pause",
       "stop": "Stop"
     },
+    "inline": {
+      "signalError": "Signal error",
+      "unknownId": "Unknown demo id",
+      "unimplementedArchetype": "Archetype not yet implemented"
+    },
     "waveform": {
       "title": "Waveform"
     },

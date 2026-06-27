@@ -4,6 +4,13 @@ import { computed, onMounted, ref } from 'vue';
 import DemoCardGrid from '@/components/DemoCardGrid.vue';
 import { CornerBrackets, GridOverlay } from '@/components/ui';
 import { createTheme } from '@/composables/useTheme';
+import {
+  DEFAULT_LOCALE,
+  localeLabels,
+  localePathPrefix,
+  normalizeLocale,
+  supportedLocales,
+} from '@/locales';
 import wasmMeta from '@/wasm/meta.json';
 
 const { lang } = useData();
@@ -46,11 +53,8 @@ onMounted(() => {
   }
 });
 
-const locales = {
+const localeCopy = {
   en: {
-    label: 'English',
-    shortLabel: 'EN',
-    path: '',
     docsLabel: 'Docs',
     githubCta: 'GitHub',
     tagline: 'Dependency-free audio engine',
@@ -147,11 +151,9 @@ const locales = {
     },
     demoCredit: 'Demo audio created with',
     midiSketch: 'MIDI Sketch',
+    demoCreditSuffix: '',
   },
   ja: {
-    label: '日本語',
-    shortLabel: 'JA',
-    path: '/ja',
     docsLabel: 'ドキュメント',
     githubCta: 'GitHub',
     tagline: '依存なしのオーディオエンジン',
@@ -248,14 +250,17 @@ const locales = {
     },
     demoCredit: 'デモ音源は',
     midiSketch: 'MIDI Sketch',
+    demoCreditSuffix: 'で作成',
   },
 } as const;
 
-type LocaleKey = keyof typeof locales;
-const defaultLocale: LocaleKey = 'en';
-const currentLocale = computed(() => locales[lang.value as LocaleKey] || locales[defaultLocale]);
-const localePath = (path: string) => `${currentLocale.value.path}${path}`;
-const isJa = computed(() => lang.value === 'ja');
+type LocaleKey = keyof typeof localeCopy;
+const currentLocaleKey = computed(() => normalizeLocale(lang.value));
+const currentLocale = computed(
+  () => localeCopy[currentLocaleKey.value as LocaleKey] || localeCopy[DEFAULT_LOCALE],
+);
+const localePath = (path: string, locale = currentLocaleKey.value) =>
+  `${localePathPrefix(locale)}${path}`;
 
 const packageLinks = {
   npm: 'https://www.npmjs.com/package/@libraz/libsonare',
@@ -279,20 +284,28 @@ const wasmReceiptFields = (() => {
 })();
 
 const otherLocales = computed(() =>
-  Object.entries(locales)
-    .filter(([key]) => key !== lang.value)
-    .map(([key, config]) => ({ key, ...config })),
+  supportedLocales
+    .filter((key) => key !== currentLocaleKey.value)
+    .map((key) => ({
+      key,
+      path: localePathPrefix(key),
+      ...localeLabels[key],
+    })),
 );
 
 const initialPath = typeof window === 'undefined' ? '/' : window.location.pathname;
 
 function otherLocaleHref(targetPath: string) {
-  if (lang.value === 'ja') {
-    const stripped = initialPath.replace(/^\/ja(\/|$)/, '/');
-    return stripped || '/';
-  }
-  if (initialPath === '/' || initialPath === '') return `${targetPath}/`;
-  return `${targetPath}${initialPath}`;
+  const localePrefixes = supportedLocales
+    .map((locale) => localePathPrefix(locale))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const unprefixed =
+    localePrefixes.reduce(
+      (path, prefix) => path.replace(new RegExp(`^${prefix}(?=/|$)`), ''),
+      initialPath,
+    ) || '/';
+  return targetPath ? `${targetPath}${unprefixed}` : unprefixed;
 }
 
 function switchLocale(event: Event, targetPath: string) {
@@ -519,7 +532,7 @@ const nodeId = computed(() => {
 </script>
 
 <template>
-  <div class="landing" :class="`landing--${lang}`">
+  <div class="landing" :class="`landing--${currentLocaleKey}`">
     <!-- Backdrop -->
     <div class="landing__backdrop">
       <GridOverlay scanlines />
@@ -893,7 +906,7 @@ const nodeId = computed(() => {
         <span class="landing__footer-dot">·</span>
         <span class="landing__footer-attr">
           {{ currentLocale.demoCredit }}
-          <a href="https://midisketch.libraz.net/" target="_blank" rel="noopener" class="landing__footer-credit">{{ currentLocale.midiSketch }}</a>{{ isJa ? 'で作成' : '' }}
+          <a href="https://midisketch.libraz.net/" target="_blank" rel="noopener" class="landing__footer-credit">{{ currentLocale.midiSketch }}</a>{{ currentLocale.demoCreditSuffix }}
         </span>
       </div>
       <div class="landing__footer-meta">

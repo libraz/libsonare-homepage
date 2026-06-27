@@ -8,13 +8,17 @@
  *
  * Archetype components own their visuals; this dispatcher owns resolution + gating.
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from '@/composables/useI18n';
+import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import { getDemo } from '@/demos/registry';
-import type { DemoArchetype } from '@/demos/types';
+import { demoArchetypeComponents } from './archetypes';
 
 const props = defineProps<{ id: string }>();
 
 const def = computed(() => getDemo(props.id));
+const { t } = useI18n();
+const { playingId, stop } = useSonareDemoAudio();
 
 /** Becomes true once the widget scrolls near the viewport; gates WASM/work. */
 const active = ref(false);
@@ -39,43 +43,20 @@ onMounted(() => {
   if (rootEl.value) observer.observe(rootEl.value);
 });
 
-onBeforeUnmount(() => observer?.disconnect());
-
-// Archetype → component. Async so each archetype is code-split and only the ones
-// used on a page are fetched. Unimplemented archetypes fall back to a placeholder.
-const archetypeComponents: Partial<Record<DemoArchetype, ReturnType<typeof defineAsyncComponent>>> =
-  {
-    transform: defineAsyncComponent(() => import('./archetypes/TransformDemo.vue')),
-    detector: defineAsyncComponent(() => import('./archetypes/DetectorDemo.vue')),
-    'ab-process': defineAsyncComponent(() => import('./archetypes/AbProcessDemo.vue')),
-    'param-sweep': defineAsyncComponent(() => import('./archetypes/ParamSweepDemo.vue')),
-    meters: defineAsyncComponent(() => import('./archetypes/MetersDemo.vue')),
-    signal: defineAsyncComponent(() => import('./archetypes/SignalDemo.vue')),
-    synth: defineAsyncComponent(() => import('./archetypes/SynthDemo.vue')),
-    room: defineAsyncComponent(() => import('./archetypes/RoomDemo.vue')),
-    contour: defineAsyncComponent(() => import('./archetypes/ContourDemo.vue')),
-    'lane-mixer': defineAsyncComponent(() => import('./archetypes/LaneMixerDemo.vue')),
-    'spectral-edit': defineAsyncComponent(() => import('./archetypes/SpectralEditDemo.vue')),
-    'piano-roll': defineAsyncComponent(() => import('./archetypes/PianoRollDemo.vue')),
-    score: defineAsyncComponent(() => import('./archetypes/ScoreDemo.vue')),
-    compressor: defineAsyncComponent(() => import('./archetypes/CompressorDemo.vue')),
-    'true-peak': defineAsyncComponent(() => import('./archetypes/TruePeakDemo.vue')),
-    'send-routing': defineAsyncComponent(() => import('./archetypes/SendRoutingDemo.vue')),
-    'mono-fold': defineAsyncComponent(() => import('./archetypes/MonoFoldDemo.vue')),
-    comping: defineAsyncComponent(() => import('./archetypes/CompingDemo.vue')),
-    hpss: defineAsyncComponent(() => import('./archetypes/HpssDemo.vue')),
-    'tempo-grid': defineAsyncComponent(() => import('./archetypes/TempoGridDemo.vue')),
-  };
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  if (playingId.value === props.id) stop();
+});
 
 const archetypeComponent = computed(() =>
-  def.value ? archetypeComponents[def.value.archetype] : undefined,
+  def.value ? demoArchetypeComponents[def.value.archetype] : undefined,
 );
 </script>
 
 <template>
   <div ref="rootEl" class="sonare-demo">
-    <div v-if="!def" class="sonare-demo__error">
-      Unknown demo id: <code>{{ id }}</code>
+    <div v-if="!def" class="sonare-demo__error" role="alert">
+      {{ t('demo.inline.unknownId') }}: <code>{{ id }}</code>
     </div>
     <component
       :is="archetypeComponent"
@@ -83,8 +64,8 @@ const archetypeComponent = computed(() =>
       :def="def"
       :active="active"
     />
-    <div v-else class="sonare-demo__error">
-      Archetype not yet implemented: <code>{{ def.archetype }}</code> ({{ id }})
+    <div v-else class="sonare-demo__error" role="alert">
+      {{ t('demo.inline.unimplementedArchetype') }}: <code>{{ def.archetype }}</code> ({{ id }})
     </div>
   </div>
 </template>

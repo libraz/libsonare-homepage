@@ -40,15 +40,16 @@ export const glossaryLinks = [
   'glossary/concepts/browser-local-processing.md',
 ];
 
-export function checkMasteringDocs({ root = process.cwd() } = {}) {
+export function checkMasteringDocs({ root = process.cwd(), defaultLocale = 'en' } = {}) {
   const failures = [];
+  const locales = listLocaleNames(path.join(root, 'src/locales'), defaultLocale);
   const jsApis = extractMasteringJsApis({ root, failures });
 
   checkWasmExports({ root, failures, jsApis });
-  checkDocs({ root, failures, jsApis });
+  checkDocs({ root, failures, jsApis, locales, defaultLocale });
   checkHelpPanelUsesDocsAsSource({ root, failures });
   checkRoutes({ root, failures });
-  checkRouteFiles({ root, failures });
+  checkRouteFiles({ root, failures, locales, defaultLocale });
 
   return failures;
 }
@@ -74,21 +75,15 @@ export function extractMasteringJsApis({ root, failures = [] }) {
   return apis;
 }
 
-function checkDocs({ root, failures, jsApis }) {
-  for (const locale of ['en', 'ja']) {
-    const prefix = locale === 'ja' ? 'src/ja/docs' : 'src/docs';
+function checkDocs({ root, failures, jsApis, locales, defaultLocale }) {
+  for (const locale of locales) {
+    const prefix = docsPrefix(locale, defaultLocale);
 
     const jsDoc = read(root, `${prefix}/js-api.md`);
     for (const api of jsApis) requireText(failures, `${prefix}/js-api.md`, jsDoc, api);
-    requireText(
-      failures,
-      `${prefix}/js-api.md`,
-      jsDoc,
-      locale === 'ja' ? '関連するマスタリングガイド' : 'Related mastering guides',
-    );
     requireText(failures, `${prefix}/js-api.md`, jsDoc, 'progress * 100');
     requireText(failures, `${prefix}/js-api.md`, jsDoc, 'stage');
-    checkRelatedGuideLine(failures, `${prefix}/js-api.md`, jsDoc, locale);
+    checkRelatedGuideLine(failures, `${prefix}/js-api.md`, jsDoc, locale, defaultLocale);
 
     const nativeDoc = read(root, `${prefix}/native-bindings.md`);
     for (const api of jsApis) requireText(failures, `${prefix}/native-bindings.md`, nativeDoc, api);
@@ -96,29 +91,31 @@ function checkDocs({ root, failures, jsApis }) {
     requireText(failures, `${prefix}/native-bindings.md`, nativeDoc, '@libraz/libsonare-native');
     requireText(failures, `${prefix}/native-bindings.md`, nativeDoc, 'progress * 100');
     requireText(failures, `${prefix}/native-bindings.md`, nativeDoc, 'stage');
-    checkRelatedGuideLine(failures, `${prefix}/native-bindings.md`, nativeDoc, locale);
+    checkRelatedGuideLine(
+      failures,
+      `${prefix}/native-bindings.md`,
+      nativeDoc,
+      locale,
+      defaultLocale,
+    );
 
     const pythonDoc = read(root, `${prefix}/python-api.md`);
     for (const api of pythonApis) requireText(failures, `${prefix}/python-api.md`, pythonDoc, api);
-    checkRelatedGuideLine(failures, `${prefix}/python-api.md`, pythonDoc, locale);
+    checkRelatedGuideLine(failures, `${prefix}/python-api.md`, pythonDoc, locale, defaultLocale);
 
     const cliDoc = read(root, `${prefix}/cli.md`);
     for (const command of cliCommands) requireText(failures, `${prefix}/cli.md`, cliDoc, command);
-    checkRelatedGuideLine(failures, `${prefix}/cli.md`, cliDoc, locale);
+    checkRelatedGuideLine(failures, `${prefix}/cli.md`, cliDoc, locale, defaultLocale);
 
     const wasmDoc = read(root, `${prefix}/wasm.md`);
     requireText(
       failures,
       `${prefix}/wasm.md`,
       wasmDoc,
-      locale === 'ja' ? '/ja/mastering' : '/mastering',
+      localizedRoute(locale, defaultLocale, '/mastering'),
     );
-    requireText(
-      failures,
-      `${prefix}/wasm.md`,
-      wasmDoc,
-      locale === 'ja' ? 'ブラウザ内マスタリング' : 'Browser Mastering',
-    );
+    const browserTitle = browserMasteringTitle(locale, defaultLocale);
+    if (browserTitle) requireText(failures, `${prefix}/wasm.md`, wasmDoc, browserTitle);
     requireText(failures, `${prefix}/wasm.md`, wasmDoc, './mastering-implementation.md');
     requireMinimumGuideLinks(failures, `${prefix}/wasm.md`, wasmDoc, 3);
 
@@ -127,18 +124,13 @@ function checkDocs({ root, failures, jsApis }) {
     requireText(failures, `${prefix}/benchmarks.md`, benchmarks, 'mastering_isp_4x_stereo_1ms');
   }
 
-  const allDocs = [
-    'src/docs/js-api.md',
-    'src/docs/python-api.md',
-    'src/docs/cli.md',
-    'src/docs/native-bindings.md',
-    'src/docs/wasm.md',
-    'src/ja/docs/js-api.md',
-    'src/ja/docs/python-api.md',
-    'src/ja/docs/cli.md',
-    'src/ja/docs/native-bindings.md',
-    'src/ja/docs/wasm.md',
-  ].map((file) => [file, read(root, file)]);
+  const runtimeDocNames = ['js-api.md', 'python-api.md', 'cli.md', 'native-bindings.md', 'wasm.md'];
+  const allDocs = locales.flatMap((locale) =>
+    runtimeDocNames.map((file) => {
+      const docsFile = `${docsPrefix(locale, defaultLocale)}/${file}`;
+      return [docsFile, read(root, docsFile)];
+    }),
+  );
 
   for (const link of glossaryLinks) {
     if (!allDocs.some(([, content]) => content.includes(link))) {
@@ -150,48 +142,19 @@ function checkDocs({ root, failures, jsApis }) {
   requireText(failures, 'README.md', readme, '/mastering');
   requireText(failures, 'README.md', readme, 'yarn check');
 
-  checkImplementationDocs({ root, failures });
+  checkImplementationDocs({ root, failures, locales, defaultLocale });
 }
 
-function checkImplementationDocs({ root, failures }) {
+function checkImplementationDocs({ root, failures, locales, defaultLocale }) {
   const config = read(root, '.vitepress/config.ts');
 
-  const pages = [
-    {
-      file: 'src/docs/mastering-implementation.md',
-      title: 'Mastering Implementation',
-      sidebarLink: '/docs/mastering-implementation',
-      required: [
-        '/mastering',
-        'Mastering worker',
-        'libsonare WASM',
-        'JSON report',
-        './glossary/mastering/repair.md',
-        './glossary/mastering/tone-air.md',
-        './glossary/mastering/dynamics.md',
-        './glossary/mastering/stereo-limiter-loudness.md',
-        'masteringChainStereoWithProgress()',
-        'yarn check:mastering-docs',
-      ],
-    },
-    {
-      file: 'src/ja/docs/mastering-implementation.md',
-      title: 'マスタリング実装',
-      sidebarLink: '/ja/docs/mastering-implementation',
-      required: [
-        '/ja/mastering',
-        'Mastering worker',
-        'libsonare WASM',
-        'JSON report',
-        './glossary/mastering/repair.md',
-        './glossary/mastering/tone-air.md',
-        './glossary/mastering/dynamics.md',
-        './glossary/mastering/stereo-limiter-loudness.md',
-        'masteringChainStereoWithProgress()',
-        'yarn check:mastering-docs',
-      ],
-    },
-  ];
+  const pages = locales.map((locale) => ({
+    locale,
+    file: `${docsPrefix(locale, defaultLocale)}/mastering-implementation.md`,
+    title: implementationTitle(locale, defaultLocale),
+    sidebarLink: localizedRoute(locale, defaultLocale, '/docs/mastering-implementation'),
+    required: implementationRequiredTerms(locale, defaultLocale),
+  }));
 
   for (const page of pages) {
     if (!fs.existsSync(path.join(root, page.file))) {
@@ -199,8 +162,12 @@ function checkImplementationDocs({ root, failures }) {
       continue;
     }
     const content = read(root, page.file);
-    requireText(failures, page.file, content, `title: ${page.title}`);
-    requireText(failures, page.file, content, `# ${page.title}`);
+    if (page.title) {
+      requireText(failures, page.file, content, `title: ${page.title}`);
+      requireText(failures, page.file, content, `# ${page.title}`);
+    } else {
+      requireFrontmatterTitleMatchesH1(failures, page.file, content);
+    }
     requireText(failures, '.vitepress/config.ts', config, page.sidebarLink);
     for (const item of page.required) requireText(failures, page.file, content, item);
   }
@@ -219,8 +186,10 @@ function checkRoutes({ root, failures }) {
   }
 }
 
-function checkRouteFiles({ root, failures }) {
-  const required = ['src/mastering.md', 'src/ja/mastering.md'];
+function checkRouteFiles({ root, failures, locales, defaultLocale }) {
+  const required = locales.map((locale) =>
+    locale === defaultLocale ? 'src/mastering.md' : `src/${locale}/mastering.md`,
+  );
   const forbidden = [
     'src/master.md',
     'src/ja/master.md',
@@ -240,8 +209,7 @@ function checkRouteFiles({ root, failures }) {
 function checkHelpPanelUsesDocsAsSource({ root, failures }) {
   const demoFile = 'src/components/MasteringDemo.vue';
   const demoContent = read(root, demoFile);
-  requireText(failures, demoFile, demoContent, '/docs/glossary/mastering');
-  requireText(failures, demoFile, demoContent, '/ja/docs/glossary/mastering');
+  requireText(failures, demoFile, demoContent, "localizedPath('/docs/glossary/mastering')");
 
   const file = 'src/data/masteringHelp.ts';
   if (!fs.existsSync(path.join(root, file))) return;
@@ -292,14 +260,77 @@ export function requireText(failures, label, content, needle) {
   if (!content.includes(needle)) failures.push(`${label}: missing ${needle}`);
 }
 
-export function checkRelatedGuideLine(failures, label, content, locale) {
-  const prefix = locale === 'ja' ? '関連するマスタリングガイド:' : 'Related mastering guides:';
-  const line = content.split(/\r?\n/).find((item) => item.startsWith(prefix));
+export function checkRelatedGuideLine(failures, label, content, locale, defaultLocale = 'en') {
+  const heading = relatedGuideHeading(locale, defaultLocale);
+  const prefix = heading ? `${heading}:` : null;
+  const line = prefix
+    ? content.split(/\r?\n/).find((item) => item.startsWith(prefix))
+    : content
+        .split(/\r?\n/)
+        .find((item) => (item.match(/\.\/glossary\/[^)]+\.md/g) ?? []).length >= 3);
   if (!line) {
-    failures.push(`${label}: missing ${prefix}`);
+    failures.push(`${label}: missing ${prefix ?? 'related glossary guide line'}`);
     return;
   }
   requireMinimumGuideLinks(failures, label, line, 3);
+}
+
+function listLocaleNames(localesDir, defaultLocale) {
+  if (!fs.existsSync(localesDir)) return [defaultLocale, 'ja'];
+  const locales = fs
+    .readdirSync(localesDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => path.basename(entry.name, '.json'));
+  return [...new Set([defaultLocale, ...locales])].sort();
+}
+
+function docsPrefix(locale, defaultLocale) {
+  return locale === defaultLocale ? 'src/docs' : `src/${locale}/docs`;
+}
+
+function localizedRoute(locale, defaultLocale, route) {
+  return locale === defaultLocale ? route : `/${locale}${route}`;
+}
+
+function shouldRequireLocalizedPhrase(locale, defaultLocale) {
+  return locale === defaultLocale || locale === 'ja';
+}
+
+function relatedGuideHeading(locale, defaultLocale = 'en') {
+  if (!shouldRequireLocalizedPhrase(locale, defaultLocale)) return null;
+  return locale === 'ja' ? '関連するマスタリングガイド' : 'Related mastering guides';
+}
+
+function browserMasteringTitle(locale, defaultLocale = 'en') {
+  if (!shouldRequireLocalizedPhrase(locale, defaultLocale)) return null;
+  return locale === 'ja' ? 'ブラウザ内マスタリング' : 'Browser Mastering';
+}
+
+function implementationTitle(locale, defaultLocale = 'en') {
+  if (!shouldRequireLocalizedPhrase(locale, defaultLocale)) return null;
+  return locale === 'ja' ? 'マスタリング実装' : 'Mastering Implementation';
+}
+
+function implementationRequiredTerms(locale, defaultLocale) {
+  const shared = [
+    localizedRoute(locale, defaultLocale, '/mastering'),
+    './glossary/mastering/repair.md',
+    './glossary/mastering/tone-air.md',
+    './glossary/mastering/dynamics.md',
+    './glossary/mastering/stereo-limiter-loudness.md',
+    'masteringChainStereoWithProgress()',
+    'yarn check:mastering-docs',
+  ];
+  if (!shouldRequireLocalizedPhrase(locale, defaultLocale)) return shared;
+  return ['Mastering worker', 'libsonare WASM', 'JSON report', ...shared];
+}
+
+function requireFrontmatterTitleMatchesH1(failures, label, content) {
+  const title = content.match(/^title:\s*(.+)$/m)?.[1]?.trim();
+  const h1 = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (!title) failures.push(`${label}: missing frontmatter title`);
+  if (!h1) failures.push(`${label}: missing h1 title`);
+  if (title && h1 && title !== h1) failures.push(`${label}: frontmatter title does not match h1`);
 }
 
 export function requireMinimumGuideLinks(failures, label, content, minimum) {

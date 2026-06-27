@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  checkBrowserExternalShims,
+  checkBuiltAssetBudgets,
   checkBuiltRoutes,
   expectedGlossaryFiles,
   resolveBuiltHref,
@@ -53,6 +55,12 @@ function writeFile(
   writeFileSync(filePath, content);
 }
 
+function writeBytes(root: string, relativePath: string, bytes: number) {
+  const filePath = path.join(root, relativePath);
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, Buffer.alloc(bytes));
+}
+
 function writeManifest(manifestPath: string) {
   writeFileSync(
     manifestPath,
@@ -78,6 +86,19 @@ function sitemap(files: string[]) {
     ...files.map((file) => `<url><loc>${siteUrl}/${file}</loc></url>`),
     '</urlset>',
   ].join('');
+}
+
+function llmsTxt(locales = ['ja']) {
+  return [
+    '# libsonare',
+    '',
+    `- [Introduction](${siteUrl}/docs/introduction.html)`,
+    ...locales.flatMap((locale) => [
+      `- [${locale} documentation](${siteUrl}/${locale}/docs/introduction.html)`,
+      `- [${locale} demos](${siteUrl}/${locale}/demos.html)`,
+    ]),
+    '',
+  ].join('\n');
 }
 
 describe('check-built-routes script helpers', () => {
@@ -113,6 +134,9 @@ describe('check-built-routes script helpers', () => {
       'ja/docs/glossary/concepts/audio-basics.html',
       'ja/docs/glossary/mixing/custom-path.html',
     ]);
+    expect(
+      expectedGlossaryFiles(manifestPath, { locales: ['en', 'ja', 'fr'], defaultLocale: 'en' }),
+    ).toContain('fr/docs/glossary/concepts/audio-basics.html');
   });
 
   it('passes when required routes, glossary pages, sitemap entries and internal hrefs exist', () => {
@@ -124,11 +148,38 @@ describe('check-built-routes script helpers', () => {
     writeFile(dist, 'index.html', '<a href="/mixing">Mixing</a><a href="/assets/app.js">Asset</a>');
     writeFile(dist, 'assets/app.js', 'console.log("ok")');
     writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
-    writeFile(dist, 'llms.txt', `# libsonare\n\n- [Introduction](${siteUrl}/docs/introduction.html)\n`);
+    writeFile(dist, 'llms.txt', llmsTxt());
 
     const result = checkBuiltRoutes({ dist, manifestPath });
 
     expect(result).toEqual({ skipped: false, failures: [] });
+  });
+
+  it('requires demo and glossary routes for every locale file', () => {
+    const { root, dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    writeFile(root, 'src/locales/en.json', '{}');
+    writeFile(root, 'src/locales/ja.json', '{}');
+    writeFile(root, 'src/locales/fr.json', '{}');
+
+    const glossaryFiles = expectedGlossaryFiles(manifestPath, {
+      locales: ['en', 'ja', 'fr'],
+      defaultLocale: 'en',
+    });
+    for (const file of [...demoRoutes, ...glossaryFiles]) writeFile(dist, file);
+    writeFile(dist, 'index.html');
+    writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
+    writeFile(dist, 'llms.txt', llmsTxt());
+
+    const result = checkBuiltRoutes({ root, dist, manifestPath });
+
+    expect(result.failures).toEqual(
+      expect.arrayContaining([
+        'missing built route: fr/analyzer.html',
+        'sitemap missing route: https://sonare.libraz.net/fr/analyzer.html',
+        'llms.txt missing localized links for fr',
+      ]),
+    );
   });
 
   it('reports missing routes, forbidden old mastering paths, stale content and broken links', () => {
@@ -175,6 +226,59 @@ describe('check-built-routes script helpers', () => {
     expect(resolveBuiltHref(dist, '//cdn.example.test/app.js')).toBe(
       path.join(dist, 'cdn.example.test/app.js'),
     );
+  });
+
+  it('keeps built JS and WASM assets inside explicit budgets', () => {
+    const { dist } = createWorkspace();
+    writeBytes(dist, 'assets/app.js', 100 * 1024);
+    writeBytes(dist, 'assets/chunks/vexflow.hash.js', 1024 * 1024);
+    writeBytes(dist, 'assets/sonare.hash.wasm', 3 * 1024 * 1024);
+
+    const failures: string[] = [];
+    checkBuiltAssetBudgets(dist, failures);
+
+    expect(failures).toEqual([]);
+  });
+
+  it('reports unexpected built assets that exceed budgets', () => {
+    const { dist } = createWorkspace();
+    writeBytes(dist, 'assets/app.js', 760 * 1024);
+    writeBytes(dist, 'assets/chunks/vexflow.hash.js', 2 * 1024 * 1024);
+    writeBytes(dist, 'assets/sonare.hash.wasm', 4 * 1024 * 1024);
+
+    const failures: string[] = [];
+    checkBuiltAssetBudgets(dist, failures);
+
+    expect(failures).toEqual([
+      'assets/app.js: built asset 760.0 KiB exceeds budget 750.0 KiB',
+      'assets/chunks/vexflow.hash.js: built asset 2.00 MiB exceeds budget 1.25 MiB',
+      'assets/sonare.hash.wasm: built asset 4.00 MiB exceeds budget 3.25 MiB',
+    ]);
+  });
+
+  it('allows expected browser-safe shims in built JavaScript', () => {
+    const { dist } = createWorkspace();
+    writeFile(dist, 'assets/app.js', 'console.log("ok")');
+    writeFile(dist, 'assets/chunks/node-module.hash.js', 'export const createRequire = () => {}');
+
+    const failures: string[] = [];
+    checkBrowserExternalShims(dist, failures);
+
+    expect(failures).toEqual([]);
+  });
+
+  it('reports Vite browser external shims in built JavaScript', () => {
+    const { dist } = createWorkspace();
+    writeFile(dist, 'assets/app.js', 'import "./__vite-browser-external.hash.js";');
+    writeFile(dist, 'assets/chunks/vite-browser-external.hash.js', 'export default {}');
+
+    const failures: string[] = [];
+    checkBrowserExternalShims(dist, failures);
+
+    expect(failures).toEqual([
+      'assets/app.js: references unexpected Vite browser external shim',
+      'assets/chunks/vite-browser-external.hash.js: unexpected Vite browser external shim',
+    ]);
   });
 
   it('keeps the CLI skip path non-failing when dist is absent', () => {

@@ -20,12 +20,10 @@ defineProps<{
   libVersion?: string;
 }>();
 
-const { t, locale } = useI18n();
+const { t, locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 
-const termCopy = computed(() => (locale.value === 'ja' ? analyzerJaCopy : analyzerEnCopy));
-const glossaryBase = computed(() =>
-  locale.value === 'ja' ? '/ja/docs/glossary' : '/docs/glossary',
-);
+const termCopy = computed(() => localizedValue({ en: analyzerEnCopy, ja: analyzerJaCopy }));
+const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
 /** Build rich-tooltip props for a metric from the copy + slug tables. */
 function term(key: AnalyzerTermKey) {
@@ -868,4 +866,3 @@ onMounted(() => {
   backdrop-filter: blur(6px);
 }
 </style>
-
