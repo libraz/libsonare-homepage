@@ -36,6 +36,8 @@ libsonare detects section boundaries by building frame-level features, computing
 
 `minSectionSec` controls how short a detected section is allowed to be. Very short edits, drops, or pickup bars may be merged into neighboring spans.
 
+For long-form input, the boundary detector mean-pools its feature sequence when the self-similarity matrix would exceed the native integer index cap. Boundary `time` values remain in the original audio timeline; on very long files, the diagnostic `frame` field refers to the pooled analysis grid, so UI code should place markers from `time`, not from `frame`.
+
 ## Then labels
 
 After boundaries are found, the implementation classifies each span using several clues:
@@ -64,7 +66,7 @@ Song structure is partly subjective. Two listeners may disagree about the exact 
 Treat section output as a strong hint for navigation, looping, and visualization. It works best on music with clear repeated sections, and it is weaker on through-composed, ambient, or very gradual material. A boundary being a few seconds off is normal, so automatic results are best used as a starting point for review.
 
 ::: details How libsonare computes it
-`BoundaryDetector` combines MFCC and chroma features, L2-normalizes them, builds a cosine self-similarity matrix, computes a checkerboard novelty curve, and picks boundary peaks. `SectionAnalyzer` turns boundaries into spans, computes RMS energy, chroma descriptors, spectral flatness, and vocal-band energy, then assigns `Intro`, `Verse`, `Pre-Chorus`, `Chorus`, `Bridge`, `Instrumental`, `Outro`, or `Unknown` labels with confidence.
+`BoundaryDetector` combines MFCC and chroma features, L2-normalizes them, mean-pools long inputs when needed, builds a cosine self-similarity matrix, computes a checkerboard novelty curve, and picks boundary peaks. `SectionAnalyzer` turns boundaries into spans, computes RMS energy, chroma descriptors, spectral flatness, and vocal-band energy, then assigns `Intro`, `Verse`, `Pre-Chorus`, `Chorus`, `Bridge`, `Instrumental`, `Outro`, or `Unknown` labels with confidence.
 :::
 
 Related: [Mel, MFCC, and Timbre](./mel-mfcc-timbre.md), [Chroma Features](./chroma-features.md), [MIR Overview](../concepts/mir-overview.md)

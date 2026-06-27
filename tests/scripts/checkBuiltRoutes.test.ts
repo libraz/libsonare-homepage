@@ -124,6 +124,7 @@ describe('check-built-routes script helpers', () => {
     writeFile(dist, 'index.html', '<a href="/mixing">Mixing</a><a href="/assets/app.js">Asset</a>');
     writeFile(dist, 'assets/app.js', 'console.log("ok")');
     writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
+    writeFile(dist, 'llms.txt', `# libsonare\n\n- [Introduction](${siteUrl}/docs/introduction.html)\n`);
 
     const result = checkBuiltRoutes({ dist, manifestPath });
 

@@ -801,7 +801,7 @@ var RealtimeVoiceChanger = class {
   }
 };
 function realtimeVoiceChangerPresetNames() {
-  return getSonareModule().realtimeVoiceChangerPresetNames();
+  return Array.from(getSonareModule().realtimeVoiceChangerPresetNames());
 }
 function realtimeVoiceChangerPresetJson(name) {
   return getSonareModule().realtimeVoiceChangerPresetJson(name);
@@ -1190,17 +1190,22 @@ function mastering(samples, sampleRate = 22050, options = {}) {
     sampleRate,
     options.targetLufs ?? -14,
     options.ceilingDb ?? -1,
-    options.truePeakOversample ?? 4
+    options.truePeakOversample ?? 4,
+    options.releaseMs ?? 0,
+    // 0 => library default (50 ms)
+    options.applyGainAtInputRate ?? false
   );
 }
 function masteringProcessorNames() {
-  return requireModule().masteringProcessorNames();
+  return Array.from(requireModule().masteringProcessorNames());
 }
 function masteringInsertNames() {
   return requireModule().masteringInsertNames();
 }
 function masteringInsertParamNames(name) {
-  return requireModule().masteringInsertParamNames(name);
+  return Array.from(
+    requireModule().masteringInsertParamNames(name)
+  );
 }
 function masteringInsertParamInfo(name) {
   const json = requireModule().masteringInsertParamInfo(name);
@@ -1211,13 +1216,13 @@ function masteringProcessorCatalog() {
   return JSON.parse(json);
 }
 function masteringPairProcessorNames() {
-  return requireModule().masteringPairProcessorNames();
+  return Array.from(requireModule().masteringPairProcessorNames());
 }
 function masteringPairAnalysisNames() {
-  return requireModule().masteringPairAnalysisNames();
+  return Array.from(requireModule().masteringPairAnalysisNames());
 }
 function masteringStereoAnalysisNames() {
-  return requireModule().masteringStereoAnalysisNames();
+  return Array.from(requireModule().masteringStereoAnalysisNames());
 }
 function masteringProcess(processorName, samples, sampleRate = 22050, params = {}) {
   return requireModule().masteringProcess(processorName, samples, sampleRate, params);
@@ -1324,7 +1329,7 @@ function masteringChainStereoWithProgress(left, right, sampleRate = 22050, confi
   );
 }
 function masteringPresetNames() {
-  return requireModule().masteringPresetNames();
+  return Array.from(requireModule().masteringPresetNames());
 }
 function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}) {
   return requireModule().masterAudio(presetName, samples, sampleRate, overrides);
@@ -1358,7 +1363,7 @@ function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetNa
   );
 }
 function mixingScenePresetNames() {
-  return requireModule().mixingScenePresetNames();
+  return Array.from(requireModule().mixingScenePresetNames());
 }
 function mixingScenePresetJson(presetName) {
   return requireModule().mixingScenePresetJson(presetName);
@@ -1541,13 +1546,14 @@ function analyzeSections(samples, sampleRate = 22050, options = {}) {
   if ((options.minSectionSec ?? 4) <= 0) {
     throw new RangeError("analyzeSections: minSectionSec must be positive");
   }
-  return requireModule3().analyzeSections(
+  const sections = requireModule3().analyzeSections(
     samples,
     sampleRate,
     options.nFft ?? 2048,
     options.hopLength ?? 512,
     options.minSectionSec ?? 4
-  ).map((s) => ({ ...s, type: s.type }));
+  );
+  return Array.from(sections, (s) => ({ ...s, type: s.type }));
 }
 function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   validateMusicSamples("analyzeMelody", samples, sampleRate, options);
@@ -2115,7 +2121,7 @@ function detectKey(samples, sampleRate = 22050, options = {}) {
 }
 function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectKeyCandidates", samples, sampleRate, options);
-  return requireModule8()._detectKeyCandidates(
+  const candidates = requireModule8()._detectKeyCandidates(
     samples,
     sampleRate,
     options.nFft ?? 4096,
@@ -2126,7 +2132,8 @@ function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
     keyModeValues(options.modes),
     keyProfileValue(options.profile),
     options.genreHint ?? ""
-  ).map(convertKeyCandidate);
+  );
+  return Array.from(candidates, convertKeyCandidate);
 }
 function detectOnsets(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectOnsets", samples, sampleRate, options);
@@ -3014,10 +3021,10 @@ function projectAbiVersion() {
   return projectModule().projectAbiVersion();
 }
 function synthPresetNames() {
-  return projectModule().synthPresetNames();
+  return Array.from(projectModule().synthPresetNames());
 }
 function synthPresetPatch(name) {
-  return projectModule().synthPresetPatch(name);
+  return { ...projectModule().synthPresetPatch(name) };
 }
 function synthEnumTables() {
   return projectModule()._synthEnumTables();
@@ -3453,9 +3460,18 @@ var Project = class _Project {
   setClipCompSegments(clipId, segments) {
     this.native.setClipCompSegments(clipId, segments);
   }
-  /** Set a clip's loop mode + loop length in PPQ (undoable). */
-  setClipLoop(clipId, loopMode, loopLengthPpq = 0) {
-    this.native.setClipLoop(clipId, projectLoopModeValue(loopMode), loopLengthPpq);
+  /**
+   * Set a clip's loop mode + loop length in PPQ (undoable). `loopCrossfadePpq`
+   * is an optional equal-power crossfade at the loop seam (PPQ, finite and >= 0;
+   * 0 = hard loop); the engine clamps it to the clip's pre-roll and half the loop.
+   */
+  setClipLoop(clipId, loopMode, loopLengthPpq = 0, loopCrossfadePpq = 0) {
+    this.native.setClipLoop(
+      clipId,
+      projectLoopModeValue(loopMode),
+      loopLengthPpq,
+      loopCrossfadePpq
+    );
   }
   /** Rebind a clip to a different (already-registered) source (undoable). */
   setClipSource(clipId, sourceId) {

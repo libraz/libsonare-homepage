@@ -255,18 +255,22 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.35, 'Finding alternate keys');
-  const keyCandidates = wasmModule
-    .detectKeyCandidates(samples, sampleRate, {
+  // detectKeyCandidates / analyzeSections return embind-backed arrays whose
+  // constructor is a wrapped method, so any derived array (.slice/.map keeps the
+  // species constructor) is not structured-cloneable and breaks postMessage.
+  // Array.from() re-roots them as plain arrays before we build the payload.
+  const keyCandidates = Array.from(
+    wasmModule.detectKeyCandidates(samples, sampleRate, {
       useHpss: true,
       loudnessWeighted: true,
       modes: 'all',
-    })
-    .slice(0, 8);
+    }),
+  ).slice(0, 8);
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.42, 'Detecting downbeats and sections');
   const downbeats = Array.from(wasmModule.detectDownbeats(samples, sampleRate));
-  const sections = wasmModule.analyzeSections(samples, sampleRate);
+  const sections = Array.from(wasmModule.analyzeSections(samples, sampleRate));
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.5, 'Tracing melody');

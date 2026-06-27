@@ -357,7 +357,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | 拍子・グルーブ・シンコペーション。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength` |
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター。`options`: `windowSec`、`hopLength`、`compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | 明るさ・暖かさ・密度・粗さ・複雑さと、窓ごとの `timbreOverTime`。`options`: `nFft`、`hopLength`、`nMels`、`nMfcc`、`windowSec` |
-| `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | 構造セクション（イントロ／ヴァース／コーラスなど）と時刻。`options`: `nFft`、`hopLength`、`minSectionSec` |
+| `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | 構造セクション（イントロ／ヴァース／コーラスなど）と時刻。`options`: `nFft`、`hopLength`、`minSectionSec`。長尺入力では境界グリッドがプーリングされる場合があるため、配置には各セクションの `start` / `end` を使います |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | 主旋律の輪郭（フレームごとの F0）。`options`: `fmin`、`fmax`、`frameLength`、`hopLength`、`threshold`、`usePyin`、`center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | 録音からの室内音響（RT60 など）。`options`: `nOctaveBands`、`nThirdOctaveSubbands`、`minDecayDb`、`noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?)` | `AcousticResult` | 測定済みインパルス応答からの室内音響 |

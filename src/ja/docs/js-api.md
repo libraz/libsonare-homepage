@@ -352,7 +352,7 @@ function analyzeWithProgress(
 | ダイナミクス | `analyzeDynamics(samples, sampleRate, ...)` | ダイナミックレンジ、ラウドネスレンジ、クレストファクター、圧縮傾向を見ます。 |
 | 音色 | `analyzeTimbre(samples, sampleRate, ...)` | ブライトネス、ウォームス、密度、粗さ、複雑さを返します。 |
 | コード | `detectChords(samples, sampleRate, options?)` | コード区間を `{ chords }` として返します。HMM 平滑化、キー文脈、転回形、`chromaMethod: 'stft' \| 'nnls'` を指定できます。 |
-| セクション | `analyzeSections(samples, sampleRate, ...)` | イントロ、ヴァース、コーラス、ブリッジ、アウトロなどの構造を推定します。 |
+| セクション | `analyzeSections(samples, sampleRate, ...)` | イントロ、ヴァース、コーラス、ブリッジ、アウトロなどの構造を推定します。長尺入力で内部の境界グリッドがプーリングされても、`start` / `end` は元タイムライン上の正確な秒数を保ちます。 |
 | メロディ | `analyzeMelody(samples, sampleRate, ...)` | ピッチ追跡ベースの単音メロディ輪郭です。 |
 
 ```typescript
@@ -2042,7 +2042,9 @@ const result = masteringChainStereo(left, right, sampleRate, {
     truePeakLimiter: {
       ceilingDb: -1,
       lookaheadMs: 5,
+      releaseMs: 50,
       oversampleFactor: 4,
+      applyGainAtInputRate: false,
     },
   },
   loudness: {
@@ -2056,6 +2058,7 @@ console.log(result.outputLufs, result.appliedGainDb, result.stages)
 
 const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
   'loudness.targetLufs': -14,
+  'maximizer.truePeakLimiter.releaseMs': 50,
 })
 console.log(presetResult.outputLufs, presetResult.stages)
 
@@ -2349,6 +2352,8 @@ function masteringRepairTrimSilence(samples: Float32Array, sampleRate: number, o
 `masterAudio*` はプリセットから開始し、同じキー名を
 `"dynamics.compressor.thresholdDb"` のようなフラットなドット記法の
 `overrides`（上書き値）として受け取ります。
+
+`maximizer.truePeakLimiter.releaseMs` はポストリミッターのリリース時間です。省略するとプリセット／設定の既定値 50 ms を保ちます。フラットな上書き値として渡した場合、その値がそのまま適用されます。`maximizer.truePeakLimiter.applyGainAtInputRate` を有効にすると、静的なラウドネスゲインをオーバーサンプリング前の入力サンプルレートで適用します。ホスト間でゲイン段の位置を揃えたい場合に使います。
 
 ::: details インターフェース全文（クリックで展開）
 

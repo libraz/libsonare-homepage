@@ -862,7 +862,11 @@ chain_result = sonare.master_audio(
     samples,
     sample_rate=sample_rate,
     preset_name="aiMusic",
-    overrides={"loudness.targetLufs": -13},
+    overrides={
+        "loudness.targetLufs": -13,
+        "maximizer.truePeakLimiter.releaseMs": 50,
+        "maximizer.truePeakLimiter.applyGainAtInputRate": False,
+    },
 )
 print(chain_result.output_lufs, chain_result.applied_gain_db)
 
@@ -891,6 +895,8 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 ```
 
 `mastering_audio_profile()` は任意のプロファイル設定として `n_fft`、`hop_length`、`true_peak_oversample` を受け取れます。`mastering_assistant_suggest()` は `target_lufs`、`ceiling_db`、`enable_repair`、`prefer_streaming_safe`、`speech_mono_amount` を受け取ります。共有ネイティブパーサーを通るため、camelCase の別名も使えます。
+
+マスタリング helper では、リミッターのリリースと静的ゲイン段の位置も指定できます。単発の `mastering()` helper は `release_ms`（`0` なら 50 ms のライブラリ既定値を維持）と `apply_gain_at_input_rate` を使います。プリセット／チェーンの上書きではフラットキーの `"maximizer.truePeakLimiter.releaseMs"` と `"maximizer.truePeakLimiter.applyGainAtInputRate"` を使い、渡した上書き値がそのまま適用されます。
 
 リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。ペア入力はサンプルレートを揃え、長さもなるべく近づけてください。
 

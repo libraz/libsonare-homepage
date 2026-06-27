@@ -955,6 +955,8 @@ api::Preset preset = api::preset_from_string("aiMusic");
 
 // 任意のフラットな上書き値（チェーン設定 params と同じドット記法）
 api::Param overrides[] = {{"loudness.targetLufs", -13.0f}};
+// リミッターは "maximizer.truePeakLimiter.releaseMs" と
+// "maximizer.truePeakLimiter.applyGainAtInputRate" も直接上書き値として受け取ります。
 
 api::MonoChainResult result = api::master_audio_mono(
   preset, samples.data(), samples.size(), sample_rate, overrides, 1);
@@ -969,6 +971,8 @@ api::MonoChainResult result = api::master_audio_mono(
 `preset_config(Preset)` は、チェーン実行前に確認・調整できる可変の `MasteringChainConfig` を返します。
 
 名前付きプロセッサのレジストリやアシスタント／プロファイルの JSON ヘルパーは、[マスタリングプロセッサ](./mastering-processors.md) と [マスタリングアシスタント](./mastering-assistant.md) を参照してください。
+
+C ABI レベルでは、`SonareMasteringConfig` が同じリミッター制御を追加フィールドの `release_ms` と `apply_gain_at_input_rate` として公開します。呼び出し側は引き続き実際の `target_lufs` と `ceiling_db` を渡す必要があります。追加されたリミッターフィールドを 0 のままにすると従来動作を保ち、`release_ms == 0` は 50 ms の既定値、`apply_gain_at_input_rate == 0` は入力レートでのゲイン適用をオフのまま保ちます。
 
 ## C API
 
@@ -1023,6 +1027,8 @@ int         sonare_has_ffmpeg_support(void);     // FFmpeg 専用フォーマッ
 camelCase の JSON 文字列を返し、`sonare_free_string` で解放します。
 
 エフェクト、特徴量、幾何ベースのルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。幾何ベースのルーム音響は `sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。完全な一覧は `src/sonare_c.h` を参照してください。
+
+プロジェクト編集は `sonare_c_project.h` にあります。`sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` の最後の引数が任意の equal-power 継ぎ目クロスフェードです。有限で 0 以上である必要があり、`0` ならハードループのままです。エンジンは使用可能なプリロールとループ長の半分を上限にクランプし、ワープ時は無視します。
 
 現在の C ABI は、用途別のヘッダーに分かれています。上の短い例に出ていないシンボルは、この表から探してください。
 

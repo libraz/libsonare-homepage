@@ -150,7 +150,7 @@ with sonare.Project() as project:
 | 移動 | `moveClip(clipId, newStartPpq, newTrackId?)` | クリップをずらす。別トラックへも移せる |
 | ゲイン | `setClipGain(clipId, gain)` | クリップごとの線形再生ゲイン（`>= 0`）。オーディオクリップにのみ有効で、MIDI クリップには保存されるがバウンスでは適用されない |
 | フェード | `setClipFade(clipId, fadeIn, fadeOut)` | カーブつきのフェードイン／フェードアウト領域 |
-| ループ | `setClipLoop(clipId, mode, loopLengthPpq?)` | `'off'` または `'loop'` とループ長 |
+| ループ | `setClipLoop(clipId, mode, loopLengthPpq?, loopCrossfadePpq?)` | `'off'` または `'loop'` と、任意のループ継ぎ目クロスフェード |
 | ソース差し替え | `setClipSource(clipId, sourceId)` | クリップを別の登録済みソースへ再バインドする |
 | 複製 | `duplicateClip(clipId, newStartPpq)` | 同じトラックにコピーし、新しい ID を返す |
 | 削除 | `removeClip(clipId)` | クリップを削除する |
@@ -163,11 +163,11 @@ project.setClipFade(
   { lengthPpq: 1.0, curve: 'linear' },       // 1 拍でフェードアウト
 );
 const tailId = project.splitClip(clipId, 2); // 拍 2 で切り、後半が新クリップになる
-project.setClipLoop(tailId, 'loop', 2);      // 後半を 2 拍ごとにループ
+project.setClipLoop(tailId, 'loop', 2, 0.05); // 短い継ぎ目クロスフェード付きで 2 拍ごとにループ
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-フェードカーブは `'linear'`・`'equal-power'`・`'exponential'`・`'logarithmic'` です。ループモードは `'off'` または `'loop'` で、ループ時は正の `loopLengthPpq` が必要です。
+フェードカーブは `'linear'`・`'equal-power'`・`'exponential'`・`'logarithmic'` です。ループモードは `'off'` または `'loop'` で、ループ時は正の `loopLengthPpq` が必要です。`loopCrossfadePpq` はループ継ぎ目に入れる任意の equal-power クロスフェードです。`0` なら従来どおりのハードループ、正の値ならループ末尾とプリロール側のソース素材をブレンドします。エンジンは使用可能なソースオフセットとループ長の半分を上限にクランプし、ワープ済みクリップではこの継ぎ目クロスフェードを無効にします。
 
 ::: warning `setClipGain` / `setClipFade` はオーディオクリップのみに効く
 `setClipGain` と `setClipFade` が効くのは**オーディオクリップのみ**です。MIDI クリップでは値が保存され（アンドゥ可能で `toJson()` でも往復します）が、レンダリングされるノートには反映されません。コンパイラは MIDI クリップのイベントをそのままレンダースケジュールへコピーし、クリップはトラックのミュート／ソロ／ゲインだけでゲートするため、クリップごとのゲインとフェードは静かに破棄されます。MIDI で駆動する楽器の音量を制御するには、**トラックゲイン**（`setTrackGain(trackId, gain)`。[ミキサーシーン](./mixing.md)のチャンネルストリップのフェーダーに畳み込まれます）を設定してください。トラックゲイン `0` はそのトラックの MIDI ノートを完全に無音にします。
@@ -185,7 +185,7 @@ project.set_clip_fade(
     fade_out_curve="linear",
 )
 tail_id = project.split_clip(clip_id, 2.0)
-project.set_clip_loop(tail_id, "loop", 2.0)
+project.set_clip_loop(tail_id, "loop", 2.0, loop_crossfade_ppq=0.05)
 copy_id = project.duplicate_clip(tail_id, 8.0)
 ```
 
@@ -567,7 +567,7 @@ Python では `project.compile()` が同じ形（`has_timeline`・`diagnostic_co
 
 ## 保存と読み込み: 決定的な JSON
 
-`toJson()` はプロジェクト全体（トラック、クリップ、MIDI の内容、テンポマップ、拍子、マーカー、注釈、ワープマップ、オートメーション）を**決定的な JSON** にシリアライズします。同じプロジェクトは常にバイト単位で同一のテキストになります。`Project.fromJson(...)` で復元します。
+`toJson()` はプロジェクト全体（トラック、クリップ、MIDI の内容、ループクロスフェード、テンポマップ、拍子、マーカー、注釈、ワープマップ、オートメーション）を**決定的な JSON** にシリアライズします。同じプロジェクトは常にバイト単位で同一のテキストになります。`Project.fromJson(...)` で復元します。ループクロスフェードは 0 のときフィールドを省略するため、従来のハードループプロジェクトは同じ JSON 形状を保ちます。
 
 ```typescript
 const json = project.toJson();

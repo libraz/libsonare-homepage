@@ -46,7 +46,7 @@ This page is source-grounded rather than generated from marketing names. It uses
 |----------|----------|
 | Registry | `src/mastering/api/named_processor_registry.cpp` for public processor names |
 | Header comments | `compressor.h` describes a feed-forward compressor with soft knee and makeup gain; `linear_phase.h` describes an FFT-domain linear-phase FIR equalizer |
-| Config fields | `TruePeakLimiterConfig` exposes `lookahead_ms`, `oversample_factor`, and `apply_gain_at_input_rate`; `DenoiseClassicalConfig` exposes three gain functions (LogMMSE, MMSE-STSA, spectral subtraction) and three noise estimators (Quantile, MCRA, IMCRA) |
+| Config fields | `TruePeakLimiterConfig` exposes `lookahead_ms`, `release_ms`, `oversample_factor`, and `apply_gain_at_input_rate`; `DenoiseClassicalConfig` exposes three gain functions (LogMMSE, MMSE-STSA, spectral subtraction) and three noise estimators (Quantile, MCRA, IMCRA) |
 | Runtime contracts | Several processors mark which parameters are real-time safe, and which changes resize buffers or rebuild FIR kernels |
 | Implementation includes | Repair code includes LPC helpers for declick/declip; denoise uses `NoiseTracker`; convolution reverb and linear-phase EQ use partitioned convolution |
 

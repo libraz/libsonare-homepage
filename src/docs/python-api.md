@@ -846,7 +846,11 @@ chain_result = sonare.master_audio(
     samples,
     sample_rate=sample_rate,
     preset_name="aiMusic",
-    overrides={"loudness.targetLufs": -13},
+    overrides={
+        "loudness.targetLufs": -13,
+        "maximizer.truePeakLimiter.releaseMs": 50,
+        "maximizer.truePeakLimiter.applyGainAtInputRate": False,
+    },
 )
 print(chain_result.output_lufs, chain_result.applied_gain_db)
 
@@ -875,6 +879,8 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 ```
 
 `mastering_audio_profile()` accepts optional profile params: `n_fft`, `hop_length`, and `true_peak_oversample`. `mastering_assistant_suggest()` accepts `target_lufs`, `ceiling_db`, `enable_repair`, `prefer_streaming_safe`, and `speech_mono_amount`; camelCase aliases also work through the shared native parser.
+
+Mastering helpers also accept limiter-release and static-gain staging controls. The simple `mastering()` helper uses `release_ms` (`0` keeps the 50 ms library default) and `apply_gain_at_input_rate`. Preset/chain overrides use the flat keys `"maximizer.truePeakLimiter.releaseMs"` and `"maximizer.truePeakLimiter.applyGainAtInputRate"`; supplied override values are applied directly.
 
 Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. Pair inputs should use the same sample rate and comparable length.
 

@@ -1008,6 +1008,8 @@ api::Preset preset = api::preset_from_string("aiMusic");
 
 // Optional flat overrides (same dot-notation as the chain config params)
 api::Param overrides[] = {{"loudness.targetLufs", -13.0f}};
+// The limiter also accepts "maximizer.truePeakLimiter.releaseMs" and
+// "maximizer.truePeakLimiter.applyGainAtInputRate" as direct overrides.
 
 api::MonoChainResult result = api::master_audio_mono(
   preset, samples.data(), samples.size(), sample_rate, overrides, 1);
@@ -1025,6 +1027,8 @@ Two helper calls are useful when working with mastering presets:
 | `preset_config(Preset)` | Getting a mutable `MasteringChainConfig` that you can inspect or tweak before running a chain. |
 
 For the named processor registry and the assistant/profile JSON helpers, see [Mastering Processors](./mastering-processors.md) and [Mastering Assistant](./mastering-assistant.md).
+
+At the C ABI level, `SonareMasteringConfig` exposes the same limiter controls as appended fields: `release_ms` and `apply_gain_at_input_rate`. Callers should still pass real `target_lufs` and `ceiling_db` values; leaving the appended limiter fields at zero preserves prior behavior (`release_ms == 0` keeps the 50 ms default and `apply_gain_at_input_rate == 0` keeps input-rate staging off).
 
 ## C API
 
@@ -1111,6 +1115,8 @@ Several helper families also have sample-based C ABI entry points:
 | Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
 | Geometric room acoustics | `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
 | Conversions and resampling | See `src/sonare_c.h` for the full list |
+
+Project editing lives in `sonare_c_project.h`. `sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` accepts the optional equal-power seam crossfade as the final argument. It must be finite and non-negative; `0` keeps a hard loop. The engine clamps it to the available pre-roll and half the loop, and ignores it under warp.
 
 The librosa-parity helpers are also exposed through the C API:
 

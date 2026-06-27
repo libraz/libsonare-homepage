@@ -635,6 +635,8 @@ The analyzer still computes internally in float. `readFramesI16()` and `readFram
 
 Both quantized read paths accept an optional `StreamQuantizeConfig` to widen the quantization ranges for unusually loud or quiet streams that would otherwise saturate; see [custom quantization ranges](./realtime-streaming.md#custom-quantization-ranges).
 
+WASM wrapper returns that contain plain lists or objects are rooted back into the JavaScript realm that called them. That means arrays from name-list helpers (`*Names()`), preset-name helpers, section results, key-candidate calls, and the object from `synthPresetPatch(...)` can be passed through `structuredClone()` or `postMessage()` without first rebuilding them by hand. Typed-array payloads still follow the normal transferable-buffer rules below.
+
 ::: details What are "Structure-of-Arrays" and transferable objects?
 - **Structure-of-Arrays (SoA)** means each field lives in its own flat typed array — all timestamps in one array, all mel values in another — instead of an array of per-frame objects. It is cheaper to slice and cheaper to hand to another thread.
 - **Transferable objects** are `ArrayBuffer`s that `postMessage` can *move* to a worker instead of copying. Ownership transfers (the sender's view becomes empty afterward), which makes passing audio frames between threads near-instant. List the buffers in the second argument: `postMessage(msg, [buffer, ...])`.

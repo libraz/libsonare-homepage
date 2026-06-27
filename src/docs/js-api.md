@@ -372,7 +372,7 @@ Use the focused helpers when the default `analyze(...)` result is either too bro
 | Dynamics | `analyzeDynamics(samples, sampleRate, ...)` | Dynamic range, loudness range, crest factor, and compression flag. |
 | Timbre | `analyzeTimbre(samples, sampleRate, ...)` | Brightness, warmth, density, roughness, and complexity. |
 | Chords | `detectChords(samples, sampleRate, options?)` | Returns `{ chords }` of chord segments; options include HMM smoothing, key context, inversions, and `chromaMethod: 'stft' \| 'nnls'`. |
-| Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. |
+| Sections | `analyzeSections(samples, sampleRate, ...)` | Song-structure sections such as intro, verse, chorus, bridge, and outro. Long inputs keep accurate `start` / `end` times even when the internal boundary grid is pooled. |
 | Melody | `analyzeMelody(samples, sampleRate, ...)` | Monophonic melody contour based on pitch tracking. |
 
 ```typescript
@@ -2128,7 +2128,9 @@ const result = masteringChainStereo(left, right, sampleRate, {
     truePeakLimiter: {
       ceilingDb: -1,
       lookaheadMs: 5,
+      releaseMs: 50,
       oversampleFactor: 4,
+      applyGainAtInputRate: false,
     },
   },
   loudness: {
@@ -2142,6 +2144,7 @@ console.log(result.outputLufs, result.appliedGainDb, result.stages)
 
 const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
   'loudness.targetLufs': -14,
+  'maximizer.truePeakLimiter.releaseMs': 50,
 })
 console.log(presetResult.outputLufs, presetResult.stages)
 
@@ -2423,6 +2426,8 @@ The repair stages are offline-only and are rejected by `StreamingMasteringChain`
 The chain runs in this order: **repair → eq → dynamics → saturation → spectral → stereo → maximizer → loudness**.
 
 `masterAudio*` starts from a preset and accepts overrides using the same key names in flat dot-notation form, such as `"dynamics.compressor.thresholdDb"`.
+
+`maximizer.truePeakLimiter.releaseMs` controls the post-limiter release time. Omit it to keep the preset/config default of 50 ms; if you provide a flat override, the value is applied directly. `maximizer.truePeakLimiter.applyGainAtInputRate` applies static loudness gain before oversampling when set, which is useful when you need that gain staged at the source rate for host parity.
 
 ::: details Full interface (click to expand)
 

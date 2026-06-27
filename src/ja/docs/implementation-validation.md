@@ -35,12 +35,12 @@
 |------|--------------------|
 | librosa 互換特徴量 | `tests/librosa/*_test.cpp` と `tests/librosa/reference/` の JSON 参照値で、STFT、メル、MFCC、クロマ/CQT、オンセット、ビート／テンポ、PCEN、tonnetz、無音処理、frame/pad/fix、peak pick、変換ヘルパーを検証 |
 | コア DSP プリミティブ | `tests/core/*_test.cpp`、`tests/util/*_test.cpp`、`tests/filters/*_test.cpp`、`tests/rt/*_test.cpp` で FFT、窓関数、リサンプリング、padding、sequence、filter、oversampling、トゥルーピークフィルター、queue、リアルタイム用プリミティブを検証 |
-| 解析 | `tests/analysis/*_test.cpp`、`tests/fixtures/music_eval/` の任意 music fixture manifest、合成 key/chord matrix で BPM、キー、コード、ビート、ダウンビート、拍子、メロディ、音色、リズム、セクション、境界、音響解析を検証 |
+| 解析 | `tests/analysis/*_test.cpp`、`tests/fixtures/music_eval/` の任意 music fixture manifest、合成 key/chord matrix で BPM、キー、コード、ビート、ダウンビート、拍子、メロディ、音色、リズム、セクション、境界、長尺境界のプーリング、音響解析を検証 |
 | 幾何ベースのルーム音響 | `tests/acoustic/*_test.cpp`、`tests/effects/room_morph_test.cpp`、`tests/api/sonare_c_acoustic_test.cpp`、`tests/fixtures/acoustic/` の任意 fixture、バインディングテストでルームモデル／マテリアル、鏡像音源法、後期残響、RIR 合成、等価ルーム推定、ルームモーフィング、C ABI 挙動を検証 |
 | マスタリング | `tests/mastering/*_test.cpp` でチェーン設定、各プロセッサ、ラウドネス、プリセット、ゴールデンハッシュ、性質ベースの確認、アシスタント出力を検証 |
 | ミキシング | `tests/mixing/*_test.cpp`、`bindings/node/tests/mixing.test.ts`、`bindings/python/tests/test_mixing.py`、WASM テストでルーティング、インサートオートメーション、処理中にアロケーションしないこと、シーンプリセット、メーター、ゴニオメーター、バインディングのスモークテストを検証 |
-| リアルタイムエンジン | `tests/engine/*_test.cpp`、`bindings/python/tests/test_engine.py`、WASM worklet テストでトランスポート、テンポ同期、メトロノーム、キャプチャ、グラフ実行、モニター実行、テレメトリ、オフラインバウンス、並行処理、AudioWorklet 実行を検証 |
-| バインディング | `bindings/wasm/tests/*.test.ts`、`bindings/node/tests/*.test.ts`、`bindings/python/tests/*.py`、型検査用のスモークテストで、公開 API の形とバインディング間の挙動を検証 |
+| リアルタイムエンジン | `tests/engine/*_test.cpp`、`bindings/python/tests/test_engine.py`、WASM worklet テストでトランスポート、テンポ同期、メトロノーム、キャプチャ、グラフ実行、モニター実行、モノラルのモニターとバウンスの同等性、テレメトリ、オフラインバウンス、並行処理、AudioWorklet 実行を検証 |
+| バインディング | `bindings/wasm/tests/*.test.ts`、`bindings/node/tests/*.test.ts`、`bindings/python/tests/*.py`、型検査用のスモークテストで、公開 API の形、structuredClone 可能な WASM 戻り値、入力検証ガード、バインディング間の挙動を検証 |
 | クロスバインディング parity | `tools/parity` で C++、C ABI、Python、Node、WASM 間の既定値、定数／enum、パラメータ名のずれを検出 |
 | CLI | `tests/cli/cli_test.cpp` と Python CLI パーサーのカバレッジで、ターミナルから使う入口を検証 |
 | パフォーマンス | `benchmarks/*.cpp`、`benchmarks/results.json`、`benchmarks/results_cpp.json` でスペクトル処理、ストリーミングメル／クロマ、マスタリング補助処理、ISP、ステレオ処理、ミキシング、EQ、リサンプリング周辺のホットパスを確認 |

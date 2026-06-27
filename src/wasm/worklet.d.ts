@@ -224,6 +224,10 @@ interface MasteringOptions {
     ceilingDb?: number;
     /** Oversampling factor used for peak estimation. Default 4. */
     truePeakOversample?: number;
+    /** Post true-peak limiter release in ms. Default 0 => library default (50 ms). */
+    releaseMs?: number;
+    /** Apply the static loudness gain at the input (pre-oversample) rate. Default false. */
+    applyGainAtInputRate?: boolean;
 }
 /** Options for `noteStretch`. All fields are optional. */
 interface NoteStretchOptions {
@@ -4111,8 +4115,12 @@ declare class Project {
     setClipTakes(clipId: number, takes: ReadonlyArray<ProjectClipTake>, activeTakeId?: number): void;
     /** Replace a clip's comp segments (undoable). */
     setClipCompSegments(clipId: number, segments: ReadonlyArray<ProjectClipCompSegment>): void;
-    /** Set a clip's loop mode + loop length in PPQ (undoable). */
-    setClipLoop(clipId: number, loopMode: ProjectLoopMode, loopLengthPpq?: number): void;
+    /**
+     * Set a clip's loop mode + loop length in PPQ (undoable). `loopCrossfadePpq`
+     * is an optional equal-power crossfade at the loop seam (PPQ, finite and >= 0;
+     * 0 = hard loop); the engine clamps it to the clip's pre-roll and half the loop.
+     */
+    setClipLoop(clipId: number, loopMode: ProjectLoopMode, loopLengthPpq?: number, loopCrossfadePpq?: number): void;
     /** Rebind a clip to a different (already-registered) source (undoable). */
     setClipSource(clipId: number, sourceId: number): void;
     /** Duplicate a clip at `newStartPpq` (same track); returns the new clip id. */

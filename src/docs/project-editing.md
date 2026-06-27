@@ -150,7 +150,7 @@ Every clip operation is a single undoable command and addresses the clip by its 
 | Move | `moveClip(clipId, newStartPpq, newTrackId?)` | Slides the clip, optionally to another track |
 | Gain | `setClipGain(clipId, gain)` | Linear per-clip playback gain (`>= 0`). Audio clips only — stored on MIDI clips but never applied at bounce |
 | Fade | `setClipFade(clipId, fadeIn, fadeOut)` | Fade-in / fade-out regions with a curve |
-| Loop | `setClipLoop(clipId, mode, loopLengthPpq?)` | `'off'` or `'loop'` with a loop length |
+| Loop | `setClipLoop(clipId, mode, loopLengthPpq?, loopCrossfadePpq?)` | `'off'` or `'loop'` with a loop length and optional loop-seam crossfade |
 | Re-source | `setClipSource(clipId, sourceId)` | Rebinds the clip to a different registered source |
 | Duplicate | `duplicateClip(clipId, newStartPpq)` | Copies the clip on the same track; returns the new id |
 | Remove | `removeClip(clipId)` | Deletes the clip |
@@ -163,11 +163,11 @@ project.setClipFade(
   { lengthPpq: 1.0, curve: 'linear' },       // fade out over one beat
 );
 const tailId = project.splitClip(clipId, 2); // cut at beat 2; tail becomes a new clip
-project.setClipLoop(tailId, 'loop', 2);      // loop the tail every two beats
+project.setClipLoop(tailId, 'loop', 2, 0.05); // loop the tail every two beats with a short seam crossfade
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping.
+Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
 
 ::: warning `setClipGain` / `setClipFade` apply to audio clips only
 `setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades are silently dropped. To control the volume of a MIDI-driven instrument, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
@@ -185,7 +185,7 @@ project.set_clip_fade(
     fade_out_curve="linear",
 )
 tail_id = project.split_clip(clip_id, 2.0)
-project.set_clip_loop(tail_id, "loop", 2.0)
+project.set_clip_loop(tail_id, "loop", 2.0, loop_crossfade_ppq=0.05)
 copy_id = project.duplicate_clip(tail_id, 8.0)
 ```
 
@@ -567,7 +567,7 @@ In Python, `project.compile()` returns the same shape (`has_timeline`, `diagnost
 
 ## Save and load: deterministic JSON
 
-`toJson()` serializes the whole project — tracks, clips, MIDI content, tempo map, time signatures, markers, annotations, warp maps, and automation — to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it.
+`toJson()` serializes the whole project — tracks, clips, MIDI content, loop crossfades, tempo map, time signatures, markers, annotations, warp maps, and automation — to **deterministic JSON**: the same project always produces byte-identical text. `Project.fromJson(...)` restores it. Loop crossfade fields are omitted when they are zero, so older hard-loop projects keep the same JSON shape.
 
 ```typescript
 const json = project.toJson();
