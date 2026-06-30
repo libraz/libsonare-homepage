@@ -6,6 +6,11 @@ import {
   enCopy as analyzerEnCopy,
   jaCopy as analyzerJaCopy,
 } from '@/components/analyzer/analyzerCopy';
+import {
+  calculateNormalizationGain,
+  mixToMono,
+  splitMelBands,
+} from '@/components/analyzer/audioAnalyzerProcessing';
 import { MetricItem, TechPanel, TermLabel, Tooltip, TransportButton } from '@/components/ui';
 import { useAudioAnalysis } from '@/composables/useAudioAnalysis';
 import { useAudioPlayer } from '@/composables/useAudioPlayer';
@@ -172,24 +177,7 @@ async function handleFile(file: File) {
 
     fileProgress.value = 95;
     fileProgressStage.value = 'FINALIZING';
-    const { nMels, nFrames: melFrames } = melResult;
-    const lowBandRms = new Float32Array(melFrames);
-    const highBandRms = new Float32Array(melFrames);
-    const lowEnd = Math.floor(nMels * 0.25);
-    const highStart = Math.floor(nMels * 0.5);
-
-    for (let f = 0; f < melFrames; f++) {
-      let lowSum = 0,
-        highSum = 0;
-      for (let m = 0; m < lowEnd; m++) {
-        lowSum += melResult.power[f * nMels + m];
-      }
-      for (let m = highStart; m < nMels; m++) {
-        highSum += melResult.power[f * nMels + m];
-      }
-      lowBandRms[f] = Math.sqrt(lowSum / lowEnd);
-      highBandRms[f] = Math.sqrt(highSum / (nMels - highStart));
-    }
+    const bands = splitMelBands(melResult);
 
     rmsData.value = rms;
     chromaData.value = {
@@ -198,8 +186,8 @@ async function handleFile(file: File) {
       nChroma: chromaResult.nChroma,
     };
     bandData.value = {
-      low: lowBandRms,
-      high: highBandRms,
+      low: bands.low,
+      high: bands.high,
     };
 
     // Set minimal result to show UI
@@ -345,29 +333,6 @@ const displayDetectedPatternScore = computed(() => {
   return 0;
 });
 
-// Calculate normalization gain for loud audio
-function calculateNormalizationGain(buffer: AudioBuffer): number {
-  const TARGET_PEAK = 0.5; // Target peak level (~-6dB)
-  const THRESHOLD = 0.8; // Only normalize if peak > this
-
-  // Find peak across all channels
-  let maxPeak = 0;
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < data.length; i++) {
-      const abs = Math.abs(data[i]);
-      if (abs > maxPeak) maxPeak = abs;
-    }
-  }
-
-  // If audio is loud (peak > threshold), apply normalization
-  if (maxPeak > THRESHOLD) {
-    return TARGET_PEAK / maxPeak;
-  }
-
-  return 1.0; // No normalization needed
-}
-
 // Yield to main thread for animation
 const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -471,24 +436,7 @@ async function loadDemoFile() {
     await yieldToMain();
 
     t0 = performance.now();
-    const { nMels, nFrames: melFrames } = melResult;
-    const lowBandRms = new Float32Array(melFrames);
-    const highBandRms = new Float32Array(melFrames);
-    const lowEnd = Math.floor(nMels * 0.25);
-    const highStart = Math.floor(nMels * 0.5);
-
-    for (let f = 0; f < melFrames; f++) {
-      let lowSum = 0,
-        highSum = 0;
-      for (let m = 0; m < lowEnd; m++) {
-        lowSum += melResult.power[f * nMels + m];
-      }
-      for (let m = highStart; m < nMels; m++) {
-        highSum += melResult.power[f * nMels + m];
-      }
-      lowBandRms[f] = Math.sqrt(lowSum / lowEnd);
-      highBandRms[f] = Math.sqrt(highSum / (nMels - highStart));
-    }
+    const bands = splitMelBands(melResult);
     timings['band separation'] = performance.now() - t0;
 
     // Abort if user uploaded a file - don't overwrite their data
@@ -504,8 +452,8 @@ async function loadDemoFile() {
       nChroma: chromaResult.nChroma,
     };
     bandData.value = {
-      low: lowBandRms,
-      high: highBandRms,
+      low: bands.low,
+      high: bands.high,
     };
 
     result.value = {
@@ -527,37 +475,6 @@ async function loadDemoFile() {
     console.error('Failed to load demo file:', e);
     isLoadingDemo.value = false;
   }
-}
-
-function mixToMono(audioBuffer: AudioBuffer, maxLength?: number): Float32Array {
-  const length = maxLength ? Math.min(audioBuffer.length, maxLength) : audioBuffer.length;
-  const channels = audioBuffer.numberOfChannels;
-
-  const channelData: Float32Array[] = [];
-  for (let ch = 0; ch < channels; ch++) {
-    channelData.push(audioBuffer.getChannelData(ch));
-  }
-
-  if (channels === 2) {
-    const left = channelData[0];
-    const right = channelData[1];
-    const mono = new Float32Array(length);
-    for (let i = 0; i < length; i++) {
-      mono[i] = (left[i] + right[i]) * 0.5;
-    }
-    return mono;
-  }
-
-  const mono = new Float32Array(length);
-  const scale = 1 / channels;
-  for (let i = 0; i < length; i++) {
-    let sum = 0;
-    for (let ch = 0; ch < channels; ch++) {
-      sum += channelData[ch][i];
-    }
-    mono[i] = sum * scale;
-  }
-  return mono;
 }
 
 // Reset stream analyzer when starting fresh playback from the beginning
@@ -805,64 +722,4 @@ onMounted(() => {
 <style scoped src="./analyzer/audioAnalyzerMetrics.css"></style>
 <style scoped src="./analyzer/audioAnalyzerResponsive.css"></style>
 
-<style scoped>
-/* Info dot beside the hero / pattern labels (secondary metrics use TermLabel). */
-.analyzer__metric-hero-label,
-.analyzer__pattern-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.analyzer__info {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.analyzer__info > span {
-  font-family: var(--font-body);
-  font-size: 8px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.analyzer__info:hover,
-.analyzer__info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
-}
-
-/* Overlay info dot pinned to the top-right of a visualization panel. */
-.analyzer__transport {
-  position: relative;
-}
-
-.analyzer__overlay-tip {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 3;
-}
-
-.analyzer__overlay-tip .analyzer__info {
-  width: 18px;
-  height: 18px;
-  background: var(--demo-bg-overlay);
-  backdrop-filter: blur(6px);
-}
-</style>
+<style scoped src="./analyzer/audioAnalyzerTooltips.css"></style>

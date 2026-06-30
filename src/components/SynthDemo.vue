@@ -1,21 +1,37 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
-import ScopeDisplay from '@/components/synth/ScopeDisplay.vue';
+import SynthDeckDisplay from '@/components/synth/SynthDeckDisplay.vue';
 import SynthKeyboard from '@/components/synth/SynthKeyboard.vue';
+import SynthMidiPanel from '@/components/synth/SynthMidiPanel.vue';
+import SynthStatusBar from '@/components/synth/SynthStatusBar.vue';
 import {
   DEFAULT_PRESET,
   enCopy,
   jaCopy,
-  KEY_LAYOUT,
   SYNTH_TERM_SLUGS,
   type SynthTermKey,
 } from '@/components/synth/synthCopy';
+import {
+  ATTACK_MAX_MS,
+  ATTACK_MIN_MS,
+  buildSynthPatch,
+  CUTOFF_MAX_HZ,
+  CUTOFF_MIN_HZ,
+  controlsFromPreset,
+  logKnobHz,
+  msLabel,
+  RELEASE_MAX_MS,
+  RELEASE_MIN_MS,
+  type SynthPatchControls,
+  type SynthTweakKey,
+} from '@/components/synth/synthPatchState';
+import { useSynthKeyboardInput } from '@/components/synth/useSynthKeyboardInput';
 import ToolShell from '@/components/ToolShell.vue';
-import { RotaryKnob, StatusIndicator, Tooltip } from '@/components/ui';
+import { RotaryKnob, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useSynthEngine } from '@/composables/useSynthEngine';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
-import type { SynthPatch, WebMidiBinding, WebMidiInputInfo } from '@/wasm/index';
+import type { WebMidiBinding, WebMidiInputInfo } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
 import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 
@@ -37,27 +53,10 @@ const MIN_BASE_NOTE = 24; // C1
 const MAX_BASE_NOTE = 84; // C6 (top key reaches B7)
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-// Log-scaled knob ranges for the time/frequency parameters.
-const CUTOFF_MIN_HZ = 80;
-const CUTOFF_MAX_HZ = 16000;
-const ATTACK_MIN_MS = 1;
-const ATTACK_MAX_MS = 2000;
-const RELEASE_MIN_MS = 10;
-const RELEASE_MAX_MS = 5000;
-
 const wasmModule = shallowRef<WasmModule | null>(null);
 
 /** Patch keys the user has touched; only these are sent as preset overrides. */
-type TweakKey =
-  | 'waveform'
-  | 'filterModel'
-  | 'cutoffHz'
-  | 'resonanceQ'
-  | 'ampAttackMs'
-  | 'ampReleaseMs'
-  | 'glideMs'
-  | 'stereoSpread';
-const dirtyTweaks = ref<Set<TweakKey>>(new Set());
+const dirtyTweaks = ref<Set<SynthTweakKey>>(new Set());
 const waveforms = ref<string[]>(['default', 'sine', 'saw', 'square', 'triangle', 'noise']);
 const filterModels = ref<string[]>(['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key']);
 const waveform = ref('default');
@@ -113,13 +112,6 @@ watch(meter, (value) => {
   peakHold.value = decayPeakHold(peakHold.value, value.peak);
 });
 
-/** PC keyboard character → semitone offset above the range's base C. */
-const pcKeyToSemitone = new Map<string, number>(
-  KEY_LAYOUT.filter((k) => k.pc !== undefined).map((k) => [k.pc as string, k.semitone]),
-);
-/** Notes currently held from the PC keyboard, frozen at press-time pitch. */
-const heldPcNotes = new Map<string, number>();
-
 const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
   if (engine.error.value) return 'error';
   if (isRunning.value) return 'active';
@@ -147,24 +139,12 @@ const sampleRateLabel = computed(() => {
   return ctx ? `${(ctx.sampleRate / 1000).toFixed(1)} kHz` : '-';
 });
 
-function logKnobHz(norm: number, min: number, max: number): number {
-  return Math.round(min * (max / min) ** norm);
-}
-
-function hzToNorm(hz: number, min: number, max: number): number {
-  return clamp(Math.log(hz / min) / Math.log(max / min), 0, 1);
-}
-
 const cutoffHz = computed(() => logKnobHz(cutoffNorm.value, CUTOFF_MIN_HZ, CUTOFF_MAX_HZ));
 const cutoffLabel = computed(() =>
   cutoffHz.value >= 1000 ? `${(cutoffHz.value / 1000).toFixed(1)} kHz` : `${cutoffHz.value} Hz`,
 );
 const attackMs = computed(() => logKnobHz(attackNorm.value, ATTACK_MIN_MS, ATTACK_MAX_MS));
 const releaseMs = computed(() => logKnobHz(releaseNorm.value, RELEASE_MIN_MS, RELEASE_MAX_MS));
-
-function msLabel(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
-}
 
 /** Attack / release silhouette drawn next to the envelope knobs. */
 const envPath = computed(() => {
@@ -247,40 +227,21 @@ async function initWasmMeta() {
   }
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 /** Seed the tweak controls from the preset's resolved base patch. */
 function loadPresetBase(preset: string) {
   const wasm = wasmModule.value;
   if (!wasm) return;
   try {
-    const base = wasm.synthPresetPatch(preset);
-    waveform.value = String(base.waveform ?? 'default');
-    filterModel.value = String(base.filterModel ?? 'default');
-    cutoffNorm.value = hzToNorm(base.cutoffHz ?? CUTOFF_MAX_HZ, CUTOFF_MIN_HZ, CUTOFF_MAX_HZ);
-    resonanceQ.value = clamp(base.resonanceQ ?? 0.7, 0.5, 12);
-    attackNorm.value = hzToNorm(
-      clamp(base.ampAttackMs ?? 1, ATTACK_MIN_MS, ATTACK_MAX_MS),
-      ATTACK_MIN_MS,
-      ATTACK_MAX_MS,
-    );
-    releaseNorm.value = hzToNorm(
-      clamp(base.ampReleaseMs ?? 300, RELEASE_MIN_MS, RELEASE_MAX_MS),
-      RELEASE_MIN_MS,
-      RELEASE_MAX_MS,
-    );
-    glideMs.value = clamp(base.glideMs ?? 0, 0, 300);
-    stereoSpread.value = clamp(base.stereoSpread ?? 0, 0, 1);
-    baseVals.value = {
-      cutoffNorm: cutoffNorm.value,
-      resonanceQ: resonanceQ.value,
-      attackNorm: attackNorm.value,
-      releaseNorm: releaseNorm.value,
-      glideMs: glideMs.value,
-      stereoSpread: stereoSpread.value,
-    };
+    const { controls, baseValues } = controlsFromPreset(wasm.synthPresetPatch(preset));
+    waveform.value = controls.waveform;
+    filterModel.value = controls.filterModel;
+    cutoffNorm.value = controls.cutoffNorm;
+    resonanceQ.value = controls.resonanceQ;
+    attackNorm.value = controls.attackNorm;
+    releaseNorm.value = controls.releaseNorm;
+    glideMs.value = controls.glideMs;
+    stereoSpread.value = controls.stereoSpread;
+    baseVals.value = baseValues;
   } catch (error) {
     console.warn(`Failed to load base patch for ${preset}:`, error);
   }
@@ -288,23 +249,17 @@ function loadPresetBase(preset: string) {
 
 /** Send the preset plus only the user-touched overrides to the audio thread. */
 function sendPatch() {
-  if (dirtyTweaks.value.size === 0) {
-    engine.setPatch(selectedPreset.value);
-    return;
-  }
-  const patch: SynthPatch = { preset: selectedPreset.value };
-  for (const key of dirtyTweaks.value) {
-    if (key === 'waveform') patch.waveform = waveform.value as SynthPatch['waveform'];
-    else if (key === 'filterModel')
-      patch.filterModel = filterModel.value as SynthPatch['filterModel'];
-    else if (key === 'cutoffHz') patch.cutoffHz = cutoffHz.value;
-    else if (key === 'resonanceQ') patch.resonanceQ = resonanceQ.value;
-    else if (key === 'ampAttackMs') patch.ampAttackMs = attackMs.value;
-    else if (key === 'ampReleaseMs') patch.ampReleaseMs = releaseMs.value;
-    else if (key === 'glideMs') patch.glideMs = glideMs.value;
-    else if (key === 'stereoSpread') patch.stereoSpread = stereoSpread.value;
-  }
-  engine.setPatch(patch);
+  const controls: SynthPatchControls = {
+    waveform: waveform.value,
+    filterModel: filterModel.value,
+    cutoffNorm: cutoffNorm.value,
+    resonanceQ: resonanceQ.value,
+    attackNorm: attackNorm.value,
+    releaseNorm: releaseNorm.value,
+    glideMs: glideMs.value,
+    stereoSpread: stereoSpread.value,
+  };
+  engine.setPatch(buildSynthPatch(selectedPreset.value, dirtyTweaks.value, controls));
 }
 
 /**
@@ -327,7 +282,7 @@ function schedulePatchSend() {
   }, 90);
 }
 
-function tweak(key: TweakKey) {
+function tweak(key: SynthTweakKey) {
   const next = new Set(dirtyTweaks.value);
   next.add(key);
   dirtyTweaks.value = next;
@@ -436,11 +391,19 @@ function noteOff(note: number) {
   activeNotes.value = next;
 }
 
+const { onKeyDown, onKeyUp, releaseHeldPcNotes } = useSynthKeyboardInput({
+  isReady,
+  baseNote,
+  noteOn,
+  noteOff,
+  shiftOctave,
+});
+
 /** Release every sounding note (octave shifts, panic, window blur). */
 function releaseAll() {
   for (const note of activeNotes.value) engine.noteOff(note);
   activeNotes.value = new Set();
-  heldPcNotes.clear();
+  releaseHeldPcNotes();
 }
 
 function shiftOctave(direction: -1 | 1) {
@@ -466,40 +429,6 @@ function selectPreset(name: string) {
 function applyGain() {
   engine.setGain(outputGain.value);
 }
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
-}
-
-function onKeyDown(event: KeyboardEvent) {
-  if (!isReady.value || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-  if (isTypingTarget(event.target)) return;
-  const key = event.key.toLowerCase();
-  if (key === 'z') {
-    shiftOctave(-1);
-    event.preventDefault();
-    return;
-  }
-  if (key === 'x') {
-    shiftOctave(1);
-    event.preventDefault();
-    return;
-  }
-  const semitone = pcKeyToSemitone.get(key);
-  if (semitone === undefined || heldPcNotes.has(key)) return;
-  const note = baseNote.value + semitone;
-  heldPcNotes.set(key, note);
-  noteOn(note);
-  event.preventDefault();
-}
-
-function onKeyUp(event: KeyboardEvent) {
-  const key = event.key.toLowerCase();
-  const note = heldPcNotes.get(key);
-  if (note === undefined) return;
-  heldPcNotes.delete(key);
-  noteOff(note);
-}
 </script>
 
 <template>
@@ -517,31 +446,29 @@ function onKeyUp(event: KeyboardEvent) {
     :opposite-locale-path="oppositeLocalePath"
   >
     <template #statusbar>
-      <div class="sy-statusbar">
-        <StatusIndicator :status="statusKind" :label="statusLabel" :pulse="isStarting" />
-        <span class="sy-statusbar__field"><b>{{ copy.output.peak }}</b>{{ peakDb }}</span>
-        <span class="sy-statusbar__field"><b>{{ copy.output.engine }}</b>{{ sampleRateLabel }}</span>
-        <span v-if="engine.error.value" class="sy-error">{{ copy.errors.start }}</span>
-      </div>
+      <SynthStatusBar
+        :status="statusKind"
+        :label="statusLabel"
+        :pulse="isStarting"
+        :peak-label="copy.output.peak"
+        :peak-db="peakDb"
+        :engine-label="copy.output.engine"
+        :sample-rate-label="sampleRateLabel"
+        :error-message="engine.error.value ? copy.errors.start : undefined"
+      />
     </template>
 
     <div class="sy-deck">
       <!-- ===== DISPLAY ROW ===== -->
-      <div class="sy-deck__display">
-        <div class="sy-brand">
-          <span class="sy-brand__name">LIBSONARE</span>
-          <span class="sy-brand__model">{{ copy.deck.model }}</span>
-          <span class="sy-brand__tag">{{ copy.deck.tagline }}</span>
-          <span class="sy-brand__power">
-            <i class="sy-led" :class="{ 'sy-led--on': isRunning }"></i>
-            {{ copy.deck.power }}
-          </span>
-        </div>
-        <ScopeDisplay :analyser="engine.analyser.value" class="sy-scope">
-          <span class="sy-scope__osd sy-scope__osd--preset">{{ selectedPreset }}</span>
-          <span class="sy-scope__osd sy-scope__osd--peak">{{ peakDb }}</span>
-        </ScopeDisplay>
-      </div>
+      <SynthDeckDisplay
+        :model="copy.deck.model"
+        :tagline="copy.deck.tagline"
+        :power-label="copy.deck.power"
+        :is-running="isRunning"
+        :analyser="engine.analyser.value"
+        :selected-preset="selectedPreset"
+        :peak-db="peakDb"
+      />
 
       <!-- ===== CONTROL SECTIONS ===== -->
       <div class="sy-deck__controls">
@@ -783,704 +710,26 @@ function onKeyUp(event: KeyboardEvent) {
       <p class="sy-keyboard-hint">{{ copy.keyboardHint }}</p>
 
       <!-- ===== MIDI ROW ===== -->
-      <div class="sy-deck__midi">
-        <span class="sy-midi__title">
-          <i class="sy-led" :class="{ 'sy-led--on': midiBinding && midiInputs.length > 0 }"></i>
-          {{ copy.sections.midi }}
-          <Tooltip v-bind="term('midi')">
-            <button type="button" class="sy-sec__info" :aria-label="term('midi').title">
-              <span aria-hidden="true">i</span>
-            </button>
-          </Tooltip>
-        </span>
-        <p v-if="midiSupported === false" class="sy-midi__note">{{ copy.midi.unavailable }}</p>
-        <template v-else>
-          <button
-            v-if="!midiBinding"
-            type="button"
-            class="sy-chipbtn"
-            :disabled="midiConnecting || !wasmModule"
-            @click="connectMidi"
-          >
-            {{ midiConnecting ? copy.midi.connecting : copy.midi.connect }}
-          </button>
-          <p v-if="midiError" class="sy-error">{{ copy.midi.error }}</p>
-          <template v-if="midiBinding">
-            <p v-if="midiInputs.length === 0" class="sy-midi__note">{{ copy.midi.none }}</p>
-            <span
-              v-for="input in midiInputs"
-              :key="input.id"
-              class="sy-midi__device"
-            >
-              <i class="sy-led" :class="{ 'sy-led--on': input.state === 'connected' }"></i>
-              {{ input.name || input.id }}
-            </span>
-          </template>
-        </template>
-        <a :href="midiDocsPath" class="sy-midi__docs">{{ copy.midi.docs }}</a>
-      </div>
+      <SynthMidiPanel
+        :title="copy.sections.midi"
+        :unavailable-label="copy.midi.unavailable"
+        :connecting-label="copy.midi.connecting"
+        :connect-label="copy.midi.connect"
+        :empty-label="copy.midi.none"
+        :error-label="copy.midi.error"
+        :docs-label="copy.midi.docs"
+        :docs-path="midiDocsPath"
+        :supported="midiSupported"
+        :connecting="midiConnecting"
+        :has-error="midiError"
+        :connected="Boolean(midiBinding)"
+        :wasm-ready="Boolean(wasmModule)"
+        :inputs="midiInputs"
+        :midi-term="term('midi')"
+        @connect="connectMidi"
+      />
     </div>
   </ToolShell>
 </template>
 
-<style scoped>
-.sy-statusbar {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--demo-border);
-  background: var(--demo-bg-overlay);
-  backdrop-filter: blur(16px);
-}
-
-.sy-statusbar__field {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.sy-statusbar__field b {
-  color: var(--demo-text-faint);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.sy-error {
-  margin: 0;
-  color: var(--demo-danger);
-  font-size: 12px;
-}
-
-/* ===== THE INSTRUMENT BODY ===== */
-.sy-deck {
-  max-width: 1120px;
-  margin: 0 auto;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, var(--demo-bg-header) 0%, var(--demo-bg-elevated) 22%, var(--demo-bg-elevated) 100%);
-  box-shadow:
-    0 24px 48px -24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  overflow: hidden;
-  /* Subtle rise as the deck mounts. */
-  animation: sy-deck-rise 0.45s ease-out both;
-}
-
-html:not(.dark) .sy-deck {
-  box-shadow:
-    0 20px 40px -24px rgba(80, 60, 140, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-@keyframes sy-deck-rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sy-deck {
-    animation: none;
-  }
-}
-
-/* ===== DISPLAY ROW ===== */
-.sy-deck__display {
-  display: flex;
-  gap: 14px;
-  align-items: stretch;
-  padding: 10px 16px 8px;
-}
-
-.sy-brand {
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  min-width: 140px;
-}
-
-.sy-brand__name {
-  color: var(--demo-text-strong);
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  line-height: 1.2;
-}
-
-.sy-brand__model {
-  color: var(--demo-accent-light);
-  font-family: var(--font-mono);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1.1;
-}
-
-.sy-brand__tag {
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  line-height: 1.3;
-}
-
-.sy-brand__power {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-  color: var(--demo-text-faint);
-  font-size: 9px;
-  line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.sy-led {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--demo-text-faint);
-  opacity: 0.5;
-  flex: 0 0 auto;
-}
-
-.sy-led--on {
-  background: var(--demo-success);
-  opacity: 1;
-  box-shadow: 0 0 6px var(--demo-success);
-}
-
-.sy-scope {
-  flex: 1;
-  height: 64px;
-  align-self: center;
-}
-
-.sy-scope__osd {
-  position: absolute;
-  top: 8px;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.sy-scope__osd--preset {
-  left: 12px;
-  color: var(--demo-accent-light);
-}
-
-.sy-scope__osd--peak {
-  right: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ===== CONTROL SECTIONS ===== */
-.sy-deck__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  border-top: 1px solid var(--demo-border);
-}
-
-.sy-sec {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 10px 12px 12px;
-  border-left: 1px solid var(--demo-border);
-}
-
-.sy-sec:first-child {
-  border-left: none;
-}
-
-.sy-sec--program {
-  flex: 1 1 250px;
-}
-
-.sy-sec__title {
-  margin: 0;
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.sy-sec__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sy-sec__info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 50%;
-  background: var(--demo-bg);
-  color: var(--demo-text-muted);
-  cursor: pointer;
-  vertical-align: middle;
-  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.sy-sec__info > span {
-  font-family: var(--font-body);
-  font-size: 8px;
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
-
-.sy-sec__info:hover,
-.sy-sec__info:focus-visible {
-  color: var(--demo-accent);
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  outline: none;
-}
-
-.sy-knob-row {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-/* Program memory grid */
-.sy-programs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(52px, 1fr));
-  gap: 4px;
-  align-content: start;
-}
-
-.sy-program {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
-  padding: 4px 7px;
-  line-height: 1.2;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background: var(--demo-control-bg);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.sy-program:hover {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
-}
-
-.sy-program--active {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  box-shadow: inset 0 0 10px var(--demo-accent-subtle), 0 0 8px var(--demo-accent-dim);
-}
-
-.sy-program__no {
-  flex: 0 0 auto;
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-}
-
-.sy-program--active .sy-program__no {
-  color: var(--demo-accent-light);
-}
-
-.sy-program__name {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sy-program--active .sy-program__name {
-  color: var(--demo-text-strong);
-}
-
-/* Oscillator waveform buttons */
-.sy-waves {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-}
-
-.sy-wave {
-  display: grid;
-  gap: 2px;
-  justify-items: center;
-  padding: 5px 5px 4px;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background: var(--demo-control-bg);
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.sy-wave:hover {
-  border-color: var(--demo-accent-border);
-}
-
-.sy-wave--active {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  box-shadow: 0 0 8px var(--demo-accent-dim);
-}
-
-.sy-wave svg {
-  width: 26px;
-  height: 12px;
-  fill: none;
-  stroke: var(--demo-text-muted);
-  stroke-width: 1.6;
-  stroke-linejoin: round;
-}
-
-.sy-wave--active svg {
-  stroke: var(--demo-accent-light);
-  filter: drop-shadow(0 0 3px var(--demo-accent-dim));
-}
-
-.sy-wave__auto {
-  display: inline-flex;
-  align-items: center;
-  height: 12px;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.sy-wave--active .sy-wave__auto {
-  color: var(--demo-accent-light);
-}
-
-.sy-wave__label {
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 7.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-/* Filter model chips */
-.sy-filter-models {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  gap: 3px;
-  justify-content: center;
-}
-
-.sy-chipbtn {
-  padding: 4px 8px;
-  border: 1px solid var(--demo-border);
-  border-radius: 5px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  line-height: 1.3;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-
-.sy-chipbtn:hover:not(:disabled) {
-  border-color: var(--demo-accent-border);
-  color: var(--demo-text);
-}
-
-.sy-chipbtn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.sy-chipbtn--active {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-  color: var(--demo-accent-light);
-  box-shadow: 0 0 8px var(--demo-accent-dim);
-}
-
-/* Envelope shape readout */
-.sy-env {
-  width: 116px;
-  height: 34px;
-  margin: 0 auto;
-  border: 1px solid var(--demo-border);
-  border-radius: 5px;
-  background: var(--demo-control-bg);
-}
-
-.sy-env__curve {
-  fill: none;
-  stroke: var(--demo-cyan);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 3px var(--demo-cyan));
-  transition: d 0.08s ease;
-}
-
-.sy-reset {
-  margin: auto auto 0;
-}
-
-/* Output: gain knob + LED meter */
-.sy-output {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: center;
-}
-
-.sy-vmeter__track {
-  position: relative;
-  width: 12px;
-  height: 64px;
-  border-radius: 3px;
-  background: var(--demo-track-bg);
-  overflow: hidden;
-}
-
-.sy-vmeter__fill {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: linear-gradient(0deg, var(--demo-success) 0%, var(--demo-success) 60%, var(--demo-amber) 82%, var(--demo-clip) 96%);
-  /* LED segments */
-  -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
-  mask-image: repeating-linear-gradient(0deg, #000 0 4px, transparent 4px 6px);
-  transition: height 0.05s linear;
-}
-
-.sy-vmeter__hold {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--demo-amber);
-}
-
-.sy-panic {
-  margin: 0 auto;
-  border-color: var(--demo-warn-border);
-  color: var(--demo-warn-text);
-}
-
-.sy-panic:hover:not(:disabled) {
-  border-color: var(--demo-warn);
-  color: var(--demo-warn);
-}
-
-/* ===== KEYBED ROW ===== */
-.sy-deck__keys {
-  display: flex;
-  gap: 12px;
-  align-items: stretch;
-  padding: 8px 16px 4px;
-  border-top: 1px solid var(--demo-border);
-}
-
-.sy-cheek {
-  display: grid;
-  align-content: center;
-  gap: 6px;
-  justify-items: center;
-  min-width: 104px;
-  padding: 8px;
-  border: 1px solid var(--demo-border);
-  border-radius: 8px;
-  background: var(--demo-control-bg);
-}
-
-.sy-cheek__label {
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.sy-cheek__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sy-cheek__btn {
-  width: 26px;
-  padding: 5px 0;
-  text-align: center;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.sy-cheek__value {
-  min-width: 34px;
-  color: var(--demo-accent-light);
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 800;
-  text-align: center;
-}
-
-.sy-cheek__zx {
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.sy-keybed {
-  flex: 1;
-  min-width: 0;
-}
-
-.sy-keyboard-hint {
-  margin: 0;
-  padding: 4px 16px 6px;
-  color: var(--demo-text-faint);
-  font-size: 10.5px;
-  line-height: 1.45;
-}
-
-/* ===== MIDI ROW ===== */
-.sy-deck__midi {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 16px;
-  border-top: 1px solid var(--demo-border);
-  background: var(--demo-bg-header);
-}
-
-.sy-midi__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--demo-text-muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.sy-midi__note {
-  margin: 0;
-  color: var(--demo-text-faint);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.sy-midi__device {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 4px 10px;
-  border: 1px solid var(--demo-border);
-  border-radius: 5px;
-  background: var(--demo-control-bg);
-  color: var(--demo-text);
-  font-size: 11px;
-}
-
-.sy-midi__docs {
-  margin-left: auto;
-  color: var(--demo-accent-light);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.sy-midi__docs:hover {
-  color: var(--demo-accent);
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 1060px) {
-  .sy-sec {
-    flex: 1 1 200px;
-    border-top: 1px solid var(--demo-border);
-    margin-top: -1px;
-  }
-}
-
-@media (max-width: 720px) {
-  .sy-deck__display {
-    flex-direction: column;
-  }
-
-  .sy-brand {
-    grid-template-columns: auto auto 1fr;
-    align-items: baseline;
-    column-gap: 10px;
-  }
-
-  .sy-brand__power {
-    grid-column: 1 / -1;
-    margin-top: 2px;
-  }
-
-  .sy-deck__keys {
-    flex-direction: column;
-  }
-
-  .sy-cheek {
-    grid-template-columns: auto auto auto;
-    justify-content: start;
-    align-items: center;
-  }
-
-  .sy-midi__docs {
-    margin-left: 0;
-  }
-}
-</style>
+<style src="./synth/SynthDemo.css"></style>

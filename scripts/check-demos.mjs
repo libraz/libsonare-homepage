@@ -29,7 +29,12 @@ function listMarkdown(dir, base = dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listMarkdown(full, base));
-    else if (entry.isFile() && entry.name.endsWith('.md')) out.push(path.relative(base, full));
+    // README.md files are developer docs (excluded from the VitePress build via
+    // srcExclude), not demo content — skip them so their syntax examples like
+    // `<SonareDemo id="..." />` aren't read as real demo references.
+    else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'README.md') {
+      out.push(path.relative(base, full));
+    }
   }
   return out.sort();
 }

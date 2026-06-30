@@ -80,7 +80,7 @@ const localeCopy = {
     ],
     demoSection: {
       eyebrow: 'Try it locally',
-      heading: 'Eight demos. One library.',
+      heading: 'Nine demos. One library.',
       subhead:
         'Every demo runs the same Apache-2.0 processors locally in your browser via WebAssembly.',
       viewAll: 'Browse all demos',
@@ -179,7 +179,7 @@ const localeCopy = {
     ],
     demoSection: {
       eyebrow: 'ローカルで試す',
-      heading: '8 つのデモ、ひとつのライブラリ。',
+      heading: '9 つのデモ、ひとつのライブラリ。',
       subhead:
         'すべてのデモは、同じ Apache-2.0 のプロセッサを WebAssembly でブラウザ内ローカル実行します。',
       viewAll: 'すべてのデモを見る',

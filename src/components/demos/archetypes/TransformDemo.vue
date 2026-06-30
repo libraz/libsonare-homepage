@@ -12,25 +12,27 @@
  * and the playback visuals (beam, reveal, progress ring) via its props.
  */
 import { computed, ref, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
 import { type MonoAudio, useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import { generateSignal } from '@/demos/signal';
-import { localized, type SonareDemoDef } from '@/demos/types';
+import type { SonareDemoDef } from '@/demos/types';
+import { useDemoChrome } from '../composables';
 import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { locale } = useI18n();
 const { ensureWasm, loadClip, play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed(() => locale.value);
-const title = computed(() => localized(props.def.title, loc.value));
-const caption = computed(() => localized(props.def.caption, loc.value));
-
 const canvas = ref<HTMLCanvasElement | null>(null);
-const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
-const errorMsg = ref('');
 const isPlaying = computed(() => playingId.value === props.def.id);
+const {
+  locale: loc,
+  title,
+  caption,
+  status,
+  errorMsg,
+  tone,
+  fail,
+} = useDemoChrome(props.def, isPlaying);
 
 type TransformKind = 'stft' | 'mel' | 'chroma' | 'mfcc';
 const transform = computed<TransformKind>(
@@ -55,13 +57,6 @@ const axisFreq = computed(() => {
 });
 
 // ---- presentation-only derived values (no effect on data flow) -------------
-const tone = computed(() => {
-  if (status.value === 'error') return 'error' as const;
-  if (status.value === 'loading') return 'loading' as const;
-  if (isPlaying.value) return 'playing' as const;
-  if (status.value === 'ready') return 'ready' as const;
-  return 'idle' as const;
-});
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'ANALYZING';
   if (status.value === 'error') return 'ERROR';
@@ -219,8 +214,7 @@ async function run(): Promise<void> {
     ctx.putImageData(img, 0, 0);
     status.value = 'ready';
   } catch (e) {
-    status.value = 'error';
-    errorMsg.value = e instanceof Error ? e.message : String(e);
+    fail(e);
   }
 }
 

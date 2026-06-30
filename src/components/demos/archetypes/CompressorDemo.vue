@@ -11,34 +11,32 @@
  * the pumping you see is the pumping you hear. Everything is computed in-browser;
  * no clip or WASM.
  */
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
-import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
+import type { SonareDemoDef } from '@/demos/types';
+import { prepareCanvas2D } from '../canvas';
+import { useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { locale } = useI18n();
 const { play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed<DemoLocale>(() => locale.value);
-const title = computed(() => localized(props.def.title, loc.value));
-const caption = computed(() => localized(props.def.caption, loc.value));
-
 const canvas = ref<HTMLCanvasElement | null>(null);
-const status = ref<'idle' | 'ready' | 'error'>('idle');
-const errorMsg = ref('');
 const isPlaying = computed(() => playingId.value === props.def.id);
+const {
+  locale: loc,
+  title,
+  caption,
+  status,
+  errorMsg,
+  tone,
+  fail,
+} = useDemoChrome(props.def, isPlaying);
 
 // ---- reader-adjustable parameters ------------------------------------------
-type ParamValue = number | string | boolean;
-const values = reactive<Record<string, ParamValue>>({});
-for (const p of props.def.params ?? []) values[p.key] = p.default;
-function onParams(next: Record<string, ParamValue>): void {
-  Object.assign(values, next);
-}
+const { values, updateParams } = useDemoParams(props.def);
 
 const threshold = computed<number>(() => Number(values.threshold ?? -18));
 const ratio = computed<number>(() => Number(values.ratio ?? 4));
@@ -50,12 +48,6 @@ const releaseMs = computed<number>(() => Number(values.release ?? 160));
 const mix = computed<number>(() => Number(values.mix ?? 100) / 100);
 
 // ---- presentation state ----------------------------------------------------
-const tone = computed(() => {
-  if (status.value === 'error') return 'error' as const;
-  if (isPlaying.value) return 'playing' as const;
-  if (status.value === 'ready') return 'ready' as const;
-  return 'idle' as const;
-});
 const maxGr = ref(0);
 const stateLabel = computed(() => {
   if (status.value === 'error') return 'ERROR';
@@ -140,8 +132,7 @@ function compute(): void {
     status.value = 'ready';
     startMorph();
   } catch (e) {
-    status.value = 'error';
-    errorMsg.value = e instanceof Error ? e.message : String(e);
+    fail(e);
   }
 }
 
@@ -181,20 +172,9 @@ const dbToY = (db: number, top: number, bot: number): number =>
   bot - ((db - FLOOR_DB) / (0 - FLOOR_DB)) * (bot - top);
 
 function paint(): void {
-  const el = canvas.value;
-  if (!el) return;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  if (w === 0 || h === 0) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  if (el.width !== Math.round(w * dpr) || el.height !== Math.round(h * dpr)) {
-    el.width = Math.round(w * dpr);
-    el.height = Math.round(h * dpr);
-  }
-  const ctx = el.getContext('2d');
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  const frame = prepareCanvas2D(canvas.value);
+  if (!frame) return;
+  const { ctx, width: w, height: h } = frame;
 
   const pad = 14;
   const gap = 20;
@@ -387,7 +367,7 @@ onBeforeUnmount(() => {
         :model-value="values"
         :params="def.params ?? []"
         :locale="loc"
-        @update:model-value="onParams"
+        @update:model-value="updateParams"
       />
     </template>
   </DemoFrame>

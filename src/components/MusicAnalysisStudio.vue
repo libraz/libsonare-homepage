@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { enCopy, jaCopy } from '@/components/analysis/musicAnalysisCopy';
+import {
+  chordLabel as buildChordLabel,
+  chordStyleRich as buildChordStyleRich,
+  markerStyle as buildMarkerStyle,
+  sectionStyle as buildSectionStyle,
+  sectionStyleRich as buildSectionStyleRich,
+  waveformPath as buildWaveformPath,
+  confidencePct,
+  confidenceTone,
+  decimateStereo,
+  mergeChordSegments,
+  formatSectionName as resolveSectionName,
+} from '@/components/analysis/musicAnalysisViewModel';
 import MatrixHeatmap from '@/components/MatrixHeatmap.vue';
 import ToolShell from '@/components/ToolShell.vue';
 import {
@@ -179,22 +192,7 @@ const activeHeatmapData = computed(() => result.value?.heatmaps[activeHeatmap.va
 // peak) so each label gets the width of the chord it actually represents.
 const chordSegments = computed(() => {
   const chords = result.value?.chords ?? [];
-  const segments: { name: string; start: number; end: number; confidence: number }[] = [];
-  for (const chord of chords) {
-    const last = segments[segments.length - 1];
-    if (last && last.name === chord.name) {
-      last.end = chord.end;
-      last.confidence = Math.max(last.confidence, chord.confidence);
-    } else {
-      segments.push({
-        name: chord.name,
-        start: chord.start,
-        end: chord.end,
-        confidence: chord.confidence,
-      });
-    }
-  }
-  return segments;
+  return mergeChordSegments(chords);
 });
 
 const LOUDNESS_FLOOR = -40;
@@ -429,26 +427,17 @@ function formatStage(stage: string): string {
 }
 
 function formatSectionName(name: string): string {
-  const normalized = name.replace(/[\s_-]+/g, '').replace(/^prechorus$/i, 'PreChorus');
-  const key = Object.keys(enCopy.sections).find(
-    (sectionKey) => sectionKey.toLowerCase() === normalized.toLowerCase(),
-  ) as keyof typeof enCopy.sections | undefined;
-  return key ? copy.value.sections[key] : name;
+  return resolveSectionName(name, Object.keys(enCopy.sections), (key) => {
+    return copy.value.sections[key as keyof typeof enCopy.sections];
+  });
 }
 
 function sectionStyle(start: number, end: number) {
-  const duration = result.value?.duration || 1;
-  return {
-    left: `${Math.max(0, (start / duration) * 100)}%`,
-    width: `${Math.max(0.4, ((end - start) / duration) * 100)}%`,
-  };
+  return buildSectionStyle(start, end, result.value?.duration || 1);
 }
 
 function markerStyle(time: number) {
-  const duration = result.value?.duration || 1;
-  return {
-    left: `${Math.max(0, Math.min(100, (time / duration) * 100))}%`,
-  };
+  return buildMarkerStyle(time, result.value?.duration || 1);
 }
 
 // Click anywhere on a time-aligned visual to scrub there: map the click X within
@@ -507,17 +496,6 @@ function seekFromKey(event: KeyboardEvent) {
 // Current playback position in whole seconds, for aria-valuenow on seek sliders.
 const playSeconds = computed(() => Math.round((result.value?.duration || 0) * playFraction.value));
 
-function confidencePct(value: number): number {
-  return Math.round(Math.max(0, Math.min(1, value)) * 100);
-}
-
-// Bucket a 0–1 confidence into a tone class used to colour chips and bars.
-function confidenceTone(value: number): 'is-low' | 'is-mid' | 'is-high' {
-  if (value >= 0.66) return 'is-high';
-  if (value >= 0.4) return 'is-mid';
-  return 'is-low';
-}
-
 // Section block: position + width, dimmed by detection confidence, with the
 // detected energy exposed as a CSS var so the fill intensity reflects loudness.
 function sectionStyleRich(section: {
@@ -526,61 +504,22 @@ function sectionStyleRich(section: {
   confidence: number;
   energyLevel: number;
 }) {
-  return {
-    ...sectionStyle(section.start, section.end),
-    opacity: `${Math.max(0.45, Math.min(1, section.confidence))}`,
-    '--energy': `${Math.max(0, Math.min(1, section.energyLevel))}`,
-  };
+  return buildSectionStyleRich(section, result.value?.duration || 1);
 }
 
 // Chord label: position + width, faded for low-confidence detections.
 function chordStyleRich(chord: { start: number; end: number; confidence: number }) {
-  return {
-    ...sectionStyle(chord.start, chord.end),
-    opacity: `${Math.max(0.35, Math.min(1, chord.confidence))}`,
-  };
+  return buildChordStyleRich(chord, result.value?.duration || 1);
 }
 
 // Only label chord blocks wide enough to hold the text; narrower blocks stay as
 // coloured segments (the name is still in the hover title) so labels never collide.
 function chordLabel(chord: { start: number; end: number; name: string }): string {
-  const duration = result.value?.duration || 1;
-  return ((chord.end - chord.start) / duration) * 100 >= 2 ? chord.name : '';
-}
-
-// Even-stride a stereo pair down to at most `frames` samples so the goniometer
-// payload (and its WASM metering pass) stay cheap, without distorting the field.
-function decimateStereo(left: Float32Array, right: Float32Array, frames: number) {
-  if (left.length <= frames) {
-    return { left: left.slice(), right: right.slice() };
-  }
-  const outLeft = new Float32Array(frames);
-  const outRight = new Float32Array(frames);
-  const step = left.length / frames;
-  for (let i = 0; i < frames; i++) {
-    const index = Math.floor(i * step);
-    outLeft[i] = left[index];
-    outRight[i] = right[index] ?? left[index];
-  }
-  return { left: outLeft, right: outRight };
+  return buildChordLabel(chord, result.value?.duration || 1);
 }
 
 function waveformPath(): string {
-  if (!waveform.value.length) return '';
-  const height = 72;
-  const mid = height / 2;
-  const step = 100 / Math.max(1, waveform.value.length - 1);
-  const upper = waveform.value.map(
-    (point, index) => `${(index * step).toFixed(3)},${(mid - point.max * mid).toFixed(3)}`,
-  );
-  const lower = waveform.value
-    .slice()
-    .reverse()
-    .map((point, reverseIndex) => {
-      const index = waveform.value.length - 1 - reverseIndex;
-      return `${(index * step).toFixed(3)},${(mid - point.min * mid).toFixed(3)}`;
-    });
-  return `M ${upper.join(' L ')} L ${lower.join(' L ')} Z`;
+  return buildWaveformPath(waveform.value);
 }
 </script>
 

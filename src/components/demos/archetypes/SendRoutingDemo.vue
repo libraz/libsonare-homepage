@@ -10,33 +10,24 @@
  * pre-fader send (standing in for a reverb/aux return) keeps sounding even with the
  * fader all the way down. Everything is synthesized in-browser; no clip or WASM.
  */
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
-import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
+import type { SonareDemoDef } from '@/demos/types';
+import { prepareCanvas2D } from '../canvas';
+import { useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { locale } = useI18n();
 const { play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed<DemoLocale>(() => locale.value);
-const title = computed(() => localized(props.def.title, loc.value));
-const caption = computed(() => localized(props.def.caption, loc.value));
-
 const canvas = ref<HTMLCanvasElement | null>(null);
-const status = ref<'idle' | 'ready'>('idle');
 const isPlaying = computed(() => playingId.value === props.def.id);
+const { locale: loc, title, caption, status, tone } = useDemoChrome(props.def, isPlaying);
 
 // ---- reader-adjustable parameters ------------------------------------------
-type ParamValue = number | string | boolean;
-const values = reactive<Record<string, ParamValue>>({});
-for (const p of props.def.params ?? []) values[p.key] = p.default;
-function onParams(next: Record<string, ParamValue>): void {
-  Object.assign(values, next);
-}
+const { values, updateParams } = useDemoParams(props.def);
 
 const faderDb = computed<number>(() => Number(values.fader ?? 0));
 const faderLin = computed<number>(() => (faderDb.value <= -40 ? 0 : 10 ** (faderDb.value / 20)));
@@ -45,11 +36,6 @@ const SOURCE_LIN = 0.8; // the channel's pre-fader signal level (fixed)
 const PRE_LIN = SOURCE_LIN * 0.7; // pre-fader send: tapped before the fader → fixed
 
 // ---- presentation state ----------------------------------------------------
-const tone = computed(() => {
-  if (isPlaying.value) return 'playing' as const;
-  if (status.value === 'ready') return 'ready' as const;
-  return 'idle' as const;
-});
 const stateLabel = computed(() => {
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
   if (status.value === 'ready')
@@ -90,20 +76,9 @@ interface Bar {
 }
 
 function paint(): void {
-  const el = canvas.value;
-  if (!el) return;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  if (w === 0 || h === 0) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  if (el.width !== Math.round(w * dpr) || el.height !== Math.round(h * dpr)) {
-    el.width = Math.round(w * dpr);
-    el.height = Math.round(h * dpr);
-  }
-  const ctx = el.getContext('2d');
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  const frame = prepareCanvas2D(canvas.value);
+  if (!frame) return;
+  const { ctx, width: w, height: h } = frame;
   ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
 
   const f = dispFader.value;
@@ -262,7 +237,7 @@ onBeforeUnmount(() => {
         :model-value="values"
         :params="def.params ?? []"
         :locale="loc"
-        @update:model-value="onParams"
+        @update:model-value="updateParams"
       />
     </template>
   </DemoFrame>

@@ -477,6 +477,7 @@ const enDemoMenu = [
       { text: 'Realtime FX Lab', link: '/realtime-fx' },
       { text: 'Synth Playground', link: '/synth' },
       { text: 'Studio Mini', link: '/studio' },
+      { text: 'Piano Practice', link: '/practice' },
     ],
   },
 ];
@@ -649,6 +650,9 @@ const webSiteJsonLd = {
 export default withMermaid(
   defineConfig({
     srcDir: 'src',
+    // Developer docs that live next to the code (e.g. component READMEs) are not
+    // public pages — keep them out of the built, localized route tree.
+    srcExclude: ['**/README.md'],
 
     title: 'libsonare - Dependency-Free Audio Engine',
     description:
@@ -838,6 +842,7 @@ export default withMermaid(
                     { text: 'リアルタイムFXラボ', link: '/ja/realtime-fx' },
                     { text: 'シンセプレイグラウンド', link: '/ja/synth' },
                     { text: 'スタジオミニ', link: '/ja/studio' },
+                    { text: 'ピアノ練習', link: '/ja/practice' },
                   ],
                 },
               ],

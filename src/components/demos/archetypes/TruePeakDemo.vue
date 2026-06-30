@@ -11,34 +11,24 @@
  * full scale, the inter-sample peak pokes above 0 dBFS: silent in the numbers, a
  * clip on playback. Everything is computed in-browser; no clip or WASM.
  */
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
-import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
+import type { SonareDemoDef } from '@/demos/types';
+import { prepareCanvas2D } from '../canvas';
+import { useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { locale } = useI18n();
 const { play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed<DemoLocale>(() => locale.value);
-const title = computed(() => localized(props.def.title, loc.value));
-const caption = computed(() => localized(props.def.caption, loc.value));
-
 const canvas = ref<HTMLCanvasElement | null>(null);
-const status = ref<'idle' | 'ready' | 'error'>('idle');
-const errorMsg = ref('');
 const isPlaying = computed(() => playingId.value === props.def.id);
+const { locale: loc, title, caption, status, errorMsg, tone } = useDemoChrome(props.def, isPlaying);
 
 // ---- reader-adjustable parameters ------------------------------------------
-type ParamValue = number | string | boolean;
-const values = reactive<Record<string, ParamValue>>({});
-for (const p of props.def.params ?? []) values[p.key] = p.default;
-function onParams(next: Record<string, ParamValue>): void {
-  Object.assign(values, next);
-}
+const { values, updateParams } = useDemoParams(props.def);
 
 // `level` is the sample peak in dBFS (what a sample meter reads); `nyq` is the tone
 // frequency as a fraction of Nyquist (closer to 1 → fewer samples per cycle).
@@ -53,12 +43,6 @@ const trueLin = computed<number>(() => sampleLin.value / Math.max(1e-3, Math.cos
 const trueDb = computed<number>(() => 20 * Math.log10(trueLin.value));
 
 // ---- presentation state ----------------------------------------------------
-const tone = computed(() => {
-  if (status.value === 'error') return 'error' as const;
-  if (isPlaying.value) return 'playing' as const;
-  if (status.value === 'ready') return 'ready' as const;
-  return 'idle' as const;
-});
 const clips = computed(() => trueDb.value > 0);
 const stateLabel = computed(() => {
   if (status.value === 'error') return 'ERROR';
@@ -110,20 +94,9 @@ const CYCLES = 2.4; // cycles of the tone shown across the panel
 const VRANGE = 1.18; // vertical half-range in linear amplitude (room above 0 dBFS)
 
 function paint(): void {
-  const el = canvas.value;
-  if (!el) return;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  if (w === 0 || h === 0) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  if (el.width !== Math.round(w * dpr) || el.height !== Math.round(h * dpr)) {
-    el.width = Math.round(w * dpr);
-    el.height = Math.round(h * dpr);
-  }
-  const ctx = el.getContext('2d');
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  const frame = prepareCanvas2D(canvas.value);
+  if (!frame) return;
+  const { ctx, width: w, height: h } = frame;
 
   const padX = 18;
   const innerW = w - padX * 2;
@@ -324,7 +297,7 @@ onBeforeUnmount(() => {
         :model-value="values"
         :params="def.params ?? []"
         :locale="loc"
-        @update:model-value="onParams"
+        @update:model-value="updateParams"
       />
     </template>
   </DemoFrame>

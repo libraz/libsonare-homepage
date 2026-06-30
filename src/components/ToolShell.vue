@@ -16,7 +16,8 @@ const props = withDefaults(
       | 'fx'
       | 'spatial'
       | 'synth'
-      | 'studio';
+      | 'studio'
+      | 'practice';
     title: string;
     subtitle?: string;
     version?: string;
@@ -54,6 +55,7 @@ const copy = computed(() =>
         spatial: 'Spatial 3D',
         synth: 'Synth',
         studio: 'Studio',
+        practice: 'Piano Practice',
       },
     },
     ja: {
@@ -71,6 +73,7 @@ const copy = computed(() =>
         spatial: '空間 3D',
         synth: 'シンセ',
         studio: 'スタジオ',
+        practice: 'ピアノ練習',
       },
     },
   }),
@@ -126,6 +129,11 @@ const demoTabs = computed(() => [
     id: 'studio',
     label: copy.value.tabs.studio,
     path: localizedPath('/studio'),
+  },
+  {
+    id: 'practice',
+    label: copy.value.tabs.practice,
+    path: localizedPath('/practice'),
   },
 ]);
 

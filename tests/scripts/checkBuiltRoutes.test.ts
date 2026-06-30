@@ -28,6 +28,8 @@ const demoRoutes = [
   'ja/synth.html',
   'studio.html',
   'ja/studio.html',
+  'practice.html',
+  'ja/practice.html',
 ];
 
 const siteUrl = 'https://sonare.libraz.net';

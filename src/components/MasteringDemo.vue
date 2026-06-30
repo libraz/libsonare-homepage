@@ -31,6 +31,10 @@ import { useMasteringInsights } from '@/composables/useMasteringInsights';
 import { useMasteringMetering } from '@/composables/useMasteringMetering';
 import { useMasteringModeUrlSync } from '@/composables/useMasteringModeUrlSync';
 import { useMasteringSession } from '@/composables/useMasteringSession';
+import {
+  applyMasteringAssistantSettings,
+  assistantParamsFromSuggestions,
+} from '@/utils/masteringAssistant';
 import { dbToLinear, formatMasteringDuration } from '@/utils/masteringMetrics';
 import { createMasteringReportUrl } from '@/utils/masteringReport';
 import {
@@ -263,89 +267,29 @@ function updateDiagnosticBypass(key: keyof MasteringDiagnosticBypass, value: boo
   };
 }
 
-function numericParam(params: Record<string, unknown>, key: string): number | null {
-  const value = params[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function applyParam(
-  next: MasteringModuleSettings,
-  params: Record<string, unknown>,
-  key: string,
-  setting: MasteringModuleSettingKey,
-  min: number,
-  max: number,
-) {
-  const value = numericParam(params, key);
-  if (value !== null) next[setting] = clamp(value, min, max);
-}
-
-function normalizeAssistantPreset(value: unknown): MasteringPresetId | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.toLowerCase().replace(/[-_\s]/g, '');
-  const match = presets.find((preset) => preset.id.toLowerCase() === normalized);
-  return match?.id ?? null;
-}
-
 function assistantParams(): Record<string, unknown> | null {
   const suggestions = insightReport.value?.suggestions as Record<string, unknown> | null;
-  const chainConfig = suggestions?.chainConfig as Record<string, unknown> | undefined;
-  const params = chainConfig?.params;
-  return params && typeof params === 'object' ? (params as Record<string, unknown>) : null;
+  const params = assistantParamsFromSuggestions(suggestions);
+  const candidates = suggestions?.genreCandidates;
+  if (!params) return Array.isArray(candidates) ? { genreCandidates: candidates } : null;
+  return Array.isArray(candidates) ? { ...params, genreCandidates: candidates } : params;
 }
 
 function applyAssistantSettings() {
-  const params = assistantParams();
-  if (!params && !insightPreview.value.some((row) => row.ceilingRisk)) return;
+  const result = applyMasteringAssistantSettings({
+    currentSettings: moduleSettings.value,
+    params: assistantParams(),
+    insightPreview: insightPreview.value,
+    presets,
+  });
+  if (!result.applied) return;
 
-  const next: MasteringModuleSettings = { ...moduleSettings.value };
-  if (params) {
-    applyParam(next, params, 'eq.tilt.tiltDb', 'tiltDb', -12, 12);
-    applyParam(next, params, 'dynamics.compressor.thresholdDb', 'compressorThresholdDb', -40, 0);
-    applyParam(next, params, 'dynamics.compressor.ratio', 'compressorRatio', 1, 10);
-    applyParam(next, params, 'dynamics.compressor.attackMs', 'compressorAttackMs', 0.5, 100);
-    applyParam(next, params, 'dynamics.compressor.releaseMs', 'compressorReleaseMs', 20, 600);
-    applyParam(next, params, 'dynamics.transientShaper.attackGainDb', 'transientAttackDb', -6, 6);
-    // Do not auto-apply color stages from the source assistant. Exciter/tape
-    // can add grit or clicks on some sources, so keep them opt-in from Studio.
-    applyParam(next, params, 'spectral.airBand.amount', 'airBandAmount', 0, 1);
-    applyParam(next, params, 'stereo.imager.width', 'stereoWidth', 0.6, 1.6);
-    applyParam(next, params, 'stereo.monoMaker.amount', 'monoMakerAmount', 0, 1);
-    applyParam(next, params, 'maximizer.truePeakLimiter.ceilingDb', 'limiterCeilingDb', -3, -0.1);
-    applyParam(next, params, 'loudness.ceilingDb', 'limiterCeilingDb', -3, -0.1);
-    applyParam(next, params, 'maximizer.truePeakLimiter.lookaheadMs', 'limiterLookaheadMs', 1, 20);
-
-    const target = numericParam(params, 'loudness.targetLufs');
-    if (target !== null) {
-      selectedPlatform.value = 'custom';
-      customLufs.value = clamp(target, -24, -8);
-    }
-
-    const suggestions = insightReport.value?.suggestions as Record<string, unknown> | null;
-    const candidates = suggestions?.genreCandidates;
-    if (Array.isArray(candidates)) {
-      const first = candidates[0] as Record<string, unknown> | undefined;
-      const preset = normalizeAssistantPreset(first?.name);
-      if (preset) selectedPreset.value = preset;
-    }
-  }
-
-  const safeCeiling = Math.min(
-    ...insightPreview.value
-      .filter((row) => row.ceilingRisk && Number.isFinite(row.safeCeilingDb))
-      .map((row) => row.safeCeilingDb),
-  );
-  if (Number.isFinite(safeCeiling)) {
-    next.limiterCeilingDb = Math.min(next.limiterCeilingDb, clamp(safeCeiling, -3, -0.1));
-  }
-
-  moduleSettings.value = next;
+  moduleSettings.value = result.moduleSettings;
+  if (result.selectedPlatform) selectedPlatform.value = result.selectedPlatform;
+  if (result.customLufs !== undefined) customLufs.value = result.customLufs;
+  if (result.selectedPreset) selectedPreset.value = result.selectedPreset;
   showFineTune.value = true;
-  if (mode.value === 'studio') activeModule.value = 'limiter';
+  if (mode.value === 'studio' && result.activeModule) activeModule.value = result.activeModule;
 }
 
 const canResetActiveModule = computed(() => {

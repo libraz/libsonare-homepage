@@ -25,39 +25,47 @@
  * The top panel is the waveform you hear; the bottom is the averaged magnitude
  * spectrum. A playback-synced beam sweeps the waveform.
  */
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
-import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
+import type { SonareDemoDef } from '@/demos/types';
+import { prepareCanvas2D } from '../canvas';
+import { useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import {
+  fillParamSweepSpectrum,
+  fillParamSweepWavePeaks,
+  PARAM_SWEEP_SPEC_COLS,
+  PARAM_SWEEP_SPEC_MAX_HZ,
+  PARAM_SWEEP_WAVE_COLS,
+} from './paramSweepData';
+import {
+  type ParamSweepProcessor,
+  type ParamSweepProcessorWasm,
+  renderParamSweepAudio,
+} from './paramSweepProcessing';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { locale } = useI18n();
 const { ensureWasm, loadClip, play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed<DemoLocale>(() => locale.value);
-const title = computed(() => localized(props.def.title, loc.value));
-const caption = computed(() => localized(props.def.caption, loc.value));
-
 const canvas = ref<HTMLCanvasElement | null>(null);
-const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
-const errorMsg = ref('');
 const isPlaying = computed(() => playingId.value === props.def.id);
+const {
+  locale: loc,
+  title,
+  caption,
+  status,
+  errorMsg,
+  tone,
+  fail,
+} = useDemoChrome(props.def, isPlaying);
 
 // ---- reader-adjustable parameters ------------------------------------------
-type ParamValue = number | string | boolean;
-const values = reactive<Record<string, ParamValue>>({});
-for (const p of props.def.params ?? []) values[p.key] = p.default;
+const { values, updateParams } = useDemoParams(props.def);
 
-function onParams(next: Record<string, ParamValue>): void {
-  Object.assign(values, next);
-}
-
-type Processor = 'pitch-shift' | 'time-stretch' | 'formant-shift' | 'griffin-lim' | 'tilt-eq';
-const processor = computed<Processor>(
-  () => (props.def.config?.processor as Processor) ?? 'pitch-shift',
+const processor = computed<ParamSweepProcessor>(
+  () => (props.def.config?.processor as ParamSweepProcessor) ?? 'pitch-shift',
 );
 const semitones = computed<number>(() => Number(values.semitones ?? 0));
 const rate = computed<number>(() => Number(values.rate ?? 1));
@@ -104,13 +112,6 @@ const fundHz = ref(0);
 const pivotHz = ref(0); // tilt-eq rotation axis; 0 when not applicable
 const outDur = ref(0); // rendered duration in seconds
 let widthFrac = 1; // fraction of the waveform panel the rendered clip fills (time-stretch)
-const tone = computed(() => {
-  if (status.value === 'error') return 'error' as const;
-  if (status.value === 'loading') return 'loading' as const;
-  if (isPlaying.value) return 'playing' as const;
-  if (status.value === 'ready') return 'ready' as const;
-  return 'idle' as const;
-});
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'RENDERING';
   if (status.value === 'error') return 'ERROR';
@@ -131,219 +132,45 @@ const stateLabel = computed(() => {
 });
 
 // ---- audio + figure data ---------------------------------------------------
-const BASE_F0 = 220; // the vowel clip's fundamental (A3)
-const TILT_PIVOT_HZ = 800; // broad midrange axis the tilt rotates around
-const WAVE_COLS = 420;
-const SPEC_COLS = 300;
-const SPEC_MAX_HZ = 4500;
-const wavePeaks = new Float32Array(WAVE_COLS);
-const dispSpec = new Float32Array(SPEC_COLS);
-const targetSpec = new Float32Array(SPEC_COLS);
+const wavePeaks = new Float32Array(PARAM_SWEEP_WAVE_COLS);
+const dispSpec = new Float32Array(PARAM_SWEEP_SPEC_COLS);
+const targetSpec = new Float32Array(PARAM_SWEEP_SPEC_COLS);
 
 let baseClip: { samples: Float32Array; sampleRate: number } | null = null;
 let rendered: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
-
-type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
-
-/** Per-column absolute peaks of the rendered audio (top waveform panel). */
-function fillWave(samples: Float32Array): void {
-  const n = samples.length;
-  let max = 1e-6;
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const start = Math.floor((c / WAVE_COLS) * n);
-    const end = Math.max(start + 1, Math.floor(((c + 1) / WAVE_COLS) * n));
-    let p = 0;
-    for (let i = start; i < end && i < n; i++) {
-      const a = Math.abs(samples[i]);
-      if (a > p) p = a;
-    }
-    wavePeaks[c] = p;
-    if (p > max) max = p;
-  }
-  for (let c = 0; c < WAVE_COLS; c++) wavePeaks[c] /= max;
-}
-
-/** Averaged magnitude spectrum (0..SPEC_MAX_HZ), mildly compressed for legibility. */
-function fillSpec(wasm: WasmModule, samples: Float32Array, sr: number): void {
-  const r = wasm.stft(samples, sr, 2048, 512);
-  const { nBins, nFrames, magnitude } = r;
-  const binHz = sr / 2048;
-  const avg = new Float32Array(nBins);
-  let max = 1e-6;
-  for (let b = 0; b < nBins; b++) {
-    let s = 0;
-    for (let fr = 0; fr < nFrames; fr++) s += magnitude[b * nFrames + fr];
-    avg[b] = s / nFrames;
-    if (avg[b] > max) max = avg[b];
-  }
-  for (let c = 0; c < SPEC_COLS; c++) {
-    const hz = (c / (SPEC_COLS - 1)) * SPEC_MAX_HZ;
-    const bin = hz / binHz;
-    const b0 = Math.floor(bin);
-    const frac = bin - b0;
-    const v = b0 + 1 < nBins ? avg[b0] * (1 - frac) + avg[b0 + 1] * frac : (avg[b0] ?? 0);
-    targetSpec[c] = (v / max) ** 0.6; // compress so high harmonics stay visible
-  }
-}
 
 /** Smallest rate the slider allows; sets the longest (reference) duration. */
 function minRate(): number {
   return props.def.params?.find((p) => p.key === 'rate')?.min ?? 0.5;
 }
 
-/** Scale to a fixed peak so reconstructions at different iteration counts audition equally loud. */
-function peakNormalize(samples: Float32Array, target: number): Float32Array {
-  let max = 1e-6;
-  for (let i = 0; i < samples.length; i++) {
-    const a = Math.abs(samples[i]);
-    if (a > max) max = a;
-  }
-  const g = target / max;
-  for (let i = 0; i < samples.length; i++) samples[i] *= g;
-  return samples;
-}
-
-/**
- * Apply one RBJ shelving biquad and return a fresh buffer. `gainDb` may be negative.
- * Slope S is fixed at 1 (the gentle shelf a tilt EQ wants, not a surgical corner).
- */
-function shelf(
-  samples: Float32Array,
-  sr: number,
-  kind: 'low' | 'high',
-  f0: number,
-  gainDb: number,
-): Float32Array {
-  const A = 10 ** (gainDb / 40);
-  const w0 = (2 * Math.PI * f0) / sr;
-  const cw = Math.cos(w0);
-  const sw = Math.sin(w0);
-  const sqA = Math.sqrt(A);
-  const alpha = (sw / 2) * Math.SQRT2; // S = 1
-  const tsa = 2 * sqA * alpha;
-  let b0: number;
-  let b1: number;
-  let b2: number;
-  let a0: number;
-  let a1: number;
-  let a2: number;
-  if (kind === 'low') {
-    b0 = A * (A + 1 - (A - 1) * cw + tsa);
-    b1 = 2 * A * (A - 1 - (A + 1) * cw);
-    b2 = A * (A + 1 - (A - 1) * cw - tsa);
-    a0 = A + 1 + (A - 1) * cw + tsa;
-    a1 = -2 * (A - 1 + (A + 1) * cw);
-    a2 = A + 1 + (A - 1) * cw - tsa;
-  } else {
-    b0 = A * (A + 1 + (A - 1) * cw + tsa);
-    b1 = -2 * A * (A - 1 + (A + 1) * cw);
-    b2 = A * (A + 1 + (A - 1) * cw - tsa);
-    a0 = A + 1 - (A - 1) * cw + tsa;
-    a1 = 2 * (A - 1 - (A + 1) * cw);
-    a2 = A + 1 - (A - 1) * cw - tsa;
-  }
-  const nb0 = b0 / a0;
-  const nb1 = b1 / a0;
-  const nb2 = b2 / a0;
-  const na1 = a1 / a0;
-  const na2 = a2 / a0;
-  const out = new Float32Array(samples.length);
-  let x1 = 0;
-  let x2 = 0;
-  let y1 = 0;
-  let y2 = 0;
-  for (let i = 0; i < samples.length; i++) {
-    const x0 = samples[i];
-    const y0 = nb0 * x0 + nb1 * x1 + nb2 * x2 - na1 * y1 - na2 * y2;
-    out[i] = y0;
-    x2 = x1;
-    x1 = x0;
-    y2 = y1;
-    y1 = y0;
-  }
-  return out;
-}
-
 async function compute(): Promise<void> {
   try {
     if (status.value === 'idle') status.value = 'loading';
-    const wasm = await ensureWasm();
+    const wasm = (await ensureWasm()) as ParamSweepProcessorWasm;
     if (!baseClip) baseClip = await loadClip(clipName.value);
-    const sr = baseClip.sampleRate;
-    const baseDur = baseClip.samples.length / sr;
 
-    let samples: Float32Array;
-    pivotHz.value = 0; // only tilt-eq marks a pivot
-    if (processor.value === 'time-stretch') {
-      const r = rate.value;
-      samples = r === 1 ? baseClip.samples : wasm.timeStretch(baseClip.samples, sr, r);
-      // Pitch is preserved, so the fundamental marker stays put — that is the lesson.
-      fundHz.value = BASE_F0;
-      outDur.value = samples.length / sr;
-      // The slowest rate gives the longest clip; draw every render against that width.
-      const refDur = baseDur / minRate();
-      widthFrac = Math.max(0.04, Math.min(1, outDur.value / refDur));
-    } else if (processor.value === 'formant-shift') {
-      const f = formant.value;
-      // Shift only the spectral envelope; pitch is held, so the fundamental marker
-      // stays put while the formant peaks slide — pitch and formant on separate axes.
-      samples =
-        f === 1 ? baseClip.samples : wasm.voiceChange(baseClip.samples, sr, { formantFactor: f });
-      fundHz.value = BASE_F0;
-      outDur.value = baseDur;
-      widthFrac = 1;
-    } else if (processor.value === 'griffin-lim') {
-      // Forward to a mel spectrogram, then reconstruct with N Griffin-Lim passes.
-      // The magnitude is fixed; more iterations only settle the invented phase.
-      const mel = wasm.melSpectrogram(baseClip.samples, sr, 2048, 512, 128);
-      const out = wasm.melToAudio(
-        mel.power,
-        mel.nMels,
-        mel.nFrames,
-        sr,
-        2048,
-        512,
-        0,
-        0,
-        iters.value,
-      );
-      samples = peakNormalize(out, 0.7);
-      fundHz.value = 0;
-      outDur.value = samples.length / sr;
-      widthFrac = 1;
-    } else if (processor.value === 'tilt-eq') {
-      // Complementary shelves around the pivot: cut one end by the same amount the
-      // other is boosted, so the spectrum rotates instead of just getting louder.
-      const t = tilt.value;
-      let s: Float32Array;
-      if (t === 0) {
-        s = Float32Array.from(baseClip.samples);
-      } else {
-        s = shelf(baseClip.samples, sr, 'low', TILT_PIVOT_HZ, -t / 2);
-        s = shelf(s, sr, 'high', TILT_PIVOT_HZ, t / 2);
-      }
-      // Match loudness per render so the lesson is tone, not level.
-      samples = peakNormalize(s, 0.7);
-      fundHz.value = 0;
-      pivotHz.value = TILT_PIVOT_HZ;
-      outDur.value = baseDur;
-      widthFrac = 1;
-    } else {
-      const st = semitones.value;
-      samples = st === 0 ? baseClip.samples : wasm.pitchShift(baseClip.samples, sr, st);
-      fundHz.value = BASE_F0 * 2 ** (st / 12);
-      outDur.value = baseDur;
-      widthFrac = 1;
-    }
-    rendered = { samples, sampleRate: sr };
-    fillWave(samples);
-    fillSpec(wasm, samples, sr);
+    const audio = renderParamSweepAudio(wasm, baseClip, {
+      processor: processor.value,
+      semitones: semitones.value,
+      rate: rate.value,
+      formant: formant.value,
+      iters: iters.value,
+      tilt: tilt.value,
+      minRate: minRate(),
+    });
+    fundHz.value = audio.fundHz;
+    pivotHz.value = audio.pivotHz;
+    outDur.value = audio.outDur;
+    widthFrac = audio.widthFrac;
+    rendered = { samples: audio.samples, sampleRate: audio.sampleRate };
+    fillParamSweepWavePeaks(audio.samples, wavePeaks);
+    fillParamSweepSpectrum(wasm, audio.samples, audio.sampleRate, targetSpec);
     status.value = 'ready';
     startMorph();
   } catch (e) {
-    status.value = 'error';
-    errorMsg.value = e instanceof Error ? e.message : String(e);
+    fail(e);
   }
 }
 
@@ -357,7 +184,7 @@ function startMorph(): void {
       reveal.value = Math.min(1, reveal.value + 0.08);
       delta = Math.max(delta, 1 - reveal.value);
     }
-    for (let c = 0; c < SPEC_COLS; c++) {
+    for (let c = 0; c < PARAM_SWEEP_SPEC_COLS; c++) {
       const d = targetSpec[c] - dispSpec[c];
       dispSpec[c] += d * 0.26;
       delta = Math.max(delta, Math.abs(d));
@@ -387,20 +214,9 @@ watch(isPlaying, (on) => {
 });
 
 function paint(): void {
-  const el = canvas.value;
-  if (!el) return;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  if (w === 0 || h === 0) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  if (el.width !== Math.round(w * dpr) || el.height !== Math.round(h * dpr)) {
-    el.width = Math.round(w * dpr);
-    el.height = Math.round(h * dpr);
-  }
-  const ctx = el.getContext('2d');
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  const frame = prepareCanvas2D(canvas.value);
+  if (!frame) return;
+  const { ctx, width: w, height: h } = frame;
 
   const padX = 14;
   const innerW = w - padX * 2;
@@ -416,10 +232,10 @@ function paint(): void {
   // For time-stretch the clip fills only `widthFrac` of the panel, so a shorter
   // (faster) render visibly occupies less width than a longer (slower) one.
   const waveW = innerW * widthFrac;
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const x = padX + (c / (WAVE_COLS - 1)) * waveW;
+  for (let c = 0; c < PARAM_SWEEP_WAVE_COLS; c++) {
+    const x = padX + (c / (PARAM_SWEEP_WAVE_COLS - 1)) * waveW;
     const a = wavePeaks[c] * (waveH / 2) * reveal.value;
-    const passed = playT >= 0 && c / (WAVE_COLS - 1) <= playT;
+    const passed = playT >= 0 && c / (PARAM_SWEEP_WAVE_COLS - 1) <= playT;
     ctx.strokeStyle = passed ? 'rgba(45, 212, 191, 0.9)' : 'rgba(148, 163, 184, 0.42)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -444,8 +260,8 @@ function paint(): void {
   grad.addColorStop(1, 'rgba(167, 139, 250, 0.04)');
   ctx.beginPath();
   ctx.moveTo(padX, specBot);
-  for (let c = 0; c < SPEC_COLS; c++) {
-    const x = padX + (c / (SPEC_COLS - 1)) * innerW;
+  for (let c = 0; c < PARAM_SWEEP_SPEC_COLS; c++) {
+    const x = padX + (c / (PARAM_SWEEP_SPEC_COLS - 1)) * innerW;
     ctx.lineTo(x, specBot - dispSpec[c] * specH * reveal.value);
   }
   ctx.lineTo(padX + innerW, specBot);
@@ -457,8 +273,8 @@ function paint(): void {
   ctx.lineWidth = 1.6;
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (let c = 0; c < SPEC_COLS; c++) {
-    const x = padX + (c / (SPEC_COLS - 1)) * innerW;
+  for (let c = 0; c < PARAM_SWEEP_SPEC_COLS; c++) {
+    const x = padX + (c / (PARAM_SWEEP_SPEC_COLS - 1)) * innerW;
     const y = specBot - dispSpec[c] * specH * reveal.value;
     c === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
@@ -467,8 +283,8 @@ function paint(): void {
   // Fundamental marker. Drawn when there is a fixed pitch to mark: pitch-shift (it
   // moves) and formant-shift (it deliberately holds). For time-stretch and griffin-lim
   // the spectrum is the constant — a moving Hz marker would mislead.
-  if (showFundamental.value && fundHz.value > 0 && fundHz.value < SPEC_MAX_HZ) {
-    const mx = padX + (fundHz.value / SPEC_MAX_HZ) * innerW;
+  if (showFundamental.value && fundHz.value > 0 && fundHz.value < PARAM_SWEEP_SPEC_MAX_HZ) {
+    const mx = padX + (fundHz.value / PARAM_SWEEP_SPEC_MAX_HZ) * innerW;
     ctx.strokeStyle = 'rgba(45, 212, 191, 0.9)';
     ctx.lineWidth = 1.4;
     ctx.setLineDash([4, 3]);
@@ -485,8 +301,8 @@ function paint(): void {
 
   // Tilt pivot: the rotation axis. The spectrum lifts on one side and drops on the
   // other around this fixed line — drawn in amber to read as an axis, not a peak.
-  if (pivotHz.value > 0 && pivotHz.value < SPEC_MAX_HZ) {
-    const px = padX + (pivotHz.value / SPEC_MAX_HZ) * innerW;
+  if (pivotHz.value > 0 && pivotHz.value < PARAM_SWEEP_SPEC_MAX_HZ) {
+    const px = padX + (pivotHz.value / PARAM_SWEEP_SPEC_MAX_HZ) * innerW;
     ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
     ctx.lineWidth = 1.4;
     ctx.setLineDash([4, 3]);
@@ -508,7 +324,7 @@ function paint(): void {
   ctx.fillText('WAVE', padX, 2);
   ctx.fillText('0 Hz', padX, specBot + 4);
   ctx.textAlign = 'right';
-  ctx.fillText(`${(SPEC_MAX_HZ / 1000).toFixed(1)} kHz`, padX + innerW, specBot + 4);
+  ctx.fillText(`${(PARAM_SWEEP_SPEC_MAX_HZ / 1000).toFixed(1)} kHz`, padX + innerW, specBot + 4);
   ctx.textAlign = 'left';
 }
 
@@ -570,7 +386,7 @@ onBeforeUnmount(() => {
         :params="def.params ?? []"
         :locale="loc"
         :disabled="status === 'loading'"
-        @update:model-value="onParams"
+        @update:model-value="updateParams"
       />
     </template>
   </DemoFrame>

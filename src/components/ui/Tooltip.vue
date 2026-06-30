@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
+defineOptions({ name: 'InfoTooltip' });
+
 type Placement = 'top' | 'bottom';
 
 const props = withDefaults(

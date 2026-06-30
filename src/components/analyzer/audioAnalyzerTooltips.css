@@ -1,0 +1,59 @@
+/* Info dot beside the hero / pattern labels (secondary metrics use TermLabel). */
+.analyzer__metric-hero-label,
+.analyzer__pattern-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.analyzer__info {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.analyzer__info > span {
+  font-family: var(--font-body);
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.analyzer__info:hover,
+.analyzer__info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
+}
+
+/* Overlay info dot pinned to the top-right of a visualization panel. */
+.analyzer__transport {
+  position: relative;
+}
+
+.analyzer__overlay-tip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+}
+
+.analyzer__overlay-tip .analyzer__info {
+  width: 18px;
+  height: 18px;
+  background: var(--demo-bg-overlay);
+  backdrop-filter: blur(6px);
+}

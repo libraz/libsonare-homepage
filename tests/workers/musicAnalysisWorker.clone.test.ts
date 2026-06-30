@@ -63,9 +63,9 @@ describe('music analysis worker — posted result is structured-cloneable (real 
 
   async function analyze(request: Record<string, unknown>): Promise<Posted> {
     posted.length = 0;
-    await (
-      self as unknown as { onmessage: (e: { data: unknown }) => Promise<void> }
-    ).onmessage({ data: request });
+    await (self as unknown as { onmessage: (e: { data: unknown }) => Promise<void> }).onmessage({
+      data: request,
+    });
     const done = posted.at(-1);
     if (!done) throw new Error('worker posted no message');
     return done;

@@ -12,6 +12,7 @@
     "add:locale": "node scripts/add-locale.mjs",
     "copy:wasm": "./scripts/copy-wasm.sh",
     "generate:demos": "node scripts/generate-demo-assets.mjs",
+    "generate:practice": "node scripts/generate-practice-assets.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check .",

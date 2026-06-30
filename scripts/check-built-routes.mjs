@@ -76,6 +76,7 @@ function requiredDemoRoutes(locales, defaultLocale) {
     'spatial',
     'synth',
     'studio',
+    'practice',
   ]
     .flatMap((route) => localizedBuiltFiles(route, locales, defaultLocale))
     .sort();

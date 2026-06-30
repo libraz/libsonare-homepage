@@ -11,35 +11,31 @@
  * (the tune, drums gone), Percussive keeps the vertical streaks (the drums, tune
  * gone). A playback-synced beam sweeps the spectrogram.
  */
-import { computed, reactive, ref, watch } from 'vue';
-import { useI18n } from '@/composables/useI18n';
+import { computed, ref, watch } from 'vue';
 import { type MonoAudio, useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
-import { type DemoLocale, localized, type SonareDemoDef } from '@/demos/types';
+import type { SonareDemoDef } from '@/demos/types';
+import { useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { locale } = useI18n();
 const { ensureWasm, loadClip, play, playingId, progress } = useSonareDemoAudio();
 
-const loc = computed<DemoLocale>(() => locale.value);
-const title = computed(() => localized(props.def.title, loc.value));
-const caption = computed(() => localized(props.def.caption, loc.value));
-
 const canvas = ref<HTMLCanvasElement | null>(null);
-const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
-const errorMsg = ref('');
 const isPlaying = computed(() => playingId.value === props.def.id);
+const {
+  locale: loc,
+  title,
+  caption,
+  status,
+  errorMsg,
+  tone,
+  fail,
+} = useDemoChrome(props.def, isPlaying);
 
 // ---- reader-adjustable parameters ------------------------------------------
-type ParamValue = number | string | boolean;
-const values = reactive<Record<string, ParamValue>>({});
-for (const p of props.def.params ?? []) values[p.key] = p.default;
-
-function onParams(next: Record<string, ParamValue>): void {
-  Object.assign(values, next);
-}
+const { values, updateParams } = useDemoParams(props.def);
 
 type View = 'full' | 'harmonic' | 'percussive';
 const view = computed<View>(() => (values.view as View) ?? 'full');
@@ -51,13 +47,6 @@ const EYEBROWS: Record<View, string> = {
 };
 const eyebrow = computed(() => EYEBROWS[view.value]);
 
-const tone = computed(() => {
-  if (status.value === 'error') return 'error' as const;
-  if (status.value === 'loading') return 'loading' as const;
-  if (isPlaying.value) return 'playing' as const;
-  if (status.value === 'ready') return 'ready' as const;
-  return 'idle' as const;
-});
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'SEPARATING';
   if (status.value === 'error') return 'ERROR';
@@ -122,8 +111,7 @@ async function compute(): Promise<void> {
     if (stream) paintStream(wasm, stream);
     status.value = 'ready';
   } catch (e) {
-    status.value = 'error';
-    errorMsg.value = e instanceof Error ? e.message : String(e);
+    fail(e);
   }
 }
 
@@ -180,7 +168,7 @@ watch(
         :params="def.params ?? []"
         :locale="loc"
         :disabled="status === 'loading'"
-        @update:model-value="onParams"
+        @update:model-value="updateParams"
       />
     </template>
   </DemoFrame>
