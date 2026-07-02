@@ -148,6 +148,10 @@ html:not(.dark) .landing .landing__receipt-row--build .landing__receipt-value {
   transform: translateX(3px);
 }
 
+.landing__studio {
+  margin-top: 28px;
+}
+
 .landing__demo-card {
   position: relative;
   display: flex;

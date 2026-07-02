@@ -2,6 +2,7 @@
 import { useData } from 'vitepress';
 import { computed } from 'vue';
 import DemoCardGrid from '@/components/DemoCardGrid.vue';
+import StudioShowcase from '@/components/StudioShowcase.vue';
 import { CornerBrackets, GridOverlay } from '@/components/ui';
 import { useTheme } from '@/composables/useTheme';
 import {
@@ -120,6 +121,8 @@ function switchLocale(event: Event) {
       </header>
 
       <DemoCardGrid layout="grid" />
+
+      <StudioShowcase class="demos-page__studio" />
     </main>
 
     <footer class="demos-page__footer">
@@ -289,6 +292,10 @@ html:not(.dark) .demos-page .demos-page__header {
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
   padding: 56px 0 72px;
+}
+
+.demos-page__studio {
+  margin-top: 40px;
 }
 
 .demos-page__hero {

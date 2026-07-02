@@ -2,6 +2,7 @@
 import { useData } from 'vitepress';
 import { computed, onMounted, ref } from 'vue';
 import DemoCardGrid from '@/components/DemoCardGrid.vue';
+import StudioShowcase from '@/components/StudioShowcase.vue';
 import { CornerBrackets, GridOverlay } from '@/components/ui';
 import { createTheme } from '@/composables/useTheme';
 import {
@@ -752,6 +753,8 @@ const nodeId = computed(() => {
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
       </a>
+
+      <StudioShowcase class="landing__studio" />
     </section>
 
     <!-- Quick Start matrix -->
