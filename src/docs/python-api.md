@@ -1,11 +1,9 @@
 # Python API
 
-libsonare provides Python bindings using **ctypes** over the native C API for
-high-performance audio analysis on desktop platforms. PyPI wheels are available
-for supported Linux and macOS targets.
+libsonare provides Python bindings for scripts, notebooks, batch jobs, and local desktop tools. The package calls the native libsonare library through **ctypes**, so Python code can use the compiled C/C++ engine without building a custom extension. PyPI wheels are available for supported Linux and macOS targets.
 
 ::: details What is ctypes (and the C API)?
-libsonare's core is compiled C/C++. **ctypes** is Python's built-in way to call functions in a compiled shared library (`.so`/`.dylib`) directly, with no extra C extension to build. The Python package is a thin wrapper that forwards your calls to the same native code the C++ library runs, so you get native speed from plain Python. ("C API" just means the flat set of C functions that wrapper targets.)
+libsonare's core is compiled C/C++. **ctypes** is Python's built-in way to call functions in a compiled shared library (`.so`/`.dylib`) directly, with no extra C extension to build. The Python package forwards your calls to the same native code the C++ library runs, so you get native speed from plain Python. ("C API" means the flat set of C functions Python calls under the hood.)
 :::
 
 Use this page when you want scripts, notebooks, batch analysis, or local tools that can read files directly. The Python package is usually the easiest route if you are not building a browser UI.
@@ -18,7 +16,13 @@ Use this page when you want scripts, notebooks, batch analysis, or local tools t
 | 2. Inspect or process | Call `detect_bpm`, `analyze`, feature functions, editing DSP, mastering, or mixing APIs |
 | 3. Use results | Print values, save JSON, render audio, or feed features into your own pipeline |
 
-Most Python APIs accept raw sample arrays plus `sample_rate`. The `Audio` wrapper is a convenience for file-based workflows.
+Most Python APIs accept raw sample arrays plus `sample_rate`. Raw samples are the decoded audio values, not an MP3 or WAV filename. The `Audio` object is a convenience for file-based workflows: load once, then call analysis or processing methods on the same object.
+
+For a first script, keep it this small:
+
+1. `audio = sonare.Audio.from_file("song.mp3")`;
+2. call `sonare.detect_bpm(audio.samples, audio.sample_rate)` or `sonare.analyze(audio.samples, audio.sample_rate)`;
+3. print the result or save it as JSON.
 
 ::: tip Start with `Audio` or call functions directly
 If your workflow begins with an audio file, start with `Audio.from_file(...)`. If you already have samples from NumPy or another loader, call module-level functions such as `detect_bpm(samples, sample_rate)` directly.
@@ -32,7 +36,7 @@ Read this page in three passes:
 2. Use [Pick The Smallest API That Solves The Job](#pick-the-smallest-api-that-solves-the-job) to choose a function family instead of scanning the full reference.
 3. Return to [Types](#types) only when you need exact attribute names, row-major matrix shapes, or JS parity aliases.
 
-A single `analyze(...)` call returns the complete result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — matching the other bindings. Reach for the focused functions below when you only need one field or want per-call options.
+A single `analyze(...)` call returns the all-in-one analysis result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — matching the other bindings. Reach for the focused functions below when you only need one field or want per-call options.
 
 ::: info Default sample rate varies by family
 Music-analysis and metering helpers default to `sample_rate=22050`; room-acoustic helpers (`analyze_impulse_response`, `detect_acoustic`, `estimate_room`) default to `48000`. When you load with `Audio.from_file(...)`, always pass `audio.sample_rate` so the per-family default never silently applies to audio recorded at a different rate.
@@ -47,7 +51,7 @@ Music-analysis and metering helpers default to `sample_rate=22050`; room-acousti
 | Feature arrays for notebooks or ML | `mel_spectrogram`, `mfcc`, `chroma`, `cqt`, `vqt`, `nnls_chroma` | Returns plain Python lists / result objects that can be converted to NumPy if desired |
 | Editing a clip | `time_stretch`, `pitch_shift`, `pitch_correct_to_midi`, `note_stretch`, `voice_change`, `RealtimeVoiceChanger` | These transform the signal itself |
 | Mastering a file | `master_audio`, `mastering_chain`, `StreamingMasteringChain` | Presets first, explicit chain config when you need control |
-| Live or chunked analysis | `StreamAnalyzer` | Feed audio blocks, drain feature frames, and read progressive BPM/key/chord estimates |
+| Live or chunked analysis | `StreamAnalyzer` | Feed audio blocks, drain feature frames, and read BPM/key/chord estimates that update as more audio arrives |
 | Stem mixing | `mix_stereo` or `Mixer.from_scene_json(...)` | One-shot arrays first; scene mixer for sends, buses, automation, and meters |
 | Room decay, clarity, equivalent-room estimates, or generated room character | `analyze_impulse_response`, `detect_acoustic`, `estimate_room`, `synthesize_rir`, `room_morph` | These describe or apply the room, not the song |
 
@@ -107,7 +111,7 @@ bpm = detect_bpm(audio.data, audio.sample_rate)
 key = detect_key(audio.data, audio.sample_rate)
 beats = detect_beats(audio.data, audio.sample_rate)
 
-# Full analysis
+# All-in-one analysis
 result = analyze(audio.data, audio.sample_rate)
 print(f"BPM: {result.bpm} ({result.bpm_confidence:.0%})")
 print(f"Key: {result.key}")
@@ -212,7 +216,7 @@ time_to_frames(2.32, sr=22050, hop_length=512) # → frame index
 | `audio.length` | Number of samples |
 | `audio.close()` | Free native memory |
 
-The Python `Audio` object is broader than the WASM convenience wrapper.
+The Python `Audio` object has more built-in methods than the WASM `Audio` object.
 
 It includes the common feature, editing, loudness, mastering, and resampling methods. It also adds focused analysis methods such as `analyze_bpm(...)`, `analyze_impulse_response(...)`, `detect_acoustic(...)`, `analyze_rhythm(...)`, `analyze_dynamics(...)`, `analyze_timbre(...)`, and positional `detect_chords(...)`.
 
@@ -234,7 +238,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | Downbeat timestamps (seconds) |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | Full analysis: BPM, key, time signature, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM, key, time signature, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
@@ -253,7 +257,7 @@ with Audio.from_file("music.mp3") as audio:
 | `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal |
 | `realtime_voice_changer_preset_config(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
 | `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
-| `project_abi_version()` | `int` | ABI version of the project/editing surface used by `Project` serialization, bounce, and realtime clip exchange |
+| `project_abi_version()` | `int` | ABI version of the project/editing API used by `Project` serialization, bounce, and realtime clip exchange |
 | `has_ffmpeg_support()` | `bool` | Whether the loaded native library can decode via FFmpeg |
 
 Most core analysis, effects, feature, loudness, and mastering helpers are also
@@ -262,7 +266,7 @@ helpers such as `analyze_sections(...)`, `analyze_melody(...)`, `cqt(...)`, and
 `vqt(...)` remain standalone functions; pass `audio.data` and
 `audio.sample_rate` to those.
 
-In Python, `analyze(...)` calls `sonare_analyze_json` and returns the full `AnalysisResult`: BPM (with confidence), key, time signature, beat times and per-beat strengths, chords, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
+In Python, `analyze(...)` calls `sonare_analyze_json` and returns the all-in-one `AnalysisResult`: BPM (with confidence), key, time signature, beat times and per-beat strengths, chords, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -377,7 +381,7 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 
 ### Realtime voice changer
 
-`RealtimeVoiceChanger` wraps the same preset-driven live voice chain exposed by WASM and Node native. It keeps retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter state across blocks. Use it instead of `voice_change(...)` when processing microphone or stream blocks.
+`RealtimeVoiceChanger` wraps the same preset-based live voice chain exposed by WASM and Node native. It keeps retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter state across blocks. Use it instead of `voice_change(...)` when processing microphone or stream blocks.
 
 ```python
 import json
@@ -805,7 +809,7 @@ with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
     snapshot = eq.spectrum()
 ```
 
-Bands can be Python dictionaries or JSON strings. `set_phase_mode(...)` accepts `zero` / `natural` / `linear` names or numeric values. The wrapper also exposes output gain/pan, sidechain input for dynamic bands, `process_stereo(...)`, `spectrum()`, `latency_samples`, and `last_auto_gain_db`.
+Bands can be Python dictionaries or JSON strings. `set_phase_mode(...)` accepts `zero` / `natural` / `linear` names or numeric values. The object also exposes output gain/pan, sidechain input for dynamic bands, `process_stereo(...)`, `spectrum()`, `latency_samples`, and `last_auto_gain_db`.
 
 ## Mastering API
 
@@ -995,7 +999,7 @@ See [Mixing Engine](./mixing.md) for routing concepts, scene presets, and real-t
 
 ## Projects, Instruments & Live MIDI
 
-The headless-DAW surface is available in Python as well: author arrangements with `Project`, render them through the built-in instruments, and drive the realtime engine with live MIDI. The dedicated guides carry the depth — this is the Python entry-point map.
+The headless-DAW API is available in Python as well: author arrangements with `Project`, render them through the built-in instruments, and drive the realtime engine with live MIDI. The dedicated guides carry the depth — this is the Python entry-point map.
 
 | Task | API | Guide |
 |------|-----|-------|

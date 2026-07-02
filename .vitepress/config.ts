@@ -614,7 +614,7 @@ const softwareApplicationJsonLd = {
     'BPM, key, chord, beat, downbeat, section, melody, loudness, room-acoustic analysis, and geometric room tools',
     '76 named mastering DSP processors with preset, chain, solo, pair, and stereo entry points',
     'Real-time-safe mixing, routing, metering, offline rendering, editing DSP, and creative FX',
-    'Built-in instruments: 7-engine synthesizer with GM fallback and SoundFont 2 player',
+    'Built-in instruments: 12-engine synthesizer with GM fallback and SoundFont 2 player',
     'Headless DAW runtime: MIDI sequencing, arrangement editing, offline bounce',
     'Realtime playback engine with live MIDI input and recording',
     'WebAssembly, Python, CLI, Node.js, and C++ APIs',

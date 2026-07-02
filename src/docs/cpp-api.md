@@ -1,6 +1,6 @@
 # C++ API Reference
 
-Complete API reference for libsonare C++ interface.
+API reference for the libsonare C++ interface.
 
 ## Overview
 
@@ -11,7 +11,7 @@ libsonare provides audio analysis, metering, feature extraction, editing DSP, re
 By the end of this page you should be able to:
 
 - choose between quick helpers, `MusicAnalyzer`, `StreamAnalyzer`, module headers, and the C ABI;
-- understand which C++ surface backs each language binding;
+- understand which C++ entry points back each language binding;
 - find the right struct or class for audio loading, analysis, streaming frames, mastering, mixing, and FFI;
 - use this page as a reference after reading the higher-level task guide for your feature.
 
@@ -21,12 +21,12 @@ By the end of this page you should be able to:
 | **Quick API** | Simple one-line analysis and room-acoustic entry points | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
 | **Geometric room acoustics** | Equivalent-room estimation, RIR synthesis, and room-character morphing | `estimate_room()`, `acoustic::synthesize_rir()`, `effects::acoustic::room_morph()` |
 | **MusicAnalyzer** | Full music analysis with callbacks | `MusicAnalyzer`, `AnalysisResult` |
-| **Streaming** | Block-by-block MIR frames and progressive estimates | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
+| **Streaming** | Block-by-block MIR frames and estimates that update over time | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
 | **Features** | Low-level feature extraction and inverse feature reconstruction | `MelSpectrogram`, `Chroma`, `cqt()`, `vqt()`, `mel_to_audio()` |
-| **Effects / editing** | Audio processing and editing primitives | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer modules |
+| **Effects / editing** | Audio processing and small editing building blocks | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer modules |
 | **Mastering** | Presets, chains, named processors, assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
 | **Mixing / engine** | Scene-based mixer and DAW-style realtime transport | `mixing::api::Scene`, `mixing::MixerController`, `RealtimeEngine` |
-| **C ABI** | Stable FFI surface for bindings | `sonare_c.h` |
+| **C ABI** | Stable FFI API for bindings | `sonare_c.h` |
 
 ## Pick The Right C++ Surface
 
@@ -35,7 +35,7 @@ By the end of this page you should be able to:
 | One-off BPM/key/beat/onset/acoustic checks | `#include <sonare.h>` and `sonare::quick::*` |
 | Geometric room estimation, RIR synthesis, or room morphing | `#include <analysis/room_estimator.h>`, `#include <acoustic/rir_synthesizer.h>`, `#include <effects/acoustic/room_morph.h>` |
 | Several music-analysis results from the same audio | `MusicAnalyzer`, so shared intermediates are reused |
-| Live visualizer or progressive estimates | `#include <streaming/stream_analyzer.h>` |
+| Live visualizer or estimates that update over time | `#include <streaming/stream_analyzer.h>` |
 | Mastering presets or named processors | `src/mastering/api/*` headers; see [Mastering Processors](./mastering-processors.md) |
 | Stem mixer / scene JSON | `src/mixing/api/scene.h`, `src/mixing/api/scene_json.cpp` concepts; see [Mixing Engine](./mixing.md) |
 | Language binding or plugin boundary | `sonare_c.h` rather than C++ classes |
@@ -190,7 +190,7 @@ namespace sonare::quick {
   // Onset times in seconds
   std::vector<float> detect_onsets(const float* samples, size_t length, int sample_rate);
 
-  // Full analysis
+  // All-in-one analysis
   AnalysisResult analyze(const float* samples, size_t length, int sample_rate);
 
   // Room acoustics
@@ -256,7 +256,7 @@ Aspect hints and `reference_absorption` define the equivalent-room prior.
 Facade class for comprehensive music analysis with lazy initialization.
 
 ::: tip Performance
-Full analysis is computationally intensive. For long audio files (>3 minutes), consider using progress callbacks to show progress, or analyze only relevant segments.
+All-in-one analysis is computationally intensive. For long audio files (>3 minutes), consider using progress callbacks to show progress, or analyze only relevant segments.
 :::
 
 ```cpp
@@ -277,7 +277,7 @@ Key key = analyzer.key();
 auto beats = analyzer.beat_times();
 auto chords = analyzer.chords();
 
-// Full analysis
+// All-in-one analysis
 auto result = analyzer.analyze();
 ```
 
@@ -286,7 +286,7 @@ auto result = analyzer.analyze();
 Real-time streaming audio analyzer for visualizations and live monitoring.
 
 ::: info Batch vs Streaming
-Use `MusicAnalyzer` for full analysis of pre-recorded files. Use `StreamAnalyzer` for real-time processing with low latency.
+Use `MusicAnalyzer` for all-in-one analysis of pre-recorded files. Use `StreamAnalyzer` for real-time processing with low latency.
 :::
 
 ### Configuration
@@ -1101,7 +1101,7 @@ int         sonare_has_ffmpeg_support(void);     // 1 if the loaded build can de
 `SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
 
 `SonareAnalysisResult` is the compact C ABI result: BPM, BPM confidence, key,
-time signature, and beat times. For the full analysis (chords, sections, timbre,
+time signature, and beat times. For the all-in-one analysis (chords, sections, timbre,
 dynamics, rhythm, melody, and form, with per-beat strength), call
 `sonare_analyze_json` (or `sonare_analyze_json_with_progress` for per-stage
 progress), which returns a camelCase JSON string you free with
@@ -1142,7 +1142,7 @@ The current C ABI is split across focused headers. Use this index when a symbol 
 | `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum, multi-channel interleaved LUFS (`sonare_lufs_interleaved`) and EBU R128 loudness range (`sonare_ebur128_loudness_range`) |
 | `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON, streaming mastering chain, streaming EQ, repair/dynamics one-shot helpers |
 | `sonare_c_mixing.h` | Channel strip controls, sends, buses, VCA groups, automation, meters, goniometer, scene presets |
-| `sonare_c_streaming.h` | `StreamAnalyzer`, quantized frame reads, progressive stats, tuning/normalization controls |
+| `sonare_c_streaming.h` | `StreamAnalyzer`, compact frame reads, updating stats, tuning/normalization controls |
 
 For room acoustics in the C ABI:
 
@@ -1154,7 +1154,7 @@ For surround/multichannel engine buses in the C ABI:
 
 - `SonareChannelLayout` enumerates the speaker bed: `SONARE_CHANNEL_LAYOUT_MONO` (0), `SONARE_CHANNEL_LAYOUT_STEREO` (1), `SONARE_CHANNEL_LAYOUT_5_1` (2), and `SONARE_CHANNEL_LAYOUT_7_1` (3). Values match `sonare::ChannelLayout` and are part of the ABI/JSON wire format.
 - `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo) and `SonareEngineTrackLane.source_channel_layout` declares the input layout feeding a lane.
-- The bus layout drives plane-by-plane summing and per-plane (wide) meters today, but the per-lane surround **panning** DSP is staged: `source_channel_layout` (and a strip's `surroundPan` position) round-trips through config JSON yet is inert until the surround DSP path lands. See [realtime engine surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters).
+- The bus layout handles plane-by-plane summing and per-plane (wide) meters today, but the per-lane surround **panning** DSP is still being phased in: `source_channel_layout` (and a strip's `surroundPan` position) round-trips through config JSON yet is inert until the surround DSP path lands. See [realtime engine surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters).
 
 To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly"}, ...]`, where `kind` is `realtime`/`offline`/`pair` and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker by realtime-insertability without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
 

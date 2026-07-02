@@ -1,11 +1,11 @@
 ---
 title: Project & Arrangement Editing
-description: Beginner-friendly guide to libsonare's headless-DAW edit surface — the Project model, clip and track operations, undo/redo, the tempo map and time signatures, warp modes, automation, MIR write-back, compile diagnostics, JSON save/load, and SMF / MIDI 2.0 Clip File import-export, with copy-paste recipes.
+description: Beginner-friendly guide to libsonare's headless-DAW edit API — the Project model, clip and track operations, undo/redo, the tempo map and time signatures, warp modes, automation, MIR write-back, compile diagnostics, JSON save/load, and SMF / MIDI 2.0 Clip File import-export, with copy-paste recipes.
 ---
 
 # Project & Arrangement Editing
 
-**Want to build a song's arrangement in code — without opening a DAW?** That is what `Project` is for. A **project** is the timeline that holds everything a song is made of: audio tracks, MIDI tracks, the clips placed on them, the tempo map, time signatures, and markers. libsonare ships a `Project` model — a small, headless DAW edit surface — so you can build, edit, and serialize that timeline **inside your own app**, with no DAW host required.
+**Want to build a song's arrangement in code — without opening a DAW?** That is what `Project` is for. A **project** is the timeline that holds everything a song is made of: audio tracks, MIDI tracks, the clips placed on them, the tempo map, time signatures, and markers. libsonare ships a `Project` model — a small, headless DAW editing API — so you can build, edit, and serialize that timeline **inside your own app**, with no DAW host required.
 
 The workflow is a short loop: you assemble an arrangement, edit it with undoable operations, [compile](#compiling-the-arrangement) it into a renderable timeline, save it to JSON, and finally [render audio](#rendering-audio). `Project` is an **offline, control-thread API** (it never runs on the audio thread), and it behaves identically in the browser (WASM), Node, and Python.
 
@@ -170,7 +170,7 @@ const copyId = project.duplicateClip(tailId, 8);
 Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
 
 ::: warning `setClipGain` / `setClipFade` apply to audio clips only
-`setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades are silently dropped. To control the volume of a MIDI-driven instrument, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
+`setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades do not affect the sound. To control the volume of an instrument playing MIDI, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
 :::
 
 In Python the same operations are snake_case, and fades take separate length/curve arguments:
@@ -365,11 +365,11 @@ A clip can carry alternate **takes** and a **comp** (composite) that stitches th
 
 ## Automation lanes
 
-An **automation lane** drives one host-defined parameter over time with breakpoints. Each breakpoint has a PPQ position, a value, and a curve to the next point (`'linear'`, `'exponential'`, `'hold'`, `'scurve'`).
+An **automation lane** changes one host-defined parameter over time with breakpoints. Each breakpoint has a PPQ position, a value, and a curve to the next point (`'linear'`, `'exponential'`, `'hold'`, `'scurve'`).
 
 ```typescript
 const lane = project.addAutomationLane(trackId, {
-  targetParamId: 1,                                   // host id of the parameter to drive
+  targetParamId: 1,                                   // host id of the parameter to change
   points: [
     { ppq: 0, value: 0.0, curve: 'linear' },
     { ppq: 4, value: 1.0, curve: 'exponential' },
@@ -426,7 +426,7 @@ for (let i = 0; i < project.assistSidecarCount(); i += 1) {
 
 A sidecar that shares the same `moduleId` + `targetTrackId` + region scope as an existing one **replaces** it; otherwise it is appended. `targetTrackId` `0` means project scope. Because the write is an undoable edit, `undo()` / `redo()` reverse it.
 
-The binding surfaces differ (consistent with the snake_case Python note elsewhere on this page). The WASM call above is positional and exposes only the count plus an index accessor. **Node** takes an options object — `project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })` — and Node/Python additionally offer `assistSidecars()` / `assist_sidecars()` to read them all at once. **Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`, `project.assist_sidecar_count()`, `project.get_assist_sidecar(index)`, `project.assist_sidecars()`.
+The binding APIs differ (consistent with the snake_case Python note elsewhere on this page). The WASM call above is positional and exposes only the count plus an index accessor. **Node** takes an options object — `project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })` — and Node/Python additionally offer `assistSidecars()` / `assist_sidecars()` to read them all at once. **Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`, `project.assist_sidecar_count()`, `project.get_assist_sidecar(index)`, `project.assist_sidecars()`.
 
 ## MIDI content
 
@@ -631,7 +631,7 @@ In Python these are `export_smf` / `import_smf` and `export_clip_file` / `import
 
 ## Rendering audio
 
-Editing produces a timeline; **rendering** turns it into samples. `Project` bounces offline through `bounce(...)` (audio tracks only) or one of the instrument-bound bounces (`bounceWithBuiltinInstrument`, `bounceWithSynthInstrument`, `bounceWithSf2Instrument`) that make MIDI tracks audible. The full set of render options, instrument binding, SoundFont loading, and the diagnostics a bounce surfaces are covered on [Project Bounce & Rendering](./project-bounce.md).
+Editing produces a timeline; **rendering** turns it into samples. `Project` bounces offline through `bounce(...)` (audio tracks only) or one of the instrument-bound bounces (`bounceWithBuiltinInstrument`, `bounceWithSynthInstrument`, `bounceWithSf2Instrument`) that make MIDI tracks audible. The full set of render options, instrument binding, SoundFont loading, and the diagnostics reported by a bounce are covered on [Project Bounce & Rendering](./project-bounce.md).
 
 ```typescript
 // Audio-only quick render. MIDI tracks are silent here.
@@ -646,6 +646,6 @@ Once your arrangement compiles cleanly, the natural next step is turning it into
 - [Project Bounce & Rendering](./project-bounce.md) — render the timeline to audio, with or without instruments
 - [Recording & Takes](./recording-and-takes.md) — takes, comp lanes, and loop-recording capture
 - [Native Synth](./native-synth.md) · [SoundFont Player](./soundfont-player.md) — make MIDI tracks audible
-- [MIDI Input](./midi-input.md) — drive a project live from a controller
+- [MIDI Input](./midi-input.md) — play a project live from a controller
 - [Mixing Scene JSON](./mixing-scene-json.md) — the scene a track routes into
 - [Binding Parity](./binding-parity.md) — per-runtime API differences

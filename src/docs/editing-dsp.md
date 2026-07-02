@@ -228,16 +228,16 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 
 :::
 
-### Using the `Audio` wrapper
+### Using `Audio` methods
 
-The `Audio` wrapper exposes the same operations as instance methods. In file-based Python workflows, you can load the file once and then apply edits to the same `Audio` object.
+The `Audio` object exposes the same operations as methods. In file-based Python workflows, you can load the file once and then apply edits to the same `Audio` object without passing samples and `sample_rate` every time.
 
 ### Creative effect inserts
 
 Beyond pitch and time transforms, two of the mixer/mastering insert processors are go-to voice and instrument color tools:
 
 - `effects.modulation.ensemble` — a BBD-style (an analog bucket-brigade delay chorus) string-machine ensemble that thickens a thin source into a wide, chorused pad.
-- `saturation.ampSim` — a guitar amp simulation that adds drive and speaker-cabinet character.
+- `saturation.ampSim` — a guitar/bass amp color insert with preamp drive, tone stack, optional power-amp sag/transformer/NFB behavior, and guitar 4x12 or bass 8x10 cab voicing.
 
 Load them as inserts on a strip (see [Mixing Engine](./mixing.md)) rather than as standalone functions on a raw buffer.
 

@@ -31,7 +31,7 @@ By the end of this page you should be able to:
 | **Build** | Emscripten | Pre-built wheels (or CMake + pip) | CMake + cmake-js |
 | **Performance** | Near-native | Native | Native |
 | **Streaming** | Yes | Yes | Yes |
-| **File I/O** | Sample-based APIs; `Audio.fromMemory(...)` decodes WAV/MP3 bytes and browser fallback can decode supported formats | WAV/MP3 by default; FFmpeg formats in FFmpeg builds | WAV/MP3 by default; FFmpeg formats in FFmpeg builds |
+| **File I/O** | Sample-based APIs; `Audio.fromMemory(...)` decodes WAV/MP3 bytes, and the browser decode path can read additional supported formats | WAV/MP3 by default; FFmpeg formats in FFmpeg builds | WAV/MP3 by default; FFmpeg formats in FFmpeg builds |
 | **Effects** | Yes | Yes | Yes |
 | **Feature Extraction** | Yes | Yes | Yes |
 | **Inverse reconstruction** | Yes | Yes | Yes |
@@ -167,11 +167,11 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
 
-Node native uses the same base names but folds progress into an optional final callback argument instead of exporting separate `*WithProgress` wrapper functions.
+Node native uses the same base names but folds progress into an optional final callback argument instead of exporting separate `*WithProgress` helper functions.
 
 ## Mixing API
 
-The native addon and the WASM package both expose the mixing surface: `mixStereo(...)`, `mixingScenePresetNames()`, `mixingScenePresetJson()`, and the persistent `Mixer` class.
+The native addon and the WASM package both expose the mixing API: `mixStereo(...)`, `mixingScenePresetNames()`, `mixingScenePresetJson()`, and the persistent `Mixer` class.
 
 Use it for channel-strip processing, scene presets, sends, buses, automation, meters, and offline stem rendering. See [Mixing Engine](./mixing.md) for the cross-runtime guide.
 
@@ -179,7 +179,7 @@ For persistent mixers, Node native accepts a `StripRef` (`number | string`) for 
 
 ## Projects, Instruments & Live MIDI
 
-The Node native addon exposes the same headless-DAW surface as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, the per-track, master, and bus strip JSON setters, queueable `setSoloMute`, track pan/law/mode/dual-pan/channel-delay setters, insert-param-by-name setters, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM (see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips)). The browser-only glue (`bindWebMidi`, `bindMicrophoneInput`) is WASM-specific and not part of the native addon.
+The Node native addon exposes the same headless-DAW API as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, the per-track, master, and bus strip JSON setters, queueable `setSoloMute`, track pan/law/mode/dual-pan/channel-delay setters, insert-param-by-name setters, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM (see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
 
 The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
@@ -187,9 +187,9 @@ The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing P
 
 Like the WASM package, the native addon throws a structured `SonareError` on every native failure: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. See [Error Handling](./js-api.md#error-handling) for the code table and a usage example.
 
-## Audio Wrapper Differences
+## Audio Method Differences
 
-The WASM `Audio` class is a convenience wrapper for common one-shot helpers. Focused helpers remain standalone when they are less common or need a different calling shape.
+The WASM `Audio` class offers method-style access to common one-shot helpers. Focused helpers remain standalone when they are less common or need a different calling shape.
 
 | Available as `Audio` methods | Still standalone in WASM |
 |------------------------------|--------------------------|
@@ -199,7 +199,7 @@ The WASM `Audio` class is a convenience wrapper for common one-shot helpers. Foc
 | Feature extraction | `analyzeTimbre(...)` |
 | Loudness and resampling | Room-acoustic helpers, section/melody/dynamics/timbre helpers |
 
-Node native's `Audio` wrapper is broader because it can call into the native addon directly.
+Node native's `Audio` object has more methods because it can call into the native addon directly.
 
 | Capability | Node native | WASM |
 |------------|-------------|------|
@@ -296,7 +296,7 @@ const bpm = detectBpm(samples, sampleRate);
 const key = detectKey(samples, sampleRate);
 const beats = detectBeats(samples, sampleRate);
 
-// Full analysis
+// All-in-one analysis
 const result = analyze(samples, sampleRate);
 console.log(`BPM: ${result.bpm}`);
 console.log(`Key: ${result.key.name}`);     // "C major"
@@ -427,7 +427,7 @@ cleanup that long-lived processes should prefer.
 | `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | Downbeat (bar-start) timestamps |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | Ranked key candidates with correlation scores |
-| `analyze(samples, sampleRate?)` | `AnalysisResult` | Full analysis in one call: `bpm`, `bpmConfidence`, `key`, `timeSignature`, `beatTimes`, `beats`, plus `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, and `form`. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
+| `analyze(samples, sampleRate?)` | `AnalysisResult` | All-in-one analysis in one call: `bpm`, `bpmConfidence`, `key`, `timeSignature`, `beatTimes`, `beats`, plus `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, and `form`. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
 | `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback for long inputs |
 | `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | Time signature, groove, syncopation. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength` |
@@ -456,11 +456,11 @@ Default sample rates differ by helper family:
 | Helper family | Default `sampleRate` |
 |---------------|----------------------|
 | Music analysis, effects, feature, and loudness helpers | `22050` |
-| `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, and `synthesizeRir` in the native wrapper | `48000` |
+| `analyzeImpulseResponse`, `detectAcoustic`, `estimateRoom`, and `synthesizeRir` in the native addon | `48000` |
 
 Common helpers are also available as `Audio` instance methods, as noted in the `Audio` section.
 
-The tables below document the Node native wrapper. The WASM package uses the same camelCase names, but functions with a required argument after `sampleRate` require that `sampleRate` position to be supplied. See [JavaScript API](./js-api.md) for the browser signatures.
+The tables below document the Node native API. The WASM package uses the same camelCase names, but functions with a required argument after `sampleRate` require that `sampleRate` position to be supplied. See [JavaScript API](./js-api.md) for the browser signatures.
 
 ##### Asynchronous variants (Node only)
 
@@ -573,7 +573,7 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `fixLength(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
 | `fixFrames(frames, xMin?, xMax?, pad?)` | `Int32Array` | `librosa.util.fix_frames` |
 | `peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait)` | `Int32Array` | `librosa.util.peak_pick` |
-| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`. `normType`: 0=inf, 1=L1, 2=L2, 3=power. The Node wrapper defaults `threshold` to `0.0`; WASM defaults it to `1e-12` |
+| `vectorNormalize(values, normType?, threshold?)` | `Float32Array` | `librosa.util.normalize`. `normType`: 0=inf, 1=L1, 2=L2, 3=power. Node native defaults `threshold` to `0.0`; WASM defaults it to `1e-12` |
 | `pcen(values, nBins, nFrames, options?)` | `Float32Array` | `librosa.pcen` (row-major mel input) |
 | `tonnetz(chromagram, nChroma, nFrames)` | `Float32Array` | `librosa.feature.tonnetz` (`[6 x nFrames]`) |
 | `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`; `mode` is `'autocorrelation'` (default) or `'cosine'` |
@@ -636,10 +636,10 @@ Beyond the one-shot functions, the native addon exposes the same streaming and r
 
 | Class | Purpose |
 |-------|---------|
-| `StreamAnalyzer` | Block-by-block analysis with progressive BPM/key estimates and `readFramesSoa`/`readFramesI16`/`readFramesU8`. See [Realtime Streaming](./realtime-streaming.md). |
+| `StreamAnalyzer` | Block-by-block analysis with BPM/key estimates that update over time and `readFramesSoa`/`readFramesI16`/`readFramesU8`. See [Realtime Streaming](./realtime-streaming.md). |
 | `StreamingEqualizer` | Real-time-safe block EQ. |
 | `StreamingMasteringChain` | Incremental mastering render (documented above). |
-| `RealtimeVoiceChanger` | Preset-driven live voice chain for block processing. |
+| `RealtimeVoiceChanger` | Preset-based live voice chain for block processing. |
 | `Mixer` | Persistent multi-strip mixer from a JSON scene. See [Mixing Engine](./mixing.md). |
 | `RealtimeEngine` | Transport/clip/automation engine for DAW-style hosting. |
 
@@ -647,12 +647,12 @@ Beyond the one-shot functions, the native addon exposes the same streaming and r
 import { StreamAnalyzer } from '@libraz/libsonare-native';
 
 const analyzer = new StreamAnalyzer({ sampleRate: 48000, computeMel: true, computeOnset: true });
-analyzer.process(block);                 // feed a Float32Array block
+analyzer.process(block);                 // pass a Float32Array block
 const frames = analyzer.readFramesSoa(analyzer.availableFrames());
 const stats = analyzer.stats();          // stats.estimate.bpm / .key (PitchClass int)
 ```
 
-Node native names the float Structure-of-Arrays read `readFramesSoa(...)`. The WASM wrapper exposes the same operation as `readFrames(...)` for browser examples.
+Node native names the float Structure-of-Arrays read `readFramesSoa(...)`. The WASM package exposes the same operation as `readFrames(...)` for browser examples.
 
 `RealtimeVoiceChanger` in Node native is constructed with `{ sampleRate, maxBlockSize, channels, preset }`, then used with `processMono(...)`, `processMonoInto(...)`, `processInterleaved(...)`, or `processPlanarStereo(...)`. For offline convenience, `voiceChangeRealtime(...)` runs a whole mono buffer through the same preset chain in 512-sample blocks.
 
@@ -686,7 +686,7 @@ console.log(
 changer.destroy();
 ```
 
-`RealtimeEngine` is shared at the class level, but a few wrapper details differ.
+`RealtimeEngine` is shared at the class level, but a few runtime details differ.
 
 | Detail | WASM | Node native |
 |--------|------|-------------|

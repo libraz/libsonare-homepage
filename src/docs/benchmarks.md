@@ -13,7 +13,7 @@ Lower latency means the operation finished faster for this exact workload. A spe
 By the end of this page you should be able to:
 
 - interpret benchmark numbers as workload-specific measurements rather than universal speed claims;
-- distinguish full-pipeline speedups from per-feature comparisons;
+- distinguish all-in-one pipeline speedups from per-feature comparisons;
 - understand why shared intermediates, native execution, and pipeline design matter;
 - find the benchmark source and reproduce or update the measurements when hardware, inputs, or implementations change.
 
@@ -25,16 +25,16 @@ All numbers below are measured **standalone from raw audio** — every call rebu
 Measured on Apple M5 Max (16 cores, 128 GB unified memory). Absolute times scale with hardware; relative differences are stable.
 :::
 
-## Full Pipeline Analysis
+## All-In-One Pipeline Analysis
 
-Complete music analysis: BPM + key + beats + chords + sections + timbre + dynamics + rhythm + melody.
+All-in-one music analysis: BPM + key + beats + chords + sections + timbre + dynamics + rhythm + melody.
 
 Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the committed `benchmarks/generate_audio.py` script (the WAV fixture itself is gitignored, not committed).
 
 <BenchChart
-  title="Full Analysis Latency (lower is better)"
+  title="All-In-One Analysis Latency (lower is better)"
   :data="[
-    { label: 'Full analyze', librosa: 36400, libsonare: 674 },
+    { label: 'All-in-one analyze', librosa: 36400, libsonare: 674 },
   ]"
 />
 
@@ -43,7 +43,7 @@ Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the
 | libsonare | C++ | 0.67s | 1x |
 | bpm-detector `--comprehensive` (librosa-based) | Python | 36.4s | ~54x slower |
 
-The full-pipeline figure is where libsonare's design pays off most: shared spectrograms, parallel feature paths, automatic 44.1 → 22.05 kHz downsampling done once inside the C++ pipeline (the librosa pipeline resamples too, so the comparison stays apples-to-apples), and no Python boundary inside the pipeline.
+The all-in-one pipeline figure is where libsonare's design pays off most: shared spectrograms, parallel feature paths, automatic 44.1 → 22.05 kHz downsampling done once inside the C++ pipeline (the librosa pipeline resamples too, so the comparison stays apples-to-apples), and no Python boundary inside the pipeline.
 
 ## Per-Feature Comparison
 
@@ -103,7 +103,7 @@ The clear wins are in (1) **compute-heavy operations** where libsonare's multith
 
 ## Where the Big Wins Come From
 
-### Full pipeline (54x): shared intermediates + no Python
+### All-in-one pipeline (54x): shared intermediates + no Python
 
 libsonare's `analyze()` computes the STFT and Mel spectrogram **once**, then reuses them across downstream analyzers.
 
@@ -167,10 +167,10 @@ rye run --pyproject benchmarks/pyproject.toml python benchmarks/generate_audio.p
 rye run --pyproject benchmarks/pyproject.toml python benchmarks/run_bench.py
 ```
 
-The merged `benchmarks/results.json` contains both the C++ libsonare numbers and the librosa numbers, plus the bpm-detector full-pipeline timing if `bpm-detector` is on `PATH`.
+The merged `benchmarks/results.json` contains both the C++ libsonare numbers and the librosa numbers, plus the bpm-detector all-in-one pipeline timing if `bpm-detector` is on `PATH`.
 
 ::: tip Calling libsonare from Python
-The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI boundary, which dominates the runtime for cheap features. The full-pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
+The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI boundary, which dominates the runtime for cheap features. The all-in-one pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
 :::
 
 ## Notes

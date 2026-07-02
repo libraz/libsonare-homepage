@@ -15,7 +15,7 @@ By the end of this page you should be able to:
 - trace a public call from WASM, C, quick API, or `sonare.h` into analysis, streaming, effects, mastering, mixing, and engine modules;
 - identify which source directories own each subsystem;
 - understand where shared DSP, feature extraction, realtime processing, and language bindings meet;
-- decide whether a change belongs in a core module, a binding wrapper, a demo component, or documentation.
+- decide whether a change belongs in a core module, a language binding, a demo component, or documentation.
 
 ## Module Overview
 
@@ -200,7 +200,7 @@ src/
 ├── core/               # Level 1-3: Core DSP
 │   ├── convert.h       # Hz/Mel/MIDI conversion
 │   ├── window.h        # Hann, Hamming, Blackman
-│   ├── fft.h           # KissFFT wrapper
+│   ├── fft.h           # KissFFT adapter
 │   ├── spectrum.h      # STFT/iSTFT
 │   ├── audio.h         # Audio buffer
 │   ├── audio_io.h      # WAV/MP3 loading, optional FFmpeg-backed formats
@@ -453,7 +453,7 @@ float bpm = analyzer.bpm();
 // Key detection triggers chroma computation
 Key key = analyzer.key();
 
-// Full analysis fills in what's left
+// All-in-one analysis fills in what's left
 AnalysisResult result = analyzer.analyze();
 ```
 
@@ -482,7 +482,7 @@ file into those values. Most WASM calls expect samples that are already decoded.
 The npm/WebAssembly package exposes mostly sample-based APIs. Most calls expect
 decoded mono `Float32Array` samples. For encoded bytes, `Audio.fromMemory(...)`
 decodes WAV/MP3 in memory, while `Audio.fromMemoryWithBrowserFallback(...)`
-can fall back to the Web Audio API or another browser codec path before calling
+can switch to the Web Audio API or another browser codec path before calling
 the same sample-based methods.
 
 WASM builds avoid native file I/O and FFmpeg-backed decoding. Runtime behavior is
@@ -518,10 +518,10 @@ to provide the sample rate; it does not implicitly resample to 22050 Hz the way
 ## WASM Compilation
 
 ```
-Output: ~{{ wasmMeta.wasm.sizeKB }} KB WASM (~{{ wasmMeta.wasm.gzipKB }} KB gzipped) plus the JS glue;
+Output: ~{{ wasmMeta.wasm.sizeKB }} KB WASM (~{{ wasmMeta.wasm.gzipKB }} KB gzipped) plus the JS binding code;
         ~{{ wasmMeta.total.sizeKB }} KB total (~{{ wasmMeta.total.gzipKB }} KB gzipped) — see src/wasm/meta.json
 Build:  Emscripten with Embind
 Flags:  -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```
 
-The full mastering + mixing + analysis surface accounts for the bundle size; an analysis-only build would be smaller.
+The full mastering + mixing + analysis API set accounts for the bundle size; an analysis-only build would be smaller.

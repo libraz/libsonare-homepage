@@ -1,6 +1,6 @@
 # Realtime Voice Changer
 
-`RealtimeVoiceChanger` is libsonare's preset-driven live voice chain. Use it when you process microphone input, monitor voice in realtime, or feed audio in repeated blocks where DSP state must continue across calls.
+`RealtimeVoiceChanger` is libsonare's preset-based live voice chain. Use it when you process microphone input, monitor voice in realtime, or pass audio in repeated blocks where DSP state must continue across calls.
 
 For a one-shot offline pitch/formant edit, use [`voiceChange(...)`](./editing-dsp.md#offline-voicechange-vs-realtimevoicechanger). For a live or chunked preset chain, use this page.
 

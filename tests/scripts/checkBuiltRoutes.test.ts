@@ -254,7 +254,7 @@ describe('check-built-routes script helpers', () => {
     expect(failures).toEqual([
       'assets/app.js: built asset 760.0 KiB exceeds budget 750.0 KiB',
       'assets/chunks/vexflow.hash.js: built asset 2.00 MiB exceeds budget 1.25 MiB',
-      'assets/sonare.hash.wasm: built asset 4.00 MiB exceeds budget 3.25 MiB',
+      'assets/sonare.hash.wasm: built asset 4.00 MiB exceeds budget 3.75 MiB',
     ]);
   });
 

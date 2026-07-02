@@ -1,17 +1,19 @@
 ---
 title: Streaming Analysis
-description: Blocks, frames, hops, progressive estimates, and quantized reads — how libsonare's StreamAnalyzer turns a live audio stream into UI-ready features.
+description: Blocks, frames, hops, updating estimates, and compact frame reads — how libsonare's StreamAnalyzer turns a live audio stream into UI-ready features.
 ---
 
 # Streaming Analysis
 
 Offline analysis sees the whole file at once. **Streaming analysis** sees the audio a chunk at a time and must produce results *as it goes*.
 
-libsonare's `StreamAnalyzer` runs the same MIR pipeline incrementally. It emits per-frame features and progressive musical estimates for visualizers and live displays.
+libsonare's `StreamAnalyzer` runs the same MIR pipeline incrementally. It emits per-frame features and musical estimates that update over time for visualizers and live displays.
 
 Use it when audio is arriving live — from a microphone, an AudioWorklet, or a playback graph — and you want meters, a spectrogram, or running BPM/key estimates to update in real time. For a fixed file you already have in full, batch (offline) analysis is simpler and more accurate.
 
 This page explains the streaming model. For the API recipe, see [Realtime and Streaming](../../realtime-streaming.md).
+
+<SonareDemo id="beat-tracking" />
 
 ## Block, frame, hop, nFft — four things people confuse
 
@@ -26,14 +28,14 @@ You feed **blocks**; you read **frames**. The two rates are decoupled, which is 
 
 ## Progressive estimates: provisional, then stable
 
-Musical estimates — BPM, key, current chord, progression, pattern — are **progressive**: they refine as more audio arrives. The first second of a stream does not contain enough evidence for a confident BPM, so early values should be shown as provisional (or hidden) and allowed to revise. Treating the first frame as final is the classic streaming mistake.
+Musical estimates — BPM, key, current chord, progression, pattern — **update as more audio arrives**. The first second of a stream does not contain enough evidence for a confident BPM, so early values should be shown as provisional (or hidden) and allowed to revise. Treating the first frame as final is the classic streaming mistake.
 
 ## Quantized reads
 
-Frames accumulate in a buffer between your `process()` calls. You drain whatever is available and render it, rather than expecting one frame per block. This **quantized read** model keeps the audio callback cheap (it just buffers) and moves the variable-rate frame handling to your UI loop, where jitter is harmless.
+Frames accumulate in a buffer between your `process()` calls. You drain whatever is available and render it, rather than expecting one frame per block. This **batched read** model keeps the audio callback cheap (it just buffers) and moves the variable-rate frame handling to your UI loop, where jitter is harmless. The API uses "quantized" for optional 8-bit / 16-bit output formats; that is about reducing data size, not about timing.
 
 ::: details How libsonare streams analysis
-`StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`; `readFrames(availableFrames())` drains buffered mel/chroma/onset/spectral frames, and `stats()` returns progressive BPM/key/chord/progression/pattern estimates with an `updated` flag. Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. `emitEveryNFrames` throttles frame output for UI rendering. It reuses the same STFT-derived feature stages as offline analysis.
+`StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`; `readFrames(availableFrames())` drains buffered mel/chroma/onset/spectral frames, and `stats()` returns BPM/key/chord/progression/pattern estimates with an `updated` flag when a value has changed. Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. `emitEveryNFrames` throttles frame output for UI rendering. It reuses the same STFT-derived feature stages as offline analysis.
 :::
 
 Related: [Realtime and Streaming](../../realtime-streaming.md), [Spectrogram and STFT](../analysis/spectrogram-stft.md), [Realtime Engine](./realtime-engine.md), [Realtime Safety](./realtime-safety.md)

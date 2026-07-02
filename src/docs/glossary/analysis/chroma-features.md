@@ -36,7 +36,7 @@ Stack a chroma vector for every frame and you get a **chromagram** — a 12-row 
 Matching the representation to the question is the recurring MIR skill: chroma trades octave and timbre detail *away* precisely to make harmony clear.
 
 ::: details How libsonare builds chroma
-libsonare derives chroma from the STFT magnitude by mapping each frequency bin onto its pitch class and accumulating energy into 12 bins, with tuning and normalization handling so off-A440 material still aligns. An NNLS (non-negative least squares) chroma variant can reduce the influence of overtones, giving cleaner profiles for chord work. Chroma feeds the Krumhansl-Schmuckler key estimator and the template-matching chord recognizer, so improving the chroma stage improves both downstream features at once.
+libsonare derives chroma from the STFT magnitude by mapping each frequency bin onto its pitch class and accumulating energy into 12 bins, with tuning and normalization handling so off-A440 material still aligns. An NNLS (non-negative least squares) chroma variant can reduce the influence of overtones, giving cleaner profiles for chord work. Chroma is used by the Krumhansl-Schmuckler key estimator and the template-matching chord recognizer, so improving the chroma stage improves both downstream features at once.
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Key Detection](./key-detection.md), [Chord Recognition](./chord-recognition.md), [Spectrogram and STFT](./spectrogram-stft.md)

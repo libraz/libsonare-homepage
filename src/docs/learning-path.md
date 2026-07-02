@@ -45,7 +45,7 @@ Each **Build By Task** page follows the same order:
 
 When the same workflow can be shown safely in Browser / WASM, Python, and CLI, the page uses a `::: code-group` to show all three.
 
-For surfaces that are inherently WASM / C++ oriented, such as the realtime engine or AudioWorklet bridge, the docs point to the batch alternative or runtime reference instead of implying that Python / CLI have the same live callback API.
+For APIs that are inherently WASM / C++ oriented, such as the realtime engine or AudioWorklet bridge, the docs point to the batch alternative or runtime reference instead of implying that Python / CLI have the same live callback API.
 
 Room acoustics includes room decay, clarity, blind estimates, equivalent-room estimates, RIR synthesis, and room morphing.
 :::

@@ -101,9 +101,9 @@ describe('wasm package integration', () => {
   });
 
   it('keeps the runtime export surface aligned with the generated type bundle', () => {
-    // index.d.ts is a re-export barrel over worklet.js: `export { dt as lufs, ... } from './worklet.js'`.
-    // The left-hand names are worklet.js's (mangled) exports; whether each one is a
-    // type or a value is recorded in worklet.d.ts's own export block via `type X as dt`.
+    // Older bundles used an index.d.ts re-export barrel over worklet.js:
+    // `export { dt as lufs, ... } from './worklet.js'`. Newer bundles emit the
+    // full public declaration file in index.d.ts and use one export block.
     const indexDts = readFileSync(join(process.cwd(), 'src/wasm/index.d.ts'), 'utf8');
     const workletDts = readFileSync(join(process.cwd(), 'src/wasm/worklet.d.ts'), 'utf8');
 
@@ -120,7 +120,9 @@ describe('wasm package integration', () => {
         }),
     );
 
-    const barrelBlock = indexDts.match(/^export \{([^}]+)\} from '\.\/worklet\.js';\s*$/m)?.[1];
+    const barrelBlock = indexDts.match(
+      /^export \{([^}]+)\}(?: from '\.\/worklet\.js')?;\s*$/m,
+    )?.[1];
     expect(barrelBlock).toBeTruthy();
 
     const runtimeExports = new Set(Object.keys(wasm));
@@ -128,6 +130,7 @@ describe('wasm package integration', () => {
       .split(',')
       .map((entry) => entry.trim())
       .filter(Boolean)
+      .filter((entry) => !entry.startsWith('type '))
       .map((entry) => {
         const aliased = entry.match(/^(\S+)\s+as\s+(\S+)$/);
         return aliased

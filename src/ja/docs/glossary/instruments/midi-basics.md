@@ -5,7 +5,7 @@ description: MIDI は音声ではなく演奏の指示を運びます — ノー
 
 # MIDI の基礎
 
-**MIDI**（Musical Instrument Digital Interface）は、音そのものではなく*演奏*を記述するための言語です。MIDI メッセージは「いまノート 60 をやや強めに鳴らせ」「ノート 60 を離せ」と伝えるだけで、音声は一切運びません。下流にある何か（シンセサイザー、[SoundFont プレーヤー](./soundfont.md)、あるいはハードウェア）がその指示を読み、音を*生成*します。
+**MIDI**（Musical Instrument Digital Interface）は、音そのものではなく*演奏*を記述するための言語です。MIDI メッセージは「いまノート 60 をやや強めに鳴らせ」「ノート 60 を離せ」と伝えるだけで、音声は一切運びません。下流にある何か（シンセサイザー、[SoundFont プレイヤー](./soundfont.md)、あるいはハードウェア）がその指示を読み、音を*生成*します。
 
 <SonareDemo id="synth-note" />
 
@@ -13,7 +13,7 @@ description: MIDI は音声ではなく演奏の指示を運びます — ノー
 
 <SonareDemo id="midi-piano-roll" />
 
-MIDI は構造化された音楽情報なので、同じ音符はグリッドと同じくらい自然に*楽譜*としても読めます。下の譜面はエンジンが鳴らす MIDI からそのまま起こしたもので、音符も楽器切り替えもテンポも同一、各音符は鳴った瞬間に光ります。ピアノロールと楽譜は、ひとつの演奏を映す2つのビューです。
+MIDI は構造化された音楽情報なので、同じ音符はグリッドと同じくらい自然に*楽譜*としても読めます。下の譜面はエンジンが鳴らす MIDI からそのまま起こしたもので、音符も楽器切り替えもテンポも同一、各音符は鳴った瞬間に光ります。ピアノロールと楽譜は、ひとつの演奏を映す 2 つのビューです。
 
 <SonareDemo id="midi-score" />
 
@@ -82,7 +82,7 @@ flowchart LR
 ```
 
 ::: details libsonare での実装
-libsonare のリアルタイムエンジンは、ノートを `pushMidiNoteOn(destinationId, group, channel, note, velocity)` と `pushMidiNoteOff(...)` で、コントロールチェンジを `pushMidiCc(destinationId, group, channel, controller, value)` で受け取ります — `destinationId` はどの読み込み済み楽器がイベントを受けるかを選び、`channel` は 0〜15 の MIDI チャンネルです。ブラウザでは Web MIDI ブリッジ（`bindWebMidi`）が、物理 MIDI 鍵盤のイベントをそれらのエンジン入力へ直接つなぎ、ハードウェアコントローラーで NativeSynth や読み込んだ SoundFont をライブ演奏できます。同じノート／CC の語彙が、ライブエンジンとオフラインのアレンジメントバウンスの両方を駆動します。
+libsonare のリアルタイムエンジンは、ノートを `pushMidiNoteOn(destinationId, group, channel, note, velocity)` と `pushMidiNoteOff(...)` で、コントロールチェンジを `pushMidiCc(destinationId, group, channel, controller, value)` で受け取ります — `destinationId` はどの読み込み済み楽器がイベントを受けるかを選び、`channel` は 0〜15 の MIDI チャンネルです。ブラウザでは Web MIDI ブリッジ（`bindWebMidi`）が、物理 MIDI 鍵盤のイベントをそれらのエンジン入力へ直接つなぎ、ハードウェアコントローラーで NativeSynth や読み込んだ SoundFont をライブ演奏できます。同じノート／CC の語彙は、ライブエンジンとオフラインのアレンジメントバウンスの両方で使われます。
 :::
 
 関連: [MIDI 入力](../../midi-input.md)、[SoundFont とサンプル音源](./soundfont.md)、[編集の基礎](../concepts/editing-basics.md)

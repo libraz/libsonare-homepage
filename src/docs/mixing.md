@@ -80,7 +80,7 @@ Reading the chain top to bottom:
 8. **Pan** — places the signal in the stereo field using the strip's [pan mode and pan law](#pan-modes-and-pan-laws).
 9. **Post-fader inserts** (and EQ, if you moved it post-fader) — processors that should react to the post-fader level.
 10. **Stereo width** — narrows or widens the side signal (see [mono compatibility](./glossary/concepts/mono-compatibility.md)).
-11. **Post-fader tap + goniometer** — feeds *post-fader* sends, the output meter, and the goniometer history buffer.
+11. **Post-fader tap + goniometer** — passes signal to *post-fader* sends, the output meter, and the goniometer history buffer.
 
 ::: warning Pre-fader vs post-fader is not cosmetic
 A **post-fader** send follows the fader: pull the fader down and the reverb sent from that track follows it down — the reverb stays proportional to the dry signal. A **pre-fader** send is independent of the fader, which is what you want for a headphone/cue mix or a fully wet effect return. Choosing the wrong one is the most common routing mistake.
@@ -368,12 +368,12 @@ The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip,
 
 The mixer core is built for predictable audio callbacks: denormal guards, lock-free parameter changes, pre-allocated state, and graph-level [plugin-delay compensation](#latency-and-plugin-delay-compensation-pdc).
 
-In the WASM wrapper, `processStereo` allocates a fresh result array on every call. That is fine offline but forbidden inside a realtime audio callback. For those tight loops, use one of these allocation-free paths instead:
+In the WASM package, `processStereo` allocates a fresh result array on every call. That is fine offline but forbidden inside a realtime audio callback. For those tight loops, use one of these allocation-free paths instead:
 
 - **`processStereoInto(inL, inR, outL, outR)`** — writes into caller-owned arrays.
 - **`createRealtimeBuffer()`** — returns reusable WASM-heap input/output views; fill the inputs, call `process()`, read `outLeft`/`outRight`, repeat. The views are owned by the mixer and become invalid after `delete()`.
 
-When the host stops feeding strip inputs, lookahead, reverb, and delay processors still hold audio in flight. Call `mixer.tailSamples()` to read the maximum processor-tail length (samples) in the compiled graph, then call `mixer.drainTailStereo(numSamples)` to render a zero-input block that flushes that tail into the master. `drainTailStereo` renders one block — it does not loop — and `numSamples` is bounded by the block size the mixer was built with, so drain in block-sized chunks until you have pulled `tailSamples()` frames:
+When the host stops sending strip inputs, lookahead, reverb, and delay processors still hold audio in flight. Call `mixer.tailSamples()` to read the maximum processor-tail length (samples) in the compiled graph, then call `mixer.drainTailStereo(numSamples)` to render a zero-input block that flushes that tail into the master. `drainTailStereo` renders one block — it does not loop — and `numSamples` is bounded by the block size the mixer was built with, so drain in block-sized chunks until you have pulled `tailSamples()` frames:
 
 ```typescript
 let remaining = mixer.tailSamples();

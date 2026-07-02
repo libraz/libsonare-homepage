@@ -1,14 +1,16 @@
 ---
 title: Realtime and Streaming
-description: libsonare realtime surfaces — StreamAnalyzer for live MIR (mel/chroma/onset frames, progressive BPM/key/chord/pattern, quantized output formats) and RealtimeEngine for transport and playback, plus how to turn a streamed onset envelope into a tempogram.
+description: libsonare realtime APIs — StreamAnalyzer for live MIR frames and updating BPM/key/chord/pattern estimates, RealtimeEngine for transport and playback, and a guide to tempograms from streamed onset data.
 ---
 
 # Realtime and Streaming
 
-libsonare has two realtime-oriented surfaces:
+libsonare has two realtime-oriented APIs:
 
-- **`StreamAnalyzer`** — feeds in blocks of audio and emits *analysis frames* (mel, chroma, onset, spectral) plus progressive musical estimates (BPM, key, chord, chord progression, pattern). Use it for visualizers and live "what is this song doing" displays.
+- **`StreamAnalyzer`** — feeds in blocks of audio and emits *analysis frames* (mel, chroma, onset, spectral) plus musical estimates that update as more audio arrives (BPM, key, chord, chord progression, pattern). Use it for visualizers and live "what is this song doing" displays.
 - **`RealtimeEngine`** — transport, automation, clip playback, a per-track lane mixer (lanes, buses, sends, channel strips), MIDI clip scheduling, graph routing, metronome, capture, offline bounce, freeze, and telemetry. Use it for playback engines.
+
+The short version: use `StreamAnalyzer` when audio is the input and information is the output; use `RealtimeEngine` when clips, MIDI, transport, and mixed audio are the output. If you are building a UI, `StreamAnalyzer` usually feeds graphs, meters, and labels. If you are building a DAW-like timeline or instrument host, `RealtimeEngine` is the object that actually plays.
 
 In realtime docs, "chunk" or "block" means a short slice of audio processed repeatedly, often inside a Web Audio `AudioWorklet` — the audio-callback context that runs your DSP on the realtime audio thread, separate from the main/UI thread. Realtime code should avoid heavy allocation inside the audio callback: prepare objects first, then process blocks.
 
@@ -27,7 +29,7 @@ By the end of this page you should be able to:
 - decide whether your app needs `StreamAnalyzer`, `RealtimeEngine`, or the mixing engine;
 - feed audio blocks without confusing compressed file bytes, decoded samples, blocks, and frames;
 - read feature frames for a UI and understand why quantized reads exist;
-- use progressive estimates without treating early BPM/key/chord values as final answers;
+- use updating estimates without treating early BPM/key/chord values as final answers;
 - recognize which realtime operations are safe in an audio callback and which should be prepared outside it.
 
 ## Common beginner choices
@@ -46,11 +48,11 @@ By the end of this page you should be able to:
 | Need | API |
 |------|-----|
 | Mel/chroma/onset frames from a microphone or playing file | `StreamAnalyzer` |
-| Progressive BPM, key, current chord, chord progression, and pattern scores | `StreamAnalyzer.stats()` |
+| BPM, key, current chord, chord progression, and pattern scores that update over time | `StreamAnalyzer.stats()` |
 | Transport, tempo, loop points, markers, metronome, clip scheduling, and automation | `RealtimeEngine` |
 | Per-track lanes, buses, sends, and channel strips inside the playback engine | `RealtimeEngine` lane mixer (`setTrackLanes`, `setTrackBuses`, strip JSON setters) |
 | Sample-accurate MIDI clip playback into engine instruments | `RealtimeEngine.setMidiClips()` + `sampleAtPpq()` |
-| AudioWorklet bridge for engine-style playback with telemetry | `RealtimeEngine` or the reduced `sonare-rt` module |
+| AudioWorklet bridge for engine-style playback with telemetry | `@libraz/libsonare/worklet` |
 | Stem or strip mixing with sends and meters | [Mixing Engine](./mixing.md) |
 
 ::: info Runtime entry points
@@ -58,7 +60,7 @@ This page is centered on the Browser / WASM `StreamAnalyzer`, `RealtimeEngine`, 
 
 | Runtime | Entry point | Typical use |
 |---------|-------------|-------------|
-| Browser / WASM | `StreamAnalyzer`, `RealtimeEngine`, `@libraz/libsonare/worklet` | Live visualizers, AudioWorklet tools, progressive BPM / key / chord displays |
+| Browser / WASM | `StreamAnalyzer`, `RealtimeEngine`, `@libraz/libsonare/worklet` | Live visualizers, AudioWorklet tools, updating BPM / key / chord displays |
 | Python | `Audio.analyze()`, `onset_envelope(...)`, `tempogram(...)`, and related batch functions | Notebooks, offline analysis, validation scripts |
 | CLI | `sonare analyze`, `sonare bpm`, `sonare key`, and related commands | File-level checks, batch jobs, JSON output |
 
@@ -69,10 +71,21 @@ If you need to analyze the same file from Python or CLI, use [Python API](./pyth
 
 `StreamAnalyzer` processes blocks and emits frame buffers for UI rendering. It is the right tool for spectrograms, chroma displays, onset-driven visuals, and incremental musical estimates. You construct it once, `process()` each incoming block, then drain whatever frames have accumulated.
 
+For a first implementation, keep the loop simple:
+
+1. create one analyzer with the same `sampleRate` as the audio device;
+2. call `process(block)` for each decoded or live audio block;
+3. call `readFrames(...)` for drawing and `stats()` for the current musical estimate;
+4. treat early estimates as provisional until several seconds of audio have arrived.
+
+The demo below shows the same "audio in, markers out" idea visually: onset detection marks every attack, while beat tracking turns those attacks into a steadier pulse.
+
+<SonareDemo id="beat-tracking" />
+
 ::: info Mel, chroma, onset in one line
 - **Mel** — a spectrogram (energy per frequency band over time) on a perceptual pitch scale; good for a "what does this sound like" heatmap.
 - **Chroma** — energy folded into the 12 pitch classes (C, C#, … B); good for showing harmony and key.
-- **Onset** — a strength curve that spikes when a new note or beat starts; drives beat/tempo visuals.
+- **Onset** — a strength curve that spikes when a new note or beat starts; useful for visuals that react to beats and tempo.
 :::
 
 ::: tip `nFft` and `hopLength` in one line
@@ -206,7 +219,7 @@ Pattern voting needs enough bars to be confident. If you know the clip length up
 
 `StreamAnalyzer` gives you a live **onset strength** stream: the `onsetStrength` array on each frame.
 
-A *tempogram* turns an onset envelope into a time × tempo image: at each moment it shows how strongly each candidate tempo is present. The progressive BPM estimate is essentially this image collapsed to its strongest tempo over time; the tempogram is the full picture that estimate is drawn from.
+A *tempogram* turns an onset envelope into a time × tempo image: at each moment it shows how strongly each candidate tempo is present. The live BPM estimate is essentially this image collapsed to its strongest tempo over time. It is useful, but still provisional early in the stream; the tempogram is the fuller picture that estimate is drawn from.
 
 Compute it from the accumulated envelope, or from any onset envelope returned by `onsetEnvelope(...)`. This is a batch step for a buffered window, not work to run inside the audio callback.
 
@@ -238,11 +251,11 @@ const pulse = plp(env, sampleRate, 512, 30, 300, 384);
 The default **autocorrelation** tempogram correlates the onset envelope with a lagged copy of itself, mirroring `librosa.feature.tempogram`. The **cosine** mode instead measures the cosine similarity between window-local lagged onset slices. Cosine emphasizes the *shape* match of the onset pattern rather than its raw energy, so it can be steadier when onset amplitude varies a lot across a window. Both produce a `[winLength x nFrames]` matrix where row `i` is the strength at lag `i`; switch with the fifth `mode` argument (`'autocorrelation'` | `'cosine'`).
 :::
 
-<SonareDemo id="beat-tracking" />
-
 ## RealtimeEngine
 
 `RealtimeEngine` is the broader transport and playback engine. It exposes sample-accurate commands for parameters and transport, plus offline render helpers for non-realtime export.
+
+Start with transport and output before adding the advanced pieces: construct the engine with the device sample rate and block size, set tempo/loop state, call `play()`, process blocks, and only then add meters, lane mixing, MIDI clips, or capture. That order keeps debugging clear because you can confirm "the engine plays" before asking it to route or record anything.
 
 ```typescript
 import { init, RealtimeEngine, engineCapabilities } from '@libraz/libsonare';
@@ -289,7 +302,7 @@ engine.process([new Float32Array(blockSize), new Float32Array(blockSize)]);
 engine.settleParameters(); // snap all smoothed ramps to target before the first audible block
 ```
 
-For recording, the capture surface adds a few controls:
+For recording, the capture API adds a few controls:
 
 - `setCaptureSource('output' | 'input')` — record the engine's rendered output bus or the raw input you pass to `process(...)`.
 - `setRecordOffsetSamples(offset)` — shift the captured audio to compensate for monitoring round-trip latency.
@@ -298,11 +311,11 @@ For recording, the capture surface adds a few controls:
 `captureStatus()` reports both the active capture `source` (`'output'` or `'input'`) and the current `recordOffsetSamples`, so the UI can confirm what is being recorded. See [Recording and Takes](./recording-and-takes.md) for the full flow.
 
 ::: info Live MIDI and recording
-The engine also accepts **live MIDI** into its instruments and **records** what plays back. Those surfaces have their own pages: [MIDI Input](./midi-input.md) for the Web MIDI → engine bridge (port management, CC binding, NativeSynth/SF2 destinations), and [Recording and Takes](./recording-and-takes.md) for capture, loop-recording takes/comp lanes, and the browser microphone helper `bindMicrophoneInput(...)` that wires `getUserMedia` into an engine node.
+The engine also accepts **live MIDI** into its instruments and **records** what plays back. Those APIs have their own pages: [MIDI Input](./midi-input.md) for the Web MIDI → engine bridge (port management, CC binding, NativeSynth/SF2 destinations), and [Recording and Takes](./recording-and-takes.md) for capture, loop-recording takes/comp lanes, and the browser microphone helper `bindMicrophoneInput(...)` that wires `getUserMedia` into an engine node.
 :::
 
 ::: warning Check the engine ABI before constructing
-`engineCapabilities().abiCompatible` confirms the loaded WASM matches the JS wrapper's expected engine ABI. The realtime engine is the most version-sensitive surface in the library; constructing it against a mismatched binary is undefined. Guard with the check above; if it fails, update your `@libraz/libsonare` package so the WASM binary and JS wrapper come from the same release.
+`engineCapabilities().abiCompatible` confirms the loaded WASM matches the JS package's expected engine ABI. The realtime engine is the most version-sensitive API in the library; constructing it against a mismatched binary is undefined. Guard with the check above; if it fails, update your `@libraz/libsonare` package so the WASM binary and JS package come from the same release.
 :::
 
 ### Track lanes, buses, and channel strips
@@ -349,7 +362,7 @@ Once a track id occupies a lane, its lane index stays fixed for the engine's lif
 
 Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan without rebuilding a strip:
 
-| Goal | Raw `RealtimeEngine` | `SonareEngine` worklet facade |
+| Goal | Raw `RealtimeEngine` | `SonareEngine` worklet API |
 |------|----------------------|-------------------------------|
 | Fold a lane into a group bus (or pass `busId 0` to restore it to the master mix) | lane `outputBusId` in `setTrackLanes(...)` (`0` or absent = master mix) | `setTrackOutputBus(target, busId)` (`busId 0` restores the master mix) |
 | Key one lane's insert off another lane (ducking) | `setLaneSidechain(trackId, insertIndex, sourceTrackId)` (pass `0` to clear) | `setLaneSidechain(target, insertIndex, sourceTarget)` (pass `null` to clear) |
@@ -359,11 +372,11 @@ Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan
 | Per-lane sample delay | `setTrackStripChannelDelaySamples(trackId, samples)` | same |
 | Set one insert parameter by name | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)` (master: `setMasterStripInsertParamByName(...)`) | same, plus `setStripInsertParamByName(target, ...)` |
 
-`setTrackStripInsertParamByName(...)` is the realtime automation entry point — it addresses a parameter by the JSON key reported by [`masteringInsertParamInfo(name)`](./mastering-processors.md), so a host can drive an insert's automatable parameters live without rebuilding the strip JSON. On the facade, `target` is a track id *or name*.
+`setTrackStripInsertParamByName(...)` is the realtime automation entry point — it addresses a parameter by the JSON key reported by [`masteringInsertParamInfo(name)`](./mastering-processors.md), so a host can change an insert's automatable parameters live without rebuilding the strip JSON. On the worklet API, `target` is a track id *or name*.
 
 ### Parameter automation
 
-`RealtimeEngine` carries an engine-level parameter registry separate from the strip-insert params of [`setTrackStripInsertParamByName`](#group-routing-sidechains-and-live-strip-controls). Register a parameter once with `addParameter(info)`, then drive it live with `setParameter(id, value, renderFrame?)` (or `setParameterSmoothed(...)` for a ramp), or schedule it along the timeline with `setAutomationLane(id, points)`.
+`RealtimeEngine` carries an engine-level parameter registry separate from the strip-insert params of [`setTrackStripInsertParamByName`](#group-routing-sidechains-and-live-strip-controls). Register a parameter once with `addParameter(info)`, then change it live with `setParameter(id, value, renderFrame?)` (or `setParameterSmoothed(...)` for a ramp), or schedule it along the timeline with `setAutomationLane(id, points)`.
 
 ```typescript
 // EngineParameterInfo: id, name, unit, min/max/default, rtSafe, defaultCurve (0=linear)
@@ -384,7 +397,7 @@ engine.setAutomationLane(1, [
 engine.setParameter(1, 0.5);
 ```
 
-On the `SonareEngine` facade you can also automate a mixer fader/pan without registering a parameter: `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (a bus id resolves to its fader gain in dB). The `target`/`busId` declares the mixer lane/bus on first use.
+On the `SonareEngine` worklet API you can also automate a mixer fader/pan without registering a parameter: `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (a bus id resolves to its fader gain in dB). The `target`/`busId` declares the mixer lane/bus on first use.
 
 ### Surround group buses and wide meters
 
@@ -433,11 +446,11 @@ engine.setMidiClips([{
 }]);
 ```
 
-Looping clips repeat their event list every `loopLengthSamples`. To clear the schedule, call `setMidiClips([])`. If you work at the *project* level instead (notes in PPQ, takes, comping), build the arrangement with [Project Editing](./project-editing.md) and bounce it — this realtime schedule is the lower-level surface a DAW front end compiles into.
+Looping clips repeat their event list every `loopLengthSamples`. To clear the schedule, call `setMidiClips([])`. If you work at the *project* level instead (notes in PPQ, takes, comping), build the arrangement with [Project Editing](./project-editing.md) and bounce it — this realtime schedule is the lower-level API a DAW front end compiles into.
 
 ## AudioWorklet notes
 
-The full WASM package exposes the complete `RealtimeEngine` class. The optional worklet bridge can run either the full embind-backed runtime or the dedicated `sonare-rt` runtime through `SonareRealtimeEngineNode.create(...)`.
+The regular WASM package exposes the `RealtimeEngine` class. The worklet bridge runs that embind-backed engine inside `AudioWorkletGlobalScope` through `SonareRealtimeEngineNode.create(...)`.
 
 The bridge helpers live under the package subpath `@libraz/libsonare/worklet`.
 Register the processor inside the worklet module, then create the node on the
@@ -458,7 +471,6 @@ import { SonareRealtimeEngineNode } from '@libraz/libsonare/worklet';
 const audioCtx = new AudioContext();
 const engineNode = await SonareRealtimeEngineNode.create(audioCtx, {
   moduleUrl: '/sonare-engine-worklet.js',
-  runtimeTarget: 'embind', // full RealtimeEngine in the worklet
   channelCount: 2,
   mode: 'auto',            // uses SAB when available, postMessage otherwise
 });
@@ -475,14 +487,14 @@ engineNode.pollTelemetry();
 engineNode.destroy();
 ```
 
-For app code that wants a higher-level facade, `SonareEngine` combines two pieces:
+For app code that wants a higher-level worklet API, `SonareEngine` combines two pieces:
 
 | Piece | Role |
 |-------|------|
 | Worklet node | Runs the realtime audio side. |
 | Main-thread `RealtimeEngine` | Handles offline and timeline operations. |
 
-Its `transport` facade covers play/stop, seek by seconds or PPQ, tempo, and loop updates. Beyond transport, the facade mirrors essentially the whole engine to the worklet through control messages — the main thread stays the single source of truth and the audio thread receives synced snapshots:
+Its `transport` API covers play/stop, seek by seconds or PPQ, tempo, and loop updates. Beyond transport, the worklet API mirrors essentially the whole engine to the worklet through control messages — the main thread stays the single source of truth and the audio thread receives synced snapshots:
 
 | Need | Facade API |
 |------|-----------|
@@ -494,11 +506,11 @@ Its `transport` facade covers play/stop, seek by seconds or PPQ, tempo, and loop
 | Instruments | `setBuiltinInstrument`, `setSynthInstrument`, `loadSoundFont`, `setSf2Instrument` |
 | Recording and monitoring | `configureCapture` (incl. `inputMonitor`), `armRecord`, `punch`, `capturedAudio`, `captureStatus` |
 | Transport, tempo, markers | `getTransportState`, `cachedTransportState`, `setTempoSegments`, `setTimeSignatureSegments`, marker methods (incl. the replace-all `setMarkers`, which returns the resolved marker list — each entry carries its engine `id`), `setLoopFromMarkers` |
-| Clip updates | `addClip`, `removeClip` — the facade sends incremental clip deltas to the worklet |
+| Clip updates | `addClip`, `removeClip` — sends incremental clip deltas to the worklet |
 | Meters and telemetry | `onMeter` / `onTelemetry` / `onScope`, `pollMeters` / `pollTelemetry` / `pollScope`; meter records carry master, lane, bus, and input target ids. Offline/main-thread engines can also drain wide meter records and scope snapshots |
 | Offline export | `renderOffline` on the main-thread mirror |
 
-On the facade, strip-addressing methods take a track id *or name* (`target: string | number`), and `setSoloMute(target, solo, mute)` resolves the lane index for you. `setTrackStripEqBand` accepts an `EqBand` object directly, so you rarely hand-build band JSON.
+On the worklet API, strip-addressing methods take a track id *or name* (`target: string | number`), and `setSoloMute(target, solo, mute)` resolves the lane index for you. `setTrackStripEqBand` accepts an `EqBand` object directly, so you rarely hand-build band JSON.
 
 `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (which resolves to its fader gain in dB), without first registering a custom parameter via `addParameter`. The `target`/`busId` declares the mixer lane/bus on first use.
 
@@ -527,33 +539,9 @@ console.log(offline[0].length);
 engine.destroy();
 ```
 
-::: tip Embind is the default runtime target
-`SonareEngine` defaults to the full embind engine inside the worklet (`runtimeTarget: 'embind'`); the reduced `sonare-rt` runtime remains a transport-focused fallback. If your host worklet entry filters message names before forwarding, allowlist every `sync*`, `captureRequest`, and `transportRequest` message — otherwise lane/strip/MIDI sync messages are silently dropped.
+::: tip Worklet sync messages
+`SonareEngine` runs the full embind engine inside the worklet. If your host worklet entry filters message names before forwarding, allowlist every `sync*`, `captureRequest`, and `transportRequest` message — otherwise lane/strip/MIDI sync messages are silently dropped.
 :::
-
-The separate `sonare-rt` module is intentionally smaller and designed for the AudioWorklet hot path: transport, tempo/loop, marker seek, metronome enablement, capture arming/punch commands, block processing, and basic telemetry drain. It omits the embind-heavy surfaces that are better kept on the main thread:
-
-```typescript
-const rtNode = await SonareRealtimeEngineNode.create(audioCtx, {
-  moduleUrl: '/sonare-engine-worklet.js',
-  runtimeTarget: 'sonare-rt',
-  rtModuleUrl: '/sonare-rt.js', // required for the reduced runtime
-  channelCount: 2,
-});
-
-await rtNode.ready; // resolves after the reduced module is loaded in the worklet
-```
-
-| Full `RealtimeEngine` only | Why it is omitted from `sonare-rt` |
-|----------------------------|------------------------------------|
-| Parameter registry and automation lanes (`addParameter`, `parameterInfo`, `setAutomationLane`, `setParameter*`) | Avoids JS object/string marshalling in the render callback |
-| Transport readback (`getTransportState`) | Worklet state is mirrored through the bridge instead |
-| Full marker/time-signature helpers | `sonare-rt` keeps only marker seek and transport commands |
-| Graph topology and clip scheduling | Graph/clip editing belongs on the full embind runtime |
-| Capture readback and offline rendering (`capturedAudio`, `renderOffline`, `bounceOffline`, `freezeOffline`) | These are non-realtime operations |
-| Meter telemetry drain | The reduced runtime exposes only the basic telemetry path |
-
-Use the full package on the main thread when you need scene editing, parameter inspection, graph operations, capture readback, or offline export. Use `sonare-rt` inside an AudioWorklet processor when the render callback must stay allocation- and GC-conscious.
 
 ## Paged clip audio streaming
 
@@ -589,7 +577,7 @@ const binding = createOpfsClipPageProvider(engine, {
 // In a UI tick, service whatever the render thread asked for:
 let request;
 while ((request = engine.popClipPageRequest()) !== null) {
-  await binding.supplyRequest(request);  // reads + supplies that page
+  await binding.supplyRequest(request);  // reads and passes that page to the provider
 }
 
 // Later:
@@ -599,7 +587,7 @@ binding.close();  // releases the provider and (if owned) terminates the worker
 `createOpfsClipPageProvider(...)` builds the engine-side `ClipPageProvider` for you and pairs it with a worker. By default it spins up an inline worker via `createOpfsClipPageWorker()`, whose body is exported as `opfsClipPageWorkerSource` if you prefer to bundle it yourself or pass your own `Worker`. `supplyRequest(request)` maps a popped request's sample position to a page index; `supplyPage(pageIndex)` lets you prefetch a page directly.
 
 ::: warning OPFS support varies by browser
-The OPFS provider relies on `navigator.storage.getDirectory()` and synchronous access handles, which are available in current Chromium and Firefox and in WebKit on recent Safari, but not in older browsers. Feature-detect before using it, and keep a fully-in-memory fallback (or your own `ClipPageProvider` filled from any source) for environments without OPFS.
+The OPFS provider relies on `navigator.storage.getDirectory()` and synchronous access handles, which are available in current Chromium and Firefox and in WebKit on recent Safari, but not in older browsers. Feature-detect before using it, and keep a fully in-memory provider (or your own `ClipPageProvider` loaded from any source) for environments without OPFS.
 :::
 
 ## Display waveform peaks

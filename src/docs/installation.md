@@ -25,6 +25,14 @@ By the end of this page you should be able to:
 For a browser UI, start with npm / WASM. For notebooks or local scripts, start with PyPI. For terminal checks, use the `sonare` CLI installed by the PyPI package. Reach for Node native or a C++ build when WASM or Python is not enough for performance, distribution, or existing-code integration.
 :::
 
+If you are unsure, pick the path that lets you run one command today:
+
+- **Website or Vite/Vue/React app** — install the npm package and call `await init()` before analysis.
+- **Local data work** — install the Python package and start with `Audio.from_file(...)`.
+- **No code yet** — install the Python package and run `sonare bpm audio.mp3` or `sonare analyze audio.mp3 --json`.
+
+You can switch runtimes later. The core analysis and DSP behavior is shared; the install choice mostly decides how you feed audio in and where the results are consumed.
+
 ## npm (Browser / WASM)
 
 Requires Node.js 18.0.0 or later.
@@ -64,9 +72,7 @@ cases. Most app code should import from the main `@libraz/libsonare` entry.
 |--------|-----|
 | `@libraz/libsonare` | Main TypeScript API: initialization, analysis, features, mastering, mixing, and realtime classes |
 | `@libraz/libsonare/worklet` | AudioWorklet bridge helpers, including `SonareRealtimeEngineNode`, `SonareEngine`, and worklet-side lifecycle exports |
-| `@libraz/libsonare/rt` | Reduced `sonare-rt` module factory for AudioWorklet realtime-engine hot paths |
 | `@libraz/libsonare/wasm` | Raw main WASM asset for bundlers or custom loaders |
-| `@libraz/libsonare/rt-wasm` | Raw reduced realtime WASM asset for custom worklet integration |
 
 ## Python (pip)
 
@@ -165,12 +171,16 @@ const bpm = detectBpm(samples, audioBuffer.sampleRate);
 // Detect key
 const key = detectKey(samples, audioBuffer.sampleRate);
 
-// Full analysis
+// All-in-one analysis
 const result = analyze(samples, audioBuffer.sampleRate);
 ```
 
 For stereo files, downmix to mono first instead of passing only one channel if
 you need both channels represented.
+
+The demo below is the same browser/WASM path in visual form: decoded samples go in, an STFT-style time/frequency view comes out. If this renders in your app, the WASM package, initialization, and sample-rate plumbing are all working.
+
+<SonareDemo id="stft-basics" />
 
 ### Python
 
@@ -186,7 +196,7 @@ bpm = audio.detect_bpm()
 # Detect key
 key = audio.detect_key()
 
-# Full analysis
+# All-in-one analysis
 result = audio.analyze()
 ```
 
@@ -202,7 +212,7 @@ pip install libsonare
 sonare bpm audio.mp3
 sonare key audio.mp3
 
-# Machine-readable full analysis
+# Machine-readable all-in-one analysis
 sonare analyze audio.mp3 --json > analysis.json
 ```
 
@@ -217,7 +227,7 @@ float bpm = sonare::quick::detect_bpm(samples, size, sample_rate);
 // Detect key
 sonare::Key key = sonare::quick::detect_key(samples, size, sample_rate);
 
-// Full analysis
+// All-in-one analysis
 sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rate);
 ```
 

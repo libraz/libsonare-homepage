@@ -169,7 +169,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **Room Acoustics** - RT60 / EDT, clarity, definition, octave-band decay, blind and equivalent-room estimates, RIR synthesis, and room morphing
 - **Spectral Features** - Mel spectrogram, MFCC, chroma, CQT/VQT, spectral centroid, and flatness
 - **Audio Effects** - HPSS, time stretch, pitch shift, normalize, and trim
-- **Streaming Analysis** - Chunk-by-chunk processing with progressive BPM/key/chord estimates
+- **Streaming Analysis** - Chunk-by-chunk processing with BPM/key/chord estimates that update as audio arrives
 - **Mastering** - Preset and configurable mastering chains with LUFS targets, true-peak limiting, EQ, dynamics, repair, stereo tools, and reference matching
 - **Mixing** - Channel strips, sends, buses, automation, scene presets, goniometer/true-peak metering, and offline stereo rendering
 - **Editing DSP and inserts** - Direct pitch correction, note-region stretch, and voice-change pitch/formant controls; reverb and ducking are available through named processor or mixer insert paths where enabled

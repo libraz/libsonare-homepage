@@ -1,12 +1,12 @@
 ---
 layout: practice
 title: libsonare Piano Practice
-description: A falling-note piano practice player — load a single-track MIDI and watch the notes scroll toward a full-range keyboard that lights as each note lands, with audio rendered locally by libsonare's SoundFont player.
+description: libsonare's built-in SoundFont engine renders single-track MIDI to audio entirely on-device — practice with falling notes scrolling toward a full-range keyboard that lights as each note lands, play along over Web MIDI, and re-render any passage slower without changing pitch.
 head:
   - - meta
     - property: og:title
       content: libsonare Piano Practice
   - - meta
     - property: og:description
-      content: "Practice piano with falling notes: a single-track MIDI scrolls toward a keyboard that lights as each note lands, played locally by libsonare's WebAssembly SoundFont piano. No upload."
+      content: "libsonare's WebAssembly SoundFont engine renders a single-track MIDI to audio on-device: falling notes scroll toward a keyboard that lights as each note lands, with Web MIDI play-along and pitch-locked speed control. No upload."
 ---

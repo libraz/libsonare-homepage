@@ -3535,7 +3535,7 @@ __metadata:
     chart.js: "npm:^4.5.1"
     jsdom: "npm:^29"
     mermaid: "npm:^11.16.0"
-    npm-check-updates: "npm:^22.2.7"
+    npm-check-updates: "npm:^22.2.9"
     three: "npm:^0.185.0"
     typescript: "npm:^6.0.3"
     vexflow: "npm:^5"
@@ -4030,13 +4030,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"npm-check-updates@npm:^22.2.7":
-  version: 22.2.7
-  resolution: "npm-check-updates@npm:22.2.7"
+"npm-check-updates@npm:^22.2.9":
+  version: 22.2.9
+  resolution: "npm-check-updates@npm:22.2.9"
   bin:
     ncu: build/cli.js
     npm-check-updates: build/cli.js
-  checksum: 10c0/663d404e2c24e5893366f844c4cc215310c416f85186ab2a0f1f5f5b41245f07fbe7b9092179dd8ccad05af08dc89b8ae5855847fc65217e0b3a630b10a97a6d
+  checksum: 10c0/eab83aa114680c512b981bb70251d0d751d9cd49155438a060644d3361b7f64cecac585a033aa1844fef8c20a8a182d4f777adc9d081da30b2c6affd2a2c8670
   languageName: node
   linkType: hard
 

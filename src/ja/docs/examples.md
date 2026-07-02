@@ -119,12 +119,12 @@ sonare key song.mp3
 
 :::
 
-### 完全な音楽解析
+### 総合的な音楽解析
 
 ブラウザでも Python でも `analyze()` がコード・セクション・楽曲形式（form）に加えて、音色・ダイナミクス・リズム・メロディまで一度に返します。`detect_chords()` や `analyze_sections()` は、解析全体を実行せずにその要素だけが欲しいときのオプションとして残しています。
 
 ::: tip Python：関数とメソッドの違い
-モジュールレベルの `analyze(samples, sample_rate)` 関数は完全な結果を返します。`Audio.analyze()` メソッドは基本サマリー（BPM・キー・拍子・ビート）のみを返すので、コード・セクション・楽曲形式をまとめて取得したいときはサンプルを関数に渡してください。
+モジュールレベルの `analyze(samples, sample_rate)` 関数は総合的な結果を返します。`Audio.analyze()` メソッドは基本サマリー（BPM・キー・拍子・ビート）のみを返すので、コード・セクション・楽曲形式をまとめて取得したいときはサンプルを関数に渡してください。
 :::
 
 ::: code-group
@@ -488,7 +488,7 @@ function onAudioData(samples: Float32Array) {
   }
 }
 
-// プログレッシブ BPM/キー推定を取得
+// 音声が届くにつれて更新される BPM/キー推定を取得
 function checkEstimates() {
   const stats = analyzer.stats();
 
@@ -584,7 +584,7 @@ int main() {
 }
 ```
 
-### MusicAnalyzer での完全解析
+### MusicAnalyzer での総合解析
 
 ```cpp
 #include <sonare.h>
@@ -704,7 +704,7 @@ sonare bpm song.mp3
 # キー検出
 sonare key song.mp3
 
-# 完全解析 (JSON)
+# 総合解析 (JSON)
 sonare analyze song.mp3 --json > analysis.json
 ```
 

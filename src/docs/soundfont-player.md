@@ -1,6 +1,6 @@
 ---
 title: SoundFont 2 Player
-description: Render MIDI arrangements with real sampled sounds using libsonare's GS-compatible SoundFont 2 instrument — load a caller-supplied SF2, drive 16-part multitimbral playback, and bounce or play live with a NativeSynth fallback so MIDI never goes silent.
+description: Render MIDI arrangements with real sampled sounds using libsonare's GS-compatible SoundFont 2 instrument — load your own SF2, play 16-part multitimbral MIDI, and use NativeSynth fallback so bounces and live playback never go silent.
 ---
 
 # SoundFont 2 Player
@@ -33,6 +33,10 @@ flowchart TD
 ```
 
 The [program manifest](#know-what-resolves-the-program-manifest) below lets you see this decision ahead of time, per program.
+
+The demo below uses built-in voices rather than a user-supplied SF2 file, but it shows the same MIDI idea the SoundFont player relies on: the notes stay fixed while the instrument that renders them changes. In your app, the selected instrument can be an SF2 preset when your SoundFont covers that program, or the NativeSynth fallback when it does not.
+
+<SonareDemo id="midi-piano-roll" />
 
 ## What You Will Learn
 
@@ -112,7 +116,7 @@ Before you render, ask the project **which programs your arrangement actually pl
 - `'sf2'` — the loaded SoundFont covers the program (GS variation/drum fallbacks included), with the resolved `presetName`;
 - `'synth'` — no preset covers it, so it plays through the NativeSynth GM fallback; `presetName` is empty.
 
-Without a loaded SoundFont, every entry is a `synth` fallback. This is your honest coverage report: a `synth` row means "this part will sound, but from the data-free floor, not your samples".
+Without a loaded SoundFont, every entry is a `synth` fallback. This is your honest coverage report: a `synth` row means "this part will sound, but from the data-free floor, not your samples". The fallback is still program-aware: for example, GM program 6 (Harpsichord) uses a Karplus-Strong plucked-string patch, while program 7 (Clavi) stays on an FM-style patch.
 
 ::: code-group
 
@@ -210,6 +214,8 @@ Passing an explicitly empty array `[]` (rather than a patch or `undefined`) bind
 
 ::: tip MIDI never renders silent for lack of data
 You can bounce with **no SoundFont loaded at all** — bound destinations still sound, because uncovered programs play through the NativeSynth GM fallback. The manifest tells you exactly which parts will use samples and which will use the fallback. See [NativeSynth](./native-synth.md) for the fallback engine.
+
+That fallback is broad enough for practical previews: pianos use the extended waveguide piano sketch, guitars/basses/harp use Karplus-Strong models, strings use bowed-string or pizzicato/harp/timpani voices, choir/voice programs use a vocal body resonance, and GM 56-79 brass/reed/flute programs use provisional physical models. It is still a fallback, not a replacement for a carefully chosen SF2; calibration is ongoing, but missing programs no longer collapse to one generic tone.
 :::
 
 ### Instrument config and the voice model
@@ -226,7 +232,7 @@ When the player runs out of voices it uses **deterministic voice stealing**, so 
 
 ## What the player implements
 
-The player is a faithful SF2 synthesis core with a Roland-GS architecture layer on top. You do not call these features directly — they are driven by the MIDI events, CCs, NRPNs, and SysEx in your arrangement — but knowing what is honored explains *why* a part sounds the way it does.
+The player is a faithful SF2 synthesis core with a Roland-GS architecture layer on top. You do not call these features directly — they respond to the MIDI events, CCs, NRPNs, and SysEx in your arrangement — but knowing what is honored explains *why* a part sounds the way it does.
 
 ::: info SoundFont engine terms (you don't call these directly)
 **TVF** (Time-Variant Filter) is the per-note filter and **TVA** (Time-Variant Amplifier) is its volume envelope. **NRPN** and **SysEx** are MIDI messages for extra or vendor-specific parameters. An **exclusive class** is the rule that one drum cuts off another — an open hi-hat is silenced the instant the closed hi-hat plays.
@@ -236,9 +242,9 @@ The player is a faithful SF2 synthesis core with a Roland-GS architecture layer 
 
 - **Preset / instrument zone layering** — a note resolves through the SF2 two-level zone structure (preset zones over instrument zones), so layered and split presets play correctly. Generators set sample selection, tuning, loop mode, and exclusive classes (e.g. a closed hi-hat cutting an open one).
 - **DAHDSR envelopes** — separate volume and modulation envelopes with Delay/Attack/Hold/Decay/Sustain/Release stages.
-- **LFOs** — a vibrato LFO and a modulation LFO drive pitch/filter/amplitude per the SF2 generators.
+- **LFOs** — a vibrato LFO and a modulation LFO change pitch/filter/amplitude per the SF2 generators.
 - **Low-pass filter with velocity tracking** — initial cutoff and resonance, with velocity influencing brightness.
-- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) drives vibrato; **CC91** (reverb send) and **CC93** (chorus send) feed the effect sends. (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
+- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send) and **CC93** (chorus send) feed the effect sends. (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
 - **Pitch bend** — honored, with the bend range set by **RPN 0** (entered via Data Entry / RPN), so a part can request its own semitone range.
 
 ### The GS architecture layer
@@ -249,7 +255,7 @@ On top of GM, the player implements the Roland-GS extensions a GS-authored arran
 - **Bank-128 drum kits on channel 10** — drum programs live in bank 128; channel 10 (index 9) is the drum part by convention.
 - **NRPN part edits** — TVF cutoff/resonance, TVA envelope, and vibrato can be edited per part via NRPN, plus **per-note drum NRPNs** for individual drum sounds.
 - **GS / GM SysEx** — **GS Reset**, **GM System On**, and "use for rhythm part" SysEx are recognized — both from the host and from SysEx events embedded inside an arrangement.
-- **Send-return effects** — reverb, chorus, and delay send-return effects, plus a per-part **drive** insert.
+- **Send-return effects and GS EFX routing** — reverb, chorus, and delay send-return effects, plus a per-part **drive** insert. GS EFX selections are translated to built-in inserts where available; composite GS EFX types become multi-stage insert chains rather than a single approximate block.
 - **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change and resolves the **GM2 Bank Select LSB** to the variation bank, so GM2-authored material maps to the right tone.
 
 ::: tip Author GS banks with the MIDI helpers

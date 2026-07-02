@@ -43,7 +43,7 @@ Correction is a pitch shift applied over a region, so the same artifact rules ap
 Region-based edits like `noteStretch` take **sample offsets**, not seconds, because sample positions are exact and never drift. Convert with `samples = round(seconds × sampleRate)` — at 48 kHz, 0.25 s is sample 12000. A region has an onset sample and an offset sample; `stretchRatio > 1` lengthens that region while leaving the surrounding audio in place.
 
 ::: details How libsonare corrects and edits
-`pitchCorrectToMidi` maps a current→target MIDI interval to a pitch shift over the signal, reusing the phase-vocoder path from [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md). Region edits use `NoteEditor` (`NoteEditorConfig`) over a `NoteRegion` defined by onset/offset sample offsets, with `NoteSegmenter` helping locate regions. `noteStretch` applies a region-bounded stretch ratio. All operate on decoded mono samples; the `Audio` wrapper exposes the same operations as instance methods so file workflows can load once and edit.
+`pitchCorrectToMidi` maps a current→target MIDI interval to a pitch shift over the signal, reusing the phase-vocoder path from [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md). Region edits use `NoteEditor` (`NoteEditorConfig`) over a `NoteRegion` defined by onset/offset sample offsets, with `NoteSegmenter` helping locate regions. `noteStretch` applies a region-bounded stretch ratio. All operate on decoded mono samples; `Audio` exposes the same operations as methods so file workflows can load once and edit.
 :::
 
 Related: [Editing Basics](../concepts/editing-basics.md), [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md), [Melody and Pitch](../analysis/melody-pitch.md), [Editing DSP](../../editing-dsp.md)

@@ -7,7 +7,7 @@ description: Buses, the master/aux/submix roles, pre- vs post-fader sends, FX bu
 
 A mixer is not just strips. It is a **routing graph** that sums and groups them.
 
-**Buses** are the shared destinations. **Sends** are the taps that feed them.
+**Buses** are the shared destinations. **Sends** are the taps that send signal to them.
 
 Getting these two right is what turns a pile of strips into a controllable mix. This page grounds the routing model in libsonare's `Bus` and send processors; for the gentler intro see [Mixing Basics](../concepts/mixing-basics.md).
 

@@ -1,11 +1,11 @@
 ---
 title: Mastering Processors
-description: The named mastering surface of libsonare — presets, solo processors, and pair/stereo analyses — with a goal-to-processor guide, kept in sync with the runtime registry.
+description: The named mastering API of libsonare — presets, solo processors, and pair/stereo analyses — with a goal-to-processor guide, kept in sync with the runtime registry.
 ---
 
 # Mastering Processors
 
-This page is the **registry** for the named mastering surface in libsonare. It answers *"what can I call?"*, not *"how does it work internally?"*
+This page is the **registry** for the named mastering API in libsonare. It answers *"what can I call?"*, not *"how does it work internally?"*
 
 The authoritative runtime source is the name-list API: `masteringProcessorNames()`, `masteringPairProcessorNames()`, `masteringPairAnalysisNames()`, `masteringStereoAnalysisNames()`, and `masteringPresetNames()`. This page mirrors those lists.
 
@@ -92,7 +92,7 @@ The exact IDs matter for code, but users usually choose by *role*:
 Most full chains use only a small subset: repair if needed, one tone stage, one dynamics stage, optional saturation/stereo, then maximizer/loudness. Stacking many processors from the registry is rarely better than starting from a preset and overriding one or two values.
 
 ::: info Loudness, oversampling, and metering details
-A few capabilities sit underneath the maximizer/final and analysis surfaces:
+A few capabilities sit underneath the maximizer/final and analysis APIs:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the BS.1770 channel weights.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
@@ -153,7 +153,7 @@ This reduces the warbly "musical noise" that naive subtraction can leave. These 
 :::
 
 ::: details What is `saturation.ampSim`?
-A guitar-amp-style coloration stage in the form drive → tone stack → cab. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then a fixed, data-free cab voicing (low cut, body bump, presence peak, and a steep roll-off around 4.8 kHz) that can be bypassed for a clean DI tone. The drive, tone, presence, and level controls are automatable through `set_parameter` on every binding. Construction/param keys: `drive` (0–1, overdrives the 12AX7 triode stage), `bassDb`, `midDb`, `trebleDb` (tone-stack gains in dB at 120 Hz / 550 Hz / 3 kHz), `presenceDb` (presence-peak gain in dB on the cab voicing, ~3.8 kHz), and `levelDb` (output trim in dB) — these six are also the `set_parameter` automation lanes. The `cab` boolean (default `true`) is a discrete topology switch: set it `false` to bypass the cabinet voicing for a clean DI tone; unlike the others it is not exposed to `set_parameter`.
+A guitar/bass-amp-style coloration stage in the form preamp drive → tone stack → power amp → cabinet. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then an optional power-amp section and a data-free cab voicing. Construction/param keys: `drive` (0-1), `bassDb`, `midDb`, `trebleDb`, `presenceDb`, `levelDb`, `power`, `sag`, `transformer`, and `nfb` are automatable through `set_parameter` on every binding. `power` adds a class-AB push-pull soft-saturation stage; `sag` models supply droop and bloom after hard hits; `transformer` adds low-frequency output-transformer saturation; `nfb` adds a negative-feedback loop around the active power stage. `cab` (boolean), `cabModel` (`0` = guitar 4x12, `1` = bass 8x10), and `ampModel` (`0` = classic crunch, `1` = Fender-style clean, `2` = modern high-gain, `3` = tweed, `4` = Vox-style chime, `5` = rectifier) are discrete topology choices, so set them at construction time rather than automating them.
 :::
 
 ## Pair processors and analyses
@@ -199,6 +199,11 @@ Keys outside an insert's list are ignored by the processor and reported through 
 | `effects.modulation.chorus` | Stereo chorus |
 | `effects.modulation.flanger` | Flanger |
 | `effects.modulation.phaser` | Phaser |
+| `effects.modulation.wah` | Tempo-style swept wah filter |
+| `effects.modulation.autoWah` | Envelope-following auto-wah filter |
+| `effects.modulation.rotary` | Rotary-speaker style pitch/tremolo motion |
+| `effects.modulation.ringModulator` | Ring modulator |
+| `effects.modulation.pitchShifter` | Simple pitch shifter |
 | `effects.delay.stereo` | Stereo delay |
 
 These insert IDs are available only in builds with `SONARE_HAVE_FX`. The geometric room inserts also require `BUILD_ACOUSTIC_SIM`.
@@ -208,11 +213,16 @@ There are a few practical details to know:
 | Detail | Meaning |
 |--------|---------|
 | `effects.reverb.plate` and `effects.reverb.dattorro` | Two names for the same Dattorro processor |
-| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
+| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). `effects.reverb.convolution` clamps `decaySec` to its synthesized-tail ceiling of 12 seconds at construction time. The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
 | `effects.modulation.chorus` params | `rateHz`, `depthMs`, `centerDelayMs`, `dryWet` |
 | `effects.modulation.flanger` params | `rateHz`, `depthMs`, `centerDelayMs`, `feedback`, `dryWet` |
 | `effects.modulation.phaser` params | `rateHz`, `minHz`, `maxHz`, `stages`, `dryWet` |
 | `effects.modulation.ensemble` params | `rateSlowHz`, `rateFastHz`, `depthSlowMs`, `depthFastMs`, `centerDelayMs`, `toneHz`, `dryWet` |
+| `effects.modulation.wah` params | `rateHz`, `minHz`, `maxHz`, `resonance`, `dryWet` |
+| `effects.modulation.autoWah` params | `sensitivity`, `minHz`, `maxHz`, `resonance`, `attackMs`, `releaseMs`, `dryWet` |
+| `effects.modulation.rotary` params | `rateHz`, `depthMs`, `tremolo`, `stereoSpread`, `dryWet` |
+| `effects.modulation.ringModulator` params | `carrierHz`, `dryWet` |
+| `effects.modulation.pitchShifter` params | `semitones`, `dryWet` |
 | `effects.delay.stereo` params | `delayTimeLMs`, `delayTimeRMs`, `feedback`, `pingPong`, `dryWet` |
 | `effects.reverb.convolution` | Needs an impulse response supplied through native insert construction |
 | Convolution insert without an IR | Effectively behaves as a passthrough |
@@ -230,7 +240,7 @@ They are different ways to synthesize a reverb tail. Pick by the character you w
 A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintage string synths. It runs three delay taps per channel, swept simultaneously by a slow and a fast 3-phase LFO bank, so the modulation is dense rather than a single chorus wobble. A BBD bucket-bandwidth lowpass darkens the wet path, emulating the analog bucket-brigade delay lines. The right-channel LFO polarity is inverted, which spreads a mono source into a wide stereo image. It is exposed through the insert factory and its parameters are automatable through `set_parameter` on every binding.
 :::
 
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, most of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven inserts and the ensemble — `effects.reverb.room`, `effects.acoustic.roomMorph`, and `effects.modulation.ensemble` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
+Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven inserts and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
 
 ## How to call them
 

@@ -1,23 +1,34 @@
 ---
 title: Built-in Synthesizer (NativeSynth)
-description: Guide to libsonare's data-free patch-driven NativeSynth — its seven synthesis engines, the SynthPatch object, the named preset catalog, the GM fallback bank, and how to drive it offline and live, with copy-paste recipes.
+description: Guide to libsonare's data-free patch-driven NativeSynth — its twelve synthesis engines, the SynthPatch object, the named preset catalog, the GM fallback bank, and how to drive it offline and live, with copy-paste recipes.
 ---
 
 # Built-in Synthesizer (NativeSynth)
 
 **NativeSynth turns MIDI into sound on its own** — no samples to download, no SoundFont to ship. It is built into libsonare, so a MIDI track always makes sound out of the box.
 
-Under the hood, NativeSynth is one synthesizer with **seven swappable synthesis engines**, each a different way of making a tone:
+For a first pass, you only need three ideas:
+
+1. choose a named preset such as `acoustic-piano`, `warm-pad`, or `drum-kit`;
+2. route MIDI notes to the destination that uses that preset;
+3. optionally override simple fields such as `cutoffHz`, `ampAttackMs`, or `stereoSpread`.
+
+Under the hood, NativeSynth is one synthesizer with **twelve swappable synthesis engines**. Each engine is a different way to create the raw tone. Several acoustic-style engines are still provisional physical models: they are useful for data-free preview and fallback, but their final voicing/calibration is still in progress.
 
 - a virtual-analog subtractive voice (classic synth leads and pads),
-- FM (electric pianos and bells),
-- Karplus-Strong plucked string (guitars and harps),
+- FM (electric pianos, bells, and clavinet),
+- Karplus-Strong plucked string (guitars, basses, harp, and harpsichord),
 - modal percussion (marimba, vibraphone),
 - additive drawbar organ,
 - membrane percussion (the drum kit),
-- and an extended-waveguide acoustic piano.
+- an extended-waveguide acoustic piano,
+- sustained flue-pipe organ,
+- bowed-string waveguide,
+- reed woodwind waveguide,
+- brass lip-reed waveguide,
+- and air-jet flute waveguide.
 
-All seven share one modulation/envelope/filter layer, so they behave consistently. To get a sound, pick a preset by name — or build one field-by-field with a `SynthPatch`. You never have to touch the engine internals to start.
+All twelve share one common control layer for modulation, envelopes, filters, stereo width, and polyphony, so the same patch fields work across very different sounds. To get a sound, pick a preset by name — or start from a preset and change only the fields you care about with a `SynthPatch`. You never have to touch the engine internals to start.
 
 ::: info Synthesis terms in one place
 The engine names below are different ways to *generate* a tone. You don't need them all to start — pick a preset and play — but here is the one-line version of each:
@@ -28,8 +39,9 @@ The engine names below are different ways to *generate* a tone. You don't need t
 - **modal** — a bank of tuned resonators modeling a struck bar or bell.
 - **additive / drawbar** — sums harmonic sine partials, like the drawbars on a Hammond organ.
 - **(extended) waveguide** — a delay-line model of a vibrating string or tube.
+- **reed / brass / flute waveguide** — sustained breath-excited models for woodwinds and brass.
 
-Two terms appear in every engine's wrapper: an **ADSR envelope** (attack/decay/sustain/release — how a level rises and falls over a note) and the **mod matrix** (routes modulation sources such as LFOs or envelopes to targets such as pitch or filter cutoff).
+Two terms appear throughout the patch controls: an **ADSR envelope** (attack/decay/sustain/release — how a level rises and falls over a note) and the **mod matrix** (a routing table that sends modulation sources such as LFOs or envelopes to targets such as pitch or filter cutoff).
 :::
 
 ::: info MIDI never renders silent
@@ -40,13 +52,13 @@ NativeSynth is also the **data-free floor** of the [SoundFont player](./soundfon
 A NativeSynth patch is an **instrument**: you bind it to a MIDI destination, and the MIDI on tracks routed to that destination plays through it. Offline you bind it in [`bounceWithSynthInstrument`](./project-bounce.md); live you bind it with `engine.setSynthInstrument` and feed [MIDI input](./midi-input.md). For sampled, multisampled instruments instead, use the [SoundFont player](./soundfont-player.md).
 :::
 
-A single signal path runs through NativeSynth on every note: a MIDI note picks one of the seven engines, and the engine's raw tone then flows through the shared wrapper before reaching the stereo output.
+A single signal path runs through NativeSynth on every note: a MIDI note picks one of the twelve engines, and the engine's raw tone then flows through the shared control layer before reaching the stereo output.
 
 ```mermaid
 flowchart TD
-  N[MIDI note] --> E{Selected engine<br/>1 of 7}
-  E --> W[Shared wrapper]
-  subgraph W [Shared wrapper]
+  N[MIDI note] --> E{Selected engine<br/>1 of 12}
+  E --> W[Shared control layer]
+  subgraph W [Shared control layer]
     direction TB
     F[Filter] --> A[Amp & filter ADSR envelopes]
     A --> L[LFOs / mod matrix]
@@ -67,9 +79,9 @@ By the end of this page you should be able to:
 - render MIDI to audio offline with `bounceWithSynthInstrument` and live with `setSynthInstrument`;
 - know when a note plays NativeSynth versus the loaded SoundFont.
 
-## The seven synthesis engines
+## The twelve synthesis engines
 
-Every preset selects one `engineMode`. The wrapper sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings — live **inside the named presets**, not in the patch.
+Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — live **inside the named presets**, not in the patch.
 
 ### `subtractive` — virtual-analog
 
@@ -92,11 +104,11 @@ All four stay stable and zipper-free under per-sample cutoff/resonance modulatio
 
 ### `fm` — frequency modulation
 
-A phase-modulation operator stack (one oscillator's pitch modulates another → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clav/harpsichord, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`, `bell`, `brass`.
+A phase-modulation operator stack (one oscillator's pitch modulates another → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`, `bell`, `brass`.
 
 ### `karplus-strong` — plucked string
 
-A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Good for **plucked and strummed strings** — guitar, harp, and the plucked ethnic family. Presets: `pluck`, `electric-guitar`, `harp`.
+A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Treat the acoustic realism as **in calibration**, not as a finished instrument model. Good for **plucked and strummed strings** — guitar, bass, harp, harpsichord, and the plucked ethnic family. Presets: `pluck`, `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
 
 ### `modal` — mallet percussion
 
@@ -112,11 +124,47 @@ Rayleigh circular-membrane modes with a descending strike-pitch envelope under f
 
 ### `piano` — extended-waveguide acoustic piano
 
-A data-free grand-piano sketch with the four piano-defining elements: stiff-string dispersion (partials stretch sharp up the keyboard), a nonlinear felt hammer (hard strikes are shorter and brighter), 2-3 coupled micro-detuned unison strings, and a soundboard resonator bank. Good for **acoustic piano**. Preset: `acoustic-piano`.
+A data-free grand-piano sketch with the four piano-defining elements: stiff-string dispersion (partials stretch sharp up the keyboard), a nonlinear felt hammer (hard strikes are shorter and brighter), 2-3 coupled micro-detuned unison strings, and a soundboard resonator bank. The voicing is register-scaled, so bass notes, middle-register chords, and treble notes do not share one over-simple brightness curve. This is still a provisional model intended for built-in preview, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`.
+
+### `pipe-organ` — sustained flue pipe
+
+A provisional waveguide flue-pipe model with shared wind behavior, multi-rank registration, reed-pipe color, and mouth/radiation correction. Good for **church organ color previews** from principals and bourdon stops to flute and trumpet ranks. Presets: `church-organ`, `church-flute`, `church-bourdon`, `church-trumpet`.
+
+### `bowed-string` — friction-excited string
+
+A sustained bowed-string waveguide with bow speed/force/position control, sympathetic resonance, second-polarization beating, and a violin-family body resonator. The model is provisional and still being tuned against references. Good for **violin-family previews**. Presets: `violin`, `viola`, `cello`, `contrabass`.
+
+### `reed` — woodwind reed
+
+A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-cone behavior, register-scaled voicing, and live breath/brightness control. This is a provisional GM fallback/preview voice while calibration continues. Good for **single- and double-reed woodwind previews** and saxophones. Presets: `clarinet`, `soprano-sax`, `alto-sax`, `tenor-sax`, `baritone-sax`, `oboe`, `english-horn`, `bassoon`.
+
+### `brass` — lip-reed brass
+
+A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing. This is a provisional physical model, so use it as a built-in brass fallback rather than as a final brass simulation. Presets: `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
+
+### `flute` — air-jet flute
+
+A breath-driven air-jet / open-pipe model with jet/reflection brightness, chiff/noise, overblow behavior, and vibrato control. This is currently a provisional fallback voice for **flutes, whistles, and ocarina-like edge-tone instruments**. Presets: `concert-flute`, `piccolo`, `recorder`, `pan-flute`, `shakuhachi`, `tin-whistle`, `ocarina`, `blown-bottle`.
+
+## The GM fallback bank
+
+The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program. Some of those voices are provisional physical models whose calibration is still underway. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism.
+
+| GM area | Data-free fallback voice |
+|---------|--------------------------|
+| Programs 0-7, keyboard | Extended-waveguide grand piano, FM electric pianos/clavinet, and Karplus-Strong harpsichord bank variants |
+| Programs 16-23, organ | Additive organs plus physical church-organ, flue-pipe, bourdon, trumpet-rank, and reed-organ colors |
+| Programs 24-37, guitar and bass | Karplus-Strong nylon, steel, electric, muted/overdriven/distorted guitars, harp, and dedicated bass variants |
+| Programs 40-47, strings/orchestra | Bowed violin family, tremolo/pizzicato strings, harp, and timpani |
+| Programs 52-54, choir/voice | Choir, voice-ooh, and synth-voice programs using the vocal body resonance |
+| Programs 56-79, brass/reed/flute | Provisional physical lip-reed brass, reed woodwinds/saxophones, and air-jet flutes |
+| Drums and GS variants | GM/GS drum-kit variants and GM2/GS bank fallbacks, with GS EFX routed to built-in insert chains where available |
+
+For beginners, the practical rule is simple: **use SoundFont when you need exact or production-ready sampled instruments; rely on NativeSynth fallback when you need a small, always-available preview or a missing-program safety net**.
 
 ## The named preset catalog
 
-NativeSynth ships a small, named preset catalog. **Do not hardcode preset names** — list them from the runtime with `synthPresetNames()`, and inspect any one as a `SynthPatch` with `synthPresetPatch(name)`.
+NativeSynth ships a named preset catalog. **Do not hardcode preset names** — list them from the runtime with `synthPresetNames()`, and inspect any one as a `SynthPatch` with `synthPresetPatch(name)`.
 
 <SonareDemo id="synth-presets" />
 
@@ -129,8 +177,9 @@ await init();
 
 synthPresetNames();
 // ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
-//  'bell', 'brass', 'pluck', 'electric-guitar', 'harp', 'marimba', 'glass',
-//  'organ', 'drum-kit', 'acoustic-piano']
+//  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
+//  'electric-guitar', 'harp', 'bass-acoustic', ...,
+//  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 const pad = synthPresetPatch('warm-pad');
 // { preset: 'warm-pad', engineMode: 'subtractive', waveform: 'saw',
@@ -142,8 +191,9 @@ import libsonare as sonare
 
 sonare.synth_preset_names()
 # ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
-#  'bell', 'brass', 'pluck', 'electric-guitar', 'harp', 'marimba', 'glass',
-#  'organ', 'drum-kit', 'acoustic-piano']
+#  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
+#  'electric-guitar', 'harp', 'bass-acoustic', ...,
+#  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 pad = sonare.synth_preset_patch("warm-pad")
 # SynthPatch(preset='warm-pad', engine_mode='subtractive', waveform='saw',
@@ -158,13 +208,18 @@ The catalog maps to the engines like this (one preset per row is enough to feel 
 |--------|--------|----------|
 | `sine` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | leads, basses, pads |
 | `e-piano` `bell` `brass` | `fm` | electric piano, bells, brass |
-| `pluck` `electric-guitar` `harp` | `karplus-strong` | plucked strings |
+| `pluck` `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | plucked strings and basses |
 | `marimba` `glass` | `modal` | tuned mallets |
 | `organ` | `additive` | drawbar organ |
 | `drum-kit` | `percussion` | GM drum map |
 | `acoustic-piano` | `piano` | acoustic piano |
+| `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | pipe organ ranks |
+| `violin` `viola` `cello` `contrabass` | `bowed-string` | bowed strings |
+| `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | reed woodwinds |
+| `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | brass instruments |
+| `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | air-jet flutes and whistles |
 
-The roll below sequences one three-voice phrase and bounces it through `bounceWithSynthInstrument(presetName, …)`. The instrument selector walks across four engines — `acoustic-piano` (`piano`), `e-piano` (`fm`), `harp` (`karplus-strong`), and `marimba` (`modal`) — so the same notes audibly take on each engine's character.
+The roll below sequences one three-voice phrase and bounces it through `bounceWithSynthInstrument(presetName, …)`. The instrument selector walks across representative piano, FM, plucked-string, modal, organ, bowed-string, reed, brass, and flute presets, so the same notes audibly take on each engine's character.
 
 <SonareDemo id="midi-piano-roll" />
 
@@ -180,6 +235,8 @@ A preset name may carry a `va:` prefix (for example `va:saw-lead`, `va:e-piano`)
 
 Think of a `SynthPatch` as "a preset, plus your tweaks". It starts from a **base** — the named `preset` (omit it for the default subtractive init patch) — and every field you set overrides that base. Leave a field out and the base value stays.
 
+The most useful beginner workflow is small and reversible: choose a preset, change one or two audible fields, listen, then reset or move on. For example, start from `warm-pad`, lengthen `ampAttackMs` for a slower fade-in, lower `cutoffHz` for a darker tone, or raise `stereoSpread` for a wider pad. You do not need to fill the whole object.
+
 ::: warning Zero means "keep the base", not "set to zero"
 Watch out: writing `ampSustain: 0` does **not** silence the sustain — it leaves the preset's sustain untouched. Across this object, **0 (or an omitted field) means "keep the base value"; any non-zero value overrides it** (clamped to its audible range). Enum fields use `'default'` for "keep".
 
@@ -188,7 +245,9 @@ You therefore cannot force a numeric field to literally zero. (This is because t
 One more rule: a non-empty `modRoutings` array **replaces** the base mod matrix entirely, rather than adding to it.
 :::
 
-The patch exposes the wrapper sections every engine shares:
+The patch exposes the shared controls every engine uses:
+
+<SonareDemo id="synth-adsr" />
 
 ::: info Cents, velocity, and key tracking
 - **Cent** — 1/100 of a semitone; 100 cents = one piano key, 1200 = an octave. Pitch and detune amounts are in cents.
@@ -203,7 +262,7 @@ The patch exposes the wrapper sections every engine shares:
 | Amp envelope | `ampAttackMs`, `ampDecayMs`, `ampSustain`, `ampReleaseMs` |
 | Filter envelope | `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs` |
 | LFOs & glide | `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs` |
-| Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube`), `bodyMix` (0-1) |
+| Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`), `bodyMix` (0-1) |
 | Stereo & output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
 | Mod matrix | `modRoutings` (up to 8) |
 | Binding (JS only) | `destinationId` (default `0`) |
@@ -216,12 +275,16 @@ The two LFOs behave differently. LFO 1 (`lfoRateHz` + `lfoToPitchCents`) is hard
 
 Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets envelopes, LFOs, velocity, key tracking, the mod wheel, and a seeded per-voice random source modulate pitch, filter cutoff, amplitude, and pan. `depth` is in destination units at full source deflection.
 
-The `body` field is NativeSynth's body/formant resonance layer — the resonant character of an instrument's physical shell. Acoustic guitars, harps, and wooden mallets carry a body; solid-body electrics intentionally do not, so leave `body` at `none` for those.
+<SonareDemo id="synth-tremolo" />
+
+The `body` field is NativeSynth's body/formant resonance layer — the resonant character of an instrument's physical shell or vocal tract. Acoustic guitars, harps, violin-family strings, woodwinds, brass, and choir/voice fallbacks use this layer; solid-body electrics can leave `body` at `none`.
 
 ::: info Pitch bend, MPE, and controller reset
 NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set via Data Entry). A MIDI **Reset All Controllers** message restores the default — bend range included. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
 
 It also tracks **per-note expression**: MPE-style per-note pitch-bend and per-note (polyphonic) pressure bend the matching voice individually rather than the whole channel, so overlapping notes can glide and swell independently. Live control changes are decoded at full resolution — **14-bit** CC pairs and **RPN / NRPN** values land with their fine bytes intact, and MIDI 2.0 note velocity is shaped in the full 16-bit domain rather than being truncated to 7 bits.
+
+Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC64** supports half-pedal damping, **CC66** acts as sostenuto, and **CC67** applies una-corda / soft-pedal voicing where the active preset uses it.
 :::
 
 ### Enum name tables
@@ -235,11 +298,13 @@ await init();
 synthEnumTables();
 // {
 //   engineModes:      ['default', 'subtractive', 'fm', 'karplus-strong',
-//                      'modal', 'additive', 'percussion', 'piano'],
+//                      'modal', 'additive', 'percussion', 'piano',
+//                      'pipe-organ', 'bowed-string', 'reed', 'brass', 'flute'],
 //   waveforms:        ['default', 'sine', 'saw', 'square', 'triangle', 'noise'],
 //   filterModels:     ['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key'],
 //   filterOutputs:    ['default', 'lowpass', 'bandpass', 'highpass'],
-//   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube'],
+//   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube',
+//                      'brass-bell', 'vocal'],
 //   modSources:       ['none', 'amp-env', 'filter-env', 'lfo1', 'lfo2',
 //                      'velocity', 'key-track', 'mod-wheel', 'random'],
 //   modDestinations:  ['none', 'pitch-cents', 'cutoff-cents', 'amp-gain', 'pan-units'],
@@ -250,7 +315,7 @@ The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYN
 
 ## Render offline: `bounceWithSynthInstrument`
 
-To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either to bind several destinations at once. When you pass an array, each `SynthPatch` may set `destinationId` (default `0`) to choose which MIDI destination it binds to — for example `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` feeds two destinations from one render call. `destinationId` is a JS binding convenience, not part of the NativeSynth patch itself (Python takes the destination as a separate argument instead). An explicitly empty array (or `undefined` / `null`) produces zero bindings. The render is deterministic for a fixed project, options, and patch.
+To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either to bind several destinations at once. When you pass an array, each `SynthPatch` may set `destinationId` (default `0`) to choose which MIDI destination it binds to — for example `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` renders two destinations from one call. `destinationId` is a JS binding convenience, not part of the NativeSynth patch itself (Python takes the destination as a separate argument instead). An explicitly empty array (or `undefined` / `null`) produces zero bindings. The render is deterministic for a fixed project, options, and patch.
 
 ::: code-group
 
@@ -367,6 +432,30 @@ const manifest = project.soundFontManifest();
 
 Because the GM fallback bank is always present, MIDI never renders silent for lack of data. See [SoundFont Player](./soundfont-player.md) for loading SF2 data and per-channel/program resolution.
 
+### GM fallback program routing
+
+The fallback bank uses the closest NativeSynth engine for each GM program family, with a few program-level overrides where the instrument behavior matters. Acoustic-style rows below are still provisional calibration targets, so read them as routing coverage, not as a claim of final sampled-instrument realism.
+
+| GM program | Instrument | Fallback engine | Why |
+|------------|------------|-----------------|-----|
+| 4-5 | Electric Piano 1 / 2 | `fm` | phase-modulated tine/bell brightness |
+| 6 | Harpsichord | `karplus-strong` | quill-plucked string with near velocity-insensitive brightness |
+| 7 | Clavi | `fm` | struck string and pickup color, currently approximated by FM |
+| 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | tuned-bar resonators |
+| 16-23 | Organ family | `additive` / `pipe-organ` | drawbar plus provisional flue-pipe, reed-pipe, bourdon, and trumpet-rank colors |
+| 24-31 | Guitar family | `karplus-strong` | plucked string waveguide |
+| 32-37 | Acoustic, electric, fretless, and slap basses | `karplus-strong` | bass-string waveguide with program-specific slap/polarization |
+| 40-43 | Violin, Viola, Cello, Contrabass | `bowed-string` | provisional sustained friction-excited string waveguide |
+| 44-47 | Tremolo Strings, Pizzicato Strings, Harp, Timpani | `bowed-string` / `karplus-strong` / `percussion` | string articulations, harp pluck, and timpani fallback voices |
+| 48 | String Ensemble 1 | `subtractive` | pad-like ensemble fallback rather than solo bow model |
+| 52-54 | Choir Aahs, Voice Oohs, Synth Voice | `additive` / vocal body voicing | vocal-formant fallback colors |
+| 56, 57, 58, 59, 60, 61 | Trumpet, Trombone, Tuba, Muted Trumpet, French Horn, Brass Section | `brass` | provisional lip-reed brass waveguide |
+| 62-63 | Synth Brass 1 / 2 | `fm` / synth voicing | synthetic brass color rather than physical brass |
+| 64-71 | Saxophones, Oboe, English Horn, Bassoon, Clarinet | `reed` | provisional reed and bore waveguides |
+| 72-79 | Piccolo, Flute, Recorder, Pan Flute, Bottle, Shakuhachi, Whistle, Ocarina | `flute` | provisional air-jet / open-pipe waveguides |
+
+This routing is separate from the named preset catalog: `synthPresetNames()` still lists the hand-authored presets (`e-piano`, `harp`, `drum-kit`, and so on), while the GM fallback bank chooses the internal patch for each MIDI program number during SF2 fallback.
+
 ## Recipes
 
 :::: details Audition every engine from one project
@@ -383,7 +472,9 @@ project.setMidiEvents(clipId, [
 ]);
 try {
   for (const preset of ['saw-lead', 'e-piano', 'electric-guitar',
-                         'marimba', 'organ', 'acoustic-piano']) {
+                         'marimba', 'organ', 'drum-kit', 'acoustic-piano',
+                         'church-organ', 'violin', 'clarinet', 'trumpet',
+                         'concert-flute']) {
     const audio = project.bounceWithSynthInstrument(preset, { totalFrames: 48000 });
     // render / inspect each preset's audio
   }

@@ -67,10 +67,10 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [シンセシスの基礎](./glossary/instruments/synthesis-basics.md) | オシレーター、フィルター、NativeSynth が使う合成方式（減算・FM・物理モデリング・モーダル・加算）。 |
+| [シンセの音作りの基礎](./glossary/instruments/synthesis-basics.md) | オシレーター、フィルター、NativeSynth が使う音作り方式（減算・FM・物理モデリング・モーダル・加算）。 |
 | [エンベロープとモジュレーション](./glossary/instruments/envelopes-modulation.md) | ADSR エンベロープ、LFO、ベロシティ、キートラック、モッドマトリクス。 |
 | [MIDI の基礎](./glossary/instruments/midi-basics.md) | ノート、ベロシティ、チャンネル、CC、プログラムチェンジ、バンク、General MIDI、ピッチベンド、MIDI 2.0。 |
-| [SoundFont とサンプル音源](./glossary/instruments/soundfont.md) | サンプル音源と合成音源の違い、SF2 のバンクとプログラム、General MIDI フォールバック。 |
+| [SoundFont とサンプル音源](./glossary/instruments/soundfont.md) | サンプル音源と合成音源の違い、SF2 のバンクとプログラム、General MIDI の補完。 |
 
 ## アレンジとプロジェクト
 
@@ -89,8 +89,8 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [ストリーミング解析](./glossary/realtime/streaming-analysis.md) | ブロック、フレーム、ホップ、逐次推定、量子化された読み出し。 |
-| [リアルタイムエンジン](./glossary/realtime/realtime-engine.md) | トランスポート、クリップスケジューリング、メトロノーム、テレメトリ。 |
+| [ストリーミング解析](./glossary/realtime/streaming-analysis.md) | ブロック、フレーム、ホップ、更新されていく推定、フレームのまとめ読み。 |
+| [リアルタイムエンジン](./glossary/realtime/realtime-engine.md) | トランスポート、クリップスケジュール、メトロノーム、メーター情報。 |
 | [リアルタイム安全性](./glossary/realtime/realtime-safety.md) | 音声コールバックの締め切り、確保なし／ロックフリーの規則、AudioWorklet。 |
 
 ## 室内音響

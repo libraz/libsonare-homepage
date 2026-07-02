@@ -132,7 +132,7 @@ The browser demos are built for interactive use, but each one emphasizes a diffe
 | Demo | Main role |
 |------|-----------|
 | [Music Analysis Studio](/music-analysis) | Full-file MIR: BPM, key, chords, sections, and related analysis. |
-| Realtime views | Progressive BPM, key, and chord estimates through `StreamAnalyzer`. |
+| Realtime views | BPM, key, and chord estimates that update over time through `StreamAnalyzer`. |
 | [Mastering Studio](/mastering) | Measurement-style APIs such as loudness measurement, reference comparison, and report export. |
 
 Seeing those demos side by side shows which pieces are reusable across analysis work and finishing work.

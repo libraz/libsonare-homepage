@@ -7,9 +7,9 @@ description: Transport, clip scheduling, the metronome, automation playback, and
 
 Where `StreamAnalyzer` *listens*, the **`RealtimeEngine`** *plays*.
 
-It is the transport-and-playback side of libsonare's realtime surface. It handles tempo, clip scheduling, a metronome, automation, and metering telemetry.
+It is the transport-and-playback side of libsonare's realtime tools. It handles tempo, clip scheduling, a metronome, automation, lane mixing, capture, and meter/scope snapshots for the UI.
 
-Use it when you are building a playback engine rather than just a live analyzer. For the API, see [Realtime and Streaming](../../realtime-streaming.md).
+Use it when you are building a playback engine rather than just a live analyzer. If your app needs a playhead, clips, MIDI, or a mixer that runs while audio plays, this is the right layer. For the API, see [Realtime and Streaming](../../realtime-streaming.md).
 
 ## Transport: the playhead and tempo
 
@@ -17,9 +17,11 @@ Use it when you are building a playback engine rather than just a live analyzer.
 
 ## Clips and scheduling
 
-The engine plays **clips** — buffers of audio placed on the timeline at scheduled positions. Scheduling means deciding *when* a clip starts and stops relative to the transport, so playback can be assembled from many pieces rather than one continuous stream. This is how an arrangement, a backing track, or a rhythm-game chart is driven.
+The engine plays **clips** — buffers of audio placed on the timeline at scheduled positions. Scheduling means deciding *when* a clip starts and stops relative to the transport, so playback can be assembled from many pieces rather than one continuous stream. This is how an arrangement, a backing track, or a rhythm-game chart is played back.
 
 <SonareDemo id="engine-lane-mixer" />
+
+The demo shows the same idea at a small scale: several lanes play together, the mixer combines them, and meters reflect the live output.
 
 ## Metronome
 
@@ -30,7 +32,7 @@ A **metronome** generates click events locked to the transport's tempo and meter
 You cannot inspect a realtime audio callback with a debugger without breaking timing. Instead the engine emits **telemetry** — periodic snapshots of meters and state — that your UI reads on a normal (non-audio) thread. This keeps the audio path untouched while still letting you draw level meters, a goniometer, or transport state.
 
 ::: details How libsonare models the engine
-`RealtimeEngine` (driven by `EngineController`) owns the transport, schedules clips through `ClipPlayer`/`ClipSchedule` over `ClipAudioBuffer` storage, generates clicks with `Metronome` (`MetronomeConfig` → `MetronomeEvent`), and plays automation back on the mixer graph. Metering is surfaced through a `MeterTelemetryTap` producing `MeterTelemetryRecord`s and a general `Telemetry` channel (`TelemetryType`/`TelemetryErrorCode`) that a UI reads off the audio thread. The whole engine is real-time-safe and runs the same offline (bounce) and inside an AudioWorklet, including freeze and capture paths.
+`RealtimeEngine` works with `EngineController`: it owns the transport, schedules clips through `ClipPlayer`/`ClipSchedule` over `ClipAudioBuffer` storage, generates clicks with `Metronome` (`MetronomeConfig` → `MetronomeEvent`), and plays automation back on the mixer graph. Metering is reported through a `MeterTelemetryTap` producing `MeterTelemetryRecord`s and a general `Telemetry` channel (`TelemetryType`/`TelemetryErrorCode`) that a UI reads off the audio thread. The whole engine is real-time-safe and runs the same offline (bounce) and inside an AudioWorklet, including freeze and capture paths.
 :::
 
 Related: [Realtime and Streaming](../../realtime-streaming.md), [Streaming Analysis](./streaming-analysis.md), [Realtime Safety](./realtime-safety.md), [Automation and Metering](../mixing/automation-metering.md)

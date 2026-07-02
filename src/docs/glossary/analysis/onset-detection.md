@@ -27,14 +27,14 @@ Peaks in this envelope are the candidate onsets.
 
 The envelope matters because the *shape* of the curve, not just the peak list, is what tempo and beat algorithms analyze. A clean, peaky envelope gives confident tempo estimates; a smeared one does not.
 
-## Why this drives tempo and beats
+## Why this helps tempo and beats
 
 A steady groove makes the onset envelope **periodic** — peaks recur at roughly even spacing. Tempo estimation looks for that period; beat tracking then places a pulse train onto the peaks. Both read the same envelope, which is why improving onset detection improves tempo and beat accuracy together.
 
 <SonareDemo id="beat-tracking" />
 
 ::: details How libsonare computes onset strength
-libsonare derives the onset-strength envelope from STFT magnitudes by summing positive frame-to-frame spectral differences, optionally per mel band, then aggregating into a single curve. The envelope feeds the tempogram (for BPM) and the beat-tracking dynamic program, and it is also exposed for visualizers that want onset-driven motion. Because it is built on the shared STFT, requesting onsets alongside other features does not recompute the spectrogram.
+libsonare derives the onset-strength envelope from STFT magnitudes by summing positive frame-to-frame spectral differences, optionally per mel band, then aggregating into a single curve. The envelope is used by the tempogram (for BPM) and the beat-tracking dynamic program, and it is also exposed for visualizers that want motion reacting to onsets. Because it is built on the shared STFT, requesting onsets alongside other features does not recompute the spectrogram.
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Tempo and BPM](./tempo-bpm.md), [Beats and Downbeats](./beats-downbeats.md), [Spectrogram and STFT](./spectrogram-stft.md)

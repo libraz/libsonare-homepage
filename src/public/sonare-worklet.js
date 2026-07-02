@@ -1,58 +1,3 @@
-// src/codes.ts
-function automationCurveCode(curve) {
-  switch (curve) {
-    case "linear":
-      return 0;
-    case "exponential":
-      return 1;
-    case "hold":
-      return 2;
-    case "s-curve":
-      return 3;
-    default:
-      throw new Error(`Invalid automation curve: ${curve}`);
-  }
-}
-function panLawCode(panLaw) {
-  if (typeof panLaw === "number") {
-    return panLaw;
-  }
-  switch (panLaw) {
-    case "const4.5dB":
-      return 1;
-    case "const6dB":
-      return 2;
-    case "linear0dB":
-      return 3;
-    default:
-      return 0;
-  }
-}
-function panModeCode(panMode) {
-  if (typeof panMode === "number") {
-    return panMode;
-  }
-  switch (panMode) {
-    case "stereoPan":
-    case "stereo-pan":
-      return 1;
-    case "dualPan":
-    case "dual-pan":
-      return 2;
-    default:
-      return 0;
-  }
-}
-function meterTapCode(tap) {
-  return tap === "preFader" || tap === 0 ? 0 : 1;
-}
-function sendTimingCode(timing) {
-  if (typeof timing === "number") {
-    return timing;
-  }
-  return timing === "preFader" ? 1 : 0;
-}
-
 // src/errors.ts
 var SonareError = class extends Error {
   constructor(code, codeName, message) {
@@ -203,6 +148,61 @@ function getSonareModule() {
     throw new Error("Module not initialized. Call init() first.");
   }
   return wrappedModule;
+}
+
+// src/codes.ts
+function automationCurveCode(curve) {
+  switch (curve) {
+    case "linear":
+      return 0;
+    case "exponential":
+      return 1;
+    case "hold":
+      return 2;
+    case "s-curve":
+      return 3;
+    default:
+      throw new Error(`Invalid automation curve: ${curve}`);
+  }
+}
+function panLawCode(panLaw) {
+  if (typeof panLaw === "number") {
+    return panLaw;
+  }
+  switch (panLaw) {
+    case "const4.5dB":
+      return 1;
+    case "const6dB":
+      return 2;
+    case "linear0dB":
+      return 3;
+    default:
+      return 0;
+  }
+}
+function panModeCode(panMode) {
+  if (typeof panMode === "number") {
+    return panMode;
+  }
+  switch (panMode) {
+    case "stereoPan":
+    case "stereo-pan":
+      return 1;
+    case "dualPan":
+    case "dual-pan":
+      return 2;
+    default:
+      return 0;
+  }
+}
+function meterTapCode(tap) {
+  return tap === "preFader" || tap === 0 ? 0 : 1;
+}
+function sendTimingCode(timing) {
+  if (typeof timing === "number") {
+    return timing;
+  }
+  return timing === "preFader" ? 1 : 0;
 }
 
 // src/mixer.ts
@@ -830,6 +830,14 @@ var RealtimeEngine = class {
   setParameterSmoothed(paramId, value, renderFrame = -1) {
     this.native.setParameterSmoothed(paramId, value, renderFrame);
   }
+  /**
+   * Set the default ramp time (ms) for engine-level smoothed parameters —
+   * fader/pan glides, insert-parameter automation, and MIDI-CC mappings. The
+   * default is 20 ms; pass `0` for instant (un-ramped) changes.
+   */
+  setParamSmoothingMs(smoothingMs) {
+    this.native.setParamSmoothingMs(smoothingMs);
+  }
   setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
     this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
   }
@@ -914,6 +922,35 @@ var RealtimeEngine = class {
   }
   midiInputPendingCount() {
     return this.native.midiInputPendingCount();
+  }
+  /**
+   * Route a destination's (track lane's) MIDI to the external output queue
+   * instead of the internal instrument rack, so the track plays an external
+   * device. Clearing it restores internal-synth playback.
+   */
+  setMidiDestinationExternal(destinationId, external) {
+    this.native.setMidiDestinationExternal(destinationId, external);
+  }
+  /**
+   * Enable/disable forwarding MIDI clock + transport (start/continue/stop) to
+   * the external output queue so external gear tracks the transport tempo.
+   */
+  setExternalMidiClockEnabled(enabled) {
+    this.native.setExternalMidiClockEnabled(enabled);
+  }
+  /** Count of external-MIDI events dropped because the output queue was full. */
+  externalMidiDroppedCount() {
+    return this.native.externalMidiDroppedCount();
+  }
+  /**
+   * Drain queued external-MIDI events, already lowered to MIDI 1.0 byte
+   * messages ready to write to a Web MIDI output port. Call once per audio
+   * block / animation frame. `maxRecords` caps the number of output events
+   * returned — the shared unit across every surface. Events past the cap stay
+   * queued for the next call (lossless); call again to drain the rest.
+   */
+  drainExternalMidi(maxRecords = 1024) {
+    return this.native.drainExternalMidi(maxRecords);
   }
   pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
     this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
@@ -1157,6 +1194,26 @@ var RealtimeEngine = class {
   setMasterStripInsertParamByName(insertIndex, paramName, value) {
     this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
   }
+  /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
+  setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
+    this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /**
+   * Resolves a track-lane insert parameter (by its JSON-key name) to the
+   * reserved automation id usable with `setAutomationLane` / `setParameter`.
+   * Returns `-1` when the track, insert, or name is unknown. (The Python binding
+   * raises a `SonareError` for an unknown id where Node/WASM return the `-1`
+   * sentinel.)
+   */
+  resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
+    return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
+  }
+  resolveMasterInsertAutomationId(insertIndex, paramName) {
+    return this.native.resolveMasterInsertAutomationId(insertIndex, paramName);
+  }
+  resolveBusInsertAutomationId(busId, insertIndex, paramName) {
+    return this.native.resolveBusInsertAutomationId(busId, insertIndex, paramName);
+  }
   /** Sets a track lane strip's pan position in realtime (glitch-free). */
   setTrackStripPan(trackId, pan) {
     this.native.setTrackStripPan(trackId, pan);
@@ -1350,6 +1407,166 @@ function isInitialized() {
   return module !== null;
 }
 
+// src/worklet/engine-sync.ts
+function buildMixerLanes(trackLaneIds, trackSends, trackOutputBus) {
+  return trackLaneIds.map((trackId) => {
+    const sends = trackSends.get(trackId);
+    const outputBusId = trackOutputBus.get(trackId);
+    return {
+      trackId,
+      ...sends && sends.length > 0 ? { sends: sends.map((send) => ({ ...send })) } : {},
+      ...outputBusId !== void 0 ? { outputBusId } : {}
+    };
+  });
+}
+function buildTempoSync(tempoBpm, timeSignature, tempoSegments, timeSignatureSegments) {
+  return {
+    type: "syncTempo",
+    bpm: tempoBpm,
+    timeSignature: { ...timeSignature },
+    tempoSegments: tempoSegments.map((segment) => ({ ...segment })),
+    timeSignatureSegments: timeSignatureSegments.map((segment) => ({ ...segment }))
+  };
+}
+function resolveTargetId(target) {
+  if (typeof target === "number") {
+    return target;
+  }
+  const parsed = Number.parseInt(target, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function resolveParamId(parameters, nodeId, param) {
+  if (typeof param === "number") {
+    return param;
+  }
+  const byName = parameters.find((info) => info.name === param);
+  if (byName) {
+    return byName.id;
+  }
+  return resolveTargetId(param || nodeId);
+}
+function curveCode(curve) {
+  if (typeof curve === "number") {
+    return curve;
+  }
+  return curve === "exponential" ? 1 : 0;
+}
+
+// src/worklet/engine-automation.ts
+function scheduleParam(ctx, nodeId, param, ppq, value, curve = "linear") {
+  const paramId = ctx.resolveParamId(nodeId, param);
+  const lane = ctx.automationLanes.get(paramId) ?? [];
+  lane.push({ ppq, value, curveToNext: curveCode(curve) });
+  lane.sort((a, b) => a.ppq - b.ppq);
+  ctx.automationLanes.set(paramId, lane);
+  ctx.offlineEngine.setAutomationLane(paramId, lane);
+  ctx.postSync({ type: "syncAutomation", paramId, points: lane });
+}
+function addAutomationPoint(ctx, laneId, ppq, value, curve = "linear") {
+  scheduleParam(ctx, "", laneId, ppq, value, curve);
+}
+function setAutomationLane(ctx, paramId, points) {
+  const sorted = points.map((point) => ({ ...point })).sort((a, b) => a.ppq - b.ppq);
+  if (sorted.length === 0) {
+    ctx.automationLanes.delete(paramId);
+  } else {
+    ctx.automationLanes.set(paramId, sorted);
+  }
+  ctx.offlineEngine.setAutomationLane(paramId, sorted);
+  ctx.postSync({ type: "syncAutomation", paramId, points: sorted });
+}
+
+// src/worklet/engine-offline.ts
+function buildCaptureConfig(options, defaultChannels) {
+  return {
+    bufferFrames: Math.trunc(options.bufferFrames),
+    channels: Math.trunc(options.channels ?? defaultChannels),
+    source: options.source ?? "output",
+    recordOffsetSamples: Math.trunc(options.recordOffsetSamples ?? 0),
+    inputMonitor: {
+      enabled: Boolean(options.inputMonitor?.enabled),
+      gain: options.inputMonitor?.gain ?? 1
+    }
+  };
+}
+function buildTransportFacade(ctx) {
+  return {
+    play: (sampleTime = -1) => {
+      const ok = ctx.realtimeNode.play(sampleTime);
+      if (ok) {
+        ctx.setTransportPlaying(true);
+      }
+      return ok;
+    },
+    stop: (sampleTime = -1) => {
+      const ok = ctx.realtimeNode.stop(sampleTime);
+      if (ok) {
+        ctx.setTransportPlaying(false);
+        ctx.flushPendingInstrumentSync();
+      }
+      return ok;
+    },
+    seekPpq: (ppq, sampleTime = -1) => {
+      ctx.offlineEngine.seekPpq(ppq, sampleTime);
+      return ctx.realtimeNode.seekPpq(ppq, sampleTime);
+    },
+    seekSeconds: (seconds, sampleTime = -1) => {
+      const timelineSample = Math.max(0, Math.round(seconds * ctx.sampleRate));
+      ctx.offlineEngine.seekSample(timelineSample, sampleTime);
+      return ctx.realtimeNode.seekSample(timelineSample, sampleTime);
+    },
+    setTempo: (bpm) => ctx.setTempo(bpm),
+    setTempoSegments: (segments) => ctx.setTempoSegments(segments),
+    setLoop: (startPpq, endPpq, enabled = true) => ctx.setLoop(startPpq, endPpq, enabled)
+  };
+}
+function normalizeTrackLanes(existing, lanes) {
+  const entries = lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane);
+  const ids = [];
+  for (const entry of entries) {
+    if (!Number.isInteger(entry.trackId) || entry.trackId <= 0) {
+      throw new Error(`Invalid track id for mixer lane: ${String(entry.trackId)}`);
+    }
+    ids.push(entry.trackId);
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new Error("Duplicate track id in mixer lane list");
+  }
+  for (let index = 0; index < existing.length; index++) {
+    if (ids[index] !== existing[index]) {
+      throw new Error(
+        "Mixer lanes are append-only: keep existing lanes in order and only append new track ids"
+      );
+    }
+  }
+  return { entries, ids };
+}
+function resolveMarkerSet(markers, nextMarkerId) {
+  const resolved = [];
+  const seen = /* @__PURE__ */ new Set();
+  let counter = nextMarkerId;
+  for (const marker2 of markers) {
+    if (!Number.isFinite(marker2.ppq)) {
+      throw new Error(`Invalid marker ppq: ${String(marker2.ppq)}`);
+    }
+    if (marker2.id !== void 0) {
+      if (!Number.isInteger(marker2.id) || marker2.id <= 0) {
+        throw new Error(`Invalid marker id: ${String(marker2.id)}`);
+      }
+      if (seen.has(marker2.id)) {
+        throw new Error(`Duplicate marker id: ${marker2.id}`);
+      }
+    }
+    const id = marker2.id ?? counter++;
+    seen.add(id);
+    if (id >= counter) {
+      counter = id + 1;
+    }
+    resolved.push({ id, ppq: marker2.ppq, name: marker2.name ?? "" });
+  }
+  return { resolved, nextMarkerId: counter };
+}
+
 // src/worklet/protocol.ts
 var ENGINE_MIXER_TARGET_BASE = 1297612800;
 var ENGINE_MIXER_PARAM_FADER_DB = 1;
@@ -1424,6 +1641,9 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["AutomationBindTargetOverflow"] = 11] = "AutomationBindTargetOverflow";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["StaleAutomationLanes"] = 12] = "StaleAutomationLanes";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["SmoothedParameterCapacity"] = 13] = "SmoothedParameterCapacity";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["CommandBacklogDeferred"] = 14] = "CommandBacklogDeferred";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["ClipPageUnderrun"] = 15] = "ClipPageUnderrun";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["InsertAutomationOverflow"] = 16] = "InsertAutomationOverflow";
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
 function toDb(value) {
@@ -1843,6 +2063,245 @@ function magnitudeToDb(value) {
   return value > 1e-12 ? 20 * Math.log10(value) : -120;
 }
 
+// src/worklet/engine-capture-facade.ts
+function configureCapture(ctx, options) {
+  const config = buildCaptureConfig(options, ctx.offlineChannelCount);
+  ctx.offlineEngine.setCaptureBuffer(config.channels, config.bufferFrames);
+  ctx.offlineEngine.setCaptureSource(config.source);
+  ctx.offlineEngine.setRecordOffsetSamples(config.recordOffsetSamples);
+  ctx.offlineEngine.setInputMonitor(config.inputMonitor.enabled, config.inputMonitor.gain);
+  ctx.setCaptureConfig(config);
+  ctx.postSync({ type: "syncCapture", ...config });
+}
+function armRecord(ctx, trackId, enabled) {
+  if (enabled && !ctx.getCaptureConfig()) {
+    throw new Error("Capture buffer is not configured");
+  }
+  ctx.offlineEngine.armCapture(enabled);
+  return ctx.realtimeNode.sendCommand({
+    type: 13 /* ArmRecord */,
+    targetId: ctx.resolveTargetId(trackId),
+    sampleTime: -1,
+    argInt: enabled ? 1 : 0
+  });
+}
+function punch(ctx, inPpq, outPpq) {
+  const inSample = ctx.offlineEngine.sampleAtPpq(inPpq);
+  const outSample = ctx.offlineEngine.sampleAtPpq(outPpq);
+  ctx.offlineEngine.setCapturePunch(inSample, outSample, true);
+  return ctx.realtimeNode.sendCommand({
+    type: 14 /* Punch */,
+    sampleTime: -1,
+    argInt: inSample,
+    argFloat: outSample
+  });
+}
+function captureStatus(ctx) {
+  return ctx.realtimeNode.requestCaptureStatus();
+}
+function capturedAudio(ctx) {
+  return ctx.realtimeNode.requestCapturedAudio();
+}
+async function resetCapture(ctx) {
+  ctx.offlineEngine.resetCapture();
+  await ctx.realtimeNode.requestCaptureReset();
+}
+
+// src/worklet/engine-clips.ts
+function addClip(ctx, trackId, buffer, startPpq, opts = {}) {
+  const id = opts.id ?? ctx.allocateClipId();
+  const clip = {
+    ...opts,
+    id,
+    channels: buffer,
+    startPpq,
+    trackId: ctx.resolveTargetId(trackId)
+  };
+  ctx.ensureTrackLane(trackId);
+  ctx.clips.set(id, clip);
+  syncClipsDelta(ctx, [clip], []);
+  return id;
+}
+function removeClip(ctx, clipId) {
+  ctx.clips.delete(clipId);
+  syncClipsDelta(ctx, [], [clipId]);
+}
+function setMidiClips(ctx, clips) {
+  ctx.midiClips.clear();
+  for (const clip of clips) {
+    const id = clip.id ?? ctx.allocateClipId();
+    ctx.midiClips.set(id, { ...clip, id, events: clip.events.map((event) => ({ ...event })) });
+  }
+  syncMidiClips(ctx);
+}
+function syncClipsDelta(ctx, upserts, removeIds) {
+  const clips = Array.from(ctx.clips.values());
+  ctx.offlineEngine.setClips(clips);
+  ctx.postSync({
+    type: "syncClipsDelta",
+    upserts,
+    removeIds
+  });
+}
+function syncMidiClips(ctx) {
+  const clips = Array.from(ctx.midiClips.values());
+  ctx.offlineEngine.setMidiClips(clips);
+  ctx.postSync({ type: "syncMidiClips", clips });
+}
+
+// src/worklet/engine-markers.ts
+function addMarker(ctx, ppq, name = "") {
+  const id = ctx.getNextMarkerId();
+  ctx.setNextMarkerId(id + 1);
+  ctx.markers.set(id, { id, ppq, name });
+  syncMarkers(ctx);
+  return id;
+}
+function setMarkers(ctx, markers) {
+  const { resolved, nextMarkerId } = resolveMarkerSet(markers, ctx.getNextMarkerId());
+  ctx.setNextMarkerId(nextMarkerId);
+  ctx.markers.clear();
+  for (const marker2 of resolved) {
+    ctx.markers.set(marker2.id, marker2);
+  }
+  syncMarkers(ctx);
+  return resolved.map((marker2) => ({ ...marker2 }));
+}
+function markerCount(ctx) {
+  return ctx.offlineEngine.markerCount();
+}
+function markerByIndex(ctx, index) {
+  return ctx.offlineEngine.markerByIndex(index);
+}
+function marker(ctx, markerId) {
+  return ctx.offlineEngine.marker(markerId);
+}
+function seekMarker(ctx, markerId) {
+  ctx.offlineEngine.seekMarker(markerId);
+  return ctx.sendCommand({
+    type: 17 /* SeekMarker */,
+    targetId: markerId,
+    sampleTime: -1
+  });
+}
+function setLoopFromMarkers(ctx, startMarkerId, endMarkerId) {
+  ctx.offlineEngine.setLoopFromMarkers(startMarkerId, endMarkerId);
+  const start = ctx.offlineEngine.marker(startMarkerId);
+  const end = ctx.offlineEngine.marker(endMarkerId);
+  return ctx.setLoop(start.ppq, end.ppq, true);
+}
+function syncMarkers(ctx) {
+  const markers = Array.from(ctx.markers.values()).sort((a, b) => a.ppq - b.ppq);
+  ctx.offlineEngine.setMarkers(markers);
+  ctx.postSync({ type: "syncMarkers", markers });
+}
+
+// src/worklet/engine-mixer-facade.ts
+function mixerLanes(ctx) {
+  return buildMixerLanes(ctx.trackLaneIds, ctx.trackSends, ctx.trackOutputBus);
+}
+function syncMixer(ctx) {
+  const lanes = mixerLanes(ctx);
+  const buses = ctx.buses.map((bus) => ({ ...bus }));
+  ctx.offlineEngine.setTrackBuses(buses);
+  if (lanes.length > 0) {
+    ctx.offlineEngine.setTrackLanes(lanes);
+  }
+  const trackStrips = Array.from(ctx.trackStripJson, ([trackId, sceneJson]) => ({
+    trackId,
+    sceneJson
+  }));
+  const busStrips = Array.from(ctx.busStripJson, ([busId, sceneJson]) => ({
+    busId,
+    sceneJson
+  }));
+  ctx.postSync({
+    type: "syncMixer",
+    lanes,
+    buses,
+    trackStrips,
+    laneSidechains: Array.from(ctx.laneSidechains.values()),
+    busStrips,
+    masterStripJson: ctx.getMasterStripJson()
+  });
+}
+function setTrackLanes(ctx, lanes) {
+  const { entries, ids } = normalizeTrackLanes(ctx.trackLaneIds, lanes);
+  for (const entry of entries) {
+    if (entry.sends) {
+      ctx.trackSends.set(
+        entry.trackId,
+        entry.sends.map((send) => ({ ...send }))
+      );
+    }
+    if (entry.outputBusId !== void 0) {
+      if (entry.outputBusId === 0) {
+        ctx.trackOutputBus.delete(entry.trackId);
+      } else {
+        ctx.trackOutputBus.set(entry.trackId, entry.outputBusId);
+      }
+    }
+  }
+  ctx.trackLaneIds.splice(0, ctx.trackLaneIds.length, ...ids);
+  ctx.syncMixer();
+}
+function setTrackOutputBus(ctx, target, busId) {
+  const laneIndex = ctx.ensureTrackLane(target);
+  const trackId = ctx.trackLaneIds[laneIndex];
+  if (busId === 0) {
+    ctx.trackOutputBus.delete(trackId);
+  } else {
+    ctx.trackOutputBus.set(trackId, busId);
+  }
+  ctx.syncMixer();
+}
+function setLaneSidechain(ctx, target, insertIndex, sourceTarget) {
+  const laneIndex = ctx.ensureTrackLane(target);
+  const trackId = ctx.trackLaneIds[laneIndex];
+  const key = `${trackId}:${insertIndex}`;
+  let sourceTrackId = 0;
+  if (sourceTarget !== null) {
+    const sourceIndex = ctx.ensureTrackLane(sourceTarget);
+    sourceTrackId = ctx.trackLaneIds[sourceIndex];
+  }
+  if (sourceTrackId === 0) {
+    ctx.laneSidechains.delete(key);
+  } else {
+    ctx.laneSidechains.set(key, { trackId, insertIndex, sourceTrackId });
+  }
+  ctx.offlineEngine.setLaneSidechain(trackId, insertIndex, sourceTrackId);
+  ctx.postSync({
+    type: "syncMixer",
+    lanes: ctx.mixerLanes(),
+    laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
+  });
+}
+function setSends(ctx, target, sends) {
+  const laneIndex = ctx.ensureTrackLane(target);
+  const trackId = ctx.trackLaneIds[laneIndex];
+  ctx.trackSends.set(
+    trackId,
+    sends.map((send) => ({ ...send }))
+  );
+  ctx.syncMixer();
+}
+function setTrackBuses(ctx, buses) {
+  ctx.buses.splice(0, ctx.buses.length, ...buses.map((bus) => ({ ...bus })));
+  ctx.syncMixer();
+}
+function setBusGain(ctx, busId, db) {
+  const busIndex = ctx.ensureBus(busId);
+  ctx.buses[busIndex] = { ...ctx.buses[busIndex], busId, gainDb: db };
+  ctx.offlineEngine.setTrackBuses(ctx.buses);
+  return ctx.sendSmoothedParam(engineMixerBusTarget(busIndex, ENGINE_MIXER_PARAM_FADER_DB), db);
+}
+function setBusStripJson(ctx, busId, sceneJson) {
+  ctx.ensureBus(busId);
+  ctx.offlineEngine.setBusStripJson(busId, sceneJson);
+  ctx.busStripJson.set(busId, sceneJson);
+  ctx.syncMixer();
+}
+
 // src/worklet/guards.ts
 function isWorkletMessage(value) {
   if (!isRecord(value) || typeof value.type !== "string") {
@@ -1857,7 +2316,7 @@ function isEngineSyncMessage(value) {
   if (!isRecord(value) || typeof value.type !== "string") {
     return false;
   }
-  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiPanic";
+  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncBusStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiFx" || value.type === "syncClearMidiFx" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiPanic" || value.type === "syncMidiDestinationExternal" || value.type === "syncExternalMidiClock";
 }
 function isEngineCaptureRequestMessage(value) {
   return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
@@ -1880,9 +2339,1336 @@ function isRealtimeVoiceChangerMessage(value) {
 function isEngineTelemetryRecord(value) {
   return isRecord(value) && typeof value.type === "number" && typeof value.error === "number" && typeof value.renderFrame === "number" && typeof value.timelineSample === "number" && typeof value.audibleTimelineSample === "number" && typeof value.graphLatencySamplesQ8 === "number" && typeof value.value === "number";
 }
+function isExternalMidiBatchMessage(value) {
+  return isRecord(value) && value.type === "externalMidi" && Array.isArray(value.events);
+}
 function isMeterSnapshot(value) {
   return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && (typeof value.targetId === "number" || value.targetId === void 0);
 }
+
+// src/worklet/engine-node.ts
+var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
+  constructor(node, capabilities, commandRing, telemetryRing, meterRing, scopeRing) {
+    this.telemetryReadIndex = 0;
+    this.meterReadIndex = 0;
+    this.scopeReadIndex = 0;
+    this.telemetryListeners = /* @__PURE__ */ new Set();
+    this.meterListeners = /* @__PURE__ */ new Set();
+    this.scopeListeners = /* @__PURE__ */ new Set();
+    this.midiOutListeners = /* @__PURE__ */ new Set();
+    this.captureRequestId = 1;
+    this.captureRequests = /* @__PURE__ */ new Map();
+    this.transportRequestId = 1;
+    this.transportRequests = /* @__PURE__ */ new Map();
+    this.destroyed = false;
+    this.node = node;
+    this.capabilities = capabilities;
+    this.commandRing = commandRing;
+    this.telemetryRing = telemetryRing;
+    this.meterRing = meterRing;
+    this.scopeRing = scopeRing;
+    this.ready = new Promise((resolve, reject) => {
+      this.resolveReady = resolve;
+      this.rejectReady = reject;
+    });
+    if (!capabilities.readyMessage) {
+      this.resolveReady();
+    }
+    this.node.port.onmessage = (event) => {
+      if (isEngineCaptureResponseMessage(event.data)) {
+        const pending = this.captureRequests.get(event.data.requestId);
+        if (pending) {
+          this.captureRequests.delete(event.data.requestId);
+          if (event.data.ok) {
+            pending.resolve(event.data);
+          } else {
+            pending.reject(new Error(event.data.error ?? "Capture request failed"));
+          }
+        }
+      } else if (isEngineTransportResponseMessage(event.data)) {
+        const pending = this.transportRequests.get(event.data.requestId);
+        if (pending) {
+          this.transportRequests.delete(event.data.requestId);
+          if (event.data.ok) {
+            pending.resolve(event.data);
+          } else {
+            pending.reject(new Error(event.data.error ?? "Transport request failed"));
+          }
+        }
+      } else if (isEngineTelemetryRecord(event.data)) {
+        this.emitTelemetry(event.data);
+      } else if (isMeterSnapshot(event.data)) {
+        this.emitMeter(event.data);
+      } else if (isExternalMidiBatchMessage(event.data)) {
+        this.emitMidiOut(event.data.events);
+      } else if (isRecord(event.data) && event.data.type === "ready") {
+        this.resolveReady();
+      } else if (isRecord(event.data) && event.data.type === "error") {
+        this.rejectReady(new Error(String(event.data.message ?? "AudioWorklet error")));
+      }
+    };
+  }
+  static async create(context, options = {}) {
+    const processorName = options.processorName ?? "sonare-realtime-engine-processor";
+    const moduleUrl = options.moduleUrl;
+    if (moduleUrl && context.audioWorklet?.addModule) {
+      await context.audioWorklet.addModule(moduleUrl);
+    }
+    const detectedCapabilities = options.engineAbiVersion !== void 0 ? {
+      engineAbiVersion: options.engineAbiVersion,
+      expectedEngineAbiVersion: options.expectedEngineAbiVersion ?? options.engineAbiVersion,
+      abiCompatible: options.engineAbiVersion === (options.expectedEngineAbiVersion ?? options.engineAbiVersion)
+    } : engineCapabilities();
+    if (options.requireAbiCompatible !== false && detectedCapabilities?.abiCompatible === false) {
+      throw new Error(
+        `Engine ABI mismatch: wasm=${detectedCapabilities.engineAbiVersion}, expected=${detectedCapabilities.expectedEngineAbiVersion}`
+      );
+    }
+    const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
+    const atomics = typeof globalThis.Atomics === "object";
+    const audioWorklet = typeof AudioWorkletNode !== "undefined" || !!options.nodeFactory;
+    const degradedReason = options.mode !== "postMessage" && (!sharedArrayBuffer || !atomics) ? "SharedArrayBuffer or Atomics unavailable; using postMessage transport." : void 0;
+    const mode = options.mode === "postMessage" || !sharedArrayBuffer || !atomics ? "postMessage" : "sab";
+    if (options.mode === "sab" && mode !== "sab") {
+      throw new Error(
+        "SharedArrayBuffer mode requested but SharedArrayBuffer/Atomics are unavailable."
+      );
+    }
+    const commandRing = mode === "sab" ? createSonareEngineCommandRingBuffer(options.commandRingCapacity ?? 128) : void 0;
+    const telemetryRing = mode === "sab" ? createSonareEngineTelemetryRingBuffer(options.telemetryRingCapacity ?? 128) : void 0;
+    const meterRing = mode === "sab" ? createSonareMeterRingBuffer(options.meterRingCapacity ?? 128) : void 0;
+    const scopeIntervalFrames = Math.max(0, Math.floor(options.scopeIntervalFrames ?? 0));
+    const scopeRing = mode === "sab" && scopeIntervalFrames > 0 ? createSonareScopeRingBuffer(options.scopeRingCapacity ?? 64, options.scopeBands ?? 48) : void 0;
+    const channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
+    const processorOptions = {
+      sampleRate: options.sampleRate ?? context.sampleRate,
+      blockSize: options.blockSize,
+      channelCount,
+      commandSharedBuffer: commandRing?.sharedBuffer,
+      commandRingCapacity: commandRing?.capacity,
+      telemetrySharedBuffer: telemetryRing?.sharedBuffer,
+      telemetryRingCapacity: telemetryRing?.capacity,
+      meterSharedBuffer: meterRing?.sharedBuffer,
+      meterRingCapacity: meterRing?.capacity,
+      scopeSharedBuffer: scopeRing?.sharedBuffer,
+      scopeRingCapacity: scopeRing?.capacity,
+      scopeBands: scopeRing?.bands,
+      scopeIntervalFrames: scopeRing ? scopeIntervalFrames : void 0,
+      wasmBinary: options.wasmBinary,
+      initialSyncMessages: options.initialSyncMessages,
+      initialCommands: options.initialCommands
+    };
+    const factory = options.nodeFactory ?? ((ctx, name, nodeOptions) => new AudioWorkletNode(ctx, name, nodeOptions));
+    const node = factory(context, processorName, {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [channelCount],
+      processorOptions
+    });
+    return new _SonareRealtimeEngineNode(
+      node,
+      {
+        mode,
+        runtimeTarget: "embind",
+        sharedArrayBuffer,
+        atomics,
+        audioWorklet,
+        engineAbiVersion: detectedCapabilities?.engineAbiVersion,
+        expectedEngineAbiVersion: detectedCapabilities?.expectedEngineAbiVersion,
+        abiCompatible: detectedCapabilities?.abiCompatible,
+        degradedReason,
+        readyMessage: moduleUrl !== void 0 && !options.nodeFactory
+      },
+      commandRing,
+      telemetryRing,
+      meterRing,
+      scopeRing
+    );
+  }
+  play(sampleTime = -1) {
+    return this.sendCommand({ type: 2 /* TransportPlay */, sampleTime });
+  }
+  stop(sampleTime = -1) {
+    return this.sendCommand({ type: 3 /* TransportStop */, sampleTime });
+  }
+  seekSample(timelineSample, sampleTime = -1) {
+    return this.sendCommand({
+      type: 4 /* TransportSeekSample */,
+      sampleTime,
+      argInt: timelineSample
+    });
+  }
+  seekPpq(ppq, sampleTime = -1) {
+    return this.sendCommand({
+      type: 5 /* TransportSeekPpq */,
+      sampleTime,
+      argFloat: ppq
+    });
+  }
+  sendCommand(command) {
+    if (this.destroyed) {
+      return false;
+    }
+    if (this.commandRing) {
+      return pushSonareEngineCommandRingBuffer(this.commandRing, command);
+    }
+    this.node.port.postMessage(command);
+    return true;
+  }
+  requestCaptureStatus() {
+    return this.sendCaptureRequest("status").then((response) => {
+      if (!response.status) {
+        throw new Error("Capture status response is missing status.");
+      }
+      return response.status;
+    });
+  }
+  requestCapturedAudio() {
+    return this.sendCaptureRequest("read").then(
+      (response) => (response.channels ?? []).map(
+        (channel) => channel instanceof Float32Array ? channel : new Float32Array(channel)
+      )
+    );
+  }
+  requestCaptureReset() {
+    return this.sendCaptureRequest("reset").then(() => void 0);
+  }
+  requestTransportState() {
+    return this.sendTransportRequest().then((response) => {
+      if (!response.state) {
+        throw new Error("Transport state response is missing state.");
+      }
+      return response.state;
+    });
+  }
+  pollTelemetry() {
+    if (!this.telemetryRing) {
+      return [];
+    }
+    const read = readSonareEngineTelemetryRingBuffer(this.telemetryRing, this.telemetryReadIndex);
+    this.telemetryReadIndex = read.nextReadIndex;
+    for (const telemetry of read.telemetry) {
+      this.emitTelemetry(telemetry);
+    }
+    return read.telemetry;
+  }
+  // Drains any meters published into the SAB meter ring (embind SAB mode) and
+  // forwards them to onMeter listeners. In postMessage mode meters arrive via
+  // node.port.onmessage instead, so this is a no-op then.
+  pollMeters() {
+    if (!this.meterRing) {
+      return [];
+    }
+    const read = readSonareMeterRingBuffer(this.meterRing, this.meterReadIndex);
+    this.meterReadIndex = read.nextReadIndex;
+    for (const meter of read.meters) {
+      this.emitMeter(meter);
+    }
+    return read.meters;
+  }
+  // Drains scope telemetry (FFT spectrum + goniometer points) published into the
+  // SAB scope ring and forwards each record to onScope listeners. A no-op unless
+  // the node was created with scopeIntervalFrames > 0 (embind SAB mode).
+  pollScope() {
+    if (!this.scopeRing) {
+      return [];
+    }
+    const read = readSonareScopeRingBuffer(this.scopeRing, this.scopeReadIndex);
+    this.scopeReadIndex = read.nextReadIndex;
+    for (const scope of read.scopes) {
+      this.emitScope(scope);
+    }
+    return read.scopes;
+  }
+  onTelemetry(callback) {
+    this.telemetryListeners.add(callback);
+    return () => {
+      this.telemetryListeners.delete(callback);
+    };
+  }
+  onMeter(callback) {
+    this.meterListeners.add(callback);
+    return () => {
+      this.meterListeners.delete(callback);
+    };
+  }
+  onScope(callback) {
+    this.scopeListeners.add(callback);
+    return () => {
+      this.scopeListeners.delete(callback);
+    };
+  }
+  /**
+   * Subscribe to external-MIDI batches drained from the engine (one call per
+   * render block that produced events), already lowered to MIDI 1.0 bytes for a
+   * Web MIDI output port. Returns an unsubscribe function.
+   */
+  onMidiOut(callback) {
+    this.midiOutListeners.add(callback);
+    return () => {
+      this.midiOutListeners.delete(callback);
+    };
+  }
+  destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
+    this.node.port.postMessage({ type: 3 /* TransportStop */, sampleTime: -1 });
+    this.node.disconnect();
+    for (const pending of this.captureRequests.values()) {
+      pending.reject(new Error("Realtime engine node is destroyed."));
+    }
+    this.captureRequests.clear();
+    for (const pending of this.transportRequests.values()) {
+      pending.reject(new Error("Realtime engine node is destroyed."));
+    }
+    this.transportRequests.clear();
+    this.telemetryListeners.clear();
+    this.meterListeners.clear();
+    this.scopeListeners.clear();
+    this.midiOutListeners.clear();
+  }
+  emitTelemetry(telemetry) {
+    for (const listener of this.telemetryListeners) {
+      listener(telemetry);
+    }
+  }
+  emitMeter(meter) {
+    for (const listener of this.meterListeners) {
+      listener(meter);
+    }
+  }
+  emitMidiOut(events) {
+    for (const listener of this.midiOutListeners) {
+      listener(events);
+    }
+  }
+  emitScope(scope) {
+    for (const listener of this.scopeListeners) {
+      listener(scope);
+    }
+  }
+  sendCaptureRequest(op) {
+    if (this.destroyed) {
+      return Promise.reject(new Error("Realtime engine node is destroyed."));
+    }
+    const requestId = this.captureRequestId++;
+    const promise = new Promise((resolve, reject) => {
+      this.captureRequests.set(requestId, { resolve, reject });
+    });
+    this.node.port.postMessage({ type: "captureRequest", requestId, op });
+    return promise;
+  }
+  sendTransportRequest() {
+    if (this.destroyed) {
+      return Promise.reject(new Error("Realtime engine node is destroyed."));
+    }
+    const requestId = this.transportRequestId++;
+    const promise = new Promise((resolve, reject) => {
+      this.transportRequests.set(requestId, { resolve, reject });
+    });
+    this.node.port.postMessage({ type: "transportRequest", requestId, op: "state" });
+    return promise;
+  }
+};
+
+// src/worklet/engine-parameter-facade.ts
+function setParam(ctx, nodeId, param, value) {
+  const paramId = ctx.resolveParamId(nodeId, param);
+  ctx.offlineEngine.setParameter(paramId, value);
+  return ctx.realtimeNode.sendCommand({
+    type: 0 /* SetParam */,
+    targetId: paramId,
+    sampleTime: -1,
+    argFloat: value
+  });
+}
+function setSoloMute(ctx, target, solo, mute) {
+  const laneIndex = ctx.ensureTrackLane(target);
+  ctx.offlineEngine.setSoloMute(laneIndex, solo, mute);
+  return ctx.realtimeNode.sendCommand({
+    type: 10 /* SetSoloMute */,
+    targetId: laneIndex,
+    sampleTime: -1,
+    argInt: (mute ? 1 : 0) | (solo ? 2 : 0)
+  });
+}
+function automationParamId(ctx, target, kind) {
+  const paramKind = kind === "pan" ? ENGINE_MIXER_PARAM_PAN : ENGINE_MIXER_PARAM_FADER_DB;
+  if (target === "master") {
+    return engineMixerMasterTarget(paramKind);
+  }
+  return engineMixerLaneTarget(ctx.ensureTrackLane(target), paramKind);
+}
+function busAutomationParamId(ctx, busId) {
+  return engineMixerBusTarget(ctx.ensureBus(busId), ENGINE_MIXER_PARAM_FADER_DB);
+}
+function resolveTrackInsertAutomationId(ctx, target, insertIndex, paramName) {
+  const laneIndex = ctx.ensureTrackLane(target);
+  return ctx.offlineEngine.resolveTrackInsertAutomationId(
+    ctx.trackLaneIds[laneIndex],
+    insertIndex,
+    paramName
+  );
+}
+function resolveMasterInsertAutomationId(ctx, insertIndex, paramName) {
+  return ctx.offlineEngine.resolveMasterInsertAutomationId(insertIndex, paramName);
+}
+function resolveBusInsertAutomationId(ctx, busId, insertIndex, paramName) {
+  ctx.ensureBus(busId);
+  return ctx.offlineEngine.resolveBusInsertAutomationId(busId, insertIndex, paramName);
+}
+function automationLaneCount(ctx) {
+  return ctx.offlineEngine.automationLaneCount();
+}
+function listParameters(ctx) {
+  const parameters = [];
+  for (let index = 0; index < ctx.offlineEngine.parameterCount(); index++) {
+    parameters.push(ctx.offlineEngine.parameterInfoByIndex(index));
+  }
+  return parameters;
+}
+
+// src/worklet/engine-strips.ts
+function trackIdFor(ctx, target) {
+  return ctx.trackLaneIds[ctx.ensureTrackLane(target)];
+}
+function setTrackStripJson(ctx, trackId, sceneJson, trackStripJson) {
+  ctx.offlineEngine.setTrackStripJson(trackId, sceneJson);
+  trackStripJson.set(trackId, sceneJson);
+}
+function setTrackStripEqBand(ctx, target, bandIndex, band) {
+  const trackId = trackIdFor(ctx, target);
+  const bandJson = typeof band === "string" ? band : JSON.stringify(band);
+  ctx.offlineEngine.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
+  ctx.postSync({ type: "syncTrackStripEqBand", trackId, bandIndex, bandJson });
+}
+function setTrackStripInsertBypassed(ctx, target, insertIndex, bypassed, resetOnBypass) {
+  const trackId = trackIdFor(ctx, target);
+  ctx.offlineEngine.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
+  ctx.postSync({
+    type: "syncTrackStripInsertBypassed",
+    trackId,
+    insertIndex,
+    bypassed,
+    resetOnBypass
+  });
+}
+function setTrackStripInsertParamByName(ctx, target, insertIndex, paramName, value) {
+  const trackId = trackIdFor(ctx, target);
+  ctx.offlineEngine.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+  ctx.postSync({ type: "syncTrackStripInsertParamByName", trackId, insertIndex, paramName, value });
+}
+function setTrackStripPan(ctx, target, pan) {
+  const trackId = trackIdFor(ctx, target);
+  ctx.offlineEngine.setTrackStripPan(trackId, pan);
+  ctx.postSync({ type: "syncTrackStripPan", trackId, pan });
+}
+function setTrackStripPanLaw(ctx, target, panLaw) {
+  const trackId = trackIdFor(ctx, target);
+  const code = panLawCode(panLaw);
+  ctx.offlineEngine.setTrackStripPanLaw(trackId, code);
+  ctx.postSync({ type: "syncTrackStripPanLaw", trackId, panLaw: code });
+}
+function setTrackStripPanMode(ctx, target, panMode) {
+  const trackId = trackIdFor(ctx, target);
+  const code = panModeCode(panMode);
+  ctx.offlineEngine.setTrackStripPanMode(trackId, code);
+  ctx.postSync({ type: "syncTrackStripPanMode", trackId, panMode: code });
+}
+function setTrackStripDualPan(ctx, target, leftPan, rightPan) {
+  const trackId = trackIdFor(ctx, target);
+  ctx.offlineEngine.setTrackStripDualPan(trackId, leftPan, rightPan);
+  ctx.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
+}
+function setTrackStripChannelDelaySamples(ctx, target, delaySamples) {
+  const trackId = trackIdFor(ctx, target);
+  ctx.offlineEngine.setTrackStripChannelDelaySamples(trackId, delaySamples);
+  ctx.postSync({ type: "syncTrackStripChannelDelaySamples", trackId, delaySamples });
+}
+function setMasterStripEqBand(ctx, bandIndex, band) {
+  const bandJson = typeof band === "string" ? band : JSON.stringify(band);
+  ctx.offlineEngine.setMasterStripEqBandJson(bandIndex, bandJson);
+  ctx.postSync({ type: "syncMasterStripEqBand", bandIndex, bandJson });
+}
+function setMasterStripInsertBypassed(ctx, insertIndex, bypassed, resetOnBypass) {
+  ctx.offlineEngine.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
+  ctx.postSync({ type: "syncMasterStripInsertBypassed", insertIndex, bypassed, resetOnBypass });
+}
+function setMasterStripInsertParamByName(ctx, insertIndex, paramName, value) {
+  ctx.offlineEngine.setMasterStripInsertParamByName(insertIndex, paramName, value);
+  ctx.postSync({ type: "syncMasterStripInsertParamByName", insertIndex, paramName, value });
+}
+function setBusStripInsertParamByName(ctx, busId, insertIndex, paramName, value) {
+  ctx.offlineEngine.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  ctx.postSync({ type: "syncBusStripInsertParamByName", busId, insertIndex, paramName, value });
+}
+function pushMidiNoteOn(ctx, trackId, group, channel, note, velocity, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
+  ctx.postSync({
+    type: "syncMidiNoteOn",
+    destinationId,
+    group,
+    channel,
+    note,
+    velocity,
+    renderFrame
+  });
+}
+function pushMidiNoteOff(ctx, trackId, group, channel, note, velocity, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
+  ctx.postSync({
+    type: "syncMidiNoteOff",
+    destinationId,
+    group,
+    channel,
+    note,
+    velocity,
+    renderFrame
+  });
+}
+function pushMidiCc(ctx, trackId, group, channel, controller, value, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  ctx.postSync({
+    type: "syncMidiCc",
+    destinationId,
+    group,
+    channel,
+    controller,
+    value,
+    renderFrame
+  });
+}
+function setBuiltinInstrument(ctx, trackId, config) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.setBuiltinInstrument(config, destinationId);
+  ctx.postInstrumentSync({ type: "syncBuiltinInstrument", destinationId, config });
+}
+function setSynthInstrument(ctx, trackId, patch) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.setSynthInstrument(patch, destinationId);
+  ctx.postInstrumentSync({ type: "syncSynthInstrument", destinationId, patch });
+}
+function loadSoundFont(ctx, data) {
+  ctx.offlineEngine.loadSoundFont(data);
+  ctx.postInstrumentSync({ type: "syncLoadSoundFont", data });
+}
+function setSf2Instrument(ctx, trackId, config) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.setSf2Instrument(config, destinationId);
+  ctx.postInstrumentSync({ type: "syncSf2Instrument", destinationId, config });
+}
+function setMidiDestinationExternal(ctx, trackId, external) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.setMidiDestinationExternal(destinationId, external);
+  ctx.postSync({ type: "syncMidiDestinationExternal", destinationId, external });
+}
+function setExternalMidiClockEnabled(ctx, enabled) {
+  ctx.offlineEngine.setExternalMidiClockEnabled(enabled);
+  ctx.postSync({ type: "syncExternalMidiClock", enabled });
+}
+function setMidiFx(ctx, trackId, configJson) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.setMidiFx(destinationId, configJson);
+  ctx.postInstrumentSync({ type: "syncMidiFx", destinationId, configJson });
+}
+function clearMidiFx(ctx, trackId) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.clearMidiFx(destinationId);
+  ctx.postInstrumentSync({ type: "syncClearMidiFx", destinationId });
+}
+
+// src/worklet/engine-tempo-facade.ts
+function postTempoSync(ctx) {
+  ctx.postSync(
+    buildTempoSync(
+      ctx.getTempoBpm(),
+      ctx.getTimeSignature(),
+      ctx.getTempoSegments(),
+      ctx.getTimeSignatureSegments()
+    )
+  );
+}
+function setTempo(ctx, bpm) {
+  ctx.setTempoBpm(bpm);
+  ctx.setTempoSegments([{ startPpq: 0, bpm }]);
+  ctx.offlineEngine.setTempo(bpm);
+  postTempoSync(ctx);
+  ctx.realtimeNode.sendCommand({
+    type: 6 /* SetTempoMap */,
+    sampleTime: -1,
+    argFloat: bpm
+  });
+}
+function setTempoSegments(ctx, segments) {
+  const copied = segments.map((segment) => ({ ...segment }));
+  ctx.setTempoSegments(copied);
+  ctx.setTempoBpm(copied[0]?.bpm ?? ctx.getTempoBpm());
+  ctx.offlineEngine.setTempoSegments(copied);
+  postTempoSync(ctx);
+}
+function setTimeSignature(ctx, numerator, denominator) {
+  ctx.setTimeSignature({ numerator, denominator });
+  ctx.setTimeSignatureSegments([{ startPpq: 0, numerator, denominator }]);
+  ctx.offlineEngine.setTimeSignature(numerator, denominator);
+  postTempoSync(ctx);
+}
+function setTimeSignatureSegments(ctx, segments) {
+  const copied = segments.map((segment) => ({ ...segment }));
+  ctx.setTimeSignatureSegments(copied);
+  const first = copied[0];
+  if (first) {
+    ctx.setTimeSignature({ numerator: first.numerator, denominator: first.denominator });
+  }
+  ctx.offlineEngine.setTimeSignatureSegments(copied);
+  postTempoSync(ctx);
+}
+function setLoop(ctx, startPpq, endPpq, enabled = true) {
+  ctx.offlineEngine.setLoop(startPpq, endPpq, enabled);
+  return ctx.realtimeNode.sendCommand({
+    type: 7 /* SetLoop */,
+    targetId: enabled ? 1 : 0,
+    sampleTime: -1,
+    argFloat: startPpq,
+    argInt: Math.round(endPpq * 1e6)
+  });
+}
+function countInEndSample(ctx, startSample, bars) {
+  return ctx.offlineEngine.countInEndSample(startSample, bars);
+}
+async function getTransportState(ctx) {
+  const state = await ctx.realtimeNode.requestTransportState();
+  ctx.setLatestTransportState(state);
+  return state;
+}
+function cachedTransportState(ctx) {
+  return ctx.getLatestTransportState();
+}
+
+// src/worklet/engine.ts
+var SonareEngine = class _SonareEngine {
+  constructor(context, realtimeNode, offlineEngine, sampleRate, offlineBlockSize, offlineChannelCount) {
+    this.automationLanes = /* @__PURE__ */ new Map();
+    this.clips = /* @__PURE__ */ new Map();
+    this.midiClips = /* @__PURE__ */ new Map();
+    this.markers = /* @__PURE__ */ new Map();
+    this.trackLaneIds = [];
+    this.trackSends = /* @__PURE__ */ new Map();
+    this.trackOutputBus = /* @__PURE__ */ new Map();
+    this.laneSidechains = /* @__PURE__ */ new Map();
+    this.buses = [];
+    this.trackStripJson = /* @__PURE__ */ new Map();
+    this.busStripJson = /* @__PURE__ */ new Map();
+    this.tempoBpm = 120;
+    this.timeSignature = { numerator: 4, denominator: 4 };
+    this.tempoSegments = [{ startPpq: 0, bpm: 120 }];
+    this.timeSignatureSegments = [
+      { startPpq: 0, numerator: 4, denominator: 4 }
+    ];
+    this.nextClipId = 1;
+    this.nextMarkerId = 1;
+    this.transportPlaying = false;
+    this.pendingInstrumentSync = [];
+    this.destroyed = false;
+    this.context = context;
+    this.realtimeNode = realtimeNode;
+    this.offlineEngine = offlineEngine;
+    this.node = realtimeNode.node;
+    this.capabilities = realtimeNode.capabilities;
+    this.sampleRate = sampleRate;
+    this.offlineBlockSize = offlineBlockSize;
+    this.offlineChannelCount = offlineChannelCount;
+    this.transport = buildTransportFacade({
+      sampleRate: this.sampleRate,
+      realtimeNode: this.realtimeNode,
+      offlineEngine: this.offlineEngine,
+      setTransportPlaying: (playing) => {
+        this.transportPlaying = playing;
+      },
+      flushPendingInstrumentSync: () => this.flushPendingInstrumentSync(),
+      setTempo: (bpm) => this.setTempo(bpm),
+      setTempoSegments: (segments) => this.setTempoSegments(segments),
+      setLoop: (startPpq, endPpq, enabled) => this.setLoop(startPpq, endPpq, enabled)
+    });
+  }
+  static async create(context, options = {}) {
+    const sampleRate = options.sampleRate ?? context.sampleRate;
+    const blockSize = options.offlineBlockSize ?? options.blockSize ?? 128;
+    const channelCount = Math.max(
+      1,
+      Math.floor(options.offlineChannelCount ?? options.channelCount ?? 2)
+    );
+    const realtimeNode = await SonareRealtimeEngineNode.create(context, options);
+    const offlineEngine = options.offlineEngine ?? new RealtimeEngine(sampleRate, blockSize);
+    return new _SonareEngine(
+      context,
+      realtimeNode,
+      offlineEngine,
+      sampleRate,
+      blockSize,
+      channelCount
+    );
+  }
+  async suspend() {
+    if (this.destroyed) {
+      return;
+    }
+    await this.context.suspend?.();
+  }
+  async resume() {
+    if (this.destroyed) {
+      return;
+    }
+    await this.context.resume?.();
+  }
+  setTempo(bpm) {
+    setTempo(this.tempoContext, bpm);
+  }
+  setTempoSegments(segments) {
+    setTempoSegments(this.tempoContext, segments);
+  }
+  setTimeSignature(numerator, denominator) {
+    setTimeSignature(this.tempoContext, numerator, denominator);
+  }
+  setTimeSignatureSegments(segments) {
+    setTimeSignatureSegments(this.tempoContext, segments);
+  }
+  setLoop(startPpq, endPpq, enabled = true) {
+    return setLoop(this.tempoContext, startPpq, endPpq, enabled);
+  }
+  countInEndSample(startSample, bars) {
+    return countInEndSample(this.tempoContext, startSample, bars);
+  }
+  getTransportState() {
+    return getTransportState(this.tempoContext);
+  }
+  cachedTransportState() {
+    return cachedTransportState(this.tempoContext);
+  }
+  setParam(nodeId, param, value) {
+    return setParam(this.parameterContext, nodeId, param, value);
+  }
+  scheduleParam(nodeId, param, ppq, value, curve = "linear") {
+    scheduleParam(this.automationContext, nodeId, param, ppq, value, curve);
+  }
+  addAutomationPoint(laneId, ppq, value, curve = "linear") {
+    addAutomationPoint(this.automationContext, laneId, ppq, value, curve);
+  }
+  /**
+   * Replaces the automation lane for `paramId` with the given breakpoints. An
+   * empty array clears the lane; the points are defensively copied and sorted
+   * by ppq before mirroring to the offline and live worklet engines.
+   */
+  setAutomationLane(paramId, points) {
+    setAutomationLane(this.automationContext, paramId, points);
+  }
+  /**
+   * Returns the automation target id for a mixer strip parameter.
+   *
+   * The id addresses the engine's reserved mixer namespace, so it can be fed
+   * straight to setAutomationLane to automate a fader or pan without
+   * registering a parameter.
+   *
+   * @param target Track id (declares a mixer lane on first use) or 'master'.
+   * @param kind Strip parameter to address.
+   * @returns Reserved engine parameter id for the strip parameter.
+   */
+  automationParamId(target, kind) {
+    return automationParamId(this.parameterContext, target, kind);
+  }
+  /**
+   * Returns the automation target id for a bus fader.
+   *
+   * @param busId Bus id (declares the mixer bus on first use).
+   * @returns Reserved engine parameter id for the bus fader gain (dB).
+   */
+  busAutomationParamId(busId) {
+    return busAutomationParamId(this.parameterContext, busId);
+  }
+  /**
+   * Resolves a track-lane insert parameter (JSON-key name) to the reserved
+   * insert-automation id fed straight to setAutomationLane. Declares the track's
+   * mixer lane first (like automationParamId) so the offline engine resolves the
+   * same strip selector the realtime engine uses.
+   *
+   * @param target Track id (declares a mixer lane on first use).
+   * @param insertIndex Index into the strip's combined insert sequence.
+   * @param paramName Processor JSON-key parameter name.
+   * @returns Reserved insert-automation id, or -1 when strip/insert/key unknown.
+   */
+  resolveTrackInsertAutomationId(target, insertIndex, paramName) {
+    return resolveTrackInsertAutomationId(
+      this.parameterContext,
+      target,
+      insertIndex,
+      paramName
+    );
+  }
+  /**
+   * Resolves a master-strip insert parameter to its reserved insert-automation
+   * id.
+   *
+   * @param insertIndex Index into the master strip's insert sequence.
+   * @param paramName Processor JSON-key parameter name.
+   * @returns Reserved insert-automation id, or -1 when insert/key unknown.
+   */
+  resolveMasterInsertAutomationId(insertIndex, paramName) {
+    return resolveMasterInsertAutomationId(this.parameterContext, insertIndex, paramName);
+  }
+  /**
+   * Resolves a bus-strip insert parameter to its reserved insert-automation id.
+   * Declares the mixer bus first so the offline engine resolves the same bus
+   * selector.
+   *
+   * @param busId Bus id (declares the mixer bus on first use).
+   * @param insertIndex Index into the bus strip's insert sequence.
+   * @param paramName Processor JSON-key parameter name.
+   * @returns Reserved insert-automation id, or -1 when bus/insert/key unknown.
+   */
+  resolveBusInsertAutomationId(busId, insertIndex, paramName) {
+    return resolveBusInsertAutomationId(
+      this.parameterContext,
+      busId,
+      insertIndex,
+      paramName
+    );
+  }
+  /**
+   * Returns the number of automation lanes installed on the engine, including
+   * lanes whose breakpoint list is currently empty.
+   *
+   * @returns Engine-side automation lane count.
+   */
+  automationLaneCount() {
+    return automationLaneCount(this.parameterContext);
+  }
+  listParameters() {
+    return listParameters(this.parameterContext);
+  }
+  setSoloMute(target, solo, mute) {
+    return setSoloMute(this.parameterContext, target, solo, mute);
+  }
+  setStripGain(target, db) {
+    return this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_FADER_DB), db);
+  }
+  setStripPan(target, pan) {
+    return this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_PAN), pan);
+  }
+  /**
+   * Declares the mixer track lanes in an explicit order.
+   *
+   * Lane indices are append-only: once a track id occupies a lane, its index
+   * stays fixed for the engine's lifetime. The given list must therefore start
+   * with the already-declared lane ids in their current order and may only
+   * append new track ids after them. Entries carrying `sends` replace that
+   * track's send list; entries without `sends` leave existing sends untouched.
+   *
+   * @param lanes Track ids or lane descriptors in the desired lane order.
+   */
+  setTrackLanes(lanes) {
+    setTrackLanes(this.mixerContext, lanes);
+  }
+  /**
+   * Routes a track lane's post-fader output into a declared bus instead of
+   * the master mix (group/folder routing); busId 0 restores the master mix.
+   */
+  setTrackOutputBus(target, busId) {
+    setTrackOutputBus(this.mixerContext, target, busId);
+  }
+  /**
+   * Keys one insert of a lane strip from another lane's post-strip pre-fader
+   * audio (ducking/sidechainRouter inserts). sourceTarget null removes the
+   * binding.
+   */
+  setLaneSidechain(target, insertIndex, sourceTarget) {
+    setLaneSidechain(this.mixerContext, target, insertIndex, sourceTarget);
+  }
+  setSends(target, sends) {
+    setSends(this.mixerContext, target, sends);
+  }
+  setTrackBuses(buses) {
+    setTrackBuses(this.mixerContext, buses);
+  }
+  setBusGain(busId, db) {
+    return setBusGain(this.mixerContext, busId, db);
+  }
+  setTrackStripJson(target, sceneJson) {
+    const laneIndex = this.ensureTrackLane(target);
+    const trackId = this.trackLaneIds[laneIndex];
+    setTrackStripJson(this.stripContext, trackId, sceneJson, this.trackStripJson);
+    this.syncMixer();
+  }
+  setTrackStripEqBand(target, bandIndex, band) {
+    setTrackStripEqBand(this.stripContext, target, bandIndex, band);
+  }
+  setTrackStripInsertBypassed(target, insertIndex, bypassed, resetOnBypass = false) {
+    setTrackStripInsertBypassed(
+      this.stripContext,
+      target,
+      insertIndex,
+      bypassed,
+      resetOnBypass
+    );
+  }
+  setTrackStripInsertParamByName(target, insertIndex, paramName, value) {
+    setTrackStripInsertParamByName(this.stripContext, target, insertIndex, paramName, value);
+  }
+  setTrackStripPan(target, pan) {
+    setTrackStripPan(this.stripContext, target, pan);
+  }
+  setTrackStripPanLaw(target, panLaw) {
+    setTrackStripPanLaw(this.stripContext, target, panLaw);
+  }
+  setTrackStripPanMode(target, panMode) {
+    setTrackStripPanMode(this.stripContext, target, panMode);
+  }
+  setTrackStripDualPan(target, leftPan, rightPan) {
+    setTrackStripDualPan(this.stripContext, target, leftPan, rightPan);
+  }
+  setTrackStripChannelDelaySamples(target, delaySamples) {
+    setTrackStripChannelDelaySamples(this.stripContext, target, delaySamples);
+  }
+  setStripEq(target, bandIndex, band) {
+    if (target === "master") {
+      this.setMasterStripEqBand(bandIndex, band);
+      return;
+    }
+    this.setTrackStripEqBand(target, bandIndex, band);
+  }
+  setStripInsertBypassed(target, insertIndex, bypassed, resetOnBypass = false) {
+    if (target === "master") {
+      this.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
+      return;
+    }
+    this.setTrackStripInsertBypassed(target, insertIndex, bypassed, resetOnBypass);
+  }
+  setStripInserts(target, sceneJson) {
+    if (target === "master") {
+      this.setMasterStripJson(sceneJson);
+      return;
+    }
+    this.setTrackStripJson(target, sceneJson);
+  }
+  setBusStripJson(busId, sceneJson) {
+    setBusStripJson(this.mixerContext, busId, sceneJson);
+  }
+  setMasterStripJson(sceneJson) {
+    this.offlineEngine.setMasterStripJson(sceneJson);
+    this.masterStripJson = sceneJson;
+    this.syncMixer();
+  }
+  setMasterStripEqBand(bandIndex, band) {
+    setMasterStripEqBand(this.stripContext, bandIndex, band);
+  }
+  setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
+    setMasterStripInsertBypassed(this.stripContext, insertIndex, bypassed, resetOnBypass);
+  }
+  setMasterStripInsertParamByName(insertIndex, paramName, value) {
+    setMasterStripInsertParamByName(this.stripContext, insertIndex, paramName, value);
+  }
+  setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
+    this.ensureBus(busId);
+    setBusStripInsertParamByName(this.stripContext, busId, insertIndex, paramName, value);
+  }
+  setStripInsertParamByName(target, insertIndex, paramName, value) {
+    if (target === "master") {
+      this.setMasterStripInsertParamByName(insertIndex, paramName, value);
+      return;
+    }
+    this.setTrackStripInsertParamByName(target, insertIndex, paramName, value);
+  }
+  setMasterChain(sceneJson) {
+    this.setMasterStripJson(sceneJson);
+  }
+  addClip(trackId, buffer, startPpq, opts = {}) {
+    return addClip(this.clipContext, trackId, buffer, startPpq, opts);
+  }
+  removeClip(clipId) {
+    removeClip(this.clipContext, clipId);
+  }
+  setMidiClips(schedules) {
+    setMidiClips(this.clipContext, schedules);
+  }
+  setBuiltinInstrument(trackId, config = {}) {
+    setBuiltinInstrument(this.stripContext, trackId, config);
+  }
+  setSynthInstrument(trackId, patch = {}) {
+    setSynthInstrument(this.stripContext, trackId, patch);
+  }
+  loadSoundFont(data) {
+    loadSoundFont(this.stripContext, data);
+  }
+  setSf2Instrument(trackId, config = {}) {
+    setSf2Instrument(this.stripContext, trackId, config);
+  }
+  /**
+   * Route a track's MIDI to the external output (drained via {@link onMidiOut})
+   * instead of an internal instrument, so the track plays an external device.
+   * Pass `external=false` to restore internal-synth playback.
+   */
+  setMidiDestinationExternal(trackId, external) {
+    setMidiDestinationExternal(this.stripContext, trackId, external);
+  }
+  /**
+   * Enable/disable forwarding MIDI clock + transport (start/continue/stop) to
+   * the external output so external gear tracks the transport tempo. The bytes
+   * arrive through {@link onMidiOut} tagged with the transport destination.
+   */
+  setExternalMidiClockEnabled(enabled) {
+    setExternalMidiClockEnabled(this.stripContext, enabled);
+  }
+  /**
+   * Install or replace a live, non-destructive MIDI-FX insert for one
+   * destination. The insert transforms the destination's MIDI before
+   * synthesis (transpose, quantize, velocity shaping, humanize, harmonize,
+   * arpeggiate) without rewriting any stored notes, so it can be bypassed by
+   * {@link clearMidiFx}. The config JSON is the flat object the engine's
+   * MIDI-FX accepts (the same schema as the offline `Project.bakeMidiFx`).
+   */
+  setMidiFx(trackId, configJson) {
+    setMidiFx(this.stripContext, trackId, configJson);
+  }
+  /** Remove the live MIDI-FX insert from one destination (a no-op when none). */
+  clearMidiFx(trackId) {
+    clearMidiFx(this.stripContext, trackId);
+  }
+  pushMidiNoteOn(trackId, group, channel, note, velocity, renderFrame = -1) {
+    pushMidiNoteOn(this.stripContext, trackId, group, channel, note, velocity, renderFrame);
+  }
+  pushMidiNoteOff(trackId, group, channel, note, velocity = 0, renderFrame = -1) {
+    pushMidiNoteOff(this.stripContext, trackId, group, channel, note, velocity, renderFrame);
+  }
+  pushMidiCc(trackId, group, channel, controller, value, renderFrame = -1) {
+    pushMidiCc(this.stripContext, trackId, group, channel, controller, value, renderFrame);
+  }
+  pushMidiPanic(renderFrame = -1) {
+    this.offlineEngine.pushMidiPanic(renderFrame);
+    this.postSync({ type: "syncMidiPanic", renderFrame });
+  }
+  configureCapture(options) {
+    configureCapture(this.captureContext, options);
+  }
+  armRecord(trackId, enabled) {
+    return armRecord(this.captureContext, trackId, enabled);
+  }
+  punch(inPpq, outPpq) {
+    return punch(this.captureContext, inPpq, outPpq);
+  }
+  captureStatus() {
+    return captureStatus(this.captureContext);
+  }
+  capturedAudio() {
+    return capturedAudio(this.captureContext);
+  }
+  async resetCapture() {
+    return resetCapture(this.captureContext);
+  }
+  setMetronome(opts) {
+    this.offlineEngine.setMetronome(opts);
+    this.postSync({ type: "syncMetronome", config: opts });
+    this.realtimeNode.sendCommand({
+      type: 15 /* SetMetronome */,
+      sampleTime: -1,
+      argInt: opts.enabled ? 1 : 0
+    });
+  }
+  addMarker(ppq, name = "") {
+    return addMarker(this.markerContext, ppq, name);
+  }
+  /**
+   * Replaces the whole marker set in one call. Entries without an `id` are
+   * assigned fresh ids; entries carrying an `id` keep it. Returns the resolved
+   * markers in the order given.
+   */
+  setMarkers(entries) {
+    return setMarkers(this.markerContext, entries);
+  }
+  markerCount() {
+    return markerCount(this.markerContext);
+  }
+  markerByIndex(index) {
+    return markerByIndex(this.markerContext, index);
+  }
+  marker(markerId) {
+    return marker(this.markerContext, markerId);
+  }
+  seekMarker(markerId) {
+    return seekMarker(this.markerContext, markerId);
+  }
+  setLoopFromMarkers(startMarkerId, endMarkerId) {
+    return setLoopFromMarkers(this.markerContext, startMarkerId, endMarkerId);
+  }
+  async renderOffline(totalFrames) {
+    const frames = Math.max(0, Math.floor(totalFrames));
+    const inputs = [];
+    for (let ch = 0; ch < this.offlineChannelCount; ch++) {
+      inputs.push(new Float32Array(frames));
+    }
+    return this.offlineEngine.renderOffline(inputs, this.offlineBlockSize);
+  }
+  /**
+   * Subscribe to external-MIDI batches (already lowered to MIDI 1.0 bytes) for
+   * delivery to Web MIDI output ports. Fires once per render block that
+   * produced events. Returns an unsubscribe function.
+   */
+  onMidiOut(callback) {
+    return this.realtimeNode.onMidiOut(callback);
+  }
+  onMeter(callback) {
+    return this.realtimeNode.onMeter(callback);
+  }
+  onScope(callback) {
+    return this.realtimeNode.onScope(callback);
+  }
+  onTelemetry(callback) {
+    return this.realtimeNode.onTelemetry(callback);
+  }
+  pollTelemetry() {
+    return this.realtimeNode.pollTelemetry();
+  }
+  pollMeters() {
+    return this.realtimeNode.pollMeters();
+  }
+  pollScope() {
+    return this.realtimeNode.pollScope();
+  }
+  destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
+    this.transport.stop();
+    this.realtimeNode.pollTelemetry();
+    this.realtimeNode.destroy();
+    this.offlineEngine.destroy();
+  }
+  mixerLanes() {
+    return mixerLanes(this.mixerContext);
+  }
+  syncMixer() {
+    syncMixer(this.mixerContext);
+  }
+  postInstrumentSync(message) {
+    if (this.destroyed) {
+      return;
+    }
+    if (this.transportPlaying) {
+      this.pendingInstrumentSync.push(message);
+      return;
+    }
+    this.postSync(message);
+  }
+  flushPendingInstrumentSync() {
+    if (this.destroyed || this.pendingInstrumentSync.length === 0) {
+      return;
+    }
+    const pending = this.pendingInstrumentSync.splice(0);
+    for (const message of pending) {
+      this.postSync(message);
+    }
+  }
+  // Posts an out-of-band control-sync message to the worklet engine processor.
+  // Sync messages use a string `type` so the worklet's message handler routes
+  // them to receiveSync() (numeric `type` is reserved for SonareEngineCommandRecord).
+  postSync(message) {
+    if (this.destroyed) {
+      return;
+    }
+    this.realtimeNode.node.port.postMessage(message);
+  }
+  // Collaborator surface handed to the mixer/routing free functions so they can
+  // mutate the routing stores (held by reference), mirror into the offline
+  // engine, post mixer-sync messages, and declare lanes/buses without a
+  // back-reference to the whole engine.
+  get mixerContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      trackLaneIds: this.trackLaneIds,
+      trackSends: this.trackSends,
+      trackOutputBus: this.trackOutputBus,
+      laneSidechains: this.laneSidechains,
+      buses: this.buses,
+      trackStripJson: this.trackStripJson,
+      busStripJson: this.busStripJson,
+      postSync: (message) => this.postSync(message),
+      ensureTrackLane: (target) => this.ensureTrackLane(target),
+      ensureBus: (busId) => this.ensureBus(busId),
+      mixerLanes: () => this.mixerLanes(),
+      syncMixer: () => this.syncMixer(),
+      sendSmoothedParam: (paramId, value) => this.sendSmoothedParam(paramId, value),
+      getMasterStripJson: () => this.masterStripJson
+    };
+  }
+  // Collaborator surface handed to the strip/pan/EQ/insert/MIDI free functions
+  // so they can mirror into the offline engine, post sync messages, and resolve
+  // lanes without each holding a back-reference to the whole engine.
+  get stripContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      trackLaneIds: this.trackLaneIds,
+      postSync: (message) => this.postSync(message),
+      postInstrumentSync: (message) => this.postInstrumentSync(message),
+      ensureTrackLane: (target) => this.ensureTrackLane(target),
+      resolveTargetId: (target) => this.resolveTargetId(target)
+    };
+  }
+  // Collaborator surface handed to the automation-lane free functions so they
+  // can mutate the lane store, mirror into the offline engine, and post
+  // automation-sync messages without holding a back-reference.
+  get automationContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      automationLanes: this.automationLanes,
+      postSync: (message) => this.postSync(message),
+      resolveParamId: (nodeId, param) => this.resolveParamId(nodeId, param)
+    };
+  }
+  // Collaborator surface handed to the capture/record/punch free functions so
+  // they can mirror into and query the offline engine, command the realtime
+  // node, and read/write the capture config without a back-reference.
+  get captureContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      realtimeNode: this.realtimeNode,
+      offlineChannelCount: this.offlineChannelCount,
+      postSync: (message) => this.postSync(message),
+      getCaptureConfig: () => this.captureConfig,
+      setCaptureConfig: (config) => {
+        this.captureConfig = config;
+      },
+      resolveTargetId: (target) => this.resolveTargetId(target)
+    };
+  }
+  // Collaborator surface handed to the parameter / automation-id resolution
+  // free functions so they can mirror into and query the offline engine,
+  // command the realtime node, and declare lanes/buses without holding a
+  // back-reference to the whole engine.
+  get parameterContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      realtimeNode: this.realtimeNode,
+      trackLaneIds: this.trackLaneIds,
+      resolveParamId: (nodeId, param) => this.resolveParamId(nodeId, param),
+      ensureTrackLane: (target) => this.ensureTrackLane(target),
+      ensureBus: (busId) => this.ensureBus(busId)
+    };
+  }
+  // Collaborator surface handed to the tempo / time-signature free functions so
+  // they can mirror into the offline engine, command the realtime node, post
+  // tempo-sync messages, and mutate the engine's tempo-map state by reference.
+  get tempoContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      realtimeNode: this.realtimeNode,
+      postSync: (message) => this.postSync(message),
+      getTempoBpm: () => this.tempoBpm,
+      setTempoBpm: (bpm) => {
+        this.tempoBpm = bpm;
+      },
+      getTimeSignature: () => this.timeSignature,
+      setTimeSignature: (signature) => {
+        this.timeSignature = signature;
+      },
+      getTempoSegments: () => this.tempoSegments,
+      setTempoSegments: (segments) => {
+        this.tempoSegments = segments;
+      },
+      getTimeSignatureSegments: () => this.timeSignatureSegments,
+      setTimeSignatureSegments: (segments) => {
+        this.timeSignatureSegments = segments;
+      },
+      setLatestTransportState: (state) => {
+        this.latestTransportState = state;
+      },
+      getLatestTransportState: () => this.latestTransportState
+    };
+  }
+  // Collaborator surface handed to the audio/MIDI clip scheduling free
+  // functions so they can mutate the clip stores, mirror into the offline
+  // engine, and post clip-sync messages without holding a back-reference.
+  get clipContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      clips: this.clips,
+      midiClips: this.midiClips,
+      allocateClipId: () => this.nextClipId++,
+      postSync: (message) => this.postSync(message),
+      ensureTrackLane: (target) => this.ensureTrackLane(target),
+      resolveTargetId: (target) => this.resolveTargetId(target)
+    };
+  }
+  // Collaborator surface handed to the marker free functions so they can mutate
+  // the marker store and id counter, mirror into the offline engine, post
+  // marker-sync messages, and drive transport without a back-reference.
+  get markerContext() {
+    return {
+      offlineEngine: this.offlineEngine,
+      markers: this.markers,
+      getNextMarkerId: () => this.nextMarkerId,
+      setNextMarkerId: (value) => {
+        this.nextMarkerId = value;
+      },
+      postSync: (message) => this.postSync(message),
+      sendCommand: (command) => this.realtimeNode.sendCommand(command),
+      setLoop: (startPpq, endPpq, enabled) => this.setLoop(startPpq, endPpq, enabled)
+    };
+  }
+  // Resolves the reserved mixer parameter id for a fader/pan target, declaring a
+  // track lane on first use; 'master' addresses the master strip namespace.
+  stripParamId(target, paramKind) {
+    if (target === "master") {
+      return engineMixerMasterTarget(paramKind);
+    }
+    return engineMixerLaneTarget(this.ensureTrackLane(target), paramKind);
+  }
+  // Mirrors a smoothed parameter into the offline engine and pushes a
+  // sample-accurate smoothed-param command to the realtime runtime.
+  sendSmoothedParam(paramId, value) {
+    this.offlineEngine.setParameter(paramId, value);
+    return this.realtimeNode.sendCommand({
+      type: 1 /* SetParamSmoothed */,
+      targetId: paramId,
+      sampleTime: -1,
+      argFloat: value
+    });
+  }
+  resolveParamId(nodeId, param) {
+    return resolveParamId(this.listParameters(), nodeId, param);
+  }
+  resolveTargetId(target) {
+    return resolveTargetId(target);
+  }
+  ensureTrackLane(target) {
+    const trackId = this.resolveTargetId(target);
+    if (!Number.isInteger(trackId) || trackId <= 0) {
+      throw new Error(`Invalid track id for mixer lane: ${String(target)}`);
+    }
+    const existing = this.trackLaneIds.indexOf(trackId);
+    if (existing >= 0) {
+      return existing;
+    }
+    this.trackLaneIds.push(trackId);
+    this.syncMixer();
+    return this.trackLaneIds.length - 1;
+  }
+  ensureBus(busId) {
+    const resolved = Math.trunc(busId);
+    if (!Number.isInteger(resolved) || resolved <= 0) {
+      throw new Error(`Invalid bus id for mixer bus: ${String(busId)}`);
+    }
+    const existing = this.buses.findIndex((bus) => bus.busId === resolved);
+    if (existing >= 0) {
+      return existing;
+    }
+    this.buses.push({ busId: resolved });
+    this.syncMixer();
+    return this.buses.length - 1;
+  }
+};
 
 // src/worklet/messages.ts
 var DEFAULT_METRONOME_CONFIG = {
@@ -1898,7 +3684,724 @@ function resolveMetronomeConfig(config) {
   };
 }
 
-// src/worklet.ts
+// src/worklet/engine-processor.ts
+var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletProcessor {
+  constructor(options = {}, transport) {
+    this.closed = false;
+    this.lastMeterFrame = Number.NEGATIVE_INFINITY;
+    // Latest metronome gains/click length pushed via 'syncMetronome'. The
+    // SetMetronome command only toggles enabled state; the config arrives here.
+    this.metronomeConfig = { ...DEFAULT_METRONOME_CONFIG };
+    this.liveClips = /* @__PURE__ */ new Map();
+    this.sampleRate = options.sampleRate ?? 48e3;
+    this.blockSize = options.blockSize ?? 128;
+    this.channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
+    this.transport = transport;
+    this.meterIntervalFrames = Math.max(0, Math.floor(options.meterIntervalFrames ?? 2048));
+    this.commandRing = options.commandSharedBuffer ? this.commandRingFromSharedBuffer(options.commandSharedBuffer, options.commandRingCapacity) : void 0;
+    this.telemetryRing = options.telemetrySharedBuffer ? this.telemetryRingFromSharedBuffer(
+      options.telemetrySharedBuffer,
+      options.telemetryRingCapacity
+    ) : void 0;
+    this.meterRing = options.meterSharedBuffer ? meterRingFromSharedBuffer(options.meterSharedBuffer, options.meterRingCapacity) : void 0;
+    this.scopeRing = options.scopeSharedBuffer ? scopeRingFromSharedBuffer(
+      options.scopeSharedBuffer,
+      options.scopeRingCapacity,
+      options.scopeBands
+    ) : void 0;
+    this.engine = new RealtimeEngine(this.sampleRate, this.blockSize);
+    this.engine.prepareChannels(this.channelCount, this.blockSize);
+    this.channelBuffers = new Array(this.channelCount);
+    for (let ch = 0; ch < this.channelCount; ch++) {
+      this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
+    }
+    if (this.scopeRing) {
+      const interval = Math.max(1, Math.floor(options.scopeIntervalFrames ?? this.blockSize));
+      this.engine.configureScopeTelemetry(interval, this.scopeRing.bands);
+    }
+  }
+  process(inputs, outputs) {
+    if (this.closed) {
+      return false;
+    }
+    const output = outputs[0];
+    const firstOutput = output?.[0];
+    if (!firstOutput) {
+      return true;
+    }
+    const frames = firstOutput.length;
+    if (frames > this.blockSize) {
+      for (const channel of output ?? []) {
+        channel.fill(0);
+      }
+      this.publishTelemetry();
+      return true;
+    }
+    this.drainCommands();
+    let usableFrames = frames;
+    if (usableFrames > this.blockSize) {
+      if (!_SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow) {
+        _SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow = true;
+        console.warn(
+          `SonareRealtimeEngineWorkletProcessor: requested ${usableFrames} frames exceeds pre-allocated capacity ${this.blockSize}; clamping.`
+        );
+      }
+      usableFrames = this.blockSize;
+    }
+    if ((this.channelBuffers[0]?.byteLength ?? 0) === 0) {
+      this.reacquireChannelBuffers();
+    }
+    const input = inputs[0];
+    for (let ch = 0; ch < this.channelCount; ch++) {
+      const dst = this.channelBuffers[ch];
+      const source = input?.[ch];
+      if (source && source.length === usableFrames) {
+        dst.set(source.subarray(0, usableFrames));
+      } else {
+        dst.fill(0, 0, usableFrames);
+      }
+    }
+    this.engine.processPrepared(usableFrames);
+    for (let ch = 0; ch < output.length; ch++) {
+      const target = output[ch];
+      const source = this.channelBuffers[ch] ?? this.channelBuffers[0];
+      if (source) {
+        target.set(source.subarray(0, Math.min(target.length, usableFrames)));
+        if (target.length > usableFrames) {
+          target.fill(0, usableFrames);
+        }
+      } else {
+        target.fill(0);
+      }
+    }
+    this.publishTelemetry();
+    this.publishMeters();
+    this.publishScope();
+    this.publishExternalMidi();
+    return true;
+  }
+  reacquireChannelBuffers() {
+    for (let ch = 0; ch < this.channelCount; ch++) {
+      this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
+    }
+  }
+  receiveCommand(command) {
+    if (!this.closed) {
+      this.applyCommand(command);
+    }
+  }
+  // Applies an out-of-band control-plane sync message. Runs on the AudioWorklet
+  // global scope but OUTSIDE process() (the message-port callback), so the
+  // bulk/allocating engine setters (setClips/setMarkers) are safe here — they
+  // never run on the realtime render path. This is the audio-thread equivalent
+  // of the engine's control-thread RtPublisher setters.
+  receiveSync(message) {
+    if (this.closed) {
+      return;
+    }
+    switch (message.type) {
+      case "syncClips":
+        this.liveClips.clear();
+        for (const clip of message.clips) {
+          if (clip.id !== void 0) {
+            this.liveClips.set(clip.id, clip);
+          }
+        }
+        this.engine.setClips(message.clips);
+        break;
+      case "syncClipsDelta":
+        for (const clipId of message.removeIds) {
+          this.liveClips.delete(clipId);
+        }
+        for (const clip of message.upserts) {
+          if (clip.id !== void 0) {
+            this.liveClips.set(clip.id, clip);
+          }
+        }
+        this.engine.setClips(Array.from(this.liveClips.values()));
+        break;
+      case "syncMidiClips":
+        this.engine.setMidiClips(message.clips);
+        break;
+      case "syncMarkers":
+        this.engine.setMarkers(message.markers);
+        break;
+      case "syncMetronome":
+        this.metronomeConfig = resolveMetronomeConfig(message.config);
+        this.engine.setMetronome(message.config);
+        break;
+      case "syncAutomation":
+        this.engine.setAutomationLane(message.paramId, message.points);
+        break;
+      case "syncTempo":
+        if (message.tempoSegments) {
+          this.engine.setTempoSegments(message.tempoSegments);
+        } else {
+          this.engine.setTempo(message.bpm);
+        }
+        if (message.timeSignatureSegments) {
+          this.engine.setTimeSignatureSegments(message.timeSignatureSegments);
+        } else {
+          this.engine.setTimeSignature(
+            message.timeSignature.numerator,
+            message.timeSignature.denominator
+          );
+        }
+        break;
+      case "syncMixer":
+        if (message.buses) {
+          this.engine.setTrackBuses(message.buses);
+        }
+        this.engine.setTrackLanes(message.lanes);
+        for (const strip of message.trackStrips ?? []) {
+          this.engine.setTrackStripJson(strip.trackId, strip.sceneJson);
+        }
+        for (const strip of message.busStrips ?? []) {
+          this.engine.setBusStripJson(strip.busId, strip.sceneJson);
+        }
+        if (message.masterStripJson) {
+          this.engine.setMasterStripJson(message.masterStripJson);
+        }
+        for (const binding of message.laneSidechains ?? []) {
+          this.engine.setLaneSidechain(binding.trackId, binding.insertIndex, binding.sourceTrackId);
+        }
+        break;
+      case "syncCapture":
+        this.engine.setCaptureBuffer(message.channels, message.bufferFrames);
+        this.engine.setCaptureSource(message.source);
+        this.engine.setRecordOffsetSamples(message.recordOffsetSamples);
+        this.engine.setInputMonitor(message.inputMonitor.enabled, message.inputMonitor.gain);
+        break;
+      case "syncTrackStripEqBand":
+        this.engine.setTrackStripEqBandJson(message.trackId, message.bandIndex, message.bandJson);
+        break;
+      case "syncMasterStripEqBand":
+        this.engine.setMasterStripEqBandJson(message.bandIndex, message.bandJson);
+        break;
+      case "syncTrackStripInsertBypassed":
+        this.engine.setTrackStripInsertBypassed(
+          message.trackId,
+          message.insertIndex,
+          message.bypassed,
+          message.resetOnBypass
+        );
+        break;
+      case "syncMasterStripInsertBypassed":
+        this.engine.setMasterStripInsertBypassed(
+          message.insertIndex,
+          message.bypassed,
+          message.resetOnBypass
+        );
+        break;
+      case "syncTrackStripInsertParamByName":
+        this.engine.setTrackStripInsertParamByName(
+          message.trackId,
+          message.insertIndex,
+          message.paramName,
+          message.value
+        );
+        break;
+      case "syncMasterStripInsertParamByName":
+        this.engine.setMasterStripInsertParamByName(
+          message.insertIndex,
+          message.paramName,
+          message.value
+        );
+        break;
+      case "syncBusStripInsertParamByName":
+        this.engine.setBusStripInsertParamByName(
+          message.busId,
+          message.insertIndex,
+          message.paramName,
+          message.value
+        );
+        break;
+      case "syncTrackStripPan":
+        this.engine.setTrackStripPan(message.trackId, message.pan);
+        break;
+      case "syncTrackStripPanLaw":
+        this.engine.setTrackStripPanLaw(message.trackId, message.panLaw);
+        break;
+      case "syncTrackStripPanMode":
+        this.engine.setTrackStripPanMode(message.trackId, message.panMode);
+        break;
+      case "syncTrackStripDualPan":
+        this.engine.setTrackStripDualPan(message.trackId, message.leftPan, message.rightPan);
+        break;
+      case "syncTrackStripChannelDelaySamples":
+        this.engine.setTrackStripChannelDelaySamples(message.trackId, message.delaySamples);
+        break;
+      case "syncBuiltinInstrument":
+        this.engine.setBuiltinInstrument(message.config, message.destinationId);
+        break;
+      case "syncSynthInstrument":
+        this.engine.setSynthInstrument(message.patch, message.destinationId);
+        break;
+      case "syncLoadSoundFont":
+        this.engine.loadSoundFont(message.data);
+        break;
+      case "syncSf2Instrument":
+        this.engine.setSf2Instrument(message.config, message.destinationId);
+        break;
+      case "syncMidiFx":
+        this.engine.setMidiFx(message.destinationId, message.configJson ?? "");
+        break;
+      case "syncClearMidiFx":
+        this.engine.clearMidiFx(message.destinationId);
+        break;
+      case "syncMidiNoteOn":
+        this.engine.pushMidiNoteOn(
+          message.destinationId,
+          message.group,
+          message.channel,
+          message.note,
+          message.velocity,
+          message.renderFrame
+        );
+        break;
+      case "syncMidiNoteOff":
+        this.engine.pushMidiNoteOff(
+          message.destinationId,
+          message.group,
+          message.channel,
+          message.note,
+          message.velocity,
+          message.renderFrame
+        );
+        break;
+      case "syncMidiCc":
+        this.engine.pushMidiCc(
+          message.destinationId,
+          message.group,
+          message.channel,
+          message.controller,
+          message.value,
+          message.renderFrame
+        );
+        break;
+      case "syncMidiPanic":
+        this.engine.pushMidiPanic(message.renderFrame);
+        break;
+      case "syncMidiDestinationExternal":
+        this.engine.setMidiDestinationExternal(message.destinationId, message.external);
+        break;
+      case "syncExternalMidiClock":
+        this.engine.setExternalMidiClockEnabled(message.enabled);
+        break;
+    }
+  }
+  receiveCaptureRequest(message) {
+    if (this.closed) {
+      return;
+    }
+    try {
+      if (message.op === "status") {
+        const status = this.engine.captureStatus();
+        this.transport?.postMessage?.({
+          type: "captureResponse",
+          requestId: message.requestId,
+          ok: true,
+          status: {
+            capturedFrames: status.capturedFrames,
+            overflowCount: status.overflowCount,
+            armed: status.armed,
+            punchEnabled: status.punchEnabled,
+            source: status.source,
+            recordOffsetSamples: status.recordOffsetSamples
+          }
+        });
+        return;
+      }
+      if (message.op === "read") {
+        const captured = this.engine.capturedAudio();
+        const channels = [];
+        for (let ch = 0; ch < captured.length; ch++) {
+          const source = captured[ch];
+          const copy = [];
+          for (let i = 0; i < source.length; i++) {
+            copy.push(Number(source[i]));
+          }
+          channels.push(copy);
+        }
+        this.transport?.postMessage?.({
+          type: "captureResponse",
+          requestId: message.requestId,
+          ok: true,
+          channels
+        });
+        return;
+      }
+      this.engine.resetCapture();
+      this.transport?.postMessage?.({
+        type: "captureResponse",
+        requestId: message.requestId,
+        ok: true
+      });
+    } catch (error) {
+      this.transport?.postMessage?.({
+        type: "captureResponse",
+        requestId: message.requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  receiveTransportRequest(message) {
+    if (this.closed) {
+      return;
+    }
+    try {
+      this.transport?.postMessage?.({
+        type: "transportResponse",
+        requestId: message.requestId,
+        ok: true,
+        state: this.engine.getTransportState()
+      });
+    } catch (error) {
+      this.transport?.postMessage?.({
+        type: "transportResponse",
+        requestId: message.requestId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  destroy() {
+    if (!this.closed) {
+      this.engine.destroy();
+      this.closed = true;
+    }
+  }
+  drainCommands() {
+    if (!this.commandRing) {
+      return;
+    }
+    for (let i = 0; i < 64; i++) {
+      const command = popSonareEngineCommandRingBuffer(this.commandRing);
+      if (!command) {
+        return;
+      }
+      this.applyCommand(command);
+    }
+  }
+  applyCommand(command) {
+    const sampleTime = Number(command.sampleTime ?? -1);
+    switch (command.type) {
+      case 0 /* SetParam */:
+        this.engine.setParameter(
+          Math.trunc(Number(command.targetId ?? 0)),
+          Number(command.argFloat ?? 0),
+          sampleTime
+        );
+        break;
+      case 1 /* SetParamSmoothed */:
+        this.engine.setParameterSmoothed(
+          Math.trunc(Number(command.targetId ?? 0)),
+          Number(command.argFloat ?? 0),
+          sampleTime
+        );
+        break;
+      case 2 /* TransportPlay */:
+        this.engine.play(sampleTime);
+        break;
+      case 3 /* TransportStop */:
+        this.engine.stop(sampleTime);
+        break;
+      case 4 /* TransportSeekSample */:
+        this.engine.seekSample(Number(command.argInt ?? 0), sampleTime);
+        break;
+      case 5 /* TransportSeekPpq */:
+        this.engine.seekPpq(Number(command.argFloat ?? 0), sampleTime);
+        break;
+      case 6 /* SetTempoMap */:
+        this.engine.setTempo(Number(command.argFloat ?? 120));
+        break;
+      case 7 /* SetLoop */:
+        this.engine.setLoop(
+          Number(command.argFloat ?? 0),
+          Number(command.argInt ?? 0) / 1e6,
+          command.targetId !== 0
+        );
+        break;
+      case 13 /* ArmRecord */:
+        this.engine.armCapture(Boolean(command.argInt));
+        break;
+      case 14 /* Punch */:
+        this.engine.setCapturePunch(
+          Number(command.argInt ?? 0),
+          Math.max(0, Math.round(Number(command.argFloat ?? 0))),
+          true
+        );
+        break;
+      case 15 /* SetMetronome */:
+        this.engine.setMetronome({
+          enabled: Boolean(command.argInt),
+          beatGain: this.metronomeConfig.beatGain,
+          accentGain: this.metronomeConfig.accentGain,
+          clickSamples: this.metronomeConfig.clickSamples
+        });
+        break;
+      case 17 /* SeekMarker */:
+        this.engine.seekMarker(Math.trunc(Number(command.targetId ?? 0)), sampleTime);
+        break;
+      case 10 /* SetSoloMute */:
+        this.engine.setSoloMute(
+          Math.trunc(Number(command.targetId ?? 0)),
+          Boolean((Number(command.argInt ?? 0) & 2) !== 0),
+          Boolean((Number(command.argInt ?? 0) & 1) !== 0),
+          sampleTime
+        );
+        break;
+      default:
+        this.publishTelemetryRecord({
+          type: 1 /* Error */,
+          error: 7 /* UnknownTarget */,
+          renderFrame: 0,
+          timelineSample: 0,
+          audibleTimelineSample: 0,
+          graphLatencySamplesQ8: 0,
+          value: Number(command.type)
+        });
+        break;
+    }
+  }
+  publishTelemetry() {
+    for (const item of this.engine.drainTelemetry(64)) {
+      this.publishTelemetryRecord(telemetryFromEngine(item));
+    }
+  }
+  publishTelemetryRecord(record) {
+    if (this.telemetryRing) {
+      writeSonareEngineTelemetryRingBuffer(this.telemetryRing, record);
+      return;
+    }
+    this.transport?.postMessage?.(record);
+  }
+  // Drains the engine meter telemetry queue into the stereo meter ring / transport.
+  //
+  // Shared-queue contract: `drainMeterTelemetry` and `drainMeterTelemetryWide`
+  // pop the SAME single-consumer telemetry queue, so exactly ONE of them may run
+  // per engine. The live worklet path owns the queue via the stereo drain below;
+  // the worklet meter ring (SONARE_METER_RING_RECORD_FLOATS) is a fixed stereo
+  // layout carrying planes 0/1 plus the correlation/LUFS summary. Per-plane
+  // surround meters are NOT delivered over the live worklet ring — a host that
+  // needs them must use the offline `drainMeterTelemetryWide()` API on a
+  // non-worklet engine instance (do not also call it on a worklet-driven engine,
+  // or the two drains will starve each other).
+  publishMeters() {
+    if (this.meterIntervalFrames <= 0 || !this.transport && !this.meterRing) {
+      return;
+    }
+    for (const item of this.engine.drainMeterTelemetry(64)) {
+      const meter = meterFromEngine(item);
+      if (meter.frame !== this.lastMeterFrame && meter.frame - this.lastMeterFrame < this.meterIntervalFrames) {
+        continue;
+      }
+      if (meter.frame !== this.lastMeterFrame) {
+        this.lastMeterFrame = meter.frame;
+      }
+      if (this.meterRing) {
+        this.writeMeterRing(meter);
+      } else {
+        this.transport?.onMeter?.(meter);
+        this.transport?.postMessage?.(meter);
+      }
+    }
+  }
+  writeMeterRing(meter) {
+    const ring = this.meterRing;
+    if (!ring) {
+      return;
+    }
+    const writeIndex = Atomics.load(ring.header, 0);
+    const offset = writeIndex % ring.capacity * SONARE_METER_RING_RECORD_FLOATS;
+    ring.records[offset] = encodeFrameLo(meter.frame);
+    ring.records[offset + 1] = encodeFrameHi(meter.frame);
+    ring.records[offset + 2] = meter.targetId;
+    ring.records[offset + 3] = meter.peakDbL;
+    ring.records[offset + 4] = meter.peakDbR;
+    ring.records[offset + 5] = meter.rmsDbL;
+    ring.records[offset + 6] = meter.rmsDbR;
+    ring.records[offset + 7] = meter.correlation;
+    ring.records[offset + 8] = meter.truePeakDbL;
+    ring.records[offset + 9] = meter.truePeakDbR;
+    ring.records[offset + 10] = meter.momentaryLufs;
+    ring.records[offset + 11] = meter.shortTermLufs;
+    ring.records[offset + 12] = meter.integratedLufs;
+    ring.records[offset + 13] = meter.gainReductionDb;
+    Atomics.store(ring.header, 0, writeIndex + 1);
+  }
+  // Drains the engine's scope producer (FFT spectrum + goniometer points) into
+  // the lock-free SAB scope ring. No allocation on the render path: records are
+  // written field-by-field into the ring.
+  publishScope() {
+    const ring = this.scopeRing;
+    if (!ring) {
+      return;
+    }
+    for (const item of this.engine.drainScopeTelemetry(64)) {
+      this.writeScopeRing(ring, item);
+    }
+  }
+  // Drains queued external-MIDI events (already lowered to MIDI 1.0 bytes) and
+  // forwards them to the main thread for delivery to Web MIDI output ports.
+  // One batch per render block; skipped entirely when nothing is queued, so an
+  // all-internal project never allocates or posts here.
+  publishExternalMidi() {
+    if (!this.transport?.postMessage) {
+      return;
+    }
+    const events = this.engine.drainExternalMidi(256);
+    if (events.length === 0) {
+      return;
+    }
+    this.transport.postMessage({ type: "externalMidi", events });
+  }
+  writeScopeRing(ring, record) {
+    const writeIndex = Atomics.load(ring.header, 0);
+    const base = writeIndex % ring.capacity * ring.recordFloats;
+    ring.records[base] = encodeFrameLo(record.renderFrame);
+    ring.records[base + 1] = encodeFrameHi(record.renderFrame);
+    ring.records[base + 2] = record.targetId;
+    const bandCount = Math.min(ring.bands, record.bands.length);
+    ring.records[base + 3] = bandCount;
+    const pointCount = Math.min(ring.maxPoints, record.points.length);
+    ring.records[base + 4] = pointCount;
+    const bandsBase = base + SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS;
+    for (let i = 0; i < bandCount; i++) {
+      ring.records[bandsBase + i] = record.bands[i];
+    }
+    const pointsBase = bandsBase + ring.bands;
+    for (let i = 0; i < pointCount; i++) {
+      const point = record.points[i];
+      ring.records[pointsBase + 2 * i] = point.left;
+      ring.records[pointsBase + 2 * i + 1] = point.right;
+    }
+    Atomics.store(ring.header, 0, writeIndex + 1);
+  }
+  commandRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
+    const ring = engineRingFromSharedBuffer(
+      sharedBuffer,
+      SONARE_ENGINE_COMMAND_RECORD_BYTES,
+      fallbackCapacity
+    );
+    return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
+  }
+  telemetryRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
+    const ring = engineRingFromSharedBuffer(
+      sharedBuffer,
+      SONARE_ENGINE_TELEMETRY_RECORD_BYTES,
+      fallbackCapacity
+    );
+    return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
+  }
+};
+_SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow = false;
+var SonareRealtimeEngineWorkletProcessor = _SonareRealtimeEngineWorkletProcessor;
+
+// src/worklet/engine-register.ts
+function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-engine-processor") {
+  const scope = globalThis;
+  if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
+    throw new Error("AudioWorkletProcessor is not available in this context.");
+  }
+  const Base = scope.AudioWorkletProcessor;
+  class RegisteredSonareRealtimeEngineWorkletProcessor extends Base {
+    constructor(options) {
+      super();
+      this.pendingMessages = [];
+      const port = this.port;
+      const processorOptions = options?.processorOptions ?? {};
+      void this.initializeEmbind(processorOptions, port);
+      const onMessage = (event) => {
+        if (!this.bridge) {
+          if (this.pendingMessages.length < 1024) {
+            this.pendingMessages.push(event.data);
+          }
+          return;
+        }
+        if (isEngineCommandRecord(event.data)) {
+          this.bridge.receiveCommand(event.data);
+        } else if (isEngineSyncMessage(event.data)) {
+          this.bridge.receiveSync(event.data);
+        } else if (isEngineCaptureRequestMessage(event.data)) {
+          this.bridge.receiveCaptureRequest(event.data);
+        } else if (isEngineTransportRequestMessage(event.data)) {
+          this.bridge.receiveTransportRequest(event.data);
+        }
+      };
+      if (port?.addEventListener) {
+        port.addEventListener("message", onMessage);
+        port.start?.();
+      } else if (port) {
+        port.onmessage = onMessage;
+      }
+    }
+    process(inputs, outputs) {
+      if (this.bridge) {
+        return this.bridge.process(inputs, outputs);
+      }
+      const output = outputs[0];
+      for (const channel of output ?? []) {
+        channel.fill(0);
+      }
+      return true;
+    }
+    replayPendingMessages() {
+      const messages = this.pendingMessages.splice(0);
+      for (const data of messages) {
+        if (isEngineCommandRecord(data)) {
+          this.bridge?.receiveCommand(data);
+        } else if (isEngineSyncMessage(data)) {
+          this.bridge?.receiveSync(data);
+        } else if (isEngineCaptureRequestMessage(data)) {
+          this.bridge?.receiveCaptureRequest(data);
+        } else if (isEngineTransportRequestMessage(data)) {
+          this.bridge?.receiveTransportRequest(data);
+        }
+      }
+    }
+    async initializeEmbind(options, port) {
+      try {
+        const initPromise2 = globalThis.SonareEmbindInitPromise;
+        if (initPromise2) {
+          await initPromise2;
+        }
+        if (!isInitialized()) {
+          const moduleFactory = globalThis.SonareEmbindModuleFactory;
+          if (!moduleFactory) {
+            throw new Error("embind realtime engine module is not initialized.");
+          }
+          await init({
+            locateFile: (path) => path,
+            wasmBinary: options.wasmBinary,
+            moduleFactory
+          });
+        }
+        this.bridge = new SonareRealtimeEngineWorkletProcessor(options, {
+          postMessage: (message) => port?.postMessage?.(message),
+          onMeter: (meter) => port?.postMessage?.(meter)
+        });
+        for (const message of options.initialSyncMessages ?? []) {
+          this.bridge.receiveSync(message);
+        }
+        for (const command of options.initialCommands ?? []) {
+          this.bridge.receiveCommand(command);
+        }
+        this.replayPendingMessages();
+        port?.postMessage?.({ type: "ready", runtimeTarget: "embind" });
+      } catch (error) {
+        port?.postMessage?.({
+          type: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+  }
+  scope.registerProcessor(name, RegisteredSonareRealtimeEngineWorkletProcessor);
+}
+
+// src/worklet/mixer-processor.ts
 var SonareWorkletProcessor = class {
   constructor(options, transport) {
     this.closed = false;
@@ -2147,2160 +4650,39 @@ var SonareWorkletProcessor = class {
     Atomics.store(ring.header, 0, writeIndex + 1);
   }
 };
-var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletProcessor {
-  constructor(options = {}, transport) {
-    this.closed = false;
-    this.lastMeterFrame = Number.NEGATIVE_INFINITY;
-    // Latest metronome gains/click length pushed via 'syncMetronome'. The
-    // SetMetronome command only toggles enabled state; the config arrives here.
-    this.metronomeConfig = { ...DEFAULT_METRONOME_CONFIG };
-    this.liveClips = /* @__PURE__ */ new Map();
-    this.sampleRate = options.sampleRate ?? 48e3;
-    this.blockSize = options.blockSize ?? 128;
-    this.channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
-    this.runtimeTarget = options.runtimeTarget ?? "embind";
-    if (this.runtimeTarget === "sonare-rt") {
-      throw new Error(
-        'sonare-rt runtime is provided by the dedicated Emscripten AudioWorklet module; use SonareRealtimeEngineNode.create({ runtimeTarget: "sonare-rt", moduleUrl: ... }) to load it.'
-      );
-    }
-    this.transport = transport;
-    this.meterIntervalFrames = Math.max(0, Math.floor(options.meterIntervalFrames ?? 2048));
-    this.commandRing = options.commandSharedBuffer ? this.commandRingFromSharedBuffer(options.commandSharedBuffer, options.commandRingCapacity) : void 0;
-    this.telemetryRing = options.telemetrySharedBuffer ? this.telemetryRingFromSharedBuffer(
-      options.telemetrySharedBuffer,
-      options.telemetryRingCapacity
-    ) : void 0;
-    this.meterRing = options.meterSharedBuffer ? meterRingFromSharedBuffer(options.meterSharedBuffer, options.meterRingCapacity) : void 0;
-    this.scopeRing = options.scopeSharedBuffer ? scopeRingFromSharedBuffer(
-      options.scopeSharedBuffer,
-      options.scopeRingCapacity,
-      options.scopeBands
-    ) : void 0;
-    this.engine = new RealtimeEngine(this.sampleRate, this.blockSize);
-    this.engine.prepareChannels(this.channelCount, this.blockSize);
-    this.channelBuffers = new Array(this.channelCount);
-    for (let ch = 0; ch < this.channelCount; ch++) {
-      this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
-    }
-    if (this.scopeRing) {
-      const interval = Math.max(1, Math.floor(options.scopeIntervalFrames ?? this.blockSize));
-      this.engine.configureScopeTelemetry(interval, this.scopeRing.bands);
-    }
+function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
+  const scope = globalThis;
+  if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
+    throw new Error("AudioWorkletProcessor is not available in this context.");
   }
-  process(inputs, outputs) {
-    if (this.closed) {
-      return false;
-    }
-    const output = outputs[0];
-    const firstOutput = output?.[0];
-    if (!firstOutput) {
-      return true;
-    }
-    const frames = firstOutput.length;
-    if (frames > this.blockSize) {
-      for (const channel of output ?? []) {
-        channel.fill(0);
-      }
-      this.publishTelemetry();
-      return true;
-    }
-    this.drainCommands();
-    let usableFrames = frames;
-    if (usableFrames > this.blockSize) {
-      if (!_SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow) {
-        _SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow = true;
-        console.warn(
-          `SonareRealtimeEngineWorkletProcessor: requested ${usableFrames} frames exceeds pre-allocated capacity ${this.blockSize}; clamping.`
-        );
-      }
-      usableFrames = this.blockSize;
-    }
-    if ((this.channelBuffers[0]?.byteLength ?? 0) === 0) {
-      this.reacquireChannelBuffers();
-    }
-    const input = inputs[0];
-    for (let ch = 0; ch < this.channelCount; ch++) {
-      const dst = this.channelBuffers[ch];
-      const source = input?.[ch];
-      if (source && source.length === usableFrames) {
-        dst.set(source.subarray(0, usableFrames));
-      } else {
-        dst.fill(0, 0, usableFrames);
-      }
-    }
-    this.engine.processPrepared(usableFrames);
-    for (let ch = 0; ch < output.length; ch++) {
-      const target = output[ch];
-      const source = this.channelBuffers[ch] ?? this.channelBuffers[0];
-      if (source) {
-        target.set(source.subarray(0, Math.min(target.length, usableFrames)));
-        if (target.length > usableFrames) {
-          target.fill(0, usableFrames);
-        }
-      } else {
-        target.fill(0);
-      }
-    }
-    this.publishTelemetry();
-    this.publishMeters();
-    this.publishScope();
-    return true;
-  }
-  reacquireChannelBuffers() {
-    for (let ch = 0; ch < this.channelCount; ch++) {
-      this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
-    }
-  }
-  receiveCommand(command) {
-    if (!this.closed) {
-      this.applyCommand(command);
-    }
-  }
-  // Applies an out-of-band control-plane sync message. Runs on the AudioWorklet
-  // global scope but OUTSIDE process() (the message-port callback), so the
-  // bulk/allocating engine setters (setClips/setMarkers) are safe here — they
-  // never run on the realtime render path. This is the audio-thread equivalent
-  // of the engine's control-thread RtPublisher setters.
-  receiveSync(message) {
-    if (this.closed) {
-      return;
-    }
-    switch (message.type) {
-      case "syncClips":
-        this.liveClips.clear();
-        for (const clip of message.clips) {
-          if (clip.id !== void 0) {
-            this.liveClips.set(clip.id, clip);
-          }
-        }
-        this.engine.setClips(message.clips);
-        break;
-      case "syncClipsDelta":
-        for (const clipId of message.removeIds) {
-          this.liveClips.delete(clipId);
-        }
-        for (const clip of message.upserts) {
-          if (clip.id !== void 0) {
-            this.liveClips.set(clip.id, clip);
-          }
-        }
-        this.engine.setClips(Array.from(this.liveClips.values()));
-        break;
-      case "syncMidiClips":
-        this.engine.setMidiClips(message.clips);
-        break;
-      case "syncMarkers":
-        this.engine.setMarkers(message.markers);
-        break;
-      case "syncMetronome":
-        this.metronomeConfig = resolveMetronomeConfig(message.config);
-        this.engine.setMetronome(message.config);
-        break;
-      case "syncAutomation":
-        this.engine.setAutomationLane(message.paramId, message.points);
-        break;
-      case "syncTempo":
-        if (message.tempoSegments) {
-          this.engine.setTempoSegments(message.tempoSegments);
-        } else {
-          this.engine.setTempo(message.bpm);
-        }
-        if (message.timeSignatureSegments) {
-          this.engine.setTimeSignatureSegments(message.timeSignatureSegments);
-        } else {
-          this.engine.setTimeSignature(
-            message.timeSignature.numerator,
-            message.timeSignature.denominator
-          );
-        }
-        break;
-      case "syncMixer":
-        if (message.buses) {
-          this.engine.setTrackBuses(message.buses);
-        }
-        this.engine.setTrackLanes(message.lanes);
-        for (const strip of message.trackStrips ?? []) {
-          this.engine.setTrackStripJson(strip.trackId, strip.sceneJson);
-        }
-        for (const strip of message.busStrips ?? []) {
-          this.engine.setBusStripJson(strip.busId, strip.sceneJson);
-        }
-        if (message.masterStripJson) {
-          this.engine.setMasterStripJson(message.masterStripJson);
-        }
-        for (const binding of message.laneSidechains ?? []) {
-          this.engine.setLaneSidechain(binding.trackId, binding.insertIndex, binding.sourceTrackId);
-        }
-        break;
-      case "syncCapture":
-        this.engine.setCaptureBuffer(message.channels, message.bufferFrames);
-        this.engine.setCaptureSource(message.source);
-        this.engine.setRecordOffsetSamples(message.recordOffsetSamples);
-        this.engine.setInputMonitor(message.inputMonitor.enabled, message.inputMonitor.gain);
-        break;
-      case "syncTrackStripEqBand":
-        this.engine.setTrackStripEqBandJson(message.trackId, message.bandIndex, message.bandJson);
-        break;
-      case "syncMasterStripEqBand":
-        this.engine.setMasterStripEqBandJson(message.bandIndex, message.bandJson);
-        break;
-      case "syncTrackStripInsertBypassed":
-        this.engine.setTrackStripInsertBypassed(
-          message.trackId,
-          message.insertIndex,
-          message.bypassed,
-          message.resetOnBypass
-        );
-        break;
-      case "syncMasterStripInsertBypassed":
-        this.engine.setMasterStripInsertBypassed(
-          message.insertIndex,
-          message.bypassed,
-          message.resetOnBypass
-        );
-        break;
-      case "syncTrackStripInsertParamByName":
-        this.engine.setTrackStripInsertParamByName(
-          message.trackId,
-          message.insertIndex,
-          message.paramName,
-          message.value
-        );
-        break;
-      case "syncMasterStripInsertParamByName":
-        this.engine.setMasterStripInsertParamByName(
-          message.insertIndex,
-          message.paramName,
-          message.value
-        );
-        break;
-      case "syncTrackStripPan":
-        this.engine.setTrackStripPan(message.trackId, message.pan);
-        break;
-      case "syncTrackStripPanLaw":
-        this.engine.setTrackStripPanLaw(message.trackId, message.panLaw);
-        break;
-      case "syncTrackStripPanMode":
-        this.engine.setTrackStripPanMode(message.trackId, message.panMode);
-        break;
-      case "syncTrackStripDualPan":
-        this.engine.setTrackStripDualPan(message.trackId, message.leftPan, message.rightPan);
-        break;
-      case "syncTrackStripChannelDelaySamples":
-        this.engine.setTrackStripChannelDelaySamples(message.trackId, message.delaySamples);
-        break;
-      case "syncBuiltinInstrument":
-        this.engine.setBuiltinInstrument(message.config, message.destinationId);
-        break;
-      case "syncSynthInstrument":
-        this.engine.setSynthInstrument(message.patch, message.destinationId);
-        break;
-      case "syncLoadSoundFont":
-        this.engine.loadSoundFont(message.data);
-        break;
-      case "syncSf2Instrument":
-        this.engine.setSf2Instrument(message.config, message.destinationId);
-        break;
-      case "syncMidiNoteOn":
-        this.engine.pushMidiNoteOn(
-          message.destinationId,
-          message.group,
-          message.channel,
-          message.note,
-          message.velocity,
-          message.renderFrame
-        );
-        break;
-      case "syncMidiNoteOff":
-        this.engine.pushMidiNoteOff(
-          message.destinationId,
-          message.group,
-          message.channel,
-          message.note,
-          message.velocity,
-          message.renderFrame
-        );
-        break;
-      case "syncMidiCc":
-        this.engine.pushMidiCc(
-          message.destinationId,
-          message.group,
-          message.channel,
-          message.controller,
-          message.value,
-          message.renderFrame
-        );
-        break;
-      case "syncMidiPanic":
-        this.engine.pushMidiPanic(message.renderFrame);
-        break;
-    }
-  }
-  receiveCaptureRequest(message) {
-    if (this.closed) {
-      return;
-    }
-    try {
-      if (message.op === "status") {
-        const status = this.engine.captureStatus();
-        this.transport?.postMessage?.({
-          type: "captureResponse",
-          requestId: message.requestId,
-          ok: true,
-          status: {
-            capturedFrames: status.capturedFrames,
-            overflowCount: status.overflowCount,
-            armed: status.armed,
-            punchEnabled: status.punchEnabled,
-            source: status.source,
-            recordOffsetSamples: status.recordOffsetSamples
-          }
-        });
-        return;
-      }
-      if (message.op === "read") {
-        const captured = this.engine.capturedAudio();
-        const channels = [];
-        for (let ch = 0; ch < captured.length; ch++) {
-          const source = captured[ch];
-          const copy = [];
-          for (let i = 0; i < source.length; i++) {
-            copy.push(Number(source[i]));
-          }
-          channels.push(copy);
-        }
-        this.transport?.postMessage?.({
-          type: "captureResponse",
-          requestId: message.requestId,
-          ok: true,
-          channels
-        });
-        return;
-      }
-      this.engine.resetCapture();
-      this.transport?.postMessage?.({
-        type: "captureResponse",
-        requestId: message.requestId,
-        ok: true
+  const Base = scope.AudioWorkletProcessor;
+  class RegisteredSonareWorkletProcessor extends Base {
+    constructor(options) {
+      super();
+      const port = this.port;
+      this.bridge = new SonareWorkletProcessor(options?.processorOptions ?? { sceneJson: "" }, {
+        postMessage: (message) => port?.postMessage?.(message)
       });
-    } catch (error) {
-      this.transport?.postMessage?.({
-        type: "captureResponse",
-        requestId: message.requestId,
-        ok: false,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-  receiveTransportRequest(message) {
-    if (this.closed) {
-      return;
-    }
-    try {
-      this.transport?.postMessage?.({
-        type: "transportResponse",
-        requestId: message.requestId,
-        ok: true,
-        state: this.engine.getTransportState()
-      });
-    } catch (error) {
-      this.transport?.postMessage?.({
-        type: "transportResponse",
-        requestId: message.requestId,
-        ok: false,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-  destroy() {
-    if (!this.closed) {
-      this.engine.destroy();
-      this.closed = true;
-    }
-  }
-  drainCommands() {
-    if (!this.commandRing) {
-      return;
-    }
-    for (let i = 0; i < 64; i++) {
-      const command = popSonareEngineCommandRingBuffer(this.commandRing);
-      if (!command) {
-        return;
-      }
-      this.applyCommand(command);
-    }
-  }
-  applyCommand(command) {
-    const sampleTime = Number(command.sampleTime ?? -1);
-    switch (command.type) {
-      case 0 /* SetParam */:
-        this.engine.setParameter(
-          Math.trunc(Number(command.targetId ?? 0)),
-          Number(command.argFloat ?? 0),
-          sampleTime
-        );
-        break;
-      case 1 /* SetParamSmoothed */:
-        this.engine.setParameterSmoothed(
-          Math.trunc(Number(command.targetId ?? 0)),
-          Number(command.argFloat ?? 0),
-          sampleTime
-        );
-        break;
-      case 2 /* TransportPlay */:
-        this.engine.play(sampleTime);
-        break;
-      case 3 /* TransportStop */:
-        this.engine.stop(sampleTime);
-        break;
-      case 4 /* TransportSeekSample */:
-        this.engine.seekSample(Number(command.argInt ?? 0), sampleTime);
-        break;
-      case 5 /* TransportSeekPpq */:
-        this.engine.seekPpq(Number(command.argFloat ?? 0), sampleTime);
-        break;
-      case 6 /* SetTempoMap */:
-        this.engine.setTempo(Number(command.argFloat ?? 120));
-        break;
-      case 7 /* SetLoop */:
-        this.engine.setLoop(
-          Number(command.argFloat ?? 0),
-          Number(command.argInt ?? 0) / 1e6,
-          command.targetId !== 0
-        );
-        break;
-      case 13 /* ArmRecord */:
-        this.engine.armCapture(Boolean(command.argInt));
-        break;
-      case 14 /* Punch */:
-        this.engine.setCapturePunch(
-          Number(command.argInt ?? 0),
-          Math.max(0, Math.round(Number(command.argFloat ?? 0))),
-          true
-        );
-        break;
-      case 15 /* SetMetronome */:
-        this.engine.setMetronome({
-          enabled: Boolean(command.argInt),
-          beatGain: this.metronomeConfig.beatGain,
-          accentGain: this.metronomeConfig.accentGain,
-          clickSamples: this.metronomeConfig.clickSamples
-        });
-        break;
-      case 17 /* SeekMarker */:
-        this.engine.seekMarker(Math.trunc(Number(command.targetId ?? 0)), sampleTime);
-        break;
-      case 10 /* SetSoloMute */:
-        this.engine.setSoloMute(
-          Math.trunc(Number(command.targetId ?? 0)),
-          Boolean((Number(command.argInt ?? 0) & 2) !== 0),
-          Boolean((Number(command.argInt ?? 0) & 1) !== 0),
-          sampleTime
-        );
-        break;
-      default:
-        this.publishTelemetryRecord({
-          type: 1 /* Error */,
-          error: 7 /* UnknownTarget */,
-          renderFrame: 0,
-          timelineSample: 0,
-          audibleTimelineSample: 0,
-          graphLatencySamplesQ8: 0,
-          value: Number(command.type)
-        });
-        break;
-    }
-  }
-  publishTelemetry() {
-    for (const item of this.engine.drainTelemetry(64)) {
-      this.publishTelemetryRecord(telemetryFromEngine(item));
-    }
-  }
-  publishTelemetryRecord(record) {
-    if (this.telemetryRing) {
-      writeSonareEngineTelemetryRingBuffer(this.telemetryRing, record);
-      return;
-    }
-    this.transport?.postMessage?.(record);
-  }
-  // Drains the engine meter telemetry queue into the stereo meter ring / transport.
-  //
-  // Shared-queue contract: `drainMeterTelemetry` and `drainMeterTelemetryWide`
-  // pop the SAME single-consumer telemetry queue, so exactly ONE of them may run
-  // per engine. The live worklet path owns the queue via the stereo drain below;
-  // the worklet meter ring (SONARE_METER_RING_RECORD_FLOATS) is a fixed stereo
-  // layout carrying planes 0/1 plus the correlation/LUFS summary. Per-plane
-  // surround meters are NOT delivered over the live worklet ring — a host that
-  // needs them must use the offline `drainMeterTelemetryWide()` API on a
-  // non-worklet engine instance (do not also call it on a worklet-driven engine,
-  // or the two drains will starve each other).
-  publishMeters() {
-    if (this.meterIntervalFrames <= 0 || !this.transport && !this.meterRing) {
-      return;
-    }
-    for (const item of this.engine.drainMeterTelemetry(64)) {
-      const meter = meterFromEngine(item);
-      if (meter.frame !== this.lastMeterFrame && meter.frame - this.lastMeterFrame < this.meterIntervalFrames) {
-        continue;
-      }
-      if (meter.frame !== this.lastMeterFrame) {
-        this.lastMeterFrame = meter.frame;
-      }
-      if (this.meterRing) {
-        this.writeMeterRing(meter);
-      } else {
-        this.transport?.onMeter?.(meter);
-        this.transport?.postMessage?.(meter);
-      }
-    }
-  }
-  writeMeterRing(meter) {
-    const ring = this.meterRing;
-    if (!ring) {
-      return;
-    }
-    const writeIndex = Atomics.load(ring.header, 0);
-    const offset = writeIndex % ring.capacity * SONARE_METER_RING_RECORD_FLOATS;
-    ring.records[offset] = encodeFrameLo(meter.frame);
-    ring.records[offset + 1] = encodeFrameHi(meter.frame);
-    ring.records[offset + 2] = meter.targetId;
-    ring.records[offset + 3] = meter.peakDbL;
-    ring.records[offset + 4] = meter.peakDbR;
-    ring.records[offset + 5] = meter.rmsDbL;
-    ring.records[offset + 6] = meter.rmsDbR;
-    ring.records[offset + 7] = meter.correlation;
-    ring.records[offset + 8] = meter.truePeakDbL;
-    ring.records[offset + 9] = meter.truePeakDbR;
-    ring.records[offset + 10] = meter.momentaryLufs;
-    ring.records[offset + 11] = meter.shortTermLufs;
-    ring.records[offset + 12] = meter.integratedLufs;
-    ring.records[offset + 13] = meter.gainReductionDb;
-    Atomics.store(ring.header, 0, writeIndex + 1);
-  }
-  // Drains the engine's scope producer (FFT spectrum + goniometer points) into
-  // the lock-free SAB scope ring. Only the embind runtime publishes scope
-  // telemetry; the sonare-rt runtime owns its own transport. No allocation on
-  // the render path: records are written field-by-field into the ring.
-  publishScope() {
-    const ring = this.scopeRing;
-    if (!ring) {
-      return;
-    }
-    for (const item of this.engine.drainScopeTelemetry(64)) {
-      this.writeScopeRing(ring, item);
-    }
-  }
-  writeScopeRing(ring, record) {
-    const writeIndex = Atomics.load(ring.header, 0);
-    const base = writeIndex % ring.capacity * ring.recordFloats;
-    ring.records[base] = encodeFrameLo(record.renderFrame);
-    ring.records[base + 1] = encodeFrameHi(record.renderFrame);
-    ring.records[base + 2] = record.targetId;
-    const bandCount = Math.min(ring.bands, record.bands.length);
-    ring.records[base + 3] = bandCount;
-    const pointCount = Math.min(ring.maxPoints, record.points.length);
-    ring.records[base + 4] = pointCount;
-    const bandsBase = base + SONARE_SCOPE_RING_RECORD_PREFIX_FLOATS;
-    for (let i = 0; i < bandCount; i++) {
-      ring.records[bandsBase + i] = record.bands[i];
-    }
-    const pointsBase = bandsBase + ring.bands;
-    for (let i = 0; i < pointCount; i++) {
-      const point = record.points[i];
-      ring.records[pointsBase + 2 * i] = point.left;
-      ring.records[pointsBase + 2 * i + 1] = point.right;
-    }
-    Atomics.store(ring.header, 0, writeIndex + 1);
-  }
-  commandRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
-    const ring = engineRingFromSharedBuffer(
-      sharedBuffer,
-      SONARE_ENGINE_COMMAND_RECORD_BYTES,
-      fallbackCapacity
-    );
-    return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
-  }
-  telemetryRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
-    const ring = engineRingFromSharedBuffer(
-      sharedBuffer,
-      SONARE_ENGINE_TELEMETRY_RECORD_BYTES,
-      fallbackCapacity
-    );
-    return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
-  }
-};
-_SonareRealtimeEngineWorkletProcessor.warnedChannelScratchOverflow = false;
-var SonareRealtimeEngineWorkletProcessor = _SonareRealtimeEngineWorkletProcessor;
-var SonareRtRealtimeEngineRuntime = class {
-  constructor(options) {
-    this.metronomeConfig = { ...DEFAULT_METRONOME_CONFIG };
-    this.closed = false;
-    this.module = options.module;
-    this.memory = options.memory;
-    this.sampleRate = options.sampleRate ?? 48e3;
-    this.blockSize = options.blockSize ?? 128;
-    this.channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
-    this.commandRing = options.commandSharedBuffer ? this.commandRingFromSharedBuffer(options.commandSharedBuffer, options.commandRingCapacity) : void 0;
-    this.telemetryRing = options.telemetrySharedBuffer ? this.telemetryRingFromSharedBuffer(
-      options.telemetrySharedBuffer,
-      options.telemetryRingCapacity
-    ) : void 0;
-    this.engine = this.module._sonare_rt_engine_create();
-    if (this.engine <= 0) {
-      throw new Error("failed to create sonare-rt engine");
-    }
-    if (this.module._sonare_rt_engine_prepare(
-      this.engine,
-      this.sampleRate,
-      this.blockSize,
-      1024,
-      1024
-    ) !== 1) {
-      this.module._sonare_rt_engine_destroy(this.engine);
-      throw new Error("failed to prepare sonare-rt engine");
-    }
-    this.channelPointerTable = this.module._malloc(
-      this.channelCount * Uint32Array.BYTES_PER_ELEMENT
-    );
-    this.channelBuffers = [];
-    for (let ch = 0; ch < this.channelCount; ch++) {
-      this.channelBuffers.push(
-        this.module._malloc(this.blockSize * Float32Array.BYTES_PER_ELEMENT)
-      );
-    }
-    this.telemetryIntsPtr = this.module._malloc(64 * 4 * Int32Array.BYTES_PER_ELEMENT);
-    this.telemetryFramesPtr = this.module._malloc(64 * 3 * Float64Array.BYTES_PER_ELEMENT);
-    this.writeChannelPointers();
-  }
-  process(inputs, outputs) {
-    if (this.closed) {
-      return false;
-    }
-    const output = outputs[0];
-    const firstOutput = output?.[0];
-    if (!firstOutput) {
-      return true;
-    }
-    const frames = firstOutput.length;
-    if (frames > this.blockSize) {
-      for (const channel of output) {
-        channel.fill(0);
-      }
-      return true;
-    }
-    this.drainCommands();
-    const heap = new Float32Array(this.memory.buffer);
-    const input = inputs[0];
-    for (let ch = 0; ch < this.channelCount; ch++) {
-      const ptr = this.channelBuffers[ch] ?? this.channelBuffers[0];
-      const offset = ptr >> 2;
-      const source = input?.[ch];
-      if (source && source.length === frames) {
-        heap.set(source, offset);
-      } else {
-        heap.fill(0, offset, offset + frames);
-      }
-    }
-    this.module._sonare_rt_engine_process(
-      this.engine,
-      this.channelPointerTable,
-      this.channelCount,
-      frames
-    );
-    for (let ch = 0; ch < output.length; ch++) {
-      const target = output[ch];
-      const ptr = this.channelBuffers[ch] ?? this.channelBuffers[0];
-      target.set(heap.subarray(ptr >> 2, (ptr >> 2) + target.length));
-    }
-    this.publishTelemetry();
-    return true;
-  }
-  receiveCommand(command) {
-    if (!this.closed) {
-      this.applyCommand(command);
-    }
-  }
-  // Out-of-band control sync for the sonare-rt runtime. The sonare-rt C ABI
-  // (src/wasm/rt_bindings.cpp) exposes set_metronome_enabled and seek_marker but
-  // NOT set_clips / set_markers, so clip/marker mutations cannot be applied to a
-  // live sonare-rt engine. We honor the metronome config and surface a clear
-  // telemetry error for the unsupported clip/marker paths instead of silently
-  // dropping them. The default 'embind' runtime wires all three fully.
-  receiveSync(message) {
-    if (this.closed) {
-      return;
-    }
-    switch (message.type) {
-      case "syncMetronome":
-        this.metronomeConfig = resolveMetronomeConfig(message.config);
-        this.module._sonare_rt_engine_set_metronome_enabled(
-          this.engine,
-          message.config.enabled ? 1 : 0,
-          this.metronomeConfig.beatGain,
-          this.metronomeConfig.accentGain,
-          this.metronomeConfig.clickSamples
-        );
-        break;
-      case "syncTempo":
-        this.module._sonare_rt_engine_set_tempo(this.engine, message.bpm);
-        break;
-      case "syncClips":
-      case "syncClipsDelta":
-      case "syncMidiClips":
-      case "syncMarkers":
-      case "syncAutomation":
-      case "syncMixer":
-      case "syncCapture":
-      case "syncTrackStripEqBand":
-      case "syncMasterStripEqBand":
-      case "syncTrackStripInsertBypassed":
-      case "syncMasterStripInsertBypassed":
-      case "syncBuiltinInstrument":
-      case "syncSynthInstrument":
-      case "syncSf2Instrument":
-      case "syncLoadSoundFont":
-      case "syncMidiNoteOn":
-      case "syncMidiNoteOff":
-      case "syncMidiCc":
-      case "syncMidiPanic":
-        if (this.telemetryRing) {
-          writeSonareEngineTelemetryRingBuffer(this.telemetryRing, {
-            type: 1 /* Error */,
-            error: 7 /* UnknownTarget */,
-            renderFrame: 0,
-            timelineSample: 0,
-            audibleTimelineSample: 0,
-            graphLatencySamplesQ8: 0,
-            value: 0
-          });
+      const onMessage = (event) => {
+        if (isWorkletMessage(event.data)) {
+          this.bridge.receiveMessage(event.data);
         }
-        break;
-    }
-  }
-  receiveCaptureRequest(message, port) {
-    if (this.closed) {
-      return;
-    }
-    port?.postMessage?.({
-      type: "captureResponse",
-      requestId: message.requestId,
-      ok: false,
-      error: "Capture read-back is not supported by the sonare-rt runtime."
-    });
-  }
-  receiveTransportRequest(message, port) {
-    if (this.closed) {
-      return;
-    }
-    port?.postMessage?.({
-      type: "transportResponse",
-      requestId: message.requestId,
-      ok: false,
-      error: "Transport state read-back is not supported by the sonare-rt runtime."
-    });
-  }
-  destroy() {
-    if (this.closed) {
-      return;
-    }
-    this.module._free(this.telemetryFramesPtr);
-    this.module._free(this.telemetryIntsPtr);
-    for (const ptr of this.channelBuffers) {
-      this.module._free(ptr);
-    }
-    this.module._free(this.channelPointerTable);
-    this.module._sonare_rt_engine_destroy(this.engine);
-    this.closed = true;
-  }
-  writeChannelPointers() {
-    const pointers = new Uint32Array(this.memory.buffer);
-    const offset = this.channelPointerTable >> 2;
-    for (let ch = 0; ch < this.channelBuffers.length; ch++) {
-      pointers[offset + ch] = this.channelBuffers[ch];
-    }
-  }
-  drainCommands() {
-    if (!this.commandRing) {
-      return;
-    }
-    for (let i = 0; i < 64; i++) {
-      const command = popSonareEngineCommandRingBuffer(this.commandRing);
-      if (!command) {
-        return;
-      }
-      this.applyCommand(command);
-    }
-  }
-  applyCommand(command) {
-    const sampleTime = toBigInt64(command.sampleTime, -1n);
-    switch (command.type) {
-      case 0 /* SetParam */:
-      case 1 /* SetParamSmoothed */:
-        if (this.telemetryRing) {
-          writeSonareEngineTelemetryRingBuffer(this.telemetryRing, {
-            type: 1 /* Error */,
-            error: 7 /* UnknownTarget */,
-            renderFrame: 0,
-            timelineSample: 0,
-            audibleTimelineSample: 0,
-            graphLatencySamplesQ8: 0,
-            value: Number(command.type)
-          });
-        }
-        break;
-      case 2 /* TransportPlay */:
-        this.module._sonare_rt_engine_play(this.engine, sampleTime);
-        break;
-      case 3 /* TransportStop */:
-        this.module._sonare_rt_engine_stop(this.engine, sampleTime);
-        break;
-      case 4 /* TransportSeekSample */:
-        this.module._sonare_rt_engine_seek_sample(
-          this.engine,
-          toBigInt64(command.argInt, 0n),
-          sampleTime
-        );
-        break;
-      case 5 /* TransportSeekPpq */:
-        this.module._sonare_rt_engine_seek_ppq(
-          this.engine,
-          Number(command.argFloat ?? 0),
-          sampleTime
-        );
-        break;
-      case 6 /* SetTempoMap */:
-        this.module._sonare_rt_engine_set_tempo(this.engine, Number(command.argFloat ?? 120));
-        break;
-      case 7 /* SetLoop */:
-        this.module._sonare_rt_engine_set_loop(
-          this.engine,
-          Number(command.argFloat ?? 0),
-          Number(command.argInt ?? 0) / 1e6,
-          command.targetId ? 1 : 0
-        );
-        break;
-      case 13 /* ArmRecord */:
-        this.module._sonare_rt_engine_set_capture_armed(this.engine, command.argInt ? 1 : 0);
-        break;
-      case 14 /* Punch */:
-        this.module._sonare_rt_engine_set_capture_punch(
-          this.engine,
-          toBigInt64(command.argInt, 0n),
-          BigInt(Math.max(0, Math.round(Number(command.argFloat ?? 0)))),
-          1
-        );
-        break;
-      case 15 /* SetMetronome */:
-        this.module._sonare_rt_engine_set_metronome_enabled(
-          this.engine,
-          command.argInt ? 1 : 0,
-          this.metronomeConfig.beatGain,
-          this.metronomeConfig.accentGain,
-          this.metronomeConfig.clickSamples
-        );
-        break;
-      case 17 /* SeekMarker */:
-        this.module._sonare_rt_engine_seek_marker(
-          this.engine,
-          Math.trunc(command.targetId ?? 0),
-          sampleTime
-        );
-        break;
-      default:
-        if (this.telemetryRing) {
-          writeSonareEngineTelemetryRingBuffer(this.telemetryRing, {
-            type: 1 /* Error */,
-            error: 7 /* UnknownTarget */,
-            renderFrame: 0,
-            timelineSample: 0,
-            audibleTimelineSample: 0,
-            graphLatencySamplesQ8: 0,
-            value: Number(command.type)
-          });
-        }
-        break;
-    }
-  }
-  publishTelemetry() {
-    if (!this.telemetryRing) {
-      this.module._sonare_rt_engine_drain_telemetry(
-        this.engine,
-        this.telemetryIntsPtr,
-        this.telemetryFramesPtr,
-        64
-      );
-      return;
-    }
-    const count = this.module._sonare_rt_engine_drain_telemetry(
-      this.engine,
-      this.telemetryIntsPtr,
-      this.telemetryFramesPtr,
-      64
-    );
-    const ints = new Int32Array(this.memory.buffer);
-    const frames = new Float64Array(this.memory.buffer);
-    const intBase = this.telemetryIntsPtr >> 2;
-    const frameBase = this.telemetryFramesPtr >> 3;
-    for (let i = 0; i < count; i++) {
-      writeSonareEngineTelemetryRingBuffer(this.telemetryRing, {
-        type: ints[intBase + i * 4],
-        error: ints[intBase + i * 4 + 1],
-        renderFrame: frames[frameBase + i * 3],
-        timelineSample: frames[frameBase + i * 3 + 1],
-        audibleTimelineSample: frames[frameBase + i * 3 + 2],
-        graphLatencySamplesQ8: ints[intBase + i * 4 + 2],
-        value: ints[intBase + i * 4 + 3]
-      });
-    }
-  }
-  commandRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
-    const ring = engineRingFromSharedBuffer(
-      sharedBuffer,
-      SONARE_ENGINE_COMMAND_RECORD_BYTES,
-      fallbackCapacity
-    );
-    return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
-  }
-  telemetryRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
-    const ring = engineRingFromSharedBuffer(
-      sharedBuffer,
-      SONARE_ENGINE_TELEMETRY_RECORD_BYTES,
-      fallbackCapacity
-    );
-    return { sharedBuffer, header: ring.header, view: ring.view, capacity: ring.capacity };
-  }
-};
-var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
-  constructor(node, capabilities, commandRing, telemetryRing, meterRing, scopeRing) {
-    this.telemetryReadIndex = 0;
-    this.meterReadIndex = 0;
-    this.scopeReadIndex = 0;
-    this.telemetryListeners = /* @__PURE__ */ new Set();
-    this.meterListeners = /* @__PURE__ */ new Set();
-    this.scopeListeners = /* @__PURE__ */ new Set();
-    this.captureRequestId = 1;
-    this.captureRequests = /* @__PURE__ */ new Map();
-    this.transportRequestId = 1;
-    this.transportRequests = /* @__PURE__ */ new Map();
-    this.destroyed = false;
-    this.node = node;
-    this.capabilities = capabilities;
-    this.commandRing = commandRing;
-    this.telemetryRing = telemetryRing;
-    this.meterRing = meterRing;
-    this.scopeRing = scopeRing;
-    this.ready = new Promise((resolve, reject) => {
-      this.resolveReady = resolve;
-      this.rejectReady = reject;
-    });
-    if (!capabilities.readyMessage) {
-      this.resolveReady();
-    }
-    this.node.port.onmessage = (event) => {
-      if (isEngineCaptureResponseMessage(event.data)) {
-        const pending = this.captureRequests.get(event.data.requestId);
-        if (pending) {
-          this.captureRequests.delete(event.data.requestId);
-          if (event.data.ok) {
-            pending.resolve(event.data);
-          } else {
-            pending.reject(new Error(event.data.error ?? "Capture request failed"));
-          }
-        }
-      } else if (isEngineTransportResponseMessage(event.data)) {
-        const pending = this.transportRequests.get(event.data.requestId);
-        if (pending) {
-          this.transportRequests.delete(event.data.requestId);
-          if (event.data.ok) {
-            pending.resolve(event.data);
-          } else {
-            pending.reject(new Error(event.data.error ?? "Transport request failed"));
-          }
-        }
-      } else if (isEngineTelemetryRecord(event.data)) {
-        this.emitTelemetry(event.data);
-      } else if (isMeterSnapshot(event.data)) {
-        this.emitMeter(event.data);
-      } else if (isRecord(event.data) && event.data.type === "ready") {
-        this.resolveReady();
-      } else if (isRecord(event.data) && event.data.type === "error") {
-        this.rejectReady(new Error(String(event.data.message ?? "AudioWorklet error")));
-      }
-    };
-  }
-  static async create(context, options = {}) {
-    const runtimeTarget = options.runtimeTarget ?? "embind";
-    const processorName = options.processorName ?? "sonare-realtime-engine-processor";
-    const moduleUrl = options.moduleUrl;
-    if (moduleUrl && context.audioWorklet?.addModule) {
-      await context.audioWorklet.addModule(moduleUrl);
-    }
-    const detectedCapabilities = options.engineAbiVersion !== void 0 ? {
-      engineAbiVersion: options.engineAbiVersion,
-      expectedEngineAbiVersion: options.expectedEngineAbiVersion ?? options.engineAbiVersion,
-      abiCompatible: options.engineAbiVersion === (options.expectedEngineAbiVersion ?? options.engineAbiVersion)
-    } : runtimeTarget === "embind" ? engineCapabilities() : void 0;
-    if (options.requireAbiCompatible !== false && detectedCapabilities?.abiCompatible === false) {
-      throw new Error(
-        `Engine ABI mismatch: wasm=${detectedCapabilities.engineAbiVersion}, expected=${detectedCapabilities.expectedEngineAbiVersion}`
-      );
-    }
-    const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
-    const atomics = typeof globalThis.Atomics === "object";
-    const audioWorklet = typeof AudioWorkletNode !== "undefined" || !!options.nodeFactory;
-    const degradedReason = options.mode !== "postMessage" && (!sharedArrayBuffer || !atomics) ? "SharedArrayBuffer or Atomics unavailable; using postMessage transport." : void 0;
-    const mode = options.mode === "postMessage" || !sharedArrayBuffer || !atomics ? "postMessage" : "sab";
-    if (options.mode === "sab" && mode !== "sab") {
-      throw new Error(
-        "SharedArrayBuffer mode requested but SharedArrayBuffer/Atomics are unavailable."
-      );
-    }
-    const commandRing = mode === "sab" ? createSonareEngineCommandRingBuffer(options.commandRingCapacity ?? 128) : void 0;
-    const telemetryRing = mode === "sab" ? createSonareEngineTelemetryRingBuffer(options.telemetryRingCapacity ?? 128) : void 0;
-    const meterRing = mode === "sab" && runtimeTarget === "embind" ? createSonareMeterRingBuffer(options.meterRingCapacity ?? 128) : void 0;
-    const scopeIntervalFrames = Math.max(0, Math.floor(options.scopeIntervalFrames ?? 0));
-    const scopeRing = mode === "sab" && runtimeTarget === "embind" && scopeIntervalFrames > 0 ? createSonareScopeRingBuffer(options.scopeRingCapacity ?? 64, options.scopeBands ?? 48) : void 0;
-    const channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
-    const processorOptions = {
-      runtimeTarget,
-      rtModuleUrl: options.rtModuleUrl,
-      rtWasmBinary: options.rtWasmBinary,
-      sampleRate: options.sampleRate ?? context.sampleRate,
-      blockSize: options.blockSize,
-      channelCount,
-      commandSharedBuffer: commandRing?.sharedBuffer,
-      commandRingCapacity: commandRing?.capacity,
-      telemetrySharedBuffer: telemetryRing?.sharedBuffer,
-      telemetryRingCapacity: telemetryRing?.capacity,
-      meterSharedBuffer: meterRing?.sharedBuffer,
-      meterRingCapacity: meterRing?.capacity,
-      scopeSharedBuffer: scopeRing?.sharedBuffer,
-      scopeRingCapacity: scopeRing?.capacity,
-      scopeBands: scopeRing?.bands,
-      scopeIntervalFrames: scopeRing ? scopeIntervalFrames : void 0,
-      wasmBinary: options.wasmBinary,
-      initialSyncMessages: options.initialSyncMessages,
-      initialCommands: options.initialCommands
-    };
-    const factory = options.nodeFactory ?? ((ctx, name, nodeOptions) => new AudioWorkletNode(ctx, name, nodeOptions));
-    const node = factory(context, processorName, {
-      numberOfInputs: 1,
-      numberOfOutputs: 1,
-      outputChannelCount: [channelCount],
-      processorOptions
-    });
-    return new _SonareRealtimeEngineNode(
-      node,
-      {
-        mode,
-        runtimeTarget,
-        sharedArrayBuffer,
-        atomics,
-        audioWorklet,
-        engineAbiVersion: detectedCapabilities?.engineAbiVersion,
-        expectedEngineAbiVersion: detectedCapabilities?.expectedEngineAbiVersion,
-        abiCompatible: detectedCapabilities?.abiCompatible,
-        degradedReason,
-        readyMessage: runtimeTarget === "sonare-rt" || runtimeTarget === "embind" && moduleUrl !== void 0 && !options.nodeFactory
-      },
-      commandRing,
-      telemetryRing,
-      meterRing,
-      scopeRing
-    );
-  }
-  play(sampleTime = -1) {
-    return this.sendCommand({ type: 2 /* TransportPlay */, sampleTime });
-  }
-  stop(sampleTime = -1) {
-    return this.sendCommand({ type: 3 /* TransportStop */, sampleTime });
-  }
-  seekSample(timelineSample, sampleTime = -1) {
-    return this.sendCommand({
-      type: 4 /* TransportSeekSample */,
-      sampleTime,
-      argInt: timelineSample
-    });
-  }
-  seekPpq(ppq, sampleTime = -1) {
-    return this.sendCommand({
-      type: 5 /* TransportSeekPpq */,
-      sampleTime,
-      argFloat: ppq
-    });
-  }
-  sendCommand(command) {
-    if (this.destroyed) {
-      return false;
-    }
-    if (this.commandRing) {
-      return pushSonareEngineCommandRingBuffer(this.commandRing, command);
-    }
-    this.node.port.postMessage(command);
-    return true;
-  }
-  requestCaptureStatus() {
-    return this.sendCaptureRequest("status").then((response) => {
-      if (!response.status) {
-        throw new Error("Capture status response is missing status.");
-      }
-      return response.status;
-    });
-  }
-  requestCapturedAudio() {
-    return this.sendCaptureRequest("read").then(
-      (response) => (response.channels ?? []).map(
-        (channel) => channel instanceof Float32Array ? channel : new Float32Array(channel)
-      )
-    );
-  }
-  requestCaptureReset() {
-    return this.sendCaptureRequest("reset").then(() => void 0);
-  }
-  requestTransportState() {
-    return this.sendTransportRequest().then((response) => {
-      if (!response.state) {
-        throw new Error("Transport state response is missing state.");
-      }
-      return response.state;
-    });
-  }
-  pollTelemetry() {
-    if (!this.telemetryRing) {
-      return [];
-    }
-    const read = readSonareEngineTelemetryRingBuffer(this.telemetryRing, this.telemetryReadIndex);
-    this.telemetryReadIndex = read.nextReadIndex;
-    for (const telemetry of read.telemetry) {
-      this.emitTelemetry(telemetry);
-    }
-    return read.telemetry;
-  }
-  // Drains any meters published into the SAB meter ring (embind SAB mode) and
-  // forwards them to onMeter listeners. In postMessage mode meters arrive via
-  // node.port.onmessage instead, so this is a no-op then.
-  pollMeters() {
-    if (!this.meterRing) {
-      return [];
-    }
-    const read = readSonareMeterRingBuffer(this.meterRing, this.meterReadIndex);
-    this.meterReadIndex = read.nextReadIndex;
-    for (const meter of read.meters) {
-      this.emitMeter(meter);
-    }
-    return read.meters;
-  }
-  // Drains scope telemetry (FFT spectrum + goniometer points) published into the
-  // SAB scope ring and forwards each record to onScope listeners. A no-op unless
-  // the node was created with scopeIntervalFrames > 0 (embind SAB mode).
-  pollScope() {
-    if (!this.scopeRing) {
-      return [];
-    }
-    const read = readSonareScopeRingBuffer(this.scopeRing, this.scopeReadIndex);
-    this.scopeReadIndex = read.nextReadIndex;
-    for (const scope of read.scopes) {
-      this.emitScope(scope);
-    }
-    return read.scopes;
-  }
-  onTelemetry(callback) {
-    this.telemetryListeners.add(callback);
-    return () => {
-      this.telemetryListeners.delete(callback);
-    };
-  }
-  onMeter(callback) {
-    this.meterListeners.add(callback);
-    return () => {
-      this.meterListeners.delete(callback);
-    };
-  }
-  onScope(callback) {
-    this.scopeListeners.add(callback);
-    return () => {
-      this.scopeListeners.delete(callback);
-    };
-  }
-  destroy() {
-    if (this.destroyed) {
-      return;
-    }
-    this.destroyed = true;
-    this.node.port.postMessage({ type: 3 /* TransportStop */, sampleTime: -1 });
-    this.node.disconnect();
-    for (const pending of this.captureRequests.values()) {
-      pending.reject(new Error("Realtime engine node is destroyed."));
-    }
-    this.captureRequests.clear();
-    for (const pending of this.transportRequests.values()) {
-      pending.reject(new Error("Realtime engine node is destroyed."));
-    }
-    this.transportRequests.clear();
-    this.telemetryListeners.clear();
-    this.meterListeners.clear();
-    this.scopeListeners.clear();
-  }
-  emitTelemetry(telemetry) {
-    for (const listener of this.telemetryListeners) {
-      listener(telemetry);
-    }
-  }
-  emitMeter(meter) {
-    for (const listener of this.meterListeners) {
-      listener(meter);
-    }
-  }
-  emitScope(scope) {
-    for (const listener of this.scopeListeners) {
-      listener(scope);
-    }
-  }
-  sendCaptureRequest(op) {
-    if (this.destroyed) {
-      return Promise.reject(new Error("Realtime engine node is destroyed."));
-    }
-    const requestId = this.captureRequestId++;
-    const promise = new Promise((resolve, reject) => {
-      this.captureRequests.set(requestId, { resolve, reject });
-    });
-    this.node.port.postMessage({ type: "captureRequest", requestId, op });
-    return promise;
-  }
-  sendTransportRequest() {
-    if (this.destroyed) {
-      return Promise.reject(new Error("Realtime engine node is destroyed."));
-    }
-    const requestId = this.transportRequestId++;
-    const promise = new Promise((resolve, reject) => {
-      this.transportRequests.set(requestId, { resolve, reject });
-    });
-    this.node.port.postMessage({ type: "transportRequest", requestId, op: "state" });
-    return promise;
-  }
-};
-var SonareEngine = class _SonareEngine {
-  constructor(context, realtimeNode, offlineEngine, sampleRate, offlineBlockSize, offlineChannelCount) {
-    this.automationLanes = /* @__PURE__ */ new Map();
-    this.clips = /* @__PURE__ */ new Map();
-    this.midiClips = /* @__PURE__ */ new Map();
-    this.markers = /* @__PURE__ */ new Map();
-    this.trackLaneIds = [];
-    this.trackSends = /* @__PURE__ */ new Map();
-    this.trackOutputBus = /* @__PURE__ */ new Map();
-    this.laneSidechains = /* @__PURE__ */ new Map();
-    this.buses = [];
-    this.trackStripJson = /* @__PURE__ */ new Map();
-    this.busStripJson = /* @__PURE__ */ new Map();
-    this.tempoBpm = 120;
-    this.timeSignature = { numerator: 4, denominator: 4 };
-    this.tempoSegments = [{ startPpq: 0, bpm: 120 }];
-    this.timeSignatureSegments = [
-      { startPpq: 0, numerator: 4, denominator: 4 }
-    ];
-    this.nextClipId = 1;
-    this.nextMarkerId = 1;
-    this.transportPlaying = false;
-    this.pendingInstrumentSync = [];
-    this.destroyed = false;
-    this.context = context;
-    this.realtimeNode = realtimeNode;
-    this.offlineEngine = offlineEngine;
-    this.node = realtimeNode.node;
-    this.capabilities = realtimeNode.capabilities;
-    this.sampleRate = sampleRate;
-    this.offlineBlockSize = offlineBlockSize;
-    this.offlineChannelCount = offlineChannelCount;
-    this.transport = {
-      play: (sampleTime = -1) => {
-        const ok = this.realtimeNode.play(sampleTime);
-        if (ok) {
-          this.transportPlaying = true;
-        }
-        return ok;
-      },
-      stop: (sampleTime = -1) => {
-        const ok = this.realtimeNode.stop(sampleTime);
-        if (ok) {
-          this.transportPlaying = false;
-          this.flushPendingInstrumentSync();
-        }
-        return ok;
-      },
-      seekPpq: (ppq, sampleTime = -1) => {
-        this.offlineEngine.seekPpq(ppq, sampleTime);
-        return this.realtimeNode.seekPpq(ppq, sampleTime);
-      },
-      seekSeconds: (seconds, sampleTime = -1) => {
-        const timelineSample = Math.max(0, Math.round(seconds * this.sampleRate));
-        this.offlineEngine.seekSample(timelineSample, sampleTime);
-        return this.realtimeNode.seekSample(timelineSample, sampleTime);
-      },
-      setTempo: (bpm) => this.setTempo(bpm),
-      setTempoSegments: (segments) => this.setTempoSegments(segments),
-      setLoop: (startPpq, endPpq, enabled = true) => this.setLoop(startPpq, endPpq, enabled)
-    };
-  }
-  static async create(context, options = {}) {
-    const sampleRate = options.sampleRate ?? context.sampleRate;
-    const blockSize = options.offlineBlockSize ?? options.blockSize ?? 128;
-    const channelCount = Math.max(
-      1,
-      Math.floor(options.offlineChannelCount ?? options.channelCount ?? 2)
-    );
-    const realtimeNode = await SonareRealtimeEngineNode.create(context, options);
-    const offlineEngine = options.offlineEngine ?? new RealtimeEngine(sampleRate, blockSize);
-    return new _SonareEngine(
-      context,
-      realtimeNode,
-      offlineEngine,
-      sampleRate,
-      blockSize,
-      channelCount
-    );
-  }
-  async suspend() {
-    if (this.destroyed) {
-      return;
-    }
-    await this.context.suspend?.();
-  }
-  async resume() {
-    if (this.destroyed) {
-      return;
-    }
-    await this.context.resume?.();
-  }
-  setTempo(bpm) {
-    this.tempoBpm = bpm;
-    this.tempoSegments = [{ startPpq: 0, bpm }];
-    this.offlineEngine.setTempo(bpm);
-    this.postTempoSync();
-    this.realtimeNode.sendCommand({
-      type: 6 /* SetTempoMap */,
-      sampleTime: -1,
-      argFloat: bpm
-    });
-  }
-  setTempoSegments(segments) {
-    this.tempoSegments = segments.map((segment) => ({ ...segment }));
-    this.tempoBpm = this.tempoSegments[0]?.bpm ?? this.tempoBpm;
-    this.offlineEngine.setTempoSegments(this.tempoSegments);
-    this.postTempoSync();
-  }
-  setTimeSignature(numerator, denominator) {
-    this.timeSignature = { numerator, denominator };
-    this.timeSignatureSegments = [{ startPpq: 0, numerator, denominator }];
-    this.offlineEngine.setTimeSignature(numerator, denominator);
-    this.postTempoSync();
-  }
-  setTimeSignatureSegments(segments) {
-    this.timeSignatureSegments = segments.map((segment) => ({ ...segment }));
-    const first = this.timeSignatureSegments[0];
-    if (first) {
-      this.timeSignature = { numerator: first.numerator, denominator: first.denominator };
-    }
-    this.offlineEngine.setTimeSignatureSegments(this.timeSignatureSegments);
-    this.postTempoSync();
-  }
-  setLoop(startPpq, endPpq, enabled = true) {
-    this.offlineEngine.setLoop(startPpq, endPpq, enabled);
-    return this.realtimeNode.sendCommand({
-      type: 7 /* SetLoop */,
-      targetId: enabled ? 1 : 0,
-      sampleTime: -1,
-      argFloat: startPpq,
-      argInt: Math.round(endPpq * 1e6)
-    });
-  }
-  countInEndSample(startSample, bars) {
-    return this.offlineEngine.countInEndSample(startSample, bars);
-  }
-  async getTransportState() {
-    const state = await this.realtimeNode.requestTransportState();
-    this.latestTransportState = state;
-    return state;
-  }
-  cachedTransportState() {
-    return this.latestTransportState;
-  }
-  setParam(nodeId, param, value) {
-    const paramId = this.resolveParamId(nodeId, param);
-    this.offlineEngine.setParameter(paramId, value);
-    return this.realtimeNode.sendCommand({
-      type: 0 /* SetParam */,
-      targetId: paramId,
-      sampleTime: -1,
-      argFloat: value
-    });
-  }
-  scheduleParam(nodeId, param, ppq, value, curve = "linear") {
-    const paramId = this.resolveParamId(nodeId, param);
-    const lane = this.automationLanes.get(paramId) ?? [];
-    lane.push({ ppq, value, curveToNext: this.curveCode(curve) });
-    lane.sort((a, b) => a.ppq - b.ppq);
-    this.automationLanes.set(paramId, lane);
-    this.offlineEngine.setAutomationLane(paramId, lane);
-    this.postSync({ type: "syncAutomation", paramId, points: lane });
-  }
-  addAutomationPoint(laneId, ppq, value, curve = "linear") {
-    this.scheduleParam("", laneId, ppq, value, curve);
-  }
-  /**
-   * Replaces the automation lane for `paramId` with the given breakpoints.
-   *
-   * Unlike scheduleParam (which appends a single point), this sets the whole
-   * lane at once; an empty array clears the lane. The points are defensively
-   * copied and sorted by ppq before being mirrored to the offline engine and
-   * the live worklet engine.
-   *
-   * @param paramId Automation target id (registered parameter or a reserved
-   *   engine mixer target from automationParamId/busAutomationParamId).
-   * @param points Lane breakpoints; order does not matter.
-   */
-  setAutomationLane(paramId, points) {
-    const sorted = points.map((point) => ({ ...point })).sort((a, b) => a.ppq - b.ppq);
-    if (sorted.length === 0) {
-      this.automationLanes.delete(paramId);
-    } else {
-      this.automationLanes.set(paramId, sorted);
-    }
-    this.offlineEngine.setAutomationLane(paramId, sorted);
-    this.postSync({ type: "syncAutomation", paramId, points: sorted });
-  }
-  /**
-   * Returns the automation target id for a mixer strip parameter.
-   *
-   * The id addresses the engine's reserved mixer namespace, so it can be fed
-   * straight to setAutomationLane to automate a fader or pan without
-   * registering a parameter.
-   *
-   * @param target Track id (declares a mixer lane on first use) or 'master'.
-   * @param kind Strip parameter to address.
-   * @returns Reserved engine parameter id for the strip parameter.
-   */
-  automationParamId(target, kind) {
-    const paramKind = kind === "pan" ? ENGINE_MIXER_PARAM_PAN : ENGINE_MIXER_PARAM_FADER_DB;
-    if (target === "master") {
-      return engineMixerMasterTarget(paramKind);
-    }
-    return engineMixerLaneTarget(this.ensureTrackLane(target), paramKind);
-  }
-  /**
-   * Returns the automation target id for a bus fader.
-   *
-   * @param busId Bus id (declares the mixer bus on first use).
-   * @returns Reserved engine parameter id for the bus fader gain (dB).
-   */
-  busAutomationParamId(busId) {
-    return engineMixerBusTarget(this.ensureBus(busId), ENGINE_MIXER_PARAM_FADER_DB);
-  }
-  /**
-   * Returns the number of automation lanes installed on the engine, including
-   * lanes whose breakpoint list is currently empty.
-   *
-   * @returns Engine-side automation lane count.
-   */
-  automationLaneCount() {
-    return this.offlineEngine.automationLaneCount();
-  }
-  listParameters() {
-    const parameters = [];
-    for (let index = 0; index < this.offlineEngine.parameterCount(); index++) {
-      parameters.push(this.offlineEngine.parameterInfoByIndex(index));
-    }
-    return parameters;
-  }
-  setSoloMute(target, solo, mute) {
-    const laneIndex = this.ensureTrackLane(target);
-    this.offlineEngine.setSoloMute(laneIndex, solo, mute);
-    return this.realtimeNode.sendCommand({
-      type: 10 /* SetSoloMute */,
-      targetId: laneIndex,
-      sampleTime: -1,
-      argInt: (mute ? 1 : 0) | (solo ? 2 : 0)
-    });
-  }
-  setStripGain(target, db) {
-    if (target === "master") {
-      const paramId2 = engineMixerMasterTarget(ENGINE_MIXER_PARAM_FADER_DB);
-      this.offlineEngine.setParameter(paramId2, db);
-      return this.realtimeNode.sendCommand({
-        type: 1 /* SetParamSmoothed */,
-        targetId: paramId2,
-        sampleTime: -1,
-        argFloat: db
-      });
-    }
-    const laneIndex = this.ensureTrackLane(target);
-    const paramId = engineMixerLaneTarget(laneIndex, ENGINE_MIXER_PARAM_FADER_DB);
-    this.offlineEngine.setParameter(paramId, db);
-    return this.realtimeNode.sendCommand({
-      type: 1 /* SetParamSmoothed */,
-      targetId: paramId,
-      sampleTime: -1,
-      argFloat: db
-    });
-  }
-  setStripPan(target, pan) {
-    if (target === "master") {
-      const paramId2 = engineMixerMasterTarget(ENGINE_MIXER_PARAM_PAN);
-      this.offlineEngine.setParameter(paramId2, pan);
-      return this.realtimeNode.sendCommand({
-        type: 1 /* SetParamSmoothed */,
-        targetId: paramId2,
-        sampleTime: -1,
-        argFloat: pan
-      });
-    }
-    const laneIndex = this.ensureTrackLane(target);
-    const paramId = engineMixerLaneTarget(laneIndex, ENGINE_MIXER_PARAM_PAN);
-    this.offlineEngine.setParameter(paramId, pan);
-    return this.realtimeNode.sendCommand({
-      type: 1 /* SetParamSmoothed */,
-      targetId: paramId,
-      sampleTime: -1,
-      argFloat: pan
-    });
-  }
-  /**
-   * Declares the mixer track lanes in an explicit order.
-   *
-   * Lane indices are append-only: once a track id occupies a lane, its index
-   * stays fixed for the engine's lifetime. The given list must therefore start
-   * with the already-declared lane ids in their current order and may only
-   * append new track ids after them. Entries carrying `sends` replace that
-   * track's send list; entries without `sends` leave existing sends untouched.
-   *
-   * @param lanes Track ids or lane descriptors in the desired lane order.
-   */
-  setTrackLanes(lanes) {
-    const entries = lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane);
-    const ids = [];
-    for (const entry of entries) {
-      if (!Number.isInteger(entry.trackId) || entry.trackId <= 0) {
-        throw new Error(`Invalid track id for mixer lane: ${String(entry.trackId)}`);
-      }
-      ids.push(entry.trackId);
-    }
-    if (new Set(ids).size !== ids.length) {
-      throw new Error("Duplicate track id in mixer lane list");
-    }
-    for (let index = 0; index < this.trackLaneIds.length; index++) {
-      if (ids[index] !== this.trackLaneIds[index]) {
-        throw new Error(
-          "Mixer lanes are append-only: keep existing lanes in order and only append new track ids"
-        );
-      }
-    }
-    for (const entry of entries) {
-      if (entry.sends) {
-        this.trackSends.set(
-          entry.trackId,
-          entry.sends.map((send) => ({ ...send }))
-        );
-      }
-      if (entry.outputBusId !== void 0) {
-        if (entry.outputBusId === 0) {
-          this.trackOutputBus.delete(entry.trackId);
-        } else {
-          this.trackOutputBus.set(entry.trackId, entry.outputBusId);
-        }
-      }
-    }
-    this.trackLaneIds.splice(0, this.trackLaneIds.length, ...ids);
-    this.syncMixer();
-  }
-  /**
-   * Routes a track lane's post-fader output into a declared bus instead of
-   * the master mix (group/folder routing); busId 0 restores the master mix.
-   */
-  setTrackOutputBus(target, busId) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    if (busId === 0) {
-      this.trackOutputBus.delete(trackId);
-    } else {
-      this.trackOutputBus.set(trackId, busId);
-    }
-    this.syncMixer();
-  }
-  /**
-   * Keys one insert of a lane strip from another lane's post-strip pre-fader
-   * audio (ducking/sidechainRouter inserts). sourceTarget null removes the
-   * binding.
-   */
-  setLaneSidechain(target, insertIndex, sourceTarget) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    const key = `${trackId}:${insertIndex}`;
-    let sourceTrackId = 0;
-    if (sourceTarget !== null) {
-      const sourceIndex = this.ensureTrackLane(sourceTarget);
-      sourceTrackId = this.trackLaneIds[sourceIndex];
-    }
-    if (sourceTrackId === 0) {
-      this.laneSidechains.delete(key);
-    } else {
-      this.laneSidechains.set(key, { trackId, insertIndex, sourceTrackId });
-    }
-    this.offlineEngine.setLaneSidechain(trackId, insertIndex, sourceTrackId);
-    this.postSync({
-      type: "syncMixer",
-      lanes: this.mixerLanes(),
-      laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
-    });
-  }
-  setSends(target, sends) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    this.trackSends.set(
-      trackId,
-      sends.map((send) => ({ ...send }))
-    );
-    this.syncMixer();
-  }
-  setTrackBuses(buses) {
-    this.buses.splice(0, this.buses.length, ...buses.map((bus) => ({ ...bus })));
-    this.syncMixer();
-  }
-  setBusGain(busId, db) {
-    const busIndex = this.ensureBus(busId);
-    this.buses[busIndex] = { ...this.buses[busIndex], busId, gainDb: db };
-    this.offlineEngine.setTrackBuses(this.buses);
-    const paramId = engineMixerBusTarget(busIndex, ENGINE_MIXER_PARAM_FADER_DB);
-    this.offlineEngine.setParameter(paramId, db);
-    return this.realtimeNode.sendCommand({
-      type: 1 /* SetParamSmoothed */,
-      targetId: paramId,
-      sampleTime: -1,
-      argFloat: db
-    });
-  }
-  setTrackStripJson(target, sceneJson) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    this.offlineEngine.setTrackStripJson(trackId, sceneJson);
-    this.trackStripJson.set(trackId, sceneJson);
-    this.syncMixer();
-  }
-  setTrackStripEqBand(target, bandIndex, band) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    const bandJson = typeof band === "string" ? band : JSON.stringify(band);
-    this.offlineEngine.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
-    this.postSync({ type: "syncTrackStripEqBand", trackId, bandIndex, bandJson });
-  }
-  setTrackStripInsertBypassed(target, insertIndex, bypassed, resetOnBypass = false) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    this.offlineEngine.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
-    this.postSync({
-      type: "syncTrackStripInsertBypassed",
-      trackId,
-      insertIndex,
-      bypassed,
-      resetOnBypass
-    });
-  }
-  setTrackStripInsertParamByName(target, insertIndex, paramName, value) {
-    const laneIndex = this.ensureTrackLane(target);
-    const trackId = this.trackLaneIds[laneIndex];
-    this.offlineEngine.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
-    this.postSync({
-      type: "syncTrackStripInsertParamByName",
-      trackId,
-      insertIndex,
-      paramName,
-      value
-    });
-  }
-  setTrackStripPan(target, pan) {
-    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
-    this.offlineEngine.setTrackStripPan(trackId, pan);
-    this.postSync({ type: "syncTrackStripPan", trackId, pan });
-  }
-  setTrackStripPanLaw(target, panLaw) {
-    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
-    const code = panLawCode(panLaw);
-    this.offlineEngine.setTrackStripPanLaw(trackId, code);
-    this.postSync({ type: "syncTrackStripPanLaw", trackId, panLaw: code });
-  }
-  setTrackStripPanMode(target, panMode) {
-    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
-    const code = panModeCode(panMode);
-    this.offlineEngine.setTrackStripPanMode(trackId, code);
-    this.postSync({ type: "syncTrackStripPanMode", trackId, panMode: code });
-  }
-  setTrackStripDualPan(target, leftPan, rightPan) {
-    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
-    this.offlineEngine.setTrackStripDualPan(trackId, leftPan, rightPan);
-    this.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
-  }
-  setTrackStripChannelDelaySamples(target, delaySamples) {
-    const trackId = this.trackLaneIds[this.ensureTrackLane(target)];
-    this.offlineEngine.setTrackStripChannelDelaySamples(trackId, delaySamples);
-    this.postSync({ type: "syncTrackStripChannelDelaySamples", trackId, delaySamples });
-  }
-  setStripEq(target, bandIndex, band) {
-    if (target === "master") {
-      this.setMasterStripEqBand(bandIndex, band);
-      return;
-    }
-    this.setTrackStripEqBand(target, bandIndex, band);
-  }
-  setStripInsertBypassed(target, insertIndex, bypassed, resetOnBypass = false) {
-    if (target === "master") {
-      this.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
-      return;
-    }
-    this.setTrackStripInsertBypassed(target, insertIndex, bypassed, resetOnBypass);
-  }
-  setStripInserts(target, sceneJson) {
-    if (target === "master") {
-      this.setMasterStripJson(sceneJson);
-      return;
-    }
-    this.setTrackStripJson(target, sceneJson);
-  }
-  setBusStripJson(busId, sceneJson) {
-    this.ensureBus(busId);
-    this.offlineEngine.setBusStripJson(busId, sceneJson);
-    this.busStripJson.set(busId, sceneJson);
-    this.syncMixer();
-  }
-  setMasterStripJson(sceneJson) {
-    this.offlineEngine.setMasterStripJson(sceneJson);
-    this.masterStripJson = sceneJson;
-    this.syncMixer();
-  }
-  setMasterStripEqBand(bandIndex, band) {
-    const bandJson = typeof band === "string" ? band : JSON.stringify(band);
-    this.offlineEngine.setMasterStripEqBandJson(bandIndex, bandJson);
-    this.postSync({ type: "syncMasterStripEqBand", bandIndex, bandJson });
-  }
-  setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
-    this.offlineEngine.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
-    this.postSync({
-      type: "syncMasterStripInsertBypassed",
-      insertIndex,
-      bypassed,
-      resetOnBypass
-    });
-  }
-  setMasterStripInsertParamByName(insertIndex, paramName, value) {
-    this.offlineEngine.setMasterStripInsertParamByName(insertIndex, paramName, value);
-    this.postSync({
-      type: "syncMasterStripInsertParamByName",
-      insertIndex,
-      paramName,
-      value
-    });
-  }
-  setStripInsertParamByName(target, insertIndex, paramName, value) {
-    if (target === "master") {
-      this.setMasterStripInsertParamByName(insertIndex, paramName, value);
-      return;
-    }
-    this.setTrackStripInsertParamByName(target, insertIndex, paramName, value);
-  }
-  setMasterChain(sceneJson) {
-    this.setMasterStripJson(sceneJson);
-  }
-  addClip(trackId, buffer, startPpq, opts = {}) {
-    const id = opts.id ?? this.nextClipId++;
-    const clip = {
-      ...opts,
-      id,
-      channels: buffer,
-      startPpq,
-      trackId: this.resolveTargetId(trackId)
-    };
-    this.ensureTrackLane(trackId);
-    this.clips.set(id, clip);
-    this.syncClipsDelta([clip], []);
-    return id;
-  }
-  removeClip(clipId) {
-    this.clips.delete(clipId);
-    this.syncClipsDelta([], [clipId]);
-  }
-  setMidiClips(clips) {
-    this.midiClips.clear();
-    for (const clip of clips) {
-      const id = clip.id ?? this.nextClipId++;
-      this.midiClips.set(id, { ...clip, id, events: clip.events.map((event) => ({ ...event })) });
-    }
-    this.syncMidiClips();
-  }
-  setBuiltinInstrument(trackId, config = {}) {
-    const destinationId = this.resolveTargetId(trackId);
-    this.offlineEngine.setBuiltinInstrument(config, destinationId);
-    this.postInstrumentSync({ type: "syncBuiltinInstrument", destinationId, config });
-  }
-  setSynthInstrument(trackId, patch = {}) {
-    const destinationId = this.resolveTargetId(trackId);
-    this.offlineEngine.setSynthInstrument(patch, destinationId);
-    this.postInstrumentSync({ type: "syncSynthInstrument", destinationId, patch });
-  }
-  loadSoundFont(data) {
-    this.offlineEngine.loadSoundFont(data);
-    this.postInstrumentSync({ type: "syncLoadSoundFont", data });
-  }
-  setSf2Instrument(trackId, config = {}) {
-    const destinationId = this.resolveTargetId(trackId);
-    this.offlineEngine.setSf2Instrument(config, destinationId);
-    this.postInstrumentSync({ type: "syncSf2Instrument", destinationId, config });
-  }
-  pushMidiNoteOn(trackId, group, channel, note, velocity, renderFrame = -1) {
-    const destinationId = this.resolveTargetId(trackId);
-    this.offlineEngine.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
-    this.postSync({
-      type: "syncMidiNoteOn",
-      destinationId,
-      group,
-      channel,
-      note,
-      velocity,
-      renderFrame
-    });
-  }
-  pushMidiNoteOff(trackId, group, channel, note, velocity = 0, renderFrame = -1) {
-    const destinationId = this.resolveTargetId(trackId);
-    this.offlineEngine.pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
-    this.postSync({
-      type: "syncMidiNoteOff",
-      destinationId,
-      group,
-      channel,
-      note,
-      velocity,
-      renderFrame
-    });
-  }
-  pushMidiCc(trackId, group, channel, controller, value, renderFrame = -1) {
-    const destinationId = this.resolveTargetId(trackId);
-    this.offlineEngine.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
-    this.postSync({
-      type: "syncMidiCc",
-      destinationId,
-      group,
-      channel,
-      controller,
-      value,
-      renderFrame
-    });
-  }
-  pushMidiPanic(renderFrame = -1) {
-    this.offlineEngine.pushMidiPanic(renderFrame);
-    this.postSync({ type: "syncMidiPanic", renderFrame });
-  }
-  configureCapture(options) {
-    const bufferFrames = Math.trunc(options.bufferFrames);
-    const channels = Math.trunc(options.channels ?? this.offlineChannelCount);
-    const source = options.source ?? "output";
-    const recordOffsetSamples = Math.trunc(options.recordOffsetSamples ?? 0);
-    const inputMonitor = {
-      enabled: Boolean(options.inputMonitor?.enabled),
-      gain: options.inputMonitor?.gain ?? 1
-    };
-    this.offlineEngine.setCaptureBuffer(channels, bufferFrames);
-    this.offlineEngine.setCaptureSource(source);
-    this.offlineEngine.setRecordOffsetSamples(recordOffsetSamples);
-    this.offlineEngine.setInputMonitor(inputMonitor.enabled, inputMonitor.gain);
-    this.captureConfig = { bufferFrames, channels, source, recordOffsetSamples, inputMonitor };
-    this.postSync({ type: "syncCapture", ...this.captureConfig });
-  }
-  armRecord(trackId, enabled) {
-    if (enabled && !this.captureConfig) {
-      throw new Error("Capture buffer is not configured");
-    }
-    this.offlineEngine.armCapture(enabled);
-    return this.realtimeNode.sendCommand({
-      type: 13 /* ArmRecord */,
-      targetId: this.resolveTargetId(trackId),
-      sampleTime: -1,
-      argInt: enabled ? 1 : 0
-    });
-  }
-  punch(inPpq, outPpq) {
-    const inSample = this.offlineEngine.sampleAtPpq(inPpq);
-    const outSample = this.offlineEngine.sampleAtPpq(outPpq);
-    this.offlineEngine.setCapturePunch(inSample, outSample, true);
-    return this.realtimeNode.sendCommand({
-      type: 14 /* Punch */,
-      sampleTime: -1,
-      argInt: inSample,
-      argFloat: outSample
-    });
-  }
-  captureStatus() {
-    return this.realtimeNode.requestCaptureStatus();
-  }
-  capturedAudio() {
-    return this.realtimeNode.requestCapturedAudio();
-  }
-  async resetCapture() {
-    this.offlineEngine.resetCapture();
-    await this.realtimeNode.requestCaptureReset();
-  }
-  setMetronome(opts) {
-    this.offlineEngine.setMetronome(opts);
-    this.postSync({ type: "syncMetronome", config: opts });
-    this.realtimeNode.sendCommand({
-      type: 15 /* SetMetronome */,
-      sampleTime: -1,
-      argInt: opts.enabled ? 1 : 0
-    });
-  }
-  addMarker(ppq, name = "") {
-    const id = this.nextMarkerId++;
-    this.markers.set(id, { id, ppq, name });
-    this.syncMarkers();
-    return id;
-  }
-  /**
-   * Replaces the whole marker set in one call.
-   *
-   * Entries without an `id` are assigned fresh ids; entries carrying an `id`
-   * keep it (ids must be positive and unique within the list). Returns the
-   * resolved markers in the order given, so a caller can map its own marker
-   * identities to the engine ids used by `seekMarker`/`setLoopFromMarkers`.
-   *
-   * @param markers The full marker list (an empty list clears all markers).
-   * @returns The markers with their resolved engine ids.
-   */
-  setMarkers(markers) {
-    const resolved = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const marker of markers) {
-      if (!Number.isFinite(marker.ppq)) {
-        throw new Error(`Invalid marker ppq: ${String(marker.ppq)}`);
-      }
-      if (marker.id !== void 0) {
-        if (!Number.isInteger(marker.id) || marker.id <= 0) {
-          throw new Error(`Invalid marker id: ${String(marker.id)}`);
-        }
-        if (seen.has(marker.id)) {
-          throw new Error(`Duplicate marker id: ${marker.id}`);
-        }
-      }
-      const id = marker.id ?? this.nextMarkerId++;
-      seen.add(id);
-      if (id >= this.nextMarkerId) {
-        this.nextMarkerId = id + 1;
-      }
-      resolved.push({ id, ppq: marker.ppq, name: marker.name ?? "" });
-    }
-    this.markers.clear();
-    for (const marker of resolved) {
-      this.markers.set(marker.id, marker);
-    }
-    this.syncMarkers();
-    return resolved.map((marker) => ({ ...marker }));
-  }
-  markerCount() {
-    return this.offlineEngine.markerCount();
-  }
-  markerByIndex(index) {
-    return this.offlineEngine.markerByIndex(index);
-  }
-  marker(markerId) {
-    return this.offlineEngine.marker(markerId);
-  }
-  seekMarker(markerId) {
-    this.offlineEngine.seekMarker(markerId);
-    return this.realtimeNode.sendCommand({
-      type: 17 /* SeekMarker */,
-      targetId: markerId,
-      sampleTime: -1
-    });
-  }
-  setLoopFromMarkers(startMarkerId, endMarkerId) {
-    this.offlineEngine.setLoopFromMarkers(startMarkerId, endMarkerId);
-    const start = this.offlineEngine.marker(startMarkerId);
-    const end = this.offlineEngine.marker(endMarkerId);
-    return this.setLoop(start.ppq, end.ppq, true);
-  }
-  async renderOffline(totalFrames) {
-    const frames = Math.max(0, Math.floor(totalFrames));
-    const inputs = [];
-    for (let ch = 0; ch < this.offlineChannelCount; ch++) {
-      inputs.push(new Float32Array(frames));
-    }
-    return this.offlineEngine.renderOffline(inputs, this.offlineBlockSize);
-  }
-  onMeter(callback) {
-    return this.realtimeNode.onMeter(callback);
-  }
-  onScope(callback) {
-    return this.realtimeNode.onScope(callback);
-  }
-  onTelemetry(callback) {
-    return this.realtimeNode.onTelemetry(callback);
-  }
-  pollTelemetry() {
-    return this.realtimeNode.pollTelemetry();
-  }
-  pollMeters() {
-    return this.realtimeNode.pollMeters();
-  }
-  pollScope() {
-    return this.realtimeNode.pollScope();
-  }
-  destroy() {
-    if (this.destroyed) {
-      return;
-    }
-    this.destroyed = true;
-    this.transport.stop();
-    this.realtimeNode.pollTelemetry();
-    this.realtimeNode.destroy();
-    this.offlineEngine.destroy();
-  }
-  syncClipsDelta(upserts, removeIds) {
-    const clips = Array.from(this.clips.values());
-    this.offlineEngine.setClips(clips);
-    this.postSync({
-      type: "syncClipsDelta",
-      upserts,
-      removeIds
-    });
-  }
-  syncMidiClips() {
-    const clips = Array.from(this.midiClips.values());
-    this.offlineEngine.setMidiClips(clips);
-    this.postSync({ type: "syncMidiClips", clips });
-  }
-  mixerLanes() {
-    return this.trackLaneIds.map((trackId) => {
-      const sends = this.trackSends.get(trackId);
-      const outputBusId = this.trackOutputBus.get(trackId);
-      return {
-        trackId,
-        ...sends && sends.length > 0 ? { sends: sends.map((send) => ({ ...send })) } : {},
-        ...outputBusId !== void 0 ? { outputBusId } : {}
       };
-    });
-  }
-  syncMixer() {
-    const lanes = this.mixerLanes();
-    const buses = this.buses.map((bus) => ({ ...bus }));
-    this.offlineEngine.setTrackBuses(buses);
-    if (lanes.length > 0) {
-      this.offlineEngine.setTrackLanes(lanes);
+      if (port?.addEventListener) {
+        port.addEventListener("message", onMessage);
+        port.start?.();
+      } else if (port) {
+        port.onmessage = onMessage;
+      }
     }
-    const trackStrips = Array.from(this.trackStripJson, ([trackId, sceneJson]) => ({
-      trackId,
-      sceneJson
-    }));
-    const busStrips = Array.from(this.busStripJson, ([busId, sceneJson]) => ({
-      busId,
-      sceneJson
-    }));
-    this.postSync({
-      type: "syncMixer",
-      lanes,
-      buses,
-      trackStrips,
-      laneSidechains: Array.from(this.laneSidechains.values()),
-      busStrips,
-      masterStripJson: this.masterStripJson
-    });
-  }
-  syncMarkers() {
-    const markers = Array.from(this.markers.values()).sort((a, b) => a.ppq - b.ppq);
-    this.offlineEngine.setMarkers(markers);
-    this.postSync({ type: "syncMarkers", markers });
-  }
-  postInstrumentSync(message) {
-    if (this.destroyed) {
-      return;
-    }
-    if (this.transportPlaying) {
-      this.pendingInstrumentSync.push(message);
-      return;
-    }
-    this.postSync(message);
-  }
-  flushPendingInstrumentSync() {
-    if (this.destroyed || this.pendingInstrumentSync.length === 0) {
-      return;
-    }
-    const pending = this.pendingInstrumentSync.splice(0);
-    for (const message of pending) {
-      this.postSync(message);
+    process(inputs, outputs) {
+      return this.bridge.process(inputs, outputs);
     }
   }
-  postTempoSync() {
-    this.postSync({
-      type: "syncTempo",
-      bpm: this.tempoBpm,
-      timeSignature: { ...this.timeSignature },
-      tempoSegments: this.tempoSegments.map((segment) => ({ ...segment })),
-      timeSignatureSegments: this.timeSignatureSegments.map((segment) => ({ ...segment }))
-    });
-  }
-  // Posts an out-of-band control-sync message to the worklet engine processor.
-  // Sync messages use a string `type` so the worklet's message handler routes
-  // them to receiveSync() (numeric `type` is reserved for SonareEngineCommandRecord).
-  postSync(message) {
-    if (this.destroyed) {
-      return;
-    }
-    this.realtimeNode.node.port.postMessage(message);
-  }
-  resolveParamId(nodeId, param) {
-    if (typeof param === "number") {
-      return param;
-    }
-    const byName = this.listParameters().find((info) => info.name === param);
-    if (byName) {
-      return byName.id;
-    }
-    return this.resolveTargetId(param || nodeId);
-  }
-  resolveTargetId(target) {
-    if (typeof target === "number") {
-      return target;
-    }
-    const parsed = Number.parseInt(target, 10);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  ensureTrackLane(target) {
-    const trackId = this.resolveTargetId(target);
-    if (!Number.isInteger(trackId) || trackId <= 0) {
-      throw new Error(`Invalid track id for mixer lane: ${String(target)}`);
-    }
-    const existing = this.trackLaneIds.indexOf(trackId);
-    if (existing >= 0) {
-      return existing;
-    }
-    this.trackLaneIds.push(trackId);
-    this.syncMixer();
-    return this.trackLaneIds.length - 1;
-  }
-  ensureBus(busId) {
-    const resolved = Math.trunc(busId);
-    if (!Number.isInteger(resolved) || resolved <= 0) {
-      throw new Error(`Invalid bus id for mixer bus: ${String(busId)}`);
-    }
-    const existing = this.buses.findIndex((bus) => bus.busId === resolved);
-    if (existing >= 0) {
-      return existing;
-    }
-    this.buses.push({ busId: resolved });
-    this.syncMixer();
-    return this.buses.length - 1;
-  }
-  curveCode(curve) {
-    if (typeof curve === "number") {
-      return curve;
-    }
-    return curve === "exponential" ? 1 : 0;
-  }
-};
+  scope.registerProcessor(name, RegisteredSonareWorkletProcessor);
+}
+
+// src/worklet/voice-changer-processor.ts
 var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChangerWorkletProcessor {
   constructor(options = {}) {
     this.destroyed = false;
@@ -4451,37 +4833,6 @@ var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChan
 _SonareRealtimeVoiceChangerWorkletProcessor.warnedMonoOverflow = false;
 _SonareRealtimeVoiceChangerWorkletProcessor.warnedInterleavedOverflow = false;
 var SonareRealtimeVoiceChangerWorkletProcessor = _SonareRealtimeVoiceChangerWorkletProcessor;
-function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
-  const scope = globalThis;
-  if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
-    throw new Error("AudioWorkletProcessor is not available in this context.");
-  }
-  const Base = scope.AudioWorkletProcessor;
-  class RegisteredSonareWorkletProcessor extends Base {
-    constructor(options) {
-      super();
-      const port = this.port;
-      this.bridge = new SonareWorkletProcessor(options?.processorOptions ?? { sceneJson: "" }, {
-        postMessage: (message) => port?.postMessage?.(message)
-      });
-      const onMessage = (event) => {
-        if (isWorkletMessage(event.data)) {
-          this.bridge.receiveMessage(event.data);
-        }
-      };
-      if (port?.addEventListener) {
-        port.addEventListener("message", onMessage);
-        port.start?.();
-      } else if (port) {
-        port.onmessage = onMessage;
-      }
-    }
-    process(inputs, outputs) {
-      return this.bridge.process(inputs, outputs);
-    }
-  }
-  scope.registerProcessor(name, RegisteredSonareWorkletProcessor);
-}
 function registerSonareRealtimeVoiceChangerWorkletProcessor(name = "sonare-realtime-voice-changer-processor") {
   const scope = globalThis;
   if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
@@ -4511,155 +4862,6 @@ function registerSonareRealtimeVoiceChangerWorkletProcessor(name = "sonare-realt
   }
   scope.registerProcessor(name, RegisteredSonareRealtimeVoiceChangerWorkletProcessor);
 }
-function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-engine-processor") {
-  const scope = globalThis;
-  if (!scope.AudioWorkletProcessor || !scope.registerProcessor) {
-    throw new Error("AudioWorkletProcessor is not available in this context.");
-  }
-  const Base = scope.AudioWorkletProcessor;
-  class RegisteredSonareRealtimeEngineWorkletProcessor extends Base {
-    constructor(options) {
-      super();
-      this.pendingMessages = [];
-      const port = this.port;
-      const processorOptions = options?.processorOptions ?? {};
-      if (processorOptions.runtimeTarget === "sonare-rt") {
-        void this.initializeSonareRt(processorOptions, port);
-      } else {
-        void this.initializeEmbind(processorOptions, port);
-      }
-      const onMessage = (event) => {
-        if (!this.bridge && !this.rtBridge) {
-          if (this.pendingMessages.length < 1024) {
-            this.pendingMessages.push(event.data);
-          }
-          return;
-        }
-        if (isEngineCommandRecord(event.data)) {
-          this.bridge?.receiveCommand(event.data);
-          this.rtBridge?.receiveCommand(event.data);
-        } else if (isEngineSyncMessage(event.data)) {
-          this.bridge?.receiveSync(event.data);
-          this.rtBridge?.receiveSync(event.data);
-        } else if (isEngineCaptureRequestMessage(event.data)) {
-          this.bridge?.receiveCaptureRequest(event.data);
-          this.rtBridge?.receiveCaptureRequest(event.data, port);
-        } else if (isEngineTransportRequestMessage(event.data)) {
-          this.bridge?.receiveTransportRequest(event.data);
-          this.rtBridge?.receiveTransportRequest(event.data, port);
-        }
-      };
-      if (port?.addEventListener) {
-        port.addEventListener("message", onMessage);
-        port.start?.();
-      } else if (port) {
-        port.onmessage = onMessage;
-      }
-    }
-    process(inputs, outputs) {
-      if (this.rtBridge) {
-        return this.rtBridge.process(inputs, outputs);
-      }
-      if (this.bridge) {
-        return this.bridge.process(inputs, outputs);
-      }
-      const output = outputs[0];
-      for (const channel of output ?? []) {
-        channel.fill(0);
-      }
-      return true;
-    }
-    replayPendingMessages(port) {
-      const messages = this.pendingMessages.splice(0);
-      for (const data of messages) {
-        if (isEngineCommandRecord(data)) {
-          this.bridge?.receiveCommand(data);
-          this.rtBridge?.receiveCommand(data);
-        } else if (isEngineSyncMessage(data)) {
-          this.bridge?.receiveSync(data);
-          this.rtBridge?.receiveSync(data);
-        } else if (isEngineCaptureRequestMessage(data)) {
-          this.bridge?.receiveCaptureRequest(data);
-          this.rtBridge?.receiveCaptureRequest(data, port);
-        } else if (isEngineTransportRequestMessage(data)) {
-          this.bridge?.receiveTransportRequest(data);
-          this.rtBridge?.receiveTransportRequest(data, port);
-        }
-      }
-    }
-    async initializeEmbind(options, port) {
-      try {
-        const initPromise2 = globalThis.SonareEmbindInitPromise;
-        if (initPromise2) {
-          await initPromise2;
-        }
-        if (!isInitialized()) {
-          const moduleFactory = globalThis.SonareEmbindModuleFactory;
-          if (!moduleFactory) {
-            throw new Error("embind realtime engine module is not initialized.");
-          }
-          await init({
-            locateFile: (path) => path,
-            wasmBinary: options.wasmBinary,
-            moduleFactory
-          });
-        }
-        this.bridge = new SonareRealtimeEngineWorkletProcessor(options, {
-          postMessage: (message) => port?.postMessage?.(message),
-          onMeter: (meter) => port?.postMessage?.(meter)
-        });
-        for (const message of options.initialSyncMessages ?? []) {
-          this.bridge.receiveSync(message);
-        }
-        for (const command of options.initialCommands ?? []) {
-          this.bridge.receiveCommand(command);
-        }
-        this.replayPendingMessages(port);
-        port?.postMessage?.({ type: "ready", runtimeTarget: "embind" });
-      } catch (error) {
-        port?.postMessage?.({
-          type: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-    async initializeSonareRt(options, port) {
-      try {
-        if (!options.rtModuleUrl) {
-          throw new Error("rtModuleUrl is required for sonare-rt AudioWorklet runtime.");
-        }
-        const rtModuleUrl = options.rtModuleUrl;
-        const memory = new WebAssembly.Memory({ initial: 1024, maximum: 1024, shared: true });
-        const globalFactory = globalThis.SonareRtModuleFactory;
-        const moduleFactory = globalFactory ? { default: globalFactory } : await import(rtModuleUrl);
-        const module2 = await moduleFactory.default({
-          wasmMemory: memory,
-          wasmBinary: options.rtWasmBinary,
-          locateFile: (path) => rtModuleUrl.replace(/[^/]*$/, path)
-        });
-        this.rtBridge = new SonareRtRealtimeEngineRuntime({
-          module: module2,
-          memory,
-          sampleRate: options.sampleRate,
-          blockSize: options.blockSize,
-          channelCount: options.channelCount,
-          commandSharedBuffer: options.commandSharedBuffer,
-          commandRingCapacity: options.commandRingCapacity,
-          telemetrySharedBuffer: options.telemetrySharedBuffer,
-          telemetryRingCapacity: options.telemetryRingCapacity
-        });
-        this.replayPendingMessages(port);
-        port?.postMessage?.({ type: "ready", runtimeTarget: "sonare-rt" });
-      } catch (error) {
-        port?.postMessage?.({
-          type: "error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-  }
-  scope.registerProcessor(name, RegisteredSonareRealtimeEngineWorkletProcessor);
-}
 export {
   SONARE_ENGINE_COMMAND_RECORD_BYTES,
   SONARE_ENGINE_RING_HEADER_INTS,
@@ -4675,7 +4877,6 @@ export {
   SonareRealtimeEngineNode,
   SonareRealtimeEngineWorkletProcessor,
   SonareRealtimeVoiceChangerWorkletProcessor,
-  SonareRtRealtimeEngineRuntime,
   SonareWorkletProcessor,
   createSonareEngineCommandRingBuffer,
   createSonareEngineTelemetryRingBuffer,

@@ -1,13 +1,20 @@
 ---
 title: ライブ MIDI 入力と Web MIDI
-description: ハードウェアキーボードから libsonare のリアルタイムエンジンを演奏する方法。MIDI デスティネーション、ノート／CC イベントのサンプルタイムスタンプ付きキューイング、CC からパラメータへのバインド、パニック復帰、ブラウザの Web MIDI ブリッジ（bindWebMidi）のホットプラグ・権限・タイムスタンプ変換、そして AudioWorklet 内エンジン + MIDI フォワーダーの 2 スレッド構成で「USB キーボードでシンセを実際に鳴らす」完全なレシピを、そのまま使えるコード付きで解説します。
+description: ハードウェアキーボードから libsonare のリアルタイムエンジンを演奏する方法。MIDI デスティネーション、ライブのノート／CC キューイング、CC からパラメータへのバインド、パニック復帰、Web MIDI 設定、そして USB キーボードでシンセを実際に鳴らす AudioWorklet レシピを解説します。
 ---
 
 # ライブ MIDI 入力と Web MIDI
 
 **ライブ MIDI 入力**は、リアルタイムエンジンを演奏できる楽器に変えます。USB キーボードで押した鍵がノートオンイベントになり、エンジンはそれをバインド済みのシンセサイザーへ送り、次の音声ブロックで音が鳴ります。ファイルもオフラインレンダーも要りません。
 
-libsonare の `RealtimeEngine` は、トランスポート・クリップ・オートメーションを駆動するのと同じリアルタイム安全な面でライブ MIDI を受け取ります。ブラウザでは、小さな **Web MIDI ブリッジ**（`bindWebMidi`）が、プラットフォームの MIDI ポートをそのエンジンへ直接つないでくれます。
+libsonare の `RealtimeEngine` は、トランスポート・クリップ・オートメーションと同じリアルタイム安全な入口からライブ MIDI を受け取ります。ブラウザでは、小さな **Web MIDI ブリッジ**（`bindWebMidi`）が、プラットフォームの MIDI ポートをそのエンジンへ直接つないでくれます。
+
+最初に選ぶ入口は 2 つです。
+
+| 手元にあるもの | まず使うもの |
+|----------------|--------------|
+| アプリ内のオンスクリーンキーボードやシーケンサーのステップ | 即時の `pushMidiNoteOn` / `pushMidiNoteOff` 呼び出し |
+| USB キーボードや外部コントローラー | `bindWebMidi`。内部ではライブ入力ソース用の呼び出しを使います |
 
 ::: info MIDI のきほん
 **ノートオン**は「この音高がこの強さで始まった」、**ノートオフ**は「離した」を伝えます。**コントロールチェンジ**（CC）は連続的なツマミ／スライダーのメッセージで、モジュレーションホイール（CC1）、サスティン（CC64）、エクスプレッション（CC11）などがあります。libsonare はこの 3 つをすべてライブで扱えます。
@@ -87,10 +94,10 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 ライブイベントは同期実行ではなく*キューイング*されます。各呼び出しは、イベントを発火させるサンプル位置をエンジンへ渡します。次の `process(...)` ブロックが、そのブロックで処理すべきイベントをすべて消費します。これがタイミングを正確にする仕組みです。イベントは「メッセージが届いた時」ではなく、正確なフレームに着地します。
 
-キューイングの面は 2 つあり、デスティネーションごとにどちらかを選ぶべきです。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
+キューイングの経路は 2 つあり、デスティネーションごとにどちらかを選びます。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべての destination の発音中ノートを一括で解放します。
-- **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きに供給します。Web MIDI ブリッジが駆動するのはこのレーンです。
+- **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 
 ```typescript
 // 即時経路: 次のブロック先頭でノートを発火
@@ -110,10 +117,10 @@ engine.pushMidiInputNoteOff(0, 0, 60, 0, 0);
 
 ## MIDI CC をエンジンパラメータへバインドする
 
-CC は二役を果たせます。楽器へ届くと同時に、エンジンのオートメーションパラメータを駆動できます。`bindMidiCc(channel, controller, paramId, options)` は、コントローラーの 7 ビット値を登録済みパラメータの `[minValue, maxValue]` へマッピングし、その間も CC はデスティネーション楽器へ流れ続けます。
+CC は二役を果たせます。楽器へ届くと同時に、エンジンのオートメーションパラメータも動かせます。`bindMidiCc(channel, controller, paramId, options)` は、コントローラーの 7 ビット値を登録済みパラメータの `[minValue, maxValue]` へマッピングし、その間も CC はデスティネーション楽器へ流れ続けます。
 
 ```typescript
-// エンジンが駆動すべきパラメータを登録し、モジュレーションホイール（CC1）を割り当てる
+// CC で動かしたいパラメータを登録し、モジュレーションホイール（CC1）を割り当てる
 engine.addParameter({ id: 42, name: 'cutoff', minValue: 0, maxValue: 1, defaultValue: 0.5 });
 engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minValue: 0, maxValue: 1 });
 
@@ -193,7 +200,7 @@ const binding = await bindWebMidi(engine, {
 
 各オプションの役割は次のとおりです。
 
-- **`destinationId` / `group`** — ライブソースが供給するエンジンデスティネーションと、MIDI 1.0 チャンネルボイスイベントに刻む UMP グループです。
+- **`destinationId` / `group`** — ライブソースがイベントを送るエンジンデスティネーションと、MIDI 1.0 チャンネルボイスイベントに刻む UMP グループです。
 - **`inputIds`** — `binding.inputs()` から得た特定のポート ID にバインドを限定します。省略または空配列で接続中の全入力にバインドします。
 - **`sysex` / `software`** — `navigator.requestMIDIAccess` へそのまま渡されます。SysEx アクセスは通常、別の権限プロンプトを出します。`software` はプラットフォームが提供する場合にソフトウェアシンセのポートを要求します。
 - **`ccBindings`** — ポート接続より*前*に適用される `bindMidiCc` のマッピングです。最初のツマミ操作からすでにルーティング済みになります。対象パラメータは先に `addParameter(...)` で登録してください。
@@ -218,31 +225,31 @@ engine.destroy();  // エンジンのネイティブハンドルを解放
 
 ### ブラウザ対応
 
-Web MIDI の対応はまちまちなので、`isWebMidiAvailable()` で実行時に確認し、なければ穏やかに縮退してください。
+Web MIDI の対応はまちまちなので、`isWebMidiAvailable()` で実行時に確認し、使えない場合はオンスクリーンキーボードなどへ切り替えてください。
 
-- **Chrome・Edge**（デスクトップ） — ホットプラグや SysEx（権限プロンプト付き）を含む完全な Web MIDI。主たる対象です。
+- **Chrome・Edge**（デスクトップ） — ホットプラグや SysEx（権限プロンプト付き）を含む Web MIDI に対応しています。主たる対象です。
 - **Firefox** — Web MIDI を提供しています。SysEx やアドオン要件は時期により変わってきたため、前提にせず機能検出してください。
-- **Safari** — 従来は `navigator.requestMIDIAccess` を公開していませんでした。対応は変化しているため、存在を前提にしないでください。常に `isWebMidiAvailable()` でゲートし、オンスクリーンキーボードのフォールバックを用意します。
+- **Safari** — 従来は `navigator.requestMIDIAccess` を公開していませんでした。対応は変化しているため、存在を前提にしないでください。常に `isWebMidiAvailable()` でゲートし、代替入力としてオンスクリーンキーボードを用意します。
 
 状況は移り変わるため、コードでは機能検出を真とし、文章での断定は控えめに保ってください。
 
 ## レシピ: USB キーボードでブラウザのシンセを鳴らす
 
-「キーボードを挿した」から「スピーカーから音が出る」までの、完全にそのまま動く経路です。処理が 2 つのスレッドにまたがるため、ファイルも 2 つになります。
+「キーボードを挿した」から「スピーカーから音が出る」までの、実装全体が見えるレシピです。処理が 2 つのスレッドにまたがるため、ファイルも 2 つになります。
 
-- **音声スレッド** — AudioWorklet プロセッサがエンジンをホストし、レンダークォンタムごとにブロックをレンダリングします。エンジンはここに置く必要があります。メインスレッドのエンジンには `process(...)` を駆動するものがなく、音が出ないままになります。
+- **音声スレッド** — AudioWorklet プロセッサがエンジンをホストし、レンダークォンタムごとにブロックをレンダリングします。エンジンはここに置く必要があります。メインスレッドのエンジンでは `process(...)` が音声コールバックから呼ばれないため、音が出ないままになります。
 - **メインスレッド** — Web MIDI アクセス（`bindWebMidi`）を持ち、すべてのイベントをノードのポート経由でワークレットへ転送します。
 
 ::: info 代役オブジェクトが bindWebMidi を満たせる理由
-`bindWebMidi` が渡されたエンジンに触れるのは、ライブ入力の面だけです。`setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、そして close 時の `clearMidiInputSource`。この 6 メソッドを実装したオブジェクトなら何でもエンジンの代役になれます。つまり、各イベントをワークレットのポートへ post する小さな*フォワーダー*が、バインディングをスレッド境界の向こうへ運んでくれます。
+`bindWebMidi` が渡されたエンジンに対して呼ぶのは、ライブ入力に必要な小さな部分だけです。`setMidiInputSource`、`bindMidiCc`、3 つの `pushMidiInput*` メソッド、そして close 時の `clearMidiInputSource`。この 6 メソッドを実装したオブジェクトなら、エンジンの代役になれます。つまり、各イベントをワークレットのポートへ post する小さな*フォワーダー*が、バインディングをスレッド境界の向こうへ運んでくれます。
 :::
 
 ### 音声スレッド: ワークレットがエンジンをホストする
 
-`AudioWorkletGlobalScope` は動的 `import()` を禁止しているため、高レベルラッパーは使えません（その `init()` は WASM モジュールを動的にインポートします）。代わりに Emscripten ファクトリ `sonare.js` を静的にインポートし、それが公開する生のエンジンを駆動します。この生の面について知っておくことは 2 つです。
+`AudioWorkletGlobalScope` は動的 `import()` を禁止しているため、通常のパッケージ入口は使えません（その `init()` は WASM モジュールを動的にインポートします）。代わりに Emscripten ファクトリ `sonare.js` を静的にインポートし、それが公開する低レベルのエンジンを呼び出します。この低レベル入口について知っておくことは 2 つです。
 
 - ワークレットは `.wasm` のバイト列も fetch できません。メインスレッドで fetch して `processorOptions` 経由で渡します。
-- 一部の引数順が JS ラッパーと異なります。特に `setSynthInstrument(destinationId, patch)` です。
+- 一部の引数順が通常の JS パッケージ入口と異なります。特に `setSynthInstrument(destinationId, patch)` です。
 
 ```js
 // synth-worklet.js — context.audioWorklet.addModule(...) で読み込む。
@@ -324,7 +331,7 @@ import { bindWebMidi, isWebMidiAvailable, type RealtimeEngine } from '@libraz/li
 
 async function startKeyboardSynth() {
   if (!isWebMidiAvailable()) {
-    throw new Error('Web MIDI が使えません — オンスクリーンキーボードでフォールバックします');
+    throw new Error('Web MIDI が使えません — オンスクリーンキーボードを使ってください');
   }
 
   // --- ワークレットを起動（コンテキストが動くようユーザージェスチャーから呼ぶ） ---
@@ -343,7 +350,7 @@ async function startKeyboardSynth() {
       event.data?.type === 'ready' ? resolve() : reject(new Error(event.data?.error));
   });
 
-  // --- フォワーダー: bindWebMidi が触るエンジンの面をポートへ post する ---
+  // --- フォワーダー: bindWebMidi が呼ぶエンジンメソッドをポートへ post する ---
   const forwarder = {
     setMidiInputSource: () => {
       // ワークレットが起動時にデスティネーション 0 をバインド済み。
@@ -388,7 +395,7 @@ async function startKeyboardSynth() {
 
 ## ほかの実行環境では
 
-ライブ MIDI のエンジン面はブラウザ専用ではありません。**Node ネイティブ**と **Python** のバインディングは同じ `RealtimeEngine` 入力メソッドを公開します。ブラウザ固有なのは Web MIDI ブリッジ自体だけです（`navigator.requestMIDIAccess` に依存するため）。Python では名前は snake_case 慣習に従います。
+ライブ MIDI のエンジン API はブラウザ専用ではありません。**Node ネイティブ**と **Python** のバインディングは同じ `RealtimeEngine` 入力メソッドを公開します。ブラウザ固有なのは Web MIDI ブリッジ自体だけです（`navigator.requestMIDIAccess` に依存するため）。Python では名前は snake_case 慣習に従います。
 
 ```python
 import libsonare as sonare
@@ -405,7 +412,7 @@ finally:
     engine.close()
 ```
 
-これらのエンジンを実機から鳴らすには、プラットフォームのライブラリ（たとえば CoreMIDI/ALSA のラッパー）で MIDI を読み、同じ `push_midi_input_*` メソッドを呼びます。タイムスタンプからサンプルへの変換は、ブラウザの `timestampToSamples` と同様に自分で用意します。
+これらのエンジンを実機から鳴らすには、プラットフォームのライブラリ（たとえば CoreMIDI や ALSA のバインディング）で MIDI を読み、同じ `push_midi_input_*` メソッドを呼びます。タイムスタンプからサンプルへの変換は、ブラウザの `timestampToSamples` と同様に自分で用意します。
 
 ::: info 実験的なネイティブ macOS バックエンド
 C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_COREAUDIO`・`BUILD_COREMIDI`・`BUILD_AU_HOST` でネイティブ macOS ホストバックエンド（CoreAudio 出力、CoreMIDI 入出力、Audio Unit 楽器ホスト）を有効化できます。これらは C-ABI を追加せず、公開パッケージ（npm／PyPI／WASM）にも含まれません。macOS 専用かつソースビルドでのオプトインで、今後変更される可能性があります。
@@ -422,5 +429,5 @@ C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_C
 - [録音とテイク](./recording-and-takes.md) — 演奏（およびマイク音声入力）の取り込み
 - [プロジェクト編集](./project-editing.md) — MIDI クリップ、CC ラーン、CC からオートメーションへの変換
 - [プロジェクトバウンス](./project-bounce.md) — MIDI 演奏のオフラインレンダー
-- [リアルタイムとストリーミング](./realtime-streaming.md) — 音声出力を駆動する AudioWorklet エンジンブリッジ
+- [リアルタイムとストリーミング](./realtime-streaming.md) — 音声出力を動かす AudioWorklet エンジンブリッジ
 - [リアルタイムエンジン](./glossary/realtime/realtime-engine.md) · [リアルタイム安全性](./glossary/realtime/realtime-safety.md)

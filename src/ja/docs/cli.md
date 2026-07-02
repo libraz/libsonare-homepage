@@ -449,7 +449,7 @@ libsonare {{ wasmMeta.version }} (Python CLI)
 sonare bpm song.mp3
 sonare key song.mp3
 
-# スクリプト用に JSON で完全解析
+# スクリプト用に JSON で総合解析
 sonare analyze song.mp3 --json > analysis.json
 ```
 

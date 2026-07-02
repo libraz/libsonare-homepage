@@ -444,7 +444,7 @@ libsonare {{ wasmMeta.version }} (Python CLI)
 sonare bpm song.mp3
 sonare key song.mp3
 
-# Full analysis with JSON output for scripting
+# All-in-one analysis with JSON output for scripting
 sonare analyze song.mp3 --json > analysis.json
 ```
 

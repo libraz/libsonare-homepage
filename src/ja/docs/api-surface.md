@@ -11,7 +11,7 @@
 - すべての API リファレンスを眺めずに、必要な機能ファミリーを見つけられる。
 - ブラウザ、Python、Node ネイティブ、CLI、C++、C ABI のどの実行環境ページへ進むべきか選べる。
 - ある話題が目的別ガイド、API リファレンス、実装／根拠ページのどこに属するかを判断できる。
-- 公開サーフェスを検証する必要があるとき、ここに挙げたソースファイルを最終根拠として使える。
+- 公開 API を検証する必要があるとき、ここに挙げたソースファイルを最終根拠として使える。
 
 ## このページの読み方
 
@@ -81,7 +81,7 @@
 | ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、ステレオ／デュアル／サラウンドパンメタデータ、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
 | マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON | [マスタリングアシスタント](./mastering-assistant.md) |
 | マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペア解析、ステレオ解析、ストリーミングチェーン | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
-| ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、逐次 BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
+| ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、パン、インサートパラメータ）、キャプチャ、モニターバス、ステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムとストリーミング](./realtime-streaming.md) |
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、アンドゥ/リドゥ、テイク／コンピング、ワープ、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生 | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
@@ -101,7 +101,7 @@
 
 ここから先は、実装や公開 API を厳密に確認したい人向けです。ブラウザで「まず動かす」だけなら、`init()` して必要な関数を import する、という理解で十分です。
 
-メインの `@libraz/libsonare` TypeScript ラッパーは、複数の系統をエクスポートします。
+メインの `@libraz/libsonare` TypeScript パッケージは、複数の系統をエクスポートします。
 
 | 系統 | 例 |
 |------|----|
@@ -110,9 +110,9 @@
 | 音声処理 | 高レベル解析、エフェクト／編集、マスタリング、ミキシング、特徴量抽出、逆変換特徴量、変換ヘルパー |
 | オブジェクト API | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
 
-同じ npm パッケージは、AudioWorklet ブリッジ用の `@libraz/libsonare/worklet`、軽量な `sonare-rt` リアルタイムモジュールファクトリ用の `@libraz/libsonare/rt`、バンドラーや独自ローダー向けの生 WASM アセット用サブパス（`@libraz/libsonare/wasm`、`@libraz/libsonare/rt-wasm`）も公開します。
+同じ npm パッケージは、AudioWorklet ブリッジ用の `@libraz/libsonare/worklet` と、バンドラーや独自ローダー向けの生 WASM アセット用サブパス `@libraz/libsonare/wasm` も公開します。
 
-完全な関数一覧は libsonare リポジトリの `bindings/wasm/src/index.ts` が根拠で、[JavaScript API](./js-api.md) に反映しています。WASM のエクスポート名を厳密に確認したい場合は、このラッパーソースを最も具体的な参照として扱ってください。
+関数一覧の根拠は libsonare リポジトリの `bindings/wasm/src/index.ts` で、[JavaScript API](./js-api.md) に反映しています。WASM のエクスポート名を厳密に確認したい場合は、この TypeScript 側の入口を最も具体的な参照として扱ってください。
 
 ## CLI コマンド系統
 

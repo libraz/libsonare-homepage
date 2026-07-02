@@ -7,7 +7,7 @@ description: Boundaries, self-similarity, repeated sections, energy, and vocal l
 
 **Section analysis** divides a track into longer musical spans such as intro, verse, chorus, bridge, instrumental, and outro. It is a structural estimate: useful for navigation and visualization, but not a replacement for a producer's arrangement notes.
 
-Use it to navigate a track, set loop points around a chorus, or drive a structural visualization — anywhere you need an approximate map of the song's large-scale form.
+Use it to navigate a track, set loop points around a chorus, or build a structural visualization — anywhere you need an approximate map of the song's large-scale form.
 
 For newcomers, think of section analysis as building a map of the song. It looks at large spans such as an intro, verse-like area, chorus-like area, or bridge-like area, rather than short events like individual beats or chords.
 

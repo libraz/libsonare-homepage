@@ -194,7 +194,7 @@ sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.
 
 :::
 
-Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。幾何ベースのルーム音響ヘルパー（`synthesizeRir`・`estimateRoom`・`roomMorph`）は、Python ではモジュールレベル関数、WASM ラッパーではスタンドアロン関数です。
+Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_response(...)` と `audio.detect_acoustic(...)`。幾何ベースのルーム音響ヘルパー（`synthesizeRir`・`estimateRoom`・`roomMorph`）は、Python ではモジュールレベル関数、WASM パッケージではスタンドアロン関数です。
 
 ## 幾何ベースのルーム音響
 

@@ -1,31 +1,38 @@
 # JavaScript/TypeScript API Reference
 
-Complete API reference for libsonare JavaScript/TypeScript interface.
+API reference for the libsonare JavaScript/TypeScript package.
 
 ## Overview
 
-libsonare provides audio analysis, mastering, mixing, and editing DSP capabilities for web applications. The npm package is the WebAssembly build, and most analysis/effect functions work on decoded `Float32Array` PCM. For loading, the `Audio.fromMemory*` factories can decode encoded bytes in memory (a native WASM decoder for WAV/MP3, plus an optional browser fallback for AAC/OGG/FLAC).
+libsonare provides audio analysis, mastering, mixing, and editing DSP capabilities for web applications. The npm package is the WebAssembly build. In practice, most functions expect decoded `Float32Array` PCM: the raw sample values after an MP3, WAV, or other file has already been decoded. For loading, the `Audio.fromMemory*` factories can decode encoded bytes in memory (a native WASM decoder for WAV/MP3, plus an optional browser decoder for AAC/OGG/FLAC).
+
+For a first browser integration, keep the path narrow:
+
+1. call `await init()` once when your app starts;
+2. decode the user file into samples and keep its `sampleRate`;
+3. call one small function such as `detectBpm(samples, sampleRate)`;
+4. only then move to `analyze`, mastering, mixing, or streaming APIs.
 
 | Category | Functions | Use Cases |
 |----------|-----------|-----------|
 | **Quick Analysis** | `detectBpm`, `detectKey`, `detectBeats` | DJ apps, music players, beat sync |
-| **Full Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
+| **All-In-One Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
 | **Audio Effects** | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | Remixing, practice tools, region repair |
 | **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
 | **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS targets, true-peak limiting, presets, streaming chains |
 | **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
 | **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
-| **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | OOP wrapper for all functions |
+| **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | File-loading helper and method-style access for common functions |
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, and more.
 :::
 
 ::: info Most functions take decoded PCM, not a file path
-Most browser functions do not take an MP3 or WAV path; they take decoded PCM samples plus `sampleRate`. To go from encoded bytes to samples, either decode with the Web Audio API (`AudioContext.decodeAudioData`) yourself, or use the `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` factories below — they decode encoded bytes in memory (native WASM decoder for WAV/MP3, optional browser fallback for AAC/OGG/FLAC) and hand back an `Audio` instance.
+Most browser functions do not take an MP3 or WAV path; they take decoded PCM samples plus `sampleRate`. To go from encoded bytes to samples, either decode with the Web Audio API (`AudioContext.decodeAudioData`) yourself, or use the `Audio.fromMemory` / `Audio.fromMemoryWithBrowserFallback` factories below. They decode encoded bytes in memory: WAV/MP3 with the bundled WASM decoder, and AAC/OGG/FLAC through browser decoding when needed.
 :::
 
-For a cross-binding feature map, see [Feature Map](./api-surface.md). For the complete mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
+For a cross-binding feature map, see [Feature Map](./api-surface.md). For the mastering processor registry and mixing scene format, see [Mastering Processors](./mastering-processors.md) and [Mixing Scene JSON](./mixing-scene-json.md).
 
 ## How To Read This Reference
 
@@ -43,9 +50,9 @@ The package is broad, so start from the task rather than the function list:
 
 | You need | Start with | Why |
 |----------|------------|-----|
-| One tempo/key/beat value for a track | `detectBpm`, `detectKey`, `detectBeats` | Fast, direct answers without building the full analysis object |
+| One tempo/key/beat value for a track | `detectBpm`, `detectKey`, `detectBeats` | Fast, direct answers without building the all-in-one analysis object |
 | Metadata for a whole song | `analyze` or the focused `analyze*` helpers | `analyze` gives the common summary; focused helpers expose more detail |
-| A live visualizer or progressive BPM/key/chord UI | `StreamAnalyzer` | Processes blocks and drains frame buffers for UI rendering |
+| A live visualizer or updating BPM/key/chord UI | `StreamAnalyzer` | Processes small audio blocks and lets the UI read the newest frames |
 | Browser mastering or delivery preview | `masterAudio*`, `masteringChain*`, `StreamingMasteringChain` | Use presets first, then move to named processors when you need control |
 | Stem balance, sends, buses, or meters | `mixStereo` or `Mixer` | One-shot mix first; persistent scene mixer when routing matters |
 | Vocal/note/spectral edits | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Editing DSP changes the signal rather than analyzing it |
@@ -129,7 +136,7 @@ function version(): string  // e.g., "{{ wasmMeta.version }}"
 
 ### `projectAbiVersion()`
 
-ABI version of the project/editing POD surface used by `Project` serialization, bounce, and realtime-engine clip exchange.
+ABI version of the project/editing POD API used by `Project` serialization, bounce, and realtime-engine clip exchange.
 
 ```typescript
 function projectAbiVersion(): number
@@ -291,7 +298,7 @@ function detectOnsets(samples: Float32Array, sampleRate: number): Float32Array
 
 ### `analyze(samples, sampleRate)` <Badge type="warning" text="Heavy" />
 
-Perform complete music analysis. Returns BPM, key, beats, chords, sections, timbre, and more.
+Perform the all-in-one music analysis. Returns BPM, key, beats, chords, sections, timbre, and more.
 
 ::: info Use Cases
 - **Music Library Management**: Auto-tag songs with metadata
@@ -323,7 +330,7 @@ console.log(`Form: ${result.form}`);  // e.g., "IABABCO"
 
 ### `analyzeWithProgress(samples, sampleRate, onProgress)` <Badge type="warning" text="Heavy" />
 
-Perform complete music analysis with progress reporting.
+Perform the same all-in-one analysis with progress reporting.
 
 ```typescript
 function analyzeWithProgress(
@@ -1363,7 +1370,7 @@ These helpers mirror familiar librosa rhythm and harmony features:
 | `cyclicTempogram` | Tempo classes folded by octave |
 | `plp` | `librosa.beat.plp` (predominant local pulse) |
 
-For `tempogram`, pass `mode: 'cosine'` to use the window-local cosine-similarity variant. The wrapper also accepts `'auto'`, `'ac'`, `0`, and `1` aliases for parity with lower-level bindings.
+For `tempogram`, pass `mode: 'cosine'` to use the window-local cosine-similarity variant. The API also accepts `'auto'`, `'ac'`, `0`, and `1` aliases for parity with lower-level bindings.
 
 See [Realtime and Streaming](./realtime-streaming.md#tempograms-from-an-onset-envelope) for when to use each.
 
@@ -1383,7 +1390,7 @@ function resample(
 
 ## Audio Class
 
-The `Audio` class provides an object-oriented wrapper around the common one-shot functions. It stores the samples and sample rate internally, so you don't need to pass them to every call. Focused helpers such as section/melody/timbre/dynamics analysis and room-acoustic estimation remain standalone in the WASM wrapper.
+The `Audio` class is the method-style entry point for common one-shot functions. It stores the samples and sample rate internally, so you do not need to pass them to every call. More specialized helpers, such as section/melody/timbre/dynamics analysis and room-acoustic estimation, remain standalone functions in the WASM package.
 
 ### `Audio.fromBuffer(samples, sampleRate)`
 
@@ -1406,7 +1413,7 @@ const audio = Audio.fromMemory(new Uint8Array(await file.arrayBuffer()));
 
 ### `Audio.fromMemoryWithBrowserFallback(bytes, options?)`
 
-`async`; returns `Promise<Audio>`. Tries `Audio.fromMemory` first, then falls back to the browser codec stack (`AudioContext.decodeAudioData`) for formats the native decoder lacks, e.g. AAC, OGG, and FLAC. Browser-decoded multi-channel audio is mixed down to mono to match the `Audio` wrapper contract. Accepts an optional `BrowserAudioDecodeOptions` (`audioContext` / `createAudioContext` / `targetSampleRate`); a context this helper creates itself is closed afterward.
+`async`; returns `Promise<Audio>`. Tries `Audio.fromMemory` first. If the bundled decoder cannot read the format, it uses the browser codec stack (`AudioContext.decodeAudioData`) for formats such as AAC, OGG, and FLAC. Browser-decoded multi-channel audio is mixed down to mono so the returned `Audio` object still contains one sample stream. Accepts an optional `BrowserAudioDecodeOptions` (`audioContext` / `createAudioContext` / `targetSampleRate`); a context this helper creates itself is closed afterward.
 
 ```typescript
 const audio = await Audio.fromMemoryWithBrowserFallback(
@@ -1425,7 +1432,7 @@ const audio = await Audio.fromMemoryWithBrowserFallback(
 
 ### Instance Methods
 
-Common one-shot helpers are available as instance methods — `samples` and `sampleRate` are provided automatically. Focused helpers such as `analyzeSections(...)`, `analyzeMelody(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and the room-acoustic functions remain standalone calls in the WASM wrapper.
+Common one-shot helpers are available as instance methods: `samples` and `sampleRate` are supplied automatically. Focused helpers such as `analyzeSections(...)`, `analyzeMelody(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and the room-acoustic functions remain standalone calls.
 
 ```typescript
 import {
@@ -1494,7 +1501,7 @@ All parameters (e.g., `nFft`, `hopLength`, `nMels`) have the same defaults as th
 The Streaming API enables real-time audio analysis for visualizations and live monitoring. Unlike batch analysis, streaming processes audio chunk by chunk with minimal latency.
 
 ::: tip When to Use
-- **Batch API**: Pre-recorded files, full analysis (BPM, key, chords, sections)
+- **Batch API**: Pre-recorded files, all-in-one analysis (BPM, key, chords, sections)
 - **Streaming API**: Live audio, visualizations, real-time feedback
 :::
 
@@ -1566,7 +1573,7 @@ class StreamAnalyzer {
   // Reset state for new stream
   reset(baseSampleOffset?: number): void;
 
-  // Get statistics and progressive estimates
+  // Get statistics and estimates that update as audio arrives
   stats(): AnalyzerStats;
 
   // Total frames processed
@@ -1734,7 +1741,7 @@ function processChunk(samples: Float32Array) {
     // Use for visualization
     updateVisualization(frames);
 
-    // Check progressive estimates
+    // Check estimates that update as audio arrives
     const stats = analyzer.stats();
     if (stats.estimate.bpm > 0) {
       console.log(`BPM: ${stats.estimate.bpm.toFixed(1)}`);
@@ -2186,7 +2193,7 @@ Use `masteringPairProcessorNames()` and `masteringPairAnalyze()` for reference-t
 
 ### StreamingEqualizer
 
-`StreamingEqualizer` is the block-by-block EQ wrapper used for realtime-safe processing: up to 24 bands, zero-latency/natural/linear phase modes, dynamic EQ, mid/side processing, external sidechain input, spectrum snapshots, and offline reference matching. In the WASM wrapper, call `init()` first and `delete()` when done.
+`StreamingEqualizer` is the block-by-block EQ object used for realtime-safe processing: up to 24 bands, zero-latency/natural/linear phase modes, dynamic EQ, mid/side processing, external sidechain input, spectrum snapshots, and offline reference matching. In the WASM package, call `init()` first and `delete()` when done.
 
 ```typescript
 import { init, StreamingEqualizer } from '@libraz/libsonare';
@@ -2220,7 +2227,7 @@ sonare filter track.wav --type hp --cutoff 80 -o filtered.wav
 
 ### StreamingRetune
 
-`StreamingRetune` is the block-by-block mono pitch retune wrapper. It maintains grain and delay state across calls, so use `prepare()` before the first block and `delete()` when done.
+`StreamingRetune` is the block-by-block mono pitch retune object. It maintains grain and delay state across calls, so use `prepare()` before the first block and `delete()` when done.
 
 ```typescript
 import { init, StreamingRetune } from '@libraz/libsonare';
@@ -2247,7 +2254,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 
 ### RealtimeVoiceChanger
 
-`RealtimeVoiceChanger` is the preset-driven live voice chain. It combines retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages, and keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple.
+`RealtimeVoiceChanger` is the preset-based live voice chain. It combines retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages, and keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple.
 
 Factory preset IDs are available at runtime with `realtimeVoiceChangerPresetNames()`. Preset JSON can be fetched and validated with `realtimeVoiceChangerPresetJson(...)` and `validateRealtimeVoiceChangerPresetJson(...)`. The current schema version is `1`.
 
@@ -2287,7 +2294,7 @@ The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterle
 
 ### `voiceChangeRealtime(samples, options?)`
 
-`voiceChangeRealtime(...)` is the offline whole-buffer convenience wrapper around `RealtimeVoiceChanger`. It internally constructs and prepares a changer, runs the per-block render loop for you, then disposes it — matching the Python `voice_change_realtime` and Node wrappers — so callers do not manage the stateful object themselves.
+`voiceChangeRealtime(...)` is the offline whole-buffer convenience function around `RealtimeVoiceChanger`. It internally constructs and prepares a changer, runs the per-block render loop for you, then disposes it — matching the Python `voice_change_realtime` and Node equivalents — so callers do not manage the stateful object themselves.
 
 ```typescript
 function voiceChangeRealtime(
@@ -2318,7 +2325,7 @@ Use this when you have the full buffer already. Reach for [`RealtimeVoiceChanger
 For real-time or memory-constrained use cases, such as processing audio block-by-block from `AudioWorklet` or a stream, the WASM module exposes `StreamingMasteringChain`. It accepts a `StreamingMasteringChainConfig`, which extends `masteringChain()`'s `MasteringChainConfig` with two optional streaming-only fields:
 
 - `loudnessStaticGainDb` — a precomputed static loudness gain in dB (e.g. `targetLufs - measuredIntegratedLufs`), applied per block so a preset's streaming preview matches its offline render with a `loudness` stage enabled.
-- `loudnessStaticGainPeakDb` — the offline-measured source true-peak in dBFS. When set, the static gain is clamped to `loudness.ceilingDb - loudnessStaticGainPeakDb` so the streaming limiter is not driven harder than the offline chain.
+- `loudnessStaticGainPeakDb` — the offline-measured source true-peak in dBFS. When set, the static gain is clamped to `loudness.ceilingDb - loudnessStaticGainPeakDb` so the streaming limiter does not receive a hotter input than the offline chain.
 
 It otherwise prepares processor state for a fixed block size and applies the chain incrementally.
 
@@ -2352,7 +2359,7 @@ Repair stages exposed by the chain config are offline-only and throw if enabled 
 - `repair.dereverb`
 - `repair.denoise`
 
-These are the only repair stages the chain config surfaces (per the shipped `MasteringChainConfig.repair` type), and the streaming constructor throws when any of them is enabled. The other repair processors (`declip`, `decrackle`, `dehum`) are not part of the chain config at all and run only through the one-shot helpers `masteringRepairDeclip` / `masteringRepairDecrackle` / `masteringRepairDehum`.
+These are the only repair stages exposed by the chain config (per the shipped `MasteringChainConfig.repair` type), and the streaming constructor throws when any of them is enabled. The other repair processors (`declip`, `decrackle`, `dehum`) are not part of the chain config at all and run only through the one-shot helpers `masteringRepairDeclip` / `masteringRepairDecrackle` / `masteringRepairDehum`.
 
 Use `masteringChain*` or `masterAudio*` when you need the chain-config repair stages.
 
@@ -2570,7 +2577,7 @@ mixer.delete();
 
 ## Projects, instruments & live MIDI
 
-The package also exposes the project, synthesis, and live-input surface used to
+The package also exposes the project, synthesis, and live-input APIs used to
 turn MIDI/clip arrangements into audio. These are summarized here; each topic has
 a dedicated guide.
 
@@ -2621,9 +2628,9 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 
 | API | Load | Notes |
 |-----|------|-------|
-| `StreamAnalyzer` | <Badge type="tip" text="Real-time" /> | Per-chunk processing, ~2ms/frame, progressive BPM/key/chord estimation |
+| `StreamAnalyzer` | <Badge type="tip" text="Real-time" /> | Per-chunk processing, ~2ms/frame, updating BPM/key/chord estimation |
 | `Mixer` | <Badge type="tip" text="Real-time" /> | Scene-based block processing with automation and meters |
-| `analyze` / `analyzeWithProgress` | <Badge type="warning" text="Heavy" /> | Full analysis pipeline |
+| `analyze` / `analyzeWithProgress` | <Badge type="warning" text="Heavy" /> | All-in-one analysis pipeline |
 | `hpss` / `harmonic` / `percussive` | <Badge type="warning" text="Heavy" /> | STFT + median filtering |
 | `timeStretch` | <Badge type="warning" text="Heavy" /> | Phase vocoder |
 | `pitchShift` | <Badge type="warning" text="Heavy" /> | Time stretch + resample |

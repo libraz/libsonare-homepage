@@ -24,6 +24,14 @@ For a first implementation, read this page in order:
 The assistant **describes and proposes**; it never decides for you. A good flow is: *profile* the source → *suggest* a direction → let the user adjust → *render* → *preview* how streaming platforms will play it back. Keep listening in the loop; the JSON seeds the UI, it does not replace your ears.
 :::
 
+Think of the three helpers as three separate buttons in a UI:
+
+| Button | What the user expects | Helper |
+|--------|-----------------------|--------|
+| Analyze source | "Tell me what is in this file." | `masteringAudioProfile` |
+| Suggest starting chain | "Fill in reasonable settings I can edit." | `masteringAssistantSuggest` |
+| Check delivery | "Tell me what YouTube/Podcast/etc. will do to the loudness." | `masteringStreamingPreview` |
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -79,9 +87,10 @@ preview    = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=
 ```
 
 ```bash [CLI]
-# No direct assistant CLI command; use CLI analysis/rendering around the same target.
-sonare lufs source.wav --json
-sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+sonare mastering-profile source.wav
+sonare mastering-suggest source.wav --params targetLufs=-14,ceilingDb=-1
+sonare mastering-streaming source.wav \
+  --platforms '[{"name":"YouTube","targetLufs":-14,"ceilingDb":-1},{"name":"Podcast","targetLufs":-16,"ceilingDb":-1}]'
 ```
 
 :::
@@ -183,7 +192,7 @@ A `crestFactorDb` of 5.8 is not "bad" — it just describes the signal. Use the 
 
 ## `masteringAssistantSuggest` — propose a chain
 
-Builds on the profile to propose a complete mastering chain, plus a human-readable rationale. The third argument carries your intent (`targetLufs`, `ceilingDb`, …).
+Builds on the profile to propose a ready-to-render mastering chain, plus a human-readable rationale. The third argument carries your intent (`targetLufs`, `ceilingDb`, …).
 
 Accepted intent keys are `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`.
 
@@ -191,7 +200,7 @@ Accepted intent keys are `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `
 `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. `preferStreamingSafe` biases the suggestion toward a safe ceiling and target for streaming delivery rather than maximum loudness. `speechMonoAmount` (0–1) collapses the low/center of speech toward mono for intelligibility on small or mono speakers.
 :::
 
-Think of this helper as a preset generator with an explanation. It returns a complete starting point that your app can render directly, but the intended workflow is still editable.
+Think of this helper as a preset generator with an explanation. It returns a full starting point that your app can render directly, but the intended workflow is still editable.
 
 | Part of the output | How to use it |
 |--------------------|---------------|
@@ -237,13 +246,13 @@ Think of this helper as a preset generator with an explanation. It returns a com
 | `genreCandidates` | The same ranked styles as the profile; the top one is the base preset. |
 | `profile` | A flattened copy of the source profile, so a suggestion is self-contained. |
 
-::: details The full params object is the entire default chain
-The example above is trimmed. The real `params` map contains **every** parameter of the default chain — all repair stages (declick, declip, decrackle, dehum, dereverb, denoise), EQ, de-esser, transient shaper, compressor, multiband, saturation (tape/exciter), air band, stereo, the true-peak limiter, and the loudness stage — each with its full parameter set and an `enabled` flag. The assistant flips `enabled` and tunes a few values based on the profile; everything else stays at its documented default. Treat the map as a complete, overridable snapshot, not a sparse diff.
+::: details The params object covers the whole default chain
+The example above is trimmed. The real `params` map contains **every** parameter of the default chain — all repair stages (declick, declip, decrackle, dehum, dereverb, denoise), EQ, de-esser, transient shaper, compressor, multiband, saturation (tape/exciter), air band, stereo, the true-peak limiter, and the loudness stage — each with its full parameter set and an `enabled` flag. The assistant flips `enabled` and tunes a few values based on the profile; everything else stays at its documented default. Treat the map as an overridable snapshot of the whole chain, not a sparse diff.
 :::
 
 ### Turning a suggestion into a master
 
-Because `chainConfig.params` uses `masterAudio`'s override keys, rendering the suggestion is one call — use the top genre candidate as the base preset and pass the whole params map (it is the complete chain, not just the few keys shown above) as overrides:
+Because `chainConfig.params` uses `masterAudio`'s override keys, rendering the suggestion is one call — use the top genre candidate as the base preset and pass the whole params map, not just the few keys shown above, as overrides:
 
 ::: code-group
 

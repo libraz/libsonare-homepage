@@ -1,11 +1,11 @@
 ---
 title: プロジェクト & アレンジ編集
-description: libsonare のヘッドレス DAW 編集面を初学者向けに解説。Project モデル、クリップ／トラック操作、アンドゥ／リドゥ、テンポマップと拍子、ワープモード、オートメーション、MIR 書き戻し、コンパイル診断、JSON 保存／読み込み、SMF / MIDI 2.0 クリップファイルの入出力を、そのまま使えるレシピつきで紹介します。
+description: libsonare のヘッドレス DAW 編集 API を初学者向けに解説。Project モデル、クリップ／トラック操作、アンドゥ／リドゥ、テンポマップと拍子、ワープモード、オートメーション、MIR 書き戻し、コンパイル診断、JSON 保存／読み込み、SMF / MIDI 2.0 クリップファイルの入出力を、そのまま使えるレシピつきで紹介します。
 ---
 
 # プロジェクト & アレンジ編集
 
-**DAW を開かずに、曲のアレンジをコードで組み立てたい——** それを叶えるのが `Project` です。**プロジェクト**は、1 曲を構成するすべてを保持するタイムラインです。オーディオトラック、MIDI トラック、そこに置かれたクリップ、テンポマップ、拍子、マーカーが含まれます。libsonare には小さなヘッドレス DAW 編集面である `Project` モデルが備わっており、DAW ホストを組み込まずに、**自分のアプリの中**でそのタイムラインを構築・編集・シリアライズできます。
+**DAW を開かずに、曲のアレンジをコードで組み立てたい——** それを叶えるのが `Project` です。**プロジェクト**は、1 曲を構成するすべてを保持するタイムラインです。オーディオトラック、MIDI トラック、そこに置かれたクリップ、テンポマップ、拍子、マーカーが含まれます。libsonare には小さなヘッドレス DAW 編集 API である `Project` モデルが備わっており、DAW ホストを組み込まずに、**自分のアプリの中**でそのタイムラインを構築・編集・シリアライズできます。
 
 作業は短いループです。アレンジを組み立て、アンドゥ可能な操作で編集し、[コンパイル](#アレンジをコンパイルする)して再生可能なタイムラインにし、JSON に保存し、最後に[音声をレンダリング](#音声をレンダリングする)します。`Project` は**オフラインの制御スレッド向け API**（音声スレッドでは決して動きません）で、ブラウザ（WASM）でも Node でも Python でも同じように動作します。
 
@@ -170,7 +170,7 @@ const copyId = project.duplicateClip(tailId, 8);
 フェードカーブは `'linear'`・`'equal-power'`・`'exponential'`・`'logarithmic'` です。ループモードは `'off'` または `'loop'` で、ループ時は正の `loopLengthPpq` が必要です。`loopCrossfadePpq` はループ継ぎ目に入れる任意の equal-power クロスフェードです。`0` なら従来どおりのハードループ、正の値ならループ末尾とプリロール側のソース素材をブレンドします。エンジンは使用可能なソースオフセットとループ長の半分を上限にクランプし、ワープ済みクリップではこの継ぎ目クロスフェードを無効にします。
 
 ::: warning `setClipGain` / `setClipFade` はオーディオクリップのみに効く
-`setClipGain` と `setClipFade` が効くのは**オーディオクリップのみ**です。MIDI クリップでは値が保存され（アンドゥ可能で `toJson()` でも往復します）が、レンダリングされるノートには反映されません。コンパイラは MIDI クリップのイベントをそのままレンダースケジュールへコピーし、クリップはトラックのミュート／ソロ／ゲインだけでゲートするため、クリップごとのゲインとフェードは静かに破棄されます。MIDI で駆動する楽器の音量を制御するには、**トラックゲイン**（`setTrackGain(trackId, gain)`。[ミキサーシーン](./mixing.md)のチャンネルストリップのフェーダーに畳み込まれます）を設定してください。トラックゲイン `0` はそのトラックの MIDI ノートを完全に無音にします。
+`setClipGain` と `setClipFade` が効くのは**オーディオクリップのみ**です。MIDI クリップでは値が保存され（アンドゥ可能で `toJson()` でも往復します）が、レンダリングされるノートには反映されません。コンパイラは MIDI クリップのイベントをそのままレンダースケジュールへコピーし、クリップはトラックのミュート／ソロ／ゲインだけでゲートするため、クリップごとのゲインとフェードは音には影響しません。MIDI で鳴る楽器の音量を制御するには、**トラックゲイン**（`setTrackGain(trackId, gain)`。[ミキサーシーン](./mixing.md)のチャンネルストリップのフェーダーに畳み込まれます）を設定してください。トラックゲイン `0` はそのトラックの MIDI ノートを完全に無音にします。
 :::
 
 Python では同じ操作が snake_case になり、フェードは長さとカーブを個別の引数で受け取ります。
@@ -266,7 +266,7 @@ project.setMarker(0, 16, 'verse');
 project.setMarker(introId, 0, 'intro (edited)'); // ID を再利用して更新
 ```
 
-構造化マーカーには、完全な `ProjectMarker` を渡す `setMarkerEx(...)` を使います。`MarkerKind` は通常マーカー、テキスト、歌詞、キューポイント、調号を表します。調号マーカーでは `keyFifths`（`-7`...`+7`、シャープが正）と `keyMinor` を使います。
+構造化マーカーには、`ProjectMarker` オブジェクト全体を渡す `setMarkerEx(...)` を使います。`MarkerKind` は通常マーカー、テキスト、歌詞、キューポイント、調号を表します。調号マーカーでは `keyFifths`（`-7`...`+7`、シャープが正）と `keyMinor` を使います。
 
 ::: code-group
 
@@ -365,11 +365,11 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 
 ## オートメーションレーン
 
-**オートメーションレーン**は、ホスト定義のパラメータ 1 つをブレークポイントで時間方向に駆動します。各ブレークポイントは PPQ 位置・値・次の点へのカーブ（`'linear'`・`'exponential'`・`'hold'`・`'scurve'`）を持ちます。
+**オートメーションレーン**は、ホスト定義のパラメータ 1 つを時間に沿って変化させます。各ブレークポイントは PPQ 位置・値・次の点へのカーブ（`'linear'`・`'exponential'`・`'hold'`・`'scurve'`）を持ちます。
 
 ```typescript
 const lane = project.addAutomationLane(trackId, {
-  targetParamId: 1,                                   // 駆動するパラメータのホスト ID
+  targetParamId: 1,                                   // 変化させるパラメータのホスト ID
   points: [
     { ppq: 0, value: 0.0, curve: 'linear' },
     { ppq: 4, value: 1.0, curve: 'exponential' },
@@ -426,7 +426,7 @@ for (let i = 0; i < project.assistSidecarCount(); i += 1) {
 
 `moduleId` + `targetTrackId` + 領域スコープが既存のものと同じサイドカーは**置換**され、それ以外は追加されます。`targetTrackId` `0` はプロジェクトスコープを意味します。書き込みはアンドゥ可能な編集なので、`undo()` / `redo()` で取り消し・やり直しできます。
 
-バインディング面は異なります（本ページの他の Python snake_case の注記と同じ方針です）。上の WASM 呼び出しは位置引数で、件数とインデックスアクセサだけを公開します。**Node** はオプションオブジェクトを取り（`project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })`）、Node/Python はさらに `assistSidecars()` / `assist_sidecars()` で全件を一度に読めます。**Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index)`、`project.assist_sidecars()`。
+バインディングごとの API は少し異なります（本ページの他の Python snake_case の注記と同じ方針です）。上の WASM 呼び出しは位置引数で、件数とインデックスアクセサだけを公開します。**Node** はオプションオブジェクトを取り（`project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })`）、Node/Python はさらに `assistSidecars()` / `assist_sidecars()` で全件を一度に読めます。**Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index)`、`project.assist_sidecars()`。
 
 ## MIDI の内容
 
@@ -473,7 +473,7 @@ if (!check.ok) {
 }
 ```
 
-MIDI アレンジを鳴らすには、レンダリング時に楽器をバインドします。[音声をレンダリングする](#音声をレンダリングする)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)を参照してください。コントローラからプロジェクトをライブで駆動するには、[MIDI 入力](./midi-input.md)を参照してください。
+MIDI アレンジを鳴らすには、レンダリング時に楽器をバインドします。[音声をレンダリングする](#音声をレンダリングする)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)を参照してください。コントローラからプロジェクトをライブ演奏するには、[MIDI 入力](./midi-input.md)を参照してください。
 
 ### キャプチャした MIDI ストリームをルーティングする
 
@@ -646,6 +646,6 @@ const audio = project.bounce({ numChannels: 2 });
 - [プロジェクトバウンス & レンダリング](./project-bounce.md) — タイムラインを音声へ。楽器ありでもなしでも
 - [録音とテイク](./recording-and-takes.md) — テイク、コンプレーン、ループ録音キャプチャ
 - [NativeSynth](./native-synth.md) · [SoundFont プレイヤー](./soundfont-player.md) — MIDI トラックを鳴らす
-- [MIDI 入力](./midi-input.md) — コントローラからプロジェクトをライブで駆動する
+- [MIDI 入力](./midi-input.md) — コントローラからプロジェクトをライブ演奏する
 - [ミキシングシーン JSON](./mixing-scene-json.md) — トラックのルーティング先となるシーン
 - [バインディング対応表](./binding-parity.md) — 実行環境ごとの API 差分

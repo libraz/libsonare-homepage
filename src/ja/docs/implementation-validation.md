@@ -34,12 +34,13 @@
 | 領域 | リポジトリ内の根拠 |
 |------|--------------------|
 | librosa 互換特徴量 | `tests/librosa/*_test.cpp` と `tests/librosa/reference/` の JSON 参照値で、STFT、メル、MFCC、クロマ/CQT、オンセット、ビート／テンポ、PCEN、tonnetz、無音処理、frame/pad/fix、peak pick、変換ヘルパーを検証 |
-| コア DSP プリミティブ | `tests/core/*_test.cpp`、`tests/util/*_test.cpp`、`tests/filters/*_test.cpp`、`tests/rt/*_test.cpp` で FFT、窓関数、リサンプリング、padding、sequence、filter、oversampling、トゥルーピークフィルター、queue、リアルタイム用プリミティブを検証 |
+| コア DSP の基礎部品 | `tests/core/*_test.cpp`、`tests/util/*_test.cpp`、`tests/filters/*_test.cpp`、`tests/rt/*_test.cpp` で FFT、窓関数、リサンプリング、padding、sequence、filter、oversampling、トゥルーピークフィルター、queue、リアルタイム用の基礎部品を検証 |
 | 解析 | `tests/analysis/*_test.cpp`、`tests/fixtures/music_eval/` の任意 music fixture manifest、合成 key/chord matrix で BPM、キー、コード、ビート、ダウンビート、拍子、メロディ、音色、リズム、セクション、境界、長尺境界のプーリング、音響解析を検証 |
 | 幾何ベースのルーム音響 | `tests/acoustic/*_test.cpp`、`tests/effects/room_morph_test.cpp`、`tests/api/sonare_c_acoustic_test.cpp`、`tests/fixtures/acoustic/` の任意 fixture、バインディングテストでルームモデル／マテリアル、鏡像音源法、後期残響、RIR 合成、等価ルーム推定、ルームモーフィング、C ABI 挙動を検証 |
 | マスタリング | `tests/mastering/*_test.cpp` でチェーン設定、各プロセッサ、ラウドネス、プリセット、ゴールデンハッシュ、性質ベースの確認、アシスタント出力を検証 |
 | ミキシング | `tests/mixing/*_test.cpp`、`bindings/node/tests/mixing.test.ts`、`bindings/python/tests/test_mixing.py`、WASM テストでルーティング、インサートオートメーション、処理中にアロケーションしないこと、シーンプリセット、メーター、ゴニオメーター、バインディングのスモークテストを検証 |
 | リアルタイムエンジン | `tests/engine/*_test.cpp`、`bindings/python/tests/test_engine.py`、WASM worklet テストでトランスポート、テンポ同期、メトロノーム、キャプチャ、グラフ実行、モニター実行、モノラルのモニターとバウンスの同等性、テレメトリ、オフラインバウンス、並行処理、AudioWorklet 実行を検証 |
+| NativeSynth のボイス調整 | `tools/voicematch/` が仮実装の GM フォールバックボイスと、ドライな FluidSynth/SoundFont 側の参照音をレンダーして音色指標を比較。`autofit.py` は隔離されたビルドディレクトリで、指定した数値定数を自動調整できる。これは調整用ハーネスであり、物理モデルが完成済みであることの証明ではない |
 | バインディング | `bindings/wasm/tests/*.test.ts`、`bindings/node/tests/*.test.ts`、`bindings/python/tests/*.py`、型検査用のスモークテストで、公開 API の形、structuredClone 可能な WASM 戻り値、入力検証ガード、バインディング間の挙動を検証 |
 | クロスバインディング parity | `tools/parity` で C++、C ABI、Python、Node、WASM 間の既定値、定数／enum、パラメータ名のずれを検出 |
 | CLI | `tests/cli/cli_test.cpp` と Python CLI パーサーのカバレッジで、ターミナルから使う入口を検証 |
@@ -64,7 +65,16 @@
 | ロックフリーなコマンド／テレメトリキュー | 制御メッセージが音声スレッドを止めないこと。 |
 | グラフ実行時テスト、AudioWorklet スモークテスト、ブロック単位同等性テスト、ボイスチェンジャー品質ゲート | リアルタイム経路が、対応するオフライン参照と同じ意味で動くこと。 |
 
-一方で libsonare では、リアルタイムセーフなブロック処理とオフライン用ヘルパーを区別しています。完全なリペア処理やファイル全体のラウドネス最適化は、意図的にオフライン処理として設計されています。
+一方で libsonare では、リアルタイムセーフなブロック処理とオフライン用ヘルパーを区別しています。重いリペア処理やファイル全体のラウドネス最適化は、意図的にオフライン処理として設計されています。
+
+## ボイス調整ハーネス
+
+NativeSynth の物理モデル系ボイスは、音色調整中の**仮実装**として文書化しています。その作業のために、リポジトリには `tools/voicematch/` があります。
+
+- `voicematch.py` は libsonare の GM フォールバック側と参照側をレンダーし、倍音バランス、ピッチ誤差、トーナル成分とノイズ成分の比、エンベロープ関連の測定値を比較します。
+- `autofit.py` は、試す数値定数を JSON spec から読み、隔離された共有ライブラリをビルドして比較を再レンダーし、ミスマッチが小さくなる値を探索します。中断時はソーステキストを戻し、`--dry-run` でも実行できます。
+
+これらはキャリブレーション変更の判断材料です。存在するからといって、ヴァイオリン、金管、リード、フルート、ピアノ、ギター、ベースのモデルが本番品質の楽器シミュレーションとして完成している、という意味ではありません。
 
 ## 精度の境界
 

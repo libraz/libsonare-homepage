@@ -194,7 +194,7 @@ sonare room-morph dry.wav --length 12 --width 9 --height 4 --wet 0.6 -o morphed.
 
 :::
 
-Python `Audio` exposes the same calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. The geometric room-acoustics helpers (`synthesizeRir`, `estimateRoom`, `roomMorph`) are module-level calls in Python and standalone functions in the WASM wrapper.
+Python `Audio` exposes the same calls as instance methods: `audio.analyze_impulse_response(...)` and `audio.detect_acoustic(...)`. The geometric room-acoustics helpers (`synthesizeRir`, `estimateRoom`, `roomMorph`) are module-level calls in Python and standalone functions in the WASM package.
 
 ## Geometric room acoustics
 
@@ -298,7 +298,7 @@ For reliable numbers, record a clean impulse response:
 
 A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
 
-If you need live visual frames or progressive BPM/key/chord estimates, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).
+If you need live visual frames or BPM/key/chord estimates that update as audio arrives, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).
 
 ## Related
 

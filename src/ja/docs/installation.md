@@ -25,6 +25,14 @@
 ブラウザ UI なら npm / WASM、ノートブックやローカル処理なら PyPI、ターミナルだけで確認するなら PyPI 同梱の `sonare` CLI から始めます。Node ネイティブや C++ ビルドは、WASM や Python では性能・配布・既存コード連携が足りないと分かった段階で選ぶと判断しやすくなります。
 :::
 
+迷う場合は、今日すぐ 1 コマンドで試せる経路を選んでください。
+
+- **Web サイトや Vite / Vue / React アプリ** — npm パッケージを入れ、解析前に `await init()` を呼びます。
+- **ローカルのデータ処理** — Python パッケージを入れ、`Audio.from_file(...)` から始めます。
+- **まだコードを書かずに確認したい** — Python パッケージを入れ、`sonare bpm audio.mp3` や `sonare analyze audio.mp3 --json` を実行します。
+
+後から別の実行環境へ移れます。解析や DSP の中核は共通で、インストール先の違いは主に「音声をどう渡すか」と「結果をどこで使うか」の違いです。
+
 ## npm（ブラウザ / WASM）
 
 Node.js 18.0.0 以上が必要です。
@@ -61,9 +69,7 @@ pnpm add @libraz/libsonare
 |--------|------|
 | `@libraz/libsonare` | 初期化、解析、特徴量、マスタリング、ミキシング、リアルタイムクラスを含む通常の TypeScript API |
 | `@libraz/libsonare/worklet` | `SonareRealtimeEngineNode`、`SonareEngine`、Worklet 側ライフサイクルエクスポートを含む AudioWorklet ブリッジヘルパー |
-| `@libraz/libsonare/rt` | AudioWorklet のリアルタイムエンジンのホットパス向けに小さくした `sonare-rt` モジュールファクトリ |
 | `@libraz/libsonare/wasm` | バンドラーや独自ローダー用の通常 WASM アセット |
-| `@libraz/libsonare/rt-wasm` | 独自 Worklet 組み込み用の軽量リアルタイム WASM アセット |
 
 ## PyPI（Python）
 
@@ -163,6 +169,10 @@ const result = analyze(samples, audioBuffer.sampleRate);
 ```
 
 ステレオファイルで両チャンネルを反映したい場合は、片チャンネルだけを渡すのではなく事前にモノラルへダウンミックスしてください。
+
+下のデモは、同じブラウザ / WASM 経路を視覚化したものです。デコード済みサンプルを入力し、STFT 系の時間 × 周波数表示を出力します。これがアプリ内で描画できれば、WASM パッケージの読み込み、初期化、サンプルレートの受け渡しが動いていると確認できます。
+
+<SonareDemo id="stft-basics" />
 
 ### Python
 

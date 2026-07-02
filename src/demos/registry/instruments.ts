@@ -352,8 +352,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'プリセットカタログ — 1 音で全エンジンを',
     },
     caption: {
-      en: 'The same single A3, auditioned through the named presets — one per synthesis engine. The patch is taken straight from `synthPresetPatch(name)`, so each preset sounds with its real character: the subtractive saw lead and warm pad, the FM electric piano and bell, the Karplus-Strong pluck, the modal marimba, the drawbar organ, and the physical-model grand piano. Watch the envelope and waveshape change with each choice, and press play to hear how different the engines are from one identical note.',
-      ja: '同じ A3 を 1 音、名前付きプリセット — 合成エンジンごとに 1 つ — で試聴します。パッチは `synthPresetPatch(name)` からそのまま取るので、各プリセットは本来の性格で鳴ります。減算方式のサウリードとウォームパッド、FM のエレピとベル、Karplus-Strong のプラック、モーダルのマリンバ、ドローバーオルガン、物理モデルのグランドピアノ。選ぶたびにエンベロープと波形が変わります。再生すると、同一の 1 音からエンジンごとにどれだけ音が違うかが聴けます。',
+      en: 'The same single A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch is read from `synthPresetPatch(name)`, so the preset keeps its real character: subtractive, FM, Karplus-Strong, modal, drawbar organ, drums, piano, pipe organ, bowed string, reed, brass, or flute. Watch the envelope and waveshape change, then press play to hear how different one note can become.',
+      ja: '同じ A3 の 1 音を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込むため、減算、FM、Karplus-Strong、モーダル、ドローバーオルガン、ドラム、ピアノ、パイプオルガン、ボウイング弦、リード、金管、フルートといった本来の性格で鳴ります。エンベロープと波形の変化を見てから再生し、同じ 1 音がどれだけ変わるかを聞いてください。',
     },
     params: [
       {
@@ -376,8 +376,23 @@ export const instrumentsDemos: SonareDemoDef[] = [
           { value: 'marimba', label: { en: 'Marimba (modal)', ja: 'マリンバ（モーダル）' } },
           { value: 'organ', label: { en: 'Organ (drawbar)', ja: 'オルガン（ドローバー）' } },
           {
+            value: 'drum-kit',
+            label: { en: 'Drum kit (percussion)', ja: 'ドラムキット（打楽器）' },
+          },
+          {
             value: 'acoustic-piano',
             label: { en: 'Piano (physical)', ja: 'ピアノ（物理モデル）' },
+          },
+          {
+            value: 'church-organ',
+            label: { en: 'Church organ (pipe)', ja: '教会オルガン（パイプ）' },
+          },
+          { value: 'violin', label: { en: 'Violin (bowed string)', ja: 'ヴァイオリン（擦弦）' } },
+          { value: 'clarinet', label: { en: 'Clarinet (reed)', ja: 'クラリネット（リード）' } },
+          { value: 'trumpet', label: { en: 'Trumpet (brass)', ja: 'トランペット（金管）' } },
+          {
+            value: 'concert-flute',
+            label: { en: 'Concert flute (air jet)', ja: 'コンサートフルート（エアジェット）' },
           },
         ],
       },

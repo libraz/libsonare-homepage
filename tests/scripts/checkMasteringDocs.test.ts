@@ -79,19 +79,15 @@ function implementationDoc(locale: string) {
 }
 
 function writeValidProject(root: string) {
-  writeFile(
-    root,
-    'src/wasm/worklet.d.ts',
-    [
-      'declare function masterAudioBuffer(input: Float32Array): Float32Array;',
-      'declare function masteringChainStereoWithProgress(left: Float32Array, right: Float32Array): Float32Array;',
-      'export { masterAudioBuffer as dv, masteringChainStereoWithProgress as dE };',
-    ].join('\n'),
-  );
+  writeFile(root, 'src/wasm/worklet.d.ts', 'export {};');
   writeFile(
     root,
     'src/wasm/index.d.ts',
-    "export { dv as masterAudioBuffer, dE as masteringChainStereoWithProgress } from './worklet.js';",
+    [
+      'declare function masterAudioBuffer(input: Float32Array): Float32Array;',
+      'declare function masteringChainStereoWithProgress(left: Float32Array, right: Float32Array): Float32Array;',
+      'export { masterAudioBuffer, masteringChainStereoWithProgress };',
+    ].join('\n'),
   );
 
   for (const locale of ['en', 'ja'] as const) {
@@ -259,7 +255,7 @@ describe('check-mastering-docs script helpers', () => {
 
     const failingRoot = createWorkspace();
     writeValidProject(failingRoot);
-    writeFile(failingRoot, 'src/wasm/worklet.d.ts', 'export {};');
+    writeFile(failingRoot, 'src/wasm/index.d.ts', 'export {};');
 
     const failing = spawnSync(process.execPath, [scriptPath], {
       cwd: failingRoot,
@@ -269,6 +265,6 @@ describe('check-mastering-docs script helpers', () => {
     expect(failing.status).toBe(1);
     expect(failing.stdout).toBe('');
     expect(failing.stderr).toContain('mastering docs check failed:');
-    expect(failing.stderr).toContain('src/wasm/worklet.d.ts: no mastering JS APIs found');
+    expect(failing.stderr).toContain('src/wasm/index.d.ts: no mastering JS APIs found');
   });
 });

@@ -165,6 +165,141 @@ function getSonareModule() {
   return wrappedModule;
 }
 
+// src/validation.ts
+function assertNonEmptySamples(fnName, samples, argName = "samples") {
+  if (samples.length === 0) {
+    throw new RangeError(`${fnName}: ${argName} must not be empty`);
+  }
+}
+function assertFiniteSamples(fnName, samples, validate, argName = "samples") {
+  if (!validate) {
+    return;
+  }
+  for (let i = 0; i < samples.length; i++) {
+    const v = samples[i];
+    if (!Number.isFinite(v)) {
+      throw new RangeError(`${fnName}: ${argName} contains NaN or Inf at index ${i}`);
+    }
+  }
+}
+function assertSamples(fnName, samples, validate, argName = "samples") {
+  assertNonEmptySamples(fnName, samples, argName);
+  assertFiniteSamples(fnName, samples, validate, argName);
+}
+function assertFiniteScalar(fnName, value, argName) {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
+  }
+}
+function assertSampleRate(fnName, sampleRate) {
+  if (!Number.isInteger(sampleRate) || sampleRate < 8e3 || sampleRate > 384e3) {
+    throw new RangeError(`${fnName}: sampleRate out of supported range [8000, 384000]`);
+  }
+}
+function assertNonNegativeInteger(fnName, value, argName) {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${fnName}: ${argName} must be a non-negative integer`);
+  }
+}
+function assertPositiveInteger(fnName, value, argName) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new RangeError(`${fnName}: ${argName} must be a positive integer`);
+  }
+}
+function assertInterleavedSamples(fnName, samples, channels, validate) {
+  assertSamples(fnName, samples, validate);
+  assertPositiveInteger(fnName, channels, "channels");
+  if (samples.length % channels !== 0) {
+    throw new RangeError(`${fnName}: samples length must be a multiple of channels`);
+  }
+}
+
+// src/effects_transform.ts
+function requireModule() {
+  return getSonareModule();
+}
+function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
+  return requireModule().hpss(samples, sampleRate, kernelHarmonic, kernelPercussive);
+}
+function harmonic(samples, sampleRate, options = {}) {
+  assertSamples("harmonic", samples, options.validate !== false);
+  return requireModule().harmonic(samples, sampleRate);
+}
+function percussive(samples, sampleRate, options = {}) {
+  assertSamples("percussive", samples, options.validate !== false);
+  return requireModule().percussive(samples, sampleRate);
+}
+function timeStretch(samples, sampleRate, rate, options = {}) {
+  assertSamples("timeStretch", samples, options.validate !== false);
+  return requireModule().timeStretch(samples, sampleRate, rate);
+}
+function pitchShift(samples, sampleRate, semitones, options = {}) {
+  assertSamples("pitchShift", samples, options.validate !== false);
+  return requireModule().pitchShift(samples, sampleRate, semitones);
+}
+function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
+  assertSamples("pitchCorrectToMidi", samples, options.validate !== false);
+  return requireModule().pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
+}
+function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 22050, hopLength = 512, voiced, voicedProb, options = {}) {
+  assertSamples("pitchCorrectToMidiTimevarying", samples, options.validate !== false);
+  if (voiced && voiced.length !== f0Hz.length) {
+    throw new RangeError("pitchCorrectToMidiTimevarying: voiced length must match f0Hz length");
+  }
+  if (voicedProb && voicedProb.length !== f0Hz.length) {
+    throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
+  }
+  const voicedF32 = voiced ? Float32Array.from(voiced) : void 0;
+  return requireModule().pitchCorrectToMidiTimevarying(
+    samples,
+    sampleRate,
+    f0Hz,
+    targetMidi,
+    hopLength,
+    voicedF32,
+    voicedProb
+  );
+}
+function pitchCorrectTimevarying(samples, f0Hz, sampleRate = 22050, hopLength = 512, options = {}) {
+  assertSamples("pitchCorrectTimevarying", samples, options.validate !== false);
+  if (options.voiced && options.voiced.length !== f0Hz.length) {
+    throw new RangeError("pitchCorrectTimevarying: voiced length must match f0Hz length");
+  }
+  if (options.voicedProb && options.voicedProb.length !== f0Hz.length) {
+    throw new RangeError("pitchCorrectTimevarying: voicedProb length must match f0Hz length");
+  }
+  const nativeOptions = {
+    ...options,
+    voiced: options.voiced ? Float32Array.from(options.voiced) : void 0
+  };
+  return requireModule().pitchCorrectTimevarying(
+    samples,
+    sampleRate,
+    f0Hz,
+    hopLength,
+    nativeOptions
+  );
+}
+function noteStretch(samples, sampleRate = 22050, options = {}) {
+  assertSamples("noteStretch", samples, options.validate !== false);
+  return requireModule().noteStretch(
+    samples,
+    sampleRate,
+    options.onsetSample ?? 0,
+    options.offsetSample ?? 0,
+    options.stretchRatio ?? 1
+  );
+}
+function normalize(samples, sampleRate, targetDb = 0, options = {}) {
+  assertSamples("normalize", samples, options.validate !== false);
+  return requireModule().normalize(samples, sampleRate, targetDb);
+}
+function spectralEdit(samples, sampleRate, ops = [], options = {}) {
+  assertSamples("spectralEdit", samples, options.validate !== false);
+  assertSampleRate("spectralEdit", sampleRate);
+  return requireModule().spectralEdit(samples, sampleRate, ops, options);
+}
+
 // src/codes.ts
 function automationCurveCode(curve) {
   switch (curve) {
@@ -1016,114 +1151,13 @@ var StreamingRetune = class {
   }
 };
 
-// src/validation.ts
-function assertNonEmptySamples(fnName, samples, argName = "samples") {
-  if (samples.length === 0) {
-    throw new RangeError(`${fnName}: ${argName} must not be empty`);
-  }
-}
-function assertFiniteSamples(fnName, samples, validate, argName = "samples") {
-  if (!validate) {
-    return;
-  }
-  for (let i = 0; i < samples.length; i++) {
-    const v = samples[i];
-    if (!Number.isFinite(v)) {
-      throw new RangeError(`${fnName}: ${argName} contains NaN or Inf at index ${i}`);
-    }
-  }
-}
-function assertSamples(fnName, samples, validate, argName = "samples") {
-  assertNonEmptySamples(fnName, samples, argName);
-  assertFiniteSamples(fnName, samples, validate, argName);
-}
-function assertFiniteScalar(fnName, value, argName) {
-  if (!Number.isFinite(value)) {
-    throw new RangeError(`${fnName}: ${argName} must be a finite number`);
-  }
-}
-function assertSampleRate(fnName, sampleRate) {
-  if (!Number.isInteger(sampleRate) || sampleRate < 8e3 || sampleRate > 384e3) {
-    throw new RangeError(`${fnName}: sampleRate out of supported range [8000, 384000]`);
-  }
-}
-function assertNonNegativeInteger(fnName, value, argName) {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${fnName}: ${argName} must be a non-negative integer`);
-  }
-}
-function assertPositiveInteger(fnName, value, argName) {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new RangeError(`${fnName}: ${argName} must be a positive integer`);
-  }
-}
-function assertInterleavedSamples(fnName, samples, channels, validate) {
-  assertSamples(fnName, samples, validate);
-  assertPositiveInteger(fnName, channels, "channels");
-  if (samples.length % channels !== 0) {
-    throw new RangeError(`${fnName}: samples length must be a multiple of channels`);
-  }
-}
-
-// src/effects_mastering.ts
-function requireModule() {
+// src/effects_voice_change.ts
+function requireModule2() {
   return getSonareModule();
-}
-function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
-  return requireModule().hpss(samples, sampleRate, kernelHarmonic, kernelPercussive);
-}
-function harmonic(samples, sampleRate, options = {}) {
-  assertSamples("harmonic", samples, options.validate !== false);
-  return requireModule().harmonic(samples, sampleRate);
-}
-function percussive(samples, sampleRate, options = {}) {
-  assertSamples("percussive", samples, options.validate !== false);
-  return requireModule().percussive(samples, sampleRate);
-}
-function timeStretch(samples, sampleRate, rate, options = {}) {
-  assertSamples("timeStretch", samples, options.validate !== false);
-  return requireModule().timeStretch(samples, sampleRate, rate);
-}
-function pitchShift(samples, sampleRate, semitones, options = {}) {
-  assertSamples("pitchShift", samples, options.validate !== false);
-  return requireModule().pitchShift(samples, sampleRate, semitones);
-}
-function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
-  assertSamples("pitchCorrectToMidi", samples, options.validate !== false);
-  return requireModule().pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
-}
-function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 22050, hopLength = 512, voiced, voicedProb, options = {}) {
-  assertSamples("pitchCorrectToMidiTimevarying", samples, options.validate !== false);
-  if (voiced && voiced.length !== f0Hz.length) {
-    throw new RangeError("pitchCorrectToMidiTimevarying: voiced length must match f0Hz length");
-  }
-  if (voicedProb && voicedProb.length !== f0Hz.length) {
-    throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
-  }
-  const voicedF32 = voiced ? Float32Array.from(voiced) : void 0;
-  return requireModule().pitchCorrectToMidiTimevarying(
-    samples,
-    sampleRate,
-    f0Hz,
-    targetMidi,
-    hopLength,
-    voicedF32,
-    voicedProb
-  );
-}
-function noteStretch(samples, sampleRate = 22050, options = {}) {
-  assertSamples("noteStretch", samples, options.validate !== false);
-  return requireModule().noteStretch(
-    samples,
-    sampleRate,
-    options.onsetSample ?? 0,
-    options.offsetSample ?? 0,
-    options.stretchRatio ?? 1
-  );
 }
 function voiceChange(samples, sampleRate = 22050, options = {}) {
   assertSamples("voiceChange", samples, options.validate !== false);
-  return requireModule().voiceChange(
+  return requireModule2().voiceChange(
     samples,
     sampleRate,
     options.pitchSemitones ?? 0,
@@ -1175,17 +1209,86 @@ function voiceChangeRealtime(samples, options = {}) {
     changer.delete();
   }
 }
-function normalize(samples, sampleRate, targetDb = 0, options = {}) {
-  assertSamples("normalize", samples, options.validate !== false);
-  return requireModule().normalize(samples, sampleRate, targetDb);
+
+// src/mastering_chain.ts
+function requireModule3() {
+  return getSonareModule();
 }
-function spectralEdit(samples, sampleRate, ops = [], options = {}) {
-  assertSamples("spectralEdit", samples, options.validate !== false);
-  assertSampleRate("spectralEdit", sampleRate);
-  return requireModule().spectralEdit(samples, sampleRate, ops, options);
+function masteringChain(samples, sampleRate = 22050, config) {
+  return requireModule3().masteringChain(samples, sampleRate, config);
+}
+function masteringChainStereo(left, right, sampleRate = 22050, config) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule3().masteringChainStereo(
+    left,
+    right,
+    sampleRate,
+    config
+  );
+}
+function masteringChainWithProgress(samples, sampleRate = 22050, config, onProgress) {
+  return requireModule3().masteringChainWithProgress(
+    samples,
+    sampleRate,
+    config,
+    onProgress
+  );
+}
+function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config, onProgress) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule3().masteringChainStereoWithProgress(
+    left,
+    right,
+    sampleRate,
+    config,
+    onProgress
+  );
+}
+function masteringPresetNames() {
+  return Array.from(requireModule3().masteringPresetNames());
+}
+function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}) {
+  return requireModule3().masterAudio(presetName, samples, sampleRate, overrides);
+}
+function masterAudioStereo(left, right, sampleRate = 22050, presetName = "pop", overrides = {}) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule3().masterAudioStereo(presetName, left, right, sampleRate, overrides);
+}
+function masterAudioWithProgress(samples, sampleRate = 22050, presetName, onProgress, overrides = null) {
+  return requireModule3().masterAudioWithProgress(
+    presetName,
+    samples,
+    sampleRate,
+    overrides,
+    onProgress
+  );
+}
+function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetName, onProgress, overrides = null) {
+  if (left.length !== right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule3().masterAudioStereoWithProgress(
+    presetName,
+    left,
+    right,
+    sampleRate,
+    overrides,
+    onProgress
+  );
+}
+
+// src/mastering_core.ts
+function requireModule4() {
+  return getSonareModule();
 }
 function mastering(samples, sampleRate = 22050, options = {}) {
-  return requireModule().mastering(
+  return requireModule4().mastering(
     samples,
     sampleRate,
     options.targetLufs ?? -14,
@@ -1197,80 +1300,64 @@ function mastering(samples, sampleRate = 22050, options = {}) {
   );
 }
 function masteringProcessorNames() {
-  return Array.from(requireModule().masteringProcessorNames());
+  return Array.from(requireModule4().masteringProcessorNames());
 }
 function masteringInsertNames() {
-  return requireModule().masteringInsertNames();
+  return requireModule4().masteringInsertNames();
 }
 function masteringInsertParamNames(name) {
   return Array.from(
-    requireModule().masteringInsertParamNames(name)
+    requireModule4().masteringInsertParamNames(name)
   );
 }
 function masteringInsertParamInfo(name) {
-  const json = requireModule().masteringInsertParamInfo(name);
+  const json = requireModule4().masteringInsertParamInfo(name);
   return JSON.parse(json);
 }
 function masteringProcessorCatalog() {
-  const json = requireModule().masteringProcessorCatalog();
+  const json = requireModule4().masteringProcessorCatalog();
   return JSON.parse(json);
 }
 function masteringPairProcessorNames() {
-  return Array.from(requireModule().masteringPairProcessorNames());
+  return Array.from(requireModule4().masteringPairProcessorNames());
 }
 function masteringPairAnalysisNames() {
-  return Array.from(requireModule().masteringPairAnalysisNames());
+  return Array.from(requireModule4().masteringPairAnalysisNames());
 }
 function masteringStereoAnalysisNames() {
-  return Array.from(requireModule().masteringStereoAnalysisNames());
+  return Array.from(requireModule4().masteringStereoAnalysisNames());
 }
 function masteringProcess(processorName, samples, sampleRate = 22050, params = {}) {
-  return requireModule().masteringProcess(processorName, samples, sampleRate, params);
+  return requireModule4().masteringProcess(processorName, samples, sampleRate, params);
 }
 function masteringProcessStereo(processorName, left, right, sampleRate = 22050, params = {}) {
   if (left.length !== right.length) {
     throw new Error("Stereo channel lengths must match.");
   }
-  return requireModule().masteringProcessStereo(processorName, left, right, sampleRate, params);
+  return requireModule4().masteringProcessStereo(processorName, left, right, sampleRate, params);
 }
 function masteringPairProcess(processorName, source, reference, sampleRate = 22050, params = {}) {
-  return requireModule().masteringPairProcess(processorName, source, reference, sampleRate, params);
+  return requireModule4().masteringPairProcess(processorName, source, reference, sampleRate, params);
 }
 function masteringPairAnalyze(analysisName, source, reference, sampleRate = 22050, params = {}) {
-  return requireModule().masteringPairAnalyze(analysisName, source, reference, sampleRate, params);
+  return requireModule4().masteringPairAnalyze(analysisName, source, reference, sampleRate, params);
 }
 function masteringStereoAnalyze(analysisName, left, right, sampleRate = 22050, params = {}) {
-  return requireModule().masteringStereoAnalyze(analysisName, left, right, sampleRate, params);
+  return requireModule4().masteringStereoAnalyze(analysisName, left, right, sampleRate, params);
 }
 function masteringAssistantSuggest(samples, sampleRate = 22050, params = {}) {
-  return requireModule().masteringAssistantSuggest(samples, sampleRate, params);
+  return requireModule4().masteringAssistantSuggest(samples, sampleRate, params);
 }
 function masteringAudioProfile(samples, sampleRate = 22050, params = {}) {
-  return requireModule().masteringAudioProfile(samples, sampleRate, params);
+  return requireModule4().masteringAudioProfile(samples, sampleRate, params);
 }
 function masteringStreamingPreview(samples, sampleRate = 22050, platforms = []) {
-  return requireModule().masteringStreamingPreview(samples, sampleRate, platforms);
+  return requireModule4().masteringStreamingPreview(samples, sampleRate, platforms);
 }
-function masteringRepairDeclick(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDeclick(samples, sampleRate, options);
-}
-function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDenoiseClassical(samples, sampleRate, options);
-}
-function masteringRepairDeclip(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDeclip(samples, sampleRate, options);
-}
-function masteringRepairDecrackle(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDecrackle(samples, sampleRate, options);
-}
-function masteringRepairDehum(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDehum(samples, sampleRate, options);
-}
-function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairDereverbClassical(samples, sampleRate, options);
-}
-function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
-  return requireModule().masteringRepairTrimSilence(samples, sampleRate, options);
+
+// src/mastering_dynamics.ts
+function requireModule5() {
+  return getSonareModule();
 }
 var COMPRESSOR_DETECTOR_MAP = {
   peak: 0,
@@ -1284,95 +1371,58 @@ function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
   if (detector !== void 0) {
     opts.detector = detector;
   }
-  return requireModule().masteringDynamicsCompressor(samples, sampleRate, opts);
+  return requireModule5().masteringDynamicsCompressor(samples, sampleRate, opts);
 }
 function masteringDynamicsGate(samples, sampleRate, options = {}) {
   assertSamples("masteringDynamicsGate", samples, options.validate !== false);
-  return requireModule().masteringDynamicsGate(samples, sampleRate, options);
+  return requireModule5().masteringDynamicsGate(samples, sampleRate, options);
 }
 function masteringDynamicsTransientShaper(samples, sampleRate, options = {}) {
   assertSamples("masteringDynamicsTransientShaper", samples, options.validate !== false);
-  return requireModule().masteringDynamicsTransientShaper(samples, sampleRate, options);
+  return requireModule5().masteringDynamicsTransientShaper(samples, sampleRate, options);
 }
-function masteringChain(samples, sampleRate = 22050, config) {
-  return requireModule().masteringChain(samples, sampleRate, config);
+
+// src/mastering_repair.ts
+function requireModule6() {
+  return getSonareModule();
 }
-function masteringChainStereo(left, right, sampleRate = 22050, config) {
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return requireModule().masteringChainStereo(
-    left,
-    right,
-    sampleRate,
-    config
-  );
+function masteringRepairDeclick(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairDeclick(samples, sampleRate, options);
 }
-function masteringChainWithProgress(samples, sampleRate = 22050, config, onProgress) {
-  return requireModule().masteringChainWithProgress(
-    samples,
-    sampleRate,
-    config,
-    onProgress
-  );
+function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairDenoiseClassical(samples, sampleRate, options);
 }
-function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config, onProgress) {
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return requireModule().masteringChainStereoWithProgress(
-    left,
-    right,
-    sampleRate,
-    config,
-    onProgress
-  );
+function masteringRepairDeclip(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairDeclip(samples, sampleRate, options);
 }
-function masteringPresetNames() {
-  return Array.from(requireModule().masteringPresetNames());
+function masteringRepairDecrackle(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairDecrackle(samples, sampleRate, options);
 }
-function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}) {
-  return requireModule().masterAudio(presetName, samples, sampleRate, overrides);
+function masteringRepairDehum(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairDehum(samples, sampleRate, options);
 }
-function masterAudioStereo(left, right, sampleRate = 22050, presetName = "pop", overrides = {}) {
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return requireModule().masterAudioStereo(presetName, left, right, sampleRate, overrides);
+function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairDereverbClassical(samples, sampleRate, options);
 }
-function masterAudioWithProgress(samples, sampleRate = 22050, presetName, onProgress, overrides = null) {
-  return requireModule().masterAudioWithProgress(
-    presetName,
-    samples,
-    sampleRate,
-    overrides,
-    onProgress
-  );
+function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
+  return requireModule6().masteringRepairTrimSilence(samples, sampleRate, options);
 }
-function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetName, onProgress, overrides = null) {
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return requireModule().masterAudioStereoWithProgress(
-    presetName,
-    left,
-    right,
-    sampleRate,
-    overrides,
-    onProgress
-  );
+
+// src/mixing_oneshot.ts
+function requireModule7() {
+  return getSonareModule();
 }
 function mixingScenePresetNames() {
-  return Array.from(requireModule().mixingScenePresetNames());
+  return Array.from(requireModule7().mixingScenePresetNames());
 }
 function mixingScenePresetJson(presetName) {
-  return requireModule().mixingScenePresetJson(presetName);
+  return requireModule7().mixingScenePresetJson(presetName);
 }
 function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {}) {
   if (leftChannels.length === 0 || leftChannels.length !== rightChannels.length) {
     throw new Error("leftChannels and rightChannels must have the same non-zero length.");
   }
-  return requireModule().mixStereo(
+  return requireModule7().mixStereo(
     leftChannels,
     rightChannels,
     sampleRate,
@@ -1381,92 +1431,92 @@ function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {})
 }
 
 // src/feature_core.ts
-function requireModule2() {
+function requireModule8() {
   return getSonareModule();
 }
 function hzToMel(hz) {
-  return requireModule2().hzToMel(hz);
+  return requireModule8().hzToMel(hz);
 }
 function melToHz(mel) {
-  return requireModule2().melToHz(mel);
+  return requireModule8().melToHz(mel);
 }
 function hzToMidi(hz) {
-  return requireModule2().hzToMidi(hz);
+  return requireModule8().hzToMidi(hz);
 }
 function midiToHz(midi) {
-  return requireModule2().midiToHz(midi);
+  return requireModule8().midiToHz(midi);
 }
 function hzToNote(hz) {
-  return requireModule2().hzToNote(hz);
+  return requireModule8().hzToNote(hz);
 }
 function noteToHz(note) {
-  return requireModule2().noteToHz(note);
+  return requireModule8().noteToHz(note);
 }
 function framesToTime(frames, sr = 22050, hopLength = 512) {
-  return requireModule2().framesToTime(frames, sr, hopLength);
+  return requireModule8().framesToTime(frames, sr, hopLength);
 }
 function timeToFrames(time, sr = 22050, hopLength = 512) {
-  return requireModule2().timeToFrames(time, sr, hopLength);
+  return requireModule8().timeToFrames(time, sr, hopLength);
 }
 function framesToSamples(frames, hopLength = 512, nFft = 0) {
-  return requireModule2().framesToSamples(frames, hopLength, nFft);
+  return requireModule8().framesToSamples(frames, hopLength, nFft);
 }
 function samplesToFrames(samples, hopLength = 512, nFft = 0) {
-  return requireModule2().samplesToFrames(samples, hopLength, nFft);
+  return requireModule8().samplesToFrames(samples, hopLength, nFft);
 }
 function powerToDb(values, ref = 1, amin = 1e-10, topDb = 80) {
-  return requireModule2().powerToDb(values, ref, amin, topDb);
+  return requireModule8().powerToDb(values, ref, amin, topDb);
 }
 function amplitudeToDb(values, ref = 1, amin = 1e-5, topDb = 80) {
-  return requireModule2().amplitudeToDb(values, ref, amin, topDb);
+  return requireModule8().amplitudeToDb(values, ref, amin, topDb);
 }
 function dbToPower(values, ref = 1) {
-  return requireModule2().dbToPower(values, ref);
+  return requireModule8().dbToPower(values, ref);
 }
 function dbToAmplitude(values, ref = 1) {
-  return requireModule2().dbToAmplitude(values, ref);
+  return requireModule8().dbToAmplitude(values, ref);
 }
 function preemphasis(samples, coef = 0.97, zi) {
-  return requireModule2().preemphasis(samples, coef, zi ?? null);
+  return requireModule8().preemphasis(samples, coef, zi ?? null);
 }
 function deemphasis(samples, coef = 0.97, zi) {
-  return requireModule2().deemphasis(samples, coef, zi ?? null);
+  return requireModule8().deemphasis(samples, coef, zi ?? null);
 }
 function trimSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
-  return requireModule2().trimSilence(samples, topDb, frameLength, hopLength);
+  return requireModule8().trimSilence(samples, topDb, frameLength, hopLength);
 }
 function splitSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
-  return requireModule2().splitSilence(samples, topDb, frameLength, hopLength);
+  return requireModule8().splitSilence(samples, topDb, frameLength, hopLength);
 }
 function frameSignal(samples, frameLength, hopLength) {
-  return requireModule2().frameSignal(samples, frameLength, hopLength);
+  return requireModule8().frameSignal(samples, frameLength, hopLength);
 }
 function padCenter(values, targetSize, padValue = 0) {
-  return requireModule2().padCenter(values, targetSize, padValue);
+  return requireModule8().padCenter(values, targetSize, padValue);
 }
 function fixLength(values, targetSize, padValue = 0) {
-  return requireModule2().fixLength(values, targetSize, padValue);
+  return requireModule8().fixLength(values, targetSize, padValue);
 }
 function fixFrames(frames, xMin = 0, xMax = -1, pad = true) {
-  return requireModule2().fixFrames(frames, xMin, xMax, pad);
+  return requireModule8().fixFrames(frames, xMin, xMax, pad);
 }
 function peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait) {
-  return requireModule2().peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait);
+  return requireModule8().peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait);
 }
 function vectorNormalize(values, normType = 0, threshold = 0) {
-  return requireModule2().vectorNormalize(values, normType, threshold);
+  return requireModule8().vectorNormalize(values, normType, threshold);
 }
 function pcen(values, nBins, nFrames, options = {}) {
-  return requireModule2().pcen(values, nBins, nFrames, options);
+  return requireModule8().pcen(values, nBins, nFrames, options);
 }
 function tonnetz(chromagram, nChroma, nFrames) {
-  return requireModule2().tonnetz(chromagram, nChroma, nFrames);
+  return requireModule8().tonnetz(chromagram, nChroma, nFrames);
 }
 function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation") {
-  return requireModule2().tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
+  return requireModule8().tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
 }
 function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
-  return requireModule2().cyclicTempogram(
+  return requireModule8().cyclicTempogram(
     onsetEnvelope2,
     sampleRate,
     hopLength,
@@ -1476,11 +1526,11 @@ function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, wi
   );
 }
 function plp(onsetEnvelope2, sampleRate = 22050, hopLength = 512, tempoMin = 30, tempoMax = 300, winLength = 384) {
-  return requireModule2().plp(onsetEnvelope2, sampleRate, hopLength, tempoMin, tempoMax, winLength);
+  return requireModule8().plp(onsetEnvelope2, sampleRate, hopLength, tempoMin, tempoMax, winLength);
 }
 
 // src/feature_music.ts
-function requireModule3() {
+function requireModule9() {
   return getSonareModule();
 }
 function validateMusicSamples(fnName, samples, sampleRate, options = {}) {
@@ -1506,25 +1556,25 @@ function validateFrequencyBounds(fnName, fmin, fmax) {
 }
 function nnlsChroma(samples, sampleRate = 22050, options = {}) {
   validateMusicSamples("nnlsChroma", samples, sampleRate, options);
-  return requireModule3().nnlsChroma(samples, sampleRate);
+  return requireModule9().nnlsChroma(samples, sampleRate);
 }
 function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
   validateMusicSamples("cqt", samples, sampleRate, options);
   validatePositiveIntegers("cqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("cqt", fmin);
-  return requireModule3().cqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
+  return requireModule9().cqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function pseudoCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
   validateMusicSamples("pseudoCqt", samples, sampleRate, options);
   validatePositiveIntegers("pseudoCqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("pseudoCqt", fmin);
-  return requireModule3().pseudoCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
+  return requireModule9().pseudoCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function hybridCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
   validateMusicSamples("hybridCqt", samples, sampleRate, options);
   validatePositiveIntegers("hybridCqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("hybridCqt", fmin);
-  return requireModule3().hybridCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
+  return requireModule9().hybridCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma = 0, options = {}) {
   validateMusicSamples("vqt", samples, sampleRate, options);
@@ -1534,7 +1584,7 @@ function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257
   if (gamma < 0) {
     throw new RangeError("vqt: gamma must be non-negative");
   }
-  return requireModule3().vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
+  return requireModule9().vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
 }
 function analyzeSections(samples, sampleRate = 22050, options = {}) {
   validateMusicSamples("analyzeSections", samples, sampleRate, options);
@@ -1546,7 +1596,7 @@ function analyzeSections(samples, sampleRate = 22050, options = {}) {
   if ((options.minSectionSec ?? 4) <= 0) {
     throw new RangeError("analyzeSections: minSectionSec must be positive");
   }
-  const sections = requireModule3().analyzeSections(
+  const sections = requireModule9().analyzeSections(
     samples,
     sampleRate,
     options.nFft ?? 2048,
@@ -1572,7 +1622,7 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   if (threshold <= 0) {
     throw new RangeError("analyzeMelody: threshold must be positive");
   }
-  return requireModule3().analyzeMelody(
+  return requireModule9().analyzeMelody(
     samples,
     sampleRate,
     options.fmin ?? 65,
@@ -1587,47 +1637,47 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
 function onsetEnvelope(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, options = {}) {
   validateMusicSamples("onsetEnvelope", samples, sampleRate, options);
   validatePositiveIntegers("onsetEnvelope", { nFft, hopLength, nMels });
-  return requireModule3().onsetEnvelope(samples, sampleRate, nFft, hopLength, nMels);
+  return requireModule9().onsetEnvelope(samples, sampleRate, nFft, hopLength, nMels);
 }
 function onsetStrengthMulti(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nBands = 3, options = {}) {
   validateMusicSamples("onsetStrengthMulti", samples, sampleRate, options);
   validatePositiveIntegers("onsetStrengthMulti", { nFft, hopLength, nMels, nBands });
-  return requireModule3().onsetStrengthMulti(samples, sampleRate, nFft, hopLength, nMels, nBands);
+  return requireModule9().onsetStrengthMulti(samples, sampleRate, nFft, hopLength, nMels, nBands);
 }
 function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, options = {}) {
   assertSampleRate("fourierTempogram", sampleRate);
   assertSamples("fourierTempogram", onsetEnvelope2, options.validate !== false, "onsetEnvelope");
   validatePositiveIntegers("fourierTempogram", { hopLength, winLength });
-  return requireModule3().fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
+  return requireModule9().fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
 }
 function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, options = {}) {
   assertSampleRate("tempogramRatio", sampleRate);
   assertSamples("tempogramRatio", tempogramData, options.validate !== false, "tempogramData");
   validatePositiveIntegers("tempogramRatio", { winLength, hopLength });
-  return requireModule3().tempogramRatio(tempogramData, winLength, sampleRate, hopLength);
+  return requireModule9().tempogramRatio(tempogramData, winLength, sampleRate, hopLength);
 }
 function lufs(samples, sampleRate = 22050, options = {}) {
   assertSampleRate("lufs", sampleRate);
   assertSamples("lufs", samples, options.validate !== false);
-  return requireModule3().lufs(samples, sampleRate);
+  return requireModule9().lufs(samples, sampleRate);
 }
 function momentaryLufs(samples, sampleRate = 22050, options = {}) {
   assertSampleRate("momentaryLufs", sampleRate);
   assertSamples("momentaryLufs", samples, options.validate !== false);
-  return requireModule3().momentaryLufs(samples, sampleRate);
+  return requireModule9().momentaryLufs(samples, sampleRate);
 }
 function shortTermLufs(samples, sampleRate = 22050, options = {}) {
   assertSampleRate("shortTermLufs", sampleRate);
   assertSamples("shortTermLufs", samples, options.validate !== false);
-  return requireModule3().shortTermLufs(samples, sampleRate);
+  return requireModule9().shortTermLufs(samples, sampleRate);
 }
 
 // src/feature_pitch.ts
-function requireModule4() {
+function requireModule10() {
   return getSonareModule();
 }
 function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
-  return requireModule4().pitchYin(
+  return requireModule10().pitchYin(
     samples,
     sampleRate,
     frameLength,
@@ -1639,7 +1689,7 @@ function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 5
   );
 }
 function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
-  return requireModule4().pitchPyin(
+  return requireModule10().pitchPyin(
     samples,
     sampleRate,
     frameLength,
@@ -1652,22 +1702,22 @@ function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 
 }
 
 // src/feature_resample.ts
-function requireModule5() {
+function requireModule11() {
   return getSonareModule();
 }
 function resample(samples, srcSr, targetSr) {
-  return requireModule5().resample(samples, srcSr, targetSr);
+  return requireModule11().resample(samples, srcSr, targetSr);
 }
 
 // src/feature_spectral.ts
-function requireModule6() {
+function requireModule12() {
   return getSonareModule();
 }
 function spectralCentroid(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  return requireModule6().spectralCentroid(samples, sampleRate, nFft, hopLength);
+  return requireModule12().spectralCentroid(samples, sampleRate, nFft, hopLength);
 }
 function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nBands = 6, fmin = 200, quantile = 0.02) {
-  return requireModule6().spectralContrast(
+  return requireModule12().spectralContrast(
     samples,
     sampleRate,
     nFft,
@@ -1678,16 +1728,16 @@ function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 
   );
 }
 function polyFeatures(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, order = 1) {
-  return requireModule6().polyFeatures(samples, sampleRate, nFft, hopLength, order);
+  return requireModule12().polyFeatures(samples, sampleRate, nFft, hopLength, order);
 }
 function zeroCrossings(samples, threshold = 1e-10, refMagnitude = false, pad = true, zeroPos = true) {
-  return requireModule6().zeroCrossings(samples, threshold, refMagnitude, pad, zeroPos);
+  return requireModule12().zeroCrossings(samples, threshold, refMagnitude, pad, zeroPos);
 }
 function pitchTuning(frequencies, resolution = 0.01, binsPerOctave = 12) {
-  return requireModule6().pitchTuning(frequencies, resolution, binsPerOctave);
+  return requireModule12().pitchTuning(frequencies, resolution, binsPerOctave);
 }
 function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, resolution = 0.01, binsPerOctave = 12) {
-  return requireModule6().estimateTuning(
+  return requireModule12().estimateTuning(
     samples,
     sampleRate,
     nFft,
@@ -1697,50 +1747,50 @@ function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 51
   );
 }
 function decompose(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2) {
-  return requireModule6().decompose(s, nFeatures, nFrames, nComponents, nIter, beta);
+  return requireModule12().decompose(s, nFeatures, nFrames, nComponents, nIter, beta);
 }
 function decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2, init2 = "random") {
-  return requireModule6().decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter, beta, init2);
+  return requireModule12().decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter, beta, init2);
 }
 function nnFilter(s, nFeatures, nFrames, aggregate = "mean", k = 7, width = 1) {
-  return requireModule6().nnFilter(s, nFeatures, nFrames, aggregate, k, width);
+  return requireModule12().nnFilter(s, nFeatures, nFrames, aggregate, k, width);
 }
 function remix(samples, intervals, sampleRate = 22050, alignZeros = false) {
   const intervalsI32 = intervals instanceof Int32Array ? intervals : Int32Array.from(intervals, (v) => Math.trunc(v));
-  return requireModule6().remix(samples, intervalsI32, sampleRate, alignZeros);
+  return requireModule12().remix(samples, intervalsI32, sampleRate, alignZeros);
 }
 function phaseVocoder(samples, rate, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  return requireModule6().phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
+  return requireModule12().phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
 }
 function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
-  return requireModule6().hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
+  return requireModule12().hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
 }
 function lufsInterleaved(samples, channels, sampleRate = 22050, options = {}) {
   assertSampleRate("lufsInterleaved", sampleRate);
   assertInterleavedSamples("lufsInterleaved", samples, channels, options.validate !== false);
-  return requireModule6().lufsInterleaved(samples, channels, sampleRate);
+  return requireModule12().lufsInterleaved(samples, channels, sampleRate);
 }
 function ebur128LoudnessRange(samples, sampleRate = 22050) {
-  return requireModule6().ebur128LoudnessRange(samples, sampleRate);
+  return requireModule12().ebur128LoudnessRange(samples, sampleRate);
 }
 function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  return requireModule6().spectralBandwidth(samples, sampleRate, nFft, hopLength);
+  return requireModule12().spectralBandwidth(samples, sampleRate, nFft, hopLength);
 }
 function spectralRolloff(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
-  return requireModule6().spectralRolloff(samples, sampleRate, nFft, hopLength, rollPercent);
+  return requireModule12().spectralRolloff(samples, sampleRate, nFft, hopLength, rollPercent);
 }
 function spectralFlatness(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
-  return requireModule6().spectralFlatness(samples, sampleRate, nFft, hopLength);
+  return requireModule12().spectralFlatness(samples, sampleRate, nFft, hopLength);
 }
 function zeroCrossingRate(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
-  return requireModule6().zeroCrossingRate(samples, sampleRate, frameLength, hopLength);
+  return requireModule12().zeroCrossingRate(samples, sampleRate, frameLength, hopLength);
 }
 function rmsEnergy(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
-  return requireModule6().rmsEnergy(samples, sampleRate, frameLength, hopLength);
+  return requireModule12().rmsEnergy(samples, sampleRate, frameLength, hopLength);
 }
 
 // src/feature_spectrogram.ts
-function requireModule7() {
+function requireModule13() {
   return getSonareModule();
 }
 function validateSpectrogramSamples(fnName, samples, sampleRate, options = {}) {
@@ -1777,33 +1827,33 @@ function validateMatrix(fnName, data, rows, frames, dataName, rowName, options =
 function trim(samples, sampleRate, thresholdDb = -60, options = {}) {
   validateSpectrogramSamples("trim", samples, sampleRate, options);
   assertFiniteScalar("trim", thresholdDb, "thresholdDb");
-  return requireModule7().trim(samples, sampleRate, thresholdDb);
+  return requireModule13().trim(samples, sampleRate, thresholdDb);
 }
 function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
   validateSpectrogramSamples("stft", samples, sampleRate, options);
   validatePositiveIntegers2("stft", { nFft, hopLength });
-  return requireModule7().stft(samples, sampleRate, nFft, hopLength);
+  return requireModule13().stft(samples, sampleRate, nFft, hopLength);
 }
 function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
   validateSpectrogramSamples("stftDb", samples, sampleRate, options);
   validatePositiveIntegers2("stftDb", { nFft, hopLength });
-  return requireModule7().stftDb(samples, sampleRate, nFft, hopLength);
+  return requireModule13().stftDb(samples, sampleRate, nFft, hopLength);
 }
 function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
   validateSpectrogramSamples("chromaCens", samples, sampleRate, options);
   validatePositiveIntegers2("chromaCens", { hopLength, nChroma });
-  return requireModule7().chromaCens(samples, sampleRate, hopLength, nChroma);
+  return requireModule13().chromaCens(samples, sampleRate, hopLength, nChroma);
 }
 function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
   validateSpectrogramSamples("bassChroma", samples, sampleRate, options);
   validatePositiveIntegers2("bassChroma", { hopLength, nChroma });
-  return requireModule7().bassChroma(samples, sampleRate, hopLength, nChroma);
+  return requireModule13().bassChroma(samples, sampleRate, hopLength, nChroma);
 }
 function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, fmin = 0, fmax = 0, htk = false, options = {}) {
   validateSpectrogramSamples("melSpectrogram", samples, sampleRate, options);
   validatePositiveIntegers2("melSpectrogram", { nFft, hopLength, nMels });
   validateMelFrequencyRange("melSpectrogram", fmin, fmax, sampleRate);
-  return requireModule7().melSpectrogram(
+  return requireModule13().melSpectrogram(
     samples,
     sampleRate,
     nFft,
@@ -1818,21 +1868,21 @@ function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels =
   validateSpectrogramSamples("mfcc", samples, sampleRate, options);
   validatePositiveIntegers2("mfcc", { nFft, hopLength, nMels, nMfcc });
   validateMelFrequencyRange("mfcc", fmin, fmax, sampleRate);
-  return requireModule7().mfcc(samples, sampleRate, nFft, hopLength, nMels, nMfcc, fmin, fmax, htk);
+  return requireModule13().mfcc(samples, sampleRate, nFft, hopLength, nMels, nMfcc, fmin, fmax, htk);
 }
 function melToStft(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0, htk = false, options = {}) {
   assertSampleRate("melToStft", sampleRate);
   validateMatrix("melToStft", melPower, nMels, nFrames, "melPower", "nMels", options);
   validatePositiveIntegers2("melToStft", { nFft });
   validateMelFrequencyRange("melToStft", fmin, fmax, sampleRate);
-  return requireModule7().melToStft(melPower, nMels, nFrames, sampleRate, nFft, fmin, fmax, htk);
+  return requireModule13().melToStft(melPower, nMels, nFrames, sampleRate, nFft, fmin, fmax, htk);
 }
 function melToAudio(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
   assertSampleRate("melToAudio", sampleRate);
   validateMatrix("melToAudio", melPower, nMels, nFrames, "melPower", "nMels", options);
   validatePositiveIntegers2("melToAudio", { nFft, hopLength, nIter });
   validateMelFrequencyRange("melToAudio", fmin, fmax, sampleRate);
-  return requireModule7().melToAudio(
+  return requireModule13().melToAudio(
     melPower,
     nMels,
     nFrames,
@@ -1856,7 +1906,7 @@ function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128, options = {}) 
     options
   );
   validatePositiveIntegers2("mfccToMel", { nMels });
-  return requireModule7().mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
+  return requireModule13().mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
 }
 function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
   assertSampleRate("mfccToAudio", sampleRate);
@@ -1871,7 +1921,7 @@ function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate =
   );
   validatePositiveIntegers2("mfccToAudio", { nMels, nFft, hopLength, nIter });
   validateMelFrequencyRange("mfccToAudio", fmin, fmax, sampleRate);
-  return requireModule7().mfccToAudio(
+  return requireModule13().mfccToAudio(
     mfccCoefficients,
     nMfcc,
     nFrames,
@@ -1888,10 +1938,10 @@ function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate =
 function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
   validateSpectrogramSamples("chroma", samples, sampleRate, options);
   validatePositiveIntegers2("chroma", { nFft, hopLength });
-  return requireModule7().chroma(samples, sampleRate, nFft, hopLength);
+  return requireModule13().chroma(samples, sampleRate, nFft, hopLength);
 }
 
-// src/public_types.ts
+// src/public_types_music.ts
 var PitchClass = {
   C: 0,
   Cs: 1,
@@ -2086,7 +2136,7 @@ function convertAnalysisResult(wasm) {
 }
 
 // src/quick_analysis.ts
-function requireModule8() {
+function requireModule14() {
   return getSonareModule();
 }
 function validateAnalysisInput(fnName, samples, sampleRate, options = {}) {
@@ -2095,11 +2145,11 @@ function validateAnalysisInput(fnName, samples, sampleRate, options = {}) {
 }
 function detectBpm(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectBpm", samples, sampleRate, options);
-  return requireModule8().detectBpm(samples, sampleRate);
+  return requireModule14().detectBpm(samples, sampleRate);
 }
 function detectKey(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectKey", samples, sampleRate, options);
-  const result = requireModule8()._detectKeyWithOptions(
+  const result = requireModule14()._detectKeyWithOptions(
     samples,
     sampleRate,
     options.nFft ?? 4096,
@@ -2121,7 +2171,7 @@ function detectKey(samples, sampleRate = 22050, options = {}) {
 }
 function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectKeyCandidates", samples, sampleRate, options);
-  const candidates = requireModule8()._detectKeyCandidates(
+  const candidates = requireModule14()._detectKeyCandidates(
     samples,
     sampleRate,
     options.nFft ?? 4096,
@@ -2137,19 +2187,19 @@ function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
 }
 function detectOnsets(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectOnsets", samples, sampleRate, options);
-  return requireModule8().detectOnsets(samples, sampleRate);
+  return requireModule14().detectOnsets(samples, sampleRate);
 }
 function detectBeats(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectBeats", samples, sampleRate, options);
-  return requireModule8().detectBeats(samples, sampleRate);
+  return requireModule14().detectBeats(samples, sampleRate);
 }
 function detectDownbeats(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectDownbeats", samples, sampleRate, options);
-  return requireModule8().detectDownbeats(samples, sampleRate);
+  return requireModule14().detectDownbeats(samples, sampleRate);
 }
 function detectChords(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("detectChords", samples, sampleRate, options);
-  const result = requireModule8().detectChords(
+  const result = requireModule14().detectChords(
     samples,
     sampleRate,
     options.minDuration ?? 0.3,
@@ -2171,7 +2221,7 @@ function detectChords(samples, sampleRate = 22050, options = {}) {
 }
 function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, options = {}) {
   validateAnalysisInput("chordFunctionalAnalysis", samples, sampleRate, options);
-  return requireModule8().chordFunctionalAnalysis(
+  return requireModule14().chordFunctionalAnalysis(
     samples,
     keyRoot,
     keyMode,
@@ -2192,12 +2242,12 @@ function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, 
 }
 function analyze(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("analyze", samples, sampleRate, options);
-  const result = requireModule8().analyze(samples, sampleRate);
+  const result = requireModule14().analyze(samples, sampleRate);
   return convertAnalysisResult(result);
 }
 function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
   validateAnalysisInput("analyzeImpulseResponse", samples, sampleRate);
-  const result = requireModule8().analyzeImpulseResponse(
+  const result = requireModule14().analyzeImpulseResponse(
     samples,
     sampleRate,
     nOctaveBands
@@ -2206,7 +2256,7 @@ function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
 }
 function detectAcoustic(samples, sampleRate = 48e3, options = {}) {
   validateAnalysisInput("detectAcoustic", samples, sampleRate);
-  const result = requireModule8().detectAcoustic(
+  const result = requireModule14().detectAcoustic(
     samples,
     sampleRate,
     options.nOctaveBands ?? 6,
@@ -2217,14 +2267,14 @@ function detectAcoustic(samples, sampleRate = 48e3, options = {}) {
   return result;
 }
 function synthesizeRir(options = {}) {
-  const module2 = requireModule8();
+  const module2 = requireModule14();
   if (typeof module2.synthesizeRir !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
   return module2.synthesizeRir(options);
 }
 function estimateRoom(samples, sampleRate = 48e3, options = {}) {
-  const module2 = requireModule8();
+  const module2 = requireModule14();
   if (typeof module2.estimateRoom !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
@@ -2232,7 +2282,7 @@ function estimateRoom(samples, sampleRate = 48e3, options = {}) {
   return module2.estimateRoom(samples, sampleRate, options);
 }
 function roomMorph(samples, sampleRate, options = {}) {
-  const module2 = requireModule8();
+  const module2 = requireModule14();
   if (typeof module2.roomMorph !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
@@ -2241,13 +2291,13 @@ function roomMorph(samples, sampleRate, options = {}) {
 }
 function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
   validateAnalysisInput("analyzeWithProgress", samples, sampleRate);
-  const result = requireModule8().analyzeWithProgress(samples, sampleRate, onProgress);
+  const result = requireModule14().analyzeWithProgress(samples, sampleRate, onProgress);
   return convertAnalysisResult(result);
 }
 function analyzeBpm(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("analyzeBpm", samples, sampleRate, options);
   assertNonNegativeInteger("analyzeBpm", options.maxCandidates ?? 5, "maxCandidates");
-  return requireModule8().analyzeBpm(
+  return requireModule14().analyzeBpm(
     samples,
     sampleRate,
     options.bpmMin ?? 30,
@@ -2260,7 +2310,7 @@ function analyzeBpm(samples, sampleRate = 22050, options = {}) {
 }
 function analyzeRhythm(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("analyzeRhythm", samples, sampleRate, options);
-  return requireModule8().analyzeRhythm(
+  return requireModule14().analyzeRhythm(
     samples,
     sampleRate,
     options.bpmMin ?? 60,
@@ -2272,7 +2322,7 @@ function analyzeRhythm(samples, sampleRate = 22050, options = {}) {
 }
 function analyzeDynamics(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("analyzeDynamics", samples, sampleRate, options);
-  return requireModule8().analyzeDynamics(
+  return requireModule14().analyzeDynamics(
     samples,
     sampleRate,
     options.windowSec ?? 0.4,
@@ -2282,7 +2332,7 @@ function analyzeDynamics(samples, sampleRate = 22050, options = {}) {
 }
 function analyzeTimbre(samples, sampleRate = 22050, options = {}) {
   validateAnalysisInput("analyzeTimbre", samples, sampleRate, options);
-  return requireModule8().analyzeTimbre(
+  return requireModule14().analyzeTimbre(
     samples,
     sampleRate,
     options.nFft ?? 2048,
@@ -2293,7 +2343,7 @@ function analyzeTimbre(samples, sampleRate = 22050, options = {}) {
   );
 }
 function hasFfmpegSupport() {
-  return requireModule8().hasFfmpegSupport();
+  return requireModule14().hasFfmpegSupport();
 }
 
 // src/audio.ts
@@ -2557,155 +2607,6 @@ var Audio = class _Audio {
   }
 };
 
-// src/live_audio.ts
-async function bindMicrophoneInput(context, engine, options = {}) {
-  const { stream: providedStream, stopTracksOnClose = true, ...constraints } = options;
-  const stream = providedStream ?? await navigator.mediaDevices.getUserMedia({
-    ...constraints,
-    audio: constraints.audio ?? true,
-    video: constraints.video ?? false
-  });
-  const source = context.createMediaStreamSource(stream);
-  const node = "node" in engine ? engine.node : engine;
-  source.connect(node);
-  let closed = false;
-  return {
-    stream,
-    source,
-    close() {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      source.disconnect();
-      if (stopTracksOnClose) {
-        for (const track of stream.getAudioTracks()) {
-          track.stop();
-        }
-      }
-    }
-  };
-}
-
-// src/metering.ts
-function requireModule9() {
-  return getSonareModule();
-}
-function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringPeakDb", samples, options.validate !== false);
-  return requireModule9().meteringPeakDb(samples, sampleRate);
-}
-function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringRmsDb", samples, options.validate !== false);
-  return requireModule9().meteringRmsDb(samples, sampleRate);
-}
-function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringCrestFactorDb", samples, options.validate !== false);
-  return requireModule9().meteringCrestFactorDb(samples, sampleRate);
-}
-function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDcOffset", samples, options.validate !== false);
-  return requireModule9().meteringDcOffset(samples, sampleRate);
-}
-function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
-  assertSamples("meteringTruePeakDb", samples, options.validate !== false);
-  const factor = oversampleFactor === 0 ? 4 : oversampleFactor;
-  if (factor < 1 || factor > 16 || (factor & factor - 1) !== 0) {
-    throw new RangeError(
-      "meteringTruePeakDb: oversampleFactor must be 0 or a power of two from 1 to 16"
-    );
-  }
-  return requireModule9().meteringTruePeakDb(samples, sampleRate, oversampleFactor);
-}
-function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDetectClipping", samples, options.validate !== false);
-  return requireModule9().meteringDetectClipping(
-    samples,
-    sampleRate,
-    options.threshold ?? 0.999,
-    options.minRegionSamples ?? 1
-  );
-}
-function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDynamicRange", samples, options.validate !== false);
-  return requireModule9().meteringDynamicRange(
-    samples,
-    sampleRate,
-    options.windowSec ?? 0,
-    options.hopSec ?? 0,
-    options.lowPercentile ?? -1,
-    options.highPercentile ?? -1
-  );
-}
-function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringStereoCorrelation", left, validate, "left");
-  assertSamples("meteringStereoCorrelation", right, validate, "right");
-  return requireModule9().meteringStereoCorrelation(left, right, sampleRate);
-}
-function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringStereoWidth", left, validate, "left");
-  assertSamples("meteringStereoWidth", right, validate, "right");
-  return requireModule9().meteringStereoWidth(left, right, sampleRate);
-}
-function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringVectorscope", left, validate, "left");
-  assertSamples("meteringVectorscope", right, validate, "right");
-  return requireModule9().meteringVectorscope(left, right, sampleRate);
-}
-function meteringVectorscopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringVectorscopeDecimated", left, validate, "left");
-  assertSamples("meteringVectorscopeDecimated", right, validate, "right");
-  return requireModule9().meteringVectorscopeDecimated(left, right, sampleRate, maxPoints);
-}
-function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringPhaseScope", left, validate, "left");
-  assertSamples("meteringPhaseScope", right, validate, "right");
-  return requireModule9().meteringPhaseScope(left, right, sampleRate);
-}
-function meteringPhaseScopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringPhaseScopeDecimated", left, validate, "left");
-  assertSamples("meteringPhaseScopeDecimated", right, validate, "right");
-  return requireModule9().meteringPhaseScopeDecimated(left, right, sampleRate, maxPoints);
-}
-function meteringSpectrum(samples, sampleRate = 22050, options) {
-  const validate = options?.validate !== false;
-  assertSamples("meteringSpectrum", samples, validate);
-  return requireModule9().meteringSpectrum(samples, sampleRate, options ?? {});
-}
-function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, options) {
-  const validate = options?.validate !== false;
-  assertSamples("meteringSpectrumFrame", samples, validate);
-  return requireModule9().meteringSpectrumFrame(samples, sampleRate, frameOffset, options ?? {});
-}
-function waveformPeaks(samples, channels, options = {}) {
-  assertSamples("waveformPeaks", samples, options.validate !== false);
-  if (channels <= 0 || samples.length % channels !== 0) {
-    throw new RangeError("waveformPeaks: samples length must be a multiple of channels");
-  }
-  const samplesPerBucket = options.samplesPerBucket ?? 512;
-  if (samplesPerBucket <= 0) {
-    throw new RangeError("waveformPeaks: samplesPerBucket must be > 0");
-  }
-  return requireModule9().waveformPeaks(samples, channels, samplesPerBucket);
-}
-function waveformPeakPyramid(samples, channels, options = {}) {
-  assertSamples("waveformPeakPyramid", samples, options.validate !== false);
-  if (channels <= 0 || samples.length % channels !== 0) {
-    throw new RangeError("waveformPeakPyramid: samples length must be a multiple of channels");
-  }
-  const levels = options.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
-  if (levels.length === 0 || levels.some((level) => level <= 0)) {
-    throw new RangeError("waveformPeakPyramid: samplesPerBucketLevels must be non-empty and > 0");
-  }
-  return requireModule9().waveformPeakPyramid(samples, channels, levels);
-}
-
 // src/opfs_clip_pages.ts
 var opfsClipPageWorkerSource = `
 const sonareClipPageReadQueues = new Map();
@@ -2899,60 +2800,288 @@ function createOpfsClipPageProvider(engine, options) {
   };
 }
 
-// src/project.ts
-var EXPECTED_PROJECT_ABI_VERSION = 1;
-var MarkerKind = {
-  marker: 0,
-  text: 1,
-  lyric: 2,
-  cuePoint: 3,
-  keySignature: 4
+// src/clip_page_streamer.ts
+var ClipPageStreamer = class {
+  constructor(engine, options = {}) {
+    this.sources = /* @__PURE__ */ new Map();
+    this.closed = false;
+    this.engine = engine;
+    this.readAheadPages = Math.max(0, Math.floor(options.readAheadPages ?? 2));
+    this.retainBehindPages = Math.max(0, Math.floor(options.retainBehindPages ?? 1));
+    this.maxRequestsPerPump = Math.max(1, Math.floor(options.maxRequestsPerPump ?? 256));
+  }
+  /**
+   * Register a paged clip. Pages already supplied to the provider before
+   * registration (for example a primed first page) should be passed in
+   * `initialResidentPages` so they participate in eviction.
+   */
+  addSource(source, initialResidentPages = []) {
+    if (source.pageFrames <= 0 || source.numSamples <= 0) {
+      throw new Error("pageFrames and numSamples must be positive");
+    }
+    const lastPage = Math.ceil(source.numSamples / source.pageFrames) - 1;
+    this.sources.set(source.clipId, {
+      source,
+      lastPage,
+      resident: new Set(initialResidentPages)
+    });
+  }
+  /** Stop tracking a clip. Does not close its binding (the caller owns that). */
+  removeSource(clipId) {
+    this.sources.delete(clipId);
+  }
+  /**
+   * Drain pending page-miss requests, fetch the missing pages plus their
+   * read-ahead window, and evict out-of-window pages. Resolves once this round's
+   * fetches settle. Concurrent fetches are serialized inside each binding.
+   */
+  async pump() {
+    if (this.closed) {
+      return;
+    }
+    const frontiers = /* @__PURE__ */ new Map();
+    for (let drained = 0; drained < this.maxRequestsPerPump; ++drained) {
+      const request = this.engine.popClipPageRequest();
+      if (!request) {
+        break;
+      }
+      const state = this.sources.get(request.clipId);
+      if (!state) {
+        continue;
+      }
+      const page = Math.floor(request.sample / state.source.pageFrames);
+      const previous = frontiers.get(request.clipId);
+      if (previous === void 0 || page > previous) {
+        frontiers.set(request.clipId, page);
+      }
+    }
+    const fetches = [];
+    for (const [clipId, frontier] of frontiers) {
+      const state = this.sources.get(clipId);
+      if (!state) {
+        continue;
+      }
+      fetches.push(...this.serviceFrontier(state, frontier));
+    }
+    await Promise.all(fetches);
+  }
+  /** Close every registered clip's binding and stop tracking. */
+  close() {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    for (const state of this.sources.values()) {
+      state.source.binding.close();
+    }
+    this.sources.clear();
+  }
+  serviceFrontier(state, frontier) {
+    const low = Math.max(0, frontier - this.retainBehindPages);
+    const high = Math.min(state.lastPage, frontier + this.readAheadPages);
+    for (const page of state.resident) {
+      if (page < low || page > high) {
+        state.source.binding.provider.clear(page);
+        state.resident.delete(page);
+      }
+    }
+    const fetches = [];
+    for (let page = low; page <= high; ++page) {
+      if (state.resident.has(page)) {
+        continue;
+      }
+      state.resident.add(page);
+      const pageIndex = page;
+      fetches.push(
+        state.source.binding.supplyPage(pageIndex).then(
+          (ok) => {
+            if (!ok) {
+              state.resident.delete(pageIndex);
+            }
+            return ok;
+          },
+          (error) => {
+            state.resident.delete(pageIndex);
+            throw error;
+          }
+        )
+      );
+    }
+    return fetches;
+  }
 };
-var SYNTH_ENGINE_MODES = [
-  "default",
-  "subtractive",
-  "fm",
-  "karplus-strong",
-  "modal",
-  "additive",
-  "percussion",
-  "piano"
-];
-var SYNTH_OSC_WAVEFORMS = [
-  "default",
-  "sine",
-  "saw",
-  "square",
-  "triangle",
-  "noise"
-];
-var SYNTH_FILTER_MODELS = [
-  "default",
-  "svf",
-  "moog-ladder",
-  "diode-ladder",
-  "sallen-key"
-];
-var SYNTH_FILTER_OUTPUTS = ["default", "lowpass", "bandpass", "highpass"];
-var SYNTH_BODY_TYPES = ["default", "none", "guitar", "violin", "wood-tube"];
-var SYNTH_MOD_SOURCES = [
-  "none",
-  "amp-env",
-  "filter-env",
-  "lfo1",
-  "lfo2",
-  "velocity",
-  "key-track",
-  "mod-wheel",
-  "random"
-];
-var SYNTH_MOD_DESTINATIONS = [
-  "none",
-  "pitch-cents",
-  "cutoff-cents",
-  "amp-gain",
-  "pan-units"
-];
+async function attachOpfsClipStream(streamer, engine, options) {
+  const { clipId, primePages = 1, ...providerOptions } = options;
+  const binding = createOpfsClipPageProvider(engine, providerOptions);
+  const lastPage = Math.ceil(providerOptions.numSamples / providerOptions.pageFrames) - 1;
+  const primed = [];
+  for (let page = 0; page < primePages && page <= lastPage; ++page) {
+    if (await binding.supplyPage(page)) {
+      primed.push(page);
+    }
+  }
+  streamer.addSource(
+    {
+      clipId,
+      binding,
+      pageFrames: providerOptions.pageFrames,
+      numSamples: providerOptions.numSamples
+    },
+    primed
+  );
+  return { binding, provider: binding.provider };
+}
+
+// src/live_audio.ts
+async function bindMicrophoneInput(context, engine, options = {}) {
+  const { stream: providedStream, stopTracksOnClose = true, ...constraints } = options;
+  const stream = providedStream ?? await navigator.mediaDevices.getUserMedia({
+    ...constraints,
+    audio: constraints.audio ?? true,
+    video: constraints.video ?? false
+  });
+  const source = context.createMediaStreamSource(stream);
+  const node = "node" in engine ? engine.node : engine;
+  source.connect(node);
+  let closed = false;
+  return {
+    stream,
+    source,
+    close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      source.disconnect();
+      if (stopTracksOnClose) {
+        for (const track of stream.getAudioTracks()) {
+          track.stop();
+        }
+      }
+    }
+  };
+}
+
+// src/metering.ts
+function requireModule15() {
+  return getSonareModule();
+}
+function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringPeakDb", samples, options.validate !== false);
+  return requireModule15().meteringPeakDb(samples, sampleRate);
+}
+function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringRmsDb", samples, options.validate !== false);
+  return requireModule15().meteringRmsDb(samples, sampleRate);
+}
+function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringCrestFactorDb", samples, options.validate !== false);
+  return requireModule15().meteringCrestFactorDb(samples, sampleRate);
+}
+function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDcOffset", samples, options.validate !== false);
+  return requireModule15().meteringDcOffset(samples, sampleRate);
+}
+function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
+  assertSamples("meteringTruePeakDb", samples, options.validate !== false);
+  const factor = oversampleFactor === 0 ? 4 : oversampleFactor;
+  if (factor < 1 || factor > 16 || (factor & factor - 1) !== 0) {
+    throw new RangeError(
+      "meteringTruePeakDb: oversampleFactor must be 0 or a power of two from 1 to 16"
+    );
+  }
+  return requireModule15().meteringTruePeakDb(samples, sampleRate, oversampleFactor);
+}
+function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDetectClipping", samples, options.validate !== false);
+  return requireModule15().meteringDetectClipping(
+    samples,
+    sampleRate,
+    options.threshold ?? 0.999,
+    options.minRegionSamples ?? 1
+  );
+}
+function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
+  assertSamples("meteringDynamicRange", samples, options.validate !== false);
+  return requireModule15().meteringDynamicRange(
+    samples,
+    sampleRate,
+    options.windowSec ?? 0,
+    options.hopSec ?? 0,
+    options.lowPercentile ?? -1,
+    options.highPercentile ?? -1
+  );
+}
+function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringStereoCorrelation", left, validate, "left");
+  assertSamples("meteringStereoCorrelation", right, validate, "right");
+  return requireModule15().meteringStereoCorrelation(left, right, sampleRate);
+}
+function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringStereoWidth", left, validate, "left");
+  assertSamples("meteringStereoWidth", right, validate, "right");
+  return requireModule15().meteringStereoWidth(left, right, sampleRate);
+}
+function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringVectorscope", left, validate, "left");
+  assertSamples("meteringVectorscope", right, validate, "right");
+  return requireModule15().meteringVectorscope(left, right, sampleRate);
+}
+function meteringVectorscopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringVectorscopeDecimated", left, validate, "left");
+  assertSamples("meteringVectorscopeDecimated", right, validate, "right");
+  return requireModule15().meteringVectorscopeDecimated(left, right, sampleRate, maxPoints);
+}
+function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringPhaseScope", left, validate, "left");
+  assertSamples("meteringPhaseScope", right, validate, "right");
+  return requireModule15().meteringPhaseScope(left, right, sampleRate);
+}
+function meteringPhaseScopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
+  const validate = options.validate !== false;
+  assertSamples("meteringPhaseScopeDecimated", left, validate, "left");
+  assertSamples("meteringPhaseScopeDecimated", right, validate, "right");
+  return requireModule15().meteringPhaseScopeDecimated(left, right, sampleRate, maxPoints);
+}
+function meteringSpectrum(samples, sampleRate = 22050, options) {
+  const validate = options?.validate !== false;
+  assertSamples("meteringSpectrum", samples, validate);
+  return requireModule15().meteringSpectrum(samples, sampleRate, options ?? {});
+}
+function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, options) {
+  const validate = options?.validate !== false;
+  assertSamples("meteringSpectrumFrame", samples, validate);
+  return requireModule15().meteringSpectrumFrame(samples, sampleRate, frameOffset, options ?? {});
+}
+function waveformPeaks(samples, channels, options = {}) {
+  assertSamples("waveformPeaks", samples, options.validate !== false);
+  if (channels <= 0 || samples.length % channels !== 0) {
+    throw new RangeError("waveformPeaks: samples length must be a multiple of channels");
+  }
+  const samplesPerBucket = options.samplesPerBucket ?? 512;
+  if (samplesPerBucket <= 0) {
+    throw new RangeError("waveformPeaks: samplesPerBucket must be > 0");
+  }
+  return requireModule15().waveformPeaks(samples, channels, samplesPerBucket);
+}
+function waveformPeakPyramid(samples, channels, options = {}) {
+  assertSamples("waveformPeakPyramid", samples, options.validate !== false);
+  if (channels <= 0 || samples.length % channels !== 0) {
+    throw new RangeError("waveformPeakPyramid: samples length must be a multiple of channels");
+  }
+  const levels = options.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
+  if (levels.length === 0 || levels.some((level) => level <= 0)) {
+    throw new RangeError("waveformPeakPyramid: samplesPerBucketLevels must be non-empty and > 0");
+  }
+  return requireModule15().waveformPeakPyramid(samples, channels, levels);
+}
+
+// src/project_internal.ts
 function projectModule() {
   const candidate = getSonareModule();
   if (typeof candidate.projectAbiVersion !== "function" || candidate.Project === void 0) {
@@ -3017,18 +3146,41 @@ function assertProjectMidiEvents(fnName, events) {
     }
   });
 }
-function projectAbiVersion() {
-  return projectModule().projectAbiVersion();
+function projectTrackKindValue(kind) {
+  if (kind === void 0 || kind === "audio") {
+    return 0;
+  }
+  if (kind === "midi") {
+    return 1;
+  }
+  if (kind === "aux") {
+    return 2;
+  }
+  return kind;
 }
-function synthPresetNames() {
-  return Array.from(projectModule().synthPresetNames());
+function projectWarpModeValue(mode) {
+  if (mode === void 0 || mode === "off") {
+    return 0;
+  }
+  if (mode === "repitch") {
+    return 1;
+  }
+  if (mode === "tempo-sync") {
+    return 2;
+  }
+  return mode;
 }
-function synthPresetPatch(name) {
-  return { ...projectModule().synthPresetPatch(name) };
+function projectLoopModeValue(mode) {
+  if (mode === void 0 || mode === "off") {
+    return 0;
+  }
+  if (mode === "loop") {
+    return 1;
+  }
+  return mode;
 }
-function synthEnumTables() {
-  return projectModule()._synthEnumTables();
-}
+
+// src/project_class.ts
 var Project = class _Project {
   constructor() {
     this.native = new (projectModule()).Project();
@@ -3618,39 +3770,88 @@ var Project = class _Project {
     this.delete();
   }
 };
-function projectTrackKindValue(kind) {
-  if (kind === void 0 || kind === "audio") {
-    return 0;
-  }
-  if (kind === "midi") {
-    return 1;
-  }
-  if (kind === "aux") {
-    return 2;
-  }
-  return kind;
+
+// src/project_synth.ts
+function projectAbiVersion() {
+  return projectModule().projectAbiVersion();
 }
-function projectWarpModeValue(mode) {
-  if (mode === void 0 || mode === "off") {
-    return 0;
-  }
-  if (mode === "repitch") {
-    return 1;
-  }
-  if (mode === "tempo-sync") {
-    return 2;
-  }
-  return mode;
+function synthPresetNames() {
+  return Array.from(projectModule().synthPresetNames());
 }
-function projectLoopModeValue(mode) {
-  if (mode === void 0 || mode === "off") {
-    return 0;
-  }
-  if (mode === "loop") {
-    return 1;
-  }
-  return mode;
+function synthPresetPatch(name) {
+  return { ...projectModule().synthPresetPatch(name) };
 }
+function synthEnumTables() {
+  return projectModule()._synthEnumTables();
+}
+
+// src/project_types.ts
+var EXPECTED_PROJECT_ABI_VERSION = 1;
+var MarkerKind = {
+  marker: 0,
+  text: 1,
+  lyric: 2,
+  cuePoint: 3,
+  keySignature: 4
+};
+var SYNTH_ENGINE_MODES = [
+  "default",
+  "subtractive",
+  "fm",
+  "karplus-strong",
+  "modal",
+  "additive",
+  "percussion",
+  "piano",
+  "pipe-organ",
+  "bowed-string",
+  "reed",
+  "brass",
+  "flute"
+];
+var SYNTH_OSC_WAVEFORMS = [
+  "default",
+  "sine",
+  "saw",
+  "square",
+  "triangle",
+  "noise"
+];
+var SYNTH_FILTER_MODELS = [
+  "default",
+  "svf",
+  "moog-ladder",
+  "diode-ladder",
+  "sallen-key"
+];
+var SYNTH_FILTER_OUTPUTS = ["default", "lowpass", "bandpass", "highpass"];
+var SYNTH_BODY_TYPES = [
+  "default",
+  "none",
+  "guitar",
+  "violin",
+  "wood-tube",
+  "brass-bell",
+  "vocal"
+];
+var SYNTH_MOD_SOURCES = [
+  "none",
+  "amp-env",
+  "filter-env",
+  "lfo1",
+  "lfo2",
+  "velocity",
+  "key-track",
+  "mod-wheel",
+  "random"
+];
+var SYNTH_MOD_DESTINATIONS = [
+  "none",
+  "pitch-cents",
+  "cutoff-cents",
+  "amp-gain",
+  "pan-units"
+];
 
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
@@ -3695,6 +3896,14 @@ var RealtimeEngine = class {
   /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
   setParameterSmoothed(paramId, value, renderFrame = -1) {
     this.native.setParameterSmoothed(paramId, value, renderFrame);
+  }
+  /**
+   * Set the default ramp time (ms) for engine-level smoothed parameters —
+   * fader/pan glides, insert-parameter automation, and MIDI-CC mappings. The
+   * default is 20 ms; pass `0` for instant (un-ramped) changes.
+   */
+  setParamSmoothingMs(smoothingMs) {
+    this.native.setParamSmoothingMs(smoothingMs);
   }
   setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
     this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
@@ -3780,6 +3989,35 @@ var RealtimeEngine = class {
   }
   midiInputPendingCount() {
     return this.native.midiInputPendingCount();
+  }
+  /**
+   * Route a destination's (track lane's) MIDI to the external output queue
+   * instead of the internal instrument rack, so the track plays an external
+   * device. Clearing it restores internal-synth playback.
+   */
+  setMidiDestinationExternal(destinationId, external) {
+    this.native.setMidiDestinationExternal(destinationId, external);
+  }
+  /**
+   * Enable/disable forwarding MIDI clock + transport (start/continue/stop) to
+   * the external output queue so external gear tracks the transport tempo.
+   */
+  setExternalMidiClockEnabled(enabled) {
+    this.native.setExternalMidiClockEnabled(enabled);
+  }
+  /** Count of external-MIDI events dropped because the output queue was full. */
+  externalMidiDroppedCount() {
+    return this.native.externalMidiDroppedCount();
+  }
+  /**
+   * Drain queued external-MIDI events, already lowered to MIDI 1.0 byte
+   * messages ready to write to a Web MIDI output port. Call once per audio
+   * block / animation frame. `maxRecords` caps the number of output events
+   * returned — the shared unit across every surface. Events past the cap stay
+   * queued for the next call (lossless); call again to drain the rest.
+   */
+  drainExternalMidi(maxRecords = 1024) {
+    return this.native.drainExternalMidi(maxRecords);
   }
   pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
     this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
@@ -4022,6 +4260,26 @@ var RealtimeEngine = class {
   /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setMasterStripInsertParamByName(insertIndex, paramName, value) {
     this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
+  setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
+    this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /**
+   * Resolves a track-lane insert parameter (by its JSON-key name) to the
+   * reserved automation id usable with `setAutomationLane` / `setParameter`.
+   * Returns `-1` when the track, insert, or name is unknown. (The Python binding
+   * raises a `SonareError` for an unknown id where Node/WASM return the `-1`
+   * sentinel.)
+   */
+  resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
+    return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
+  }
+  resolveMasterInsertAutomationId(insertIndex, paramName) {
+    return this.native.resolveMasterInsertAutomationId(insertIndex, paramName);
+  }
+  resolveBusInsertAutomationId(busId, insertIndex, paramName) {
+    return this.native.resolveBusInsertAutomationId(busId, insertIndex, paramName);
   }
   /** Sets a track lane strip's pan position in realtime (glitch-free). */
   setTrackStripPan(trackId, pan) {
@@ -4727,6 +4985,7 @@ function realtimeVoiceChangerPresetConfig(preset) {
 export {
   Audio,
   ChordQuality,
+  ClipPageStreamer,
   EXPECTED_ENGINE_ABI_VERSION,
   EXPECTED_PROJECT_ABI_VERSION,
   ErrorCode,
@@ -4762,6 +5021,7 @@ export {
   analyzeSections,
   analyzeTimbre,
   analyzeWithProgress,
+  attachOpfsClipStream,
   bassChroma,
   bindMicrophoneInput,
   bindWebMidi,
@@ -4886,6 +5146,7 @@ export {
   peakPick,
   percussive,
   phaseVocoder,
+  pitchCorrectTimevarying,
   pitchCorrectToMidi,
   pitchCorrectToMidiTimevarying,
   pitchPyin,

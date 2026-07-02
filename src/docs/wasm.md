@@ -20,6 +20,12 @@ Use this page when you are building a browser app. If you are writing a Python s
 
 The most common beginner mistake is passing an MP3 `ArrayBuffer` directly to an analysis function. Decode it first; libsonare's browser package works on PCM samples, not compressed file bytes.
 
+Three quick sanity checks catch most setup problems:
+
+- `await init()` has completed before any DSP call.
+- The value passed as `sampleRate` is the rate of the decoded samples, usually `audioBuffer.sampleRate`.
+- The sample array is PCM audio (`Float32Array`), not encoded file bytes.
+
 ::: details What are Float32Array, PCM, mono, and downmixing?
 - **PCM samples** are the raw, uncompressed waveform — a long list of amplitude numbers. An MP3/WAV *file* is compressed or wrapped bytes; decoding turns it into PCM.
 - **`Float32Array`** is the JavaScript typed array the Web Audio API uses to hold those samples as 32-bit floats (normally in the −1…1 range), one number per sample. libsonare's browser API takes this directly.
@@ -90,7 +96,7 @@ async function analyzeAudio() {
   const key = detectKey(samples, sampleRate);
   console.log(`Key: ${key.name}`);  // "C major"
 
-  // Full analysis
+  // All-in-one analysis
   const result = analyze(samples, sampleRate);
   console.log(result);
 }
@@ -103,6 +109,10 @@ sonare bpm music.mp3
 sonare key music.mp3
 sonare analyze music.mp3 --json
 ```
+
+The demo below is the same data flow in visual form: decoded samples go in, a time/frequency view comes out. If your browser page can render this kind of result, the WASM package, initialization, decoding, and sample-rate plumbing are all connected.
+
+<SonareDemo id="stft-basics" />
 
 The browser build also exposes the full librosa-parity helper set — functions that mirror the popular Python audio library librosa, so existing librosa recipes port over — grouped by intent:
 
@@ -431,8 +441,8 @@ The Streaming API enables real-time audio analysis with low latency. Unlike batc
 ::: info Batch vs Streaming
 | Approach | Use Case | Latency | Features |
 |----------|----------|---------|----------|
-| **Batch** | Pre-recorded files | High | Full analysis (BPM, chords, sections) |
-| **Streaming** | Live audio, visualization | Low (~10ms) | Mel, chroma, onset, progressive BPM/key |
+| **Batch** | Pre-recorded files | High | All-in-one analysis (BPM, chords, sections) |
+| **Streaming** | Live audio, visualization | Low (~10ms) | Mel, chroma, onset, updating BPM/key |
 :::
 
 <SonareDemo id="loudness-meter" />
@@ -498,7 +508,7 @@ async function setupStreaming() {
       const frames = analyzer.readFrames(available);
       updateVisualization(frames);
 
-      // Check progressive BPM/key estimates
+      // Check BPM/key estimates that update as audio arrives
       const stats = analyzer.stats();
       if (stats.estimate.updated) {
         const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -608,14 +618,14 @@ source.connect(workletNode);
 ```
 
 ::: details Related entry points (realtime engine, MIDI)
-The example above builds a custom analyzer worklet. If you instead want to run the full engine in a worklet — track lanes, channel strips, buses, MIDI clips, live MIDI, instruments, and capture — the package ships an AudioWorklet bridge at `@libraz/libsonare/worklet` and a reduced realtime module at `@libraz/libsonare/rt`. The bridge's `SonareEngine` facade mirrors that engine to the worklet; see [Realtime and Streaming](./realtime-streaming.md).
+The example above builds a custom analyzer worklet. If you instead want to run the whole playback engine in a worklet — track lanes, channel strips, buses, MIDI clips, live MIDI, instruments, and capture — the package ships an AudioWorklet bridge at `@libraz/libsonare/worklet`. The bridge's `SonareEngine` API mirrors that engine to the worklet; see [Realtime and Streaming](./realtime-streaming.md).
 
-The main package entry (`@libraz/libsonare`) also ships two main-thread browser-glue helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
+The main package entry (`@libraz/libsonare`) also ships two main-thread browser integration helpers: `bindMicrophoneInput(...)` wires `getUserMedia` into an AudioWorklet engine node (see [Recording and Takes](./recording-and-takes.md)), and `bindWebMidi(...)` bridges Web MIDI input to the engine (see [MIDI Input](./midi-input.md)).
 :::
 
 ### Bandwidth Optimization
 
-The TypeScript `StreamAnalyzer` wrapper has three read methods. Choose them by how much precision your UI needs and how much data you can afford to move between threads.
+The TypeScript `StreamAnalyzer` has three read methods. Choose them by how much precision your UI needs and how much data you can afford to move between threads.
 
 | Method | Returned type | Use when |
 |--------|---------------|----------|
@@ -635,7 +645,7 @@ The analyzer still computes internally in float. `readFramesI16()` and `readFram
 
 Both quantized read paths accept an optional `StreamQuantizeConfig` to widen the quantization ranges for unusually loud or quiet streams that would otherwise saturate; see [custom quantization ranges](./realtime-streaming.md#custom-quantization-ranges).
 
-WASM wrapper returns that contain plain lists or objects are rooted back into the JavaScript realm that called them. That means arrays from name-list helpers (`*Names()`), preset-name helpers, section results, key-candidate calls, and the object from `synthPresetPatch(...)` can be passed through `structuredClone()` or `postMessage()` without first rebuilding them by hand. Typed-array payloads still follow the normal transferable-buffer rules below.
+Plain lists and objects returned from WASM are rooted back into the JavaScript realm that called them. That means arrays from name-list helpers (`*Names()`), preset-name helpers, section results, key-candidate calls, and the object from `synthPresetPatch(...)` can be passed through `structuredClone()` or `postMessage()` without first rebuilding them by hand. Typed-array payloads still follow the normal transferable-buffer rules below.
 
 ::: details What are "Structure-of-Arrays" and transferable objects?
 - **Structure-of-Arrays (SoA)** means each field lives in its own flat typed array — all timestamps in one array, all mel values in another — instead of an array of per-frame objects. It is cheaper to slice and cheaper to hand to another thread.
@@ -649,9 +659,9 @@ WASM wrapper returns that contain plain lists or objects are rooted back into th
 | `readFramesI16()` (quantized SoA) | ~300 bytes | High-quality visualizations |
 | `readFramesU8()` (quantized SoA) | ~150 bytes | Mobile, bandwidth-limited |
 
-### Progressive Estimation
+### Updating Estimates
 
-The Streaming API provides **progressive BPM and key estimates** that improve over time:
+The Streaming API provides **BPM and key estimates that improve over time**:
 
 ```typescript
 const stats = analyzer.stats();
@@ -739,12 +749,12 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 | `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | MFCC → mel → audio in one call |
 
 ::: warning Lossy round-trip
-These reconstruct *magnitude* and estimate phase with Griffin-Lim, so the output is an approximation — fine for sonification, audition, and visualization, not for bit-exact recovery. See [Inverse Features](./inverse-features.md) for the full pipeline and caveats.
+These reconstruct *magnitude* and estimate phase with Griffin-Lim, so the output is an approximation — fine for sonification, audition, and visualization, not for bit-exact recovery. See [Inverse Features](./inverse-features.md) for the processing flow and caveats.
 :::
 
 ## Streaming Retune
 
-`StreamingRetune` is the WASM block-by-block mono retune wrapper. Use it for live or chunked pitch shifting when you need state to continue across blocks.
+`StreamingRetune` is the WASM block-by-block mono retune object. Use it for live or chunked pitch shifting when you need state to continue across blocks.
 
 ```typescript
 import { init, StreamingRetune } from '@libraz/libsonare';
@@ -774,7 +784,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 
 ## Realtime Voice Changer
 
-`RealtimeVoiceChanger` is the WASM wrapper for the preset-driven live voice chain. It is separate from the offline `voiceChange(...)` helper because it keeps DSP state across blocks and exposes heap-backed zero-copy buffers for AudioWorklet-style loops.
+`RealtimeVoiceChanger` is the WASM object for the preset-based live voice chain. It is separate from the offline `voiceChange(...)` helper because it keeps DSP state across blocks and exposes heap-backed zero-copy buffers for AudioWorklet-style loops.
 
 ```typescript
 import {
@@ -829,10 +839,10 @@ Requirements:
 
 The published package ships a few coordinated pieces:
 
-- **Main module** — `sonare.js` plus `sonare.wasm`, the full Emscripten build behind every analysis, mastering, mixing, and editing API.
-- **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the full analysis, mastering, mixing, and editing API.
+- **Main module** — `sonare.js` plus `sonare.wasm`, the Emscripten build behind every analysis, mastering, mixing, and editing API.
+- **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
 - **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries `SonareEngine`, the worklet processor classes, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
-- **Realtime runtime** — a dedicated lightweight AudioWorklet runtime (`sonare-rt.wasm` plus loaders, C-ABI only) you can select as a runtime target for engine playback when you do not need the full module. It is reachable via `@libraz/libsonare/rt`; see [Realtime and Streaming](./realtime-streaming.md).
+- **AudioWorklet bridge** — `worklet.js` / `worklet.d.ts`, the self-contained bundle for `AudioWorkletGlobalScope` that exposes the `SonareEngine` API and processor registration helpers.
 
 ## Bundle Size
 

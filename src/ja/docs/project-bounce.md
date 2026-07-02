@@ -32,7 +32,7 @@ flowchart TD
 ::: tip バウンスは生クリップの加算ではなくミキサー全体を反映する
 トラックは単純に加算されるわけではありません。各トラックはチャンネルストリップ（トリム、EQ、インサート、フェーダー、パン、センド、バス）を通って[シーンミキサー](./mixing.md)でレンダリングされます。バウンス結果はルーティング済みのマスターで、リアルタイム再生とまったく同じ出力です。
 
-`setClipGain`（およびクリップフェード）が効くのは**オーディオクリップのみ**で、バウンス時の MIDI クリップには反映されません。MIDI で駆動する楽器の音量は、トラックフェーダー／チャンネルストリップ（[ミキサーシーン](./mixing.md)）で調整してください。詳しくは[プロジェクト編集](./project-editing.md#クリップを編集する)を参照してください。
+`setClipGain`（およびクリップフェード）が効くのは**オーディオクリップのみ**で、バウンス時の MIDI クリップには反映されません。MIDI で鳴る楽器の音量は、トラックフェーダー／チャンネルストリップ（[ミキサーシーン](./mixing.md)）で調整してください。詳しくは[プロジェクト編集](./project-editing.md#クリップを編集する)を参照してください。
 :::
 
 ## このページで身につくこと
@@ -56,7 +56,7 @@ flowchart TD
 | MIDI をとにかく*鳴らしたい* | `bounceWithBuiltinInstrument` | シンプルなオシレーターシンセ |
 | 本格的な楽器のキャラクターが必要な MIDI | `bounceWithSynthInstrument` | フル [NativeSynth](./native-synth.md)（減算 / FM / モーダル / ピアノ …） |
 | SoundFont で鳴らしたい MIDI | `bounceWithSf2Instrument` | GS 互換 [SF2 プレイヤー](./soundfont-player.md) |
-| 自前の（Python）シンセで駆動する MIDI | `bounce_with_instruments` — **Python 専用** | ホスト供給の [`ExternalInstrument`](#python-自前のインストゥルメントをホストする) |
+| 自前の（Python）シンセで鳴らす MIDI | `bounce_with_instruments` — **Python 専用** | ホスト側が用意する [`ExternalInstrument`](#python-自前のインストゥルメントをホストする) |
 
 ::: info 1 つの Project、すべての実行環境
 同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`、`project midi-render`、SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、出力先ごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジメントモデル・コンパイラ・DSP は実行環境を問わず同一です。
@@ -151,7 +151,7 @@ try {
 }
 ```
 
-`BuiltinSynthBinding` は `waveform`（`'sine'`、`'saw'`、`'square'`、`'triangle'`）、`gain`、ADSR（`attackMs`、`decayMs`、`sustain`、`releaseMs`）、`polyphony`、そして 1 つの MIDI デスティネーションを指す `destinationId` を受け付けます。数値フィールドはすべて「0 / 省略で既定値を維持」なので、`{}` がそのまま使える既定パッチになります。複数の MIDI デスティネーションへ供給するにはバインディングの**配列**を渡します。明示的な空配列 `[]`（または `undefined` / `null`）は何もバインドせず、無音でレンダリングします。
+`BuiltinSynthBinding` は `waveform`（`'sine'`、`'saw'`、`'square'`、`'triangle'`）、`gain`、ADSR（`attackMs`、`decayMs`、`sustain`、`releaseMs`）、`polyphony`、そして 1 つの MIDI デスティネーションを指す `destinationId` を受け付けます。数値フィールドはすべて「0 / 省略で既定値を維持」なので、`{}` がそのまま使える既定パッチになります。複数の MIDI デスティネーションをレンダリングするにはバインディングの**配列**を渡します。明示的な空配列 `[]`（または `undefined` / `null`）は何もバインドせず、無音でレンダリングします。
 
 ## NativeSynth で MIDI をバウンスする
 
@@ -169,14 +169,14 @@ const a = project.bounceWithSynthInstrument('saw-lead', { numChannels: 2, sample
 // 2. 同じプリセットを "va:" ルーティングプレフィックスつきで
 const b = project.bounceWithSynthInstrument('va:saw-lead', { numChannels: 2, sampleRate: 48000 });
 
-// 3. パッチオブジェクト: ベースプリセット + ラッパーセクションの上書き
+// 3. パッチオブジェクト: ベースプリセット + 共通設定の上書き
 const c = project.bounceWithSynthInstrument(
   { preset: 'warm-pad', filterCutoffHz: 1200, ampRelease: 0.6 },
   { numChannels: 2, sampleRate: 48000 },
 );
 ```
 
-有効な名前はマジック文字列をハードコードせず [`synthPresetNames()`](./native-synth.md) で取得してください。未知の名前は例外を投げます。パッチオブジェクトは `preset` ベース（`preset` 省略時は既定の減算パッチ）から始まり、ラッパーセクションを上書きします。全フィールドの一覧は [NativeSynth](./native-synth.md) を参照してください。複数のデスティネーションをバインドするには配列を渡します。空配列は何もバインドしません。
+有効な名前はマジック文字列をハードコードせず [`synthPresetNames()`](./native-synth.md) で取得してください。未知の名前は例外を投げます。パッチオブジェクトは `preset` ベース（`preset` 省略時は既定の減算パッチ）から始まり、共通設定を上書きします。フィールドの一覧は [NativeSynth](./native-synth.md) を参照してください。複数のデスティネーションをバインドするには配列を渡します。空配列は何もバインドしません。
 
 下のピアノロールはまさにこの呼び出しです。1 つの MIDI フレーズを `bounceWithSynthInstrument` に通し、プリセットを切り替えるたびに同じ音符が別の音色で鳴り直します。再生ヘッドはバウンスした音声に追従します。
 
@@ -188,7 +188,7 @@ const c = project.bounceWithSynthInstrument(
 
 ## SoundFont で MIDI をバウンスする
 
-`bounceWithSf2Instrument` は、プロジェクトに読み込まれた SoundFont を供給源とする GS 互換 [SoundFont プレイヤー](./soundfont-player.md)で MIDI を鳴らします。先に `.sf2` のバイト列を読み込み、それからバウンスします。
+`bounceWithSf2Instrument` は、プロジェクトに読み込まれた SoundFont を使う GS 互換 [SoundFont プレイヤー](./soundfont-player.md)で MIDI を鳴らします。先に `.sf2` のバイト列を読み込み、それからバウンスします。
 
 ```typescript [ブラウザ]
 const sf2Bytes = new Uint8Array(await (await fetch('/piano.sf2')).arrayBuffer());

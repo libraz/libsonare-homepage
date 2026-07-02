@@ -66,7 +66,7 @@ try {
   engine.armCapture();           // 次に処理するブロックから追記を開始
   engine.play();
 
-  // ブロック単位でエンジンを駆動する（実アプリでは音声コールバック内）
+  // ブロック単位でエンジンを処理する（実アプリでは音声コールバック内）
   engine.process([blockL, blockR]);
 
   const status = engine.captureStatus();
@@ -129,7 +129,7 @@ try {
   engine.armCapture();
   engine.play();
 
-  // ... engine.process([micBlock]) でライブ入力ブロックを供給 ...
+  // ... engine.process([micBlock]) へライブ入力ブロックを渡す ...
 
   const [mono] = engine.capturedAudio();    // 録音したテイクが Float32Array で得られる
 } finally {
@@ -153,7 +153,7 @@ const binding = await bindMicrophoneInput(audioContext, engineNode, {
 });
 
 // binding.stream  -> ライブの MediaStream
-// binding.source  -> エンジンへ供給する MediaStreamAudioSourceNode
+// binding.source  -> エンジンへ接続する MediaStreamAudioSourceNode
 
 // テイクが終わったら
 binding.close();             // ソースを切断する（stopTracksOnClose ならトラックも停止）
@@ -165,7 +165,7 @@ binding.close();             // ソースを切断する（stopTracksOnClose な
 - **`stopTracksOnClose`** — 既定は `true` です。true のとき、`binding.close()` が背後のマイクトラックも停止し、OS の録音インジケーターを消します。自分で所有する `stream` を渡し、他所でも使い続けたい場合は `false` にしてください。
 
 ::: warning 終わったらバインディングをクローズする
-`binding.close()` はソースノードを切断し、マイクがエンジンへ供給するのを止めます。`bindMicrophoneInput` には必ず `close()` を組にしてください（通常はユーザーが録音を止めたとき、またはコンポーネントのアンマウント時）。既定ではマイクトラックも停止するため OS の録音インジケーターが消えます。同じストリームをアプリの別部分で使い続ける場合だけ `stopTracksOnClose: false` を渡してください。
+`binding.close()` はソースノードを切断し、マイク音声がエンジンへ送られるのを止めます。`bindMicrophoneInput` には必ず `close()` を組にしてください（通常はユーザーが録音を止めたとき、またはコンポーネントのアンマウント時）。既定ではマイクトラックも停止するため OS の録音インジケーターが消えます。同じストリームをアプリの別部分で使い続ける場合だけ `stopTracksOnClose: false` を渡してください。
 :::
 
 周辺の AudioWorklet 配線（エンジンノードの構築、ワークレットプロセッサの登録、SAB なしのリアルタイム経路）は [リアルタイムストリーミング](./realtime-streaming.md) を参照してください。外部マイクではなくシンセやサンプラーを録音へ*入れたい*場合は、[NativeSynth](./native-synth.md) と [SoundFont プレイヤー](./soundfont-player.md)、ライブ演奏で鳴らすなら [MIDI 入力](./midi-input.md) を参照してください。
@@ -322,7 +322,7 @@ try {
   engine.setCaptureSource('output');         // レンダリング済みのミックスをキャプチャ
   engine.armCapture();
   engine.play();
-  // ... engine.process([...]) で演奏を駆動 ...
+  // ... engine.process([...]) で演奏を進める ...
 
   const [left] = engine.capturedAudio();     // 1 チャンネルを描く
   const peaks = waveformPeaks(left, 1);      // 既定で 512 フレームのバケット

@@ -18,7 +18,7 @@ The source of truth is the C++ implementation in the libsonare repository.
 |------|--------|
 | DSP implementation | `src/analysis`, `src/feature`, `src/mastering`, `src/effects`, `src/mixing`, `src/engine` |
 | Public mastering processor names | `src/mastering/api/named_processor_registry.cpp` |
-| Analysis and feature helpers | Quick APIs and binding wrappers |
+| Analysis and feature helpers | Quick APIs and language bindings |
 
 ## What You Will Learn
 
@@ -106,7 +106,7 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
 | `dynamics.brickwallLimiter` | Lookahead peak detector with fast gain reduction and ceiling enforcement | Prevent sample peaks from exceeding a ceiling | Adds lookahead latency; safe when prepared before streaming |
-| `dynamics.compressor` | Feed-forward level detector, attack/release envelope, ratio/knee gain computer, makeup gain | Control macro dynamics and glue a master | Smooth parameter changes to avoid gain zipper noise |
+| `dynamics.compressor` | Feed-forward level detector, attack/release envelope, ratio/knee gain computer, makeup gain | Control macro dynamics and make a master feel more cohesive | Smooth parameter changes to avoid gain zipper noise |
 | `dynamics.deesser` | Split-band de-esser with band-pass filters, threshold, ratio, attack/release, range, and bandpass Q | Attenuate sibilant high-frequency energy | Listed parameters are automatable without allocation or state reset |
 | `dynamics.expander` | Downward expansion below a threshold using envelope detection | Increase contrast and reduce low-level spill | Release time dominates audibility |
 | `dynamics.gate` | Threshold gate with hysteresis-style open/close behavior | Suppress background noise between events | Hold/release settings avoid chatter |
@@ -131,7 +131,7 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
-| `eq.apiStyle` | API-facing EQ wrapper for common band definitions | Stable public entry point for UI-friendly EQ | Delegates to the underlying EQ design |
+| `eq.apiStyle` | API-facing EQ adapter for common band definitions | Stable public entry point for UI-friendly EQ | Delegates to the underlying EQ design |
 | `eq.bandPass` | Biquad band-pass filter | Isolate a frequency region | Low latency |
 | `eq.cutFilter` | High-pass/low-pass cut filters with slope control | Remove rumble, hiss, or band-limit a signal | Low latency IIR path |
 | `eq.dynamic` | EQ band controlled by an envelope detector | Frequency-selective compression/expansion | Detector timing must be smoothed |
@@ -241,10 +241,10 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 | Normalize | Peak or target-level gain adjustment | Utility level matching | File-level operation unless gain is known ahead |
 | Trim/split silence | Threshold segmentation | Batch cleanup and asset prep | File-level utility |
 | Reverb inserts | Plate/Dattorro, FDN, velvet, convolution, geometric room, and room-morph inserts | Space, ambience, and room-character morphing in mixer/mastering insert graphs | Build flags and IR requirements vary |
-| Modulation/delay modules | Chorus, flanger, phaser, and stereo delay DSP live in source modules | Building blocks for creative FX | Not exposed as standalone top-level JS/Python helpers in the current public bindings |
+| Modulation/delay inserts | Chorus, ensemble, flanger, phaser, wah, auto-wah, rotary, ring modulator, pitch shifter, and stereo delay DSP live in source modules | Building blocks for creative FX | Exposed through insert factories and scene inserts; not standalone top-level JS/Python helper functions |
 
 ::: info Reverb insert availability
-`effects.reverb.plate` / `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, and `effects.reverb.convolution` require `SONARE_HAVE_FX`. `effects.reverb.room` and `effects.acoustic.roomMorph` also require `BUILD_ACOUSTIC_SIM`.
+`effects.reverb.plate` / `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, and the modulation/delay inserts require `SONARE_HAVE_FX`. `effects.reverb.room` and `effects.acoustic.roomMorph` also require `BUILD_ACOUSTIC_SIM`.
 
 Algorithmic and geometric room reverb are streamable. Convolution needs an IR supplied through native insert creation paths.
 :::
@@ -261,4 +261,4 @@ Automation lanes are sample-positioned and support `linear`, `exponential`, `hol
 
 ## Real-Time Engine DSP Boundary
 
-`RealtimeEngine` owns transport, tempo synchronization, graph runtime, clip playback, metronome, capture, monitor runtime, offline bounce, and telemetry. It is not a replacement for the mastering processor registry; it is the scheduler and graph runtime that can host real-time-safe DSP blocks. File-wide analysis, full repair, and loudness optimization remain offline or latency-tolerant operations.
+`RealtimeEngine` owns transport, tempo synchronization, graph runtime, clip playback, metronome, capture, monitor runtime, offline bounce, and telemetry. It is not a replacement for the mastering processor registry; it is the scheduler and graph runtime that can host real-time-safe DSP blocks. File-wide analysis, heavier repair stages, and loudness optimization remain offline or latency-tolerant operations.

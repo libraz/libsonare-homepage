@@ -1,13 +1,20 @@
 ---
 title: Live MIDI Input & Web MIDI
-description: Play libsonare's realtime engine from a hardware keyboard — MIDI destinations, queueing live note/CC events with sample timestamps, CC-to-parameter bindings, panic recovery, and the browser Web MIDI bridge (bindWebMidi) with hot-plug, permissions, and timestamp mapping, plus a complete two-thread recipe (AudioWorklet-hosted engine + MIDI forwarder) that makes a USB keyboard audibly play a synth.
+description: Play libsonare's realtime engine from a hardware keyboard — MIDI destinations, live note/CC queueing, CC-to-parameter bindings, panic recovery, Web MIDI setup, and a two-thread AudioWorklet recipe that makes a USB keyboard audibly play a synth.
 ---
 
 # Live MIDI Input & Web MIDI
 
 **Live MIDI input** turns the realtime engine into an instrument you can play. A note pressed on a USB keyboard becomes a note-on event, the engine routes it to a bound synthesizer, and you hear it on the next audio block — no file, no offline render.
 
-libsonare's `RealtimeEngine` accepts live MIDI on the same realtime-safe surface that drives transport, clips, and automation. In the browser, a small **Web MIDI bridge** (`bindWebMidi`) wires the platform's MIDI ports straight into that engine for you.
+libsonare's `RealtimeEngine` accepts live MIDI through the same realtime-safe entry points that drive transport, clips, and automation. In the browser, a small **Web MIDI bridge** (`bindWebMidi`) wires the platform's MIDI ports straight into that engine for you.
+
+There are two common starting points:
+
+| If you have | Start with |
+|-------------|------------|
+| An on-screen keyboard or sequencer step written in your app | immediate `pushMidiNoteOn` / `pushMidiNoteOff` calls |
+| A USB keyboard or external controller | `bindWebMidi`, which uses the live input-source calls for you |
 
 ::: info MIDI 101
 A **note-on** says "this pitch started, this hard"; a **note-off** says "let it go". A **control change (CC)** is a continuous knob/slider message — mod wheel (CC1), sustain (CC64), expression (CC11), and so on. libsonare speaks all three live.
@@ -87,10 +94,10 @@ Use `clearMidiInstrument(destinationId)` to unbind one, and `midiInstrumentCount
 
 Live events are *queued*, not played synchronously. Each call hands the engine a sample position at which the event should fire; the next `process(...)` block consumes everything due in that block. That is what makes timing tight: the event lands at an exact frame, not "whenever the message arrived".
 
-There are two queueing surfaces, and you should pick one per destination. Rule of thumb: use the **immediate commands** when your own code generates the events (a sequencer step, an on-screen keyboard); use the **input source** when events arrive from outside with their own timestamps (a hardware keyboard via `bindWebMidi`), because that lane carries the per-port timestamp the Web MIDI bridge needs.
+There are two queueing paths, and you should pick one per destination. Rule of thumb: use the **immediate commands** when your own code generates the events (a sequencer step, an on-screen keyboard); use the **input source** when events arrive from outside with their own timestamps (a hardware keyboard via `bindWebMidi`), because that lane carries the per-port timestamp the Web MIDI bridge needs.
 
 - **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and a `renderFrame` (or `-1` for "as soon as possible"). `pushMidiPanic(renderFrame)` takes only the `renderFrame` — it releases every sounding note on *all* destinations at once.
-- **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` feed it with a `portTimeSamples` timestamp. This is the lane the Web MIDI bridge drives for you.
+- **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. This is the lane the Web MIDI bridge feeds for you.
 
 ```typescript
 // Immediate path: fire a note at the start of the next block.
@@ -193,7 +200,7 @@ const binding = await bindWebMidi(engine, {
 
 What each option does:
 
-- **`destinationId` / `group`** — which engine destination the live source feeds, and the UMP group stamped on MIDI 1.0 channel-voice events.
+- **`destinationId` / `group`** — which engine destination receives the live events, and the UMP group stamped on MIDI 1.0 channel-voice events.
 - **`inputIds`** — restrict binding to specific port ids (from `binding.inputs()`); omit or pass an empty array to bind every connected input.
 - **`sysex` / `software`** — passed straight to `navigator.requestMIDIAccess`. SysEx access usually triggers a separate permission prompt; `software` requests software-synth ports where the platform offers them.
 - **`ccBindings`** — `bindMidiCc` mappings applied *before* any port connects, so the very first knob move is already routed. Register the target parameters with `addParameter(...)` first.
@@ -222,27 +229,27 @@ Web MIDI support is uneven, so check at runtime with `isWebMidiAvailable()` and 
 
 - **Chrome and Edge (desktop)** — full Web MIDI, including hot-plug and SysEx (behind a permission prompt). The primary target.
 - **Firefox** — has shipped Web MIDI; SysEx and add-on requirements have varied over time, so feature-detect rather than assume.
-- **Safari** — historically did not expose `navigator.requestMIDIAccess`; support has been changing, so do not assume it is present. Always gate on `isWebMidiAvailable()` and offer an on-screen-keyboard fallback.
+- **Safari** — historically did not expose `navigator.requestMIDIAccess`; support has been changing, so do not assume it is present. Always gate on `isWebMidiAvailable()` and offer an on-screen keyboard as the alternate input path.
 
 Because the landscape shifts, treat the feature check as the source of truth in code and keep any prose claims conservative.
 
 ## Recipe: a USB keyboard plays a synth in the browser
 
-A complete, runnable path from "keyboard plugged in" to "sound out of the speakers". It takes two files because the work spans two threads:
+A runnable path from "keyboard plugged in" to "sound out of the speakers". It takes two files because the work spans two threads:
 
-- **Audio thread** — an AudioWorklet processor hosts the engine and renders a block every render quantum. The engine must live here: a main-thread engine has nothing driving its `process(...)`, so it would stay silent.
+- **Audio thread** — an AudioWorklet processor hosts the engine and renders a block every render quantum. The engine must live here: on the main thread, `process(...)` is not called by the audio callback, so it would stay silent.
 - **Main thread** — owns the Web MIDI access (`bindWebMidi`) and forwards every event to the worklet through the node's port.
 
 ::: info Why a stand-in object satisfies bindWebMidi
-`bindWebMidi` only touches the live-input surface of the engine it is given: `setMidiInputSource`, `bindMidiCc`, the three `pushMidiInput*` methods, and `clearMidiInputSource` on close. Any object implementing those six methods can stand in for the engine — so a small *forwarder* that posts each event over the worklet port carries the binding across the thread boundary.
+`bindWebMidi` only calls the small live-input part of the engine it is given: `setMidiInputSource`, `bindMidiCc`, the three `pushMidiInput*` methods, and `clearMidiInputSource` on close. Any object implementing those six methods can stand in for the engine — so a small *forwarder* that posts each event over the worklet port carries the binding across the thread boundary.
 :::
 
 ### Audio thread: the worklet hosts the engine
 
-An `AudioWorkletGlobalScope` forbids dynamic `import()`, which rules out the high-level wrapper (its `init()` imports the WASM module dynamically). Statically import the Emscripten factory `sonare.js` instead and drive the raw engine it exposes. Two things to know about that raw surface:
+An `AudioWorkletGlobalScope` forbids dynamic `import()`, which rules out the high-level package entry point (its `init()` imports the WASM module dynamically). Statically import the Emscripten factory `sonare.js` instead and call the lower-level engine it exposes. Two things to know about that lower-level entry point:
 
 - The worklet cannot fetch the `.wasm` bytes either — fetch them on the main thread and hand them in through `processorOptions`.
-- Some argument orders differ from the JS wrapper — notably `setSynthInstrument(destinationId, patch)`.
+- Some argument orders differ from the high-level JS package — notably `setSynthInstrument(destinationId, patch)`.
 
 ```js
 // synth-worklet.js — load with context.audioWorklet.addModule(...).
@@ -324,7 +331,7 @@ import { bindWebMidi, isWebMidiAvailable, type RealtimeEngine } from '@libraz/li
 
 async function startKeyboardSynth() {
   if (!isWebMidiAvailable()) {
-    throw new Error('Web MIDI not available — use an on-screen keyboard fallback.');
+    throw new Error('Web MIDI not available — use an on-screen keyboard instead.');
   }
 
   // --- Boot the worklet (call this from a user gesture so the context runs) ---
@@ -343,7 +350,7 @@ async function startKeyboardSynth() {
       event.data?.type === 'ready' ? resolve() : reject(new Error(event.data?.error));
   });
 
-  // --- The forwarder: bindWebMidi's engine surface, posted over the port ---
+  // --- The forwarder: bindWebMidi's engine calls, posted over the port ---
   const forwarder = {
     setMidiInputSource: () => {
       // The worklet already bound destination 0 at startup.
@@ -388,7 +395,7 @@ An `AudioContext` must be created/resumed from a user gesture (a click), and mos
 
 ## On other runtimes
 
-The live-MIDI engine surface is not browser-only. The **Node native** and **Python** bindings expose the same `RealtimeEngine` input methods — only the Web MIDI bridge itself is browser-specific (it depends on `navigator.requestMIDIAccess`). In Python the names follow the snake_case convention:
+The live-MIDI engine API is not browser-only. The **Node native** and **Python** bindings expose the same `RealtimeEngine` input methods — only the Web MIDI bridge itself is browser-specific (it depends on `navigator.requestMIDIAccess`). In Python the names follow the snake_case convention:
 
 ```python
 import libsonare as sonare
@@ -405,10 +412,10 @@ finally:
     engine.close()
 ```
 
-To feed those engines from real hardware, read MIDI with a platform library (for example a CoreMIDI/ALSA wrapper) and call the same `push_midi_input_*` methods — the timestamp-to-sample mapping is yours to supply, just as `timestampToSamples` is in the browser.
+To feed those engines from real hardware, read MIDI with a platform library (for example CoreMIDI or ALSA bindings) and call the same `push_midi_input_*` methods — the timestamp-to-sample mapping is yours to supply, just as `timestampToSamples` is in the browser.
 
 ::: info Experimental native macOS backends
-A C++ source build can opt into native macOS host backends behind the off-by-default `BUILD_COREAUDIO`, `BUILD_COREMIDI`, and `BUILD_AU_HOST` CMake options — a CoreAudio output, a CoreMIDI input/output, and an Audio Unit instrument host. They add no C-ABI surface and ship in no published package (npm / PyPI / WASM), so they are a macOS-only, source-build opt-in that may still change.
+A C++ source build can opt into native macOS host backends behind the off-by-default `BUILD_COREAUDIO`, `BUILD_COREMIDI`, and `BUILD_AU_HOST` CMake options — a CoreAudio output, a CoreMIDI input/output, and an Audio Unit instrument host. They add no C-ABI API and ship in no published package (npm / PyPI / WASM), so they are a macOS-only, source-build opt-in that may still change.
 :::
 
 ## A note on microphone input
@@ -422,5 +429,5 @@ Live MIDI is *control* input — it tells the engine what to play. **Audio** inp
 - [Recording and Takes](./recording-and-takes.md) — capture what you play (and microphone audio input)
 - [Project Editing](./project-editing.md) — MIDI clips, CC-learn, and turning CC into automation
 - [Project Bounce](./project-bounce.md) — render a MIDI performance offline
-- [Realtime and Streaming](./realtime-streaming.md) — the AudioWorklet engine bridge that drives audio output
+- [Realtime and Streaming](./realtime-streaming.md) — the AudioWorklet engine bridge that renders audio output
 - [Realtime Engine](./glossary/realtime/realtime-engine.md) · [Realtime Safety](./glossary/realtime/realtime-safety.md)

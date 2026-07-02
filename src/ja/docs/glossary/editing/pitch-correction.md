@@ -41,7 +41,7 @@ MIDI ノート番号は半音単位のインデックスです。
 UI が秒で区間を扱う場合は、関数を呼ぶ直前にサンプルへ変換するのが安全です。秒のまま小数で渡すと丸め方によって 1 サンプルずれることがあり、ループのつなぎ目でわずかなノイズになり得ます。サンプル位置で考えれば、編集が常に正確な位置に当たります。
 
 ::: details libsonare が補正・編集をどう行うか
-`pitchCorrectToMidi` は現在→目標の MIDI 音程をピッチシフトへ対応づけ、[タイムストレッチとピッチシフト](./phase-vocoder-stretch.md) のフェーズボコーダ経路を再利用します。区間編集は、オンセット／オフセットのサンプル位置で定義される `NoteRegion` に対して `NoteEditor`（`NoteEditorConfig`）を使い、`NoteSegmenter` が区間の特定を助けます。`noteStretch` は区間限定のストレッチ比を適用します。すべてデコード済みのモノラルサンプルに作用し、`Audio` ラッパーは同じ操作をインスタンスメソッドとして公開するので、ファイルワークフローでは一度読み込んで編集できます。
+`pitchCorrectToMidi` は現在→目標の MIDI 音程をピッチシフトへ対応づけ、[タイムストレッチとピッチシフト](./phase-vocoder-stretch.md) のフェーズボコーダ経路を再利用します。区間編集は、オンセット／オフセットのサンプル位置で定義される `NoteRegion` に対して `NoteEditor`（`NoteEditorConfig`）を使い、`NoteSegmenter` が区間の特定を助けます。`noteStretch` は区間限定のストレッチ比を適用します。すべてデコード済みのモノラルサンプルに作用し、`Audio` も同じ操作をメソッドとして公開するので、ファイルワークフローでは一度読み込んで編集できます。
 :::
 
 関連: [編集の基礎](../concepts/editing-basics.md), [タイムストレッチとピッチシフト](./phase-vocoder-stretch.md), [メロディとピッチ](../analysis/melody-pitch.md), [編集 DSP](../../editing-dsp.md)

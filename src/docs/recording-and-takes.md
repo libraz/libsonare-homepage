@@ -66,7 +66,7 @@ try {
   engine.armCapture();           // start appending on the next processed block
   engine.play();
 
-  // Drive the engine block by block (in a real app this is your audio callback).
+  // Process the engine block by block (in a real app this is your audio callback).
   engine.process([blockL, blockR]);
 
   const status = engine.captureStatus();
@@ -129,7 +129,7 @@ try {
   engine.armCapture();
   engine.play();
 
-  // ... feed live input blocks via engine.process([micBlock]) ...
+  // ... pass live input blocks via engine.process([micBlock]) ...
 
   const [mono] = engine.capturedAudio();    // the recorded take as a Float32Array
 } finally {
@@ -153,7 +153,7 @@ const binding = await bindMicrophoneInput(audioContext, engineNode, {
 });
 
 // binding.stream  -> the live MediaStream
-// binding.source  -> the MediaStreamAudioSourceNode feeding the engine
+// binding.source  -> the MediaStreamAudioSourceNode connected to the engine
 
 // When the take is done:
 binding.close();             // disconnects the source (and stops tracks if stopTracksOnClose)
@@ -165,7 +165,7 @@ The options object **extends `MediaStreamConstraints`**, so any constraint you w
 - **`stopTracksOnClose`** — defaults to `true`. When true, `binding.close()` also stops the underlying microphone tracks, turning off the OS recording indicator. Set it to `false` when you pass a `stream` you own and want to keep using elsewhere.
 
 ::: warning Close the binding when you are done
-`binding.close()` disconnects the source node so the microphone stops feeding the engine. Pair every `bindMicrophoneInput` with a `close()` — typically when the user stops recording or the component unmounts. The default also stops microphone tracks so the OS recording indicator goes away; pass `stopTracksOnClose: false` only when another part of your app still needs the same stream.
+`binding.close()` disconnects the source node so the microphone stops sending audio to the engine. Pair every `bindMicrophoneInput` with a `close()` — typically when the user stops recording or the component unmounts. The default also stops microphone tracks so the OS recording indicator goes away; pass `stopTracksOnClose: false` only when another part of your app still needs the same stream.
 :::
 
 For the surrounding AudioWorklet plumbing — building the engine node, registering the worklet processor, and the SAB-free realtime path — see [Realtime Streaming](./realtime-streaming.md). To play a synth or sampler *into* the recording instead of an external mic, see [Native Synth](./native-synth.md) and the [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md) for driving them live.
@@ -322,7 +322,7 @@ try {
   engine.setCaptureSource('output');         // capture the rendered mix
   engine.armCapture();
   engine.play();
-  // ... drive engine.process([...]) for the performance ...
+  // ... call engine.process([...]) for the performance ...
 
   const [left] = engine.capturedAudio();     // draw one channel
   const peaks = waveformPeaks(left, 1);      // 512-frame buckets by default

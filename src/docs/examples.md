@@ -124,15 +124,15 @@ sonare key song.mp3
 
 :::
 
-### Full Music Analysis
+### All-In-One Music Analysis
 
 In both the browser and Python, `analyze()` returns chords, sections, and form
 (plus timbre, dynamics, rhythm, and melody) in one call. `detect_chords()` and
 `analyze_sections()` stay available as standalone calls for when you want only
-that one element without running the full analysis.
+that one element without running the all-in-one analysis.
 
 ::: tip Python: function vs. method
-The module-level `analyze(samples, sample_rate)` returns the complete result.
+The module-level `analyze(samples, sample_rate)` returns the all-in-one analysis result.
 The `Audio.analyze()` method returns only the core summary (BPM, key, time
 signature, beats), so pass the samples to the function when you need chords,
 sections, and form together.
@@ -186,7 +186,7 @@ for section in result.sections:
 
 print(f"\nForm: {result.form}")
 
-# Want only one element? Call it standalone instead of the full analysis:
+# Want only one element? Call it standalone instead of the all-in-one analysis:
 #   chords = audio.detect_chords().chords
 #   sections = analyze_sections(audio.data, audio.sample_rate).sections
 ```
@@ -489,7 +489,7 @@ function onAudioData(samples: Float32Array) {
   }
 }
 
-// Get progressive BPM/key estimates
+// Get BPM/key estimates that update as audio arrives
 function checkEstimates() {
   const stats = analyzer.stats();
 
@@ -585,7 +585,7 @@ int main() {
 }
 ```
 
-### Full Analysis with MusicAnalyzer
+### All-In-One Analysis with MusicAnalyzer
 
 ```cpp
 #include <sonare.h>
@@ -767,7 +767,7 @@ sonare bpm song.mp3
 # Key detection
 sonare key song.mp3
 
-# Full analysis
+# All-in-one analysis
 sonare analyze song.mp3 --json > analysis.json
 ```
 

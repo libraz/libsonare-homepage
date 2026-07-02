@@ -104,7 +104,7 @@ const CARD_META: Array<
     accent: false,
     status: 'NEW',
     eyebrow: 'INSTRUMENTS',
-    chips: ['7 ENGINES', '16 PRESETS', 'MIDI', 'PATCH'],
+    chips: ['12 ENGINES', '55 PRESETS', 'MIDI', 'PATCH'],
   },
   {
     id: 'studio',
@@ -122,7 +122,7 @@ const CARD_META: Array<
     accent: false,
     status: 'NEW',
     eyebrow: 'PLAY · LEARN',
-    chips: ['MIDI', 'SOUNDFONT', 'FALLING NOTES', 'KEYBOARD'],
+    chips: ['SOUNDFONT', 'SF2 RENDER', 'WEB MIDI', 'FALLING NOTES'],
   },
 ];
 
@@ -167,7 +167,7 @@ export const demoCardsCopy = {
       practice: {
         title: 'Piano Practice',
         tagline:
-          'Falling-note player for single-track MIDI, with a SoundFont piano and a lit keyboard.',
+          "libsonare's built-in SoundFont engine renders single-track MIDI on-device — practice with falling notes, a lit keyboard, and MIDI scoring.",
       },
     },
   },
@@ -182,7 +182,7 @@ export const demoCardsCopy = {
       },
       mastering: {
         title: 'マスタリングスタジオ',
-        tagline: 'プリセットで配信向けラウドネスへ。WAV書き出し対応。',
+        tagline: 'プリセットで配信向けラウドネスへ。WAV 書き出し対応。',
       },
       analysis: {
         title: '楽曲分析スタジオ',
@@ -190,7 +190,7 @@ export const demoCardsCopy = {
       },
       mixing: {
         title: 'ミキシングスタジオ',
-        tagline: '最大8トラックのステム・ミキサー。シーンJSONとバウンス。',
+        tagline: '最大 8 トラックのステムミキサー。シーン JSON とバウンスに対応。',
       },
       fx: {
         title: 'リアルタイムボイスチェンジャー',
@@ -210,7 +210,8 @@ export const demoCardsCopy = {
       },
       practice: {
         title: 'ピアノ練習',
-        tagline: '1トラックMIDIのノート落下プレイヤー。SoundFontピアノと光る鍵盤で。',
+        tagline:
+          '1 トラック MIDI を libsonare 内蔵 SoundFont 音源で端末内レンダリング。落下ノート、光る鍵盤、MIDI 採点で練習できます。',
       },
     },
   },

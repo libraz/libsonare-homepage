@@ -56,7 +56,7 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI you just need to *hear* | `bounceWithBuiltinInstrument` | Simple oscillator synth |
 | MIDI that needs real instrument character | `bounceWithSynthInstrument` | Full [NativeSynth](./native-synth.md) (subtractive / FM / modal / piano …) |
 | MIDI that should play a SoundFont | `bounceWithSf2Instrument` | GS-compatible [SF2 player](./soundfont-player.md) |
-| MIDI driven by your own (Python) synth | `bounce_with_instruments` — **Python only** | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
+| MIDI played by your own (Python) synth | `bounce_with_instruments` — **Python only** | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
 
 ::: info One Project, every runtime
 The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce`, `project midi-render`, SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
@@ -151,7 +151,7 @@ try {
 }
 ```
 
-A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. Pass an **array** of bindings to feed several MIDI destinations; an explicitly empty array `[]` (or `undefined` / `null`) binds nothing and renders silently.
+A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. Pass an **array** of bindings to render several MIDI destinations; an explicitly empty array `[]` (or `undefined` / `null`) binds nothing and renders silently.
 
 ## Bounce MIDI through the NativeSynth
 
@@ -169,14 +169,14 @@ const a = project.bounceWithSynthInstrument('saw-lead', { numChannels: 2, sample
 // 2. The same preset with the "va:" routing prefix
 const b = project.bounceWithSynthInstrument('va:saw-lead', { numChannels: 2, sampleRate: 48000 });
 
-// 3. A patch object: a base preset plus wrapper-section overrides
+// 3. A patch object: a base preset plus shared-control overrides
 const c = project.bounceWithSynthInstrument(
   { preset: 'warm-pad', filterCutoffHz: 1200, ampRelease: 0.6 },
   { numChannels: 2, sampleRate: 48000 },
 );
 ```
 
-Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the wrapper sections — see [NativeSynth](./native-synth.md) for the full field list. Pass an array to bind several destinations; an empty array binds nothing.
+Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the shared controls — see [NativeSynth](./native-synth.md) for the field list. Pass an array to bind several destinations; an empty array binds nothing.
 
 The piano roll below is exactly this call at work — one MIDI passage routed through `bounceWithSynthInstrument` and re-voiced live as you switch the preset; the playhead tracks the bounced audio.
 

@@ -137,7 +137,7 @@ const localeCopy = {
         {
           tag: 'INSTRUMENTS & DAW',
           title: 'Built-in instruments and a headless-DAW runtime.',
-          body: 'A 7-engine synth with a data-free GM fallback bank and a GS-compatible SoundFont 2 player — MIDI never renders silent. Author projects with audio and MIDI tracks, undo/redo, MIDI sequencing, SMF import/export, offline bounce, and a sample-accurate realtime engine that runs in the browser via AudioWorklet.',
+          body: 'A 12-engine synth with a data-free GM fallback bank and a GS-compatible SoundFont 2 player — MIDI never renders silent. Author projects with audio and MIDI tracks, undo/redo, MIDI sequencing, SMF import/export, offline bounce, and a sample-accurate realtime engine that runs in the browser via AudioWorklet.',
           link: { label: 'Built-in instruments', path: '/docs/native-synth' },
         },
       ],
@@ -236,7 +236,7 @@ const localeCopy = {
         {
           tag: 'INSTRUMENTS & DAW',
           title: '内蔵インストゥルメントとヘッドレス DAW ランタイム。',
-          body: 'データ不要の GM フォールバックバンクを備えた 7 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤー。MIDI が無音になりません。オーディオと MIDI のトラックでプロジェクトを編集でき、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンス、ブラウザでは AudioWorklet 経由で動くサンプル精度のリアルタイムエンジンを提供します。',
+          body: 'データ不要の GM フォールバックバンクを備えた 12 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤー。MIDI が無音になりません。オーディオと MIDI のトラックでプロジェクトを編集でき、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンス、ブラウザでは AudioWorklet 経由で動くサンプル精度のリアルタイムエンジンを提供します。',
           link: { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
         },
       ],

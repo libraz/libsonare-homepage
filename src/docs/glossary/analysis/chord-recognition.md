@@ -27,7 +27,7 @@ By default, richer chords must beat the simpler triad by an extra margin before 
 
 The chord detector can run on frame-level chroma or beat-synchronized chroma. Beat sync usually gives musically cleaner changes because chord boundaries often align with beats. Smoothing and minimum-duration merging avoid very short flickering labels.
 
-Optional HMM smoothing (a hidden Markov model, which favors sequences of chords that follow one another plausibly rather than judging each region in isolation) can run over the chord candidates, with optional key context, to further suppress jitter. In streaming mode, chord estimates are progressive and should be treated as provisional until enough context accumulates.
+Optional HMM smoothing (a hidden Markov model, which favors sequences of chords that follow one another plausibly rather than judging each region in isolation) can run over the chord candidates, with optional key context, to further suppress jitter. In streaming mode, chord estimates update over time and should be treated as provisional until enough context accumulates.
 
 ## Common confusions
 

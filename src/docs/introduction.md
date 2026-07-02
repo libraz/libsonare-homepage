@@ -242,7 +242,7 @@ Ducking is exposed as `dynamics.duckingProcessor` / mixer routing rather than a 
 
 The `StreamAnalyzer` runs the same pipeline on audio **chunk by chunk** with low latency.
 
-It produces per-frame features for real-time visualization or live analysis. Its progressive estimate includes BPM, key, current chord, chord progression, bar-level chord voting, and pattern scores.
+It produces per-frame features for real-time visualization or live analysis. Its updating estimate includes BPM, key, current chord, chord progression, bar-level chord voting, and pattern scores.
 
 In the browser, it integrates with the Web Audio API's AudioWorklet for real-time processing.
 

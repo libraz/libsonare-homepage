@@ -36,8 +36,9 @@ By the end of this page you should be able to:
 | Mastering | `tests/mastering/*_test.cpp` covers chain config, latency, EQ, dynamics, multiband, saturation, repair, spectral, stereo, match, maximizer, EBU R128, loudness ceiling, presets, golden hashes, property checks, and assistant output |
 | Mixing | `tests/mixing/*_test.cpp`, `bindings/node/tests/mixing.test.ts`, `bindings/python/tests/test_mixing.py`, and WASM tests cover routing, insert automation, no-allocation process checks, scene presets, meters, goniometer, and binding smoke tests |
 | Realtime engine | `tests/engine/*_test.cpp`, `bindings/python/tests/test_engine.py`, and WASM worklet tests cover transport, tempo sync, metronome, capture, graph runtime, monitor runtime, mono monitor/bounce parity, telemetry, offline bounce, concurrency, and AudioWorklet runtime behavior |
+| NativeSynth voice calibration | `tools/voicematch/` renders the provisional GM fallback voices against a dry FluidSynth/SoundFont oracle and reports timbre metrics; `autofit.py` can tune selected numeric constants in an isolated build directory. This is a calibration harness, not proof that the physical models are finished |
 | Bindings | `bindings/wasm/tests/*.test.ts`, `bindings/node/tests/*.test.ts`, `bindings/python/tests/*.py`, and typing smoke tests cover exported API shape, structured-clone-safe WASM returns, input-validation guards, and cross-binding behavior |
-| Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so facade drift is caught before release |
+| Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so API drift is caught before release |
 | CLI | `tests/cli/cli_test.cpp` and Python CLI parser coverage exercise terminal entry points |
 | Performance | `benchmarks/*.cpp`, `benchmarks/results.json`, and `benchmarks/results_cpp.json` cover spectrum, streaming mel/chroma, mastering support, ISP, stereo, mixing, EQ, and resampling-related hot paths |
 
@@ -61,6 +62,15 @@ Realtime-oriented code is tested in several ways:
 | Graph runtime, AudioWorklet smoke, block parity, and voice-changer quality gates | Realtime paths should behave like the offline reference where they are meant to match. |
 
 libsonare still separates realtime-safe block processing from offline helpers. Full repair or loudness optimization over an entire file is intentionally offline work.
+
+## Voice Calibration Harness
+
+The NativeSynth physical voices are intentionally documented as **provisional** while their voicing is being tuned. The repository includes `tools/voicematch/` for that work:
+
+- `voicematch.py` renders the libsonare GM fallback side and an oracle side, then compares harmonic balance, intonation error, tonal-to-noise ratio, and envelope-related measurements.
+- `autofit.py` reads a JSON spec of numeric constants to try, rebuilds an isolated shared library, re-renders the comparison, and searches for lower mismatch. It restores source text on interruption and can run in `--dry-run` mode.
+
+Use these tools to guide calibration changes. Do not read their existence as a claim that violin, brass, reed, flute, piano, guitar, or bass models are already final production-grade instrument simulations.
 
 ## Accuracy Boundaries
 

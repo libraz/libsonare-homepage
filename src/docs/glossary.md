@@ -89,7 +89,7 @@ These pages expand the realtime/streaming terms used by `StreamAnalyzer`, the `R
 
 | Guide | Covers |
 |-------|--------|
-| [Streaming Analysis](./glossary/realtime/streaming-analysis.md) | Blocks, frames, hops, progressive estimates, and quantized reads. |
+| [Streaming Analysis](./glossary/realtime/streaming-analysis.md) | Blocks, frames, hops, updating estimates, and compact frame reads. |
 | [Realtime Engine](./glossary/realtime/realtime-engine.md) | Transport, clip scheduling, the metronome, and telemetry. |
 | [Realtime Safety](./glossary/realtime/realtime-safety.md) | The audio-callback deadline, no-allocation/lock-free rules, and the AudioWorklet. |
 

@@ -82,7 +82,7 @@ flowchart LR
 ```
 
 ::: details How libsonare implements this
-libsonare's realtime engine accepts live MIDI through `pushMidiNoteOn(destinationId, group, channel, note, velocity)` and `pushMidiNoteOff(...)` for notes, and `pushMidiCc(destinationId, group, channel, controller, value)` for Control Change messages — the `destinationId` selects which loaded instrument receives the event, and `channel` is the 0-15 MIDI channel. In the browser, a Web MIDI bridge (`bindWebMidi`) connects a physical MIDI keyboard's events straight into those engine inputs, so a hardware controller can play NativeSynth or a loaded SoundFont live. The same note/CC vocabulary drives both the live engine and offline arrangement bounces.
+libsonare's realtime engine accepts live MIDI through `pushMidiNoteOn(destinationId, group, channel, note, velocity)` and `pushMidiNoteOff(...)` for notes, and `pushMidiCc(destinationId, group, channel, controller, value)` for Control Change messages — the `destinationId` selects which loaded instrument receives the event, and `channel` is the 0-15 MIDI channel. In the browser, a Web MIDI bridge (`bindWebMidi`) connects a physical MIDI keyboard's events straight into those engine inputs, so a hardware controller can play NativeSynth or a loaded SoundFont live. The same note/CC vocabulary is used by both the live engine and offline arrangement bounces.
 :::
 
 Related: [MIDI Input](../../midi-input.md), [SoundFont and Sampled Instruments](./soundfont.md), [Editing Basics](../concepts/editing-basics.md)

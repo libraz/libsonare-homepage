@@ -180,7 +180,7 @@ librosa's strength is low-level DSP — higher-level music understanding is typi
 | `RhythmAnalyzer` | Time signature, groove, syncopation, regularity |
 
 ::: info Streaming
-`StreamAnalyzer` — progressive real-time BPM / key / chord estimates — is also libsonare-specific. librosa has no streaming API.
+`StreamAnalyzer` — realtime BPM / key / chord estimates that update as audio arrives — is also libsonare-specific. librosa has no streaming API.
 :::
 
 ## Function Mapping
@@ -352,7 +352,7 @@ sonare beats song.wav --json
 | `n_chroma` | 12 | 12 |
 
 When matching librosa output, pass parameters explicitly instead of relying on
-wrapper defaults.
+per-runtime defaults.
 
 ## Mel Scale Formulas
 
@@ -484,7 +484,7 @@ auto energy = chroma.mean_energy();
 ## Performance Comparison
 
 The short version: core spectral transforms (STFT, Mel, MFCC) are roughly tied
-with librosa, while iterative algorithms (HPSS, pYIN) and the full analysis
+with librosa, while iterative algorithms (HPSS, pYIN) and the all-in-one analysis
 pipeline are dramatically faster. The per-feature numbers, hardware details,
 methodology, and reproduction steps live in one place — see
 [Benchmarks](/docs/benchmarks) — so this page doesn't carry a copy that can

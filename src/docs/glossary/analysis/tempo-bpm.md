@@ -27,7 +27,7 @@ Practical handling: pick a sensible BPM range for your material (e.g. 70–180 f
 A single number hides how *sure* the estimate is. A track with a tight, repetitive groove yields a sharp tempogram peak and high confidence; rubato, ambient, or sparse material yields a flat tempogram and low confidence. When a confidence value is available, use it to decide whether to display the BPM, hedge it, or hide it.
 
 ::: details How libsonare estimates tempo
-libsonare computes the onset-strength envelope from the STFT, then estimates tempo via tempogram and autocorrelation analysis of that envelope, selecting a dominant period and converting it to BPM. The streaming analyzer exposes a *progressive* BPM that refines as more audio arrives, so early values should be treated as provisional. Beat tracking then uses the tempo as a prior when placing individual beats, so tempo and beats are computed from the same onset information rather than independently.
+libsonare computes the onset-strength envelope from the STFT, then estimates tempo via tempogram and autocorrelation analysis of that envelope, selecting a dominant period and converting it to BPM. The streaming analyzer exposes a BPM value that refines as more audio arrives, so early values should be treated as provisional. Beat tracking then uses the tempo as a prior when placing individual beats, so tempo and beats are computed from the same onset information rather than independently.
 :::
 
 Related: [Onset Detection](./onset-detection.md), [Beats and Downbeats](./beats-downbeats.md), [MIR Overview](../concepts/mir-overview.md), [Realtime and Streaming](../../realtime-streaming.md)

@@ -1,6 +1,6 @@
 ---
 title: Mixing Scene JSON
-description: The exact mixer scene exchange format — every strip, insert, send, bus, VCA, and connection field — with a fully annotated built-in preset and the browser demo project format.
+description: The mixer scene exchange format — every strip, insert, send, bus, VCA, and connection field — with an annotated built-in preset and the browser demo project format.
 ---
 
 # Mixing Scene JSON
@@ -12,6 +12,10 @@ It is the format `Mixer.fromSceneJson(...)` reads and `toSceneJson()` writes. In
 The format is identical across WASM, Python, Node, the C ABI, and C++. Because it is plain JSON, you can store it with a project, diff it in git, hand-edit it, and reload it later.
 
 If you have not met strips, sends, and buses yet, read [Mixing Basics](./glossary/concepts/mixing-basics.md) and the [Mixing Engine](./mixing.md) guide first — this page is the field-by-field reference.
+
+The demo below shows the same routing ideas without JSON: lanes feed a small mixer, sends and levels change the output, and the meters respond immediately. Use it first if the scene fields feel abstract, then come back to the schema with the signal flow in mind.
+
+<SonareDemo id="engine-lane-mixer" />
 
 ## What You Will Learn
 
@@ -49,7 +53,7 @@ The fastest way to understand the schema is to print a built-in preset and read 
 ::: warning Unknown keys are skipped — but insert params are audited
 The parser ignores scene fields it does not recognize, so a forward-compatible producer can add metadata without breaking older readers. The flip side: a **misspelled scene key is silently dropped** — `processorName` (wrong) vs `processor` (right) is a classic. If a setting seems to have no effect, check the spelling against the tables below.
 
-Insert `params` keys get a safety net: after a scene loads, every param key that no processor consumed is reported as a **non-fatal warning** through `Mixer.sceneWarnings()` (Python `scene_warnings()`). The scene still loads and the unknown keys simply take no effect — read the warnings right after loading to surface typos instead of hunting for a knob that "does nothing". Enumerate the keys an insert actually reads with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`).
+Insert `params` keys get a safety net: after a scene loads, every param key that no processor consumed is reported as a **non-fatal warning** through `Mixer.sceneWarnings()` (Python `scene_warnings()`). The scene still loads and the unknown keys simply take no effect — read the warnings right after loading to catch typos instead of hunting for a knob that "does nothing". Enumerate the keys an insert actually reads with `masteringInsertParamNames(name)` (Python `mastering_insert_param_names(name)`).
 :::
 
 ## Strip
@@ -157,7 +161,7 @@ Connections are the graph edges. A strip routed to `master` is `{ "source": "voc
 | Preset | Intent |
 |--------|--------|
 | `vocalReverbSend` | Vocal strip (EQ + compressor inserts) with a post-fader aux send into a plate-reverb return |
-| `drumBusSubgroup` | Kick/snare/overheads into a group bus (role `subgroup`), glued with parallel compression and tape, ridden by a "drums" VCA |
+| `drumBusSubgroup` | Kick/snare/overheads into a group bus (role `subgroup`), made cohesive with parallel compression and tape, ridden by a "drums" VCA |
 | `commentaryDucking` | Host/guest speech (de-ess + compress) with a music bed ducked via `dynamics.sidechainRouter` keyed off the host |
 
 Discover them at runtime with `mixingScenePresetNames()` and fetch one with `mixingScenePresetJson(name)`.

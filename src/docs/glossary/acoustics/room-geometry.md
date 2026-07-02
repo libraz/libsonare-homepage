@@ -32,7 +32,7 @@ Volume and absorption therefore trade off. A long RT60 alone does not tell you w
 
 ## Why estimate geometry at all
 
-The geometry estimate is what makes the result *visualizable* and *comparable*. A bare RT60 number is abstract; a reconstructed room you can orbit in 3D, with the listener and an estimated source shell inside it, turns the measurement into something spatial. It also feeds the source-distance chain, because critical distance depends on volume and absorption together.
+The geometry estimate is what makes the result *visualizable* and *comparable*. A bare RT60 number is abstract; a reconstructed room you can orbit in 3D, with the listener and an estimated source shell inside it, turns the measurement into something spatial. The source-distance estimate also uses it, because critical distance depends on volume and absorption together.
 
 ::: details How libsonare reconstructs the room
 libsonare treats geometry recovery as an inverse problem: from the energy decay curve and per-band reverberation times it estimates the total absorption, then solves Sabine's relation for the volume that produces the measured decay, and distributes that volume into length/width/height using the proportions most consistent with the modal and decay cues in the response. The preset rooms are generated from known dimensions, rendered to an impulse response, and inverted back, so the demo can show the estimate beside the ground-truth geometry. Because the inversion is single-channel and assumes a diffuse, shoebox-like field, the dimensions should be read as an equivalent acoustic room rather than a survey of the actual space.
