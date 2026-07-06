@@ -16,7 +16,8 @@
       "!**/*.css",
       "!src/wasm",
       "!src/public/audio-stream-processor.js",
-      "!src/public/sonare-worklet.js"
+      "!src/public/sonare-worklet.js",
+      "!src/public/tuner-worklet.js"
     ]
   },
   "formatter": {

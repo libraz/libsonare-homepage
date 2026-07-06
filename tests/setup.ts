@@ -2,6 +2,7 @@
 import { beforeEach, vi } from 'vitest';
 
 function installUrlMocks() {
+  if (typeof URL === 'undefined') return;
   Object.defineProperty(URL, 'createObjectURL', {
     configurable: true,
     writable: true,
@@ -53,6 +54,7 @@ function createCanvasContextMock() {
 }
 
 function installCanvasMocks() {
+  if (typeof HTMLCanvasElement === 'undefined') return;
   Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     configurable: true,
     writable: true,

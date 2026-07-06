@@ -6,6 +6,7 @@ import AnalyzerDemo from '@/components/AnalyzerDemo.vue';
 import MasteringDemo from '@/components/MasteringDemo.vue';
 import MixingStudio from '@/components/MixingStudio.vue';
 import MusicAnalysisStudio from '@/components/MusicAnalysisStudio.vue';
+import PhysicalModelTuner from '@/components/PhysicalModelTuner.vue';
 import PianoPracticeDemo from '@/components/PianoPracticeDemo.vue';
 import RealtimeFxLab from '@/components/RealtimeFxLab.vue';
 import SpatialScanner from '@/components/SpatialScanner.vue';
@@ -33,6 +34,7 @@ const isSpatial = computed(() => frontmatter.value.layout === 'spatial');
 const isSynth = computed(() => frontmatter.value.layout === 'synth');
 const isStudio = computed(() => frontmatter.value.layout === 'studio');
 const isPractice = computed(() => frontmatter.value.layout === 'practice');
+const isTuner = computed(() => frontmatter.value.layout === 'tuner');
 </script>
 
 <template>
@@ -47,5 +49,6 @@ const isPractice = computed(() => frontmatter.value.layout === 'practice');
   <SynthDemo v-else-if="isSynth" />
   <StudioDemo v-else-if="isStudio" />
   <PianoPracticeDemo v-else-if="isPractice" />
+  <PhysicalModelTuner v-else-if="isTuner" />
   <DefaultLayout v-else />
 </template>

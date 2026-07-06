@@ -1,0 +1,1145 @@
+/* Physical-model tuner — hardware-panel styling on the shared --demo-* tokens.
+   Tokens come from .vitepress/theme/styles/demo-tokens.css; never re-declare. */
+
+/* ===== ORACLE + AUTO-FIT ===== */
+.tn-oracle {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--demo-border);
+  display: grid;
+  gap: 8px;
+}
+
+.tn-oracle__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tn-oracle__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  background: var(--demo-control-bg);
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.tn-oracle__clear {
+  border: none;
+  background: none;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.tn-oracle__clear:hover {
+  color: var(--demo-status-error);
+}
+
+.tn-oracle__note {
+  display: grid;
+  gap: 4px;
+}
+
+.tn-oracle__noterow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tn-oracle__notename {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-num--sm {
+  width: 70px;
+}
+
+.tn-fit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tn-fit__bar {
+  flex: 1 1 160px;
+  height: 8px;
+  min-width: 120px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--demo-control-bg-strong, var(--demo-control-bg));
+  border: 1px solid var(--demo-border);
+}
+
+.tn-fit__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--demo-accent), var(--demo-cyan, var(--demo-accent)));
+  transition: width 0.15s ease;
+}
+
+.tn-fit__stat {
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-hint--warn {
+  color: var(--demo-status-warning, var(--demo-amber));
+}
+
+.tn-deck {
+  display: grid;
+  gap: 14px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ===== STATUS BAR ===== */
+.tn-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+}
+
+.tn-statusbar__field {
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-statusbar__field b {
+  margin-right: 6px;
+  color: var(--demo-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+
+.tn-error {
+  color: var(--demo-status-error);
+  font-size: 11px;
+}
+
+/* ===== HERO ===== */
+.tn-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.tn-scene {
+  position: relative;
+  min-height: 260px;
+  border: 1px solid var(--demo-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--demo-accent-subtle), transparent 70%),
+    var(--demo-screen-bg, var(--demo-control-bg-strong));
+}
+
+.tn-scene > :first-child {
+  position: absolute;
+  inset: 0;
+}
+
+.tn-scene__badge {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  display: grid;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.tn-scene__model {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.tn-scene__tagline {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+/* ===== TARGET CARD (GM/GS map — primary picker in the hero) ===== */
+.tn-tgcard {
+  min-height: 260px;
+}
+
+.tn-tgcard__body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 12px;
+}
+
+.tn-tgcard__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tn-tgcard__sub {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tn-tgcard__segs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tn-tgcard__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Numeric slot-address input (GS variation bank), styled like .tn-select. */
+.tn-num {
+  width: 120px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-tgcard__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: var(--demo-control-bg);
+}
+
+.tn-tgcard__slot {
+  display: grid;
+  gap: 4px;
+}
+
+/* ===== EXCITER MODEL ===== */
+/* Locked slot-model display shown while a target is active. */
+.tn-engines__locked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tn-engines__lockedname {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tn-engines__badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--demo-accent-subtle);
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tn-engines__badge--warn {
+  background: var(--demo-status-warning-subtle, var(--demo-accent-subtle));
+  color: var(--demo-status-warning, var(--demo-amber));
+}
+
+.tn-engines__override {
+  margin-top: 12px;
+  border-top: 1px solid var(--demo-border);
+  padding-top: 4px;
+}
+
+.tn-engines__override .tn-advanced__summary {
+  padding: 8px 0;
+}
+
+.tn-engines__warn {
+  margin: 4px 0 12px;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tn-engines__reset {
+  margin-top: 12px;
+}
+
+.tn-link {
+  color: var(--demo-accent);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tn-link:hover {
+  text-decoration: underline;
+}
+
+/* Out-of-scope note inside the target card (slot voiced by a synth engine). */
+.tn-tgcard__scope {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--demo-border);
+  border-left: 3px solid var(--demo-status-warning, var(--demo-amber));
+  border-radius: 6px;
+  background: var(--demo-status-warning-subtle, var(--demo-accent-subtle));
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ===== GM PROGRAM PICKER (custom listbox with out-of-scope chips) ===== */
+.tn-picker {
+  position: relative;
+}
+
+.tn-picker__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  background: var(--demo-control-bg);
+  color: var(--demo-text);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tn-picker__trigger:hover {
+  border-color: var(--demo-accent-border);
+}
+
+.tn-picker__trigger:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+}
+
+.tn-picker__current {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tn-picker__caret {
+  color: var(--demo-text-muted);
+  font-size: 10px;
+}
+
+.tn-picker__pop {
+  position: fixed;
+  z-index: 3000;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--demo-accent-border, var(--demo-border));
+  border-radius: 8px;
+  /* Opaque — this overlays page content, so it must not show it through. */
+  background: var(--demo-screen-bg, var(--demo-bg));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.tn-picker__grouphead {
+  position: sticky;
+  top: 0;
+  padding: 6px 8px 4px;
+  background: var(--demo-screen-bg, var(--demo-bg));
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tn-picker__opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--demo-text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tn-picker__opt--active {
+  background: var(--demo-accent-subtle);
+}
+
+/* Selected row: identifiable by its background fill alone. */
+.tn-picker__opt--selected,
+.tn-picker__opt--selected.tn-picker__opt--active {
+  background: var(--demo-accent-dim);
+  color: var(--demo-text-strong);
+}
+
+.tn-picker__opt--disabled {
+  cursor: not-allowed;
+  color: var(--demo-text-muted);
+}
+
+.tn-picker__opt--disabled .tn-picker__name {
+  opacity: 0.6;
+}
+
+.tn-picker__num {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-picker__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* v-chip-style out-of-scope marker. */
+.tn-picker__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--demo-status-warning, var(--demo-amber));
+  border-radius: 999px;
+  background: var(--demo-status-warning-subtle, var(--demo-accent-subtle));
+  color: var(--demo-status-warning, var(--demo-amber));
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.tn-picker__chip-sub {
+  color: var(--demo-text-muted);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.tn-enginebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: flex-end;
+}
+
+.tn-egroup {
+  display: grid;
+  gap: 5px;
+}
+
+.tn-egroup__fam {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tn-egroup__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tn-echip {
+  padding: 5px 11px;
+  border: 1px solid var(--demo-border);
+  border-radius: 999px;
+  background: var(--demo-control-bg);
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.tn-echip:hover {
+  border-color: var(--demo-accent-border);
+}
+
+.tn-echip--active {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-text-strong);
+}
+
+/* The engine libsonare uses for the current target, when the user has diverged. */
+.tn-echip--suggested {
+  border-style: dashed;
+  border-color: var(--demo-accent-border);
+  color: var(--demo-accent-light);
+}
+
+.tn-echip:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+}
+
+.tn-enginebar__blurb {
+  margin: 10px 0 0;
+  color: var(--demo-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ===== SECTIONS ===== */
+.tn-sec {
+  padding: 12px 14px;
+  border: 1px solid var(--demo-border);
+  border-radius: 10px;
+  background: var(--demo-bg-elevated);
+}
+
+.tn-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tn-sec__title {
+  margin: 0;
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tn-sec__count {
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--demo-accent-subtle);
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-sub-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tn-chain-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.tn-bodies__row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tn-knob-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Sound-shaping macros — the primary, beginner-first control surface. */
+.tn-sec--sound {
+  border-color: var(--demo-accent);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--demo-accent-subtle), transparent 60%),
+    var(--demo-bg-elevated);
+}
+
+.tn-macros__intro {
+  margin: -2px 0 14px;
+  color: var(--demo-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tn-macros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px 18px;
+}
+
+.tn-macro {
+  display: grid;
+  gap: 5px;
+}
+
+.tn-macro__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tn-macro__label {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.tn-macro__val {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-macro__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  margin: 4px 0;
+  border-radius: 999px;
+  background: var(--demo-control-bg-strong, var(--demo-control-bg));
+  border: 1px solid var(--demo-border);
+  cursor: pointer;
+}
+
+.tn-macro__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--demo-accent);
+  border: 2px solid var(--demo-bg-elevated);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.tn-macro__slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--demo-accent);
+  border: 2px solid var(--demo-bg-elevated);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.tn-macro__slider:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 3px;
+}
+
+.tn-macro__hint {
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Advanced (per-layer) parameters — collapsed by default under the macros. */
+.tn-advanced {
+  padding: 0;
+}
+
+.tn-advanced > :not(summary) {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.tn-advanced > .tn-layers {
+  margin-bottom: 14px;
+}
+
+.tn-advanced__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.tn-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.tn-advanced__title {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tn-advanced__chevron {
+  margin-left: auto;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  transition: transform 0.18s ease;
+}
+
+.tn-advanced[open] .tn-advanced__chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tn-advanced__chevron {
+    transition: none;
+  }
+}
+
+.tn-advanced__summary:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+
+/* Model parameters grouped by physical layer. */
+.tn-params__intro {
+  margin: -2px 0 12px;
+  color: var(--demo-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tn-layers {
+  display: grid;
+  gap: 14px;
+}
+
+.tn-layer {
+  padding: 12px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: var(--demo-control-bg);
+}
+
+.tn-layer__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--demo-border);
+}
+
+.tn-layer__name {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tn-layer__blurb {
+  flex: 1 1 200px;
+  min-width: 0;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tn-params {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 14px 8px;
+  justify-items: center;
+}
+
+.tn-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.tn-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Shared "i" info dot for toggles and section labels (knobs carry their own).
+   Mirrors RotaryKnob's info dot so the whole tool reads consistently. */
+.tn-info {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 50%;
+  background: var(--demo-bg);
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.tn-info > span {
+  font-family: var(--font-body);
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.tn-info:hover,
+.tn-info:focus-visible {
+  color: var(--demo-accent);
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  outline: none;
+}
+
+.tn-sub-label--info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tn-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--demo-border);
+  border-radius: 20px;
+  background: var(--demo-control-bg);
+  color: var(--demo-text);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.tn-toggle__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--demo-track-bg);
+  box-shadow: inset 0 0 0 1px var(--demo-border-strong);
+  transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.tn-toggle--on {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+}
+
+.tn-toggle--on .tn-toggle__dot {
+  background: var(--demo-accent);
+  box-shadow: 0 0 6px var(--demo-accent);
+}
+
+.tn-toggle__label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tn-toggle:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+}
+
+/* ===== CONTRIBUTION TARGET (GM/GS slot) ===== */
+/* Native select styled to the demo panel. */
+.tn-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  background: var(--demo-control-bg);
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tn-select:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+  border-color: var(--demo-accent);
+}
+
+/* Segmented Melodic / Drums switch. */
+.tn-seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: var(--demo-control-bg);
+}
+
+.tn-seg__btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tn-seg__btn--on {
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent-light);
+}
+
+.tn-seg__btn:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+}
+
+.tn-target__slot {
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* A small toggle used in a section head. */
+.tn-toggle--sm {
+  padding: 4px 10px;
+}
+
+.tn-toggle--sm .tn-toggle__label {
+  font-size: 10px;
+}
+
+/* ===== ACTIONS / CHIPS ===== */
+.tn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tn-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  background: var(--demo-control-bg);
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.tn-chip:hover:not(:disabled) {
+  border-color: var(--demo-accent);
+  color: var(--demo-accent);
+}
+
+.tn-chip--active {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent-light);
+}
+
+/* The body the current target implies, when the user has diverged from it. */
+.tn-chip--suggested {
+  border-style: dashed;
+  border-color: var(--demo-accent-border);
+  color: var(--demo-accent-light);
+}
+
+.tn-chip--wide {
+  min-width: 120px;
+}
+
+/* Filled accent CTA — the contribute / share-via-issue action. */
+.tn-chip--accent {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+}
+
+.tn-chip--accent:hover:not(:disabled) {
+  color: var(--demo-on-accent);
+  filter: brightness(1.08);
+}
+
+.tn-hint--contribute {
+  color: var(--demo-accent-light);
+}
+
+.tn-chip:disabled {
+  opacity: var(--demo-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.tn-chip:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+}
+
+.tn-file {
+  display: none;
+}
+
+.tn-hint {
+  margin: 10px 0 0;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ===== KEYBED ===== */
+/* The tool-page shell sets `overflow-x: hidden`, which makes `overflow-y`
+   compute to `auto` and turns it into a scroll container — that breaks a
+   position:sticky keybed. `overflow-x: clip` clips identically but is exempt
+   from the visible->auto rule, so overflow-y stays visible and the window is
+   the scroll root the sticky keybed pins to. Scoped to the tuner via :has(). */
+.tool-page:has(.tn-deck) {
+  overflow-x: clip;
+}
+
+/* Dock the keyboard to the bottom of the viewport so the 3D scene (top) and the
+   keybed stay visible together while the parameter sections scroll between. */
+.tn-keys {
+  position: sticky;
+  bottom: 10px;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: stretch;
+  padding: 12px 14px;
+  border: 1px solid var(--demo-border);
+  border-radius: 10px;
+  background: var(--demo-bg-elevated);
+  box-shadow: 0 14px 34px -16px rgba(0, 0, 0, 0.5);
+}
+
+.tn-cheek {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 128px;
+}
+
+.tn-cheek__label {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tn-cheek__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tn-cheek__btn {
+  width: 30px;
+  text-align: center;
+}
+
+.tn-cheek__value {
+  min-width: 42px;
+  text-align: center;
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tn-cheek__wide {
+  width: 100%;
+}
+
+.tn-keybed {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .tn-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .tn-keys {
+    grid-template-columns: 1fr;
+  }
+}

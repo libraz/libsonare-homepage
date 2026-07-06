@@ -19,6 +19,8 @@ const props = withDefaults(
     size?: number;
     /** Accent color for the value arc and pointer. */
     accent?: string;
+    /** Allow the label to wrap to two lines (for dense grids with long labels). */
+    labelWrap?: boolean;
     disabled?: boolean;
     /**
      * Help content. When `body` is set, an "i" info dot appears next to the
@@ -42,6 +44,7 @@ const props = withDefaults(
     defaultValue: undefined,
     size: 56,
     accent: 'var(--demo-accent)',
+    labelWrap: false,
     disabled: false,
     eyebrow: undefined,
     title: undefined,
@@ -173,7 +176,11 @@ function onKeyDown(event: KeyboardEvent): void {
 <template>
   <div
     class="rotary-knob"
-    :class="{ 'rotary-knob--dragging': dragging, 'rotary-knob--disabled': disabled }"
+    :class="{
+      'rotary-knob--dragging': dragging,
+      'rotary-knob--disabled': disabled,
+      'rotary-knob--wrap': labelWrap,
+    }"
     :style="{ '--knob-size': `${size}px`, '--knob-accent': accent }"
   >
     <span class="rotary-knob__head">
@@ -254,6 +261,25 @@ function onKeyDown(event: KeyboardEvent): void {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+/* Dense-grid mode: let a long label wrap to two lines and stay inside its cell
+   (the info dot beside it would otherwise push the head past the column width).
+   A reserved head height keeps one- and two-line knobs vertically aligned. */
+.rotary-knob--wrap {
+  width: 100%;
+}
+
+.rotary-knob--wrap .rotary-knob__head {
+  max-width: 100%;
+  min-height: 24px;
+}
+
+.rotary-knob--wrap .rotary-knob__label {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .rotary-knob__label {

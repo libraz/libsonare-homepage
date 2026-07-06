@@ -1,7 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitepress';
-import { withMermaid } from 'vitepress-plugin-mermaid';
 import { generateLlmsTxt } from './llms';
 
 const siteUrl = 'https://sonare.libraz.net';
@@ -482,6 +481,10 @@ const enDemoMenu = [
   },
 ];
 
+// Community / OSS-contribution tools. Not demos: these let contributors shape
+// libsonare itself (e.g. tune the physical-model engines and feed patches back).
+const enContributeMenu = [{ items: [{ text: 'Physical Model Tuner', link: '/tuner' }] }];
+
 // English docs sidebar — shared between the `/docs/` sidebar and the llms.txt index.
 const enDocsSidebar = [
   {
@@ -577,6 +580,7 @@ const generatedLocaleConfigs = Object.fromEntries(
         themeConfig: {
           nav: [
             { text: 'Demos', items: prefixLocaleLinks(enDemoMenu, locale) },
+            { text: 'Contribute', items: prefixLocaleLinks(enContributeMenu, locale) },
             { text: 'Docs', link: `/${locale}/docs/introduction` },
             { text: 'GitHub', link: githubUrl },
           ],
@@ -647,313 +651,316 @@ const webSiteJsonLd = {
   },
 };
 
-export default withMermaid(
-  defineConfig({
-    srcDir: 'src',
-    // Developer docs that live next to the code (e.g. component READMEs) are not
-    // public pages — keep them out of the built, localized route tree.
-    srcExclude: ['**/README.md'],
+export default defineConfig({
+  srcDir: 'src',
+  // Developer docs that live next to the code (e.g. component READMEs) are not
+  // public pages — keep them out of the built, localized route tree.
+  srcExclude: ['**/README.md'],
 
-    title: 'libsonare - Dependency-Free Audio Engine',
-    description:
-      'Dependency-free audio engine for C++, Python, and the browser: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
+  title: 'libsonare - Dependency-Free Audio Engine',
+  description:
+    'Dependency-free audio engine for C++, Python, and the browser: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
 
-    // Sitemap
-    sitemap: {
-      hostname: siteUrl,
-    },
+  // Sitemap
+  sitemap: {
+    hostname: siteUrl,
+  },
 
-    // Emit an llms.txt index (https://llmstxt.org) into the build output.
-    buildEnd(siteConfig) {
-      generateLlmsTxt({
-        siteUrl,
-        srcDir: siteConfig.srcDir,
-        outDir: siteConfig.outDir,
-        summary:
-          'Dependency-free C++/WebAssembly audio engine: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
-        demoMenu: enDemoMenu,
-        docsSidebar: enDocsSidebar,
-        glossaryRoot: glossarySidebar[0],
-        localizedSections: siteLocales
-          .filter((locale) => locale !== defaultLocale)
-          .map((locale) => {
-            const label = languageLabel(locale);
-            return {
-              locale,
-              label,
-              docsLink: `/${locale}/docs/introduction`,
-              demosLink: `/${locale}/demos`,
-              docsText: `${label} documentation`,
-              demosText: `${label} demos`,
-              docsDescription: `Localized documentation for ${label}.`,
-              demosDescription: `Localized browser demos for ${label}.`,
-            };
-          }),
+  // Emit an llms.txt index (https://llmstxt.org) into the build output.
+  buildEnd(siteConfig) {
+    generateLlmsTxt({
+      siteUrl,
+      srcDir: siteConfig.srcDir,
+      outDir: siteConfig.outDir,
+      summary:
+        'Dependency-free C++/WebAssembly audio engine: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
+      demoMenu: enDemoMenu,
+      docsSidebar: enDocsSidebar,
+      glossaryRoot: glossarySidebar[0],
+      localizedSections: siteLocales
+        .filter((locale) => locale !== defaultLocale)
+        .map((locale) => {
+          const label = languageLabel(locale);
+          return {
+            locale,
+            label,
+            docsLink: `/${locale}/docs/introduction`,
+            demosLink: `/${locale}/demos`,
+            docsText: `${label} documentation`,
+            demosText: `${label} demos`,
+            docsDescription: `Localized documentation for ${label}.`,
+            demosDescription: `Localized browser demos for ${label}.`,
+          };
+        }),
+    });
+  },
+
+  head: [
+    ['meta', { name: 'theme-color', content: '#8B5CF6' }],
+    ['link', { rel: 'icon', href: '/favicon.svg' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+    [
+      'link',
+      {
+        // JetBrains Mono 600-800 are used by the demo instrument labels;
+        // loading them here replaces the per-component Google Fonts @imports.
+        href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
+        rel: 'stylesheet',
+      },
+    ],
+
+    // JSON-LD structured data
+    ['script', { type: 'application/ld+json' }, JSON.stringify(softwareApplicationJsonLd)],
+    ['script', { type: 'application/ld+json' }, JSON.stringify(webSiteJsonLd)],
+
+    // SEO - Keywords
+    [
+      'meta',
+      {
+        name: 'keywords',
+        content:
+          'audio engine, dependency-free audio library, music information retrieval, MIR, mastering DSP, mixing engine, editing DSP, creative FX, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, BPM detection, key detection, chord recognition, beat tracking, WebAssembly, WASM, C++ library, Python audio, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
+      },
+    ],
+
+    // OGP
+    ['meta', { property: 'og:site_name', content: 'libsonare' }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:image', content: `${siteUrl}/og-image.svg` }],
+    ['meta', { property: 'og:image:width', content: '1200' }],
+    ['meta', { property: 'og:image:height', content: '630' }],
+    ['meta', { property: 'og:image:alt', content: 'libsonare dependency-free audio engine' }],
+    // Twitter
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:image', content: `${siteUrl}/og-image.svg` }],
+    ['meta', { name: 'twitter:image:alt', content: 'libsonare dependency-free audio engine' }],
+    [
+      'script',
+      { defer: '', 'data-domain': 'sonare.libraz.net', src: 'https://plausible.io/js/script.js' },
+    ],
+  ],
+
+  markdown: {
+    config(md) {
+      md.core.ruler.before('normalize', 'replace_wasm_meta_tokens', (state) => {
+        state.src = replaceWasmMetaTokens(state.src);
       });
     },
+  },
 
-    head: [
-      ['meta', { name: 'theme-color', content: '#8B5CF6' }],
-      ['link', { rel: 'icon', href: '/favicon.svg' }],
-      ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
-      ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+  transformHead({ pageData, description }) {
+    const path = routeFromRelativePath(pageData.relativePath);
+    const url = absoluteUrl(path);
+    const alternates = localizedAlternates(pageData.relativePath);
+    const lang = localeFromRelativePath(pageData.relativePath);
+    const defaultAlternate = alternates.find((item) => item.lang === defaultLocale);
+    const titleContent = pageSeoTitle(pageData.title || 'libsonare');
+    const webPageJsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: titleContent,
+      description,
+      url,
+      inLanguage: lang,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'libsonare',
+        url: siteUrl,
+      },
+    };
+    const head = [
+      ['link', { rel: 'canonical', href: url }],
+      ['meta', { property: 'og:title', content: titleContent }],
+      ['meta', { property: 'og:description', content: description }],
+      ['meta', { property: 'og:url', content: url }],
+      ['meta', { property: 'og:locale', content: lang }],
+      ['meta', { name: 'twitter:title', content: titleContent }],
+      ['meta', { name: 'twitter:description', content: description }],
+      ['meta', { name: 'robots', content: 'index,follow,max-image-preview:large' }],
+      ['link', { rel: 'alternate', hreflang: lang, href: url }],
       [
         'link',
         {
-          // JetBrains Mono 600-800 are used by the demo instrument labels;
-          // loading them here replaces the per-component Google Fonts @imports.
-          href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
-          rel: 'stylesheet',
+          rel: 'alternate',
+          hreflang: 'x-default',
+          href: defaultAlternate ? absoluteUrl(defaultAlternate.path) : url,
         },
       ],
+      ['script', { type: 'application/ld+json' }, JSON.stringify(webPageJsonLd)],
+    ] as any[];
 
-      // JSON-LD structured data
-      ['script', { type: 'application/ld+json' }, JSON.stringify(softwareApplicationJsonLd)],
-      ['script', { type: 'application/ld+json' }, JSON.stringify(webSiteJsonLd)],
+    for (const alternate of alternates) {
+      if (alternate.lang === lang) continue;
+      head.push(['meta', { property: 'og:locale:alternate', content: alternate.lang }]);
+      head.push([
+        'link',
+        { rel: 'alternate', hreflang: alternate.lang, href: absoluteUrl(alternate.path) },
+      ]);
+    }
 
-      // SEO - Keywords
-      [
-        'meta',
-        {
-          name: 'keywords',
-          content:
-            'audio engine, dependency-free audio library, music information retrieval, MIR, mastering DSP, mixing engine, editing DSP, creative FX, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, BPM detection, key detection, chord recognition, beat tracking, WebAssembly, WASM, C++ library, Python audio, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
-        },
-      ],
+    return head;
+  },
 
-      // OGP
-      ['meta', { property: 'og:site_name', content: 'libsonare' }],
-      ['meta', { property: 'og:type', content: 'website' }],
-      ['meta', { property: 'og:image', content: `${siteUrl}/og-image.svg` }],
-      ['meta', { property: 'og:image:width', content: '1200' }],
-      ['meta', { property: 'og:image:height', content: '630' }],
-      ['meta', { property: 'og:image:alt', content: 'libsonare dependency-free audio engine' }],
-      // Twitter
-      ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-      ['meta', { name: 'twitter:image', content: `${siteUrl}/og-image.svg` }],
-      ['meta', { name: 'twitter:image:alt', content: 'libsonare dependency-free audio engine' }],
-      [
-        'script',
-        { defer: '', 'data-domain': 'sonare.libraz.net', src: 'https://plausible.io/js/script.js' },
-      ],
-    ],
-
-    markdown: {
-      config(md) {
-        md.core.ruler.before('normalize', 'replace_wasm_meta_tokens', (state) => {
-          state.src = replaceWasmMetaTokens(state.src);
-        });
-      },
-    },
-
-    transformHead({ pageData, description }) {
-      const path = routeFromRelativePath(pageData.relativePath);
-      const url = absoluteUrl(path);
-      const alternates = localizedAlternates(pageData.relativePath);
-      const lang = localeFromRelativePath(pageData.relativePath);
-      const defaultAlternate = alternates.find((item) => item.lang === defaultLocale);
-      const titleContent = pageSeoTitle(pageData.title || 'libsonare');
-      const webPageJsonLd = {
-        '@context': 'https://schema.org',
-        '@type': 'WebPage',
-        name: titleContent,
-        description,
-        url,
-        inLanguage: lang,
-        isPartOf: {
-          '@type': 'WebSite',
-          name: 'libsonare',
-          url: siteUrl,
-        },
-      };
-      const head = [
-        ['link', { rel: 'canonical', href: url }],
-        ['meta', { property: 'og:title', content: titleContent }],
-        ['meta', { property: 'og:description', content: description }],
-        ['meta', { property: 'og:url', content: url }],
-        ['meta', { property: 'og:locale', content: lang }],
-        ['meta', { name: 'twitter:title', content: titleContent }],
-        ['meta', { name: 'twitter:description', content: description }],
-        ['meta', { name: 'robots', content: 'index,follow,max-image-preview:large' }],
-        ['link', { rel: 'alternate', hreflang: lang, href: url }],
-        [
-          'link',
-          {
-            rel: 'alternate',
-            hreflang: 'x-default',
-            href: defaultAlternate ? absoluteUrl(defaultAlternate.path) : url,
-          },
+  locales: {
+    root: {
+      label: 'English',
+      lang: 'en',
+      themeConfig: {
+        nav: [
+          { text: 'Demos', items: enDemoMenu },
+          { text: 'Contribute', items: enContributeMenu },
+          { text: 'Docs', link: '/docs/introduction' },
+          { text: 'GitHub', link: githubUrl },
         ],
-        ['script', { type: 'application/ld+json' }, JSON.stringify(webPageJsonLd)],
-      ] as any[];
-
-      for (const alternate of alternates) {
-        if (alternate.lang === lang) continue;
-        head.push(['meta', { property: 'og:locale:alternate', content: alternate.lang }]);
-        head.push([
-          'link',
-          { rel: 'alternate', hreflang: alternate.lang, href: absoluteUrl(alternate.path) },
-        ]);
-      }
-
-      return head;
-    },
-
-    locales: {
-      root: {
-        label: 'English',
-        lang: 'en',
-        themeConfig: {
-          nav: [
-            { text: 'Demos', items: enDemoMenu },
-            { text: 'Docs', link: '/docs/introduction' },
-            { text: 'GitHub', link: githubUrl },
-          ],
-          sidebar: {
-            '/docs/': enDocsSidebar,
-          },
+        sidebar: {
+          '/docs/': enDocsSidebar,
         },
       },
-      ja: {
-        label: '日本語',
-        lang: 'ja',
-        title: 'libsonare - 依存なしのオーディオエンジン',
-        description:
-          'C++、Python、ブラウザで使える依存なしのオーディオエンジン。librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW / リアルタイムランタイムに対応。',
-        themeConfig: {
-          nav: [
-            {
-              text: 'デモ',
-              items: [
-                { items: [{ text: 'デモ一覧', link: '/ja/demos' }] },
-                {
-                  text: '解析',
-                  items: [
-                    { text: 'ビジュアルプレイヤー', link: '/ja/analyzer' },
-                    { text: '楽曲分析スタジオ', link: '/ja/music-analysis' },
-                    { text: '空間ルームスキャナー', link: '/ja/spatial' },
-                  ],
-                },
-                {
-                  text: '制作',
-                  items: [
-                    { text: 'マスタリングスタジオ', link: '/ja/mastering' },
-                    { text: 'ミキシングスタジオ', link: '/ja/mixing' },
-                    { text: 'リアルタイムFXラボ', link: '/ja/realtime-fx' },
-                    { text: 'シンセプレイグラウンド', link: '/ja/synth' },
-                    { text: 'スタジオミニ', link: '/ja/studio' },
-                    { text: 'ピアノ練習', link: '/ja/practice' },
-                  ],
-                },
-              ],
-            },
-            { text: 'ドキュメント', link: '/ja/docs/introduction' },
-            { text: 'GitHub', link: githubUrl },
-          ],
-          sidebar: {
-            '/ja/docs/': [
+    },
+    ja: {
+      label: '日本語',
+      lang: 'ja',
+      title: 'libsonare - 依存なしのオーディオエンジン',
+      description:
+        'C++、Python、ブラウザで使える依存なしのオーディオエンジン。librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW / リアルタイムランタイムに対応。',
+      themeConfig: {
+        nav: [
+          {
+            text: 'デモ',
+            items: [
+              { items: [{ text: 'デモ一覧', link: '/ja/demos' }] },
               {
-                text: 'まず読む',
+                text: '解析',
                 items: [
-                  { text: 'イントロダクション', link: '/ja/docs/introduction' },
-                  { text: '学習順ガイド', link: '/ja/docs/learning-path' },
-                  { text: 'はじめに', link: '/ja/docs/getting-started' },
-                  { text: 'インストール', link: '/ja/docs/installation' },
-                  { text: '使用例', link: '/ja/docs/examples' },
-                  { text: '機能マップ', link: '/ja/docs/api-surface' },
+                  { text: 'ビジュアルプレイヤー', link: '/ja/analyzer' },
+                  { text: '楽曲分析スタジオ', link: '/ja/music-analysis' },
+                  { text: '空間ルームスキャナー', link: '/ja/spatial' },
                 ],
               },
               {
-                text: '作りたいもの別',
+                text: '制作',
                 items: [
-                  { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
-                  { text: 'スペクトル編集', link: '/ja/docs/spectral-editing' },
-                  { text: 'ミキシングエンジン', link: '/ja/docs/mixing' },
-                  { text: 'ミキシングシーン JSON', link: '/ja/docs/mixing-scene-json' },
-                  { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
-                  { text: 'マスタリングプロセッサ', link: '/ja/docs/mastering-processors' },
-                  { text: 'リアルタイムとストリーミング', link: '/ja/docs/realtime-streaming' },
-                  {
-                    text: 'リアルタイムボイスチェンジャー',
-                    link: '/ja/docs/realtime-voice-changer',
-                  },
-                  { text: 'ルーム音響解析', link: '/ja/docs/acoustic-analysis' },
-                  { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
-                ],
-              },
-              {
-                text: '作曲・アレンジ',
-                items: [
-                  { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
-                  { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
-                  { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
-                  { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
-                  { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },
-                  { text: 'プロジェクトのバウンス', link: '/ja/docs/project-bounce' },
-                ],
-              },
-              {
-                text: '利用環境別 API',
-                items: [
-                  { text: 'ブラウザ / WASM', link: '/ja/docs/wasm' },
-                  { text: 'JavaScript API', link: '/ja/docs/js-api' },
-                  { text: 'Python API', link: '/ja/docs/python-api' },
-                  { text: 'CLIリファレンス', link: '/ja/docs/cli' },
-                  { text: 'Node.js ネイティブ', link: '/ja/docs/native-bindings' },
-                  { text: 'C++ API', link: '/ja/docs/cpp-api' },
-                  { text: 'バインディング対応表', link: '/ja/docs/binding-parity' },
-                ],
-              },
-              {
-                text: '詳しく知る',
-                items: [
-                  { text: 'DSP 実装解説', link: '/ja/docs/dsp-implementation' },
-                  { text: 'アルゴリズム根拠', link: '/ja/docs/algorithm-references' },
-                  { text: '実装検証', link: '/ja/docs/implementation-validation' },
-                  { text: 'マスタリング実装', link: '/ja/docs/mastering-implementation' },
-                  { text: 'アーキテクチャ', link: '/ja/docs/architecture' },
-                  { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
-                  { text: 'ベンチマーク', link: '/ja/docs/benchmarks' },
-                  ...jaGlossarySidebar,
+                  { text: 'マスタリングスタジオ', link: '/ja/mastering' },
+                  { text: 'ミキシングスタジオ', link: '/ja/mixing' },
+                  { text: 'リアルタイムFXラボ', link: '/ja/realtime-fx' },
+                  { text: 'シンセプレイグラウンド', link: '/ja/synth' },
+                  { text: 'スタジオミニ', link: '/ja/studio' },
+                  { text: 'ピアノ練習', link: '/ja/practice' },
                 ],
               },
             ],
           },
+          {
+            text: '貢献',
+            items: [{ items: [{ text: '物理モデルチューナー', link: '/ja/tuner' }] }],
+          },
+          { text: 'ドキュメント', link: '/ja/docs/introduction' },
+          { text: 'GitHub', link: githubUrl },
+        ],
+        sidebar: {
+          '/ja/docs/': [
+            {
+              text: 'まず読む',
+              items: [
+                { text: 'イントロダクション', link: '/ja/docs/introduction' },
+                { text: '学習順ガイド', link: '/ja/docs/learning-path' },
+                { text: 'はじめに', link: '/ja/docs/getting-started' },
+                { text: 'インストール', link: '/ja/docs/installation' },
+                { text: '使用例', link: '/ja/docs/examples' },
+                { text: '機能マップ', link: '/ja/docs/api-surface' },
+              ],
+            },
+            {
+              text: '作りたいもの別',
+              items: [
+                { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
+                { text: 'スペクトル編集', link: '/ja/docs/spectral-editing' },
+                { text: 'ミキシングエンジン', link: '/ja/docs/mixing' },
+                { text: 'ミキシングシーン JSON', link: '/ja/docs/mixing-scene-json' },
+                { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
+                { text: 'マスタリングプロセッサ', link: '/ja/docs/mastering-processors' },
+                { text: 'リアルタイムとストリーミング', link: '/ja/docs/realtime-streaming' },
+                {
+                  text: 'リアルタイムボイスチェンジャー',
+                  link: '/ja/docs/realtime-voice-changer',
+                },
+                { text: 'ルーム音響解析', link: '/ja/docs/acoustic-analysis' },
+                { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
+              ],
+            },
+            {
+              text: '作曲・アレンジ',
+              items: [
+                { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
+                { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
+                { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
+                { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
+                { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },
+                { text: 'プロジェクトのバウンス', link: '/ja/docs/project-bounce' },
+              ],
+            },
+            {
+              text: '利用環境別 API',
+              items: [
+                { text: 'ブラウザ / WASM', link: '/ja/docs/wasm' },
+                { text: 'JavaScript API', link: '/ja/docs/js-api' },
+                { text: 'Python API', link: '/ja/docs/python-api' },
+                { text: 'CLIリファレンス', link: '/ja/docs/cli' },
+                { text: 'Node.js ネイティブ', link: '/ja/docs/native-bindings' },
+                { text: 'C++ API', link: '/ja/docs/cpp-api' },
+                { text: 'バインディング対応表', link: '/ja/docs/binding-parity' },
+              ],
+            },
+            {
+              text: '詳しく知る',
+              items: [
+                { text: 'DSP 実装解説', link: '/ja/docs/dsp-implementation' },
+                { text: 'アルゴリズム根拠', link: '/ja/docs/algorithm-references' },
+                { text: '実装検証', link: '/ja/docs/implementation-validation' },
+                { text: 'マスタリング実装', link: '/ja/docs/mastering-implementation' },
+                { text: 'アーキテクチャ', link: '/ja/docs/architecture' },
+                { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
+                { text: 'ベンチマーク', link: '/ja/docs/benchmarks' },
+                ...jaGlossarySidebar,
+              ],
+            },
+          ],
         },
       },
-      ...generatedLocaleConfigs,
     },
+    ...generatedLocaleConfigs,
+  },
 
-    themeConfig: {
-      siteTitle: 'libsonare',
-      socialLinks: [{ icon: 'github', link: githubUrl }],
-      footer: {
-        message:
-          'a personal project by <a href="https://libraz.net" target="_blank" rel="noopener">libraz</a>',
-      },
+  themeConfig: {
+    siteTitle: 'libsonare',
+    socialLinks: [{ icon: 'github', link: githubUrl }],
+    footer: {
+      message:
+        'a personal project by <a href="https://libraz.net" target="_blank" rel="noopener">libraz</a>',
     },
+  },
 
-    vite: {
-      build: {
-        // Heavy docs/demo chunks are checked explicitly by `check:built-routes`.
-        chunkSizeWarningLimit: 1280,
-      },
-      worker: {
-        format: 'es',
-      },
-      resolve: {
-        alias: {
-          '@': fileURLToPath(new URL('../src', import.meta.url)),
-          '@theme': fileURLToPath(new URL('./theme', import.meta.url)),
-          'node:module': fileURLToPath(new URL('./shims/node-module.ts', import.meta.url)),
-        },
-      },
-      optimizeDeps: {
-        exclude: ['libsonare'],
-      },
-      ssr: {
-        noExternal: ['libsonare'],
+  vite: {
+    build: {
+      // Heavy docs/demo chunks are checked explicitly by `check:built-routes`.
+      chunkSizeWarningLimit: 1280,
+    },
+    worker: {
+      format: 'es',
+    },
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('../src', import.meta.url)),
+        '@theme': fileURLToPath(new URL('./theme', import.meta.url)),
+        'node:module': fileURLToPath(new URL('./shims/node-module.ts', import.meta.url)),
       },
     },
-  }),
-);
+    optimizeDeps: {
+      exclude: ['libsonare'],
+    },
+    ssr: {
+      noExternal: ['libsonare'],
+    },
+  },
+});

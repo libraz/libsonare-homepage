@@ -17,12 +17,15 @@ const props = withDefaults(
       | 'spatial'
       | 'synth'
       | 'studio'
-      | 'practice';
+      | 'practice'
+      | 'tuner';
     title: string;
     subtitle?: string;
     version?: string;
     status?: 'idle' | 'active' | 'warning' | 'error';
     statusLabel?: string;
+    /** Hide the demo-switcher tab strip (for standalone / non-demo tools). */
+    hideTabs?: boolean;
     docsPath?: string;
     guideTitle?: string;
     guideBody?: string;
@@ -228,6 +231,7 @@ function switchLocale(event: Event) {
     </header>
 
     <nav
+      v-if="!hideTabs"
       ref="tabsRef"
       class="tool-page__tabs"
       :class="{ 'tool-page__tabs--fade-left': tabsCanScrollLeft, 'tool-page__tabs--fade-right': tabsCanScrollRight }"

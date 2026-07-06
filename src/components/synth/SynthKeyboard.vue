@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { KEY_LAYOUT, type KeyDef } from '@/components/synth/synthCopy';
 
 const props = defineProps<{
@@ -7,6 +7,13 @@ const props = defineProps<{
   baseNote: number;
   /** Currently sounding MIDI notes, for pressed-key visual state. */
   active: Set<number>;
+  /**
+   * Octaves to render. When set, the keybed is generated to span this many
+   * octaves (ending on the top C) instead of the fixed `KEY_LAYOUT` span, so a
+   * wide-range instrument (e.g. piano) gets a full keyboard. Computer-keyboard
+   * hints are kept only for the notes `KEY_LAYOUT` covers.
+   */
+  octaves?: number;
 }>();
 
 const emit = defineEmits<{
@@ -24,9 +31,27 @@ interface RenderKey extends KeyDef {
   name?: string;
 }
 
+/** Computer-keyboard hint per semitone, taken from the canonical layout. */
+const PC_BY_SEMITONE = new Map(
+  KEY_LAYOUT.filter((k) => k.pc).map((k) => [k.semitone, k.pc as string]),
+);
+/** Semitones-in-octave that are accidental (black) keys. */
+const BLACK_PCS = new Set([1, 3, 6, 8, 10]);
+
+/** The key layout to render: the fixed one, or a generated wide-range keybed. */
+const layout = computed<KeyDef[]>(() => {
+  if (props.octaves == null) return KEY_LAYOUT;
+  const out: KeyDef[] = [];
+  // Inclusive of the final top C, so the keybed reads as full octaves.
+  for (let s = 0; s <= props.octaves * 12; ++s) {
+    out.push({ semitone: s, black: BLACK_PCS.has(s % 12), pc: PC_BY_SEMITONE.get(s) });
+  }
+  return out;
+});
+
 const keys = computed<RenderKey[]>(() => {
   let whiteIndex = -1;
-  return KEY_LAYOUT.map((k) => {
+  return layout.value.map((k) => {
     if (!k.black) whiteIndex += 1;
     const note = props.baseNote + k.semitone;
     const name =
@@ -56,21 +81,47 @@ function velocityFromEvent(event: PointerEvent): number {
   return Math.round(64 + Math.min(1, Math.max(0, depth)) * 56);
 }
 
+/** Notes this keyboard is currently sounding, so a pointerup anywhere (even off
+ *  a key, where the per-key handler never fires) reliably releases them. Without
+ *  this, a mouse-up that lands off the pressed key leaves the note stuck on. */
+const pressed = new Set<number>();
+
 function press(note: number, event: PointerEvent): void {
   event.preventDefault();
   // Release implicit capture so dragging across keys plays a glissando.
   (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+  if (pressed.has(note)) return;
+  pressed.add(note);
   emit('note-on', note, velocityFromEvent(event));
 }
 
 function glide(note: number, event: PointerEvent): void {
   if ((event.buttons & 1) === 0) return;
+  if (pressed.has(note)) return;
+  pressed.add(note);
   emit('note-on', note, velocityFromEvent(event));
 }
 
 function release(note: number): void {
+  if (!pressed.delete(note)) return;
   emit('note-off', note);
 }
+
+/** Release every held note on a global pointer-up (the safety net). */
+function releaseAllPressed(): void {
+  for (const note of pressed) emit('note-off', note);
+  pressed.clear();
+}
+
+onMounted(() => {
+  window.addEventListener('pointerup', releaseAllPressed);
+  window.addEventListener('pointercancel', releaseAllPressed);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pointerup', releaseAllPressed);
+  window.removeEventListener('pointercancel', releaseAllPressed);
+});
 </script>
 
 <template>
