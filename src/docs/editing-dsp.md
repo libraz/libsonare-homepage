@@ -54,6 +54,7 @@ Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` ar
 | Time-stretch the whole signal without changing pitch | `timeStretch(samples, sampleRate, rate)` | `time_stretch(samples, sample_rate, rate)` |
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | Follow a per-frame pitch contour toward a note | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
+| Snap a contour to a musical scale (auto-tune) | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, options)` |
 | Stretch only a note region | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | Edit a time-frequency region | `spectralEdit(samples, sampleRate, ops, options?)` | `spectral_edit(samples, sample_rate, ops, ...)` |
 | Shift pitch and formants independently | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
@@ -149,6 +150,33 @@ const tuned = pitchCorrectToMidiTimevarying(
 ::: tip Constant vs contour-following correction
 Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.
 :::
+
+### Scale-snap correction (auto-tune)
+
+The two functions above pull toward a single note. When a whole vocal line should follow a **key** — each note snapped to the nearest tone of, say, C major — use `pitchCorrectTimevarying(...)`. It takes the same per-frame F0 contour but reads its target and correction feel from an options object, and `mode: 'scale'` is the classic auto-tune behavior: every voiced frame is pulled to the closest scale tone rather than one fixed pitch.
+
+```typescript
+import { init, pitchPyin, pitchCorrectTimevarying } from '@libraz/libsonare';
+
+await init();
+
+const hopLength = 256;
+const pitch = pitchPyin(vocal, sampleRate, 2048, hopLength, 65, 1000, 0.1, true);
+
+// Snap every voiced frame to C major, gently, keeping vibrato.
+const voiced = Int32Array.from(pitch.voicedFlag, (v) => (v ? 1 : 0));
+const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
+  mode: 'scale',
+  scaleRoot: 0,             // 0 = C .. 11 = B
+  scaleModeMask: 0xab5,     // 12-bit degree mask: C major = {0,2,4,5,7,9,11}
+  retuneAmount: 0.8,        // 0 = bypass, 1 = full snap
+  retuneSpeedMs: 15,        // larger = slower glide onto pitch
+  vibratoThresholdCents: 20, // corrections under this are skipped to keep vibrato
+  voiced,
+});
+```
+
+`scaleModeMask` is a 12-bit mask where bit `i` enables the semitone `i` above `scaleRoot`, so any scale is expressible (C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`). With `mode: 'midi'` (the default) the same function behaves like `pitchCorrectToMidiTimevarying(...)`, retuning toward `targetMidi` instead of a scale. `retuneAmount` controls how hard the snap is — lower values leave a natural, human wobble; `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect. See the interactive [pitch-correction demo](./glossary/editing/pitch-correction.md) for this in action.
 
 ### MIDI note numbers
 

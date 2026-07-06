@@ -590,6 +590,39 @@ binding.close();  // releases the provider and (if owned) terminates the worker
 The OPFS provider relies on `navigator.storage.getDirectory()` and synchronous access handles, which are available in current Chromium and Firefox and in WebKit on recent Safari, but not in older browsers. Feature-detect before using it, and keep a fully in-memory provider (or your own `ClipPageProvider` loaded from any source) for environments without OPFS.
 :::
 
+### Bounded-window streaming across many clips
+
+The loop above services one provider by hand. For a multitrack arrangement you usually want the resident audio bounded no matter how many clips play or how long they are. `ClipPageStreamer` does that: it keeps only a sliding window of pages around each clip's live playback position — `retainBehindPages + readAheadPages + 1` pages per clip — fetching misses ahead of time and evicting pages that fall behind, so a whole session never holds its full PCM in WASM memory.
+
+`attachOpfsClipStream(...)` wires one OPFS-backed clip into a shared streamer in a single call: it builds the provider, primes the leading pages so playback starts without an immediate miss, and registers the clip for windowed eviction.
+
+```typescript
+import { ClipPageStreamer, attachOpfsClipStream } from '@libraz/libsonare';
+
+const streamer = new ClipPageStreamer(engine, { readAheadPages: 2, retainBehindPages: 1 });
+
+// Attach each long clip; `provider` goes into the clip schedule.
+const take = await attachOpfsClipStream(streamer, engine, {
+  clipId: 1,                    // matches the page-miss request clipId
+  path: 'clips/long-take.f32',
+  numChannels: 2,
+  numSamples: totalFrames,
+  pageFrames: 65536,
+});
+engine.setClips([{ clipId: 1, /* ...timing... */ pageProvider: take.provider }]);
+
+// Drain misses on a control-thread cadence (once per animation frame is typical):
+function tick() {
+  streamer.pump();              // fetch missing pages + read-ahead, evict out-of-window
+  requestAnimationFrame(tick);
+}
+
+// Teardown closes every attached clip's binding:
+streamer.close();
+```
+
+Call `pump()` on the main or control thread only — never the audio thread, since the fetches are asynchronous. Use `addSource`/`removeSource` to attach or drop clips you built providers for yourself.
+
 ## Display waveform peaks
 
 Drawing a clip at an arbitrary zoom does not need every sample — it needs the min/max envelope per screen column. `waveformPeaks(...)` reduces interleaved audio to per-channel min/max **buckets** you can stroke directly:
