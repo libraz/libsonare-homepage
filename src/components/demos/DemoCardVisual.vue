@@ -149,6 +149,33 @@ const fallingNotes = [
       </g>
     </svg>
 
+    <svg v-else-if="visual === 'rack'" viewBox="0 0 220 60" preserveAspectRatio="none">
+      <g class="demo-grid__rack">
+        <rect
+          v-for="(x, i) in [16, 54, 92, 130, 168]"
+          :key="`kn${i}`"
+          :x="x"
+          y="10"
+          width="34"
+          height="34"
+          rx="17"
+          class="demo-grid__rack-knob"
+          :class="{ 'demo-grid__rack-knob--lit': i === 1 || i === 3 }"
+          :style="{ '--d': `${i * 150}ms` }"
+        />
+        <line
+          v-for="(x, i) in [33, 71, 109, 147, 185]"
+          :key="`pt${i}`"
+          :x1="x"
+          y1="27"
+          :x2="x + (i % 2 === 0 ? 6 : -6)"
+          :y2="i % 2 === 0 ? 15 : 39"
+          class="demo-grid__rack-pointer"
+        />
+        <line x1="8" y1="52" x2="212" y2="52" class="demo-grid__rack-rail" />
+      </g>
+    </svg>
+
     <svg v-else viewBox="0 0 220 60" preserveAspectRatio="none">
       <polyline
         class="demo-grid__wave"

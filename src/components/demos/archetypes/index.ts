@@ -22,6 +22,7 @@ export const demoArchetypeComponents = {
   comping: defineAsyncComponent(() => import('./CompingDemo.vue')),
   hpss: defineAsyncComponent(() => import('./HpssDemo.vue')),
   'tempo-grid': defineAsyncComponent(() => import('./TempoGridDemo.vue')),
+  'instrument-audition': defineAsyncComponent(() => import('./InstrumentAuditionDemo.vue')),
 } satisfies Record<DemoArchetype, ReturnType<typeof defineAsyncComponent>>;
 
 export function implementedDemoArchetypes(): DemoArchetype[] {

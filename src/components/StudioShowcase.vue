@@ -30,9 +30,28 @@ const CHIPS = ['MULTI-TRACK', 'PIANO ROLL', 'SCORE', 'MIXER', 'MASTERING', 'EXPO
  * an accent tint. Purely visual — the whole panel is aria-hidden.
  */
 const LANES: Array<{ tone: 'a' | 'b' | 'c'; clips: Array<[number, number]> }> = [
-  { tone: 'a', clips: [[3, 24], [31, 41]] },
-  { tone: 'b', clips: [[9, 30], [45, 30]] },
-  { tone: 'a', clips: [[3, 13], [20, 19], [44, 35]] },
+  {
+    tone: 'a',
+    clips: [
+      [3, 24],
+      [31, 41],
+    ],
+  },
+  {
+    tone: 'b',
+    clips: [
+      [9, 30],
+      [45, 30],
+    ],
+  },
+  {
+    tone: 'a',
+    clips: [
+      [3, 13],
+      [20, 19],
+      [44, 35],
+    ],
+  },
   { tone: 'c', clips: [[28, 47]] },
 ];
 

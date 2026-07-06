@@ -398,4 +398,74 @@ export const instrumentsDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'gm-sfx',
+    archetype: 'instrument-audition',
+    config: { mode: 'gm-program' },
+    // Source is unused for this archetype (the engine renders the program); the
+    // schema requires one, and noise matches the Sound-Effects family's character.
+    source: { kind: 'generate', signal: 'noise' },
+    viz: 'waveform',
+    title: {
+      en: 'GM Sound-Effects — the data-free fallback',
+      ja: 'GM サウンドエフェクト — データ非依存フォールバック',
+    },
+    caption: {
+      en: 'Audition the built-in fallback for the General MIDI Sound-Effects family (programs 120–127), rendered with no SoundFont loaded. In the current build these eight programs share one generic noise-based placeholder voice — so they sound alike on purpose; per-effect modeling is future work. Load a SoundFont that supplies real effect samples and those addresses play its sounds instead. Press play to hear the current data-free fallback.',
+      ja: 'General MIDI のサウンドエフェクト・ファミリー（プログラム120〜127）の内蔵フォールバックを、SoundFont を読み込まずに試聴します。現在のビルドでは、これら8つのプログラムは共通の汎用ノイズ系プレースホルダー音色を共有しており、あえて似た音になります（効果音ごとの個別モデル化は今後の対応です）。実際の効果音サンプルを持つ SoundFont を読み込めば、これらのアドレスはそのサンプルを鳴らします。再生で現在のデータ非依存フォールバックを聴けます。',
+    },
+    params: [
+      {
+        key: 'variant',
+        kind: 'select',
+        default: '120',
+        label: { en: 'Program', ja: 'プログラム' },
+        options: [
+          { value: '120', label: { en: '120 Guitar Fret Noise', ja: '120 ギターフレットノイズ' } },
+          { value: '121', label: { en: '121 Breath Noise', ja: '121 ブレスノイズ' } },
+          { value: '122', label: { en: '122 Seashore', ja: '122 波の音' } },
+          { value: '123', label: { en: '123 Bird Tweet', ja: '123 鳥のさえずり' } },
+          { value: '124', label: { en: '124 Telephone Ring', ja: '124 電話のベル' } },
+          { value: '125', label: { en: '125 Helicopter', ja: '125 ヘリコプター' } },
+          { value: '126', label: { en: '126 Applause', ja: '126 拍手' } },
+          { value: '127', label: { en: '127 Gunshot', ja: '127 銃声' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'gs-efx',
+    archetype: 'instrument-audition',
+    config: { mode: 'gs-efx' },
+    // Source is unused (the engine renders a live chord through the EFX); the
+    // schema requires one.
+    source: { kind: 'generate', signal: 'saw', freq: 196 },
+    viz: 'waveform',
+    title: {
+      en: 'GS insertion effects (EFX) — hear each one',
+      ja: 'GS 挿入エフェクト（EFX） — 一つずつ聴く',
+    },
+    caption: {
+      en: "The same held chord, rendered through the GS-compatible player with one insertion effect (EFX) switched in. Pick an effect and hear how it reshapes the tone — overdrive adds grit, rotary swirls, a phaser sweeps, delay repeats. These are libsonare's own DSP algorithms, reconstructed from publicly documented information and mapped to the GS EFX numbering: they follow the same addressing, not the exact sound of any hardware, so treat them as an independent re-creation rather than a 1:1 match. Each buffer is level-matched so you compare character, not loudness. Switch to Dry for the untouched reference.",
+      ja: '同じ持続和音を、GS 互換プレーヤーで、挿入エフェクト（EFX）を1つ挿して鳴らします。エフェクトを選ぶと音色がどう変わるかを聴けます — オーバードライブは歪みを、ロータリーは回転する揺れを、フェイザーはうねりを、ディレイは繰り返しを加えます。これらは公開情報をもとに再構成した libsonare 独自の DSP アルゴリズムで、GS の EFX 番号体系に対応づけています。同じアドレス指定に従うだけで、特定ハードウェアの音そのものではありません。1:1 の再現ではなく独立した再構成として捉えてください。各バッファは音量を揃えてあるので、大きさではなく質感を比較できます。「ドライ」で元の音と比べられます。',
+    },
+    params: [
+      {
+        key: 'variant',
+        kind: 'select',
+        default: '272',
+        label: { en: 'Effect', ja: 'エフェクト' },
+        options: [
+          { value: '0', label: { en: 'Dry (no effect)', ja: 'ドライ（無効果）' } },
+          { value: '272', label: { en: 'Overdrive', ja: 'オーバードライブ' } },
+          { value: '273', label: { en: 'Distortion', ja: 'ディストーション' } },
+          { value: '288', label: { en: 'Phaser', ja: 'フェイザー' } },
+          { value: '289', label: { en: 'Auto Wah', ja: 'オートワウ' } },
+          { value: '290', label: { en: 'Rotary', ja: 'ロータリー' } },
+          { value: '322', label: { en: 'Stereo Chorus', ja: 'ステレオコーラス' } },
+          { value: '336', label: { en: 'Stereo Delay', ja: 'ステレオディレイ' } },
+        ],
+      },
+    ],
+  },
 ];

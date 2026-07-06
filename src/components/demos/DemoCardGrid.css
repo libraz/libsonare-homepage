@@ -304,6 +304,30 @@ html:not(.dark) .demo-grid__fader-cap {
   animation: demo-grid-wave 2.2s ease-in-out infinite;
 }
 
+/* Tuner rack knobs */
+.demo-grid__rack-knob {
+  fill: var(--demo-control-bg, rgba(139, 92, 246, 0.06));
+  stroke: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));
+  stroke-width: 1.2;
+}
+
+.demo-grid__rack-knob--lit {
+  fill: var(--demo-accent-subtle, rgba(139, 92, 246, 0.12));
+  stroke: var(--demo-accent, #8B5CF6);
+}
+
+.demo-grid__rack-pointer {
+  stroke: var(--demo-accent, #8B5CF6);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+.demo-grid__rack-rail {
+  stroke: var(--demo-border-strong, rgba(139, 92, 246, 0.2));
+  stroke-width: 1;
+}
+
 /* Room 3D */
 .demo-grid__room-floor {
   fill: var(--demo-accent-subtle, rgba(139, 92, 246, 0.08));

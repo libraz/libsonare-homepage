@@ -41,6 +41,7 @@ export type DemoLocale = string;
  * - `comping`      — three takes → per-segment take selection → assembled comp lane + audition
  * - `hpss`         — mix → harmonic/percussive separation → switchable spectrogram + per-layer audition
  * - `tempo-grid`   — BPM + beats-per-bar → bar/beat grid over a fixed seconds axis + metronome audition
+ * - `instrument-audition` — pick a variant (GM program, or a GS insertion effect over one phrase) → data-free fallback render → envelope/scope + audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -62,7 +63,8 @@ export type DemoArchetype =
   | 'mono-fold'
   | 'comping'
   | 'hpss'
-  | 'tempo-grid';
+  | 'tempo-grid'
+  | 'instrument-audition';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';

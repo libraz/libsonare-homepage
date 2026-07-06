@@ -55,15 +55,24 @@ function fillPct(p: ParamDef): string {
 
 <template>
   <div class="dc">
-    <div v-for="p in params" :key="p.key" class="dc__field" :class="`dc__field--${p.kind}`">
+    <div
+      v-for="p in params"
+      :key="p.key"
+      class="dc__field"
+      :class="[
+        `dc__field--${p.kind}`,
+        { 'dc__field--wide': p.kind === 'select' && (p.options?.length ?? 0) > 5 },
+      ]"
+    >
       <span :id="`${controlsId}-${p.key}-label`" class="dc__label">
         {{ localized(p.label, locale) }}
       </span>
 
-      <!-- select → segmented control -->
+      <!-- select → segmented control (pill for a few options, equal-width chip grid for many) -->
       <div
         v-if="p.kind === 'select'"
         class="dc__seg"
+        :class="{ 'dc__seg--grid': (p.options?.length ?? 0) > 5 }"
         role="group"
         :aria-labelledby="`${controlsId}-${p.key}-label`"
       >
@@ -125,6 +134,9 @@ function fillPct(p: ParamDef): string {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3) var(--space-5);
+  /* Fill the params column so a full-width field (the chip grid) resolves its
+     100% basis against the real width instead of collapsing to one column. */
+  width: 100%;
 }
 .dc__field {
   display: flex;
@@ -162,8 +174,9 @@ function fillPct(p: ParamDef): string {
   letter-spacing: 0.02em;
   color: var(--color-text-secondary);
   background: transparent;
+  white-space: nowrap;
   transition: color var(--transition-fast), background var(--transition-fast),
-    box-shadow var(--transition-fast);
+    border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .dc__seg-btn:hover:not(:disabled) {
   color: var(--color-text-primary);
@@ -176,6 +189,52 @@ function fillPct(p: ParamDef): string {
 .dc__seg-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Many/long options don't fit a single pill row, so switch to an equal-width
+   chip grid that wraps: every chip shares a column width (polished next to
+   native segmented controls), labels stay legible on one or two lines, and the
+   active chip is a filled rectangle instead of collapsing into a circle. */
+.dc__field--wide {
+  flex: 1 1 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.dc__seg--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+.dc__seg--grid .dc__seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 8px;
+  min-height: 2.75rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md, 10px);
+  background: var(--vp-c-bg);
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.dc__seg--grid .dc__seg-btn:hover:not(:disabled):not(.is-on) {
+  color: var(--color-text-primary);
+  border-color: color-mix(in srgb, var(--color-brand) 40%, var(--color-border-default));
+}
+.dc__seg--grid .dc__seg-btn.is-on {
+  /* Re-assert the active fill: the grid's base rule sets a light background at
+     the same specificity as `.dc__seg-btn.is-on`, so it must be restored here
+     (higher specificity) or the white label lands on a light chip. */
+  color: #fff;
+  background: linear-gradient(150deg, var(--color-brand-light), var(--color-brand-dark));
+  border-color: transparent;
 }
 
 /* ── range slider ──────────────────────────────────────────────────────── */
