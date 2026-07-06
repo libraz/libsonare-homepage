@@ -37,6 +37,8 @@ Widening adds spaciousness, but it can create [mono compatibility](../concepts/m
 
 Narrowing tightens focus and improves mono robustness. Width belongs late in the strip, after pan, so it acts on the already placed signal.
 
+<SonareDemo id="mono-fold" />
+
 ::: details How libsonare models pan and width
 Pan is a `PannerProcessor` configured by `PanMode` (true pan / balance / independent) and `PanLaw` (center attenuation), placed after the fader in the strip. Stereo width is a `StereoWidthProcessor` operating on the mid/side representation, late in the signal order so it acts on the panned signal. Both are parameter-smoothed for click-free moves and write to the post-fader `GoniometerBuffer` so the resulting image can be metered. The placement matches the fixed strip order described in [Channel Strip](./channel-strip.md).
 :::

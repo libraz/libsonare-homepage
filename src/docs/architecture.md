@@ -44,20 +44,24 @@ class list — see the Page Map for where each subsystem's full API is documente
     { id: 'editFx', label: 'Normalize · Silence Trim · Pre/De-emphasis', col: 1, row: 3, group: 'effects' },
     { id: 'creativeFx', label: 'Decompose · Reverbs · Creative FX', col: 2, row: 3, group: 'effects' },
     { id: 'roomFx', label: 'Room Morph · Voice Change', col: 3, row: 3, group: 'effects' },
-    { id: 'masterChain', label: 'MasteringChain', col: 0, row: 4, group: 'mastering', variant: 'accent' },
-    { id: 'streamMaster', label: 'StreamingMasteringChain / EQ', col: 1, row: 4, group: 'mastering' },
-    { id: 'mixerEngine', label: 'Mixer (strips/buses/sends)', col: 2, row: 4, group: 'mastering' },
-    { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 4, group: 'mastering' },
-    { id: 'metering', label: 'Metering (LUFS/true-peak)', col: 4, row: 4, group: 'mastering' },
-    { id: 'specFeatures', label: 'Mel · Chroma · CQT/VQT', col: 0, row: 5, group: 'feature', variant: 'accent' },
-    { id: 'otherFeatures', label: 'Spectral · Onset · Pitch', col: 1, row: 5, group: 'feature' },
-    { id: 'inverseFeatures', label: 'Inverse Features (reconstruction)', col: 2, row: 5, group: 'feature' },
-    { id: 'audio', label: 'Audio', col: 0, row: 6, group: 'core' },
-    { id: 'spectrum', label: 'Spectrogram (STFT/iSTFT)', col: 1, row: 6, group: 'core', variant: 'accent' },
-    { id: 'primitives', label: 'FFT · Window · Resample · I-O', col: 2, row: 6, group: 'core' },
-    { id: 'roomModel', label: 'Room Model', col: 0, row: 7, group: 'acoustic-sim' },
-    { id: 'rir', label: 'RIR Synthesizer', col: 1, row: 7, group: 'acoustic-sim' },
-    { id: 'materials', label: 'Material Presets', col: 2, row: 7, group: 'acoustic-sim' }
+    { id: 'nativeSynth', label: 'NativeSynth (15 engines)', col: 0, row: 4, group: 'instruments', variant: 'accent' },
+    { id: 'soundfont', label: 'SoundFont Player (SF2)', col: 1, row: 4, group: 'instruments' },
+    { id: 'midiSeq', label: 'MIDI · Sequencer · SMF/UMP', col: 2, row: 4, group: 'instruments' },
+    { id: 'instrumentRack', label: 'Instrument Rack', col: 3, row: 4, group: 'instruments' },
+    { id: 'masterChain', label: 'MasteringChain', col: 0, row: 5, group: 'mastering', variant: 'accent' },
+    { id: 'streamMaster', label: 'StreamingMasteringChain / EQ', col: 1, row: 5, group: 'mastering' },
+    { id: 'mixerEngine', label: 'Mixer (strips/buses/sends)', col: 2, row: 5, group: 'mastering' },
+    { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 5, group: 'mastering' },
+    { id: 'metering', label: 'Metering (LUFS/true-peak)', col: 4, row: 5, group: 'mastering' },
+    { id: 'specFeatures', label: 'Mel · Chroma · CQT/VQT', col: 0, row: 6, group: 'feature', variant: 'accent' },
+    { id: 'otherFeatures', label: 'Spectral · Onset · Pitch', col: 1, row: 6, group: 'feature' },
+    { id: 'inverseFeatures', label: 'Inverse Features (reconstruction)', col: 2, row: 6, group: 'feature' },
+    { id: 'audio', label: 'Audio', col: 0, row: 7, group: 'core' },
+    { id: 'spectrum', label: 'Spectrogram (STFT/iSTFT)', col: 1, row: 7, group: 'core', variant: 'accent' },
+    { id: 'primitives', label: 'FFT · Window · Resample · I-O', col: 2, row: 7, group: 'core' },
+    { id: 'roomModel', label: 'Room Model', col: 0, row: 8, group: 'acoustic-sim' },
+    { id: 'rir', label: 'RIR Synthesizer', col: 1, row: 8, group: 'acoustic-sim' },
+    { id: 'materials', label: 'Material Presets', col: 2, row: 8, group: 'acoustic-sim' }
   ]"
   :edges="[
     { from: 'wasm', to: 'stream' },
@@ -78,6 +82,10 @@ class list — see the Page Map for where each subsystem's full API is documente
     { from: 'creativeFx', to: 'rir' },
     { from: 'roomFx', to: 'spectralFx' },
     { from: 'roomFx', to: 'rir' },
+    { from: 'midiSeq', to: 'nativeSynth' },
+    { from: 'nativeSynth', to: 'instrumentRack' },
+    { from: 'soundfont', to: 'instrumentRack' },
+    { from: 'instrumentRack', to: 'mixerEngine' },
     { from: 'streamMaster', to: 'masterChain' },
     { from: 'masterChain', to: 'spectrum' },
     { from: 'mixerEngine', to: 'metering' },
@@ -97,6 +105,7 @@ class list — see the Page Map for where each subsystem's full API is documente
     { id: 'streaming', label: 'Streaming Layer' },
     { id: 'analysis', label: 'Analysis Layer' },
     { id: 'effects', label: 'Effects Layer' },
+    { id: 'instruments', label: 'Instruments & MIDI' },
     { id: 'mastering', label: 'Mastering & Mixing' },
     { id: 'feature', label: 'Feature Layer' },
     { id: 'core', label: 'Core Layer' },
@@ -115,6 +124,9 @@ class list — see the Page Map for where each subsystem's full API is documente
 | `mastering/` | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Mastering Assistant](./mastering-assistant.md) |
 | `mixing/` | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [Realtime and Streaming](./realtime-streaming.md), especially `RealtimeEngine` |
+| `midi/` and `midi/synth/` | [Native Synth](./native-synth.md), [SoundFont Player](./soundfont-player.md), [MIDI Input](./midi-input.md) |
+| `arrangement/` (edit model) | [Project Editing](./project-editing.md), [Recording and Takes](./recording-and-takes.md), [Project Bounce](./project-bounce.md) |
+| `mir/` (warp, grid snap, key context) | [Warp and Tempo](./glossary/arrangement/warp-and-tempo.md), [Realtime and Streaming](./realtime-streaming.md) |
 | `editing/` and `effects/` | [Editing DSP](./editing-dsp.md), [DSP Implementation Notes](./dsp-implementation.md#effects-and-editing-dsp) |
 | `sonare_c*.h` and binding folders | [Binding Parity](./binding-parity.md), [Native Bindings](./native-bindings.md), [C++ API](./cpp-api.md) |
 
@@ -207,15 +219,28 @@ src/
 │   ├── bus.* sends.* vca_group.* panner.*
 │   └── api/            # Scene JSON + scene presets
 │
-├── engine/             # Realtime engine (transport/clips/graph)
+├── midi/               # MIDI I-O and the built-in instruments
+│   ├── synth/          # NativeSynth voices + SoundFont player
+│   │   ├── native_synth.*      # 12 physical models + subtractive/FM/additive
+│   │   ├── ks_/piano_/pipe_organ_/bowed_string_/reed_/brass_/flute_/... voice.*
+│   │   ├── sf2_player.* sf2_file.* sf2_voice.*   # SoundFont (SF2) playback
+│   │   └── synth_presets.* gm_fallback_map.* gs_layer.* gs_effects.*
+│   ├── sequencer.* smf.* smf2.* ump.*   # Sequencer, SMF and MIDI 2.0 (UMP)
+│   └── program_map.* cc_map.* midi_fx.* routing.*
+│
+├── arrangement/        # Non-destructive edit model, edit compiler, edit history
+├── engine/             # Realtime engine: transport, clips, instrument rack, track mixer, metronome, telemetry
 ├── automation/         # Automation lanes + curve shapes
 ├── metering/           # LUFS, true-peak, phase scope/goniometer
+├── mir/                # Warp, grid snap, key context, tempo estimator bridge
 ├── graph/  rt/  transport/   # DSP graph, RT-safe primitives, transport
 ├── editing/            # Pitch editor, voice changer, note stretch
+├── serialize/          # Project (de)serialization
+├── host/               # Audio-device / MIDI-I-O / plugin-host backends (native only)
 │
 ├── quick.h             # Simple function API
 ├── sonare.h            # Unified include header
-├── sonare_c*.h         # C API aggregate and module headers
+├── c_api/              # C API implementation (public headers in include/sonare/sonare_c*.h)
 └── wasm/
     └── bindings.cpp    # Embind bindings
 ```

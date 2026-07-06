@@ -34,6 +34,8 @@ A send taps either **before** the fader or **after** it, and this is the routing
 | Pre-fader | No | Headphone/cue mixes, effects that should stay constant while you ride the fader |
 | Post-fader | Yes | Reverb/delay that should stay proportional to the balance |
 
+<SonareDemo id="pre-post-fader" />
+
 ## VCA groups vs submixes
 
 A **submix** re-routes audio: the grouped tracks actually flow through the submix bus. A **VCA group** does not — it is a single fader that trims several tracks' levels at once *without* changing where their audio goes. Use a VCA when the parts must still reach different buses but you want one hand on their combined level.

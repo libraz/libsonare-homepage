@@ -39,20 +39,24 @@ libsonare の内部アーキテクチャについて説明します。
     { id: 'editFx', label: 'ノーマライズ・無音トリム・プリ／ディエンファシス', col: 1, row: 3, group: 'effects' },
     { id: 'creativeFx', label: '分解・リバーブ・クリエイティブ FX', col: 2, row: 3, group: 'effects' },
     { id: 'roomFx', label: 'Room Morph・ボイス変換', col: 3, row: 3, group: 'effects' },
-    { id: 'masterChain', label: 'MasteringChain', col: 0, row: 4, group: 'mastering', variant: 'accent' },
-    { id: 'streamMaster', label: 'StreamingMasteringChain / EQ', col: 1, row: 4, group: 'mastering' },
-    { id: 'mixerEngine', label: 'Mixer（ストリップ／バス／センド）', col: 2, row: 4, group: 'mastering' },
-    { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 4, group: 'mastering' },
-    { id: 'metering', label: 'メータリング（LUFS/トゥルーピーク）', col: 4, row: 4, group: 'mastering' },
-    { id: 'specFeatures', label: 'Mel・Chroma・CQT/VQT', col: 0, row: 5, group: 'feature', variant: 'accent' },
-    { id: 'otherFeatures', label: 'スペクトル・オンセット・ピッチ', col: 1, row: 5, group: 'feature' },
-    { id: 'inverseFeatures', label: '逆変換特徴量（再構成）', col: 2, row: 5, group: 'feature' },
-    { id: 'audio', label: 'Audio', col: 0, row: 6, group: 'core' },
-    { id: 'spectrum', label: 'Spectrogram（STFT/iSTFT）', col: 1, row: 6, group: 'core', variant: 'accent' },
-    { id: 'primitives', label: 'FFT・窓関数・リサンプリング・I/O', col: 2, row: 6, group: 'core' },
-    { id: 'roomModel', label: 'Room Model', col: 0, row: 7, group: 'acoustic-sim' },
-    { id: 'rir', label: 'RIR Synthesizer', col: 1, row: 7, group: 'acoustic-sim' },
-    { id: 'materials', label: 'Material Presets', col: 2, row: 7, group: 'acoustic-sim' }
+    { id: 'nativeSynth', label: 'NativeSynth（15 エンジン）', col: 0, row: 4, group: 'instruments', variant: 'accent' },
+    { id: 'soundfont', label: 'SoundFont プレーヤー（SF2）', col: 1, row: 4, group: 'instruments' },
+    { id: 'midiSeq', label: 'MIDI・シーケンサー・SMF/UMP', col: 2, row: 4, group: 'instruments' },
+    { id: 'instrumentRack', label: 'インストゥルメントラック', col: 3, row: 4, group: 'instruments' },
+    { id: 'masterChain', label: 'MasteringChain', col: 0, row: 5, group: 'mastering', variant: 'accent' },
+    { id: 'streamMaster', label: 'StreamingMasteringChain / EQ', col: 1, row: 5, group: 'mastering' },
+    { id: 'mixerEngine', label: 'Mixer（ストリップ／バス／センド）', col: 2, row: 5, group: 'mastering' },
+    { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 5, group: 'mastering' },
+    { id: 'metering', label: 'メータリング（LUFS/トゥルーピーク）', col: 4, row: 5, group: 'mastering' },
+    { id: 'specFeatures', label: 'Mel・Chroma・CQT/VQT', col: 0, row: 6, group: 'feature', variant: 'accent' },
+    { id: 'otherFeatures', label: 'スペクトル・オンセット・ピッチ', col: 1, row: 6, group: 'feature' },
+    { id: 'inverseFeatures', label: '逆変換特徴量（再構成）', col: 2, row: 6, group: 'feature' },
+    { id: 'audio', label: 'Audio', col: 0, row: 7, group: 'core' },
+    { id: 'spectrum', label: 'Spectrogram（STFT/iSTFT）', col: 1, row: 7, group: 'core', variant: 'accent' },
+    { id: 'primitives', label: 'FFT・窓関数・リサンプリング・I/O', col: 2, row: 7, group: 'core' },
+    { id: 'roomModel', label: 'Room Model', col: 0, row: 8, group: 'acoustic-sim' },
+    { id: 'rir', label: 'RIR Synthesizer', col: 1, row: 8, group: 'acoustic-sim' },
+    { id: 'materials', label: 'Material Presets', col: 2, row: 8, group: 'acoustic-sim' }
   ]"
   :edges="[
     { from: 'wasm', to: 'stream' },
@@ -73,6 +77,10 @@ libsonare の内部アーキテクチャについて説明します。
     { from: 'creativeFx', to: 'rir' },
     { from: 'roomFx', to: 'spectralFx' },
     { from: 'roomFx', to: 'rir' },
+    { from: 'midiSeq', to: 'nativeSynth' },
+    { from: 'nativeSynth', to: 'instrumentRack' },
+    { from: 'soundfont', to: 'instrumentRack' },
+    { from: 'instrumentRack', to: 'mixerEngine' },
     { from: 'streamMaster', to: 'masterChain' },
     { from: 'masterChain', to: 'spectrum' },
     { from: 'mixerEngine', to: 'metering' },
@@ -92,6 +100,7 @@ libsonare の内部アーキテクチャについて説明します。
     { id: 'streaming', label: 'ストリーミングレイヤー' },
     { id: 'analysis', label: '解析レイヤー' },
     { id: 'effects', label: 'エフェクトレイヤー' },
+    { id: 'instruments', label: 'インストゥルメント＆MIDI' },
     { id: 'mastering', label: 'マスタリング＆ミキシング' },
     { id: 'feature', label: '特徴レイヤー' },
     { id: 'core', label: 'コアレイヤー' },
@@ -110,6 +119,9 @@ libsonare の内部アーキテクチャについて説明します。
 | `mastering/` | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[マスタリングアシスタント](./mastering-assistant.md) |
 | `mixing/` | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
 | `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [リアルタイムとストリーミング](./realtime-streaming.md)、特に `RealtimeEngine` |
+| `midi/` と `midi/synth/` | [ネイティブシンセ](./native-synth.md)、[SoundFont プレーヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
+| `arrangement/`（編集モデル） | [プロジェクト編集](./project-editing.md)、[録音とテイク](./recording-and-takes.md)、[プロジェクトバウンス](./project-bounce.md) |
+| `mir/`（ワープ・グリッドスナップ・キーコンテキスト） | [ワープとテンポ](./glossary/arrangement/warp-and-tempo.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | `editing/` と `effects/` | [編集 DSP](./editing-dsp.md)、[DSP 実装解説](./dsp-implementation.md#エフェクトと編集-dsp) |
 | `sonare_c*.h` と binding フォルダ | [バインディング対応表](./binding-parity.md)、[ネイティブバインディング](./native-bindings.md)、[C++ API](./cpp-api.md) |
 
@@ -202,15 +214,28 @@ src/
 │   ├── bus.* sends.* vca_group.* panner.*
 │   └── api/            # シーン JSON ＋シーンプリセット
 │
-├── engine/             # リアルタイムエンジン（トランスポート/クリップ/グラフ）
+├── midi/               # MIDI 入出力と内蔵インストゥルメント
+│   ├── synth/          # NativeSynth のボイス群＋SoundFont プレーヤー
+│   │   ├── native_synth.*      # 12 物理モデル＋サブトラクティブ/FM/アディティブ
+│   │   ├── ks_/piano_/pipe_organ_/bowed_string_/reed_/brass_/flute_/... voice.*
+│   │   ├── sf2_player.* sf2_file.* sf2_voice.*   # SoundFont（SF2）再生
+│   │   └── synth_presets.* gm_fallback_map.* gs_layer.* gs_effects.*
+│   ├── sequencer.* smf.* smf2.* ump.*   # シーケンサー・SMF・MIDI 2.0（UMP）
+│   └── program_map.* cc_map.* midi_fx.* routing.*
+│
+├── arrangement/        # 非破壊の編集モデル・編集コンパイラ・編集履歴
+├── engine/             # リアルタイムエンジン: トランスポート・クリップ・インストゥルメントラック・トラックミキサー・メトロノーム・テレメトリ
 ├── automation/         # オートメーションレーン＋カーブ形状
 ├── metering/           # LUFS・トゥルーピーク・位相スコープ/ゴニオメーター
+├── mir/                # ワープ・グリッドスナップ・キーコンテキスト・テンポ推定ブリッジ
 ├── graph/  rt/  transport/   # DSP グラフ・RT セーフ基盤・トランスポート
 ├── editing/            # ピッチエディター・ボイスチェンジャー・ノートストレッチ
+├── serialize/          # プロジェクトの直列化／復元
+├── host/               # オーディオデバイス／MIDI 入出力／プラグインホストのバックエンド（ネイティブのみ）
 │
 ├── quick.h             # シンプル関数 API
 ├── sonare.h            # 統合インクルードヘッダー
-├── sonare_c*.h         # C API 集約・モジュール別ヘッダー
+├── c_api/              # C API 実装（公開ヘッダーは include/sonare/sonare_c*.h）
 └── wasm/
     └── bindings.cpp    # Embind バインディング
 ```
