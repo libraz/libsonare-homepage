@@ -169,9 +169,9 @@ Useful options:
 | `--use-hpss` | Analyze harmonic content for cleaner key detection on drum-heavy material |
 | `--loudness-weighted` | Weight chroma frames by RMS so quieter passages contribute less |
 | `--high-pass-hz FREQ` | Ignore low-frequency energy before key analysis |
-| `--modes major-minor\|all\|...` | Limit candidate modes |
-| `--profile ks\|krumhansl\|temperley\|shaath\|keyfinder\|faraldo-edmt\|edmt\|faraldo-edma\|edma\|faraldo-edmm\|edmm\|bellman-budge\|bellman` | Choose the key-profile family |
-| `--genre-hint auto\|edm\|electronic\|dance\|pop\|classical\|jazz` | Let the CLI choose a profile from a genre hint |
+| `--modes NAME` | Limit candidate modes |
+| `--profile NAME` | Choose the key-profile family |
+| `--genre-hint HINT` | Let the CLI choose a profile from a genre hint |
 
 ::: details What are key profiles, genre hints, and `--high-pass-hz`?
 - **Key profile** — a template of how prominent each of the 12 pitch classes tends to be in a given key. The detector compares your song's chroma against these templates and picks the best match. Different families (`ks` / `krumhansl`, `temperley`, `shaath` / `keyfinder`, the Faraldo EDM profiles, `bellman` / `bellman-budge`) were tuned on different material, so one may fit your genre better than another.

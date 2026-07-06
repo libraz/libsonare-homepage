@@ -1112,9 +1112,11 @@ Several helper families also have sample-based C ABI entry points:
 | Family | Examples |
 |--------|----------|
 | Effects | `sonare_hpss`, `sonare_time_stretch`, `sonare_phase_vocoder`, `sonare_pitch_shift`, `sonare_spectral_edit`, `sonare_normalize`, `sonare_trim` |
-| Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_chroma`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
+| Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_mfcc_ex`, `sonare_chroma`, `sonare_chroma_cqt`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
 | Geometric room acoustics | `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
 | Conversions and resampling | See `src/sonare_c.h` for the full list |
+
+`sonare_chroma_cqt` computes a constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) alongside the note-activation `sonare_chroma`. The explicit-range MFCC entry point `sonare_mfcc_ex` (fmin/fmax/htk) also carries a trailing cepstral `lifter` argument (`0` disables liftering).
 
 Project editing lives in `sonare_c_project.h`. `sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` accepts the optional equal-power seam crossfade as the final argument. It must be finite and non-negative; `0` keeps a hard loop. The engine clamps it to the available pre-roll and half the loop, and ignores it under warp.
 

@@ -28,14 +28,24 @@ This is exactly the addressing scheme [MIDI](./midi-basics.md) uses for Program 
 
 Because a SoundFont is addressed by `(bank, program)`, a **General MIDI**-compliant `.sf2` lines its programs up with the GM map: program 0 is an acoustic grand piano, 24 a nylon-string guitar, 40 a violin, and so on across all 128 GM instruments. Percussion lives in a separate **drum bank**, where each *note number* selects a different drum or cymbal rather than a pitch — matching MIDI's channel-10 drum convention.
 
-```mermaid
-flowchart LR
-  MIDI["MIDI note<br/>+ channel"] --> ADDR["(bank, program)"]
-  ADDR --> SF2["SoundFont sample<br/>(if present)"]
-  ADDR --> SYN["NativeSynth GM<br/>fallback (if missing)"]
-  SF2 --> OUT["Audio"]
-  SYN --> OUT
-```
+<FlowDiagram
+  title="Note resolution"
+  :nodes="[
+    { id: 'midi', label: 'MIDI note + channel', col: 0, row: 0 },
+    { id: 'addr', label: '(bank, program) lookup', col: 1, row: 0, variant: 'decision' },
+    { id: 'sf2', label: 'SoundFont sample', col: 2, row: 0, variant: 'success' },
+    { id: 'syn', label: 'NativeSynth GM fallback', col: 2, row: 1, variant: 'error' },
+    { id: 'out', label: 'Audio', col: 3, row: 0 }
+  ]"
+  :edges="[
+    { from: 'midi', to: 'addr' },
+    { from: 'addr', to: 'sf2', label: 'present' },
+    { from: 'addr', to: 'syn', label: 'missing', style: 'dashed' },
+    { from: 'sf2', to: 'out' },
+    { from: 'syn', to: 'out', style: 'dashed' }
+  ]"
+  caption="Every program resolves to a backend — the SF2 sample when the loaded SoundFont covers it, otherwise the NativeSynth GM fallback — so a note is never dropped."
+/>
 
 The principle underneath is simple: a note list is instrument-agnostic, and the address decides which instrument performs it. The piano roll below makes that tangible — the notes never change; switching the instrument points the same MIDI at a different sound.
 

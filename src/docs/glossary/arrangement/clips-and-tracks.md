@@ -24,18 +24,34 @@ Inside each track are **clips**. A clip is one block of content placed at a spec
 
 <SonareDemo id="engine-lane-mixer" />
 
-```mermaid
-graph TD
-  P[Project] --> T1[Audio track: Vocals]
-  P --> T2[Audio track: Drums]
-  P --> T3[MIDI track: Bass]
-  T1 --> C1[Clip: verse vocal]
-  T1 --> C2[Clip: chorus vocal]
-  T2 --> C3[Clip: drum loop]
-  T3 --> C4[Clip: bass line]
-  T3 --> D[MIDI destination]
-  D --> I[Instrument: NativeSynth / SoundFont]
-```
+<FlowDiagram
+  title="Project → tracks → clips → instrument"
+  direction="TB"
+  :nodes="[
+    { id: 'project', label: 'Project', col: 1, row: 0, variant: 'accent' },
+    { id: 'vocals', label: 'Audio track: Vocals', col: 0, row: 1 },
+    { id: 'drums', label: 'Audio track: Drums', col: 2, row: 1 },
+    { id: 'bass', label: 'MIDI track: Bass', col: 3, row: 1 },
+    { id: 'clipVerse', label: 'Clip: verse vocal', col: 0, row: 2 },
+    { id: 'clipChorus', label: 'Clip: chorus vocal', col: 1, row: 2 },
+    { id: 'clipDrum', label: 'Clip: drum loop', col: 2, row: 2 },
+    { id: 'clipBass', label: 'Clip: bass line', col: 3, row: 2 },
+    { id: 'destination', label: 'MIDI destination', col: 3, row: 3, variant: 'accent' },
+    { id: 'instrument', label: 'Instrument: NativeSynth / SoundFont', col: 3, row: 4, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'project', to: 'vocals' },
+    { from: 'project', to: 'drums' },
+    { from: 'project', to: 'bass' },
+    { from: 'vocals', to: 'clipVerse' },
+    { from: 'vocals', to: 'clipChorus' },
+    { from: 'drums', to: 'clipDrum' },
+    { from: 'bass', to: 'clipBass' },
+    { from: 'bass', to: 'destination', label: 'routes to' },
+    { from: 'destination', to: 'instrument', label: 'renders' }
+  ]"
+  caption="Audio tracks already hold sound and just play. A MIDI track's clips hold notes, so the track separately routes to a destination bound to an instrument, which renders them at bounce time."
+/>
 
 ## Musical time, not seconds
 

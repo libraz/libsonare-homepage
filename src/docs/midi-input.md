@@ -30,20 +30,25 @@ This page is about *playing* the engine from a controller. To bind the instrumen
 
 ## The live MIDI path
 
-The browser receives MIDI bytes, `bindWebMidi` converts them into engine events, and the destination's instrument produces audio during `process(...)`.
+The browser receives MIDI bytes, `bindWebMidi` converts them into engine events, and the destination's instrument produces audio during `process(...)`. Each arrow below is one hop on that path — from raw key press to sample data — and the loop label marks the parts that repeat on every note.
 
-```mermaid
-sequenceDiagram
-  participant K as USB keyboard
-  participant B as bindWebMidi
-  participant E as RealtimeEngine
-  participant I as Instrument on destination 0
-  participant O as Audio output block
-  K->>B: note-on / note-off / CC
-  B->>E: pushMidiInput* with sample timestamp
-  E->>I: route by destination id
-  I->>O: render sound in process()
-```
+<SequenceDiagram
+  title="USB keyboard to audio output"
+  :participants="[
+    { id: 'keyboard', label: 'USB keyboard' },
+    { id: 'bridge', label: 'bindWebMidi' },
+    { id: 'engine', label: 'RealtimeEngine' },
+    { id: 'instrument', label: 'Instrument (dest. 0)' },
+    { id: 'output', label: 'Audio output block' }
+  ]"
+  :messages="[
+    { from: 'keyboard', to: 'bridge', label: 'note-on / note-off / CC', loop: 'per MIDI message' },
+    { from: 'bridge', to: 'engine', label: 'pushMidiInput*(sample timestamp)', loop: 'per MIDI message' },
+    { from: 'engine', to: 'instrument', label: 'route by destination id' },
+    { from: 'instrument', to: 'output', label: 'render in process()' }
+  ]"
+  caption="Everything left of the engine happens once per event; everything right of it happens once per audio block."
+/>
 
 If you hear silence, check the path in this order: browser permission, `bindWebMidi` input list, destination id, bound instrument, then the AudioWorklet/output wiring.
 
@@ -74,6 +79,10 @@ Three instrument kinds can sit on a destination:
 | `setSynthInstrument(patch, destinationId)` | The patch-driven NativeSynth | [Native Synth](./native-synth.md) |
 | `setSf2Instrument(config, destinationId)` | A GS-compatible SoundFont player | [SoundFont Player](./soundfont-player.md) |
 
+::: tip MPE-style expression is a `setBuiltinInstrument` feature
+Only the built-in waveform synth (`setBuiltinInstrument`) offers true MPE-style per-note expression — per-note pitch bend and channel/polyphonic pressure, plus full 16-bit MIDI 2.0 velocity — and its MPE bend range is fixed at ±2 semitones. NativeSynth (`setSynthInstrument`) works per channel instead: an RPN-0-configurable bend range and full-resolution RPN/NRPN and 14-bit CC, but velocity is quantized to 7 bits and per-note pressure is not tracked. See [Native Synth](./native-synth.md) for NativeSynth's per-channel bend and CC details.
+:::
+
 ```typescript
 import { init, RealtimeEngine } from '@libraz/libsonare';
 
@@ -98,12 +107,14 @@ There are two queueing paths, and you should pick one per destination. Rule of t
 
 - **Immediate engine commands** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` each take a `destinationId` and a `renderFrame` (or `-1` for "as soon as possible"). `pushMidiPanic(renderFrame)` takes only the `renderFrame` — it releases every sounding note on *all* destinations at once.
 - **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. This is the lane the Web MIDI bridge feeds for you.
+- **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` queues a full SysEx frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same immediate/schedule convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
 
 ```typescript
 // Immediate path: fire a note at the start of the next block.
 engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
 engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64, -1);
 engine.pushMidiNoteOff(0, 0, 0, 60, 0, -1);
+engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1); // full frame incl. 0xF0/0xF7
 
 // Input-source path (what bindWebMidi uses under the hood):
 engine.setMidiInputSource(0);

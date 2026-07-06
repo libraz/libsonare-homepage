@@ -24,18 +24,33 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
 
 ## レンダリングフロー
 
-```mermaid
-flowchart TD
-  A[ブラウザのファイル入力] --> B[Web Audio でデコード]
-  B --> C[Float32 チャンネルバッファ]
-  C --> D[Mastering worker]
-  D --> E[libsonare WASM]
-  E --> F[ソースのメトリクス]
-  E --> G[プリセットまたはチェーンでレンダリング]
-  G --> H[レンダリング後のメトリクス]
-  H --> I[WAV 書き出し]
-  H --> J[JSON report]
-```
+<FlowDiagram
+  title="レンダリングフロー"
+  :nodes="[
+    { id: 'file', label: '音声ファイル', col: 0, row: 0 },
+    { id: 'decode', label: 'Web Audio でデコード', col: 1, row: 0 },
+    { id: 'buffers', label: 'Float32 バッファ', col: 2, row: 0 },
+    { id: 'worker', label: 'Mastering worker', col: 3, row: 0, variant: 'accent' },
+    { id: 'wasm', label: 'libsonare WASM', col: 4, row: 0, variant: 'accent' },
+    { id: 'srcMetrics', label: 'ソースのメトリクス', col: 5, row: 0 },
+    { id: 'render', label: 'プリセットまたはチェーンでレンダリング', col: 5, row: 1 },
+    { id: 'outMetrics', label: 'レンダリング後のメトリクス', col: 6, row: 1 },
+    { id: 'wav', label: 'WAV 書き出し', col: 7, row: 0, variant: 'success' },
+    { id: 'json', label: 'JSON report', col: 7, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'file', to: 'decode' },
+    { from: 'decode', to: 'buffers' },
+    { from: 'buffers', to: 'worker' },
+    { from: 'worker', to: 'wasm' },
+    { from: 'wasm', to: 'srcMetrics' },
+    { from: 'wasm', to: 'render' },
+    { from: 'render', to: 'outMetrics' },
+    { from: 'outMetrics', to: 'wav' },
+    { from: 'outMetrics', to: 'json' }
+  ]"
+  caption="ソースのメトリクスはデコード後のバッファから一度だけ算出され、レンダリングパスは常に独自のレンダリング後メトリクスを生成します。"
+/>
 
 デコードはブラウザ API で行います。重い DSP が VitePress のページを止めないよう、マスタリング処理は Mastering worker 上で実行します。ワーカーはモノラル／ステレオの `Float32Array` バッファを WASM パッケージへ渡し、レンダリング後のサンプルとメトリクスを受け取って、再生・ダウンロード・JSON report 用のローカル object URL を生成します。
 

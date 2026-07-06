@@ -74,12 +74,23 @@ MIDI ファイルは波形ではなく指示を保存するため、サイズは
 
 ## 全体像
 
-```mermaid
-flowchart LR
-  IN["MIDI ソース<br/>（鍵盤 / ファイル）"] --> MSG["ノートオン／オフ<br/>CC、プログラムチェンジ"]
-  MSG --> INST["楽器<br/>（シンセ or SoundFont）"]
-  INST --> AUD["音声出力"]
-```
+MIDI が演奏と音を切り分けている様子は、一本道のパイプラインとして表れます — ソースがノートとコントローラーのメッセージを送り出し、楽器がそれを解釈し、最後の段階だけが音声を生成します。
+
+<FlowDiagram
+  title="MIDI メッセージの流れ"
+  :nodes="[
+    { id: 'source', label: 'MIDI ソース', col: 0, row: 0 },
+    { id: 'messages', label: 'ノートオン／オフ、CC、プログラムチェンジ', col: 1, row: 0, variant: 'accent' },
+    { id: 'instrument', label: '楽器（シンセ or SoundFont）', col: 2, row: 0 },
+    { id: 'audio', label: '音声出力', col: 3, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'messages' },
+    { from: 'messages', to: 'instrument' },
+    { from: 'instrument', to: 'audio' }
+  ]"
+  caption="ソース（鍵盤 / ファイル）と楽器（シンセ or SoundFont）は入れ替え可能です — 演奏を伝えるのは、あいだのメッセージだけです。"
+/>
 
 ::: details libsonare での実装
 libsonare のリアルタイムエンジンは、ノートを `pushMidiNoteOn(destinationId, group, channel, note, velocity)` と `pushMidiNoteOff(...)` で、コントロールチェンジを `pushMidiCc(destinationId, group, channel, controller, value)` で受け取ります — `destinationId` はどの読み込み済み楽器がイベントを受けるかを選び、`channel` は 0〜15 の MIDI チャンネルです。ブラウザでは Web MIDI ブリッジ（`bindWebMidi`）が、物理 MIDI 鍵盤のイベントをそれらのエンジン入力へ直接つなぎ、ハードウェアコントローラーで NativeSynth や読み込んだ SoundFont をライブ演奏できます。同じノート／CC の語彙は、ライブエンジンとオフラインのアレンジメントバウンスの両方で使われます。

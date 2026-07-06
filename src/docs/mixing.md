@@ -51,22 +51,46 @@ A **channel strip** is one track lane. Understanding the order in which a strip 
 
 libsonare processes each block of a strip in this exact order:
 
-```mermaid
-flowchart TB
-  IN([Strip input]) --> TRIM[Input trim]
-  TRIM --> POL[Polarity invert L/R]
-  POL --> DLY[Channel delay]
-  DLY --> EQ1[EQ * pre-fader default]
-  EQ1 --> PRE[Pre-fader inserts]
-  PRE --> TAP1{{Pre-fader tap}}
-  TAP1 --> FAD[Fader * + VCA offset]
-  FAD --> PAN[Pan * pan law / mode]
-  PAN --> EQ2[EQ if post-fader]
-  EQ2 --> POST[Post-fader inserts]
-  POST --> W[Stereo width]
-  W --> TAP2{{Post-fader tap + goniometer}}
-  TAP2 --> OUT([To bus / master])
-```
+<FlowDiagram
+  title="Channel strip signal flow"
+  direction="LR"
+  :nodes="[
+    { id: 'send1', label: 'Pre-fader send', col: 6, row: -1, variant: 'muted' },
+    { id: 'in', label: 'Strip input', col: 0, row: 0, variant: 'muted' },
+    { id: 'trim', label: 'Input trim', col: 1, row: 0 },
+    { id: 'pol', label: 'Polarity invert', col: 2, row: 0 },
+    { id: 'dly', label: 'Channel delay', col: 3, row: 0 },
+    { id: 'eqPre', label: 'EQ (pre)', col: 4, row: 0 },
+    { id: 'preIns', label: 'Pre inserts', col: 5, row: 0 },
+    { id: 'tap1', label: 'Pre-fader tap', col: 6, row: 0, variant: 'warning' },
+    { id: 'fader', label: 'Fader + VCA', col: 0, row: 1, variant: 'accent' },
+    { id: 'pan', label: 'Pan', col: 1, row: 1 },
+    { id: 'eqPost', label: 'EQ (post)', col: 2, row: 1 },
+    { id: 'postIns', label: 'Post inserts', col: 3, row: 1 },
+    { id: 'width', label: 'Stereo width', col: 4, row: 1 },
+    { id: 'tap2', label: 'Post-fader tap', col: 5, row: 1, variant: 'warning' },
+    { id: 'out', label: 'To bus / master', col: 6, row: 1, variant: 'success' },
+    { id: 'send2', label: 'Post send + meter', col: 5, row: 2, variant: 'muted' }
+  ]"
+  :edges="[
+    { from: 'in', to: 'trim' },
+    { from: 'trim', to: 'pol' },
+    { from: 'pol', to: 'dly' },
+    { from: 'dly', to: 'eqPre' },
+    { from: 'eqPre', to: 'preIns' },
+    { from: 'preIns', to: 'tap1' },
+    { from: 'tap1', to: 'send1', style: 'dashed' },
+    { from: 'tap1', to: 'fader' },
+    { from: 'fader', to: 'pan' },
+    { from: 'pan', to: 'eqPost' },
+    { from: 'eqPost', to: 'postIns' },
+    { from: 'postIns', to: 'width' },
+    { from: 'width', to: 'tap2' },
+    { from: 'tap2', to: 'send2', style: 'dashed' },
+    { from: 'tap2', to: 'out' }
+  ]"
+  caption="Signal order: trim -> polarity -> delay -> EQ (pre) -> pre-fader inserts -> fader -> pan -> EQ (post, optional) -> post-fader inserts -> width -> bus. The two taps branch a copy to sends/meters without altering the main chain."
+/>
 
 Reading the chain top to bottom:
 

@@ -744,7 +744,8 @@ function mfcc(
   nMfcc?: number,     // デフォルト: 20
   fmin?: number,      // デフォルト: 0（librosa の既定）
   fmax?: number,      // デフォルト: 0 = sampleRate / 2
-  htk?: boolean       // デフォルト: false = Slaney 式。true で HTK
+  htk?: boolean,      // デフォルト: false = Slaney 式。true で HTK
+  lifter?: number     // デフォルト: 0 = リフタリングなし
 ): MfccResult
 
 interface MfccResult {
@@ -754,7 +755,7 @@ interface MfccResult {
 }
 ```
 
-`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るため、両側で同じ値を保てば往復しても結果が一致します。
+`fmin`／`fmax` で Mel 帯域の端を制限でき、`htk: true` で Slaney ではなく HTK の Mel 式を使います。`lifter` は librosa の `lifter` 引数に対応し、高次のケプストラム係数を弱めるケプストラム／正弦リフタリングを行います（`0` でリフタリングなし）。逆変換ヘルパー（`melToStft`、`melToAudio`、`mfccToAudio`）も対応する `fmin`／`fmax`／`htk` 引数を取るため、両側で同じ値を保てば往復しても結果が一致します。
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="中負荷" />
 
@@ -826,7 +827,7 @@ function rmsEnergy(samples, sampleRate, frameLength?, hopLength?): Float32Array
 |------|----------|------|
 | 音楽的なピッチ軸の表現 | `cqt(...)`, `pseudoCqt(...)`, `hybridCqt(...)` | オクターブ方向に音高と対応しやすい Constant-Q 表現です。擬似／ハイブリッド版はビンごとの速度と精度のバランスを変えます。 |
 | 帯域幅を調整したピッチ表現 | `vqt(...)` | CQT に近く、低域の安定性を調整できます。 |
-| コード検出向けのクロマ | `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | NNLS、CENS、低域寄りのクロマは、通常の STFT クロマよりコードや低音域の処理に向く場合があります。 |
+| コード検出向けのクロマ | `chromaCqt(...)`, `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | Constant-Q、NNLS、CENS、低域寄りのクロマは、通常の STFT クロマよりコードや低音域の処理に向く場合があります。 |
 | スペクトル形状の詳細 | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | librosa 互換のコントラスト帯域、多項式係数、ゼロ交差インデックス、マルチバンドオンセット強度を返します。 |
 | ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。 |
 | 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、近傍フィルタ、区間リミックス、時間スケーリング、残差付き HPSS。 |
@@ -837,6 +838,7 @@ function rmsEnergy(samples, sampleRate, frameLength?, hopLength?): Float32Array
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
+const cqtChroma = chromaCqt(samples, sampleRate);
 const nnls = nnlsChroma(samples, sampleRate);
 const cens = chromaCens(samples, sampleRate);
 const bass = bassChroma(samples, sampleRate);
@@ -858,6 +860,8 @@ const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
 const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
 ```
+
+`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma` は倍音の漏れを抑える別物の音符活性化（NNLS）クロマで、コードや低音域の処理ではこちらの方がすっきりする場合が多いです。
 
 ソースビルド C++ CLI で近いコマンド:
 
@@ -1689,22 +1693,26 @@ analyzer.delete();
 
 ### AudioWorklet 統合
 
-```mermaid
-sequenceDiagram
-    participant Main as メインスレッド
-    participant Worklet as AudioWorklet
-    participant WASM as StreamAnalyzer (WASM)
+オーディオスレッドとメインスレッドは `StreamAnalyzer` を直接共有しません。ワークレットはリアルタイムのオーディオスレッド上でサンプル単位のデータを渡し、定期的な `readFrames()` の結果だけが `postMessage` 経由でメインスレッドに渡ります。`process(samples)` の呼び出しは、キャプチャが続く限り 128 サンプルのレンダークオンタムごとに 1 回繰り返されます。
 
-    Main->>Worklet: 音声キャプチャ開始
-    loop 128 サンプルごと
-        Worklet->>WASM: process(samples)
-        WASM-->>Worklet: （内部バッファリング）
-    end
-    Worklet->>WASM: readFrames(maxFrames)
-    WASM-->>Worklet: FrameBuffer
-    Worklet->>Main: postMessage(buffer)
-    Main->>Main: ビジュアライゼーション更新
-```
+<SequenceDiagram
+  title="AudioWorklet と StreamAnalyzer のハンドシェイク"
+  :participants="[
+    { id: 'main', label: 'メインスレッド' },
+    { id: 'worklet', label: 'AudioWorklet' },
+    { id: 'wasm', label: 'StreamAnalyzer (WASM)' }
+  ]"
+  :messages="[
+    { from: 'main', to: 'worklet', label: '音声キャプチャ開始' },
+    { from: 'worklet', to: 'wasm', label: 'process(samples)', loop: '128 サンプルごと' },
+    { from: 'wasm', to: 'worklet', label: '内部バッファリング', type: 'return', loop: '128 サンプルごと' },
+    { from: 'worklet', to: 'wasm', label: 'readFrames(maxFrames)' },
+    { from: 'wasm', to: 'worklet', label: 'FrameBuffer', type: 'return' },
+    { from: 'worklet', to: 'main', label: 'postMessage(buffer)', type: 'async' },
+    { from: 'main', to: 'main', label: 'ビジュアライゼーション更新' }
+  ]"
+  caption="process() は 128 サンプルのレンダークオンタムごとに 1 回実行され、readFrames() と postMessage は十分なフレームが蓄積されたときにのみ発生します。"
+/>
 
 **worklet-processor.ts:**
 
@@ -1754,24 +1762,36 @@ registerProcessor('analyzer-processor', AnalyzerProcessor);
 
 ### データフロー図
 
-```mermaid
-flowchart LR
-    subgraph 入力
-        A[オーディオソース] --> B[AudioWorklet]
-    end
+同じハンドシェイクを、データフローのパイプラインとして描き直したものです。音声は `入力` と `処理` のグループを通じてリアルタイムスレッド上にとどまり、組み立てられた `FrameBuffer` だけがメインスレッド側の `出力` グループへ渡ります。
 
-    subgraph 処理
-        B --> C[StreamAnalyzer]
-        C --> D[readFrames]
-        D --> E[FrameBuffer]
-    end
-
-    subgraph 出力
-        E --> F[postMessage]
-        F --> G[メインスレッド]
-        G --> H[ビジュアライゼーション]
-    end
-```
+<FlowDiagram
+  title="ストリーミング解析のデータフロー"
+  :nodes="[
+    { id: 'source', label: 'オーディオソース', col: 0, row: 0, group: 'input' },
+    { id: 'worklet', label: 'AudioWorklet', col: 1, row: 0, group: 'input' },
+    { id: 'analyzer', label: 'StreamAnalyzer', col: 2, row: 0, group: 'processing', variant: 'accent' },
+    { id: 'readFrames', label: 'readFrames()', col: 3, row: 0, group: 'processing' },
+    { id: 'frameBuffer', label: 'FrameBuffer', col: 4, row: 0, group: 'processing' },
+    { id: 'postMessage', label: 'postMessage', col: 5, row: 0, group: 'output' },
+    { id: 'mainThread', label: 'メインスレッド', col: 6, row: 0, group: 'output' },
+    { id: 'visualization', label: 'ビジュアライゼーション', col: 7, row: 0, group: 'output', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'worklet' },
+    { from: 'worklet', to: 'analyzer' },
+    { from: 'analyzer', to: 'readFrames' },
+    { from: 'readFrames', to: 'frameBuffer' },
+    { from: 'frameBuffer', to: 'postMessage' },
+    { from: 'postMessage', to: 'mainThread' },
+    { from: 'mainThread', to: 'visualization' }
+  ]"
+  :groups="[
+    { id: 'input', label: '入力' },
+    { id: 'processing', label: '処理' },
+    { id: 'output', label: '出力' }
+  ]"
+  caption="入力と処理はオーディオレンダリングスレッド上で実行され、出力だけがメインスレッドへ渡ります。"
+/>
 
 ### タイムスタンプ同期
 

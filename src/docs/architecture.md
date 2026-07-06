@@ -19,161 +19,91 @@ By the end of this page you should be able to:
 
 ## Module Overview
 
-```mermaid
-graph TB
-    subgraph "API Layer"
-        WASM["WASM Bindings<br/>(Embind)"]
-        CAPI["C API<br/>(sonare_c*.h)"]
-        QUICK["Quick API<br/>(quick.h)"]
-        UNIFIED["Unified Header<br/>(sonare.h)"]
-    end
+The layers below run top to bottom: the API layer is what apps call, and every
+call eventually funnels down into the shared `Spectrogram`/`FFT` core so no
+analyzer, effect, or mastering processor recomputes the same transform twice.
+Groups mirror the `src/` subdirectories from the Directory Structure section
+below; nodes inside a group are representative members, not an exhaustive
+class list — see the Page Map for where each subsystem's full API is documented.
 
-    subgraph "Streaming Layer"
-        STREAM["StreamAnalyzer"]
-        FRAME["StreamFrame"]
-        BUFFER["FrameBuffer<br/>(SOA/Quantized)"]
-    end
-
-    subgraph "Analysis Layer"
-        MUSIC["MusicAnalyzer"]
-        BPM["BpmAnalyzer"]
-        KEY["KeyAnalyzer"]
-        BEAT["BeatAnalyzer"]
-        CHORD["ChordAnalyzer"]
-        SECTION["SectionAnalyzer"]
-        BOUNDARY["BoundaryDetector"]
-        TIMBRE["TimbreAnalyzer"]
-        DYNAMICS["DynamicsAnalyzer"]
-        RHYTHM["RhythmAnalyzer"]
-        MELODY["MelodyAnalyzer"]
-        ACOUSTIC["AcousticAnalyzer"]
-        ROOMEST["RoomEstimator"]
-    end
-
-    subgraph "Effects Layer"
-        HPSS["HPSS"]
-        TIMESTRETCH["Time Stretch"]
-        PITCHSHIFT["Pitch Shift"]
-        NORMALIZE["Normalize"]
-        SILENCE["Silence Trim/Split"]
-        PREEMPH["Pre/De-emphasis"]
-        DECOMPOSE["Decompose<br/>(NMF)"]
-        REVERB["Reverbs<br/>(convolution/plate/FDN/<br/>velvet/room)"]
-        CREATIVE["Creative FX<br/>(delay/chorus/flanger/phaser)"]
-        ROOMMORPH["Room Morph"]
-        VOICE["Voice Change<br/>& pitch editing"]
-    end
-
-    subgraph "Mastering & Mixing Layer"
-        MASTERCHAIN["MasteringChain<br/>(eq/dynamics/spectral/<br/>stereo/maximizer/loudness)"]
-        STREAMMASTER["StreamingMasteringChain"]
-        STREAMEQ["StreamingEqualizer"]
-        MIXER["Mixer<br/>(channel strips/buses/sends)"]
-        ENGINE["RealtimeEngine<br/>(transport/clips/automation)"]
-        METER["Metering<br/>(LUFS/true-peak/goniometer)"]
-    end
-
-    subgraph "Feature Layer"
-        MEL["MelSpectrogram"]
-        CHROMA["Chroma"]
-        CQT["CQT"]
-        VQT["VQT"]
-        SPECTRAL["Spectral Features"]
-        ONSET["Onset Detection"]
-        PITCH["Pitch Tracking"]
-        INVERSE["Inverse Features<br/>(Mel/MFCC reconstruction)"]
-    end
-
-    subgraph "Core Layer"
-        AUDIO["Audio"]
-        SPECTRUM["Spectrogram<br/>(STFT/iSTFT)"]
-        FFT["FFT<br/>(KissFFT)"]
-        WINDOW["Window Functions"]
-        CONVERT["Unit Conversion"]
-        RESAMPLE["Resampling<br/>(r8brain)"]
-        AUDIO_IO["Audio I/O<br/>(dr_libs, minimp3)"]
-    end
-
-    subgraph "Acoustic Simulation Layer"
-        ROOMMODEL["Room Model<br/>(shoebox/materials)"]
-        RIR["RIR Synthesizer<br/>(image source + late tail)"]
-        MATERIAL["Material Presets"]
-    end
-
-    WASM --> QUICK
-    WASM --> STREAM
-    WASM --> CAPI
-    CAPI --> QUICK
-    CAPI --> STREAM
-    CAPI --> MASTERCHAIN
-    CAPI --> MIXER
-    CAPI --> ENGINE
-    UNIFIED --> MUSIC
-    QUICK --> MUSIC
-
-    STREAM --> FRAME
-    STREAM --> BUFFER
-    STREAM --> FFT
-    STREAM --> MEL
-    STREAM --> CHROMA
-
-    MUSIC --> BPM
-    MUSIC --> KEY
-    MUSIC --> BEAT
-    MUSIC --> CHORD
-    MUSIC --> SECTION
-    MUSIC --> BOUNDARY
-    MUSIC --> TIMBRE
-    MUSIC --> DYNAMICS
-    MUSIC --> RHYTHM
-    MUSIC --> MELODY
-    QUICK --> ACOUSTIC
-    QUICK --> ROOMEST
-
-    BPM --> ONSET
-    KEY --> CHROMA
-    BEAT --> ONSET
-    CHORD --> CHROMA
-    SECTION --> MEL
-    BOUNDARY --> MEL
-    MELODY --> PITCH
-    ACOUSTIC --> SPECTRUM
-    ROOMEST --> ACOUSTIC
-    ROOMEST --> RIR
-
-    HPSS --> SPECTRUM
-    TIMESTRETCH --> SPECTRUM
-    PITCHSHIFT --> TIMESTRETCH
-    PITCHSHIFT --> RESAMPLE
-    REVERB --> RIR
-    ROOMMORPH --> RIR
-    VOICE --> TIMESTRETCH
-
-    WASM --> MASTERCHAIN
-    WASM --> STREAMMASTER
-    WASM --> STREAMEQ
-    WASM --> MIXER
-    WASM --> ENGINE
-    MASTERCHAIN --> SPECTRUM
-    MIXER --> METER
-    ENGINE --> MIXER
-
-    MEL --> SPECTRUM
-    CHROMA --> SPECTRUM
-    CQT --> FFT
-    VQT --> CQT
-    SPECTRAL --> SPECTRUM
-    ONSET --> MEL
-    INVERSE --> MEL
-    INVERSE --> SPECTRUM
-
-    SPECTRUM --> FFT
-    SPECTRUM --> WINDOW
-    AUDIO --> AUDIO_IO
-    AUDIO --> RESAMPLE
-    RIR --> ROOMMODEL
-    ROOMMODEL --> MATERIAL
-```
+<FlowDiagram
+  title="Module Overview"
+  direction="TB"
+  :nodes="[
+    { id: 'wasm', label: 'WASM Bindings (Embind)', col: 0, row: 0, group: 'api', variant: 'accent' },
+    { id: 'capi', label: 'C API (sonare_c*.h)', col: 1, row: 0, group: 'api' },
+    { id: 'quick', label: 'Quick API (quick.h)', col: 2, row: 0, group: 'api' },
+    { id: 'unified', label: 'sonare.h (Unified Header)', col: 3, row: 0, group: 'api' },
+    { id: 'stream', label: 'StreamAnalyzer', col: 0, row: 1, group: 'streaming', variant: 'accent' },
+    { id: 'frameBuf', label: 'StreamFrame / FrameBuffer', col: 1, row: 1, group: 'streaming' },
+    { id: 'music', label: 'MusicAnalyzer', col: 0, row: 2, group: 'analysis', variant: 'accent' },
+    { id: 'coreAnalyzers', label: 'BPM · Key · Beat · Chord · Section · Boundary', col: 1, row: 2, group: 'analysis' },
+    { id: 'moreAnalyzers', label: 'Timbre · Dynamics · Rhythm · Melody', col: 2, row: 2, group: 'analysis' },
+    { id: 'acousticAnalysis', label: 'AcousticAnalyzer / RoomEstimator', col: 3, row: 2, group: 'analysis' },
+    { id: 'spectralFx', label: 'HPSS · Time Stretch · Pitch Shift', col: 0, row: 3, group: 'effects', variant: 'accent' },
+    { id: 'editFx', label: 'Normalize · Silence Trim · Pre/De-emphasis', col: 1, row: 3, group: 'effects' },
+    { id: 'creativeFx', label: 'Decompose · Reverbs · Creative FX', col: 2, row: 3, group: 'effects' },
+    { id: 'roomFx', label: 'Room Morph · Voice Change', col: 3, row: 3, group: 'effects' },
+    { id: 'masterChain', label: 'MasteringChain', col: 0, row: 4, group: 'mastering', variant: 'accent' },
+    { id: 'streamMaster', label: 'StreamingMasteringChain / EQ', col: 1, row: 4, group: 'mastering' },
+    { id: 'mixerEngine', label: 'Mixer (strips/buses/sends)', col: 2, row: 4, group: 'mastering' },
+    { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 4, group: 'mastering' },
+    { id: 'metering', label: 'Metering (LUFS/true-peak)', col: 4, row: 4, group: 'mastering' },
+    { id: 'specFeatures', label: 'Mel · Chroma · CQT/VQT', col: 0, row: 5, group: 'feature', variant: 'accent' },
+    { id: 'otherFeatures', label: 'Spectral · Onset · Pitch', col: 1, row: 5, group: 'feature' },
+    { id: 'inverseFeatures', label: 'Inverse Features (reconstruction)', col: 2, row: 5, group: 'feature' },
+    { id: 'audio', label: 'Audio', col: 0, row: 6, group: 'core' },
+    { id: 'spectrum', label: 'Spectrogram (STFT/iSTFT)', col: 1, row: 6, group: 'core', variant: 'accent' },
+    { id: 'primitives', label: 'FFT · Window · Resample · I-O', col: 2, row: 6, group: 'core' },
+    { id: 'roomModel', label: 'Room Model', col: 0, row: 7, group: 'acoustic-sim' },
+    { id: 'rir', label: 'RIR Synthesizer', col: 1, row: 7, group: 'acoustic-sim' },
+    { id: 'materials', label: 'Material Presets', col: 2, row: 7, group: 'acoustic-sim' }
+  ]"
+  :edges="[
+    { from: 'wasm', to: 'stream' },
+    { from: 'capi', to: 'stream' },
+    { from: 'unified', to: 'music' },
+    { from: 'quick', to: 'music' },
+    { from: 'quick', to: 'acousticAnalysis' },
+    { from: 'stream', to: 'frameBuf' },
+    { from: 'stream', to: 'primitives' },
+    { from: 'music', to: 'coreAnalyzers' },
+    { from: 'music', to: 'moreAnalyzers' },
+    { from: 'coreAnalyzers', to: 'specFeatures' },
+    { from: 'moreAnalyzers', to: 'otherFeatures' },
+    { from: 'acousticAnalysis', to: 'spectrum' },
+    { from: 'acousticAnalysis', to: 'rir' },
+    { from: 'spectralFx', to: 'spectrum' },
+    { from: 'spectralFx', to: 'primitives' },
+    { from: 'creativeFx', to: 'rir' },
+    { from: 'roomFx', to: 'spectralFx' },
+    { from: 'roomFx', to: 'rir' },
+    { from: 'streamMaster', to: 'masterChain' },
+    { from: 'masterChain', to: 'spectrum' },
+    { from: 'mixerEngine', to: 'metering' },
+    { from: 'rtEngine', to: 'mixerEngine' },
+    { from: 'specFeatures', to: 'spectrum' },
+    { from: 'specFeatures', to: 'primitives' },
+    { from: 'otherFeatures', to: 'spectrum' },
+    { from: 'otherFeatures', to: 'specFeatures' },
+    { from: 'inverseFeatures', to: 'spectrum' },
+    { from: 'spectrum', to: 'primitives' },
+    { from: 'audio', to: 'spectrum' },
+    { from: 'rir', to: 'roomModel' },
+    { from: 'roomModel', to: 'materials' }
+  ]"
+  :groups="[
+    { id: 'api', label: 'API Layer' },
+    { id: 'streaming', label: 'Streaming Layer' },
+    { id: 'analysis', label: 'Analysis Layer' },
+    { id: 'effects', label: 'Effects Layer' },
+    { id: 'mastering', label: 'Mastering & Mixing' },
+    { id: 'feature', label: 'Feature Layer' },
+    { id: 'core', label: 'Core Layer' },
+    { id: 'acoustic-sim', label: 'Acoustic Simulation' }
+  ]"
+  caption="Bindings stay thin: WASM/C/Quick/sonare.h all reduce to the same C++ core, they never reimplement DSP per binding."
+/>
 
 ## Page Map
 
@@ -294,92 +224,96 @@ src/
 
 ### Audio Analysis Pipeline
 
-```mermaid
-flowchart LR
-    subgraph Input
-        FILE[Audio File<br/>WAV/MP3<br/>+ FFmpeg formats when enabled]
-        BUFFER[Raw Buffer<br/>float*]
-    end
+Every analyzer branches off the same STFT/Spectrogram output instead of
+recomputing it: onset strength drives BPM and beat tracking, while the
+chromagram drives key and chord recognition, and `MusicAnalyzer.analyze()`
+just collects whichever of these were touched into one `AnalysisResult`.
 
-    subgraph Core
-        AUDIO[Audio]
-        STFT[STFT]
-        SPEC[Spectrogram]
-    end
-
-    subgraph Features
-        MEL[Mel Spectrogram]
-        CHROMA[Chromagram]
-        ONSET[Onset Strength]
-    end
-
-    subgraph Analysis
-        BPM[BPM Detection]
-        KEY[Key Detection]
-        BEAT[Beat Tracking]
-        CHORD[Chord Recognition]
-    end
-
-    subgraph Output
-        RESULT[AnalysisResult]
-    end
-
-    FILE --> AUDIO
-    BUFFER --> AUDIO
-    AUDIO --> STFT
-    STFT --> SPEC
-    SPEC --> MEL
-    SPEC --> CHROMA
-    MEL --> ONSET
-    ONSET --> BPM
-    ONSET --> BEAT
-    CHROMA --> KEY
-    CHROMA --> CHORD
-    BPM --> RESULT
-    KEY --> RESULT
-    BEAT --> RESULT
-    CHORD --> RESULT
-```
+<FlowDiagram
+  title="Audio Analysis Pipeline"
+  :nodes="[
+    { id: 'file', label: 'Audio File (WAV/MP3)', col: 0, row: 0, group: 'input' },
+    { id: 'buffer', label: 'Raw Buffer (float*)', col: 0, row: 1, group: 'input' },
+    { id: 'audio', label: 'Audio', col: 1, row: 0, group: 'core' },
+    { id: 'stft', label: 'STFT', col: 2, row: 0, group: 'core' },
+    { id: 'spec', label: 'Spectrogram', col: 3, row: 0, group: 'core', variant: 'accent' },
+    { id: 'mel', label: 'Mel Spectrogram', col: 4, row: 0, group: 'features' },
+    { id: 'chroma', label: 'Chromagram', col: 4, row: 1, group: 'features' },
+    { id: 'onset', label: 'Onset Strength', col: 4, row: 2, group: 'features' },
+    { id: 'bpm', label: 'BPM Detection', col: 5, row: 0, group: 'analysis' },
+    { id: 'key', label: 'Key Detection', col: 5, row: 1, group: 'analysis' },
+    { id: 'beat', label: 'Beat Tracking', col: 5, row: 2, group: 'analysis' },
+    { id: 'chord', label: 'Chord Recognition', col: 5, row: 3, group: 'analysis' },
+    { id: 'result', label: 'AnalysisResult', col: 6, row: 1, group: 'output', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'file', to: 'audio' },
+    { from: 'buffer', to: 'audio' },
+    { from: 'audio', to: 'stft' },
+    { from: 'stft', to: 'spec' },
+    { from: 'spec', to: 'mel' },
+    { from: 'spec', to: 'chroma' },
+    { from: 'mel', to: 'onset' },
+    { from: 'onset', to: 'bpm' },
+    { from: 'onset', to: 'beat' },
+    { from: 'chroma', to: 'key' },
+    { from: 'chroma', to: 'chord' },
+    { from: 'bpm', to: 'result' },
+    { from: 'key', to: 'result' },
+    { from: 'beat', to: 'result' },
+    { from: 'chord', to: 'result' }
+  ]"
+  :groups="[
+    { id: 'input', label: 'Input' },
+    { id: 'core', label: 'Core' },
+    { id: 'features', label: 'Features' },
+    { id: 'analysis', label: 'Analysis' },
+    { id: 'output', label: 'Output' }
+  ]"
+  caption="File and in-memory buffer paths converge on Audio; from there every feature and analyzer shares the same Spectrogram."
+/>
 
 ### Audio Effects Pipeline
 
-```mermaid
-flowchart TB
-    subgraph Input
-        AUDIO[Audio]
-    end
+HPSS and the phase vocoder both run on the same complex STFT and reconstruct
+through a shared iSTFT, so they never diverge on transform parameters. Time
+stretch and pitch shift instead take a separate path straight from `Audio`,
+since pitch shift layers a resampler on top of the same time-stretch core.
 
-    subgraph SharedTransform
-        STFT[STFT]
-        SPEC[Complex<br/>Spectrogram]
-        ISTFT[iSTFT]
-    end
-
-    subgraph SpectralEffects
-        HPSS[HPSS]
-        PV[Phase Vocoder]
-    end
-
-    subgraph PitchShift
-        TS[Time Stretch]
-        RESAMPLE[Resample]
-    end
-
-    subgraph Output
-        OUT[Processed Audio]
-    end
-
-    AUDIO --> STFT
-    STFT --> SPEC
-    SPEC --> HPSS
-    SPEC --> PV
-    HPSS --> ISTFT
-    PV --> ISTFT
-    AUDIO --> TS
-    TS --> RESAMPLE
-    ISTFT --> OUT
-    RESAMPLE --> OUT
-```
+<FlowDiagram
+  title="Audio Effects Pipeline"
+  direction="TB"
+  :nodes="[
+    { id: 'audio', label: 'Audio', col: 1, row: 0, group: 'input' },
+    { id: 'stft', label: 'STFT', col: 1, row: 1, group: 'shared' },
+    { id: 'ts', label: 'Time Stretch', col: 2, row: 1, group: 'pitch' },
+    { id: 'spec', label: 'Complex Spectrogram', col: 1, row: 2, group: 'shared' },
+    { id: 'resample', label: 'Resample', col: 2, row: 2, group: 'pitch' },
+    { id: 'hpss', label: 'HPSS', col: 0, row: 3, group: 'spectral' },
+    { id: 'pv', label: 'Phase Vocoder', col: 1, row: 3, group: 'spectral' },
+    { id: 'istft', label: 'iSTFT', col: 1, row: 4 },
+    { id: 'out', label: 'Processed Audio', col: 1, row: 5, group: 'output', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'audio', to: 'stft' },
+    { from: 'audio', to: 'ts' },
+    { from: 'stft', to: 'spec' },
+    { from: 'spec', to: 'hpss' },
+    { from: 'spec', to: 'pv' },
+    { from: 'ts', to: 'resample' },
+    { from: 'hpss', to: 'istft' },
+    { from: 'pv', to: 'istft' },
+    { from: 'istft', to: 'out' },
+    { from: 'resample', to: 'out' }
+  ]"
+  :groups="[
+    { id: 'input', label: 'Input' },
+    { id: 'shared', label: 'Shared Transform' },
+    { id: 'pitch', label: 'Pitch Shift' },
+    { id: 'spectral', label: 'Spectral Effects' },
+    { id: 'output', label: 'Output' }
+  ]"
+/>
 
 ::: details What is a phase vocoder?
 A phase vocoder is the standard way to time-stretch audio (or, combined with resampling, pitch-shift it) without obvious artifacts. It takes the STFT and *advances the phase* of each frequency bin to fit the new timeline before reconstructing, so a sound can be made longer or shorter while its pitch and spectral character stay intact. libsonare uses it for `timeStretch` / `pitchShift` and the editing-DSP voice tools.
@@ -389,52 +323,50 @@ A phase vocoder is the standard way to time-stretch audio (or, combined with res
 
 ### Streaming Pipeline
 
-The streaming pipeline processes audio in real time, maintaining overlap state between chunks.
+The streaming pipeline processes audio in real time, maintaining overlap state between chunks. Once a full frame's features land in the ring buffer, quantization is an opt-in trade: the default keeps full `Float32` precision, while 8-bit/16-bit packing shrinks the buffer for transfer at the cost of precision.
 
-```mermaid
-flowchart LR
-    subgraph Input
-        CHUNK[Audio Chunk<br/>128-512 samples]
-    end
-
-    subgraph Buffering
-        OVERLAP[Overlap Buffer<br/>n_fft - hop_length]
-        FRAME[Full Frame<br/>n_fft samples]
-    end
-
-    subgraph Processing
-        FFT[FFT]
-        MAG[Magnitude]
-        MEL[Mel Filterbank]
-        CHROMA[Chroma Filterbank]
-        SPECTRAL[Spectral Features]
-    end
-
-    subgraph Output
-        STREAMFRAME[StreamFrame]
-        RING[Ring Buffer]
-        QUANT{Quantize?}
-        SOA[FrameBuffer<br/>Float32]
-        U8[QuantizedU8<br/>Uint8]
-        I16[QuantizedI16<br/>Int16]
-    end
-
-    CHUNK --> OVERLAP
-    OVERLAP --> FRAME
-    FRAME --> FFT
-    FFT --> MAG
-    MAG --> MEL
-    MAG --> CHROMA
-    MAG --> SPECTRAL
-    MEL --> STREAMFRAME
-    CHROMA --> STREAMFRAME
-    SPECTRAL --> STREAMFRAME
-    STREAMFRAME --> RING
-    RING --> QUANT
-    QUANT -->|No| SOA
-    QUANT -->|8-bit| U8
-    QUANT -->|16-bit| I16
-```
+<FlowDiagram
+  title="Streaming Pipeline"
+  :nodes="[
+    { id: 'chunk', label: 'Audio Chunk (128–512 samples)', col: 0, row: 1, group: 'input' },
+    { id: 'overlap', label: 'Overlap Buffer', col: 1, row: 1, group: 'buffering' },
+    { id: 'frame', label: 'Full Frame (n_fft)', col: 2, row: 1, group: 'buffering' },
+    { id: 'fft', label: 'FFT', col: 3, row: 1, group: 'processing' },
+    { id: 'mag', label: 'Magnitude', col: 4, row: 1, group: 'processing' },
+    { id: 'mel', label: 'Mel Filterbank', col: 5, row: 0, group: 'processing' },
+    { id: 'chroma', label: 'Chroma Filterbank', col: 5, row: 1, group: 'processing' },
+    { id: 'spectral', label: 'Spectral Features', col: 5, row: 2, group: 'processing' },
+    { id: 'streamframe', label: 'StreamFrame', col: 6, row: 1, group: 'output' },
+    { id: 'ring', label: 'Ring Buffer', col: 7, row: 1, group: 'output' },
+    { id: 'quant', label: 'Quantize?', col: 8, row: 1, group: 'output', variant: 'decision' },
+    { id: 'soa', label: 'FrameBuffer (Float32)', col: 9, row: 0, group: 'output' },
+    { id: 'u8', label: 'QuantizedU8', col: 9, row: 1, group: 'output' },
+    { id: 'i16', label: 'QuantizedI16', col: 9, row: 2, group: 'output' }
+  ]"
+  :edges="[
+    { from: 'chunk', to: 'overlap' },
+    { from: 'overlap', to: 'frame' },
+    { from: 'frame', to: 'fft' },
+    { from: 'fft', to: 'mag' },
+    { from: 'mag', to: 'mel' },
+    { from: 'mag', to: 'chroma' },
+    { from: 'mag', to: 'spectral' },
+    { from: 'mel', to: 'streamframe' },
+    { from: 'chroma', to: 'streamframe' },
+    { from: 'spectral', to: 'streamframe' },
+    { from: 'streamframe', to: 'ring' },
+    { from: 'ring', to: 'quant' },
+    { from: 'quant', to: 'soa', label: 'No' },
+    { from: 'quant', to: 'u8', label: '8-bit', style: 'dashed' },
+    { from: 'quant', to: 'i16', label: '16-bit', style: 'dashed' }
+  ]"
+  :groups="[
+    { id: 'input', label: 'Input' },
+    { id: 'buffering', label: 'Buffering' },
+    { id: 'processing', label: 'Processing' },
+    { id: 'output', label: 'Output' }
+  ]"
+/>
 
 ::: info Progressive Estimation
 As more audio streams in, the pipeline accumulates chroma and onset data, so its BPM/key estimates have more evidence to work from. Estimates are refreshed periodically (default: BPM every 10s, key every 5s) and grow more confident the longer the stream runs.

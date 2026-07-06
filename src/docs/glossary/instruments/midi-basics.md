@@ -74,12 +74,23 @@ A **Standard MIDI File (SMF, the `.mid` extension)** stores a whole performance 
 
 ## How it fits together
 
-```mermaid
-flowchart LR
-  IN["MIDI source<br/>(keyboard / file)"] --> MSG["note-on / note-off<br/>CC, Program Change"]
-  MSG --> INST["Instrument<br/>(synth or SoundFont)"]
-  INST --> AUD["Audio output"]
-```
+MIDI's separation of performance from sound shows up as a straight pipeline: a source emits note and controller messages, an instrument interprets them, and only the last step produces audio.
+
+<FlowDiagram
+  title="MIDI message flow"
+  :nodes="[
+    { id: 'source', label: 'MIDI source', col: 0, row: 0 },
+    { id: 'messages', label: 'Note-on/off, CC, Program Change', col: 1, row: 0, variant: 'accent' },
+    { id: 'instrument', label: 'Instrument (synth / SoundFont)', col: 2, row: 0 },
+    { id: 'audio', label: 'Audio output', col: 3, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'messages' },
+    { from: 'messages', to: 'instrument' },
+    { from: 'instrument', to: 'audio' }
+  ]"
+  caption="The source (keyboard or file) and the instrument (synth or SoundFont) are interchangeable — only the messages in the middle carry the performance."
+/>
 
 ::: details How libsonare implements this
 libsonare's realtime engine accepts live MIDI through `pushMidiNoteOn(destinationId, group, channel, note, velocity)` and `pushMidiNoteOff(...)` for notes, and `pushMidiCc(destinationId, group, channel, controller, value)` for Control Change messages — the `destinationId` selects which loaded instrument receives the event, and `channel` is the 0-15 MIDI channel. In the browser, a Web MIDI bridge (`bindWebMidi`) connects a physical MIDI keyboard's events straight into those engine inputs, so a hardware controller can play NativeSynth or a loaded SoundFont live. The same note/CC vocabulary is used by both the live engine and offline arrangement bounces.

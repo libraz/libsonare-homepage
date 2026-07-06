@@ -58,22 +58,46 @@ libsonare には、[マスタリングプロセッサ](./mastering-processors.md
 
 libsonare は各ブロックを次の順序で処理します。
 
-```mermaid
-flowchart TB
-  IN([ストリップ入力]) --> TRIM[入力トリム]
-  TRIM --> POL[極性反転 L/R]
-  POL --> DLY[チャンネルディレイ]
-  DLY --> EQ1[EQ * 既定はプリフェーダー]
-  EQ1 --> PRE[プリフェーダーインサート]
-  PRE --> TAP1{{プリフェーダータップ}}
-  TAP1 --> FAD[フェーダー * + VCA オフセット]
-  FAD --> PAN[パン * パンロー / モード]
-  PAN --> EQ2[EQ ポストフェーダー時]
-  EQ2 --> POST[ポストフェーダーインサート]
-  POST --> W[ステレオ幅]
-  W --> TAP2{{ポストフェーダータップ + ゴニオメーター}}
-  TAP2 --> OUT([バス / マスターへ])
-```
+<FlowDiagram
+  title="チャンネルストリップの信号経路"
+  direction="LR"
+  :nodes="[
+    { id: 'send1', label: 'プリフェーダーセンド', col: 6, row: -1, variant: 'muted' },
+    { id: 'in', label: 'ストリップ入力', col: 0, row: 0, variant: 'muted' },
+    { id: 'trim', label: '入力トリム', col: 1, row: 0 },
+    { id: 'pol', label: '極性反転', col: 2, row: 0 },
+    { id: 'dly', label: 'チャンネルディレイ', col: 3, row: 0 },
+    { id: 'eqPre', label: 'EQ（プリ）', col: 4, row: 0 },
+    { id: 'preIns', label: 'プリインサート', col: 5, row: 0 },
+    { id: 'tap1', label: 'プリフェーダータップ', col: 6, row: 0, variant: 'warning' },
+    { id: 'fader', label: 'フェーダー + VCA', col: 0, row: 1, variant: 'accent' },
+    { id: 'pan', label: 'パン', col: 1, row: 1 },
+    { id: 'eqPost', label: 'EQ（ポスト）', col: 2, row: 1 },
+    { id: 'postIns', label: 'ポストインサート', col: 3, row: 1 },
+    { id: 'width', label: 'ステレオ幅', col: 4, row: 1 },
+    { id: 'tap2', label: 'ポストフェーダータップ', col: 5, row: 1, variant: 'warning' },
+    { id: 'out', label: 'バス / マスターへ', col: 6, row: 1, variant: 'success' },
+    { id: 'send2', label: 'ポストセンド + メーター', col: 5, row: 2, variant: 'muted' }
+  ]"
+  :edges="[
+    { from: 'in', to: 'trim' },
+    { from: 'trim', to: 'pol' },
+    { from: 'pol', to: 'dly' },
+    { from: 'dly', to: 'eqPre' },
+    { from: 'eqPre', to: 'preIns' },
+    { from: 'preIns', to: 'tap1' },
+    { from: 'tap1', to: 'send1', style: 'dashed' },
+    { from: 'tap1', to: 'fader' },
+    { from: 'fader', to: 'pan' },
+    { from: 'pan', to: 'eqPost' },
+    { from: 'eqPost', to: 'postIns' },
+    { from: 'postIns', to: 'width' },
+    { from: 'width', to: 'tap2' },
+    { from: 'tap2', to: 'send2', style: 'dashed' },
+    { from: 'tap2', to: 'out' }
+  ]"
+  caption="信号の順序: トリム → 極性 → ディレイ → EQ（プリ）→ プリフェーダーインサート → フェーダー → パン → EQ（ポスト、任意）→ ポストフェーダーインサート → 幅 → バス。2 つのタップはメインの経路を変えずに、信号のコピーをセンド／メーターへ分岐させます。"
+/>
 
 上から順に読むと次のとおりです。
 

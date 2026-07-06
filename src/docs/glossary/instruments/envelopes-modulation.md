@@ -13,13 +13,23 @@ This page explains the two kinds of modulation sources you will meet most often 
 
 An **envelope** is a shape that plays out once per note. The classic envelope has four stages — **A**ttack, **D**ecay, **S**ustain, **R**elease (ADSR) — and the most important one controls loudness over the life of the note:
 
-```mermaid
-flowchart LR
-  S["key down"] --> A["Attack<br/>rise to peak"]
-  A --> D["Decay<br/>fall to sustain"]
-  D --> SUS["Sustain<br/>held level"]
-  SUS --> R["Release<br/>fade after key up"]
-```
+<FlowDiagram
+  title="ADSR envelope"
+  :nodes="[
+    { id: 'keydown', label: 'Key down', col: 0, row: 0, variant: 'muted' },
+    { id: 'attack', label: 'Attack', col: 1, row: 0 },
+    { id: 'decay', label: 'Decay', col: 2, row: 0 },
+    { id: 'sustain', label: 'Sustain', col: 3, row: 0, variant: 'warning' },
+    { id: 'release', label: 'Release', col: 4, row: 0 }
+  ]"
+  :edges="[
+    { from: 'keydown', to: 'attack' },
+    { from: 'attack', to: 'decay' },
+    { from: 'decay', to: 'sustain' },
+    { from: 'sustain', to: 'release', label: 'key up' }
+  ]"
+  caption="Only Sustain holds at a level — Attack, Decay, and Release move toward one and take actual time."
+/>
 
 | Stage | What it controls | Long value sounds like | Short value sounds like |
 |-------|------------------|------------------------|-------------------------|

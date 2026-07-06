@@ -770,7 +770,8 @@ function mfcc(
   nMfcc?: number,     // default: 20
   fmin?: number,      // default: 0 (librosa default)
   fmax?: number,      // default: 0 = sampleRate / 2
-  htk?: boolean       // default: false = Slaney formula; true = HTK
+  htk?: boolean,      // default: false = Slaney formula; true = HTK
+  lifter?: number     // default: 0 = no liftering
 ): MfccResult
 
 interface MfccResult {
@@ -781,9 +782,11 @@ interface MfccResult {
 ```
 
 Set `fmin`/`fmax` to bound the Mel band edges, and pass `htk: true` to use the
-HTK Mel formula instead of Slaney. The inverse helpers (`melToStft`,
-`melToAudio`, `mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, so a
-round-trip stays consistent when you keep the same values on both sides.
+HTK Mel formula instead of Slaney. `lifter` matches librosa's `lifter` argument
+(cepstral/sinusoidal liftering that de-emphasizes higher cepstral coefficients);
+`0` disables liftering. The inverse helpers (`melToStft`, `melToAudio`,
+`mfccToAudio`) take matching `fmin`/`fmax`/`htk` arguments, so a round-trip stays
+consistent when you keep the same values on both sides.
 
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="Medium" />
 
@@ -906,7 +909,7 @@ These functions are not just "more features"; they solve different modeling prob
 |------|-----|-----|
 | Log-frequency pitch representation | `cqt(...)`, `pseudoCqt(...)`, `hybridCqt(...)` | Constant-Q bins align well with musical pitch over octaves; pseudo/hybrid variants trade accuracy and speed across bins. |
 | Variable bandwidth pitch representation | `vqt(...)` | Like CQT, but with a bandwidth offset for low-frequency stability. |
-| Chord-friendly chroma | `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | NNLS, CENS, and low-register chroma variants can be cleaner for chord or bass-register work than plain STFT chroma. |
+| Chord-friendly chroma | `chromaCqt(...)`, `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | Constant-Q, NNLS, CENS, and low-register chroma variants can be cleaner for chord or bass-register work than plain STFT chroma. |
 | Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | Librosa-compatible contrast bands, polynomial coefficients, zero-crossing indices, and multi-band onset strength. |
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
 | Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, nearest-neighbor filtering, interval remixing, time scaling, and HPSS residual output. |
@@ -917,6 +920,7 @@ These functions are not just "more features"; they solve different modeling prob
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
+const cqtChroma = chromaCqt(samples, sampleRate);
 const nnls = nnlsChroma(samples, sampleRate);
 const cens = chromaCens(samples, sampleRate);
 const bass = bassChroma(samples, sampleRate);
@@ -938,6 +942,11 @@ const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
 const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
 ```
+
+`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` is the direct
+`librosa.feature.chroma_cqt` equivalent (log-frequency / constant-Q pitch
+folding), while `nnlsChroma` is a distinct note-activation (NNLS) chroma that
+suppresses harmonic leakage — often cleaner for chord or bass-register work.
 
 Closest CLI equivalents from the source-built C++ CLI:
 
@@ -1775,22 +1784,26 @@ Plain functions like `analyze()` return ordinary JS values and need no cleanup. 
 
 ### AudioWorklet Integration
 
-```mermaid
-sequenceDiagram
-    participant Main as Main Thread
-    participant Worklet as AudioWorklet
-    participant WASM as StreamAnalyzer (WASM)
+The audio thread and the main thread never share `StreamAnalyzer` directly: the worklet feeds it sample-by-sample on the realtime audio thread, and only the periodic `readFrames()` result crosses over to the main thread via `postMessage`. The `process(samples)` call repeats once per 128-sample render quantum for as long as capture runs.
 
-    Main->>Worklet: Start audio capture
-    loop Every 128 samples
-        Worklet->>WASM: process(samples)
-        WASM-->>Worklet: (internal buffering)
-    end
-    Worklet->>WASM: readFrames(maxFrames)
-    WASM-->>Worklet: FrameBuffer
-    Worklet->>Main: postMessage(buffer)
-    Main->>Main: Update visualization
-```
+<SequenceDiagram
+  title="AudioWorklet + StreamAnalyzer handshake"
+  :participants="[
+    { id: 'main', label: 'Main Thread' },
+    { id: 'worklet', label: 'AudioWorklet' },
+    { id: 'wasm', label: 'StreamAnalyzer (WASM)' }
+  ]"
+  :messages="[
+    { from: 'main', to: 'worklet', label: 'start audio capture' },
+    { from: 'worklet', to: 'wasm', label: 'process(samples)', loop: 'every 128 samples' },
+    { from: 'wasm', to: 'worklet', label: 'internal buffering', type: 'return', loop: 'every 128 samples' },
+    { from: 'worklet', to: 'wasm', label: 'readFrames(maxFrames)' },
+    { from: 'wasm', to: 'worklet', label: 'FrameBuffer', type: 'return' },
+    { from: 'worklet', to: 'main', label: 'postMessage(buffer)', type: 'async' },
+    { from: 'main', to: 'main', label: 'update visualization' }
+  ]"
+  caption="process() runs once per 128-sample render quantum; readFrames() and postMessage happen only when enough frames have accumulated."
+/>
 
 **worklet-processor.ts:**
 
@@ -1840,24 +1853,36 @@ registerProcessor('analyzer-processor', AnalyzerProcessor);
 
 ### Data Flow Diagram
 
-```mermaid
-flowchart LR
-    subgraph Input
-        A[Audio Source] --> B[AudioWorklet]
-    end
+The same handshake, redrawn as a data-flow pipeline: audio stays on the realtime thread through the `Input` and `Processing` groups, and only the assembled `FrameBuffer` crosses into the `Output` group on the main thread.
 
-    subgraph Processing
-        B --> C[StreamAnalyzer]
-        C --> D[readFrames]
-        D --> E[FrameBuffer]
-    end
-
-    subgraph Output
-        E --> F[postMessage]
-        F --> G[Main Thread]
-        G --> H[Visualization]
-    end
-```
+<FlowDiagram
+  title="Streaming analysis data flow"
+  :nodes="[
+    { id: 'source', label: 'Audio source', col: 0, row: 0, group: 'input' },
+    { id: 'worklet', label: 'AudioWorklet', col: 1, row: 0, group: 'input' },
+    { id: 'analyzer', label: 'StreamAnalyzer', col: 2, row: 0, group: 'processing', variant: 'accent' },
+    { id: 'readFrames', label: 'readFrames()', col: 3, row: 0, group: 'processing' },
+    { id: 'frameBuffer', label: 'FrameBuffer', col: 4, row: 0, group: 'processing' },
+    { id: 'postMessage', label: 'postMessage', col: 5, row: 0, group: 'output' },
+    { id: 'mainThread', label: 'Main Thread', col: 6, row: 0, group: 'output' },
+    { id: 'visualization', label: 'Visualization', col: 7, row: 0, group: 'output', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'worklet' },
+    { from: 'worklet', to: 'analyzer' },
+    { from: 'analyzer', to: 'readFrames' },
+    { from: 'readFrames', to: 'frameBuffer' },
+    { from: 'frameBuffer', to: 'postMessage' },
+    { from: 'postMessage', to: 'mainThread' },
+    { from: 'mainThread', to: 'visualization' }
+  ]"
+  :groups="[
+    { id: 'input', label: 'Input' },
+    { id: 'processing', label: 'Processing' },
+    { id: 'output', label: 'Output' }
+  ]"
+  caption="Input and Processing run on the audio-rendering thread; only Output crosses to the main thread."
+/>
 
 ### Timestamp Synchronization
 

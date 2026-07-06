@@ -25,18 +25,31 @@ Use Quick Master for preset-driven rendering. Use Studio to adjust module-level 
 
 ## Processing Chain
 
-The browser demo presents the chain as a small number of musical decisions, but the render still follows a deterministic DSP path.
+The browser demo presents the chain as a small number of musical decisions, but the render still follows a deterministic DSP path. Each stage only sees the audio after every earlier stage has run, so corrective work (repair, tone) always happens before the stages that depend on a clean, balanced signal (dynamics, stereo, limiting, loudness).
 
-```mermaid
-flowchart LR
-  A[Decoded source] --> B[Repair and input]
-  B --> C[Tone and air]
-  C --> D[Dynamics]
-  D --> E[Stereo image]
-  E --> F[True-peak limiter]
-  F --> G[Loudness target]
-  G --> H[WAV and JSON report]
-```
+<FlowDiagram
+  title="Mastering chain"
+  :nodes="[
+    { id: 'decode', label: 'Decoded source', col: 0, row: 0 },
+    { id: 'repair', label: 'Repair + input', col: 1, row: 0 },
+    { id: 'tone', label: 'Tone + air', col: 2, row: 0 },
+    { id: 'dynamics', label: 'Dynamics', col: 3, row: 0 },
+    { id: 'stereo', label: 'Stereo image', col: 4, row: 0 },
+    { id: 'limiter', label: 'True-peak limiter', col: 5, row: 0 },
+    { id: 'loudness', label: 'Loudness target', col: 6, row: 0 },
+    { id: 'export', label: 'WAV + report', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'decode', to: 'repair' },
+    { from: 'repair', to: 'tone' },
+    { from: 'tone', to: 'dynamics' },
+    { from: 'dynamics', to: 'stereo' },
+    { from: 'stereo', to: 'limiter' },
+    { from: 'limiter', to: 'loudness' },
+    { from: 'loudness', to: 'export' }
+  ]"
+  caption="Corrective stages run first; peak safety and loudness are locked in last."
+/>
 
 The grouped guides below explain the implementation details without splitting every parameter into a thin page:
 

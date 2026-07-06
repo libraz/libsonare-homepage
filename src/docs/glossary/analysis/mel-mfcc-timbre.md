@@ -49,7 +49,7 @@ Two scalars summarize spectral shape per frame:
 These are cheap brightness/noisiness proxies — useful for UI meters, thresholds, and quick descriptors when a full MFCC vector is more than you need.
 
 ::: details How libsonare computes these
-libsonare builds the mel spectrogram with a mel filterbank applied to STFT power, then derives MFCCs via log compression and a DCT-style step, following librosa conventions closely enough for reference comparison. Spectral centroid and flatness are computed directly from the magnitude spectrum per frame. These features are exposed through the feature-extraction APIs and reused by higher-level timbre and section descriptors; mel and MFCC can also be inverted to approximate audio for previews (see Inverse Features).
+libsonare builds the mel spectrogram with a mel filterbank applied to STFT power, then derives MFCCs via log compression and a DCT-style step, following librosa conventions closely enough for reference comparison. `mfcc` accepts a trailing `lifter` parameter (cepstral liftering, default 0 = no liftering) that matches librosa's `lifter` argument. Spectral centroid and flatness are computed directly from the magnitude spectrum per frame. These features are exposed through the feature-extraction APIs and reused by higher-level timbre and section descriptors; mel and MFCC can also be inverted to approximate audio for previews (see Inverse Features).
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Spectrogram and STFT](./spectrogram-stft.md), [Section and Structure](./section-structure.md), [Chroma Features](./chroma-features.md)

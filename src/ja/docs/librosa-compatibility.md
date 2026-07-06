@@ -20,7 +20,7 @@ libsonare は、[librosa](https://librosa.org/) と同じような MIR（music i
 |--------------------------------|----------------------|--------|
 | ファイルを読み込み、単発解析する | `Audio.from_file(...)` のあと `detect_bpm`, `detect_key`, `analyze` | ブラウザ/WASM はファイルをデコードしません。先に Web Audio などで PCM にします |
 | ML 用のスペクトログラム特徴を作る | `stft`, `melSpectrogram` / `mel_spectrogram`, `mfcc`, `pcen` | 比較時は `n_fft`, `hop_length`, `n_mels`, `n_mfcc` を明示してください |
-| クロマや和声特徴を計算する | `chroma`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `nnlsChroma` は `librosa.feature.chroma_cqt` の厳密な clone ではありません |
+| クロマや和声特徴を計算する | `chroma`, `chromaCqt` / `chroma_cqt`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `chromaCqt` / `chroma_cqt` が `librosa.feature.chroma_cqt` の直接の相当。`nnlsChroma` は別物の NNLS 音符活性化クロマです |
 | テンポ、ビート、オンセット、パルスを見る | `onsetEnvelope`, `detectOnsets`, `detectBeats`, `detectBpm`, `tempogram`, `plp` | 高レベル検出器はビート／オンセット時刻を秒で返します |
 | 音声を編集・変換する | `hpss`, `hpssWithResidual` / `hpss_with_residual`, `timeStretch` / `time_stretch`, `phaseVocoder` / `phase_vocoder`, `pitchShift` / `pitch_shift`, `remix`, `trimSilence` / `trim_silence` | フェーズボコーダー、HPSS、リサンプリングの細部は librosa と異なります |
 | 単位変換や配列整形をする | `framesToSamples`, `samplesToFrames`, `frameSignal`, `padCenter`, `fixLength`, `vectorNormalize` | JS は camelCase、Python は snake_case です |
@@ -77,7 +77,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 | librosa | libsonare | 備考 |
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney 正規化 |
-| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II。librosa と合わせる場合は `n_mfcc` を明示してください |
+| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II。librosa と合わせる場合は `n_mfcc` を明示してください。末尾の `lifter`（ケプストラルリフタリング、既定 0 = リフタリングなし）は librosa の `lifter` に対応します |
 | `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース。各フレームは 12 個のピッチクラス値の最大が 1.0 になるよう正規化され（L-infinity／最大値正規化）、librosa の既定 `norm=np.inf` と一致 |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | フレーム単位 |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | フレーム単位 |
@@ -91,7 +91,8 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 | `librosa.feature.tonnetz()` | `tonnetz()` | 入力: row-major クロマグラム |
 | `librosa.cqt()` | `cqt()` | 定 Q 変換の振幅 |
 | `librosa.vqt()` | `vqt()` | 可変 Q 変換。`gamma` で Q を制御 |
-| `librosa.feature.chroma_cqt()`（近いもの） | `nnlsChroma()` / `nnls_chroma()` | NNLS 音符活性化クロマ。librosa に厳密な相当なし |
+| `librosa.feature.chroma_cqt()` | `chromaCqt()` / `chroma_cqt()` | 定 Q クロマグラム。`librosa.feature.chroma_cqt` の直接の相当 |
+| _（librosa に厳密な clone なし）_ | `nnlsChroma()` / `nnls_chroma()` | 追加の NNLS 音符活性化クロマ。librosa に厳密な相当なし |
 | `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS（Chroma Energy Normalized Statistics）クロマ。平滑化・L1 正規化済み |
 | _（librosa に厳密な相当なし）_ | `bassChroma()` / `bass_chroma()` | CQT ベースの低域クロマ。ベース音・転回形の推定向け |
 | `librosa.hybrid_cqt()` | `hybridCqt()` / `hybrid_cqt()` | ハイブリッド CQT（低域ビンは CQT、高域ビンは pseudo-CQT） |

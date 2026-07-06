@@ -168,9 +168,9 @@ sonare key music.mp3 --candidates 5 --profile temperley --modes major-minor
 | `--use-hpss` | ドラムが強い素材で、倍音成分を使ってキーを見やすくする |
 | `--loudness-weighted` | RMS でクロマフレームを重み付けし、静かな箇所の影響を下げる |
 | `--high-pass-hz FREQ` | キー解析前に低域を無視する |
-| `--modes major-minor\|all\|...` | 候補モードを制限する |
-| `--profile ks\|krumhansl\|temperley\|shaath\|keyfinder\|faraldo-edmt\|edmt\|faraldo-edma\|edma\|faraldo-edmm\|edmm\|bellman-budge\|bellman` | キープロファイルの系統を選ぶ |
-| `--genre-hint auto\|edm\|electronic\|dance\|pop\|classical\|jazz` | ジャンルヒントからプロファイルを選ばせる |
+| `--modes NAME` | 候補モードを制限する |
+| `--profile NAME` | キープロファイルの系統を選ぶ |
+| `--genre-hint HINT` | ジャンルヒントからプロファイルを選ばせる |
 
 ::: details キープロファイル・ジャンルヒント・`--high-pass-hz` とは？
 - **キープロファイル** — あるキーで 12 のピッチクラスがそれぞれどれくらい目立ちやすいかのテンプレートです。検出器は曲のクロマをこれらと比べ、最も一致するものを選びます。

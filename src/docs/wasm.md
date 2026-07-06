@@ -449,24 +449,36 @@ The Streaming API enables real-time audio analysis with low latency. Unlike batc
 
 ### Architecture Overview
 
-```mermaid
-flowchart TB
-    subgraph Browser
-        A[Microphone / File] --> B[AudioContext]
-        B --> C[AudioWorkletNode]
-    end
+Audio capture and analysis run on the AudioWorklet thread so the main thread stays free to paint; only the small, already-computed frame buffer crosses the thread boundary via `postMessage`, not raw audio.
 
-    subgraph AudioWorklet Thread
-        C --> D[AudioWorkletProcessor]
-        D --> E[StreamAnalyzer]
-        E --> F[QuantizedFrameBuffer]
-    end
-
-    subgraph Main Thread
-        F -->|postMessage| G[Visualization]
-        G --> H[Canvas / WebGL]
-    end
-```
+<FlowDiagram
+  title="Streaming pipeline"
+  :nodes="[
+    { id: 'mic', label: 'Mic / File', col: 0, row: 0, group: 'browser', variant: 'muted' },
+    { id: 'ctx', label: 'AudioContext', col: 1, row: 0, group: 'browser' },
+    { id: 'node', label: 'AudioWorkletNode', col: 2, row: 0, group: 'browser', variant: 'accent' },
+    { id: 'processor', label: 'AudioWorkletProcessor', col: 3, row: 0, group: 'worklet' },
+    { id: 'analyzer', label: 'StreamAnalyzer', col: 4, row: 0, group: 'worklet', variant: 'accent' },
+    { id: 'buffer', label: 'Quantized frames', col: 5, row: 0, group: 'worklet' },
+    { id: 'viz', label: 'Visualization', col: 6, row: 0, group: 'main' },
+    { id: 'canvas', label: 'Canvas / WebGL', col: 7, row: 0, group: 'main', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'mic', to: 'ctx' },
+    { from: 'ctx', to: 'node' },
+    { from: 'node', to: 'processor' },
+    { from: 'processor', to: 'analyzer' },
+    { from: 'analyzer', to: 'buffer' },
+    { from: 'buffer', to: 'viz', label: 'postMessage', style: 'dashed' },
+    { from: 'viz', to: 'canvas' }
+  ]"
+  :groups="[
+    { id: 'browser', label: 'Browser' },
+    { id: 'worklet', label: 'AudioWorklet Thread' },
+    { id: 'main', label: 'Main Thread' }
+  ]"
+  caption="Everything left of the dashed edge runs off the main thread; only the postMessage hop crosses back to it."
+/>
 
 ### Basic Example
 

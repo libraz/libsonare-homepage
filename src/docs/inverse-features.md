@@ -43,15 +43,27 @@ The output is meant for inspection and preview, not for getting your original re
 
 ## The four helpers
 
-```mermaid
-flowchart LR
-  A[audio] -->|melSpectrogram| M[mel power]
-  A -->|mfcc| C[MFCC coeffs]
-  C -->|mfccToMel| M
-  M -->|melToStft| S[STFT power]
-  M -->|melToAudio| P1[preview audio]
-  C -->|mfccToAudio| P2[preview audio]
-```
+<FlowDiagram
+  title="Mel/MFCC round trip"
+  :nodes="[
+    { id: 'audio', label: 'Audio', col: 0, row: 0 },
+    { id: 'mel', label: 'Mel power', col: 1, row: 0 },
+    { id: 'mfcc', label: 'MFCC coeffs', col: 1, row: 1 },
+    { id: 'stft', label: 'STFT power', col: 2, row: 0, variant: 'success' },
+    { id: 'preview', label: 'Preview audio', col: 2, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'audio', to: 'mel', label: 'melSpectrogram', style: 'dashed' },
+    { from: 'audio', to: 'mfcc', label: 'mfcc', style: 'dashed' },
+    { from: 'mfcc', to: 'mel', label: 'mfccToMel' },
+    { from: 'mel', to: 'stft', label: 'melToStft' },
+    { from: 'mel', to: 'preview', label: 'melToAudio' },
+    { from: 'mfcc', to: 'preview', label: 'mfccToAudio' }
+  ]"
+  caption="Dashed edges are the forward transforms this page assumes you already have; solid edges are the four inverse helpers below."
+/>
+
+The two forward transforms (dashed) produce the features you already know; the four inverse helpers (solid) undo them, either staying in the spectral domain (`melToStft`, `mfccToMel`) or reconstructing a preview waveform via Griffin-Lim (`melToAudio`, `mfccToAudio`).
 
 | Intent | JavaScript | Python |
 |--------|------------|--------|

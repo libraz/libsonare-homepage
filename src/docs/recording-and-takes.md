@@ -23,17 +23,33 @@ A **take** is one recorded attempt. A **comp** is the edited keeper assembled fr
 
 ## From microphone to comped clip
 
-Recording crosses the realtime layer and the project layer. The engine captures samples; the project stores those samples as takes and comp instructions.
+Recording crosses the realtime layer and the project layer. The engine captures samples; the project stores those samples as takes and comp instructions. The two halves meet at a single handoff point — `capturedAudio()` — which is also where you must switch from the audio thread to the main/control thread.
 
-```mermaid
-flowchart LR
-  A[Microphone or engine output] --> B[RealtimeEngine capture buffer]
-  B --> C["capturedAudio()"]
-  C --> D[Project.addLoopRecordingTakes]
-  D --> E[Clip takes]
-  E --> F[Comp segments]
-  F --> G["compile() / bounce()"]
-```
+<FlowDiagram
+  title="Capture-to-bounce pipeline"
+  :nodes="[
+    { id: 'source', label: 'Mic or engine output', col: 0, row: 0, variant: 'muted', group: 'realtime' },
+    { id: 'buffer', label: 'Capture buffer', col: 1, row: 0, group: 'realtime' },
+    { id: 'handoff', label: 'capturedAudio()', col: 2, row: 0, variant: 'accent' },
+    { id: 'takes', label: 'addLoopRecordingTakes', col: 3, row: 0, group: 'project' },
+    { id: 'cliptakes', label: 'Clip takes', col: 4, row: 0, group: 'project' },
+    { id: 'comp', label: 'Comp segments', col: 5, row: 0, group: 'project' },
+    { id: 'bounce', label: 'compile() / bounce()', col: 6, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'buffer' },
+    { from: 'buffer', to: 'handoff' },
+    { from: 'handoff', to: 'takes' },
+    { from: 'takes', to: 'cliptakes' },
+    { from: 'cliptakes', to: 'comp' },
+    { from: 'comp', to: 'bounce' }
+  ]"
+  :groups="[
+    { id: 'realtime', label: 'Realtime engine' },
+    { id: 'project', label: 'Project model' }
+  ]"
+  caption="capturedAudio() is the one safe crossing point from the audio thread to the main/control thread."
+/>
 
 Do not put `Project` editing calls in the audio callback. Capture in the realtime engine first, then update the project from the main/control thread after the take is finished.
 

@@ -24,18 +24,33 @@ By the end of this page you should be able to:
 
 ## Render Path
 
-```mermaid
-flowchart TD
-  A[Browser file input] --> B[Web Audio decode]
-  B --> C[Float32 channel buffers]
-  C --> D[Mastering worker]
-  D --> E[libsonare WASM]
-  E --> F[Source metrics]
-  E --> G[Preset or chain render]
-  G --> H[Rendered metrics]
-  H --> I[WAV export]
-  H --> J[JSON report]
-```
+<FlowDiagram
+  title="Render path"
+  :nodes="[
+    { id: 'file', label: 'Audio file', col: 0, row: 0 },
+    { id: 'decode', label: 'Web Audio decode', col: 1, row: 0 },
+    { id: 'buffers', label: 'Float32 buffers', col: 2, row: 0 },
+    { id: 'worker', label: 'Mastering worker', col: 3, row: 0, variant: 'accent' },
+    { id: 'wasm', label: 'libsonare WASM', col: 4, row: 0, variant: 'accent' },
+    { id: 'srcMetrics', label: 'Source metrics', col: 5, row: 0 },
+    { id: 'render', label: 'Preset / chain render', col: 5, row: 1 },
+    { id: 'outMetrics', label: 'Rendered metrics', col: 6, row: 1 },
+    { id: 'wav', label: 'WAV export', col: 7, row: 0, variant: 'success' },
+    { id: 'json', label: 'JSON report', col: 7, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'file', to: 'decode' },
+    { from: 'decode', to: 'buffers' },
+    { from: 'buffers', to: 'worker' },
+    { from: 'worker', to: 'wasm' },
+    { from: 'wasm', to: 'srcMetrics' },
+    { from: 'wasm', to: 'render' },
+    { from: 'render', to: 'outMetrics' },
+    { from: 'outMetrics', to: 'wav' },
+    { from: 'outMetrics', to: 'json' }
+  ]"
+  caption="Source metrics are read once from the decoded buffers; the render path always produces its own rendered metrics."
+/>
 
 Decoding uses browser APIs. The mastering work runs in a worker so expensive DSP does not block the VitePress page. The worker passes mono or stereo `Float32Array` buffers into the WASM package, receives rendered samples and metrics, then creates local object URLs for playback, download, and reports.
 

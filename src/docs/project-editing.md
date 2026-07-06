@@ -35,35 +35,64 @@ A project nests a few simple parts, each one a container for the next:
 MIDI notes are just instructions (play note 60 now), not sound. A **destination** is the instrument those instructions are sent to — the synth or sampler that turns them into audio. A MIDI track names a destination; you bind an actual instrument to it when you render. See [Project Bounce](./project-bounce.md).
 :::
 
-```mermaid
-flowchart TD
-  P[Project] --> T1[Audio track]
-  P --> T2[MIDI track]
-  P --> AUTO[Automation lanes]
-  T1 --> C1[Audio clip<br/>takes / comp segments]
-  T2 --> C2[MIDI clip<br/>note events]
-  C2 --> DEST[MIDI destination<br/>instrument]
-  T1 --> SCENE[Mixer scene strip]
-  T2 --> SCENE
-  SCENE --> MASTER[Master bus]
-```
+<FlowDiagram
+  title="Project structure"
+  direction="TB"
+  :nodes="[
+    { id: 'project', label: 'Project', col: 0, row: 0, variant: 'accent' },
+    { id: 'audioTrack', label: 'Audio track', col: 0, row: 1 },
+    { id: 'midiTrack', label: 'MIDI track', col: 1, row: 1 },
+    { id: 'automation', label: 'Automation lanes', col: 2, row: 1, variant: 'muted' },
+    { id: 'audioClip', label: 'Audio clip (takes / comp)', col: 0, row: 2 },
+    { id: 'midiClip', label: 'MIDI clip (note events)', col: 1, row: 2 },
+    { id: 'destination', label: 'MIDI destination', col: 1, row: 3, variant: 'accent' },
+    { id: 'scene', label: 'Mixer scene strip', col: 0, row: 3 },
+    { id: 'master', label: 'Master bus', col: 0, row: 4, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'project', to: 'audioTrack' },
+    { from: 'project', to: 'midiTrack' },
+    { from: 'project', to: 'automation' },
+    { from: 'audioTrack', to: 'audioClip' },
+    { from: 'midiTrack', to: 'midiClip' },
+    { from: 'midiClip', to: 'destination' },
+    { from: 'audioTrack', to: 'scene' },
+    { from: 'midiTrack', to: 'scene' },
+    { from: 'scene', to: 'master' }
+  ]"
+  caption="Every track, clip, and lane nests under the project; audio and MIDI tracks both route through the mixer scene on their way to the master bus."
+/>
 
 ## The edit flow at a glance
 
 Keep this mental model in mind before reading the API list. You edit a `Project`; compiling checks that the timeline makes sense; bouncing turns the compiled timeline into audio samples.
 
-```mermaid
-flowchart LR
-  A[Decoded audio or MIDI events] --> B[Project tracks and clips]
-  B --> C[Undoable edits]
-  C --> D["compile()"]
-  D --> E{Diagnostics}
-  E -->|no errors| F[bounce / instrument bounce]
-  E -->|errors| G[Fix clip, track, or routing]
-  F --> H[Interleaved Float32 audio]
-```
+<FlowDiagram
+  title="Edit → compile → bounce"
+  :nodes="[
+    { id: 'source', label: 'Audio / MIDI source', col: 0, row: 0 },
+    { id: 'project', label: 'Tracks & clips', col: 1, row: 0 },
+    { id: 'edits', label: 'Undoable edits', col: 2, row: 0 },
+    { id: 'compile', label: 'compile()', col: 3, row: 0 },
+    { id: 'diagnostics', label: 'Diagnostics', col: 4, row: 0, variant: 'decision' },
+    { id: 'bounce', label: 'Bounce', col: 5, row: 0, variant: 'accent' },
+    { id: 'fix', label: 'Fix clip / track / routing', col: 5, row: 1, variant: 'warning' },
+    { id: 'audio', label: 'Interleaved Float32 audio', col: 6, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'project' },
+    { from: 'project', to: 'edits' },
+    { from: 'edits', to: 'compile' },
+    { from: 'compile', to: 'diagnostics' },
+    { from: 'diagnostics', to: 'bounce', label: 'no errors' },
+    { from: 'diagnostics', to: 'fix', label: 'errors', style: 'dashed' },
+    { from: 'fix', to: 'edits', label: 'fix', style: 'dashed' },
+    { from: 'bounce', to: 'audio' }
+  ]"
+  caption="When diagnostics report errors, fixing the clip, track, or routing loops back into the edit step (dashed) instead of ending the flow."
+/>
 
-Two points prevent most beginner mistakes:
+When `compile()` comes back with errors, the fix is not a dead end — you correct the offending clip, track, or routing and the arrangement re-enters the same undoable-edit step, ready to compile again. Two points prevent most beginner mistakes:
 
 - `compile()` does not make sound; it validates and prepares the arrangement.
 - Plain `bounce()` renders audio tracks only. MIDI tracks need an instrument-bound bounce such as `bounceWithSynthInstrument(...)` or `bounceWithSf2Instrument(...)`.

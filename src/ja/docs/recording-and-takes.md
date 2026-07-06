@@ -23,17 +23,33 @@ libsonare はこれを協調する 2 つの層に分けています。[リアル
 
 ## マイクからコンプ済みクリップまで
 
-録音はリアルタイム層とプロジェクト層をまたぎます。エンジンがサンプルをキャプチャし、プロジェクトがそのサンプルをテイクとコンプ指示として保持します。
+録音はリアルタイム層とプロジェクト層をまたぎます。エンジンがサンプルをキャプチャし、プロジェクトがそのサンプルをテイクとコンプ指示として保持します。この2つの層は `capturedAudio()` という単一の受け渡し地点でつながっており、ここがオーディオスレッドからメイン／制御スレッドへ切り替えるべき地点でもあります。
 
-```mermaid
-flowchart LR
-  A[マイクまたはエンジン出力] --> B[RealtimeEngine のキャプチャバッファ]
-  B --> C["capturedAudio()"]
-  C --> D[Project.addLoopRecordingTakes]
-  D --> E[クリップのテイク]
-  E --> F[コンプセグメント]
-  F --> G["compile() / bounce()"]
-```
+<FlowDiagram
+  title="キャプチャからバウンスまでのパイプライン"
+  :nodes="[
+    { id: 'source', label: 'マイクまたはエンジン出力', col: 0, row: 0, variant: 'muted', group: 'realtime' },
+    { id: 'buffer', label: 'キャプチャバッファ', col: 1, row: 0, group: 'realtime' },
+    { id: 'handoff', label: 'capturedAudio()', col: 2, row: 0, variant: 'accent' },
+    { id: 'takes', label: 'addLoopRecordingTakes', col: 3, row: 0, group: 'project' },
+    { id: 'cliptakes', label: 'クリップのテイク', col: 4, row: 0, group: 'project' },
+    { id: 'comp', label: 'コンプセグメント', col: 5, row: 0, group: 'project' },
+    { id: 'bounce', label: 'compile() / bounce()', col: 6, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'source', to: 'buffer' },
+    { from: 'buffer', to: 'handoff' },
+    { from: 'handoff', to: 'takes' },
+    { from: 'takes', to: 'cliptakes' },
+    { from: 'cliptakes', to: 'comp' },
+    { from: 'comp', to: 'bounce' }
+  ]"
+  :groups="[
+    { id: 'realtime', label: 'リアルタイムエンジン' },
+    { id: 'project', label: 'プロジェクトモデル' }
+  ]"
+  caption="capturedAudio() は、オーディオスレッドからメイン／制御スレッドへ移ってよい唯一の安全な受け渡し地点です。"
+/>
 
 音声コールバック内で `Project` の編集メソッドを呼ばないでください。まずリアルタイムエンジンで録音し、テイクが終わってからメイン／制御スレッドでプロジェクトを更新します。
 

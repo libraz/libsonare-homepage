@@ -48,7 +48,7 @@ Music-analysis and metering helpers default to `sample_rate=22050`; room-acousti
 |----------|------------|-----|
 | A script that reads files and prints metadata | `Audio.from_file(...)` + `detect_bpm` / `detect_key` / `analyze` | Python handles decoding and keeps the code short |
 | Detailed music analysis | `analyze_bpm`, `detect_chords`, `analyze_sections`, `analyze_timbre`, `analyze_dynamics`, `analyze_rhythm` | These run a single facet of analysis with extra parameters; `analyze(...)` already returns all of these fields in one `AnalysisResult` |
-| Feature arrays for notebooks or ML | `mel_spectrogram`, `mfcc`, `chroma`, `cqt`, `vqt`, `nnls_chroma` | Returns plain Python lists / result objects that can be converted to NumPy if desired |
+| Feature arrays for notebooks or ML | `mel_spectrogram`, `mfcc`, `chroma`, `cqt`, `vqt`, `chroma_cqt`, `nnls_chroma` | Returns plain Python lists / result objects that can be converted to NumPy if desired |
 | Editing a clip | `time_stretch`, `pitch_shift`, `pitch_correct_to_midi`, `note_stretch`, `voice_change`, `RealtimeVoiceChanger` | These transform the signal itself |
 | Mastering a file | `master_audio`, `mastering_chain`, `StreamingMasteringChain` | Presets first, explicit chain config when you need control |
 | Live or chunked analysis | `StreamAnalyzer` | Feed audio blocks, drain feature frames, and read BPM/key/chord estimates that update as more audio arrives |
@@ -416,7 +416,7 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `stft(samples, sample_rate, n_fft?, hop_length?)` | `StftResult` | Short-Time Fourier Transform |
 | `stft_db(samples, sample_rate, n_fft?, hop_length?)` | `tuple` | STFT in decibels |
 | `mel_spectrogram(samples, sample_rate, n_fft?, hop_length?, n_mels?, fmin?, fmax?, htk?)` | `MelSpectrogramResult` | Mel spectrogram; `fmin`/`fmax` bound the band edges, `htk=True` uses the HTK Mel formula |
-| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients |
+| `mfcc(samples, sample_rate, n_fft?, hop_length?, n_mels?, n_mfcc?, fmin?, fmax?, htk?, lifter?)` | `MfccResult` | Mel-Frequency Cepstral Coefficients (`lifter=0.0` disables cepstral liftering) |
 | `chroma(samples, sample_rate, n_fft?, hop_length?)` | `ChromaResult` | Chroma features (pitch class distribution) |
 | `spectral_centroid(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral centroid per frame |
 | `spectral_bandwidth(samples, sample_rate, n_fft?, hop_length?)` | `list[float]` | Spectral bandwidth per frame |
@@ -439,6 +439,7 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude |
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
 | `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
+| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?)` | `tuple[int, list[float]]` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) — returns `(n_frames, row-major 12 x n_frames data)` |
 | `nnls_chroma(samples, sample_rate)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | NMF decomposition `(w, h)` with a selectable initialiser; `init` defaults to `'random'`, also accepts `'nndsvd'` (SVD warm start) |

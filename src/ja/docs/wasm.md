@@ -440,24 +440,36 @@ function AudioAnalyzer() {
 
 ### アーキテクチャ概要
 
-```mermaid
-flowchart TB
-    subgraph ブラウザ
-        A[マイク / ファイル] --> B[AudioContext]
-        B --> C[AudioWorkletNode]
-    end
+音声のキャプチャと解析は AudioWorklet スレッドで実行されるため、メインスレッドは描画に専念できます。スレッド境界を `postMessage` で越えるのは、生の音声ではなく、あらかじめ計算済みの小さなフレームバッファだけです。
 
-    subgraph AudioWorklet スレッド
-        C --> D[AudioWorkletProcessor]
-        D --> E[StreamAnalyzer]
-        E --> F[QuantizedFrameBuffer]
-    end
-
-    subgraph メインスレッド
-        F -->|postMessage| G[ビジュアライゼーション]
-        G --> H[Canvas / WebGL]
-    end
-```
+<FlowDiagram
+  title="ストリーミングパイプライン"
+  :nodes="[
+    { id: 'mic', label: 'マイク / ファイル', col: 0, row: 0, group: 'browser', variant: 'muted' },
+    { id: 'ctx', label: 'AudioContext', col: 1, row: 0, group: 'browser' },
+    { id: 'node', label: 'AudioWorkletNode', col: 2, row: 0, group: 'browser', variant: 'accent' },
+    { id: 'processor', label: 'AudioWorkletProcessor', col: 3, row: 0, group: 'worklet' },
+    { id: 'analyzer', label: 'StreamAnalyzer', col: 4, row: 0, group: 'worklet', variant: 'accent' },
+    { id: 'buffer', label: '量子化フレーム', col: 5, row: 0, group: 'worklet' },
+    { id: 'viz', label: 'ビジュアライゼーション', col: 6, row: 0, group: 'main' },
+    { id: 'canvas', label: 'Canvas / WebGL', col: 7, row: 0, group: 'main', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'mic', to: 'ctx' },
+    { from: 'ctx', to: 'node' },
+    { from: 'node', to: 'processor' },
+    { from: 'processor', to: 'analyzer' },
+    { from: 'analyzer', to: 'buffer' },
+    { from: 'buffer', to: 'viz', label: 'postMessage', style: 'dashed' },
+    { from: 'viz', to: 'canvas' }
+  ]"
+  :groups="[
+    { id: 'browser', label: 'ブラウザ' },
+    { id: 'worklet', label: 'AudioWorklet スレッド' },
+    { id: 'main', label: 'メインスレッド' }
+  ]"
+  caption="破線より左側はすべてメインスレッド外で実行され、メインスレッドに戻ってくるのは postMessage の一往復だけです。"
+/>
 
 ### 基本的な例
 

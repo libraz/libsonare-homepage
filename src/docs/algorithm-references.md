@@ -59,6 +59,31 @@ This page cites algorithms by name; here is what the less-obvious ones do.
 - **RBJ biquads / Linkwitz-Riley crossovers** — standard recipes for EQ filters and for splitting audio into frequency bands with correct phase behavior.
 :::
 
+## Built-in synthesis and GM/GS compatibility
+
+The data-free [built-in synthesizer](./native-synth.md) is built from published synthesis and physical-modelling literature; its acoustic engines are original implementations of these algorithm families, not sampled or captured instruments.
+
+| Engine | Algorithm-family basis | Evidence |
+|--------|------------------------|----------|
+| FM | Chowning phase-modulation FM (1973) | `src/midi/synth/fm_voice.*` |
+| Karplus-Strong | Karplus-Strong plucked string (1983) with Jaffe-Smith extensions (1983); dual-polarization and bridge coupling after Karjalainen-Välimäki-Tolonen (1998), Bank-Karjalainen (2010), Woodhouse (2004); fret-slap after Rank-Kubin (1997) | `src/midi/synth/ks_voice.*` |
+| Plucked string (buzzing bridge) | Karplus-Strong string with a distributed nonlinear jawari / sawari bridge contact (amplitude-limited loop reflection) for the sitar / koto / harp buzz | `src/midi/synth/plucked_string_voice.*` |
+| Modal | Modal resonator synthesis (Adrien 1991); banded waveguides (Essl-Cook) | `src/midi/synth/modal_voice.*` |
+| Piano | Stiff-string allpass-chain dispersion, nonlinear felt-hammer contact, coupled unison strings, shared modal soundboard, Railsback stretch tuning | `src/midi/synth/piano_voice.*` |
+| Bowed string | Digital-waveguide bowed string (McIntyre-Schumacher-Woodhouse 1983; Smith); elasto-plastic bow friction (Dupont 2002; Avanzini-Serafin-Rocchesso 2003) | `src/midi/synth/bowed_string_voice.*` |
+| Reed | Single-reed digital-waveguide woodwind (Smith); tonehole scattering (STK BlowHole family) | `src/midi/synth/reed_voice.*` |
+| Brass | Lip-reed brass waveguide (Smith-Cook); outward-striking lip valve (Fletcher 1979); cuivré wave-steepening (Hirschberg 1996); two-mode lip (Adachi-Sato 1996) | `src/midi/synth/brass_voice.*` |
+| Flute / pipe organ | Air-jet / flue-pipe waveguide with a lumped jet drive (Fabre-Hirschberg); edge hysteresis (Auvray-Ernoult-Fabre-Lagrée 2014) | `src/midi/synth/flute_voice.*`, `src/midi/synth/pipe_organ_voice.*` |
+| Vocal (source-filter) | Source-filter voice: a spectrally tilted glottal sawtooth plus aspiration through a parallel bank of RBJ constant-peak bandpass formants; sung-bass vowel formant data from the Csound FOF corpus | `src/midi/synth/vocal_voice.*` |
+| Free reed | Driven free-reed tongue oscillator (phase accumulator, asymmetric saturator, reed-plate body lowpass) with a musette-detuned tongue pair; free-reed acoustics after Cottingham | `src/midi/synth/free_reed_voice.*` |
+| Percussion | Circular-membrane (Rayleigh) modes with strike-point Bessel weighting; PhISEM stochastic-particle model (Cook) | `src/midi/synth/percussion_voice.*` |
+
+### General MIDI and GS compatibility
+
+libsonare follows the open General MIDI and General MIDI 2 instrument/percussion maps (MIDI Association) and the Roland-defined GS extensions — extra banks, NRPNs, drum-kit variations, and insertion effects (EFX) — at the addressing level, using their publicly documented MIDI/SysEx implementation and effect type-numbering. This compatibility target lets GM/GS-authored MIDI select the banks, kits, and effects a composer intended.
+
+The sounds behind those addresses are libsonare's own procedural synthesis and DSP, reconstructed from public documentation and the literature above. libsonare ships no samples, ROM data, or firmware from any hardware module, and each effect is one of its own algorithms. The result is an **independent re-creation** — it follows the GS addressing and effect structure, but does **not** reproduce the exact sound of any specific device. As with the librosa fixtures below, this is a compatibility target, not copied implementation code, and not a claim of identical output.
+
 ## librosa Reference Compatibility
 
 The reference fixtures under `tests/librosa/reference/` are generated with librosa 0.11.0.

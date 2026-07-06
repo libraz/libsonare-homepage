@@ -82,8 +82,8 @@ The analysis side — music information retrieval (MIR): extracting tempo, key, 
 | Family | Implementation role | Main use |
 |--------|---------------------|----------|
 | STFT and framing | Windowed FFT over overlapping frames, with shared frame/hop conventions | Foundation for spectral, chroma, onset, mel, and MFCC features |
-| Mel / MFCC | Mel filterbank plus DCT-style cepstral compression | ML features, timbre summaries, librosa-compatible workflows |
-| Chroma / CQT / VQT / NNLS chroma | Pitch-class and log-frequency representations | Key, chord, harmonic similarity, and pitch-aware features |
+| Mel / MFCC | Mel filterbank plus DCT-style cepstral compression, with optional cepstral liftering (`lifter`, default 0 = off) | ML features, timbre summaries, librosa-compatible workflows |
+| Chroma / CQT / VQT / NNLS chroma | Pitch-class and log-frequency representations, including a constant-Q chromagram (`chromaCqt`) | Key, chord, harmonic similarity, and pitch-aware features |
 | Onset / tempogram / PLP | Onset envelope and local periodicity representations | BPM, beat, rhythm, and pulse analysis |
 | Pitch tracking | YIN and pYIN style F0 estimation | Melody extraction and monophonic pitch analysis |
 | Inverse features | Pseudo-inverse mel/MFCC paths and Griffin-Lim audio synthesis | Debug previews and feature round-trip checks |

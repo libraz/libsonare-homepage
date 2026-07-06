@@ -27,15 +27,28 @@ A common beginner assumption is that a bounce just adds all the tracks together.
 
 That means each track passes through its **channel strip** (its EQ, dynamics, gain, pan), its **sends** feed shared effects, and everything sums through the **buses** on the way to the master — exactly as it would when you mix. The bounce is the mix, not a raw sum of clips. See [Mixing](../../mixing.md) for what lives on a channel strip.
 
-```mermaid
-graph LR
-  A[Track clips] --> B[Channel strip<br/>EQ / dynamics / gain]
-  B --> C[Sends to FX]
-  B --> D[Bus]
-  C --> D
-  D --> M[Master]
-  M --> F[Finished audio file]
-```
+The signal path below is identical to what you hear during live playback — bouncing simply captures it to a file instead of an audio device.
+
+<FlowDiagram
+  title="Bounce signal path"
+  :nodes="[
+    { id: 'clips', label: 'Track clips', col: 0, row: 0 },
+    { id: 'strip', label: 'Channel strip', col: 1, row: 0, variant: 'accent' },
+    { id: 'sends', label: 'Sends to FX', col: 2, row: 0, variant: 'muted' },
+    { id: 'bus', label: 'Bus', col: 3, row: 0 },
+    { id: 'master', label: 'Master', col: 4, row: 0 },
+    { id: 'file', label: 'Finished audio file', col: 5, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'clips', to: 'strip' },
+    { from: 'strip', to: 'sends' },
+    { from: 'strip', to: 'bus' },
+    { from: 'sends', to: 'bus' },
+    { from: 'bus', to: 'master' },
+    { from: 'master', to: 'file' }
+  ]"
+  caption="Every track's EQ, dynamics, gain, and sends are summed through the bus and master before the bounce is written."
+/>
 
 ## MIDI tracks need an instrument at bounce
 

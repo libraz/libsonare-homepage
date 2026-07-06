@@ -29,7 +29,7 @@ Use this table before scanning the long compatibility matrix:
 |------------------------------|------------------|---------------|
 | Load files and run one-off analysis | `Audio.from_file(...)`, then `detect_bpm`, `detect_key`, `analyze` | Browser/WASM APIs usually take decoded PCM; use Web Audio or `Audio.fromMemory*` to turn encoded bytes into samples |
 | Build spectrogram features for ML | `stft`, `melSpectrogram` / `mel_spectrogram`, `mfcc`, `pcen` | Pass `n_fft`, `hop_length`, `n_mels`, and `n_mfcc` explicitly when comparing |
-| Compute chroma or harmonic features | `chroma`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `nnlsChroma` is not a strict `librosa.feature.chroma_cqt` clone |
+| Compute chroma or harmonic features | `chroma`, `chromaCqt` / `chroma_cqt`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `chromaCqt` / `chroma_cqt` is the direct `librosa.feature.chroma_cqt` match; `nnlsChroma` is a separate NNLS note-activation chroma |
 | Track tempo, beats, onsets, or pulse | `onsetEnvelope`, `detectOnsets`, `detectBeats`, `detectBpm`, `tempogram`, `plp` | libsonare returns beat/onset times in seconds for high-level detectors |
 | Edit or transform audio | `hpss`, `hpssWithResidual` / `hpss_with_residual`, `timeStretch` / `time_stretch`, `phaseVocoder` / `phase_vocoder`, `pitchShift` / `pitch_shift`, `remix`, `trimSilence` / `trim_silence` | Phase-vocoder, HPSS, and resampling details differ from librosa |
 | Convert units or reshape feature arrays | `framesToSamples`, `samplesToFrames`, `frameSignal`, `padCenter`, `fixLength`, `vectorNormalize` | JS names are camelCase, Python names are snake_case |
@@ -86,7 +86,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney normalization |
-| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa |
+| `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa; trailing `lifter` (cepstral liftering, default 0 = no liftering) matches librosa's `lifter` |
 | `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; each frame is scaled so its largest of the 12 pitch-class values is 1.0 (L-infinity / max normalization), matching librosa's default `norm=np.inf` |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | Per-frame |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
@@ -100,7 +100,8 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.feature.tonnetz()` | `tonnetz()` | Input: row-major chromagram |
 | `librosa.cqt()` | `cqt()` | Constant-Q transform magnitude |
 | `librosa.vqt()` | `vqt()` | Variable-Q transform; `gamma` controls Q |
-| `librosa.feature.chroma_cqt()` (closest) | `nnlsChroma()` / `nnls_chroma()` | NNLS note-activation chroma; no exact librosa equivalent |
+| `librosa.feature.chroma_cqt()` | `chromaCqt()` / `chroma_cqt()` | Constant-Q chromagram; direct `librosa.feature.chroma_cqt` equivalent |
+| _(no strict librosa clone)_ | `nnlsChroma()` / `nnls_chroma()` | Additional NNLS note-activation chroma; no strict librosa equivalent |
 | `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS (Energy Normalized Statistics) chroma; smoothed/L1-normalized |
 | _(no exact librosa equivalent)_ | `bassChroma()` / `bass_chroma()` | CQT-based low-register chroma for bass/inversion estimation |
 | `librosa.hybrid_cqt()` | `hybridCqt()` / `hybrid_cqt()` | Hybrid CQT (CQT for low bins, pseudo-CQT for high bins) |

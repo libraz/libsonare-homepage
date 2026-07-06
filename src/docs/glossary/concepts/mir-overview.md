@@ -17,19 +17,35 @@ This page explains *how the pieces relate*. For call signatures, go to the [Java
 
 Most MIR features are derived from a small set of intermediate representations. You rarely build these by hand — libsonare computes them internally — but seeing the flow explains why so many features share parameters like `nFft` and `hopLength`.
 
-```mermaid
-flowchart TD
-  W[waveform] --> S[STFT / spectrogram]
-  S --> MEL[mel spectrogram]
-  S --> CH[chroma]
-  S --> ON[onset strength]
-  MEL --> MFCC[MFCC / timbre]
-  CH --> KEY[key]
-  CH --> CHORD[chords]
-  ON --> BPM[BPM / beats]
-  ON --> SEC[sections]
-  S --> HPSS[HPSS: harmonic / percussive]
-```
+<FlowDiagram
+  title="Shared analysis pipeline"
+  :nodes="[
+    { id: 'wave', label: 'Waveform', col: 0, row: 2 },
+    { id: 'stft', label: 'STFT / spectrogram', col: 1, row: 2, variant: 'accent' },
+    { id: 'mel', label: 'Mel spectrogram', col: 2, row: 0 },
+    { id: 'chroma', label: 'Chroma', col: 2, row: 1 },
+    { id: 'onset', label: 'Onset strength', col: 2, row: 2 },
+    { id: 'mfcc', label: 'MFCC (timbre)', col: 3, row: 0, variant: 'success' },
+    { id: 'key', label: 'Key', col: 3, row: 1, variant: 'success' },
+    { id: 'chords', label: 'Chords', col: 3, row: 1.5, variant: 'success' },
+    { id: 'bpm', label: 'BPM / beats', col: 3, row: 2, variant: 'success' },
+    { id: 'sections', label: 'Sections', col: 3, row: 2.5, variant: 'success' },
+    { id: 'hpss', label: 'HPSS', col: 2, row: 3.5, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'wave', to: 'stft' },
+    { from: 'stft', to: 'mel' },
+    { from: 'stft', to: 'chroma' },
+    { from: 'stft', to: 'onset' },
+    { from: 'stft', to: 'hpss' },
+    { from: 'mel', to: 'mfcc' },
+    { from: 'chroma', to: 'key' },
+    { from: 'chroma', to: 'chords' },
+    { from: 'onset', to: 'bpm' },
+    { from: 'onset', to: 'sections' }
+  ]"
+  caption="One STFT feeds every branch, so asking for several features on the same source reuses the same intermediates instead of recomputing them."
+/>
 
 Because these intermediates are shared, asking for BPM, key, chord, and section results back-to-back on the same source does **not** repeat the heavy work — the STFT and friends are computed once and reused.
 

@@ -9,19 +9,31 @@ description: libsonare の Project を決定論的にオフラインレンダリ
 
 [Project](./project-editing.md) はタイムライン上にトラックとクリップを保持します。オーディオクリップはすでにサンプルを持つため、そのままレンダリングされます。一方 MIDI クリップが持つのは*イベント*（ノートオン・ノートオフ）であって音そのものではないので、楽譜に演奏者が要るのと同じで、音にするには**インストゥルメント**が必要です。つまりどのバウンスメソッドを選ぶかは、*どのインストゥルメントで MIDI を鳴らすか*という 1 つの問いに尽きます。
 
-```mermaid
-flowchart TD
-  subgraph PROJ[タイムライン上の Project]
-    MC[MIDI クリップ<br/>ノートイベント]
-    AC[オーディオクリップ<br/>録音サンプル]
-  end
-  MC --> BIND[各 MIDI デスティネーションに<br/>インストゥルメントをバインド<br/>NativeSynth / SoundFont / 内蔵]
-  BIND --> STRIP[各トラックをチャンネルストリップで<br/>レンダリング<br/>トリム・EQ・インサート・フェーダー・パン]
-  AC --> STRIP
-  STRIP --> SCENE[センド & バス<br/>ミキサーシーン]
-  SCENE --> MASTER[マスターバス]
-  MASTER --> OUT[インターリーブ Float32 音声 / WAV]
-```
+<FlowDiagram
+  title="バウンスパイプライン: クリップから WAV へ"
+  direction="TB"
+  :nodes="[
+    { id: 'mc', label: 'MIDI クリップ', col: 0, row: 0, group: 'timeline', variant: 'muted' },
+    { id: 'ac', label: 'オーディオクリップ', col: 1, row: 0, group: 'timeline', variant: 'muted' },
+    { id: 'bind', label: '楽器バインド', col: 0, row: 1, variant: 'accent' },
+    { id: 'strip', label: 'チャンネルストリップ', col: 0, row: 2 },
+    { id: 'scene', label: 'ミキサーシーン', col: 0, row: 3 },
+    { id: 'master', label: 'マスターバス', col: 0, row: 4 },
+    { id: 'out', label: 'WAV 出力', col: 0, row: 5, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'mc', to: 'bind' },
+    { from: 'ac', to: 'strip' },
+    { from: 'bind', to: 'strip' },
+    { from: 'strip', to: 'scene' },
+    { from: 'scene', to: 'master' },
+    { from: 'master', to: 'out' }
+  ]"
+  :groups="[
+    { id: 'timeline', label: 'タイムライン上の Project' }
+  ]"
+  caption="楽器バインドは MIDI デスティネーションごとに NativeSynth・SoundFont・内蔵シンセのいずれかを選び、そのあとチャンネルストリップがトリム・EQ・インサート・フェーダー・パンを適用してから、ミキサーがすべてをマスターバスへ合算します。"
+/>
 
 図は上から下へ読みます。オーディオクリップはそのまま流れ込み、MIDI クリップはまず楽器をバインドする必要があり、すべてがミキサーを通ってマスターへ合算されます。この一連の処理はオフラインで計算されるため、結果は毎回再現可能です。
 

@@ -23,18 +23,31 @@ libsonare のデモでは、マスタリング処理は WebAssembly としてブ
 
 ## 処理チェーン
 
-ブラウザデモの UI は少数の音楽的な判断に整理していますが、レンダリング自体は決定的な DSP 経路として実行されます。
+ブラウザデモの UI は少数の音楽的な判断に整理していますが、レンダリング自体は決定的な DSP 経路として実行されます。各ステージは、それより前のすべてのステージの処理が終わった音声だけを受け取るため、補正系の処理(リペア、トーン)は、整った信号を前提とする後続の処理(ダイナミクス、ステレオ、リミッティング、ラウドネス)より必ず先に行われます。
 
-```mermaid
-flowchart LR
-  A[デコード済み音源] --> B[リペアと入力]
-  B --> C[トーンと Air]
-  C --> D[ダイナミクス]
-  D --> E[ステレオイメージ]
-  E --> F[True Peak リミッター]
-  F --> G[ラウドネスターゲット]
-  G --> H[WAV と JSON レポート]
-```
+<FlowDiagram
+  title="マスタリングチェーン"
+  :nodes="[
+    { id: 'decode', label: 'デコード済み音源', col: 0, row: 0 },
+    { id: 'repair', label: 'リペアと入力', col: 1, row: 0 },
+    { id: 'tone', label: 'トーンと Air', col: 2, row: 0 },
+    { id: 'dynamics', label: 'ダイナミクス', col: 3, row: 0 },
+    { id: 'stereo', label: 'ステレオイメージ', col: 4, row: 0 },
+    { id: 'limiter', label: 'True Peak リミッター', col: 5, row: 0 },
+    { id: 'loudness', label: 'ラウドネスターゲット', col: 6, row: 0 },
+    { id: 'export', label: 'WAV とレポート', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'decode', to: 'repair' },
+    { from: 'repair', to: 'tone' },
+    { from: 'tone', to: 'dynamics' },
+    { from: 'dynamics', to: 'stereo' },
+    { from: 'stereo', to: 'limiter' },
+    { from: 'limiter', to: 'loudness' },
+    { from: 'loudness', to: 'export' }
+  ]"
+  caption="補正系のステージを先に実行し、ピーク安全性とラウドネスは最後に確定します。"
+/>
 
 各パラメータを細かいページへ分けず、以下の機能群ガイドで実装上の詳細までまとめています。
 

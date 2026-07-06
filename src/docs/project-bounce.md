@@ -9,19 +9,31 @@ description: Deterministic offline rendering of a libsonare Project — plain au
 
 A [Project](./project-editing.md) holds tracks and clips on a timeline. Audio clips already carry samples, so they render directly. MIDI clips carry *events* (note-on, note-off), not sound — they need an **instrument** to become audible, the same way sheet music needs a player. So the choice of bounce method is really one question: *which instrument plays your MIDI?*
 
-```mermaid
-flowchart TD
-  subgraph PROJ[Project on the timeline]
-    MC[MIDI clips<br/>note events]
-    AC[Audio clips<br/>recorded samples]
-  end
-  MC --> BIND[Bind an instrument<br/>to each MIDI destination<br/>NativeSynth / SoundFont / built-in]
-  BIND --> STRIP[Render each track<br/>through its channel strip<br/>trim · EQ · inserts · fader · pan]
-  AC --> STRIP
-  STRIP --> SCENE[Sends & buses<br/>the mixer scene]
-  SCENE --> MASTER[Master bus]
-  MASTER --> OUT[Interleaved Float32 audio / WAV]
-```
+<FlowDiagram
+  title="Bounce pipeline: clips to WAV"
+  direction="TB"
+  :nodes="[
+    { id: 'mc', label: 'MIDI clips', col: 0, row: 0, group: 'timeline', variant: 'muted' },
+    { id: 'ac', label: 'Audio clips', col: 1, row: 0, group: 'timeline', variant: 'muted' },
+    { id: 'bind', label: 'Instrument binding', col: 0, row: 1, variant: 'accent' },
+    { id: 'strip', label: 'Channel strip', col: 0, row: 2 },
+    { id: 'scene', label: 'Mixer scene', col: 0, row: 3 },
+    { id: 'master', label: 'Master bus', col: 0, row: 4 },
+    { id: 'out', label: 'WAV output', col: 0, row: 5, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'mc', to: 'bind' },
+    { from: 'ac', to: 'strip' },
+    { from: 'bind', to: 'strip' },
+    { from: 'strip', to: 'scene' },
+    { from: 'scene', to: 'master' },
+    { from: 'master', to: 'out' }
+  ]"
+  :groups="[
+    { id: 'timeline', label: 'Project on the timeline' }
+  ]"
+  caption="Instrument binding picks NativeSynth, SoundFont, or the built-in synth per MIDI destination; the channel strip then applies trim, EQ, inserts, fader, and pan before the mixer sums everything to the master bus."
+/>
 
 Read the diagram top to bottom: audio clips flow straight in, MIDI clips must first have an instrument bound, and everything is summed through the mixer to the master. The whole pass is computed offline, so the result is reproducible every time.
 
