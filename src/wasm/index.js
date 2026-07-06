@@ -1844,6 +1844,11 @@ function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, 
   validatePositiveIntegers2("chromaCens", { hopLength, nChroma });
   return requireModule13().chromaCens(samples, sampleRate, hopLength, nChroma);
 }
+function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  validateSpectrogramSamples("chromaCqt", samples, sampleRate, options);
+  validatePositiveIntegers2("chromaCqt", { hopLength, nChroma });
+  return requireModule13().chromaCqt(samples, sampleRate, hopLength, nChroma);
+}
 function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
   validateSpectrogramSamples("bassChroma", samples, sampleRate, options);
   validatePositiveIntegers2("bassChroma", { hopLength, nChroma });
@@ -1864,11 +1869,22 @@ function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 51
     htk
   );
 }
-function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20, fmin = 0, fmax = 0, htk = false, options = {}) {
+function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20, fmin = 0, fmax = 0, htk = false, lifter = 0, options = {}) {
   validateSpectrogramSamples("mfcc", samples, sampleRate, options);
   validatePositiveIntegers2("mfcc", { nFft, hopLength, nMels, nMfcc });
   validateMelFrequencyRange("mfcc", fmin, fmax, sampleRate);
-  return requireModule13().mfcc(samples, sampleRate, nFft, hopLength, nMels, nMfcc, fmin, fmax, htk);
+  return requireModule13().mfcc(
+    samples,
+    sampleRate,
+    nFft,
+    hopLength,
+    nMels,
+    nMfcc,
+    fmin,
+    fmax,
+    htk,
+    lifter
+  );
 }
 function melToStft(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0, htk = false, options = {}) {
   assertSampleRate("melToStft", sampleRate);
@@ -3807,7 +3823,10 @@ var SYNTH_ENGINE_MODES = [
   "bowed-string",
   "reed",
   "brass",
-  "flute"
+  "flute",
+  "plucked-string",
+  "vocal",
+  "free-reed"
 ];
 var SYNTH_OSC_WAVEFORMS = [
   "default",
@@ -4044,6 +4063,15 @@ var RealtimeEngine = class {
     this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
   }
   /**
+   * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
+   * the full message including the leading 0xF0 and trailing 0xF7 (1..512
+   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
+   * the Node/Python/C-ABI `pushMidiSysex`.
+   */
+  pushMidiSysex(destinationId, data, renderFrame = -1) {
+    this.native.pushMidiSysex(destinationId, data, renderFrame);
+  }
+  /**
    * Queue a MIDI panic (all-notes-off) releasing every sounding note at
    * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
    */
@@ -4264,6 +4292,10 @@ var RealtimeEngine = class {
   /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
     this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
+  setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
   }
   /**
    * Resolves a track-lane insert parameter (by its JSON-key name) to the
@@ -5028,6 +5060,7 @@ export {
   chordFunctionalAnalysis,
   chroma,
   chromaCens,
+  chromaCqt,
   cqt,
   createOpfsClipPageProvider,
   createOpfsClipPageWorker,

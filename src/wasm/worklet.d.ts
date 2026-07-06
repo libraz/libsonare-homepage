@@ -67,7 +67,7 @@ interface RealtimeVoiceChangerPreset {
 }
 type RealtimeVoiceChangerConfigInput = VoicePresetId | RealtimeVoiceChangerPreset;
 
-declare const SYNTH_ENGINE_MODES: readonly ["default", "subtractive", "fm", "karplus-strong", "modal", "additive", "percussion", "piano", "pipe-organ", "bowed-string", "reed", "brass", "flute"];
+declare const SYNTH_ENGINE_MODES: readonly ["default", "subtractive", "fm", "karplus-strong", "modal", "additive", "percussion", "piano", "pipe-organ", "bowed-string", "reed", "brass", "flute", "plucked-string", "vocal", "free-reed"];
 declare const SYNTH_OSC_WAVEFORMS: readonly ["default", "sine", "saw", "square", "triangle", "noise"];
 declare const SYNTH_FILTER_MODELS: readonly ["default", "svf", "moog-ladder", "diode-ladder", "sallen-key"];
 declare const SYNTH_FILTER_OUTPUTS: readonly ["default", "lowpass", "bandpass", "highpass"];
@@ -353,6 +353,13 @@ declare class RealtimeEngine {
      */
     pushMidiCc(destinationId: number, group: number, channel: number, controller: number, value: number, renderFrame?: number): void;
     /**
+     * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
+     * the full message including the leading 0xF0 and trailing 0xF7 (1..512
+     * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
+     * the Node/Python/C-ABI `pushMidiSysex`.
+     */
+    pushMidiSysex(destinationId: number, data: Uint8Array, renderFrame?: number): void;
+    /**
      * Queue a MIDI panic (all-notes-off) releasing every sounding note at
      * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
      */
@@ -429,6 +436,8 @@ declare class RealtimeEngine {
     setMasterStripInsertParamByName(insertIndex: number, paramName: string, value: number): void;
     /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
     setBusStripInsertParamByName(busId: number, insertIndex: number, paramName: string, value: number): void;
+    /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
+    setBusStripInsertBypassed(busId: number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
     /**
      * Resolves a track-lane insert parameter (by its JSON-key name) to the
      * reserved automation id usable with `setAutomationLane` / `setParameter`.
@@ -1041,6 +1050,12 @@ interface SonareEngineSyncMidiCcMessage {
     value: number;
     renderFrame: number;
 }
+interface SonareEngineSyncMidiSysexMessage {
+    type: 'syncMidiSysex';
+    destinationId: number;
+    data: Uint8Array;
+    renderFrame: number;
+}
 interface SonareEngineSyncMidiPanicMessage {
     type: 'syncMidiPanic';
     renderFrame: number;
@@ -1054,7 +1069,7 @@ interface SonareEngineSyncExternalMidiClockMessage {
     type: 'syncExternalMidiClock';
     enabled: boolean;
 }
-type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage;
+type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiSysexMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage;
 interface SonareEngineCaptureRequestMessage {
     type: 'captureRequest';
     requestId: number;
@@ -1300,6 +1315,7 @@ declare class SonareEngine {
     pushMidiNoteOn(trackId: string | number, group: number, channel: number, note: number, velocity: number, renderFrame?: number): void;
     pushMidiNoteOff(trackId: string | number, group: number, channel: number, note: number, velocity?: number, renderFrame?: number): void;
     pushMidiCc(trackId: string | number, group: number, channel: number, controller: number, value: number, renderFrame?: number): void;
+    pushMidiSysex(trackId: string | number, data: Uint8Array, renderFrame?: number): void;
     pushMidiPanic(renderFrame?: number): void;
     configureCapture(options: CaptureOptions): void;
     armRecord(trackId: string | number, enabled: boolean): boolean;

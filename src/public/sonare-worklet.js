@@ -977,6 +977,15 @@ var RealtimeEngine = class {
     this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
   }
   /**
+   * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
+   * the full message including the leading 0xF0 and trailing 0xF7 (1..512
+   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
+   * the Node/Python/C-ABI `pushMidiSysex`.
+   */
+  pushMidiSysex(destinationId, data, renderFrame = -1) {
+    this.native.pushMidiSysex(destinationId, data, renderFrame);
+  }
+  /**
    * Queue a MIDI panic (all-notes-off) releasing every sounding note at
    * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
    */
@@ -1197,6 +1206,10 @@ var RealtimeEngine = class {
   /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
   setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
     this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
+  setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
   }
   /**
    * Resolves a track-lane insert parameter (by its JSON-key name) to the
@@ -2316,7 +2329,7 @@ function isEngineSyncMessage(value) {
   if (!isRecord(value) || typeof value.type !== "string") {
     return false;
   }
-  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncBusStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiFx" || value.type === "syncClearMidiFx" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiPanic" || value.type === "syncMidiDestinationExternal" || value.type === "syncExternalMidiClock";
+  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncBusStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiFx" || value.type === "syncClearMidiFx" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiSysex" || value.type === "syncMidiPanic" || value.type === "syncMidiDestinationExternal" || value.type === "syncExternalMidiClock";
 }
 function isEngineCaptureRequestMessage(value) {
   return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
@@ -2881,6 +2894,11 @@ function clearMidiFx(ctx, trackId) {
   ctx.offlineEngine.clearMidiFx(destinationId);
   ctx.postInstrumentSync({ type: "syncClearMidiFx", destinationId });
 }
+function pushMidiSysex(ctx, trackId, data, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiSysex(destinationId, data, renderFrame);
+  ctx.postSync({ type: "syncMidiSysex", destinationId, data, renderFrame });
+}
 
 // src/worklet/engine-tempo-facade.ts
 function postTempoSync(ctx) {
@@ -3344,6 +3362,9 @@ var SonareEngine = class _SonareEngine {
   }
   pushMidiCc(trackId, group, channel, controller, value, renderFrame = -1) {
     pushMidiCc(this.stripContext, trackId, group, channel, controller, value, renderFrame);
+  }
+  pushMidiSysex(trackId, data, renderFrame = -1) {
+    pushMidiSysex(this.stripContext, trackId, data, renderFrame);
   }
   pushMidiPanic(renderFrame = -1) {
     this.offlineEngine.pushMidiPanic(renderFrame);
@@ -3978,6 +3999,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.value,
           message.renderFrame
         );
+        break;
+      case "syncMidiSysex":
+        this.engine.pushMidiSysex(message.destinationId, message.data, message.renderFrame);
         break;
       case "syncMidiPanic":
         this.engine.pushMidiPanic(message.renderFrame);
