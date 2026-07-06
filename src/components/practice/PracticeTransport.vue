@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { type PracticeCopy, SPEED_OPTIONS } from '@/components/practice/practiceCopy';
+import {
+  type PracticeCopy,
+  type SoundSource,
+  SPEED_OPTIONS,
+} from '@/components/practice/practiceCopy';
 
 defineProps<{
   copy: PracticeCopy;
@@ -7,6 +11,7 @@ defineProps<{
   hasMidi: boolean;
   isPlaying: boolean;
   speed: number;
+  source: SoundSource;
   muted: boolean;
   volume: number;
 }>();
@@ -16,6 +21,7 @@ defineEmits<{
   play: [];
   restart: [];
   speed: [speed: number];
+  source: [source: SoundSource];
   mute: [];
   volume: [event: Event];
 }>();
@@ -97,6 +103,34 @@ defineEmits<{
           @click="$emit('speed', option)"
         >
           {{ option === 1 ? '1×' : `${option}×` }}
+        </button>
+      </div>
+    </div>
+
+    <div class="practice__group">
+      <span class="practice__group-label demo-label">{{ copy.controls.sound }}</span>
+      <div class="practice__sources" role="group" :aria-label="copy.controls.sourceAria">
+        <button
+          type="button"
+          class="practice__source"
+          :class="{ 'is-active': source === 'sf2' }"
+          :aria-pressed="source === 'sf2'"
+          :disabled="isBusy"
+          @pointerenter="$emit('prefetch')"
+          @click="$emit('source', 'sf2')"
+        >
+          {{ copy.controls.sourceSampled }}
+        </button>
+        <button
+          type="button"
+          class="practice__source"
+          :class="{ 'is-active': source === 'synth' }"
+          :aria-pressed="source === 'synth'"
+          :disabled="isBusy"
+          @pointerenter="$emit('prefetch')"
+          @click="$emit('source', 'synth')"
+        >
+          {{ copy.controls.sourceSynth }}
         </button>
       </div>
     </div>

@@ -23,7 +23,7 @@ import PracticeProgramBar from '@/components/practice/PracticeProgramBar.vue';
 import PracticeRollFx from '@/components/practice/PracticeRollFx.vue';
 import PracticeScore from '@/components/practice/PracticeScore.vue';
 import PracticeTransport from '@/components/practice/PracticeTransport.vue';
-import { enCopy, jaCopy } from '@/components/practice/practiceCopy';
+import { enCopy, jaCopy, type SoundSource } from '@/components/practice/practiceCopy';
 import { LEAD_IN_SEC } from '@/components/practice/rollConfig';
 import { noteLabel, paintPracticeRoll, sameSet } from '@/components/practice/rollPainter';
 import { useMidiInput } from '@/components/practice/useMidiInput';
@@ -41,6 +41,8 @@ const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 // ---- constants -------------------------------------------------------------
 const SR = 44100;
 const SF2_URL = '/sf2/acoustic-grand.sf2';
+// NativeSynth catalog preset for the built-in (synthesized) piano voice.
+const SYNTH_PIANO_PRESET = 'acoustic-piano';
 const TAIL_SEC = 1.6; // release tail captured past the last note-off
 const reducedMotion =
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -61,6 +63,10 @@ const isPlaying = ref(false);
 // empty and the notes fall in from the top (the rhythm-game count-in).
 const posBase = ref(-LEAD_IN_SEC);
 const speed = ref<number>(1);
+// Which engine renders the piano: libsonare's built-in NativeSynth physical-model
+// piano ('synth', the default — no asset to fetch, so it plays instantly) or the
+// bundled sampled SoundFont ('sf2', which loads its font on first use).
+const soundSource = ref<SoundSource>('synth');
 const volume = ref(0.85);
 const muted = ref(false);
 
@@ -120,6 +126,36 @@ const manualNotes = reactive<Set<number>>(new Set());
 const upcomingNotes = ref<Set<number>>(new Set());
 const ANTICIPATE_SEC = 0.28;
 
+/**
+ * Recompute the lit and pre-glow key sets from the current playhead. In practice
+ * mode a key is active while a note sounds at `posBase` (unioned with the
+ * pointer/MIDI-held keys) and the next notes get a faint pre-glow while playing
+ * (the Synthesia-style anticipation). In game mode the keyboard reflects ONLY the
+ * player's own strikes — the falling roll is the chart to play, not a free answer
+ * key — so the playback notes light nothing. Both sets are diffed against their
+ * previous value so an unchanged frame doesn't trigger a needless reactive repaint.
+ */
+function syncActiveNotes(): void {
+  const active = new Set<number>(manualNotes);
+  const upcoming = new Set<number>();
+  const notes = midi.value?.notes;
+  if (notes && !gameMode.value) {
+    const pos = posBase.value;
+    const showUpcoming = isPlaying.value;
+    for (const n of notes) {
+      if (n.startSec <= pos) {
+        if (pos < n.endSec) active.add(n.midi);
+      } else if (showUpcoming && n.startSec <= pos + ANTICIPATE_SEC) {
+        upcoming.add(n.midi);
+      }
+    }
+  }
+  // A key that's already lit doesn't also need the fainter pre-glow.
+  for (const m of active) upcoming.delete(m);
+  if (!sameSet(active, activeNotes.value)) activeNotes.value = active;
+  if (!sameSet(upcoming, upcomingNotes.value)) upcomingNotes.value = upcoming;
+}
+
 // Non-reactive paint caches, rebuilt when a piece is applied.
 let keyByMidi = new Map<number, ReturnType<typeof buildKeyboard>['keys'][number]>();
 let beatTimesSec: number[] = []; // onset seconds of every beat, for the lane grid
@@ -177,6 +213,19 @@ const tempoLabel = computed(() => {
   return lo === hi ? `${lo} BPM` : `${lo}–${hi} BPM`;
 });
 
+// ---- on-roll playback readouts ---------------------------------------------
+// During the empty lead-in the roll shows nothing yet, so a count-in reassures
+// the player that playback is running and cues the first note; once notes are
+// falling a small elapsed-time clock keeps confirming it advances (skipped in
+// game mode, where the score HUD already owns the corners).
+const showCountIn = computed(() => isPlaying.value && posBase.value < 0);
+const countInNum = computed(() => Math.max(1, Math.min(3, Math.ceil(-posBase.value))));
+const showClock = computed(() => isPlaying.value && !gameMode.value && posBase.value >= 0);
+const clockLabel = computed(() => {
+  const sec = Math.max(0, Math.floor(posBase.value));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} / ${lengthLabel.value}`;
+});
+
 // ---- canvas ----------------------------------------------------------------
 const canvas = ref<HTMLCanvasElement | null>(null);
 const stage = ref<HTMLElement | null>(null);
@@ -225,9 +274,12 @@ let audioBuffer: AudioBuffer | null = null;
 let bufferSpeed = 0; // speed the current buffer was rendered at (0 = none)
 let ctxStart = 0; // ctx.currentTime mapped to buffer offset 0
 
-// Rendered bounces are cached per (piece × speed) so revisiting a movement (or
-// flipping speed back) replays instantly instead of bouncing again.
-const audioBuffers = createAudioBufferCache('mv0', 4);
+// Rendered bounces are cached per (piece × sound source × speed) so revisiting a
+// movement, flipping the source, or dropping speed back replays instantly instead
+// of bouncing again. The piece key folds in the source so the two engines never
+// share an entry.
+const audioBuffers = createAudioBufferCache('mv0:synth', 6);
+const bounceKey = (): string => `mv${currentMv.value}:${soundSource.value}`;
 
 let sf2Bytes: Uint8Array | null = null;
 let warmed = false;
@@ -250,8 +302,9 @@ function prefetchEngine(): void {
   if (!warmed) {
     warmed = true;
     void ensureWasm().catch(() => {});
-    void ensureSf2().catch(() => {});
   }
+  // The sampled voice needs the SoundFont; the built-in synth doesn't.
+  if (soundSource.value === 'sf2') void ensureSf2().catch(() => {});
   void prewarmBuffer();
 }
 
@@ -263,6 +316,10 @@ interface ProjectLike {
   setMidiEvents(clipId: number, events: unknown[]): void;
   bounceWithSf2Instrument(
     instrument: Record<string, unknown>,
+    options: { numChannels: number; sampleRate: number; totalFrames: number },
+  ): Float32Array;
+  bounceWithSynthInstrument(
+    instrument: string,
     options: { numChannels: number; sampleRate: number; totalFrames: number },
   ): Float32Array;
   delete(): void;
@@ -284,15 +341,16 @@ async function renderBuffer(targetSpeed: number): Promise<void> {
   const m = midi.value;
   const ctx = audioCtx;
   if (!m || !ctx) return;
+  const source = soundSource.value;
   const wasm = (await ensureWasm()) as WasmModule;
-  const sf2 = await ensureSf2();
   const Project = (wasm as unknown as { Project: ProjectCtor }).Project;
   libVersion.value =
     (wasm as unknown as { version?: () => string }).version?.() ?? libVersion.value;
 
   const project = new Project();
   try {
-    project.loadSoundFont(sf2);
+    // The built-in synth needs no SoundFont; it synthesizes every note.
+    if (source === 'sf2') project.loadSoundFont(await ensureSf2());
     project.setSampleRate(SR);
     // Scale every tempo segment by the practice speed; pitch is unaffected.
     project.setTempoSegments(
@@ -317,10 +375,11 @@ async function renderBuffer(targetSpeed: number): Promise<void> {
 
     const lengthSec = m.durationSec / targetSpeed + TAIL_SEC;
     const totalFrames = Math.round(SR * lengthSec);
-    const pcm = project.bounceWithSf2Instrument(
-      { destinationId: 0, gain: 1 },
-      { numChannels: 1, sampleRate: SR, totalFrames },
-    );
+    const options = { numChannels: 1, sampleRate: SR, totalFrames };
+    const pcm =
+      source === 'sf2'
+        ? project.bounceWithSf2Instrument({ destinationId: 0, gain: 1 }, options)
+        : project.bounceWithSynthInstrument(SYNTH_PIANO_PRESET, options);
 
     // The SoundFont renders at a low absolute level; normalize to a fixed headroom.
     let peak = 1e-6;
@@ -518,6 +577,21 @@ async function setSpeed(s: number): Promise<void> {
   else void prewarmBuffer();
 }
 
+async function setSource(s: SoundSource): Promise<void> {
+  if (s === soundSource.value) return;
+  const wasPlaying = isPlaying.value;
+  if (wasPlaying) pause();
+  soundSource.value = s;
+  // Re-point the cache at this source's entries, reusing an existing render at
+  // the current speed if one exists; otherwise drop the buffer so it re-bounces.
+  audioBuffers.setPieceKey(bounceKey());
+  const cached = audioBuffers.get(speed.value);
+  audioBuffer = cached ?? null;
+  bufferSpeed = cached ? speed.value : 0;
+  if (wasPlaying) await togglePlay();
+  else void prewarmBuffer();
+}
+
 function toggleMute(): void {
   muted.value = !muted.value;
   applyGain();
@@ -565,7 +639,7 @@ function applyMidi(parsed: ParsedMidi): void {
   posBase.value = -LEAD_IN_SEC;
   // Identify the movement for the bounce cache, then reuse a cached render if
   // it (at the current speed) has already been bounced.
-  audioBuffers.setPieceKey(`mv${currentMv.value}`);
+  audioBuffers.setPieceKey(bounceKey());
   const cached = audioBuffers.get(speed.value);
   audioBuffer = cached ?? null;
   bufferSpeed = cached ? speed.value : 0;
@@ -686,7 +760,10 @@ function releaseNote(midiNote: number): void {
 
 // ---- lifecycle --------------------------------------------------------------
 onMounted(() => {
-  void loadMovement(0);
+  // The default built-in synth needs no asset fetch, so warm its bounce right
+  // away: the render happens while the page settles and the intro is read, and
+  // the first play starts instantly instead of waiting on a fresh bounce.
+  loadAndPrewarm(0);
   if (stage.value && typeof ResizeObserver !== 'undefined') {
     resizeObs = new ResizeObserver(() => paint());
     resizeObs.observe(stage.value);
@@ -748,6 +825,14 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
             @retry="replayGame"
             @exit="exitResults"
           />
+          <!-- Count-in over the empty lead-in, then a small elapsed clock. -->
+          <div v-if="showCountIn" class="practice__countin" aria-hidden="true">
+            <span class="practice__countin-label">{{ copy.countdown }}</span>
+            <span :key="countInNum" class="practice__countin-num">{{ countInNum }}</span>
+          </div>
+          <div v-else-if="showClock" class="practice__clock" aria-hidden="true">
+            {{ clockLabel }}
+          </div>
           <div v-if="status === 'loading' || status === 'rendering'" class="practice__overlay">
             <span class="practice__spinner" aria-hidden="true"></span>
             <span class="practice__overlay-label">{{ copy.preparing }}</span>
@@ -805,12 +890,14 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
         :has-midi="Boolean(midi)"
         :is-playing="isPlaying"
         :speed="speed"
+        :source="soundSource"
         :muted="muted"
         :volume="volume"
         @prefetch="prefetchEngine"
         @play="togglePlay"
         @restart="restart"
         @speed="setSpeed"
+        @source="setSource"
         @mute="toggleMute"
         @volume="onVolume"
       />

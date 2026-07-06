@@ -98,6 +98,71 @@
   letter-spacing: 0.04em;
   color: var(--demo-text-muted);
 }
+
+/* Count-in over the empty lead-in — reassures that playback is running and cues
+   the first note. Sits above the roll but below the game HUD (z-index 3). */
+.practice__countin {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.practice__countin-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  text-transform: uppercase;
+  color: var(--demo-accent);
+  text-shadow: 0 0 12px var(--demo-accent-dim);
+}
+.practice__countin-num {
+  font-family: var(--font-mono);
+  font-size: clamp(3rem, 2rem + 6vw, 4.6rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--demo-text-strong);
+  text-shadow: 0 0 22px var(--demo-accent), 0 0 48px var(--demo-accent-dim);
+  animation: practice-countin 0.9s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes practice-countin {
+  0% { opacity: 0; transform: scale(1.4); }
+  22% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0.85; transform: scale(1); }
+}
+
+/* Small elapsed clock, top-right, once notes are falling (practice mode only —
+   game mode owns the corners with its score HUD). */
+.practice__clock {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--demo-screen-bg-alpha);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--demo-text-muted);
+  pointer-events: none;
+  z-index: 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .practice__countin-num {
+    animation: none;
+  }
+}
 @keyframes practice-spin {
   to {
     transform: rotate(360deg);
@@ -419,6 +484,46 @@ html:not(.dark) .practice__play:hover:not(:disabled) {
   color: var(--demo-on-accent);
 }
 .practice__speed:disabled {
+  opacity: var(--demo-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* Sound-source picker: equal-width segments so the EN/JA labels align and the
+   control keeps a stable width across locales (matches the speed pill's look). */
+.practice__sources {
+  display: inline-flex;
+  width: 148px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--demo-control-bg);
+}
+.practice__source {
+  flex: 1 1 0;
+  height: 34px;
+  padding: 0 8px;
+  border: none;
+  border-right: 1px solid var(--demo-border);
+  background: transparent;
+  color: var(--demo-text);
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.practice__source:last-child {
+  border-right: none;
+}
+.practice__source:not(.is-active):hover:not(:disabled) {
+  background: var(--demo-accent-subtle);
+}
+.practice__source.is-active {
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+}
+.practice__source:disabled {
   opacity: var(--demo-disabled-opacity);
   cursor: not-allowed;
 }

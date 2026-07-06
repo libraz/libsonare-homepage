@@ -7,11 +7,11 @@
 
 export const enCopy = {
   title: 'Piano Practice',
-  subtitle: 'Falling notes · built-in SoundFont engine',
+  subtitle: 'Falling notes · built-in piano engine',
   eyebrow: 'PLAY · LEARN',
   heading: 'Watch the notes fall, follow the keys',
   intro:
-    "libsonare's built-in SoundFont engine renders the score to audio entirely on-device — nothing is uploaded, and any passage can be re-rendered slower without changing pitch. The falling-note roll is a timing guide: notes move toward the keyboard, each key lights when its note reaches the strike line, and a connected MIDI keyboard lets you play along and be scored.",
+    "libsonare's built-in engine renders the score to audio on-device — nothing uploaded. Slow any passage down without changing pitch, and switch between the synthesized and sampled piano on the fly.",
 
   status: {
     idle: 'READY',
@@ -29,6 +29,10 @@ export const enCopy = {
     preparing: 'Preparing…',
     restart: 'Restart',
     speed: 'Speed',
+    sound: 'Sound',
+    sourceSampled: 'Sampled',
+    sourceSynth: 'Built-in',
+    sourceAria: 'Piano sound source',
     volume: 'Guide volume',
     mute: 'Mute',
     unmute: 'Unmute',
@@ -86,7 +90,7 @@ export const enCopy = {
 
   guideTitle: 'How it works',
   guideBody:
-    'The roll, the strike line, and the rendered audio share one clock, so the lit keys match what you hear. Drop the speed to learn a passage: the notes stretch in time, but the pitch stays the same. Bring it back to tempo when the fingering feels stable. Switch on game mode and connect a MIDI keyboard to be scored on your timing.',
+    'The roll, strike line, and audio share one clock, so the lit keys match what you hear. Slow a passage down to learn it without changing pitch, then switch on game mode and connect a MIDI keyboard to be scored on your timing.',
   guideLink: 'SoundFont player',
 
   errors: {
@@ -94,20 +98,21 @@ export const enCopy = {
     render: 'Could not render the audio. Reload the page and try again.',
   },
 
+  countdown: 'Get ready',
   hint: 'Press play — the piano loads on first play.',
   preparing: 'Preparing the piano…',
   preparingNote: 'Rendering this movement on-device — no upload.',
   attribution:
-    'Music: Goldberg Variations (BWV 988), public-domain transcription. Piano: public-domain SoundFont.',
+    'Music: Goldberg Variations (BWV 988), public-domain transcription. Piano: libsonare built-in synth, or a public-domain SoundFont.',
 };
 
 export const jaCopy: typeof enCopy = {
   title: 'ピアノ練習',
-  subtitle: 'ノート落下 · 内蔵 SoundFont 音源',
+  subtitle: 'ノート落下 · 内蔵ピアノ音源',
   eyebrow: 'PLAY · LEARN',
   heading: '落ちてくる音符を見て、鍵盤を追う',
   intro:
-    'libsonare 内蔵の SoundFont 音源が、楽譜を端末内だけでオーディオにレンダリングします。アップロードは一切ありません。どのパッセージも、音の高さを変えずに遅く再レンダリングできます。落ちてくるノートはタイミングの目印です。ノートが鍵盤へ向かって流れ、判定ラインに届くと対応する鍵盤が光ります。MIDI キーボードをつなぐと、一緒に弾いてタイミングを採点できます。',
+    'libsonare 内蔵の音源が、楽譜を端末内でオーディオにレンダリングします（アップロードなし）。音の高さを変えずに遅くでき、合成ピアノとサンプル音源はその場で切り替えられます。',
 
   status: {
     idle: 'READY',
@@ -125,6 +130,10 @@ export const jaCopy: typeof enCopy = {
     preparing: '準備中…',
     restart: '最初から',
     speed: '速度',
+    sound: '音源',
+    sourceSampled: 'サンプル',
+    sourceSynth: '内蔵合成',
+    sourceAria: 'ピアノの音源',
     volume: 'ガイド音量',
     mute: 'ミュート',
     unmute: 'ミュート解除',
@@ -180,7 +189,7 @@ export const jaCopy: typeof enCopy = {
 
   guideTitle: '仕組み',
   guideBody:
-    'ピアノロール、判定ライン、生成音声は同じクロックで動くので、光る鍵盤と聞こえる音が一致します。速度を落とすと、音符の間隔は広がりますが音の高さは変わりません。まず指の動きを覚え、安定したら元のテンポへ戻します。ゲームモードをオンにして MIDI キーボードをつなぐと、タイミングを採点できます。',
+    'ピアノロール・判定ライン・音声は同じクロックで動くので、光る鍵盤と聞こえる音が一致します。速度を落として音の高さを変えずに練習し、ゲームモードで MIDI キーボードをつなぐとタイミングを採点できます。',
   guideLink: 'SoundFont プレイヤー',
 
   errors: {
@@ -188,14 +197,22 @@ export const jaCopy: typeof enCopy = {
     render: '音声を生成できませんでした。ページを再読み込みして再試行してください。',
   },
 
+  countdown: 'まもなく開始',
   hint: '再生を押すと、初回にピアノ音源を読み込みます。',
   preparing: 'ピアノを準備中…',
   preparingNote: 'この楽章を端末内で生成中 — アップロードなし。',
   attribution:
-    '楽曲: ゴルトベルク変奏曲（BWV 988、パブリックドメインの採譜）。ピアノ: パブリックドメインの SoundFont。',
+    '楽曲: ゴルトベルク変奏曲（BWV 988、パブリックドメインの採譜）。ピアノ: libsonare 内蔵合成、またはパブリックドメインの SoundFont。',
 };
 
 export type PracticeCopy = typeof enCopy;
 
 /** Practice playback speeds (multipliers of the score tempo). */
 export const SPEED_OPTIONS = [0.5, 0.75, 1] as const;
+
+/**
+ * Which engine renders the piano: `sf2` plays the bundled sampled acoustic grand
+ * through the SoundFont player; `synth` plays libsonare's built-in NativeSynth
+ * physical-model piano (no SoundFont — the engine synthesizes every note).
+ */
+export type SoundSource = 'sf2' | 'synth';
