@@ -25,6 +25,7 @@ const ARCHETYPES = new Set([
   'hpss',
   'tempo-grid',
   'instrument-audition',
+  'pitch-correct',
 ]);
 
 const GENERATED_SIGNALS = new Set(['sine', 'saw', 'square', 'triangle', 'sweep', 'noise']);
@@ -59,6 +60,7 @@ const ARCHETYPE_SOURCE_KINDS = {
   hpss: ['clip'],
   'tempo-grid': ['generate'],
   'instrument-audition': ['generate'],
+  'pitch-correct': ['generate'],
 } satisfies Record<string, Array<DemoSource['kind']>>;
 const TRANSFORMS = new Set(['stft', 'mel', 'chroma', 'mfcc']);
 const PARAM_SWEEP_PROCESSORS = new Set([

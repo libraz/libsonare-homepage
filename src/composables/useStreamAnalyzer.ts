@@ -51,8 +51,28 @@ export interface StreamEstimate {
 }
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-// ChordQuality: Major=0, Minor=1, Diminished=2, Augmented=3, Dominant7=4, Major7=5, Minor7=6, Sus2=7, Sus4=8
-const CHORD_QUALITY_NAMES = ['', 'm', 'dim', 'aug', '7', 'M7', 'm7', 'sus2', 'sus4'];
+// ChordQuality: Major=0, Minor=1, Diminished=2, Augmented=3, Dominant7=4, Major7=5,
+// Minor7=6, Sus2=7, Sus4=8, Unknown=9, Add9=10, MinorAdd9=11, Dim7=12, HalfDim7=13,
+// Major9=14, Dominant9=15, Sus2Add4=16
+const CHORD_QUALITY_NAMES = [
+  '',
+  'm',
+  'dim',
+  'aug',
+  '7',
+  'M7',
+  'm7',
+  'sus2',
+  'sus4',
+  '',
+  'add9',
+  'm(add9)',
+  'dim7',
+  'm7b5',
+  'M9',
+  '9',
+  'sus2add4',
+];
 
 function keyToName(keyIndex: number, isMinor: boolean): string {
   const note = NOTE_NAMES[keyIndex % 12];

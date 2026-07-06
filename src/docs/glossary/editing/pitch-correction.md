@@ -7,6 +7,8 @@ description: MIDI-targeted pitch correction, note regions, and sample-accurate e
 
 **Pitch correction** nudges a note from its current pitch toward a target.
 
+<SonareDemo id="pitch-correct" />
+
 **Note editing** reshapes a chosen region, such as stretching one held note or tightening timing, without touching the rest of the clip.
 
 Both are surgical, region-aware edits rather than whole-clip transforms. This page explains them through libsonare's `PitchCorrector` and `NoteEditor`; for the vocabulary, read [Editing Basics](../concepts/editing-basics.md).

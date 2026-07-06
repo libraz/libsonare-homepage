@@ -530,7 +530,7 @@ This routing is separate from the named preset catalog: `synthPresetNames()` sti
 Every General MIDI program resolves to one of the fifteen engines. The table below is the data-free fallback voicing NativeSynth uses for each GM program number when no SoundFont covers it; the canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`. Rows marked *provisional* use one of the acoustic physical models still being calibrated.
 
 ::: details Show the full 128-program tone map
-**Model status** — **stable**: the subtractive, FM, modal, additive, and percussion cores are settled. **provisional**: the piano, Karplus-Strong, pipe-organ, bowed-string, reed, brass, and flute physical models are still being calibrated.
+**Model status** — **stable**: the subtractive, FM, modal, additive, and percussion cores are settled. **provisional**: the piano, Karplus-Strong, pipe-organ, bowed-string, reed, brass, flute, plucked-string (buzzing-bridge), vocal, and free-reed physical models are still being calibrated.
 
 #### Piano (0-7)
 
@@ -749,13 +749,13 @@ Note on 120-127: in the data-free fallback these eight programs currently share 
 
 ## Current status and limitations
 
-**The physical models are provisional and still being calibrated.** Ten of the fifteen engines are physical models of acoustic instruments — piano, plucked string (Karplus-Strong), bowed string, reed woodwind, brass, air-jet flute, pipe organ, buzzing-bridge plucked string, source-filter vocal, and free reed. They are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Their voicing is tuned by a developer-run A/B harness that compares the synth against a reference SoundFont; this is a manual, ongoing loop, not an automatic or verified-against-reference calibration, and the tuning is not finished. Recent work continues to retune the piano, organ, brass, reed, and violin-family voicing.
+**The physical models are provisional and still being calibrated.** Ten of the fifteen engines are provisional physical models of acoustic instruments — piano, plucked string (Karplus-Strong), bowed string, reed woodwind, brass, air-jet flute, pipe organ, buzzing-bridge plucked string, source-filter vocal, and free reed. (The modal and membrane-percussion engines are also physical models, but their voicing is already mature — see below.) They are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Their voicing is tuned by a developer-run A/B harness that compares the synth against a reference SoundFont; this is a manual, ongoing loop, not an automatic or verified-against-reference calibration, and the tuning is not finished. Recent work continues to retune the piano, organ, brass, reed, and violin-family voicing.
 
 **Some advanced physics is implemented but not yet reachable.** The bowed string, reed, brass, and flute engines carry richer nonlinear refinements (elasto-plastic bow friction, tonehole scattering, a brass "cuivré" edge, flute overblow, and more). These exist in the core and default to off — no public binding exposes a switch to turn them on yet — so the sound you get today is the simpler linear model. Expect these to become reachable, and the voicing to keep improving, in future releases.
 
 **A couple of self-oscillating models have a small residual intonation error.** The air-jet flute and flue pipe-organ lock slightly off the naive tuning and are corrected by a calibrated factor; a small, note-dependent residual remains.
 
-**The five non-physical engines are settled.** Subtractive (virtual-analog), FM, modal (mallets/bells), additive (drawbar organ), and membrane percussion carry no provisional caveats — they are the mature core.
+**The other five engines are settled.** Subtractive (virtual-analog), FM, and additive (drawbar organ) are signal-based (non-physical); modal (mallets/bells) and membrane percussion are physical models whose voicing is already mature. None carry provisional caveats — they are the settled core.
 
 **Where the sounds come from.** The synthesis engines are original implementations of published synthesis and physical-modelling algorithm families, and the GM/GS behavior follows the openly documented General MIDI / GS addressing — no sampled or captured instrument audio is bundled, and the result is an independent re-creation rather than a copy of any specific device. For the standards and papers behind each engine, see [Algorithm References](./algorithm-references.md).
 

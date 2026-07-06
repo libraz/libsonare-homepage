@@ -170,4 +170,62 @@ export const editingDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'pitch-correct',
+    archetype: 'pitch-correct',
+    // No clip: the raw take is synthesized off-pitch in the component so there is
+    // something for correction to fix (the shipped clips are already in tune). The
+    // source is unused by this archetype but the schema requires one.
+    source: { kind: 'generate', signal: 'triangle', freq: 262 },
+    viz: 'overlay',
+    title: {
+      en: 'Pitch correction — snapping a shaky take to a scale',
+      ja: 'ピッチ補正 — ゆれた歌を音階へ寄せる',
+    },
+    caption: {
+      en: 'The raw take is a deliberately out-of-tune vocal: a C-major melody sung a little sharp or flat on every note (the amber line wanders off the grid). Pitch correction measures the pitch frame by frame and snaps each note toward the nearest tone of the chosen scale — the teal line settles onto the gridlines. Retune strength sets how far it pulls (0 leaves the natural drift, 1 is a hard robotic snap) and retune speed sets how quickly it slides there — a fast glide can sound mechanical, a slow one keeps the phrasing. Flip Compare to hear the raw take against the tuned one; the root stays C.',
+      ja: '素の歌は、わざと音を外したボーカルです。C メジャーのメロディを一音ごとに少し高め・低めに歌っていて、アンバーの線がグリッドから外れて動きます。ピッチ補正はピッチをフレームごとに測り、各音を選んだスケールの最も近い音へ寄せます。ティールの線がグリッド線に収まっていきます。補正の強さは寄せる度合いで、0 は自然なゆれを残し、1 は硬いロボット的なスナップになります。補正の速さは寄る速さで、速いと機械的に、遅いと歌い回しが残ります。Compare で素の歌と補正後を聴き比べできます。ルートは C のままです。',
+    },
+    params: [
+      {
+        key: 'retuneAmount',
+        kind: 'range',
+        default: 1,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        label: { en: 'Retune strength', ja: '補正の強さ' },
+      },
+      {
+        key: 'retuneSpeedMs',
+        kind: 'range',
+        default: 15,
+        min: 5,
+        max: 80,
+        step: 5,
+        unit: 'ms',
+        label: { en: 'Retune speed (ms)', ja: '補正の速さ (ms)' },
+      },
+      {
+        key: 'scale',
+        kind: 'select',
+        default: 'major',
+        label: { en: 'Scale', ja: 'スケール' },
+        options: [
+          { value: 'major', label: { en: 'C major', ja: 'C メジャー' } },
+          { value: 'minor', label: { en: 'C minor', ja: 'C マイナー' } },
+        ],
+      },
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'tuned',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'raw', label: { en: 'Raw', ja: '素の歌' } },
+          { value: 'tuned', label: { en: 'Tuned', ja: '補正後' } },
+        ],
+      },
+    ],
+  },
 ];

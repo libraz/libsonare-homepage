@@ -1093,7 +1093,7 @@ export const jaCopy: TunerCopy = {
     octave: 'オクターブ',
     octaveDown: 'オクターブを下げる',
     octaveUp: 'オクターブを上げる',
-    panic: '全音オフ',
+    panic: 'オールノートオフ',
     playScale: 'スケールを再生',
   },
   output: {
@@ -1127,7 +1127,7 @@ export const jaCopy: TunerCopy = {
     additive: 'アディティブ',
   },
   paramsIntro:
-    '物理レイヤー順に整理 — 信号は上から下へ流れます:励振 → 共鳴体 → 結合 → 胴鳴り・放射 → 奏法。',
+    '物理レイヤー順に整理 — 信号は上から下へ流れます: 励振 → 共鳴体 → 結合 → 胴鳴り・放射 → 奏法。',
   keyboardHint:
     '鍵盤をクリック／タップするか、PC キーボードで演奏できます: A W S E D F T G Y H U J K。Z / X でオクターブを切り替えます。撥弦・打鍵系（ピアノ・ギター・マレット・ドラム）は指を離しても自然に鳴り切り、擦弦・管・オルガン系は押している間だけ鳴り離すとフェードします。',
   errors: {
@@ -1199,7 +1199,7 @@ export const jaCopy: TunerCopy = {
       noiseTone: { label: 'ノイズの明るさ', hint: '暗いノイズ → 明るく鋭いノイズ。' },
       shell: { label: '胴の共鳴', hint: '胴なし → 響く太鼓の胴。' },
       airflow: { label: '息の量', hint: '穏やかな風 → 満ちた強い風。' },
-      reed: { label: 'リード感', hint: '純粋なフルー管 → バジー でリードらしい音。' },
+      reed: { label: 'リード感', hint: '純粋なフルー管 → うなりのあるリードらしい音。' },
       chiff: { label: '発音のかすれ', hint: 'クリーンな発音 → 息まじりのチフ。' },
       tremulant: { label: 'トレモロ', hint: '一定 → うねるトレムラント。' },
       breath: { label: '息の強さ', hint: '弱い息 → 強く大きな吹き込み。' },
@@ -1344,7 +1344,7 @@ export const jaCopy: TunerCopy = {
       pickPosition: {
         title: 'ピック位置',
         body: '弦のどこを弾くか。ブリッジ寄りは細く鼻にかかった音、中央寄りは丸く豊かな音です。',
-        tip: 'ブリッジ寄りで明るいツイン、中央で柔らかい胴鳴り。',
+        tip: 'ブリッジ寄りで明るく弾ける音、中央で柔らかい胴鳴り。',
       },
       excBrightness: {
         title: 'ピックの明るさ',

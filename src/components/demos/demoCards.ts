@@ -104,7 +104,7 @@ const CARD_META: Array<
     accent: false,
     status: 'NEW',
     eyebrow: 'INSTRUMENTS',
-    chips: ['12 ENGINES', '55 PRESETS', 'MIDI', 'PATCH'],
+    chips: ['15 ENGINES', '66 PRESETS', 'MIDI', 'PATCH'],
   },
   {
     id: 'studio',

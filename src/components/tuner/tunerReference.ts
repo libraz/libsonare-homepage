@@ -35,7 +35,13 @@ export const COMPARE_FIXTURE: Record<PhysicalEngineMode, CompareFixture> = {
   reed: { note: 50, velocity: 100 },
   brass: { note: 57, velocity: 100 },
   flute: { note: 72, velocity: 100 },
+  'plucked-string': { note: 52, velocity: 100 },
+  vocal: { note: 48, velocity: 100 },
+  'free-reed': { note: 55, velocity: 100 },
 };
+
+/** Fallback used if an engine has no explicit fixture (keeps compare mode safe). */
+const DEFAULT_FIXTURE: CompareFixture = { note: 57, velocity: 100 };
 
 /** A wrapper that leaves the exciter core as bare as possible (from parity). */
 function transparentPatch(engineMode: string) {
@@ -84,7 +90,7 @@ function bounceWasm(wasm: any, patch: object, note: number, velocity: number): F
 export async function renderReference(mode: PhysicalEngineMode): Promise<Float32Array> {
   const wasm = await import('@/wasm/index.js');
   await wasm.init();
-  const fixture = COMPARE_FIXTURE[mode];
+  const fixture = COMPARE_FIXTURE[mode] ?? DEFAULT_FIXTURE;
   const patch = fixture.preset ? wasm.synthPresetPatch(fixture.preset) : transparentPatch(mode);
   return bounceWasm(wasm, patch, fixture.note, fixture.velocity);
 }
@@ -92,7 +98,7 @@ export async function renderReference(mode: PhysicalEngineMode): Promise<Float32
 /** Render the tuned TS model. Note/velocity default to the engine fixture, but a
  *  GM target overrides both so the adjusted trace aligns with the built-in voice. */
 export function renderAdjusted(spec: ModelSpec, note?: number, velocity?: number): Float32Array {
-  const fixture = COMPARE_FIXTURE[spec.engineMode];
+  const fixture = COMPARE_FIXTURE[spec.engineMode] ?? DEFAULT_FIXTURE;
   return renderNoteOffline(
     spec,
     note ?? fixture.note,
