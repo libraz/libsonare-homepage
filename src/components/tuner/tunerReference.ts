@@ -10,6 +10,7 @@
  * velocity / sample-rate / frame-count so they align at note-on.
  */
 import { type ModelSpec, renderNoteOffline } from '@/tuner/dsp/engine';
+import { withGsDrumKit } from '@/tuner/dsp/gs-kit';
 import type { PhysicalEngineMode } from '@/tuner/dsp/params';
 
 export const COMPARE_SR = 48000;
@@ -96,12 +97,22 @@ export async function renderReference(mode: PhysicalEngineMode): Promise<Float32
 }
 
 /** Render the tuned TS model. Note/velocity default to the engine fixture, but a
- *  GM target overrides both so the adjusted trace aligns with the built-in voice. */
-export function renderAdjusted(spec: ModelSpec, note?: number, velocity?: number): Float32Array {
+ *  GM target overrides both so the adjusted trace aligns with the built-in voice.
+ *  A non-zero `drumKit` program applies the GS kit transform at render time only
+ *  (the edited spec stays the Standard base patch), so the A/B stays a fair
+ *  comparison under the selected kit. */
+export function renderAdjusted(
+  spec: ModelSpec,
+  note?: number,
+  velocity?: number,
+  drumKit = 0,
+): Float32Array {
   const fixture = COMPARE_FIXTURE[spec.engineMode] ?? DEFAULT_FIXTURE;
+  const resolvedNote = note ?? fixture.note;
+  const rendered = drumKit > 0 ? withGsDrumKit(spec, drumKit, resolvedNote) : spec;
   return renderNoteOffline(
-    spec,
-    note ?? fixture.note,
+    rendered,
+    resolvedNote,
     velocity ?? fixture.velocity,
     COMPARE_SR,
     COMPARE_FRAMES,
@@ -114,13 +125,15 @@ export function renderAdjusted(spec: ModelSpec, note?: number, velocity?: number
  * `bounceWithSf2Instrument` falls through to the synth GM fallback bank (the
  * data-free floor that `gm_fallback_map.cpp` defines). The program is selected
  * with an inline program-change event (a bare `setProgram` does not take on this
- * offline path); drums play on channel 10, where the note IS the instrument.
+ * offline path); drums play on channel 10, where the note IS the instrument and
+ * a channel program-change selects the GS drum kit (Room / Power / TR-808 / …).
  */
 export async function renderGmFallback(
   program: number,
   note: number,
   velocity = 100,
   isDrum = false,
+  drumKit = 0,
 ): Promise<Float32Array> {
   const wasm = await import('@/wasm/index.js');
   await wasm.init();
@@ -129,7 +142,11 @@ export async function renderGmFallback(
     project.setSampleRate(COMPARE_SR);
     const { clipId } = project.addMidiClip(0, 8);
     const channel = isDrum ? 9 : 0;
-    const events = isDrum ? [] : [wasm.Project.midiProgram(0, 0, channel, program)];
+    // Drums address a kit by channel-10 program; a melodic slot programs its
+    // instrument. A drumKit of 0 (Standard) needs no program-change.
+    const events = (isDrum ? drumKit > 0 : true)
+      ? [wasm.Project.midiProgram(0, 0, channel, isDrum ? drumKit : program)]
+      : [];
     events.push(
       wasm.Project.midiNoteOn(0, 0, channel, note, velocity),
       wasm.Project.midiNoteOff(6, 0, channel, note, 0),

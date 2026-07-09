@@ -1042,6 +1042,13 @@
   color: var(--demo-accent-light);
 }
 
+/* Kit-scope hint: a reserved-height line so switching kits (or to the
+   Standard kit, which has no hint) never resizes the target card. */
+.tn-hint--kit {
+  min-height: 2lh;
+  margin-top: 6px;
+}
+
 .tn-chip:disabled {
   opacity: var(--demo-disabled-opacity);
   cursor: not-allowed;

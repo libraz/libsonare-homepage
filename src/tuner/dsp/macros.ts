@@ -119,6 +119,30 @@ export const MACROS: Record<PhysicalEngineMode, MacroDef[]> = {
     { id: 'noise', params: [{ key: 'noiseGain', at0: 0, at1: 1 }] },
     { id: 'noiseTone', params: [{ key: 'noiseCutoffHz', at0: 500, at1: 8000 }] },
     { id: 'shell', params: [{ key: 'shellMix', at0: 0, at1: 0.8 }] },
+    // Drum-layer axes: snare wires, cymbal wash, shaker grains. Each owns its
+    // fields exclusively (no overlap with the five above), so the sliders stay
+    // invertible even on a seeded drum patch.
+    {
+      id: 'rattle',
+      params: [
+        { key: 'wireBuzz', at0: 0, at1: 1.2 },
+        { key: 'wireCutoffHz', at0: 3500, at1: 5500 },
+      ],
+    },
+    {
+      id: 'shimmer',
+      params: [
+        { key: 'shimmer', at0: 0, at1: 8 },
+        { key: 'shimmerCutoffHz', at0: 7000, at1: 10000 },
+      ],
+    },
+    {
+      id: 'grains',
+      params: [
+        { key: 'phisemBeans', at0: 0, at1: 48 },
+        { key: 'phisemEnergyMs', at0: 60, at1: 300 },
+      ],
+    },
   ],
   'pipe-organ': [
     { id: 'tone', params: [{ key: 'brightness', at0: 0.2, at1: 0.9 }] },

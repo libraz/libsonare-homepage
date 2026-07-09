@@ -56,7 +56,9 @@ import { useTheme } from '@/composables/useTheme';
 import { useTunerAutofit } from '@/composables/useTunerAutofit';
 import { useTunerEngine } from '@/composables/useTunerEngine';
 import { type AutofitResult, OracleTooShortError, prepareOracle } from '@/tuner/dsp/autofit';
+import { buildDrumSeedSpec } from '@/tuner/dsp/drum-seeds';
 import { buildDefaultSpec, type ModelSpec } from '@/tuner/dsp/engine';
+import { gsDrumKitIndex } from '@/tuner/dsp/gs-kit';
 import { applyMacro, deriveMacroValue, type MacroDef, macrosFor } from '@/tuner/dsp/macros';
 import {
   type BodyType,
@@ -238,6 +240,8 @@ const targetDrumNote = ref(38);
 const targetBankMsb = ref(0);
 /** GS drum-kit program (channel-10 PC) for a drum target. */
 const targetDrumKit = ref(0);
+/** GM drum note the model was last seeded for; drives note-change reseeding. */
+const lastDrumSeedKey = ref('');
 /** Cached GM fallback render per slot (`mel:<program>` / `drum:<note>`). */
 const gmCache = new Map<string, Float32Array>();
 
@@ -303,6 +307,13 @@ const bodyDiverged = computed(() => spec.value.body !== suggestedBody.value.body
 
 const isGs = computed(() => targetStandard.value === 'GS');
 
+/** Channel-10 kit program for the A/B renders; 0 (Standard) for GM or melodic.
+ *  A GS drum target voices its A/B "current sound" and adjusted trace under the
+ *  selected kit; the edited spec itself stays the Standard base patch. */
+const effectiveDrumKit = computed(() =>
+  targetMode.value === 'drum' && isGs.value ? targetDrumKit.value : 0,
+);
+
 const currentTarget = computed<TunerTarget | null>(() => {
   if (!targetActive.value) return null;
   const standard = targetStandard.value;
@@ -331,6 +342,12 @@ const currentTarget = computed<TunerTarget | null>(() => {
 
 /** Localized name of the selected GS drum kit (for labels). */
 const drumKitName = computed(() => displayKitName(targetDrumKit.value));
+
+/** How the selected GS kit re-voices the piece (empty for the Standard kit). */
+const kitScopeHint = computed(() => {
+  const scope = copy.value.target.kitScope as Record<number, string>;
+  return scope[gsDrumKitIndex(targetDrumKit.value)] ?? '';
+});
 
 /** Slot label for the active target, e.g. "GM · 040 · バイオリン" or
  *  "GS · 040 · バイオリン · CC0 8". Uses localized names (the exported JSON keeps
@@ -380,7 +397,8 @@ async function ensureReference(mode: PhysicalEngineMode): Promise<Float32Array |
 /** Fetch (and cache) the current built-in GM voice for the active target. */
 async function ensureGmOriginal(): Promise<Float32Array | null> {
   const isDrum = targetMode.value === 'drum';
-  const key = isDrum ? `drum:${targetDrumNote.value}` : `mel:${targetProgram.value}`;
+  const kit = effectiveDrumKit.value;
+  const key = isDrum ? `drum:${targetDrumNote.value}:${kit}` : `mel:${targetProgram.value}`;
   const cached = gmCache.get(key);
   if (cached) {
     originalBuf.value = cached;
@@ -388,7 +406,7 @@ async function ensureGmOriginal(): Promise<Float32Array | null> {
   }
   compareRendering.value = true;
   try {
-    const buf = await renderGmFallback(targetProgram.value, targetNote(), 100, isDrum);
+    const buf = await renderGmFallback(targetProgram.value, targetNote(), 100, isDrum, kit);
     gmCache.set(key, buf);
     originalBuf.value = buf;
     return buf;
@@ -414,7 +432,12 @@ function recomputeMetrics(): void {
 
 /** Re-render the tuned TS model and refresh the error readout. */
 function renderAdjustedNow(): void {
-  adjustedBuf.value = renderAdjusted(spec.value, targetActive.value ? targetNote() : undefined);
+  adjustedBuf.value = renderAdjusted(
+    spec.value,
+    targetActive.value ? targetNote() : undefined,
+    undefined,
+    targetActive.value ? effectiveDrumKit.value : 0,
+  );
   recomputeMetrics();
 }
 
@@ -675,17 +698,31 @@ function selectEngine(mode: PhysicalEngineMode): void {
  *  tool's scope, so the engine is left as-is — only the A/B original is refreshed
  *  so the contributor can still hear the real built-in voice. */
 function refreshTarget(): void {
-  if (targetCovered.value) {
-    const eng = suggestedEngine.value;
-    const { body, mix } = suggestedBody.value;
-    if (eng !== engineMode.value) {
+  if (targetMode.value === 'drum') {
+    // Seed the model with the drum note's current built-in voicing so the
+    // adjusted trace starts at "today's sound" (a snare from a snare, a hat
+    // from a hat). Reseed only when the NOTE moves — a kit change keeps the
+    // edited base patch and is applied at render time (see effectiveDrumKit).
+    const seedKey = String(targetDrumNote.value);
+    if (seedKey !== lastDrumSeedKey.value) {
       releaseAll();
-      // buildDefaultSpec seeds the engine's generic body; override it with the
-      // one the specific GM program implies (e.g. a guitar corpus for a plucked
-      // string, which the bare Karplus-Strong loop lacks).
-      pushSpec({ ...buildDefaultSpec(eng), body, bodyMix: mix });
-    } else if (spec.value.body !== body || spec.value.bodyMix !== mix) {
-      pushSpec({ ...cloneSpec(spec.value), body, bodyMix: mix });
+      lastDrumSeedKey.value = seedKey;
+      pushSpec(buildDrumSeedSpec(targetDrumNote.value));
+    }
+  } else {
+    lastDrumSeedKey.value = '';
+    if (targetCovered.value) {
+      const eng = suggestedEngine.value;
+      const { body, mix } = suggestedBody.value;
+      if (eng !== engineMode.value) {
+        releaseAll();
+        // buildDefaultSpec seeds the engine's generic body; override it with the
+        // one the specific GM program implies (e.g. a guitar corpus for a plucked
+        // string, which the bare Karplus-Strong loop lacks).
+        pushSpec({ ...buildDefaultSpec(eng), body, bodyMix: mix });
+      } else if (spec.value.body !== body || spec.value.bodyMix !== mix) {
+        pushSpec({ ...cloneSpec(spec.value), body, bodyMix: mix });
+      }
     }
   }
   compareActive.value = true;
@@ -720,10 +757,13 @@ function onTargetDrum(event: Event): void {
   if (targetActive.value) refreshTarget();
 }
 
-// GS standard / bank / kit only tag the slot address — the offline fallback
-// render is GM-program-only, so they change the label but not the A/B audio.
+// Switching standard re-renders the A/B: a GS drum target voices its current
+// sound and adjusted trace under the selected kit (channel-10 program). A
+// melodic GS variation (CC0) stays a label-only tag — the data-free fallback
+// bank carries no melodic bank variations to render.
 function setTargetStandard(std: TargetStandard): void {
   targetStandard.value = std;
+  if (targetActive.value) refreshTarget();
 }
 
 function onTargetBank(event: Event): void {
@@ -732,6 +772,7 @@ function onTargetBank(event: Event): void {
 
 function onTargetKit(event: Event): void {
   targetDrumKit.value = Number((event.target as HTMLSelectElement).value);
+  if (targetActive.value) refreshTarget();
 }
 
 /** Play the current built-in GM voice for the target slot. */
@@ -752,7 +793,12 @@ function resetBody(): void {
 
 function resetEngine(): void {
   releaseAll();
-  pushSpec(buildDefaultSpec(engineMode.value));
+  // A drum target resets to the note's built-in seed, not the bare tom default.
+  if (targetActive.value && targetMode.value === 'drum') {
+    pushSpec(buildDrumSeedSpec(targetDrumNote.value));
+  } else {
+    pushSpec(buildDefaultSpec(engineMode.value));
+  }
 }
 
 /** Format a knob readout from its descriptor's step + unit. */
@@ -996,6 +1042,9 @@ async function onPatchFile(event: Event): Promise<void> {
       if (t.kind === 'melodic' && typeof t.program === 'number') targetProgram.value = t.program;
       targetBankMsb.value = typeof t.bankMsb === 'number' ? t.bankMsb : 0;
       targetDrumKit.value = typeof t.drumKit === 'number' ? t.drumKit : 0;
+      // Mark the imported drum note as already seeded so the model keeps the
+      // file's spec (a later refresh reseeds only when the note moves).
+      lastDrumSeedKey.value = t.kind === 'drum' ? String(targetDrumNote.value) : '';
     } else {
       targetActive.value = false;
     }
@@ -1184,6 +1233,8 @@ onUnmounted(() => {
                   </option>
                 </select>
               </label>
+              <!-- Fixed-height slot: kit changes never resize the card. -->
+              <p v-if="isGs && targetMode === 'drum'" class="tn-hint tn-hint--kit">{{ kitScopeHint }}</p>
 
               <div class="tn-tgcard__foot">
                 <div class="tn-tgcard__slot">
