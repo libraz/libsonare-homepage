@@ -169,9 +169,11 @@ const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   mode: 'scale',
   scaleRoot: 0,             // 0 = C .. 11 = B
   scaleModeMask: 0xab5,     // 12-bit degree mask: C major = {0,2,4,5,7,9,11}
+  referenceMidi: 69,        // anchors the scale grid; 69 = A4 (default)
   retuneAmount: 0.8,        // 0 = bypass, 1 = full snap
   retuneSpeedMs: 15,        // larger = slower glide onto pitch
   vibratoThresholdCents: 20, // corrections under this are skipped to keep vibrato
+  maxCorrectionSemitones: 2, // safety valve: clamp any single frame's jump (default 12)
   voiced,
 });
 ```
@@ -191,14 +193,18 @@ tuned = sonare.pitch_correct_timevarying(
     mode="scale",
     scale_root=0,
     scale_mode_mask=0xAB5,
+    reference_midi=69,
     retune_amount=0.8,
     retune_speed_ms=15,
     vibrato_threshold_cents=20,
+    max_correction_semitones=2,
     voiced=pitch.voiced_flag,
 )
 ```
 
 `scaleModeMask` is a 12-bit mask where bit `i` enables the semitone `i` above `scaleRoot`, so any scale is expressible (C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`). With `mode: 'midi'` (the default) the same function behaves like `pitchCorrectToMidiTimevarying(...)`, retuning toward `targetMidi` instead of a scale. `retuneAmount` controls how hard the snap is — lower values leave a natural, human wobble; `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect. See the interactive [pitch-correction demo](./glossary/editing/pitch-correction.md) for this in action.
+
+`referenceMidi` (default `69` = A4) anchors where the scale grid sits, so every degree is measured from a fixed reference note. `maxCorrectionSemitones` (default `12`) is the safety valve behind the "keep correction intervals small" advice below: it hard-clamps how far a single frame can jump, so an octave-off detector glitch on one frame is bounded instead of yanking that frame a full octave. Lower it when the detector is noisy or the take should stay close to the original.
 
 ### MIDI note numbers
 
@@ -277,6 +283,8 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 ```
 
 :::
+
+For a preset applied to a whole buffer in one call — without managing the class yourself — use `voiceChangeRealtime(samples, sampleRate, preset, options?)`. By default it treats `samples` as mono; pass `{ channels: 2 }` to feed an **interleaved** stereo buffer (`L0, R0, L1, R1, ...`) for a stereo source, and `{ blockSize }` to set the internal render block size (default 512). The returned buffer keeps the same layout and length as the input.
 
 ### Using `Audio` methods
 

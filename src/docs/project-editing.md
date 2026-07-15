@@ -237,11 +237,21 @@ Track operations are likewise undoable.
 | Pan | `setTrackPan(trackId, pan)` | Pans the track in `[-1, 1]` (non-finite values are rejected) |
 | MIDI destination | `setTrackMidiDestination(trackId, destinationId)` | Routes the track's MIDI to an instrument destination id (see [Built-in Instruments](./native-synth.md)) |
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 const drums = project.addTrack({ kind: 'audio', name: 'drums' });
 project.renameTrack(drums, 'drum-bus');
 project.setTrackRoute(drums, 'strip-drums', 'master'); // wire to a mixer scene strip
 ```
+
+```python [Python]
+drums = project.add_track("audio", name="drums")
+project.rename_track(drums, "drum-bus")
+project.set_track_route(drums, "strip-drums", "master")  # wire to a mixer scene strip
+```
+
+:::
 
 An **aux** track carries no clips of its own — it is a routing/return lane (for example an effect return or a submix) rather than a place to record content.
 
@@ -251,11 +261,21 @@ An **aux** track carries no clips of its own — it is a routing/return lane (fo
 
 The project keeps an **edit history**. Every clip, track, automation, and annotation operation pushes a command you can reverse.
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 project.setClipGain(clipId, 0.3);
 project.undo();   // gain returns to its previous value
 project.redo();   // re-applies the gain edit
 ```
+
+```python [Python]
+project.set_clip_gain(clip_id, 0.3)
+project.undo()   # gain returns to its previous value
+project.redo()   # re-applies the gain edit
+```
+
+:::
 
 Because the history is exact, calling `toJson()` before an edit, undoing, and calling `toJson()` again yields byte-identical JSON — a useful invariant for testing and for change detection in an editor UI.
 
@@ -267,7 +287,9 @@ All positions are in **PPQ** (quarter notes as a floating-point value, so fracti
 
 The **tempo map** is a list of tempo segments. Each segment starts at a PPQ position and sets a BPM; an optional `endBpm` makes the segment ramp linearly to a new tempo.
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 project.setTempoSegments([
   { startPpq: 0,  bpm: 120 },                 // constant 120 BPM from the top
   { startPpq: 16, bpm: 120, endBpm: 140 },    // ramp 120 -> 140 over this segment
@@ -276,16 +298,38 @@ project.setTempoSegments([
 project.tempoSegmentCount(); // 3
 ```
 
+```python [Python]
+project.set_tempo_segments([
+    {"start_ppq": 0.0, "bpm": 120},                     # constant 120 BPM from the top
+    {"start_ppq": 16.0, "bpm": 120, "end_bpm": 140},    # ramp 120 -> 140 over this segment
+    {"start_ppq": 32.0, "bpm": 140},
+])
+project.tempo_segment_count()  # 3
+```
+
+:::
+
 ### Time signatures
 
 Time signatures are a parallel list of segments, each with a numerator (beats per bar) and denominator (beat unit).
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 project.setTimeSignatures([
   { startPpq: 0,  numerator: 4, denominator: 4 },
   { startPpq: 64, numerator: 3, denominator: 4 },  // switch to 3/4 later
 ]);
 ```
+
+```python [Python]
+project.set_time_signatures([
+    {"start_ppq": 0.0, "numerator": 4, "denominator": 4},
+    {"start_ppq": 64.0, "numerator": 3, "denominator": 4},  # switch to 3/4 later
+])
+```
+
+:::
 
 ### Markers
 
@@ -341,7 +385,7 @@ for index in range(project.marker_count()):
 
 :::
 
-In Python: `set_tempo_segments`, `set_time_signatures`, and `set_marker` accept the same fields (mappings or tuples for the segment lists).
+In Python the segment lists also accept plain tuples in place of the mappings shown above (`(start_ppq, bpm)` for tempo, `(start_ppq, numerator, denominator)` for time signatures), and the simple marker call is `set_marker(marker_id, ppq, name)`.
 
 ## Overlap policy
 
@@ -398,7 +442,9 @@ A clip can carry alternate **takes** and a **comp** (composite) that stitches th
 
 An **automation lane** changes one host-defined parameter over time with breakpoints. Each breakpoint has a PPQ position, a value, and a curve to the next point (`'linear'`, `'exponential'`, `'hold'`, `'scurve'`).
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 const lane = project.addAutomationLane(trackId, {
   targetParamId: 1,                                   // host id of the parameter to change
   points: [
@@ -410,13 +456,32 @@ project.editAutomationLane(trackId, lane, { targetParamId: 1, points: [/* … */
 project.removeAutomationLane(trackId, lane);
 ```
 
+```python [Python]
+lane = project.add_automation_lane(
+    track_id,
+    target_param_id=1,                # host id of the parameter to change
+    points=[
+        (0.0, 0.0, "linear"),         # (ppq, value, curve)
+        (4.0, 1.0, "exponential"),
+    ],
+)
+project.edit_automation_lane(track_id, lane, target_param_id=1, points=[])
+project.remove_automation_lane(track_id, lane)
+```
+
+:::
+
+In Python the breakpoints are `(ppq, value, curve)` tuples rather than objects, and `add_automation_lane` / `edit_automation_lane` take `target_param_id` and `points` as separate arguments.
+
 The lane's `targetParamId` is your own parameter id; the project stores the breakpoints verbatim and replays them through the compiled timeline.
 
 ## Key and chord annotation write-back
 
 A project can carry musical annotations — the **key** regions and **chord** symbols that an analyzer produced — so they travel with the arrangement and survive save/load. Both streams are replace-in-full and undoable.
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 project.annotateKeys([
   { startPpq: 0, endPpq: 16, tonicPc: 0, mode: 1 }, // C major (tonicPc 0, mode 1 = major)
 ]);
@@ -426,6 +491,20 @@ project.annotateChords([
 ]);
 ```
 
+```python [Python]
+project.annotate_keys([
+    (0.0, 16.0, 0, 1),  # (start_ppq, end_ppq, tonic_pc, mode) — C major
+])
+project.annotate_chords([
+    {"start_ppq": 0.0, "end_ppq": 4.0, "root_pc": 0, "quality": 1, "roman_numeral": "I"},
+    {"start_ppq": 4.0, "end_ppq": 8.0, "root_pc": 7, "quality": 1, "roman_numeral": "V"},
+])
+```
+
+:::
+
+In Python `annotate_keys` takes `(start_ppq, end_ppq, tonic_pc, mode)` tuples while `annotate_chords` takes mappings with the same fields as the WASM objects (snake_case keys).
+
 The numeric fields are small fixed encodings:
 
 - **Pitch class** (`tonicPc`, `rootPc`): `0..11` with C = 0, C#/Db = 1, … B = 11; `255` means unknown.
@@ -433,6 +512,10 @@ The numeric fields are small fixed encodings:
 - **Chord quality** (`quality`): `1` = major, `2` = minor, `3` = diminished, `4` = augmented (see [Chord Recognition](./glossary/analysis/chord-recognition.md) for the full list).
 
 So `{ tonicPc: 0, mode: 1 }` is C major and `{ rootPc: 7, quality: 1 }` is a G major chord.
+
+::: warning These are arrangement ordinals, not the analysis enums
+The `mode` and `quality` numbers here are **1-based arrangement ordinals** (major = 1), distinct from the **0-based** `Mode` and `ChordQuality` enums that `detectKey` / `detectChords` return (major = 0, minor = 1, diminished = 2, augmented = 3). They are off by one and cannot be passed through: feeding a `ChordQuality.Minor` (= 1) straight from the analysis API into `annotateChords`'s `quality` would label the chord **major** here. Remap analysis-API results before annotating (e.g. `quality = analysisQuality + 1`).
+:::
 
 ## Assist sidecars
 
@@ -463,7 +546,9 @@ The binding APIs differ (consistent with the snake_case Python note elsewhere on
 
 A MIDI clip holds a flat event list. Build events with the `Project.midi*` static packers (which produce the canonical MIDI 1.0 words) and replace the clip's list with `setMidiEvents`.
 
-```typescript
+::: code-group
+
+```typescript [Browser / WASM]
 project.setMidiEvents(midiClip, [
   Project.midiNoteOn(0, 0, 0, 60, 100),  // (ppq, group, channel, note, velocity)
   Project.midiNoteOff(2, 0, 0, 60),
@@ -473,11 +558,27 @@ project.setMidiEvents(midiClip, [
 project.setProgram(midiClip, 4);          // GM program (e.g. 4 = electric piano)
 ```
 
+```python [Python]
+project.set_midi_events(midi_clip, [
+    Project.midi_note_on(0.0, 0, 0, 60, 100),  # (ppq, group, channel, note, velocity)
+    Project.midi_note_off(2.0, 0, 0, 60),
+    Project.midi_note_on(2.0, 0, 0, 64, 100),
+    Project.midi_note_off(4.0, 0, 0, 64),
+])
+project.set_program(midi_clip, 4)          # GM program (e.g. 4 = electric piano)
+```
+
+:::
+
+In Python the static packers are `Project.midi_note_on(...)` / `Project.midi_note_off(...)`, each returning a `(ppq, data0, data1)` tuple, and the events list is any sequence of those tuples.
+
+`setProgram` takes an optional third `bank` argument — `setProgram(clipId, program, bank = -1)` — that defaults to `-1` (no Bank Select emitted); pass a value `>= 0` to emit a Bank Select ahead of the program change. To change the program on a specific UMP group and channel rather than the clip default, use `setProgramOnChannel(clipId, group, channel, program, bank?)`. Both take the same optional `bank` across the WASM, Node, and Python bindings (`set_program(clip_id, program, bank=-1)`, `set_program_on_channel(clip_id, group, channel, program, bank=-1)`).
+
 ::: warning `ppq` is in quarter notes, not ticks
 The `ppq` argument is a **position in quarter notes** (a float), *not* a MIDI tick count. `Project.midiNoteOn(1, …)` is one quarter note in; `Project.midiNoteOn(0.5, …)` is an eighth note in. Despite the name, it is **not** 480-ticks-per-quarter — `Project.midiNoteOn(480, …)` schedules the note 480 quarter notes (120 bars) away, almost always far past your render window, so it silently never sounds. If you are converting from a tick-based source (an SMF at 480 PPQ, say), divide by the source's ticks-per-quarter first. The same unit applies to `addMidiClip(startPpq, lengthPpq)` and every clip/automation position on this page.
 :::
 
-Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop into a `setMidiEvents` list:
+Every shipped static packer returns one or more MIDI 1.0 UMP (Universal MIDI Packet) words ready to drop into a `setMidiEvents` list:
 
 | Packer | Signature | Event |
 |--------|-----------|-------|
@@ -645,7 +746,7 @@ try {
 }
 ```
 
-The v1.5.1 importer contains damage locally: if one SMF track has an overlong variable-length quantity or payload, parsing resynchronizes at that track's declared boundary so later valid tracks can still import instead of the whole file failing.
+The importer contains damage locally: if one SMF track has an overlong variable-length quantity or payload, parsing resynchronizes at that track's declared boundary so later valid tracks can still import instead of the whole file failing.
 
 What an SMF round-trips is a *performance* — and engraved, that same note list is a score. The grand staff below is the notation view of a MIDI clip; press play to hear the events it stores.
 

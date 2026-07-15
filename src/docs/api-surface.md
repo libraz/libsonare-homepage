@@ -58,15 +58,17 @@ Runtime means "which environment calls libsonare." The core math lives in C++, b
 Feature families group APIs by the job they do. If you do not know an exact function name yet, start here.
 
 ::: details Acronyms in the feature table
-- **STFT** — short-time Fourier transform, the basis of spectrograms.
-- **MFCC** — compact timbre features often used for ML and classification.
-- **CQT / VQT** — frequency transforms aligned with musical pitch spacing.
-- **NNLS / NMF** — matrix-factorization methods that split audio features into non-negative parts.
+Each line is a one-line gloss; follow the link for the authoritative explanation in the glossary.
+
+- **STFT** — short-time Fourier transform, the basis of spectrograms. See [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md).
+- **MFCC** — compact timbre features often used for ML and classification. See [Mel, MFCC, and Timbre](./glossary/analysis/mel-mfcc-timbre.md).
+- **CQT / VQT** — frequency transforms aligned with musical pitch spacing. See [Chroma Features](./glossary/analysis/chroma-features.md).
+- **NNLS / NMF** — matrix-factorization methods that split audio features into non-negative parts. See [Chroma Features](./glossary/analysis/chroma-features.md).
 - **PLP** — a feature that estimates the main rhythmic pulse.
-- **LUFS / LRA** — loudness and loudness-range metrics.
-- **VCA** — a group control that moves several strip levels together.
-- **RIR** — room impulse response.
-- **Equivalent-room estimation** — fitting a practical room model from audio.
+- **LUFS / LRA** — loudness and loudness-range metrics. See [LUFS](./glossary/lufs.md).
+- **VCA** — a group control that moves several strip levels together. See [Buses and Sends](./glossary/mixing/buses-sends.md).
+- **RIR** — room impulse response. See [Room Geometry and Volume](./glossary/acoustics/room-geometry.md).
+- **Equivalent-room estimation** — fitting a practical room model from audio. See [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md).
 - **Room morphing** — applying a target-room character as an effect.
 :::
 
@@ -84,7 +86,7 @@ Feature families group APIs by the job they do. If you do not know an exact func
 | Streaming MIR | Live mel/chroma/onset frames, BPM/key/chord estimates that update over time, chord progression and pattern scores | [Realtime and Streaming](./realtime-streaming.md), [WASM](./wasm.md#streaming-analysis) |
 | Realtime engine | Transport, tempo, structured markers, metronome, automation lanes, graph topology, clips, MIDI clip schedule, per-track lane mixer (lanes, buses, sends, channel strips, surround pan, insert parameters), external MIDI output/clock, capture, monitor bus, stereo/wide meter telemetry, scope telemetry and Worklet scope rings, bounce/freeze | [Realtime and Streaming](./realtime-streaming.md) |
 | Projects & arrangement | Audio/MIDI tracks and clips, undo/redo, takes/comping, warp, MIDI sequencing, SMF and MIDI 2.0 Clip File (`SMF2CLIP`) import/export, JSON save/load, and offline bounce | [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Recording and Takes](./recording-and-takes.md), [Realtime and Streaming](./realtime-streaming.md) |
-| Instruments & MIDI | Multi-engine synth with a GM fallback bank, GS-compatible SoundFont 2 player, and live MIDI playback | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md) |
+| Instruments & MIDI | Multi-engine synth with a GM fallback bank, GS-compatible SoundFont 2 player, live MIDI playback, and GS insertion effects (EFX) selected over live SysEx | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md#queueing-live-events) |
 | Inverse features | Mel to STFT/audio, MFCC to mel/audio | [Inverse Features](./inverse-features.md) |
 | Utility / librosa parity | Frame/sample/time conversions, dB conversion, pre/de-emphasis, silence trim/split, frame/pad/fix helpers, peak pick, vector normalize, PCEN, tonnetz | [librosa Compatibility](./librosa-compatibility.md) |
 
@@ -101,32 +103,16 @@ Feature families group APIs by the job they do. If you do not know an exact func
 
 This section is for readers who need to verify implementation details or exact public exports. If you only want to get a browser app running, it is enough to import what you need from `@libraz/libsonare` and call `init()` before using it.
 
-The main `@libraz/libsonare` TypeScript package exports several groups:
+The main `@libraz/libsonare` TypeScript package exports fall into a few groups: initialization and ABI checks, an `engineCapabilities` query, the audio-processing functions (analysis, effects/editing, mastering, mixing, feature extraction, inverse features, conversion helpers), and the stateful object APIs (`Audio`, `StreamAnalyzer`, `Mixer`, `RealtimeEngine`, and the streaming/voice-changer classes). The full, current export list is mirrored in [JavaScript API](./js-api.md), generated from `bindings/wasm/src/index.ts` in the libsonare repository — treat that TypeScript entry point as the authoritative reference.
 
-| Group | Examples |
-|-------|----------|
-| Initialization and ABI checks | `init`, `isInitialized`, `version`, `abiVersion`, `engineAbiVersion`, `projectAbiVersion`, `voiceChangerAbiVersion` |
-| Engine capabilities | `engineCapabilities` |
-| Audio work | High-level analysis, effects/editing, mastering, mixing, feature extraction, inverse features, conversion helpers |
-| Object APIs | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
+::: tip What the ABI-version functions are for
+`abiVersion`, `engineAbiVersion`, `projectAbiVersion`, and `voiceChangerAbiVersion` report the binary interface version each subsystem was built against. Compare them against the version your code expects to catch a mismatched or stale WASM build before you rely on its objects.
+:::
 
 The same npm package also exports `@libraz/libsonare/worklet` for the AudioWorklet bridge and `@libraz/libsonare/wasm` for bundlers or custom loaders that need the raw WASM asset.
-
-The function list is maintained in `bindings/wasm/src/index.ts` in the libsonare repository and mirrored in [JavaScript API](./js-api.md). When in doubt, use that TypeScript entry point as the most specific reference for WASM exports.
 
 ## CLI Command Families
 
 The CLI is the entry point when you want to point libsonare at files without writing a program. It is useful for automation and validation, but JavaScript / Python / C++ APIs are better for realtime UI or fine interactive control.
 
-The Python CLI covers the common user-facing commands:
-
-- version/info and core analysis;
-- feature summaries and LUFS;
-- file-writing editing commands such as `pitch-correct`, `note-stretch`, and `voice-change`;
-- acoustic/rhythm/dynamics/timbre summaries;
-- equivalent-room estimation, RIR synthesis, and room morphing;
-- mastering processor entry points and simple mixing.
-
-The source-built C++ CLI exposes a broader lower-level command set. Use it for section/melody/boundary utilities, CQT/tonnetz/PCEN/Fourier tempogram helpers, extra time/pitch file-processing commands, mastering pair/stereo lists, and mixing scene preset export.
-
-See [CLI](./cli.md) for command examples and [Binding Parity](./binding-parity.md) for runtime differences.
+Two CLIs exist: the Python CLI covers the common user-facing commands (analysis, feature summaries, file-writing edits, acoustic/room work, and basic mastering/mixing), while the source-built C++ CLI adds a broader lower-level set (section/melody utilities, extra feature helpers, and mastering pair/stereo and mixing-scene export). The full, current command list with examples lives in [CLI](./cli.md); see [Binding Parity](./binding-parity.md) for the runtime differences.

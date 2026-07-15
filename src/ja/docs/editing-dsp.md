@@ -169,9 +169,11 @@ const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   mode: 'scale',
   scaleRoot: 0,             // 0 = C .. 11 = B
   scaleModeMask: 0xab5,     // 12 ビットの度数マスク: C メジャー = {0,2,4,5,7,9,11}
+  referenceMidi: 69,        // 音階グリッドの基準音。69 = A4（既定）
   retuneAmount: 0.8,        // 0 = バイパス、1 = 完全スナップ
   retuneSpeedMs: 15,        // 大きいほど音程へ乗るグライドが遅い
   vibratoThresholdCents: 20, // これ未満の補正はビブラート保持のためスキップ
+  maxCorrectionSemitones: 2, // 安全弁: 1 フレームあたりの移動量を制限（既定 12）
   voiced,
 });
 ```
@@ -191,14 +193,18 @@ tuned = sonare.pitch_correct_timevarying(
     mode="scale",
     scale_root=0,
     scale_mode_mask=0xAB5,
+    reference_midi=69,
     retune_amount=0.8,
     retune_speed_ms=15,
     vibrato_threshold_cents=20,
+    max_correction_semitones=2,
     voiced=pitch.voiced_flag,
 )
 ```
 
 `scaleModeMask` は 12 ビットのマスクで、ビット `i` が `scaleRoot` の `i` 半音上を有効にするため、任意の音階を表現できます（C ナチュラルマイナー `{0,2,3,5,7,8,10}` は `0x5ad`）。`mode: 'midi'`（既定）では、この関数は `pitchCorrectToMidiTimevarying(...)` と同じく、音階ではなく `targetMidi` へ補正します。`retuneAmount` はスナップの強さで、低い値は自然で人間的な揺れを残し、`retuneAmount: 1` に短い `retuneSpeedMs` を合わせると硬いロボット的な効果になります。実際の動きは[ピッチ補正のデモ](./glossary/editing/pitch-correction.md)で確認できます。
+
+`referenceMidi`（既定 `69` = A4）は音階グリッドの基準となる音を固定し、各度数をその基準音から測ります。`maxCorrectionSemitones`（既定 `12`）は、後述の「補正量を小さく保つ」という指針を支える安全弁で、1 フレームで動かせる量を上限で抑えます。検出器が 1 フレームだけオクターブを取り違えても、そのフレームがまるまる 1 オクターブ引っ張られることはなく、上限内に収まります。検出が不安定なときや、テイクを原音に近く保ちたいときは値を下げてください。
 
 ### MIDI ノート番号
 
@@ -281,6 +287,8 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 ```
 
 :::
+
+プリセットをバッファ全体に 1 回で適用したい — クラスを自分で管理したくない — ときは `voiceChangeRealtime(samples, sampleRate, preset, options?)` を使います。既定では `samples` をモノラルとして扱いますが、ステレオソースには `{ channels: 2 }` を渡してインターリーブされたステレオバッファ（`L0, R0, L1, R1, ...`）を入力できます。`{ blockSize }` で内部レンダリングのブロックサイズも指定できます（既定 512）。返るバッファは入力と同じ並びと長さを保ちます。
 
 ### `Audio` メソッドから使う場合
 

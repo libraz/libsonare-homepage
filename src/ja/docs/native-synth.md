@@ -429,8 +429,9 @@ project.close()
 ```
 
 ```bash [CLI]
-sonare project bounce --in song.json -o synth.wav --synth va:saw-lead
-sonare project synth-presets            # NativeSynth プリセットカタログを一覧
+# CLI の --synth は内蔵オシレーターの波形（sine | saw | square | triangle）だけを受け付けます。
+# NativeSynth のプリセットやパッチを介した MIDI ルーティングはバインディング専用です（上のブラウザ／Python を参照）。
+sonare project bounce --in song.json -o synth.wav --synth saw
 ```
 
 :::

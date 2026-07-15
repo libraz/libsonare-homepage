@@ -71,7 +71,7 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI played by your own (Python) synth | `bounce_with_instruments` — **Python only** | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
 
 ::: info One Project, every runtime
-The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce`, `project midi-render`, SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
+The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce` — including `--synth` to route MIDI through the built-in oscillator — plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
 :::
 
 ## Plain bounce: audio clips
@@ -183,7 +183,7 @@ const b = project.bounceWithSynthInstrument('va:saw-lead', { numChannels: 2, sam
 
 // 3. A patch object: a base preset plus shared-control overrides
 const c = project.bounceWithSynthInstrument(
-  { preset: 'warm-pad', filterCutoffHz: 1200, ampRelease: 0.6 },
+  { preset: 'warm-pad', cutoffHz: 1200, ampReleaseMs: 600 },
   { numChannels: 2, sampleRate: 48000 },
 );
 ```
@@ -332,21 +332,17 @@ The Python package ships a `project` subcommand that loads a project JSON and re
 # Plain bounce (audio clips; MIDI tracks render silently)
 sonare project bounce --in song.json -o master.wav --sample-rate 48000
 
-# Route MIDI through the NativeSynth default patch
+# Route MIDI through the built-in oscillator synth (default sine waveform)
 sonare project bounce --in song.json -o master.wav --synth
 
-# Route MIDI through a named NativeSynth preset
-sonare project bounce --in song.json -o master.wav --synth saw-lead
-
-# Equivalent dedicated MIDI renderer
-sonare midi-render --in song.json -o master.wav --synth saw-lead
+# Pick the built-in oscillator waveform: sine | saw | square | triangle
+sonare project bounce --in song.json -o master.wav --synth saw
 
 # Inspect first: compile diagnostics (including the no-instrument warning)
 sonare project compile --in song.json --json
-sonare project synth-presets          # list valid NativeSynth preset names
 ```
 
-The `--synth` flag takes an optional value: omit it for the default patch, or pass a preset name. SF2 and per-destination synth JSON are not wired through the CLI — use the Project API for SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, and `project abi`.
+The `--synth` flag takes an optional value: omit it for the default (sine) waveform, or pass a built-in oscillator waveform (`sine`, `saw`, `square`, `triangle`). It does not accept NativeSynth preset names. The CLI does not expose the NativeSynth preset catalog or SF2 — those are binding-only (WASM/Node/Python), so use the Project API for preset- or SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, and `project abi`.
 
 ## Recipes
 

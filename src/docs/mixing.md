@@ -40,7 +40,7 @@ The engine is deliberately split into two levels. Start at the top row and only 
 | You are inside a browser `AudioWorklet` or audio callback | WASM [`Mixer.createRealtimeBuffer()`](#realtime-and-the-audioworklet-bridge) | Reuses buffers, never allocates per block |
 
 ::: info One engine, every runtime
-The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLI renders scenes rather than exposing a persistent `Mixer` object. See [Binding Parity](./binding-parity.md) for the per-runtime table.
+The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLI is the exception: its `mix` command is a single-file, single-strip processor and does **not** render scenes — the persistent multi-strip `Mixer` is available only through WASM/JS, Node, and Python. See [Binding Parity](./binding-parity.md) for the per-runtime table.
 :::
 
 ## The channel strip, signal by signal
@@ -156,12 +156,16 @@ mix = sonare.mix_stereo(
 ```
 
 ```bash [CLI]
+# The CLI mix command processes ONE file through ONE channel strip.
+# Combining several stems into one master is binding-only (mixStereo above).
 sonare mix \
-  --preset vocalReverbSend \
   --input vocal.wav \
-  --input music.wav \
-  --sample-rate 48000 \
-  -o master.wav
+  --input-trim-db 3 \
+  --fader-db -3 \
+  --pan 0.2 \
+  --pan-mode stereo \
+  --width 1.1 \
+  -o out.wav
 ```
 
 :::
@@ -218,13 +222,11 @@ mixer.close()                                               # release the native
 ```
 
 ```bash [CLI]
-# Render per-strip WAV inputs through a built-in scene preset (one --input per strip)
-sonare mix --preset vocalReverbSend \
-  --input vocal.wav --input reverb-return.wav \
-  --sample-rate 48000 -o master.wav
-
-# Or load a scene JSON file you saved from toSceneJson()/to_scene_json()
-sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav
+# The CLI has no scene-mixing command: `sonare mix` is single-file/single-strip
+# and cannot render a Mixer scene. Persistent multi-strip mixing is binding-only
+# (WASM/JS, Node, Python). The CLI can only PRINT scene JSON, never render it:
+sonare mixing-presets                   # list the built-in scene preset names
+sonare mixing-preset vocalReverbSend    # print one scene's JSON to stdout
 ```
 
 :::
@@ -338,7 +340,7 @@ The constant-power laws (3 / 4.5 / 6 dB) keep *perceived* loudness even as you p
 
 ### Surround and multichannel
 
-For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the offline `Mixer` still renders stereo — the surround panner that consumes these values runs in the [realtime engine's surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters), so set the position here and render the surround mix through the engine.
+For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the offline `Mixer` still renders stereo — the surround panner that consumes these values runs in the [realtime engine's surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters), so set the position here and render the surround mix through the engine.
 
 ## Automation
 

@@ -363,7 +363,7 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | Harmonic-Percussive Source Separation |
+| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | Harmonic-Percussive Source Separation; median-filter kernels default to `kernel_harmonic=31`, `kernel_percussive=31` |
 | `harmonic(samples, sample_rate)` | `list[float]` | Extract harmonic component |
 | `percussive(samples, sample_rate)` | `list[float]` | Extract percussive component |
 | `time_stretch(samples, sample_rate, rate)` | `list[float]` | Time-stretch without pitch change |
@@ -446,13 +446,13 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
-| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/momentary/short-term LUFS + loudness range (EBU R128) |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/momentary/short-term [LUFS](./glossary/lufs.md) + loudness range (EBU R128) |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range (LRA) in LU |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | Momentary LUFS per frame |
 | `short_term_lufs(samples, sample_rate)` | `list[float]` | Short-term LUFS per frame |
 
-Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`.
+Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`.
 
 Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
 
@@ -563,6 +563,15 @@ Result objects are plain classes with attribute access; many also expose
 camelCase property aliases (e.g. `bpm_confidence` / `bpmConfidence`) for
 JS-parity. Shapes below show the data fields.
 
+::: tip Row-major matrix layout
+Flattened matrix fields (marked "row-major" throughout this page) store a `[rows x n]` matrix one row after another: the first `n` values are row 0, the next `n` are row 1, and so on. Reshape the flat list by the row count to recover a 2-D NumPy array:
+
+```python
+import numpy as np
+mat = np.asarray(flat).reshape(rows, n)   # e.g. reshape(12, n_frames) for a 12-pitch-class chromagram
+```
+:::
+
 ```python
 class PitchClass(IntEnum):
     C, CS, D, DS, E, F, FS, G, GS, A, AS, B
@@ -596,6 +605,22 @@ class TimeSignature:
     numerator: int
     denominator: int
     confidence: float
+
+class Chord:
+    root: PitchClass
+    quality: str             # "major", "minor", "diminished", "augmented",
+                             #   "dominant7", "major7", "minor7", "sus2", "sus4",
+                             #   "add9", "minorAdd9", "dim7", "halfDim7",
+                             #   "major9", "dominant9", "sus2Add4", "unknown"
+    start: float             # segment start (seconds)
+    end: float               # segment end (seconds)
+    confidence: float
+    bass: PitchClass | None  # slash-chord bass, or None when it equals root
+    name: str                # property -> "Cmaj7", "Am", "G/B"
+    duration: float          # property -> end - start
+
+class ChordAnalysisResult:
+    chords: list[Chord]      # return type of detect_chords(...)
 
 class AnalysisResult:
     bpm: float
@@ -1014,10 +1039,10 @@ The headless-DAW API is available in Python as well: author arrangements with `P
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
 | Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
-| Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
-| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime and Streaming](./realtime-streaming.md#sending-a-track-to-external-midi-gear) |
-| Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
-| Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime and Streaming](./realtime-streaming.md#surround-group-buses-and-wide-meters) |
+| Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
+| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
+| Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) |
 
 ```python
 import libsonare as sonare

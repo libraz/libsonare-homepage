@@ -109,14 +109,37 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
 
-Node では同じ `pushMidiSysex(...)` 名です。Python は `push_midi_sysex(destination_id, data, render_frame=-1)` を公開し、完全なフレームを `bytes` またはほかのバイト列として受け取ります。C ABI の入口は `sonare_engine_push_midi_sysex(...)` です。
+同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じく「即時」を表す `-1` のレンダーフレームです。
+
+::: code-group
+
+```typescript [Browser]
+engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1);
+```
+
+```typescript [Node]
+// ブラウザと同じ形。data は Buffer か Uint8Array。
+engine.pushMidiSysex(0, gsResetOrEfxBytes, -1);
+```
+
+```python [Python]
+# data は bytes / bytearray / memoryview。render_frame=-1 が即時。
+engine.push_midi_sysex(0, gs_reset_or_efx_bytes, render_frame=-1)
+```
+
+```c [C ABI]
+/* size は 1〜512。render_frame -1 が即時。 */
+sonare_engine_push_midi_sysex(engine, /* destination_id */ 0,
+                              data, size, /* render_frame */ -1);
+```
+
+:::
 
 ```typescript
 // 即時経路: 次のブロック先頭でノートを発火
 engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
 engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64, -1);
 engine.pushMidiNoteOff(0, 0, 0, 60, 0, -1);
-engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1); // 0xF0/0xF7 込みの完全なフレーム
 
 // 入力ソース経路（bindWebMidi が内部で使う経路）
 engine.setMidiInputSource(0);
@@ -141,6 +164,8 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 // engine.clearMidiCcBindings() -> すべてのマッピングを削除
 ```
 
+`addParameter` は `unit`（表示用の文字列）・`rtSafe`・`defaultCurve` も受け取ります。ここで効いてくるのは **`rtSafe`**（既定は `true`）です。これは、音声スレッドが再生中にそのパラメータを変更してよいかを宣言します。演奏中に鳴らしながら CC バインドで動かしたいものは `true` のままにしてください。`rtSafe: false` で登録すると、オートメーションからでもバインド済み CC からでも、そのパラメータへのライブ書き込みはすべて無視され、変更はトランスポート停止中にのみ適用されます。
+
 ::: tip CC ラーンのワークフロー
 オフラインで「ツマミを動かし、どの CC が動いたか取り込む」流れには、プロジェクト API の `Project.midiCcLearn(events, paramId, options)` と、録音した CC ストリームをオートメーションへ変換する `midiCcToBreakpoint` / `midiParamToCc` があります。これらはライブエンジンではなく、取り込んだ `ProjectMidiEvent` データを対象とします。[プロジェクト編集](./project-editing.md) を参照してください。
 :::
@@ -149,13 +174,31 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 
 各デスティネーションは 1 つの **MIDI FX インサート** を持てます。イベントストリームへの非破壊な変換（トランスポーズ、チャンネルフィルタ、ベロシティカーブなど）を JSON で設定します。
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 // 入力されたノートをすべて 1 オクターブ上げる
 engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ transpose_semitones: 12 }));
 engine.clearMidiFx(0);   // 指定したデスティネーションのみ解除（ID 省略時は 0）
 ```
 
-Python でも v1.5.1 から同じライブ差し替えを `engine.set_midi_fx(destination_id, config_json)` で利用できます。解除には `engine.clear_midi_fx(destination_id)` を使います。
+```typescript [Node]
+engine.setMidiFx(0, JSON.stringify({ transpose_semitones: 12 }));
+engine.clearMidiFx(0);   // destinationId 省略時は 0
+```
+
+```python [Python]
+engine.set_midi_fx(0, '{"transpose_semitones": 12}')
+engine.clear_midi_fx(0)   # destination_id 省略時は 0
+```
+
+```c [C ABI]
+sonare_engine_set_midi_fx(engine, /* destination_id */ 0,
+                          "{\"transpose_semitones\": 12}");
+sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
+```
+
+:::
 
 設定 JSON は [`bakeMidiFx`](./project-editing.md) と同じスキーマです。各ステージはそのパラメータをキーにするので、ステージのキーを含めれば有効になり、省けばスキップされます。主なキーは `transpose_semitones`、`velocity_scale` / `velocity_offset` / `velocity_gamma`、`quantize_ppq` / `quantize_strength`、`chord_intervals`、`arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq` です。キーの全一覧と例は [プロジェクト編集](./project-editing.md) を参照してください。
 
@@ -263,9 +306,10 @@ Web MIDI の対応はまちまちなので、`isWebMidiAvailable()` で実行時
 
 ### 音声スレッド: ワークレットがエンジンをホストする
 
-`AudioWorkletGlobalScope` は動的 `import()` を禁止しているため、通常のパッケージ入口は使えません（その `init()` は WASM モジュールを動的にインポートします）。代わりに Emscripten ファクトリ `sonare.js` を静的にインポートし、それが公開する低レベルのエンジンを呼び出します。この低レベル入口について知っておくことは 2 つです。
+`AudioWorkletGlobalScope` は動的 `import()` を禁止しているため、通常のパッケージ入口は使えません（その `init()` は WASM モジュールを動的にインポートします）。代わりに Emscripten ファクトリ `sonare.js` を静的にインポートし、それが公開する低レベルのエンジンを呼び出します。この低レベル入口について知っておくことは次のとおりです。
 
 - ワークレットは `.wasm` のバイト列も fetch できません。メインスレッドで fetch して `processorOptions` 経由で渡します。
+- 生の embind の `RealtimeEngine` コンストラクタは 4 つの引数 `(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity)` を取ります。高レベルの `RealtimeEngine` クラスは末尾の 2 つを既定値 `1024` にするため、このページ前半の 2 引数の呼び出しが成立しますが、embind のクラスには既定引数がないので、ワークレットでは 2 つを明示的に渡す必要があります。`commandCapacity` はキューイングした MIDI／オートメーションコマンドのリングバッファ容量、`telemetryCapacity` はテレメトリ／メーター読み出しの容量です。
 - 一部の引数順が通常の JS パッケージ入口と異なります。特に `setSynthInstrument(destinationId, patch)` です。
 
 ```js

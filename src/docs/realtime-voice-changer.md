@@ -80,9 +80,13 @@ The demo above isolates just the **Retune** stage (pitch shift) so you can hear 
 
 Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`. Treat these as starting points, not genre or identity labels.
 
-## Browser / WASM
+## One Flow, Every Binding
 
-```typescript
+Every binding follows the same lifecycle: **construct** the changer, **prepare** it for the sample rate and block size, call **`processMono(...)`** for each block, swap presets live with **`setConfig(...)`**, and read **`latencySamples()`**. The tabs below show that one flow in each runtime — only the constructor shape and the cleanup call differ.
+
+::: code-group
+
+```typescript [Browser]
 import {
   init,
   RealtimeVoiceChanger,
@@ -99,11 +103,79 @@ try {
   changer.setConfig('soft-whisper');
   console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), out);
 } finally {
-  changer.delete();
+  changer.delete(); // WASM handle cleanup
 }
 ```
 
-For AudioWorklet-style loops, use the heap-backed realtime buffers documented in [Browser / WASM](./wasm.md#realtime-voice-changer). They avoid allocating a new output array on every render quantum.
+```python [Python]
+import libsonare as sonare
+
+print(sonare.voice_character_preset_id(1))
+preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")
+
+with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
+    out = changer.process_mono(input_block)
+    changer.set_config("soft-whisper")
+    print(sonare.realtime_voice_changer_preset_names(), preset_config, changer.latency_samples())
+
+# Whole-array render through the same preset chain:
+processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
+```
+
+```typescript [Node]
+import {
+  RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetNames,
+  voiceChangeRealtime,
+} from '@libraz/libsonare-native';
+
+const changer = new RealtimeVoiceChanger({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  channels: 1,
+  preset: 'bright-idol',
+});
+
+try {
+  const blockOut = changer.processMono(inputBlock);
+  changer.setConfig('soft-whisper');
+  // Whole-array render through the same preset chain:
+  const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
+  console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), blockOut, rendered);
+} finally {
+  changer.destroy(); // native handle cleanup (WASM uses delete())
+}
+```
+
+```bash [CLI]
+# sonare voice-change renders a whole file through the preset chain;
+# it is not a per-block realtime loop.
+sonare voice-presets --json
+sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
+```
+
+:::
+
+::: warning Cleanup differs by binding
+The construct/process flow is shared, but each runtime releases its native handle differently — release it exactly once.
+
+- **Browser / WASM** — call `delete()` (in the `finally`, on component unmount, or when the worklet stops).
+- **Node native** — call `destroy()`; `using` (Node 22+) can free it automatically.
+- **Python** — the `with` block releases the handle; outside a `with`, call `close()`.
+:::
+
+For AudioWorklet-style loops, use the heap-backed realtime buffers documented in [Browser / WASM](./wasm.md#realtime-voice-changer). They avoid allocating a new output array on every render quantum, which the browser example's plain `processMono(...)` does.
+
+## CLI Modes
+
+The `sonare voice-change` command has two modes:
+
+| Mode | Options |
+|------|---------|
+| Simple pitch/formant edit | `--pitch-semitones`, `--formant-factor` |
+| Realtime preset-chain render | `--preset`, `--preset-json`, `--preset-pack`, `--set PATH=VALUE` |
+
+If you pass realtime preset options, the command uses the preset chain and ignores the simple pitch/formant options. See [CLI Reference](./cli.md#realtime-voice-presets) for the full command table.
 
 ## Preset JSON
 
@@ -127,63 +199,6 @@ Current built-in preset JSON uses schema version `1`. The native POD-config ABI 
 
 If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. Python exposes the same native-config path as `realtime_voice_changer_preset_config(...)`.
 
-## Python
-
-```python
-import libsonare as sonare
-
-print(sonare.voice_character_preset_id(1))
-preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")
-
-with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
-    out = changer.process_mono(input_block)
-    changer.set_config("soft-whisper")
-    print(sonare.realtime_voice_changer_preset_names(), preset_config, changer.latency_samples())
-
-processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
-```
-
-Use the context manager or call `close()` so the native handle is released.
-
-## Node Native
-
-```typescript
-import {
-  RealtimeVoiceChanger,
-  realtimeVoiceChangerPresetNames,
-  voiceChangeRealtime,
-} from '@libraz/libsonare-native';
-
-const changer = new RealtimeVoiceChanger({
-  sampleRate: 48000,
-  maxBlockSize: 128,
-  channels: 1,
-  preset: 'bright-idol',
-});
-
-const blockOut = changer.processMono(inputBlock);
-const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
-console.log(realtimeVoiceChangerPresetNames(), blockOut, rendered);
-```
-
-Use Node native when you need native file decoding, server-side batch work, or desktop integration. Use browser/WASM when the microphone and UI live in the browser.
-
-## CLI
-
-The `sonare voice-change` command has two modes:
-
-| Mode | Options |
-|------|---------|
-| Simple pitch/formant edit | `--pitch-semitones`, `--formant-factor` |
-| Realtime preset-chain render | `--preset`, `--preset-json`, `--preset-pack`, `--set PATH=VALUE` |
-
-```bash
-sonare voice-presets --json
-sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
-```
-
-If you pass realtime preset options, the command uses the preset chain and ignores the simple pitch/formant options. See [CLI Reference](./cli.md#realtime-voice-presets) for the full command table.
-
 ## Practical Notes
 
 Realtime voice processing is stateful. Reuse the same changer across blocks, keep block sizes within the prepared maximum, and release handles when the component or stream stops.
@@ -191,7 +206,7 @@ Realtime voice processing is stateful. Reuse the same changer across blocks, kee
 Large pitch, formant, or ambience moves can be useful for sound design, but they will be less transparent. For natural monitoring, keep preset edits conservative and watch latency with `latencySamples()`.
 
 ::: info What "latency" means here
-**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds. Since v1.5.1 it follows the effective dry/wet mix: roughly `wetMix × retune grain`, plus the ISP limiter's fixed delay when that limiter is active. Pure dry reports zero, while fully wet reports the full wet-path delay.
+**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds. Since v1.5.1 it follows the effective dry/wet mix: roughly `wetMix × retune grain`, plus the ISP limiter's fixed delay when that limiter is active. Here *grain* is the retune stage's pitch-shift analysis window measured in samples — a larger grain analyses more audio per step, so it adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field). Pure dry reports zero, while fully wet reports the full wet-path delay.
 :::
 
 ## Related Pages
@@ -200,4 +215,4 @@ Large pitch, formant, or ambience moves can be useful for sound design, but they
 - [Browser / WASM](./wasm.md#realtime-voice-changer)
 - [JavaScript API](./js-api.md#realtimevoicechanger)
 - [Python API](./python-api.md#realtime-voice-changer)
-- [Node.js Native](./native-bindings.md#streaming-and-realtime-classes)
+- [Node.js Native API](./node-api.md#streaming-and-realtime-classes)

@@ -52,7 +52,7 @@ The browser receives MIDI bytes, `bindWebMidi` converts them into engine events,
 
 If you hear silence, check the path in this order: browser permission, `bindWebMidi` input list, destination id, bound instrument, then the AudioWorklet/output wiring.
 
-## What You Will Learn
+## What you will learn
 
 By the end of this page you should be able to:
 
@@ -109,14 +109,37 @@ There are two queueing paths, and you should pick one per destination. Rule of t
 - **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. This is the lane the Web MIDI bridge feeds for you.
 - **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` queues a full SysEx frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same immediate/schedule convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
 
-Node uses the same `pushMidiSysex(...)` name. Python exposes `push_midi_sysex(destination_id, data, render_frame=-1)` and accepts the complete frame as `bytes` or another byte sequence. The C ABI entry point is `sonare_engine_push_midi_sysex(...)`.
+Every binding exposes the same SysEx call; only the naming convention changes. `data` is the complete frame (leading `0xF0`, trailing `0xF7`, 1..512 bytes) and the last argument is the same `-1`-for-immediate render frame as the other `pushMidi*` calls.
+
+::: code-group
+
+```typescript [Browser]
+engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1);
+```
+
+```typescript [Node]
+// Same surface as the browser; data is a Buffer or Uint8Array.
+engine.pushMidiSysex(0, gsResetOrEfxBytes, -1);
+```
+
+```python [Python]
+# data is bytes / bytearray / memoryview; render_frame=-1 is immediate.
+engine.push_midi_sysex(0, gs_reset_or_efx_bytes, render_frame=-1)
+```
+
+```c [C ABI]
+/* size must be 1..512; render_frame -1 = immediate. */
+sonare_engine_push_midi_sysex(engine, /* destination_id */ 0,
+                              data, size, /* render_frame */ -1);
+```
+
+:::
 
 ```typescript
 // Immediate path: fire a note at the start of the next block.
 engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
 engine.pushMidiCc(0, 0, 0, /* controller */ 1, /* value */ 64, -1);
 engine.pushMidiNoteOff(0, 0, 0, 60, 0, -1);
-engine.pushMidiSysex(/* destinationId */ 0, gsResetOrEfxBytes, -1); // full frame incl. 0xF0/0xF7
 
 // Input-source path (what bindWebMidi uses under the hood):
 engine.setMidiInputSource(0);
@@ -141,6 +164,8 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 // engine.clearMidiCcBindings() -> remove all mappings
 ```
 
+`addParameter` also accepts `unit` (a display string), `rtSafe`, and `defaultCurve`. The one that matters here is **`rtSafe`** (default `true`): it declares whether the audio thread may change the parameter mid-playback. Keep it `true` for anything you intend to CC-bind and move while notes sound. Register it with `rtSafe: false` and the engine silently drops every live write to it — from automation *and* from a bound CC — applying changes only while transport is stopped.
+
 ::: tip CC "learn" workflows
 For an offline "wiggle a knob, capture which CC moved" flow, the project API exposes `Project.midiCcLearn(events, paramId, options)` plus `midiCcToBreakpoint` / `midiParamToCc` for turning recorded CC streams into automation. Those operate on captured `ProjectMidiEvent` data rather than the live engine — see [Project Editing](./project-editing.md).
 :::
@@ -149,13 +174,31 @@ For an offline "wiggle a knob, capture which CC moved" flow, the project API exp
 
 Each destination can carry one **MIDI-FX insert** — a non-destructive transform on the event stream (transpose, channel filter, velocity curve, …) configured from JSON.
 
-```typescript
+::: code-group
+
+```typescript [Browser]
 // Transpose every incoming note up an octave.
 engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ transpose_semitones: 12 }));
 engine.clearMidiFx(0);   // clears this destination only (the id defaults to 0 if omitted)
 ```
 
-Python exposes the same live replacement in v1.5.1 as `engine.set_midi_fx(destination_id, config_json)`; use `engine.clear_midi_fx(destination_id)` to remove it.
+```typescript [Node]
+engine.setMidiFx(0, JSON.stringify({ transpose_semitones: 12 }));
+engine.clearMidiFx(0);   // destinationId defaults to 0
+```
+
+```python [Python]
+engine.set_midi_fx(0, '{"transpose_semitones": 12}')
+engine.clear_midi_fx(0)   # destination_id defaults to 0
+```
+
+```c [C ABI]
+sonare_engine_set_midi_fx(engine, /* destination_id */ 0,
+                          "{\"transpose_semitones\": 12}");
+sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
+```
+
+:::
 
 The JSON schema is the same one [`bakeMidiFx`](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
 
@@ -263,9 +306,10 @@ A runnable path from "keyboard plugged in" to "sound out of the speakers". It ta
 
 ### Audio thread: the worklet hosts the engine
 
-An `AudioWorkletGlobalScope` forbids dynamic `import()`, which rules out the high-level package entry point (its `init()` imports the WASM module dynamically). Statically import the Emscripten factory `sonare.js` instead and call the lower-level engine it exposes. Two things to know about that lower-level entry point:
+An `AudioWorkletGlobalScope` forbids dynamic `import()`, which rules out the high-level package entry point (its `init()` imports the WASM module dynamically). Statically import the Emscripten factory `sonare.js` instead and call the lower-level engine it exposes. A few things to know about that lower-level entry point:
 
 - The worklet cannot fetch the `.wasm` bytes either — fetch them on the main thread and hand them in through `processorOptions`.
+- The raw embind `RealtimeEngine` constructor takes four arguments — `(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity)`. The high-level `RealtimeEngine` class defaults the last two to `1024`, which is why the two-arg call earlier on this page works; the embind class has no default parameters, so the worklet must pass them explicitly. `commandCapacity` is the ring-buffer capacity for queued MIDI/automation commands, and `telemetryCapacity` is the capacity for telemetry/meter readback.
 - Some argument orders differ from the high-level JS package — notably `setSynthInstrument(destinationId, patch)`.
 
 ```js

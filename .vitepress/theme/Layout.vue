@@ -1,20 +1,27 @@
 <script setup lang="ts">
 import { useData } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
-import { computed } from 'vue';
-import AnalyzerDemo from '@/components/AnalyzerDemo.vue';
-import MasteringDemo from '@/components/MasteringDemo.vue';
-import MixingStudio from '@/components/MixingStudio.vue';
-import MusicAnalysisStudio from '@/components/MusicAnalysisStudio.vue';
-import PhysicalModelTuner from '@/components/PhysicalModelTuner.vue';
-import PianoPracticeDemo from '@/components/PianoPracticeDemo.vue';
-import RealtimeFxLab from '@/components/RealtimeFxLab.vue';
-import SpatialScanner from '@/components/SpatialScanner.vue';
-import StudioDemo from '@/components/StudioDemo.vue';
-import SynthDemo from '@/components/SynthDemo.vue';
+import { computed, defineAsyncComponent } from 'vue';
 import { createTheme } from '@/composables/useTheme';
-import DemosLayout from './DemosLayout.vue';
-import LandingLayout from './LandingLayout.vue';
+
+// Each custom route is a standalone application. Keep it out of the shared
+// documentation theme and load only the application selected by frontmatter.
+const AnalyzerDemo = defineAsyncComponent(() => import('@/components/AnalyzerDemo.vue'));
+const MasteringDemo = defineAsyncComponent(() => import('@/components/MasteringDemo.vue'));
+const MixingStudio = defineAsyncComponent(() => import('@/components/MixingStudio.vue'));
+const MusicAnalysisStudio = defineAsyncComponent(
+  () => import('@/components/MusicAnalysisStudio.vue'),
+);
+const PhysicalModelTuner = defineAsyncComponent(
+  () => import('@/components/PhysicalModelTuner.vue'),
+);
+const PianoPracticeDemo = defineAsyncComponent(() => import('@/components/PianoPracticeDemo.vue'));
+const RealtimeFxLab = defineAsyncComponent(() => import('@/components/RealtimeFxLab.vue'));
+const SpatialScanner = defineAsyncComponent(() => import('@/components/SpatialScanner.vue'));
+const StudioDemo = defineAsyncComponent(() => import('@/components/StudioDemo.vue'));
+const SynthDemo = defineAsyncComponent(() => import('@/components/SynthDemo.vue'));
+const DemosLayout = defineAsyncComponent(() => import('./DemosLayout.vue'));
+const LandingLayout = defineAsyncComponent(() => import('./LandingLayout.vue'));
 
 defineOptions({ name: 'ThemeLayout' });
 

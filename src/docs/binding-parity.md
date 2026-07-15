@@ -37,11 +37,11 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Batch analysis | Yes | Yes |
 | Low-level features and librosa helpers | Yes | Common commands |
 | Constant-Q chroma (`chromaCqt` / `chroma_cqt`) | Yes — WASM, Node, Python, C ABI | No |
-| Streaming analyzer | Yes | No |
+| Streaming analyzer and processors (`StreamAnalyzer`, `StreamingEqualizer`, `StreamingMasteringChain`) | Yes | No |
 | Mel/MFCC inverse reconstruction | Yes | No |
 | Realtime engine | Yes | No |
-| Engine lane mixer (lanes, buses, sends, channel strips) and MIDI clip schedule | Yes — see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) | No |
-| Realtime scope and wide meter telemetry | Yes — see [Realtime and Streaming](./realtime-streaming.md#surround-group-buses-and-wide-meters) | No |
+| Engine lane mixer (lanes, buses, sends, channel strips) and MIDI clip schedule | Yes — see [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) | No |
+| Realtime scope and wide meter telemetry | Yes — see [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) | No |
 | Mastering presets/chains/processors | Yes | Partial |
 | Mastering assistant/profile/preview JSON | Yes | No dedicated command |
 | Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
@@ -74,12 +74,9 @@ These functions exist across the library bindings but take their arguments diffe
 | Streaming reads | `process`, `readFrames`, `stats` | float Structure-of-Arrays read is `readFramesSoa` | `process`, `read_frames`, `stats` |
 | Quantized stream reads | `readFramesI16` / `readFramesU8`, `StreamConfig.outputFormat` | same as WASM | `read_frames_i16` / `read_frames_u8`, `output_format` |
 | `Mixer` strip references | numeric index; `stripById(id)` for lookup | numeric index or strip-id string | numeric index or strip-id string |
-
-A few signatures don't line up across all three bindings:
-
-- **Stereo mix:** WASM `mixStereo(...)` takes separate `leftChannels` / `rightChannels` arrays plus a `MixOptions` object; Python `mix_stereo(...)` takes `[(left, right), …]` strips plus keyword arrays such as `fader_db`, `pan`, `width`, and `input_trim_db`.
-- **`timeStretch(...)` / `pitchShift(...)`:** Since v1.5.1, WASM and Node native both use `samples, sampleRate, rateOrSemitones`.
-- **Metering taps:** use `meterTap(strip, tap)` for an explicit pre/post-fader tap; Node's `stripMeter(strip)` is the post-fader convenience path.
+| Stereo mix (`mixStereo` / `mix_stereo`) | separate `leftChannels` / `rightChannels` arrays plus a `MixOptions` object | same as WASM | `[(left, right), …]` strips plus keyword arrays (`fader_db`, `pan`, `width`, `input_trim_db`) |
+| `timeStretch` / `pitchShift` | `(samples, sampleRate, rate/semitones)` | same as WASM | `(samples, sample_rate, rate/semitones)` |
+| Metering taps (`meterTap` / `stripMeter`) | `meterTap(strip, tap)` for an explicit pre/post-fader tap; `stripMeter(strip)` is the post-fader convenience | same as WASM | `meter_tap(strip, tap)` / `strip_meter(strip)` |
 
 ### Config, return, and data shapes
 
@@ -92,7 +89,7 @@ A few signatures don't line up across all three bindings:
 | `bounceOffline(...)` LUFS | Same LUFS-normalization default in C API and WASM; pass `normalizeLufs` / `normalize_lufs` explicitly when porting older code if the behavior matters |
 | `mfcc` lifter | `mfcc(...)` / `mfcc` takes a trailing `lifter` / `lifter` argument (cepstral liftering, default `0` = no liftering) on every binding; the C-ABI explicit-range entry point is `sonare_mfcc_ex` |
 | `trim` vs `trimSilence` | `trim(...)` uses a simple `thresholdDb` and returns audio only; `trimSilence(...)` / `trim_silence(...)` follow `librosa.effects.trim` with `topDb`, frame RMS, and original sample ranges |
-| Automation curves | Shared `AutomationCurve` across engine and mixing APIs (`linear`, `exponential`, `hold`, `s-curve`); update older per-module curve enum names to this shared name |
+| Automation curves | The mixing and engine APIs use separately named curve types. Mixing's `AutomationCurve` accepts `'linear'`, `'exponential'`, `'hold'`, `'s-curve'`. The engine/project API uses a distinct type — `EngineAutomationPointCurve` (Node) / `ProjectAutomationCurve` (WASM, which also accepts the ordinals `0`–`3`) — and spells the s-curve value `'scurve'` (no hyphen) rather than mixing's `'s-curve'`. Don't assume one shared name or spelling across the two surfaces |
 | Scene JSON | Interchange format for persistent mixers; prefer `Mixer.toSceneJson()` (WASM/Node) or `Mixer.to_scene_json()` (Python) over hand-written JSON when preserving runtime edits |
 | Clip loop crossfade | `setClipLoop` / `set_clip_loop` accepts `loopCrossfadePpq` / `loop_crossfade_ppq` on every binding. It is an equal-power seam crossfade, clamped by pre-roll and half the loop, ignored under warp, and serialized only when non-zero |
 | Project bounce variants | The headless-DAW `Project` bounces to audio across bindings; instrument-bound bounce (`bounceWithBuiltinInstrument` / `bounceWithSynthInstrument` / `bounceWithSf2Instrument`) and the take/comp arrangement model are shared — see [Project Bounce](./project-bounce.md) and [Recording and Takes](./recording-and-takes.md). The `ExternalInstrument` bounce protocol is Python-only |
@@ -117,6 +114,10 @@ When moving a JavaScript example to Python, or Python verification code to C++, 
 3. Check option names and defaults — especially `nFft` / `n_fft`, `hopLength` / `hop_length`, and `nMels` / `n_mels`, which directly affect the result.
 4. Confirm matrix orientation. Returned `[rows x nFrames]` row-major arrays must not be read as column-major in another language.
 5. Don't expect bit-exact numbers. Allow for small differences from floating-point, windowing, and decoder behavior; verify the tolerance fits your use case.
+
+::: tip Row-major vs column-major
+A row-major buffer stores each row's elements contiguously (one whole row after another); a column-major buffer stores each column contiguously instead. libsonare returns `[rows x nFrames]` matrices row-major — the entire first row, then the entire second row — so index an element as `row * nFrames + frame`.
+:::
 
 ## Verification Sources
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { CornerBrackets, ScanLine } from '@/components/ui';
+import CornerBrackets from './CornerBrackets.vue';
+import ScanLine from './ScanLine.vue';
 
 const props = withDefaults(
   defineProps<{

@@ -1,6 +1,6 @@
 ---
 title: Mixing Scene JSON
-description: The mixer scene exchange format — every strip, insert, send, bus, VCA, and connection field — with an annotated built-in preset and the browser demo project format.
+description: The mixer scene exchange format — every strip, insert, send, bus, VCA, and connection field — with an annotated built-in preset.
 ---
 
 # Mixing Scene JSON
@@ -74,7 +74,7 @@ Each strip object describes one channel lane. All numeric fields have sensible d
 | `panMode` | integer | `0` | `0` = balance, `1` = stereo pan, `2` = dual pan |
 | `dualPanLeft` | number | `-1` | Left position in dual-pan mode (default is identity hard-left, preserving the stereo image) |
 | `dualPanRight` | number | `1` | Right position in dual-pan mode (default is identity hard-right) |
-| `surroundPan` | object | identity | Surround-pan position for wider-than-stereo hosts. `azimuth`, `divergence`, and `lfe` affect the [realtime engine's 5.1/7.1 group-bus panner](./realtime-streaming.md#surround-group-buses-and-wide-meters); `elevation` and `distance` are reserved. The value is validated and round-tripped through scene JSON. The standalone offline `Mixer` remains stereo and therefore does not apply it |
+| `surroundPan` | object | identity | Surround-pan position for wider-than-stereo hosts. `azimuth`, `divergence`, and `lfe` affect the [realtime engine's 5.1/7.1 group-bus panner](./realtime-engine.md#surround-group-buses-and-wide-meters); `elevation` and `distance` are reserved. The value is validated and round-tripped through scene JSON. The standalone offline `Mixer` remains stereo and therefore does not apply it |
 | `polarityInvertLeft` | boolean | `false` | Inverts the left channel polarity |
 | `polarityInvertRight` | boolean | `false` | Inverts the right channel polarity |
 | `panLaw` | integer | `0` | `0` = const 3 dB, `1` = const 4.5 dB, `2` = const 6 dB, `3` = linear 0 dB |
@@ -104,7 +104,7 @@ An insert is a named processor running in series inside the strip (or a bus).
 | Field | Type | Meaning |
 |-------|------|---------|
 | `slot` | `"pre"` \| `"post"` | Runs before or after the fader. **Note the short tokens** — not `preFader`/`postFader`. |
-| `processor` | string | Processor id, e.g. `eq.parametric`, `dynamics.compressor`, `effects.reverb.plate`. See [Mastering Processors](./mastering-processors.md#mixer-insert-names). |
+| `processor` | string | Processor id, e.g. `eq.parametric`, `dynamics.compressor`, `effects.reverb.plate`. See [Mastering Processors](./mastering-processors.md) for solo processors and [Effects Inserts](./effects-inserts.md) for the creative-FX catalog. |
 | `params` | string | The processor's parameters, as a **JSON string** (escaped object), e.g. `"{\"thresholdDb\":-18,\"ratio\":2.5}"`. |
 | `sidechainKey` | string | *Optional.* Strip id whose signal feeds this insert's external sidechain (e.g. ducking). Omitted when empty. |
 
@@ -265,39 +265,11 @@ Rendering a whole scene from a JSON file with one `--input` per strip is impleme
 Structural edits — adding/removing buses, sends, or connections — mark the graph dirty and need `compile()` before the next timing-critical block. Parameter moves (`setSendDb` / Python `set_send_db`, `setPanLaw`), VCA group changes (add/remove/gain — applied live as control-only gain offsets on member strips), and scheduled automation do **not** need a recompile.
 :::
 
-## Browser demo project JSON
-
-The `/mixing` demo exports a *different*, smaller file for browser sessions. It is a UI project, not a mixer scene: it stores per-track arrangement settings, **not** decoded audio.
-
-The example below is abbreviated — it shows a representative subset of keys. A real export also carries additional top-level fields (such as `reverb` and `vcaGains`) and more per-track settings.
-
-```json
-{
-  "version": 1,
-  "masterFaderDb": 0,
-  "tracks": [
-    {
-      "id": "track-id",
-      "name": "Lead Vocal",
-      "offsetSeconds": 1.5,
-      "inputTrimDb": 0,
-      "faderDb": -3,
-      "pan": 0,
-      "width": 1,
-      "muted": false,
-      "soloed": false,
-      "polarityLeft": false,
-      "polarityRight": false
-    }
-  ]
-}
-```
-
-`offsetSeconds` is the clip start time on the arrangement timeline; the demo pads each stem by that amount before calling the WASM mixer, so the visual start time is preserved in the offline bounce. Because the file excludes audio, re-import matches tracks by `id` (or `name`) once the audio is loaded again.
-
 ## Related
 
+- [Mixing Demo Project JSON](./mixing-demo-project-json.md) — the `/mixing` demo's UI project file, a per-track arrangement format that is *not* a mixer scene
 - [Mixing Engine](./mixing.md) — the API guide and signal flow
 - [Mixing Basics](./glossary/concepts/mixing-basics.md) — the vocabulary
-- [Mastering Processors](./mastering-processors.md#mixer-insert-names) — valid `processor` ids and the extra mixer insert names
+- [Mastering Processors](./mastering-processors.md) — valid `processor` ids for the mastering registry
+- [Effects Inserts](./effects-inserts.md) — the extra creative-FX mixer insert names
 - [Binding Parity](./binding-parity.md) — per-runtime differences

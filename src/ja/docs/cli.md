@@ -608,7 +608,7 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 
 ### プロジェクト＆ MIDI ワークフロー
 
-`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`midi-render` はプロジェクトの MIDI を NativeSynth でレンダリングし、`project synth-presets` は組み込みの楽器パッチを一覧表示します。
+`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth <sine|saw|square|triangle>` はプロジェクトの MIDI トラックを組み込みのオシレーターシンセでレンダリングします。CLI の `--synth` はこれら組み込み波形だけを受け付けます。NativeSynth のプリセットカタログはバインディング側の `synthPresetNames()` で列挙するもので、CLI からは扱えません。
 
 ```bash
 # プロジェクトの ABI バージョンを表示
@@ -627,8 +627,8 @@ sonare project compile --in project.json
 # プロジェクトをステレオ WAV にレンダリング（マルチチャンネルのバウンスもステレオ出力）
 sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
 
-# クリップ音声ではなくプロジェクトの MIDI を NativeSynth プリセットでレンダリング
-sonare project bounce --in project.json --synth -o synth-bounce.wav
+# クリップ音声ではなくプロジェクトの MIDI トラックを組み込みのオシレーターシンセでレンダリング
+sonare project bounce --in project.json --synth saw -o synth-bounce.wav
 ```
 
 | コマンド | 説明 | 主なオプション |
@@ -642,7 +642,6 @@ sonare project bounce --in project.json --synth -o synth-bounce.wav
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
 | `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |
 | `sonare project import-midi2` | MIDI 2.0 Clip File からプロジェクトを構築 | `--midi2`, `-o` |
-| `sonare project synth-presets` | 組み込み NativeSynth プリセットを一覧表示 | `--json` |
 
 ```bash
 # プロジェクトを Standard MIDI File 形式でラウンドトリップ
@@ -653,19 +652,13 @@ sonare project import-smf --smf project.mid -o roundtrip.json
 sonare project export-midi2 --in project.json -o project.midi2
 sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 
-# MIDI プロジェクトを NativeSynth でステレオ WAV にレンダリング
-sonare midi-render --in project.json --synth acoustic-piano --sample-rate 48000 -o render.wav
-
-# 組み込みシンセプリセットを一覧表示
-sonare project synth-presets
+# プロジェクトの MIDI トラックを組み込みのオシレーターシンセでステレオ WAV にレンダリング
+sonare project bounce --in project.json --synth triangle --sample-rate 48000 -o render.wav
 ```
 
-| コマンド | 説明 | 主なオプション |
-|----------|------|----------------|
-| `sonare midi-render` | MIDI プロジェクトを NativeSynth でレンダリング | `--in`, `--synth`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `-o` |
-| `sonare project synth-presets` | 組み込み NativeSynth プリセットを一覧表示 | `--json` |
+MIDI から音声へレンダリングする独立したコマンドはありません。上記の `project bounce --synth <sine|saw|square|triangle>` が担当します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
 
-バウンスやレンダリングのコマンドはステレオ WAV を出力します。SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
+バウンスコマンドはステレオ WAV を出力します。SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
 関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
 

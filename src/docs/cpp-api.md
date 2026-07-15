@@ -206,6 +206,7 @@ These APIs estimate, synthesize, or apply a room model. They live in focused mod
 ::: info Terms in this section
 - **Equivalent room** is a practical room model inferred from audio. It is not exact measured geometry.
 - **RIR** means room impulse response: samples that describe how a room reacts to a short sound.
+- **DRR (direct-to-reverberant ratio)** compares the level of the direct sound against the reverberant tail, in dB. Higher means a drier, closer-sounding source.
 - **Room morphing** is a creative room-character effect, not dereverberation.
 :::
 
@@ -288,6 +289,8 @@ Real-time streaming audio analyzer for visualizations and live monitoring.
 ::: info Batch vs Streaming
 Use `MusicAnalyzer` for all-in-one analysis of pre-recorded files. Use `StreamAnalyzer` for real-time processing with low latency.
 :::
+
+For cross-runtime examples and bounded-window clip streaming, see [Realtime Streaming](./realtime-streaming.md).
 
 ### Configuration
 
@@ -703,6 +706,10 @@ auto vqt_result = vqt(audio, vqt_config);
 `CqtResult` and `VqtResult` objects use lazy initialization for cached results. They are **not thread-safe** for concurrent access. Create separate copies for multi-threaded use.
 :::
 
+::: tip Griffin-Lim
+Griffin-Lim is an iterative phase-reconstruction algorithm: it recovers a plausible waveform from a magnitude-only spectrum (which stores no phase) by transforming to the time domain and back over successive passes, refining the phase estimate each time. A phase vocoder instead tracks and manipulates the STFT phase directly.
+:::
+
 ::: danger Deprecated Functions
 The inverse transform functions `icqt()` and `ivqt()` are **deprecated** in the
 current C++ headers. Prefer Griffin-Lim or phase-vocoder based reconstruction
@@ -910,6 +917,38 @@ struct AnalysisResult {
   RhythmFeatures rhythm;
   MelodyContour melody;
   std::string form;  // "IABABCO"
+};
+```
+
+The two perceptual sub-structs are expanded below; `RhythmFeatures` and
+`MelodyContour` follow the same by-value pattern.
+
+### Timbre
+
+Perceptual sound-color descriptors, each normalized to `[0, 1]`.
+
+```cpp
+struct Timbre {
+  float brightness;  // high = bright / harsh
+  float warmth;      // high = warm / full
+  float density;     // high = rich / complex
+  float roughness;   // high = rough / harsh
+  float complexity;  // high = harmonically complex
+};
+```
+
+### Dynamics
+
+Loudness and dynamic-range descriptors (levels in dB).
+
+```cpp
+struct Dynamics {
+  float dynamic_range_db;   // dynamic range (dB)
+  float peak_db;            // peak level (dB)
+  float rms_db;             // RMS level (dB)
+  float crest_factor;       // peak-to-RMS ratio
+  float loudness_range_db;  // loudness range / LRA (dB)
+  bool  is_compressed;      // true if the audio appears heavily compressed
 };
 ```
 
@@ -1161,7 +1200,7 @@ For surround/multichannel engine buses in the C ABI:
 
 - `SonareChannelLayout` enumerates the speaker bed: `SONARE_CHANNEL_LAYOUT_MONO` (0), `SONARE_CHANNEL_LAYOUT_STEREO` (1), `SONARE_CHANNEL_LAYOUT_5_1` (2), and `SONARE_CHANNEL_LAYOUT_7_1` (3). Values match `sonare::ChannelLayout` and are part of the ABI/JSON wire format.
 - `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo). `SonareEngineTrackLane.source_channel_layout` is serialized as source metadata but does not yet make a multichannel lane input discrete.
-- The realtime lane mixer pans each mono/stereo lane into a 5.1/7.1 destination from the strip's `surroundPan` position, sums buses plane by plane, and publishes per-plane (wide) meters. `azimuth`, `divergence`, and `lfe` affect placement; `elevation` and `distance` are reserved. See [realtime engine surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters).
+- The realtime lane mixer pans each mono/stereo lane into a 5.1/7.1 destination from the strip's `surroundPan` position, sums buses plane by plane, and publishes per-plane (wide) meters. `azimuth`, `divergence`, and `lfe` affect placement; `elevation` and `distance` are reserved. See [realtime engine surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters).
 
 For realtime insert automation and external MIDI in the C ABI:
 

@@ -429,8 +429,9 @@ project.close()
 ```
 
 ```bash [CLI]
-sonare project bounce --in song.json -o synth.wav --synth va:saw-lead
-sonare project synth-presets            # list the NativeSynth preset catalog
+# --synth on the CLI takes only a built-in oscillator waveform: sine | saw | square | triangle.
+# Routing MIDI through a NativeSynth preset or patch is binding-only (see Browser / Python above).
+sonare project bounce --in song.json -o synth.wav --synth saw
 ```
 
 :::

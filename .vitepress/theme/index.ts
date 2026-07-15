@@ -1,12 +1,16 @@
 import type { Theme } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
+import { defineAsyncComponent } from 'vue';
 import './custom.css';
-import AudioAnalyzer from '@/components/AudioAnalyzer.vue';
-import SonareDemo from '@/components/demos/SonareDemo.vue';
-import BenchChart from './components/BenchChart.vue';
-import FlowDiagram from './components/diagrams/FlowDiagram.vue';
-import SequenceDiagram from './components/diagrams/SequenceDiagram.vue';
 import Layout from './Layout.vue';
+
+const AudioAnalyzer = defineAsyncComponent(() => import('@/components/AudioAnalyzer.vue'));
+const SonareDemo = defineAsyncComponent(() => import('@/components/demos/SonareDemo.vue'));
+const BenchChart = defineAsyncComponent(() => import('./components/BenchChart.vue'));
+const FlowDiagram = defineAsyncComponent(() => import('./components/diagrams/FlowDiagram.vue'));
+const SequenceDiagram = defineAsyncComponent(
+  () => import('./components/diagrams/SequenceDiagram.vue'),
+);
 
 export default {
   extends: DefaultTheme,

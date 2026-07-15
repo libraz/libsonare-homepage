@@ -171,7 +171,7 @@ In v1.5.1 the resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on bo
 
 ### Realtime environment helpers
 
-These helpers describe the runtime capabilities used by [`RealtimeEngine`](./realtime-streaming.md#realtimeengine). Use them before wiring AudioWorklet/SharedArrayBuffer paths, especially when the page may run under different browser isolation policies.
+These helpers describe the runtime capabilities used by [`RealtimeEngine`](./realtime-engine.md). Use them before wiring AudioWorklet/SharedArrayBuffer paths, especially when the page may run under different browser isolation policies.
 
 ```typescript
 function engineAbiVersion(): number
@@ -212,7 +212,7 @@ function detectBpm(samples: Float32Array, sampleRate?: number): number
 | `sampleRate?` | `number` | Sample rate in Hz (default: 22050; e.g., 44100) |
 
 ::: warning Always pass the real sample rate
-Although `sampleRate` is optional here (defaulting to 22050 Hz), decoded browser audio is almost always 44100 or 48000 Hz. Pass the buffer's actual `audioBuffer.sampleRate`, or the reported BPM will be wrong. Unlike `detectBpm`, the other analysis functions (`detectKey`, `detectBeats`, `analyze`) make `sampleRate` required for exactly this reason.
+Although `sampleRate` is optional here (defaulting to 22050 Hz), decoded browser audio is almost always 44100 or 48000 Hz. Pass the buffer's actual `audioBuffer.sampleRate`, or the reported BPM will be wrong. The same holds for `detectKey`, `detectBeats`, and `analyze`: their `sampleRate` is optional with the same 22050 Hz default, so pass the real rate to those as well.
 :::
 
 **Returns:** Detected BPM as a number.
@@ -234,7 +234,7 @@ Detect musical key from audio samples. Returns the root note (C, D, E...) and mo
 :::
 
 ```typescript
-function detectKey(samples: Float32Array, sampleRate: number): Key
+function detectKey(samples: Float32Array, sampleRate?: number): Key  // sampleRate default: 22050
 ```
 
 **Returns:** `Key` object
@@ -277,7 +277,7 @@ Detect beat times from audio samples. Returns exact timestamps of each beat.
 :::
 
 ```typescript
-function detectBeats(samples: Float32Array, sampleRate: number): Float32Array
+function detectBeats(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate default: 22050
 ```
 
 **Returns:** Float32Array of beat times in seconds
@@ -322,7 +322,7 @@ This is the heaviest API. For long audio files (>3 minutes), consider using `ana
 :::
 
 ```typescript
-function analyze(samples: Float32Array, sampleRate: number): AnalysisResult
+function analyze(samples: Float32Array, sampleRate?: number): AnalysisResult  // sampleRate default: 22050
 ```
 
 **Returns:** Complete `AnalysisResult`. A single `analyze()` call returns the
@@ -345,10 +345,12 @@ Perform the same all-in-one analysis with progress reporting.
 ```typescript
 function analyzeWithProgress(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate: number | undefined,  // undefined applies the 22050 default
   onProgress: (progress: number, stage: string) => void
 ): AnalysisResult
 ```
+
+`sampleRate` is positional (before the callback) but accepts `undefined`, which uses the same 22050 Hz default as `analyze`. Pass the buffer's real rate.
 
 **Progress Stages:**
 
@@ -611,6 +613,31 @@ function pitchCorrectToMidiTimevarying(
   voicedProb?: Float32Array,
 ): Float32Array
 
+// Snap a tracked pitch contour to a musical scale (auto-tune) or a fixed note.
+// mode 'scale' pulls every voiced frame to the nearest enabled scale tone;
+// mode 'midi' (the default) behaves like pitchCorrectToMidiTimevarying.
+function pitchCorrectTimevarying(
+  samples: Float32Array,
+  f0Hz: Float32Array,       // per-frame f0 track aligned to hopLength
+  sampleRate?: number,      // default 22050
+  hopLength?: number,       // default 512
+  options?: PitchCorrectOptions,
+): Float32Array
+
+interface PitchCorrectOptions {
+  mode?: 'midi' | 'scale';         // default 'midi'
+  targetMidi?: number;             // fixed note for 'midi' mode; default 69 (A4)
+  scaleRoot?: number;              // scale root pitch class 0-11; default 0 (C)
+  scaleModeMask?: number;          // 12-bit degree mask; default C major
+  referenceMidi?: number;          // scale-grid anchor; default 69 (A4)
+  retuneAmount?: number;           // 0 = bypass, 1 = full snap; default 1
+  maxCorrectionSemitones?: number; // per-frame clamp in semitones; default 12
+  retuneSpeedMs?: number;          // glide time constant; default 50
+  vibratoThresholdCents?: number;  // corrections below this are bypassed; default 20
+  voiced?: Int32Array;             // per-frame voiced flags (non-zero = voiced)
+  voicedProb?: Float32Array;       // per-frame voicing probability 0-1
+}
+
 function noteStretch(
   samples: Float32Array,
   sampleRate: number,
@@ -642,7 +669,7 @@ function spectralEdit(
 
 function voiceChange(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,        // default: 22050
   options?: {
     pitchSemitones?: number,  // negative shifts down; default 0
     formantFactor?: number,   // >1 brightens, <1 darkens; default 1.0
@@ -658,7 +685,7 @@ sonare note-stretch take.wav --onset 12000 --offset 24000 --ratio 1.25 -o held.w
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice.wav
 ```
 
-See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
+`pitchCorrectTimevarying(...)` is the scale-snap auto-tune path; see [Editing DSP](./editing-dsp.md) for the scale masks, `mode`, and retune-feel options in full. See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
 
 ### `normalize(samples, sampleRate, targetDb?)`
 
@@ -697,7 +724,7 @@ Compute Short-Time Fourier Transform.
 ```typescript
 function stft(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number, // default: 22050
   nFft?: number,      // default: 2048
   hopLength?: number  // default: 512
 ): StftResult
@@ -720,7 +747,7 @@ Compute STFT and return in dB scale.
 ```typescript
 function stftDb(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number, // default: 22050
   nFft?: number,      // default: 2048
   hopLength?: number  // default: 512
 ): { nBins: number; nFrames: number; db: Float32Array }
@@ -730,17 +757,10 @@ function stftDb(
 
 Compute Mel spectrogram. Frequency representation that matches human pitch perception.
 
-::: info Use Cases
-- **Machine Learning**: Input for genre classification, mood detection
-- **Visualization**: Create frequency spectrograms for audio players
-- **Similarity Search**: Compare songs by their spectral content
-- **Voice Analysis**: Analyze speech patterns and characteristics
-:::
-
 ```typescript
 function melSpectrogram(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number, // default: 22050
   nFft?: number,      // default: 2048
   hopLength?: number, // default: 512
   nMels?: number,     // default: 128
@@ -763,17 +783,10 @@ interface MelSpectrogramResult {
 
 Compute MFCC (Mel-Frequency Cepstral Coefficients). Compact representation of spectral envelope.
 
-::: info Use Cases
-- **Speech Recognition**: Standard input for speech-to-text systems
-- **Speaker Identification**: Identify who is speaking
-- **Timbre Analysis**: Characterize instrument/voice quality
-- **Audio Fingerprinting**: Create compact song signatures
-:::
-
 ```typescript
 function mfcc(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number, // default: 22050
   nFft?: number,      // default: 2048
   hopLength?: number, // default: 512
   nMels?: number,     // default: 128
@@ -801,13 +814,6 @@ consistent when you keep the same values on both sides.
 ### `chroma(samples, sampleRate, nFft?, hopLength?)` <Badge type="info" text="Medium" />
 
 Compute chromagram (pitch class distribution). Maps all frequencies to 12 pitch classes (C, C#, D, ..., B).
-
-::: info Use Cases
-- **Chord Detection**: Identify chords being played
-- **Key Detection**: Determine song key from pitch distribution
-- **Cover Song Detection**: Match songs regardless of tempo/key
-- **Music Similarity**: Compare harmonic content between tracks
-:::
 
 <SonareDemo id="chromagram" />
 
@@ -909,6 +915,32 @@ function rmsEnergy(
   frameLength?: number,
   hopLength?: number
 ): Float32Array
+```
+
+### Waveform Peaks <Badge type="info" text="WASM/Node" />
+
+Per-channel min/max buckets for drawing a waveform overview without shipping the full sample array to the UI. `samplesPerBucket` sets the bucket width (default 512); `waveformPeakPyramid` returns one report per zoom level.
+
+```typescript
+function waveformPeaks(
+  samples: Float32Array,   // interleaved when channels > 1
+  channels: number,
+  options?: { samplesPerBucket?: number },  // default 512
+): WaveformPeaksReport
+
+function waveformPeakPyramid(
+  samples: Float32Array,
+  channels: number,
+  options?: { samplesPerBucketLevels?: number[] },  // default [512, 1024, 2048, 4096]
+): WaveformPeaksReport[]
+
+interface WaveformPeaksReport {
+  min: Float32Array;        // channel-major
+  max: Float32Array;        // channel-major
+  channels: number;
+  bucketCount: number;
+  samplesPerBucket: number;
+}
 ```
 
 ### CQT, VQT, NNLS chroma, inverse features, and loudness
@@ -1197,30 +1229,19 @@ Pair `scaleQuantizeMidi(...)` with `pitchCorrectToMidi(...)` to retune a detecte
 
 ## librosa-Compatible Helpers
 
-These librosa-parity helpers mirror the
-behavior of the corresponding `librosa` functions and are exposed across the
-WASM, Node, and Python bindings. See [librosa Compatibility](/docs/librosa-compatibility)
-for the librosa function each helper matches.
-
-::: tip What each helper is for
-- **Pre / De-emphasis** — Classic one-tap IIR pre-processing that boosts (or undoes) high frequencies before analysis.
-- **Silence Trim / Split** — Practical helpers that cut leading/trailing silence or split a recording on silent gaps.
-- **Frame / Pad / Length** — Utilities to slice a waveform into fixed-length frames, or align array sizes before feeding fixed-frame DSP.
-- **Peak Picking / Vector Normalize** — Post-processing on 1-D signals (e.g. onset envelopes) to extract peak indices or normalize vectors under a chosen norm.
-- **PCEN** — Dynamic range compression for mel spectrograms; produces features that are more robust to background noise and gain changes.
-- **Tonnetz** — Projects a chromagram into a 6-D harmonic space — useful for chord-relation and modulation analysis.
-- **Tempogram / PLP** — A time-varying tempo representation built from the onset envelope, and the predominant local pulse extracted from it.
-:::
+These librosa-parity helpers match the corresponding `librosa` functions and are
+exposed across the WASM, Node, and Python bindings. The signatures are below; for
+the librosa function each one maps to argument-for-argument, and when to reach for
+it, see [librosa Compatibility](/docs/librosa-compatibility).
 
 ### Pre-emphasis / De-emphasis
 
 ```typescript
-function preemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array
+function preemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array  // coef default 0.97
 function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32Array
 ```
 
-`coef` defaults to `0.97`. Pass `zi` to provide an initial condition (the value
-from a previous frame's tail) when streaming.
+`zi` provides an initial condition (a previous frame's tail) when streaming.
 
 ### Silence Trim / Split
 
@@ -1240,15 +1261,10 @@ function splitSilence(
 ): Int32Array  // flat [start0, end0, start1, end1, ...]
 ```
 
-`trimSilence` matches `librosa.effects.trim`. It uses frame RMS and a `topDb`
-distance below the peak RMS, then returns both the trimmed audio and the
-original `[startSample, endSample)` range.
-
-This is distinct from `trim(samples, sampleRate, thresholdDb)`, which is a
-simpler threshold trim.
-
-`splitSilence` matches `librosa.effects.split` and returns non-silent intervals
-as sample-index pairs.
+`trimSilence` (`librosa.effects.trim`) uses frame RMS and a `topDb` distance below
+the peak RMS, returning the trimmed audio plus the original `[startSample, endSample)`
+range — distinct from the simpler `trim(samples, sampleRate, thresholdDb)`.
+`splitSilence` (`librosa.effects.split`) returns non-silent intervals as sample-index pairs.
 
 ### Frame / Pad / Length Helpers
 
@@ -1264,8 +1280,8 @@ function fixLength(values: Float32Array, targetSize: number, padValue?: number):
 function fixFrames(frames: Int32Array, xMin?: number, xMax?: number, pad?: boolean): Int32Array
 ```
 
-`frameSignal` is `librosa.util.frame`. `padCenter`, `fixLength`, and `fixFrames`
-mirror the librosa.util helpers of the same names.
+`frameSignal` is `librosa.util.frame`; `padCenter`, `fixLength`, and `fixFrames`
+mirror the `librosa.util` helpers of the same names.
 
 ### Peak Picking / Vector Normalize
 
@@ -1287,25 +1303,10 @@ function vectorNormalize(
 ): Float32Array
 ```
 
-`peakPick` is `librosa.util.peak_pick`. `vectorNormalize` is `librosa.util.normalize`.
-
-::: details `peakPick` parameters
-- `preMax` / `postMax` — local-maximum window (in samples) on each side of a candidate.
-- `preAvg` / `postAvg` — averaging window on each side; a candidate must exceed the local mean + `delta`.
-- `delta` — required prominence above the local mean. Increase to reject smaller peaks.
-- `wait` — minimum spacing between successive peaks. Suppresses double-trigger.
-
-Used as a post-processing step on 1-D signals such as onset envelopes.
-:::
-
-::: details `vectorNormalize` `normType`
-- `0` (**inf**, default) — divide by max absolute value, mapping into `[-1, 1]` (peak-style normalization).
-- `1` (**L1**) — divide by sum of absolute values (probability-distribution style).
-- `2` (**L2**) — divide by sqrt of sum of squares (common feature-vector pre-processing).
-- `3` (**power**) — divide by sum of squares (energy normalization).
-
-`threshold` skips normalization when the chosen norm is below it — guards against amplifying near-silent frames.
-:::
+`peakPick` is `librosa.util.peak_pick` (post-processing for 1-D signals such as
+onset envelopes); `vectorNormalize` is `librosa.util.normalize`. See
+[librosa Compatibility](/docs/librosa-compatibility) for the `peakPick` window
+parameters and each `normType`.
 
 ### PCEN (Per-Channel Energy Normalization)
 
@@ -1380,19 +1381,11 @@ function plp(
 ): Float32Array
 ```
 
-These helpers mirror familiar librosa rhythm and harmony features:
-
-| Helper | Meaning |
-|--------|---------|
-| `tonnetz` | Corresponds to `librosa.feature.tonnetz` |
-| `tempogram` | Corresponds to `librosa.feature.tempogram`; autocorrelation by default |
-| `fourierTempogram` | FFT-based tempogram |
-| `cyclicTempogram` | Tempo classes folded by octave |
-| `plp` | `librosa.beat.plp` (predominant local pulse) |
-
-For `tempogram`, pass `mode: 'cosine'` to use the window-local cosine-similarity variant. The API also accepts `'auto'`, `'ac'`, `0`, and `1` aliases for parity with lower-level bindings.
-
-See [Realtime and Streaming](./realtime-streaming.md#tempograms-from-an-onset-envelope) for when to use each.
+For `tempogram`, `mode: 'cosine'` selects the window-local cosine-similarity
+variant (`'auto'`, `'ac'`, `0`, and `1` aliases are also accepted). See
+[librosa Compatibility](/docs/librosa-compatibility) for the librosa feature each
+helper maps to, and [Realtime and Streaming](./realtime-streaming.md#tempograms-from-an-onset-envelope)
+for when to use each.
 
 ## Resampling
 
@@ -1524,6 +1517,8 @@ The Streaming API enables real-time audio analysis for visualizations and live m
 - **Batch API**: Pre-recorded files, all-in-one analysis (BPM, key, chords, sections)
 - **Streaming API**: Live audio, visualizations, real-time feedback
 :::
+
+This section is the `StreamAnalyzer` type/class reference. For the runnable recipe, the AudioWorklet bridge, output-format details, and the progressive-estimate walkthrough, see [Realtime and Streaming](./realtime-streaming.md).
 
 ### StreamConfig
 
@@ -1733,192 +1728,22 @@ interface ProgressiveEstimate {
 }
 ```
 
-### Basic Streaming Example
+### Usage, AudioWorklet integration, and timing
 
-```typescript
-import { init, StreamAnalyzer } from '@libraz/libsonare';
+The runnable `StreamAnalyzer` recipe — feeding blocks from an `AudioWorklet`,
+reading frames, throttling with `emitEveryNFrames`, and mapping the `FrameBuffer`
+stream-time timestamps onto `AudioContext.currentTime` — lives on
+[Realtime and Streaming](./realtime-streaming.md), with the AudioWorklet handshake
+and data-flow diagrams.
 
-await init();
-
-// Create analyzer with config object
-const analyzer = new StreamAnalyzer({
-  sampleRate: 44100,
-  nFft: 2048,
-  hopLength: 512,
-  nMels: 128,
-  computeMel: true,
-  computeChroma: true,
-  computeOnset: true,
-  emitEveryNFrames: 1
-});
-
-// Process audio chunks (e.g., from AudioWorklet)
-function processChunk(samples: Float32Array) {
-  analyzer.process(samples);
-
-  // Read available frames
-  const available = analyzer.availableFrames();
-  if (available > 0) {
-    const frames = analyzer.readFrames(available);
-
-    // Use for visualization
-    updateVisualization(frames);
-
-    // Check estimates that update as audio arrives
-    const stats = analyzer.stats();
-    if (stats.estimate.bpm > 0) {
-      console.log(`BPM: ${stats.estimate.bpm.toFixed(1)}`);
-      console.log(`Key: ${stats.estimate.key} ${stats.estimate.keyMinor ? 'minor' : 'major'}`);
-      console.log(`Current bar: ${stats.estimate.currentBar}`);
-      console.log(`Chord progression:`, stats.estimate.chordProgression);
-      console.log(`Bar chords:`, stats.estimate.barChordProgression);
-    }
-  }
-}
-
-// Clean up when done (delete() is canonical; dispose() is an alias)
-analyzer.delete();
-```
-
-::: details Why call `dispose()` / `delete()`? (embind handles)
-Classes like `StreamAnalyzer`, `Mixer`, and `StreamingMasteringChain` are C++ objects exposed to JavaScript through **embind** (Emscripten's C++↔JS bridge).
-
-Each object owns a block of WASM heap memory. The JavaScript garbage collector cannot see or reclaim that memory, so you must release the object yourself.
-
-| Class | Cleanup method |
-|-------|----------------|
-| `StreamAnalyzer` | `delete()` |
-| `Mixer` | `delete()` |
-| `StreamingMasteringChain` | `delete()` |
-
-`StreamAnalyzer` also keeps `dispose()` as a backward-compatibility alias for `delete()`. Some WASM classes also expose `destroy()` as an alias. Skipping cleanup slowly leaks WASM memory in long-running pages.
-
-Plain functions like `analyze()` return ordinary JS values and need no cleanup. Node native cleanup differs; see [Native Bindings](./native-bindings.md).
+::: tip Releasing WASM objects
+`StreamAnalyzer`, `Mixer`, `StreamingEqualizer`, and `StreamingMasteringChain` are
+**embind** handles onto WASM heap memory that the JavaScript garbage collector cannot
+reclaim — call `delete()` when done (`StreamAnalyzer` also accepts `dispose()`, and
+some classes expose `destroy()` as an alias). Plain functions like `analyze()` return
+ordinary JS values and need no cleanup. Node native cleanup differs; see
+[Native Bindings](./native-bindings.md).
 :::
-
-### AudioWorklet Integration
-
-The audio thread and the main thread never share `StreamAnalyzer` directly: the worklet feeds it sample-by-sample on the realtime audio thread, and only the periodic `readFrames()` result crosses over to the main thread via `postMessage`. The `process(samples)` call repeats once per 128-sample render quantum for as long as capture runs.
-
-<SequenceDiagram
-  title="AudioWorklet + StreamAnalyzer handshake"
-  :participants="[
-    { id: 'main', label: 'Main Thread' },
-    { id: 'worklet', label: 'AudioWorklet' },
-    { id: 'wasm', label: 'StreamAnalyzer (WASM)' }
-  ]"
-  :messages="[
-    { from: 'main', to: 'worklet', label: 'start audio capture' },
-    { from: 'worklet', to: 'wasm', label: 'process(samples)', loop: 'every 128 samples' },
-    { from: 'wasm', to: 'worklet', label: 'internal buffering', type: 'return', loop: 'every 128 samples' },
-    { from: 'worklet', to: 'wasm', label: 'readFrames(maxFrames)' },
-    { from: 'wasm', to: 'worklet', label: 'FrameBuffer', type: 'return' },
-    { from: 'worklet', to: 'main', label: 'postMessage(buffer)', type: 'async' },
-    { from: 'main', to: 'main', label: 'update visualization' }
-  ]"
-  caption="process() runs once per 128-sample render quantum; readFrames() and postMessage happen only when enough frames have accumulated."
-/>
-
-**worklet-processor.ts:**
-
-```typescript
-import { init, StreamAnalyzer } from '@libraz/libsonare';
-
-class AnalyzerProcessor extends AudioWorkletProcessor {
-  private analyzer?: StreamAnalyzer;
-
-  constructor() {
-    super();
-    void init().then(() => {
-      this.analyzer = new StreamAnalyzer({
-        sampleRate,
-        nFft: 2048,
-        hopLength: 512,
-        nMels: 128,
-        computeMel: true,
-        computeChroma: true,
-        computeOnset: true,
-        emitEveryNFrames: 4
-      });
-    });
-  }
-
-  process(inputs: Float32Array[][]): boolean {
-    const input = inputs[0]?.[0];
-    if (!input || !this.analyzer) return true;
-
-    this.analyzer.process(input);
-
-    const available = this.analyzer.availableFrames();
-    if (available >= 4) {
-      const frames = this.analyzer.readFrames(available);
-      this.port.postMessage(frames, [
-        frames.mel.buffer,
-        frames.chroma.buffer
-      ]);
-    }
-
-    return true;
-  }
-}
-
-registerProcessor('analyzer-processor', AnalyzerProcessor);
-```
-
-### Data Flow Diagram
-
-The same handshake, redrawn as a data-flow pipeline: audio stays on the realtime thread through the `Input` and `Processing` groups, and only the assembled `FrameBuffer` crosses into the `Output` group on the main thread.
-
-<FlowDiagram
-  title="Streaming analysis data flow"
-  :nodes="[
-    { id: 'source', label: 'Audio source', col: 0, row: 0, group: 'input' },
-    { id: 'worklet', label: 'AudioWorklet', col: 1, row: 0, group: 'input' },
-    { id: 'analyzer', label: 'StreamAnalyzer', col: 2, row: 0, group: 'processing', variant: 'accent' },
-    { id: 'readFrames', label: 'readFrames()', col: 3, row: 0, group: 'processing' },
-    { id: 'frameBuffer', label: 'FrameBuffer', col: 4, row: 0, group: 'processing' },
-    { id: 'postMessage', label: 'postMessage', col: 5, row: 0, group: 'output' },
-    { id: 'mainThread', label: 'Main Thread', col: 6, row: 0, group: 'output' },
-    { id: 'visualization', label: 'Visualization', col: 7, row: 0, group: 'output', variant: 'success' }
-  ]"
-  :edges="[
-    { from: 'source', to: 'worklet' },
-    { from: 'worklet', to: 'analyzer' },
-    { from: 'analyzer', to: 'readFrames' },
-    { from: 'readFrames', to: 'frameBuffer' },
-    { from: 'frameBuffer', to: 'postMessage' },
-    { from: 'postMessage', to: 'mainThread' },
-    { from: 'mainThread', to: 'visualization' }
-  ]"
-  :groups="[
-    { id: 'input', label: 'Input' },
-    { id: 'processing', label: 'Processing' },
-    { id: 'output', label: 'Output' }
-  ]"
-  caption="Input and Processing run on the audio-rendering thread; only Output crosses to the main thread."
-/>
-
-### Timestamp Synchronization
-
-::: warning Stream Time vs AudioContext Time
-`FrameBuffer.timestamps` represents **stream time** (cumulative input samples), not `AudioContext.currentTime`. For synchronization:
-
-```typescript
-// Track offset when starting
-const startTime = audioContext.currentTime;
-const startOffset = 0;
-
-// In visualization, add offset
-const audioTime = startTime + frame.timestamps[i];
-```
-:::
-
-### Performance Tips
-
-1. **Throttle with `emitEveryNFrames`**: Set to 4 for 60fps visualizations
-2. **Process in AudioWorklet**: Avoid main thread blocking
-3. **Batch reads**: Read multiple frames at once when available
-4. **Call `delete()`**: Release resources when done to prevent memory leaks
 
 ## Types
 
@@ -2146,91 +1971,33 @@ The codes match Python's `SonareError.code` and the C ABI `SonareError` enum, an
 
 ## Mastering API
 
-The browser package includes the same named mastering processors used by the `/mastering` demo. Decode audio with Web Audio API, pass `Float32Array` channel buffers to libsonare, then export the returned samples as WAV in your application.
+The browser package includes the same named mastering processors used by the `/mastering` demo. Decode audio with the Web Audio API, pass `Float32Array` channel buffers to libsonare, then export the returned samples as WAV in your application.
+
+This section lists the JS entry points and their result/config types. For what each processor does, the preset list, and the analysis/assistant JSON, see [Mastering Processors](./mastering-processors.md) and [Mastering Assistant](./mastering-assistant.md).
 
 ```typescript
-import {
-  init,
-  masterAudioStereo,
-  masteringChainStereo,
-  masteringChainStereoWithProgress,
-  masteringAssistantSuggest,
-  masteringAudioProfile,
-  masteringPresetNames,
-  masteringProcessorNames,
-  masteringProcess,
-  masteringStreamingPreview,
-  masteringStereoAnalyze,
-} from '@libraz/libsonare'
+import { init, masterAudioStereo, masteringChainStereo } from '@libraz/libsonare'
 
 await init()
 
-console.log(masteringProcessorNames())
-console.log(masteringPresetNames())
-
+// Full chain with explicit stage config
 const result = masteringChainStereo(left, right, sampleRate, {
-  spectral: {
-    airBand: { amount: 0.35, shelfFrequencyHz: 14000 },
-  },
-  maximizer: {
-    truePeakLimiter: {
-      ceilingDb: -1,
-      lookaheadMs: 5,
-      releaseMs: 50,
-      oversampleFactor: 4,
-      applyGainAtInputRate: false,
-    },
-  },
-  loudness: {
-    targetLufs: -14,
-    ceilingDb: -1,
-    truePeakOversample: 4,
-  },
+  spectral: { airBand: { amount: 0.35, shelfFrequencyHz: 14000 } },
+  maximizer: { truePeakLimiter: { ceilingDb: -1, oversampleFactor: 4 } },
+  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
 })
-
 console.log(result.outputLufs, result.appliedGainDb, result.stages)
 
+// Preset with flat dot-notation overrides
 const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
   'loudness.targetLufs': -14,
   'maximizer.truePeakLimiter.releaseMs': 50,
 })
-console.log(presetResult.outputLufs, presetResult.stages)
-
-const progressResult = masteringChainStereoWithProgress(left, right, sampleRate, {
-  loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
-}, (progress, stage) => {
-  console.log(`mastering ${(progress * 100).toFixed(0)}%: ${stage}`)
-})
-console.log(progressResult.outputLufs)
-
-const mono = masteringProcess('spectral.airBand', samples, sampleRate, {
-  amount: 0.4,
-  shelfFrequencyHz: 14000,
-})
-
-const stereoReport = masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate)
-console.log(JSON.parse(stereoReport))
-
-const profile = JSON.parse(masteringAudioProfile(samples, sampleRate, {
-  nFft: 2048,
-  hopLength: 512,
-  truePeakOversample: 4,
-}))
-const suggestions = JSON.parse(masteringAssistantSuggest(samples, sampleRate, {
-  targetLufs: -14,
-  ceilingDb: -1,
-  preferStreamingSafe: true,
-}))
-const deliveryPreview = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
-  { name: 'YouTube', targetLufs: -14, ceilingDb: -1 },
-  { name: 'Podcast', targetLufs: -16, ceilingDb: -1 },
-]))
-console.log(profile, suggestions, deliveryPreview)
 ```
 
-`masteringAudioProfile()` accepts optional numeric profile settings: `nFft`, `hopLength`, and `truePeakOversample`. `masteringAssistantSuggest()` accepts `targetLufs`, `ceilingDb`, `enableRepair`, `preferStreamingSafe`, and `speechMonoAmount`; snake_case aliases are also accepted by the native bindings.
+Each of these has a `*WithProgress` variant taking an `(progress, stage) => void` callback. `masteringProcess(...)` / `masteringProcessStereo(...)` run one named processor, and `masteringStereoAnalyze(...)` returns a JSON report.
 
-Use `masteringPairProcessorNames()` and `masteringPairAnalyze()` for reference-track workflows such as match analysis or A/B reporting. Pair inputs should use the same sample rate and comparable duration.
+The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration).
 
 ### StreamingEqualizer
 
@@ -2295,34 +2062,17 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 
 ### RealtimeVoiceChanger
 
-`RealtimeVoiceChanger` is the preset-based live voice chain. It combines retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages, and keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple.
-
-Factory preset IDs are available at runtime with `realtimeVoiceChangerPresetNames()`. Preset JSON can be fetched and validated with `realtimeVoiceChangerPresetJson(...)` and `validateRealtimeVoiceChangerPresetJson(...)`. The current schema version is `1`.
+`RealtimeVoiceChanger` is the preset-based live voice chain (retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages) that keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple. Factory preset IDs come from `realtimeVoiceChangerPresetNames()`; preset JSON is fetched with `realtimeVoiceChangerPresetJson(...)` and checked with `validateRealtimeVoiceChangerPresetJson(...)` (schema version `1`).
 
 ```typescript
-import {
-  init,
-  RealtimeVoiceChanger,
-  realtimeVoiceChangerPresetJson,
-  realtimeVoiceChangerPresetConfig,
-  realtimeVoiceChangerPresetNames,
-  validateRealtimeVoiceChangerPresetJson,
-  voiceCharacterPresetId,
-} from '@libraz/libsonare';
-
+import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
 await init();
 
-const preset = realtimeVoiceChangerPresetNames()[1]; // e.g. "bright-idol"
-const presetJson = realtimeVoiceChangerPresetJson(preset);
-const presetConfig = realtimeVoiceChangerPresetConfig(preset);
-console.log(voiceCharacterPresetId(1), validateRealtimeVoiceChangerPresetJson(presetJson).ok, presetConfig);
-
-const changer = new RealtimeVoiceChanger(preset);
-changer.prepare(48000, 128, 1);
-
+const changer = new RealtimeVoiceChanger(realtimeVoiceChangerPresetNames()[1]); // e.g. "bright-idol"
+changer.prepare(48000, /*maxBlockSize=*/128, /*channels=*/1);
 try {
   const out = changer.processMono(inputBlock);
-  const realtime = changer.createRealtimeMonoBuffer(128);
+  const realtime = changer.createRealtimeMonoBuffer(128); // zero-copy WASM heap view
   realtime.input.set(inputBlock.subarray(0, 128));
   realtime.process();
   console.log(out, realtime.output, changer.latencySamples());
@@ -2331,7 +2081,7 @@ try {
 }
 ```
 
-The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, and `createRealtimePlanarBuffer`) return WASM heap views owned by the changer. Reuse them inside a realtime loop, and discard them after `delete()`.
+The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, `createRealtimePlanarBuffer`) return changer-owned WASM heap views; reuse them inside a realtime loop and discard after `delete()`. See [Realtime Voice Changer](./realtime-voice-changer.md) for the preset list and chain stages.
 
 ### `voiceChangeRealtime(samples, sampleRate?, preset?, options?)`
 
@@ -2349,17 +2099,7 @@ function voiceChangeRealtime(
 ): Float32Array  // same layout/length as the input
 ```
 
-```typescript
-import { init, voiceChangeRealtime, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
-await init();
-
-const preset = realtimeVoiceChangerPresetNames()[1]; // e.g. "bright-idol"
-const out = voiceChangeRealtime(vocal, 48000, preset);
-```
-
-`channels` defaults to `1` (a plain mono buffer); pass `channels: 2` for interleaved stereo input. The output has the same layout and length as the input.
-
-Use this when you have the full buffer already. Reach for [`RealtimeVoiceChanger`](#realtimevoicechanger) directly for manual block-by-block live use, and for `voiceChange(...)` when you only need a one-shot pitch/formant change without the full preset chain. See [Realtime Voice Changer](./realtime-voice-changer.md) for the preset list and chain stages.
+Use this when you already have the full buffer. Reach for [`RealtimeVoiceChanger`](#realtimevoicechanger) for manual block-by-block live use, and `voiceChange(...)` when you only need a one-shot pitch/formant change without the full preset chain.
 
 ### StreamingMasteringChain
 
@@ -2392,23 +2132,7 @@ chain.reset();   // clear processor state without re-preparing
 chain.delete();  // release the WASM handle (call when done)
 ```
 
-Stereo-only stages are skipped when `numChannels === 1`.
-
-Repair stages exposed by the chain config are offline-only and throw if enabled on the streaming constructor:
-
-- `repair.declick`
-- `repair.dereverb`
-- `repair.denoise`
-
-These are the only repair stages exposed by the chain config (per the shipped `MasteringChainConfig.repair` type), and the streaming constructor throws when any of them is enabled. The other repair processors (`declip`, `decrackle`, `dehum`) are not part of the chain config at all and run only through the one-shot helpers `masteringRepairDeclip` / `masteringRepairDecrackle` / `masteringRepairDehum`.
-
-Use `masteringChain*` or `masterAudio*` when you need the chain-config repair stages.
-
-The `loudness` stage is a special case. The streaming chain cannot measure whole-signal integrated LUFS, so an enabled `loudness` stage throws at construction **unless** you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`). With those fields set, the chain applies the precomputed static gain plus the loudness stage's true-peak limiter per block instead of throwing.
-
-Use `reset()` between independent songs that share the same chain. Use `delete()` to free the underlying handle.
-
-
+Stereo-only stages are skipped when `numChannels === 1`. The chain-config repair stages (`repair.declick`, `repair.dereverb`, `repair.denoise`) are offline-only and throw if enabled on the streaming constructor — run them through `masteringChain*` / `masterAudio*`, or the one-shot `masteringRepair*` helpers (the `declip`/`decrackle`/`dehum` processors are not part of the chain config and run only through those helpers). The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
 
 The named mastering API families are:
 
@@ -2629,9 +2353,9 @@ a dedicated guide.
 | Render a project to audio | `project.bounceWithSynthInstrument(s)` | [Project Bounce](./project-bounce.md) |
 | Pick a built-in synth voice | `synthPresetNames()`, `synthPresetPatch(name)`, `engine.setSynthInstrument(...)` | [Native Synth](./native-synth.md) |
 | Play through a SoundFont | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont Player](./soundfont-player.md) |
-| Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
-| Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
-| Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime and Streaming](./realtime-streaming.md#sending-a-track-to-external-midi-gear) |
+| Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
+| Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
 | Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |
 | Feed a live microphone into the engine | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="Browser only" /> | [Recording and Takes](./recording-and-takes.md) |
 
@@ -2649,7 +2373,7 @@ patch.
 
 `bindWebMidi(...)` and `bindMicrophoneInput(...)` are browser-only helpers that
 wire Web MIDI / a `MediaStream` into a live `RealtimeEngine`. See
-[Realtime and Streaming](./realtime-streaming.md#realtimeengine) for the engine itself.
+[Realtime Engine](./realtime-engine.md) for the engine itself.
 
 ## Type Export Index
 

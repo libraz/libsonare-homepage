@@ -367,7 +367,7 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS） |
+| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS）。メディアンフィルタのカーネル既定値は `kernel_harmonic=31`、`kernel_percussive=31` |
 | `harmonic(samples, sample_rate)` | `list[float]` | 倍音成分を抽出 |
 | `percussive(samples, sample_rate)` | `list[float]` | 打撃成分を抽出 |
 | `time_stretch(samples, sample_rate, rate)` | `list[float]` | ピッチを変えずにテンポ変更 |
@@ -454,13 +454,13 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルタ |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度包絡（テンポグラム系の入力） |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | マルチバンドのオンセット強度。`(n_frames, [n_bands x n_frames])` を行優先で返す（`n_bands` 既定 3） |
-| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／momentary／short-term LUFS とラウドネスレンジ（EBU R128） |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／momentary／short-term [LUFS](./glossary/lufs.md) とラウドネスレンジ（EBU R128） |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | インターリーブされたサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range（LRA、LU 単位） |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | フレームごとの momentary LUFS |
 | `short_term_lufs(samples, sample_rate)` | `list[float]` | フレームごとの short-term LUFS |
 
-デフォルトパラメータ: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, ピッチ検出の `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`。CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。
+デフォルトパラメータ: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, ピッチ検出の `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`。CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31` を既定値とします。
 
 追加のエフェクト系ヘルパーとして `remix(samples, intervals, sample_rate?, align_zeros?)`、`phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)` も利用できます。librosa 型の区間リミックス、直接のフェーズボコーダー時間伸縮、残差信号を保持した HPSS が必要な場合に使います。
 
@@ -579,6 +579,15 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 ため camelCase のプロパティ別名（例: `bpm_confidence` / `bpmConfidence`）も
 公開します。以下はデータフィールドの形です。
 
+::: tip 行優先（row-major）の行列レイアウト
+このページで「row-major」と記した平坦化フィールドは、`[rows x n]` の行列を行ごとに並べたものです。先頭の `n` 個が 0 行目、次の `n` 個が 1 行目…と続きます。行数で reshape すると 2 次元の NumPy 配列に戻せます。
+
+```python
+import numpy as np
+mat = np.asarray(flat).reshape(rows, n)   # 例: 12 ピッチクラスのクロマグラムなら reshape(12, n_frames)
+```
+:::
+
 ```python
 class PitchClass(IntEnum):
     C, CS, D, DS, E, F, FS, G, GS, A, AS, B
@@ -612,6 +621,22 @@ class TimeSignature:
     numerator: int
     denominator: int
     confidence: float
+
+class Chord:
+    root: PitchClass
+    quality: str             # "major"、"minor"、"diminished"、"augmented"、
+                             #   "dominant7"、"major7"、"minor7"、"sus2"、"sus4"、
+                             #   "add9"、"minorAdd9"、"dim7"、"halfDim7"、
+                             #   "major9"、"dominant9"、"sus2Add4"、"unknown"
+    start: float             # セグメント開始（秒）
+    end: float               # セグメント終了（秒）
+    confidence: float
+    bass: PitchClass | None  # スラッシュコードのベース音。root と同じなら None
+    name: str                # プロパティ -> "Cmaj7"、"Am"、"G/B"
+    duration: float          # プロパティ -> end - start
+
+class ChordAnalysisResult:
+    chords: list[Chord]      # detect_chords(...) の戻り値の型
 
 class AnalysisResult:
     bpm: float
@@ -1036,10 +1061,10 @@ finally:
 | SoundFont で MIDI をレンダーする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。**Python 専用です**。 | [プロジェクトのバウンス](./project-bounce.md) |
 | MIDI イベントからインストゥルメントをライブ演奏し、デスティネーションの MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
-| ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)` | [リアルタイムとストリーミング](./realtime-streaming.md#midi-クリップスケジューリングと-sampleatppq) |
-| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムとストリーミング](./realtime-streaming.md#トラックを外部-midi-機器へ送る) |
-| エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムとストリーミング](./realtime-streaming.md#レーンミキサー) |
-| ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムとストリーミング](./realtime-streaming.md#サラウンドグループバスとワイドメーター) |
+| ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
+| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る) |
+| エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
+| ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター) |
 
 ```python
 import libsonare as sonare

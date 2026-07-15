@@ -47,7 +47,7 @@ libsonare には、[マスタリングプロセッサ](./mastering-processors.md
 | ブラウザの `AudioWorklet` や音声コールバック内で使う | WASM [`Mixer.createRealtimeBuffer()`](#リアルタイムと-audioworklet-ブリッジ) | バッファを再利用し、ブロックごとに確保しない |
 
 ::: info 1 つのエンジン、すべての実行環境
-同じミキサーエンジンが WASM/JS、Node ネイティブ、Python、C ABI、CLI から使えます。名前は各言語の慣習に従います（`mixStereo` ↔ `mix_stereo`、`fromSceneJson` ↔ `from_scene_json`）が、ルーティンググラフ・シーン JSON・DSP は同一です。CLI は永続的な `Mixer` オブジェクトではなく、シーンのレンダー入口を提供します。実行環境ごとの一覧は [バインディング対応表](./binding-parity.md) を参照してください。
+同じミキサーエンジンが WASM/JS、Node ネイティブ、Python、C ABI、CLI から使えます。名前は各言語の慣習に従います（`mixStereo` ↔ `mix_stereo`、`fromSceneJson` ↔ `from_scene_json`）が、ルーティンググラフ・シーン JSON・DSP は同一です。ただし CLI だけは例外で、その `mix` コマンドは単一ファイル・単一ストリップのプロセッサです。シーンはレンダリング**しません**。永続的なマルチストリップの `Mixer` は WASM/JS・Node・Python でのみ使えます。実行環境ごとの一覧は [バインディング対応表](./binding-parity.md) を参照してください。
 :::
 
 ## チャンネルストリップを信号順にたどる
@@ -171,12 +171,16 @@ mix = sonare.mix_stereo(
 ```
 
 ```bash [CLI]
+# CLI の mix コマンドは 1 ファイルを 1 つのチャンネルストリップで処理する。
+# 複数ステムを 1 つのマスターへまとめるのはバインディング専用（上記 mixStereo）。
 sonare mix \
-  --preset vocalReverbSend \
   --input vocal.wav \
-  --input music.wav \
-  --sample-rate 48000 \
-  -o master.wav
+  --input-trim-db 3 \
+  --fader-db -3 \
+  --pan 0.2 \
+  --pan-mode stereo \
+  --width 1.1 \
+  -o out.wav
 ```
 
 :::
@@ -233,13 +237,11 @@ mixer.close()                                               # ネイティブハ
 ```
 
 ```bash [CLI]
-# ストリップごとの WAV 入力を組み込みシーンプリセットでレンダリング（ストリップごとに --input を 1 つ）
-sonare mix --preset vocalReverbSend \
-  --input vocal.wav --input reverb-return.wav \
-  --sample-rate 48000 -o master.wav
-
-# toSceneJson()／to_scene_json() で保存したシーン JSON ファイルを読み込むこともできます
-sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o master.wav
+# CLI にシーンミキシング用のコマンドはない。`sonare mix` は単一ファイル／単一ストリップで、
+# Mixer シーンをレンダリングできない。永続的なマルチストリップのミックスはバインディング専用
+# （WASM/JS・Node・Python）。CLI はシーン JSON を出力できるだけで、レンダリングはしない。
+sonare mixing-presets                   # 組み込みシーンプリセット名の一覧
+sonare mixing-preset vocalReverbSend    # 1 つのシーンの JSON を標準出力へ出力
 ```
 
 :::
@@ -351,7 +353,7 @@ JavaScript API のパンローは `const3dB`、`const4.5dB`、`const6dB`、`line
 
 ### サラウンドとマルチチャンネル
 
-ステレオより広いバス向けに、ストリップは `SurroundPan` 位置（`setSurroundPan(strip, { azimuth, divergence, lfe })`、Python は `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`）を保持します。フェーズ 1 では `azimuth`（−180…180°、0 = 正面中央）・`divergence`（0 = 点音源、1 = 前方へ広がる）・`lfe`（0…1 の LFE プレーンへの送り）が有効で、`elevation` と `distance` は予約です。位置はシーンに保存され JSON で往復しますが、オフラインの `Mixer` は依然ステレオでレンダリングします。これらの値を消費するサラウンドパンナーは[リアルタイムエンジンのサラウンドグループバス](./realtime-streaming.md#サラウンドグループバスとワイドメーター)で動くため、ここで位置を設定し、サラウンドミックスはエンジンでレンダリングしてください。
+ステレオより広いバス向けに、ストリップは `SurroundPan` 位置（`setSurroundPan(strip, { azimuth, divergence, lfe })`、Python は `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`）を保持します。フェーズ 1 では `azimuth`（−180…180°、0 = 正面中央）・`divergence`（0 = 点音源、1 = 前方へ広がる）・`lfe`（0…1 の LFE プレーンへの送り）が有効で、`elevation` と `distance` は予約です。位置はシーンに保存され JSON で往復しますが、オフラインの `Mixer` は依然ステレオでレンダリングします。これらの値を消費するサラウンドパンナーは[リアルタイムエンジンのサラウンドグループバス](./realtime-engine.md#サラウンドグループバスとワイドメーター)で動くため、ここで位置を設定し、サラウンドミックスはエンジンでレンダリングしてください。
 
 ## オートメーション
 

@@ -94,7 +94,7 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 ::: info Loudness, oversampling, and metering details
 A few capabilities sit underneath the maximizer/final and analysis APIs:
 
-- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the BS.1770 channel weights.
+- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
 - For UI metering there are display-decimated variants: `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - A **stereo imager** (widens or narrows the stereo field per band) and a **dynamic EQ** (an EQ whose boost/cut reacts to level, like a frequency-targeted compressor) are available in multiband form: `multiband.imager` and `multiband.dynamicEq` expose per-band parameters and accept a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three.
@@ -117,6 +117,10 @@ A crossover splits the signal into frequency bands (e.g. lows / mids / highs) so
 | Saturation | `saturation.ampSim`, `saturation.bitcrusher`, `saturation.exciter`, `saturation.hardClipper`, `saturation.multibandExciter`, `saturation.softClipper`, `saturation.tape`, `saturation.transformer`, `saturation.tube`, `saturation.waveshaper` |
 | Spectral | `spectral.airBand`, `spectral.lowEndFocus`, `spectral.presenceEnhancer`, `spectral.spectralShaper` |
 | Stereo | `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
+
+::: warning Stereo-family processors use a different entry point
+Most processors run through the single-array `masteringProcess()` (mono, or interleaved). The stereo-family processors (`stereo.imager`, `stereo.monoMaker`, `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.phaseAlign`, `stereo.stereoBalance`) operate on true left/right channels, so call them through the separate stereo entry point `masteringProcessStereo()` / `mastering_process_stereo()`, which takes distinct `left` and `right` arrays. The same is true of `eq.midSide` and the `multiband.*` processors. Passing these to `masteringProcess()` cannot express independent channels — see [How to call them](#how-to-call-them) for the exact signatures.
+:::
 
 ::: details What is dither?
 When you reduce bit depth (e.g. 24-bit down to 16-bit for CD/streaming), rounding creates a faint distortion on quiet tails. Dither adds a tiny, carefully shaped noise that masks that distortion so fades sound smooth instead of grainy. Apply it once, last, at the final bit-depth reduction.
@@ -171,76 +175,9 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 - **Mono compatibility** (`stereo.monoCompatCheck`) predicts what happens when your stereo mix is summed to mono (phone speakers, club PAs, some broadcast paths). If the left and right channels are out of phase, parts can cancel out and lose level when folded down. The check flags that risk before it surprises a listener. See [Mono Compatibility](./glossary/concepts/mono-compatibility.md) for a deeper walk-through.
 :::
 
-## Mixer Insert Names
+## Mixer and engine inserts
 
-Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. Four runtime APIs describe what is available and how to configure it:
-
-| API | Returns |
-|-----|---------|
-| `masteringInsertNames()` | The full list of valid insert ids |
-| `masteringInsertParamNames(name)` | The construction keys one insert accepts (band/sub-band processors list their indexed `band{i}.*` keys; an unknown name returns an empty array) |
-| `masteringInsertParamInfo(name)` | The realtime-automatable subset: each parameter's JSON key, numeric automation id, and realtime-safety flag |
-| `masteringProcessorCatalog()` | Machine-readable entries (`kind`, `realtimeInsertable`, `stereoOnly`, `latencySamples`, `channelPolicy`) for picker/filter UIs. `latencySamples` is measured with a representative 48 kHz / 512-sample default configuration (0 for offline processors), so query the live processor for exact configuration-dependent latency. Hosts can filter capabilities without hard-coding processor IDs. |
-
-The Python equivalents are `mastering_insert_param_names(name)`, `mastering_insert_param_info(name)`, and `mastering_processor_catalog()`.
-
-Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads. In addition to the solo processors above, builds with creative FX enabled expose reverb and modulation insert IDs:
-
-| Insert ID | Meaning |
-|-----------|---------|
-| `effects.reverb.plate` | Alias for the Dattorro plate-style reverb |
-| `effects.reverb.dattorro` | Dattorro reverb |
-| `effects.reverb.fdn` | Feedback delay network reverb |
-| `effects.reverb.velvet` | Velvet-noise style reverb |
-| `effects.reverb.convolution` | Convolution reverb; can use an impulse response in native insert creation paths |
-| `effects.reverb.room` | Geometric room reverb synthesized from room parameters |
-| `effects.acoustic.roomMorph` | Room-character morph toward a target geometric room |
-| `effects.modulation.ensemble` | Solina-style BBD string-machine ensemble |
-| `effects.modulation.chorus` | Stereo chorus |
-| `effects.modulation.flanger` | Flanger |
-| `effects.modulation.phaser` | Phaser |
-| `effects.modulation.wah` | Tempo-style swept wah filter |
-| `effects.modulation.autoWah` | Envelope-following auto-wah filter |
-| `effects.modulation.rotary` | Rotary-speaker style pitch/tremolo motion |
-| `effects.modulation.ringModulator` | Ring modulator |
-| `effects.modulation.pitchShifter` | Simple pitch shifter |
-| `effects.delay.stereo` | Stereo delay |
-
-These insert IDs are available only in builds with `SONARE_HAVE_FX`. The geometric room inserts also require `BUILD_ACOUSTIC_SIM`.
-
-There are a few practical details to know:
-
-| Detail | Meaning |
-|--------|---------|
-| `effects.reverb.plate` and `effects.reverb.dattorro` | Two names for the same Dattorro processor |
-| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). `effects.reverb.convolution` clamps `decaySec` to its synthesized-tail ceiling of 12 seconds at construction time. The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
-| `effects.modulation.chorus` params | `rateHz`, `depthMs`, `centerDelayMs`, `dryWet` |
-| `effects.modulation.flanger` params | `rateHz`, `depthMs`, `centerDelayMs`, `feedback`, `dryWet` |
-| `effects.modulation.phaser` params | `rateHz`, `minHz`, `maxHz`, `stages`, `dryWet` |
-| `effects.modulation.ensemble` params | `rateSlowHz`, `rateFastHz`, `depthSlowMs`, `depthFastMs`, `centerDelayMs`, `toneHz`, `dryWet` |
-| `effects.modulation.wah` params | `rateHz`, `minHz`, `maxHz`, `resonance`, `dryWet` |
-| `effects.modulation.autoWah` params | `sensitivity`, `minHz`, `maxHz`, `resonance`, `attackMs`, `releaseMs`, `dryWet` |
-| `effects.modulation.rotary` params | `rateHz`, `depthMs`, `tremolo`, `stereoSpread`, `dryWet` |
-| `effects.modulation.ringModulator` params | `carrierHz`, `dryWet` |
-| `effects.modulation.pitchShifter` params | `semitones`, `dryWet` |
-| `effects.delay.stereo` params | `delayTimeLMs`, `delayTimeRMs`, `feedback`, `pingPong`, `dryWet` |
-| `effects.reverb.convolution` | Needs an impulse response supplied through native insert construction |
-| Convolution insert without an IR | Effectively behaves as a passthrough |
-
-::: details What are these reverb algorithms?
-They are different ways to synthesize a reverb tail. Pick by the character you want, not by correctness — all are valid.
-
-- **Plate / Dattorro** — a smooth, dense, classic-studio sound. The Dattorro topology is a widely used plate-style design; `plate` is an alias for it.
-- **FDN (feedback delay network)** — a flexible algorithmic reverb built from interconnected delay lines, easy to tune from small rooms to large halls.
-- **Velvet-noise** — uses sparse random impulses to build an efficient, natural-sounding tail at low CPU cost.
-- **Convolution** — reproduces a *real* space by convolving the signal with a measured impulse response of that room.
-:::
-
-::: details What is `effects.modulation.ensemble`?
-A Solina-style BBD string-machine ensemble — the lush, chorused tone of vintage string synths. It runs three delay taps per channel, swept simultaneously by a slow and a fast 3-phase LFO bank, so the modulation is dense rather than a single chorus wobble. A BBD bucket-bandwidth lowpass darkens the wet path, emulating the analog bucket-brigade delay lines. The right-channel LFO polarity is inverted, which spreads a mono source into a wide stereo image. It is exposed through the insert factory and its parameters are automatable through `set_parameter` on every binding.
-:::
-
-Use these in [Mixing Scene JSON](./mixing-scene-json.md) `insert.processor` fields. In the shipped FX-enabled WASM build, some of them are also one-shot mastering processors: `effects.reverb.plate`, `effects.reverb.dattorro`, `effects.reverb.fdn`, `effects.reverb.velvet`, `effects.reverb.convolution`, `effects.modulation.chorus`, `effects.modulation.flanger`, `effects.modulation.phaser`, and `effects.delay.stereo` are returned by `masteringProcessorNames()` and run through the one-shot apply path. The geometry-driven inserts and the newer modulation inserts — `effects.reverb.room`, `effects.acoustic.roomMorph`, `effects.modulation.ensemble`, `effects.modulation.wah`, `effects.modulation.autoWah`, `effects.modulation.rotary`, `effects.modulation.ringModulator`, and `effects.modulation.pitchShifter` — are insert-only and do **not** appear in `masteringProcessorNames()`; reach them through `masteringInsertNames()` and scene inserts.
+The creative-FX insert catalog — reverb, modulation, and delay insert IDs, their parameter tables, the `masteringInsertNames()` discovery APIs, and `SONARE_HAVE_FX` / `BUILD_ACOUSTIC_SIM` build gating — lives on its own page: [Effects Inserts](./effects-inserts.md).
 
 ## How to call them
 
@@ -292,8 +229,10 @@ sonare mastering-processor song.wav --processor dynamics.compressor \
 # two-input (pair) analysis prints JSON
 sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.referenceLoudness
 
-# stereo processors (stereo.imager) have no Python CLI subcommand.
-# Source-built C++ CLI builds also expose mastering-stereo-analyze / analyses.
+# The Python CLI has no dedicated mastering-stereo-analyze subcommand; only
+# source-built C++ CLI builds expose the two-channel stereo analyses.
+# (The Python `mastering-processor` command does run stereo-only processors,
+#  but previews them by duplicating the mono input across left/right.)
 ```
 
 :::

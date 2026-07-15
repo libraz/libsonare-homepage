@@ -601,9 +601,11 @@ Related: [Mixing Engine](./mixing.md).
 ### Project & MIDI Workflow
 
 The `sonare project` command group runs headless project and Standard MIDI File
-(SMF) / MIDI 2.0 workflows from JSON project files. `midi-render` renders a MIDI
-project through the native synthesizer, and `project synth-presets` lists the
-built-in instrument patches.
+(SMF) / MIDI 2.0 workflows from JSON project files. `project bounce --synth
+<sine|saw|square|triangle>` routes the project's MIDI tracks through the built-in
+oscillator synth. The CLI's `--synth` accepts only those built-in waveforms; the
+NativeSynth preset catalog is enumerated from the bindings (`synthPresetNames()`),
+not from the CLI.
 
 ```bash
 # Print the project ABI version
@@ -622,8 +624,8 @@ sonare project compile --in project.json
 # Render a project to a stereo WAV (multi-channel bounces write stereo output)
 sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
 
-# Render the project's MIDI through a NativeSynth preset instead of clip audio
-sonare project bounce --in project.json --synth -o synth-bounce.wav
+# Render the project's MIDI tracks through the built-in oscillator synth instead of clip audio
+sonare project bounce --in project.json --synth saw -o synth-bounce.wav
 ```
 
 | Command | Description | Notable options |
@@ -637,7 +639,6 @@ sonare project bounce --in project.json --synth -o synth-bounce.wav
 | `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |
 | `sonare project export-midi2` | Export the project to a MIDI 2.0 Clip File | `--in`, `-o` |
 | `sonare project import-midi2` | Build a project from a MIDI 2.0 Clip File | `--midi2`, `-o` |
-| `sonare project synth-presets` | List the built-in NativeSynth presets | `--json` |
 
 ```bash
 # Round-trip a project through Standard MIDI File format
@@ -648,19 +649,15 @@ sonare project import-smf --smf project.mid -o roundtrip.json
 sonare project export-midi2 --in project.json -o project.midi2
 sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 
-# Render a MIDI project through NativeSynth to a stereo WAV
-sonare midi-render --in project.json --synth acoustic-piano --sample-rate 48000 -o render.wav
-
-# List the built-in synth presets
-sonare project synth-presets
+# Render a project's MIDI tracks through the built-in oscillator synth to a stereo WAV
+sonare project bounce --in project.json --synth triangle --sample-rate 48000 -o render.wav
 ```
 
-| Command | Description | Notable options |
-|---------|-------------|-----------------|
-| `sonare midi-render` | Render a MIDI project through NativeSynth | `--in`, `--synth`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `-o` |
-| `sonare project synth-presets` | List the built-in NativeSynth presets | `--json` |
+There is no separate MIDI-render command: MIDI-to-audio rendering is the
+`project bounce --synth <sine|saw|square|triangle>` path shown above, whose full
+option set is listed in the `sonare project` table earlier in this section.
 
-Bounce and render commands write stereo WAV output. SoundFont (SF2) and
+Bounce commands write stereo WAV output. SoundFont (SF2) and
 per-destination synth JSON are not wired through these CLI commands; use the
 Project API for SoundFont-backed bounces.
 

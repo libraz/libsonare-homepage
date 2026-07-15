@@ -80,9 +80,13 @@
 
 標準プリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。これらは出発点であり、ジャンルや話者属性のラベルとして固定的に扱うものではありません。
 
-## ブラウザ / WASM
+## どの言語でも同じ流れ
 
-```typescript
+どのバインディングも同じ流れで動きます。changer を**生成**し、サンプルレートとブロックサイズで**準備**し、ブロックごとに **`processMono(...)`** を呼び、`setConfig(...)` でプリセットをライブ差し替えし、`latencySamples()` を読むだけです。違うのはコンストラクタの形と後始末の呼び出しだけで、それを下のタブに並べています。
+
+::: code-group
+
+```typescript [Browser]
 import {
   init,
   RealtimeVoiceChanger,
@@ -99,11 +103,79 @@ try {
   changer.setConfig('soft-whisper');
   console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), out);
 } finally {
-  changer.delete();
+  changer.delete(); // WASM ハンドルの解放
 }
 ```
 
-AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー) で説明している WASM ヒープ上のリアルタイムバッファを使います。レンダークォンタムごとに新しい出力配列を確保せずに済みます。
+```python [Python]
+import libsonare as sonare
+
+print(sonare.voice_character_preset_id(1))
+preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")
+
+with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
+    out = changer.process_mono(input_block)
+    changer.set_config("soft-whisper")
+    print(sonare.realtime_voice_changer_preset_names(), preset_config, changer.latency_samples())
+
+# 同じプリセットチェーンで配列全体をレンダーする:
+processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
+```
+
+```typescript [Node]
+import {
+  RealtimeVoiceChanger,
+  realtimeVoiceChangerPresetNames,
+  voiceChangeRealtime,
+} from '@libraz/libsonare-native';
+
+const changer = new RealtimeVoiceChanger({
+  sampleRate: 48000,
+  maxBlockSize: 128,
+  channels: 1,
+  preset: 'bright-idol',
+});
+
+try {
+  const blockOut = changer.processMono(inputBlock);
+  changer.setConfig('soft-whisper');
+  // 同じプリセットチェーンで配列全体をレンダーする:
+  const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
+  console.log(realtimeVoiceChangerPresetNames(), changer.latencySamples(), blockOut, rendered);
+} finally {
+  changer.destroy(); // ネイティブハンドルの解放（WASM は delete()）
+}
+```
+
+```bash [CLI]
+# sonare voice-change はファイル全体をプリセットチェーンに通してレンダーします。
+# ブロック単位のリアルタイムループではありません。
+sonare voice-presets --json
+sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
+```
+
+:::
+
+::: warning 後始末はバインディングごとに違う
+生成と処理の流れは共通ですが、ネイティブハンドルの解放方法は言語ごとに異なります。解放は必ず 1 回だけ行ってください。
+
+- **ブラウザ / WASM** — `delete()` を呼びます（`finally` 内、コンポーネントの unmount 時、Worklet 停止時など）。
+- **Node ネイティブ** — `destroy()` を呼びます。`using`（Node 22 以降）を使えば自動で解放できます。
+- **Python** — `with` ブロックを抜けるとハンドルを解放します。`with` を使わない場合は `close()` を呼びます。
+:::
+
+AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー) で説明している WASM ヒープ上のリアルタイムバッファを使います。ブラウザ例の素の `processMono(...)` と違い、レンダークォンタムごとに新しい出力配列を確保せずに済みます。
+
+## CLI のモード
+
+`sonare voice-change` には 2 つのモードがあります。
+
+| モード | オプション |
+|--------|------------|
+| 単純なピッチ／フォルマント変換 | `--pitch-semitones`、`--formant-factor` |
+| リアルタイムプリセットチェーンでのレンダリング | `--preset`、`--preset-json`、`--preset-pack`、`--set PATH=VALUE` |
+
+リアルタイムプリセット系のオプションを渡した場合、コマンドはプリセットチェーンを使い、単純なピッチ／フォルマント指定は参照しません。詳細なコマンド表は [CLI リファレンス](./cli.md#リアルタイムボイスプリセット) を参照してください。
 
 ## プリセット JSON
 
@@ -127,63 +199,6 @@ if (!validation.ok) {
 
 正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_config(...)` として公開しています。
 
-## Python
-
-```python
-import libsonare as sonare
-
-print(sonare.voice_character_preset_id(1))
-preset_config = sonare.realtime_voice_changer_preset_config("bright-idol")
-
-with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128) as changer:
-    out = changer.process_mono(input_block)
-    changer.set_config("soft-whisper")
-    print(sonare.realtime_voice_changer_preset_names(), preset_config, changer.latency_samples())
-
-processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
-```
-
-コンテキストマネージャーを使うか、`close()` を呼んでネイティブハンドルを解放してください。
-
-## Node ネイティブ
-
-```typescript
-import {
-  RealtimeVoiceChanger,
-  realtimeVoiceChangerPresetNames,
-  voiceChangeRealtime,
-} from '@libraz/libsonare-native';
-
-const changer = new RealtimeVoiceChanger({
-  sampleRate: 48000,
-  maxBlockSize: 128,
-  channels: 1,
-  preset: 'bright-idol',
-});
-
-const blockOut = changer.processMono(inputBlock);
-const rendered = voiceChangeRealtime(vocal, 48000, 'soft-whisper');
-console.log(realtimeVoiceChangerPresetNames(), blockOut, rendered);
-```
-
-ネイティブのファイルデコード、サーバー側バッチ処理、デスクトップ統合が必要なら Node ネイティブを使います。マイクと UI がブラウザ内にある場合はブラウザ / WASM を使います。
-
-## CLI
-
-`sonare voice-change` には 2 つのモードがあります。
-
-| モード | オプション |
-|--------|------------|
-| 単純なピッチ／フォルマント変換 | `--pitch-semitones`、`--formant-factor` |
-| リアルタイムプリセットチェーンでのレンダリング | `--preset`、`--preset-json`、`--preset-pack`、`--set PATH=VALUE` |
-
-```bash
-sonare voice-presets --json
-sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
-```
-
-リアルタイムプリセット系のオプションを渡した場合、コマンドはプリセットチェーンを使い、単純なピッチ／フォルマント指定は参照しません。詳細なコマンド表は [CLI リファレンス](./cli.md#リアルタイムボイスプリセット) を参照してください。
-
 ## 実用上の注意
 
 リアルタイム音声処理は状態を持ちます。同じ changer をブロック間で再利用し、ブロックサイズは `prepare(...)` した最大値以内に保ち、コンポーネントやストリーム停止時にはハンドルを解放してください。
@@ -191,7 +206,7 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 大きなピッチ、フォルマント、空間処理の変更はサウンドデザインには有効ですが、自然さは下がります。自然なモニタリングではプリセット編集を控えめにし、`latencySamples()` でレイテンシも確認してください。
 
 ::: info ここでいう「レイテンシ」とは
-**レイテンシ**は、音が入ってから加工後の音が出てくるまでの遅れで、チェーンが行う解析によって生じます。`latencySamples()` はこれをサンプル数で報告するので、サンプルレートで割れば秒になります。v1.5.1 以降は実効的なドライ／ウェット比に追従し、おおむね `wetMix × リチューングレイン` に、ISP リミッターが有効な場合の固定遅延を加えた値です。完全ドライでは 0、完全ウェットではウェット経路全体の遅延を報告します。
+**レイテンシ**は、音が入ってから加工後の音が出てくるまでの遅れで、チェーンが行う解析によって生じます。`latencySamples()` はこれをサンプル数で報告するので、サンプルレートで割れば秒になります。v1.5.1 以降は実効的なドライ／ウェット比に追従し、おおむね `wetMix × リチューングレイン` に、ISP リミッターが有効な場合の固定遅延を加えた値です。ここでいう「グレイン」は、リチューン段がピッチシフトのために解析する窓の大きさ（サンプル数）です。グレインが大きいほど 1 ステップで解析する音が増えるため、遅延も増えます（[StreamingRetune](./js-api.md#streamingretune) の `grainSize` フィールドを参照）。完全ドライでは 0、完全ウェットではウェット経路全体の遅延を報告します。
 :::
 
 ## 関連ページ
@@ -200,4 +215,4 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 - [ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー)
 - [JavaScript API](./js-api.md#realtimevoicechanger)
 - [Python API](./python-api.md#リアルタイムボイスチェンジャー)
-- [Node.js ネイティブ](./native-bindings.md)
+- [Node.js ネイティブ API](./node-api.md#ストリーミング／リアルタイムクラス)

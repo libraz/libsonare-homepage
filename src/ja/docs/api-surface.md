@@ -58,16 +58,18 @@
 機能ファミリーは「何をする機能か」で大きく分けたものです。API 名を知らない段階では、ここから探すのが一番早いです。
 
 ::: details 機能表に出る略語
-- **STFT** — スペクトログラムの元になる短時間フーリエ変換。
-- **MFCC** — 音色を小さな特徴量に圧縮したもの。
-- **CQT / VQT** — 音楽のピッチ間隔に合わせた周波数変換。
-- **NNLS / NMF** — 音の成分を非負の部品へ分解する行列分解系の手法です。
-- **PLP** — リズムの主な脈動を推定する特徴量です。
-- **LUFS / LRA** — ラウドネスとラウドネスレンジの指標です。
-- **VCA** — 複数ストリップの音量をまとめて動かすグループ制御です。
-- **RIR** — room impulse response の略です。
-- **等価ルーム推定** — 音声から実用上の部屋モデルを推定する処理です。
-- **ルームモーフィング** — 目標ルームの響きを音作り効果として適用する処理です。
+各項目は一行の要約です。詳しい説明はリンク先の用語集ページを参照してください。
+
+- **STFT** — スペクトログラムの元になる短時間フーリエ変換。詳細は[スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md)。
+- **MFCC** — 音色を小さな特徴量に圧縮したもの。詳細は[メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md)。
+- **CQT / VQT** — 音楽のピッチ間隔に合わせた周波数変換。詳細は[クロマ特徴量](./glossary/analysis/chroma-features.md)。
+- **NNLS / NMF** — 音の成分を非負の部品へ分解する行列分解系の手法。詳細は[クロマ特徴量](./glossary/analysis/chroma-features.md)。
+- **PLP** — リズムの主な脈動を推定する特徴量。
+- **LUFS / LRA** — ラウドネスとラウドネスレンジの指標。詳細は[LUFS](./glossary/lufs.md)。
+- **VCA** — 複数ストリップの音量をまとめて動かすグループ制御。詳細は[バスとセンド](./glossary/mixing/buses-sends.md)。
+- **RIR** — room impulse response（部屋のインパルス応答）。詳細は[部屋の形状と容積](./glossary/acoustics/room-geometry.md)。
+- **等価ルーム推定** — 音声から実用上の部屋モデルを推定する処理。詳細は[逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md)。
+- **ルームモーフィング** — 目標ルームの響きを音作り効果として適用する処理。
 :::
 
 | ファミリー | 対象 | 主なページ |
@@ -84,7 +86,7 @@
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、モニターバス、ステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムとストリーミング](./realtime-streaming.md) |
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、アンドゥ/リドゥ、テイク／コンピング、ワープ、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
-| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生 | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
+| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声 | [逆変換特徴量](./inverse-features.md) |
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz | [librosa 互換性](./librosa-compatibility.md) |
 
@@ -101,39 +103,16 @@
 
 ここから先は、実装や公開 API を厳密に確認したい人向けです。ブラウザで「まず動かす」だけなら、`init()` して必要な関数を import する、という理解で十分です。
 
-メインの `@libraz/libsonare` TypeScript パッケージは、複数の系統をエクスポートします。
+メインの `@libraz/libsonare` TypeScript パッケージのエクスポートは、いくつかの系統に分かれます。初期化と ABI 確認、`engineCapabilities` による互換性確認、音声処理の関数群（高レベル解析、エフェクト／編集、マスタリング、ミキシング、特徴量抽出、逆変換特徴量、変換ヘルパー）、そして状態を持つオブジェクト API（`Audio`、`StreamAnalyzer`、`Mixer`、`RealtimeEngine`、およびストリーミング／ボイスチェンジャー系のクラス）です。最新の完全なエクスポート一覧は [JavaScript API](./js-api.md) に反映されており、その根拠は libsonare リポジトリの `bindings/wasm/src/index.ts` です。エクスポート名を厳密に確認したい場合は、この TypeScript 側の入口を最も具体的な参照として扱ってください。
 
-| 系統 | 例 |
-|------|----|
-| 初期化と ABI 確認 | `init`, `isInitialized`, `version`, `abiVersion`, `engineAbiVersion`, `projectAbiVersion`, `voiceChangerAbiVersion` |
-| エンジン互換性・実行環境確認 | `engineCapabilities` |
-| 音声処理 | 高レベル解析、エフェクト／編集、マスタリング、ミキシング、特徴量抽出、逆変換特徴量、変換ヘルパー |
-| オブジェクト API | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
+::: tip ABI バージョン関数の用途
+`abiVersion`、`engineAbiVersion`、`projectAbiVersion`、`voiceChangerAbiVersion` は、各サブシステムがビルド時に対象とした ABI（バイナリインターフェース）のバージョンを返します。自分のコードが想定するバージョンと突き合わせることで、オブジェクトを使い始める前に、不一致や古い WASM ビルドを検出できます。
+:::
 
 同じ npm パッケージは、AudioWorklet ブリッジ用の `@libraz/libsonare/worklet` と、バンドラーや独自ローダー向けの生 WASM アセット用サブパス `@libraz/libsonare/wasm` も公開します。
-
-関数一覧の根拠は libsonare リポジトリの `bindings/wasm/src/index.ts` で、[JavaScript API](./js-api.md) に反映しています。WASM のエクスポート名を厳密に確認したい場合は、この TypeScript 側の入口を最も具体的な参照として扱ってください。
 
 ## CLI コマンド系統
 
 CLI は、プログラムを書かずにファイルを指定して解析・変換したいときの入口です。自動処理や検証には便利ですが、リアルタイム UI や細かい対話的制御には JavaScript / Python / C++ API の方が向いています。
 
-Python CLI は次の用途を扱います。
-
-- version/info
-- コア解析
-- 主要な特徴量サマリー
-- ファイルを書き出す編集コマンド（`pitch-correct`、`note-stretch`、`voice-change`）
-- 音響／リズム／ダイナミクス／音色サマリー
-- 等価ルーム推定、RIR 合成、ルームモーフィング
-- LUFS、マスタリングプロセッサ入口、簡単なミキシング
-
-ソースビルドの C++ CLI は、さらに低レベルなコマンド群を持ちます。
-
-- セクション／メロディ／境界ユーティリティ
-- CQT／tonnetz／PCEN／Fourier tempogram／tempogram-ratio ヘルパー
-- 追加の時間／ピッチ加工コマンド（`time-stretch`、`pitch-shift`）
-- マスタリングのペア／ステレオ一覧
-- ミキシングシーンプリセット書き出し
-
-例は [CLI](./cli.md)、ランタイム差分は [バインディング対応表](./binding-parity.md) を参照してください。
+CLI は 2 種類あります。Python CLI は一般的な利用者向けコマンド（解析、特徴量サマリー、ファイルを書き出す編集、音響／ルーム処理、基本的なマスタリング／ミキシング）を扱い、ソースビルドの C++ CLI はさらに低レベルなコマンド群（セクション／メロディユーティリティ、追加の特徴量ヘルパー、マスタリングのペア／ステレオ一覧やミキシングシーン書き出し）を加えます。最新の完全なコマンド一覧と例は [CLI](./cli.md) にあります。ランタイム差分は [バインディング対応表](./binding-parity.md) を参照してください。
