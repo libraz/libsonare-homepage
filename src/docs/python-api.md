@@ -381,7 +381,7 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 
 ### Realtime voice changer
 
-`RealtimeVoiceChanger` wraps the same preset-based live voice chain exposed by WASM and Node native. It keeps retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter state across blocks. Use it instead of `voice_change(...)` when processing microphone or stream blocks.
+`RealtimeVoiceChanger` wraps the same preset-based live voice chain exposed by WASM and Node native. It keeps high-pass, gate, retune, formant, EQ, compressor, de-esser, reverb, and limiter state across blocks. Use it instead of `voice_change(...)` when processing microphone or stream blocks.
 
 ```python
 import json

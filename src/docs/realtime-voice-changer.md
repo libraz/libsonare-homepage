@@ -56,47 +56,61 @@ The realtime chain is more than a pitch shifter. Built-in presets combine these 
 
 <SonareDemo id="pitch-shift" />
 
-The demo above isolates just the **Retune** stage (pitch shift) so you can hear it on its own. A full preset layers the formant, EQ, dynamics, and ambience stages from the table below on top of it.
+The demo above isolates just the **Retune** stage (pitch shift) so you can hear it on its own. In a full preset a cleanup high-pass and a noise gate run *before* the pitch shift, and EQ, dynamics, and ambience follow *after* it — the diagram shows the full order.
 
 <FlowDiagram
   title="Preset signal chain"
+  direction="TB"
   :nodes="[
-    { id: 'retune', label: 'Retune', col: 0, row: 0, variant: 'accent' },
-    { id: 'formant', label: 'Formant', col: 1, row: 0 },
-    { id: 'eq', label: 'EQ', col: 2, row: 0 },
-    { id: 'gate', label: 'Gate', col: 3, row: 0 },
-    { id: 'comp', label: 'Compressor', col: 4, row: 0 },
-    { id: 'deesser', label: 'De-esser', col: 5, row: 0 },
-    { id: 'reverb', label: 'Reverb', col: 6, row: 0 },
-    { id: 'limiter', label: 'Limiter', col: 7, row: 0, variant: 'success' }
+    { id: 'hpf', label: 'High-pass', col: 0, row: 0, group: 'input' },
+    { id: 'gate', label: 'Gate', col: 0, row: 1, group: 'input' },
+    { id: 'retune', label: 'Retune', col: 0, row: 2, variant: 'accent', group: 'block' },
+    { id: 'formant', label: 'Formant', col: 0, row: 3, group: 'block' },
+    { id: 'eq', label: 'EQ', col: 0, row: 4, group: 'output' },
+    { id: 'comp', label: 'Compressor', col: 0, row: 5, group: 'output' },
+    { id: 'deesser', label: 'De-esser', col: 0, row: 6, group: 'output' },
+    { id: 'reverb', label: 'Reverb', col: 0, row: 7, group: 'output' },
+    { id: 'limiter', label: 'Limiter', col: 0, row: 8, variant: 'success', group: 'output' }
   ]"
   :edges="[
+    { from: 'hpf', to: 'gate' },
+    { from: 'gate', to: 'retune' },
     { from: 'retune', to: 'formant' },
     { from: 'formant', to: 'eq' },
-    { from: 'eq', to: 'gate' },
-    { from: 'gate', to: 'comp' },
+    { from: 'eq', to: 'comp' },
     { from: 'comp', to: 'deesser' },
     { from: 'deesser', to: 'reverb' },
     { from: 'reverb', to: 'limiter' }
   ]"
-  caption="Every built-in preset runs each block through these stages in order; the table below covers what each one does."
+  :groups="[
+    { id: 'input', label: 'Input stage' },
+    { id: 'block', label: 'Pitch & formant' },
+    { id: 'output', label: 'Output stage' }
+  ]"
+  caption="Every block flows top to bottom in this order. The input stage (high-pass, gate) and the output stage (EQ through limiter) run sample by sample; retune and formant work on the whole block in between. A default-on true-peak limiter follows the dry/wet mix."
 />
 
 | Stage | Purpose |
 |-------|---------|
+| High-pass | Removes sub-bass rumble and DC as a cleanup pre-filter (`eq.highpassHz`) |
+| Gate | Reduces low-level room or mic noise between phrases |
 | Retune | Shifts the note pitch up or down by the preset's semitone amount (e.g. for a higher or lower voice), and where the preset enables it, pulls held notes toward the nearest scale tone — the pitch-shift stage of the chain |
 | Formant | Changes perceived vocal size or character independently of note pitch |
-| EQ | Shapes tone before dynamics and ambience |
-| Gate | Reduces low-level room or mic noise |
+| EQ | Body, presence, and air tone shaping (`eq.bodyDb`/`presenceDb`/`airDb`) |
 | Compressor | Keeps level stable across blocks |
 | De-esser | Controls harsh sibilance |
 | Reverb | Adds or shapes space |
-| Limiter | Catches peaks at the end of the chain |
+| Limiter | Catches peaks; a 4×-oversampled true-peak limiter follows the dry/wet mix (on by default) |
+
+::: tip
+The `eq` block configures both ends of the chain: `highpassHz` is the cleanup high-pass at the very front, while `bodyDb`/`presenceDb`/`airDb` are the tonal shelves that sit after formant shaping.
+:::
 
 ::: info Voice-chain terms in one place
+- **High-pass** — a cleanup filter at the front that removes sub-bass rumble and DC before any other stage.
+- **Gate** — mutes the signal when it drops below a threshold, removing low-level mic/room noise between phrases.
 - **Retune** — moves the sung note up or down in pitch; separate from formant, which changes vocal character without moving the note.
 - **Formant** — the resonances that make a voice sound large/small or male/female; shifting them changes vocal character without changing the note.
-- **Gate** — mutes the signal when it drops below a threshold, removing low-level mic/room noise between phrases.
 - **Compressor** — automatically evens out loud and quiet parts so the level stays steady.
 - **De-esser** — tames harsh "s"/"sh" sounds (sibilance).
 - **Limiter** — a safety catch that stops peaks from clipping at the very end of the chain.

@@ -249,7 +249,7 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, str
 
 `RealtimeVoiceChanger` は、ライブ入力やチャンク処理向けの状態付きプリセットチェーンです。
 
-リチューン、フォルマント、EQ、ゲート、コンプレッサー、ディエッサー、リバーブ、リミッターの各段をまとめて扱います。
+ハイパス、ゲート、リチューン、フォルマント、EQ、コンプレッサー、ディエッサー、リバーブ、リミッターの各段をまとめて扱います。
 
 標準プリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。
 

@@ -247,7 +247,7 @@ const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, str
 
 `voiceChange(...)` is the simple offline helper for a decoded mono clip: pass semitone and formant values, get a processed buffer back.
 
-`RealtimeVoiceChanger` is the stateful preset chain used for live or chunked voice processing. It combines retune, formant, EQ, gate, compressor, de-esser, reverb, and limiter stages. Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`.
+`RealtimeVoiceChanger` is the stateful preset chain used for live or chunked voice processing. It combines high-pass, gate, retune, formant, EQ, compressor, de-esser, reverb, and limiter stages. Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`.
 
 Use the realtime class when you process repeated blocks and need continuity across calls. In WASM, call `prepare(...)` and `delete()` yourself. In Python, use the context manager or `close()`.
 
