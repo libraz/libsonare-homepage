@@ -681,6 +681,7 @@ class StreamConfig:
     compute_spectral: bool = True
     emit_every_n_frames: int = 1
     magnitude_downsample: int = 1
+    max_pending_frames: int = 4096  # oldest unread frame is dropped at the cap
     key_update_interval_sec: float = 5.0
     bpm_update_interval_sec: float = 10.0
     window: int = 0          # 0=Hann, 1=Hamming, 2=Blackman, 3=Rectangular
@@ -721,6 +722,8 @@ class StreamStats:
     total_frames: int
     total_samples: int
     duration_seconds: float
+    pending_frames: int
+    dropped_output_frames: int
     bpm: float
     bpm_confidence: float
     bpm_candidate_count: int
@@ -865,6 +868,7 @@ with sonare.StreamingMasteringChain({
     "dynamics.compressor.thresholdDb": -20.0,
 }) as chain:
     chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
+    print(chain.stage_names(), chain.latency_samples())
     out_block = chain.process_mono([0.0] * 512)
 
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
@@ -987,6 +991,7 @@ offline = sonare.mix_stereo(
 mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 try:
     print(mixer.scene_warnings())  # non-fatal: insert params no processor reads (typos)
+    print(mixer.latency_samples())  # compiled graph latency for dry/wet alignment
     block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
     meter = mixer.strip_meter(0, tap="postFader")
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")
@@ -1008,9 +1013,11 @@ The headless-DAW API is available in Python as well: author arrangements with `P
 | Render MIDI through the built-in synthesizer | `Project.bounce_with_synth_instrument(...)`, `synth_preset_names()`, `synth_preset_patch(name)`, `SynthPatch` | [Built-in Synthesizer](./native-synth.md), [Bouncing Projects](./project-bounce.md) |
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
-| Play instruments live from MIDI events | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
+| Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
-| Mix the engine's tracks live with lanes, buses, sends, and strips | `RealtimeEngine.set_track_lanes(...)`, `set_track_buses(...)`, `set_track_strip_json(...)`, `set_master_strip_json(...)`, `set_bus_strip_json(...)`, `set_solo_mute(...)`, `set_track_strip_pan(...)`, `set_track_strip_pan_law(...)`, `set_track_strip_pan_mode(...)`, `set_track_strip_dual_pan(...)`, `set_track_strip_channel_delay_samples(...)`, `set_track_strip_insert_param_by_name(...)`, `set_master_strip_insert_param_by_name(...)`, `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
+| Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime and Streaming](./realtime-streaming.md#sending-a-track-to-external-midi-gear) |
+| Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
+| Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime and Streaming](./realtime-streaming.md#surround-group-buses-and-wide-meters) |
 
 ```python
 import libsonare as sonare

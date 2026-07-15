@@ -179,7 +179,7 @@ For persistent mixers, Node native accepts a `StripRef` (`number | string`) for 
 
 ## Projects, Instruments & Live MIDI
 
-The Node native addon exposes the same headless-DAW API as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, the per-track, master, and bus strip JSON setters, queueable `setSoloMute`, track pan/law/mode/dual-pan/channel-delay setters, insert-param-by-name setters, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM (see [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
+The Node native addon exposes the same headless-DAW API as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, strip JSON and insert controls for tracks, the master, and buses, insert automation-id resolvers, `setParamSmoothingMs`, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM. It also exposes external-device routing through `setMidiDestinationExternal`, `setExternalMidiClockEnabled`, `drainExternalMidi`, and `externalMidiDroppedCount` (see [Realtime and Streaming](./realtime-streaming.md#sending-a-track-to-external-midi-gear)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
 
 The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
@@ -484,9 +484,9 @@ Progress callbacks are not available on the async path. If you need progress upd
 | `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssWithResidualResult` | HPSS with harmonic, percussive, and residual outputs |
 | `harmonic(samples, sr?)` | `Float32Array` | Extract harmonic component |
 | `percussive(samples, sr?)` | `Float32Array` | Extract percussive component |
-| `timeStretch(samples, rate, sr?)` | `Float32Array` | Time-stretch without pitch change |
+| `timeStretch(samples, sampleRate, rate)` | `Float32Array` | Time-stretch without pitch change |
 | `phaseVocoder(samples, rate, sr?, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
-| `pitchShift(samples, semitones, sr?)` | `Float32Array` | Pitch-shift without tempo change |
+| `pitchShift(samples, sampleRate, semitones)` | `Float32Array` | Pitch-shift without tempo change |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
 | `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |
@@ -580,7 +580,7 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`; `mode` is `'autocorrelation'` (default) or `'cosine'` |
 | `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
 | `cyclicTempogram(onsetEnvelope, sr, hopLength?, winLength?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | Cyclic (tempo-octave-invariant) tempogram |
-| `tempogramRatio(tempogramData, winLength?, sr?, hopLength?)` | `Float32Array` | `librosa.feature.tempogram_ratio` |
+| `tempogramRatio(tempogramData, winLength?, sr?, hopLength?, factors?)` | `Float32Array` | `librosa.feature.tempogram_ratio`; factors default to `[0.5, 1, 2, 3, 4]` |
 | `plp(onsetEnvelope, sr?, hopLength?, tempoMin?, tempoMax?, winLength?)` | `Float32Array` | `librosa.beat.plp` |
 
 #### Conversion Functions

@@ -109,6 +109,8 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
 
+Node では同じ `pushMidiSysex(...)` 名です。Python は `push_midi_sysex(destination_id, data, render_frame=-1)` を公開し、完全なフレームを `bytes` またはほかのバイト列として受け取ります。C ABI の入口は `sonare_engine_push_midi_sysex(...)` です。
+
 ```typescript
 // 即時経路: 次のブロック先頭でノートを発火
 engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
@@ -153,9 +155,13 @@ engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ transpose_semitones: 12
 engine.clearMidiFx(0);   // 指定したデスティネーションのみ解除（ID 省略時は 0）
 ```
 
+Python でも v1.5.1 から同じライブ差し替えを `engine.set_midi_fx(destination_id, config_json)` で利用できます。解除には `engine.clear_midi_fx(destination_id)` を使います。
+
 設定 JSON は [`bakeMidiFx`](./project-editing.md) と同じスキーマです。各ステージはそのパラメータをキーにするので、ステージのキーを含めれば有効になり、省けばスキップされます。主なキーは `transpose_semitones`、`velocity_scale` / `velocity_offset` / `velocity_gamma`、`quantize_ppq` / `quantize_strength`、`chord_intervals`、`arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq` です。キーの全一覧と例は [プロジェクト編集](./project-editing.md) を参照してください。
 
 `setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ます。そのため、よくあるケース（フレーズ間で 1 つの変換を別の変換へ差し替える）では、鳴っているノートはそのまま保たれます。鍵を押したまま FX を変える場合の注意点が 2 つあります。
+
+この呼び出しは制御スレッドから不変の設定を publish し、音声スレッドが次のブロック境界で採用するため、エンジンの処理中にも実行できます。
 
 - 現在の状態が不確かなら、先に FX をクリアしてください。
 - 変換がノートオフのルーティングを変えてノートが鳴り続けたら、差し替えの後にパニック（次節）を送ってください。

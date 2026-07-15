@@ -392,6 +392,8 @@ The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip,
 
 The mixer core is built for predictable audio callbacks: denormal guards, lock-free parameter changes, pre-allocated state, and graph-level [plugin-delay compensation](#latency-and-plugin-delay-compensation-pdc).
 
+Call `mixer.latencySamples()` to read the compiled graph's reported latency when aligning it with dry or externally processed material. If the topology is dirty, this call compiles the graph before returning the value.
+
 In the WASM package, `processStereo` allocates a fresh result array on every call. That is fine offline but forbidden inside a realtime audio callback. For those tight loops, use one of these allocation-free paths instead:
 
 - **`processStereoInto(inL, inR, outL, outR)`** — writes into caller-owned arrays.

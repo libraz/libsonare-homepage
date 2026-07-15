@@ -78,11 +78,11 @@
 | スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api.md#スケール量子化)、[Python API](./python-api.md) |
 | エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api.md#オーディオエフェクト) |
 | ルーム音響解析 | IR 解析、ブラインド音響推定、等価ルーム推定、RIR 合成、ルームモーフィング | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
-| ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、ステレオ／デュアル／サラウンドパンメタデータ、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
+| ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、ステレオ／デュアルパン、リアルタイムエンジンの 5.1/7.1 サラウンドパン、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
 | マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON | [マスタリングアシスタント](./mastering-assistant.md) |
 | マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペア解析、ステレオ解析、ストリーミングチェーン | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
-| リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、パン、インサートパラメータ）、キャプチャ、モニターバス、ステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムとストリーミング](./realtime-streaming.md) |
+| リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、モニターバス、ステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムとストリーミング](./realtime-streaming.md) |
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、アンドゥ/リドゥ、テイク／コンピング、ワープ、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生 | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声 | [逆変換特徴量](./inverse-features.md) |
@@ -105,8 +105,8 @@
 
 | 系統 | 例 |
 |------|----|
-| 初期化 | `init`, `isInitialized`, `version` |
-| エンジン互換性・実行環境確認 | `engineAbiVersion`, `projectAbiVersion`, `voiceChangerAbiVersion`, `engineCapabilities` |
+| 初期化と ABI 確認 | `init`, `isInitialized`, `version`, `abiVersion`, `engineAbiVersion`, `projectAbiVersion`, `voiceChangerAbiVersion` |
+| エンジン互換性・実行環境確認 | `engineCapabilities` |
 | 音声処理 | 高レベル解析、エフェクト／編集、マスタリング、ミキシング、特徴量抽出、逆変換特徴量、変換ヘルパー |
 | オブジェクト API | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
 

@@ -45,11 +45,12 @@ Most meaningful gaps are in the CLI. The table lists each feature family with li
 | Mastering presets/chains/processors | Yes | Partial |
 | Mastering assistant/profile/preview JSON | Yes | No dedicated command |
 | Mixing engine and scenes | Yes | `mix` (C++ CLI also exports scene presets) |
-| Surround and multichannel mixing | Yes for scene/pan round-trip plus realtime [surround group buses](./mixing.md#surround-and-multichannel). **Per-lane surround panning is still being phased in:** `setSurroundPan` positions save and reload in scene JSON but do not move the sound yet, because the surround DSP path is not implemented. The parts that work today are the surround group bus and wide-meter telemetry. | No |
+| Surround and multichannel mixing | Realtime engine lanes are panned into 5.1/7.1 group buses from the strip's `surroundPan` position and expose wide-meter telemetry. The standalone offline `Mixer` remains stereo; `sourceChannelLayout` is stored but does not yet preserve a multichannel lane source. See [Surround and multichannel](./mixing.md#surround-and-multichannel). | No |
 | Project and arrangement editing (headless DAW) | Yes — see [Project Editing](./project-editing.md) | Yes |
 | Built-in instruments (NativeSynth presets/patches) | Yes — see [Built-in Instruments](./native-synth.md) | Partial — `project bounce --synth` exposes the simple built-in synth waveform path, not the NativeSynth preset/patch catalog |
 | SoundFont 2 player | Yes — see [SoundFont 2 Player](./soundfont-player.md) | No (Project API only) |
 | Realtime engine live MIDI input | Yes — see [MIDI Input](./midi-input.md) | No |
+| External MIDI output and clock/transport forwarding | Yes — WASM, Node, Python, C ABI; browser worklets deliver lowered MIDI 1.0 messages through `onMidiOut` | No |
 | Web MIDI bridge (`bindWebMidi`) and microphone helper (`bindMicrophoneInput`) | WASM / browser only | No |
 | External-instrument bounce protocol (`ExternalInstrument`) | Python only — see [Project Bounce](./project-bounce.md) | No |
 | Editing DSP | Yes | Yes |
@@ -77,7 +78,7 @@ These functions exist across the library bindings but take their arguments diffe
 A few signatures don't line up across all three bindings:
 
 - **Stereo mix:** WASM `mixStereo(...)` takes separate `leftChannels` / `rightChannels` arrays plus a `MixOptions` object; Python `mix_stereo(...)` takes `[(left, right), …]` strips plus keyword arrays such as `fader_db`, `pan`, `width`, and `input_trim_db`.
-- **`timeStretch(...)` / `pitchShift(...)`:** WASM uses `samples, sampleRate, rateOrSemitones`; Node native uses `samples, rateOrSemitones, sampleRate?`. Pass all numeric arguments explicitly when porting between the two.
+- **`timeStretch(...)` / `pitchShift(...)`:** Since v1.5.1, WASM and Node native both use `samples, sampleRate, rateOrSemitones`.
 - **Metering taps:** use `meterTap(strip, tap)` for an explicit pre/post-fader tap; Node's `stripMeter(strip)` is the post-fader convenience path.
 
 ### Config, return, and data shapes

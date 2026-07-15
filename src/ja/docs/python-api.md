@@ -697,6 +697,7 @@ class StreamConfig:
     compute_spectral: bool = True
     emit_every_n_frames: int = 1
     magnitude_downsample: int = 1
+    max_pending_frames: int = 4096  # 上限到達時は最古の未読フレームを破棄
     key_update_interval_sec: float = 5.0
     bpm_update_interval_sec: float = 10.0
     window: int = 0          # 0=Hann, 1=Hamming, 2=Blackman, 3=Rectangular
@@ -737,6 +738,8 @@ class StreamStats:
     total_frames: int
     total_samples: int
     duration_seconds: float
+    pending_frames: int
+    dropped_output_frames: int
     bpm: float
     bpm_confidence: float
     bpm_candidate_count: int
@@ -883,6 +886,7 @@ with sonare.StreamingMasteringChain({
     "dynamics.compressor.thresholdDb": -20.0,
 }) as chain:
     chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
+    print(chain.stage_names(), chain.latency_samples())
     out_block = chain.process_mono([0.0] * 512)
 
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
@@ -1009,6 +1013,7 @@ offline = sonare.mix_stereo(
 mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
 try:
     print(mixer.scene_warnings())  # 非致命的: どのプロセッサも読まない insert パラメータ（タイプミス）
+    print(mixer.latency_samples())  # ドライ／ウェット整列用のコンパイル済みグラフ遅延
     block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
     meter = mixer.strip_meter(0, tap="postFader")
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")
@@ -1030,9 +1035,11 @@ finally:
 | 組み込みシンセサイザーで MIDI をレンダーする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [組み込みシンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
 | SoundFont で MIDI をレンダーする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。**Python 専用です**。 | [プロジェクトのバウンス](./project-bounce.md) |
-| MIDI イベントからインストゥルメントをライブ演奏する | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
+| MIDI イベントからインストゥルメントをライブ演奏し、デスティネーションの MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)` | [リアルタイムとストリーミング](./realtime-streaming.md#midi-クリップスケジューリングと-sampleatppq) |
-| エンジンのトラックをレーン・バス・センド・ストリップでライブミックスする | `RealtimeEngine.set_track_lanes(...)`、`set_track_buses(...)`、`set_track_strip_json(...)`、`set_master_strip_json(...)`、`set_bus_strip_json(...)`、`set_solo_mute(...)`、`set_track_strip_pan(...)`、`set_track_strip_pan_law(...)`、`set_track_strip_pan_mode(...)`、`set_track_strip_dual_pan(...)`、`set_track_strip_channel_delay_samples(...)`、`set_track_strip_insert_param_by_name(...)`、`set_master_strip_insert_param_by_name(...)`、`drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムとストリーミング](./realtime-streaming.md#レーンミキサー) |
+| デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムとストリーミング](./realtime-streaming.md#トラックを外部-midi-機器へ送る) |
+| エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムとストリーミング](./realtime-streaming.md#レーンミキサー) |
+| ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムとストリーミング](./realtime-streaming.md#サラウンドグループバスとワイドメーター) |
 
 ```python
 import libsonare as sonare

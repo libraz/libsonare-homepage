@@ -317,6 +317,7 @@ struct StreamConfig {
   OutputFormat output_format = OutputFormat::Float32;
   int emit_every_n_frames = 1;   // 4 = ~60fps at 44100Hz
   int magnitude_downsample = 1;  // Downsample factor for magnitude
+  size_t max_pending_frames = 4096; // unread cap; overflow drops oldest
 
   // Progressive estimation intervals
   float key_update_interval_sec = 5.0f;
@@ -325,6 +326,8 @@ struct StreamConfig {
 ```
 
 `OutputFormat` selects the internal frame representation for downstream transfer: `Float32` for full precision, `Int16` for compact streaming data, or `Uint8` for visualization payloads. Use it together with the matching read method below when you want to reduce worker or UI-thread bandwidth.
+
+`analyzer.stats()` reports `pending_frames` and cumulative `dropped_output_frames` alongside the existing totals and progressive estimate. This lets a native host distinguish a healthy bounded queue from a consumer that is repeatedly falling behind.
 
 ### Basic Usage
 
@@ -1098,6 +1101,8 @@ uint32_t    sonare_abi_version(void);            // packed aggregate ABI version
 int         sonare_has_ffmpeg_support(void);     // 1 if the loaded build can decode FFmpeg-only formats (M4A/AAC/FLAC/OGG), 0 otherwise
 ```
 
+Every C ABI call that returns `SonareError` clears the thread-local detail on entry, preventing a stale message from leaking into a later result. Diagnostic accessors and void cleanup helpers deliberately do not clear it, so callers may release partial output before reading `sonare_last_error_message()`.
+
 `SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
 
 `SonareAnalysisResult` is the compact C ABI result: BPM, BPM confidence, key,
@@ -1137,14 +1142,14 @@ The current C ABI is split across focused headers. Use this index when a symbol 
 | Header | Surface |
 |--------|---------|
 | `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, engine lane/bus/send structs (`SonareEngineTrackLane`, `SonareEngineBus`, `SonareEngineTrackSend`) and the `SonareChannelLayout` enum, error/version/FFmpeg helpers |
-| `sonare_c_project.h` | Headless project/arrangement lifecycle, track/clip and MIDI-clip editing, MIDI events and MIDI-FX (`sonare_project_set_midi_events`, `set_midi_fx`, `bake_midi_fx`), compile/bounce (incl. `bounce_with_builtin_instruments`/`bounce_with_synth_instruments`), warp maps, loop-recording takes and comp segments, NativeSynth and SoundFont/SF2 instrument bindings, assist sidecar, chord/key annotations, `SONARE_PROJECT_ABI_VERSION` |
+| `sonare_c_project.h` | Headless project/arrangement lifecycle, track/clip counts and editing (`sonare_project_clip_count`), MIDI events and MIDI-FX (`sonare_project_set_midi_events`, `set_midi_fx`, `bake_midi_fx`), compile/bounce (incl. `bounce_with_builtin_instruments`/`bounce_with_synth_instruments`), warp maps, loop-recording takes and comp segments, NativeSynth and SoundFont/SF2 instrument bindings, assist sidecar, chord/key annotations, `SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | Focused analysis, STFT/mel/MFCC/chroma, inverse features, CQT/VQT, pitch, tempogram/PLP, LUFS |
 | `sonare_c_effects.h` | HPSS/editing DSP, region-based spectral editing (`sonare_spectral_edit`, modes GAIN/ATTENUATE/MUTE/HEAL), realtime voice changer, realtime engine, decomposition/remix helpers |
 | `sonare_c_acoustic.h` | RIR synthesis from room geometry, equivalent-room estimation, offline room-character morphing, `SONARE_ACOUSTIC_ABI_VERSION` |
 | `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum, multi-channel interleaved LUFS (`sonare_lufs_interleaved`) and EBU R128 loudness range (`sonare_ebur128_loudness_range`) |
-| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON, streaming mastering chain, streaming EQ, repair/dynamics one-shot helpers |
+| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON, streaming mastering chain with latency and realized-stage inspection (`sonare_streaming_mastering_chain_stage_names`), streaming EQ, repair/dynamics one-shot helpers |
 | `sonare_c_mixing.h` | Channel strip controls, sends, buses, VCA groups, automation, meters, goniometer, scene presets |
-| `sonare_c_streaming.h` | `StreamAnalyzer`, compact frame reads, updating stats, tuning/normalization controls |
+| `sonare_c_streaming.h` | `StreamAnalyzer`, bounded unread output (`max_pending_frames`), compact frame reads, pending/drop-aware updating stats, tuning/normalization controls |
 
 For room acoustics in the C ABI:
 
@@ -1155,10 +1160,18 @@ For room acoustics in the C ABI:
 For surround/multichannel engine buses in the C ABI:
 
 - `SonareChannelLayout` enumerates the speaker bed: `SONARE_CHANNEL_LAYOUT_MONO` (0), `SONARE_CHANNEL_LAYOUT_STEREO` (1), `SONARE_CHANNEL_LAYOUT_5_1` (2), and `SONARE_CHANNEL_LAYOUT_7_1` (3). Values match `sonare::ChannelLayout` and are part of the ABI/JSON wire format.
-- `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo) and `SonareEngineTrackLane.source_channel_layout` declares the input layout feeding a lane.
-- The bus layout handles plane-by-plane summing and per-plane (wide) meters today, but the per-lane surround **panning** DSP is still being phased in: `source_channel_layout` (and a strip's `surroundPan` position) round-trips through config JSON yet is inert until the surround DSP path lands. See [realtime engine surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters).
+- `SonareEngineBus.channel_layout` sets a bus's speaker bed (the master bus carries the project output layout; defaults to stereo). `SonareEngineTrackLane.source_channel_layout` is serialized as source metadata but does not yet make a multichannel lane input discrete.
+- The realtime lane mixer pans each mono/stereo lane into a 5.1/7.1 destination from the strip's `surroundPan` position, sums buses plane by plane, and publishes per-plane (wide) meters. `azimuth`, `divergence`, and `lfe` affect placement; `elevation` and `distance` are reserved. See [realtime engine surround group buses](./realtime-streaming.md#surround-group-buses-and-wide-meters).
 
-To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly"}, ...]`, where `kind` is `realtime`/`offline`/`pair` and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker by realtime-insertability without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
+For realtime insert automation and external MIDI in the C ABI:
+
+- Track, master, and bus strips each have insert-bypass and realtime-safe parameter setters. Parameter names are the JSON keys reported by `sonare_mastering_insert_param_info`; an unsupported or non-realtime-safe name returns `SONARE_ERROR_INVALID_PARAMETER`.
+- `sonare_engine_resolve_{track,master,bus}_insert_automation_id` converts an insert parameter name into the numeric id accepted by `sonare_engine_set_automation_lane`, `sonare_engine_set_parameter`, and `sonare_engine_set_parameter_smoothed`. `sonare_engine_set_param_smoothing_ms` changes the shared ramp time (20 ms by default; `0` makes changes immediate).
+- `sonare_engine_push_midi_sysex` copies one complete SysEx frame, including `0xF0` and `0xF7`; its size must be 1–512 bytes.
+- `sonare_engine_set_midi_destination_external` moves a destination out of the internal instrument rack and into the host-drained output queue. Up to 16 destinations may be external. Clock/transport forwarding is opt-in through `sonare_engine_set_external_midi_clock_enabled`; those messages use destination `0xFFFFFFFF`.
+- On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
+
+To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","channelPolicy"}, ...]`, where `kind` is `realtime`/`offline`/`pair` and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` is a representative default-configuration probe (48 kHz / 512 samples; 0 for offline ids), while `channelPolicy` tells a surround host how the mixer wraps the processor. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
 
 Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The typed preset selector is the `SonareVoiceCharacterPreset` enum (`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 through `SONARE_VC_PRESET_DARK_VILLAIN` = 5); `sonare_voice_character_preset_id(preset)` returns its canonical id string (NULL for unknown values), and the `SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` macro provides the newline-separated id list for compile-time binding generation. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
 

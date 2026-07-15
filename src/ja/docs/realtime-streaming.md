@@ -113,6 +113,7 @@ const analyzer = new StreamAnalyzer({
   computeChroma: true,
   computeOnset: true,
   emitEveryNFrames: 4,   // スロットル: 4 ホップごとに 1 フレーム出力
+  maxPendingFrames: 256, // 未読出力を制限。超過時は最古フレームを破棄
 });
 
 analyzer.process(inputBlock);
@@ -124,6 +125,8 @@ if (stats.estimate.updated) {
   console.log(stats.estimate.bpm, stats.estimate.key, stats.estimate.chordRoot);
 }
 ```
+
+`maxPendingFrames` の既定値は `4096` です。UI が一時停止したり読み出しに遅れたりする可能性がある場合は小さめに設定してください。解析は継続し、最古の未読フレームが破棄されます。現在の滞留数と累積破棄数は `stats().pendingFrames` / `stats().droppedOutputFrames` で確認できます。
 
 ::: info ストリームの既定値はバッチ解析と異なる
 `StreamAnalyzer` の既定サンプルレートは、バッチの 22050 Hz ではなく **44100 Hz** です。
@@ -252,7 +255,7 @@ const ac  = tempogram(env, sampleRate, 512, 384, 'autocorrelation'); // 既定
 const cos = tempogram(env, sampleRate, 512, 384, 'cosine');
 const ft  = fourierTempogram(env, sampleRate, 512, 384);
 const cyc = cyclicTempogram(env, sampleRate, 512, 384, 60, 60);
-const ratio = tempogramRatio(ac.data, 384, sampleRate, 512);
+const ratio = tempogramRatio(ac.data, 384, sampleRate, 512, [0.5, 1, 2, 3, 4]);
 const pulse = plp(env, sampleRate, 512, 30, 300, 384);
 ```
 
@@ -389,7 +392,8 @@ engine.setSoloMute(0, true, false, -1);
 | パンロー／パンモード | `setTrackStripPanLaw(...)`、`setTrackStripPanMode(...)` | 同名 |
 | 左右独立（デュアル）パン | `setTrackStripDualPan(trackId, left, right)` | `setTrackStripDualPan(target, left, right)` |
 | レーンごとのサンプル遅延 | `setTrackStripChannelDelaySamples(trackId, samples)` | 同名 |
-| インサートパラメータを名前で設定 | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)`（マスター: `setMasterStripInsertParamByName(...)`） | 同名、加えて `setStripInsertParamByName(target, ...)` |
+| インサートパラメータを名前で設定 | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)`（マスター／バス: `setMasterStripInsertParamByName(...)`、`setBusStripInsertParamByName(...)`） | 同名、加えて `setStripInsertParamByName(target, ...)` |
+| バスインサートをバイパス | `setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass?)` | 同名 |
 
 `setTrackStripInsertParamByName(...)` はリアルタイムオートメーションの入り口です。[`masteringInsertParamInfo(name)`](./mastering-processors.md) が返す JSON キーでパラメータを指定するため、ホストはストリップ JSON を作り直さずにインサートの自動化可能なパラメータをライブで変更できます。ワークレット API では `target` はトラック id または名前です。
 
@@ -418,14 +422,34 @@ engine.setParameter(1, 0.5);
 
 `SonareEngine` ワークレット API では、パラメータを登録せずにミキサーのフェーダー／パンを自動化することもできます。`automationParamId(target, 'faderDb' | 'pan')` と `busAutomationParamId(busId)` はミキサー名前空間の予約済みエンジンパラメータ id を返すので、それをそのまま `setAutomationLane(paramId, points)` に渡してトラック／マスターのフェーダーやパン、あるいはバスのフェーダー（バス id はそのフェーダーゲイン dB に解決されます）を自動化できます。`target`／`busId` は初回利用時にミキサーのレーン／バスを宣言します。
 
+インサートパラメータも同じオートメーションレーンで動かせますが、先に予約 id を取得します。`resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`、`resolveMasterInsertAutomationId(...)`、`resolveBusInsertAutomationId(...)` のいずれかを呼び、その戻り値を `setAutomationLane`、`setParameter`、`setParameterSmoothed` に渡してください。`insertIndex` はストリップの pre インサート、続いて post インサートを連結した列を指し、`paramName` は `masteringInsertParamInfo` が返す JSON キーです。未知のストリップ／インサート／キーでは WASM/Node は `-1`、Python は `SonareError` を返します。
+
+```typescript
+const thresholdId = engine.resolveBusInsertAutomationId(1, 0, 'thresholdDb');
+if (thresholdId < 0) throw new Error('bus compressor threshold is not automatable');
+engine.setAutomationLane(thresholdId, [
+  { ppq: 0, value: -18 },
+  { ppq: 8, value: -24, curveToNext: 3 },
+]);
+```
+
+`setParamSmoothingMs(ms)` は、フェーダー／パンのスムーズな変更、インサートパラメータのオートメーション、MIDI CC マッピングに使う既定の追従時間を変更します。既定は `20` ms、`0` は即時変更です。ホストがオートメーション全体の感触を意図的に変える場合を除き、再生前にコントロールスレッドから 1 度設定してください。
+
 ### サラウンドグループバスとワイドメーター
 
-サラウンドの `channelLayout`（`SonareChannelLayout`: `0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）で宣言したバスは**サラウンドグループバス**になります。バスはプレーンごとにマスターへ合算し、プレーン別メーターを公開します。レーンごとのサラウンドパン DSP（各レーンをストリップの [`surroundPan`](./mixing.md#サラウンドとマルチチャンネル) 位置へ配置するもの）は段階導入中で、`surroundPan` 値（およびレーン自身の `sourceChannelLayout`）はシーンに保存され config JSON を往復しますが、まだ音声のパンニングには反映されません。現状はバスの `channelLayout` を宣言し、レーンごとのパンはサラウンド DSP パスが入った時点で有効になります。
+サラウンドの `channelLayout`（`SonareChannelLayout`: `0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）で宣言したバスは**サラウンドグループバス**になります。バスはプレーンごとにマスターへ合算し、プレーン別メーターを公開します。そこへルーティングしたレーンは点音源へフォールドされた後、ストリップの [`surroundPan`](./mixing.md#サラウンドとマルチチャンネル) に従って配置されます。`azimuth`、`divergence`、`lfe` は有効で、`elevation` と `distance` は予約です。単体の `Mixer` はステレオのままなので、この DSP はリアルタイムエンジンのワイドバス経路に固有です。
 
 ```typescript
 engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]); // 5.1 のグループバス
 engine.setTrackOutputBus(1, 1);                          // レーンをそこへルーティング
+engine.setTrackStripJson(1, JSON.stringify({
+  strips: [{ id: 'source', surroundPan: { azimuth: -30, divergence: 0, lfe: 0 } }],
+  buses: [],
+  connections: [],
+}));
 ```
+
+`EngineTrackLane` の `sourceChannelLayout` は現状では説明／シリアライズ用です。レーンのレンダー入力はまだモノラルまたはステレオで、ステレオはサラウンド配置の前に点音源へフォールドされます。既存の 5.1/7.1 ソースがディスクリートのまま保たれる指定としては使わないでください。
 
 `setTrackOutputBus(1, 0)`（または `setTrackLanes` で `outputBusId: 0` を指定）を呼ぶと、レーンをマスターミックスへ戻せます。
 
@@ -466,6 +490,46 @@ engine.setMidiClips([{
 ```
 
 ループするクリップは `loopLengthSamples` ごとにイベントリストを繰り返します。スケジュールを空にするには `setMidiClips([])` を呼びます。*プロジェクト*レベル（PPQ 単位のノート、テイク、コンピング）で作業したい場合は、[プロジェクト編集](./project-editing.md)でアレンジを組んでバウンスしてください。このリアルタイムスケジュールは、DAW フロントエンドがコンパイルして渡す低レベル側の API です。
+
+### トラックを外部 MIDI 機器へ送る
+
+**内部デスティネーション**は libsonare 内の NativeSynth／SF2 インストゥルメントで MIDI をレンダーします。**外部デスティネーション**はそのインストゥルメントを通さず、ホストがハードウェアや別アプリへ送るための MIDI 1.0 バイト列を出力キューへ入れます。libsonare はメッセージの変換と時刻付けを行いますが、OS／Web MIDI ポートを開くのはホスト側の役割です。
+
+生の `RealtimeEngine` では、デスティネーションを外部に設定し、通常どおり音声処理した後、出力キューを高頻度でドレインします。
+
+```typescript
+engine.setMidiDestinationExternal(2, true); // デスティネーション 2 を外部機器へ送る
+engine.setExternalMidiClockEnabled(true);  // 任意: clock + start/continue/stop
+
+engine.process([leftBlock, rightBlock]);
+for (const event of engine.drainExternalMidi(256)) {
+  if (event.destinationId === 0xffffffff) {
+    // クロック／トランスポートは、ホストが選んだ全外部ポートへ配信する。
+    for (const output of externalOutputs.values()) output.send(event.bytes);
+  } else {
+    externalOutputs.get(event.destinationId)?.send(event.bytes);
+  }
+}
+```
+
+各イベントは `destinationId`、`renderFrame`、`bytes`（1〜3 バイトの変換済み MIDI 1.0 メッセージ 1 個）を持ちます。クロック／トランスポートはデスティネーションの番兵値 `0xFFFFFFFF` を使い、チャンネルメッセージは元のデスティネーション id を保ちます。`maxRecords` は戻り値のメッセージ数を制限し、残りは次回のドレインまでキューに残ります。`externalMidiDroppedCount()` が増え続ける場合、ホストが読み出す前に固定容量のリアルタイムキューが満杯になっています。
+
+`SonareEngine` AudioWorklet ファサードでは `setMidiDestinationExternal(trackId, true)` と `onMidiOut(callback)` を使います。ワークレットはレンダーブロックごとに内部エンジンをすでにドレインし、メインスレッドへバッチを送るため、別の消費側として生のドレインを呼ばないでください。
+
+```typescript
+engine.setMidiDestinationExternal('hardware-lead', true);
+const unsubscribe = engine.onMidiOut((events) => {
+  for (const event of events) {
+    if (event.destinationId === 0xffffffff) {
+      for (const output of externalOutputs.values()) output.send(event.bytes);
+    } else {
+      externalOutputs.get(event.destinationId)?.send(event.bytes);
+    }
+  }
+});
+```
+
+Node は同じ camelCase の生エンジンメソッドを公開します。Python では `set_midi_destination_external`、`set_external_midi_clock_enabled`、`drain_external_midi`、`external_midi_dropped_count` を使います。
 
 ## AudioWorklet での使い分け
 
@@ -637,7 +701,7 @@ function tick() {
 streamer.close();
 ```
 
-`pump()` はメイン／制御スレッドでのみ呼びます — 取得は非同期なので、オーディオスレッドでは決して呼ばないでください。自前でプロバイダを作ったクリップの着脱には `addSource` / `removeSource` を使います。
+`pump()` はメイン／制御スレッドでのみ呼びます — 取得は非同期なので、オーディオスレッドでは決して呼ばないでください。自前でプロバイダを作ったクリップの着脱には `addSource` / `removeSource` を使います。明示的なシークやループの後は `resetSource(clipId)` を呼び、古い再生ウィンドウを破棄して新しい取得世代を開始します。後方ページへのミスでもこのリセットは自動的に行われ、シーク前の処理中フェッチが後から常駐するのを防ぎます。
 
 ## 表示用の波形ピーク
 

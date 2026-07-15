@@ -54,15 +54,15 @@ Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` ar
 | Time-stretch the whole signal without changing pitch | `timeStretch(samples, sampleRate, rate)` | `time_stretch(samples, sample_rate, rate)` |
 | Correct from one MIDI note to another | `pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` | `pitch_correct_to_midi(samples, sample_rate, current_midi, target_midi)` |
 | Follow a per-frame pitch contour toward a note | `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate, hopLength, voiced?, voicedProb?)` | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate, hop_length, voiced?, voiced_prob?)` |
-| Snap a contour to a musical scale (auto-tune) | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, options)` |
+| Snap a contour to a musical scale (auto-tune) | `pitchCorrectTimevarying(samples, f0Hz, sampleRate, hopLength, options)` | `pitch_correct_timevarying(samples, f0_hz, sample_rate, hop_length, *, mode=..., scale_root=..., ...)` |
 | Stretch only a note region | `noteStretch(samples, sampleRate, { onsetSample, offsetSample, stretchRatio })` | `note_stretch(samples, sample_rate, onset_sample, offset_sample, stretch_ratio)` |
 | Edit a time-frequency region | `spectralEdit(samples, sampleRate, ops, options?)` | `spectral_edit(samples, sample_rate, ops, ...)` |
 | Shift pitch and formants independently | `voiceChange(samples, sampleRate, { pitchSemitones, formantFactor })` | `voice_change(samples, sample_rate, pitch_semitones, formant_factor)` |
 | Stateful realtime voice preset chain | `RealtimeVoiceChanger` | `RealtimeVoiceChanger` |
-| One-shot realtime voice preset render | Node native: `voiceChangeRealtime(samples, sampleRate, preset)` | `voice_change_realtime(samples, sample_rate, preset)` |
+| One-shot realtime voice preset render | `voiceChangeRealtime(samples, sampleRate, preset, options?)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
-::: tip Node native argument order
-Node native uses `timeStretch(samples, rate, sampleRate?)` and `pitchShift(samples, semitones, sampleRate?)`. The WASM/browser functions above keep `sampleRate` before the edit amount.
+::: tip Shared positional order
+Since v1.5.1, WASM and Node native use the same positional order for `timeStretch`, `pitchShift`, and `voiceChangeRealtime`: samples first, then sample rate, then the edit amount or preset.
 :::
 
 ## Usage
@@ -174,6 +174,28 @@ const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   vibratoThresholdCents: 20, // corrections under this are skipped to keep vibrato
   voiced,
 });
+```
+
+Python exposes the same controls as keyword-only arguments rather than an options dictionary:
+
+```python
+import libsonare as sonare
+
+hop_length = 256
+pitch = sonare.pitch_pyin(vocal, sample_rate, 2048, hop_length, 65, 1000, 0.1, True)
+tuned = sonare.pitch_correct_timevarying(
+    vocal,
+    pitch.f0,
+    sample_rate,
+    hop_length,
+    mode="scale",
+    scale_root=0,
+    scale_mode_mask=0xAB5,
+    retune_amount=0.8,
+    retune_speed_ms=15,
+    vibrato_threshold_cents=20,
+    voiced=pitch.voiced_flag,
+)
 ```
 
 `scaleModeMask` is a 12-bit mask where bit `i` enables the semitone `i` above `scaleRoot`, so any scale is expressible (C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`). With `mode: 'midi'` (the default) the same function behaves like `pitchCorrectToMidiTimevarying(...)`, retuning toward `targetMidi` instead of a scale. `retuneAmount` controls how hard the snap is — lower values leave a natural, human wobble; `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect. See the interactive [pitch-correction demo](./glossary/editing/pitch-correction.md) for this in action.

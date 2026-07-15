@@ -180,7 +180,7 @@ Mixer scene inserts use the same processor factory as mastering inserts, but the
 | `masteringInsertNames()` | The full list of valid insert ids |
 | `masteringInsertParamNames(name)` | The construction keys one insert accepts (band/sub-band processors list their indexed `band{i}.*` keys; an unknown name returns an empty array) |
 | `masteringInsertParamInfo(name)` | The realtime-automatable subset: each parameter's JSON key, numeric automation id, and realtime-safety flag |
-| `masteringProcessorCatalog()` | Machine-readable entries (`kind`, `realtimeInsertable`, `stereoOnly`, `channelPolicy`) for picker/filter UIs, so hosts can filter offline-only, pair, stereo-only, and surround-wrapping behavior without hard-coding processor IDs |
+| `masteringProcessorCatalog()` | Machine-readable entries (`kind`, `realtimeInsertable`, `stereoOnly`, `latencySamples`, `channelPolicy`) for picker/filter UIs. `latencySamples` is measured with a representative 48 kHz / 512-sample default configuration (0 for offline processors), so query the live processor for exact configuration-dependent latency. Hosts can filter capabilities without hard-coding processor IDs. |
 
 The Python equivalents are `mastering_insert_param_names(name)`, `mastering_insert_param_info(name)`, and `mastering_processor_catalog()`.
 

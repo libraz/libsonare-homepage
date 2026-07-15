@@ -739,6 +739,13 @@ var Mixer = class _Mixer {
     return this.mixer.tailSamples();
   }
   /**
+   * Reported latency (samples) of the compiled mixer graph, for aligning
+   * dry/wet material. Lazily compiles the routing graph if the topology is dirty.
+   */
+  latencySamples() {
+    return this.mixer.latencySamples();
+  }
+  /**
    * Drain delayed / tail audio by processing a zero-input block of `numSamples`
    * frames after the host stops feeding strip inputs. Returns the mixed stereo
    * master (`left`, `right`, `sampleRate`).
@@ -1190,7 +1197,7 @@ function latencyCompensatedVoiceChange(changer, samples, channels, blockFrames) 
   const start = latencyFrames * 2;
   return processed.slice(start, start + samples.length);
 }
-function voiceChangeRealtime(samples, options = {}) {
+function voiceChangeRealtime(samples, sampleRate = 48e3, preset = "neutral-monitor", options = {}) {
   assertSamples("voiceChangeRealtime", samples, options.validate !== false);
   const channels = options.channels ?? 1;
   if (channels !== 1 && channels !== 2) {
@@ -1199,9 +1206,8 @@ function voiceChangeRealtime(samples, options = {}) {
   if (channels === 2 && samples.length % 2 !== 0) {
     throw new Error("voiceChangeRealtime: stereo input length must be a multiple of 2.");
   }
-  const sampleRate = options.sampleRate ?? 48e3;
   const blockSize = Math.max(1, Math.floor(options.blockSize ?? 512));
-  const changer = new RealtimeVoiceChanger(options.preset ?? "neutral-monitor");
+  const changer = new RealtimeVoiceChanger(preset);
   try {
     changer.prepare(sampleRate, blockSize, channels);
     return latencyCompensatedVoiceChange(changer, samples, channels, blockSize);
@@ -1650,11 +1656,11 @@ function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, w
   validatePositiveIntegers("fourierTempogram", { hopLength, winLength });
   return requireModule9().fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
 }
-function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, options = {}) {
+function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, factors, options = {}) {
   assertSampleRate("tempogramRatio", sampleRate);
   assertSamples("tempogramRatio", tempogramData, options.validate !== false, "tempogramData");
   validatePositiveIntegers("tempogramRatio", { winLength, hopLength });
-  return requireModule9().tempogramRatio(tempogramData, winLength, sampleRate, hopLength);
+  return requireModule9().tempogramRatio(tempogramData, winLength, sampleRate, hopLength, factors);
 }
 function lufs(samples, sampleRate = 22050, options = {}) {
   assertSampleRate("lufs", sampleRate);
@@ -2836,15 +2842,36 @@ var ClipPageStreamer = class {
       throw new Error("pageFrames and numSamples must be positive");
     }
     const lastPage = Math.ceil(source.numSamples / source.pageFrames) - 1;
+    const previous = this.sources.get(source.clipId);
+    if (previous) {
+      this.resetState(previous);
+    }
     this.sources.set(source.clipId, {
       source,
       lastPage,
-      resident: new Set(initialResidentPages)
+      generation: 0,
+      lastFrontier: null,
+      resident: new Map(Array.from(initialResidentPages, (page) => [page, 0]))
     });
   }
   /** Stop tracking a clip. Does not close its binding (the caller owns that). */
   removeSource(clipId) {
+    const state = this.sources.get(clipId);
+    if (state) {
+      this.resetState(state);
+    }
     this.sources.delete(clipId);
+  }
+  /**
+   * Explicitly start a new playback generation after a host seek/loop. Resident
+   * pages are evicted and any older in-flight fetch is cleared when it settles.
+   * The next miss establishes the new bounded window.
+   */
+  resetSource(clipId) {
+    const state = this.sources.get(clipId);
+    if (state) {
+      this.resetState(state);
+    }
   }
   /**
    * Drain pending page-miss requests, fetch the missing pages plus their
@@ -2866,10 +2893,7 @@ var ClipPageStreamer = class {
         continue;
       }
       const page = Math.floor(request.sample / state.source.pageFrames);
-      const previous = frontiers.get(request.clipId);
-      if (previous === void 0 || page > previous) {
-        frontiers.set(request.clipId, page);
-      }
+      frontiers.set(request.clipId, page);
     }
     const fetches = [];
     for (const [clipId, frontier] of frontiers) {
@@ -2888,14 +2912,20 @@ var ClipPageStreamer = class {
     }
     this.closed = true;
     for (const state of this.sources.values()) {
+      this.resetState(state);
       state.source.binding.close();
     }
     this.sources.clear();
   }
   serviceFrontier(state, frontier) {
+    if (state.lastFrontier !== null && frontier < state.lastFrontier) {
+      this.resetState(state);
+    }
+    state.lastFrontier = frontier;
+    const generation = state.generation;
     const low = Math.max(0, frontier - this.retainBehindPages);
     const high = Math.min(state.lastPage, frontier + this.readAheadPages);
-    for (const page of state.resident) {
+    for (const page of state.resident.keys()) {
       if (page < low || page > high) {
         state.source.binding.provider.clear(page);
         state.resident.delete(page);
@@ -2903,27 +2933,39 @@ var ClipPageStreamer = class {
     }
     const fetches = [];
     for (let page = low; page <= high; ++page) {
-      if (state.resident.has(page)) {
+      if (state.resident.get(page) === generation) {
         continue;
       }
-      state.resident.add(page);
+      state.resident.set(page, generation);
       const pageIndex = page;
       fetches.push(
         state.source.binding.supplyPage(pageIndex).then(
           (ok) => {
-            if (!ok) {
+            if (state.generation !== generation) {
+              state.source.binding.provider.clear(pageIndex);
+            } else if (!ok && state.resident.get(pageIndex) === generation) {
               state.resident.delete(pageIndex);
             }
             return ok;
           },
           (error) => {
-            state.resident.delete(pageIndex);
+            if (state.resident.get(pageIndex) === generation) {
+              state.resident.delete(pageIndex);
+            }
             throw error;
           }
         )
       );
     }
     return fetches;
+  }
+  resetState(state) {
+    state.generation += 1;
+    state.lastFrontier = null;
+    for (const page of state.resident.keys()) {
+      state.source.binding.provider.clear(page);
+    }
+    state.resident.clear();
   }
 };
 async function attachOpfsClipStream(streamer, engine, options) {
@@ -3532,8 +3574,10 @@ var Project = class _Project {
    * built-in oscillator synth so a MIDI-only arrangement bounces to audible
    * audio. Pass a {@link BuiltinSynthBinding} (or an array of them) to choose
    * the patch and MIDI destination; omit it (or pass `{}`) for one
-   * default-destination sine patch. An explicitly empty array `[]` (or
-   * `undefined` / `null`) produces zero bindings, so MIDI tracks render silently.
+   * default-destination sine patch. Because the parameter defaults to `{}`,
+   * omission and explicit `undefined` both create that one default binding.
+   * Use an explicitly empty array `[]` (or runtime `null`) for zero bindings,
+   * so MIDI tracks render silently.
    *
    * Like {@link bounce}, omitting `totalFrames` auto-derives the render length
    * from the arrangement plus the synth's release tail.
@@ -3558,9 +3602,10 @@ var Project = class _Project {
    * string (`'saw-lead'` / `'va:saw-lead'`; see {@link synthPresetNames}), or
    * an array of either; each object entry may carry a `destinationId` binding
    * convenience (default 0), which is not part of the NativeSynth patch itself.
-   * An explicitly empty array (or `undefined` / `null`) produces zero bindings.
-   * Unknown preset names throw. Deterministic for a fixed project + options +
-   * patch.
+   * Because the parameter defaults to `{}`, omission and explicit `undefined`
+   * both create one default binding. Use an explicitly empty array `[]` (or
+   * runtime `null`) for zero bindings. Unknown preset names throw.
+   * Deterministic for a fixed project + options + patch.
    */
   bounceWithSynthInstrument(instrument = {}, options = {}) {
     return this.native.bounceWithSynthInstrument(instrument, options);
@@ -3602,8 +3647,10 @@ var Project = class _Project {
    * honored. Programs the SoundFont does not cover — including bouncing with
    * no SoundFont loaded at all — play through the built-in synthesizer GM
    * fallback bank (the data-free floor; see {@link soundFontManifest} for the
-   * per-program backend). An explicitly empty array `[]` (or `undefined` /
-   * `null`) produces zero bindings, so MIDI tracks render silently.
+   * per-program backend). Because the parameter defaults to `{}`, omission and
+   * explicit `undefined` both create one default binding. Use an explicitly
+   * empty array `[]` (or runtime `null`) for zero bindings, so MIDI tracks
+   * render silently.
    */
   bounceWithSf2Instrument(instrument = {}, options = {}) {
     return this.native.bounceWithSf2Instrument(instrument, options);
@@ -3749,6 +3796,10 @@ var Project = class _Project {
   trackCount() {
     return this.native.trackCount();
   }
+  /** Number of clips in the project. */
+  clipCount() {
+    return this.native.clipCount();
+  }
   /** Number of audio sources registered on the project. */
   sourceCount() {
     return this.native.sourceCount();
@@ -3875,14 +3926,14 @@ var SYNTH_MOD_DESTINATIONS = [
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
 function engineCapabilities() {
-  const abiVersion = getSonareModule().engineAbiVersion();
+  const abiVersion2 = getSonareModule().engineAbiVersion();
   const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
   const atomics = typeof globalThis.Atomics === "object";
   const audioWorklet = typeof AudioWorkletNode !== "undefined" || typeof globalThis.AudioWorkletProcessor !== "undefined";
   return {
-    engineAbiVersion: abiVersion,
+    engineAbiVersion: abiVersion2,
     expectedEngineAbiVersion: EXPECTED_ENGINE_ABI_VERSION,
-    abiCompatible: abiVersion === EXPECTED_ENGINE_ABI_VERSION,
+    abiCompatible: abiVersion2 === EXPECTED_ENGINE_ABI_VERSION,
     sharedArrayBuffer,
     atomics,
     audioWorklet,
@@ -4528,6 +4579,7 @@ var StreamAnalyzer = class {
       config.computeSpectral ?? defaults.computeSpectral,
       config.emitEveryNFrames ?? defaults.emitEveryNFrames,
       config.magnitudeDownsample ?? defaults.magnitudeDownsample,
+      config.maxPendingFrames ?? defaults.maxPendingFrames,
       config.keyUpdateIntervalSec ?? defaults.keyUpdateIntervalSec,
       config.bpmUpdateIntervalSec ?? defaults.bpmUpdateIntervalSec,
       config.window ?? defaults.window,
@@ -4611,6 +4663,8 @@ var StreamAnalyzer = class {
       totalFrames: s.totalFrames,
       totalSamples: s.totalSamples,
       durationSeconds: s.durationSeconds,
+      pendingFrames: s.pendingFrames,
+      droppedOutputFrames: s.droppedOutputFrames,
       estimate: {
         bpm: s.estimate.bpm,
         bpmConfidence: s.estimate.bpmConfidence,
@@ -4972,6 +5026,12 @@ function version() {
   }
   return module.version();
 }
+function abiVersion() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.abiVersion();
+}
 function engineAbiVersion() {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
@@ -5043,6 +5103,7 @@ export {
   StreamingEqualizer,
   StreamingMasteringChain,
   StreamingRetune,
+  abiVersion,
   amplitudeToDb,
   analyze,
   analyzeBpm,

@@ -134,6 +134,14 @@ Get the library version.
 function version(): string  // e.g., "{{ wasmMeta.version }}"
 ```
 
+### `abiVersion()`
+
+Returns the aggregate native ABI version across the C POD surfaces. Persist or compare it when loading a prebuilt binary so an incompatible JS/native artifact pair fails early.
+
+```typescript
+function abiVersion(): number
+```
+
 ### `projectAbiVersion()`
 
 ABI version of the project/editing POD API used by `Project` serialization, bounce, and realtime-engine clip exchange.
@@ -158,6 +166,8 @@ Use these when you need the canonical voice-character preset ID or the resolved 
 function voiceCharacterPresetId(preset: VoicePresetId | number): string | null
 function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null
 ```
+
+In v1.5.1 the resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case.
 
 ### Realtime environment helpers
 
@@ -1357,6 +1367,7 @@ function tempogramRatio(
   winLength?: number,
   sampleRate?: number,
   hopLength?: number,
+  factors?: Float32Array | number[], // default [0.5, 1, 2, 3, 4]
 ): Float32Array
 
 function plp(
@@ -1533,6 +1544,7 @@ interface StreamConfig {
   computeSpectral?: boolean;   // default: true
   emitEveryNFrames?: number;   // default: 1 (no throttling)
   magnitudeDownsample?: number;// default: 1
+  maxPendingFrames?: number;   // default: 4096; overflow drops the oldest unread frame
   keyUpdateIntervalSec?: number;  // default: 5
   bpmUpdateIntervalSec?: number;  // default: 10
   window?: number;             // 0=Hann (default), 1=Hamming, 2=Blackman, 3=Rectangular
@@ -1675,6 +1687,8 @@ interface AnalyzerStats {
   totalFrames: number;
   totalSamples: number;
   durationSeconds: number;
+  pendingFrames: number;       // unread frames currently buffered
+  droppedOutputFrames: number; // oldest frames dropped at the configured cap
   estimate: ProgressiveEstimate;
 }
 ```
@@ -2099,6 +2113,8 @@ All functions throw if the module is not initialized — call `await init()` fir
 
 Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same numeric code on every binding (WASM, Node native, Python, C ABI), so you can branch on the cause instead of matching message text. The package exports the `ErrorCode` enum, the `SonareError` class, and an `isSonareError(value)` type guard.
 
+Since v1.5.1, the facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
+
 ```typescript
 import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
 
@@ -2317,16 +2333,16 @@ try {
 
 The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterleavedBuffer`, and `createRealtimePlanarBuffer`) return WASM heap views owned by the changer. Reuse them inside a realtime loop, and discard them after `delete()`.
 
-### `voiceChangeRealtime(samples, options?)`
+### `voiceChangeRealtime(samples, sampleRate?, preset?, options?)`
 
 `voiceChangeRealtime(...)` is the offline whole-buffer convenience function around `RealtimeVoiceChanger`. It internally constructs and prepares a changer, runs the per-block render loop for you, then disposes it — matching the Python `voice_change_realtime` and Node equivalents — so callers do not manage the stateful object themselves.
 
 ```typescript
 function voiceChangeRealtime(
   samples: Float32Array,
+  sampleRate?: number, // default 48000
+  preset?: VoicePresetId | number | RealtimeVoiceChangerConfigInput,
   options?: {
-    sampleRate?: number;
-    preset?: VoicePresetId | number | RealtimeVoiceChangerConfigInput;
     channels?: 1 | 2;   // default 1 (mono); 2 = interleaved stereo (L0,R0,L1,R1,...)
     blockSize?: number; // default 512
   },
@@ -2338,7 +2354,7 @@ import { init, voiceChangeRealtime, realtimeVoiceChangerPresetNames } from '@lib
 await init();
 
 const preset = realtimeVoiceChangerPresetNames()[1]; // e.g. "bright-idol"
-const out = voiceChangeRealtime(vocal, { sampleRate: 48000, preset });
+const out = voiceChangeRealtime(vocal, 48000, preset);
 ```
 
 `channels` defaults to `1` (a plain mono buffer); pass `channels: 2` for interleaved stereo input. The output has the same layout and length as the input.
@@ -2586,6 +2602,7 @@ const offline = mixStereo([vocalL, musicL], [vocalR, musicR], sampleRate, {
 
 const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), sampleRate, 512);
 mixer.sceneWarnings(); // non-fatal scene-load warnings: insert params no processor reads (typos)
+const latency = mixer.latencySamples(); // compiled graph latency for dry/wet alignment
 const block = mixer.processStereo([vocalBlockL, musicBlockL], [vocalBlockR, musicBlockR]);
 const meter = mixer.stripMeter(0, 'postFader');
 
@@ -2614,6 +2631,7 @@ a dedicated guide.
 | Play through a SoundFont | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont Player](./soundfont-player.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime and Streaming](./realtime-streaming.md#midi-clip-scheduling-and-sampleatppq) |
 | Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime and Streaming](./realtime-streaming.md#track-lanes-buses-and-channel-strips) |
+| Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime and Streaming](./realtime-streaming.md#sending-a-track-to-external-midi-gear) |
 | Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |
 | Feed a live microphone into the engine | `bindMicrophoneInput(context, engine, ...)` <Badge type="info" text="Browser only" /> | [Recording and Takes](./recording-and-takes.md) |
 
@@ -2640,9 +2658,10 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Area | Exported types/constants |
 |------|--------------------------|
 | Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
-| Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `MarkerKind`, `ProjectMarker`, `SurroundPan` |
+| Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker`, `SurroundPan` |
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
-| Spectral and feature transforms | `MelPowerResult`, `StftPowerResult`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
+| Spectral, pitch, and feature transforms | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
+| Paged clip streaming | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
 | Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringStereoChainResult` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |

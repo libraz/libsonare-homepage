@@ -164,6 +164,8 @@ with sonare.Project() as project:
 
 :::
 
+Use `project.trackCount()` and `project.clipCount()` to update project summaries or validate imported arrangements without walking the serialized JSON. Python exposes the same values as `track_count()` and `clip_count()`.
+
 ::: danger Always release the project
 `Project`, like every WASM-backed object, holds a heap handle that JavaScript's garbage collector cannot reclaim. In the WASM package, construct it with `new Project()` and call `project.delete()` in a `finally` block. In Node native, construct it with `Project.create()` and call `project.destroy()` or `project.delete()`. In Python use `Project` as a context manager (`with sonare.Project() as project:`) or call `project.close()`. Leaking handles slowly exhausts native or WASM memory in long sessions.
 :::
@@ -196,7 +198,7 @@ project.setClipLoop(tailId, 'loop', 2, 0.05); // loop the tail every two beats w
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
+Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length (negative lengths become zero), so an oversized fade cannot start before the clip. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
 
 ::: warning `setClipGain` / `setClipFade` apply to audio clips only
 `setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades do not affect the sound. To control the volume of an instrument playing MIDI, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
@@ -642,6 +644,8 @@ try {
   fresh.delete();
 }
 ```
+
+The v1.5.1 importer contains damage locally: if one SMF track has an overlong variable-length quantity or payload, parsing resynchronizes at that track's declared boundary so later valid tracks can still import instead of the whole file failing.
 
 What an SMF round-trips is a *performance* — and engraved, that same note list is a score. The grand staff below is the notation view of a MIDI clip; press play to hear the events it stores.
 

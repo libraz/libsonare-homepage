@@ -106,6 +106,7 @@ const analyzer = new StreamAnalyzer({
   computeChroma: true,
   computeOnset: true,
   emitEveryNFrames: 4,   // throttle: emit one frame per 4 hops
+  maxPendingFrames: 256, // bound unread output; overflow drops the oldest frame
 });
 
 analyzer.process(inputBlock);
@@ -117,6 +118,8 @@ if (stats.estimate.updated) {
   console.log(stats.estimate.bpm, stats.estimate.key, stats.estimate.chordRoot);
 }
 ```
+
+`maxPendingFrames` defaults to `4096`. Set it to a smaller value for a UI that may pause or fall behind: analysis continues, the oldest unread frames are dropped, and `stats().pendingFrames` / `stats().droppedOutputFrames` report the current backlog and cumulative drops.
 
 ::: info Stream defaults differ from the batch analyzer
 `StreamAnalyzer` defaults to **44100 Hz**, not the 22050 Hz batch default. Realtime audio arrives straight from the playback/capture graph (AudioWorklet, device callbacks), which almost always runs at 44100/48000 Hz; matching that rate avoids an extra resample on the hot path and keeps timestamps aligned with the audio clock. Pass `sampleRate: audioCtx.sampleRate` so estimates and timestamps line up with what you are actually playing.
@@ -234,7 +237,7 @@ const ac  = tempogram(env, sampleRate, 512, 384, 'autocorrelation'); // default
 const cos = tempogram(env, sampleRate, 512, 384, 'cosine');
 const ft  = fourierTempogram(env, sampleRate, 512, 384);
 const cyc = cyclicTempogram(env, sampleRate, 512, 384, 60, 60);
-const ratio = tempogramRatio(ac.data, 384, sampleRate, 512);
+const ratio = tempogramRatio(ac.data, 384, sampleRate, 512, [0.5, 1, 2, 3, 4]);
 const pulse = plp(env, sampleRate, 512, 30, 300, 384);
 ```
 
@@ -370,7 +373,8 @@ Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan
 | Pan law / pan mode | `setTrackStripPanLaw(...)`, `setTrackStripPanMode(...)` | same names |
 | Independent L/R (dual) pan | `setTrackStripDualPan(trackId, left, right)` | `setTrackStripDualPan(target, left, right)` |
 | Per-lane sample delay | `setTrackStripChannelDelaySamples(trackId, samples)` | same |
-| Set one insert parameter by name | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)` (master: `setMasterStripInsertParamByName(...)`) | same, plus `setStripInsertParamByName(target, ...)` |
+| Set one insert parameter by name | `setTrackStripInsertParamByName(trackId, insertIndex, paramName, value)` (master/bus: `setMasterStripInsertParamByName(...)`, `setBusStripInsertParamByName(...)`) | same, plus `setStripInsertParamByName(target, ...)` |
+| Bypass a bus insert | `setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass?)` | same |
 
 `setTrackStripInsertParamByName(...)` is the realtime automation entry point — it addresses a parameter by the JSON key reported by [`masteringInsertParamInfo(name)`](./mastering-processors.md), so a host can change an insert's automatable parameters live without rebuilding the strip JSON. On the worklet API, `target` is a track id *or name*.
 
@@ -399,14 +403,34 @@ engine.setParameter(1, 0.5);
 
 On the `SonareEngine` worklet API you can also automate a mixer fader/pan without registering a parameter: `automationParamId(target, 'faderDb' | 'pan')` and `busAutomationParamId(busId)` return reserved engine parameter ids in the mixer namespace, so you can pass them straight to `setAutomationLane(paramId, points)` to automate a track or master fader or pan, or a bus fader (a bus id resolves to its fader gain in dB). The `target`/`busId` declares the mixer lane/bus on first use.
 
+Insert parameters use the same automation-lane mechanism, but first need a reserved id. Call `resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`, `resolveMasterInsertAutomationId(...)`, or `resolveBusInsertAutomationId(...)`, then pass the returned id to `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. `insertIndex` addresses the strip's combined pre-then-post insert sequence, and `paramName` is the JSON key reported by `masteringInsertParamInfo`. WASM/Node return `-1` for an unknown strip, insert, or key; Python raises `SonareError`.
+
+```typescript
+const thresholdId = engine.resolveBusInsertAutomationId(1, 0, 'thresholdDb');
+if (thresholdId < 0) throw new Error('bus compressor threshold is not automatable');
+engine.setAutomationLane(thresholdId, [
+  { ppq: 0, value: -18 },
+  { ppq: 8, value: -24, curveToNext: 3 },
+]);
+```
+
+`setParamSmoothingMs(ms)` changes the default glide used by smoothed fader/pan changes, insert-parameter automation, and MIDI-CC mappings. The default is `20` ms; `0` makes changes immediate. Set it once from the control thread before playback unless your host intentionally changes the global feel of automation.
+
 ### Surround group buses and wide meters
 
-A bus declared with a surround `channelLayout` (`SonareChannelLayout`: `0` mono, `1` stereo, `2` 5.1, `3` 7.1) becomes a **surround group bus**: it sums into the master plane-by-plane and exposes per-plane meters. The per-lane surround panning DSP — which would place each lane from its strip [`surroundPan`](./mixing.md#surround-and-multichannel) position — is staged: a lane's `surroundPan` value (and its own `sourceChannelLayout`) is stored on the scene and round-trips through config JSON, but does not yet drive audio panning. Declare the bus `channelLayout` today; per-lane panning activates when the surround DSP path lands.
+A bus declared with a surround `channelLayout` (`SonareChannelLayout`: `0` mono, `1` stereo, `2` 5.1, `3` 7.1) becomes a **surround group bus**: it sums into the master plane-by-plane and exposes per-plane meters. A lane routed to it is folded to a point source, then placed from its strip [`surroundPan`](./mixing.md#surround-and-multichannel) values. `azimuth`, `divergence`, and `lfe` are active; `elevation` and `distance` are reserved. The standalone `Mixer` remains stereo, so this DSP is specific to the realtime engine's wide-bus render path.
 
 ```typescript
 engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]); // a 5.1 group bus
 engine.setTrackOutputBus(1, 1);                          // route the lane into it
+engine.setTrackStripJson(1, JSON.stringify({
+  strips: [{ id: 'source', surroundPan: { azimuth: -30, divergence: 0, lfe: 0 } }],
+  buses: [],
+  connections: [],
+}));
 ```
+
+`sourceChannelLayout` on `EngineTrackLane` is currently descriptive/serialized only: the lane render still consumes mono or stereo input and folds stereo to a point source before surround placement. Do not use it as a promise that an existing 5.1/7.1 source stays discrete.
 
 Call `setTrackOutputBus(1, 0)` (or set `outputBusId: 0` in `setTrackLanes`) to fold the lane back onto the master mix.
 
@@ -447,6 +471,46 @@ engine.setMidiClips([{
 ```
 
 Looping clips repeat their event list every `loopLengthSamples`. To clear the schedule, call `setMidiClips([])`. If you work at the *project* level instead (notes in PPQ, takes, comping), build the arrangement with [Project Editing](./project-editing.md) and bounce it — this realtime schedule is the lower-level API a DAW front end compiles into.
+
+### Sending a track to external MIDI gear
+
+An **internal destination** renders MIDI through a NativeSynth/SF2 instrument inside libsonare. An **external destination** skips that instrument and places MIDI 1.0 byte messages in an output queue for your host to send to hardware or another application. libsonare prepares and timestamps the messages; opening the OS/Web MIDI port remains the host's job.
+
+For the raw `RealtimeEngine`, mark the destination, process audio as usual, then drain the output queue frequently:
+
+```typescript
+engine.setMidiDestinationExternal(2, true); // destination 2 now drives external gear
+engine.setExternalMidiClockEnabled(true);  // optional: clock + start/continue/stop
+
+engine.process([leftBlock, rightBlock]);
+for (const event of engine.drainExternalMidi(256)) {
+  if (event.destinationId === 0xffffffff) {
+    // Clock/transport is broadcast to every external port selected by the host.
+    for (const output of externalOutputs.values()) output.send(event.bytes);
+  } else {
+    externalOutputs.get(event.destinationId)?.send(event.bytes);
+  }
+}
+```
+
+Each event contains `destinationId`, `renderFrame`, and `bytes` (one lowered MIDI 1.0 message of 1–3 bytes). Clock and transport messages use the sentinel destination `0xFFFFFFFF`; channel messages retain their destination id. `maxRecords` limits the returned messages, not source events, and any remainder stays queued for the next drain. Check `externalMidiDroppedCount()` — a rising value means the fixed-capacity realtime queue filled before the host drained it.
+
+With the `SonareEngine` AudioWorklet facade, use `setMidiDestinationExternal(trackId, true)` and subscribe with `onMidiOut(callback)`. The worklet already drains its engine once per render block and posts batches to the main thread, so do not try to call the raw drain as a second consumer:
+
+```typescript
+engine.setMidiDestinationExternal('hardware-lead', true);
+const unsubscribe = engine.onMidiOut((events) => {
+  for (const event of events) {
+    if (event.destinationId === 0xffffffff) {
+      for (const output of externalOutputs.values()) output.send(event.bytes);
+    } else {
+      externalOutputs.get(event.destinationId)?.send(event.bytes);
+    }
+  }
+});
+```
+
+Node exposes the same camelCase raw-engine methods. Python uses `set_midi_destination_external`, `set_external_midi_clock_enabled`, `drain_external_midi`, and `external_midi_dropped_count`.
 
 ## AudioWorklet notes
 
@@ -621,7 +685,7 @@ function tick() {
 streamer.close();
 ```
 
-Call `pump()` on the main or control thread only — never the audio thread, since the fetches are asynchronous. Use `addSource`/`removeSource` to attach or drop clips you built providers for yourself.
+Call `pump()` on the main or control thread only — never the audio thread, since the fetches are asynchronous. Use `addSource`/`removeSource` to attach or drop clips you built providers for yourself. After an explicit seek or loop, call `resetSource(clipId)` to evict the old playback window and start a new fetch generation; backward page misses also trigger this reset automatically, preventing an older in-flight fetch from becoming resident after the seek.
 
 ## Display waveform peaks
 

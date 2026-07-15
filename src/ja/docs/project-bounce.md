@@ -163,7 +163,7 @@ try {
 }
 ```
 
-`BuiltinSynthBinding` は `waveform`（`'sine'`、`'saw'`、`'square'`、`'triangle'`）、`gain`、ADSR（`attackMs`、`decayMs`、`sustain`、`releaseMs`）、`polyphony`、そして 1 つの MIDI デスティネーションを指す `destinationId` を受け付けます。数値フィールドはすべて「0 / 省略で既定値を維持」なので、`{}` がそのまま使える既定パッチになります。複数の MIDI デスティネーションをレンダリングするにはバインディングの**配列**を渡します。明示的な空配列 `[]`（または `undefined` / `null`）は何もバインドせず、無音でレンダリングします。
+`BuiltinSynthBinding` は `waveform`（`'sine'`、`'saw'`、`'square'`、`'triangle'`）、`gain`、ADSR（`attackMs`、`decayMs`、`sustain`、`releaseMs`）、`polyphony`、そして 1 つの MIDI デスティネーションを指す `destinationId` を受け付けます。数値フィールドはすべて「0 / 省略で既定値を維持」なので、`{}` がそのまま使える既定パッチになります。複数の MIDI デスティネーションをレンダリングするにはバインディングの**配列**を渡します。引数の省略または `undefined` は既定バインディングを 1 つ作ります。何もバインドせず無音でレンダリングするには、明示的な空配列 `[]`（または実行時の `null`）を渡します。
 
 ## NativeSynth で MIDI をバウンスする
 

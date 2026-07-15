@@ -78,11 +78,11 @@ Feature families group APIs by the job they do. If you do not know an exact func
 | Scale quantization | Snap MIDI notes to a scale, measure the correction in semitones, and test pitch-class membership | [JavaScript API](./js-api.md#scale-quantization), [Python API](./python-api.md) |
 | Effects and editing | HPSS, HPSS with residual, harmonic/percussive extraction, normalize, trim, remix, phase vocoder, time stretch, pitch shift, pitch correction, note stretch, region-based spectral editing, voice pitch/formant change, realtime voice presets | [Editing DSP](./editing-dsp.md), [Spectral Editing](./spectral-editing.md), [JavaScript API](./js-api.md#audio-effects) |
 | Room acoustics | Impulse-response reverberation time (RT60 / EDT), clarity (C50 / C80), definition (D50), blind acoustic estimation, equivalent-room estimation, geometric RIR synthesis, and creative room morphing | [Room Acoustics](./acoustic-analysis.md), [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
-| Mixing | Channel strips, buses, sends, VCA groups, scene presets, automation, stereo/dual/surround pan metadata, meters, goniometer, offline rendering | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
+| Mixing | Channel strips, buses, sends, VCA groups, scene presets, automation, stereo/dual pan, realtime-engine 5.1/7.1 surround pan, meters, goniometer, offline rendering | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | Mastering assistant | Source audio profile, chain suggestion JSON, streaming-platform preview JSON | [Mastering Assistant](./mastering-assistant.md) |
 | Mastering | Presets, full chains, named processors, processor catalog metadata, insert parameter metadata, pair processors, pair analyses, stereo analyses, streaming mastering chain | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Algorithm References](./algorithm-references.md), [Mastering Implementation](./mastering-implementation.md) |
 | Streaming MIR | Live mel/chroma/onset frames, BPM/key/chord estimates that update over time, chord progression and pattern scores | [Realtime and Streaming](./realtime-streaming.md), [WASM](./wasm.md#streaming-analysis) |
-| Realtime engine | Transport, tempo, structured markers, metronome, automation lanes, graph topology, clips, MIDI clip schedule, per-track lane mixer (lanes, buses, sends, channel strips, pan, insert parameters), capture, monitor bus, stereo/wide meter telemetry, scope telemetry and Worklet scope rings, bounce/freeze | [Realtime and Streaming](./realtime-streaming.md) |
+| Realtime engine | Transport, tempo, structured markers, metronome, automation lanes, graph topology, clips, MIDI clip schedule, per-track lane mixer (lanes, buses, sends, channel strips, surround pan, insert parameters), external MIDI output/clock, capture, monitor bus, stereo/wide meter telemetry, scope telemetry and Worklet scope rings, bounce/freeze | [Realtime and Streaming](./realtime-streaming.md) |
 | Projects & arrangement | Audio/MIDI tracks and clips, undo/redo, takes/comping, warp, MIDI sequencing, SMF and MIDI 2.0 Clip File (`SMF2CLIP`) import/export, JSON save/load, and offline bounce | [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Recording and Takes](./recording-and-takes.md), [Realtime and Streaming](./realtime-streaming.md) |
 | Instruments & MIDI | Multi-engine synth with a GM fallback bank, GS-compatible SoundFont 2 player, and live MIDI playback | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md) |
 | Inverse features | Mel to STFT/audio, MFCC to mel/audio | [Inverse Features](./inverse-features.md) |
@@ -105,8 +105,8 @@ The main `@libraz/libsonare` TypeScript package exports several groups:
 
 | Group | Examples |
 |-------|----------|
-| Initialization | `init`, `isInitialized`, `version` |
-| Engine capabilities | `engineAbiVersion`, `projectAbiVersion`, `voiceChangerAbiVersion`, `engineCapabilities` |
+| Initialization and ABI checks | `init`, `isInitialized`, `version`, `abiVersion`, `engineAbiVersion`, `projectAbiVersion`, `voiceChangerAbiVersion` |
+| Engine capabilities | `engineCapabilities` |
 | Audio work | High-level analysis, effects/editing, mastering, mixing, feature extraction, inverse features, conversion helpers |
 | Object APIs | `Audio`, `StreamAnalyzer`, `StreamingMasteringChain`, `StreamingEqualizer`, `StreamingRetune`, `RealtimeVoiceChanger`, `Mixer`, `RealtimeEngine` |
 

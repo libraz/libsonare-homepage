@@ -109,6 +109,8 @@ There are two queueing paths, and you should pick one per destination. Rule of t
 - **The engine-owned live input source** — `setMidiInputSource(destinationId)` opens a dedicated input lane, then `pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` send events with a `portTimeSamples` timestamp. This is the lane the Web MIDI bridge feeds for you.
 - **Live SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` queues a full SysEx frame to a destination; `data` is the complete message including the leading `0xF0` and trailing `0xF7` (1..512 bytes), and `renderFrame` follows the same immediate/schedule convention as the other `pushMidi*` calls. Its primary use is delivering a GS/GM reset or a GS insertion-effect (EFX) selection to a live SF2-bound destination without stopping playback — see [SoundFont Player](./soundfont-player.md) for what that SysEx selects.
 
+Node uses the same `pushMidiSysex(...)` name. Python exposes `push_midi_sysex(destination_id, data, render_frame=-1)` and accepts the complete frame as `bytes` or another byte sequence. The C ABI entry point is `sonare_engine_push_midi_sysex(...)`.
+
 ```typescript
 // Immediate path: fire a note at the start of the next block.
 engine.pushMidiNoteOn(/* destinationId */ 0, /* group */ 0, /* channel */ 0, /* note */ 60, /* velocity */ 100, -1);
@@ -153,9 +155,13 @@ engine.setMidiFx(/* destinationId */ 0, JSON.stringify({ transpose_semitones: 12
 engine.clearMidiFx(0);   // clears this destination only (the id defaults to 0 if omitted)
 ```
 
+Python exposes the same live replacement in v1.5.1 as `engine.set_midi_fx(destination_id, config_json)`; use `engine.clear_midi_fx(destination_id)` to remove it.
+
 The JSON schema is the same one [`bakeMidiFx`](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
 
 `setMidiFx` *replaces* the insert in place without resetting the instrument's voices, so the common case — swapping one transform for another between phrases — leaves sounding notes untouched. Two safety notes for changing FX while keys are held:
+
+The call publishes an immutable configuration from the control thread and the audio thread adopts it at the next block boundary, so it may run while engine processing is active.
 
 - If you are unsure of the current state, clear the FX first.
 - If a transform changes how note-offs are routed and a note is left ringing, follow the swap with a panic (below).

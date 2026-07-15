@@ -163,7 +163,7 @@ try {
 }
 ```
 
-A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. Pass an **array** of bindings to render several MIDI destinations; an explicitly empty array `[]` (or `undefined` / `null`) binds nothing and renders silently.
+A `BuiltinSynthBinding` accepts `waveform` (`'sine'`, `'saw'`, `'square'`, `'triangle'`), `gain`, ADSR (`attackMs`, `decayMs`, `sustain`, `releaseMs`), `polyphony`, and a `destinationId` to target one MIDI destination. Every numeric field uses "0 / omit keeps the default", so `{}` is a usable default patch. Pass an **array** of bindings to render several MIDI destinations. Omitting the argument or passing `undefined` creates one default binding; pass an explicitly empty array `[]` (or runtime `null`) to bind nothing and render silently.
 
 ## Bounce MIDI through the NativeSynth
 
