@@ -842,7 +842,31 @@ Bands can be Python dictionaries or JSON strings. `set_phase_mode(...)` accepts 
 
 ## Mastering API
 
-Python exposes the same named mastering processors as the browser demo. Use the name-list helpers to inspect the active build, then call mono, stereo, pair, or analysis APIs with explicit parameters.
+Python exposes the same named mastering processors as the browser demo. Use the name-list helpers to inspect the active build, then call mono, stereo, pair, or analysis APIs with explicit parameters. A full chain runs its stages in a fixed order:
+
+<FlowDiagram
+  title="Mastering chain order"
+  :nodes="[
+    { id: 'repair', label: 'Repair', col: 0, row: 0, variant: 'accent' },
+    { id: 'eq', label: 'EQ', col: 1, row: 0 },
+    { id: 'dynamics', label: 'Dynamics', col: 2, row: 0 },
+    { id: 'saturation', label: 'Saturation', col: 3, row: 0 },
+    { id: 'spectral', label: 'Spectral', col: 4, row: 0 },
+    { id: 'stereo', label: 'Stereo', col: 5, row: 0 },
+    { id: 'maximizer', label: 'Maximizer', col: 6, row: 0 },
+    { id: 'loudness', label: 'Loudness', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'repair', to: 'eq' },
+    { from: 'eq', to: 'dynamics' },
+    { from: 'dynamics', to: 'saturation' },
+    { from: 'saturation', to: 'spectral' },
+    { from: 'spectral', to: 'stereo' },
+    { from: 'stereo', to: 'maximizer' },
+    { from: 'maximizer', to: 'loudness' }
+  ]"
+  caption="Only the stages you configure are activated, but whichever are enabled run in this order."
+/>
 
 ```python
 import json

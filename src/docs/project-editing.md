@@ -417,6 +417,34 @@ project.getOverlapPolicy();  // read it back
 
 A **warp map** is a list of anchors, and each anchor is a "this moment in the recording belongs here on the timeline" pin. Concretely, each `ProjectWarpAnchor` ties a `warpSample` (a position on the project/warped timeline) to a `sourceSample` (the matching position in the recorded audio); the engine stretches the audio smoothly between consecutive anchors.
 
+<FlowDiagram
+  title="Warp anchors map recording time onto project time"
+  :nodes="[
+    { id: 'r0', label: '0', col: 0, row: 0, group: 'rec' },
+    { id: 'r1', label: '12000', col: 1, row: 0, group: 'rec' },
+    { id: 'r2', label: '24000', col: 2, row: 0, group: 'rec' },
+    { id: 'r3', label: '48000', col: 3, row: 0, group: 'rec' },
+    { id: 'p0', label: '0', col: 0, row: 1, variant: 'accent', group: 'proj' },
+    { id: 'p1', label: '12000', col: 1, row: 1, variant: 'accent', group: 'proj' },
+    { id: 'p2', label: '36000', col: 2, row: 1, variant: 'accent', group: 'proj' },
+    { id: 'p3', label: '48000', col: 3, row: 1, variant: 'accent', group: 'proj' }
+  ]"
+  :edges="[
+    { from: 'r0', to: 'p0', style: 'dashed' },
+    { from: 'r1', to: 'p1', style: 'dashed' },
+    { from: 'r2', to: 'p2', style: 'dashed' },
+    { from: 'r3', to: 'p3', style: 'dashed' },
+    { from: 'p0', to: 'p1', label: '1× (as recorded)' },
+    { from: 'p1', to: 'p2', label: '2× stretch' },
+    { from: 'p2', to: 'p3', label: '0.5× (faster)' }
+  ]"
+  :groups="[
+    { id: 'rec', label: 'Recording timeline (sourceSample)' },
+    { id: 'proj', label: 'Project timeline (warpSample)' }
+  ]"
+  caption="Each dashed pin ties one sourceSample to its warpSample; between consecutive anchors the engine stretches the audio at that segment's ratio."
+/>
+
 ```typescript
 // Define a reusable warp map, then attach it to a clip.
 project.setWarpMap({

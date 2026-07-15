@@ -283,6 +283,35 @@ auto result = analyzer.analyze();
 
 ランタイム横断の例や境界ウィンドウでのクリップストリーミングは [リアルタイムストリーミング](./realtime-streaming.md) を参照してください。
 
+フレームはオーディオコールバックから内部の上限付きキューに入り、転送コストに合わせた表現で読み出します。3 つの読み出しメソッドは同じキューを消費するので、消費側ごとに 1 つを選びます。
+
+<FlowDiagram
+  title="StreamAnalyzer の読み出し経路"
+  :nodes="[
+    { id: 'callback', label: 'オーディオコールバックスレッド', col: 0, row: 1, variant: 'accent' },
+    { id: 'process', label: 'analyzer.process()', col: 1, row: 1, variant: 'accent' },
+    { id: 'queue', label: '上限付きフレームキュー', col: 2, row: 1 },
+    { id: 'aos', label: 'read_frames() — AoS の StreamFrame', col: 3, row: 0, group: 'read' },
+    { id: 'soa', label: 'read_frames_soa() — SoA の FrameBuffer', col: 3, row: 1, group: 'read' },
+    { id: 'quant', label: 'read_frames_quantized_u8 / _i16', col: 3, row: 2, variant: 'muted', group: 'read' },
+    { id: 'consumer', label: '消費側 / Worker / UI スレッド', col: 4, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'callback', to: 'process' },
+    { from: 'process', to: 'queue', label: 'available_frames()' },
+    { from: 'queue', to: 'aos', label: 'フル float' },
+    { from: 'queue', to: 'soa', label: 'フル float・連続配置' },
+    { from: 'queue', to: 'quant', label: '任意の 8/16bit', style: 'dashed' },
+    { from: 'aos', to: 'consumer', label: 'フレーム単位の構造体' },
+    { from: 'soa', to: 'consumer', label: 'キャッシュ効率よく安価に受け渡し' },
+    { from: 'quant', to: 'consumer', label: '帯域幅 1/4 ・ 1/2' }
+  ]"
+  :groups="[
+    { id: 'read', label: '読み出し形式（消費側ごとに 1 つ選ぶ）' }
+  ]"
+  caption="フル float の読み出しは精度をすべて保ちます。SoA は同じ float を連続配置して安価に転送でき、任意の 8/16bit 量子化読み出しは精度と引き換えにバッファを 1/4・1/2 に縮め、Worker や UI スレッドへ渡すのに向きます。"
+/>
+
 ### 設定
 
 ```cpp

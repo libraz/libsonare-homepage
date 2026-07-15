@@ -417,6 +417,34 @@ project.getOverlapPolicy();  // 読み戻す
 
 **ワープマップ**はアンカーのリストで、各アンカーは「録音中のこの瞬間をタイムライン上のここに置く」というピンです。具体的には、各 `ProjectWarpAnchor` が `warpSample`（プロジェクト／ワープ後タイムライン上の位置）を `sourceSample`（録音音声内の対応位置）に結びつけ、エンジンは隣り合うアンカーの間で音声を滑らかに伸縮させます。
 
+<FlowDiagram
+  title="ワープアンカーは録音時間をプロジェクト時間へ対応づける"
+  :nodes="[
+    { id: 'r0', label: '0', col: 0, row: 0, group: 'rec' },
+    { id: 'r1', label: '12000', col: 1, row: 0, group: 'rec' },
+    { id: 'r2', label: '24000', col: 2, row: 0, group: 'rec' },
+    { id: 'r3', label: '48000', col: 3, row: 0, group: 'rec' },
+    { id: 'p0', label: '0', col: 0, row: 1, variant: 'accent', group: 'proj' },
+    { id: 'p1', label: '12000', col: 1, row: 1, variant: 'accent', group: 'proj' },
+    { id: 'p2', label: '36000', col: 2, row: 1, variant: 'accent', group: 'proj' },
+    { id: 'p3', label: '48000', col: 3, row: 1, variant: 'accent', group: 'proj' }
+  ]"
+  :edges="[
+    { from: 'r0', to: 'p0', style: 'dashed' },
+    { from: 'r1', to: 'p1', style: 'dashed' },
+    { from: 'r2', to: 'p2', style: 'dashed' },
+    { from: 'r3', to: 'p3', style: 'dashed' },
+    { from: 'p0', to: 'p1', label: '1×（録音のまま）' },
+    { from: 'p1', to: 'p2', label: '2× 伸長' },
+    { from: 'p2', to: 'p3', label: '0.5×（速く）' }
+  ]"
+  :groups="[
+    { id: 'rec', label: '録音タイムライン（sourceSample）' },
+    { id: 'proj', label: 'プロジェクトタイムライン（warpSample）' }
+  ]"
+  caption="破線のピンが各 sourceSample を warpSample に結びつけ、隣り合うアンカーの間ではその区間の比率で音声を伸縮します。"
+/>
+
 ```typescript
 // 再利用できるワープマップを定義し、クリップに割り当てる
 project.setWarpMap({

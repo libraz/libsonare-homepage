@@ -155,6 +155,8 @@ Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enou
 
 The two functions above pull toward a single note. When a whole vocal line should follow a **key** — each note snapped to the nearest tone of, say, C major — use `pitchCorrectTimevarying(...)`. It takes the same per-frame F0 contour but reads its target and correction feel from an options object, and `mode: 'scale'` is the classic auto-tune behavior: every voiced frame is pulled to the closest scale tone rather than one fixed pitch.
 
+<SonareDemo id="pitch-correct" />
+
 ```typescript
 import { init, pitchPyin, pitchCorrectTimevarying } from '@libraz/libsonare';
 
@@ -302,6 +304,32 @@ Load them as inserts on a strip (see [Mixing Engine](./mixing.md)) rather than a
 ::: info Offline transforms vs arrange-time warp
 The functions on this page are **offline** transforms: you hand them a buffer and get a new buffer back. They are different from **arrange-time warp** — clip repitch and tempo-sync inside a project, where a clip follows the timeline rather than being baked once. For that project-level workflow, see [Project Editing](./project-editing.md).
 :::
+
+The same offline-versus-realtime split shows up in the [`voiceChange(...)` versus `RealtimeVoiceChanger`](#offline-voicechange-vs-realtimevoicechanger) distinction above. It comes down to two processing shapes:
+
+<FlowDiagram
+  title="Offline buffer transform vs realtime block loop"
+  :nodes="[
+    { id: 'off-in', label: 'Whole buffer in', col: 0, row: 0, group: 'offline' },
+    { id: 'off-fn', label: 'voiceChange() / pitchShift()', col: 1, row: 0, group: 'offline' },
+    { id: 'off-out', label: 'New buffer out', col: 2, row: 0, variant: 'success', group: 'offline' },
+    { id: 'rt-in', label: 'Audio block in', col: 0, row: 1, group: 'realtime' },
+    { id: 'rt-fn', label: 'prepare() → processMono() loop', col: 1, row: 1, variant: 'accent', group: 'realtime' },
+    { id: 'rt-out', label: 'Block out', col: 2, row: 1, variant: 'success', group: 'realtime' }
+  ]"
+  :edges="[
+    { from: 'off-in', to: 'off-fn', label: 'all at once' },
+    { from: 'off-fn', to: 'off-out' },
+    { from: 'rt-in', to: 'rt-fn', label: 'per block' },
+    { from: 'rt-fn', to: 'rt-out' },
+    { from: 'rt-out', to: 'rt-fn', label: 'state persists', style: 'dashed' }
+  ]"
+  :groups="[
+    { id: 'offline', label: 'Offline (stateless)' },
+    { id: 'realtime', label: 'Realtime / arrange-time (stateful)' }
+  ]"
+  caption="Offline hands the whole signal to a function and gets one buffer back. The realtime path loops over blocks and keeps DSP state between them, so the tail of one block carries into the next."
+/>
 
 ## Practical Notes
 

@@ -155,6 +155,8 @@ const tuned = pitchCorrectToMidiTimevarying(
 
 上の 2 つの関数は 1 つの音へ寄せます。ボーカルライン全体を**キー**に沿わせたい — 各音を C メジャーなどの最も近い構成音へスナップしたい — ときは `pitchCorrectTimevarying(...)` を使います。同じフレームごとの F0 輪郭を取りますが、目標と補正の効き方をオプションオブジェクトから読み、`mode: 'scale'` が古典的なオートチューンの挙動になります。1 つの固定音ではなく、有声フレームごとに最も近い音階音へ引き寄せます。
 
+<SonareDemo id="pitch-correct" />
+
 ```typescript
 import { init, pitchPyin, pitchCorrectTimevarying } from '@libraz/libsonare';
 
@@ -306,6 +308,32 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 ::: info オフライン変換とアレンジ時のワープの違い
 このページの関数は**オフライン**変換です。バッファを渡すと新しいバッファが返ります。これは**アレンジ時のワープ**、つまりプロジェクト内でのクリップのリピッチやテンポ同期とは別物です。後者ではクリップが一度焼き込まれるのではなく、タイムラインに追従します。そのプロジェクトレベルのワークフローは [プロジェクト編集](./project-editing.md) を参照してください。
 :::
+
+同じオフラインとリアルタイムの違いは、上の [`voiceChange(...)` と `RealtimeVoiceChanger`](#オフライン-voicechange-と-realtimevoicechanger) の区別にも表れます。要は 2 つの処理の形です。
+
+<FlowDiagram
+  title="オフラインのバッファ変換とリアルタイムのブロックループ"
+  :nodes="[
+    { id: 'off-in', label: 'バッファ全体を入力', col: 0, row: 0, group: 'offline' },
+    { id: 'off-fn', label: 'voiceChange() / pitchShift()', col: 1, row: 0, group: 'offline' },
+    { id: 'off-out', label: '新しいバッファを出力', col: 2, row: 0, variant: 'success', group: 'offline' },
+    { id: 'rt-in', label: 'オーディオブロックを入力', col: 0, row: 1, group: 'realtime' },
+    { id: 'rt-fn', label: 'prepare() → processMono() ループ', col: 1, row: 1, variant: 'accent', group: 'realtime' },
+    { id: 'rt-out', label: 'ブロックを出力', col: 2, row: 1, variant: 'success', group: 'realtime' }
+  ]"
+  :edges="[
+    { from: 'off-in', to: 'off-fn', label: '一括' },
+    { from: 'off-fn', to: 'off-out' },
+    { from: 'rt-in', to: 'rt-fn', label: 'ブロックごと' },
+    { from: 'rt-fn', to: 'rt-out' },
+    { from: 'rt-out', to: 'rt-fn', label: '状態を保持', style: 'dashed' }
+  ]"
+  :groups="[
+    { id: 'offline', label: 'オフライン（ステートレス）' },
+    { id: 'realtime', label: 'リアルタイム／アレンジ時（ステートフル）' }
+  ]"
+  caption="オフラインは信号全体を関数に渡して 1 つのバッファを受け取ります。リアルタイム経路はブロックごとに処理し、ブロック間で DSP の状態を保つため、あるブロックの末尾が次のブロックへ引き継がれます。"
+/>
 
 ## 実用上の注意
 

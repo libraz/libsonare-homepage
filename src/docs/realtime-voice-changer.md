@@ -58,6 +58,30 @@ The realtime chain is more than a pitch shifter. Built-in presets combine these 
 
 The demo above isolates just the **Retune** stage (pitch shift) so you can hear it on its own. A full preset layers the formant, EQ, dynamics, and ambience stages from the table below on top of it.
 
+<FlowDiagram
+  title="Preset signal chain"
+  :nodes="[
+    { id: 'retune', label: 'Retune', col: 0, row: 0, variant: 'accent' },
+    { id: 'formant', label: 'Formant', col: 1, row: 0 },
+    { id: 'eq', label: 'EQ', col: 2, row: 0 },
+    { id: 'gate', label: 'Gate', col: 3, row: 0 },
+    { id: 'comp', label: 'Compressor', col: 4, row: 0 },
+    { id: 'deesser', label: 'De-esser', col: 5, row: 0 },
+    { id: 'reverb', label: 'Reverb', col: 6, row: 0 },
+    { id: 'limiter', label: 'Limiter', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'retune', to: 'formant' },
+    { from: 'formant', to: 'eq' },
+    { from: 'eq', to: 'gate' },
+    { from: 'gate', to: 'comp' },
+    { from: 'comp', to: 'deesser' },
+    { from: 'deesser', to: 'reverb' },
+    { from: 'reverb', to: 'limiter' }
+  ]"
+  caption="Every built-in preset runs each block through these stages in order; the table below covers what each one does."
+/>
+
 | Stage | Purpose |
 |-------|---------|
 | Retune | Shifts the note pitch up or down by the preset's semitone amount (e.g. for a higher or lower voice), and where the preset enables it, pulls held notes toward the nearest scale tone — the pitch-shift stage of the chain |

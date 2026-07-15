@@ -860,7 +860,31 @@ with sonare.StreamingEqualizer(sample_rate=48000, max_block_size=512) as eq:
 
 ## マスタリング API
 
-Python からもブラウザデモと同じ名前付きマスタリングプロセッサを利用できます。まず一覧取得用のヘルパー関数で、現在のビルドに含まれるプロセッサ名を確認したうえで、モノラル／ステレオ／ペア／解析の各 API をパラメータ明示で呼び出します。
+Python からもブラウザデモと同じ名前付きマスタリングプロセッサを利用できます。まず一覧取得用のヘルパー関数で、現在のビルドに含まれるプロセッサ名を確認したうえで、モノラル／ステレオ／ペア／解析の各 API をパラメータ明示で呼び出します。フルチェーンは各ステージを下の固定順で実行します。
+
+<FlowDiagram
+  title="マスタリングチェーンの順序"
+  :nodes="[
+    { id: 'repair', label: 'リペア', col: 0, row: 0, variant: 'accent' },
+    { id: 'eq', label: 'EQ', col: 1, row: 0 },
+    { id: 'dynamics', label: 'ダイナミクス', col: 2, row: 0 },
+    { id: 'saturation', label: 'サチュレーション', col: 3, row: 0 },
+    { id: 'spectral', label: 'スペクトル', col: 4, row: 0 },
+    { id: 'stereo', label: 'ステレオ', col: 5, row: 0 },
+    { id: 'maximizer', label: 'マキシマイザー', col: 6, row: 0 },
+    { id: 'loudness', label: 'ラウドネス', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'repair', to: 'eq' },
+    { from: 'eq', to: 'dynamics' },
+    { from: 'dynamics', to: 'saturation' },
+    { from: 'saturation', to: 'spectral' },
+    { from: 'spectral', to: 'stereo' },
+    { from: 'stereo', to: 'maximizer' },
+    { from: 'maximizer', to: 'loudness' }
+  ]"
+  caption="有効化したステージだけが処理されますが、有効なステージは常にこの順で実行されます。"
+/>
 
 ```python
 import json

@@ -380,6 +380,33 @@ engine.destroy();
 
 音声スレッドは要求を積むことと、すでに読み込まれたページを読むことしか行わないため、ストレージやアロケーションでブロックしません。
 
+<FlowDiagram
+  title="ロックフリーなクリップページの受け渡し"
+  direction="TB"
+  :nodes="[
+    { id: 'need', label: 'レンダースレッドがページ N を要求', col: 0, row: 0, variant: 'accent', group: 'audio' },
+    { id: 'push', label: 'ウェイトフリーキューへ要求を積む', col: 0, row: 1, variant: 'accent', group: 'audio' },
+    { id: 'pop', label: 'popClipPageRequest() でキューを排出', col: 1, row: 2, group: 'main' },
+    { id: 'read', label: 'ストレージからページ音声を読む', col: 1, row: 3, group: 'main' },
+    { id: 'supply', label: 'provider.supply(pageIndex, channels)', col: 1, row: 4, variant: 'success', group: 'main' },
+    { id: 'consume', label: 'レンダースレッドが供給済みページを読む', col: 0, row: 5, variant: 'success', group: 'audio' },
+    { id: 'clear', label: 'provider.clear(pageIndex)', col: 1, row: 6, variant: 'muted', group: 'main' }
+  ]"
+  :edges="[
+    { from: 'need', to: 'push' },
+    { from: 'push', to: 'pop', label: 'ページ要求' },
+    { from: 'pop', to: 'read' },
+    { from: 'read', to: 'supply' },
+    { from: 'supply', to: 'consume', label: 'ページ準備完了' },
+    { from: 'consume', to: 'clear', label: '不要になったら', style: 'dashed' }
+  ]"
+  :groups="[
+    { id: 'audio', label: 'オーディオ／レンダースレッド' },
+    { id: 'main', label: 'メインスレッド' }
+  ]"
+  caption="音声スレッドは要求を積むことと供給済みページを読むことだけを行い、遅いストレージ読み取りはメインスレッドで行われます。"
+/>
+
 ::: info ロックフリーとウェイトフリー（初心者向け）
 リアルタイム音声スレッドは止まってはいけません。ほんの一瞬でも停滞すると出力にノイズが乗ります。**ロックフリー**とは、音声スレッドが他スレッドの保持するロックの解放を待たないことです。ここで使うより強い保証が**ウェイトフリー**で、ページ欠落要求をページ要求キューへ積む処理は必ず有限ステップで完了します。そのため音声スレッドがそこで待ったりスピンしたりすることがありません。遅い部分（ストレージからのページ読み取り）は、代わりにメインスレッドで行われます。
 :::

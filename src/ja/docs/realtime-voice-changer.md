@@ -58,6 +58,30 @@
 
 上のデモは**リチューン**段（ピッチシフト）だけを取り出して、その効果を単体で聞けるようにしたものです。実際のプリセットは、下の表にあるフォルマント・EQ・ダイナミクス・空間処理の各段をこれに重ねます。
 
+<FlowDiagram
+  title="プリセットの信号チェーン"
+  :nodes="[
+    { id: 'retune', label: 'リチューン', col: 0, row: 0, variant: 'accent' },
+    { id: 'formant', label: 'フォルマント', col: 1, row: 0 },
+    { id: 'eq', label: 'EQ', col: 2, row: 0 },
+    { id: 'gate', label: 'ゲート', col: 3, row: 0 },
+    { id: 'comp', label: 'コンプレッサー', col: 4, row: 0 },
+    { id: 'deesser', label: 'ディエッサー', col: 5, row: 0 },
+    { id: 'reverb', label: 'リバーブ', col: 6, row: 0 },
+    { id: 'limiter', label: 'リミッター', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'retune', to: 'formant' },
+    { from: 'formant', to: 'eq' },
+    { from: 'eq', to: 'gate' },
+    { from: 'gate', to: 'comp' },
+    { from: 'comp', to: 'deesser' },
+    { from: 'deesser', to: 'reverb' },
+    { from: 'reverb', to: 'limiter' }
+  ]"
+  caption="どの組み込みプリセットも、各ブロックをこの順で各段に通します。下の表で各段の役割を説明します。"
+/>
+
 | 段 | 役割 |
 |----|------|
 | リチューン | プリセットが指定する半音値だけピッチを上下させ（例: 声を高く／低く）、プリセットが有効にしている場合は持続音を最も近い音階音へ寄せる。チェーンの中のピッチシフト段 |

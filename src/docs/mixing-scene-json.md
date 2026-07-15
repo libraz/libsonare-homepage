@@ -208,7 +208,25 @@ This is the actual output of `mixingScenePresetJson('vocalReverbSend')` (default
 }
 ```
 
-Trace the reverb: the **vocal** strip's post-fader send feeds the **vocal-verb** aux bus; that bus connects to the **vocal-verb-return** strip (which hosts the plate reverb); the return connects to **master**. The dry vocal also connects straight to **master**. One reverb instance, dry and wet kept separate.
+Trace the reverb below: one reverb instance, with the dry vocal and the wet return kept as separate paths to **master**.
+
+<FlowDiagram
+  title="Reverb-send signal path"
+  direction="LR"
+  :nodes="[
+    { id: 'vocal', label: 'vocal (strip)', col: 0, row: 0 },
+    { id: 'bus', label: 'vocal-verb (aux bus)', col: 1, row: 1 },
+    { id: 'return', label: 'vocal-verb-return (plate reverb)', col: 2, row: 1, variant: 'accent' },
+    { id: 'master', label: 'master', col: 3, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'vocal', to: 'master', label: 'dry' },
+    { from: 'vocal', to: 'bus', label: 'post-fader send' },
+    { from: 'bus', to: 'return' },
+    { from: 'return', to: 'master', label: 'wet' }
+  ]"
+  caption="The vocal strip connects straight to master (dry) and, via a post-fader send, into the vocal-verb aux bus; that bus feeds the vocal-verb-return strip hosting the plate reverb, which returns to master (wet)."
+/>
 
 ::: tip The `eq.parametric` insert uses band-indexed keys
 The `eq.parametric` insert reads **band-indexed** keys — `band{N}.type`, `band{N}.frequencyHz`, `band{N}.gainDb`, `band{N}.q`, and the per-band dynamic-EQ fields. In this preset, `band0` is an 80 Hz high-pass (`"band0.type": 4` is `HighPass` in the EQ band-type enum) and `band1` is a +2 dB presence bell at 4 kHz — a working high-pass + presence boost.

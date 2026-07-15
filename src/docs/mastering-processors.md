@@ -74,6 +74,10 @@ A normal compressor turns the loud parts down.
 Use it when you want density and "glue" without flattening transients. It is also called New York compression. `dynamics.transientShaper` is the related tool for the opposite goal: exaggerating or softening the attack of each hit.
 :::
 
+Drag the threshold and ratio to watch the transfer curve bend and hear a `dynamics.compressor` work on a live signal:
+
+<SonareDemo id="compressor-curve" />
+
 ## Processor Families In Plain English
 
 The exact IDs matter for code, but users usually choose by *role*:

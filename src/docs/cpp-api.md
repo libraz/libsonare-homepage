@@ -292,6 +292,35 @@ Use `MusicAnalyzer` for all-in-one analysis of pre-recorded files. Use `StreamAn
 
 For cross-runtime examples and bounded-window clip streaming, see [Realtime Streaming](./realtime-streaming.md).
 
+Frames flow from the audio callback into a bounded internal queue, and you read them out in whichever representation matches your transport budget. All three read methods drain the same queue — pick one per consumer.
+
+<FlowDiagram
+  title="StreamAnalyzer read path"
+  :nodes="[
+    { id: 'callback', label: 'Audio-callback thread', col: 0, row: 1, variant: 'accent' },
+    { id: 'process', label: 'analyzer.process()', col: 1, row: 1, variant: 'accent' },
+    { id: 'queue', label: 'Bounded frame queue', col: 2, row: 1 },
+    { id: 'aos', label: 'read_frames() — AoS StreamFrame', col: 3, row: 0, group: 'read' },
+    { id: 'soa', label: 'read_frames_soa() — SoA FrameBuffer', col: 3, row: 1, group: 'read' },
+    { id: 'quant', label: 'read_frames_quantized_u8 / _i16', col: 3, row: 2, variant: 'muted', group: 'read' },
+    { id: 'consumer', label: 'Consumer / worker / UI thread', col: 4, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'callback', to: 'process' },
+    { from: 'process', to: 'queue', label: 'available_frames()' },
+    { from: 'queue', to: 'aos', label: 'full float' },
+    { from: 'queue', to: 'soa', label: 'full float, contiguous' },
+    { from: 'queue', to: 'quant', label: 'optional 8-/16-bit', style: 'dashed' },
+    { from: 'aos', to: 'consumer', label: 'per-frame structs' },
+    { from: 'soa', to: 'consumer', label: 'cache-friendly, cheap to hand off' },
+    { from: 'quant', to: 'consumer', label: '4x / 2x less bandwidth' }
+  ]"
+  :groups="[
+    { id: 'read', label: 'Read format (pick one per consumer)' }
+  ]"
+  caption="Full-float reads keep every bit of precision; SoA packs the same floats contiguously for cheap transfer; the optional 8-/16-bit quantized reads trade precision for 4x / 2x smaller buffers when handing frames to a worker or UI thread."
+/>
+
 ### Configuration
 
 ```cpp

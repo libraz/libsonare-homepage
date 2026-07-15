@@ -365,6 +365,33 @@ The flow is lock-free by design:
 
 Because the audio thread only enqueues requests and reads already-supplied pages, it never blocks on storage or allocation.
 
+<FlowDiagram
+  title="Lock-free paged-clip page handoff"
+  direction="TB"
+  :nodes="[
+    { id: 'need', label: 'Render thread needs page N', col: 0, row: 0, variant: 'accent', group: 'audio' },
+    { id: 'push', label: 'Push request onto wait-free queue', col: 0, row: 1, variant: 'accent', group: 'audio' },
+    { id: 'pop', label: 'popClipPageRequest() drains queue', col: 1, row: 2, group: 'main' },
+    { id: 'read', label: 'Read page audio from storage', col: 1, row: 3, group: 'main' },
+    { id: 'supply', label: 'provider.supply(pageIndex, channels)', col: 1, row: 4, variant: 'success', group: 'main' },
+    { id: 'consume', label: 'Render thread reads supplied page', col: 0, row: 5, variant: 'success', group: 'audio' },
+    { id: 'clear', label: 'provider.clear(pageIndex)', col: 1, row: 6, variant: 'muted', group: 'main' }
+  ]"
+  :edges="[
+    { from: 'need', to: 'push' },
+    { from: 'push', to: 'pop', label: 'page request' },
+    { from: 'pop', to: 'read' },
+    { from: 'read', to: 'supply' },
+    { from: 'supply', to: 'consume', label: 'page ready' },
+    { from: 'consume', to: 'clear', label: 'no longer needed', style: 'dashed' }
+  ]"
+  :groups="[
+    { id: 'audio', label: 'Audio / render thread' },
+    { id: 'main', label: 'Main thread' }
+  ]"
+  caption="The audio thread only enqueues a request and reads pages already supplied; the slow storage read runs on the main thread."
+/>
+
 ::: info Lock-free and wait-free, for beginners
 A realtime audio thread must not pause — if it stalls for even a moment, the output glitches. **Lock-free** means the audio thread never waits to acquire a lock that another thread holds. **Wait-free** is the stronger guarantee used here: pushing a page-miss request onto the page-request queue always finishes in a bounded number of steps, so the audio thread never spins or blocks waiting on it. The slow part — reading the page from storage — happens on the main thread instead.
 :::
