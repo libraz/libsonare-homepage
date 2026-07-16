@@ -663,6 +663,9 @@ describe('wasm package integration', () => {
       analyzer.process(streamInput);
       expect(analyzer.availableFrames()).toBeGreaterThan(0);
       expect(analyzer.readFrames(4).nFrames).toBeGreaterThan(0);
+      // v1.5.2 requires reset before switching from internally tracked offsets
+      // to externally supplied offsets.
+      analyzer.reset(streamInput.length);
       analyzer.processWithOffset(streamInput, streamInput.length);
       expect(analyzer.stats().totalSamples).toBeGreaterThan(0);
       expect(analyzer.frameCount()).toBeGreaterThan(0);

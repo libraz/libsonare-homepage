@@ -21,7 +21,7 @@ By the end of this page you should be able to:
 
 - explain why mel/MFCC inversion is approximate and why phase cannot be recovered from the feature alone;
 - keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, `nMfcc`, `fmin`, `fmax`, and `htk` values needed for a correct round trip;
-- choose `melToStft`, `melToAudio`, `mfccToMel`, or `mfccToAudio` based on whether you need a matrix or preview audio;
+- choose `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, or `vqtToAudio` based on the feature matrix and whether you need preview audio;
 - compare JavaScript and Python return shapes without confusing row counts, frame counts, and flattened data.
 
 ## What "inverse" means here
@@ -71,6 +71,8 @@ The two forward transforms (dashed) produce the features you already know; the f
 | Mel power → audio | `melToAudio(...)` returns `Float32Array` | `mel_to_audio(...)` returns `list[float]` |
 | MFCCs → mel power | `mfccToMel(...)` returns `{ nMels, nFrames, power }` | `mfcc_to_mel(...)` returns `InverseResult(rows, n_frames, data)` |
 | MFCCs → audio | `mfccToAudio(...)` returns `Float32Array` | `mfcc_to_audio(...)` returns `list[float]` |
+| CQT magnitude → audio | `cqtToAudio(...)` returns `Float32Array` | `cqt_to_audio(...)` returns `list[float]` |
+| VQT magnitude → audio | `vqtToAudio(...)` returns `Float32Array` | `vqt_to_audio(...)` returns `list[float]` |
 
 The two `*ToStft` / `*ToMel` helpers stay in the **spectral** domain and return a result object you can inspect or feed onward. The two `*ToAudio` helpers go all the way back to a waveform and run **Griffin-Lim** internally to supply the missing phase.
 
@@ -122,6 +124,8 @@ Both inputs are **row-major** matrices: `melPower` is `[nMels x nFrames]`, MFCC 
 ## Reconstruct audio
 
 `melToAudio` and `mfccToAudio` produce a mono `Float32Array` you can play or write to a file. Because the features carry no phase, both run **Griffin-Lim**: start from the magnitude with random (or zero) phase, repeatedly STFT → keep the new phase → impose the known magnitude → inverse-STFT, until the phase settles into something self-consistent.
+
+`cqtToAudio` and `vqtToAudio` use the same iterative idea for the row-major magnitude matrix returned by `cqt(...)` or `vqt(...)`. Keep the forward transform's `sampleRate`, `hopLength`, `fmin`, and `binsPerOctave` (plus `gamma` for VQT) unchanged. As with mel/MFCC reconstruction, this is an approximate mono preview, not a restoration.
 
 ::: code-group
 

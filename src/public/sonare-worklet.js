@@ -582,7 +582,7 @@ var Mixer = class _Mixer {
     return this.mixer.toSceneJson();
   }
   /**
-   * Maximum processor tail length (samples) in the compiled mixer graph. Lazily
+   * Longest audible serial processor-tail path to the master, in samples. Lazily
    * compiles the routing graph if the topology is dirty.
    */
   tailSamples() {

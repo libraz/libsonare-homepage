@@ -37,6 +37,13 @@ function createCanvasContextMock() {
       if (key === 'getImageData') {
         return () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 });
       }
+      if (key === 'createImageData') {
+        return (width: number, height: number) => ({
+          data: new Uint8ClampedArray(width * height * 4),
+          width,
+          height,
+        });
+      }
       if (key === 'measureText') {
         return (text: string) => ({ width: String(text).length * 6 });
       }

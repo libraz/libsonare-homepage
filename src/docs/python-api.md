@@ -237,7 +237,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_onsets(samples, sample_rate)` | `list[float]` | Onset timestamps (seconds) |
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | Downbeat timestamps (seconds) |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
-| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time |
+| `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time; frames below the detection threshold are explicit `N.C.` intervals |
 | `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM, key, time signature, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
@@ -466,6 +466,8 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients |
 | `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from MFCC coefficients |
+| `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | Audio from a row-major CQT magnitude matrix (Griffin-Lim) |
+| `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma?, n_iter?)` | `list[float]` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
 
 Pass `0.0` for `fmin`/`fmax` to use the full-band defaults; `n_iter` defaults to `32`. Keep `fmin`/`fmax`/`htk` identical to the values used by the forward transform so the round-trip stays consistent.
 
@@ -823,6 +825,8 @@ For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(ma
 `quantize_config` is an optional `QuantizeConfig` (exported from `libsonare`) that widens the quantization ranges for streams much louder or quieter than the defaults; omit it to use the defaults. Its fields and defaults are `mel_db_min=-80.0`, `mel_db_max=0.0`, `onset_max=50.0`, `rms_max=1.0`, `centroid_max=11025.0`. The quantizers clamp normalized values to `[0, 1]`, so a signal outside these ranges otherwise saturates silently to the endpoints. This mirrors `StreamQuantizeConfig` in the JS/WASM streaming docs.
 
 Both return timestamps as floats. If you synchronize against an external audio clock, feed chunks with `process_with_offset(samples, sample_offset)` so returned timestamps follow that timeline.
+
+`process_with_offset` accepts only contiguous offsets. After a gap, seek, or switching from `process(...)`, call `reset(base_sample_offset)` before feeding the next block. `StreamConfig.max_progression_entries` (default `4096`) bounds each retained chord and bar progression; `stats()` exposes `dropped_chord_progression_entries` and `dropped_bar_progression_entries` when the oldest history is discarded.
 
 ## Streaming Equalizer API
 

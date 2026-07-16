@@ -87,7 +87,7 @@ Each line is a one-line gloss; follow the link for the authoritative explanation
 | Realtime engine | Transport, tempo, structured markers, metronome, automation lanes, graph topology, clips, MIDI clip schedule, per-track lane mixer (lanes, buses, sends, channel strips, surround pan, insert parameters), external MIDI output/clock, capture, monitor bus, stereo/wide meter telemetry, scope telemetry and Worklet scope rings, bounce/freeze | [Realtime and Streaming](./realtime-streaming.md) |
 | Projects & arrangement | Audio/MIDI tracks and clips, undo/redo, takes/comping, warp, MIDI sequencing, SMF and MIDI 2.0 Clip File (`SMF2CLIP`) import/export, JSON save/load, and offline bounce | [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Recording and Takes](./recording-and-takes.md), [Realtime and Streaming](./realtime-streaming.md) |
 | Instruments & MIDI | Multi-engine synth with a GM fallback bank, GS-compatible SoundFont 2 player, live MIDI playback, and GS insertion effects (EFX) selected over live SysEx | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md#queueing-live-events) |
-| Inverse features | Mel to STFT/audio, MFCC to mel/audio | [Inverse Features](./inverse-features.md) |
+| Inverse features | Mel to STFT/audio, MFCC to mel/audio, CQT/VQT magnitude to audio | [Inverse Features](./inverse-features.md) |
 | Utility / librosa parity | Frame/sample/time conversions, dB conversion, pre/de-emphasis, silence trim/split, frame/pad/fix helpers, peak pick, vector normalize, PCEN, tonnetz | [librosa Compatibility](./librosa-compatibility.md) |
 
 ## Implementation And Evidence Pages

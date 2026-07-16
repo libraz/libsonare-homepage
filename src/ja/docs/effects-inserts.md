@@ -20,7 +20,7 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 | `masteringInsertNames()` | 有効なインサート id の全リスト |
 | `masteringInsertParamNames(name)` | 1 つのインサートが受け付ける構築用キー（バンド／サブバンド型はインデックス付きの `band{i}.*` キーを列挙し、未知の名前には空配列を返す） |
 | `masteringInsertParamInfo(name)` | リアルタイムオートメーション可能なサブセット。各パラメータの JSON キー、数値のオートメーション id、リアルタイム安全フラグ |
-| `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`channelPolicy` を持つ機械処理しやすいエントリ。`latencySamples` は代表的な既定構成（48 kHz／512 サンプル）で測った値（オフライン専用は 0）なので、構成依存の正確な遅延は実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
+| `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`tailSamples`、`channelPolicy` を持つ機械処理しやすいエントリ。代表的な既定構成（48 kHz／512 サンプル）のプローブでレイテンシと可聴な減衰テールを返し（オフライン専用はどちらも 0）、構成依存の正確なレイテンシは実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
 
 Python の対応関数は `mastering_insert_param_names(name)`、`mastering_insert_param_info(name)`、`mastering_processor_catalog()` です。
 

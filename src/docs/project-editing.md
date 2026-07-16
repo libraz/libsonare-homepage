@@ -279,6 +279,8 @@ project.redo()   # re-applies the gain edit
 
 Because the history is exact, calling `toJson()` before an edit, undoing, and calling `toJson()` again yields byte-identical JSON — a useful invariant for testing and for change detection in an editor UI.
 
+Compound clip edits are one history transaction: an operation that changes several clips is undone or redone in one step, rather than leaving the arrangement half-applied.
+
 ## Musical time: PPQ, tempo, time signatures, markers
 
 All positions are in **PPQ** (quarter notes as a floating-point value, so fractional beats are exact). Tempo and time signatures live in the project as ordered segment lists.

@@ -955,11 +955,12 @@ These functions are not just "more features"; they solve different modeling prob
 | Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | Librosa-compatible contrast bands, polynomial coefficients, zero-crossing indices, and multi-band onset strength. |
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
 | Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, nearest-neighbor filtering, interval remixing, time scaling, and HPSS residual output. |
-| Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. |
+| Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. CQT/VQT inputs are magnitude matrices. |
 | Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA. |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
+const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, 0);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
@@ -983,6 +984,8 @@ const hpssResidual = hpssWithResidual(samples, sampleRate);
 const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
 const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+const cqtPreview = cqtToAudio(cqtResult.magnitude, cqtResult.nBins, cqtResult.nFrames, sampleRate, 512, 32.7, 12);
+const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nFrames, sampleRate, 512, 32.7, 12, 0, 32);
 ```
 
 `chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` is the direct
@@ -1540,6 +1543,7 @@ interface StreamConfig {
   emitEveryNFrames?: number;   // default: 1 (no throttling)
   magnitudeDownsample?: number;// default: 1
   maxPendingFrames?: number;   // default: 4096; overflow drops the oldest unread frame
+  maxProgressionEntries?: number; // default: 4096; cap for each retained chord/bar progression, overflow drops oldest
   keyUpdateIntervalSec?: number;  // default: 5
   bpmUpdateIntervalSec?: number;  // default: 10
   window?: number;             // 0=Hann (default), 1=Hamming, 2=Blackman, 3=Rectangular
@@ -1571,7 +1575,8 @@ class StreamAnalyzer {
   // Process audio chunk (internal offset tracking)
   process(samples: Float32Array): void;
 
-  // Process with external synchronization
+  // Process with an explicit, contiguous sample offset. A gap, seek, or switch
+  // from process() requires reset() first.
   processWithOffset(samples: Float32Array, sampleOffset: number): void;
 
   // Number of frames ready to read
@@ -1684,6 +1689,8 @@ interface AnalyzerStats {
   durationSeconds: number;
   pendingFrames: number;       // unread frames currently buffered
   droppedOutputFrames: number; // oldest frames dropped at the configured cap
+  droppedChordProgressionEntries: number; // oldest chord-history entries dropped at the configured cap
+  droppedBarProgressionEntries: number;   // oldest bar-history entries dropped at the configured cap
   estimate: ProgressiveEstimate;
 }
 ```

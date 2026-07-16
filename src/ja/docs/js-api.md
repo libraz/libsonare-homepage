@@ -879,11 +879,12 @@ interface WaveformPeaksReport {
 | スペクトル形状の詳細 | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | librosa 互換のコントラスト帯域、多項式係数、ゼロ交差インデックス、マルチバンドオンセット強度を返します。 |
 | ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。 |
 | 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、近傍フィルタ、区間リミックス、時間スケーリング、残差付き HPSS。 |
-| 特徴量や音声の近似復元 | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio` | 可視化、デバッグ、特徴量の往復確認に使います。 |
+| 特徴量や音声の近似復元 | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | 可視化、デバッグ、特徴量の往復確認に使います。CQT/VQT の入力は振幅行列です。 |
 | 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA も含みます。 |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
+const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, 0);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
@@ -907,6 +908,8 @@ const hpssResidual = hpssWithResidual(samples, sampleRate);
 const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
 const reconstructed = melToAudio(mel.power, mel.nMels, mel.nFrames, sampleRate);
+const cqtPreview = cqtToAudio(cqtResult.magnitude, cqtResult.nBins, cqtResult.nFrames, sampleRate, 512, 32.7, 12);
+const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nFrames, sampleRate, 512, 32.7, 12, 0, 32);
 ```
 
 `chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma` は倍音の漏れを抑える別物の音符活性化（NNLS）クロマで、コードや低音域の処理ではこちらの方がすっきりする場合が多いです。
@@ -1461,6 +1464,7 @@ interface StreamConfig {
   emitEveryNFrames?: number;   // デフォルト: 1（スロットリングなし）
   magnitudeDownsample?: number;// デフォルト: 1
   maxPendingFrames?: number;   // デフォルト: 4096。超過時は最古の未読フレームを破棄
+  maxProgressionEntries?: number; // デフォルト: 4096。コード／小節進行をそれぞれ保持する上限で、超過時は最古を破棄
   keyUpdateIntervalSec?: number;  // デフォルト: 5
   bpmUpdateIntervalSec?: number;  // デフォルト: 10
   window?: number;             // 0=Hann（既定）, 1=Hamming, 2=Blackman, 3=Rectangular
@@ -1484,7 +1488,7 @@ class StreamAnalyzer {
   // 音声チャンクを処理（内部オフセット追跡）
   process(samples: Float32Array): void;
 
-  // 外部同期で処理
+  // 明示的で連続したサンプルオフセットで処理。ギャップ、シーク、または process() からの切り替え前には reset() が必要
   processWithOffset(samples: Float32Array, sampleOffset: number): void;
 
   // 読み取り可能なフレーム数
@@ -1597,6 +1601,8 @@ interface AnalyzerStats {
   durationSeconds: number;
   pendingFrames: number;       // 現在バッファされている未読フレーム数
   droppedOutputFrames: number; // 上限到達時に破棄された最古フレームの累計
+  droppedChordProgressionEntries: number; // 上限到達時に破棄された最古のコード進行エントリ数
+  droppedBarProgressionEntries: number;   // 上限到達時に破棄された最古の小節進行エントリ数
   estimate: ProgressiveEstimate;
 }
 ```

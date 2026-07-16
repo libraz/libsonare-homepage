@@ -155,7 +155,7 @@ finalization, so it cannot be released deterministically.
 | `detectKey(samples, sampleRate?)` | `Key` | Root, mode, confidence |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | Beat timestamps |
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | Onset timestamps |
-| `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
+| `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Frames below `threshold` are returned as explicit `N.C.` intervals; trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | Downbeat (bar-start) timestamps |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | Ranked key candidates with correlation scores |
 | `analyze(samples, sampleRate?)` | `AnalysisResult` | All-in-one analysis in one call: `bpm`, `bpmConfidence`, `key`, `timeSignature`, `beatTimes`, `beats`, plus `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, and `form`. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
@@ -281,6 +281,8 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 | `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
 | `mfccToMel(mfcc, nMfcc, nFrames, nMels?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
 | `mfccToAudio(mfcc, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from MFCC coefficients |
+| `cqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, nIter?)` | `Float32Array` | Audio from a row-major CQT magnitude matrix (Griffin-Lim) |
+| `vqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, gamma?, nIter?)` | `Float32Array` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
 
 ### librosa-Compatible Helpers
 

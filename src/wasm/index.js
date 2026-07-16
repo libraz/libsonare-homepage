@@ -732,7 +732,7 @@ var Mixer = class _Mixer {
     return this.mixer.toSceneJson();
   }
   /**
-   * Maximum processor tail length (samples) in the compiled mixer graph. Lazily
+   * Longest audible serial processor-tail path to the master, in samples. Lazily
    * compiles the routing graph if the topology is dirty.
    */
   tailSamples() {
@@ -1591,6 +1591,74 @@ function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257
     throw new RangeError("vqt: gamma must be non-negative");
   }
   return requireModule9().vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
+}
+function validateCqtInverse(fnName, magnitude, nBins, nFrames, sampleRate, hopLength, fmin, binsPerOctave, nIter, options) {
+  assertSampleRate(fnName, sampleRate);
+  validatePositiveIntegers(fnName, { nBins, nFrames, hopLength, binsPerOctave, nIter });
+  if (nIter > 256) {
+    throw new RangeError(`${fnName}: nIter must be at most 256`);
+  }
+  validateFrequencyBounds(fnName, fmin);
+  if (fmin === 0) {
+    throw new RangeError(`${fnName}: fmin must be positive`);
+  }
+  if (magnitude.length !== nBins * nFrames) {
+    throw new RangeError(`${fnName}: magnitude length must equal nBins * nFrames`);
+  }
+  assertSamples(fnName, magnitude, options.validate !== false);
+}
+function cqtToAudio(magnitude, nBins, nFrames, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, nIter = 32, options = {}) {
+  validateCqtInverse(
+    "cqtToAudio",
+    magnitude,
+    nBins,
+    nFrames,
+    sampleRate,
+    hopLength,
+    fmin,
+    binsPerOctave,
+    nIter,
+    options
+  );
+  return requireModule9().cqtToAudio(
+    magnitude,
+    nBins,
+    nFrames,
+    sampleRate,
+    hopLength,
+    fmin,
+    binsPerOctave,
+    nIter
+  );
+}
+function vqtToAudio(magnitude, nBins, nFrames, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, gamma = 0, nIter = 32, options = {}) {
+  validateCqtInverse(
+    "vqtToAudio",
+    magnitude,
+    nBins,
+    nFrames,
+    sampleRate,
+    hopLength,
+    fmin,
+    binsPerOctave,
+    nIter,
+    options
+  );
+  assertFiniteScalar("vqtToAudio", gamma, "gamma");
+  if (gamma < 0) {
+    throw new RangeError("vqtToAudio: gamma must be non-negative");
+  }
+  return requireModule9().vqtToAudio(
+    magnitude,
+    nBins,
+    nFrames,
+    sampleRate,
+    hopLength,
+    fmin,
+    binsPerOctave,
+    gamma,
+    nIter
+  );
 }
 function analyzeSections(samples, sampleRate = 22050, options = {}) {
   validateMusicSamples("analyzeSections", samples, sampleRate, options);
@@ -4580,6 +4648,7 @@ var StreamAnalyzer = class {
       config.emitEveryNFrames ?? defaults.emitEveryNFrames,
       config.magnitudeDownsample ?? defaults.magnitudeDownsample,
       config.maxPendingFrames ?? defaults.maxPendingFrames,
+      config.maxProgressionEntries ?? defaults.maxProgressionEntries,
       config.keyUpdateIntervalSec ?? defaults.keyUpdateIntervalSec,
       config.bpmUpdateIntervalSec ?? defaults.bpmUpdateIntervalSec,
       config.window ?? defaults.window,
@@ -4595,7 +4664,8 @@ var StreamAnalyzer = class {
     this.analyzer.process(samples);
   }
   /**
-   * Process audio samples with explicit sample offset.
+   * Process audio samples with a contiguous explicit sample offset. A gap,
+   * seek, or switch from `process()` requires `reset()` first.
    *
    * @param samples - Audio samples (mono, float32)
    * @param sampleOffset - Cumulative sample count at start of this chunk
@@ -4665,6 +4735,8 @@ var StreamAnalyzer = class {
       durationSeconds: s.durationSeconds,
       pendingFrames: s.pendingFrames,
       droppedOutputFrames: s.droppedOutputFrames,
+      droppedChordProgressionEntries: s.droppedChordProgressionEntries,
+      droppedBarProgressionEntries: s.droppedBarProgressionEntries,
       estimate: {
         bpm: s.estimate.bpm,
         bpmConfidence: s.estimate.bpmConfidence,
@@ -5123,6 +5195,7 @@ export {
   chromaCens,
   chromaCqt,
   cqt,
+  cqtToAudio,
   createOpfsClipPageProvider,
   createOpfsClipPageWorker,
   cyclicTempogram,
@@ -5294,6 +5367,7 @@ export {
   voiceChangerAbiVersion,
   voiceCharacterPresetId,
   vqt,
+  vqtToAudio,
   waveformPeakPyramid,
   waveformPeaks,
   zeroCrossingRate,
