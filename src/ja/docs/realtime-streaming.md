@@ -117,7 +117,7 @@ const analyzer = new StreamAnalyzer({
   computeChroma: true,
   computeOnset: true,
   emitEveryNFrames: 4,   // スロットル: 4 ホップごとに 1 フレーム出力
-  maxPendingFrames: 256, // 未読出力を制限。超過時は最古フレームを破棄
+  maxPendingFrames: 256, // 未読出力を制限。超過時は新たに生成されたフレームを破棄
 });
 
 analyzer.process(inputBlock);
@@ -130,7 +130,7 @@ if (stats.estimate.updated) {
 }
 ```
 
-`maxPendingFrames` の既定値は `4096` です。UI が一時停止したり読み出しに遅れたりする可能性がある場合は小さめに設定してください。解析は継続し、最古の未読フレームが破棄されます。現在の滞留数と累積破棄数は `stats().pendingFrames` / `stats().droppedOutputFrames` で確認できます。
+`maxPendingFrames` の既定値は `4096` です。UI が一時停止したり読み出しに遅れたりする可能性がある場合は小さめに設定してください。解析は継続しますが、未読キューが満杯の間に新しく生成された出力フレームは破棄されます。現在の滞留数と累積破棄数は `stats().pendingFrames` / `stats().droppedOutputFrames` で確認できます。
 
 ::: info ストリームの既定値はバッチ解析と異なる
 `StreamAnalyzer` の既定サンプルレートは、バッチの 22050 Hz ではなく **44100 Hz** です。
@@ -142,7 +142,7 @@ if (stats.estimate.updated) {
 
 ### フレームの読み出しと出力フォーマット
 
-`FrameBuffer` は **Structure-of-Arrays** です。タイムスタンプ、メル、クロマ、オンセット強度、RMS、スペクトル重心、スペクトル平坦度、コードルート、コードクオリティ、コード信頼度が、それぞれ独立した型付き配列に入ります。この形はスライスも別スレッドへの受け渡しも安価です。
+`FrameBuffer` は **Structure-of-Arrays** です。タイムスタンプ、メル、クロマ、オンセット強度、RMS、スペクトル重心、スペクトル平坦度、コードルート、コードクオリティ、コード信頼度が、それぞれ独立した型付き配列に入ります。この形はスライスも別スレッドへの受け渡しも安価です。任意配列を読む前に `featureFlags`（`MEL=1`、`CHROMA=2`、`ONSET=4`、`SPECTRAL=8`）を確認してください。無効な特徴量は空配列で、クロマが無いときの `nChroma` は `0` です。
 
 ::: details スペクトル重心・平坦度とは？
 どちらも 1 フレームのスペクトルの*形*を 1 つの数値にまとめたもので、プロットやしきい値処理に使えます。
@@ -157,22 +157,22 @@ if (stats.estimate.updated) {
 
 スレッド間転送や可視化では、しばしば完全な float 精度は不要です。`StreamAnalyzer` は特徴量配列を量子化し、精度と帯域を引き換えにできます。
 
-| 読み出しメソッド | 要素型 | `outputFormat` | 用途 |
-|------------------|--------|----------------|------|
-| `readFrames(n)` | `Float32Array` / `Int32Array` フィールドを持つ `FrameBuffer` | `0`（既定） | 完全精度の DSP、さらなる解析 |
-| `readFramesI16(n)` | `Int16Array` フィールドを持つ `StreamFramesI16` | `1` | ワーカー／回線への帯域削減転送 |
-| `readFramesU8(n)` | `Uint8Array` フィールドを持つ `StreamFramesU8` | `2` | 安価な可視化（ヒートマップの 1 画素は 8 ビットで足りる） |
+| 読み出しメソッド | 要素型 | 用途 |
+|------------------|--------|------|
+| `readFrames(n)` | `Float32Array` / `Int32Array` フィールドを持つ `FrameBuffer` | 完全精度の DSP、さらなる解析 |
+| `readFramesI16(n)` | `Int16Array` フィールドを持つ `StreamFramesI16` | ワーカー／回線への帯域削減転送 |
+| `readFramesU8(n)` | `Uint8Array` フィールドを持つ `StreamFramesU8` | 安価な可視化（ヒートマップの 1 画素は 8 ビットで足りる） |
 
 ```typescript
 // スペクトログラム描画には 8 ビットのメルで十分 — 出力時点で量子化する。
-const analyzer = new StreamAnalyzer({ sampleRate, nMels: 64, outputFormat: 2 });
+const analyzer = new StreamAnalyzer({ sampleRate, nMels: 64 });
 analyzer.process(block);
 const u8 = analyzer.readFramesU8(analyzer.availableFrames());
 // u8.mel は Uint8Array [nFrames x nMels]、ImageData にそのまま書き込める
 ```
 
-::: tip フォーマットは解析側ではなく消費側に合わせる
-`outputFormat` は `readFramesU8`／`readFramesI16` が出力時にどう量子化するかを変えるだけで、内部解析は浮動小数点のままです。データが最終的に画素になるなら `Uint8`、スレッド／ネットワーク境界を越えてバイト数をおよそ半分にしたいなら `Int16`、下流でさらに計算するなら既定の `Float32` を選びます。
+::: tip 消費側に合わせて読み出しメソッドを選ぶ
+解析自体は常に float です。データが最終的に画素になるなら `readFramesU8`、スレッド／ネットワーク境界を越えてバイト数をおよそ半分にしたいなら `readFramesI16`、下流でさらに計算するなら `readFrames` を選びます。`StreamConfig.outputFormat` はレガシーであり、省略するか `0` を指定してください。
 :::
 
 ::: info マグニチュードフレームは読み出し経路を持たない

@@ -197,6 +197,8 @@ Audio clips have the clip schedule and page providers; **MIDI clips** have their
 
 The schedule is *compiled*: timing is in **absolute samples on the engine timeline**, not PPQ. Use `sampleAtPpq(ppq)` to convert musical positions through the engine's tempo map — it integrates every `setTempo` / `setTempoSegments` change, so the result stays correct across tempo ramps.
 
+`setTempoSegments([{ startPpq, bpm, endBpm? }, ...])` and `setTimeSignatureSegments([{ startPpq, numerator, denominator }, ...])` install a piecewise map on the control thread. A non-zero `endBpm` ramps from that segment's `bpm`; pass an empty array to clear the map and return to the most recent single value set with `setTempo` or `setTimeSignature`.
+
 ```typescript
 // UMP MIDI 1.0 channel-voice words (note-on = status 0x9, note-off = 0x8).
 const noteOn  = (ch: number, note: number, vel: number) =>

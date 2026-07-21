@@ -198,6 +198,8 @@ engine.setTrackStripJson(1, JSON.stringify({
 
 このスケジュールは*コンパイル済み*です。タイミングは PPQ ではなく**エンジンタイムライン上の絶対サンプル**で表します。音楽的な位置の変換には `sampleAtPpq(ppq)` を使ってください。エンジンのテンポマップ（`setTempo` / `setTempoSegments` のすべての変更）を積分するため、テンポが途中で変わっても正しい位置が得られます。
 
+`setTempoSegments([{ startPpq, bpm, endBpm? }, ...])` と `setTimeSignatureSegments([{ startPpq, numerator, denominator }, ...])` は、コントロールスレッドで区分的なマップを設定します。`endBpm` が 0 以外なら、そのセグメントの `bpm` からランプします。空配列を渡すとマップを消去し、直近に `setTempo` または `setTimeSignature` で設定した単一値へ戻ります。
+
 ```typescript
 // UMP MIDI 1.0 チャンネルボイスワード（ノートオン = ステータス 0x9、ノートオフ = 0x8）。
 const noteOn  = (ch: number, note: number, vel: number) =>

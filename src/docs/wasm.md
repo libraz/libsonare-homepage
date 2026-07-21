@@ -645,15 +645,7 @@ The TypeScript `StreamAnalyzer` has three read methods. Choose them by how much 
 | `readFramesI16(maxFrames)` | `StreamFramesI16` | You want smaller payloads but still enough precision for most visual meters |
 | `readFramesU8(maxFrames)` | `StreamFramesU8` | You need very small payloads for mobile or dense visual updates |
 
-Set `StreamConfig.outputFormat` to document the transfer format you plan to read, then call the matching method:
-
-| `outputFormat` | Read method |
-|----------------|-------------|
-| `0` | `readFrames()` |
-| `1` | `readFramesI16()` |
-| `2` | `readFramesU8()` |
-
-The analyzer still computes internally in float. `readFramesI16()` and `readFramesU8()` quantize (pack each float into a smaller 16-bit or 8-bit integer) in the C++/WASM read path, so you do not need to quantize manually before `postMessage`.
+The analyzer still computes internally in float. Select the transfer precision with the explicit read method: `readFrames()` for float data, `readFramesI16()` for 16-bit data, or `readFramesU8()` for 8-bit data. `StreamConfig.outputFormat` is retained only for source compatibility and must be omitted or set to `0`; the C++/WASM read path quantizes the integer forms, so you do not need to quantize manually before `postMessage`.
 
 Both quantized read paths accept an optional `StreamQuantizeConfig` to widen the quantization ranges for unusually loud or quiet streams that would otherwise saturate; see [custom quantization ranges](./realtime-streaming.md#custom-quantization-ranges).
 

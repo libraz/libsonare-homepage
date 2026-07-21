@@ -44,6 +44,27 @@ Read this page in three passes:
 
 For browser apps, keep the core rule in mind: initialize WASM with `await init()`, decode files to PCM first, then pass `Float32Array` samples plus the original `sampleRate`.
 
+## One-shot request objects
+
+The top-level one-shot analysis, effects, mastering, metering, feature, mixer, and voice-changer APIs use a named **request object** as their canonical form. Every input is named, optional settings can grow without changing argument order, and TypeScript can guide you to the matching `*Request` type. Positional forms are compatibility overloads with identical defaults, validation, errors, results, and progress behavior.
+
+```typescript
+// Preferred request-object form
+const bpm = detectBpm({ samples, sampleRate });
+const mastered = masterAudio({
+  samples,
+  sampleRate,
+  preset: 'pop',
+  overrides: { loudness: { targetLufs: -14 } },
+  onProgress: (progress, stage) => console.log(stage, progress),
+});
+
+// Still supported for existing callers
+const legacyBpm = detectBpm(samples, sampleRate);
+```
+
+The request fields use the same camelCase names on the Node and WASM packages. Python remains keyword-oriented (`detect_bpm(samples, sample_rate=...)`), rather than adopting a JavaScript-style options object.
+
 ## Pick The Smallest API That Solves The Job
 
 The package is broad, so start from the task rather than the function list:
@@ -1542,18 +1563,19 @@ interface StreamConfig {
   computeSpectral?: boolean;   // default: true
   emitEveryNFrames?: number;   // default: 1 (no throttling)
   magnitudeDownsample?: number;// default: 1
-  maxPendingFrames?: number;   // default: 4096; overflow drops the oldest unread frame
+  maxPendingFrames?: number;   // default: 4096; overflow drops newly produced output frames
   maxProgressionEntries?: number; // default: 4096; cap for each retained chord/bar progression, overflow drops oldest
   keyUpdateIntervalSec?: number;  // default: 5
   bpmUpdateIntervalSec?: number;  // default: 10
   window?: number;             // 0=Hann (default), 1=Hamming, 2=Blackman, 3=Rectangular
-  outputFormat?: number;       // 0=Float32 (default), 1=Int16, 2=Uint8
+  outputFormat?: 0;            // legacy; omit it or use Float32 (0)
 }
 ```
 
-`outputFormat` controls how `readFramesU8`/`readFramesI16` quantize on the way
-out (the analysis itself always runs in float). See
-[Realtime and Streaming](./realtime-streaming.md#reading-frames-and-output-format).
+`outputFormat` is retained only for source compatibility and must be `0` when
+provided. Choose a quantized read explicitly with `readFramesU8` or
+`readFramesI16`; analysis itself always runs in float. See [Realtime and
+Streaming](./realtime-streaming.md#reading-frames-and-output-format).
 
 The legacy `computeMagnitude` flag is no longer supported; passing it makes the
 constructor throw. The flag was removed because magnitude frames are not exposed
@@ -1629,16 +1651,18 @@ Structure-of-Arrays format for efficient transfer via `postMessage`.
 interface FrameBuffer {
   nFrames: number;
   nMels: number;
+  nChroma: number;             // 12 when chroma is present; otherwise 0
+  featureFlags: number;        // MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
   timestamps: Float32Array;      // [nFrames]
-  mel: Float32Array;             // [nFrames * nMels]
-  chroma: Float32Array;          // [nFrames * 12]
-  onsetStrength: Float32Array;   // [nFrames]
+  mel: Float32Array;             // [nFrames * nMels], empty if MEL is absent
+  chroma: Float32Array;          // [nFrames * nChroma], empty if CHROMA is absent
+  onsetStrength: Float32Array;   // [nFrames], empty if ONSET is absent
   rmsEnergy: Float32Array;       // [nFrames]
-  spectralCentroid: Float32Array;// [nFrames]
-  spectralFlatness: Float32Array;// [nFrames]
-  chordRoot: Int32Array;         // [nFrames] per-frame chord root
-  chordQuality: Int32Array;      // [nFrames] per-frame chord quality
-  chordConfidence: Float32Array; // [nFrames] per-frame chord confidence
+  spectralCentroid: Float32Array;// [nFrames], empty if SPECTRAL is absent
+  spectralFlatness: Float32Array;// [nFrames], empty if SPECTRAL is absent
+  chordRoot: Int32Array;         // [nFrames], empty if CHROMA is absent
+  chordQuality: Int32Array;      // [nFrames], empty if CHROMA is absent
+  chordConfidence: Float32Array; // [nFrames], empty if CHROMA is absent
 }
 ```
 
@@ -1688,7 +1712,7 @@ interface AnalyzerStats {
   totalSamples: number;
   durationSeconds: number;
   pendingFrames: number;       // unread frames currently buffered
-  droppedOutputFrames: number; // oldest frames dropped at the configured cap
+  droppedOutputFrames: number; // newly produced frames dropped at the configured cap
   droppedChordProgressionEntries: number; // oldest chord-history entries dropped at the configured cap
   droppedBarProgressionEntries: number;   // oldest bar-history entries dropped at the configured cap
   estimate: ProgressiveEstimate;
@@ -1993,7 +2017,8 @@ const result = masteringChainStereo(left, right, sampleRate, {
   maximizer: { truePeakLimiter: { ceilingDb: -1, oversampleFactor: 4 } },
   loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
 })
-console.log(result.outputLufs, result.appliedGainDb, result.stages)
+console.log(result.outputLufs, result.outputTruePeakDbtp, result.outputLra)
+console.log(result.stageGainReductions)
 
 // Preset with flat dot-notation overrides
 const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
@@ -2003,6 +2028,8 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 ```
 
 Each of these has a `*WithProgress` variant taking an `(progress, stage) => void` callback. `masteringProcess(...)` / `masteringProcessStereo(...)` run one named processor, and `masteringStereoAnalyze(...)` returns a JSON report.
+
+Offline chain and preset results include `outputTruePeakDbtp` (the output true peak at the configured loudness oversample factor), `outputLra` (EBU R128 loudness range in LU), and `stageGainReductions`. Each `StageGainReduction` names a dynamics/maximizer stage and reports its most recent gain reduction in dB (zero or negative), so a delivery ceiling can be checked without an extra oversampled scan.
 
 The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration).
 

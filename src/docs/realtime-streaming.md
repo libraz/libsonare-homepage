@@ -110,7 +110,7 @@ const analyzer = new StreamAnalyzer({
   computeChroma: true,
   computeOnset: true,
   emitEveryNFrames: 4,   // throttle: emit one frame per 4 hops
-  maxPendingFrames: 256, // bound unread output; overflow drops the oldest frame
+  maxPendingFrames: 256, // bound unread output; overflow drops newly produced frames
 });
 
 analyzer.process(inputBlock);
@@ -123,7 +123,7 @@ if (stats.estimate.updated) {
 }
 ```
 
-`maxPendingFrames` defaults to `4096`. Set it to a smaller value for a UI that may pause or fall behind: analysis continues, the oldest unread frames are dropped, and `stats().pendingFrames` / `stats().droppedOutputFrames` report the current backlog and cumulative drops.
+`maxPendingFrames` defaults to `4096`. Set it to a smaller value for a UI that may pause or fall behind: analysis continues, but newly produced output frames are dropped while the unread queue is full. `stats().pendingFrames` / `stats().droppedOutputFrames` report the current backlog and cumulative drops.
 
 ::: info Stream defaults differ from the batch analyzer
 `StreamAnalyzer` defaults to **44100 Hz**, not the 22050 Hz batch default. Realtime audio arrives straight from the playback/capture graph (AudioWorklet, device callbacks), which almost always runs at 44100/48000 Hz; matching that rate avoids an extra resample on the hot path and keeps timestamps aligned with the audio clock. Pass `sampleRate: audioCtx.sampleRate` so estimates and timestamps line up with what you are actually playing.
@@ -131,7 +131,7 @@ if (stats.estimate.updated) {
 
 ### Reading frames and output format
 
-A `FrameBuffer` is **Structure-of-Arrays**: timestamps, mel, chroma, onset strength, RMS, spectral centroid, spectral flatness, chord root, chord quality, and chord confidence each live in their own typed array. That layout is cheap to slice and cheap to hand to another thread.
+A `FrameBuffer` is **Structure-of-Arrays**: timestamps, mel, chroma, onset strength, RMS, spectral centroid, spectral flatness, chord root, chord quality, and chord confidence each live in their own typed array. That layout is cheap to slice and cheap to hand to another thread. Check `featureFlags` before consuming optional arrays (`MEL=1`, `CHROMA=2`, `ONSET=4`, `SPECTRAL=8`); disabled features are empty, and `nChroma` is `0` when chroma is absent.
 
 ::: details What are spectral centroid and flatness?
 Both reduce the *shape* of one frame's spectrum to a single number you can plot or threshold. The **spectral centroid** is the energy-weighted average frequency — a higher centroid sounds "brighter" (more high-frequency content). The **spectral flatness** measures how evenly energy is spread across frequencies: values near 1 are noise-like (energy everywhere at once), values near 0 are tonal (energy concentrated in a few strong peaks). Together they are a cheap way to describe timbre frame by frame.
@@ -139,22 +139,22 @@ Both reduce the *shape* of one frame's spectrum to a single number you can plot 
 
 For thread transfer and visualization you often do not need full float precision. `StreamAnalyzer` can quantize the feature arrays, trading precision for bandwidth:
 
-| Read method | Element type | `outputFormat` | Use it for |
-|-------------|--------------|----------------|------------|
-| `readFrames(n)` | `FrameBuffer` with `Float32Array` / `Int32Array` fields | `0` (default) | Full-precision DSP, further analysis |
-| `readFramesI16(n)` | `StreamFramesI16` with `Int16Array` fields | `1` | Bandwidth-reduced transfer to a worker / over the wire |
-| `readFramesU8(n)` | `StreamFramesU8` with `Uint8Array` fields | `2` | Cheap visualization (a heatmap pixel only needs 8 bits) |
+| Read method | Element type | Use it for |
+|-------------|--------------|------------|
+| `readFrames(n)` | `FrameBuffer` with `Float32Array` / `Int32Array` fields | Full-precision DSP, further analysis |
+| `readFramesI16(n)` | `StreamFramesI16` with `Int16Array` fields | Bandwidth-reduced transfer to a worker / over the wire |
+| `readFramesU8(n)` | `StreamFramesU8` with `Uint8Array` fields | Cheap visualization (a heatmap pixel only needs 8 bits) |
 
 ```typescript
 // A spectrogram canvas only needs 8-bit mel — quantize at the source.
-const analyzer = new StreamAnalyzer({ sampleRate, nMels: 64, outputFormat: 2 });
+const analyzer = new StreamAnalyzer({ sampleRate, nMels: 64 });
 analyzer.process(block);
 const u8 = analyzer.readFramesU8(analyzer.availableFrames());
 // u8.mel is a Uint8Array [nFrames x nMels], ready to write into ImageData
 ```
 
-::: tip Match the format to the consumer, not the analyzer
-`outputFormat` only changes how `readFramesU8`/`readFramesI16` quantize on the way out — the internal analysis still runs in float. Pick `Uint8` when the data ends up as pixels, `Int16` when it crosses a thread/network boundary and you want roughly half the bytes, and the default `Float32` when something downstream does more math on it.
+::: tip Match the read method to the consumer
+The analyzer always runs in float. Pick `readFramesU8` when the data ends up as pixels, `readFramesI16` when it crosses a thread/network boundary and you want roughly half the bytes, and `readFrames` when something downstream does more math. `StreamConfig.outputFormat` is legacy and must be omitted or set to `0`.
 :::
 
 ::: info Magnitude frames are not a read path

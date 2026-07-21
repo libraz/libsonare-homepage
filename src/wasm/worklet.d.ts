@@ -407,6 +407,11 @@ declare class RealtimeEngine {
     graphNodeCount(): number;
     graphConnectionCount(): number;
     setClips(clips: EngineClip[]): void;
+    /**
+     * Returns the PCM generated for a tempo-sync clip by the control-thread
+     * setter, or `null` when the clip did not require a tempo-sync bake.
+     */
+    prebakedClipChannels(clipId: number): Float32Array[] | null;
     clipCount(): number;
     setTrackLanes(lanes: Array<number | EngineTrackLane>): void;
     /**
@@ -873,6 +878,27 @@ interface SonareEngineSyncClipsDeltaMessage {
     upserts: EngineClip[];
     removeIds: number[];
 }
+/** Begins a paged, pre-baked clip transfer. PCM pages follow in FIFO order. */
+interface SonareEngineSyncClipPageProviderMessage {
+    type: 'syncClipPageProvider';
+    clipId: number;
+    clip: EngineClip;
+    numChannels: number;
+    numSamples: number;
+    pageFrames: number;
+}
+/** Supplies one bounded PCM page for a pending pre-baked clip transfer. */
+interface SonareEngineSyncClipPageMessage {
+    type: 'syncClipPage';
+    clipId: number;
+    pageIndex: number;
+    channels: Float32Array[];
+}
+/** Makes a fully supplied paged clip visible to the audio engine. */
+interface SonareEngineSyncClipPageCommitMessage {
+    type: 'syncClipPageCommit';
+    clipId: number;
+}
 interface SonareEngineSyncMidiClipsMessage {
     type: 'syncMidiClips';
     clips: EngineMidiClipSchedule[];
@@ -1069,7 +1095,7 @@ interface SonareEngineSyncExternalMidiClockMessage {
     type: 'syncExternalMidiClock';
     enabled: boolean;
 }
-type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiSysexMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage;
+type SonareEngineSyncMessage = SonareEngineSyncClipsMessage | SonareEngineSyncClipsDeltaMessage | SonareEngineSyncClipPageProviderMessage | SonareEngineSyncClipPageMessage | SonareEngineSyncClipPageCommitMessage | SonareEngineSyncMidiClipsMessage | SonareEngineSyncMarkersMessage | SonareEngineSyncMetronomeMessage | SonareEngineSyncAutomationMessage | SonareEngineSyncTempoMessage | SonareEngineSyncMixerMessage | SonareEngineSyncCaptureMessage | SonareEngineSyncTrackStripEqBandMessage | SonareEngineSyncMasterStripEqBandMessage | SonareEngineSyncTrackStripInsertBypassedMessage | SonareEngineSyncMasterStripInsertBypassedMessage | SonareEngineSyncTrackStripInsertParamByNameMessage | SonareEngineSyncMasterStripInsertParamByNameMessage | SonareEngineSyncBusStripInsertParamByNameMessage | SonareEngineSyncTrackStripPanMessage | SonareEngineSyncTrackStripPanLawMessage | SonareEngineSyncTrackStripPanModeMessage | SonareEngineSyncTrackStripDualPanMessage | SonareEngineSyncTrackStripChannelDelaySamplesMessage | SonareEngineSyncBuiltinInstrumentMessage | SonareEngineSyncSynthInstrumentMessage | SonareEngineSyncSf2InstrumentMessage | SonareEngineSyncLoadSoundFontMessage | SonareEngineSyncMidiFxMessage | SonareEngineSyncMidiNoteMessage | SonareEngineSyncMidiCcMessage | SonareEngineSyncMidiSysexMessage | SonareEngineSyncMidiPanicMessage | SonareEngineSyncMidiDestinationExternalMessage | SonareEngineSyncExternalMidiClockMessage;
 interface SonareEngineCaptureRequestMessage {
     type: 'captureRequest';
     requestId: number;
@@ -1454,6 +1480,8 @@ declare class SonareRealtimeEngineWorkletProcessor {
     private metronomeConfig;
     private channelBuffers;
     private readonly liveClips;
+    private readonly pagedClipProviders;
+    private readonly pendingPagedClips;
     constructor(options?: SonareRealtimeEngineWorkletProcessorOptions, transport?: WorkletTransport);
     process(inputs: WorkletInput, outputs: WorkletOutput): boolean;
     private reacquireChannelBuffers;

@@ -72,7 +72,7 @@ These functions exist across the library bindings but take their arguments diffe
 |----------|------|-------------|--------|
 | `detectChords` / `detect_chords` | options object | positional / keyword params | positional / keyword params |
 | Streaming reads | `process`, `readFrames`, `stats` | float Structure-of-Arrays read is `readFramesSoa` | `process`, `read_frames`, `stats` |
-| Quantized stream reads | `readFramesI16` / `readFramesU8`, `StreamConfig.outputFormat` | same as WASM | `read_frames_i16` / `read_frames_u8`, `output_format` |
+| Quantized stream reads | `readFramesI16` / `readFramesU8` (legacy `StreamConfig.outputFormat` must be `0`) | same as WASM | `read_frames_i16` / `read_frames_u8` (legacy `output_format` must be `0`) |
 | `Mixer` strip references | numeric index; `stripById(id)` for lookup | numeric index or strip-id string | numeric index or strip-id string |
 | Stereo mix (`mixStereo` / `mix_stereo`) | separate `leftChannels` / `rightChannels` arrays plus a `MixOptions` object | same as WASM | `[(left, right), …]` strips plus keyword arrays (`fader_db`, `pan`, `width`, `input_trim_db`) |
 | `timeStretch` / `pitchShift` | `(samples, sampleRate, rate/semitones)` | same as WASM | `(samples, sample_rate, rate/semitones)` |

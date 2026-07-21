@@ -708,25 +708,27 @@ class StreamConfig:
     compute_spectral: bool = True
     emit_every_n_frames: int = 1
     magnitude_downsample: int = 1
-    max_pending_frames: int = 4096  # oldest unread frame is dropped at the cap
+    max_pending_frames: int = 4096  # newly produced frames are dropped at the cap
     key_update_interval_sec: float = 5.0
     bpm_update_interval_sec: float = 10.0
     window: int = 0          # 0=Hann, 1=Hamming, 2=Blackman, 3=Rectangular
-    output_format: int = 0  # 0=Float32, 1=Int16, 2=Uint8
+    output_format: int = 0  # legacy; omit it or keep the Float32 value (0)
 
 class StreamFrames:
     n_frames: int
     n_mels: int
+    n_chroma: int             # 12 when chroma is present; otherwise 0
+    feature_flags: int        # MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
     timestamps: list[float]
-    mel: list[float]        # n_frames × n_mels, row-major
-    chroma: list[float]     # n_frames × 12, row-major
-    onset_strength: list[float]
+    mel: list[float]        # n_frames × n_mels; empty if MEL is absent
+    chroma: list[float]     # n_frames × n_chroma; empty if CHROMA is absent
+    onset_strength: list[float]  # empty if ONSET is absent
     rms_energy: list[float]
-    spectral_centroid: list[float]
-    spectral_flatness: list[float]
-    chord_root: list[int]
-    chord_quality: list[int]
-    chord_confidence: list[float]
+    spectral_centroid: list[float]  # empty if SPECTRAL is absent
+    spectral_flatness: list[float]  # empty if SPECTRAL is absent
+    chord_root: list[int]            # empty if CHROMA is absent
+    chord_quality: list[int]         # empty if CHROMA is absent
+    chord_confidence: list[float]    # empty if CHROMA is absent
 
 class StreamChordChange:
     root: int
@@ -797,7 +799,6 @@ stream = sonare.StreamAnalyzer(
         sample_rate=44100,
         n_mels=64,
         emit_every_n_frames=4,
-        output_format=0,  # 0=Float32, 1=Int16, 2=Uint8
     )
 )
 
@@ -806,7 +807,7 @@ for block in audio_blocks:
 
     frames = stream.read_frames(stream.available_frames())
     # frames.mel is flattened [n_frames * n_mels]
-    # frames.chroma is flattened [n_frames * 12]
+    # check frames.feature_flags before optional arrays; chroma uses [n_frames * n_chroma]
 
     stats = stream.stats()
     if stats.bpm > 0:
@@ -815,7 +816,7 @@ for block in audio_blocks:
 stream.close()
 ```
 
-For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(max_frames)`:
+For lower-bandwidth UI transfer, use a quantized read instead of `read_frames(max_frames)`. `output_format` is retained for source compatibility only; omit it or keep it at `0` and choose the desired read method explicitly:
 
 | Method | What changes |
 |--------|--------------|
@@ -913,7 +914,8 @@ chain_result = sonare.master_audio(
         "maximizer.truePeakLimiter.applyGainAtInputRate": False,
     },
 )
-print(chain_result.output_lufs, chain_result.applied_gain_db)
+print(chain_result.output_lufs, chain_result.output_true_peak_dbtp, chain_result.output_lra)
+print(chain_result.stage_gain_reductions)
 
 # Block-by-block streaming variant
 with sonare.StreamingMasteringChain({
@@ -943,6 +945,8 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 `mastering_audio_profile()` accepts optional profile params: `n_fft`, `hop_length`, and `true_peak_oversample`. `mastering_assistant_suggest()` accepts `target_lufs`, `ceiling_db`, `enable_repair`, `prefer_streaming_safe`, and `speech_mono_amount`; camelCase aliases also work through the shared native parser.
 
 Mastering helpers also accept limiter-release and static-gain staging controls. The simple `mastering()` helper uses `release_ms` (`0` keeps the 50 ms library default) and `apply_gain_at_input_rate`. Preset/chain overrides use the flat keys `"maximizer.truePeakLimiter.releaseMs"` and `"maximizer.truePeakLimiter.applyGainAtInputRate"`; supplied override values are applied directly.
+
+Offline chain and preset results also report `output_true_peak_dbtp` at the configured loudness oversample factor, `output_lra` (EBU R128 loudness range in LU), and `stage_gain_reductions`. Each reduction identifies the reporting dynamics/maximizer stage and its most recent gain reduction in dB (zero or negative).
 
 Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. Pair inputs should use the same sample rate and comparable length.
 

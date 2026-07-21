@@ -724,25 +724,27 @@ class StreamConfig:
     compute_spectral: bool = True
     emit_every_n_frames: int = 1
     magnitude_downsample: int = 1
-    max_pending_frames: int = 4096  # 上限到達時は最古の未読フレームを破棄
+    max_pending_frames: int = 4096  # 上限到達時は新たに生成されたフレームを破棄
     key_update_interval_sec: float = 5.0
     bpm_update_interval_sec: float = 10.0
     window: int = 0          # 0=Hann, 1=Hamming, 2=Blackman, 3=Rectangular
-    output_format: int = 0  # 0=Float32, 1=Int16, 2=Uint8
+    output_format: int = 0  # レガシー。省略するか Float32 の値（0）を維持
 
 class StreamFrames:
     n_frames: int
     n_mels: int
+    n_chroma: int             # クロマがあれば 12、なければ 0
+    feature_flags: int        # MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
     timestamps: list[float]
-    mel: list[float]        # n_frames × n_mels, row-major
-    chroma: list[float]     # n_frames × 12, row-major
-    onset_strength: list[float]
+    mel: list[float]        # n_frames × n_mels。MEL がなければ空
+    chroma: list[float]     # n_frames × n_chroma。CHROMA がなければ空
+    onset_strength: list[float]  # ONSET がなければ空
     rms_energy: list[float]
-    spectral_centroid: list[float]
-    spectral_flatness: list[float]
-    chord_root: list[int]
-    chord_quality: list[int]
-    chord_confidence: list[float]
+    spectral_centroid: list[float]  # SPECTRAL がなければ空
+    spectral_flatness: list[float]  # SPECTRAL がなければ空
+    chord_root: list[int]            # CHROMA がなければ空
+    chord_quality: list[int]         # CHROMA がなければ空
+    chord_confidence: list[float]    # CHROMA がなければ空
 
 class StreamChordChange:
     root: int
@@ -815,7 +817,6 @@ stream = sonare.StreamAnalyzer(
         sample_rate=44100,
         n_mels=64,
         emit_every_n_frames=4,
-        output_format=0,  # 0=Float32, 1=Int16, 2=Uint8
     )
 )
 
@@ -824,7 +825,7 @@ for block in audio_blocks:
 
     frames = stream.read_frames(stream.available_frames())
     # frames.mel は [n_frames * n_mels] のフラット配列
-    # frames.chroma は [n_frames * 12] のフラット配列
+    # 任意配列は frames.feature_flags を確認してから読む。クロマは [n_frames * n_chroma]
 
     stats = stream.stats()
     if stats.bpm > 0:
@@ -833,7 +834,7 @@ for block in audio_blocks:
 stream.close()
 ```
 
-UI 転送量を抑える場合は、`read_frames(max_frames)` の代わりに量子化読み出しを使います。
+UI 転送量を抑える場合は、`read_frames(max_frames)` の代わりに量子化読み出しを使います。`output_format` はソース互換性のためだけに残っているので、省略するか `0` のままにし、使いたい読み出しメソッドを明示してください。
 
 | メソッド | 変わる点 |
 |----------|----------|
@@ -931,7 +932,8 @@ chain_result = sonare.master_audio(
         "maximizer.truePeakLimiter.applyGainAtInputRate": False,
     },
 )
-print(chain_result.output_lufs, chain_result.applied_gain_db)
+print(chain_result.output_lufs, chain_result.output_true_peak_dbtp, chain_result.output_lra)
+print(chain_result.stage_gain_reductions)
 
 # ブロック単位のストリーミング処理
 with sonare.StreamingMasteringChain({
@@ -961,6 +963,8 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 `mastering_audio_profile()` は任意のプロファイル設定として `n_fft`、`hop_length`、`true_peak_oversample` を受け取れます。`mastering_assistant_suggest()` は `target_lufs`、`ceiling_db`、`enable_repair`、`prefer_streaming_safe`、`speech_mono_amount` を受け取ります。共有ネイティブパーサーを通るため、camelCase の別名も使えます。
 
 マスタリング helper では、リミッターのリリースと静的ゲイン段の位置も指定できます。単発の `mastering()` helper は `release_ms`（`0` なら 50 ms のライブラリ既定値を維持）と `apply_gain_at_input_rate` を使います。プリセット／チェーンの上書きではフラットキーの `"maximizer.truePeakLimiter.releaseMs"` と `"maximizer.truePeakLimiter.applyGainAtInputRate"` を使い、渡した上書き値がそのまま適用されます。
+
+オフラインのチェーン／プリセット結果は、設定したラウドネス用オーバーサンプル倍率での `output_true_peak_dbtp`、EBU R128 ラウドネスレンジ（LU）の `output_lra`、`stage_gain_reductions` も報告します。各リダクションには、報告したダイナミクス／マキシマイザーステージと、その直近のゲインリダクション（0 以下の dB）が入ります。
 
 リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。ペア入力はサンプルレートを揃え、長さもなるべく近づけてください。
 

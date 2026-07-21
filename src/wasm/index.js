@@ -166,6 +166,8 @@ function getSonareModule() {
 }
 
 // src/validation.ts
+var MIN_AUDIO_SAMPLE_RATE = 8e3;
+var MAX_AUDIO_SAMPLE_RATE = 384e3;
 function assertNonEmptySamples(fnName, samples, argName = "samples") {
   if (samples.length === 0) {
     throw new RangeError(`${fnName}: ${argName} must not be empty`);
@@ -192,8 +194,10 @@ function assertFiniteScalar(fnName, value, argName) {
   }
 }
 function assertSampleRate(fnName, sampleRate) {
-  if (!Number.isInteger(sampleRate) || sampleRate < 8e3 || sampleRate > 384e3) {
-    throw new RangeError(`${fnName}: sampleRate out of supported range [8000, 384000]`);
+  if (!Number.isInteger(sampleRate) || sampleRate < MIN_AUDIO_SAMPLE_RATE || sampleRate > MAX_AUDIO_SAMPLE_RATE) {
+    throw new RangeError(
+      `${fnName}: sampleRate out of supported range [${MIN_AUDIO_SAMPLE_RATE}, ${MAX_AUDIO_SAMPLE_RATE}]`
+    );
   }
 }
 function assertNonNegativeInteger(fnName, value, argName) {
@@ -219,1073 +223,384 @@ function requireModule() {
   return getSonareModule();
 }
 function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
-  return requireModule().hpss(samples, sampleRate, kernelHarmonic, kernelPercussive);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, kernelHarmonic, kernelPercussive } : samples;
+  return requireModule().hpss(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.kernelHarmonic ?? 31,
+    request.kernelPercussive ?? 31
+  );
 }
-function harmonic(samples, sampleRate, options = {}) {
-  assertSamples("harmonic", samples, options.validate !== false);
-  return requireModule().harmonic(samples, sampleRate);
+function harmonic(samples, sampleRate = 22050, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("harmonic", request.samples, request.validate !== false);
+  return requireModule().harmonic(request.samples, request.sampleRate ?? 22050);
 }
-function percussive(samples, sampleRate, options = {}) {
-  assertSamples("percussive", samples, options.validate !== false);
-  return requireModule().percussive(samples, sampleRate);
+function percussive(samples, sampleRate = 22050, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("percussive", request.samples, request.validate !== false);
+  return requireModule().percussive(request.samples, request.sampleRate ?? 22050);
 }
 function timeStretch(samples, sampleRate, rate, options = {}) {
-  assertSamples("timeStretch", samples, options.validate !== false);
-  return requireModule().timeStretch(samples, sampleRate, rate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, rate, ...options } : samples;
+  assertSamples("timeStretch", request.samples, request.validate !== false);
+  return requireModule().timeStretch(request.samples, request.sampleRate, request.rate);
 }
 function pitchShift(samples, sampleRate, semitones, options = {}) {
-  assertSamples("pitchShift", samples, options.validate !== false);
-  return requireModule().pitchShift(samples, sampleRate, semitones);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, semitones, ...options } : samples;
+  assertSamples("pitchShift", request.samples, request.validate !== false);
+  return requireModule().pitchShift(request.samples, request.sampleRate, request.semitones);
 }
 function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
-  assertSamples("pitchCorrectToMidi", samples, options.validate !== false);
-  return requireModule().pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, currentMidi, targetMidi, ...options } : samples;
+  assertSamples("pitchCorrectToMidi", request.samples, request.validate !== false);
+  return requireModule().pitchCorrectToMidi(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.currentMidi ?? 69,
+    request.targetMidi ?? 69
+  );
 }
 function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 22050, hopLength = 512, voiced, voicedProb, options = {}) {
-  assertSamples("pitchCorrectToMidiTimevarying", samples, options.validate !== false);
-  if (voiced && voiced.length !== f0Hz.length) {
-    throw new RangeError("pitchCorrectToMidiTimevarying: voiced length must match f0Hz length");
-  }
-  if (voicedProb && voicedProb.length !== f0Hz.length) {
-    throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
-  }
-  const voicedF32 = voiced ? Float32Array.from(voiced) : void 0;
-  return requireModule().pitchCorrectToMidiTimevarying(
+  const request = samples instanceof Float32Array ? {
     samples,
-    sampleRate,
     f0Hz,
     targetMidi,
+    sampleRate,
     hopLength,
+    voiced,
+    voicedProb,
+    ...options
+  } : samples;
+  assertSamples("pitchCorrectToMidiTimevarying", request.samples, request.validate !== false);
+  if (request.voiced && request.voiced.length !== request.f0Hz.length) {
+    throw new RangeError("pitchCorrectToMidiTimevarying: voiced length must match f0Hz length");
+  }
+  if (request.voicedProb && request.voicedProb.length !== request.f0Hz.length) {
+    throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
+  }
+  const voicedF32 = request.voiced ? Float32Array.from(request.voiced) : void 0;
+  return requireModule().pitchCorrectToMidiTimevarying(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.f0Hz,
+    request.targetMidi,
+    request.hopLength ?? 512,
     voicedF32,
-    voicedProb
+    request.voicedProb
   );
 }
 function pitchCorrectTimevarying(samples, f0Hz, sampleRate = 22050, hopLength = 512, options = {}) {
-  assertSamples("pitchCorrectTimevarying", samples, options.validate !== false);
-  if (options.voiced && options.voiced.length !== f0Hz.length) {
+  const request = samples instanceof Float32Array ? { samples, f0Hz, sampleRate, hopLength, ...options } : samples;
+  assertSamples("pitchCorrectTimevarying", request.samples, request.validate !== false);
+  if (request.voiced && request.voiced.length !== request.f0Hz.length) {
     throw new RangeError("pitchCorrectTimevarying: voiced length must match f0Hz length");
   }
-  if (options.voicedProb && options.voicedProb.length !== f0Hz.length) {
+  if (request.voicedProb && request.voicedProb.length !== request.f0Hz.length) {
     throw new RangeError("pitchCorrectTimevarying: voicedProb length must match f0Hz length");
   }
   const nativeOptions = {
-    ...options,
-    voiced: options.voiced ? Float32Array.from(options.voiced) : void 0
+    ...request,
+    voiced: request.voiced ? Float32Array.from(request.voiced) : void 0
   };
   return requireModule().pitchCorrectTimevarying(
-    samples,
-    sampleRate,
-    f0Hz,
-    hopLength,
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.f0Hz,
+    request.hopLength ?? 512,
     nativeOptions
   );
 }
 function noteStretch(samples, sampleRate = 22050, options = {}) {
-  assertSamples("noteStretch", samples, options.validate !== false);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("noteStretch", request.samples, request.validate !== false);
   return requireModule().noteStretch(
-    samples,
-    sampleRate,
-    options.onsetSample ?? 0,
-    options.offsetSample ?? 0,
-    options.stretchRatio ?? 1
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.onsetSample ?? 0,
+    request.offsetSample ?? 0,
+    request.stretchRatio ?? 1
+  );
+}
+function noteMove(samples, sampleRate = 22050, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("noteMove", request.samples, request.validate !== false);
+  return requireModule().noteMove(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.onsetSample ?? 0,
+    request.offsetSample ?? 0,
+    request.targetOnsetSample ?? 0
   );
 }
 function normalize(samples, sampleRate, targetDb = 0, options = {}) {
-  assertSamples("normalize", samples, options.validate !== false);
-  return requireModule().normalize(samples, sampleRate, targetDb);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, targetDb, ...options } : samples;
+  assertSamples("normalize", request.samples, request.validate !== false);
+  return requireModule().normalize(request.samples, request.sampleRate, request.targetDb ?? 0);
 }
 function spectralEdit(samples, sampleRate, ops = [], options = {}) {
-  assertSamples("spectralEdit", samples, options.validate !== false);
-  assertSampleRate("spectralEdit", sampleRate);
-  return requireModule().spectralEdit(samples, sampleRate, ops, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ops, ...options } : samples;
+  assertSamples("spectralEdit", request.samples, request.validate !== false);
+  assertSampleRate("spectralEdit", request.sampleRate);
+  return requireModule().spectralEdit(
+    request.samples,
+    request.sampleRate,
+    request.ops ?? [],
+    request
+  );
 }
-
-// src/codes.ts
-function automationCurveCode(curve) {
-  switch (curve) {
-    case "linear":
-      return 0;
-    case "exponential":
-      return 1;
-    case "hold":
-      return 2;
-    case "s-curve":
-      return 3;
-    default:
-      throw new Error(`Invalid automation curve: ${curve}`);
-  }
-}
-function panLawCode(panLaw) {
-  if (typeof panLaw === "number") {
-    return panLaw;
-  }
-  switch (panLaw) {
-    case "const4.5dB":
-      return 1;
-    case "const6dB":
-      return 2;
-    case "linear0dB":
-      return 3;
-    default:
-      return 0;
-  }
-}
-function panModeCode(panMode) {
-  if (typeof panMode === "number") {
-    return panMode;
-  }
-  switch (panMode) {
-    case "stereoPan":
-    case "stereo-pan":
-      return 1;
-    case "dualPan":
-    case "dual-pan":
-      return 2;
-    default:
-      return 0;
-  }
-}
-function meterTapCode(tap) {
-  return tap === "preFader" || tap === 0 ? 0 : 1;
-}
-function sendTimingCode(timing) {
-  if (typeof timing === "number") {
-    return timing;
-  }
-  return timing === "preFader" ? 1 : 0;
-}
-
-// src/mixer.ts
-var Mixer = class _Mixer {
-  constructor(mixer) {
-    this.mixer = mixer;
-  }
-  /**
-   * Build a mixer from a scene JSON string.
-   *
-   * @param json - Scene JSON (strips, buses, sends, connections, inserts)
-   * @param sampleRate - Sample rate in Hz (default: 48000)
-   * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
-   */
-  static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
-    const module2 = getSonareModule();
-    return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize));
-  }
-  /** Rebuild and compile the routing graph from the current scene topology. */
-  compile() {
-    this.mixer.compile();
-  }
-  /**
-   * Non-fatal warnings captured when this mixer was built from scene JSON: one
-   * entry per channel-strip insert that was handed param keys it does not read
-   * (a likely typo, or a key meant for a different processor). The scene still
-   * loaded; these keys simply took no effect. Empty when every key was consumed.
-   * Use {@link masteringInsertParamNames} to discover the keys an insert accepts.
-   */
-  sceneWarnings() {
-    return this.mixer.sceneWarnings();
-  }
-  /**
-   * Mix one block of per-strip stereo audio into the stereo master.
-   *
-   * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
-   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
-   * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
-   */
-  processStereo(leftChannels, rightChannels) {
-    if (leftChannels.length !== rightChannels.length) {
-      throw new Error("leftChannels and rightChannels must have the same length.");
-    }
-    return this.mixer.processStereo(leftChannels, rightChannels);
-  }
-  /**
-   * Mix one block into caller-owned output arrays.
-   *
-   * This avoids allocating the result object and result `Float32Array`s. It is
-   * intended for realtime bridges such as AudioWorklet; the input channel count
-   * must match the scene strip count and all arrays must have the same length.
-   */
-  processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
-    if (leftChannels.length !== rightChannels.length) {
-      throw new Error("leftChannels and rightChannels must have the same length.");
-    }
-    if (outLeft.length !== outRight.length) {
-      throw new Error("outLeft and outRight must have the same length.");
-    }
-    this.mixer.processStereoInto(leftChannels, rightChannels, outLeft, outRight);
-  }
-  /**
-   * Create reusable WASM-heap input/output views for realtime-style processing.
-   *
-   * Fill `leftInputs[i]` / `rightInputs[i]`, call `process()`, then read
-   * `outLeft` / `outRight`. The views are owned by this mixer and become invalid
-   * after {@link delete}.
-   */
-  createRealtimeBuffer() {
-    const stripCount = this.stripCount();
-    let leftInputs = [];
-    let rightInputs = [];
-    let outLeft = this.mixer.outputLeftView();
-    let outRight = this.mixer.outputRightView();
-    const acquire = () => {
-      leftInputs = [];
-      rightInputs = [];
-      for (let index = 0; index < stripCount; index++) {
-        leftInputs.push(this.mixer.inputLeftView(index));
-        rightInputs.push(this.mixer.inputRightView(index));
-      }
-      outLeft = this.mixer.outputLeftView();
-      outRight = this.mixer.outputRightView();
-    };
-    acquire();
-    const reacquireIfDetached = () => {
-      if (outLeft.byteLength === 0 || (leftInputs[0]?.byteLength ?? 1) === 0) {
-        acquire();
-      }
-    };
-    return {
-      get leftInputs() {
-        reacquireIfDetached();
-        return leftInputs;
-      },
-      get rightInputs() {
-        reacquireIfDetached();
-        return rightInputs;
-      },
-      get outLeft() {
-        reacquireIfDetached();
-        return outLeft;
-      },
-      get outRight() {
-        reacquireIfDetached();
-        return outRight;
-      },
-      process: (numSamples = outLeft.length) => {
-        reacquireIfDetached();
-        this.mixer.processPreparedStereo(numSamples);
-      }
-    };
-  }
-  /** Number of strips in the mixer (e.g. strips loaded from the scene). */
-  stripCount() {
-    return this.mixer.stripCount();
-  }
-  /**
-   * Schedule sample-accurate insert-parameter automation on a strip's insert.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param insertIndex - Index into the strip's combined insert sequence
-   *   (`[pre-inserts... post-inserts...]`)
-   * @param paramId - Processor-specific parameter id
-   * @param samplePos - Absolute samples from the start of processing (the mixer
-   *   advances an internal position from 0 on the first {@link processStereo}
-   *   call; recompiling resets it to 0)
-   * @param value - Target parameter value
-   * @param curve - Interpolation curve (default: `'linear'`)
-   * @throws If the strip index is out of range or the schedule call fails
-   *   (unknown curve, out-of-range insert index, or full event lane)
-   */
-  scheduleInsertAutomation(stripIndex, insertIndex, paramId, samplePos, value, curve = "linear") {
-    this.mixer.scheduleInsertAutomation(
-      stripIndex,
-      insertIndex,
-      paramId,
-      samplePos,
-      value,
-      automationCurveCode(curve)
-    );
-  }
-  /**
-   * Resolve a strip's index in `[0, stripCount())` from its scene id, or `null`
-   * when no strip with that id exists (matches the Node binding's `number | null`).
-   */
-  stripById(id) {
-    const index = this.mixer.stripById(id);
-    return index < 0 ? null : index;
-  }
-  /**
-   * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
-   * `'submix'` (defaults to `'aux'`). Marks the routing graph dirty; call
-   * {@link compile} (or {@link processStereo}) to rebuild.
-   */
-  addBus(id, role = "aux") {
-    this.mixer.addBus(id, role);
-  }
-  /** Remove a bus by id. Marks the routing graph dirty. */
-  removeBus(id) {
-    this.mixer.removeBus(id);
-  }
-  /** Number of buses in the mixer topology. */
-  busCount() {
-    return this.mixer.busCount();
-  }
-  /**
-   * Add a VCA group with the given gain offset (dB). `members` is a list of
-   * strip ids governed by the group (may be empty).
-   */
-  addVcaGroup(id, gainDb = 0, members = []) {
-    this.mixer.addVcaGroup(id, gainDb, members);
-  }
-  /** Set an existing VCA group's gain in dB. */
-  setVcaGroupGainDb(id, gainDb) {
-    this.mixer.setVcaGroupGainDb(id, gainDb);
-  }
-  /** Remove a VCA group by id. */
-  removeVcaGroup(id) {
-    this.mixer.removeVcaGroup(id);
-  }
-  /** Number of VCA groups in the mixer topology. */
-  vcaGroupCount() {
-    return this.mixer.vcaGroupCount();
-  }
-  /** Set the strip's input trim in dB. */
-  setInputTrimDb(stripIndex, db) {
-    this.mixer.setInputTrimDb(stripIndex, db);
-  }
-  /** Set the strip's fader level in dB. */
-  setFaderDb(stripIndex, db) {
-    this.mixer.setFaderDb(stripIndex, db);
-  }
-  /**
-   * Set the strip's pan position.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param pan - Pan position in `[-1, 1]`
-   * @param panMode - Optional pan mode. When omitted the strip's current pan
-   *   mode is kept (passes `SONARE_PAN_MODE_KEEP`), so a plain pan nudge does
-   *   not reset a scene-defined `'stereoPan'` / `'dualPan'` mode back to
-   *   balance. Pass `'balance'` (or `0`) explicitly to force balance mode.
-   */
-  setPan(stripIndex, pan, panMode) {
-    const mode = panMode === void 0 ? -1 : panModeCode(panMode);
-    this.mixer.setPan(stripIndex, pan, mode);
-  }
-  /** Set the strip's stereo width. */
-  setWidth(stripIndex, width) {
-    this.mixer.setWidth(stripIndex, width);
-  }
-  /** Set the strip's mute state. */
-  setMuted(stripIndex, muted) {
-    this.mixer.setMuted(stripIndex, muted);
-  }
-  /**
-   * Set a strip's solo state. Takes effect on the next process without a
-   * graph recompile.
-   */
-  setSoloed(stripIndex, soloed) {
-    this.mixer.setSoloed(stripIndex, soloed);
-  }
-  /**
-   * Mark a strip solo-safe so it is never implied-muted by another strip's
-   * solo. Takes effect on the next process without a graph recompile.
-   */
-  setSoloSafe(stripIndex, soloSafe) {
-    this.mixer.setSoloSafe(stripIndex, soloSafe);
-  }
-  /** Invert the polarity of the left and/or right channel of a strip. */
-  setPolarityInvert(stripIndex, invertLeft, invertRight) {
-    this.mixer.setPolarityInvert(stripIndex, invertLeft, invertRight);
-  }
-  /** Set the strip's pan law. */
-  setPanLaw(stripIndex, panLaw) {
-    this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
-  }
-  /**
-   * Set a per-strip channel delay in samples. This changes the strip's reported
-   * latency; recompile to re-run latency compensation.
-   */
-  setChannelDelaySamples(stripIndex, delaySamples) {
-    this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
-  }
-  /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
-  setVcaOffsetDb(stripIndex, offsetDb) {
-    this.mixer.setVcaOffsetDb(stripIndex, offsetDb);
-  }
-  /** Set independent left/right pan positions (dual-pan mode). */
-  setDualPan(stripIndex, leftPan, rightPan) {
-    this.mixer.setDualPan(stripIndex, leftPan, rightPan);
-  }
-  /**
-   * Set the strip's surround pan position, used when it feeds a >2-channel bus.
-   * Stored on the scene; inert until the surround DSP path applies it.
-   */
-  setSurroundPan(stripIndex, pan) {
-    this.mixer.setSurroundPan(stripIndex, pan);
-  }
-  /**
-   * Add a send to a strip after construction.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param id - Send id
-   * @param destinationBusId - Destination bus id
-   * @param sendDb - Initial send level in dB
-   * @param timing - `'preFader'` or `'postFader'` (default: `'postFader'`)
-   * @returns The new send's index
-   */
-  addSend(stripIndex, id, destinationBusId, sendDb = 0, timing = "postFader") {
-    return this.mixer.addSend(stripIndex, id, destinationBusId, sendDb, sendTimingCode(timing));
-  }
-  /** Set the send level (in dB) for an existing send by index. */
-  setSendDb(stripIndex, sendIndex, sendDb) {
-    this.mixer.setSendDb(stripIndex, sendIndex, sendDb);
-  }
-  /**
-   * Remove an existing send from a strip by index.
-   *
-   * Sends are addressed in add order. After removal, sends with a higher index
-   * than `sendIndex` shift down by one. Recompile (or process) before reading
-   * results so the routing graph rebuilds.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param sendIndex - Send index in add order
-   */
-  removeSend(stripIndex, sendIndex) {
-    this.mixer.removeSend(stripIndex, sendIndex);
-  }
-  /**
-   * Read a strip's meter snapshot at the given tap point.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param tap - `'preFader'` or `'postFader'` (default: `'postFader'`)
-   */
-  meterTap(stripIndex, tap = "postFader") {
-    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
-  }
-  /**
-   * Read a strip's meter snapshot.
-   *
-   * With no `tap` argument this reads the strip's own (post-fader) meter,
-   * matching the Node/Python tap-less `stripMeter` contract. Pass an optional
-   * `tap` (`'preFader'` / `'postFader'`) to read the tap-selectable snapshot
-   * instead — the same backing call as {@link meterTap}.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param tap - Optional tap point (`'preFader'` / `'postFader'`); when omitted
-   *   the tap-less post-fader strip meter is read.
-   */
-  stripMeter(stripIndex, tap) {
-    if (tap === void 0) {
-      return this.mixer.stripMeter(stripIndex);
-    }
-    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
-  }
-  /**
-   * Schedule sample-accurate fader automation on a strip.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param samplePos - Absolute samples from the start of processing
-   * @param faderDb - Target fader level in dB
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  scheduleFaderAutomation(stripIndex, samplePos, faderDb, curve = "linear") {
-    this.mixer.scheduleFaderAutomation(stripIndex, samplePos, faderDb, automationCurveCode(curve));
-  }
-  /**
-   * Schedule sample-accurate pan automation on a strip.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param samplePos - Absolute samples from the start of processing
-   * @param pan - Target pan position
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  schedulePanAutomation(stripIndex, samplePos, pan, curve = "linear") {
-    this.mixer.schedulePanAutomation(stripIndex, samplePos, pan, automationCurveCode(curve));
-  }
-  /**
-   * Schedule sample-accurate width automation on a strip.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param samplePos - Absolute samples from the start of processing
-   * @param width - Target stereo width
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  scheduleWidthAutomation(stripIndex, samplePos, width, curve = "linear") {
-    this.mixer.scheduleWidthAutomation(stripIndex, samplePos, width, automationCurveCode(curve));
-  }
-  /**
-   * Schedule sample-accurate send-level automation on a strip's send.
-   *
-   * @param stripIndex - Strip index in `[0, stripCount())`
-   * @param sendIndex - Send index in the strip's add order
-   * @param samplePos - Absolute samples from the start of processing
-   * @param db - Target send level in dB
-   * @param curve - Interpolation curve (default: `'linear'`)
-   */
-  scheduleSendAutomation(stripIndex, sendIndex, samplePos, db, curve = "linear") {
-    this.mixer.scheduleSendAutomation(
-      stripIndex,
-      sendIndex,
-      samplePos,
-      db,
-      automationCurveCode(curve)
-    );
-  }
-  /**
-   * Read up to `maxPoints` of a strip's most recent goniometer samples
-   * (oldest to newest).
-   */
-  readGoniometerLatest(stripIndex, maxPoints) {
-    return this.mixer.readGoniometerLatest(stripIndex, maxPoints);
-  }
-  /** Serialize the current scene (strips, buses, sends, connections) to JSON. */
-  toSceneJson() {
-    return this.mixer.toSceneJson();
-  }
-  /**
-   * Longest audible serial processor-tail path to the master, in samples. Lazily
-   * compiles the routing graph if the topology is dirty.
-   */
-  tailSamples() {
-    return this.mixer.tailSamples();
-  }
-  /**
-   * Reported latency (samples) of the compiled mixer graph, for aligning
-   * dry/wet material. Lazily compiles the routing graph if the topology is dirty.
-   */
-  latencySamples() {
-    return this.mixer.latencySamples();
-  }
-  /**
-   * Drain delayed / tail audio by processing a zero-input block of `numSamples`
-   * frames after the host stops feeding strip inputs. Returns the mixed stereo
-   * master (`left`, `right`, `sampleRate`).
-   */
-  drainTailStereo(numSamples) {
-    return this.mixer.drainTailStereo(numSamples);
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.mixer.delete();
-  }
-  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
-  destroy() {
-    this.delete();
-  }
-};
-
-// src/realtime_voice_changer.ts
-var RealtimeVoiceChanger = class {
-  constructor(config = "neutral-monitor") {
-    const module2 = getSonareModule();
-    this.changer = module2.createRealtimeVoiceChanger(config);
-  }
-  prepare(sampleRate, maxBlockSize = 128, channels = 1) {
-    this.changer.prepare(sampleRate, maxBlockSize, channels);
-  }
-  reset() {
-    this.changer.reset();
-  }
-  setConfig(config) {
-    this.changer.setConfig(config);
-  }
-  configJson() {
-    return this.changer.configJson();
-  }
-  latencySamples() {
-    return this.changer.latencySamples();
-  }
-  processMono(samples) {
-    return this.changer.processMono(samples);
-  }
-  processMonoInto(samples, output) {
-    this.changer.processMonoInto(samples, output);
-  }
-  processInterleaved(samples, channels) {
-    return this.changer.processInterleaved(samples, channels);
-  }
-  processInterleavedInto(samples, channels, output) {
-    this.changer.processInterleavedInto(samples, channels, output);
-  }
-  /**
-   * Acquire a typed-memory view onto the WASM heap for mono input.
-   *
-   * Write your input samples into the returned `Float32Array` directly (e.g.
-   * via `input.set(source)`); no copy crosses the JS↔C++ bridge until
-   * {@link processPreparedMono} is called. The view is owned by this
-   * RealtimeVoiceChanger and becomes invalid after {@link delete}; it may
-   * also be invalidated if you later call this method with a larger
-   * `numSamples` value (the underlying buffer may be reallocated).
-   */
-  getMonoInputBuffer(numSamples) {
-    return this.changer.getMonoInputBuffer(numSamples);
-  }
-  /** Mono output view counterpart to {@link getMonoInputBuffer}. */
-  getMonoOutputBuffer(numSamples) {
-    return this.changer.getMonoOutputBuffer(numSamples);
-  }
-  /**
-   * Process the previously-acquired mono input buffer in place. The output
-   * appears in the buffer returned by {@link getMonoOutputBuffer}. No JS↔C++
-   * sample-level crossings happen on this call — it just hands control to
-   * the underlying DSP on already-on-heap data.
-   */
-  processPreparedMono(numSamples) {
-    this.changer.processPreparedMono(numSamples);
-  }
-  /** Interleaved input view (layout L0,R0,L1,R1,...). */
-  getInterleavedInputBuffer(numFrames, numChannels) {
-    return this.changer.getInterleavedInputBuffer(numFrames, numChannels);
-  }
-  /** Interleaved output view counterpart. */
-  getInterleavedOutputBuffer(numFrames, numChannels) {
-    return this.changer.getInterleavedOutputBuffer(numFrames, numChannels);
-  }
-  /**
-   * Process the previously-acquired interleaved buffer in place. Output
-   * appears in the buffer returned by {@link getInterleavedOutputBuffer}.
-   */
-  processPreparedInterleaved(numFrames, numChannels) {
-    this.changer.processPreparedInterleaved(numFrames, numChannels);
-  }
-  /**
-   * Planar-channel input/output view (one Float32Array per channel). Matches
-   * AudioWorklet's native layout; processing happens in place.
-   */
-  getPlanarChannelBuffer(channel, numFrames) {
-    return this.changer.getPlanarChannelBuffer(channel, numFrames);
-  }
-  /**
-   * Process the previously-acquired planar channel buffers in place. Each
-   * channel must have been obtained from {@link getPlanarChannelBuffer}
-   * with the same `numFrames`. Output replaces input in the same buffers.
-   */
-  processPreparedPlanar(numFrames) {
-    this.changer.processPreparedPlanar(numFrames);
-  }
-  /**
-   * Convenience factory for the mono zero-copy path: returns the input/output
-   * heap views plus a `process()` thunk wired to the same `numSamples`. The
-   * views are reused across calls and become invalid after {@link delete}.
-   */
-  createRealtimeMonoBuffer(numSamples) {
-    let input = this.getMonoInputBuffer(numSamples);
-    let output = this.getMonoOutputBuffer(numSamples);
-    const reacquireIfDetached = () => {
-      if (input.byteLength === 0 || output.byteLength === 0) {
-        input = this.getMonoInputBuffer(numSamples);
-        output = this.getMonoOutputBuffer(numSamples);
-      }
-    };
-    return {
-      get input() {
-        reacquireIfDetached();
-        return input;
-      },
-      get output() {
-        reacquireIfDetached();
-        return output;
-      },
-      process: () => {
-        reacquireIfDetached();
-        this.processPreparedMono(numSamples);
-      }
-    };
-  }
-  /** Same as {@link createRealtimeMonoBuffer} but for interleaved I/O. */
-  createRealtimeInterleavedBuffer(numFrames, numChannels) {
-    let input = this.getInterleavedInputBuffer(numFrames, numChannels);
-    let output = this.getInterleavedOutputBuffer(numFrames, numChannels);
-    const reacquireIfDetached = () => {
-      if (input.byteLength === 0 || output.byteLength === 0) {
-        input = this.getInterleavedInputBuffer(numFrames, numChannels);
-        output = this.getInterleavedOutputBuffer(numFrames, numChannels);
-      }
-    };
-    return {
-      get input() {
-        reacquireIfDetached();
-        return input;
-      },
-      get output() {
-        reacquireIfDetached();
-        return output;
-      },
-      channels: numChannels,
-      process: () => {
-        reacquireIfDetached();
-        this.processPreparedInterleaved(numFrames, numChannels);
-      }
-    };
-  }
-  /**
-   * Convenience factory for the planar zero-copy path. Acquires one
-   * heap-backed Float32Array per channel and returns a `process()` thunk
-   * wired to the same `numFrames`. Buffers are reused across calls and
-   * become invalid after {@link delete}.
-   */
-  createRealtimePlanarBuffer(numFrames, numChannels) {
-    let channels = [];
-    const acquire = () => {
-      channels = [];
-      for (let ch = 0; ch < numChannels; ch++) {
-        channels.push(this.getPlanarChannelBuffer(ch, numFrames));
-      }
-    };
-    acquire();
-    const reacquireIfDetached = () => {
-      if ((channels[0]?.byteLength ?? 0) === 0) {
-        acquire();
-      }
-    };
-    return {
-      get channels() {
-        reacquireIfDetached();
-        return channels;
-      },
-      process: () => {
-        reacquireIfDetached();
-        this.processPreparedPlanar(numFrames);
-      }
-    };
-  }
-  delete() {
-    this.changer.delete();
-  }
-};
-function realtimeVoiceChangerPresetNames() {
-  return Array.from(getSonareModule().realtimeVoiceChangerPresetNames());
-}
-function realtimeVoiceChangerPresetJson(name) {
-  return getSonareModule().realtimeVoiceChangerPresetJson(name);
-}
-function validateRealtimeVoiceChangerPresetJson(json) {
-  return getSonareModule().validateRealtimeVoiceChangerPresetJson(json);
-}
-
-// src/streaming_processors.ts
-var EQ_PHASE_MODES = {
-  zero: 1,
-  "zero-latency": 1,
-  zero_latency: 1,
-  natural: 2,
-  "natural-phase": 2,
-  natural_phase: 2,
-  linear: 3,
-  "linear-phase": 3,
-  linear_phase: 3
-};
-var StreamingMasteringChain = class {
-  constructor(config) {
-    const module2 = getSonareModule();
-    this.chain = module2.createStreamingMasteringChain(config);
-  }
-  /**
-   * Initialize processors for the given sample rate and block layout.
-   *
-   * @param sampleRate - Sample rate in Hz
-   * @param maxBlockSize - Maximum block size per process call
-   * @param numChannels - 1 (mono) or 2 (stereo)
-   */
-  prepare(sampleRate, maxBlockSize, numChannels) {
-    this.chain.prepare(sampleRate, maxBlockSize, numChannels);
-  }
-  /**
-   * Process one mono block, returning the processed samples (same length).
-   */
-  processMono(samples) {
-    return this.chain.processMono(samples);
-  }
-  /**
-   * Process one stereo block, returning the processed channels.
-   */
-  processStereo(left, right) {
-    if (left.length !== right.length) {
-      throw new Error("Stereo channel lengths must match.");
-    }
-    return this.chain.processStereo(left, right);
-  }
-  /** Reset all processor state without rebuilding. */
-  reset() {
-    this.chain.reset();
-  }
-  /** Total reported latency in samples across all active processors. */
-  latencySamples() {
-    return this.chain.latencySamples();
-  }
-  /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
-  stageNames() {
-    return this.chain.stageNames();
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.chain.delete();
-  }
-};
-var StreamingEqualizer = class {
-  constructor(config = {}) {
-    const module2 = getSonareModule();
-    this.eq = module2.createEqualizer(config);
-  }
-  /**
-   * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
-   */
-  setBand(index, band) {
-    this.eq.setBand(index, band);
-  }
-  /** Disable and reset every band. */
-  clear() {
-    this.eq.clear();
-  }
-  /**
-   * Set the global phase mode: `'zero'` | `'natural'` | `'linear'` or 1/2/3.
-   */
-  setPhaseMode(mode) {
-    const value = typeof mode === "number" ? mode : EQ_PHASE_MODES[mode.toLowerCase()];
-    if (value === void 0) {
-      throw new Error(`unknown EQ phase mode: ${mode}`);
-    }
-    this.eq.setPhaseMode(value);
-  }
-  /** Enable or disable output auto-gain compensation. */
-  setAutoGain(enabled) {
-    this.eq.setAutoGain(enabled);
-  }
-  /** Set all-band EQ gain scale as a 0.0..2.0 multiplier. */
-  setGainScale(scale) {
-    this.eq.setGainScale(scale);
-  }
-  /** Set post-EQ output gain in dB. */
-  setOutputGainDb(gainDb) {
-    this.eq.setOutputGainDb(gainDb);
-  }
-  /** Set post-EQ stereo balance in -1.0..1.0; mono input ignores pan. */
-  setOutputPan(pan) {
-    this.eq.setOutputPan(pan);
-  }
-  /**
-   * Provide a mono external sidechain key for dynamic bands that opt into
-   * `external_sidechain`. The samples are copied into an owned buffer.
-   */
-  setSidechainMono(samples) {
-    this.eq.setSidechainMono(samples);
-  }
-  /**
-   * Provide a stereo external sidechain key. Both channels must match length.
-   */
-  setSidechainStereo(left, right) {
-    if (left.length !== right.length) {
-      throw new Error("Sidechain channel lengths must match.");
-    }
-    this.eq.setSidechainStereo(left, right);
-  }
-  /** Release any borrowed external sidechain buffers. */
-  clearSidechain() {
-    this.eq.clearSidechain();
-  }
-  /** Auto-gain applied on the most recent block, in dB. */
-  lastAutoGainDb() {
-    return this.eq.lastAutoGainDb();
-  }
-  /** Reported processing latency in samples (non-zero for linear-phase bands). */
-  latencySamples() {
-    return this.eq.latencySamples();
-  }
-  /**
-   * Process one mono block, returning the equalized samples (same length).
-   */
-  processMono(samples) {
-    return this.eq.processMono(samples);
-  }
-  /**
-   * Process one stereo block, returning the equalized channels.
-   */
-  processStereo(left, right) {
-    if (left.length !== right.length) {
-      throw new Error("Stereo channel lengths must match.");
-    }
-    return this.eq.processStereo(left, right);
-  }
-  /**
-   * Read the latest pre/post spectrum snapshot for metering. `seq` increments
-   * each time a new snapshot is published.
-   */
-  spectrum() {
-    return this.eq.spectrum();
-  }
-  /**
-   * Configure bands so the source spectrum matches the reference spectrum.
-   *
-   * @param source - Source audio (mono samples)
-   * @param reference - Reference audio (mono samples)
-   * @param options - `sampleRate` (default 48000) and `maxBands` (default 8)
-   */
-  match(source, reference, options = {}) {
-    this.eq.match(source, reference, options);
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.eq.delete();
-  }
-};
-var StreamingRetune = class {
-  constructor(config = {}) {
-    const module2 = getSonareModule();
-    this.retune = module2.createStreamingRetune(config);
-  }
-  /**
-   * Allocate and initialize native state for the given sample rate and maximum
-   * process block size.
-   */
-  prepare(sampleRate, maxBlockSize) {
-    this.retune.prepare(sampleRate, maxBlockSize);
-  }
-  /** Reset delay, grain, and overlap-add state without changing config. */
-  reset() {
-    this.retune.reset();
-  }
-  /**
-   * Update retune settings. Changing `grainSize` takes effect after the next
-   * {@link prepare} call.
-   */
-  setConfig(config) {
-    this.retune.setConfig(config);
-  }
-  /** Current native config. */
-  config() {
-    return this.retune.config();
-  }
-  /** Resolved grain size in samples after {@link prepare}. */
-  grainSize() {
-    return this.retune.grainSize();
-  }
-  /** Process one mono block, returning the shifted samples (same length). */
-  processMono(samples) {
-    return this.retune.processMono(samples);
-  }
-  /** Release the underlying WASM object. Safe to call only once. */
-  delete() {
-    this.retune.delete();
-  }
-};
 
 // src/effects_voice_change.ts
 function requireModule2() {
   return getSonareModule();
 }
 function voiceChange(samples, sampleRate = 22050, options = {}) {
-  assertSamples("voiceChange", samples, options.validate !== false);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("voiceChange", request.samples, request.validate !== false);
   return requireModule2().voiceChange(
-    samples,
-    sampleRate,
-    options.pitchSemitones ?? 0,
-    options.formantFactor ?? 1
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.pitchSemitones ?? 0,
+    request.formantFactor ?? 1
   );
 }
-function latencyCompensatedVoiceChange(changer, samples, channels, blockFrames) {
-  const latencyFrames = Math.max(0, changer.latencySamples());
-  if (channels === 1) {
-    const total = samples.length + latencyFrames;
-    const input2 = new Float32Array(total);
-    input2.set(samples);
-    const processed2 = new Float32Array(total);
-    for (let offset = 0; offset < total; offset += blockFrames) {
-      const block = input2.subarray(offset, Math.min(offset + blockFrames, total));
-      processed2.set(changer.processMono(block), offset);
-    }
-    return processed2.slice(latencyFrames, latencyFrames + samples.length);
-  }
-  const frames = samples.length / 2;
-  const totalFrames = frames + latencyFrames;
-  const input = new Float32Array(totalFrames * 2);
-  input.set(samples);
-  const processed = new Float32Array(totalFrames * 2);
-  const frameStride = blockFrames * 2;
-  for (let offset = 0; offset < input.length; offset += frameStride) {
-    const block = input.subarray(offset, Math.min(offset + frameStride, input.length));
-    processed.set(changer.processInterleaved(block, 2), offset);
-  }
-  const start = latencyFrames * 2;
-  return processed.slice(start, start + samples.length);
-}
 function voiceChangeRealtime(samples, sampleRate = 48e3, preset = "neutral-monitor", options = {}) {
-  assertSamples("voiceChangeRealtime", samples, options.validate !== false);
-  const channels = options.channels ?? 1;
+  const request = samples instanceof Float32Array ? { samples, sampleRate, preset, ...options } : samples;
+  assertSamples("voiceChangeRealtime", request.samples, request.validate !== false);
+  const channels = request.channels ?? 1;
   if (channels !== 1 && channels !== 2) {
     throw new Error("voiceChangeRealtime: channels must be 1 or 2.");
   }
-  if (channels === 2 && samples.length % 2 !== 0) {
+  if (channels === 2 && request.samples.length % 2 !== 0) {
     throw new Error("voiceChangeRealtime: stereo input length must be a multiple of 2.");
   }
-  const blockSize = Math.max(1, Math.floor(options.blockSize ?? 512));
-  const changer = new RealtimeVoiceChanger(preset);
-  try {
-    changer.prepare(sampleRate, blockSize, channels);
-    return latencyCompensatedVoiceChange(changer, samples, channels, blockSize);
-  } finally {
-    changer.delete();
+  const presetConfig = request.preset ?? "neutral-monitor";
+  return requireModule2().voiceChangeRealtime(
+    request.samples,
+    request.sampleRate ?? 48e3,
+    typeof presetConfig === "string" ? presetConfig : JSON.stringify(presetConfig),
+    channels
+  );
+}
+
+// src/_chain_config.ts
+function flattenChainConfig(config) {
+  const out = {};
+  const walk = (node, prefix) => {
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[path] = value;
+      } else if (value !== null && typeof value === "object") {
+        walk(value, path);
+      }
+    }
+  };
+  walk(config, "");
+  const aliases = {
+    "repair.denoise": "repair.denoise.enabled",
+    "repair.nFft": "repair.denoise.nFft",
+    "repair.hopLength": "repair.denoise.hopLength",
+    "repair.ddAlpha": "repair.denoise.ddAlpha",
+    "repair.gainFloor": "repair.denoise.gainFloor",
+    "eq.tiltDb": "eq.tilt.tiltDb",
+    "eq.pivotHz": "eq.tilt.pivotHz"
+  };
+  for (const [legacy, canonical] of Object.entries(aliases)) {
+    const value = out[legacy];
+    if (value !== void 0) {
+      out[canonical] = value;
+      delete out[legacy];
+    }
   }
+  return out;
 }
 
 // src/mastering_chain.ts
 function requireModule3() {
   return getSonareModule();
 }
-function masteringChain(samples, sampleRate = 22050, config) {
-  return requireModule3().masteringChain(samples, sampleRate, config);
+function canonicalChainConfig(config) {
+  return { __flatParams: flattenChainConfig(config) };
 }
-function masteringChainStereo(left, right, sampleRate = 22050, config) {
-  if (left.length !== right.length) {
+function masterAudioRequest(requestOrSamples, sampleRate, preset, overrides, onProgress) {
+  if (requestOrSamples instanceof Float32Array) {
+    return {
+      samples: requestOrSamples,
+      sampleRate,
+      preset,
+      overrides: overrides ?? {},
+      onProgress
+    };
+  }
+  return requestOrSamples;
+}
+function masterAudioStereoRequest(requestOrLeft, right, sampleRate, preset, overrides, onProgress) {
+  if (requestOrLeft instanceof Float32Array) {
+    return {
+      left: requestOrLeft,
+      right,
+      sampleRate,
+      preset,
+      overrides: overrides ?? {},
+      onProgress
+    };
+  }
+  return requestOrLeft;
+}
+function masteringChain(samples, sampleRate = 22050, config = {}, onProgress) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, config, onProgress } : samples;
+  if (request.onProgress) {
+    return requireModule3().masteringChainWithProgress(
+      request.samples,
+      request.sampleRate ?? 22050,
+      canonicalChainConfig(request.config ?? {}),
+      request.onProgress
+    );
+  }
+  return requireModule3().masteringChain(
+    request.samples,
+    request.sampleRate ?? 22050,
+    canonicalChainConfig(request.config ?? {})
+  );
+}
+function masteringChainStereo(left, right, sampleRate = 22050, config = {}, onProgress) {
+  const request = left instanceof Float32Array ? { left, right, sampleRate, config, onProgress } : left;
+  if (request.left.length !== request.right.length) {
     throw new Error("Stereo channel lengths must match.");
   }
+  if (request.onProgress) {
+    return requireModule3().masteringChainStereoWithProgress(
+      request.left,
+      request.right,
+      request.sampleRate ?? 22050,
+      canonicalChainConfig(request.config ?? {}),
+      request.onProgress
+    );
+  }
   return requireModule3().masteringChainStereo(
-    left,
-    right,
-    sampleRate,
-    config
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    canonicalChainConfig(request.config ?? {})
   );
 }
-function masteringChainWithProgress(samples, sampleRate = 22050, config, onProgress) {
+function masteringChainWithProgress(samples, sampleRate = 22050, config = {}, onProgress) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, config, onProgress } : samples;
+  if (!request.onProgress) {
+    throw new TypeError("masteringChainWithProgress: onProgress is required");
+  }
   return requireModule3().masteringChainWithProgress(
-    samples,
-    sampleRate,
-    config,
-    onProgress
+    request.samples,
+    request.sampleRate ?? 22050,
+    canonicalChainConfig(request.config ?? {}),
+    request.onProgress
   );
 }
-function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config, onProgress) {
-  if (left.length !== right.length) {
+function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config = {}, onProgress) {
+  const request = left instanceof Float32Array ? { left, right, sampleRate, config, onProgress } : left;
+  if (!request.onProgress) {
+    throw new TypeError("masteringChainStereoWithProgress: onProgress is required");
+  }
+  if (request.left.length !== request.right.length) {
     throw new Error("Stereo channel lengths must match.");
   }
   return requireModule3().masteringChainStereoWithProgress(
-    left,
-    right,
-    sampleRate,
-    config,
-    onProgress
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    canonicalChainConfig(request.config ?? {}),
+    request.onProgress
   );
 }
 function masteringPresetNames() {
   return Array.from(requireModule3().masteringPresetNames());
 }
-function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}) {
-  return requireModule3().masterAudio(presetName, samples, sampleRate, overrides);
-}
-function masterAudioStereo(left, right, sampleRate = 22050, presetName = "pop", overrides = {}) {
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
+function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}, onProgress) {
+  const request = masterAudioRequest(samples, sampleRate, presetName, overrides, onProgress);
+  const flat = flattenChainConfig(request.overrides ?? {});
+  if (request.onProgress) {
+    return requireModule3().masterAudioWithProgress(
+      request.preset ?? "pop",
+      request.samples,
+      request.sampleRate ?? 22050,
+      flat,
+      request.onProgress
+    );
   }
-  return requireModule3().masterAudioStereo(presetName, left, right, sampleRate, overrides);
-}
-function masterAudioWithProgress(samples, sampleRate = 22050, presetName, onProgress, overrides = null) {
-  return requireModule3().masterAudioWithProgress(
-    presetName,
-    samples,
-    sampleRate,
-    overrides,
-    onProgress
+  return requireModule3().masterAudio(
+    request.preset ?? "pop",
+    request.samples,
+    request.sampleRate ?? 22050,
+    flat
   );
 }
-function masterAudioStereoWithProgress(left, right, sampleRate = 22050, presetName, onProgress, overrides = null) {
-  if (left.length !== right.length) {
-    throw new Error("Stereo channel lengths must match.");
-  }
-  return requireModule3().masterAudioStereoWithProgress(
-    presetName,
+function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName = "pop", overrides = {}, onProgress) {
+  const request = masterAudioStereoRequest(
     left,
     right,
     sampleRate,
+    presetName,
     overrides,
     onProgress
+  );
+  const flat = flattenChainConfig(request.overrides ?? {});
+  if (request.left.length !== request.right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  if (request.onProgress) {
+    return requireModule3().masterAudioStereoWithProgress(
+      request.preset ?? "pop",
+      request.left,
+      request.right,
+      request.sampleRate ?? 22050,
+      flat,
+      request.onProgress
+    );
+  }
+  return requireModule3().masterAudioStereo(
+    request.preset ?? "pop",
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    flat
+  );
+}
+function masterAudioWithProgress(samples, sampleRate = 22050, presetName = "pop", overrides = null, onProgress) {
+  const request = masterAudioRequest(samples, sampleRate, presetName, overrides, onProgress);
+  if (!request.onProgress) {
+    throw new TypeError("masterAudioWithProgress: onProgress is required");
+  }
+  return requireModule3().masterAudioWithProgress(
+    request.preset ?? "pop",
+    request.samples,
+    request.sampleRate ?? 22050,
+    flattenChainConfig(request.overrides ?? {}),
+    request.onProgress
+  );
+}
+function masterAudioStereoWithProgress(left, right = void 0, sampleRate = 22050, presetName = "pop", overrides = null, onProgress) {
+  const request = masterAudioStereoRequest(
+    left,
+    right,
+    sampleRate,
+    presetName,
+    overrides,
+    onProgress
+  );
+  if (!request.onProgress) {
+    throw new TypeError("masterAudioStereoWithProgress: onProgress is required");
+  }
+  if (request.left.length !== request.right.length) {
+    throw new Error("Stereo channel lengths must match.");
+  }
+  return requireModule3().masterAudioStereoWithProgress(
+    request.preset ?? "pop",
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    flattenChainConfig(request.overrides ?? {}),
+    request.onProgress
   );
 }
 
@@ -1294,15 +609,16 @@ function requireModule4() {
   return getSonareModule();
 }
 function mastering(samples, sampleRate = 22050, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   return requireModule4().mastering(
-    samples,
-    sampleRate,
-    options.targetLufs ?? -14,
-    options.ceilingDb ?? -1,
-    options.truePeakOversample ?? 4,
-    options.releaseMs ?? 0,
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.targetLufs ?? -14,
+    request.ceilingDb ?? -1,
+    request.truePeakOversample ?? 4,
+    request.releaseMs ?? 0,
     // 0 => library default (50 ms)
-    options.applyGainAtInputRate ?? false
+    request.applyGainAtInputRate ?? false
   );
 }
 function masteringProcessorNames() {
@@ -1334,31 +650,104 @@ function masteringStereoAnalysisNames() {
   return Array.from(requireModule4().masteringStereoAnalysisNames());
 }
 function masteringProcess(processorName, samples, sampleRate = 22050, params = {}) {
-  return requireModule4().masteringProcess(processorName, samples, sampleRate, params);
+  const request = typeof processorName === "string" ? { processorName, samples, sampleRate, params } : processorName;
+  return requireModule4().masteringProcess(
+    request.processorName,
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringProcessStereo(processorName, left, right, sampleRate = 22050, params = {}) {
-  if (left.length !== right.length) {
+  const request = typeof processorName === "string" ? {
+    processorName,
+    left,
+    right,
+    sampleRate,
+    params
+  } : processorName;
+  if (request.left.length !== request.right.length) {
     throw new Error("Stereo channel lengths must match.");
   }
-  return requireModule4().masteringProcessStereo(processorName, left, right, sampleRate, params);
+  return requireModule4().masteringProcessStereo(
+    request.processorName,
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringPairProcess(processorName, source, reference, sampleRate = 22050, params = {}) {
-  return requireModule4().masteringPairProcess(processorName, source, reference, sampleRate, params);
+  const request = typeof processorName === "string" ? {
+    processorName,
+    source,
+    reference,
+    sampleRate,
+    params
+  } : processorName;
+  return requireModule4().masteringPairProcess(
+    request.processorName,
+    request.source,
+    request.reference,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringPairAnalyze(analysisName, source, reference, sampleRate = 22050, params = {}) {
-  return requireModule4().masteringPairAnalyze(analysisName, source, reference, sampleRate, params);
+  const request = typeof analysisName === "string" ? {
+    analysisName,
+    source,
+    reference,
+    sampleRate,
+    params
+  } : analysisName;
+  return requireModule4().masteringPairAnalyze(
+    request.analysisName,
+    request.source,
+    request.reference,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringStereoAnalyze(analysisName, left, right, sampleRate = 22050, params = {}) {
-  return requireModule4().masteringStereoAnalyze(analysisName, left, right, sampleRate, params);
+  const request = typeof analysisName === "string" ? {
+    analysisName,
+    left,
+    right,
+    sampleRate,
+    params
+  } : analysisName;
+  return requireModule4().masteringStereoAnalyze(
+    request.analysisName,
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringAssistantSuggest(samples, sampleRate = 22050, params = {}) {
-  return requireModule4().masteringAssistantSuggest(samples, sampleRate, params);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, params } : samples;
+  return requireModule4().masteringAssistantSuggest(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringAudioProfile(samples, sampleRate = 22050, params = {}) {
-  return requireModule4().masteringAudioProfile(samples, sampleRate, params);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, params } : samples;
+  return requireModule4().masteringAudioProfile(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
 }
 function masteringStreamingPreview(samples, sampleRate = 22050, platforms = []) {
-  return requireModule4().masteringStreamingPreview(samples, sampleRate, platforms);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, platforms } : samples;
+  return requireModule4().masteringStreamingPreview(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.platforms ?? []
+  );
 }
 
 // src/mastering_dynamics.ts
@@ -1371,21 +760,28 @@ var COMPRESSOR_DETECTOR_MAP = {
   log_rms: 2
 };
 function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
-  assertSamples("masteringDynamicsCompressor", samples, options.validate !== false);
-  const detector = typeof options.detector === "string" ? COMPRESSOR_DETECTOR_MAP[options.detector] : options.detector;
-  const opts = { ...options };
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("masteringDynamicsCompressor", request.samples, request.validate !== false);
+  const detector = typeof request.detector === "string" ? COMPRESSOR_DETECTOR_MAP[request.detector] : request.detector;
+  const opts = { ...request };
   if (detector !== void 0) {
     opts.detector = detector;
   }
-  return requireModule5().masteringDynamicsCompressor(samples, sampleRate, opts);
+  return requireModule5().masteringDynamicsCompressor(request.samples, request.sampleRate, opts);
 }
 function masteringDynamicsGate(samples, sampleRate, options = {}) {
-  assertSamples("masteringDynamicsGate", samples, options.validate !== false);
-  return requireModule5().masteringDynamicsGate(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("masteringDynamicsGate", request.samples, request.validate !== false);
+  return requireModule5().masteringDynamicsGate(request.samples, request.sampleRate, request);
 }
 function masteringDynamicsTransientShaper(samples, sampleRate, options = {}) {
-  assertSamples("masteringDynamicsTransientShaper", samples, options.validate !== false);
-  return requireModule5().masteringDynamicsTransientShaper(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("masteringDynamicsTransientShaper", request.samples, request.validate !== false);
+  return requireModule5().masteringDynamicsTransientShaper(
+    request.samples,
+    request.sampleRate,
+    request
+  );
 }
 
 // src/mastering_repair.ts
@@ -1393,25 +789,40 @@ function requireModule6() {
   return getSonareModule();
 }
 function masteringRepairDeclick(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairDeclick(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairDeclick(request.samples, request.sampleRate, request);
 }
 function masteringRepairDenoiseClassical(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairDenoiseClassical(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairDenoiseClassical(
+    request.samples,
+    request.sampleRate,
+    request
+  );
 }
 function masteringRepairDeclip(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairDeclip(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairDeclip(request.samples, request.sampleRate, request);
 }
 function masteringRepairDecrackle(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairDecrackle(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairDecrackle(request.samples, request.sampleRate, request);
 }
 function masteringRepairDehum(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairDehum(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairDehum(request.samples, request.sampleRate, request);
 }
 function masteringRepairDereverbClassical(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairDereverbClassical(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairDereverbClassical(
+    request.samples,
+    request.sampleRate,
+    request
+  );
 }
 function masteringRepairTrimSilence(samples, sampleRate, options = {}) {
-  return requireModule6().masteringRepairTrimSilence(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  return requireModule6().masteringRepairTrimSilence(request.samples, request.sampleRate, request);
 }
 
 // src/mixing_oneshot.ts
@@ -1425,14 +836,15 @@ function mixingScenePresetJson(presetName) {
   return requireModule7().mixingScenePresetJson(presetName);
 }
 function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {}) {
-  if (leftChannels.length === 0 || leftChannels.length !== rightChannels.length) {
+  const request = Array.isArray(leftChannels) ? { leftChannels, rightChannels: rightChannels ?? [], sampleRate, ...options } : leftChannels;
+  if (request.leftChannels.length === 0 || request.leftChannels.length !== request.rightChannels.length) {
     throw new Error("leftChannels and rightChannels must have the same non-zero length.");
   }
   return requireModule7().mixStereo(
-    leftChannels,
-    rightChannels,
-    sampleRate,
-    options
+    request.leftChannels,
+    request.rightChannels,
+    request.sampleRate ?? 48e3,
+    request
   );
 }
 
@@ -1471,9 +883,15 @@ function samplesToFrames(samples, hopLength = 512, nFft = 0) {
   return requireModule8().samplesToFrames(samples, hopLength, nFft);
 }
 function powerToDb(values, ref = 1, amin = 1e-10, topDb = 80) {
+  if (!(values instanceof Float32Array)) {
+    return powerToDb(values.values, values.ref, values.amin, values.topDb);
+  }
   return requireModule8().powerToDb(values, ref, amin, topDb);
 }
 function amplitudeToDb(values, ref = 1, amin = 1e-5, topDb = 80) {
+  if (!(values instanceof Float32Array)) {
+    return amplitudeToDb(values.values, values.ref, values.amin, values.topDb);
+  }
   return requireModule8().amplitudeToDb(values, ref, amin, topDb);
 }
 function dbToPower(values, ref = 1) {
@@ -1483,45 +901,106 @@ function dbToAmplitude(values, ref = 1) {
   return requireModule8().dbToAmplitude(values, ref);
 }
 function preemphasis(samples, coef = 0.97, zi) {
+  if (!(samples instanceof Float32Array)) {
+    return preemphasis(samples.samples, samples.coef, samples.zi);
+  }
   return requireModule8().preemphasis(samples, coef, zi ?? null);
 }
 function deemphasis(samples, coef = 0.97, zi) {
+  if (!(samples instanceof Float32Array)) {
+    return deemphasis(samples.samples, samples.coef, samples.zi);
+  }
   return requireModule8().deemphasis(samples, coef, zi ?? null);
 }
 function trimSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return trimSilence(samples.samples, samples.topDb, samples.frameLength, samples.hopLength);
+  }
   return requireModule8().trimSilence(samples, topDb, frameLength, hopLength);
 }
 function splitSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return splitSilence(samples.samples, samples.topDb, samples.frameLength, samples.hopLength);
+  }
   return requireModule8().splitSilence(samples, topDb, frameLength, hopLength);
 }
 function frameSignal(samples, frameLength, hopLength) {
+  if (!(samples instanceof Float32Array)) {
+    return frameSignal(samples.samples, samples.frameLength, samples.hopLength);
+  }
   return requireModule8().frameSignal(samples, frameLength, hopLength);
 }
 function padCenter(values, targetSize, padValue = 0) {
+  if (!(values instanceof Float32Array)) {
+    return padCenter(values.values, values.targetSize, values.padValue);
+  }
   return requireModule8().padCenter(values, targetSize, padValue);
 }
 function fixLength(values, targetSize, padValue = 0) {
+  if (!(values instanceof Float32Array)) {
+    return fixLength(values.values, values.targetSize, values.padValue);
+  }
   return requireModule8().fixLength(values, targetSize, padValue);
 }
 function fixFrames(frames, xMin = 0, xMax = -1, pad = true) {
+  if (!(frames instanceof Int32Array)) {
+    return fixFrames(frames.frames, frames.xMin, frames.xMax, frames.pad);
+  }
   return requireModule8().fixFrames(frames, xMin, xMax, pad);
 }
 function peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait) {
-  return requireModule8().peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait);
+  if (!(values instanceof Float32Array)) {
+    const r = values;
+    return peakPick(r.values, r.preMax, r.postMax, r.preAvg, r.postAvg, r.delta, r.wait);
+  }
+  return requireModule8().peakPick(
+    values,
+    preMax,
+    postMax,
+    preAvg,
+    postAvg,
+    delta,
+    wait
+  );
 }
 function vectorNormalize(values, normType = 0, threshold = 0) {
+  if (!(values instanceof Float32Array)) {
+    return vectorNormalize(values.values, values.normType, values.threshold);
+  }
   return requireModule8().vectorNormalize(values, normType, threshold);
 }
-function pcen(values, nBins, nFrames, options = {}) {
+function pcen(values, nBins = 0, nFrames = 0, options = {}) {
+  if (!(values instanceof Float32Array)) {
+    const r = values;
+    return pcen(r.values, r.nBins, r.nFrames, r.options);
+  }
   return requireModule8().pcen(values, nBins, nFrames, options);
 }
 function tonnetz(chromagram, nChroma, nFrames) {
+  if (!(chromagram instanceof Float32Array)) {
+    return tonnetz(chromagram.chromagram, chromagram.nChroma, chromagram.nFrames);
+  }
   return requireModule8().tonnetz(chromagram, nChroma, nFrames);
 }
 function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation") {
+  if (!(onsetEnvelope2 instanceof Float32Array)) {
+    const r = onsetEnvelope2;
+    return tempogram(r.onsetEnvelope, r.sampleRate, r.hopLength, r.winLength, r.mode);
+  }
   return requireModule8().tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
 }
 function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
+  if (!(onsetEnvelope2 instanceof Float32Array)) {
+    const r = onsetEnvelope2;
+    return cyclicTempogram(
+      r.onsetEnvelope,
+      r.sampleRate,
+      r.hopLength,
+      r.winLength,
+      r.bpmMin,
+      r.nBins
+    );
+  }
   return requireModule8().cyclicTempogram(
     onsetEnvelope2,
     sampleRate,
@@ -1532,6 +1011,10 @@ function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, wi
   );
 }
 function plp(onsetEnvelope2, sampleRate = 22050, hopLength = 512, tempoMin = 30, tempoMax = 300, winLength = 384) {
+  if (!(onsetEnvelope2 instanceof Float32Array)) {
+    const r = onsetEnvelope2;
+    return plp(r.onsetEnvelope, r.sampleRate, r.hopLength, r.tempoMin, r.tempoMax, r.winLength);
+  }
   return requireModule8().plp(onsetEnvelope2, sampleRate, hopLength, tempoMin, tempoMax, winLength);
 }
 
@@ -1561,28 +1044,80 @@ function validateFrequencyBounds(fnName, fmin, fmax) {
   }
 }
 function nnlsChroma(samples, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    return nnlsChroma(samples.samples, samples.sampleRate, samples);
+  }
   validateMusicSamples("nnlsChroma", samples, sampleRate, options);
   return requireModule9().nnlsChroma(samples, sampleRate);
 }
 function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return cqt(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.fmin,
+      request.nBins,
+      request.binsPerOctave,
+      request
+    );
+  }
   validateMusicSamples("cqt", samples, sampleRate, options);
   validatePositiveIntegers("cqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("cqt", fmin);
   return requireModule9().cqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function pseudoCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return pseudoCqt(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.fmin,
+      request.nBins,
+      request.binsPerOctave,
+      request
+    );
+  }
   validateMusicSamples("pseudoCqt", samples, sampleRate, options);
   validatePositiveIntegers("pseudoCqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("pseudoCqt", fmin);
   return requireModule9().pseudoCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function hybridCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return hybridCqt(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.fmin,
+      request.nBins,
+      request.binsPerOctave,
+      request
+    );
+  }
   validateMusicSamples("hybridCqt", samples, sampleRate, options);
   validatePositiveIntegers("hybridCqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("hybridCqt", fmin);
   return requireModule9().hybridCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
 function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma = 0, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return vqt(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.fmin,
+      request.nBins,
+      request.binsPerOctave,
+      request.gamma,
+      request
+    );
+  }
   validateMusicSamples("vqt", samples, sampleRate, options);
   validatePositiveIntegers("vqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("vqt", fmin);
@@ -1607,7 +1142,21 @@ function validateCqtInverse(fnName, magnitude, nBins, nFrames, sampleRate, hopLe
   }
   assertSamples(fnName, magnitude, options.validate !== false);
 }
-function cqtToAudio(magnitude, nBins, nFrames, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, nIter = 32, options = {}) {
+function cqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, nIter = 32, options = {}) {
+  if (!(magnitude instanceof Float32Array)) {
+    const request = magnitude;
+    return cqtToAudio(
+      request.magnitude,
+      request.nBins,
+      request.nFrames,
+      request.sampleRate,
+      request.hopLength,
+      request.fmin,
+      request.binsPerOctave,
+      request.nIter,
+      request
+    );
+  }
   validateCqtInverse(
     "cqtToAudio",
     magnitude,
@@ -1631,7 +1180,22 @@ function cqtToAudio(magnitude, nBins, nFrames, sampleRate = 22050, hopLength = 5
     nIter
   );
 }
-function vqtToAudio(magnitude, nBins, nFrames, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, gamma = 0, nIter = 32, options = {}) {
+function vqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, gamma = 0, nIter = 32, options = {}) {
+  if (!(magnitude instanceof Float32Array)) {
+    const request = magnitude;
+    return vqtToAudio(
+      request.magnitude,
+      request.nBins,
+      request.nFrames,
+      request.sampleRate,
+      request.hopLength,
+      request.fmin,
+      request.binsPerOctave,
+      request.gamma,
+      request.nIter,
+      request
+    );
+  }
   validateCqtInverse(
     "vqtToAudio",
     magnitude,
@@ -1661,6 +1225,10 @@ function vqtToAudio(magnitude, nBins, nFrames, sampleRate = 22050, hopLength = 5
   );
 }
 function analyzeSections(samples, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return analyzeSections(r.samples, r.sampleRate, r);
+  }
   validateMusicSamples("analyzeSections", samples, sampleRate, options);
   validatePositiveIntegers("analyzeSections", {
     nFft: options.nFft ?? 2048,
@@ -1680,6 +1248,10 @@ function analyzeSections(samples, sampleRate = 22050, options = {}) {
   return Array.from(sections, (s) => ({ ...s, type: s.type }));
 }
 function analyzeMelody(samples, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return analyzeMelody(r.samples, r.sampleRate, r);
+  }
   validateMusicSamples("analyzeMelody", samples, sampleRate, options);
   const fmin = options.fmin ?? 65;
   const fmax = options.fmax ?? 2093;
@@ -1709,38 +1281,94 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   );
 }
 function onsetEnvelope(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return onsetEnvelope(
+      request.samples,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.nMels,
+      request
+    );
+  }
   validateMusicSamples("onsetEnvelope", samples, sampleRate, options);
   validatePositiveIntegers("onsetEnvelope", { nFft, hopLength, nMels });
   return requireModule9().onsetEnvelope(samples, sampleRate, nFft, hopLength, nMels);
 }
 function onsetStrengthMulti(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nBands = 3, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return onsetStrengthMulti(
+      request.samples,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.nMels,
+      request.nBands,
+      request
+    );
+  }
   validateMusicSamples("onsetStrengthMulti", samples, sampleRate, options);
   validatePositiveIntegers("onsetStrengthMulti", { nFft, hopLength, nMels, nBands });
   return requireModule9().onsetStrengthMulti(samples, sampleRate, nFft, hopLength, nMels, nBands);
 }
 function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, options = {}) {
+  if (!(onsetEnvelope2 instanceof Float32Array)) {
+    const request = onsetEnvelope2;
+    return fourierTempogram(
+      request.onsetEnvelope,
+      request.sampleRate,
+      request.hopLength,
+      request.winLength,
+      request
+    );
+  }
   assertSampleRate("fourierTempogram", sampleRate);
   assertSamples("fourierTempogram", onsetEnvelope2, options.validate !== false, "onsetEnvelope");
   validatePositiveIntegers("fourierTempogram", { hopLength, winLength });
   return requireModule9().fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
 }
 function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, factors, options = {}) {
+  if (!(tempogramData instanceof Float32Array)) {
+    const request = tempogramData;
+    return tempogramRatio(
+      request.tempogramData,
+      request.winLength,
+      request.sampleRate,
+      request.hopLength,
+      request.factors,
+      request
+    );
+  }
   assertSampleRate("tempogramRatio", sampleRate);
   assertSamples("tempogramRatio", tempogramData, options.validate !== false, "tempogramData");
   validatePositiveIntegers("tempogramRatio", { winLength, hopLength });
   return requireModule9().tempogramRatio(tempogramData, winLength, sampleRate, hopLength, factors);
 }
 function lufs(samples, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return lufs(r.samples, r.sampleRate, r);
+  }
   assertSampleRate("lufs", sampleRate);
   assertSamples("lufs", samples, options.validate !== false);
   return requireModule9().lufs(samples, sampleRate);
 }
 function momentaryLufs(samples, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return momentaryLufs(r.samples, r.sampleRate, r);
+  }
   assertSampleRate("momentaryLufs", sampleRate);
   assertSamples("momentaryLufs", samples, options.validate !== false);
   return requireModule9().momentaryLufs(samples, sampleRate);
 }
 function shortTermLufs(samples, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return shortTermLufs(r.samples, r.sampleRate, r);
+  }
   assertSampleRate("shortTermLufs", sampleRate);
   assertSamples("shortTermLufs", samples, options.validate !== false);
   return requireModule9().shortTermLufs(samples, sampleRate);
@@ -1751,6 +1379,19 @@ function requireModule10() {
   return getSonareModule();
 }
 function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return pitchYin(
+      request.samples,
+      request.sampleRate,
+      request.frameLength,
+      request.hopLength,
+      request.fmin,
+      request.fmax,
+      request.threshold,
+      request.fillNa
+    );
+  }
   return requireModule10().pitchYin(
     samples,
     sampleRate,
@@ -1763,6 +1404,19 @@ function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 5
   );
 }
 function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return pitchPyin(
+      request.samples,
+      request.sampleRate,
+      request.frameLength,
+      request.hopLength,
+      request.fmin,
+      request.fmax,
+      request.threshold,
+      request.fillNa
+    );
+  }
   return requireModule10().pitchPyin(
     samples,
     sampleRate,
@@ -1780,6 +1434,9 @@ function requireModule11() {
   return getSonareModule();
 }
 function resample(samples, srcSr, targetSr) {
+  if (!(samples instanceof Float32Array)) {
+    return resample(samples.samples, samples.srcSr, samples.targetSr);
+  }
   return requireModule11().resample(samples, srcSr, targetSr);
 }
 
@@ -1788,9 +1445,24 @@ function requireModule12() {
   return getSonareModule();
 }
 function spectralCentroid(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return spectralCentroid(samples.samples, samples.sampleRate, samples.nFft, samples.hopLength);
+  }
   return requireModule12().spectralCentroid(samples, sampleRate, nFft, hopLength);
 }
 function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nBands = 6, fmin = 200, quantile = 0.02) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return spectralContrast(
+      r.samples,
+      r.sampleRate,
+      r.nFft,
+      r.hopLength,
+      r.nBands,
+      r.fmin,
+      r.quantile
+    );
+  }
   return requireModule12().spectralContrast(
     samples,
     sampleRate,
@@ -1802,15 +1474,38 @@ function spectralContrast(samples, sampleRate = 22050, nFft = 2048, hopLength = 
   );
 }
 function polyFeatures(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, order = 1) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return polyFeatures(r.samples, r.sampleRate, r.nFft, r.hopLength, r.order);
+  }
   return requireModule12().polyFeatures(samples, sampleRate, nFft, hopLength, order);
 }
 function zeroCrossings(samples, threshold = 1e-10, refMagnitude = false, pad = true, zeroPos = true) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return zeroCrossings(r.samples, r.threshold, r.refMagnitude, r.pad, r.zeroPos);
+  }
   return requireModule12().zeroCrossings(samples, threshold, refMagnitude, pad, zeroPos);
 }
 function pitchTuning(frequencies, resolution = 0.01, binsPerOctave = 12) {
+  if (!(frequencies instanceof Float32Array)) {
+    const r = frequencies;
+    return pitchTuning(r.frequencies, r.resolution, r.binsPerOctave);
+  }
   return requireModule12().pitchTuning(frequencies, resolution, binsPerOctave);
 }
 function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, resolution = 0.01, binsPerOctave = 12) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return estimateTuning(
+      r.samples,
+      r.sampleRate,
+      r.nFft,
+      r.hopLength,
+      r.resolution,
+      r.binsPerOctave
+    );
+  }
   return requireModule12().estimateTuning(
     samples,
     sampleRate,
@@ -1820,46 +1515,118 @@ function estimateTuning(samples, sampleRate = 22050, nFft = 2048, hopLength = 51
     binsPerOctave
   );
 }
-function decompose(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2) {
+function decompose(s, nFeatures = 0, nFrames = 0, nComponents = 0, nIter = 50, beta = 2) {
+  if (!(s instanceof Float32Array)) {
+    const request = s;
+    return decompose(
+      request.s,
+      request.nFeatures,
+      request.nFrames,
+      request.nComponents,
+      request.nIter,
+      request.beta
+    );
+  }
   return requireModule12().decompose(s, nFeatures, nFrames, nComponents, nIter, beta);
 }
-function decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter = 50, beta = 2, init2 = "random") {
+function decomposeWithInit(s, nFeatures = 0, nFrames = 0, nComponents = 0, nIter = 50, beta = 2, init2 = "random") {
+  if (!(s instanceof Float32Array)) {
+    const request = s;
+    return decomposeWithInit(
+      request.s,
+      request.nFeatures,
+      request.nFrames,
+      request.nComponents,
+      request.nIter,
+      request.beta,
+      request.init
+    );
+  }
   return requireModule12().decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter, beta, init2);
 }
-function nnFilter(s, nFeatures, nFrames, aggregate = "mean", k = 7, width = 1) {
+function nnFilter(s, nFeatures = 0, nFrames = 0, aggregate = "mean", k = 7, width = 1) {
+  if (!(s instanceof Float32Array)) {
+    const r = s;
+    return nnFilter(r.s, r.nFeatures, r.nFrames, r.aggregate, r.k, r.width);
+  }
   return requireModule12().nnFilter(s, nFeatures, nFrames, aggregate, k, width);
 }
 function remix(samples, intervals, sampleRate = 22050, alignZeros = false) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return remix(r.samples, r.intervals, r.sampleRate, r.alignZeros);
+  }
   const intervalsI32 = intervals instanceof Int32Array ? intervals : Int32Array.from(intervals, (v) => Math.trunc(v));
   return requireModule12().remix(samples, intervalsI32, sampleRate, alignZeros);
 }
-function phaseVocoder(samples, rate, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+function phaseVocoder(samples, rate = 1, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return phaseVocoder(r.samples, r.rate, r.sampleRate, r.nFft, r.hopLength);
+  }
   return requireModule12().phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
 }
 function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return hpssWithResidual(r.samples, r.sampleRate, r.kernelHarmonic, r.kernelPercussive);
+  }
   return requireModule12().hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
 }
-function lufsInterleaved(samples, channels, sampleRate = 22050, options = {}) {
+function lufsInterleaved(samples, channels = 0, sampleRate = 22050, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return lufsInterleaved(r.samples, r.channels, r.sampleRate, r);
+  }
   assertSampleRate("lufsInterleaved", sampleRate);
   assertInterleavedSamples("lufsInterleaved", samples, channels, options.validate !== false);
   return requireModule12().lufsInterleaved(samples, channels, sampleRate);
 }
 function ebur128LoudnessRange(samples, sampleRate = 22050) {
+  if (!(samples instanceof Float32Array)) {
+    return ebur128LoudnessRange(samples.samples, samples.sampleRate);
+  }
   return requireModule12().ebur128LoudnessRange(samples, sampleRate);
 }
 function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return spectralBandwidth(samples.samples, samples.sampleRate, samples.nFft, samples.hopLength);
+  }
   return requireModule12().spectralBandwidth(samples, sampleRate, nFft, hopLength);
 }
 function spectralRolloff(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
+  if (!(samples instanceof Float32Array)) {
+    return spectralRolloff(
+      samples.samples,
+      samples.sampleRate,
+      samples.nFft,
+      samples.hopLength,
+      samples.rollPercent
+    );
+  }
   return requireModule12().spectralRolloff(samples, sampleRate, nFft, hopLength, rollPercent);
 }
 function spectralFlatness(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return spectralFlatness(samples.samples, samples.sampleRate, samples.nFft, samples.hopLength);
+  }
   return requireModule12().spectralFlatness(samples, sampleRate, nFft, hopLength);
 }
 function zeroCrossingRate(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return zeroCrossingRate(
+      samples.samples,
+      samples.sampleRate,
+      samples.frameLength,
+      samples.hopLength
+    );
+  }
   return requireModule12().zeroCrossingRate(samples, sampleRate, frameLength, hopLength);
 }
 function rmsEnergy(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
+  if (!(samples instanceof Float32Array)) {
+    return rmsEnergy(samples.samples, samples.sampleRate, samples.frameLength, samples.hopLength);
+  }
   return requireModule12().rmsEnergy(samples, sampleRate, frameLength, hopLength);
 }
 
@@ -1898,37 +1665,93 @@ function validateMatrix(fnName, data, rows, frames, dataName, rowName, options =
     throw new RangeError(`${fnName}: ${dataName} length must equal ${rowName} * nFrames`);
   }
 }
-function trim(samples, sampleRate, thresholdDb = -60, options = {}) {
+function trim(samples, sampleRate = 22050, thresholdDb = -60, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const r = samples;
+    return trim(r.samples, r.sampleRate, r.thresholdDb, r);
+  }
   validateSpectrogramSamples("trim", samples, sampleRate, options);
   assertFiniteScalar("trim", thresholdDb, "thresholdDb");
   return requireModule13().trim(samples, sampleRate, thresholdDb);
 }
 function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return stft(request.samples, request.sampleRate, request.nFft, request.hopLength, request);
+  }
   validateSpectrogramSamples("stft", samples, sampleRate, options);
   validatePositiveIntegers2("stft", { nFft, hopLength });
   return requireModule13().stft(samples, sampleRate, nFft, hopLength);
 }
 function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return stftDb(request.samples, request.sampleRate, request.nFft, request.hopLength, request);
+  }
   validateSpectrogramSamples("stftDb", samples, sampleRate, options);
   validatePositiveIntegers2("stftDb", { nFft, hopLength });
   return requireModule13().stftDb(samples, sampleRate, nFft, hopLength);
 }
 function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return chromaCens(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.nChroma,
+      request
+    );
+  }
   validateSpectrogramSamples("chromaCens", samples, sampleRate, options);
   validatePositiveIntegers2("chromaCens", { hopLength, nChroma });
   return requireModule13().chromaCens(samples, sampleRate, hopLength, nChroma);
 }
 function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return chromaCqt(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.nChroma,
+      request
+    );
+  }
   validateSpectrogramSamples("chromaCqt", samples, sampleRate, options);
   validatePositiveIntegers2("chromaCqt", { hopLength, nChroma });
   return requireModule13().chromaCqt(samples, sampleRate, hopLength, nChroma);
 }
 function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return bassChroma(
+      request.samples,
+      request.sampleRate,
+      request.hopLength,
+      request.nChroma,
+      request
+    );
+  }
   validateSpectrogramSamples("bassChroma", samples, sampleRate, options);
   validatePositiveIntegers2("bassChroma", { hopLength, nChroma });
   return requireModule13().bassChroma(samples, sampleRate, hopLength, nChroma);
 }
 function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, fmin = 0, fmax = 0, htk = false, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return melSpectrogram(
+      request.samples,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.nMels,
+      request.fmin,
+      request.fmax,
+      request.htk,
+      request
+    );
+  }
   validateSpectrogramSamples("melSpectrogram", samples, sampleRate, options);
   validatePositiveIntegers2("melSpectrogram", { nFft, hopLength, nMels });
   validateMelFrequencyRange("melSpectrogram", fmin, fmax, sampleRate);
@@ -1944,6 +1767,22 @@ function melSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 51
   );
 }
 function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels = 128, nMfcc = 20, fmin = 0, fmax = 0, htk = false, lifter = 0, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return mfcc(
+      request.samples,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.nMels,
+      request.nMfcc,
+      request.fmin,
+      request.fmax,
+      request.htk,
+      request.lifter,
+      request
+    );
+  }
   validateSpectrogramSamples("mfcc", samples, sampleRate, options);
   validatePositiveIntegers2("mfcc", { nFft, hopLength, nMels, nMfcc });
   validateMelFrequencyRange("mfcc", fmin, fmax, sampleRate);
@@ -1960,14 +1799,44 @@ function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels =
     lifter
   );
 }
-function melToStft(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0, htk = false, options = {}) {
+function melToStft(melPower, nMels = 0, nFrames = 0, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0, htk = false, options = {}) {
+  if (!(melPower instanceof Float32Array)) {
+    const request = melPower;
+    return melToStft(
+      request.melPower,
+      request.nMels,
+      request.nFrames,
+      request.sampleRate,
+      request.nFft,
+      request.fmin,
+      request.fmax,
+      request.htk,
+      request
+    );
+  }
   assertSampleRate("melToStft", sampleRate);
   validateMatrix("melToStft", melPower, nMels, nFrames, "melPower", "nMels", options);
   validatePositiveIntegers2("melToStft", { nFft });
   validateMelFrequencyRange("melToStft", fmin, fmax, sampleRate);
   return requireModule13().melToStft(melPower, nMels, nFrames, sampleRate, nFft, fmin, fmax, htk);
 }
-function melToAudio(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+function melToAudio(melPower, nMels = 0, nFrames = 0, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+  if (!(melPower instanceof Float32Array)) {
+    const request = melPower;
+    return melToAudio(
+      request.melPower,
+      request.nMels,
+      request.nFrames,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.fmin,
+      request.fmax,
+      request.nIter,
+      request.htk,
+      request
+    );
+  }
   assertSampleRate("melToAudio", sampleRate);
   validateMatrix("melToAudio", melPower, nMels, nFrames, "melPower", "nMels", options);
   validatePositiveIntegers2("melToAudio", { nFft, hopLength, nIter });
@@ -1985,7 +1854,17 @@ function melToAudio(melPower, nMels, nFrames, sampleRate = 22050, nFft = 2048, h
     htk
   );
 }
-function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128, options = {}) {
+function mfccToMel(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, options = {}) {
+  if (!(mfccCoefficients instanceof Float32Array)) {
+    const request = mfccCoefficients;
+    return mfccToMel(
+      request.mfccCoefficients,
+      request.nMfcc,
+      request.nFrames,
+      request.nMels,
+      request
+    );
+  }
   validateMatrix(
     "mfccToMel",
     mfccCoefficients,
@@ -1998,7 +1877,24 @@ function mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels = 128, options = {}) 
   validatePositiveIntegers2("mfccToMel", { nMels });
   return requireModule13().mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
 }
-function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+function mfccToAudio(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+  if (!(mfccCoefficients instanceof Float32Array)) {
+    const request = mfccCoefficients;
+    return mfccToAudio(
+      request.mfccCoefficients,
+      request.nMfcc,
+      request.nFrames,
+      request.nMels,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.fmin,
+      request.fmax,
+      request.nIter,
+      request.htk,
+      request
+    );
+  }
   assertSampleRate("mfccToAudio", sampleRate);
   validateMatrix(
     "mfccToAudio",
@@ -2026,6 +1922,10 @@ function mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels = 128, sampleRate =
   );
 }
 function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return chroma(request.samples, request.sampleRate, request.nFft, request.hopLength, request);
+  }
   validateSpectrogramSamples("chroma", samples, sampleRate, options);
   validatePositiveIntegers2("chroma", { nFft, hopLength });
   return requireModule13().chroma(samples, sampleRate, nFft, hopLength);
@@ -2234,22 +2134,24 @@ function validateAnalysisInput(fnName, samples, sampleRate, options = {}) {
   assertSamples(fnName, samples, options.validate !== false);
 }
 function detectBpm(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectBpm", samples, sampleRate, options);
-  return requireModule14().detectBpm(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectBpm", request.samples, request.sampleRate ?? 22050, request);
+  return requireModule14().detectBpm(request.samples, request.sampleRate ?? 22050);
 }
 function detectKey(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectKey", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectKey", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule14()._detectKeyWithOptions(
-    samples,
-    sampleRate,
-    options.nFft ?? 4096,
-    options.hopLength ?? 512,
-    options.useHpss ?? false,
-    options.loudnessWeighted ?? false,
-    options.highPassHz ?? 0,
-    keyModeValues(options.modes),
-    keyProfileValue(options.profile),
-    options.genreHint ?? ""
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.nFft ?? 4096,
+    request.hopLength ?? 512,
+    request.useHpss ?? false,
+    request.loudnessWeighted ?? false,
+    request.highPassHz ?? 0,
+    keyModeValues(request.modes),
+    keyProfileValue(request.profile),
+    request.genreHint ?? ""
   );
   return {
     root: result.root,
@@ -2260,99 +2162,123 @@ function detectKey(samples, sampleRate = 22050, options = {}) {
   };
 }
 function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectKeyCandidates", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput(
+    "detectKeyCandidates",
+    request.samples,
+    request.sampleRate ?? 22050,
+    request
+  );
   const candidates = requireModule14()._detectKeyCandidates(
-    samples,
-    sampleRate,
-    options.nFft ?? 4096,
-    options.hopLength ?? 512,
-    options.useHpss ?? false,
-    options.loudnessWeighted ?? false,
-    options.highPassHz ?? 0,
-    keyModeValues(options.modes),
-    keyProfileValue(options.profile),
-    options.genreHint ?? ""
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.nFft ?? 4096,
+    request.hopLength ?? 512,
+    request.useHpss ?? false,
+    request.loudnessWeighted ?? false,
+    request.highPassHz ?? 0,
+    keyModeValues(request.modes),
+    keyProfileValue(request.profile),
+    request.genreHint ?? ""
   );
   return Array.from(candidates, convertKeyCandidate);
 }
 function detectOnsets(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectOnsets", samples, sampleRate, options);
-  return requireModule14().detectOnsets(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectOnsets", request.samples, request.sampleRate ?? 22050, request);
+  return requireModule14().detectOnsets(request.samples, request.sampleRate ?? 22050);
 }
 function detectBeats(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectBeats", samples, sampleRate, options);
-  return requireModule14().detectBeats(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectBeats", request.samples, request.sampleRate ?? 22050, request);
+  return requireModule14().detectBeats(request.samples, request.sampleRate ?? 22050);
 }
 function detectDownbeats(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectDownbeats", samples, sampleRate, options);
-  return requireModule14().detectDownbeats(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectDownbeats", request.samples, request.sampleRate ?? 22050, request);
+  return requireModule14().detectDownbeats(request.samples, request.sampleRate ?? 22050);
 }
 function detectChords(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("detectChords", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectChords", request.samples, request.sampleRate ?? 22050, request);
   const result = requireModule14().detectChords(
-    samples,
-    sampleRate,
-    options.minDuration ?? 0.3,
-    options.smoothingWindow ?? 2,
-    options.threshold ?? 0.5,
-    options.useTriadsOnly ?? false,
-    options.nFft ?? 2048,
-    options.hopLength ?? 512,
-    options.useBeatSync ?? true,
-    options.useHmm ?? false,
-    options.hmmBeamWidth ?? 24,
-    options.useKeyContext ?? false,
-    options.keyRoot ?? PitchClass.C,
-    options.keyMode ?? Mode.Major,
-    options.detectInversions ?? false,
-    chordChromaMethodValue(options.chromaMethod ?? "stft")
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.minDuration ?? 0.3,
+    request.smoothingWindow ?? 2,
+    request.threshold ?? 0.5,
+    request.useTriadsOnly ?? false,
+    request.nFft ?? 2048,
+    request.hopLength ?? 512,
+    request.useBeatSync ?? true,
+    request.useHmm ?? false,
+    request.hmmBeamWidth ?? 24,
+    request.useKeyContext ?? false,
+    request.keyRoot ?? PitchClass.C,
+    request.keyMode ?? Mode.Major,
+    request.detectInversions ?? false,
+    chordChromaMethodValue(request.chromaMethod ?? "stft")
   );
   return convertChordAnalysisResult(result);
 }
 function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("chordFunctionalAnalysis", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, keyRoot, keyMode, sampleRate, ...options } : samples;
+  validateAnalysisInput(
+    "chordFunctionalAnalysis",
+    request.samples,
+    request.sampleRate ?? 22050,
+    request
+  );
   return requireModule14().chordFunctionalAnalysis(
-    samples,
-    keyRoot,
-    keyMode,
-    sampleRate,
-    options.minDuration ?? 0.3,
-    options.smoothingWindow ?? 2,
-    options.threshold ?? 0.5,
-    options.useTriadsOnly ?? false,
-    options.nFft ?? 2048,
-    options.hopLength ?? 512,
-    options.useBeatSync ?? true,
-    options.useHmm ?? false,
-    options.hmmBeamWidth ?? 24,
-    options.useKeyContext ?? false,
-    options.detectInversions ?? false,
-    chordChromaMethodValue(options.chromaMethod ?? "stft")
+    request.samples,
+    request.keyRoot,
+    request.keyMode ?? Mode.Major,
+    request.sampleRate ?? 22050,
+    request.minDuration ?? 0.3,
+    request.smoothingWindow ?? 2,
+    request.threshold ?? 0.5,
+    request.useTriadsOnly ?? false,
+    request.nFft ?? 2048,
+    request.hopLength ?? 512,
+    request.useBeatSync ?? true,
+    request.useHmm ?? false,
+    request.hmmBeamWidth ?? 24,
+    request.useKeyContext ?? false,
+    request.detectInversions ?? false,
+    chordChromaMethodValue(request.chromaMethod ?? "stft")
   );
 }
 function analyze(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("analyze", samples, sampleRate, options);
-  const result = requireModule14().analyze(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("analyze", request.samples, request.sampleRate ?? 22050, request);
+  const result = requireModule14().analyze(request.samples, request.sampleRate ?? 22050);
   return convertAnalysisResult(result);
 }
 function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
-  validateAnalysisInput("analyzeImpulseResponse", samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, nOctaveBands } : samples;
+  validateAnalysisInput(
+    "analyzeImpulseResponse",
+    request.samples,
+    request.sampleRate ?? 48e3,
+    request
+  );
   const result = requireModule14().analyzeImpulseResponse(
-    samples,
-    sampleRate,
-    nOctaveBands
+    request.samples,
+    request.sampleRate ?? 48e3,
+    request.nOctaveBands ?? 6
   );
   return result;
 }
 function detectAcoustic(samples, sampleRate = 48e3, options = {}) {
-  validateAnalysisInput("detectAcoustic", samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("detectAcoustic", request.samples, request.sampleRate ?? 48e3, request);
   const result = requireModule14().detectAcoustic(
-    samples,
-    sampleRate,
-    options.nOctaveBands ?? 6,
-    options.nThirdOctaveSubbands ?? 24,
-    options.minDecayDb ?? 30,
-    options.noiseFloorMarginDb ?? 10
+    request.samples,
+    request.sampleRate ?? 48e3,
+    request.nOctaveBands ?? 6,
+    request.nThirdOctaveSubbands ?? 24,
+    request.minDecayDb ?? 30,
+    request.noiseFloorMarginDb ?? 10
   );
   return result;
 }
@@ -2368,68 +2294,84 @@ function estimateRoom(samples, sampleRate = 48e3, options = {}) {
   if (typeof module2.estimateRoom !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
-  validateAnalysisInput("estimateRoom", samples, sampleRate);
-  return module2.estimateRoom(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("estimateRoom", request.samples, request.sampleRate ?? 48e3, request);
+  return module2.estimateRoom(request.samples, request.sampleRate ?? 48e3, request);
 }
 function roomMorph(samples, sampleRate, options = {}) {
   const module2 = requireModule14();
   if (typeof module2.roomMorph !== "function") {
     throw new Error("libsonare was built without acoustic-simulation support");
   }
-  validateAnalysisInput("roomMorph", samples, sampleRate);
-  return module2.roomMorph(samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("roomMorph", request.samples, request.sampleRate, request);
+  return module2.roomMorph(request.samples, request.sampleRate, request);
 }
 function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
-  validateAnalysisInput("analyzeWithProgress", samples, sampleRate);
-  const result = requireModule14().analyzeWithProgress(samples, sampleRate, onProgress);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress } : samples;
+  validateAnalysisInput(
+    "analyzeWithProgress",
+    request.samples,
+    request.sampleRate ?? 22050,
+    request
+  );
+  const result = requireModule14().analyzeWithProgress(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.onProgress
+  );
   return convertAnalysisResult(result);
 }
 function analyzeBpm(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("analyzeBpm", samples, sampleRate, options);
-  assertNonNegativeInteger("analyzeBpm", options.maxCandidates ?? 5, "maxCandidates");
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("analyzeBpm", request.samples, request.sampleRate ?? 22050, request);
+  assertNonNegativeInteger("analyzeBpm", request.maxCandidates ?? 5, "maxCandidates");
   return requireModule14().analyzeBpm(
-    samples,
-    sampleRate,
-    options.bpmMin ?? 30,
-    options.bpmMax ?? 300,
-    options.startBpm ?? 120,
-    options.nFft ?? 2048,
-    options.hopLength ?? 512,
-    options.maxCandidates ?? 5
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.bpmMin ?? 30,
+    request.bpmMax ?? 300,
+    request.startBpm ?? 120,
+    request.nFft ?? 2048,
+    request.hopLength ?? 512,
+    request.maxCandidates ?? 5
   );
 }
 function analyzeRhythm(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("analyzeRhythm", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("analyzeRhythm", request.samples, request.sampleRate ?? 22050, request);
   return requireModule14().analyzeRhythm(
-    samples,
-    sampleRate,
-    options.bpmMin ?? 60,
-    options.bpmMax ?? 200,
-    options.startBpm ?? 120,
-    options.nFft ?? 2048,
-    options.hopLength ?? 512
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.bpmMin ?? 60,
+    request.bpmMax ?? 200,
+    request.startBpm ?? 120,
+    request.nFft ?? 2048,
+    request.hopLength ?? 512
   );
 }
 function analyzeDynamics(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("analyzeDynamics", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("analyzeDynamics", request.samples, request.sampleRate ?? 22050, request);
   return requireModule14().analyzeDynamics(
-    samples,
-    sampleRate,
-    options.windowSec ?? 0.4,
-    options.hopLength ?? 512,
-    options.compressionThreshold ?? 6
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.windowSec ?? 0.4,
+    request.hopLength ?? 512,
+    request.compressionThreshold ?? 6
   );
 }
 function analyzeTimbre(samples, sampleRate = 22050, options = {}) {
-  validateAnalysisInput("analyzeTimbre", samples, sampleRate, options);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  validateAnalysisInput("analyzeTimbre", request.samples, request.sampleRate ?? 22050, request);
   return requireModule14().analyzeTimbre(
-    samples,
-    sampleRate,
-    options.nFft ?? 2048,
-    options.hopLength ?? 512,
-    options.nMels ?? 128,
-    options.nMfcc ?? 13,
-    options.windowSec ?? 0.5
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.nFft ?? 2048,
+    request.hopLength ?? 512,
+    request.nMels ?? 128,
+    request.nMfcc ?? 13,
+    request.windowSec ?? 0.5
   );
 }
 function hasFfmpegSupport() {
@@ -2598,6 +2540,9 @@ var Audio = class _Audio {
   noteStretch(options = {}) {
     return noteStretch(this._samples, this._sampleRate, options);
   }
+  noteMove(options = {}) {
+    return noteMove(this._samples, this._sampleRate, options);
+  }
   voiceChange(options = {}) {
     return voiceChange(this._samples, this._sampleRate, options);
   }
@@ -2607,11 +2552,22 @@ var Audio = class _Audio {
   mastering(options = {}) {
     return mastering(this._samples, this._sampleRate, options);
   }
-  masteringChain(config) {
-    return masteringChain(this._samples, this._sampleRate, config);
+  masteringChain(config = {}, onProgress) {
+    return masteringChain({
+      samples: this._samples,
+      sampleRate: this._sampleRate,
+      config,
+      onProgress
+    });
   }
-  masterAudio(presetName = "pop", overrides = null) {
-    return masterAudio(this._samples, this._sampleRate, presetName, overrides ?? {});
+  masterAudio(presetName = "pop", overrides = null, onProgress) {
+    return masterAudio({
+      samples: this._samples,
+      sampleRate: this._sampleRate,
+      preset: presetName,
+      overrides: overrides ?? {},
+      onProgress
+    });
   }
   masteringProcess(processorName, params = {}) {
     return masteringProcess(processorName, this._samples, this._sampleRate, params);
@@ -3089,122 +3045,172 @@ async function bindMicrophoneInput(context, engine, options = {}) {
 }
 
 // src/metering.ts
+function assertOversampleFactor(fnName, factor) {
+  const normalized = factor === 0 ? 4 : factor;
+  if (!Number.isInteger(normalized) || normalized < 1 || normalized > 16 || (normalized & normalized - 1) !== 0) {
+    throw new RangeError(`${fnName}: oversampleFactor must be 0 or a power of two from 1 to 16`);
+  }
+}
 function requireModule15() {
   return getSonareModule();
 }
 function meteringPeakDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringPeakDb", samples, options.validate !== false);
-  return requireModule15().meteringPeakDb(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringPeakDb", request.samples, request.validate !== false);
+  return requireModule15().meteringPeakDb(request.samples, request.sampleRate ?? 22050);
 }
 function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringRmsDb", samples, options.validate !== false);
-  return requireModule15().meteringRmsDb(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringRmsDb", request.samples, request.validate !== false);
+  return requireModule15().meteringRmsDb(request.samples, request.sampleRate ?? 22050);
 }
 function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringCrestFactorDb", samples, options.validate !== false);
-  return requireModule15().meteringCrestFactorDb(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringCrestFactorDb", request.samples, request.validate !== false);
+  return requireModule15().meteringCrestFactorDb(request.samples, request.sampleRate ?? 22050);
 }
 function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDcOffset", samples, options.validate !== false);
-  return requireModule15().meteringDcOffset(samples, sampleRate);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringDcOffset", request.samples, request.validate !== false);
+  return requireModule15().meteringDcOffset(request.samples, request.sampleRate ?? 22050);
 }
 function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, options = {}) {
-  assertSamples("meteringTruePeakDb", samples, options.validate !== false);
-  const factor = oversampleFactor === 0 ? 4 : oversampleFactor;
-  if (factor < 1 || factor > 16 || (factor & factor - 1) !== 0) {
-    throw new RangeError(
-      "meteringTruePeakDb: oversampleFactor must be 0 or a power of two from 1 to 16"
-    );
-  }
-  return requireModule15().meteringTruePeakDb(samples, sampleRate, oversampleFactor);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, oversampleFactor, ...options } : samples;
+  assertSamples("meteringTruePeakDb", request.samples, request.validate !== false);
+  const factor = request.oversampleFactor ?? 4;
+  assertOversampleFactor("meteringTruePeakDb", factor);
+  return requireModule15().meteringTruePeakDb(request.samples, request.sampleRate ?? 22050, factor);
 }
 function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDetectClipping", samples, options.validate !== false);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringDetectClipping", request.samples, request.validate !== false);
   return requireModule15().meteringDetectClipping(
-    samples,
-    sampleRate,
-    options.threshold ?? 0.999,
-    options.minRegionSamples ?? 1
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.threshold ?? 0.999,
+    request.minRegionSamples ?? 1
   );
 }
 function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
-  assertSamples("meteringDynamicRange", samples, options.validate !== false);
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringDynamicRange", request.samples, request.validate !== false);
   return requireModule15().meteringDynamicRange(
-    samples,
-    sampleRate,
-    options.windowSec ?? 0,
-    options.hopSec ?? 0,
-    options.lowPercentile ?? -1,
-    options.highPercentile ?? -1
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.windowSec ?? 0,
+    request.hopSec ?? 0,
+    request.lowPercentile ?? -1,
+    request.highPercentile ?? -1
   );
 }
 function meteringStereoCorrelation(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringStereoCorrelation", left, validate, "left");
-  assertSamples("meteringStereoCorrelation", right, validate, "right");
-  return requireModule15().meteringStereoCorrelation(left, right, sampleRate);
+  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : left;
+  const validate = request.validate !== false;
+  assertSamples("meteringStereoCorrelation", request.left, validate, "left");
+  assertSamples("meteringStereoCorrelation", request.right, validate, "right");
+  return requireModule15().meteringStereoCorrelation(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050
+  );
 }
 function meteringStereoWidth(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringStereoWidth", left, validate, "left");
-  assertSamples("meteringStereoWidth", right, validate, "right");
-  return requireModule15().meteringStereoWidth(left, right, sampleRate);
+  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : left;
+  const validate = request.validate !== false;
+  assertSamples("meteringStereoWidth", request.left, validate, "left");
+  assertSamples("meteringStereoWidth", request.right, validate, "right");
+  return requireModule15().meteringStereoWidth(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050
+  );
 }
 function meteringVectorscope(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringVectorscope", left, validate, "left");
-  assertSamples("meteringVectorscope", right, validate, "right");
-  return requireModule15().meteringVectorscope(left, right, sampleRate);
+  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : left;
+  const validate = request.validate !== false;
+  assertSamples("meteringVectorscope", request.left, validate, "left");
+  assertSamples("meteringVectorscope", request.right, validate, "right");
+  return requireModule15().meteringVectorscopeDecimated(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.maxPoints ?? 0
+  );
 }
 function meteringVectorscopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringVectorscopeDecimated", left, validate, "left");
-  assertSamples("meteringVectorscopeDecimated", right, validate, "right");
-  return requireModule15().meteringVectorscopeDecimated(left, right, sampleRate, maxPoints);
+  const request = left instanceof Float32Array ? { left, right, sampleRate, maxPoints, ...options } : left;
+  const validate = request.validate !== false;
+  assertSamples("meteringVectorscopeDecimated", request.left, validate, "left");
+  assertSamples("meteringVectorscopeDecimated", request.right, validate, "right");
+  return requireModule15().meteringVectorscopeDecimated(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.maxPoints ?? 0
+  );
 }
 function meteringPhaseScope(left, right, sampleRate = 22050, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringPhaseScope", left, validate, "left");
-  assertSamples("meteringPhaseScope", right, validate, "right");
-  return requireModule15().meteringPhaseScope(left, right, sampleRate);
+  const request = left instanceof Float32Array ? { left, right, sampleRate, ...options } : left;
+  const validate = request.validate !== false;
+  assertSamples("meteringPhaseScope", request.left, validate, "left");
+  assertSamples("meteringPhaseScope", request.right, validate, "right");
+  return requireModule15().meteringPhaseScopeDecimated(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.maxPoints ?? 0
+  );
 }
 function meteringPhaseScopeDecimated(left, right, sampleRate = 22050, maxPoints = 0, options = {}) {
-  const validate = options.validate !== false;
-  assertSamples("meteringPhaseScopeDecimated", left, validate, "left");
-  assertSamples("meteringPhaseScopeDecimated", right, validate, "right");
-  return requireModule15().meteringPhaseScopeDecimated(left, right, sampleRate, maxPoints);
+  const request = left instanceof Float32Array ? { left, right, sampleRate, maxPoints, ...options } : left;
+  const validate = request.validate !== false;
+  assertSamples("meteringPhaseScopeDecimated", request.left, validate, "left");
+  assertSamples("meteringPhaseScopeDecimated", request.right, validate, "right");
+  return requireModule15().meteringPhaseScopeDecimated(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.maxPoints ?? 0
+  );
 }
-function meteringSpectrum(samples, sampleRate = 22050, options) {
-  const validate = options?.validate !== false;
-  assertSamples("meteringSpectrum", samples, validate);
-  return requireModule15().meteringSpectrum(samples, sampleRate, options ?? {});
+function meteringSpectrum(samples, sampleRate = 22050, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
+  assertSamples("meteringSpectrum", request.samples, request.validate !== false);
+  return requireModule15().meteringSpectrum(request.samples, request.sampleRate ?? 22050, request);
 }
-function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, options) {
-  const validate = options?.validate !== false;
-  assertSamples("meteringSpectrumFrame", samples, validate);
-  return requireModule15().meteringSpectrumFrame(samples, sampleRate, frameOffset, options ?? {});
+function meteringSpectrumFrame(samples, sampleRate = 22050, frameOffset = 0, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, frameOffset, ...options } : samples;
+  assertSamples("meteringSpectrumFrame", request.samples, request.validate !== false);
+  return requireModule15().meteringSpectrumFrame(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.frameOffset ?? 0,
+    request
+  );
 }
 function waveformPeaks(samples, channels, options = {}) {
-  assertSamples("waveformPeaks", samples, options.validate !== false);
-  if (channels <= 0 || samples.length % channels !== 0) {
+  const request = samples instanceof Float32Array ? { samples, channels, ...options } : samples;
+  assertSamples("waveformPeaks", request.samples, request.validate !== false);
+  if (request.channels <= 0 || request.samples.length % request.channels !== 0) {
     throw new RangeError("waveformPeaks: samples length must be a multiple of channels");
   }
-  const samplesPerBucket = options.samplesPerBucket ?? 512;
+  const samplesPerBucket = request.samplesPerBucket ?? 512;
   if (samplesPerBucket <= 0) {
     throw new RangeError("waveformPeaks: samplesPerBucket must be > 0");
   }
-  return requireModule15().waveformPeaks(samples, channels, samplesPerBucket);
+  return requireModule15().waveformPeaks(request.samples, request.channels, samplesPerBucket);
 }
 function waveformPeakPyramid(samples, channels, options = {}) {
-  assertSamples("waveformPeakPyramid", samples, options.validate !== false);
-  if (channels <= 0 || samples.length % channels !== 0) {
+  const request = samples instanceof Float32Array ? { samples, channels, ...options } : samples;
+  assertSamples("waveformPeakPyramid", request.samples, request.validate !== false);
+  if (request.channels <= 0 || request.samples.length % request.channels !== 0) {
     throw new RangeError("waveformPeakPyramid: samples length must be a multiple of channels");
   }
-  const levels = options.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
+  const levels = request.samplesPerBucketLevels ?? [512, 1024, 2048, 4096];
   if (levels.length === 0 || levels.some((level) => level <= 0)) {
     throw new RangeError("waveformPeakPyramid: samplesPerBucketLevels must be non-empty and > 0");
   }
-  return requireModule15().waveformPeakPyramid(samples, channels, levels);
+  return requireModule15().waveformPeakPyramid(request.samples, request.channels, levels);
 }
 
 // src/project_internal.ts
@@ -3608,13 +3614,17 @@ var Project = class _Project {
   validateMidiNotes(clipId) {
     return this.native.validateMidiNotes(clipId);
   }
-  /** Detect tempo from a mono buffer and install it; returns the primary BPM. */
-  autoTempo(audio, sampleRate) {
-    return this.native.autoTempo(audio, sampleRate);
+  /** Return ranked tempo-octave and detected-meter candidates without editing. */
+  analyzeTempo(audio, sampleRate) {
+    return this.native.analyzeTempo(audio, sampleRate);
   }
-  /** Snap a PPQ coordinate to the nearest beat of the project grid. */
-  snapToGrid(ppq, strength = 1) {
-    return this.native.snapToGrid(ppq, strength);
+  /** Detect and install a ranked tempo candidate; optionally apply detected meter. */
+  autoTempo(audio, sampleRate, candidateIndex = 0, applyTimeSignatures = false) {
+    return this.native.autoTempo(audio, sampleRate, candidateIndex, applyTimeSignatures);
+  }
+  /** Snap to a bar (`division=0`), beat (`1`), or beat subdivision (`2+`). */
+  snapToGrid(ppq, strength = 1, division = 1) {
+    return this.native.snapToGrid(ppq, strength, division);
   }
   /** Compile the project into a renderable timeline, surfacing diagnostics. */
   compile() {
@@ -3991,6 +4001,61 @@ var SYNTH_MOD_DESTINATIONS = [
   "pan-units"
 ];
 
+// src/codes.ts
+function automationCurveCode(curve) {
+  switch (curve) {
+    case "linear":
+      return 0;
+    case "exponential":
+      return 1;
+    case "hold":
+      return 2;
+    case "s-curve":
+      return 3;
+    default:
+      throw new Error(`Invalid automation curve: ${curve}`);
+  }
+}
+function panLawCode(panLaw) {
+  if (typeof panLaw === "number") {
+    return panLaw;
+  }
+  switch (panLaw) {
+    case "const4.5dB":
+      return 1;
+    case "const6dB":
+      return 2;
+    case "linear0dB":
+      return 3;
+    default:
+      return 0;
+  }
+}
+function panModeCode(panMode) {
+  if (typeof panMode === "number") {
+    return panMode;
+  }
+  switch (panMode) {
+    case "stereoPan":
+    case "stereo-pan":
+      return 1;
+    case "dualPan":
+    case "dual-pan":
+      return 2;
+    default:
+      return 0;
+  }
+}
+function meterTapCode(tap) {
+  return tap === "preFader" || tap === 0 ? 0 : 1;
+}
+function sendTimingCode(timing) {
+  if (typeof timing === "number") {
+    return timing;
+  }
+  return timing === "preFader" ? 1 : 0;
+}
+
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
 function engineCapabilities() {
@@ -4308,6 +4373,13 @@ var RealtimeEngine = class {
         pageProvider: typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider
       }))
     );
+  }
+  /**
+   * Returns the PCM generated for a tempo-sync clip by the control-thread
+   * setter, or `null` when the clip did not require a tempo-sync bake.
+   */
+  prebakedClipChannels(clipId) {
+    return this.native.prebakedClipChannels(clipId);
   }
   clipCount() {
     return this.native.clipCount();
@@ -4630,6 +4702,9 @@ var StreamAnalyzer = class {
         "computeMagnitude is not supported because magnitude frames are not exposed by StreamAnalyzer read paths."
       );
     }
+    if (config.outputFormat !== void 0 && (typeof config.outputFormat !== "number" || !Number.isFinite(config.outputFormat) || !Number.isInteger(config.outputFormat) || config.outputFormat !== 0)) {
+      throw new TypeError("outputFormat must be the integer 0 (Float32)");
+    }
     const module2 = getSonareModule();
     const defaults = streamAnalyzerConfigDefaults();
     this.analyzer = new module2.StreamAnalyzer(
@@ -4674,7 +4749,7 @@ var StreamAnalyzer = class {
     this.analyzer.processWithOffset(samples, sampleOffset);
   }
   /**
-   * Flush the final partial frame with zero-padding.
+   * Drain any high-rate resampler tail, then zero-pad the final partial frame.
    */
   finalize() {
     this.analyzer.finalize();
@@ -4837,6 +4912,815 @@ var StreamAnalyzer = class {
   /** Alias for {@link delete}, kept for backward compatibility (historical name). */
   dispose() {
     this.delete();
+  }
+};
+
+// src/mixer.ts
+var Mixer = class _Mixer {
+  constructor(mixer, blockSize) {
+    this.mixer = mixer;
+    this.blockSize = blockSize;
+  }
+  /**
+   * Build a mixer from a scene JSON string.
+   *
+   * @param json - Scene JSON (strips, buses, sends, connections, inserts)
+   * @param sampleRate - Sample rate in Hz (default: 48000)
+   * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
+   */
+  static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
+    const module2 = getSonareModule();
+    return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
+  }
+  /** Rebuild and compile the routing graph from the current scene topology. */
+  compile() {
+    this.mixer.compile();
+  }
+  /**
+   * Non-fatal warnings captured when this mixer was built from scene JSON: one
+   * entry per channel-strip insert that was handed param keys it does not read
+   * (a likely typo, or a key meant for a different processor). The scene still
+   * loaded; these keys simply took no effect. Empty when every key was consumed.
+   * Use {@link masteringInsertParamNames} to discover the keys an insert accepts.
+   */
+  sceneWarnings() {
+    return this.mixer.sceneWarnings();
+  }
+  /**
+   * Mix one block of per-strip stereo audio into the stereo master.
+   *
+   * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
+   * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
+   * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
+   */
+  processStereo(leftChannels, rightChannels) {
+    if (leftChannels.length !== rightChannels.length) {
+      throw new Error("leftChannels and rightChannels must have the same length.");
+    }
+    return this.mixer.processStereo(leftChannels, rightChannels);
+  }
+  /**
+   * Mix one block into caller-owned output arrays.
+   *
+   * This avoids allocating the result object and result `Float32Array`s. It is
+   * intended for realtime bridges such as AudioWorklet; the input channel count
+   * must match the scene strip count and all arrays must have the same length.
+   */
+  processStereoInto(leftChannels, rightChannels, outLeft, outRight) {
+    if (leftChannels.length !== rightChannels.length) {
+      throw new Error("leftChannels and rightChannels must have the same length.");
+    }
+    if (outLeft.length !== outRight.length) {
+      throw new Error("outLeft and outRight must have the same length.");
+    }
+    this.mixer.processStereoInto(leftChannels, rightChannels, outLeft, outRight);
+  }
+  /**
+   * Create reusable WASM-heap input/output views for realtime-style processing.
+   *
+   * Fill `leftInputs[i]` / `rightInputs[i]`, call `process()`, then read
+   * `outLeft` / `outRight`. The views are owned by this mixer and become invalid
+   * after {@link delete}.
+   */
+  createRealtimeBuffer() {
+    const stripCount = this.stripCount();
+    let leftInputs = [];
+    let rightInputs = [];
+    let outLeft = this.mixer.outputLeftView();
+    let outRight = this.mixer.outputRightView();
+    const acquire = () => {
+      leftInputs = [];
+      rightInputs = [];
+      for (let index = 0; index < stripCount; index++) {
+        leftInputs.push(this.mixer.inputLeftView(index));
+        rightInputs.push(this.mixer.inputRightView(index));
+      }
+      outLeft = this.mixer.outputLeftView();
+      outRight = this.mixer.outputRightView();
+    };
+    acquire();
+    const reacquireIfDetached = () => {
+      if (outLeft.byteLength === 0 || (leftInputs[0]?.byteLength ?? 1) === 0) {
+        acquire();
+      }
+    };
+    return {
+      get leftInputs() {
+        reacquireIfDetached();
+        return leftInputs;
+      },
+      get rightInputs() {
+        reacquireIfDetached();
+        return rightInputs;
+      },
+      get outLeft() {
+        reacquireIfDetached();
+        return outLeft;
+      },
+      get outRight() {
+        reacquireIfDetached();
+        return outRight;
+      },
+      process: (numSamples = outLeft.length) => {
+        reacquireIfDetached();
+        this.mixer.processPreparedStereo(numSamples);
+      }
+    };
+  }
+  /** Number of strips in the mixer (e.g. strips loaded from the scene). */
+  stripCount() {
+    return this.mixer.stripCount();
+  }
+  /**
+   * Schedule sample-accurate insert-parameter automation on a strip's insert.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param insertIndex - Index into the strip's combined insert sequence
+   *   (`[pre-inserts... post-inserts...]`)
+   * @param paramId - Processor-specific parameter id
+   * @param samplePos - Absolute samples from the start of processing (the mixer
+   *   advances an internal position from 0 on the first {@link processStereo}
+   *   call; recompiling resets it to 0)
+   * @param value - Target parameter value
+   * @param curve - Interpolation curve (default: `'linear'`)
+   * @throws If the strip index is out of range or the schedule call fails
+   *   (unknown curve, out-of-range insert index, or full event lane)
+   */
+  scheduleInsertAutomation(stripIndex, insertIndex, paramId, samplePos, value, curve = "linear") {
+    this.mixer.scheduleInsertAutomation(
+      stripIndex,
+      insertIndex,
+      paramId,
+      samplePos,
+      value,
+      automationCurveCode(curve)
+    );
+  }
+  /**
+   * Resolve a strip's index in `[0, stripCount())` from its scene id, or `null`
+   * when no strip with that id exists (matches the Node binding's `number | null`).
+   */
+  stripById(id) {
+    const index = this.mixer.stripById(id);
+    return index < 0 ? null : index;
+  }
+  /**
+   * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
+   * `'submix'` (defaults to `'aux'`). Marks the routing graph dirty; call
+   * {@link compile} (or {@link processStereo}) to rebuild.
+   */
+  addBus(id, role = "aux") {
+    this.mixer.addBus(id, role);
+  }
+  /** Remove a bus by id. Marks the routing graph dirty. */
+  removeBus(id) {
+    this.mixer.removeBus(id);
+  }
+  /** Number of buses in the mixer topology. */
+  busCount() {
+    return this.mixer.busCount();
+  }
+  /**
+   * Add a VCA group with the given gain offset (dB). `members` is a list of
+   * strip ids governed by the group (may be empty).
+   */
+  addVcaGroup(id, gainDb = 0, members = []) {
+    this.mixer.addVcaGroup(id, gainDb, members);
+  }
+  /** Set an existing VCA group's gain in dB. */
+  setVcaGroupGainDb(id, gainDb) {
+    this.mixer.setVcaGroupGainDb(id, gainDb);
+  }
+  /** Remove a VCA group by id. */
+  removeVcaGroup(id) {
+    this.mixer.removeVcaGroup(id);
+  }
+  /** Number of VCA groups in the mixer topology. */
+  vcaGroupCount() {
+    return this.mixer.vcaGroupCount();
+  }
+  /** Set the strip's input trim in dB. */
+  setInputTrimDb(stripIndex, db) {
+    this.mixer.setInputTrimDb(stripIndex, db);
+  }
+  /** Set the strip's fader level in dB. */
+  setFaderDb(stripIndex, db) {
+    this.mixer.setFaderDb(stripIndex, db);
+  }
+  /**
+   * Set the strip's pan position.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param pan - Pan position in `[-1, 1]`
+   * @param panMode - Optional pan mode. When omitted the strip's current pan
+   *   mode is kept (passes `SONARE_PAN_MODE_KEEP`), so a plain pan nudge does
+   *   not reset a scene-defined `'stereoPan'` / `'dualPan'` mode back to
+   *   balance. Pass `'balance'` (or `0`) explicitly to force balance mode.
+   */
+  setPan(stripIndex, pan, panMode) {
+    const mode = panMode === void 0 ? -1 : panModeCode(panMode);
+    this.mixer.setPan(stripIndex, pan, mode);
+  }
+  /** Set the strip's stereo width. */
+  setWidth(stripIndex, width) {
+    this.mixer.setWidth(stripIndex, width);
+  }
+  /** Set the strip's mute state. */
+  setMuted(stripIndex, muted) {
+    this.mixer.setMuted(stripIndex, muted);
+  }
+  /**
+   * Set a strip's solo state. Takes effect on the next process without a
+   * graph recompile.
+   */
+  setSoloed(stripIndex, soloed) {
+    this.mixer.setSoloed(stripIndex, soloed);
+  }
+  /**
+   * Mark a strip solo-safe so it is never implied-muted by another strip's
+   * solo. Takes effect on the next process without a graph recompile.
+   */
+  setSoloSafe(stripIndex, soloSafe) {
+    this.mixer.setSoloSafe(stripIndex, soloSafe);
+  }
+  /** Invert the polarity of the left and/or right channel of a strip. */
+  setPolarityInvert(stripIndex, invertLeft, invertRight) {
+    this.mixer.setPolarityInvert(stripIndex, invertLeft, invertRight);
+  }
+  /** Set the strip's pan law. */
+  setPanLaw(stripIndex, panLaw) {
+    this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
+  }
+  /**
+   * Set a per-strip channel delay in samples. This changes the strip's reported
+   * latency; recompile to re-run latency compensation.
+   */
+  setChannelDelaySamples(stripIndex, delaySamples) {
+    this.mixer.setChannelDelaySamples(stripIndex, delaySamples);
+  }
+  /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
+  setVcaOffsetDb(stripIndex, offsetDb) {
+    this.mixer.setVcaOffsetDb(stripIndex, offsetDb);
+  }
+  /** Set independent left/right pan positions (dual-pan mode). */
+  setDualPan(stripIndex, leftPan, rightPan) {
+    this.mixer.setDualPan(stripIndex, leftPan, rightPan);
+  }
+  /**
+   * Set the strip's surround pan position, used when it feeds a >2-channel bus.
+   * Stored on the scene; inert until the surround DSP path applies it.
+   */
+  setSurroundPan(stripIndex, pan) {
+    this.mixer.setSurroundPan(stripIndex, pan);
+  }
+  /**
+   * Add a send to a strip after construction.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param id - Send id
+   * @param destinationBusId - Destination bus id
+   * @param sendDb - Initial send level in dB
+   * @param timing - `'preFader'` or `'postFader'` (default: `'postFader'`)
+   * @returns The new send's index
+   */
+  addSend(stripIndex, id, destinationBusId, sendDb = 0, timing = "postFader") {
+    return this.mixer.addSend(stripIndex, id, destinationBusId, sendDb, sendTimingCode(timing));
+  }
+  /** Set the send level (in dB) for an existing send by index. */
+  setSendDb(stripIndex, sendIndex, sendDb) {
+    this.mixer.setSendDb(stripIndex, sendIndex, sendDb);
+  }
+  /**
+   * Remove an existing send from a strip by index.
+   *
+   * Sends are addressed in add order. After removal, sends with a higher index
+   * than `sendIndex` shift down by one. Recompile (or process) before reading
+   * results so the routing graph rebuilds.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param sendIndex - Send index in add order
+   */
+  removeSend(stripIndex, sendIndex) {
+    this.mixer.removeSend(stripIndex, sendIndex);
+  }
+  /**
+   * Read a strip's meter snapshot at the given tap point.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param tap - `'preFader'` or `'postFader'` (default: `'postFader'`)
+   */
+  meterTap(stripIndex, tap = "postFader") {
+    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
+  }
+  /**
+   * Read a strip's meter snapshot.
+   *
+   * With no `tap` argument this reads the strip's own (post-fader) meter,
+   * matching the Node/Python tap-less `stripMeter` contract. Pass an optional
+   * `tap` (`'preFader'` / `'postFader'`) to read the tap-selectable snapshot
+   * instead — the same backing call as {@link meterTap}.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param tap - Optional tap point (`'preFader'` / `'postFader'`); when omitted
+   *   the tap-less post-fader strip meter is read.
+   */
+  stripMeter(stripIndex, tap) {
+    if (tap === void 0) {
+      return this.mixer.stripMeter(stripIndex);
+    }
+    return this.mixer.meterTap(stripIndex, meterTapCode(tap));
+  }
+  /**
+   * Schedule sample-accurate fader automation on a strip.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param samplePos - Absolute samples from the start of processing
+   * @param faderDb - Target fader level in dB
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  scheduleFaderAutomation(stripIndex, samplePos, faderDb, curve = "linear") {
+    this.mixer.scheduleFaderAutomation(stripIndex, samplePos, faderDb, automationCurveCode(curve));
+  }
+  /**
+   * Schedule sample-accurate pan automation on a strip.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param samplePos - Absolute samples from the start of processing
+   * @param pan - Target pan position
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  schedulePanAutomation(stripIndex, samplePos, pan, curve = "linear") {
+    this.mixer.schedulePanAutomation(stripIndex, samplePos, pan, automationCurveCode(curve));
+  }
+  /**
+   * Schedule sample-accurate width automation on a strip.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param samplePos - Absolute samples from the start of processing
+   * @param width - Target stereo width
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  scheduleWidthAutomation(stripIndex, samplePos, width, curve = "linear") {
+    this.mixer.scheduleWidthAutomation(stripIndex, samplePos, width, automationCurveCode(curve));
+  }
+  /**
+   * Schedule sample-accurate send-level automation on a strip's send.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   * @param sendIndex - Send index in the strip's add order
+   * @param samplePos - Absolute samples from the start of processing
+   * @param db - Target send level in dB
+   * @param curve - Interpolation curve (default: `'linear'`)
+   */
+  scheduleSendAutomation(stripIndex, sendIndex, samplePos, db, curve = "linear") {
+    this.mixer.scheduleSendAutomation(
+      stripIndex,
+      sendIndex,
+      samplePos,
+      db,
+      automationCurveCode(curve)
+    );
+  }
+  /**
+   * Read up to `maxPoints` of a strip's most recent goniometer samples
+   * (oldest to newest).
+   */
+  readGoniometerLatest(stripIndex, maxPoints) {
+    return this.mixer.readGoniometerLatest(stripIndex, maxPoints);
+  }
+  /** Serialize the current scene (strips, buses, sends, connections) to JSON. */
+  toSceneJson() {
+    return this.mixer.toSceneJson();
+  }
+  /**
+   * Longest audible serial processor-tail path to the master, in samples. Lazily
+   * compiles the routing graph if the topology is dirty.
+   */
+  tailSamples() {
+    return this.mixer.tailSamples();
+  }
+  /**
+   * Reported latency (samples) of the compiled mixer graph, for aligning
+   * dry/wet material. Lazily compiles the routing graph if the topology is dirty.
+   */
+  latencySamples() {
+    return this.mixer.latencySamples();
+  }
+  /**
+   * Drain delayed / tail audio by processing a zero-input block of `numSamples`
+   * frames after the host stops feeding strip inputs. Returns the mixed stereo
+   * master (`left`, `right`, `sampleRate`).
+   */
+  drainTailStereo(numSamples) {
+    if (!Number.isSafeInteger(numSamples) || numSamples <= 0 || numSamples > this.blockSize) {
+      throw new RangeError(
+        `Mixer.drainTailStereo: numSamples must be an integer in [1, ${this.blockSize}]`
+      );
+    }
+    return this.mixer.drainTailStereo(numSamples);
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.mixer.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+
+// src/realtime_voice_changer.ts
+var RealtimeVoiceChanger = class {
+  constructor(config = "neutral-monitor") {
+    const module2 = getSonareModule();
+    this.changer = module2.createRealtimeVoiceChanger(config);
+  }
+  prepare(sampleRate, maxBlockSize = 128, channels = 1) {
+    this.changer.prepare(sampleRate, maxBlockSize, channels);
+  }
+  reset() {
+    this.changer.reset();
+  }
+  setConfig(config) {
+    this.changer.setConfig(config);
+  }
+  configJson() {
+    return this.changer.configJson();
+  }
+  latencySamples() {
+    return this.changer.latencySamples();
+  }
+  processMono(samples) {
+    return this.changer.processMono(samples);
+  }
+  processMonoInto(samples, output) {
+    this.changer.processMonoInto(samples, output);
+  }
+  processInterleaved(samples, channels) {
+    return this.changer.processInterleaved(samples, channels);
+  }
+  processInterleavedInto(samples, channels, output) {
+    this.changer.processInterleavedInto(samples, channels, output);
+  }
+  /**
+   * Acquire a typed-memory view onto the WASM heap for mono input.
+   *
+   * Write your input samples into the returned `Float32Array` directly (e.g.
+   * via `input.set(source)`); no copy crosses the JS↔C++ bridge until
+   * {@link processPreparedMono} is called. The view is owned by this
+   * RealtimeVoiceChanger and becomes invalid after {@link delete}; it may
+   * also be invalidated if you later call this method with a larger
+   * `numSamples` value (the underlying buffer may be reallocated).
+   */
+  getMonoInputBuffer(numSamples) {
+    return this.changer.getMonoInputBuffer(numSamples);
+  }
+  /** Mono output view counterpart to {@link getMonoInputBuffer}. */
+  getMonoOutputBuffer(numSamples) {
+    return this.changer.getMonoOutputBuffer(numSamples);
+  }
+  /**
+   * Process the previously-acquired mono input buffer in place. The output
+   * appears in the buffer returned by {@link getMonoOutputBuffer}. No JS↔C++
+   * sample-level crossings happen on this call — it just hands control to
+   * the underlying DSP on already-on-heap data.
+   */
+  processPreparedMono(numSamples) {
+    this.changer.processPreparedMono(numSamples);
+  }
+  /** Interleaved input view (layout L0,R0,L1,R1,...). */
+  getInterleavedInputBuffer(numFrames, numChannels) {
+    return this.changer.getInterleavedInputBuffer(numFrames, numChannels);
+  }
+  /** Interleaved output view counterpart. */
+  getInterleavedOutputBuffer(numFrames, numChannels) {
+    return this.changer.getInterleavedOutputBuffer(numFrames, numChannels);
+  }
+  /**
+   * Process the previously-acquired interleaved buffer in place. Output
+   * appears in the buffer returned by {@link getInterleavedOutputBuffer}.
+   */
+  processPreparedInterleaved(numFrames, numChannels) {
+    this.changer.processPreparedInterleaved(numFrames, numChannels);
+  }
+  /**
+   * Planar-channel input/output view (one Float32Array per channel). Matches
+   * AudioWorklet's native layout; processing happens in place.
+   */
+  getPlanarChannelBuffer(channel, numFrames) {
+    return this.changer.getPlanarChannelBuffer(channel, numFrames);
+  }
+  /**
+   * Process the previously-acquired planar channel buffers in place. Each
+   * channel must have been obtained from {@link getPlanarChannelBuffer}
+   * with the same `numFrames`. Output replaces input in the same buffers.
+   */
+  processPreparedPlanar(numFrames) {
+    this.changer.processPreparedPlanar(numFrames);
+  }
+  /**
+   * Convenience factory for the mono zero-copy path: returns the input/output
+   * heap views plus a `process()` thunk wired to the same `numSamples`. The
+   * views are reused across calls and become invalid after {@link delete}.
+   */
+  createRealtimeMonoBuffer(numSamples) {
+    let input = this.getMonoInputBuffer(numSamples);
+    let output = this.getMonoOutputBuffer(numSamples);
+    const reacquireIfDetached = () => {
+      if (input.byteLength === 0 || output.byteLength === 0) {
+        input = this.getMonoInputBuffer(numSamples);
+        output = this.getMonoOutputBuffer(numSamples);
+      }
+    };
+    return {
+      get input() {
+        reacquireIfDetached();
+        return input;
+      },
+      get output() {
+        reacquireIfDetached();
+        return output;
+      },
+      process: () => {
+        reacquireIfDetached();
+        this.processPreparedMono(numSamples);
+      }
+    };
+  }
+  /** Same as {@link createRealtimeMonoBuffer} but for interleaved I/O. */
+  createRealtimeInterleavedBuffer(numFrames, numChannels) {
+    let input = this.getInterleavedInputBuffer(numFrames, numChannels);
+    let output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+    const reacquireIfDetached = () => {
+      if (input.byteLength === 0 || output.byteLength === 0) {
+        input = this.getInterleavedInputBuffer(numFrames, numChannels);
+        output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+      }
+    };
+    return {
+      get input() {
+        reacquireIfDetached();
+        return input;
+      },
+      get output() {
+        reacquireIfDetached();
+        return output;
+      },
+      channels: numChannels,
+      process: () => {
+        reacquireIfDetached();
+        this.processPreparedInterleaved(numFrames, numChannels);
+      }
+    };
+  }
+  /**
+   * Convenience factory for the planar zero-copy path. Acquires one
+   * heap-backed Float32Array per channel and returns a `process()` thunk
+   * wired to the same `numFrames`. Buffers are reused across calls and
+   * become invalid after {@link delete}.
+   */
+  createRealtimePlanarBuffer(numFrames, numChannels) {
+    let channels = [];
+    const acquire = () => {
+      channels = [];
+      for (let ch = 0; ch < numChannels; ch++) {
+        channels.push(this.getPlanarChannelBuffer(ch, numFrames));
+      }
+    };
+    acquire();
+    const reacquireIfDetached = () => {
+      if ((channels[0]?.byteLength ?? 0) === 0) {
+        acquire();
+      }
+    };
+    return {
+      get channels() {
+        reacquireIfDetached();
+        return channels;
+      },
+      process: () => {
+        reacquireIfDetached();
+        this.processPreparedPlanar(numFrames);
+      }
+    };
+  }
+  delete() {
+    this.changer.delete();
+  }
+};
+function realtimeVoiceChangerPresetNames() {
+  return Array.from(getSonareModule().realtimeVoiceChangerPresetNames());
+}
+function realtimeVoiceChangerPresetJson(name) {
+  return getSonareModule().realtimeVoiceChangerPresetJson(name);
+}
+function validateRealtimeVoiceChangerPresetJson(json) {
+  return getSonareModule().validateRealtimeVoiceChangerPresetJson(json);
+}
+
+// src/streaming_processors.ts
+var EQ_PHASE_MODES = {
+  zero: 1,
+  "zero-latency": 1,
+  zero_latency: 1,
+  natural: 2,
+  "natural-phase": 2,
+  natural_phase: 2,
+  linear: 3,
+  "linear-phase": 3,
+  linear_phase: 3
+};
+var StreamingMasteringChain = class {
+  constructor(config) {
+    const module2 = getSonareModule();
+    this.chain = module2.createStreamingMasteringChain(config);
+  }
+  /**
+   * Initialize processors for the given sample rate and block layout.
+   *
+   * @param sampleRate - Sample rate in Hz
+   * @param maxBlockSize - Maximum block size per process call
+   * @param numChannels - 1 (mono) or 2 (stereo)
+   */
+  prepare(sampleRate, maxBlockSize, numChannels) {
+    this.chain.prepare(sampleRate, maxBlockSize, numChannels);
+  }
+  /**
+   * Process one mono block, returning the processed samples (same length).
+   */
+  processMono(samples) {
+    return this.chain.processMono(samples);
+  }
+  /**
+   * Process one stereo block, returning the processed channels.
+   */
+  processStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Stereo channel lengths must match.");
+    }
+    return this.chain.processStereo(left, right);
+  }
+  /** Reset all processor state without rebuilding. */
+  reset() {
+    this.chain.reset();
+  }
+  /** Total reported latency in samples across all active processors. */
+  latencySamples() {
+    return this.chain.latencySamples();
+  }
+  /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
+  stageNames() {
+    return this.chain.stageNames();
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.chain.delete();
+  }
+};
+var StreamingEqualizer = class {
+  constructor(config = {}) {
+    const module2 = getSonareModule();
+    this.eq = module2.createEqualizer(config);
+  }
+  /**
+   * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
+   */
+  setBand(index, band) {
+    this.eq.setBand(index, band);
+  }
+  /** Disable and reset every band. */
+  clear() {
+    this.eq.clear();
+  }
+  /**
+   * Set the global phase mode: `'zero'` | `'natural'` | `'linear'` or 1/2/3.
+   */
+  setPhaseMode(mode) {
+    const value = typeof mode === "number" ? mode : EQ_PHASE_MODES[mode.toLowerCase()];
+    if (value === void 0) {
+      throw new Error(`unknown EQ phase mode: ${mode}`);
+    }
+    this.eq.setPhaseMode(value);
+  }
+  /** Enable or disable output auto-gain compensation. */
+  setAutoGain(enabled) {
+    this.eq.setAutoGain(enabled);
+  }
+  /** Set all-band EQ gain scale as a 0.0..2.0 multiplier. */
+  setGainScale(scale) {
+    this.eq.setGainScale(scale);
+  }
+  /** Set post-EQ output gain in dB. */
+  setOutputGainDb(gainDb) {
+    this.eq.setOutputGainDb(gainDb);
+  }
+  /** Set post-EQ stereo balance in -1.0..1.0; mono input ignores pan. */
+  setOutputPan(pan) {
+    this.eq.setOutputPan(pan);
+  }
+  /**
+   * Provide a mono external sidechain key for dynamic bands that opt into
+   * `external_sidechain`. The samples are copied into an owned buffer.
+   */
+  setSidechainMono(samples) {
+    this.eq.setSidechainMono(samples);
+  }
+  /**
+   * Provide a stereo external sidechain key. Both channels must match length.
+   */
+  setSidechainStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Sidechain channel lengths must match.");
+    }
+    this.eq.setSidechainStereo(left, right);
+  }
+  /** Release any borrowed external sidechain buffers. */
+  clearSidechain() {
+    this.eq.clearSidechain();
+  }
+  /** Auto-gain applied on the most recent block, in dB. */
+  lastAutoGainDb() {
+    return this.eq.lastAutoGainDb();
+  }
+  /** Reported processing latency in samples (non-zero for linear-phase bands). */
+  latencySamples() {
+    return this.eq.latencySamples();
+  }
+  /**
+   * Process one mono block, returning the equalized samples (same length).
+   */
+  processMono(samples) {
+    return this.eq.processMono(samples);
+  }
+  /**
+   * Process one stereo block, returning the equalized channels.
+   */
+  processStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Stereo channel lengths must match.");
+    }
+    return this.eq.processStereo(left, right);
+  }
+  /**
+   * Read the latest pre/post spectrum snapshot for metering. `seq` increments
+   * each time a new snapshot is published.
+   */
+  spectrum() {
+    return this.eq.spectrum();
+  }
+  /**
+   * Configure bands so the source spectrum matches the reference spectrum.
+   *
+   * @param source - Source audio (mono samples)
+   * @param reference - Reference audio (mono samples)
+   * @param options - `sampleRate` (default 48000) and `maxBands` (default 8)
+   */
+  match(source, reference, options = {}) {
+    this.eq.match(source, reference, options);
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.eq.delete();
+  }
+};
+var StreamingRetune = class {
+  constructor(config = {}) {
+    const module2 = getSonareModule();
+    this.retune = module2.createStreamingRetune(config);
+  }
+  /**
+   * Allocate and initialize native state for the given sample rate and maximum
+   * process block size.
+   */
+  prepare(sampleRate, maxBlockSize) {
+    this.retune.prepare(sampleRate, maxBlockSize);
+  }
+  /** Reset delay, grain, and overlap-add state without changing config. */
+  reset() {
+    this.retune.reset();
+  }
+  /**
+   * Update retune settings. Changing `grainSize` takes effect after the next
+   * {@link prepare} call.
+   */
+  setConfig(config) {
+    this.retune.setConfig(config);
+  }
+  /** Current native config. */
+  config() {
+    return this.retune.config();
+  }
+  /** Resolved grain size in samples after {@link prepare}. */
+  grainSize() {
+    return this.retune.grainSize();
+  }
+  /** Process one mono block, returning the shifted samples (same length). */
+  processMono(samples) {
+    return this.retune.processMono(samples);
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.retune.delete();
   }
 };
 
@@ -5303,6 +6187,7 @@ export {
   nnFilter,
   nnlsChroma,
   normalize,
+  noteMove,
   noteStretch,
   noteToHz,
   onsetEnvelope,

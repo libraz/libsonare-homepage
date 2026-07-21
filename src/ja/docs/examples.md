@@ -479,7 +479,8 @@ function onAudioData(samples: Float32Array) {
     // frames.nFrames        - フレーム数
     // frames.timestamps     - [nFrames] Float32Array (秒単位のストリーム時刻)
     // frames.mel            - [nFrames * nMels] Float32Array
-    // frames.chroma         - [nFrames * 12] Float32Array
+    // frames.chroma         - [nFrames * nChroma] Float32Array（CHROMA が無効なら空）
+    // frames.featureFlags   - MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
     // frames.onsetStrength  - [nFrames] Float32Array
     // frames.rmsEnergy      - [nFrames] Float32Array
     // frames.spectralCentroid / spectralFlatness / chordRoot / chordQuality / chordConfidence

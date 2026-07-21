@@ -337,10 +337,10 @@ struct StreamConfig {
   float tuning_ref_hz = 440.0f;  // A4 の基準周波数
 
   // 出力設定
-  OutputFormat output_format = OutputFormat::Float32;
+  OutputFormat output_format = OutputFormat::Float32; // レガシー。Float32 のままにする
   int emit_every_n_frames = 1;   // 4 = 44100Hz で約 60fps
   int magnitude_downsample = 1;  // マグニチュードのダウンサンプル係数
-  size_t max_pending_frames = 4096; // 未読上限。超過時は最古を破棄
+  size_t max_pending_frames = 4096; // 未読上限。超過時は新たに生成したフレームを破棄
 
   // 推定を更新する間隔
   float key_update_interval_sec = 5.0f;
@@ -348,7 +348,7 @@ struct StreamConfig {
 };
 ```
 
-`OutputFormat` は下流へ渡すストリーミングフレームの内部表現を選びます。`Float32` は精度優先、`Int16` は帯域幅を抑えた転送、`Uint8` は可視化向けの軽量ペイロードに向きます。UI スレッドや Worker へ送る量を減らしたい場合は、後述の量子化読み出しメソッドと組み合わせて使います。
+`output_format` はソース互換性のために残っており、`OutputFormat::Float32` のままにする必要があります。`Int16` または `Uint8` のペイロードが必要な場合は、アナライザ設定を変えるのではなく、後述の明示的な量子化読み出しメソッドを使います。
 
 `analyzer.stats()` は既存の総数・進行中推定に加え、`pending_frames` と累積 `dropped_output_frames` を返します。これにより、ネイティブホストは正常に上限管理されているキューと、読み出し側が繰り返し遅れている状態を区別できます。
 
@@ -363,7 +363,6 @@ StreamConfig config;
 config.sample_rate = 44100;
 config.n_mels = 64;
 config.emit_every_n_frames = 4;
-config.output_format = OutputFormat::Float32;
 
 StreamAnalyzer analyzer(config);
 
@@ -398,7 +397,7 @@ struct StreamFrame {
 
   std::vector<float> magnitude;  // [n_bins] またはダウンサンプル後
   std::vector<float> mel;        // [n_mels]
-  std::vector<float> chroma;     // [12]
+  std::vector<float> chroma;     // 有効時は [12]、無効時は空
 
   float spectral_centroid;       // Hz
   float spectral_flatness;       // 0-1
@@ -424,7 +423,8 @@ analyzer.read_frames_soa(max_frames, buffer);
 // buffer.n_frames
 // buffer.timestamps - [n_frames]
 // buffer.mel - [n_frames * n_mels]
-// buffer.chroma - [n_frames * 12]
+// buffer.n_chroma / buffer.feature_flags - ストライドと MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
+// buffer.chroma - [n_frames * n_chroma]。CHROMA が無効なら空
 // buffer.onset_strength - [n_frames]
 // buffer.rms_energy - [n_frames]
 // buffer.spectral_centroid - [n_frames]

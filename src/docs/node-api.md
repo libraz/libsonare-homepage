@@ -97,6 +97,17 @@ timeToFrames(2.32, 22050, 512); // → frame index
 
 ## API Reference
 
+### One-shot request objects
+
+Top-level one-shot analysis, effects, mastering, metering, feature, mixer, and voice-changer functions use a named request object as their canonical Node call form. Positional overloads remain compatible and normalize to the same validation, defaults, results, errors, and progress behavior.
+
+```ts
+const bpm = detectBpm({ samples, sampleRate });
+const result = masterAudio({ samples, sampleRate, preset: 'pop' });
+```
+
+The corresponding `*Request` TypeScript types are exported from the package.
+
 ### Audio
 
 | Method | Description |

@@ -480,7 +480,8 @@ function onAudioData(samples: Float32Array) {
     // frames.nFrames        - number of frames
     // frames.timestamps     - [nFrames] Float32Array (stream time in seconds)
     // frames.mel            - [nFrames * nMels] Float32Array
-    // frames.chroma         - [nFrames * 12] Float32Array
+    // frames.chroma         - [nFrames * nChroma] Float32Array (empty when CHROMA is disabled)
+    // frames.featureFlags   - MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
     // frames.onsetStrength  - [nFrames] Float32Array
     // frames.rmsEnergy      - [nFrames] Float32Array
     // frames.spectralCentroid / spectralFlatness / chordRoot / chordQuality / chordConfidence

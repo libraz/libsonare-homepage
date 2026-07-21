@@ -205,10 +205,626 @@ function sendTimingCode(timing) {
   return timing === "preFader" ? 1 : 0;
 }
 
+// src/realtime_engine.ts
+var EXPECTED_ENGINE_ABI_VERSION = 3;
+function engineCapabilities() {
+  const abiVersion = getSonareModule().engineAbiVersion();
+  const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
+  const atomics = typeof globalThis.Atomics === "object";
+  const audioWorklet = typeof AudioWorkletNode !== "undefined" || typeof globalThis.AudioWorkletProcessor !== "undefined";
+  return {
+    engineAbiVersion: abiVersion,
+    expectedEngineAbiVersion: EXPECTED_ENGINE_ABI_VERSION,
+    abiCompatible: abiVersion === EXPECTED_ENGINE_ABI_VERSION,
+    sharedArrayBuffer,
+    atomics,
+    audioWorklet,
+    mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
+  };
+}
+var RealtimeEngine = class {
+  constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024) {
+    const module2 = getSonareModule();
+    const capabilities = engineCapabilities();
+    if (!capabilities.abiCompatible) {
+      throw new Error(
+        `Engine ABI mismatch: wasm=${capabilities.engineAbiVersion}, expected=${capabilities.expectedEngineAbiVersion}`
+      );
+    }
+    this.native = new module2.RealtimeEngine(
+      sampleRate,
+      maxBlockSize,
+      commandCapacity,
+      telemetryCapacity
+    );
+  }
+  prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024) {
+    this.native.prepare(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity);
+  }
+  /** Queue a sample-accurate parameter change (engine kSetParam). */
+  setParameter(paramId, value, renderFrame = -1) {
+    this.native.setParameter(paramId, value, renderFrame);
+  }
+  /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
+  setParameterSmoothed(paramId, value, renderFrame = -1) {
+    this.native.setParameterSmoothed(paramId, value, renderFrame);
+  }
+  /**
+   * Set the default ramp time (ms) for engine-level smoothed parameters —
+   * fader/pan glides, insert-parameter automation, and MIDI-CC mappings. The
+   * default is 20 ms; pass `0` for instant (un-ramped) changes.
+   */
+  setParamSmoothingMs(smoothingMs) {
+    this.native.setParamSmoothingMs(smoothingMs);
+  }
+  setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
+    this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
+  }
+  setMidiClips(clips) {
+    this.native.setMidiClips(clips);
+  }
+  setBuiltinInstrument(config = {}, destinationId = config.destinationId ?? 0) {
+    this.native.setBuiltinInstrument(destinationId, config);
+  }
+  /**
+   * Bind the patch-driven NativeSynth to a realtime MIDI destination. `patch`
+   * is a {@link SynthPatch} or a preset-name string (`'saw-lead'` /
+   * `'va:saw-lead'`; see {@link synthPresetNames}), resolving exactly like
+   * {@link Project.bounceWithSynthInstrument}. Live note/CC commands and
+   * scheduled MIDI clips routed to that destination render through the synth.
+   * Unknown preset names throw. An object patch's `destinationId` is a JS
+   * binding convenience, not part of the NativeSynth patch itself.
+   */
+  setSynthInstrument(patch = {}, destinationId = (typeof patch === "object" ? patch.destinationId : void 0) ?? 0) {
+    this.native.setSynthInstrument(destinationId, patch);
+  }
+  /**
+   * Load (parse) SoundFont 2 bytes into the engine so SF2 instruments can be
+   * bound with {@link setSf2Instrument}. The host fetches the `.sf2` and
+   * passes the raw bytes; they are copied into linear memory for the call and
+   * not referenced afterwards. Replaces any previously loaded SoundFont.
+   */
+  loadSoundFont(data) {
+    this.native.loadSoundFont(data);
+  }
+  /**
+   * Bind a GS-compatible SoundFont player to a realtime MIDI destination, fed
+   * by the engine's loaded SoundFont ({@link loadSoundFont}). Live note/CC
+   * commands and scheduled MIDI clips routed to that destination render
+   * through the player (16 MIDI channels, channel 10 drums, GS NRPN part
+   * edits, GS/GM SysEx resets). Without a loaded SoundFont — or for programs
+   * the SoundFont does not cover — notes play through the built-in
+   * synthesizer GM fallback bank (the data-free floor).
+   */
+  setSf2Instrument(config = {}, destinationId = config.destinationId ?? 0) {
+    this.native.setSf2Instrument(destinationId, config);
+  }
+  clearMidiInstrument(destinationId = 0) {
+    this.native.clearMidiInstrument(destinationId);
+  }
+  midiInstrumentCount() {
+    return this.native.midiInstrumentCount();
+  }
+  /**
+   * Bind a live MIDI CC to an engine automation parameter. The MIDI event still
+   * reaches the destination instrument; when bound, its 7-bit value is also
+   * mapped into [minValue, maxValue] for `paramId`.
+   */
+  bindMidiCc(channel, controller, paramId, options = {}) {
+    this.native.bindMidiCc(
+      channel,
+      controller,
+      paramId,
+      options.minValue ?? 0,
+      options.maxValue ?? 1
+    );
+  }
+  clearMidiCcBindings() {
+    this.native.clearMidiCcBindings();
+  }
+  midiCcBindingCount() {
+    return this.native.midiCcBindingCount();
+  }
+  /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
+  setMidiFx(destinationId, configJson) {
+    this.native.setMidiFx(destinationId, configJson);
+  }
+  clearMidiFx(destinationId = 0) {
+    this.native.clearMidiFx(destinationId);
+  }
+  /** Enable the engine-owned live MIDI input source for a destination. */
+  setMidiInputSource(destinationId = 0) {
+    this.native.setMidiInputSource(destinationId);
+  }
+  clearMidiInputSource() {
+    this.native.clearMidiInputSource();
+  }
+  midiInputPendingCount() {
+    return this.native.midiInputPendingCount();
+  }
+  /**
+   * Route a destination's (track lane's) MIDI to the external output queue
+   * instead of the internal instrument rack, so the track plays an external
+   * device. Clearing it restores internal-synth playback.
+   */
+  setMidiDestinationExternal(destinationId, external) {
+    this.native.setMidiDestinationExternal(destinationId, external);
+  }
+  /**
+   * Enable/disable forwarding MIDI clock + transport (start/continue/stop) to
+   * the external output queue so external gear tracks the transport tempo.
+   */
+  setExternalMidiClockEnabled(enabled) {
+    this.native.setExternalMidiClockEnabled(enabled);
+  }
+  /** Count of external-MIDI events dropped because the output queue was full. */
+  externalMidiDroppedCount() {
+    return this.native.externalMidiDroppedCount();
+  }
+  /**
+   * Drain queued external-MIDI events, already lowered to MIDI 1.0 byte
+   * messages ready to write to a Web MIDI output port. Call once per audio
+   * block / animation frame. `maxRecords` caps the number of output events
+   * returned — the shared unit across every surface. Events past the cap stay
+   * queued for the next call (lossless); call again to drain the rest.
+   */
+  drainExternalMidi(maxRecords = 1024) {
+    return this.native.drainExternalMidi(maxRecords);
+  }
+  pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
+    this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
+  }
+  pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
+    this.native.pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
+  }
+  pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
+    this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
+  }
+  pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
+    this.native.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
+  }
+  pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame = -1) {
+    this.native.pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI control change to a MIDI destination
+   * (engine kMidiCcImmediate). `group`/`channel` are 0..15; `controller`/`value`
+   * are 7-bit (0..127). `renderFrame` is the frame to fire at, or -1 for
+   * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
+   */
+  pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
+    this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
+   * the full message including the leading 0xF0 and trailing 0xF7 (1..512
+   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
+   * the Node/Python/C-ABI `pushMidiSysex`.
+   */
+  pushMidiSysex(destinationId, data, renderFrame = -1) {
+    this.native.pushMidiSysex(destinationId, data, renderFrame);
+  }
+  /**
+   * Queue a MIDI panic (all-notes-off) releasing every sounding note at
+   * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
+   */
+  pushMidiPanic(renderFrame = -1) {
+    this.native.pushMidiPanic(renderFrame);
+  }
+  /**
+   * Remove all registered parameters (and their automation lanes). Control-thread
+   * only; not realtime-safe. Mirrors the C-ABI `clearParameters`.
+   */
+  clearParameters() {
+    this.native.clearParameters();
+  }
+  /** Read back the current transport state snapshot. */
+  getTransportState() {
+    return this.native.getTransportState();
+  }
+  play(renderFrame = -1) {
+    this.native.play(renderFrame);
+  }
+  stop(renderFrame = -1) {
+    this.native.stop(renderFrame);
+  }
+  seekSample(timelineSample, renderFrame = -1) {
+    this.native.seekSample(timelineSample, renderFrame);
+  }
+  /**
+   * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
+   * lane fader/pan/gate, bus gains) to its target value. Offline renders call
+   * this after a priming process() block so the first audible block renders at
+   * settled values instead of ramping in from defaults.
+   */
+  settleParameters() {
+    this.native.settleParameters();
+  }
+  seekPpq(ppq, renderFrame = -1) {
+    this.native.seekPpq(ppq, renderFrame);
+  }
+  setTempo(bpm) {
+    this.native.setTempo(bpm);
+  }
+  setTempoSegments(segments) {
+    this.native.setTempoSegments([...segments]);
+  }
+  setTimeSignature(numerator, denominator) {
+    this.native.setTimeSignature(numerator, denominator);
+  }
+  setTimeSignatureSegments(segments) {
+    this.native.setTimeSignatureSegments([...segments]);
+  }
+  sampleAtPpq(ppq) {
+    return Number(this.native.sampleAtPpq(ppq));
+  }
+  setLoop(startPpq, endPpq, enabled = true) {
+    this.native.setLoop(startPpq, endPpq, enabled);
+  }
+  addParameter(info) {
+    this.native.addParameter(info);
+  }
+  parameterCount() {
+    return this.native.parameterCount();
+  }
+  parameterInfoByIndex(index) {
+    return this.native.parameterInfoByIndex(index);
+  }
+  parameterInfo(id) {
+    return this.native.parameterInfo(id);
+  }
+  setAutomationLane(paramId, points) {
+    this.native.setAutomationLane(paramId, points);
+  }
+  automationLaneCount() {
+    return this.native.automationLaneCount();
+  }
+  setMarkers(markers) {
+    this.native.setMarkers(markers);
+  }
+  markerCount() {
+    return this.native.markerCount();
+  }
+  markerByIndex(index) {
+    return this.native.markerByIndex(index);
+  }
+  marker(id) {
+    return this.native.marker(id);
+  }
+  seekMarker(markerId, renderFrame = -1) {
+    this.native.seekMarker(markerId, renderFrame);
+  }
+  setLoopFromMarkers(startMarkerId, endMarkerId) {
+    this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
+  }
+  setMetronome(config) {
+    this.native.setMetronome(config);
+  }
+  metronome() {
+    return this.native.metronome();
+  }
+  countInEndSample(startSample, bars) {
+    return Number(this.native.countInEndSample(startSample, bars));
+  }
+  setGraph(spec) {
+    this.native.setGraph(spec);
+  }
+  graphNodeCount() {
+    return this.native.graphNodeCount();
+  }
+  graphConnectionCount() {
+    return this.native.graphConnectionCount();
+  }
+  setClips(clips) {
+    this.native.setClips(
+      clips.map((clip) => ({
+        ...clip,
+        pageProvider: typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider
+      }))
+    );
+  }
+  /**
+   * Returns the PCM generated for a tempo-sync clip by the control-thread
+   * setter, or `null` when the clip did not require a tempo-sync bake.
+   */
+  prebakedClipChannels(clipId) {
+    return this.native.prebakedClipChannels(clipId);
+  }
+  clipCount() {
+    return this.native.clipCount();
+  }
+  setTrackLanes(lanes) {
+    this.native.setTrackLanes(
+      lanes.map((lane) => {
+        if (typeof lane === "number") {
+          return { trackId: lane };
+        }
+        if (!lane.sends) {
+          return lane;
+        }
+        return {
+          ...lane,
+          sends: lane.sends.map((send) => ({
+            ...send,
+            // Post-fader (0) is the default for an omitted sendTiming.
+            sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
+          }))
+        };
+      })
+    );
+  }
+  /**
+   * Keys one insert of a lane strip from another lane's post-strip audio
+   * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
+   */
+  setLaneSidechain(trackId, insertIndex, sourceTrackId) {
+    this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
+  }
+  setTrackBuses(buses) {
+    this.native.setTrackBuses(buses);
+  }
+  setBusStripJson(busId, sceneJson) {
+    try {
+      JSON.parse(sceneJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid bus strip JSON";
+      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
+    }
+    this.native.setBusStripJson(busId, sceneJson);
+  }
+  setTrackStripJson(trackId, sceneJson) {
+    try {
+      JSON.parse(sceneJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid track strip JSON";
+      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
+    }
+    this.native.setTrackStripJson(trackId, sceneJson);
+  }
+  setTrackStripEqBand(trackId, bandIndex, band) {
+    this.native.setTrackStripEqBandJson(
+      trackId,
+      bandIndex,
+      typeof band === "string" ? band : JSON.stringify(band)
+    );
+  }
+  setTrackStripEqBandJson(trackId, bandIndex, bandJson) {
+    this.native.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
+  }
+  setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
+  }
+  setMasterStripJson(sceneJson) {
+    try {
+      JSON.parse(sceneJson);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid master strip JSON";
+      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
+    }
+    this.native.setMasterStripJson(sceneJson);
+  }
+  setMasterStripEqBand(bandIndex, band) {
+    this.native.setMasterStripEqBandJson(
+      bandIndex,
+      typeof band === "string" ? band : JSON.stringify(band)
+    );
+  }
+  setMasterStripEqBandJson(bandIndex, bandJson) {
+    this.native.setMasterStripEqBandJson(bandIndex, bandJson);
+  }
+  setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
+  }
+  /**
+   * Changes one track-strip insert parameter in realtime, addressed by the
+   * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
+   * Applied at the next block head via the engine command queue; safe during
+   * playback. Throws if the track, insert, or name is unknown, the param is not
+   * realtime-safe, or the command queue is full.
+   */
+  setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
+    this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
+  }
+  /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
+  setMasterStripInsertParamByName(insertIndex, paramName, value) {
+    this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
+  setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
+    this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
+  setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
+    this.native.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
+  }
+  /**
+   * Resolves a track-lane insert parameter (by its JSON-key name) to the
+   * reserved automation id usable with `setAutomationLane` / `setParameter`.
+   * Returns `-1` when the track, insert, or name is unknown. (The Python binding
+   * raises a `SonareError` for an unknown id where Node/WASM return the `-1`
+   * sentinel.)
+   */
+  resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
+    return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
+  }
+  resolveMasterInsertAutomationId(insertIndex, paramName) {
+    return this.native.resolveMasterInsertAutomationId(insertIndex, paramName);
+  }
+  resolveBusInsertAutomationId(busId, insertIndex, paramName) {
+    return this.native.resolveBusInsertAutomationId(busId, insertIndex, paramName);
+  }
+  /** Sets a track lane strip's pan position in realtime (glitch-free). */
+  setTrackStripPan(trackId, pan) {
+    this.native.setTrackStripPan(trackId, pan);
+  }
+  /** Sets a track lane strip's pan law in realtime. */
+  setTrackStripPanLaw(trackId, panLaw) {
+    this.native.setTrackStripPanLaw(trackId, panLawCode(panLaw));
+  }
+  /** Sets a track lane strip's pan mode in realtime. */
+  setTrackStripPanMode(trackId, panMode) {
+    this.native.setTrackStripPanMode(trackId, panModeCode(panMode));
+  }
+  /** Sets a track lane strip's dual-pan left/right positions in realtime. */
+  setTrackStripDualPan(trackId, leftPan, rightPan) {
+    this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
+  }
+  /**
+   * Sets a track lane strip's inter-channel alignment delay (whole samples).
+   * Adjusts strip latency, so PDC and reported graph latency are refreshed.
+   */
+  setTrackStripChannelDelaySamples(trackId, delaySamples) {
+    this.native.setTrackStripChannelDelaySamples(trackId, delaySamples);
+  }
+  createClipPageProvider(numChannels, numSamples, pageFrames) {
+    const id = this.native.createClipPageProvider(numChannels, numSamples, pageFrames);
+    return new ClipPageProvider(this, id);
+  }
+  supplyClipPage(providerId, pageIndex, channels) {
+    this.native.supplyClipPage(providerId, pageIndex, channels);
+  }
+  clearClipPage(providerId, pageIndex) {
+    this.native.clearClipPage(providerId, pageIndex);
+  }
+  destroyClipPageProvider(providerId) {
+    this.native.destroyClipPageProvider(providerId);
+  }
+  popClipPageRequest() {
+    return this.native.popClipPageRequest();
+  }
+  setCaptureBuffer(numChannels, capacityFrames) {
+    this.native.setCaptureBuffer(numChannels, capacityFrames);
+  }
+  armCapture(armed = true) {
+    this.native.armCapture(armed);
+  }
+  setCapturePunch(startSample, endSample, enabled = true) {
+    this.native.setCapturePunch(startSample, endSample, enabled);
+  }
+  setCaptureSource(source) {
+    this.native.setCaptureSource(source);
+  }
+  setRecordOffsetSamples(offsetSamples) {
+    this.native.setRecordOffsetSamples(offsetSamples);
+  }
+  setInputMonitor(enabled, gain = 1) {
+    this.native.setInputMonitor(enabled, gain);
+  }
+  resetCapture() {
+    this.native.resetCapture();
+  }
+  captureStatus() {
+    return this.native.captureStatus();
+  }
+  capturedAudio() {
+    return this.native.capturedAudio();
+  }
+  process(channels) {
+    return this.native.process(channels);
+  }
+  /**
+   * Allocates persistent per-channel WASM-heap scratch for the zero-copy
+   * `getChannelBuffer` / `processPrepared` realtime path. Call once (off the
+   * audio thread) before driving `processPrepared` from an AudioWorklet so the
+   * render callback never allocates on the C++/JS heap.
+   */
+  prepareChannels(numChannels, maxFrames) {
+    this.native.prepareChannels(numChannels, maxFrames);
+  }
+  /**
+   * Returns a Float32Array view onto the persistent WASM-heap scratch for one
+   * channel (valid for up to `numFrames`). Fill it, call `processPrepared`, then
+   * read the same view back. Re-acquire after WASM memory growth.
+   */
+  getChannelBuffer(channel, numFrames) {
+    return this.native.getChannelBuffer(channel, numFrames);
+  }
+  /**
+   * Runs the engine in place over the prepared per-channel scratch buffers.
+   * Allocation-free: safe to call on the AudioWorklet render thread after
+   * `prepareChannels`.
+   */
+  processPrepared(numFrames) {
+    this.native.processPrepared(numFrames);
+  }
+  processWithMonitor(channels) {
+    return this.native.processWithMonitor(channels);
+  }
+  renderOffline(channels, blockSize = 128) {
+    return this.native.renderOffline(channels, blockSize);
+  }
+  bounceOffline(options) {
+    return this.native.bounceOffline(options);
+  }
+  freezeOffline(options) {
+    return this.native.freezeOffline(options);
+  }
+  drainTelemetry(maxRecords = 1024) {
+    return this.native.drainTelemetry(maxRecords);
+  }
+  drainMeterTelemetry(maxRecords = 1024) {
+    return this.native.drainMeterTelemetry(maxRecords);
+  }
+  /**
+   * Drains pending meter telemetry as per-plane (wide) records for a surround
+   * target. Use this for a surround mix target; {@link drainMeterTelemetry}
+   * stays the stereo fast path. The two share one queue — call only one per
+   * target. The live AudioWorklet path owns the queue via the stereo drain, so
+   * this wide drain is for an offline (non-worklet) engine instance; per-plane
+   * surround meters are not delivered over the live worklet meter ring.
+   */
+  drainMeterTelemetryWide(maxRecords = 1024) {
+    return this.native.drainMeterTelemetryWide(maxRecords);
+  }
+  /**
+   * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
+   * the minimum render-frame gap between snapshots (0 disables). @param bandCount
+   * is the FFT band resolution (1..64); changing it re-prepares the tap. Returns
+   * the band count actually applied.
+   */
+  configureScopeTelemetry(intervalFrames, bandCount) {
+    return this.native.configureScopeTelemetry(intervalFrames, bandCount);
+  }
+  /** Drains pending spectrum + vectorscope snapshots (per mix target). */
+  drainScopeTelemetry(maxRecords = 1024) {
+    return this.native.drainScopeTelemetry(maxRecords);
+  }
+  destroy() {
+    this.native.delete();
+  }
+};
+var ClipPageProvider = class {
+  constructor(engine, id) {
+    this.engine = engine;
+    this.id = id;
+    this.disposed = false;
+  }
+  supply(pageIndex, channels) {
+    if (this.disposed) {
+      throw new Error("ClipPageProvider is destroyed");
+    }
+    this.engine.supplyClipPage(this.id, pageIndex, channels);
+  }
+  clear(pageIndex) {
+    if (this.disposed) {
+      return;
+    }
+    this.engine.clearClipPage(this.id, pageIndex);
+  }
+  destroy() {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.engine.destroyClipPageProvider(this.id);
+  }
+};
+
 // src/mixer.ts
 var Mixer = class _Mixer {
-  constructor(mixer) {
+  constructor(mixer, blockSize) {
     this.mixer = mixer;
+    this.blockSize = blockSize;
   }
   /**
    * Build a mixer from a scene JSON string.
@@ -219,7 +835,7 @@ var Mixer = class _Mixer {
    */
   static fromSceneJson(json, sampleRate = 48e3, blockSize = 512) {
     const module2 = getSonareModule();
-    return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize));
+    return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
   }
   /** Rebuild and compile the routing graph from the current scene topology. */
   compile() {
@@ -601,6 +1217,11 @@ var Mixer = class _Mixer {
    * master (`left`, `right`, `sampleRate`).
    */
   drainTailStereo(numSamples) {
+    if (!Number.isSafeInteger(numSamples) || numSamples <= 0 || numSamples > this.blockSize) {
+      throw new RangeError(
+        `Mixer.drainTailStereo: numSamples must be an integer in [1, ${this.blockSize}]`
+      );
+    }
     return this.mixer.drainTailStereo(numSamples);
   }
   /** Release the underlying WASM object. Safe to call only once. */
@@ -790,614 +1411,6 @@ var RealtimeVoiceChanger = class {
   }
   delete() {
     this.changer.delete();
-  }
-};
-
-// src/realtime_engine.ts
-var EXPECTED_ENGINE_ABI_VERSION = 3;
-function engineCapabilities() {
-  const abiVersion = getSonareModule().engineAbiVersion();
-  const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
-  const atomics = typeof globalThis.Atomics === "object";
-  const audioWorklet = typeof AudioWorkletNode !== "undefined" || typeof globalThis.AudioWorkletProcessor !== "undefined";
-  return {
-    engineAbiVersion: abiVersion,
-    expectedEngineAbiVersion: EXPECTED_ENGINE_ABI_VERSION,
-    abiCompatible: abiVersion === EXPECTED_ENGINE_ABI_VERSION,
-    sharedArrayBuffer,
-    atomics,
-    audioWorklet,
-    mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
-  };
-}
-var RealtimeEngine = class {
-  constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024) {
-    const module2 = getSonareModule();
-    const capabilities = engineCapabilities();
-    if (!capabilities.abiCompatible) {
-      throw new Error(
-        `Engine ABI mismatch: wasm=${capabilities.engineAbiVersion}, expected=${capabilities.expectedEngineAbiVersion}`
-      );
-    }
-    this.native = new module2.RealtimeEngine(
-      sampleRate,
-      maxBlockSize,
-      commandCapacity,
-      telemetryCapacity
-    );
-  }
-  prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024) {
-    this.native.prepare(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity);
-  }
-  /** Queue a sample-accurate parameter change (engine kSetParam). */
-  setParameter(paramId, value, renderFrame = -1) {
-    this.native.setParameter(paramId, value, renderFrame);
-  }
-  /** Queue a smoothed parameter change (engine kSetParamSmoothed). */
-  setParameterSmoothed(paramId, value, renderFrame = -1) {
-    this.native.setParameterSmoothed(paramId, value, renderFrame);
-  }
-  /**
-   * Set the default ramp time (ms) for engine-level smoothed parameters —
-   * fader/pan glides, insert-parameter automation, and MIDI-CC mappings. The
-   * default is 20 ms; pass `0` for instant (un-ramped) changes.
-   */
-  setParamSmoothingMs(smoothingMs) {
-    this.native.setParamSmoothingMs(smoothingMs);
-  }
-  setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
-    this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
-  }
-  setMidiClips(clips) {
-    this.native.setMidiClips(clips);
-  }
-  setBuiltinInstrument(config = {}, destinationId = config.destinationId ?? 0) {
-    this.native.setBuiltinInstrument(destinationId, config);
-  }
-  /**
-   * Bind the patch-driven NativeSynth to a realtime MIDI destination. `patch`
-   * is a {@link SynthPatch} or a preset-name string (`'saw-lead'` /
-   * `'va:saw-lead'`; see {@link synthPresetNames}), resolving exactly like
-   * {@link Project.bounceWithSynthInstrument}. Live note/CC commands and
-   * scheduled MIDI clips routed to that destination render through the synth.
-   * Unknown preset names throw. An object patch's `destinationId` is a JS
-   * binding convenience, not part of the NativeSynth patch itself.
-   */
-  setSynthInstrument(patch = {}, destinationId = (typeof patch === "object" ? patch.destinationId : void 0) ?? 0) {
-    this.native.setSynthInstrument(destinationId, patch);
-  }
-  /**
-   * Load (parse) SoundFont 2 bytes into the engine so SF2 instruments can be
-   * bound with {@link setSf2Instrument}. The host fetches the `.sf2` and
-   * passes the raw bytes; they are copied into linear memory for the call and
-   * not referenced afterwards. Replaces any previously loaded SoundFont.
-   */
-  loadSoundFont(data) {
-    this.native.loadSoundFont(data);
-  }
-  /**
-   * Bind a GS-compatible SoundFont player to a realtime MIDI destination, fed
-   * by the engine's loaded SoundFont ({@link loadSoundFont}). Live note/CC
-   * commands and scheduled MIDI clips routed to that destination render
-   * through the player (16 MIDI channels, channel 10 drums, GS NRPN part
-   * edits, GS/GM SysEx resets). Without a loaded SoundFont — or for programs
-   * the SoundFont does not cover — notes play through the built-in
-   * synthesizer GM fallback bank (the data-free floor).
-   */
-  setSf2Instrument(config = {}, destinationId = config.destinationId ?? 0) {
-    this.native.setSf2Instrument(destinationId, config);
-  }
-  clearMidiInstrument(destinationId = 0) {
-    this.native.clearMidiInstrument(destinationId);
-  }
-  midiInstrumentCount() {
-    return this.native.midiInstrumentCount();
-  }
-  /**
-   * Bind a live MIDI CC to an engine automation parameter. The MIDI event still
-   * reaches the destination instrument; when bound, its 7-bit value is also
-   * mapped into [minValue, maxValue] for `paramId`.
-   */
-  bindMidiCc(channel, controller, paramId, options = {}) {
-    this.native.bindMidiCc(
-      channel,
-      controller,
-      paramId,
-      options.minValue ?? 0,
-      options.maxValue ?? 1
-    );
-  }
-  clearMidiCcBindings() {
-    this.native.clearMidiCcBindings();
-  }
-  midiCcBindingCount() {
-    return this.native.midiCcBindingCount();
-  }
-  /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
-  setMidiFx(destinationId, configJson) {
-    this.native.setMidiFx(destinationId, configJson);
-  }
-  clearMidiFx(destinationId = 0) {
-    this.native.clearMidiFx(destinationId);
-  }
-  /** Enable the engine-owned live MIDI input source for a destination. */
-  setMidiInputSource(destinationId = 0) {
-    this.native.setMidiInputSource(destinationId);
-  }
-  clearMidiInputSource() {
-    this.native.clearMidiInputSource();
-  }
-  midiInputPendingCount() {
-    return this.native.midiInputPendingCount();
-  }
-  /**
-   * Route a destination's (track lane's) MIDI to the external output queue
-   * instead of the internal instrument rack, so the track plays an external
-   * device. Clearing it restores internal-synth playback.
-   */
-  setMidiDestinationExternal(destinationId, external) {
-    this.native.setMidiDestinationExternal(destinationId, external);
-  }
-  /**
-   * Enable/disable forwarding MIDI clock + transport (start/continue/stop) to
-   * the external output queue so external gear tracks the transport tempo.
-   */
-  setExternalMidiClockEnabled(enabled) {
-    this.native.setExternalMidiClockEnabled(enabled);
-  }
-  /** Count of external-MIDI events dropped because the output queue was full. */
-  externalMidiDroppedCount() {
-    return this.native.externalMidiDroppedCount();
-  }
-  /**
-   * Drain queued external-MIDI events, already lowered to MIDI 1.0 byte
-   * messages ready to write to a Web MIDI output port. Call once per audio
-   * block / animation frame. `maxRecords` caps the number of output events
-   * returned — the shared unit across every surface. Events past the cap stay
-   * queued for the next call (lossless); call again to drain the rest.
-   */
-  drainExternalMidi(maxRecords = 1024) {
-    return this.native.drainExternalMidi(maxRecords);
-  }
-  pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
-    this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
-  }
-  pushMidiInputNoteOff(group, channel, note, velocity = 0, portTimeSamples = 0) {
-    this.native.pushMidiInputNoteOff(group, channel, note, velocity, portTimeSamples);
-  }
-  pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
-    this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
-  }
-  pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
-    this.native.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
-  }
-  pushMidiNoteOff(destinationId, group, channel, note, velocity = 0, renderFrame = -1) {
-    this.native.pushMidiNoteOff(destinationId, group, channel, note, velocity, renderFrame);
-  }
-  /**
-   * Queue an immediate (live) MIDI control change to a MIDI destination
-   * (engine kMidiCcImmediate). `group`/`channel` are 0..15; `controller`/`value`
-   * are 7-bit (0..127). `renderFrame` is the frame to fire at, or -1 for
-   * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
-   */
-  pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
-    this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
-  }
-  /**
-   * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
-   * the full message including the leading 0xF0 and trailing 0xF7 (1..512
-   * bytes). `renderFrame` is the frame to fire at, or -1 for immediate. Mirrors
-   * the Node/Python/C-ABI `pushMidiSysex`.
-   */
-  pushMidiSysex(destinationId, data, renderFrame = -1) {
-    this.native.pushMidiSysex(destinationId, data, renderFrame);
-  }
-  /**
-   * Queue a MIDI panic (all-notes-off) releasing every sounding note at
-   * `renderFrame` (-1 = immediate). Mirrors the C-ABI `pushMidiPanic`.
-   */
-  pushMidiPanic(renderFrame = -1) {
-    this.native.pushMidiPanic(renderFrame);
-  }
-  /**
-   * Remove all registered parameters (and their automation lanes). Control-thread
-   * only; not realtime-safe. Mirrors the C-ABI `clearParameters`.
-   */
-  clearParameters() {
-    this.native.clearParameters();
-  }
-  /** Read back the current transport state snapshot. */
-  getTransportState() {
-    return this.native.getTransportState();
-  }
-  play(renderFrame = -1) {
-    this.native.play(renderFrame);
-  }
-  stop(renderFrame = -1) {
-    this.native.stop(renderFrame);
-  }
-  seekSample(timelineSample, renderFrame = -1) {
-    this.native.seekSample(timelineSample, renderFrame);
-  }
-  /**
-   * Snaps every in-flight parameter ramp (engine-level smoothed params, mixer
-   * lane fader/pan/gate, bus gains) to its target value. Offline renders call
-   * this after a priming process() block so the first audible block renders at
-   * settled values instead of ramping in from defaults.
-   */
-  settleParameters() {
-    this.native.settleParameters();
-  }
-  seekPpq(ppq, renderFrame = -1) {
-    this.native.seekPpq(ppq, renderFrame);
-  }
-  setTempo(bpm) {
-    this.native.setTempo(bpm);
-  }
-  setTempoSegments(segments) {
-    this.native.setTempoSegments([...segments]);
-  }
-  setTimeSignature(numerator, denominator) {
-    this.native.setTimeSignature(numerator, denominator);
-  }
-  setTimeSignatureSegments(segments) {
-    this.native.setTimeSignatureSegments([...segments]);
-  }
-  sampleAtPpq(ppq) {
-    return Number(this.native.sampleAtPpq(ppq));
-  }
-  setLoop(startPpq, endPpq, enabled = true) {
-    this.native.setLoop(startPpq, endPpq, enabled);
-  }
-  addParameter(info) {
-    this.native.addParameter(info);
-  }
-  parameterCount() {
-    return this.native.parameterCount();
-  }
-  parameterInfoByIndex(index) {
-    return this.native.parameterInfoByIndex(index);
-  }
-  parameterInfo(id) {
-    return this.native.parameterInfo(id);
-  }
-  setAutomationLane(paramId, points) {
-    this.native.setAutomationLane(paramId, points);
-  }
-  automationLaneCount() {
-    return this.native.automationLaneCount();
-  }
-  setMarkers(markers) {
-    this.native.setMarkers(markers);
-  }
-  markerCount() {
-    return this.native.markerCount();
-  }
-  markerByIndex(index) {
-    return this.native.markerByIndex(index);
-  }
-  marker(id) {
-    return this.native.marker(id);
-  }
-  seekMarker(markerId, renderFrame = -1) {
-    this.native.seekMarker(markerId, renderFrame);
-  }
-  setLoopFromMarkers(startMarkerId, endMarkerId) {
-    this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
-  }
-  setMetronome(config) {
-    this.native.setMetronome(config);
-  }
-  metronome() {
-    return this.native.metronome();
-  }
-  countInEndSample(startSample, bars) {
-    return Number(this.native.countInEndSample(startSample, bars));
-  }
-  setGraph(spec) {
-    this.native.setGraph(spec);
-  }
-  graphNodeCount() {
-    return this.native.graphNodeCount();
-  }
-  graphConnectionCount() {
-    return this.native.graphConnectionCount();
-  }
-  setClips(clips) {
-    this.native.setClips(
-      clips.map((clip) => ({
-        ...clip,
-        pageProvider: typeof clip.pageProvider === "object" && clip.pageProvider !== null ? clip.pageProvider.id : clip.pageProvider
-      }))
-    );
-  }
-  clipCount() {
-    return this.native.clipCount();
-  }
-  setTrackLanes(lanes) {
-    this.native.setTrackLanes(
-      lanes.map((lane) => {
-        if (typeof lane === "number") {
-          return { trackId: lane };
-        }
-        if (!lane.sends) {
-          return lane;
-        }
-        return {
-          ...lane,
-          sends: lane.sends.map((send) => ({
-            ...send,
-            // Post-fader (0) is the default for an omitted sendTiming.
-            sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
-          }))
-        };
-      })
-    );
-  }
-  /**
-   * Keys one insert of a lane strip from another lane's post-strip audio
-   * (ducking/sidechainRouter inserts). sourceTrackId 0 removes the binding.
-   */
-  setLaneSidechain(trackId, insertIndex, sourceTrackId) {
-    this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
-  }
-  setTrackBuses(buses) {
-    this.native.setTrackBuses(buses);
-  }
-  setBusStripJson(busId, sceneJson) {
-    try {
-      JSON.parse(sceneJson);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "invalid bus strip JSON";
-      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
-    }
-    this.native.setBusStripJson(busId, sceneJson);
-  }
-  setTrackStripJson(trackId, sceneJson) {
-    try {
-      JSON.parse(sceneJson);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "invalid track strip JSON";
-      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
-    }
-    this.native.setTrackStripJson(trackId, sceneJson);
-  }
-  setTrackStripEqBand(trackId, bandIndex, band) {
-    this.native.setTrackStripEqBandJson(
-      trackId,
-      bandIndex,
-      typeof band === "string" ? band : JSON.stringify(band)
-    );
-  }
-  setTrackStripEqBandJson(trackId, bandIndex, bandJson) {
-    this.native.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
-  }
-  setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass = false) {
-    this.native.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
-  }
-  setMasterStripJson(sceneJson) {
-    try {
-      JSON.parse(sceneJson);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "invalid master strip JSON";
-      throw new SonareError(2 /* InvalidFormat */, "InvalidFormat", message);
-    }
-    this.native.setMasterStripJson(sceneJson);
-  }
-  setMasterStripEqBand(bandIndex, band) {
-    this.native.setMasterStripEqBandJson(
-      bandIndex,
-      typeof band === "string" ? band : JSON.stringify(band)
-    );
-  }
-  setMasterStripEqBandJson(bandIndex, bandJson) {
-    this.native.setMasterStripEqBandJson(bandIndex, bandJson);
-  }
-  setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass = false) {
-    this.native.setMasterStripInsertBypassed(insertIndex, bypassed, resetOnBypass);
-  }
-  /**
-   * Changes one track-strip insert parameter in realtime, addressed by the
-   * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
-   * Applied at the next block head via the engine command queue; safe during
-   * playback. Throws if the track, insert, or name is unknown, the param is not
-   * realtime-safe, or the command queue is full.
-   */
-  setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
-    this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
-  }
-  /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
-  setMasterStripInsertParamByName(insertIndex, paramName, value) {
-    this.native.setMasterStripInsertParamByName(insertIndex, paramName, value);
-  }
-  /** Bus-strip counterpart of {@link setTrackStripInsertParamByName}. */
-  setBusStripInsertParamByName(busId, insertIndex, paramName, value) {
-    this.native.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
-  }
-  /** Bus-strip counterpart of {@link setTrackStripInsertBypassed}. */
-  setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
-    this.native.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
-  }
-  /**
-   * Resolves a track-lane insert parameter (by its JSON-key name) to the
-   * reserved automation id usable with `setAutomationLane` / `setParameter`.
-   * Returns `-1` when the track, insert, or name is unknown. (The Python binding
-   * raises a `SonareError` for an unknown id where Node/WASM return the `-1`
-   * sentinel.)
-   */
-  resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
-    return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
-  }
-  resolveMasterInsertAutomationId(insertIndex, paramName) {
-    return this.native.resolveMasterInsertAutomationId(insertIndex, paramName);
-  }
-  resolveBusInsertAutomationId(busId, insertIndex, paramName) {
-    return this.native.resolveBusInsertAutomationId(busId, insertIndex, paramName);
-  }
-  /** Sets a track lane strip's pan position in realtime (glitch-free). */
-  setTrackStripPan(trackId, pan) {
-    this.native.setTrackStripPan(trackId, pan);
-  }
-  /** Sets a track lane strip's pan law in realtime. */
-  setTrackStripPanLaw(trackId, panLaw) {
-    this.native.setTrackStripPanLaw(trackId, panLawCode(panLaw));
-  }
-  /** Sets a track lane strip's pan mode in realtime. */
-  setTrackStripPanMode(trackId, panMode) {
-    this.native.setTrackStripPanMode(trackId, panModeCode(panMode));
-  }
-  /** Sets a track lane strip's dual-pan left/right positions in realtime. */
-  setTrackStripDualPan(trackId, leftPan, rightPan) {
-    this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
-  }
-  /**
-   * Sets a track lane strip's inter-channel alignment delay (whole samples).
-   * Adjusts strip latency, so PDC and reported graph latency are refreshed.
-   */
-  setTrackStripChannelDelaySamples(trackId, delaySamples) {
-    this.native.setTrackStripChannelDelaySamples(trackId, delaySamples);
-  }
-  createClipPageProvider(numChannels, numSamples, pageFrames) {
-    const id = this.native.createClipPageProvider(numChannels, numSamples, pageFrames);
-    return new ClipPageProvider(this, id);
-  }
-  supplyClipPage(providerId, pageIndex, channels) {
-    this.native.supplyClipPage(providerId, pageIndex, channels);
-  }
-  clearClipPage(providerId, pageIndex) {
-    this.native.clearClipPage(providerId, pageIndex);
-  }
-  destroyClipPageProvider(providerId) {
-    this.native.destroyClipPageProvider(providerId);
-  }
-  popClipPageRequest() {
-    return this.native.popClipPageRequest();
-  }
-  setCaptureBuffer(numChannels, capacityFrames) {
-    this.native.setCaptureBuffer(numChannels, capacityFrames);
-  }
-  armCapture(armed = true) {
-    this.native.armCapture(armed);
-  }
-  setCapturePunch(startSample, endSample, enabled = true) {
-    this.native.setCapturePunch(startSample, endSample, enabled);
-  }
-  setCaptureSource(source) {
-    this.native.setCaptureSource(source);
-  }
-  setRecordOffsetSamples(offsetSamples) {
-    this.native.setRecordOffsetSamples(offsetSamples);
-  }
-  setInputMonitor(enabled, gain = 1) {
-    this.native.setInputMonitor(enabled, gain);
-  }
-  resetCapture() {
-    this.native.resetCapture();
-  }
-  captureStatus() {
-    return this.native.captureStatus();
-  }
-  capturedAudio() {
-    return this.native.capturedAudio();
-  }
-  process(channels) {
-    return this.native.process(channels);
-  }
-  /**
-   * Allocates persistent per-channel WASM-heap scratch for the zero-copy
-   * `getChannelBuffer` / `processPrepared` realtime path. Call once (off the
-   * audio thread) before driving `processPrepared` from an AudioWorklet so the
-   * render callback never allocates on the C++/JS heap.
-   */
-  prepareChannels(numChannels, maxFrames) {
-    this.native.prepareChannels(numChannels, maxFrames);
-  }
-  /**
-   * Returns a Float32Array view onto the persistent WASM-heap scratch for one
-   * channel (valid for up to `numFrames`). Fill it, call `processPrepared`, then
-   * read the same view back. Re-acquire after WASM memory growth.
-   */
-  getChannelBuffer(channel, numFrames) {
-    return this.native.getChannelBuffer(channel, numFrames);
-  }
-  /**
-   * Runs the engine in place over the prepared per-channel scratch buffers.
-   * Allocation-free: safe to call on the AudioWorklet render thread after
-   * `prepareChannels`.
-   */
-  processPrepared(numFrames) {
-    this.native.processPrepared(numFrames);
-  }
-  processWithMonitor(channels) {
-    return this.native.processWithMonitor(channels);
-  }
-  renderOffline(channels, blockSize = 128) {
-    return this.native.renderOffline(channels, blockSize);
-  }
-  bounceOffline(options) {
-    return this.native.bounceOffline(options);
-  }
-  freezeOffline(options) {
-    return this.native.freezeOffline(options);
-  }
-  drainTelemetry(maxRecords = 1024) {
-    return this.native.drainTelemetry(maxRecords);
-  }
-  drainMeterTelemetry(maxRecords = 1024) {
-    return this.native.drainMeterTelemetry(maxRecords);
-  }
-  /**
-   * Drains pending meter telemetry as per-plane (wide) records for a surround
-   * target. Use this for a surround mix target; {@link drainMeterTelemetry}
-   * stays the stereo fast path. The two share one queue — call only one per
-   * target. The live AudioWorklet path owns the queue via the stereo drain, so
-   * this wide drain is for an offline (non-worklet) engine instance; per-plane
-   * surround meters are not delivered over the live worklet meter ring.
-   */
-  drainMeterTelemetryWide(maxRecords = 1024) {
-    return this.native.drainMeterTelemetryWide(maxRecords);
-  }
-  /**
-   * Enables per-target spectrum + vectorscope capture. @param intervalFrames is
-   * the minimum render-frame gap between snapshots (0 disables). @param bandCount
-   * is the FFT band resolution (1..64); changing it re-prepares the tap. Returns
-   * the band count actually applied.
-   */
-  configureScopeTelemetry(intervalFrames, bandCount) {
-    return this.native.configureScopeTelemetry(intervalFrames, bandCount);
-  }
-  /** Drains pending spectrum + vectorscope snapshots (per mix target). */
-  drainScopeTelemetry(maxRecords = 1024) {
-    return this.native.drainScopeTelemetry(maxRecords);
-  }
-  destroy() {
-    this.native.delete();
-  }
-};
-var ClipPageProvider = class {
-  constructor(engine, id) {
-    this.engine = engine;
-    this.id = id;
-    this.disposed = false;
-  }
-  supply(pageIndex, channels) {
-    if (this.disposed) {
-      throw new Error("ClipPageProvider is destroyed");
-    }
-    this.engine.supplyClipPage(this.id, pageIndex, channels);
-  }
-  clear(pageIndex) {
-    if (this.disposed) {
-      return;
-    }
-    this.engine.clearClipPage(this.id, pageIndex);
-  }
-  destroy() {
-    if (this.disposed) {
-      return;
-    }
-    this.disposed = true;
-    this.engine.destroyClipPageProvider(this.id);
   }
 };
 
@@ -2128,6 +2141,8 @@ async function resetCapture(ctx) {
 }
 
 // src/worklet/engine-clips.ts
+var PREBAKED_CLIP_PAGE_THRESHOLD = 16384;
+var PREBAKED_CLIP_PAGE_FRAMES = 4096;
 function addClip(ctx, trackId, buffer, startPpq, opts = {}) {
   const id = opts.id ?? ctx.allocateClipId();
   const clip = {
@@ -2157,9 +2172,56 @@ function setMidiClips(ctx, clips) {
 function syncClipsDelta(ctx, upserts, removeIds) {
   const clips = Array.from(ctx.clips.values());
   ctx.offlineEngine.setClips(clips);
+  const preparedById = /* @__PURE__ */ new Map();
+  for (const clip of clips) {
+    if (clip.id === void 0) {
+      continue;
+    }
+    const bakedChannels = ctx.offlineEngine.prebakedClipChannels(clip.id);
+    preparedById.set(
+      clip.id,
+      bakedChannels === null ? clip : {
+        ...clip,
+        channels: bakedChannels,
+        clipOffsetSamples: 0,
+        lengthSamples: bakedChannels[0]?.length ?? 0,
+        loop: false,
+        warpMode: "off",
+        warpAnchors: void 0
+      }
+    );
+  }
+  const inlineUpserts = [];
+  for (const clip of upserts) {
+    const prepared = clip.id === void 0 ? clip : preparedById.get(clip.id) ?? clip;
+    const channels = prepared.channels;
+    if (prepared.id === void 0 || prepared.warpMode !== "off" || !channels || channels.length === 0 || channels[0].length <= PREBAKED_CLIP_PAGE_THRESHOLD) {
+      inlineUpserts.push(prepared);
+      continue;
+    }
+    const numSamples = channels[0].length;
+    ctx.postSync({
+      type: "syncClipPageProvider",
+      clipId: prepared.id,
+      clip: { ...prepared, channels: void 0, pageProvider: void 0 },
+      numChannels: channels.length,
+      numSamples,
+      pageFrames: PREBAKED_CLIP_PAGE_FRAMES
+    });
+    for (let start = 0, pageIndex = 0; start < numSamples; start += PREBAKED_CLIP_PAGE_FRAMES, pageIndex++) {
+      const page = channels.map(
+        (channel) => channel.slice(start, start + PREBAKED_CLIP_PAGE_FRAMES)
+      );
+      ctx.postSync(
+        { type: "syncClipPage", clipId: prepared.id, pageIndex, channels: page },
+        page.map((channel) => channel.buffer)
+      );
+    }
+    ctx.postSync({ type: "syncClipPageCommit", clipId: prepared.id });
+  }
   ctx.postSync({
     type: "syncClipsDelta",
-    upserts,
+    upserts: inlineUpserts,
     removeIds
   });
 }
@@ -2336,7 +2398,7 @@ function isEngineSyncMessage(value) {
   if (!isRecord(value) || typeof value.type !== "string") {
     return false;
   }
-  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncBusStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiFx" || value.type === "syncClearMidiFx" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiSysex" || value.type === "syncMidiPanic" || value.type === "syncMidiDestinationExternal" || value.type === "syncExternalMidiClock";
+  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncClipPageProvider" || value.type === "syncClipPage" || value.type === "syncClipPageCommit" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncBusStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiFx" || value.type === "syncClearMidiFx" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiSysex" || value.type === "syncMidiPanic" || value.type === "syncMidiDestinationExternal" || value.type === "syncExternalMidiClock";
 }
 function isEngineCaptureRequestMessage(value) {
   return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
@@ -3502,11 +3564,15 @@ var SonareEngine = class _SonareEngine {
   // Posts an out-of-band control-sync message to the worklet engine processor.
   // Sync messages use a string `type` so the worklet's message handler routes
   // them to receiveSync() (numeric `type` is reserved for SonareEngineCommandRecord).
-  postSync(message) {
+  postSync(message, transfer) {
     if (this.destroyed) {
       return;
     }
-    this.realtimeNode.node.port.postMessage(message);
+    if (transfer && transfer.length > 0) {
+      this.realtimeNode.node.port.postMessage(message, transfer);
+    } else {
+      this.realtimeNode.node.port.postMessage(message);
+    }
   }
   // Collaborator surface handed to the mixer/routing free functions so they can
   // mutate the routing stores (held by reference), mirror into the offline
@@ -3624,7 +3690,7 @@ var SonareEngine = class _SonareEngine {
       clips: this.clips,
       midiClips: this.midiClips,
       allocateClipId: () => this.nextClipId++,
-      postSync: (message) => this.postSync(message),
+      postSync: (message, transfer) => this.postSync(message, transfer),
       ensureTrackLane: (target) => this.ensureTrackLane(target),
       resolveTargetId: (target) => this.resolveTargetId(target)
     };
@@ -3721,6 +3787,8 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     // SetMetronome command only toggles enabled state; the config arrives here.
     this.metronomeConfig = { ...DEFAULT_METRONOME_CONFIG };
     this.liveClips = /* @__PURE__ */ new Map();
+    this.pagedClipProviders = /* @__PURE__ */ new Map();
+    this.pendingPagedClips = /* @__PURE__ */ new Map();
     this.sampleRate = options.sampleRate ?? 48e3;
     this.blockSize = options.blockSize ?? 128;
     this.channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
@@ -3818,11 +3886,10 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       this.applyCommand(command);
     }
   }
-  // Applies an out-of-band control-plane sync message. Runs on the AudioWorklet
-  // global scope but OUTSIDE process() (the message-port callback), so the
-  // bulk/allocating engine setters (setClips/setMarkers) are safe here — they
-  // never run on the realtime render path. This is the audio-thread equivalent
-  // of the engine's control-thread RtPublisher setters.
+  // Applies an out-of-band control-plane sync message on the AudioWorklet
+  // thread. These handlers must remain bounded: expensive clip transforms are
+  // performed on the main-thread mirror, and long pre-baked PCM arrives in
+  // small pages before the final lightweight clip schedule is committed.
   receiveSync(message) {
     if (this.closed) {
       return;
@@ -3848,6 +3915,33 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         }
         this.engine.setClips(Array.from(this.liveClips.values()));
         break;
+      case "syncClipPageProvider": {
+        const provider = this.engine.createClipPageProvider(
+          message.numChannels,
+          message.numSamples,
+          message.pageFrames
+        );
+        this.pagedClipProviders.set(message.clipId, provider.id);
+        this.pendingPagedClips.set(message.clipId, message.clip);
+        break;
+      }
+      case "syncClipPage": {
+        const providerId = this.pagedClipProviders.get(message.clipId);
+        if (providerId !== void 0) {
+          this.engine.supplyClipPage(providerId, message.pageIndex, message.channels);
+        }
+        break;
+      }
+      case "syncClipPageCommit": {
+        const providerId = this.pagedClipProviders.get(message.clipId);
+        const clip = this.pendingPagedClips.get(message.clipId);
+        if (providerId !== void 0 && clip) {
+          this.liveClips.set(message.clipId, { ...clip, pageProvider: providerId });
+          this.pendingPagedClips.delete(message.clipId);
+          this.engine.setClips(Array.from(this.liveClips.values()));
+        }
+        break;
+      }
       case "syncMidiClips":
         this.engine.setMidiClips(message.clips);
         break;

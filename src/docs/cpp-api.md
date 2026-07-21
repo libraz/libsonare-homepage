@@ -346,10 +346,10 @@ struct StreamConfig {
   float tuning_ref_hz = 440.0f;  // Reference frequency for A4
 
   // Output configuration
-  OutputFormat output_format = OutputFormat::Float32;
+  OutputFormat output_format = OutputFormat::Float32; // legacy; must remain Float32
   int emit_every_n_frames = 1;   // 4 = ~60fps at 44100Hz
   int magnitude_downsample = 1;  // Downsample factor for magnitude
-  size_t max_pending_frames = 4096; // unread cap; overflow drops oldest
+  size_t max_pending_frames = 4096; // unread cap; overflow drops newly produced frames
 
   // Progressive estimation intervals
   float key_update_interval_sec = 5.0f;
@@ -357,7 +357,7 @@ struct StreamConfig {
 };
 ```
 
-`OutputFormat` selects the internal frame representation for downstream transfer: `Float32` for full precision, `Int16` for compact streaming data, or `Uint8` for visualization payloads. Use it together with the matching read method below when you want to reduce worker or UI-thread bandwidth.
+`output_format` is retained for source compatibility and must remain `OutputFormat::Float32`. Use the explicit quantized read methods below to produce `Int16` or `Uint8` payloads without changing the analyzer configuration.
 
 `analyzer.stats()` reports `pending_frames` and cumulative `dropped_output_frames` alongside the existing totals and progressive estimate. This lets a native host distinguish a healthy bounded queue from a consumer that is repeatedly falling behind.
 
@@ -372,7 +372,6 @@ StreamConfig config;
 config.sample_rate = 44100;
 config.n_mels = 64;
 config.emit_every_n_frames = 4;
-config.output_format = OutputFormat::Float32;
 
 StreamAnalyzer analyzer(config);
 
@@ -406,7 +405,7 @@ struct StreamFrame {
   // Frequency features (sizes depend on config)
   std::vector<float> magnitude;  // [n_bins] or downsampled
   std::vector<float> mel;        // [n_mels]
-  std::vector<float> chroma;     // [12]
+  std::vector<float> chroma;     // [12] when enabled; empty otherwise
 
   // Scalar features
   float spectral_centroid;
@@ -435,7 +434,8 @@ analyzer.read_frames_soa(max_frames, buffer);
 // buffer.n_frames
 // buffer.timestamps - [n_frames]
 // buffer.mel - [n_frames * n_mels]
-// buffer.chroma - [n_frames * 12]
+// buffer.n_chroma / buffer.feature_flags - stride and MEL=1, CHROMA=2, ONSET=4, SPECTRAL=8
+// buffer.chroma - [n_frames * n_chroma], or empty when CHROMA is disabled
 // buffer.onset_strength - [n_frames]
 // buffer.rms_energy - [n_frames]
 // buffer.spectral_centroid - [n_frames]
