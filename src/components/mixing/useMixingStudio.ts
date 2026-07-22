@@ -25,6 +25,7 @@ import { goniometerPoints, meterHeight, waveformPath } from '@/components/mixing
 import { useI18n } from '@/composables/useI18n';
 import { useRealtimeMixer } from '@/composables/useRealtimeMixer';
 import {
+  AudioInputBudgetError,
   calculatePeakRms,
   decodeAudioFile,
   encodeWavStereo,
@@ -193,6 +194,9 @@ export function useMixingStudio() {
     if (sceneUrl) URL.revokeObjectURL(sceneUrl);
     stopPreview();
     void realtime.dispose();
+    const context = audioContext;
+    audioContext = null;
+    if (typeof context?.close === 'function') void context.close();
   });
 
   async function initWasmVersion() {
@@ -234,7 +238,18 @@ export function useMixingStudio() {
           break;
         }
 
-        const audio = await decodeAudioFile(file, getAudioContext());
+        let audio: Awaited<ReturnType<typeof decodeAudioFile>>;
+        try {
+          audio = await decodeAudioFile(file, getAudioContext(), {
+            maxDurationSeconds: MAX_DURATION_SECONDS,
+          });
+        } catch (error) {
+          if (error instanceof AudioInputBudgetError && error.code === 'duration') {
+            warning.value = copy.value.warnings.durationLimit.replace('{file}', file.name);
+            continue;
+          }
+          throw error;
+        }
         if (audio.duration > MAX_DURATION_SECONDS) {
           warning.value = copy.value.warnings.durationLimit.replace('{file}', file.name);
           continue;
@@ -279,7 +294,9 @@ export function useMixingStudio() {
       const response = await fetch('/demo.mp3');
       const blob = await response.blob();
       const file = new File([blob], 'demo.mp3', { type: blob.type || 'audio/mpeg' });
-      const audio = await decodeAudioFile(file, getAudioContext());
+      const audio = await decodeAudioFile(file, getAudioContext(), {
+        maxDurationSeconds: MAX_DURATION_SECONDS,
+      });
       const crossoverHz = 250;
       const leftBands = splitBands(audio.left, audio.sampleRate, crossoverHz);
       const rightBands = splitBands(audio.right, audio.sampleRate, crossoverHz);
@@ -633,6 +650,7 @@ export function useMixingStudio() {
           realtimeActive = false;
         },
       );
+      warning.value = null;
       return true;
     } catch (error) {
       console.warn('Realtime mixer unavailable, falling back to node preview:', error);
@@ -646,6 +664,7 @@ export function useMixingStudio() {
     stopPreview();
     // Prefer the WASM realtime mixer (reflects EQ/reverb/sends/VCA); fall back to plain nodes.
     if (await startRealtime()) return;
+    warning.value = copy.value.warnings.fallback;
     const context = getAudioContext();
     if (context.state === 'suspended') await context.resume();
     const soloActive = tracks.value.some((track) => track.soloed);
@@ -665,10 +684,12 @@ export function useMixingStudio() {
       const source = context.createBufferSource();
       const gain = context.createGain();
       const pan = context.createStereoPanner();
+      const master = context.createGain();
       source.buffer = buffer;
       gain.gain.value = dbToLinear(track.inputTrimDb + track.faderDb);
       pan.pan.value = track.pan;
-      source.connect(gain).connect(pan).connect(context.destination);
+      master.gain.value = dbToLinear(masterFaderDb.value);
+      source.connect(gain).connect(pan).connect(master).connect(context.destination);
 
       const sourceOffset = Math.max(0, previewStartPosition - clipStart);
       const when = startAt + Math.max(0, clipStart - previewStartPosition);

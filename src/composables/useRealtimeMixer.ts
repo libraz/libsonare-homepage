@@ -41,8 +41,15 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
     this.reportCounter = 0;
     this.port.onmessage = (e) => this.onMessage(e.data);
     createModule({ wasmBinary: o.wasmBinary, locateFile: () => 'sonare.wasm' })
-      .then((mod) => { this.mod = mod; this.buildMixer(o.sceneJson); this.ready = true; this.port.postMessage({ type: 'ready' }); })
-      .catch((err) => this.port.postMessage({ type: 'error', error: String(err) }));
+      .then((mod) => {
+        if (this.disposed) return;
+        this.mod = mod;
+        this.buildMixer(o.sceneJson);
+        if (this.disposed) { if (this.mixer) this.mixer.delete(); this.mixer = null; return; }
+        this.ready = true;
+        this.port.postMessage({ type: 'ready' });
+      })
+      .catch((err) => { if (!this.disposed) this.port.postMessage({ type: 'error', error: String(err) }); });
   }
 
   buildMixer(sceneJson) {
@@ -124,10 +131,15 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
   let wasmBinary: ArrayBuffer | null = null;
   let sampleRate = 48000;
   let onEnded: (() => void) | null = null;
+  let generation = 0;
+  let cancelStart: ((error: Error) => void) | null = null;
 
   async function ensureContext(sr: number): Promise<AudioContext> {
     if (context.value && context.value.sampleRate === sr) return context.value;
-    if (context.value) await dispose();
+    if (context.value) {
+      teardownNode();
+      await closeContext();
+    }
     const ctx = new AudioContext({ sampleRate: sr });
     if (!moduleUrl) {
       // The worklet runs from a blob: URL, so the static import specifier must be
@@ -137,22 +149,37 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
         new Blob([buildProcessorSource(absoluteSonareUrl)], { type: 'text/javascript' }),
       );
     }
-    await ctx.audioWorklet.addModule(moduleUrl);
+    try {
+      await ctx.audioWorklet.addModule(moduleUrl);
+    } catch (error) {
+      await ctx.close().catch(() => undefined);
+      throw error;
+    }
     context.value = ctx;
     sampleRate = sr;
     return ctx;
   }
 
   async function start(payload: RealtimeStartPayload, endedCallback?: () => void) {
+    const currentGeneration = ++generation;
+    cancelStart?.(new Error('Realtime mixer start superseded'));
+    cancelStart = null;
     error.value = null;
+    ready.value = false;
+    playing.value = false;
     onEnded = endedCallback || null;
     const ctx = await ensureContext(payload.sampleRate);
+    if (currentGeneration !== generation) {
+      if (context.value === ctx) await closeContext();
+      throw new Error('Realtime mixer start cancelled');
+    }
     if (ctx.state === 'suspended') await ctx.resume();
+    if (currentGeneration !== generation) throw new Error('Realtime mixer start cancelled');
     if (!wasmBinary) wasmBinary = await (await fetch(wasmUrl)).arrayBuffer();
+    if (currentGeneration !== generation) throw new Error('Realtime mixer start cancelled');
 
     teardownNode();
-    ready.value = false;
-    node = new AudioWorkletNode(ctx, 'libsonare-rt-mixer', {
+    const currentNode = new AudioWorkletNode(ctx, 'libsonare-rt-mixer', {
       numberOfInputs: 0,
       numberOfOutputs: 1,
       outputChannelCount: [2],
@@ -167,22 +194,44 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
         gates: payload.gates,
       },
     });
-    node.port.onmessage = (event) => {
-      const msg = event.data;
-      if (msg.type === 'ready') {
-        ready.value = true;
-        node?.port.postMessage({ type: 'play' });
-        playing.value = true;
-      } else if (msg.type === 'position') positionSec.value = msg.frame / sampleRate;
-      else if (msg.type === 'ended') {
+    node = currentNode;
+    currentNode.connect(ctx.destination);
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        cancelStart = null;
+        callback();
+      };
+      cancelStart = (reason) => finish(() => reject(reason));
+      currentNode.port.onmessage = (event) => {
+        if (currentGeneration !== generation || node !== currentNode) return;
+        const msg = event.data;
+        if (msg.type === 'ready') {
+          ready.value = true;
+          currentNode.port.postMessage({ type: 'play' });
+          playing.value = true;
+          finish(resolve);
+        } else if (msg.type === 'position') positionSec.value = msg.frame / sampleRate;
+        else if (msg.type === 'ended') {
+          playing.value = false;
+          onEnded?.();
+        } else if (msg.type === 'error') {
+          error.value = msg.error;
+          playing.value = false;
+          teardownNode();
+          finish(() => reject(new Error(msg.error)));
+        }
+      };
+      currentNode.onprocessorerror = () => {
+        if (currentGeneration !== generation || node !== currentNode) return;
+        error.value = 'Realtime mixer processor failed';
         playing.value = false;
-        onEnded?.();
-      } else if (msg.type === 'error') {
-        error.value = msg.error;
-        playing.value = false;
-      }
-    };
-    node.connect(ctx.destination);
+        teardownNode();
+        finish(() => reject(new Error(error.value!)));
+      };
+    });
   }
 
   function stop() {
@@ -222,26 +271,34 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
         /* already disconnected */
       }
       node.port.onmessage = null;
+      node.onprocessorerror = null;
       node = null;
     }
   }
 
   async function dispose() {
+    generation += 1;
+    cancelStart?.(new Error('Realtime mixer disposed'));
+    cancelStart = null;
     teardownNode();
     playing.value = false;
     ready.value = false;
     positionSec.value = 0;
-    if (context.value) {
-      try {
-        await context.value.close();
-      } catch {
-        /* already closed */
-      }
-      context.value = null;
-    }
+    await closeContext();
     if (moduleUrl) {
       URL.revokeObjectURL(moduleUrl);
       moduleUrl = null;
+    }
+  }
+
+  async function closeContext() {
+    const current = context.value;
+    context.value = null;
+    if (!current) return;
+    try {
+      await current.close();
+    } catch {
+      /* already closed */
     }
   }
 

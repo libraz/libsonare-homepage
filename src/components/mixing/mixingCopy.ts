@@ -93,6 +93,8 @@ export const enCopy = {
     durationLimit: '{file} is longer than 5:00 and was not loaded.',
     memory:
       'This session is using a lot of decoded audio memory. Bounce may be slower on this device.',
+    fallback:
+      'Realtime DSP is unavailable. Preview is degraded to level and pan; bounce still uses the full mix chain.',
   },
   errors: {
     loadFailed: 'Failed to decode one of the audio files.',
@@ -397,6 +399,8 @@ export const jaCopy: typeof enCopy = {
     durationLimit: '{file} は 5:00 を超えているため読み込みませんでした。',
     memory:
       'デコード済み音声メモリが大きくなっています。この端末ではバウンスに時間がかかる場合があります。',
+    fallback:
+      'リアルタイム DSP を利用できないため、プレビューは音量とパンのみです。バウンスには完全なミックスチェーンを使用します。',
   },
   errors: {
     loadFailed: '音声ファイルのデコードに失敗しました。',

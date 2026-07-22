@@ -109,6 +109,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   let masterPeak = 0;
   let auditioning = 0;
   let auditionRaf = 0;
+  const stemCache = new Map<string, Float32Array>();
 
   /** Engine lane track ids are 1-based; destination id == track id. */
   function trackId(index: number): number {
@@ -157,23 +158,29 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
         return false;
       }
 
-      const created = await wmod.SonareEngine.create(ctx, {
-        moduleUrl,
-        wasmBinary,
-        mode: 'auto', // the site is SAB-free, so this falls back to postMessage
-        channelCount: 2,
-        meterIntervalFrames: METER_INTERVAL_FRAMES,
-        // The ABI numbers come from the already-initialized index.js module;
-        // passing them lets the bridge skip its own (uninitialized) lookup.
-        engineAbiVersion: mod.engineAbiVersion(),
-        expectedEngineAbiVersion: mod.EXPECTED_ENGINE_ABI_VERSION,
-        // Reuse the index.js WASM instance for the offline mirror instead of
-        // booting a second main-thread heap from the worklet bundle.
-        offlineEngine: new mod.RealtimeEngine(
-          ctx.sampleRate,
-          128,
-        ) as unknown as FacadeOptions['offlineEngine'],
-      });
+      // Ownership transfers to SonareEngine only after create() succeeds. If
+      // worklet construction rejects, explicitly destroy this native mirror.
+      const offlineEngine = new mod.RealtimeEngine(ctx.sampleRate, 128) as unknown as NonNullable<
+        FacadeOptions['offlineEngine']
+      >;
+      let created: Awaited<ReturnType<typeof wmod.SonareEngine.create>>;
+      try {
+        created = await wmod.SonareEngine.create(ctx, {
+          moduleUrl,
+          wasmBinary,
+          mode: 'auto', // the site is SAB-free, so this falls back to postMessage
+          channelCount: 2,
+          meterIntervalFrames: METER_INTERVAL_FRAMES,
+          // The ABI numbers come from the already-initialized index.js module;
+          // passing them lets the bridge skip its own (uninitialized) lookup.
+          engineAbiVersion: mod.engineAbiVersion(),
+          expectedEngineAbiVersion: mod.EXPECTED_ENGINE_ABI_VERSION,
+          offlineEngine,
+        });
+      } catch (cause) {
+        offlineEngine.destroy();
+        throw cause;
+      }
       if (disposed) {
         created.destroy();
         await closeContext();
@@ -206,6 +213,8 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     } catch (err) {
       console.error('studio engine start failed:', err);
       error.value = err instanceof Error ? err.message : String(err);
+      engine?.destroy();
+      engine = null;
       // The engine never came up — don't leave a dangling AudioContext.
       await closeContext();
       return false;
@@ -333,10 +342,13 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     bpm: number,
     totalFrames: number,
   ): Float32Array {
+    const cacheKey = `${trackIndex}:${bpm}:${totalFrames}:${JSON.stringify(pattern[trackIndex])}`;
+    const cached = stemCache.get(cacheKey);
+    if (cached) return cached;
     const def = STUDIO_TRACKS[trackIndex];
     const project = buildTrackProject(mod, pattern, trackIndex, bpm, 1);
     try {
-      return project.bounceWithSynthInstrument(
+      const rendered = project.bounceWithSynthInstrument(
         [{ preset: def.preset, destinationId: def.destination }],
         {
           numChannels: 2,
@@ -344,6 +356,9 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
           totalFrames,
         },
       );
+      stemCache.set(cacheKey, rendered);
+      if (stemCache.size > 32) stemCache.delete(stemCache.keys().next().value!);
+      return rendered;
     } finally {
       project.delete();
     }
@@ -586,6 +601,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     }
     masterLevel.value = 0;
     stemViews.value = [];
+    stemCache.clear();
     await closeContext();
   }
 

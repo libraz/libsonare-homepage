@@ -378,7 +378,10 @@ describe('useRealtimeMixer', () => {
         gates: [true],
       };
 
-      await mixer.start(payload, ended);
+      const startPromise = mixer.start(payload, ended);
+      await vi.waitFor(() => {
+        expect(RealtimeMixerWorkletNodeMock.instances.length).toBeGreaterThan(0);
+      });
       const context = RealtimeMixerAudioContextMock.instances.at(-1)!;
       const node = RealtimeMixerWorkletNodeMock.instances.at(-1)!;
 
@@ -397,6 +400,7 @@ describe('useRealtimeMixer', () => {
       });
 
       node.emit({ type: 'ready' });
+      await startPromise;
       expect(mixer.ready.value).toBe(true);
       expect(mixer.playing.value).toBe(true);
       expect(node.port.messages).toContainEqual({ type: 'play' });
@@ -419,10 +423,6 @@ describe('useRealtimeMixer', () => {
           { type: 'stop' },
         ]),
       );
-      expect(mixer.playing.value).toBe(false);
-
-      node.emit({ type: 'error', error: 'worklet failed' });
-      expect(mixer.error.value).toBe('worklet failed');
       expect(mixer.playing.value).toBe(false);
 
       node.emit({ type: 'ended', frame: 1024 });
@@ -467,21 +467,85 @@ describe('useRealtimeMixer', () => {
 
     try {
       const mixer = useRealtimeMixer('/wasm/sonare.js', '/wasm/sonare.wasm');
-      await mixer.start(payload);
+      const firstStart = mixer.start(payload);
+      await vi.waitFor(() => {
+        expect(RealtimeMixerWorkletNodeMock.instances).toHaveLength(1);
+      });
       const firstContext = RealtimeMixerAudioContextMock.instances[0];
       const firstNode = RealtimeMixerWorkletNodeMock.instances[0];
+      firstNode.emit({ type: 'ready' });
+      await firstStart;
 
-      await mixer.start({ ...payload, sceneJson: '{"version":2}' });
+      const secondStart = mixer.start({ ...payload, sceneJson: '{"version":2}' });
+      await vi.waitFor(() => {
+        expect(RealtimeMixerWorkletNodeMock.instances).toHaveLength(2);
+      });
+      RealtimeMixerWorkletNodeMock.instances[1].emit({ type: 'ready' });
+      await secondStart;
       expect(RealtimeMixerAudioContextMock.instances).toHaveLength(1);
       expect(firstNode.disconnected).toBe(true);
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
 
-      await mixer.start({ ...payload, sampleRate: 44_100 });
+      const thirdStart = mixer.start({ ...payload, sampleRate: 44_100 });
+      await vi.waitFor(() => {
+        expect(RealtimeMixerWorkletNodeMock.instances).toHaveLength(3);
+      });
+      RealtimeMixerWorkletNodeMock.instances[2].emit({ type: 'ready' });
+      await thirdStart;
       expect(RealtimeMixerAudioContextMock.instances).toHaveLength(2);
       expect(firstContext.close).toHaveBeenCalled();
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
 
       await mixer.dispose();
+    } finally {
+      globalThis.AudioContext = originalAudioContext;
+      globalThis.AudioWorkletNode = originalAudioWorkletNode;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rejects worklet initialization errors and pending starts cancelled by dispose', async () => {
+    const originalAudioContext = globalThis.AudioContext;
+    const originalAudioWorkletNode = globalThis.AudioWorkletNode;
+    const originalFetch = globalThis.fetch;
+    RealtimeMixerAudioContextMock.instances = [];
+    RealtimeMixerWorkletNodeMock.instances = [];
+    // @ts-expect-error focused test mock
+    globalThis.AudioContext = RealtimeMixerAudioContextMock;
+    // @ts-expect-error focused test mock
+    globalThis.AudioWorkletNode = RealtimeMixerWorkletNodeMock;
+    globalThis.fetch = vi.fn(async () => ({
+      arrayBuffer: async () => new ArrayBuffer(16),
+    })) as any;
+
+    const payload = {
+      sceneJson: '{"version":1}',
+      sampleRate: 48_000,
+      masterGain: 1,
+      startFrame: 0,
+      totalFrames: 1024,
+      strips: [{ left: new Float32Array([0.1]), right: new Float32Array([0.1]), offsetFrames: 0 }],
+      gates: [true],
+    };
+
+    try {
+      const mixer = useRealtimeMixer('/wasm/sonare.js', '/wasm/sonare.wasm');
+      const failedStart = mixer.start(payload);
+      await vi.waitFor(() => {
+        expect(RealtimeMixerWorkletNodeMock.instances).toHaveLength(1);
+      });
+      RealtimeMixerWorkletNodeMock.instances[0].emit({ type: 'error', error: 'worklet failed' });
+      await expect(failedStart).rejects.toThrow('worklet failed');
+      expect(mixer.error.value).toBe('worklet failed');
+      expect(RealtimeMixerWorkletNodeMock.instances[0].disconnected).toBe(true);
+
+      const pendingStart = mixer.start(payload);
+      await vi.waitFor(() => {
+        expect(RealtimeMixerWorkletNodeMock.instances).toHaveLength(2);
+      });
+      await mixer.dispose();
+      await expect(pendingStart).rejects.toThrow('disposed');
+      expect(RealtimeMixerWorkletNodeMock.instances[1].disconnected).toBe(true);
     } finally {
       globalThis.AudioContext = originalAudioContext;
       globalThis.AudioWorkletNode = originalAudioWorkletNode;
@@ -605,7 +669,8 @@ describe('useRealtimeFx', () => {
 
     try {
       const fx = useRealtimeFx('/wasm/sonare.js', '/wasm/sonare.wasm');
-      await expect(fx.start()).resolves.toBe(true);
+      const startPromise = fx.start();
+      await vi.waitFor(() => expect(FxWorkletNodeMock.instances).toHaveLength(1));
 
       const context = FxAudioContextMock.instances.at(-1)!;
       const node = FxWorkletNodeMock.instances.at(-1)!;
@@ -623,6 +688,7 @@ describe('useRealtimeFx', () => {
       // posts 'ready' (init could still fail before then). Latency is derived
       // from the native chain's reported latency on the same message.
       node.emit({ type: 'ready', latencySamples: 2232 });
+      await expect(startPromise).resolves.toBe(true);
       expect(fx.ready.value).toBe(true);
       expect(fx.latencyMs.value).toBe(
         Math.round((2232 / context.sampleRate + context.baseLatency) * 1000),
@@ -637,6 +703,7 @@ describe('useRealtimeFx', () => {
         pitchSemitones: 7,
         formant: 1.3,
         brightness: 0.75,
+        formantEngaged: false,
         wet: 1,
         outputGain: 0.85,
         bypass: false,
