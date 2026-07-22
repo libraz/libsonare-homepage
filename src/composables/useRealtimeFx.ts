@@ -10,6 +10,8 @@ export interface RealtimeFxParams {
   formant: number;
   /** Formant brightness tilt, layered over the preset (−1..1). */
   brightness: number;
+  /** Whether the formant stage is explicitly engaged by the user. */
+  formantEngaged: boolean;
   /** Wet/dry mix handed to the native chain (0..1). */
   wet: number;
   /** Post-chain monitor gain applied in the worklet, capped at unity to stay
@@ -84,6 +86,7 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
     this.enabled = true;
     this.preset = 'neutral-monitor';
     this.pitch = 0; this.formant = 1; this.brightness = 0.1; this.wet = 1;
+    this.formantEngaged = false; this.baseFormantAmount = 0;
     this.outputGain = 0.85; this.bypass = false;
 
     this.vc = null; this.base = null;
@@ -107,7 +110,12 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
   }
 
   loadBase() {
-    try { this.base = JSON.parse(this.vc.configJson()); }
+    try {
+      this.base = JSON.parse(this.vc.configJson());
+      this.baseFormantAmount = Number(this.base && this.base.dsp && this.base.dsp.formant
+        ? this.base.dsp.formant.amount
+        : 0);
+    }
     catch (e) { this.base = null; }
   }
 
@@ -122,11 +130,9 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
     dsp.retune.mix = Math.abs(this.pitch) > 0.05 ? 1 : 0;
     dsp.formant.factor = this.formant;
     dsp.formant.brightness = this.brightness;
-    // Engage the formant module whenever the macros leave unity/neutral. The
-    // transparent monitor preset ships amount:0, which would otherwise leave
-    // the Formant and Brightness sliders inaudible on the default character.
-    dsp.formant.amount =
-      Math.abs(this.formant - 1) > 0.001 || Math.abs(this.brightness) > 0.001 ? 1 : 0;
+    // Preserve the preset's authored blend until the user actually moves a
+    // formant macro. A preset can intentionally use a fractional amount.
+    dsp.formant.amount = this.formantEngaged ? 1 : this.baseFormantAmount;
     dsp.wetMix = this.wet;
     try { this.vc.setConfig(this.base); } catch (e) { /* keep last good config */ }
   }
@@ -146,6 +152,7 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
       }
       this.pitch = p.pitchSemitones; this.formant = p.formant;
       this.brightness = p.brightness; this.wet = p.wet;
+      this.formantEngaged = Boolean(p.formantEngaged);
       this.outputGain = p.outputGain; this.bypass = Boolean(p.bypass);
       this.applyConfig();
     } else if (msg.type === 'setEnabled') {
@@ -283,6 +290,7 @@ registerProcessor('libsonare-voice', LibsonareVoiceProcessor);
 function toErrorCode(err: unknown): string {
   if (err instanceof Error) {
     if (err.message === 'no-mic-api') return 'no-mic-api';
+    if (err.message === 'engine-error') return 'engine-error';
     if (err.name === 'NotAllowedError' || err.name === 'SecurityError') return 'mic-denied';
   }
   return 'start-failed';
@@ -302,10 +310,28 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
   let mediaStream: MediaStream | null = null;
   let moduleUrl: string | null = null;
   let wasmBinary: ArrayBuffer | null = null;
+  let generation = 0;
+  let startTask: Promise<boolean> | null = null;
+  let cleanupTask: Promise<void> | null = null;
+  let cancelStartup: (() => void) | null = null;
 
   async function start(): Promise<boolean> {
-    error.value = null;
     if (ready.value) return true;
+    if (startTask) return startTask;
+
+    const task = runStart();
+    startTask = task;
+    try {
+      return await task;
+    } finally {
+      if (startTask === task) startTask = null;
+    }
+  }
+
+  async function runStart(): Promise<boolean> {
+    if (cleanupTask) await cleanupTask;
+    error.value = null;
+    const currentGeneration = ++generation;
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('no-mic-api');
@@ -320,8 +346,11 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
           new Blob([buildProcessorSource(absoluteSonareUrl)], { type: 'text/javascript' }),
         );
       }
-      await ctx.audioWorklet.addModule(moduleUrl);
+      const workletUrl = moduleUrl;
+      await ctx.audioWorklet.addModule(workletUrl);
+      if (currentGeneration !== generation) throw new Error('cancelled');
       if (!wasmBinary) wasmBinary = await (await fetch(wasmUrl)).arrayBuffer();
+      if (currentGeneration !== generation) throw new Error('cancelled');
 
       node = new AudioWorkletNode(ctx, 'libsonare-voice', {
         numberOfInputs: 1,
@@ -331,42 +360,70 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
       });
       silentGain = ctx.createGain();
       silentGain.gain.value = 0;
-      mediaStream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
+      if (currentGeneration !== generation) {
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
+        throw new Error('cancelled');
+      }
+      mediaStream = stream;
       sourceNode = ctx.createMediaStreamSource(mediaStream);
       sourceNode.connect(node);
       node.connect(silentGain);
       silentGain.connect(ctx.destination);
-      node.port.onmessage = (event) => {
-        const msg = event.data;
-        if (msg?.type === 'ready') {
-          ready.value = true;
-          // Native processing latency (grain warmup) plus the device output buffer.
-          const procSeconds = (msg.latencySamples || 0) / ctx.sampleRate;
-          latencyMs.value = Math.round((procSeconds + (ctx.baseLatency || 0)) * 1000);
-        } else if (msg?.type === 'meter') meter.value = msg;
-        else if (msg?.type === 'error') {
-          // A worklet-side failure (module init or a native fault mid-stream)
-          // clears readiness so the dry mic path is never taken for ready.
-          ready.value = false;
+      return await new Promise<boolean>((resolve, reject) => {
+        let startupSettled = false;
+        const finishStartup = (value: boolean) => {
+          if (startupSettled) return;
+          startupSettled = true;
+          cancelStartup = null;
+          resolve(value);
+        };
+        cancelStartup = () => finishStartup(false);
+        node!.port.onmessage = (event) => {
+          if (currentGeneration !== generation) return;
+          const msg = event.data;
+          if (msg?.type === 'ready') {
+            ready.value = true;
+            // Native processing latency (grain warmup) plus the device output buffer.
+            const procSeconds = (msg.latencySamples || 0) / ctx.sampleRate;
+            latencyMs.value = Math.round((procSeconds + (ctx.baseLatency || 0)) * 1000);
+            finishStartup(true);
+          } else if (msg?.type === 'meter') meter.value = msg;
+          else if (msg?.type === 'error') {
+            error.value = 'engine-error';
+            if (!startupSettled) reject(new Error('engine-error'));
+            else void failEngine(currentGeneration);
+          }
+        };
+        node!.onprocessorerror = () => {
+          if (currentGeneration !== generation) return;
           error.value = 'engine-error';
-        }
-      };
-      // Readiness belongs to the worklet's 'ready' message: the node exists but
-      // its native engine is still initializing, so do not report ready here —
-      // otherwise a failed init would leave raw dry mic audio flowing as "ready".
-      node.onprocessorerror = () => {
-        error.value = 'engine-error';
-        ready.value = false;
-        monitoring.value = false;
-      };
-      return true;
+          if (!startupSettled) reject(new Error('engine-error'));
+          else void failEngine(currentGeneration);
+        };
+      });
     } catch (err) {
+      if (currentGeneration !== generation) return false;
       error.value = toErrorCode(err);
-      await dispose();
+      generation += 1;
+      cancelStartup?.();
+      cancelStartup = null;
+      await beginCleanup();
       return false;
     }
+  }
+
+  async function failEngine(currentGeneration: number) {
+    if (currentGeneration !== generation) return;
+    error.value = 'engine-error';
+    generation += 1;
+    cancelStartup?.();
+    cancelStartup = null;
+    await beginCleanup();
   }
 
   function setParams(params: RealtimeFxParams) {
@@ -375,7 +432,7 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
 
   async function toggleMonitor(): Promise<boolean> {
     const ctx = context.value;
-    if (!ctx || !node) return false;
+    if (!ready.value || !ctx || !node) return false;
     if (ctx.state === 'suspended') await ctx.resume();
     monitoring.value = !monitoring.value;
     node.disconnect();
@@ -388,7 +445,7 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
     return monitoring.value;
   }
 
-  async function dispose() {
+  async function cleanupResources() {
     monitoring.value = false;
     ready.value = false;
     latencyMs.value = 0;
@@ -408,6 +465,7 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
       /* already disconnected */
     }
     if (node) node.port.onmessage = null;
+    if (node) node.onprocessorerror = null;
     node = null;
     sourceNode = null;
     silentGain = null;
@@ -423,7 +481,28 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
       }
       context.value = null;
     }
+    if (moduleUrl) {
+      URL.revokeObjectURL(moduleUrl);
+      moduleUrl = null;
+    }
     meter.value = { inputPeak: 0, outputPeak: 0, inputRms: 0, outputRms: 0 };
+  }
+
+  function beginCleanup(): Promise<void> {
+    if (cleanupTask) return cleanupTask;
+    const task = cleanupResources();
+    cleanupTask = task;
+    void task.finally(() => {
+      if (cleanupTask === task) cleanupTask = null;
+    });
+    return task;
+  }
+
+  async function dispose() {
+    generation += 1;
+    cancelStartup?.();
+    cancelStartup = null;
+    await beginCleanup();
   }
 
   return { ready, monitoring, error, latencyMs, meter, start, setParams, toggleMonitor, dispose };

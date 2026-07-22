@@ -72,13 +72,14 @@ describe('useRealtimeFx lifecycle', () => {
 
   it('keeps ready false until the worklet posts its ready message', async () => {
     const fx = makeFx();
-    const ok = await fx.start();
-    expect(ok).toBe(true);
+    const startPromise = fx.start();
+    await vi.waitFor(() => expect(createdNodes).toHaveLength(1));
     // The node is wired but the native engine is still initializing.
     expect(fx.ready.value).toBe(false);
 
     const node = createdNodes.at(-1)!;
     node.port.onmessage?.({ data: { type: 'ready', latencySamples: 480 } });
+    await expect(startPromise).resolves.toBe(true);
     expect(fx.ready.value).toBe(true);
     expect(fx.latencyMs.value).toBeGreaterThan(0);
 
@@ -87,9 +88,11 @@ describe('useRealtimeFx lifecycle', () => {
 
   it('clears readiness and surfaces an engine-error on a worklet error message', async () => {
     const fx = makeFx();
-    await fx.start();
+    const startPromise = fx.start();
+    await vi.waitFor(() => expect(createdNodes).toHaveLength(1));
     const node = createdNodes.at(-1)!;
     node.port.onmessage?.({ data: { type: 'ready', latencySamples: 0 } });
+    await expect(startPromise).resolves.toBe(true);
     expect(fx.ready.value).toBe(true);
 
     node.port.onmessage?.({ data: { type: 'error', error: 'native boom' } });
@@ -101,9 +104,11 @@ describe('useRealtimeFx lifecycle', () => {
 
   it('resets ready and monitoring state when the processor errors', async () => {
     const fx = makeFx();
-    await fx.start();
+    const startPromise = fx.start();
+    await vi.waitFor(() => expect(createdNodes).toHaveLength(1));
     const node = createdNodes.at(-1)!;
     node.port.onmessage?.({ data: { type: 'ready', latencySamples: 0 } });
+    await expect(startPromise).resolves.toBe(true);
     fx.monitoring.value = true;
 
     node.onprocessorerror?.();

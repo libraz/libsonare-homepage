@@ -89,6 +89,7 @@ describe('RealtimeFxLab', () => {
       pitchSemitones: -9,
       formant: 0.72,
       brightness: -0.7,
+      formantEngaged: false,
       wet: 1,
       outputGain: 0.85,
       bypass: false,
@@ -104,6 +105,7 @@ describe('RealtimeFxLab', () => {
       pitchSemitones: 7,
       formant: 1.3,
       brightness: 0.75,
+      formantEngaged: false,
       wet: 1,
       outputGain: 0.85,
       bypass: false,
@@ -256,7 +258,7 @@ describe('RealtimeFxLab', () => {
     wrapper.unmount();
   });
 
-  it('disables Stop while the engine is starting so it cannot close a half-open context', async () => {
+  it('keeps Stop available while starting so a half-open context can be cancelled', async () => {
     let releaseStart!: (ok: boolean) => void;
     fxMock.start.mockImplementation(
       () =>
@@ -272,8 +274,9 @@ describe('RealtimeFxLab', () => {
       .find((button) => button.text() === 'Start engine')!
       .trigger('click');
     await nextTick();
-    // Start is still pending (isStarting === true): Stop must be disabled.
-    expect(stopButton().attributes('disabled')).toBeDefined();
+    // Start is still pending (isStarting === true): Stop remains available so
+    // getUserMedia/worklet startup can always be cancelled.
+    expect(stopButton().attributes('disabled')).toBeUndefined();
 
     releaseStart(true);
     await nextTick();

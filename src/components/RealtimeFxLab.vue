@@ -10,6 +10,7 @@ import {
   VOICE_PRESET_MACROS,
   VOICE_PRESET_ORDER,
 } from '@/composables/useRealtimeFx';
+import { useWasmBoot } from '@/composables/useWasmBoot';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
 import type { VoicePresetId } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -18,12 +19,13 @@ import sonareWasmUrl from '@/wasm/sonare.wasm?url';
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 const fx = useRealtimeFx(sonareJsUrl, sonareWasmUrl);
-const libVersion = ref('');
+const { version: libVersion } = useWasmBoot();
 const isStarting = ref(false);
 const selectedPreset = ref<VoicePresetId>('neutral-monitor');
 const pitchSemitones = ref(0);
 const formant = ref(1);
 const brightness = ref(0.1);
+const formantEngaged = ref(false);
 const wet = ref(1);
 const outputGain = ref(0.85);
 const bypass = ref(false);
@@ -115,25 +117,12 @@ const presets = computed(() =>
 const activePresetHint = computed(() => copy.value.presets[selectedPreset.value].hint);
 
 onMounted(() => {
-  const ric = (window as any).requestIdleCallback;
-  if (ric) ric(initWasmVersion, { timeout: 2000 });
-  else setTimeout(initWasmVersion, 100);
   restorePreset();
 });
 
 onUnmounted(() => {
   void fx.dispose();
 });
-
-async function initWasmVersion() {
-  try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
-    libVersion.value = wasm.version();
-  } catch (error) {
-    console.warn('Failed to initialize WASM version:', error);
-  }
-}
 
 async function startEngine() {
   if (isReady.value) return true;
@@ -166,6 +155,7 @@ function applyPreset(id: VoicePresetId) {
   pitchSemitones.value = macros.pitchSemitones;
   formant.value = macros.formant;
   brightness.value = macros.brightness;
+  formantEngaged.value = false;
   wet.value = macros.wet;
   applyParams();
   try {
@@ -191,10 +181,16 @@ function applyParams() {
     pitchSemitones: pitchSemitones.value,
     formant: formant.value,
     brightness: brightness.value,
+    formantEngaged: formantEngaged.value,
     wet: wet.value,
     outputGain: outputGain.value,
     bypass: bypass.value,
   });
+}
+
+function applyFormantParams() {
+  formantEngaged.value = true;
+  applyParams();
 }
 
 function amplitudeToDb(value: number): number {
@@ -236,7 +232,7 @@ function formatDb(value: number): string {
             <div class="rt-input__badge">MIC</div>
             <div class="rt-actions">
               <button class="rt-button rt-button--primary" :disabled="isStarting || isReady" @click="startEngine">{{ copy.actions.start }}</button>
-              <button class="rt-button" :disabled="!isReady || isStarting" @click="stopEngine">{{ copy.actions.stop }}</button>
+              <button class="rt-button" :disabled="!isReady && !isStarting" @click="stopEngine">{{ copy.actions.stop }}</button>
             </div>
             <button
               class="rt-monitor"
@@ -286,11 +282,11 @@ function formatDb(value: number): string {
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('formant')">{{ copy.controls.formant }}</TermLabel> <b>{{ formant.toFixed(2) }}</b></span>
-              <input v-model.number="formant" type="range" min="0.55" max="1.65" step="0.01" @input="applyParams">
+              <input v-model.number="formant" type="range" min="0.55" max="1.65" step="0.01" @input="applyFormantParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('brightness')">{{ copy.controls.brightness }}</TermLabel> <b>{{ brightness.toFixed(2) }}</b></span>
-              <input v-model.number="brightness" type="range" min="-1" max="1" step="0.01" @input="applyParams">
+              <input v-model.number="brightness" type="range" min="-1" max="1" step="0.01" @input="applyFormantParams">
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('wet')">{{ copy.controls.wet }}</TermLabel> <b>{{ Math.round(wet * 100) }}%</b></span>

@@ -40,11 +40,10 @@ describe('buildProcessorSource', () => {
     expect(source).toContain('this.vc.setConfig(this.base)');
   });
 
-  it('engages the formant module when a macro diverges from unity/neutral', () => {
+  it('preserves the preset formant amount until a formant control is engaged', () => {
     expect(source).toContain('dsp.formant.amount');
-    expect(source).toContain(
-      'Math.abs(this.formant - 1) > 0.001 || Math.abs(this.brightness) > 0.001 ? 1 : 0',
-    );
+    expect(source).toContain('this.baseFormantAmount = Number');
+    expect(source).toContain('this.formantEngaged ? 1 : this.baseFormantAmount');
   });
 
   it('switches the full preset chain when the preset id changes', () => {
