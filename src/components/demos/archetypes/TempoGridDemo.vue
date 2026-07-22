@@ -13,6 +13,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
+import { type TempoGrid, tempoGrid } from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -34,9 +35,10 @@ const PPQ = 480; // libsonare's pulses-per-quarter resolution for MIDI timing
 const SPAN_SEC = 6; // fixed width of the seconds axis
 
 const bpm = computed<number>(() => Number(values.bpm ?? 120));
-const beatsPerBar = computed<number>(() => Number(values.beats ?? 4));
-const secPerBeat = computed<number>(() => 60 / bpm.value);
-const secPerBar = computed<number>(() => secPerBeat.value * beatsPerBar.value);
+const grid = computed<TempoGrid>(() => tempoGrid(bpm.value, String(values.beats ?? '4')));
+const beatsPerBar = computed<number>(() => grid.value.beatsPerBar);
+const secPerBeat = computed<number>(() => grid.value.secPerBeat);
+const secPerBar = computed<number>(() => grid.value.secPerBar);
 
 const stateLabel = computed(() => {
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
@@ -186,9 +188,10 @@ function paint(): void {
   ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
   ctx.fillText('SECONDS', padX, 4);
   ctx.fillStyle = 'rgba(94, 234, 212, 0.7)';
-  ctx.fillText(`MUSICAL GRID · ${beats}/4`, padX, gridTop - 13);
+  ctx.fillText(`MUSICAL GRID · ${grid.value.label}`, padX, gridTop - 13);
 
-  const tickUs = (secPerBeat.value / PPQ) * 1e6;
+  // A tick is 1/PPQ of a quarter note, independent of the beat unit.
+  const tickUs = (grid.value.secPerQuarter / PPQ) * 1e6;
   ctx.fillStyle = 'rgba(186, 230, 224, 0.62)';
   ctx.fillText(
     `1 bar = ${secPerBar.value.toFixed(2)} s   1 beat = ${(secPerBeat.value * 1000).toFixed(0)} ms   1 tick = ${tickUs.toFixed(0)} µs   PPQ ${PPQ}`,

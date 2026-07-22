@@ -12,6 +12,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
+import { peakEnvelope } from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -200,17 +201,6 @@ function renderLoop(e: EngineLike): Float32Array {
   return mono;
 }
 
-function fillEnvelope(pcm: Float32Array, target: Float32Array, scale: number): void {
-  const n = pcm.length;
-  for (let c = 0; c < ENV_COLS; c++) {
-    const a = Math.floor((c / ENV_COLS) * n);
-    const b = Math.min(n, Math.floor(((c + 1) / ENV_COLS) * n));
-    let m = 0;
-    for (let i = a; i < b; i++) m = Math.max(m, Math.abs(pcm[i]));
-    target[c] = Math.min(1, m * scale);
-  }
-}
-
 async function compute(): Promise<void> {
   if (disposed) return;
   try {
@@ -244,8 +234,8 @@ async function compute(): Promise<void> {
     for (const s of master) peak = Math.max(peak, Math.abs(s));
     for (const pcm of lanePcm) for (const s of pcm) peak = Math.max(peak, Math.abs(s));
     const scale = 1 / peak;
-    for (let t = 0; t < 3; t++) fillEnvelope(lanePcm[t], laneEnvs[t], scale);
-    fillEnvelope(master, masterEnv, scale);
+    for (let t = 0; t < 3; t++) peakEnvelope(lanePcm[t], laneEnvs[t], scale);
+    peakEnvelope(master, masterEnv, scale);
 
     status.value = 'ready';
     startMorph();

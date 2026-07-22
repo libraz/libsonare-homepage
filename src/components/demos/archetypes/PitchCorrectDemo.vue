@@ -122,10 +122,12 @@ interface ProjectCtor {
   midiPitchBend(ppq: number, group: number, channel: number, bend: number): ProjectMidiEvent;
 }
 
-/** A measured pitch contour: MIDI note per hop, plus a voiced flag per hop. */
+/** A measured pitch contour: MIDI note per hop, a voiced flag per hop, and the
+ * raw pYIN f0 (Hz) it was derived from, kept so correction can reuse it. */
 interface Contour {
   midi: Float32Array;
   voiced: Uint8Array;
+  f0: Float32Array;
 }
 
 let rawAudio: { samples: Float32Array; sampleRate: number } | null = null;
@@ -198,18 +200,24 @@ function renderRaw(wasm: WasmModule): Float32Array {
   }
 }
 
-/** Measure a pitch contour with pYIN and convert per-hop Hz to MIDI note numbers. */
+/**
+ * Measure a pitch contour with pYIN and convert per-hop Hz to MIDI note numbers.
+ * The f0 track is copied out of the WASM result so callers can retain and reuse it
+ * (e.g. feed it straight into correction) without measuring the same take twice.
+ */
 function measureContour(wasm: WasmModule, samples: Float32Array): Contour {
   const pr = wasm.pitchPyin(samples, SR, 2048, HOP, 65, 1000, 0.1, true);
   const n = pr.f0.length;
   const midi = new Float32Array(n);
   const voiced = new Uint8Array(n);
+  const f0 = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const hz = pr.f0[i];
+    f0[i] = hz;
     voiced[i] = pr.voicedFlag[i] && hz > 0 ? 1 : 0;
     midi[i] = hz > 0 ? 69 + 12 * Math.log2(hz / 440) : Number.NaN;
   }
-  return { midi, voiced };
+  return { midi, voiced, f0 };
 }
 
 /** Mean absolute distance from the nearest allowed scale tone, in cents. */
@@ -242,15 +250,11 @@ function ensureRaw(wasm: WasmModule): void {
   if (rawAudio) return;
   const pcm = renderRaw(wasm);
   rawAudio = { samples: pcm, sampleRate: SR };
+  // One pYIN pass measures the contour; correction reuses its f0 track directly.
   rawContour = measureContour(wasm, pcm);
-  const f0 = new Float32Array(rawContour.midi.length);
-  const voiced = new Int32Array(rawContour.midi.length);
-  const pr = wasm.pitchPyin(pcm, SR, 2048, HOP, 65, 1000, 0.1, true);
-  for (let i = 0; i < f0.length; i++) {
-    f0[i] = pr.f0[i];
-    voiced[i] = rawContour.voiced[i];
-  }
-  rawF0 = f0;
+  const voiced = new Int32Array(rawContour.voiced.length);
+  for (let i = 0; i < voiced.length; i++) voiced[i] = rawContour.voiced[i];
+  rawF0 = rawContour.f0;
   voicedInt = voiced;
 }
 

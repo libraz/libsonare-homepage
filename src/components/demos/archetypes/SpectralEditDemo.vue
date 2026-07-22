@@ -14,6 +14,12 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
+import {
+  averagedSpectrum,
+  hexA,
+  peakEnvelope,
+  SPECTRUM_COMPRESSION,
+} from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -75,56 +81,6 @@ let artifact: { samples: Float32Array; sampleRate: number } | null = null;
 let editedAudio: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
 
-type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
-
-/** Per-column absolute peaks of the selected side (top waveform strip). */
-function fillWave(samples: Float32Array): void {
-  const n = samples.length;
-  let max = 1e-6;
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const start = Math.floor((c / WAVE_COLS) * n);
-    const end = Math.max(start + 1, Math.floor(((c + 1) / WAVE_COLS) * n));
-    let p = 0;
-    for (let i = start; i < end && i < n; i++) {
-      const a = Math.abs(samples[i]);
-      if (a > p) p = a;
-    }
-    wavePeaks[c] = p;
-    if (p > max) max = p;
-  }
-  for (let c = 0; c < WAVE_COLS; c++) wavePeaks[c] /= max;
-}
-
-/** Averaged magnitude spectrum sampled to SPEC_COLS, on a caller-supplied scale. */
-function sampleSpectrum(
-  wasm: WasmModule,
-  samples: Float32Array,
-  sr: number,
-  out: Float32Array,
-  scale: number,
-): number {
-  const r = wasm.stft(samples, sr, 2048, 512);
-  const { nBins, nFrames, magnitude } = r;
-  const binHz = sr / 2048;
-  const avg = new Float32Array(nBins);
-  let max = 1e-6;
-  for (let b = 0; b < nBins; b++) {
-    let s = 0;
-    for (let fr = 0; fr < nFrames; fr++) s += magnitude[b * nFrames + fr];
-    avg[b] = s / nFrames;
-    if (avg[b] > max) max = avg[b];
-  }
-  for (let c = 0; c < SPEC_COLS; c++) {
-    const hz = (c / (SPEC_COLS - 1)) * SPEC_MAX_HZ;
-    const bin = hz / binHz;
-    const b0 = Math.floor(bin);
-    const frac = bin - b0;
-    const v = b0 + 1 < nBins ? avg[b0] * (1 - frac) + avg[b0 + 1] * frac : (avg[b0] ?? 0);
-    out[c] = ((v * scale) ** 0.6) as number; // compress for legibility; shared scale
-  }
-  return max;
-}
-
 /** Mean linear magnitude inside the notch band — the in-band level proxy. */
 function bandMean(spec: Float32Array): number {
   const c0 = Math.round(((WHISTLE_HZ - BAND_HALF_HZ) / SPEC_MAX_HZ) * (SPEC_COLS - 1));
@@ -132,7 +88,10 @@ function bandMean(spec: Float32Array): number {
   let s = 0;
   let n = 0;
   for (let c = Math.max(0, c0); c <= Math.min(SPEC_COLS - 1, c1); c++) {
-    s += spec[c];
+    // Undo the display compression per column so this is a true linear-magnitude
+    // average: averaging the compressed columns and de-compressing the mean would
+    // bias it, since the mean of a power is not the power of the mean.
+    s += spec[c] ** (1 / SPECTRUM_COMPRESSION);
     n++;
   }
   return n > 0 ? s / n : 0;
@@ -177,17 +136,17 @@ async function compute(): Promise<void> {
     editedAudio = { samples: out, sampleRate: sr };
 
     // Both spectra share the artifact scale so the in-band drop is read on one axis.
-    const scale = 1 / sampleSpectrum(wasm, artifact.samples, sr, specArt, 1);
-    sampleSpectrum(wasm, artifact.samples, sr, specArt, scale);
-    sampleSpectrum(wasm, out, sr, specEd, scale);
+    const scale = 1 / averagedSpectrum(wasm, artifact.samples, sr, specArt, SPEC_MAX_HZ, 1);
+    averagedSpectrum(wasm, artifact.samples, sr, specArt, SPEC_MAX_HZ, scale);
+    averagedSpectrum(wasm, out, sr, specEd, SPEC_MAX_HZ, scale);
 
-    // In-band reduction in dB (uses the underlying linear means, pre-compression).
-    const artBand = bandMean(specArt) ** (1 / 0.6);
-    const edBand = bandMean(specEd) ** (1 / 0.6);
+    // In-band reduction in dB, from the linear-magnitude band means.
+    const artBand = bandMean(specArt);
+    const edBand = bandMean(specEd);
     notchDb.value =
       artBand > 0 ? 20 * Math.log10(Math.max(edBand, 1e-9) / Math.max(artBand, 1e-9)) : 0;
 
-    fillWave((edited.value ? editedAudio : artifact).samples);
+    peakEnvelope((edited.value ? editedAudio : artifact).samples, wavePeaks);
     status.value = 'ready';
     startMorph();
   } catch (e) {
@@ -373,15 +332,6 @@ function paint(): void {
   }
 }
 
-/** Append an alpha to a #rrggbb colour as an rgba() string. */
-function hexA(hex: string, a: number): string {
-  const num = Number.parseInt(hex.slice(1), 16);
-  const r = (num >> 16) & 255;
-  const g = (num >> 8) & 255;
-  const b = num & 255;
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
 async function onPlay(): Promise<void> {
   if (!artifact || !editedAudio) await compute();
   const audio = edited.value ? editedAudio : artifact;
@@ -390,7 +340,7 @@ async function onPlay(): Promise<void> {
 
 watch(view, () => {
   if (status.value === 'idle') return;
-  fillWave((edited.value ? editedAudio : artifact)?.samples ?? wavePeaks);
+  peakEnvelope((edited.value ? editedAudio : artifact)?.samples ?? wavePeaks, wavePeaks);
   startMorph();
   if (isPlaying.value) {
     stop();

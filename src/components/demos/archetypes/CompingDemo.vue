@@ -14,6 +14,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
+import { peakEnvelope } from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -72,24 +73,6 @@ const dispComp = new Float32Array(WAVE_COLS);
 let assembled: Float32Array | null = null;
 const reveal = ref(0);
 
-/** Per-column absolute peaks, normalized to the loudest column. */
-function fillPeaks(samples: Float32Array, out: Float32Array): void {
-  const n = samples.length;
-  let max = 1e-6;
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const a = Math.floor((c / WAVE_COLS) * n);
-    const b = Math.max(a + 1, Math.floor(((c + 1) / WAVE_COLS) * n));
-    let p = 0;
-    for (let i = a; i < b && i < n; i++) {
-      const v = Math.abs(samples[i]);
-      if (v > p) p = v;
-    }
-    out[c] = p;
-    if (p > max) max = p;
-  }
-  for (let c = 0; c < WAVE_COLS; c++) out[c] /= max;
-}
-
 /** Segment boundaries in samples (NSEG + 1 edges). */
 function bounds(): number[] {
   const b: number[] = [];
@@ -129,7 +112,7 @@ async function ensureClips(): Promise<void> {
   clipLen = Math.min(...loaded.map((c) => c.samples.length));
   TAKES.forEach((t, i) => {
     takeBuf[t] = loaded[i].samples;
-    fillPeaks(loaded[i].samples, takePeaks[t]);
+    peakEnvelope(loaded[i].samples, takePeaks[t]);
   });
 }
 
@@ -138,7 +121,7 @@ async function compute(): Promise<void> {
     if (status.value === 'idle') status.value = 'loading';
     await ensureClips();
     assembled = assemble(segChoices.value);
-    fillPeaks(assembled, compPeaks);
+    peakEnvelope(assembled, compPeaks);
     status.value = 'ready';
     startMorph();
   } catch (e) {

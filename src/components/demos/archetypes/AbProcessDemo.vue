@@ -13,6 +13,13 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
+import {
+  averagedSpectrum,
+  hexA,
+  mulberry32,
+  peakEnvelope,
+  SPECTRUM_COMPRESSION,
+} from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -68,75 +75,16 @@ let damaged: { samples: Float32Array; sampleRate: number } | null = null;
 let cleaned: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
 
-type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
-
-/** Deterministic PRNG so the injected hiss is identical on every render. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Per-column absolute peaks of the selected side (top waveform strip). */
-function fillWave(samples: Float32Array): void {
-  const n = samples.length;
-  let max = 1e-6;
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const start = Math.floor((c / WAVE_COLS) * n);
-    const end = Math.max(start + 1, Math.floor(((c + 1) / WAVE_COLS) * n));
-    let p = 0;
-    for (let i = start; i < end && i < n; i++) {
-      const a = Math.abs(samples[i]);
-      if (a > p) p = a;
-    }
-    wavePeaks[c] = p;
-    if (p > max) max = p;
-  }
-  for (let c = 0; c < WAVE_COLS; c++) wavePeaks[c] /= max;
-}
-
-/** Averaged magnitude spectrum sampled to SPEC_COLS, on a caller-supplied scale. */
-function sampleSpectrum(
-  wasm: WasmModule,
-  samples: Float32Array,
-  sr: number,
-  out: Float32Array,
-  scale: number,
-): number {
-  const r = wasm.stft(samples, sr, 2048, 512);
-  const { nBins, nFrames, magnitude } = r;
-  const binHz = sr / 2048;
-  const avg = new Float32Array(nBins);
-  let max = 1e-6;
-  for (let b = 0; b < nBins; b++) {
-    let s = 0;
-    for (let fr = 0; fr < nFrames; fr++) s += magnitude[b * nFrames + fr];
-    avg[b] = s / nFrames;
-    if (avg[b] > max) max = avg[b];
-  }
-  for (let c = 0; c < SPEC_COLS; c++) {
-    const hz = (c / (SPEC_COLS - 1)) * SPEC_MAX_HZ;
-    const bin = hz / binHz;
-    const b0 = Math.floor(bin);
-    const frac = bin - b0;
-    const v = b0 + 1 < nBins ? avg[b0] * (1 - frac) + avg[b0 + 1] * frac : (avg[b0] ?? 0);
-    out[c] = ((v * scale) ** 0.6) as number; // compress for legibility; shared scale
-  }
-  return max;
-}
-
 /** Mean linear magnitude above FLOOR_HZ — the high-band noise-floor proxy. */
 function highBandMean(spec: Float32Array): number {
   const c0 = Math.round((FLOOR_HZ / SPEC_MAX_HZ) * (SPEC_COLS - 1));
   let s = 0;
   let n = 0;
   for (let c = c0; c < SPEC_COLS; c++) {
-    s += spec[c];
+    // Undo the display compression per column so this is a true linear-magnitude
+    // average: averaging the compressed columns and de-compressing the mean would
+    // bias it, since the mean of a power is not the power of the mean.
+    s += spec[c] ** (1 / SPECTRUM_COMPRESSION);
     n++;
   }
   return n > 0 ? s / n : 0;
@@ -167,16 +115,16 @@ async function compute(): Promise<void> {
     cleaned = { samples: out, sampleRate: sr };
 
     // Both spectra share the damaged scale so the floor drop is read on one axis.
-    const scale = 1 / sampleSpectrum(wasm, damaged.samples, sr, specDmg, 1);
-    sampleSpectrum(wasm, damaged.samples, sr, specDmg, scale);
-    sampleSpectrum(wasm, out, sr, specRep, scale);
+    const scale = 1 / averagedSpectrum(wasm, damaged.samples, sr, specDmg, SPEC_MAX_HZ, 1);
+    averagedSpectrum(wasm, damaged.samples, sr, specDmg, SPEC_MAX_HZ, scale);
+    averagedSpectrum(wasm, out, sr, specRep, SPEC_MAX_HZ, scale);
 
-    // High-band reduction in dB (uses the underlying linear means, pre-compression).
-    const dmgHi = highBandMean(specDmg) ** (1 / 0.6);
-    const repHi = highBandMean(specRep) ** (1 / 0.6);
+    // High-band reduction in dB, from the linear-magnitude band means.
+    const dmgHi = highBandMean(specDmg);
+    const repHi = highBandMean(specRep);
     floorDb.value = repHi > 0 ? 20 * Math.log10(repHi / Math.max(dmgHi, 1e-9)) : 0;
 
-    fillWave((repaired.value ? cleaned : damaged).samples);
+    peakEnvelope((repaired.value ? cleaned : damaged).samples, wavePeaks);
     status.value = 'ready';
     startMorph();
   } catch (e) {
@@ -355,15 +303,6 @@ function paint(): void {
   }
 }
 
-/** Append an alpha to a #rrggbb colour as an rgba() string. */
-function hexA(hex: string, a: number): string {
-  const n = Number.parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
 async function onPlay(): Promise<void> {
   if (!damaged || !cleaned) await compute();
   const audio = repaired.value ? cleaned : damaged;
@@ -373,7 +312,7 @@ async function onPlay(): Promise<void> {
 watch(view, () => {
   if (status.value === 'idle') return;
   // Re-emphasize the figure and re-fill the waveform for the newly selected side.
-  fillWave((repaired.value ? cleaned : damaged)?.samples ?? wavePeaks);
+  peakEnvelope((repaired.value ? cleaned : damaged)?.samples ?? wavePeaks, wavePeaks);
   startMorph();
   // If a side is sounding, swap to the other side seamlessly.
   if (isPlaying.value) {

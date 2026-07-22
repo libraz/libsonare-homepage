@@ -12,6 +12,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
+import { peakEnvelope } from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -72,25 +73,6 @@ const reveal = ref(0); // 0..1 waveform fade-in
 
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
-/** Downsample the clip to per-column absolute peaks for the waveform display. */
-function fillPeaks(samples: Float32Array): void {
-  const n = samples.length;
-  peaks.fill(0);
-  let max = 1e-6;
-  for (let c = 0; c < COLS; c++) {
-    const start = Math.floor((c / COLS) * n);
-    const end = Math.max(start + 1, Math.floor(((c + 1) / COLS) * n));
-    let p = 0;
-    for (let i = start; i < end && i < n; i++) {
-      const a = Math.abs(samples[i]);
-      if (a > p) p = a;
-    }
-    peaks[c] = p;
-    if (p > max) max = p;
-  }
-  for (let c = 0; c < COLS; c++) peaks[c] /= max;
-}
-
 /** Run the selected detector and store the marker times + a tempo readout. */
 function detect(wasm: WasmModule, samples: Float32Array, sr: number): void {
   let times: Float32Array;
@@ -119,7 +101,7 @@ async function compute(): Promise<void> {
     if (!clip) {
       clip = await loadClip(clipName.value);
       duration = clip.samples.length / clip.sampleRate;
-      fillPeaks(clip.samples);
+      peakEnvelope(clip.samples, peaks);
     }
     detect(wasm, clip.samples, clip.sampleRate);
     status.value = 'ready';

@@ -203,6 +203,21 @@ describe('PitchCorrectDemo', () => {
     }
   });
 
+  it('measures the raw take with a single pYIN pass, reusing its f0 for correction', async () => {
+    const spy = vi.spyOn(wasm, 'pitchPyin');
+    const wrapper = mountDemo(true);
+    try {
+      await settle(wrapper);
+      expect(wrapper.find('figure.td--ready').exists()).toBe(true);
+      // One pass measures the raw contour (its f0 is fed straight into correction),
+      // one measures the tuned result — the raw take is never analyzed twice.
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+      wrapper.unmount();
+    }
+  });
+
   it('auditions peak-normalized audio for the selected side', async () => {
     const wrapper = mountDemo(true);
     try {
