@@ -28,14 +28,17 @@ const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n()
 const { isDark } = useTheme();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 
-const scanner = useSpatialScanner();
-const { status, progress, error, fileName, activePreset, result } = scanner;
+// Create the audio engine first so the scanner can decode uploads through its single
+// playback AudioContext instead of opening a second one.
 const audio = useSpatialAudio();
+const scanner = useSpatialScanner({ getAudioContext: audio.getContext });
+const { status, progress, error, fileName, activePreset, result } = scanner;
 
 const libVersion = ref('');
 const treatAsIr = ref(false);
 const autoRotate = ref(true);
 const morphError = ref(false);
+const uploadError = ref(false);
 
 const docsPath = computed(() => localizedPath('/docs/acoustic-analysis'));
 const glossaryBase = computed(() => localizedPath('/docs/glossary'));
@@ -59,8 +62,8 @@ function term(key: SpatialTermKey) {
 
 const sceneColors = computed(() =>
   isDark.value
-    ? { accent: '#8B5CF6', cyan: '#22D3EE', amber: '#F59E0B' }
-    : { accent: '#7C3AED', cyan: '#0891B2', amber: '#B45309' },
+    ? { accent: '#8B5CF6', cyan: '#22D3EE', amber: '#F59E0B', truth: '#34D399' }
+    : { accent: '#7C3AED', cyan: '#0891B2', amber: '#B45309', truth: '#059669' },
 );
 
 const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
@@ -84,6 +87,7 @@ const rooms = computed(() =>
 
 const localError = computed(() => {
   if (morphError.value) return copy.value.errors.morph;
+  if (uploadError.value) return copy.value.errors.decode;
   if (!error.value) return null;
   if (error.value === 'decode') return copy.value.errors.decode;
   return error.value;
@@ -112,18 +116,30 @@ const sourceName = computed(() => {
 
 function onPreset(id: PresetId) {
   morphError.value = false;
+  uploadError.value = false;
   scanner.scanPreset(id);
 }
 function onFile(file: File) {
   morphError.value = false;
+  uploadError.value = false;
   void scanner.scanFile(file, treatAsIr.value);
-  void audio.setUpload(file); // the recording is playable regardless of estimation outcome
+  // The recording is playable regardless of estimation outcome; surface a decode
+  // failure here so the playback panel doesn't silently sit in a "no content" state.
+  void audio.setUpload(file).catch((e) => {
+    console.warn('Could not decode uploaded audio for playback', e);
+    uploadError.value = true;
+  });
 }
 function onClear() {
   morphError.value = false;
+  uploadError.value = false;
   audio.clearSource();
   scanner.clear();
 }
+
+// Re-run the estimate when the "treat as impulse response" mode changes: it selects a
+// different acoustic pipeline (isolated-impulse vs blind), so RT60/clarity must update.
+watch(treatAsIr, () => scanner.rescan(treatAsIr.value));
 
 async function onMorph() {
   const geometry = morphGeometry();
@@ -308,6 +324,7 @@ async function initVersion() {
               :accent="sceneColors.accent"
               :cyan="sceneColors.cyan"
               :amber="sceneColors.amber"
+              :truth="sceneColors.truth"
             />
             <div v-if="!result" class="sp-scene__placeholder">
               <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -338,8 +355,8 @@ async function initVersion() {
             <li><i class="sp-dot sp-dot--ring" style="--c: var(--demo-amber)"></i>{{ copy.legend.shell }}</li>
             <li><i class="sp-dot sp-dot--ring" style="--c: var(--demo-cyan)"></i>{{ copy.legend.critical }}</li>
             <template v-if="result?.truth">
-              <li><i class="sp-dot sp-dot--ring" style="--c: var(--demo-cyan)"></i>{{ copy.legend.truthRoom }}</li>
-              <li><i class="sp-dot" style="--c: var(--demo-cyan)"></i>{{ copy.legend.truthSource }}</li>
+              <li><i class="sp-dot sp-dot--ring" :style="{ '--c': sceneColors.truth }"></i>{{ copy.legend.truthRoom }}</li>
+              <li><i class="sp-dot" :style="{ '--c': sceneColors.truth }"></i>{{ copy.legend.truthSource }}</li>
             </template>
           </ul>
         </TechPanel>

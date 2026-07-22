@@ -137,6 +137,14 @@ type WasmModule = {
 };
 
 const N_BANDS = 6;
+
+// Preset RIR length scales with the room's reverberation time so long-decay presets
+// (hall, cathedral) audition their full tail instead of a hard truncation that cuts
+// the decay short.
+const RIR_TAIL_FACTOR = 1.2;
+const RIR_MIN_SECONDS = 2.5;
+const RIR_MAX_SECONDS = 12;
+
 let wasmModule: WasmModule | null = null;
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -164,6 +172,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (request.type === 'preset') {
       const { geometry, sampleRate, id } = request;
       self.postMessage({ type: 'progress', id, stage: 'synthesize', value: 0.35 });
+      const maxSeconds = clamp(
+        sabineRt60(geometry) * RIR_TAIL_FACTOR,
+        RIR_MIN_SECONDS,
+        RIR_MAX_SECONDS,
+      );
       const rir = wasmModule.synthesizeRir({
         lengthM: geometry.lengthM,
         widthM: geometry.widthM,
@@ -177,7 +190,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         listenerZ: geometry.listenerZ,
         ismOrder: 2,
         seed: 1337,
-        maxSeconds: 2.5,
+        maxSeconds,
         sampleRate,
       });
       if (rir.hasError || rir.rir.length === 0) {
@@ -288,20 +301,18 @@ function analyse(
     ? { x: truthGeometry.listenerX, y: truthGeometry.listenerY, z: truthGeometry.listenerZ }
     : { x: estimate.length * 0.62, y: estimate.width * 0.5, z: 1.5 };
 
-  // Representative source point: a fixed bearing on the distance shell, clamped inside.
-  // (A single channel reveals distance, not bearing — the UI shows a full shell.)
+  // Representative source point: a fixed bearing at exactly sourceDistance from the
+  // listener, so the marker always sits on the drawn distance shell. (A single channel
+  // reveals distance, not bearing — the UI shows a full shell.) The point is left
+  // unclamped: clamping it back inside the room would pull it off the shell radius,
+  // which is what the scene actually visualizes.
   const bearing = Math.PI * 0.78;
   const elevation = -0.12;
-  const source = clampToRoom(
-    {
-      x: listener.x + sourceDistance * Math.cos(elevation) * Math.cos(bearing),
-      y: listener.y + sourceDistance * Math.cos(elevation) * Math.sin(bearing),
-      z: listener.z + sourceDistance * Math.sin(elevation),
-    },
-    estimate.length,
-    estimate.width,
-    estimate.height,
-  );
+  const source = {
+    x: listener.x + sourceDistance * Math.cos(elevation) * Math.cos(bearing),
+    y: listener.y + sourceDistance * Math.cos(elevation) * Math.sin(bearing),
+    z: listener.z + sourceDistance * Math.sin(elevation),
+  };
 
   const estimateConfidence = clamp(estimate.confidence, 0, 1);
   const acousticConfidence = clamp(acoustic.confidence, 0, 1);
@@ -380,15 +391,16 @@ function clamp(value: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, value));
 }
 
-function clampToRoom(
-  p: { x: number; y: number; z: number },
-  length: number,
-  width: number,
-  height: number,
-) {
-  return {
-    x: clamp(p.x, 0.15, length - 0.15),
-    y: clamp(p.y, 0.15, width - 0.15),
-    z: clamp(p.z, 0.15, height - 0.15),
-  };
+/**
+ * Sabine reverberation-time estimate (s) from shoebox geometry. Used only to size the
+ * synthesized preset RIR so its full decay tail is captured (not for the reported RT60,
+ * which comes from the acoustic analysis of the synthesized impulse).
+ */
+function sabineRt60(geometry: RoomGeometry): number {
+  const { lengthM, widthM, heightM } = geometry;
+  const volume = lengthM * widthM * heightM;
+  const surface = 2 * (lengthM * widthM + lengthM * heightM + widthM * heightM);
+  const absorption = Math.max(geometry.absorption, 0.01);
+  if (surface <= 0) return RIR_MIN_SECONDS;
+  return (0.161 * volume) / (surface * absorption);
 }

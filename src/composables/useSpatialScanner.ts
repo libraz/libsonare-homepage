@@ -16,7 +16,17 @@ const PRESET_SAMPLE_RATE = 48000;
 // Cap uploaded audio analyzed for room acoustics (RT60/decay needs only a short window).
 const MAX_ANALYSIS_SECONDS = 30;
 
-export function useSpatialScanner() {
+/** Options for {@link useSpatialScanner}. */
+export interface SpatialScannerOptions {
+  /**
+   * Supply the shared playback AudioContext (from `useSpatialAudio`) so uploads are
+   * decoded through it instead of opening a second context. When provided, the scanner
+   * does not own or close the context. Falls back to a self-owned context otherwise.
+   */
+  getAudioContext?: () => AudioContext;
+}
+
+export function useSpatialScanner(options: SpatialScannerOptions = {}) {
   const status = ref<Status>('idle');
   const progress = ref(0);
   const error = ref<string | null>(null);
@@ -24,6 +34,7 @@ export function useSpatialScanner() {
   const activePreset = ref<PresetId | null>(null);
   const result = shallowRef<ScanResult | null>(null);
 
+  const externalAudioContext = options.getAudioContext ?? null;
   let worker: Worker | null = null;
   let audioContext: AudioContext | null = null;
   let requestId = 0;
@@ -54,6 +65,7 @@ export function useSpatialScanner() {
   }
 
   function ensureAudioContext(): AudioContext {
+    if (externalAudioContext) return externalAudioContext();
     if (!audioContext) {
       const Ctor =
         window.AudioContext ||
@@ -137,7 +149,8 @@ export function useSpatialScanner() {
   function dispose() {
     worker?.terminate();
     worker = null;
-    void audioContext?.close();
+    // Only close a self-owned context; a shared context is owned by useSpatialAudio.
+    if (!externalAudioContext) void audioContext?.close();
     audioContext = null;
   }
 

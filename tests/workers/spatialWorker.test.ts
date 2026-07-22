@@ -36,12 +36,27 @@ const wasmMock = vi.hoisted(() => {
           absorptionBands: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
           rt60Bands: new Float32Array([0.5, 0.55, 0.6, 0.62, 0.58, 0.5]),
         };
+  // A wide room with a very negative DRR so the estimated source lands far from the
+  // listener — far enough that the raw shell point falls outside the room walls.
+  const farRoom = () => ({
+    volume: 300,
+    length: 6,
+    width: 4,
+    height: 3,
+    drrDb: -30,
+    confidence: 0.7,
+    absorptionBands: new Float32Array([0.1, 0.12, 0.15, 0.18, 0.2, 0.22]),
+    rt60Bands: new Float32Array([0.5, 0.55, 0.6, 0.62, 0.58, 0.5]),
+  });
   return {
     degenerate: { value: false },
+    farSource: { value: false },
     rirError: { value: false },
     init: vi.fn(async () => undefined),
     version: vi.fn(() => '1.3.1-test'),
-    estimateRoom: vi.fn(() => room(wasmMock.degenerate.value)),
+    estimateRoom: vi.fn(() =>
+      wasmMock.farSource.value ? farRoom() : room(wasmMock.degenerate.value),
+    ),
     analyzeImpulseResponse: vi.fn(() => acoustic(false)),
     detectAcoustic: vi.fn(() => acoustic(true)),
     synthesizeRir: vi.fn(() => ({
@@ -76,6 +91,7 @@ describe('spatial worker protocol', () => {
     vi.resetModules();
     vi.clearAllMocks();
     wasmMock.degenerate.value = false;
+    wasmMock.farSource.value = false;
     wasmMock.rirError.value = false;
     posted = [];
     originalSelf = globalThis.self;
@@ -164,6 +180,42 @@ describe('spatial worker protocol', () => {
     expect(message.result.rirSampleRate).toBe(48000);
     // RIR buffer is handed back zero-copy.
     expect(done()!.transfer).toEqual([message.result.rir.buffer]);
+  });
+
+  it('keeps the estimated source marker on the distance shell, even outside the room', async () => {
+    wasmMock.farSource.value = true;
+    await send({
+      type: 'scan',
+      id: 40,
+      samples: new Float32Array([0.2, -0.1, 0.05]),
+      sampleRate: 48000,
+      isIR: false,
+    });
+
+    const { source, listener, sourceDistance } = done()!.message.result;
+    const dist = Math.hypot(source.x - listener.x, source.y - listener.y, source.z - listener.z);
+    // The marker sits exactly on the drawn shell (radius === sourceDistance), not clamped
+    // back onto a room wall (which would shorten the radius and float it off the shell).
+    expect(dist).toBeCloseTo(sourceDistance, 6);
+    // This geometry drives the point past a wall — proving it is intentionally unclamped.
+    expect(source.x).toBeLessThan(0);
+  });
+
+  it('sizes preset RIRs by reverberation time so long-decay rooms are not truncated', async () => {
+    // A small, damped room: Sabine RT60 is short, so the RIR stays at the floor length.
+    const smallRoom = { ...geometry, lengthM: 4, widthM: 3, heightM: 2.5, absorption: 0.32 };
+    await send({ type: 'preset', id: 41, sampleRate: 48000, geometry: smallRoom });
+    const smallMax = wasmMock.synthesizeRir.mock.calls.at(-1)![0].maxSeconds as number;
+
+    // A cavernous, reflective room (cathedral scale): RT60 ≈ 9.5 s, so the RIR is far
+    // longer than the old hardcoded 2.5 s cap.
+    const bigRoom = { ...geometry, lengthM: 34, widthM: 20, heightM: 24, absorption: 0.07 };
+    await send({ type: 'preset', id: 42, sampleRate: 48000, geometry: bigRoom });
+    const bigMax = wasmMock.synthesizeRir.mock.calls.at(-1)![0].maxSeconds as number;
+
+    expect(smallMax).toBe(2.5);
+    expect(bigMax).toBeGreaterThan(8);
+    expect(bigMax).toBeGreaterThan(smallMax);
   });
 
   it('reports an error for an un-synthesizable preset geometry', async () => {

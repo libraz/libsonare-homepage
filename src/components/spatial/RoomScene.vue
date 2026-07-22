@@ -1,6 +1,30 @@
+<script lang="ts">
+import type { ScanResult } from '@/workers/spatial.worker';
+
+/**
+ * Map a libsonare room point (x∈length, y∈width, z up) into three.js scene coords,
+ * centered on the given room. Pure and THREE-free so scene geometry is unit-testable.
+ * (libsonare x→scene x-left, z→scene up, y→scene depth.)
+ */
+export function sceneCoords(
+  p: { x: number; y: number; z: number },
+  room: { length: number; width: number },
+): [number, number, number] {
+  return [p.x - room.length / 2, p.z, p.y - room.width / 2];
+}
+
+/**
+ * Scene position of the ground-truth source marker, centered on the *truth* room dims
+ * (not the estimated room) so it stays inside its own dashed truth box when the blind
+ * estimate diverges. Returns null when there is no truth overlay.
+ */
+export function truthMarkerCoords(res: ScanResult): [number, number, number] | null {
+  return res.truth ? sceneCoords(res.truth.source, res.truth.room) : null;
+}
+</script>
+
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { ScanResult } from '@/workers/spatial.worker';
 
 const props = withDefaults(
   defineProps<{
@@ -8,6 +32,7 @@ const props = withDefaults(
     accent?: string;
     cyan?: string;
     amber?: string;
+    truth?: string;
     isDark?: boolean;
     autoRotate?: boolean;
     level?: number;
@@ -16,6 +41,7 @@ const props = withDefaults(
     accent: '#8B5CF6',
     cyan: '#22D3EE',
     amber: '#F59E0B',
+    truth: '#34D399',
     isDark: true,
     autoRotate: true,
     level: 0,
@@ -55,7 +81,8 @@ function color(hex: string) {
 
 // libsonare coords (x∈len, y∈width, z∈height, z up) → three (x-left, z up, y-depth).
 function toScene(p: { x: number; y: number; z: number }, room: { length: number; width: number }) {
-  return new THREE.Vector3(p.x - room.length / 2, p.z, p.y - room.width / 2);
+  const [x, y, z] = sceneCoords(p, room);
+  return new THREE.Vector3(x, y, z);
 }
 
 function disposeGroup(group: any) {
@@ -216,18 +243,26 @@ function buildScene() {
   );
   addFloorGrid(roomGroup, room.length, room.width, lineColor, props.isDark ? 0.22 : 0.42);
 
-  // Ground-truth room overlay for built-in presets.
+  // Ground-truth room overlay for built-in presets. Drawn in a dedicated truth hue so
+  // it reads distinctly from the cyan critical-distance shell. The truth source marker
+  // is centered on the truth room dims (not the estimated room) so it stays anchored to
+  // its own dashed box when the blind estimate diverges.
   if (res.truth) {
     addWireBox(
       roomGroup,
       res.truth.room.length,
       res.truth.room.width,
       res.truth.room.height,
-      props.cyan,
+      props.truth,
       0.5,
       true,
     );
-    addMarker(roomGroup, toScene(res.truth.source, room), props.cyan, sizeFor(room, 0.05));
+    addMarker(
+      roomGroup,
+      toScene(res.truth.source, res.truth.room),
+      props.truth,
+      sizeFor(room, 0.05),
+    );
   }
 
   const markerR = sizeFor(room, 0.045);

@@ -65,6 +65,15 @@ export function useSpatialAudio() {
     return ctx;
   }
 
+  /**
+   * Expose the single playback AudioContext so the scanner can decode uploads through
+   * it instead of opening a second context (one context, one native decode path per
+   * demo). Lazily created on first use, and owned/closed here.
+   */
+  function getContext(): AudioContext {
+    return getCtx();
+  }
+
   /** Play an uploaded recording directly (it already carries its own room). */
   async function setUpload(file: File): Promise<void> {
     const ctxLocal = getCtx();
@@ -317,6 +326,7 @@ export function useSpatialAudio() {
     isMorphing,
     morphProgress,
     contentLabel,
+    getContext,
     setUpload,
     setRoomImpulse,
     renderRoomMorph,
