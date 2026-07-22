@@ -27,6 +27,10 @@ vi.mock('@/components/demos/archetypes', () => ({
       props: ['def', 'active'],
       template: '<div class="mock-archetype" :data-id="def.id" :data-active="String(active)" />',
     },
+    'lane-mixer': {
+      props: ['def', 'active'],
+      template: '<div class="mock-archetype" :data-id="def.id" :data-active="String(active)" />',
+    },
   },
 }));
 
@@ -100,6 +104,25 @@ describe('SonareDemo', () => {
 
     expect(wrapper.find('.mock-archetype').attributes('data-active')).toBe('true');
     expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('activates a heavy demo when it scrolls near the viewport', async () => {
+    installIntersectionObserver();
+    getDemoMock.mockReturnValue({
+      id: 'engine-lane-mixer',
+      archetype: 'lane-mixer',
+      source: { kind: 'generate', signal: 'saw' },
+      title: { en: 'Engine lane mixer', ja: 'エンジンのレーンミキサー' },
+    });
+
+    const wrapper = mount(SonareDemo, { props: { id: 'engine-lane-mixer' } });
+
+    expect(wrapper.find('.mock-archetype').attributes('data-active')).toBe('false');
+
+    observerCallback?.([{ isIntersecting: true }]);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.mock-archetype').attributes('data-active')).toBe('true');
   });
 
   it('activates immediately when IntersectionObserver is unavailable', async () => {
