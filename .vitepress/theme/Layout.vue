@@ -1,25 +1,28 @@
 <script setup lang="ts">
 import { useData } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
-import { computed, defineAsyncComponent } from 'vue';
+import { type AsyncComponentLoader, computed, defineAsyncComponent } from 'vue';
 import { createTheme } from '@/composables/useTheme';
+import DemoLoadError from './DemoLoadError.vue';
 
 // Each custom route is a standalone application. Keep it out of the shared
 // documentation theme and load only the application selected by frontmatter.
-const AnalyzerDemo = defineAsyncComponent(() => import('@/components/AnalyzerDemo.vue'));
-const MasteringDemo = defineAsyncComponent(() => import('@/components/MasteringDemo.vue'));
-const MixingStudio = defineAsyncComponent(() => import('@/components/MixingStudio.vue'));
-const MusicAnalysisStudio = defineAsyncComponent(
-  () => import('@/components/MusicAnalysisStudio.vue'),
-);
-const PhysicalModelTuner = defineAsyncComponent(
-  () => import('@/components/PhysicalModelTuner.vue'),
-);
-const PianoPracticeDemo = defineAsyncComponent(() => import('@/components/PianoPracticeDemo.vue'));
-const RealtimeFxLab = defineAsyncComponent(() => import('@/components/RealtimeFxLab.vue'));
-const SpatialScanner = defineAsyncComponent(() => import('@/components/SpatialScanner.vue'));
-const StudioDemo = defineAsyncComponent(() => import('@/components/StudioDemo.vue'));
-const SynthDemo = defineAsyncComponent(() => import('@/components/SynthDemo.vue'));
+// A shared errorComponent turns a failed chunk load (flaky network, stale
+// deploy) into a retry panel instead of a permanently blank route.
+function demoRoute(loader: AsyncComponentLoader) {
+  return defineAsyncComponent({ loader, errorComponent: DemoLoadError });
+}
+
+const AnalyzerDemo = demoRoute(() => import('@/components/AnalyzerDemo.vue'));
+const MasteringDemo = demoRoute(() => import('@/components/MasteringDemo.vue'));
+const MixingStudio = demoRoute(() => import('@/components/MixingStudio.vue'));
+const MusicAnalysisStudio = demoRoute(() => import('@/components/MusicAnalysisStudio.vue'));
+const PhysicalModelTuner = demoRoute(() => import('@/components/PhysicalModelTuner.vue'));
+const PianoPracticeDemo = demoRoute(() => import('@/components/PianoPracticeDemo.vue'));
+const RealtimeFxLab = demoRoute(() => import('@/components/RealtimeFxLab.vue'));
+const SpatialScanner = demoRoute(() => import('@/components/SpatialScanner.vue'));
+const StudioDemo = demoRoute(() => import('@/components/StudioDemo.vue'));
+const SynthDemo = demoRoute(() => import('@/components/SynthDemo.vue'));
 const DemosLayout = defineAsyncComponent(() => import('./DemosLayout.vue'));
 const LandingLayout = defineAsyncComponent(() => import('./LandingLayout.vue'));
 
