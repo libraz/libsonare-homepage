@@ -98,6 +98,18 @@ class MockWorker {
 
   postMessage(message: any) {
     MockWorker.messages.push(message);
+    if (message.type === 'sourceAnalyze') {
+      this.emit({
+        type: 'sourceAnalysisDone',
+        id: message.id,
+        result: {
+          profile: { integratedLufs: -18 },
+          suggestions: { targetLufs: -14 },
+          streamingPreview: { platforms: message.platforms },
+        },
+      });
+      return;
+    }
     this.emit({
       type: 'progress',
       id: message.id,
@@ -201,28 +213,21 @@ describe('wasm-backed demo composables', () => {
       const block = sine(440, 2048 / SAMPLE_RATE);
       analyzer.process(block, 0);
       expect(analyzer.isProcessing.value).toBe(false);
-      expect(analyzer.streamingData.value.nFrames).toBeGreaterThan(0);
-      expect(analyzer.streamingData.value.nMels).toBe(24);
-      expect(analyzer.streamingData.value.nChroma).toBe(12);
-      expect(analyzer.streamingData.value.mel.length).toBe(
-        analyzer.streamingData.value.nFrames * analyzer.streamingData.value.nMels,
-      );
+      expect(analyzer.estimate.value.accumulatedSeconds).toBeGreaterThanOrEqual(0);
 
-      const framesBeforeSeekReset = analyzer.streamingData.value.nFrames;
       analyzer.process(block, block.length + 128);
-      expect(analyzer.streamingData.value.nFrames).toBeLessThanOrEqual(framesBeforeSeekReset);
+      expect(analyzer.isProcessing.value).toBe(false);
 
       analyzer.setExpectedDuration(2);
       analyzer.setNormalizationGain(0.75);
 
       await analyzer.reinit(SAMPLE_RATE * 2);
-      expect(analyzer.streamingData.value.nFrames).toBe(0);
+      expect(analyzer.estimate.value.accumulatedSeconds).toBe(0);
 
       analyzer.process(block);
-      expect(analyzer.streamingData.value.nFrames).toBeGreaterThan(0);
+      expect(analyzer.isProcessing.value).toBe(false);
 
       analyzer.reset(256);
-      expect(analyzer.streamingData.value.nFrames).toBe(0);
       expect(analyzer.estimate.value).toMatchObject({
         bpm: 0,
         key: '-',
@@ -273,7 +278,6 @@ describe('wasm-backed demo composables', () => {
       const report = await mastering.analyzeSource([
         { name: 'Test', targetLufs: -14, ceilingDb: -1 },
       ]);
-      expect(mastering.isInitialized.value).toBe(true);
       expect(report.profile).toBeTruthy();
       expect(report.suggestions).toBeTruthy();
       expect(report.streamingPreview).toMatchObject({

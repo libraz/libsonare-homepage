@@ -27,14 +27,7 @@ const streamMock = vi.hoisted(() => ({
   state: null as any,
 }));
 const lang = vi.hoisted(() => ({ value: 'en' }));
-
-vi.mock('vitepress', () => ({
-  useData: () => ({ lang }),
-}));
-
-vi.mock('@/wasm/index.js', () => ({
-  init: vi.fn(async () => undefined),
-  version: vi.fn(() => 'test-wasm'),
+const analyzerWasmMock = vi.hoisted(() => ({
   rmsEnergy: vi.fn(() => new Float32Array([0.1, 0.2, 0.3])),
   chroma: vi.fn(() => ({
     features: new Float32Array(36).fill(0.25),
@@ -46,6 +39,16 @@ vi.mock('@/wasm/index.js', () => ({
     nMels: 128,
     nFrames: 3,
   })),
+}));
+
+vi.mock('vitepress', () => ({
+  useData: () => ({ lang }),
+}));
+
+vi.mock('@/wasm/index.js', () => ({
+  init: vi.fn(async () => undefined),
+  version: vi.fn(() => 'test-wasm'),
+  ...analyzerWasmMock,
 }));
 
 vi.mock('@/composables/useAudioAnalysis', async () => {
@@ -77,8 +80,19 @@ vi.mock('@/composables/useAudioPlayer', async () => {
       isPaused,
       currentTime,
       duration,
-      loadAudio: playerMock.loadAudio,
-      loadAudioFromArrayBuffer: playerMock.loadAudioFromArrayBuffer,
+      decodeAudio: playerMock.loadAudio,
+      decodeAudioFromArrayBuffer: playerMock.loadAudioFromArrayBuffer,
+      setAudioBuffer: (buffer: AudioBuffer) => {
+        audioBuffer.value = buffer;
+        duration.value = buffer.duration;
+      },
+      resetAudio: () => {
+        audioBuffer.value = null;
+        duration.value = 0;
+        isPlaying.value = false;
+        isPaused.value = false;
+        currentTime.value = 0;
+      },
       play: playerMock.play,
       pause: playerMock.pause,
       resume: playerMock.resume,
@@ -228,6 +242,20 @@ describe('AudioAnalyzer visual player flow', () => {
     streamMock.setExpectedDuration.mockReset();
     streamMock.setNormalizationGain.mockReset();
     streamMock.reset.mockReset();
+    analyzerWasmMock.rmsEnergy.mockReset();
+    analyzerWasmMock.rmsEnergy.mockReturnValue(new Float32Array([0.1, 0.2, 0.3]));
+    analyzerWasmMock.chroma.mockReset();
+    analyzerWasmMock.chroma.mockReturnValue({
+      features: new Float32Array(36).fill(0.25),
+      nFrames: 3,
+      nChroma: 12,
+    });
+    analyzerWasmMock.melSpectrogram.mockReset();
+    analyzerWasmMock.melSpectrogram.mockReturnValue({
+      power: new Float32Array(128 * 3).fill(0.5),
+      nMels: 128,
+      nFrames: 3,
+    });
 
     const buffer = audioBuffer();
     playerMock.state.audioBuffer.value = null;
@@ -236,13 +264,9 @@ describe('AudioAnalyzer visual player flow', () => {
     playerMock.state.currentTime.value = 0;
     playerMock.state.duration.value = 0;
     playerMock.loadAudioFromArrayBuffer.mockImplementation(async () => {
-      playerMock.state.audioBuffer.value = buffer;
-      playerMock.state.duration.value = buffer.duration;
       return buffer;
     });
     playerMock.loadAudio.mockImplementation(async () => {
-      playerMock.state.audioBuffer.value = buffer;
-      playerMock.state.duration.value = buffer.duration;
       return buffer;
     });
     playerMock.getAudioContext.mockReturnValue({ sampleRate: 48_000 });
@@ -379,6 +403,36 @@ describe('AudioAnalyzer visual player flow', () => {
 
       wrapper.unmount();
     } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('rolls back decoded audio when a later visualization stage fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const wrapper = mount(AudioAnalyzer);
+
+    try {
+      await drainAsyncWork();
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('FILE'))!
+        .trigger('click');
+      analyzerWasmMock.melSpectrogram.mockImplementationOnce(() => {
+        throw new Error('mel failed');
+      });
+
+      wrapper
+        .findComponent({ name: 'DropZone' })
+        .vm.$emit('file', new File([new Uint8Array([1])], 'broken-late.wav'));
+      await drainAsyncWork();
+
+      expect(playerMock.state.audioBuffer.value).toBeNull();
+      expect(playerMock.state.duration.value).toBe(0);
+      expect(wrapper.findComponent({ name: 'DropZone' }).exists()).toBe(true);
+      expect(wrapper.find('.synesthesia-stub').exists()).toBe(false);
+      expect(wrapper.text()).toContain('visualization data could not be generated');
+    } finally {
+      wrapper.unmount();
       consoleError.mockRestore();
     }
   });

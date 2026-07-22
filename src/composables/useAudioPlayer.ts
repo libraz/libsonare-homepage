@@ -1,10 +1,10 @@
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref, shallowRef } from 'vue';
 
 export type AudioProcessCallback = (samples: Float32Array, sampleOffset: number) => void;
 
 export function useAudioPlayer() {
   const audioContext = ref<AudioContext | null>(null);
-  const sourceNode = ref<AudioBufferSourceNode | null>(null);
+  const sourceNode = shallowRef<AudioBufferSourceNode | null>(null);
   const audioBuffer = ref<AudioBuffer | null>(null);
   const startTime = ref(0);
   const pauseTime = ref(0);
@@ -17,6 +17,8 @@ export function useAudioPlayer() {
   let workletNode: AudioWorkletNode | null = null;
   let processCallback: AudioProcessCallback | null = null;
   let workletReady = false;
+  let workletReadyPromise: Promise<void> | null = null;
+  let playbackGeneration = 0;
 
   function getAudioContext(): AudioContext {
     if (!audioContext.value) {
@@ -27,97 +29,119 @@ export function useAudioPlayer() {
 
   async function ensureWorkletReady(): Promise<void> {
     if (workletReady) return;
+    if (workletReadyPromise) return workletReadyPromise;
 
     const ctx = getAudioContext();
+    const task = ctx.audioWorklet
+      .addModule('/audio-stream-processor.js')
+      .then(() => {
+        workletReady = true;
+      })
+      .catch((error) => {
+        console.error('Failed to load AudioWorklet:', error);
+        throw error;
+      });
+    workletReadyPromise = task;
     try {
-      await ctx.audioWorklet.addModule('/audio-stream-processor.js');
-      workletReady = true;
-    } catch (e) {
-      console.error('Failed to load AudioWorklet:', e);
-      throw e;
+      await task;
+    } finally {
+      if (workletReadyPromise === task) workletReadyPromise = null;
     }
   }
 
-  async function loadAudio(file: File): Promise<AudioBuffer> {
+  async function decodeAudio(file: File): Promise<AudioBuffer> {
     const ctx = getAudioContext();
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = await ctx.decodeAudioData(arrayBuffer);
+    return ctx.decodeAudioData(arrayBuffer);
+  }
+
+  async function decodeAudioFromArrayBuffer(arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
+    return getAudioContext().decodeAudioData(arrayBuffer);
+  }
+
+  function setAudioBuffer(buffer: AudioBuffer) {
+    stop();
     audioBuffer.value = buffer;
     duration.value = buffer.duration;
+  }
+
+  async function loadAudio(file: File): Promise<AudioBuffer> {
+    const buffer = await decodeAudio(file);
+    setAudioBuffer(buffer);
     return buffer;
   }
 
   async function loadAudioFromArrayBuffer(arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
-    const ctx = getAudioContext();
-    const buffer = await ctx.decodeAudioData(arrayBuffer);
-    audioBuffer.value = buffer;
-    duration.value = buffer.duration;
+    const buffer = await decodeAudioFromArrayBuffer(arrayBuffer);
+    setAudioBuffer(buffer);
     return buffer;
   }
 
   async function play(offset = 0) {
-    if (!audioBuffer.value) return;
+    const buffer = audioBuffer.value;
+    if (!buffer) return;
+    const currentGeneration = ++playbackGeneration;
 
     const ctx = getAudioContext();
+
+    stopPlaybackNodes();
+    isPlaying.value = false;
 
     // Resume context if suspended
     if (ctx.state === 'suspended') {
       await ctx.resume();
+      if (currentGeneration !== playbackGeneration) return;
     }
-
-    // Stop current playback. Clear the old source's 'ended' handler first: that
-    // event fires asynchronously, so without this the stale handler would run
-    // after the new source is assigned and tear down live playback (a seek or
-    // rewind would go silent and the playhead would jump to 0:00).
-    if (sourceNode.value) {
-      sourceNode.value.onended = null;
-      sourceNode.value.stop();
-      sourceNode.value.disconnect();
-    }
-
-    // Clean up old worklet
-    stopProcessing();
-
-    // Create new source
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer.value;
 
     // Set up audio processing chain with AudioWorklet
+    let processingAvailable = false;
     if (processCallback) {
       try {
         await ensureWorkletReady();
-
-        // Create AudioWorkletNode
-        workletNode = new AudioWorkletNode(ctx, 'audio-stream-processor');
-
-        // Set initial sample offset based on playback position
-        const initialSampleOffset = Math.floor(offset * ctx.sampleRate);
-        workletNode.port.postMessage({
-          type: 'reset',
-          sampleOffset: initialSampleOffset,
-        });
-
-        // Handle messages from worklet (sample data)
-        workletNode.port.onmessage = (event) => {
-          if (event.data.type === 'samples' && processCallback) {
-            processCallback(event.data.samples, event.data.sampleOffset);
-          }
-        };
-
-        // Connect: source -> worklet -> destination
-        source.connect(workletNode);
-        workletNode.connect(ctx.destination);
+        if (currentGeneration !== playbackGeneration) return;
+        processingAvailable = true;
       } catch (e) {
         // Fallback to direct connection if AudioWorklet fails
         console.warn('AudioWorklet not available, audio processing disabled:', e);
-        source.connect(ctx.destination);
       }
+    }
+
+    if (currentGeneration !== playbackGeneration) return;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    if (processingAvailable) {
+      const processingNode = new AudioWorkletNode(ctx, 'audio-stream-processor');
+      workletNode = processingNode;
+
+      // Set initial sample offset based on playback position
+      const initialSampleOffset = Math.floor(offset * ctx.sampleRate);
+      processingNode.port.postMessage({
+        type: 'reset',
+        sampleOffset: initialSampleOffset,
+      });
+
+      // Handle messages from worklet (sample data), then return the transferred
+      // backing store to its small pool on the audio thread.
+      processingNode.port.onmessage = (event) => {
+        if (event.data.type !== 'samples') return;
+        const samples = event.data.samples as Float32Array;
+        try {
+          processCallback?.(samples, event.data.sampleOffset);
+        } finally {
+          processingNode.port.postMessage({ type: 'recycle', samples }, [samples.buffer]);
+        }
+      };
+
+      // Connect: source -> worklet -> destination
+      source.connect(processingNode);
+      processingNode.connect(ctx.destination);
     } else {
       source.connect(ctx.destination);
     }
 
     source.onended = () => {
-      if (isPlaying.value && !isPaused.value) {
+      if (sourceNode.value === source && isPlaying.value && !isPaused.value) {
         if (animationFrame) {
           cancelAnimationFrame(animationFrame);
           animationFrame = null;
@@ -146,6 +170,7 @@ export function useAudioPlayer() {
   function stopProcessing() {
     if (workletNode) {
       workletNode.port.postMessage({ type: 'stop' });
+      workletNode.port.onmessage = null;
       workletNode.disconnect();
       workletNode = null;
     }
@@ -153,6 +178,8 @@ export function useAudioPlayer() {
 
   function pause() {
     if (!isPlaying.value || !audioContext.value) return;
+
+    playbackGeneration += 1;
 
     pauseTime.value = audioContext.value.currentTime - startTime.value;
 
@@ -180,14 +207,8 @@ export function useAudioPlayer() {
   }
 
   function stop() {
-    if (sourceNode.value) {
-      sourceNode.value.onended = null;
-      sourceNode.value.stop();
-      sourceNode.value.disconnect();
-      sourceNode.value = null;
-    }
-
-    stopProcessing();
+    playbackGeneration += 1;
+    stopPlaybackNodes();
 
     isPlaying.value = false;
     isPaused.value = false;
@@ -198,6 +219,23 @@ export function useAudioPlayer() {
       cancelAnimationFrame(animationFrame);
       animationFrame = null;
     }
+  }
+
+  function stopPlaybackNodes() {
+    if (sourceNode.value) {
+      sourceNode.value.onended = null;
+      sourceNode.value.stop();
+      sourceNode.value.disconnect();
+      sourceNode.value = null;
+    }
+
+    stopProcessing();
+  }
+
+  function resetAudio() {
+    stop();
+    audioBuffer.value = null;
+    duration.value = 0;
   }
 
   function setProcessCallback(callback: AudioProcessCallback | null): void {
@@ -259,6 +297,10 @@ export function useAudioPlayer() {
     progress,
     loadAudio,
     loadAudioFromArrayBuffer,
+    decodeAudio,
+    decodeAudioFromArrayBuffer,
+    setAudioBuffer,
+    resetAudio,
     play,
     pause,
     resume,

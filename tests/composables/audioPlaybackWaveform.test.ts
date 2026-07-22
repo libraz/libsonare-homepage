@@ -420,4 +420,63 @@ describe('useAudioPlayer edge cases', () => {
 
     wrapper.unmount();
   });
+
+  it('shares worklet initialization and lets only the latest concurrent play create a source', async () => {
+    vi.stubGlobal('AudioContext', PlayerAudioContextMock);
+    vi.stubGlobal('AudioWorkletNode', PlayerWorkletNodeMock);
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const { wrapper, player } = mountPlayer();
+    await player.loadAudioFromArrayBuffer(new ArrayBuffer(4));
+    const context = PlayerAudioContextMock.instances[0];
+    let finishModule!: () => void;
+    context.audioWorklet.addModule.mockImplementation(
+      () => new Promise<void>((resolve) => (finishModule = resolve)),
+    );
+    player.setProcessCallback(vi.fn());
+
+    const first = player.play();
+    const second = player.play(0.00001);
+    finishModule();
+    await Promise.all([first, second]);
+
+    expect(context.audioWorklet.addModule).toHaveBeenCalledTimes(1);
+    expect(context.sources).toHaveLength(1);
+    expect(context.sources[0].started).toEqual([[0, 0.00001]]);
+    expect(PlayerWorkletNodeMock.instances).toHaveLength(1);
+    expect(player.isPlaying.value).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('does not start a source after stop cancels pending worklet initialization', async () => {
+    vi.stubGlobal('AudioContext', PlayerAudioContextMock);
+    vi.stubGlobal('AudioWorkletNode', PlayerWorkletNodeMock);
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const { wrapper, player } = mountPlayer();
+    await player.loadAudioFromArrayBuffer(new ArrayBuffer(4));
+    const context = PlayerAudioContextMock.instances[0];
+    let finishModule!: () => void;
+    context.audioWorklet.addModule.mockImplementation(
+      () => new Promise<void>((resolve) => (finishModule = resolve)),
+    );
+    player.setProcessCallback(vi.fn());
+
+    const pending = player.play();
+    player.stop();
+    finishModule();
+    await pending;
+
+    expect(context.sources).toHaveLength(0);
+    expect(player.isPlaying.value).toBe(false);
+    wrapper.unmount();
+  });
 });

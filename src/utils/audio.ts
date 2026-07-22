@@ -7,6 +7,50 @@ export interface DecodedStereoAudio {
   right: Float32Array;
 }
 
+export interface AudioInputBudget {
+  maxFileBytes?: number;
+  maxDurationSeconds?: number;
+  maxChannels?: number;
+  maxFrames?: number;
+}
+
+export const DEFAULT_AUDIO_INPUT_BUDGET: Required<AudioInputBudget> = {
+  maxFileBytes: 128 * 1024 * 1024,
+  maxDurationSeconds: 20 * 60,
+  maxChannels: 8,
+  maxFrames: 57_600_000,
+};
+
+export class AudioInputBudgetError extends Error {
+  constructor(public readonly code: 'file-size' | 'duration' | 'channels' | 'frames') {
+    super(`Audio input exceeds the ${code} budget`);
+    this.name = 'AudioInputBudgetError';
+  }
+}
+
+export function assertAudioFileBudget(file: File, budget: AudioInputBudget = {}): void {
+  const limit = budget.maxFileBytes ?? DEFAULT_AUDIO_INPUT_BUDGET.maxFileBytes;
+  if (file.size > limit) throw new AudioInputBudgetError('file-size');
+}
+
+export function assertDecodedAudioBudget(buffer: AudioBuffer, budget: AudioInputBudget = {}): void {
+  const limits = { ...DEFAULT_AUDIO_INPUT_BUDGET, ...budget };
+  if (buffer.numberOfChannels > limits.maxChannels) throw new AudioInputBudgetError('channels');
+  if (buffer.duration > limits.maxDurationSeconds) throw new AudioInputBudgetError('duration');
+  if (buffer.length > limits.maxFrames) throw new AudioInputBudgetError('frames');
+}
+
+export async function decodeAudioBuffer(
+  file: File,
+  audioContext: AudioContext,
+  budget: AudioInputBudget = {},
+): Promise<AudioBuffer> {
+  assertAudioFileBudget(file, budget);
+  const buffer = await audioContext.decodeAudioData(await file.arrayBuffer());
+  assertDecodedAudioBudget(buffer, budget);
+  return buffer;
+}
+
 export interface WaveformPeak {
   min: number;
   max: number;
@@ -16,8 +60,9 @@ export interface WaveformPeak {
 export async function decodeAudioFile(
   file: File,
   audioContext: AudioContext,
+  budget: AudioInputBudget = {},
 ): Promise<DecodedStereoAudio> {
-  const buffer = await audioContext.decodeAudioData(await file.arrayBuffer());
+  const buffer = await decodeAudioBuffer(file, audioContext, budget);
   const left = new Float32Array(buffer.getChannelData(0));
   const right =
     buffer.numberOfChannels > 1

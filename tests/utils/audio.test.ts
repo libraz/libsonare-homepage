@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  AudioInputBudgetError,
   amplitudeToDb,
   calculateCorrelation,
   calculatePeakRms,
@@ -72,6 +73,46 @@ describe('decodeAudioFile', () => {
     expect(decoded.left).toEqual(mono);
     expect(decoded.right).toEqual(mono);
     expect(decoded.right).not.toBe(mono);
+  });
+
+  it('rejects encoded files over budget before allocating an ArrayBuffer', async () => {
+    const context = { decodeAudioData: vi.fn() } as unknown as AudioContext;
+    const file = new File(['oversized'], 'large.wav');
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(4));
+    Object.defineProperties(file, {
+      size: { configurable: true, value: 1024 },
+      arrayBuffer: { configurable: true, value: arrayBuffer },
+    });
+
+    await expect(decodeAudioFile(file, context, { maxFileBytes: 100 })).rejects.toMatchObject({
+      code: 'file-size',
+    });
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rejects decoded duration, frame, and channel budgets before copying PCM', async () => {
+    const file = new File(['audio'], 'large-pcm.wav');
+    Object.defineProperty(file, 'arrayBuffer', {
+      configurable: true,
+      value: vi.fn(async () => new ArrayBuffer(4)),
+    });
+    const tooLong = audioBuffer([new Float32Array(100)], 10);
+    const context = {
+      decodeAudioData: vi.fn(async () => tooLong),
+    } as unknown as AudioContext;
+
+    await expect(decodeAudioFile(file, context, { maxDurationSeconds: 5 })).rejects.toBeInstanceOf(
+      AudioInputBudgetError,
+    );
+    await expect(decodeAudioFile(file, context, { maxFrames: 50 })).rejects.toMatchObject({
+      code: 'frames',
+    });
+
+    const manyChannels = audioBuffer(Array.from({ length: 4 }, () => new Float32Array(2)));
+    (context.decodeAudioData as ReturnType<typeof vi.fn>).mockResolvedValue(manyChannels);
+    await expect(decodeAudioFile(file, context, { maxChannels: 2 })).rejects.toMatchObject({
+      code: 'channels',
+    });
   });
 });
 

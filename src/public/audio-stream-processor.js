@@ -10,6 +10,8 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
     // Pre-allocated fill buffer; avoids per-block allocation/splice on the
     // audio thread (which causes GC pauses = audible glitches).
     this.chunk = new Float32Array(this.bufferSize)
+    this.bufferPool = []
+    this.maxPoolSize = 4
     this.fillCount = 0
     this.sampleOffset = 0
     this.isActive = true
@@ -17,6 +19,7 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
     // Listen for messages from main thread
     this.port.onmessage = (event) => {
       if (event.data.type === 'stop') {
+        this.flushChunk()
         this.isActive = false
       } else if (event.data.type === 'reset') {
         this.fillCount = 0
@@ -24,9 +27,22 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
         this.sampleOffset = event.data.sampleOffset || 0
         this.isActive = true
       } else if (event.data.type === 'setBufferSize') {
-        this.bufferSize = event.data.bufferSize
+        const requested = Number(event.data.bufferSize)
+        if (!Number.isInteger(requested) || requested < 128 || requested > 65536) return
+        this.flushChunk()
+        this.bufferSize = requested
         this.chunk = new Float32Array(this.bufferSize)
         this.fillCount = 0
+        this.bufferPool = []
+      } else if (event.data.type === 'recycle') {
+        const samples = event.data.samples
+        if (
+          samples instanceof Float32Array &&
+          samples.length === this.bufferSize &&
+          this.bufferPool.length < this.maxPoolSize
+        ) {
+          this.bufferPool.push(samples)
+        }
       }
     }
   }
@@ -48,7 +64,8 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
         }
       }
 
-      // Collect samples for analysis (mono - use first channel)
+      // Collect samples for analysis. Downmix all available channels so stereo
+      // material cannot disappear merely because it lives in the right channel.
       if (this.isActive && inputChannel) {
         let read = 0
         while (read < inputChannel.length) {
@@ -56,7 +73,11 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
           const remaining = this.bufferSize - this.fillCount
           const available = inputChannel.length - read
           const take = remaining < available ? remaining : available
-          this.chunk.set(inputChannel.subarray(read, read + take), this.fillCount)
+          for (let i = 0; i < take; i++) {
+            let sum = 0
+            for (let ch = 0; ch < input.length; ch++) sum += input[ch][read + i] || 0
+            this.chunk[this.fillCount + i] = sum / input.length
+          }
           this.fillCount += take
           read += take
 
@@ -64,18 +85,7 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
           // buffer to avoid a copy, then allocate a fresh backing store for the
           // next fill (transfer detaches the old one).
           if (this.fillCount === this.bufferSize) {
-            const samples = this.chunk
-            this.chunk = new Float32Array(this.bufferSize)
-            this.fillCount = 0
-            this.port.postMessage(
-              {
-                type: 'samples',
-                samples,
-                sampleOffset: this.sampleOffset,
-              },
-              [samples.buffer],
-            )
-            this.sampleOffset += this.bufferSize
+            this.emitChunk(this.bufferSize)
           }
         }
       }
@@ -83,6 +93,26 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
 
     // Return true to keep processor alive
     return true
+  }
+
+  emitChunk(length) {
+    if (length <= 0) return
+    const samples = length === this.bufferSize ? this.chunk : this.chunk.slice(0, length)
+    this.chunk = this.bufferPool.pop() || new Float32Array(this.bufferSize)
+    this.fillCount = 0
+    this.port.postMessage(
+      {
+        type: 'samples',
+        samples,
+        sampleOffset: this.sampleOffset,
+      },
+      [samples.buffer],
+    )
+    this.sampleOffset += length
+  }
+
+  flushChunk() {
+    if (this.fillCount > 0) this.emitChunk(this.fillCount)
   }
 }
 

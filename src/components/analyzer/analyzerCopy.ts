@@ -26,8 +26,8 @@ export const enCopy = {
     },
     timeSig: {
       title: 'Time signature',
-      body: 'The estimated beats per bar and beat unit, inferred from the detected beats and downbeats.',
-      tip: '4/4 dominates popular music; 3/4 and 6/8 show up in waltzes and ballads.',
+      body: 'The beats per bar and beat unit. This streaming view leaves it unreported until a reliable downbeat-based estimate is available.',
+      tip: 'A dash means the current analyzer has not produced a trustworthy meter estimate.',
     },
     duration: {
       title: 'Duration',
@@ -79,8 +79,8 @@ export const jaCopy: typeof enCopy = {
     },
     timeSig: {
       title: '拍子',
-      body: '検出したビートとダウンビートから推定した、1 小節あたりの拍数と拍の単位です。',
-      tip: 'ポピュラー音楽では 4/4 が主流で、3/4 や 6/8 はワルツやバラードに見られます。',
+      body: '1 小節あたりの拍数と拍の単位です。信頼できるダウンビート推定が得られるまでは未解析として表示します。',
+      tip: 'ダッシュ表示は、現在の解析器が信頼できる拍子をまだ算出していないことを示します。',
     },
     duration: {
       title: '長さ',

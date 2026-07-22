@@ -1,24 +1,5 @@
-import { onUnmounted, ref, shallowRef } from 'vue';
-import type {
-  BarChord,
-  FrameBuffer,
-  ProgressiveEstimate,
-  StreamAnalyzer,
-  StreamConfig,
-} from '@/wasm/index';
-
-export interface StreamingData {
-  chroma: Float32Array;
-  rms: Float32Array;
-  mel: Float32Array;
-  spectralCentroid: Float32Array;
-  spectralFlatness: Float32Array;
-  onsetStrength: Float32Array;
-  timestamps: Float32Array;
-  nFrames: number;
-  nMels: number;
-  nChroma: number;
-}
+import { onUnmounted, ref } from 'vue';
+import type { BarChord, ProgressiveEstimate, StreamAnalyzer, StreamConfig } from '@/wasm/index';
 
 export interface BarChordInfo {
   barIndex: number;
@@ -275,29 +256,6 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     accumulatedSeconds: 0,
   });
 
-  // Use shallowRef for large typed arrays to avoid deep reactivity overhead
-  const streamingData = shallowRef<StreamingData>({
-    chroma: new Float32Array(0),
-    rms: new Float32Array(0),
-    mel: new Float32Array(0),
-    spectralCentroid: new Float32Array(0),
-    spectralFlatness: new Float32Array(0),
-    onsetStrength: new Float32Array(0),
-    timestamps: new Float32Array(0),
-    nFrames: 0,
-    nMels: options.nMels ?? 128,
-    nChroma: 12,
-  });
-
-  // Accumulated frame buffers for visualization
-  const chromaHistory: Float32Array[] = [];
-  const rmsHistory: Float32Array[] = [];
-  const melHistory: Float32Array[] = [];
-  const timestampHistory: Float32Array[] = [];
-  const spectralCentroidHistory: Float32Array[] = [];
-  const spectralFlatnessHistory: Float32Array[] = [];
-  const onsetStrengthHistory: Float32Array[] = [];
-
   let analyzer: StreamAnalyzer | null = null;
   let wasmModule: typeof import('@/wasm/index') | null = null;
   let nextExpectedSampleOffset: number | null = null;
@@ -373,9 +331,10 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     // Read available frames
     const availableFrames = analyzer.availableFrames();
     if (availableFrames > 0) {
-      const frames = analyzer.readFrames(availableFrames);
-      accumulateFrames(frames);
-      updateStreamingData();
+      // Drain native frame telemetry. The page consumes progressive estimates,
+      // not the full feature history; retaining and re-flattening ~30 seconds of
+      // mel/chroma on every chunk only created growing GC pressure.
+      analyzer.readFrames(availableFrames);
     }
 
     // Update progressive estimates
@@ -383,108 +342,6 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     updateEstimate(stats.estimate);
 
     isProcessing.value = false;
-  }
-
-  function accumulateFrames(frames: FrameBuffer): void {
-    if (frames.nFrames === 0) return;
-
-    // Accumulate chroma (12 values per frame)
-    chromaHistory.push(new Float32Array(frames.chroma));
-
-    // Accumulate RMS
-    rmsHistory.push(new Float32Array(frames.rmsEnergy));
-
-    // Accumulate mel (nMels values per frame)
-    melHistory.push(new Float32Array(frames.mel));
-
-    // Accumulate timestamps
-    timestampHistory.push(new Float32Array(frames.timestamps));
-
-    // Accumulate spectral features
-    spectralCentroidHistory.push(new Float32Array(frames.spectralCentroid));
-    spectralFlatnessHistory.push(new Float32Array(frames.spectralFlatness));
-    onsetStrengthHistory.push(new Float32Array(frames.onsetStrength));
-
-    // Limit history length (keep ~30 seconds worth at 44100/512 ≈ 86 fps)
-    const maxChunks = 300;
-    while (chromaHistory.length > maxChunks) {
-      chromaHistory.shift();
-      rmsHistory.shift();
-      melHistory.shift();
-      timestampHistory.shift();
-      spectralCentroidHistory.shift();
-      spectralFlatnessHistory.shift();
-      onsetStrengthHistory.shift();
-    }
-  }
-
-  function updateStreamingData(): void {
-    const nChroma = 12;
-    const nMels = defaultConfig.nMels ?? 128;
-
-    // Calculate total frames
-    let totalFrames = 0;
-    for (const chunk of rmsHistory) {
-      totalFrames += chunk.length;
-    }
-
-    if (totalFrames === 0) return;
-
-    // Flatten arrays
-    const flatChroma = new Float32Array(totalFrames * nChroma);
-    const flatRms = new Float32Array(totalFrames);
-    const flatMel = new Float32Array(totalFrames * nMels);
-    const flatTimestamps = new Float32Array(totalFrames);
-    const flatSpectralCentroid = new Float32Array(totalFrames);
-    const flatSpectralFlatness = new Float32Array(totalFrames);
-    const flatOnsetStrength = new Float32Array(totalFrames);
-
-    let frameOffset = 0;
-    for (let i = 0; i < rmsHistory.length; i++) {
-      const chunkFrames = rmsHistory[i].length;
-
-      // Copy RMS
-      flatRms.set(rmsHistory[i], frameOffset);
-
-      // Copy timestamps
-      flatTimestamps.set(timestampHistory[i], frameOffset);
-
-      // Copy spectral features
-      flatSpectralCentroid.set(spectralCentroidHistory[i], frameOffset);
-      flatSpectralFlatness.set(spectralFlatnessHistory[i], frameOffset);
-      flatOnsetStrength.set(onsetStrengthHistory[i], frameOffset);
-
-      // Copy chroma (interleaved)
-      const chromaChunk = chromaHistory[i];
-      for (let f = 0; f < chunkFrames; f++) {
-        for (let c = 0; c < nChroma; c++) {
-          flatChroma[(frameOffset + f) * nChroma + c] = chromaChunk[f * nChroma + c] || 0;
-        }
-      }
-
-      // Copy mel (interleaved)
-      const melChunk = melHistory[i];
-      for (let f = 0; f < chunkFrames; f++) {
-        for (let m = 0; m < nMels; m++) {
-          flatMel[(frameOffset + f) * nMels + m] = melChunk[f * nMels + m] || 0;
-        }
-      }
-
-      frameOffset += chunkFrames;
-    }
-
-    streamingData.value = {
-      chroma: flatChroma,
-      rms: flatRms,
-      mel: flatMel,
-      spectralCentroid: flatSpectralCentroid,
-      spectralFlatness: flatSpectralFlatness,
-      onsetStrength: flatOnsetStrength,
-      timestamps: flatTimestamps,
-      nFrames: totalFrames,
-      nMels,
-      nChroma,
-    };
   }
 
   function updateEstimate(progressiveEstimate: ProgressiveEstimate): void {
@@ -547,27 +404,6 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
 
     nextExpectedSampleOffset = baseSampleOffset;
 
-    chromaHistory.length = 0;
-    rmsHistory.length = 0;
-    melHistory.length = 0;
-    timestampHistory.length = 0;
-    spectralCentroidHistory.length = 0;
-    spectralFlatnessHistory.length = 0;
-    onsetStrengthHistory.length = 0;
-
-    streamingData.value = {
-      chroma: new Float32Array(0),
-      rms: new Float32Array(0),
-      mel: new Float32Array(0),
-      spectralCentroid: new Float32Array(0),
-      spectralFlatness: new Float32Array(0),
-      onsetStrength: new Float32Array(0),
-      timestamps: new Float32Array(0),
-      nFrames: 0,
-      nMels: defaultConfig.nMels ?? 128,
-      nChroma: 12,
-    };
-
     estimate.value = {
       bpm: 0,
       bpmConfidence: 0,
@@ -605,7 +441,6 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     isProcessing,
     error,
     estimate,
-    streamingData,
     init,
     reinit,
     process,

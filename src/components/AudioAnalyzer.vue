@@ -54,6 +54,12 @@ const decodeErrorMessage = computed(() =>
     ja: 'この音声ファイルをデコードできませんでした。別の WAV・MP3・FLAC ファイルをお試しください。',
   }),
 );
+const processingErrorMessage = computed(() =>
+  localizedValue({
+    en: 'The audio decoded, but its visualization data could not be generated. Try a shorter file.',
+    ja: '音声はデコードできましたが、可視化データを生成できませんでした。より短いファイルをお試しください。',
+  }),
+);
 
 const {
   isAnalyzing,
@@ -70,8 +76,10 @@ const {
   isPaused,
   currentTime,
   duration,
-  loadAudio,
-  loadAudioFromArrayBuffer,
+  decodeAudio,
+  decodeAudioFromArrayBuffer,
+  setAudioBuffer,
+  resetAudio,
   play,
   pause,
   resume,
@@ -85,7 +93,6 @@ const {
 const {
   isInitialized: isStreamInitialized,
   estimate: streamEstimate,
-  streamingData,
   init: initStreamAnalyzer,
   reinit: reinitStreamAnalyzer,
   process: processAudioChunk,
@@ -115,12 +122,16 @@ const fileProgressStage = ref('');
 const hasUserFile = ref(false); // Track if user uploaded a file
 
 async function handleFile(file: File) {
-  // Stop current playback and reset state
-  if (isPlaying.value) {
-    stop();
-  }
+  // Clear the previous source before any asynchronous work so a failed
+  // replacement can never leave the old file behind under the new filename.
+  resetAudio();
   resetStreamAnalyzer();
   setProcessCallback(null);
+  result.value = null;
+  rmsData.value = null;
+  chromaData.value = null;
+  bandData.value = null;
+  beats.value = null;
 
   hasUserFile.value = true; // Mark that user uploaded a file
   fileName.value = file.name;
@@ -128,6 +139,7 @@ async function handleFile(file: File) {
   fileProgress.value = 0;
   fileProgressStage.value = 'DECODING AUDIO';
   analysisError.value = null;
+  let failurePhase: 'decode' | 'processing' = 'decode';
 
   try {
     // Initialize WASM and StreamAnalyzer if needed
@@ -137,7 +149,8 @@ async function handleFile(file: File) {
 
     fileProgress.value = 15;
     fileProgressStage.value = 'DECODING AUDIO';
-    const buffer = await loadAudio(file);
+    const buffer = await decodeAudio(file);
+    failurePhase = 'processing';
     await yieldToMain();
 
     fileProgress.value = 35;
@@ -187,6 +200,7 @@ async function handleFile(file: File) {
     fileProgressStage.value = 'FINALIZING';
     const bands = splitMelBands(melResult);
 
+    setAudioBuffer(buffer);
     rmsData.value = rms;
     chromaData.value = {
       features: chromaResult.features,
@@ -203,7 +217,7 @@ async function handleFile(file: File) {
       bpm: 0,
       bpmConfidence: 0,
       key: { root: 0, mode: 0, confidence: 0, name: '-', shortName: '-' },
-      timeSignature: { numerator: 4, denominator: 4, confidence: 0 },
+      timeSignature: { numerator: 0, denominator: 0, confidence: 0 },
       beats: [],
       chords: [],
       sections: [],
@@ -220,9 +234,16 @@ async function handleFile(file: File) {
     isLoadingFile.value = false;
     // Surface the failure and roll back the upload state so the drop zone
     // reappears with an explanation instead of silently showing a bare zone.
-    analysisError.value = decodeErrorMessage.value;
+    analysisError.value =
+      failurePhase === 'decode' ? decodeErrorMessage.value : processingErrorMessage.value;
     hasUserFile.value = false;
     fileName.value = '';
+    resetAudio();
+    result.value = null;
+    rmsData.value = null;
+    chromaData.value = null;
+    bandData.value = null;
+    beats.value = null;
     resetStreamAnalyzer();
     setProcessCallback(null);
   }
@@ -248,8 +269,14 @@ function handleSeek(time: number) {
 }
 
 function resetFile() {
-  audioBuffer.value = null;
+  resetAudio();
   result.value = null;
+  hasUserFile.value = false;
+  fileName.value = '';
+  rmsData.value = null;
+  chromaData.value = null;
+  bandData.value = null;
+  beats.value = null;
   resetStreamAnalyzer();
   setProcessCallback(null);
 }
@@ -306,7 +333,7 @@ const displayChordConfidence = computed(() => {
 });
 
 const displayTimeSignature = computed(() => {
-  if (!result.value?.timeSignature) return '-';
+  if (!result.value?.timeSignature || result.value.timeSignature.confidence <= 0) return '—';
   const ts = result.value.timeSignature;
   return `${ts.numerator}/${ts.denominator}`;
 });
@@ -399,7 +426,7 @@ async function loadDemoFile() {
     fileName.value = 'demo.mp3';
 
     t0 = performance.now();
-    const buffer = await loadAudioFromArrayBuffer(arrayBuffer.slice(0));
+    const buffer = await decodeAudioFromArrayBuffer(arrayBuffer.slice(0));
     timings['Decode audio'] = performance.now() - t0;
 
     await yieldToMain();
@@ -460,6 +487,7 @@ async function loadDemoFile() {
       return;
     }
 
+    setAudioBuffer(buffer);
     rmsData.value = rms;
     chromaData.value = {
       features: chromaResult.features,
@@ -475,7 +503,7 @@ async function loadDemoFile() {
       bpm: 0,
       bpmConfidence: 0,
       key: { root: 0, mode: 0, confidence: 0, name: '-', shortName: '-' },
-      timeSignature: { numerator: 4, denominator: 4, confidence: 0 },
+      timeSignature: { numerator: 0, denominator: 0, confidence: 0 },
       beats: [],
       chords: [],
       sections: [],
