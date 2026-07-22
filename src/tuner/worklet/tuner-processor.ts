@@ -21,6 +21,7 @@
  *   { type: 'voiceEnded', note }   a latched voice decayed to silence on its own
  */
 import { buildDefaultSpec, type ModelSpec, PhysicalVoice } from '../dsp/engine';
+import { PIANO_DIRECT_GAIN, PianoResonanceBank, PianoSoundboard } from '../dsp/piano-voice';
 
 // AudioWorkletGlobalScope ambients (not in the default lib for this project).
 declare const sampleRate: number;
@@ -67,10 +68,16 @@ class TunerProcessor extends AudioWorkletProcessor {
   /** Per-voice consecutive silent-sample count (resets on any audible block). */
   private silent: number[] = new Array(MAX_VOICES).fill(0);
   private readonly silenceHold = Math.round(sampleRate * SILENCE_HOLD_S);
+  /** Piano radiation is instrument-wide, matching NativeSynth: all dry voice
+   * outputs feed one persistent soundboard and sympathetic bank. */
+  private readonly pianoBoard = new PianoSoundboard();
+  private readonly pianoBank = new PianoResonanceBank();
+  private pianoRadiationReady = false;
+  private pianoSoundboardMix = -1;
 
   constructor() {
     super();
-    for (let i = 0; i < MAX_VOICES; ++i) this.voices.push(new PhysicalVoice(sampleRate));
+    for (let i = 0; i < MAX_VOICES; ++i) this.voices.push(new PhysicalVoice(sampleRate, true));
     this.port.onmessage = (e: MessageEvent<WorkletMessage>) => this.onMessage(e.data);
     this.port.postMessage({ type: 'ready' });
   }
@@ -78,7 +85,10 @@ class TunerProcessor extends AudioWorkletProcessor {
   private onMessage(msg: WorkletMessage): void {
     switch (msg.type) {
       case 'spec':
-        if (msg.spec) this.spec = msg.spec;
+        if (msg.spec) {
+          this.spec = msg.spec;
+          this.preparePianoRadiation(false);
+        }
         break;
       case 'noteOn':
         if (typeof msg.note === 'number') this.noteOn(msg.note, msg.velocity ?? 100);
@@ -88,6 +98,7 @@ class TunerProcessor extends AudioWorkletProcessor {
         break;
       case 'panic':
         for (const v of this.voices) v.kill();
+        this.preparePianoRadiation(true);
         break;
       case 'gain':
         if (typeof msg.value === 'number') this.outputGain = msg.value;
@@ -103,6 +114,16 @@ class TunerProcessor extends AudioWorkletProcessor {
     this.age += 1n;
     this.silent[slot] = 0;
     this.voices[slot].noteOn(this.spec, note, velocity, slot, this.age);
+  }
+
+  private preparePianoRadiation(force: boolean): void {
+    const piano = this.spec.engineMode === 'piano' ? this.spec.piano : undefined;
+    if (!piano) return;
+    if (!force && this.pianoRadiationReady && piano.soundboard === this.pianoSoundboardMix) return;
+    this.pianoBoard.prepare(sampleRate, piano.soundboard);
+    this.pianoBank.prepare(sampleRate);
+    this.pianoSoundboardMix = piano.soundboard;
+    this.pianoRadiationReady = true;
   }
 
   private noteOff(note: number): void {
@@ -132,6 +153,11 @@ class TunerProcessor extends AudioWorkletProcessor {
         s += sv;
         const av = sv < 0 ? -sv : sv;
         if (av > this.vpeak[vi]) this.vpeak[vi] = av;
+      }
+      if (this.spec.engineMode === 'piano' && this.pianoRadiationReady) {
+        const board = this.pianoBoard.process(s);
+        const sympathetic = this.pianoBank.process(this.pianoBoard.lastDiffused(), false);
+        s = PIANO_DIRECT_GAIN * s + board + sympathetic;
       }
       s *= g;
       left[i] = s;

@@ -40,12 +40,14 @@ export function useTunerEngine() {
   const error = ref<string | null>(null);
   const running = ref(false);
   const meter = ref<TunerMeterState>({ peak: 0 });
+  const faultEpoch = ref(0);
 
   const context = shallowRef<AudioContext | null>(null);
   const analyser = shallowRef<AnalyserNode | null>(null);
   let node: AudioWorkletNode | null = null;
   /** Set by dispose(); cancels an in-flight start() at its next await point. */
   let disposed = false;
+  let terminallyDisposed = false;
   /** Rejects a start() still awaiting the worklet 'ready' when dispose() runs. */
   let rejectReady: ((err: Error) => void) | null = null;
   /** Notified when a latched voice decays to silence on its own (note number). */
@@ -57,6 +59,7 @@ export function useTunerEngine() {
   }
 
   async function start(initialSpec: ModelSpec): Promise<boolean> {
+    if (terminallyDisposed) return false;
     error.value = null;
     if (ready.value) {
       void context.value?.resume();
@@ -64,6 +67,7 @@ export function useTunerEngine() {
     }
     if (starting.value) return false;
     starting.value = true;
+    disposed = false;
     try {
       const ctx = new AudioContext({ latencyHint: 'interactive' });
       context.value = ctx;
@@ -83,6 +87,11 @@ export function useTunerEngine() {
         numberOfOutputs: 1,
         outputChannelCount: [CHANNELS],
       });
+      node.onprocessorerror = () => {
+        error.value = 'Tuner audio processor failed';
+        faultEpoch.value++;
+        void teardown(false);
+      };
       const tap = ctx.createAnalyser();
       tap.fftSize = 2048;
       tap.smoothingTimeConstant = 0.75;
@@ -127,7 +136,7 @@ export function useTunerEngine() {
       // Surface the real cause (e.g. a stale dev server not serving the freshly
       // built /tuner-worklet.js) — the UI only shows a generic message.
       console.error('[tuner] engine start failed:', err);
-      await dispose();
+      await teardown(false);
       return false;
     } finally {
       rejectReady = null;
@@ -161,7 +170,8 @@ export function useTunerEngine() {
     node?.port.postMessage({ type: 'gain', value });
   }
 
-  async function dispose(): Promise<void> {
+  async function teardown(permanent: boolean): Promise<void> {
+    if (permanent) terminallyDisposed = true;
     disposed = true;
     ready.value = false;
     // Settle a start() still awaiting the worklet 'ready' so it unwinds (its
@@ -182,6 +192,7 @@ export function useTunerEngine() {
         /* already disconnected */
       }
       node.port.onmessage = null;
+      node.onprocessorerror = null;
       node = null;
     }
     if (analyser.value) {
@@ -204,12 +215,17 @@ export function useTunerEngine() {
     meter.value = { peak: 0 };
   }
 
+  async function dispose(): Promise<void> {
+    await teardown(true);
+  }
+
   return {
     ready,
     starting,
     error,
     running,
     meter,
+    faultEpoch,
     context,
     analyser,
     start,

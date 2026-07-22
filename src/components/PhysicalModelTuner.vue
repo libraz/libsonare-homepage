@@ -55,6 +55,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useTheme } from '@/composables/useTheme';
 import { useTunerAutofit } from '@/composables/useTunerAutofit';
 import { useTunerEngine } from '@/composables/useTunerEngine';
+import { useWasmBoot } from '@/composables/useWasmBoot';
 import { type AutofitResult, OracleTooShortError, prepareOracle } from '@/tuner/dsp/autofit';
 import { buildDrumSeedSpec } from '@/tuner/dsp/drum-seeds';
 import { buildDefaultSpec, type ModelSpec } from '@/tuner/dsp/engine';
@@ -75,7 +76,7 @@ const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const { isDark } = useTheme();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
 const engine = useTunerEngine();
-const libVersion = ref('');
+const { version: libVersion } = useWasmBoot();
 
 const BODY_TYPES: BodyType[] = ['none', 'guitar', 'violin', 'wood-tube', 'brass-bell', 'vocal'];
 const MIN_BASE_NOTE = 24;
@@ -222,6 +223,7 @@ const metrics = ref<CompareMetrics>({ rmsErrorPct: 0, specSimPct: 0 });
 /** Cached WASM baseline render per engine (the bounce is the expensive step). */
 const referenceCache = new Map<PhysicalEngineMode, Float32Array>();
 let adjustTimer: ReturnType<typeof setTimeout> | null = null;
+let adjustIdle: number | null = null;
 
 // ---- GM/GS contribution target --------------------------------------------
 // The tool's purpose is to voice libsonare's GM/GS fallback bank. A target ties
@@ -458,9 +460,23 @@ async function runCompare(): Promise<void> {
 function scheduleAdjustedRender(): void {
   if (!compareActive.value) return;
   if (adjustTimer) clearTimeout(adjustTimer);
+  if (adjustIdle !== null && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(adjustIdle);
+    adjustIdle = null;
+  }
   adjustTimer = setTimeout(() => {
     adjustTimer = null;
-    renderAdjustedNow();
+    if ('requestIdleCallback' in window) {
+      adjustIdle = window.requestIdleCallback(
+        () => {
+          adjustIdle = null;
+          renderAdjustedNow();
+        },
+        { timeout: 350 },
+      );
+    } else {
+      renderAdjustedNow();
+    }
   }, 140);
 }
 
@@ -1073,16 +1089,6 @@ async function startEngine(): Promise<void> {
   void runCompare();
 }
 
-async function loadLibVersion(): Promise<void> {
-  try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
-    libVersion.value = wasm.version();
-  } catch {
-    // Leave the placeholder if the engine cannot be probed.
-  }
-}
-
 onMounted(() => {
   reduceMotion.value =
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1090,12 +1096,13 @@ onMounted(() => {
   // Live-preview each improved candidate through the normal update path so the
   // knobs, worklet voice and adjusted trace converge on screen during a fit.
   autofit.onBestSpec((next) => pushSpec(next));
-  void loadLibVersion();
   void startEngine();
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', releaseAll);
 });
+
+watch(engine.faultEpoch, () => releaseAll());
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown);
@@ -1104,7 +1111,9 @@ onUnmounted(() => {
   for (const timer of scaleTimers) clearTimeout(timer);
   for (const timer of phraseTimers) clearTimeout(timer);
   if (adjustTimer) clearTimeout(adjustTimer);
+  if (adjustIdle !== null && 'cancelIdleCallback' in window) window.cancelIdleCallback(adjustIdle);
   autofit.dispose();
+  midiInput.disconnect();
   void engine.dispose();
 });
 </script>
@@ -1660,6 +1669,39 @@ onUnmounted(() => {
           </div>
         </div>
       </details>
+
+      <!-- ===== MIDI PHRASE / SCORE ===== -->
+      <section class="tn-sec">
+        <div class="tn-sec__head">
+          <h3 class="tn-sec__title">{{ copy.sections.midi }}</h3>
+          <span v-if="phrase.length" class="tn-sec__count">{{ phrase.length }} {{ copy.midi.count }}</span>
+        </div>
+        <div class="tn-actions">
+          <button
+            type="button" class="tn-chip tn-chip--wide"
+            :disabled="!midiInput.supported.value || midiInput.connecting.value"
+            @click="connectMidi"
+          >
+            {{ midiInput.connecting.value ? copy.midi.connecting : midiInput.connected.value ? copy.midi.connected : copy.midi.connect }}
+          </button>
+          <button
+            type="button" class="tn-chip tn-chip--wide"
+            :class="{ 'tn-chip--accent': recording }"
+            :disabled="!isReady"
+            @click="toggleRecord"
+          >{{ recording ? copy.midi.stop : copy.midi.record }}</button>
+          <button type="button" class="tn-chip tn-chip--wide" :disabled="!phrase.length" @click="playPhrase">{{ copy.midi.play }}</button>
+          <button type="button" class="tn-chip tn-chip--wide" @click="openMidiImport">{{ copy.midi.importSmf }}</button>
+          <button type="button" class="tn-chip tn-chip--wide" :disabled="!phrase.length" @click="exportMidi">{{ copy.midi.exportSmf }}</button>
+          <button type="button" class="tn-chip tn-chip--wide" :disabled="!phrase.length" @click="clearPhrase">{{ copy.midi.clear }}</button>
+          <button type="button" class="tn-chip tn-chip--wide" @click="toggleScore">{{ showScore ? copy.score.hide : copy.score.show }}</button>
+          <input ref="midiInputEl" type="file" accept=".mid,.midi,audio/midi" class="tn-file" @change="onMidiFile" />
+        </div>
+        <p v-if="midiInput.error.value" class="tn-error">{{ midiInput.error.value }}</p>
+        <p v-else-if="!midiInput.supported.value" class="tn-hint">{{ copy.midi.unavailable }}</p>
+        <p v-else-if="!phrase.length" class="tn-hint">{{ copy.midi.empty }}</p>
+        <TunerScore v-if="showScore" :phrase="phrase" :labels="copy.score" />
+      </section>
 
       <!-- ===== PATCH JSON ===== -->
       <section class="tn-sec">

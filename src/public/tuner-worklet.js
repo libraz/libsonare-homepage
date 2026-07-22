@@ -4253,14 +4253,16 @@
     pianoBoard;
     pianoBank;
     usePianoBoard = false;
+    externalPianoRadiation;
     env;
     drive = 0;
     driveMakeup = 1;
     gain = 1;
     active = false;
     note = -1;
-    constructor(sampleRate2) {
+    constructor(sampleRate2, externalPianoRadiation = false) {
       this.sampleRate = sampleRate2;
+      this.externalPianoRadiation = externalPianoRadiation;
       this.env = new AmpEnv(sampleRate2);
     }
     noteOn(spec, note, velocity, voiceIndex, age) {
@@ -4270,7 +4272,7 @@
       const sr = this.sampleRate;
       const seed = voiceSeed(voiceIndex, note, age);
       this.current = this.startCore(spec, note, velocity, seed);
-      if (spec.engineMode === "piano" && spec.piano) {
+      if (spec.engineMode === "piano" && spec.piano && !this.externalPianoRadiation) {
         this.pianoBoard ??= new PianoSoundboard();
         this.pianoBank ??= new PianoResonanceBank();
         this.pianoBoard.prepare(sr, spec.piano.soundboard);
@@ -4485,16 +4487,25 @@
     /** Per-voice consecutive silent-sample count (resets on any audible block). */
     silent = new Array(MAX_VOICES).fill(0);
     silenceHold = Math.round(sampleRate * SILENCE_HOLD_S);
+    /** Piano radiation is instrument-wide, matching NativeSynth: all dry voice
+     * outputs feed one persistent soundboard and sympathetic bank. */
+    pianoBoard = new PianoSoundboard();
+    pianoBank = new PianoResonanceBank();
+    pianoRadiationReady = false;
+    pianoSoundboardMix = -1;
     constructor() {
       super();
-      for (let i = 0; i < MAX_VOICES; ++i) this.voices.push(new PhysicalVoice(sampleRate));
+      for (let i = 0; i < MAX_VOICES; ++i) this.voices.push(new PhysicalVoice(sampleRate, true));
       this.port.onmessage = (e) => this.onMessage(e.data);
       this.port.postMessage({ type: "ready" });
     }
     onMessage(msg) {
       switch (msg.type) {
         case "spec":
-          if (msg.spec) this.spec = msg.spec;
+          if (msg.spec) {
+            this.spec = msg.spec;
+            this.preparePianoRadiation(false);
+          }
           break;
         case "noteOn":
           if (typeof msg.note === "number") this.noteOn(msg.note, msg.velocity ?? 100);
@@ -4504,6 +4515,7 @@
           break;
         case "panic":
           for (const v of this.voices) v.kill();
+          this.preparePianoRadiation(true);
           break;
         case "gain":
           if (typeof msg.value === "number") this.outputGain = msg.value;
@@ -4516,6 +4528,15 @@
       this.age += 1n;
       this.silent[slot] = 0;
       this.voices[slot].noteOn(this.spec, note, velocity, slot, this.age);
+    }
+    preparePianoRadiation(force) {
+      const piano = this.spec.engineMode === "piano" ? this.spec.piano : void 0;
+      if (!piano) return;
+      if (!force && this.pianoRadiationReady && piano.soundboard === this.pianoSoundboardMix) return;
+      this.pianoBoard.prepare(sampleRate, piano.soundboard);
+      this.pianoBank.prepare(sampleRate);
+      this.pianoSoundboardMix = piano.soundboard;
+      this.pianoRadiationReady = true;
     }
     noteOff(note) {
       const soft = DECAYING_ENGINES.has(this.spec.engineMode);
@@ -4543,6 +4564,11 @@
           s += sv;
           const av = sv < 0 ? -sv : sv;
           if (av > this.vpeak[vi]) this.vpeak[vi] = av;
+        }
+        if (this.spec.engineMode === "piano" && this.pianoRadiationReady) {
+          const board = this.pianoBoard.process(s);
+          const sympathetic = this.pianoBank.process(this.pianoBoard.lastDiffused(), false);
+          s = PIANO_DIRECT_GAIN * s + board + sympathetic;
         }
         s *= g;
         left[i] = s;

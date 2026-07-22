@@ -188,6 +188,7 @@ export class PhysicalVoice {
   private pianoBoard?: PianoSoundboard;
   private pianoBank?: PianoResonanceBank;
   private usePianoBoard = false;
+  private readonly externalPianoRadiation: boolean;
   private env: AmpEnv;
   private drive = 0;
   private driveMakeup = 1;
@@ -195,8 +196,9 @@ export class PhysicalVoice {
   active = false;
   note = -1;
 
-  constructor(sampleRate: number) {
+  constructor(sampleRate: number, externalPianoRadiation = false) {
     this.sampleRate = sampleRate;
+    this.externalPianoRadiation = externalPianoRadiation;
     this.env = new AmpEnv(sampleRate);
   }
 
@@ -209,7 +211,7 @@ export class PhysicalVoice {
     this.current = this.startCore(spec, note, velocity, seed);
     // Prepare the piano soundboard/sympathetic bank at the patch's soundboard
     // mix so `spec.piano.soundboard` reaches the radiated output.
-    if (spec.engineMode === 'piano' && spec.piano) {
+    if (spec.engineMode === 'piano' && spec.piano && !this.externalPianoRadiation) {
       this.pianoBoard ??= new PianoSoundboard();
       this.pianoBank ??= new PianoResonanceBank();
       this.pianoBoard.prepare(sr, spec.piano.soundboard);

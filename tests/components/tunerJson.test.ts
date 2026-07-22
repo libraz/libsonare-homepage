@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { jsonToSpec } from '@/components/tuner/tunerJson';
+import { jsonToSpec, specToJson } from '@/components/tuner/tunerJson';
 import { buildDefaultSpec, renderNoteOffline } from '@/tuner/dsp/engine';
 import type { ModalPatchParams } from '@/tuner/dsp/modal-voice';
 import { MAX_MODAL_MODES } from '@/tuner/dsp/modal-voice';
+import { ENGINE_INFO, type PhysicalEngineMode } from '@/tuner/dsp/params';
 
 const SR = 48000;
 
@@ -130,6 +131,49 @@ describe('jsonToSpec import validation (M-21)', () => {
     expect(spec.ks!.brightness).toBe(0.42);
     expect(spec.ks!.decayS).toBe(2.5);
     expect(spec.ks!.sympathetic).toBe(true);
+  });
+
+  it('round-trips every engine default without changing its parameters', () => {
+    for (const engine of Object.keys(ENGINE_INFO) as PhysicalEngineMode[]) {
+      const original = buildDefaultSpec(engine);
+      expect(jsonToSpec(specToJson(original))).toEqual(original);
+    }
+  });
+
+  it('preserves primitive percussion tables and valid noise filter enums', () => {
+    for (const noiseOutput of ['lowpass', 'bandpass', 'highpass'] as const) {
+      const original = buildDefaultSpec('percussion');
+      original.percussion!.modeRatios = [1, 1.7, 2.2, 3.1, 4.4, 5.2];
+      original.percussion!.modeM = [0, 1, 2, 3, 4, 5];
+      original.percussion!.noiseOutput = noiseOutput;
+      const restored = jsonToSpec(specToJson(original));
+      expect(restored.percussion!.modeRatios).toEqual(original.percussion!.modeRatios);
+      expect(restored.percussion!.modeM).toEqual(original.percussion!.modeM);
+      expect(restored.percussion!.noiseOutput).toBe(noiseOutput);
+    }
+  });
+
+  it('rejects invalid string enums and clamps wrapper fields', () => {
+    const defaults = buildDefaultSpec('percussion');
+    const spec = jsonToSpec({
+      engine: 'percussion',
+      params: { noiseOutput: 'not-a-filter' },
+      wrapper: {
+        body: 'spaceship',
+        bodyMix: 5,
+        drive: -2,
+        gain: 99,
+        ampEnv: { attackMs: -1, sustain: 4, releaseMs: Number.NaN },
+      },
+    });
+    expect(spec.percussion!.noiseOutput).toBe(defaults.percussion!.noiseOutput);
+    expect(spec.body).toBe(defaults.body);
+    expect(spec.bodyMix).toBe(1);
+    expect(spec.drive).toBe(0);
+    expect(spec.gain).toBe(4);
+    expect(spec.ampEnv.attackMs).toBe(0);
+    expect(spec.ampEnv.sustain).toBe(1);
+    expect(spec.ampEnv.releaseMs).toBe(defaults.ampEnv.releaseMs);
   });
 
   it('still rejects a patch with an unknown engine', () => {

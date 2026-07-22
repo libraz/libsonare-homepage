@@ -8,33 +8,45 @@
 import { buildDefaultSpec, type ModelSpec } from '@/tuner/dsp/engine';
 import { ENGINE_INFO, type PhysicalEngineMode, paramSpecsFor } from '@/tuner/dsp/params';
 
+const BODY_TYPES = new Set<ModelSpec['body']>([
+  'none',
+  'guitar',
+  'violin',
+  'wood-tube',
+  'brass-bell',
+  'vocal',
+]);
+const STRING_ENUMS: Record<string, ReadonlySet<string>> = {
+  noiseOutput: new Set(['lowpass', 'bandpass', 'highpass']),
+};
+
 /** The deep `*PatchParams` object for a spec's active engine. */
 export function activeParams(spec: ModelSpec): Record<string, unknown> {
   switch (spec.engineMode) {
     case 'karplus-strong':
-      return spec.ks as Record<string, unknown>;
+      return spec.ks as unknown as Record<string, unknown>;
     case 'modal':
-      return spec.modal as Record<string, unknown>;
+      return spec.modal as unknown as Record<string, unknown>;
     case 'bowed-string':
-      return spec.bowed as Record<string, unknown>;
+      return spec.bowed as unknown as Record<string, unknown>;
     case 'reed':
-      return spec.reed as Record<string, unknown>;
+      return spec.reed as unknown as Record<string, unknown>;
     case 'brass':
-      return spec.brass as Record<string, unknown>;
+      return spec.brass as unknown as Record<string, unknown>;
     case 'flute':
-      return spec.flute as Record<string, unknown>;
+      return spec.flute as unknown as Record<string, unknown>;
     case 'piano':
-      return spec.piano as Record<string, unknown>;
+      return spec.piano as unknown as Record<string, unknown>;
     case 'pipe-organ':
-      return spec.pipeOrgan as Record<string, unknown>;
+      return spec.pipeOrgan as unknown as Record<string, unknown>;
     case 'percussion':
-      return spec.percussion as Record<string, unknown>;
+      return spec.percussion as unknown as Record<string, unknown>;
     case 'plucked-string':
-      return spec.pluckedString as Record<string, unknown>;
+      return spec.pluckedString as unknown as Record<string, unknown>;
     case 'vocal':
-      return spec.vocal as Record<string, unknown>;
+      return spec.vocal as unknown as Record<string, unknown>;
     case 'free-reed':
-      return spec.freeReed as Record<string, unknown>;
+      return spec.freeReed as unknown as Record<string, unknown>;
   }
 }
 
@@ -103,21 +115,28 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  * default, coercing each numeric field to a finite value and each boolean.
  * Unknown fields on the incoming element are ignored.
  */
-function mergeTableElement(def: unknown, incoming: unknown): unknown {
-  if (!isPlainObject(def)) return def;
-  const out: Record<string, unknown> = { ...def };
-  if (isPlainObject(incoming)) {
-    for (const key of Object.keys(out)) {
-      const dv = out[key];
-      const iv = incoming[key];
-      if (typeof dv === 'number') {
-        out[key] = typeof iv === 'number' && Number.isFinite(iv) ? iv : dv;
-      } else if (typeof dv === 'boolean') {
-        out[key] = typeof iv === 'boolean' ? iv : dv;
-      }
-    }
+function mergeTableElement(def: unknown, incoming: unknown, key = ''): unknown {
+  if (typeof def === 'number') {
+    return typeof incoming === 'number' && Number.isFinite(incoming) ? incoming : def;
   }
-  return out;
+  if (typeof def === 'boolean') return typeof incoming === 'boolean' ? incoming : def;
+  if (typeof def === 'string') {
+    if (typeof incoming !== 'string') return def;
+    const allowed = STRING_ENUMS[key];
+    return !allowed || allowed.has(incoming) ? incoming : def;
+  }
+  if (Array.isArray(def)) {
+    const source = Array.isArray(incoming) ? incoming : [];
+    return def.map((value, index) => mergeTableElement(value, source[index], key));
+  }
+  if (!isPlainObject(def)) return def;
+  const source = isPlainObject(incoming) ? incoming : {};
+  return Object.fromEntries(
+    Object.entries(def).map(([childKey, value]) => [
+      childKey,
+      mergeTableElement(value, source[childKey], childKey),
+    ]),
+  );
 }
 
 /**
@@ -139,15 +158,19 @@ function sanitizeParams(
     if (typeof dv === 'number') {
       let n = typeof iv === 'number' && Number.isFinite(iv) ? iv : dv;
       const r = ranges.get(key);
-      if (r) n = Math.min(Math.max(n, r.min), r.max);
+      // Several native parameters use an exact zero as an "off / track note"
+      // sentinel even though the visible knob's active range starts above zero.
+      if (r && !(n === 0 && dv === 0)) n = Math.min(Math.max(n, r.min), r.max);
       defaults[key] = n;
     } else if (typeof dv === 'boolean') {
       defaults[key] = typeof iv === 'boolean' ? iv : dv;
+    } else if (typeof dv === 'string') {
+      defaults[key] = mergeTableElement(dv, iv, key);
     } else if (Array.isArray(dv)) {
       // Keep the default (fixed-capacity) table length; merge whatever the
       // import supplied element-by-element.
       const src = Array.isArray(iv) ? iv : [];
-      defaults[key] = dv.map((el, i) => mergeTableElement(el, src[i]));
+      defaults[key] = dv.map((el, i) => mergeTableElement(el, src[i], key));
     }
     // Non-array objects and unknown shapes: keep the default.
   }
@@ -165,20 +188,32 @@ export function jsonToSpec(json: unknown): ModelSpec {
   }
   if (j.wrapper && typeof j.wrapper === 'object') {
     const w = j.wrapper;
-    if (w.body !== undefined) spec.body = w.body;
-    if (Number.isFinite(w.bodyMix)) spec.bodyMix = w.bodyMix as number;
-    if (Number.isFinite(w.drive)) spec.drive = w.drive as number;
+    if (typeof w.body === 'string' && BODY_TYPES.has(w.body as ModelSpec['body'])) {
+      spec.body = w.body as ModelSpec['body'];
+    }
+    if (typeof w.bodyMix === 'number' && Number.isFinite(w.bodyMix)) {
+      spec.bodyMix = clamp(w.bodyMix, 0, 1);
+    }
+    if (typeof w.drive === 'number' && Number.isFinite(w.drive)) {
+      spec.drive = clamp(w.drive, 0, 1);
+    }
     if (w.ampEnv && typeof w.ampEnv === 'object') {
       const env = { ...spec.ampEnv };
       for (const key of Object.keys(env) as (keyof typeof env)[]) {
-        const v = (w.ampEnv as Record<string, unknown>)[key];
-        if (typeof v === 'number' && Number.isFinite(v)) env[key] = v;
+        const v = (w.ampEnv as unknown as Record<string, unknown>)[key];
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          env[key] = key === 'sustain' ? clamp(v, 0, 1) : clamp(v, 0, 120_000);
+        }
       }
       spec.ampEnv = env;
     }
-    if (Number.isFinite(w.gain)) spec.gain = w.gain as number;
+    if (typeof w.gain === 'number' && Number.isFinite(w.gain)) spec.gain = clamp(w.gain, 0, 4);
   }
   return spec;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 /** Read the contribution target back from an imported patch, if present. */
