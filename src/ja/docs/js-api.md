@@ -1093,7 +1093,8 @@ interface DynamicRangeReport {
 ```typescript
 // チャンネル間のピアソン相関(−1..1)
 function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// ミッド/サイドのステレオ幅
+// ミッド/サイドのステレオ幅: 0 = モノ、約 1 = 広いステレオ。上限なし
+// （完全な逆相などでミッド信号が無音なら Infinity）
 function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // サンプルごとのミッド/サイド点列
 function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): VectorscopeReport
@@ -1123,6 +1124,8 @@ interface PhaseScopeReport {
 ```
 
 `meteringStereoCorrelation`・`meteringStereoWidth`・`meteringVectorscope`・`meteringPhaseScope` は `left` と `right` が同じ長さである必要があります。
+
+`meteringStereoWidth` は正規化された百分率ではなく、サイド／ミッドのエネルギー比です。`0` は完全なモノラル、約 `1` は広いステレオ、より大きな有限値はデコリレーションまたは逆相成分が増えていることを表します。`2` にクランプしてはいけません。ミッドチャンネルが無音なら、意図的に `Infinity` を返します。
 
 ### スペクトラムスナップショット
 

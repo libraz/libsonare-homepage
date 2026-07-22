@@ -1176,12 +1176,12 @@ interface PercussiveRequest extends ValidateOptions {
 }
 interface TimeStretchRequest extends ValidateOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
     rate: number;
 }
 interface PitchShiftRequest extends ValidateOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
     semitones: number;
 }
 interface PitchCorrectToMidiRequest extends ValidateOptions {
@@ -1215,7 +1215,7 @@ interface NoteMoveRequest extends NoteMoveOptions, ValidateOptions {
 }
 interface NormalizeRequest extends ValidateOptions {
     samples: Float32Array;
-    sampleRate: number;
+    sampleRate?: number;
     targetDb?: number;
 }
 interface SpectralEditRequest extends SpectralEditOptions, ValidateOptions {
@@ -1256,7 +1256,7 @@ declare function percussive(samples: Float32Array, sampleRate?: number, options?
  * Time-stretch audio without changing pitch.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param rate - Time stretch rate (0.5 = double duration, 2.0 = half duration)
  * @returns Time-stretched audio
  */
@@ -1266,7 +1266,7 @@ declare function timeStretch(samples: Float32Array, sampleRate: number, rate: nu
  * Pitch-shift audio without changing duration.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param semitones - Pitch shift in semitones (+12 = one octave up, -12 = one octave down)
  * @returns Pitch-shifted audio
  */
@@ -1340,7 +1340,7 @@ declare function noteMove(samples: Float32Array, sampleRate?: number, options?: 
  * Normalize audio to target peak level.
  *
  * @param samples - Audio samples (mono, float32)
- * @param sampleRate - Sample rate in Hz
+ * @param sampleRate - Sample rate in Hz (default: 22050)
  * @param targetDb - Target peak level in dB (default: 0 dB = full scale)
  * @returns Normalized audio
  */
@@ -2645,6 +2645,10 @@ declare class Project {
     undo(): void;
     /** Redo the most recently undone edit. */
     redo(): void;
+    /** Clear the undo/redo history without changing the current project state. */
+    clearHistory(): void;
+    /** Cap the undo history depth (clamped to >= 1); evicts oldest entries beyond the cap. */
+    setMaxUndoDepth(depth: number): void;
     /** Replace a MIDI clip's entire event list. */
     setMidiEvents(clipId: number, events: ReadonlyArray<ProjectMidiEvent | readonly [number, number, number]>): void;
     /** Import an in-memory SMF buffer; returns the first added clip id. */
@@ -5079,8 +5083,10 @@ interface WaveformPeaksReport {
 declare function meteringStereoCorrelation(request: MeteringStereoRequest): number;
 declare function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
 /**
- * Side / mid energy ratio, clamped to `[0, 2]`: 0 = pure mono, ~1 = wide
- * stereo, 2 = fully decorrelated / out-of-phase.
+ * Side / mid energy ratio in `[0, +Infinity)`: 0 = pure mono, ~1 = wide stereo,
+ * larger = increasingly decorrelated / out-of-phase. The value is unbounded and
+ * returns `Infinity` when the mid channel is silent (a mono-collapsed / fully
+ * out-of-phase signal).
  */
 declare function meteringStereoWidth(request: MeteringStereoRequest): number;
 declare function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number;
@@ -6022,7 +6028,7 @@ declare class RealtimeVoiceChanger {
     constructor(config?: RealtimeVoiceChangerConfigInput);
     prepare(sampleRate: number, maxBlockSize?: number, channels?: number): void;
     reset(): void;
-    setConfig(config: RealtimeVoiceChangerConfigInput): void;
+    setConfig(config: RealtimeVoiceChangerConfigInput | RealtimeVoiceChangerPodConfig): void;
     configJson(): string;
     latencySamples(): number;
     processMono(samples: Float32Array): Float32Array;

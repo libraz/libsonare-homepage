@@ -41,6 +41,14 @@ engine.stop();
 engine.destroy();
 ```
 
+`getTransportState()` includes a musical playhead as well as the raw sample and PPQ positions. `barCount` is zero-based, while `beat` is one-based within that bar and `beatFraction` is in `[0, 1)`. A UI can therefore render a conventional bar:beat display without deriving it from PPQ itself:
+
+```typescript
+const { barCount, beat, beatFraction } = transport;
+const playhead = `${barCount + 1}:${beat}`; // for example, "3:2"
+// beatFraction is the progress through that beat; use it for a smooth indicator.
+```
+
 Beyond transport, `RealtimeEngine` also registers parameter metadata, sets automation lanes, seeks to markers, configures metronome clicks, processes with monitor output, captures audio, runs offline bounces, and freezes clips. Two telemetry families matter when wiring a UI:
 
 - **Meters** — `drainMeterTelemetry()` for the stereo fast path, and `drainMeterTelemetryWide()` for per-plane records on surround/offline targets.

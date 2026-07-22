@@ -170,6 +170,8 @@ function panLawCode(panLaw) {
     return panLaw;
   }
   switch (panLaw) {
+    case "const3dB":
+      return 0;
     case "const4.5dB":
       return 1;
     case "const6dB":
@@ -177,7 +179,7 @@ function panLawCode(panLaw) {
     case "linear0dB":
       return 3;
     default:
-      return 0;
+      throw new Error(`Invalid pan law: ${panLaw}`);
   }
 }
 function panModeCode(panMode) {
@@ -185,6 +187,8 @@ function panModeCode(panMode) {
     return panMode;
   }
   switch (panMode) {
+    case "balance":
+      return 0;
     case "stereoPan":
     case "stereo-pan":
       return 1;
@@ -192,17 +196,34 @@ function panModeCode(panMode) {
     case "dual-pan":
       return 2;
     default:
-      return 0;
+      throw new Error(`Invalid pan mode: ${panMode}`);
   }
 }
 function meterTapCode(tap) {
-  return tap === "preFader" || tap === 0 ? 0 : 1;
+  if (typeof tap === "number") {
+    return tap;
+  }
+  switch (tap) {
+    case "preFader":
+      return 0;
+    case "postFader":
+      return 1;
+    default:
+      throw new Error(`Invalid meter tap: ${tap}`);
+  }
 }
 function sendTimingCode(timing) {
   if (typeof timing === "number") {
     return timing;
   }
-  return timing === "preFader" ? 1 : 0;
+  switch (timing) {
+    case "postFader":
+      return 0;
+    case "preFader":
+      return 1;
+    default:
+      throw new Error(`Invalid send timing: ${timing}`);
+  }
 }
 
 // src/realtime_engine.ts
@@ -1235,6 +1256,61 @@ var Mixer = class _Mixer {
 };
 
 // src/realtime_voice_changer.ts
+function isFlatVoiceChangerPod(config) {
+  return typeof config === "object" && config !== null && "retuneSemitones" in config;
+}
+function flatVoiceChangerPodToNested(pod) {
+  return {
+    inputGainDb: pod.inputGainDb,
+    outputGainDb: pod.outputGainDb,
+    wetMix: pod.wetMix,
+    retune: { semitones: pod.retuneSemitones, mix: pod.retuneMix, grainSize: pod.retuneGrainSize },
+    formant: {
+      factor: pod.formantFactor,
+      amount: pod.formantAmount,
+      body: pod.formantBody,
+      brightness: pod.formantBrightness,
+      nasal: pod.formantNasal
+    },
+    eq: {
+      highpassHz: pod.eqHighpassHz,
+      bodyDb: pod.eqBodyDb,
+      presenceDb: pod.eqPresenceDb,
+      airDb: pod.eqAirDb
+    },
+    gate: {
+      thresholdDb: pod.gateThresholdDb,
+      attackMs: pod.gateAttackMs,
+      releaseMs: pod.gateReleaseMs,
+      rangeDb: pod.gateRangeDb
+    },
+    compressor: {
+      thresholdDb: pod.compressorThresholdDb,
+      ratio: pod.compressorRatio,
+      attackMs: pod.compressorAttackMs,
+      releaseMs: pod.compressorReleaseMs,
+      makeupGainDb: pod.compressorMakeupGainDb
+    },
+    deesser: {
+      frequencyHz: pod.deesserFrequencyHz,
+      thresholdDb: pod.deesserThresholdDb,
+      ratio: pod.deesserRatio,
+      rangeDb: pod.deesserRangeDb
+    },
+    reverb: {
+      mix: pod.reverbMix,
+      timeMs: pod.reverbTimeMs,
+      damping: pod.reverbDamping,
+      seed: pod.reverbSeed
+    },
+    limiter: {
+      ceilingDb: pod.limiterCeilingDb,
+      releaseMs: pod.limiterReleaseMs,
+      enableIspLimiter: pod.limiterEnableIspLimiter,
+      ispCeilingDbtp: pod.limiterIspCeilingDbtp
+    }
+  };
+}
 var RealtimeVoiceChanger = class {
   constructor(config = "neutral-monitor") {
     const module2 = getSonareModule();
@@ -1247,7 +1323,8 @@ var RealtimeVoiceChanger = class {
     this.changer.reset();
   }
   setConfig(config) {
-    this.changer.setConfig(config);
+    const resolved = isFlatVoiceChangerPod(config) ? flatVoiceChangerPodToNested(config) : config;
+    this.changer.setConfig(resolved);
   }
   configJson() {
     return this.changer.configJson();

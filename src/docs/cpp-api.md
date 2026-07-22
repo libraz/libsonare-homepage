@@ -252,6 +252,24 @@ The three calls cover different parts of the workflow:
 Aspect hints and `reference_absorption` define the equivalent-room prior.
 :::
 
+### Air absorption in large rooms
+
+For a large hall, the geometry-only RT60 estimate can overstate the high-frequency tail because it does not account for air loss over a long path. The C++ acoustic core can add the ISO 9613-1 atmospheric-absorption term to the Sabine/Eyring calculation. It is opt-in: omitting the last argument keeps the earlier geometry-only result exactly.
+
+```cpp
+#include <acoustic/late_reverb.h>
+
+acoustic::AirAbsorption air;
+air.temperature_c = 20.0f;
+air.humidity_percent = 50.0f;
+
+const auto rt60 = acoustic::shoebox_reverb_time(
+    room, acoustic::ReverbModel::Eyring, &air);
+// rt60.rt60_bands: air loss shortens the high bands most.
+```
+
+`AirAbsorption` defaults to 20 °C and 50% relative humidity. This lower-level C++ calculation is not part of the C ABI, Node, Python, or WASM shoebox helpers; those public helpers continue to use the geometry-only model.
+
 ## MusicAnalyzer <Badge type="warning" text="Heavy" />
 
 Facade class for comprehensive music analysis with lazy initialization.

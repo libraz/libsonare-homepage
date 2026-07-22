@@ -277,6 +277,14 @@ project.redo()   # re-applies the gain edit
 
 :::
 
+For long-lived editors, you can bound the memory retained for undo or start a fresh editing session without changing the arrangement. `setMaxUndoDepth(depth)` keeps the most recent `depth` edits and immediately discards older entries; the WASM method requires an integer of at least `1`. `clearHistory()` removes both undo and redo entries while leaving the current project state untouched. Node exposes the same camelCase methods; Python uses `set_max_undo_depth(...)` and `clear_history()`.
+
+```typescript
+project.setMaxUndoDepth(100); // retain at most the 100 most recent edits
+// ... save or hand the project to another editing session ...
+project.clearHistory();       // the arrangement stays as-is; undo/redo are now empty
+```
+
 Because the history is exact, calling `toJson()` before an edit, undoing, and calling `toJson()` again yields byte-identical JSON — a useful invariant for testing and for change detection in an editor UI.
 
 Compound clip edits are one history transaction: an operation that changes several clips is undone or redone in one step, rather than leaving the arrangement half-applied.

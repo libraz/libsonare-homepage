@@ -41,6 +41,14 @@ engine.stop();
 engine.destroy();
 ```
 
+`getTransportState()` には生のサンプル位置／PPQ 位置だけでなく、音楽的な再生位置も含まれます。`barCount` は 0 始まり、`beat` はその小節内で 1 始まり、`beatFraction` は `[0, 1)` の範囲です。そのため、PPQ から自前で換算せずに一般的な小節:拍表示を作れます。
+
+```typescript
+const { barCount, beat, beatFraction } = transport;
+const playhead = `${barCount + 1}:${beat}`; // 例: "3:2"
+// beatFraction はその拍の進行度。滑らかなインジケーターに使える。
+```
+
 `RealtimeEngine` はトランスポート以外にも、パラメータ情報の登録、オートメーションレーンの設定、マーカーへのシーク、メトロノームクリックの設定、モニター出力付き処理、キャプチャ、オフラインバウンス、クリップのフリーズも扱えます。UI を組むうえで重要なテレメトリは 2 系統あります。
 
 - **メーター** — ステレオ高速経路なら `drainMeterTelemetry()`、サラウンド／オフライン対象のプレーン別レコードなら `drainMeterTelemetryWide()` を使います。

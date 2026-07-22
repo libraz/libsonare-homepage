@@ -363,7 +363,7 @@ Standalone level, dynamics, and stereo-image meters. Each accepts an optional `o
 | `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | Clipped-sample runs; `options` adds `threshold` (default `0.999`) and `minRegionSamples` (default `1`) |
 | `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | Sliding-window dynamic range; `options` adds `windowSec`, `hopSec`, `lowPercentile`, `highPercentile` (omit for defaults: window 3 s, hop 1 s, low 0.10, high 0.95) |
 | `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | Pearson correlation, −1..1 |
-| `meteringStereoWidth(left, right, sr?, options?)` | `number` | Mid/side stereo width |
+| `meteringStereoWidth(left, right, sr?, options?)` | `number` | Side/mid energy ratio: 0 = mono, ~1 = wide stereo; unbounded (`Infinity` when mid is silent) |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | Per-sample mid/side point series |
 | `meteringPhaseScope(left, right, sr?, options?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
 | `meteringSpectrum(samples, sr?, options?)` | `SpectrumReport` | Single-frame magnitude/power/dB spectrum; `options` adds `nFft`, `applyOctaveSmoothing`, `octaveFraction`, `dbRef`, `dbAmin` |

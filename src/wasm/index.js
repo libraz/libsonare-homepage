@@ -244,12 +244,16 @@ function percussive(samples, sampleRate = 22050, options = {}) {
 function timeStretch(samples, sampleRate, rate, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, rate, ...options } : samples;
   assertSamples("timeStretch", request.samples, request.validate !== false);
-  return requireModule().timeStretch(request.samples, request.sampleRate, request.rate);
+  return requireModule().timeStretch(request.samples, request.sampleRate ?? 22050, request.rate);
 }
 function pitchShift(samples, sampleRate, semitones, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, semitones, ...options } : samples;
   assertSamples("pitchShift", request.samples, request.validate !== false);
-  return requireModule().pitchShift(request.samples, request.sampleRate, request.semitones);
+  return requireModule().pitchShift(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.semitones
+  );
 }
 function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, currentMidi, targetMidi, ...options } : samples;
@@ -336,7 +340,11 @@ function noteMove(samples, sampleRate = 22050, options = {}) {
 function normalize(samples, sampleRate, targetDb = 0, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, targetDb, ...options } : samples;
   assertSamples("normalize", request.samples, request.validate !== false);
-  return requireModule().normalize(request.samples, request.sampleRate, request.targetDb ?? 0);
+  return requireModule().normalize(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.targetDb ?? 0
+  );
 }
 function spectralEdit(samples, sampleRate, ops = [], options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ops, ...options } : samples;
@@ -1257,7 +1265,11 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   const fmax = options.fmax ?? 2093;
   validateFrequencyBounds("analyzeMelody", fmin, fmax);
   if (fmin <= 0) {
-    throw new RangeError("analyzeMelody: fmin must be positive");
+    throw new SonareError(
+      4 /* InvalidParameter */,
+      "InvalidParameter",
+      "analyzeMelody: fmin must be positive"
+    );
   }
   validatePositiveIntegers("analyzeMelody", {
     frameLength: options.frameLength ?? 2048,
@@ -1266,7 +1278,11 @@ function analyzeMelody(samples, sampleRate = 22050, options = {}) {
   const threshold = options.threshold ?? 0.1;
   assertFiniteScalar("analyzeMelody", threshold, "threshold");
   if (threshold <= 0) {
-    throw new RangeError("analyzeMelody: threshold must be positive");
+    throw new SonareError(
+      4 /* InvalidParameter */,
+      "InvalidParameter",
+      "analyzeMelody: threshold must be positive"
+    );
   }
   return requireModule9().analyzeMelody(
     samples,
@@ -3555,6 +3571,17 @@ var Project = class _Project {
   redo() {
     this.native.redo();
   }
+  /** Clear the undo/redo history without changing the current project state. */
+  clearHistory() {
+    this.native.clearHistory();
+  }
+  /** Cap the undo history depth (clamped to >= 1); evicts oldest entries beyond the cap. */
+  setMaxUndoDepth(depth) {
+    if (!Number.isInteger(depth) || depth < 1) {
+      throw new RangeError("Project.setMaxUndoDepth: depth must be an integer >= 1");
+    }
+    this.native.setMaxUndoDepth(depth);
+  }
   /** Replace a MIDI clip's entire event list. */
   setMidiEvents(clipId, events) {
     assertProjectMidiEvents("Project.setMidiEvents", events);
@@ -4021,6 +4048,8 @@ function panLawCode(panLaw) {
     return panLaw;
   }
   switch (panLaw) {
+    case "const3dB":
+      return 0;
     case "const4.5dB":
       return 1;
     case "const6dB":
@@ -4028,7 +4057,7 @@ function panLawCode(panLaw) {
     case "linear0dB":
       return 3;
     default:
-      return 0;
+      throw new Error(`Invalid pan law: ${panLaw}`);
   }
 }
 function panModeCode(panMode) {
@@ -4036,6 +4065,8 @@ function panModeCode(panMode) {
     return panMode;
   }
   switch (panMode) {
+    case "balance":
+      return 0;
     case "stereoPan":
     case "stereo-pan":
       return 1;
@@ -4043,17 +4074,34 @@ function panModeCode(panMode) {
     case "dual-pan":
       return 2;
     default:
-      return 0;
+      throw new Error(`Invalid pan mode: ${panMode}`);
   }
 }
 function meterTapCode(tap) {
-  return tap === "preFader" || tap === 0 ? 0 : 1;
+  if (typeof tap === "number") {
+    return tap;
+  }
+  switch (tap) {
+    case "preFader":
+      return 0;
+    case "postFader":
+      return 1;
+    default:
+      throw new Error(`Invalid meter tap: ${tap}`);
+  }
 }
 function sendTimingCode(timing) {
   if (typeof timing === "number") {
     return timing;
   }
-  return timing === "preFader" ? 1 : 0;
+  switch (timing) {
+    case "postFader":
+      return 0;
+    case "preFader":
+      return 1;
+    default:
+      throw new Error(`Invalid send timing: ${timing}`);
+  }
 }
 
 // src/realtime_engine.ts
@@ -5330,6 +5378,61 @@ var Mixer = class _Mixer {
 };
 
 // src/realtime_voice_changer.ts
+function isFlatVoiceChangerPod(config) {
+  return typeof config === "object" && config !== null && "retuneSemitones" in config;
+}
+function flatVoiceChangerPodToNested(pod) {
+  return {
+    inputGainDb: pod.inputGainDb,
+    outputGainDb: pod.outputGainDb,
+    wetMix: pod.wetMix,
+    retune: { semitones: pod.retuneSemitones, mix: pod.retuneMix, grainSize: pod.retuneGrainSize },
+    formant: {
+      factor: pod.formantFactor,
+      amount: pod.formantAmount,
+      body: pod.formantBody,
+      brightness: pod.formantBrightness,
+      nasal: pod.formantNasal
+    },
+    eq: {
+      highpassHz: pod.eqHighpassHz,
+      bodyDb: pod.eqBodyDb,
+      presenceDb: pod.eqPresenceDb,
+      airDb: pod.eqAirDb
+    },
+    gate: {
+      thresholdDb: pod.gateThresholdDb,
+      attackMs: pod.gateAttackMs,
+      releaseMs: pod.gateReleaseMs,
+      rangeDb: pod.gateRangeDb
+    },
+    compressor: {
+      thresholdDb: pod.compressorThresholdDb,
+      ratio: pod.compressorRatio,
+      attackMs: pod.compressorAttackMs,
+      releaseMs: pod.compressorReleaseMs,
+      makeupGainDb: pod.compressorMakeupGainDb
+    },
+    deesser: {
+      frequencyHz: pod.deesserFrequencyHz,
+      thresholdDb: pod.deesserThresholdDb,
+      ratio: pod.deesserRatio,
+      rangeDb: pod.deesserRangeDb
+    },
+    reverb: {
+      mix: pod.reverbMix,
+      timeMs: pod.reverbTimeMs,
+      damping: pod.reverbDamping,
+      seed: pod.reverbSeed
+    },
+    limiter: {
+      ceilingDb: pod.limiterCeilingDb,
+      releaseMs: pod.limiterReleaseMs,
+      enableIspLimiter: pod.limiterEnableIspLimiter,
+      ispCeilingDbtp: pod.limiterIspCeilingDbtp
+    }
+  };
+}
 var RealtimeVoiceChanger = class {
   constructor(config = "neutral-monitor") {
     const module2 = getSonareModule();
@@ -5342,7 +5445,8 @@ var RealtimeVoiceChanger = class {
     this.changer.reset();
   }
   setConfig(config) {
-    this.changer.setConfig(config);
+    const resolved = isFlatVoiceChangerPod(config) ? flatVoiceChangerPodToNested(config) : config;
+    this.changer.setConfig(resolved);
   }
   configJson() {
     return this.changer.configJson();

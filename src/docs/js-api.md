@@ -1168,7 +1168,8 @@ interface DynamicRangeReport {
 ```typescript
 // Pearson correlation between channels, −1..1
 function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// Mid/side stereo width
+// Mid/side stereo width: 0 = mono, ~1 = wide stereo; unbounded above
+// (Infinity when the mid signal is silent, such as fully out-of-phase audio)
 function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // Per-sample mid/side point series
 function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): VectorscopeReport
@@ -1198,6 +1199,8 @@ interface PhaseScopeReport {
 ```
 
 `meteringStereoCorrelation`, `meteringStereoWidth`, `meteringVectorscope`, and `meteringPhaseScope` require `left` and `right` to be the same length.
+
+`meteringStereoWidth` is a side-to-mid energy ratio, not a normalized percentage: `0` is pure mono, around `1` is a wide stereo signal, and larger finite values mean increasingly decorrelated or out-of-phase content. Do not clamp it to `2`; when the mid channel is silent it deliberately returns `Infinity`.
 
 ### Spectrum snapshot
 

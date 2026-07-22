@@ -243,6 +243,24 @@ Audio morphed = effects::acoustic::room_morph(recording, morph_config);
 アスペクトヒントと `reference_absorption` は、等価ルームの事前条件を決めます。
 :::
 
+### 大空間での空気吸収
+
+大きなホールでは、長い伝搬経路での空気損失を考慮しない幾何学のみの RT60 推定は、高域の残響を長く見積もりすぎることがあります。C++ の音響コアでは、Sabine/Eyring 計算に ISO 9613-1 の大気吸収項を加えられます。これはオプトインです。最後の引数を省略すれば、従来の幾何学のみの結果がそのまま得られます。
+
+```cpp
+#include <acoustic/late_reverb.h>
+
+acoustic::AirAbsorption air;
+air.temperature_c = 20.0f;
+air.humidity_percent = 50.0f;
+
+const auto rt60 = acoustic::shoebox_reverb_time(
+    room, acoustic::ReverbModel::Eyring, &air);
+// rt60.rt60_bands: 空気損失により、とくに高域が短くなる。
+```
+
+`AirAbsorption` の既定値は 20 ℃・相対湿度 50% です。この低レベル C++ 計算は C ABI、Node、Python、WASM のシューボックスヘルパーには含まれません。これらの公開ヘルパーは引き続き幾何学のみのモデルを使います。
+
 ## MusicAnalyzer <Badge type="warning" text="Heavy" />
 
 複数の音楽解析をまとめて扱う、遅延初期化のクラスです。
