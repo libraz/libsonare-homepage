@@ -5,11 +5,10 @@
  *
  * A sine is drawn as the continuous, band-limited waveform a converter actually
  * reconstructs, with the stored sample points marked on top. The samples are
- * aligned worst-case — the true peak falls exactly between two of them — so as the
- * frequency climbs toward Nyquist the samples land further down the slope and the
- * reconstructed curve rises higher above them. When the highest sample is pushed to
- * full scale, the inter-sample peak pokes above 0 dBFS: silent in the numbers, a
- * clip on playback. Everything is computed in-browser; no clip or WASM.
+ * aligned with a true peak between the central pair. The finite sample column is
+ * then measured and normalized from its actual largest absolute value: at some
+ * frequencies a dot near another cycle lands closer to a peak than the central
+ * pair. Everything is computed in-browser; no clip or WASM.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
@@ -18,6 +17,7 @@ import { prepareCanvas2D } from '../canvas';
 import { useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import { buildTruePeakSampleModel } from './truePeakMath';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -38,9 +38,10 @@ const nyq = computed<number>(() => Number(values.nyquist ?? 0.4));
 // Half the sample spacing in phase, i.e. the phase from a sample to the true peak
 // under worst-case alignment. cos(theta) = sample peak / true peak.
 const theta = computed<number>(() => (Math.PI / 2) * nyq.value);
-const sampleLin = computed<number>(() => 10 ** (sampleDb.value / 20));
-const trueLin = computed<number>(() => sampleLin.value / Math.max(1e-3, Math.cos(theta.value)));
-const trueDb = computed<number>(() => 20 * Math.log10(trueLin.value));
+const peakModel = computed(() => buildTruePeakSampleModel(sampleDb.value, nyq.value));
+const sampleLin = computed<number>(() => peakModel.value.samplePeak);
+const trueLin = computed<number>(() => peakModel.value.continuousPeak);
+const trueDb = computed<number>(() => peakModel.value.truePeakDb);
 
 // ---- presentation state ----------------------------------------------------
 const clips = computed(() => trueDb.value > 0);
@@ -126,9 +127,21 @@ function paint(): void {
   ctx.textBaseline = 'bottom';
   ctx.fillText('0 dBFS', padX, yAt(1) - 2);
 
+  // Enumerate the exact finite sample column before drawing guides. At some
+  // frequencies a sample farther from the centre lands closer to another peak.
+  const samplePhaseStep = 2 * th;
+  let sampleMax = Number.NEGATIVE_INFINITY;
+  let sampleMin = Number.POSITIVE_INFINITY;
+  for (let k = -200; k <= 200; k++) {
+    const ph = (k + 0.5) * samplePhaseStep;
+    if (Math.abs(ph) > halfSpan) continue;
+    const value = amp * Math.cos(ph);
+    sampleMax = Math.max(sampleMax, value);
+    sampleMin = Math.min(sampleMin, value);
+  }
+
   // Continuous reconstructed waveform: amp * cos(phase). Highlight the overshoot
   // segments (where the curve rises above the highest stored sample).
-  const sampleMax = amp * Math.cos(th);
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#2dd4bf';
   ctx.shadowColor = 'rgba(45, 212, 191, 0.6)';
@@ -174,7 +187,6 @@ function paint(): void {
 
   // Stored samples: dots at t_k = (k + 0.5) sample offsets from the peak, so the
   // peak always falls midway between two of them (worst case).
-  const samplePhaseStep = 2 * th; // phase between adjacent samples
   ctx.fillStyle = '#a78bfa';
   ctx.shadowColor = 'rgba(167, 139, 250, 0.8)';
   ctx.shadowBlur = 5;
@@ -207,6 +219,8 @@ function paint(): void {
   ctx.beginPath();
   ctx.moveTo(padX, yAt(sampleMax));
   ctx.lineTo(padX + innerW, yAt(sampleMax));
+  ctx.moveTo(padX, yAt(sampleMin));
+  ctx.lineTo(padX + innerW, yAt(sampleMin));
   ctx.stroke();
   ctx.setLineDash([]);
 

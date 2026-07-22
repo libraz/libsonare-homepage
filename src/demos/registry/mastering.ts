@@ -171,7 +171,7 @@ export const masteringDemos: SonareDemoDef[] = [
       {
         key: 'nyquist',
         kind: 'range',
-        default: 0.4,
+        default: 0.48,
         min: 0.15,
         max: 0.48,
         step: 0.01,
