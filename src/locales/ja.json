@@ -37,7 +37,12 @@
     "inline": {
       "signalError": "信号エラー",
       "unknownId": "不明なデモ ID",
-      "unimplementedArchetype": "未実装のデモタイプ"
+      "unimplementedArchetype": "未実装のデモタイプ",
+      "loadError": {
+        "title": "デモの読み込みに失敗しました",
+        "body": "通信状況を確認して、もう一度お試しください。",
+        "reload": "再読み込み"
+      }
     },
     "waveform": {
       "title": "波形"

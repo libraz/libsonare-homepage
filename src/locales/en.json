@@ -37,7 +37,12 @@
     "inline": {
       "signalError": "Signal error",
       "unknownId": "Unknown demo id",
-      "unimplementedArchetype": "Archetype not yet implemented"
+      "unimplementedArchetype": "Archetype not yet implemented",
+      "loadError": {
+        "title": "Failed to load this demo",
+        "body": "Check your connection and try again.",
+        "reload": "Reload"
+      }
     },
     "waveform": {
       "title": "Waveform"
