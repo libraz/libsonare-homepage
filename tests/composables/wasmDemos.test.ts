@@ -61,6 +61,8 @@ class MockAudioContext {
       ],
     );
   }
+
+  close = vi.fn(async () => {});
 }
 
 type WorkerListener = (event: MessageEvent) => void;

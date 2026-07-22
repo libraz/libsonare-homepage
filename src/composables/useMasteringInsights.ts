@@ -119,7 +119,12 @@ export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?:
       const report = await mastering.analyzeSource(STREAMING_TARGETS);
       if (id === insightRequestId) insightReport.value = report;
     } catch (error) {
+      // Insight analysis is a best-effort background pass. A failure here (e.g. a
+      // clip too short for the assistant window) must not surface as a fatal demo
+      // error on a clip that still masters fine — clear the shared error the
+      // analysis path set and keep it on this non-fatal channel instead.
       console.warn('Mastering insight analysis failed:', error);
+      if (id === insightRequestId) mastering.error.value = null;
     } finally {
       if (id === insightRequestId) isAnalyzingInsights.value = false;
     }

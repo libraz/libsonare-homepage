@@ -16,7 +16,6 @@ const props = defineProps<{
   suggestions: string[];
   preview: MasteringPreviewRow[];
   canApply?: boolean;
-  qualityTargetLufs?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -68,11 +67,6 @@ function formatGain(value: number): string {
 function formatCeiling(value: number): string {
   if (!Number.isFinite(value)) return '-';
   return `${value.toFixed(1)} dBTP`;
-}
-
-function formatLufs(value: number): string {
-  if (!Number.isFinite(value)) return '-';
-  return `${value.toFixed(1)} LUFS`;
 }
 
 function formatSuggestion(move: string): string {
@@ -134,9 +128,6 @@ function formatSuggestion(move: string): string {
             </span>
           </header>
           <div class="master-insights__body">
-            <p v-if="qualityTargetLufs != null" class="master-insights__quality">
-              {{ t('master.insights.qualityGuard', { value: formatLufs(qualityTargetLufs) }) }}
-            </p>
             <ul v-if="suggestions.length" class="master-insights__moves">
               <li v-for="(move, index) in suggestions" :key="index">{{ formatSuggestion(move) }}</li>
             </ul>
@@ -260,17 +251,6 @@ function formatSuggestion(move: string): string {
   color: var(--demo-text-muted);
   font-size: 12px;
   line-height: 1.6;
-}
-
-.master-insights__quality {
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--demo-warn-border, var(--demo-border-strong));
-  border-radius: 6px;
-  background: var(--demo-warn-bg, transparent);
-  color: var(--demo-warn-text);
-  font-size: 11px;
-  line-height: 1.5;
 }
 
 .master-insights__moves {

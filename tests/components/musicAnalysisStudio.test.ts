@@ -121,6 +121,8 @@ class MockAudioContext {
           : new Float32Array([0, -0.25, 0.5, -0.75, 1, -0.5, 0.25, 0]),
     };
   }
+
+  close = vi.fn(async () => {});
 }
 
 class MockFile {

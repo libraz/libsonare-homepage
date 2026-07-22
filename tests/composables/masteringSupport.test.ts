@@ -76,7 +76,9 @@ describe('mastering metrics and report helpers', () => {
     );
     expect(fallbackRight.peakDb).toBeCloseTo(0, 6);
     expect(fallbackRight.correlation).toBeGreaterThan(0.9);
-    expect(formatMasteringDuration(59.6)).toBe('0:60');
+    expect(formatMasteringDuration(59.6)).toBe('1:00');
+    expect(formatMasteringDuration(Number.NaN)).toBe('0:00');
+    expect(formatMasteringDuration(Number.POSITIVE_INFINITY)).toBe('0:00');
     expect(dbToLinear(-Infinity)).toBe(0);
     expect(normalizeRange(-99, -24, -8)).toBe(0);
     expect(normalizeRange(0, -24, -8)).toBe(100);

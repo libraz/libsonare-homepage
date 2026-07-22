@@ -42,10 +42,12 @@ export function analyzeMasteringSignal(
 }
 
 export function formatMasteringDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const rest = Math.round(seconds % 60)
-    .toString()
-    .padStart(2, '0');
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
+  // Round to whole seconds first, then split — rounding the remainder in
+  // isolation can carry to 60 (e.g. 59.6 -> "0:60" instead of "1:00").
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = (total % 60).toString().padStart(2, '0');
   return `${minutes}:${rest}`;
 }
 

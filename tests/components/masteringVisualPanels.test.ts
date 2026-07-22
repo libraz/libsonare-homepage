@@ -256,7 +256,6 @@ describe('MasteringInsights', () => {
     expect(wrapper.text()).toContain('0.0 dB');
     expect(wrapper.text()).toContain('-');
     expect(wrapper.text()).toContain('Set ceiling <= -2.2 dBTP');
-    expect(wrapper.text()).toContain('Quality guard: rendering at -17.5 LUFS');
     expect(wrapper.find('.master-insights__platform--risk').exists()).toBe(true);
 
     await wrapper

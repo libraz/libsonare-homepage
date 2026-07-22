@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { init, masteringChainStereo, masteringPairAnalyze, version } from '../src/wasm/index.js';
 
@@ -6,43 +5,94 @@ export const sampleRate = 22050;
 export const seconds = 2;
 export const length = sampleRate * seconds;
 
-export const presets = [
-  ['pop', buildConfig({ targetLufs: -14, tiltDb: 0.4, ratio: 2.2, air: 0.24, width: 1.08 })],
-  ['edm', buildConfig({ targetLufs: -12, tiltDb: -0.2, ratio: 3.0, air: 0.32, width: 1.18 })],
-  ['acoustic', buildConfig({ targetLufs: -16, tiltDb: 0.1, ratio: 1.5, air: 0.16, width: 0.96 })],
-  ['hiphop', buildConfig({ targetLufs: -13, tiltDb: -0.5, ratio: 2.8, air: 0.2, width: 1.02 })],
-  [
-    'livehouseSmall',
-    buildConfig({ targetLufs: -14, tiltDb: 0.4, ratio: 2.0, air: 0.18, width: 1.0 }),
-  ],
-  [
-    'livehouseLarge',
-    buildConfig({ targetLufs: -14, tiltDb: 0.2, ratio: 2.1, air: 0.16, width: 1.05 }),
-  ],
-  [
-    'aiMusic',
-    buildConfig({ targetLufs: -14, tiltDb: 0.3, ratio: 2.1, air: 0.58, width: 1.0, denoise: true }),
-  ],
-  [
-    'speech',
-    buildConfig({ targetLufs: -16, tiltDb: 0.0, ratio: 3.0, air: 0.12, width: 0.9, denoise: true }),
-  ],
-];
+// Neutral tuning + default module settings: exercise the production chain-config
+// builder along its preset/venue branches rather than a hand-rolled config.
+const NEUTRAL_TUNING = { tone: 50, width: 50, dynamics: 50 };
+
+// The production config builder and the canonical preset/venue ID tables live in
+// TypeScript source. Bundling them in-memory (with a Vue stub, since the builder
+// ships alongside a Vue composable) lets this plain-node gate exercise the exact
+// code path the demo runs — and iterate the real MasteringPresetId × VenueId sets
+// instead of a drifting hand-maintained list.
+let masteringModulePromise;
+
+export function loadMasteringModule() {
+  if (!masteringModulePromise) masteringModulePromise = bundleMasteringModule();
+  return masteringModulePromise;
+}
+
+async function bundleMasteringModule() {
+  // Import esbuild lazily: a static import makes vite/vitest pre-transform this
+  // module (it is also imported by tests/scripts/validateMasteringPresets.test.ts)
+  // and choke on the shebang. A dynamic import keeps it out of that transform.
+  const esbuild = await import('esbuild');
+  const rootDir = fileURLToPath(new URL('..', import.meta.url));
+  const stubVue = {
+    name: 'stub-vue',
+    setup(build) {
+      build.onResolve({ filter: /^vue$/ }, () => ({ path: 'vue', namespace: 'stub-vue' }));
+      build.onLoad({ filter: /.*/, namespace: 'stub-vue' }, () => ({
+        contents: 'export const ref = () => {}; export const shallowRef = () => {};',
+        loader: 'js',
+      }));
+    },
+  };
+  const result = await esbuild.build({
+    stdin: {
+      contents: [
+        "export { buildMasteringConfig } from './src/composables/useMastering.ts';",
+        "export { MASTERING_PRESETS, MASTERING_VENUES, MASTERING_PRESET_TARGETS } from './src/utils/masteringUi.ts';",
+      ].join('\n'),
+      resolveDir: rootDir,
+      sourcefile: 'validator-entry.ts',
+      loader: 'ts',
+    },
+    bundle: true,
+    treeShaking: true,
+    format: 'esm',
+    platform: 'node',
+    write: false,
+    plugins: [stubVue],
+  });
+  const code = result.outputFiles[0].text;
+  return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+}
+
+export async function buildPresetEntries() {
+  const { buildMasteringConfig, MASTERING_PRESETS, MASTERING_VENUES, MASTERING_PRESET_TARGETS } =
+    await loadMasteringModule();
+
+  const entries = [];
+  for (const { id: preset } of MASTERING_PRESETS) {
+    for (const { id: venue } of MASTERING_VENUES) {
+      const config = buildMasteringConfig({
+        preset,
+        venue,
+        targetLufs: MASTERING_PRESET_TARGETS[preset],
+        tuning: NEUTRAL_TUNING,
+      });
+      entries.push([`${preset}/${venue}`, config]);
+    }
+  }
+  return entries;
+}
 
 export async function validateMasteringPresets({
   api = { init, masteringChainStereo, masteringPairAnalyze, version },
-  presetEntries = presets,
+  presetEntries,
   log = () => {},
 } = {}) {
   await api.init();
   log(`libsonare ${api.version()}`);
+
+  const entries = presetEntries ?? (await buildPresetEntries());
 
   const source = makeSyntheticMix();
   const reference = makeReferenceMix();
 
   const failures = [];
 
-  for (const [name, config] of presetEntries) {
+  for (const [name, config] of entries) {
     try {
       const result = api.masteringChainStereo(source.left, source.right, sampleRate, config);
       assertFinite(`${name}.inputLufs`, result.inputLufs);

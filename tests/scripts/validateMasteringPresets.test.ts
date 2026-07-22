@@ -1,8 +1,15 @@
+// @vitest-environment node
+// This gate script bundles the production TS config builder with esbuild, whose
+// TextEncoder invariant fails under jsdom; run it in the node environment (also a
+// closer match to how `node scripts/validate-mastering-presets.mjs` runs in CI).
 import { describe, expect, it, vi } from 'vitest';
+import { MASTERING_PRESETS, MASTERING_VENUES } from '@/utils/masteringUi';
 import {
   assertFinite,
   buildConfig,
+  buildPresetEntries,
   length,
+  loadMasteringModule,
   makeReferenceMix,
   makeSyntheticMix,
   maxAbs,
@@ -170,6 +177,33 @@ describe('validate-mastering-presets script helpers', () => {
     await expect(
       validateMasteringPresets({ api, presetEntries: [['aiMusic', denoiseConfig]] }),
     ).resolves.toEqual([]);
+  });
+
+  it('exercises the real preset and venue IDs through the production config builder', async () => {
+    const module = await loadMasteringModule();
+
+    // The gate must iterate the exact ID tables the demo ships — not a private,
+    // drift-prone list. Bundling the production source keeps them in lock-step.
+    expect(module.MASTERING_PRESETS.map((preset: { id: string }) => preset.id)).toEqual(
+      MASTERING_PRESETS.map((preset) => preset.id),
+    );
+    expect(module.MASTERING_VENUES.map((venue: { id: string }) => venue.id)).toEqual(
+      MASTERING_VENUES.map((venue) => venue.id),
+    );
+    expect(typeof module.buildMasteringConfig).toBe('function');
+
+    const entries = await buildPresetEntries();
+    expect(entries).toHaveLength(MASTERING_PRESETS.length * MASTERING_VENUES.length);
+    const names = entries.map(([name]: [string, unknown]) => name);
+    for (const { id: preset } of MASTERING_PRESETS) {
+      for (const { id: venue } of MASTERING_VENUES) {
+        expect(names).toContain(`${preset}/${venue}`);
+      }
+    }
+    // Every entry is a fully-shaped chain config with a loudness target.
+    for (const [, config] of entries as Array<[string, { loudness?: { targetLufs?: number } }]>) {
+      expect(Number.isFinite(config.loudness?.targetLufs)).toBe(true);
+    }
   });
 
   it('throws helpful errors for non-finite scalar values', () => {

@@ -150,7 +150,6 @@ const targetLufs = computed(() =>
 const recommendedLufs = computed(() => MASTERING_PRESET_TARGETS[selectedPreset.value]);
 const selectedPresetName = computed(() => t(`master.presets.${selectedPreset.value}.name`));
 const effectiveTargetLufs = computed(() => targetLufs.value);
-const qualityGuardLufs = computed<number | null>(() => null);
 
 const { sourceMetrics, masterMetrics, referenceMetrics, meterReadings, phasePoints, stereoImage } =
   useMasteringMetering({
@@ -362,7 +361,13 @@ const quickRenderButtonLabel = computed(() => {
   if (mastering.isRendering.value) return t('master.quick.processing');
   return t('master.quick.processButton');
 });
-const quickProcessingSeconds = computed(() => (mastering.source.value ? '12' : '--'));
+const quickProcessingSeconds = computed(() => {
+  const duration = mastering.source.value?.duration;
+  if (!duration || !Number.isFinite(duration)) return '--';
+  // Rough offline-render estimate that tracks clip length instead of a fixed
+  // figure. The chain renders faster than realtime, so scale the duration down.
+  return String(Math.max(3, Math.round(duration * 0.2)));
+});
 const quickRenderProgressLabel = computed(() => {
   if (mastering.isRendering.value) return renderStageLabel.value;
   return t('master.quick.processingEta', { seconds: quickProcessingSeconds.value });
@@ -746,7 +751,6 @@ function createReportUrl(): string {
           :suggestions="insightSuggestions"
           :preview="insightPreview"
           :can-apply="!!insightReport"
-          :quality-target-lufs="qualityGuardLufs"
           @apply="applyAssistantSettings"
           @refresh="analyzeSourceInsights"
         />
@@ -828,7 +832,6 @@ function createReportUrl(): string {
           :suggestions="insightSuggestions"
           :preview="insightPreview"
           :can-apply="!!insightReport"
-          :quality-target-lufs="qualityGuardLufs"
           @apply="applyAssistantSettings"
           @refresh="analyzeSourceInsights"
         />

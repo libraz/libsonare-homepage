@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type DecodedMasteringAudio, useMastering } from '@/composables/useMastering';
+import { useMasteringInsights } from '@/composables/useMasteringInsights';
 
 const wasm = vi.hoisted(() => ({
   init: vi.fn(),
@@ -44,9 +45,14 @@ type WorkerErrorListener = (event: ErrorEvent) => void;
 
 class ErrorWorkerMock {
   static messages: unknown[] = [];
+  static instances: ErrorWorkerMock[] = [];
   private messageListeners = new Set<WorkerMessageListener>();
   private errorListeners = new Set<WorkerErrorListener>();
   terminated = false;
+
+  constructor() {
+    ErrorWorkerMock.instances.push(this);
+  }
 
   addEventListener(
     type: 'message' | 'error',
@@ -81,6 +87,45 @@ class ErrorWorkerMock {
   }
 }
 
+// Simulates a genuine uncaught worker crash: postMessage dispatches an 'error'
+// event (the ErrorEvent path) rather than a recoverable protocol-error message.
+class CrashWorkerMock {
+  static instances: CrashWorkerMock[] = [];
+  private messageListeners = new Set<WorkerMessageListener>();
+  private errorListeners = new Set<WorkerErrorListener>();
+  terminated = false;
+
+  constructor() {
+    CrashWorkerMock.instances.push(this);
+  }
+
+  addEventListener(
+    type: 'message' | 'error',
+    listener: WorkerMessageListener | WorkerErrorListener,
+  ) {
+    if (type === 'message') this.messageListeners.add(listener as WorkerMessageListener);
+    else this.errorListeners.add(listener as WorkerErrorListener);
+  }
+
+  removeEventListener(
+    type: 'message' | 'error',
+    listener: WorkerMessageListener | WorkerErrorListener,
+  ) {
+    if (type === 'message') this.messageListeners.delete(listener as WorkerMessageListener);
+    else this.errorListeners.delete(listener as WorkerErrorListener);
+  }
+
+  postMessage() {
+    for (const listener of this.errorListeners) {
+      listener({ message: 'worker crashed', error: new Error('worker crashed') } as ErrorEvent);
+    }
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+}
+
 describe('useMastering failure paths and report parsing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,13 +133,23 @@ describe('useMastering failure paths and report parsing', () => {
     MasteringAudioContextMock.nextDecodeError = null;
     MasteringAudioContextMock.instances = [];
     ErrorWorkerMock.messages = [];
+    ErrorWorkerMock.instances = [];
+    CrashWorkerMock.instances = [];
     vi.stubGlobal('AudioContext', MasteringAudioContextMock);
     vi.stubGlobal('Worker', ErrorWorkerMock);
     wasm.init.mockResolvedValue(undefined);
+
     wasm.lufs.mockReturnValue({ integratedLufs: -16.25 });
     wasm.masteringAudioProfile.mockReturnValue('{"duration":12}');
     wasm.masteringAssistantSuggest.mockReturnValue('not-json');
     wasm.masteringStreamingPreview.mockReturnValue('{"platforms":[{"name":"A"}]}');
+  });
+
+  // Restore globals after the file so the AudioContext/Worker stubs don't leak
+  // into later test files sharing the worker (which broke masteringSupport's
+  // jsdom localStorage).
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('loads mono files into dual-channel mastering audio and clears previous renders', async () => {
@@ -201,5 +256,61 @@ describe('useMastering failure paths and report parsing', () => {
     const mastering = useMastering();
     await expect(mastering.analyzeSource([])).rejects.toThrow('No audio loaded');
     expect(wasm.init).not.toHaveBeenCalled();
+  });
+
+  it('terminates and replaces the worker after an uncaught worker crash', async () => {
+    vi.stubGlobal('Worker', CrashWorkerMock);
+    const mastering = useMastering();
+    const file = new File(['audio'], 'crash.wav', { type: 'audio/wav' });
+    Object.defineProperty(file, 'arrayBuffer', {
+      configurable: true,
+      value: vi.fn(async () => new ArrayBuffer(8)),
+    });
+    await mastering.loadFile(file);
+
+    const options = {
+      preset: 'pop' as const,
+      targetLufs: -14,
+      tuning: { tone: 50, width: 50, dynamics: 50 },
+    };
+
+    await expect(mastering.render(options)).rejects.toThrow('worker crashed');
+    expect(CrashWorkerMock.instances).toHaveLength(1);
+    expect(CrashWorkerMock.instances[0].terminated).toBe(true);
+
+    // The crashed worker must not be reused — the next render spins up a fresh
+    // one instead of posting into a terminated worker that never settles.
+    await expect(mastering.render(options)).rejects.toThrow('worker crashed');
+    expect(CrashWorkerMock.instances).toHaveLength(2);
+  });
+
+  it('keeps a background insight failure off the fatal error channel', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      // The assistant rejects clips shorter than one analysis window, but such a
+      // clip still masters fine — the failure must stay non-fatal.
+      wasm.masteringAudioProfile.mockImplementation(() => {
+        throw new Error('audio too short');
+      });
+
+      const mastering = useMastering();
+      const file = new File(['audio'], 'short.wav', { type: 'audio/wav' });
+      Object.defineProperty(file, 'arrayBuffer', {
+        configurable: true,
+        value: vi.fn(async () => new ArrayBuffer(8)),
+      });
+      await mastering.loadFile(file);
+
+      const insights = useMasteringInsights(mastering);
+      await insights.analyzeSourceInsights();
+
+      expect(mastering.error.value).toBeNull();
+      expect(insights.insightReport.value).toBeNull();
+      expect(insights.isAnalyzingInsights.value).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
+    }
   });
 });

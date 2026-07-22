@@ -253,19 +253,23 @@ export function useMastering() {
       throw new Error('No audio loaded');
     }
     await initWasm();
+    const sampleRate = source.value.sampleRate;
     const samples = mixToMono(source.value.left, source.value.right);
     try {
-      return {
-        profile: parseJsonReport(
-          wasmModule.masteringAudioProfile(samples, source.value.sampleRate),
-        ),
-        suggestions: parseJsonReport(
-          wasmModule.masteringAssistantSuggest(samples, source.value.sampleRate),
-        ),
-        streamingPreview: parseJsonReport(
-          wasmModule.masteringStreamingPreview(samples, source.value.sampleRate, platforms),
-        ),
-      };
+      // Each pass is a heavy synchronous WASM call. Yield to the main thread
+      // between them so this background analysis does not freeze the UI while a
+      // full-length clip is profiled.
+      await yieldToMain();
+      const profile = parseJsonReport(wasmModule.masteringAudioProfile(samples, sampleRate));
+      await yieldToMain();
+      const suggestions = parseJsonReport(
+        wasmModule.masteringAssistantSuggest(samples, sampleRate),
+      );
+      await yieldToMain();
+      const streamingPreview = parseJsonReport(
+        wasmModule.masteringStreamingPreview(samples, sampleRate, platforms),
+      );
+      return { profile, suggestions, streamingPreview };
     } catch (e) {
       // The mastering assistant rejects clips shorter than one analysis window.
       // It surfaces as a raw WASM exception pointer (a number), so normalise it
@@ -314,6 +318,8 @@ export function useMastering() {
   function dispose() {
     worker?.terminate();
     worker = null;
+    audioContext?.close();
+    audioContext = null;
   }
 
   function renderInWorker(
@@ -354,6 +360,11 @@ export function useMastering() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        // A genuine uncaught worker crash leaves the worker unusable — terminate
+        // and null it so the next request spins up a fresh worker instead of
+        // posting into a dead one (which never settles its promise).
+        worker?.terminate();
+        worker = null;
         reject(event.error || new Error(event.message));
       };
 
@@ -409,6 +420,11 @@ export function useMastering() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        // A genuine uncaught worker crash leaves the worker unusable — terminate
+        // and null it so the next request spins up a fresh worker instead of
+        // posting into a dead one (which never settles its promise).
+        worker?.terminate();
+        worker = null;
         reject(event.error || new Error(event.message));
       };
 
@@ -465,6 +481,11 @@ export function useMastering() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        // A genuine uncaught worker crash leaves the worker unusable — terminate
+        // and null it so the next request spins up a fresh worker instead of
+        // posting into a dead one (which never settles its promise).
+        worker?.terminate();
+        worker = null;
         reject(event.error || new Error(event.message));
       };
 
@@ -503,6 +524,10 @@ export function useMastering() {
     createSourceAudioUrl,
     dispose,
   };
+}
+
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
@@ -549,7 +574,7 @@ function resampleLinear(
   return output;
 }
 
-function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainConfig {
+export function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainConfig {
   const { preset, targetLufs, tuning } = options;
   const venue: MasteringVenueId = options.venue ?? 'studio';
   const safeMode = options.qualityMode === 'safe';

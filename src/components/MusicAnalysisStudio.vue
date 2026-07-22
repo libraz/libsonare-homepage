@@ -244,6 +244,8 @@ onUnmounted(() => {
   worker?.terminate();
   if (reportUrl) URL.revokeObjectURL(reportUrl);
   if (mediaUrl.value) URL.revokeObjectURL(mediaUrl.value);
+  audioContext?.close();
+  audioContext = null;
 });
 
 async function initWasmVersion() {
