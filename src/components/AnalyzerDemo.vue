@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import AudioAnalyzer from '@/components/AudioAnalyzer.vue';
 import ToolShell from '@/components/ToolShell.vue';
 import { useI18n } from '@/composables/useI18n';
+import { useWasmBoot } from '@/composables/useWasmBoot';
 
 const { localizedPath, alternateLocalePath, localizedValue } = useI18n();
 
-const libVersion = ref('');
-const initFailed = ref(false);
+const { version: libVersion, error: initError } = useWasmBoot();
+const initFailed = computed(() => Boolean(initError.value));
 
 const copy = computed(() =>
   localizedValue({
@@ -40,24 +41,6 @@ const statusLabel = computed(() =>
 );
 const docsPath = computed(() => localizedPath('/docs/wasm'));
 const oppositeLocalePath = computed(() => alternateLocalePath('/analyzer'));
-
-async function initWasm() {
-  if (typeof window === 'undefined' || libVersion.value) return;
-  try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
-    libVersion.value = wasm.version();
-  } catch (e) {
-    console.warn('Failed to initialize WASM:', e);
-    initFailed.value = true;
-  }
-}
-
-onMounted(() => {
-  const ric = (window as any).requestIdleCallback;
-  if (ric) ric(initWasm, { timeout: 2000 });
-  else setTimeout(initWasm, 100);
-});
 </script>
 
 <template>

@@ -31,6 +31,7 @@ import { useMasteringInsights } from '@/composables/useMasteringInsights';
 import { useMasteringMetering } from '@/composables/useMasteringMetering';
 import { useMasteringModeUrlSync } from '@/composables/useMasteringModeUrlSync';
 import { useMasteringSession } from '@/composables/useMasteringSession';
+import { useWasmBoot } from '@/composables/useWasmBoot';
 import {
   applyMasteringAssistantSettings,
   assistantParamsFromSuggestions,
@@ -53,7 +54,7 @@ import {
 const { t, locale, localizedPath, alternateLocalePath } = useI18n();
 const mastering = useMastering();
 
-const libVersion = ref<string>('');
+const { version: libVersion } = useWasmBoot();
 const docsPath = computed(() => localizedPath('/docs/glossary/mastering'));
 const glossaryBasePath = computed(() => localizedPath('/docs/glossary'));
 const otherLocalePath = computed(() => alternateLocalePath('/mastering'));
@@ -421,17 +422,6 @@ watch(
   { deep: true },
 );
 
-async function loadLibVersion() {
-  if (typeof window === 'undefined' || libVersion.value) return;
-  try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
-    libVersion.value = wasm.version();
-  } catch (e) {
-    console.warn('Failed to read WASM version:', e);
-  }
-}
-
 onMounted(() => {
   if (typeof window === 'undefined') return;
   restoreSession();
@@ -439,13 +429,6 @@ onMounted(() => {
   replaceModeInUrl();
   enableModeUrlSync();
   window.addEventListener('keydown', handleKeyboardShortcuts);
-
-  const ric = (window as any).requestIdleCallback;
-  if (ric) {
-    ric(loadLibVersion, { timeout: 2000 });
-  } else {
-    setTimeout(loadLibVersion, 100);
-  }
 });
 
 function handleKeyboardShortcuts(event: KeyboardEvent) {
