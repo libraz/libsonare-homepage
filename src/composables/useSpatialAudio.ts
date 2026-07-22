@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
+import { decodeAudioBuffer } from '@/utils/audio';
 import type { RoomGeometry } from '@/workers/spatial.worker';
 
 type MorphGeometry = Partial<RoomGeometry> & {
@@ -43,14 +44,24 @@ export function useSpatialAudio() {
   let source: AudioBufferSourceNode | null = null;
   let contentBuffer: AudioBuffer | null = null;
   let dryBuffer: AudioBuffer | null = null;
-  let timeData: Float32Array | null = null;
+  let timeData: Float32Array<ArrayBuffer> | null = null;
   let morphWorker: Worker | null = null;
   let morphRequestId = 0;
   let startTime = 0;
   let pauseOffset = 0;
   let raf: number | null = null;
+  let disposed = false;
+  let contentGeneration = 0;
+  const pendingMorphs = new Map<
+    number,
+    {
+      resolve: (value: { left: Float32Array; right: Float32Array; sampleRate: number }) => void;
+      reject: (reason: Error) => void;
+    }
+  >();
 
   function getCtx(): AudioContext {
+    if (disposed) throw new Error('Spatial audio disposed');
     if (!ctx) {
       const Ctor =
         window.AudioContext ||
@@ -75,20 +86,28 @@ export function useSpatialAudio() {
   }
 
   /** Play an uploaded recording directly (it already carries its own room). */
-  async function setUpload(file: File): Promise<void> {
+  async function setUpload(file: File): Promise<AudioBuffer> {
+    const generation = ++contentGeneration;
+    cancelMorphs(new DOMException('Superseded', 'AbortError'));
     const ctxLocal = getCtx();
-    const buf = await ctxLocal.decodeAudioData(await file.arrayBuffer());
+    const buf = await decodeAudioBuffer(file, ctxLocal);
+    if (disposed || generation !== contentGeneration) {
+      throw new DOMException('Superseded', 'AbortError');
+    }
     stop();
     contentBuffer = buf;
     dryBuffer = buf;
     duration.value = buf.duration;
     hasContent.value = true;
     contentLabel.value = file.name;
+    return buf;
   }
 
   /** Audition a preset room by playing its synthesized impulse response directly.
    *  The RIR is peak-normalized into a fresh buffer so the direct impulse can't clip. */
   function setRoomImpulse(rir: Float32Array, sampleRate: number): void {
+    contentGeneration++;
+    cancelMorphs(new DOMException('Superseded', 'AbortError'));
     const ctxLocal = getCtx();
     let peak = 0;
     for (let i = 0; i < rir.length; i++) {
@@ -111,14 +130,22 @@ export function useSpatialAudio() {
     geometry: MorphGeometry,
     options: { demoUrl?: string; label: string },
   ) {
+    const generation = ++contentGeneration;
+    cancelMorphs(new DOMException('Superseded', 'AbortError'));
     const ctxLocal = getCtx();
     const input = dryBuffer ?? (await loadDemoBuffer(options.demoUrl ?? '/demo.mp3'));
+    if (disposed || generation !== contentGeneration) {
+      throw new DOMException('Superseded', 'AbortError');
+    }
     dryBuffer = dryBuffer ?? input;
 
     isMorphing.value = true;
     morphProgress.value = 0.05;
     try {
       const result = await morphInWorker(input, geometry);
+      if (disposed || generation !== contentGeneration) {
+        throw new DOMException('Superseded', 'AbortError');
+      }
       const length = Math.max(result.left.length, result.right.length);
       const buf = ctxLocal.createBuffer(2, length, result.sampleRate);
       copyIntoChannel(buf.getChannelData(0), result.left);
@@ -129,12 +156,16 @@ export function useSpatialAudio() {
       hasContent.value = true;
       contentLabel.value = options.label;
     } finally {
-      isMorphing.value = false;
-      morphProgress.value = 0;
+      if (generation === contentGeneration) {
+        isMorphing.value = false;
+        morphProgress.value = 0;
+      }
     }
   }
 
   function clearSource(): void {
+    contentGeneration++;
+    cancelMorphs(new DOMException('Cleared', 'AbortError'));
     stop();
     contentBuffer = null;
     dryBuffer = null;
@@ -159,9 +190,11 @@ export function useSpatialAudio() {
   }
 
   async function play(offset = 0): Promise<void> {
+    const generation = contentGeneration;
     const ctxLocal = getCtx();
     if (!contentBuffer || !analyser) return;
     if (ctxLocal.state === 'suspended') await ctxLocal.resume();
+    if (disposed || generation !== contentGeneration) return;
     disconnectSource();
 
     const src = ctxLocal.createBufferSource();
@@ -242,6 +275,9 @@ export function useSpatialAudio() {
   const progress = computed(() => (duration.value > 0 ? currentTime.value / duration.value : 0));
 
   onBeforeUnmount(() => {
+    disposed = true;
+    contentGeneration++;
+    cancelMorphs(new Error('Spatial audio disposed'));
     stop();
     morphWorker?.terminate();
     morphWorker = null;
@@ -265,6 +301,30 @@ export function useSpatialAudio() {
       morphWorker = new Worker(new URL('../workers/spatial.worker.ts', import.meta.url), {
         type: 'module',
       });
+      morphWorker.onmessage = (event: MessageEvent<MorphWorkerMessage>) => {
+        const message = event.data;
+        const pending = pendingMorphs.get(message.id);
+        if (!pending) return;
+        if (message.type === 'progress') {
+          morphProgress.value = message.value;
+          return;
+        }
+        pendingMorphs.delete(message.id);
+        if (message.type === 'morphDone') {
+          pending.resolve({
+            left: message.left,
+            right: message.right,
+            sampleRate: message.sampleRate,
+          });
+        } else {
+          pending.reject(new Error(message.message));
+        }
+      };
+      morphWorker.onerror = (event) => {
+        cancelMorphs(event.error || new Error(event.message || 'Spatial morph worker failed'));
+        morphWorker?.terminate();
+        morphWorker = null;
+      };
     }
 
     const left = new Float32Array(buffer.getChannelData(0));
@@ -274,33 +334,7 @@ export function useSpatialAudio() {
         : new Float32Array(buffer.getChannelData(0));
 
     return new Promise((resolve, reject) => {
-      const onMessage = (event: MessageEvent<MorphWorkerMessage>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-
-        if (message.type === 'progress') {
-          morphProgress.value = message.value;
-          return;
-        }
-
-        morphWorker?.removeEventListener('message', onMessage);
-        morphWorker?.removeEventListener('error', onError);
-
-        if (message.type === 'morphDone') {
-          resolve({ left: message.left, right: message.right, sampleRate: message.sampleRate });
-        } else {
-          reject(new Error(message.message));
-        }
-      };
-
-      const onError = (event: ErrorEvent) => {
-        morphWorker?.removeEventListener('message', onMessage);
-        morphWorker?.removeEventListener('error', onError);
-        reject(event.error || new Error(event.message));
-      };
-
-      morphWorker!.addEventListener('message', onMessage);
-      morphWorker!.addEventListener('error', onError);
+      pendingMorphs.set(id, { resolve, reject });
       morphWorker!.postMessage(
         {
           type: 'morph',
@@ -313,6 +347,12 @@ export function useSpatialAudio() {
         [left.buffer, right.buffer],
       );
     });
+  }
+
+  function cancelMorphs(reason: Error) {
+    morphRequestId++;
+    for (const pending of pendingMorphs.values()) pending.reject(reason);
+    pendingMorphs.clear();
   }
 
   return {

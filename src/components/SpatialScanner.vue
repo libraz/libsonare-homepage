@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import RoomScene from '@/components/spatial/RoomScene.vue';
 import {
   enCopy,
@@ -23,6 +23,7 @@ import { useI18n } from '@/composables/useI18n';
 import { useSpatialAudio } from '@/composables/useSpatialAudio';
 import { useSpatialScanner } from '@/composables/useSpatialScanner';
 import { useTheme } from '@/composables/useTheme';
+import { useWasmBoot } from '@/composables/useWasmBoot';
 
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const { isDark } = useTheme();
@@ -34,7 +35,7 @@ const audio = useSpatialAudio();
 const scanner = useSpatialScanner({ getAudioContext: audio.getContext });
 const { status, progress, error, fileName, activePreset, result } = scanner;
 
-const libVersion = ref('');
+const { version: libVersion } = useWasmBoot();
 const treatAsIr = ref(false);
 const autoRotate = ref(true);
 const morphError = ref(false);
@@ -122,13 +123,14 @@ function onPreset(id: PresetId) {
 function onFile(file: File) {
   morphError.value = false;
   uploadError.value = false;
-  void scanner.scanFile(file, treatAsIr.value);
-  // The recording is playable regardless of estimation outcome; surface a decode
-  // failure here so the playback panel doesn't silently sit in a "no content" state.
-  void audio.setUpload(file).catch((e) => {
-    console.warn('Could not decode uploaded audio for playback', e);
-    uploadError.value = true;
-  });
+  void audio
+    .setUpload(file)
+    .then((buffer) => scanner.scanDecoded(buffer, file.name, treatAsIr.value))
+    .catch((e) => {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      console.warn('Could not decode uploaded audio', e);
+      uploadError.value = true;
+    });
 }
 function onClear() {
   morphError.value = false;
@@ -172,10 +174,12 @@ function fmtVol(v: number) {
 function fmtS(v: number) {
   return `${v.toFixed(2)} s`;
 }
-function fmtDb(v: number) {
+function fmtDb(v: number | null) {
+  if (v === null || !Number.isFinite(v)) return '—';
   return `${v >= 0 ? '+' : ''}${v.toFixed(1)} dB`;
 }
-function fmtPct(v: number) {
+function fmtPct(v: number | null) {
+  if (v === null || !Number.isFinite(v)) return '—';
   return `${Math.round(v * 100)}%`;
 }
 
@@ -188,35 +192,23 @@ function morphGeometry() {
     absorptions.length > 0
       ? absorptions.reduce((sum, value) => sum + value, 0) / absorptions.length
       : 0.18;
+  const dspSource = r.dspSource ?? {
+    x: Math.min(Math.max(r.source.x, 0.05), r.room.length - 0.05),
+    y: Math.min(Math.max(r.source.y, 0.05), r.room.width - 0.05),
+    z: Math.min(Math.max(r.source.z, 0.05), r.room.height - 0.05),
+  };
   return {
     lengthM: r.room.length,
     widthM: r.room.width,
     heightM: r.room.height,
     absorption,
-    sourceX: r.source.x,
-    sourceY: r.source.y,
-    sourceZ: r.source.z,
+    sourceX: dspSource.x,
+    sourceY: dspSource.y,
+    sourceZ: dspSource.z,
     listenerX: r.listener.x,
     listenerY: r.listener.y,
     listenerZ: r.listener.z,
   };
-}
-
-onMounted(() => {
-  const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: object) => void })
-    .requestIdleCallback;
-  if (ric) ric(initVersion, { timeout: 2000 });
-  else setTimeout(initVersion, 120);
-});
-
-async function initVersion() {
-  try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
-    libVersion.value = wasm.version();
-  } catch (e) {
-    console.warn('Failed to read libsonare version', e);
-  }
 }
 </script>
 

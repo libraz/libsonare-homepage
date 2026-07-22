@@ -50,9 +50,9 @@ export interface ScanResult {
   acoustic: {
     rt60: number;
     edt: number;
-    c50: number;
-    c80: number;
-    d50: number;
+    c50: number | null;
+    c80: number | null;
+    d50: number | null;
   };
   bands: BandRow[];
   /** Critical distance (m): where direct and reverberant energy are equal. */
@@ -63,6 +63,8 @@ export interface ScanResult {
   listener: { x: number; y: number; z: number };
   /** A representative estimated source point on the distance shell. */
   source: { x: number; y: number; z: number };
+  /** Independent source placement guaranteed to be valid for roomMorph DSP. */
+  dspSource: { x: number; y: number; z: number };
   /** Ground-truth geometry + source, present only for built-in synthesized presets. */
   truth: {
     room: { length: number; width: number; height: number };
@@ -313,6 +315,11 @@ function analyse(
     y: listener.y + sourceDistance * Math.cos(elevation) * Math.sin(bearing),
     z: listener.z + sourceDistance * Math.sin(elevation),
   };
+  const dspSource = {
+    x: clamp(source.x, 0.05, Math.max(0.05, estimate.length - 0.05)),
+    y: clamp(source.y, 0.05, Math.max(0.05, estimate.width - 0.05)),
+    z: clamp(source.z, 0.05, Math.max(0.05, estimate.height - 0.05)),
+  };
 
   const estimateConfidence = clamp(estimate.confidence, 0, 1);
   const acousticConfidence = clamp(acoustic.confidence, 0, 1);
@@ -333,15 +340,16 @@ function analyse(
     acoustic: {
       rt60,
       edt: acoustic.edt,
-      c50: acoustic.c50,
-      c80: acoustic.c80,
-      d50: acoustic.d50,
+      c50: finiteOrNull(acoustic.c50),
+      c80: finiteOrNull(acoustic.c80),
+      d50: finiteOrNull(acoustic.d50),
     },
     bands: buildBands(estimate.rt60Bands, estimate.absorptionBands),
     criticalDistance,
     sourceDistance,
     listener,
     source,
+    dspSource,
     truth: truthGeometry
       ? {
           room: {
@@ -389,6 +397,10 @@ function meanPositive(values: Float32Array): number {
 
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, value));
+}
+
+function finiteOrNull(value: number): number | null {
+  return Number.isFinite(value) ? value : null;
 }
 
 /**

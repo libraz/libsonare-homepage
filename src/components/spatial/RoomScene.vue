@@ -59,6 +59,7 @@ let camera: any = null;
 let roomGroup: any = null;
 let wavefronts: any[] = [];
 let resizeObserver: ResizeObserver | null = null;
+let disposed = false;
 let frame = 0;
 let target = { x: 0, y: 1.5, z: 0 };
 
@@ -395,7 +396,9 @@ function onWheel(e: WheelEvent) {
 
 onMounted(async () => {
   if (typeof window === 'undefined' || !host.value) return;
-  THREE = await import('three');
+  const loadedThree = await import('three');
+  if (disposed || !host.value) return;
+  THREE = loadedThree;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -414,6 +417,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   cancelAnimationFrame(frame);
   resizeObserver?.disconnect();
   disposeGroup(roomGroup);

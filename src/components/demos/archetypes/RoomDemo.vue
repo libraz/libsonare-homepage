@@ -50,7 +50,9 @@ const stateLabel = computed(() => {
 });
 
 // ---- RIR synthesis + decay analysis ----------------------------------------
-const DISPLAY_SEC = 1.8; // fixed time axis so tails are comparable
+const MIN_DISPLAY_SEC = 1.8;
+const MAX_DISPLAY_SEC = 8;
+const displaySec = ref(MIN_DISPLAY_SEC);
 const COLS = 240;
 const dispEnv = new Float32Array(COLS);
 const targetEnv = new Float32Array(COLS);
@@ -66,6 +68,10 @@ function renderRir(wasm: WasmModule): { rir: Float32Array; sampleRate: number } 
   const lengthM = size.value;
   const widthM = size.value * 0.72;
   const heightM = Math.min(6, Math.max(2.4, size.value * 0.42));
+  const volume = lengthM * widthM * heightM;
+  const surface = 2 * (lengthM * widthM + lengthM * heightM + widthM * heightM);
+  const sabine = (0.161 * volume) / Math.max(0.01, surface * absorption.value);
+  displaySec.value = Math.min(MAX_DISPLAY_SEC, Math.max(MIN_DISPLAY_SEC, sabine * 1.12));
   const r = wasm.synthesizeRir({
     lengthM,
     widthM,
@@ -78,7 +84,7 @@ function renderRir(wasm: WasmModule): { rir: Float32Array; sampleRate: number } 
     listenerY: widthM * 0.62,
     listenerZ: 1.3,
     sampleRate: 48000,
-    maxSeconds: DISPLAY_SEC + 0.2,
+    maxSeconds: displaySec.value + 0.25,
   });
   if (r.hasError || !r.rir.length) {
     throw new Error('source/listener fell outside the room');
@@ -103,7 +109,7 @@ function fillTargets(rir: Float32Array, sr: number): void {
     edc[i] = acc;
   }
   const total = edc[0] + 1e-20;
-  const totalSamp = Math.round(sr * DISPLAY_SEC);
+  const totalSamp = Math.round(sr * displaySec.value);
   let crossCol = COLS;
   for (let c = 0; c < COLS; c++) {
     const idx = Math.floor((c / (COLS - 1)) * (totalSamp - 1));
@@ -113,7 +119,33 @@ function fillTargets(rir: Float32Array, sr: number): void {
     targetEnv[c] = hgt;
     if (crossCol === COLS && hgt <= 0.001) crossCol = c;
   }
-  rt60.value = (crossCol / COLS) * DISPLAY_SEC;
+  if (crossCol < COLS) {
+    rt60.value = (crossCol / COLS) * displaySec.value;
+    return;
+  }
+
+  // If the measured tail has not crossed −60 dB, extrapolate a least-squares
+  // decay slope from the standard −5..−35 dB interval instead of saturating at
+  // the right edge of the chart.
+  let count = 0;
+  let sumT = 0;
+  let sumDb = 0;
+  let sumTT = 0;
+  let sumTDb = 0;
+  for (let i = 0; i < n; i++) {
+    const db = 10 * Math.log10(edc[i] / total + 1e-12);
+    if (db > -5 || db < -35) continue;
+    const time = i / sr;
+    count += 1;
+    sumT += time;
+    sumDb += db;
+    sumTT += time * time;
+    sumTDb += time * db;
+  }
+  const denom = count * sumTT - sumT * sumT;
+  const slope = denom !== 0 ? (count * sumTDb - sumT * sumDb) / denom : 0;
+  const intercept = count ? (sumDb - slope * sumT) / count : 0;
+  rt60.value = slope < -1e-6 ? Math.max(0, (-60 - intercept) / slope) : displaySec.value;
 }
 
 async function compute(): Promise<void> {
@@ -206,8 +238,8 @@ function paint(): void {
   ctx.shadowBlur = 0;
 
   // RT60 marker (vertical line where the decay reaches -60 dB).
-  if (rt60.value > 0 && rt60.value < DISPLAY_SEC) {
-    const mx = padX + (rt60.value / DISPLAY_SEC) * innerW;
+  if (rt60.value > 0 && rt60.value < displaySec.value) {
+    const mx = padX + (rt60.value / displaySec.value) * innerW;
     ctx.strokeStyle = 'rgba(255, 184, 108, 0.9)';
     ctx.lineWidth = 1.4;
     ctx.setLineDash([4, 3]);
@@ -230,7 +262,7 @@ function paint(): void {
   ctx.textBaseline = 'bottom';
   ctx.fillText('-60 dB', padX, bot + 14);
   ctx.textAlign = 'right';
-  ctx.fillText(`${DISPLAY_SEC.toFixed(1)} s`, padX + innerW, bot + 14);
+  ctx.fillText(`${displaySec.value.toFixed(1)} s`, padX + innerW, bot + 14);
   ctx.textAlign = 'left';
 }
 

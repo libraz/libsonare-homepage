@@ -1,6 +1,6 @@
 import { onBeforeUnmount, ref, shallowRef } from 'vue';
 import { PRESET_GEOMETRY, type PresetId } from '@/components/spatial/spatialCopy';
-import { decodeAudioFile, mixToMono } from '@/utils/audio';
+import { decodeAudioBuffer } from '@/utils/audio';
 import type { RoomGeometry, ScanResult } from '@/workers/spatial.worker';
 
 type Status = 'idle' | 'decoding' | 'scanning' | 'ready' | 'error';
@@ -39,14 +39,18 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
   let audioContext: AudioContext | null = null;
   let requestId = 0;
   let lastFile: File | null = null;
+  let lastBuffer: AudioBuffer | null = null;
   let lastIsIR = false;
+  let disposed = false;
 
   function ensureWorker(): Worker {
+    if (disposed) throw new Error('Spatial scanner disposed');
     if (!worker) {
       worker = new Worker(new URL('../workers/spatial.worker.ts', import.meta.url), {
         type: 'module',
       });
       worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
+        if (disposed) return;
         const msg = event.data;
         if (msg.id !== requestId) return; // stale response from a superseded scan
         if (msg.type === 'progress') {
@@ -76,7 +80,9 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
   }
 
   async function scanFile(file: File, isIR: boolean) {
+    const id = ++requestId;
     lastFile = file;
+    lastBuffer = null;
     lastIsIR = isIR;
     activePreset.value = null;
     fileName.value = file.name;
@@ -84,34 +90,50 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
     status.value = 'decoding';
     progress.value = 0.05;
 
-    let mono: Float32Array;
-    let sampleRate: number;
     try {
-      const decoded = await decodeAudioFile(file, ensureAudioContext());
-      mono = mixToMono(decoded.left, decoded.right);
-      sampleRate = decoded.sampleRate;
+      const decoded = await decodeAudioBuffer(file, ensureAudioContext());
+      if (disposed || id !== requestId) return;
+      scanDecoded(decoded, file.name, isIR, id);
     } catch {
+      if (disposed || id !== requestId) return;
       error.value = 'decode';
       status.value = 'error';
-      return;
     }
+  }
 
+  function scanDecoded(buffer: AudioBuffer, name: string, isIR: boolean, id = ++requestId) {
+    if (disposed || id !== requestId) return;
+    lastFile = null;
+    lastBuffer = buffer;
+    lastIsIR = isIR;
+    activePreset.value = null;
+    fileName.value = name;
+    error.value = null;
     // Room-acoustic estimation cost grows superlinearly with length; a long song
     // would park the progress bar at 50% for 10-25s ("frozen"). A window of a few
     // tens of seconds is more than enough for RT60/decay, so cap it.
-    const maxSamples = Math.floor(MAX_ANALYSIS_SECONDS * sampleRate);
-    if (mono.length > maxSamples) mono = mono.slice(0, maxSamples);
+    const maxSamples = Math.min(
+      buffer.length,
+      Math.floor(MAX_ANALYSIS_SECONDS * buffer.sampleRate),
+    );
+    const mono = new Float32Array(maxSamples);
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      const samples = buffer.getChannelData(channel);
+      const gain = 1 / buffer.numberOfChannels;
+      for (let i = 0; i < maxSamples; i++) mono[i] += samples[i] * gain;
+    }
 
-    const id = ++requestId;
     status.value = 'scanning';
     progress.value = 0.2;
-    ensureWorker().postMessage({ type: 'scan', id, samples: mono, sampleRate, isIR }, [
-      mono.buffer,
-    ]);
+    ensureWorker().postMessage(
+      { type: 'scan', id, samples: mono, sampleRate: buffer.sampleRate, isIR },
+      [mono.buffer],
+    );
   }
 
   function scanPreset(preset: PresetId) {
     lastFile = null;
+    lastBuffer = null;
     activePreset.value = preset;
     fileName.value = '';
     error.value = null;
@@ -130,6 +152,8 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
   function rescan(isIR: boolean) {
     if (activePreset.value) {
       scanPreset(activePreset.value);
+    } else if (lastBuffer) {
+      scanDecoded(lastBuffer, fileName.value, isIR);
     } else if (lastFile) {
       void scanFile(lastFile, isIR);
     }
@@ -142,11 +166,15 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
     fileName.value = '';
     activePreset.value = null;
     lastFile = null;
+    lastBuffer = null;
     status.value = 'idle';
     progress.value = 0;
   }
 
   function dispose() {
+    if (disposed) return;
+    disposed = true;
+    requestId++;
     worker?.terminate();
     worker = null;
     // Only close a self-owned context; a shared context is owned by useSpatialAudio.
@@ -164,6 +192,7 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
     activePreset,
     result,
     scanFile,
+    scanDecoded,
     scanPreset,
     rescan,
     clear,
