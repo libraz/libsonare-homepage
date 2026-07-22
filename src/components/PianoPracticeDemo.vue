@@ -7,14 +7,18 @@
  * is rendered offline by the libsonare Project through its SoundFont player (a
  * public-domain acoustic grand), so the roll, the strike line, and the sound all
  * advance on one clock — the lit keys always match what you hear. A practice
- * speed control re-renders the passage slower without changing pitch, and any
- * single-track `.mid` can be loaded to practice your own part.
+ * speed control re-renders the passage slower without changing pitch.
  *
  * Everything runs locally: the MIDI is parsed in the browser and the audio is
  * synthesized on-device — nothing is uploaded.
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { createAudioBufferCache } from '@/components/practice/audioBufferCache';
+import {
+  type BounceClient,
+  buildBouncePayload,
+  createBounceClient,
+} from '@/components/practice/bounceClient';
 import { GOLDBERG } from '@/components/practice/goldberg';
 import { buildKeyboard, type KeyboardLayout } from '@/components/practice/keyboard';
 import { type ParsedMidi, parseMidi } from '@/components/practice/midiSmf';
@@ -31,9 +35,6 @@ import { type Judgment, useRhythmGame } from '@/components/practice/useRhythmGam
 import ToolShell from '@/components/ToolShell.vue';
 import { StatusIndicator } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
-import { ensureWasm } from '@/composables/useSonareDemoAudio';
-
-type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
 
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
@@ -89,6 +90,9 @@ const midiInput = useMidiInput({ onNoteOn: playNote, onNoteOff: releaseNote });
 const midiSupported = midiInput.supported;
 const midiConnected = midiInput.connected;
 const midiConnecting = midiInput.connecting;
+const midiError = midiInput.error;
+// Access is granted with zero devices plugged in: prompt to connect a keyboard.
+const midiWaiting = computed(() => midiConnected.value && midiInput.devices.value.length === 0);
 
 /** Flattened, reactive game snapshot for the HUD (avoids nested-ref unwrap). */
 const gameView = computed(() => ({
@@ -301,39 +305,23 @@ async function ensureSf2(): Promise<Uint8Array> {
 function prefetchEngine(): void {
   if (!warmed) {
     warmed = true;
-    void ensureWasm().catch(() => {});
+    // Spin up the bounce worker (which lazily inits its own WASM) ahead of the
+    // first play so the click doesn't pay worker + WASM startup.
+    getBounceClient();
   }
-  // The sampled voice needs the SoundFont; the built-in synth doesn't.
+  // The sampled voice needs the SoundFont; warm the browser HTTP cache so the
+  // worker's own fetch is instant. The built-in synth needs no asset.
   if (soundSource.value === 'sf2') void ensureSf2().catch(() => {});
   void prewarmBuffer();
 }
 
-interface ProjectLike {
-  setSampleRate(sr: number): void;
-  setTempoSegments(segments: Array<{ startPpq: number; bpm: number }>): void;
-  loadSoundFont(data: Uint8Array): void;
-  addMidiClip(startPpq: number, lengthPpq: number): { clipId: number };
-  setMidiEvents(clipId: number, events: unknown[]): void;
-  bounceWithSf2Instrument(
-    instrument: Record<string, unknown>,
-    options: { numChannels: number; sampleRate: number; totalFrames: number },
-  ): Float32Array;
-  bounceWithSynthInstrument(
-    instrument: string,
-    options: { numChannels: number; sampleRate: number; totalFrames: number },
-  ): Float32Array;
-  delete(): void;
-}
-interface ProjectCtor {
-  new (): ProjectLike;
-  midiNoteOn(ppq: number, group: number, channel: number, note: number, velocity: number): unknown;
-  midiNoteOff(
-    ppq: number,
-    group: number,
-    channel: number,
-    note: number,
-    velocity?: number,
-  ): unknown;
+// The offline bounce (a multi-second synchronous WASM call plus a full-buffer
+// peak scan) runs in a dedicated worker so it never freezes the main thread on a
+// movement load, tempo change, or instrument switch. Created lazily on first intent.
+let bounceClient: BounceClient | null = null;
+function getBounceClient(): BounceClient {
+  if (!bounceClient) bounceClient = createBounceClient();
+  return bounceClient;
 }
 
 /** Bounce the loaded passage to a mono AudioBuffer at the given practice speed. */
@@ -341,60 +329,23 @@ async function renderBuffer(targetSpeed: number): Promise<void> {
   const m = midi.value;
   const ctx = audioCtx;
   if (!m || !ctx) return;
-  const source = soundSource.value;
-  const wasm = (await ensureWasm()) as WasmModule;
-  const Project = (wasm as unknown as { Project: ProjectCtor }).Project;
-  libVersion.value =
-    (wasm as unknown as { version?: () => string }).version?.() ?? libVersion.value;
+  const payload = buildBouncePayload(m, {
+    source: soundSource.value,
+    sf2Url: SF2_URL,
+    synthPreset: SYNTH_PIANO_PRESET,
+    sampleRate: SR,
+    speed: targetSpeed,
+    tailSec: TAIL_SEC,
+  });
+  const { pcm, version } = await getBounceClient().bounce(payload);
+  if (version) libVersion.value = version;
 
-  const project = new Project();
-  try {
-    // The built-in synth needs no SoundFont; it synthesizes every note.
-    if (source === 'sf2') project.loadSoundFont(await ensureSf2());
-    project.setSampleRate(SR);
-    // Scale every tempo segment by the practice speed; pitch is unaffected.
-    project.setTempoSegments(
-      m.tempoSegments.map((s) => ({ startPpq: s.startBeat, bpm: s.bpm * targetSpeed })),
-    );
-    const { clipId } = project.addMidiClip(0, m.durationBeats);
+  const buffer = ctx.createBuffer(1, pcm.length, SR);
+  buffer.getChannelData(0).set(pcm);
 
-    const tagged: Array<{ at: number; key: number; ev: unknown }> = [];
-    for (const n of m.notes) {
-      tagged.push({
-        at: n.startBeat,
-        key: 1,
-        ev: Project.midiNoteOn(n.startBeat, 0, 0, n.midi, n.velocity),
-      });
-      tagged.push({ at: n.endBeat, key: 0, ev: Project.midiNoteOff(n.endBeat, 0, 0, n.midi, 0) });
-    }
-    tagged.sort((a, b) => a.at - b.at || a.key - b.key);
-    project.setMidiEvents(
-      clipId,
-      tagged.map((t) => t.ev),
-    );
-
-    const lengthSec = m.durationSec / targetSpeed + TAIL_SEC;
-    const totalFrames = Math.round(SR * lengthSec);
-    const options = { numChannels: 1, sampleRate: SR, totalFrames };
-    const pcm =
-      source === 'sf2'
-        ? project.bounceWithSf2Instrument({ destinationId: 0, gain: 1 }, options)
-        : project.bounceWithSynthInstrument(SYNTH_PIANO_PRESET, options);
-
-    // The SoundFont renders at a low absolute level; normalize to a fixed headroom.
-    let peak = 1e-6;
-    for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
-    const gain = 0.9 / peak;
-    const buffer = ctx.createBuffer(1, pcm.length, SR);
-    const channel = buffer.getChannelData(0);
-    for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] * gain;
-
-    audioBuffer = buffer;
-    bufferSpeed = targetSpeed;
-    audioBuffers.set(targetSpeed, buffer);
-  } finally {
-    project.delete();
-  }
+  audioBuffer = buffer;
+  bufferSpeed = targetSpeed;
+  audioBuffers.set(targetSpeed, buffer);
 }
 
 function applyGain(): void {
@@ -442,7 +393,7 @@ function onSourceEnded(): void {
   posBase.value = baseDuration.value;
   source = null;
   if (gameMode.value) {
-    game.update(posBase.value); // sweep any final unplayed notes into misses
+    game.finish(); // resolve every unplayed target — including a short final note
     gameFinished.value = true; // reveal the results card
   }
   syncActiveNotes();
@@ -775,6 +726,8 @@ onBeforeUnmount(() => {
   stopLoop();
   stopSource();
   resizeObs?.disconnect();
+  bounceClient?.dispose();
+  bounceClient = null;
   if (audioCtx) void audioCtx.close();
   audioCtx = null;
 });
@@ -859,6 +812,8 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
         :midi-supported="midiSupported"
         :midi-connected="midiConnected"
         :midi-connecting="midiConnecting"
+        :midi-waiting="midiWaiting"
+        :midi-error="midiError"
         @previous="stepMovement(-1)"
         @next="stepMovement(1)"
         @select="selectMovement"

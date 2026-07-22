@@ -93,23 +93,34 @@ class Reader {
     return this.view.byteLength - this.pos;
   }
 
+  /** Guard a read of `n` bytes so truncated input fails as a MidiParseError. */
+  private need(n: number): void {
+    if (n < 0 || this.pos + n > this.view.byteLength) {
+      throw new MidiParseError('Unexpected end of MIDI data (file is truncated or malformed).');
+    }
+  }
+
   u8(): number {
+    this.need(1);
     return this.view.getUint8(this.pos++);
   }
 
   u16(): number {
+    this.need(2);
     const v = this.view.getUint16(this.pos);
     this.pos += 2;
     return v;
   }
 
   u32(): number {
+    this.need(4);
     const v = this.view.getUint32(this.pos);
     this.pos += 4;
     return v;
   }
 
   bytes(length: number): Uint8Array {
+    this.need(length);
     const out = new Uint8Array(this.view.buffer, this.view.byteOffset + this.pos, length);
     this.pos += length;
     return out;
@@ -228,7 +239,10 @@ function parseTrack(reader: Reader, length: number): TrackResult {
  * @param ticksPerBeat Division from the header.
  */
 function makeTickToSec(tempos: RawTempoEvent[], ticksPerBeat: number): (tick: number) => number {
-  const map = tempos.length > 0 ? tempos : [{ tick: 0, usPerQuarter: 500000 }];
+  // Clone before prepending the implicit 120 BPM head: `tempos` is the shared
+  // tempo array reused by the caller to build tempoSegments, so unshifting into
+  // it would inject a phantom segment there for a non-zero-start tempo map.
+  const map = tempos.length > 0 ? [...tempos] : [{ tick: 0, usPerQuarter: 500000 }];
   if (map[0].tick !== 0) map.unshift({ tick: 0, usPerQuarter: 500000 });
   // Precompute the elapsed seconds at the start of each segment.
   const secAtTick: number[] = [0];
@@ -308,10 +322,12 @@ export function parseMidi(data: Uint8Array): ParsedMidi {
     allTempos.length > 0 ? allTempos : [{ tick: 0, usPerQuarter: 500000 }]
   ).map((tp) => ({ startBeat: tp.tick / ticksPerBeat, bpm: 60_000_000 / tp.usPerQuarter }));
 
-  const durationSec = Math.max(...notes.map((n) => n.endSec));
-  const durationBeats = Math.max(...notes.map((n) => n.endBeat));
-  const lowestMidi = Math.min(...notes.map((n) => n.midi));
-  const highestMidi = Math.max(...notes.map((n) => n.midi));
+  // Reduce rather than Math.max(...spread): a large chart can overflow the call
+  // stack when spread as arguments.
+  const durationSec = notes.reduce((m, n) => Math.max(m, n.endSec), 0);
+  const durationBeats = notes.reduce((m, n) => Math.max(m, n.endBeat), 0);
+  const lowestMidi = notes.reduce((m, n) => Math.min(m, n.midi), 127);
+  const highestMidi = notes.reduce((m, n) => Math.max(m, n.midi), 0);
 
   const beatsPerBar = parsedTracks.find((tr) => tr.beatsPerBar)?.beatsPerBar ?? 4;
 

@@ -332,6 +332,9 @@ html:not(.dark) .practice__game-toggle.is-on {
   font-size: 0.7rem;
   color: var(--demo-text-muted);
 }
+.practice__midi-note--error {
+  color: var(--demo-warn-text);
+}
 .practice__game-hint {
   margin: 0;
   font-family: var(--font-mono);

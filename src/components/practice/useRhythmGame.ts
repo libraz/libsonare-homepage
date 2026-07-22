@@ -139,10 +139,18 @@ export function useRhythmGame(options: RhythmGameOptions) {
       registerHit(kind, midi);
       return kind;
     }
-    // No target of this pitch nearby. If a same-pitch target is still well in
-    // the future, this is just an early tap — ignore it. Otherwise it's a wrong
-    // note and breaks the combo.
+    // A same-pitch target still well in the future: just an early warm-up tap,
+    // ignore it rather than penalize it.
     if (best && bestDelta < -HIT_WINDOW_SEC) return null;
+    // The nearest same-pitch target has already scrolled past the hit window:
+    // this late strike resolves THAT target as its miss. Consume it (best.done +
+    // judged) so the update() sweep can't miss the same target a second time.
+    if (best && bestDelta > HIT_WINDOW_SEC) {
+      best.done = true;
+      registerMiss(midi, true);
+      return 'miss';
+    }
+    // No target of this pitch pending at all — a wrong note that breaks the combo.
     registerMiss(midi, false);
     return 'miss';
   }
@@ -151,6 +159,21 @@ export function useRhythmGame(options: RhythmGameOptions) {
   function update(posBase: number): void {
     for (const t of targets) {
       if (!t.done && posBase - t.time > HIT_WINDOW_SEC) {
+        t.done = true;
+        registerMiss(t.midi, true);
+      }
+    }
+  }
+
+  /**
+   * Resolve every still-unjudged target as a miss. Called when playback ends so
+   * a short final note whose strike time sits within the hit window of the
+   * pinned end-of-piece playhead (which {@link update} would never sweep past)
+   * is still counted, keeping the miss total consistent with the chart length.
+   */
+  function finish(): void {
+    for (const t of targets) {
+      if (!t.done) {
         t.done = true;
         registerMiss(t.midi, true);
       }
@@ -170,5 +193,6 @@ export function useRhythmGame(options: RhythmGameOptions) {
     reset,
     press,
     update,
+    finish,
   };
 }

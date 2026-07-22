@@ -12,6 +12,10 @@ const props = defineProps<{
   midiSupported: boolean | null;
   midiConnected: boolean;
   midiConnecting: boolean;
+  /** Access granted but no keyboard is plugged in yet. */
+  midiWaiting: boolean;
+  /** Permission / availability error message, empty when none. */
+  midiError: string;
 }>();
 
 const emit = defineEmits<{
@@ -122,6 +126,10 @@ function onSelect(event: Event): void {
         {{ midiConnected ? copy.midi.connected : copy.midi.connect }}
       </button>
       <span v-else class="practice__midi-note">{{ copy.midi.unsupported }}</span>
+      <span v-if="midiError" class="practice__midi-note practice__midi-note--error" role="alert">
+        {{ copy.midi.denied }}
+      </span>
+      <span v-else-if="midiWaiting" class="practice__midi-note">{{ copy.midi.waiting }}</span>
     </div>
   </div>
 </template>

@@ -43,6 +43,8 @@ export function useMidiInput(options: MidiInputOptions) {
   const error = ref('');
 
   let access: MidiAccessLike | null = null;
+  /** Set by disconnect() (e.g. on unmount) to abandon an in-flight connect(). */
+  let disposed = false;
 
   function handleMessage(e: { data: Uint8Array }): void {
     const [status, note, velocity] = e.data;
@@ -65,12 +67,22 @@ export function useMidiInput(options: MidiInputOptions) {
   /** Request Web MIDI access (must be triggered by a user gesture). */
   async function connect(): Promise<void> {
     if (!supported || connecting.value) return;
+    disposed = false;
     connecting.value = true;
     error.value = '';
     try {
-      access = (await (
+      const granted = (await (
         navigator as { requestMIDIAccess: (opts?: unknown) => Promise<MidiAccessLike> }
       ).requestMIDIAccess({ sysex: false })) as MidiAccessLike;
+      // The user may have left the demo while the permission dialog was open. If
+      // disconnect() ran during the await, release the access and bind nothing —
+      // otherwise the note listeners would keep firing for the whole SPA session.
+      if (disposed) {
+        for (const input of granted.inputs.values()) input.onmidimessage = null;
+        granted.onstatechange = null;
+        return;
+      }
+      access = granted;
       access.onstatechange = bindInputs;
       bindInputs();
       // Access is granted even with zero devices plugged in; reflect that the
@@ -85,6 +97,7 @@ export function useMidiInput(options: MidiInputOptions) {
   }
 
   function disconnect(): void {
+    disposed = true;
     if (access) {
       for (const input of access.inputs.values()) input.onmidimessage = null;
       access.onstatechange = null;
