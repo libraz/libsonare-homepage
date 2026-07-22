@@ -162,6 +162,10 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
   let node: AudioWorkletNode | null = null;
   let moduleUrl: string | null = null;
   let wasmBinary: ArrayBuffer | null = null;
+  /** Set by dispose(); cancels an in-flight start() at its next await point. */
+  let disposed = false;
+  /** Resolver for the in-flight ready wait, so dispose() can settle it. */
+  let resolveReady: (() => void) | null = null;
 
   /**
    * Boot the AudioContext + worklet. Safe to call without a user gesture: the
@@ -177,6 +181,8 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
     }
     if (starting.value) return false;
     starting.value = true;
+    // A fresh boot attempt clears a prior teardown's cancellation flag.
+    disposed = false;
     try {
       const ctx = new AudioContext({ latencyHint: 'interactive' });
       context.value = ctx;
@@ -194,7 +200,9 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
         );
       }
       await ctx.audioWorklet.addModule(moduleUrl);
+      if (disposed) return false;
       if (!wasmBinary) wasmBinary = await (await fetch(wasmUrl)).arrayBuffer();
+      if (disposed) return false;
 
       node = new AudioWorkletNode(ctx, 'libsonare-synth', {
         numberOfInputs: 0,
@@ -214,6 +222,9 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
           reject(new Error('worklet-node-missing'));
           return;
         }
+        // dispose() settles this via resolveReady if the worklet's 'ready'
+        // never arrives (its onmessage is nulled during teardown).
+        resolveReady = resolve;
         node.port.onmessage = (event) => {
           const msg = event.data;
           if (msg?.type === 'ready') {
@@ -233,6 +244,7 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
         /* resume re-attempted on the first gesture */
       });
       await readyPromise;
+      if (disposed) return false;
       return true;
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err);
@@ -275,6 +287,11 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
   }
 
   async function dispose(): Promise<void> {
+    disposed = true;
+    // Settle an in-flight start()'s ready wait so its await returns and the
+    // starting flag clears — nulling node.port.onmessage below drops 'ready'.
+    resolveReady?.();
+    resolveReady = null;
     ready.value = false;
     if (node) {
       try {
@@ -305,6 +322,10 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
         /* already closed */
       }
       context.value = null;
+    }
+    if (moduleUrl) {
+      URL.revokeObjectURL(moduleUrl);
+      moduleUrl = null;
     }
     running.value = false;
     meter.value = { peak: 0 };

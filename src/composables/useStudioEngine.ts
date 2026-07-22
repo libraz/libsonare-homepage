@@ -349,7 +349,17 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     }
   }
 
-  /** Re-render the per-track waveform views (display only — not playback). */
+  /**
+   * Re-render the per-track waveform views (display only — not playback).
+   *
+   * Bounces run synchronously on the main thread rather than on a Web Worker,
+   * unlike the site's heavier offline paths. This is a deliberate trade-off:
+   * the render is a bounded one-bar-per-track loop and the caller (`rebuild`)
+   * only fires after the engine is ready and grid edits are debounced, so it
+   * never sits on the first-paint path. A worker offload would need a second
+   * WASM heap (this reuses the already-booted index.js instance) and add a
+   * round-trip for no perceptible win at this loop length.
+   */
   function refreshStemViews(mod: WasmModule, pattern: StudioPattern, bpm: number): void {
     const frames = Math.round((EXPORT_SAMPLE_RATE * BAR_PPQ * 60) / bpm);
     const views: StudioStemView[] = [];
@@ -474,6 +484,11 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   /**
    * Bounce a two-bar version of the session (release tails included) with the
    * mixer's gains applied, as a 16-bit PCM WAV blob.
+   *
+   * Runs synchronously on the main thread by design: it fires from an explicit
+   * download click (never on the first-paint path) and the fixed two-bar loop
+   * keeps the offline render short, so a worker offload with its own WASM heap
+   * would add complexity without a perceptible latency win.
    */
   function exportWav(pattern: StudioPattern, bpm: number): Blob | null {
     const mod = wasm;
