@@ -1,6 +1,39 @@
 // Stubs for browser APIs that demo composables touch but jsdom lacks.
 import { beforeEach, vi } from 'vitest';
 
+function createStorageMock(): Storage {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: (key: string) => values.get(String(key)) ?? null,
+    key: (index: number) => Array.from(values.keys())[index] ?? null,
+    removeItem: (key: string) => values.delete(String(key)),
+    setItem: (key: string, value: string) => values.set(String(key), String(value)),
+  };
+}
+
+const localStorageMock = createStorageMock();
+const sessionStorageMock = createStorageMock();
+
+function installStorageMocks() {
+  // Newer Node releases expose an incomplete global localStorage when started
+  // with an invalid --localstorage-file flag. Always install deterministic
+  // browser-compatible stores for jsdom tests instead of inheriting that global.
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    writable: true,
+    value: localStorageMock,
+  });
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    configurable: true,
+    writable: true,
+    value: sessionStorageMock,
+  });
+}
+
 function installUrlMocks() {
   if (typeof URL === 'undefined') return;
   Object.defineProperty(URL, 'createObjectURL', {
@@ -74,8 +107,12 @@ function installCanvasMocks() {
 
 installUrlMocks();
 installCanvasMocks();
+installStorageMocks();
 
 beforeEach(() => {
   installUrlMocks();
   installCanvasMocks();
+  installStorageMocks();
+  localStorageMock.clear();
+  sessionStorageMock.clear();
 });

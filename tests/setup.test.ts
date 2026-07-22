@@ -9,4 +9,11 @@ describe('test setup browser API mocks', () => {
     expect(ctx?.measureText('abc').width).toBeGreaterThan(0);
     expect(ctx?.getImageData(0, 0, 1, 1).data).toHaveLength(4);
   });
+
+  it('provides deterministic browser storage APIs', () => {
+    localStorage.setItem('demo', 'value');
+    expect(localStorage.getItem('demo')).toBe('value');
+    localStorage.removeItem('demo');
+    expect(localStorage.getItem('demo')).toBeNull();
+  });
 });
