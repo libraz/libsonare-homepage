@@ -51,6 +51,10 @@ onBeforeUnmount(() => {
 const archetypeComponent = computed(() =>
   def.value ? demoArchetypeComponents[def.value.archetype] : undefined,
 );
+const HEAVY_ARCHETYPES = new Set(['hpss', 'pitch-correct', 'lane-mixer']);
+const mayAutoActivate = computed(
+  () => active.value && !!def.value && !HEAVY_ARCHETYPES.has(def.value.archetype),
+);
 </script>
 
 <template>
@@ -62,7 +66,7 @@ const archetypeComponent = computed(() =>
       :is="archetypeComponent"
       v-else-if="archetypeComponent"
       :def="def"
-      :active="active"
+      :active="mayAutoActivate"
     />
     <div v-else class="sonare-demo__error" role="alert">
       {{ t('demo.inline.unimplementedArchetype') }}: <code>{{ def.archetype }}</code> ({{ id }})

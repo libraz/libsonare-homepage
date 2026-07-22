@@ -234,6 +234,7 @@ onBeforeUnmount(() => {
     </template>
     <template #controls>
       <DemoControls
+        :disabled="isPlaying"
         :model-value="values"
         :params="def.params ?? []"
         :locale="loc"

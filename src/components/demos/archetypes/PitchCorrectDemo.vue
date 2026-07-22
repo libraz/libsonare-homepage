@@ -506,7 +506,7 @@ function scheduleCompute(): void {
 }
 
 watch([retuneAmount, retuneSpeedMs, scale], () => {
-  if (props.active && status.value !== 'idle') scheduleCompute();
+  if (status.value !== 'idle') scheduleCompute();
 });
 
 watch(view, () => {

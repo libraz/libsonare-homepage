@@ -131,7 +131,7 @@ function scheduleCompute(): void {
 }
 
 watch(view, () => {
-  if (props.active && status.value !== 'idle') scheduleCompute();
+  if (status.value !== 'idle') scheduleCompute();
 });
 
 watch(
@@ -164,10 +164,10 @@ watch(
     </template>
     <template #controls>
       <DemoControls
+        :disabled="isPlaying || status === 'loading'"
         :model-value="values"
         :params="def.params ?? []"
         :locale="loc"
-        :disabled="status === 'loading'"
         @update:model-value="updateParams"
       />
     </template>

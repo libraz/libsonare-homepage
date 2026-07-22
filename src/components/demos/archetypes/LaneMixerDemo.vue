@@ -368,7 +368,7 @@ function scheduleCompute(): void {
 watch(
   () => [...faderDb.value, ...muted.value],
   () => {
-    if (props.active) scheduleCompute();
+    if (status.value !== 'idle') scheduleCompute();
   },
 );
 
@@ -410,10 +410,10 @@ onBeforeUnmount(() => {
     </template>
     <template #controls>
       <DemoControls
+        :disabled="isPlaying || status === 'loading'"
         :model-value="values"
         :params="def.params ?? []"
         :locale="loc"
-        :disabled="status === 'loading'"
         @update:model-value="updateParams"
       />
     </template>
