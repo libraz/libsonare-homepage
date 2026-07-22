@@ -239,4 +239,45 @@ describe('RealtimeFxLab', () => {
 
     wrapper.unmount();
   });
+
+  it('renders localized copy for permission denial and generic start failures', async () => {
+    fxMock.state.error.value = 'mic-denied';
+    const wrapper = mount(RealtimeFxLab);
+    expect(wrapper.find('.rt-error').text()).toContain('Microphone access was blocked');
+
+    // Any unrecognized error code falls back to the generic start-failure copy,
+    // so a raw browser message is never shown to the visitor.
+    fxMock.state.error.value = 'start-failed';
+    await nextTick();
+    expect(wrapper.find('.rt-error').text()).toContain(
+      'Could not start the realtime audio engine.',
+    );
+
+    wrapper.unmount();
+  });
+
+  it('disables Stop while the engine is starting so it cannot close a half-open context', async () => {
+    let releaseStart!: (ok: boolean) => void;
+    fxMock.start.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseStart = resolve;
+        }),
+    );
+    const wrapper = mount(RealtimeFxLab);
+    const stopButton = () => wrapper.findAll('button').find((button) => button.text() === 'Stop')!;
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Start engine')!
+      .trigger('click');
+    await nextTick();
+    // Start is still pending (isStarting === true): Stop must be disabled.
+    expect(stopButton().attributes('disabled')).toBeDefined();
+
+    releaseStart(true);
+    await nextTick();
+    await nextTick();
+    wrapper.unmount();
+  });
 });

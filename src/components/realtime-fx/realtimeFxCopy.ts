@@ -65,6 +65,7 @@ export const enCopy = {
   },
   errors: {
     noMicApi: 'This browser does not expose microphone input.',
+    micDenied: 'Microphone access was blocked. Allow it in your browser, then start the engine.',
     startFailed: 'Could not start the realtime audio engine.',
   },
   terms: {
@@ -204,6 +205,8 @@ export const jaCopy: typeof enCopy = {
   },
   errors: {
     noMicApi: 'このブラウザではマイク入力を利用できません。',
+    micDenied:
+      'マイクへのアクセスがブロックされました。ブラウザで許可してからエンジンを開始してください。',
     startFailed: 'リアルタイム音声エンジンを開始できませんでした。',
   },
   terms: {

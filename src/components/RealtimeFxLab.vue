@@ -49,7 +49,8 @@ const localError = computed(() => {
   const code = fx.error.value;
   if (!code) return null;
   if (code === 'no-mic-api') return copy.value.errors.noMicApi;
-  return code;
+  if (code === 'mic-denied') return copy.value.errors.micDenied;
+  return copy.value.errors.startFailed;
 });
 
 const docsPath = computed(() => localizedPath('/docs/realtime-streaming'));
@@ -235,7 +236,7 @@ function formatDb(value: number): string {
             <div class="rt-input__badge">MIC</div>
             <div class="rt-actions">
               <button class="rt-button rt-button--primary" :disabled="isStarting || isReady" @click="startEngine">{{ copy.actions.start }}</button>
-              <button class="rt-button" :disabled="!isReady && !isStarting" @click="stopEngine">{{ copy.actions.stop }}</button>
+              <button class="rt-button" :disabled="!isReady || isStarting" @click="stopEngine">{{ copy.actions.stop }}</button>
             </div>
             <button
               class="rt-monitor"
@@ -297,7 +298,7 @@ function formatDb(value: number): string {
             </label>
             <label class="rt-slider">
               <span><TermLabel v-bind="term('output')">{{ copy.controls.output }}</TermLabel> <b>{{ Math.round(outputGain * 100) }}%</b></span>
-              <input v-model.number="outputGain" type="range" min="0" max="2" step="0.01" @input="applyParams">
+              <input v-model.number="outputGain" type="range" min="0" max="1" step="0.01" @input="applyParams">
             </label>
             <label class="rt-bypass">
               <input v-model="bypass" type="checkbox" @change="applyParams">

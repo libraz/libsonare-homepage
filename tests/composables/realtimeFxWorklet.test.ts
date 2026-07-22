@@ -14,13 +14,21 @@ describe('buildProcessorSource', () => {
     expect(source).not.toContain('createStreamingRetune');
   });
 
-  it('drives the zero-copy prepared-mono path with per-block heap views', () => {
-    expect(source).toContain('const inView = this.vc.getMonoInputBuffer(MAX_BLOCK)');
-    expect(source).toContain('const outView = this.vc.getMonoOutputBuffer(MAX_BLOCK)');
+  it('drives the zero-copy prepared-mono path with cached heap views', () => {
+    expect(source).toContain('const inView = this.inputView()');
+    expect(source).toContain('const outView = this.outputView()');
     expect(source).toContain('this.vc.processPreparedMono(m)');
     expect(source).toContain('inView[i] = mono');
     expect(source).toContain('const wet = outView[i]');
     expect(source).not.toContain('voiceChange(');
+  });
+
+  it('caches heap views and re-acquires them only after the buffer detaches', () => {
+    expect(source).toContain('this.vc.getMonoInputBuffer(MAX_BLOCK)');
+    expect(source).toContain('this.vc.getMonoOutputBuffer(MAX_BLOCK)');
+    expect(source).toContain('this.inView.buffer.byteLength === 0');
+    expect(source).toContain('this.outView.buffer.byteLength === 0');
+    expect(source).toContain('this.inView = null; this.outView = null');
   });
 
   it('layers the four live macros over the preset chain without dropping it', () => {
@@ -32,9 +40,23 @@ describe('buildProcessorSource', () => {
     expect(source).toContain('this.vc.setConfig(this.base)');
   });
 
+  it('engages the formant module when a macro diverges from unity/neutral', () => {
+    expect(source).toContain('dsp.formant.amount');
+    expect(source).toContain(
+      'Math.abs(this.formant - 1) > 0.001 || Math.abs(this.brightness) > 0.001 ? 1 : 0',
+    );
+  });
+
   it('switches the full preset chain when the preset id changes', () => {
     expect(source).toContain('p.preset !== this.preset');
     expect(source).toContain('this.vc.setConfig(this.preset); this.loadBase()');
+  });
+
+  it('records the preset id even when params arrive before the engine exists', () => {
+    // The preset guard no longer requires this.vc, so a preset chosen during
+    // startup still seeds createRealtimeVoiceChanger once init completes.
+    expect(source).toContain('if (p.preset && p.preset !== this.preset)');
+    expect(source).not.toContain('if (this.vc && p.preset && p.preset !== this.preset)');
   });
 
   it('reports worklet readiness with latency and module initialization failures', () => {
@@ -47,11 +69,22 @@ describe('buildProcessorSource', () => {
     );
   });
 
-  it('resets native state when disabled or bypassed before passthrough', () => {
+  it('flushes native state once on the transition into processing, not every block', () => {
     expect(source).toContain("msg.type === 'setEnabled'");
     expect(source).toContain('if (!this.enabled && this.vc) this.vc.reset()');
     expect(source).toContain('if (this.bypass || !this.ready || !this.enabled)');
-    expect(source).toContain('if (this.vc) this.vc.reset()');
+    expect(source).toContain(
+      'if (!this.wasProcessing) { this.vc.reset(); this.wasProcessing = true; }',
+    );
+    // The bypass path only records the transition; it no longer resets the
+    // whole voice changer on every render block.
+    expect(source).toContain('this.wasProcessing = false;');
+    expect(source).not.toContain('if (this.vc) this.vc.reset()');
+  });
+
+  it('drops to dry passthrough and surfaces a native processing fault', () => {
+    expect(source).toContain("this.port.postMessage({ type: 'error', error: String(e) })");
+    expect(source).toContain('this.ready = false;');
   });
 
   it('publishes metering at a throttled cadence with peak and RMS values', () => {

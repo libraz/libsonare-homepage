@@ -12,7 +12,8 @@ export interface RealtimeFxParams {
   brightness: number;
   /** Wet/dry mix handed to the native chain (0..1). */
   wet: number;
-  /** Post-chain monitor gain applied in the worklet (0..2). */
+  /** Post-chain monitor gain applied in the worklet, capped at unity to stay
+   * under the native −1 dBTP limiter (0..1). */
   outputGain: number;
   bypass: boolean;
 }
@@ -87,6 +88,8 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
 
     this.vc = null; this.base = null;
     this.seq = 0;
+    this.wasProcessing = false;
+    this.inView = null; this.outView = null;
 
     this.port.onmessage = (e) => this.onMessage(e.data);
     createModule({ wasmBinary: o.wasmBinary, locateFile: () => 'sonare.wasm' })
@@ -119,6 +122,11 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
     dsp.retune.mix = Math.abs(this.pitch) > 0.05 ? 1 : 0;
     dsp.formant.factor = this.formant;
     dsp.formant.brightness = this.brightness;
+    // Engage the formant module whenever the macros leave unity/neutral. The
+    // transparent monitor preset ships amount:0, which would otherwise leave
+    // the Formant and Brightness sliders inaudible on the default character.
+    dsp.formant.amount =
+      Math.abs(this.formant - 1) > 0.001 || Math.abs(this.brightness) > 0.001 ? 1 : 0;
     dsp.wetMix = this.wet;
     try { this.vc.setConfig(this.base); } catch (e) { /* keep last good config */ }
   }
@@ -126,10 +134,15 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
   onMessage(msg) {
     if (msg.type === 'params') {
       const p = msg.params;
-      if (this.vc && p.preset && p.preset !== this.preset) {
+      // Record the preset id even before the engine exists: params can arrive
+      // ahead of module init, and the stored id seeds createRealtimeVoiceChanger
+      // so a preset chosen during startup is never dropped.
+      if (p.preset && p.preset !== this.preset) {
         this.preset = p.preset;
-        try { this.vc.setConfig(this.preset); this.loadBase(); }
-        catch (e) { /* preset id rejected; keep current */ }
+        if (this.vc) {
+          try { this.vc.setConfig(this.preset); this.loadBase(); }
+          catch (e) { /* preset id rejected; keep current */ }
+        }
       }
       this.pitch = p.pitchSemitones; this.formant = p.formant;
       this.brightness = p.brightness; this.wet = p.wet;
@@ -169,46 +182,81 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
         if (aout > outputPeak) outputPeak = aout;
         outputSum += (ol * ol + or * or) * 0.5;
       }
-      if (this.vc) this.vc.reset();
+      // Leaving the processed path. The next processing block flushes stale
+      // native state once (transition reset below), so skip a per-block reset
+      // that would memset the whole voice changer every render quantum.
+      this.wasProcessing = false;
       this.publishMeter(n, inputPeak, outputPeak, inputSum, outputSum);
       return true;
     }
 
-    // Acquire fresh heap views each block — a same-size view is cheap, and
-    // re-acquiring keeps us immune to any Emscripten heap growth that would
-    // detach a cached typed-array view.
-    const inView = this.vc.getMonoInputBuffer(MAX_BLOCK);
     const m = Math.min(n, MAX_BLOCK);
-    for (let i = 0; i < m; i++) {
-      const l = inL ? inL[i] : 0;
-      const r = inR ? inR[i] : l;
-      const mono = (l + r) * 0.5;
-      inView[i] = mono;
-      const a = Math.abs(mono);
-      if (a > inputPeak) inputPeak = a;
-      inputSum += mono * mono;
-    }
+    try {
+      // Flush the native chain once on the transition back into processing so a
+      // resumed stream starts clean, without the tail left over from bypass.
+      if (!this.wasProcessing) { this.vc.reset(); this.wasProcessing = true; }
 
-    // The native chain (retune + formant + eq/gate/comp/deesser/reverb/limiter)
-    // runs in place on already-on-heap samples — no per-block JS↔C++ copy.
-    this.vc.processPreparedMono(m);
+      const inView = this.inputView();
+      for (let i = 0; i < m; i++) {
+        const l = inL ? inL[i] : 0;
+        const r = inR ? inR[i] : l;
+        const mono = (l + r) * 0.5;
+        inView[i] = mono;
+        const a = Math.abs(mono);
+        if (a > inputPeak) inputPeak = a;
+        inputSum += mono * mono;
+      }
 
-    const outView = this.vc.getMonoOutputBuffer(MAX_BLOCK);
-    const g = this.outputGain;
-    for (let i = 0; i < m; i++) {
-      const wet = outView[i];
-      const ol = wet * g;
-      const or = ol;
-      outL[i] = ol; outR[i] = or;
-      const aout = Math.abs(ol);
-      if (aout > outputPeak) outputPeak = aout;
-      outputSum += ol * ol;
+      // The native chain (retune + formant + eq/gate/comp/deesser/reverb/limiter)
+      // runs in place on already-on-heap samples — no per-block JS↔C++ copy.
+      this.vc.processPreparedMono(m);
+
+      const outView = this.outputView();
+      const g = this.outputGain;
+      for (let i = 0; i < m; i++) {
+        const wet = outView[i];
+        const ol = wet * g;
+        const or = ol;
+        outL[i] = ol; outR[i] = or;
+        const aout = Math.abs(ol);
+        if (aout > outputPeak) outputPeak = aout;
+        outputSum += ol * ol;
+      }
+      // Fill any tail beyond MAX_BLOCK (defensive; render quantum is 128).
+      for (let i = m; i < n; i++) { outL[i] = 0; outR[i] = 0; }
+    } catch (e) {
+      // A native fault must not wedge the graph in silence: surface it, drop to
+      // dry passthrough, and let the main thread tear the engine down.
+      this.ready = false;
+      this.wasProcessing = false;
+      this.port.postMessage({ type: 'error', error: String(e) });
+      const g = this.outputGain;
+      for (let i = 0; i < n; i++) {
+        const l = inL ? inL[i] : 0;
+        outL[i] = l * g; outR[i] = (inR ? inR[i] : l) * g;
+      }
+      this.publishMeter(n, inputPeak, outputPeak, inputSum, outputSum);
+      return true;
     }
-    // Fill any tail beyond MAX_BLOCK (defensive; render quantum is 128).
-    for (let i = m; i < n; i++) { outL[i] = 0; outR[i] = 0; }
 
     this.publishMeter(m, inputPeak, outputPeak, inputSum, outputSum);
     return true;
+  }
+
+  // Cached zero-copy heap views. Re-acquire only when Emscripten heap growth has
+  // detached the backing ArrayBuffer (its byteLength drops to 0).
+  inputView() {
+    if (!this.inView || this.inView.buffer.byteLength === 0) {
+      this.inView = this.vc.getMonoInputBuffer(MAX_BLOCK);
+    }
+    return this.inView;
+  }
+
+  outputView() {
+    if (!this.outView || this.outView.buffer.byteLength === 0) {
+      this.outView = this.vc.getMonoOutputBuffer(MAX_BLOCK);
+    }
+    return this.outView;
   }
 
   publishMeter(n, inputPeak, outputPeak, inputSum, outputSum) {
@@ -225,6 +273,19 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
 
 registerProcessor('libsonare-voice', LibsonareVoiceProcessor);
 `;
+}
+
+/**
+ * Map a caught start-up error to a stable code the UI localizes, so a raw
+ * browser message never reaches the user. A missing API and a mic-permission
+ * denial each get dedicated copy; anything else is a generic start failure.
+ */
+function toErrorCode(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message === 'no-mic-api') return 'no-mic-api';
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') return 'mic-denied';
+  }
+  return 'start-failed';
 }
 
 export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
@@ -285,12 +346,24 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
           const procSeconds = (msg.latencySamples || 0) / ctx.sampleRate;
           latencyMs.value = Math.round((procSeconds + (ctx.baseLatency || 0)) * 1000);
         } else if (msg?.type === 'meter') meter.value = msg;
-        else if (msg?.type === 'error') error.value = msg.error;
+        else if (msg?.type === 'error') {
+          // A worklet-side failure (module init or a native fault mid-stream)
+          // clears readiness so the dry mic path is never taken for ready.
+          ready.value = false;
+          error.value = 'engine-error';
+        }
       };
-      ready.value = true;
+      // Readiness belongs to the worklet's 'ready' message: the node exists but
+      // its native engine is still initializing, so do not report ready here —
+      // otherwise a failed init would leave raw dry mic audio flowing as "ready".
+      node.onprocessorerror = () => {
+        error.value = 'engine-error';
+        ready.value = false;
+        monitoring.value = false;
+      };
       return true;
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err);
+      error.value = toErrorCode(err);
       await dispose();
       return false;
     }

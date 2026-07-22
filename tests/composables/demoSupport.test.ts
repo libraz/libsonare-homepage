@@ -618,10 +618,12 @@ describe('useRealtimeFx', () => {
       });
       expect(node.name).toBe('libsonare-voice');
       expect(silentGain.gain.value).toBe(0);
-      expect(fx.ready.value).toBe(true);
 
-      // Latency is derived from the native chain's reported latency on `ready`.
+      // The worklet now owns readiness: ready flips true only once the processor
+      // posts 'ready' (init could still fail before then). Latency is derived
+      // from the native chain's reported latency on the same message.
       node.emit({ type: 'ready', latencySamples: 2232 });
+      expect(fx.ready.value).toBe(true);
       expect(fx.latencyMs.value).toBe(
         Math.round((2232 / context.sampleRate + context.baseLatency) * 1000),
       );
@@ -654,8 +656,9 @@ describe('useRealtimeFx', () => {
       expect(fx.monitoring.value).toBe(false);
       expect(node.port.messages).toContainEqual({ type: 'setEnabled', enabled: false });
 
+      // Worklet-reported faults surface as a localizable code, not the raw string.
       node.emit({ type: 'error', error: 'processor failed' });
-      expect(fx.error.value).toBe('processor failed');
+      expect(fx.error.value).toBe('engine-error');
 
       await fx.dispose();
       expect(fx.ready.value).toBe(false);
@@ -694,7 +697,9 @@ describe('useRealtimeFx', () => {
       await expect(fx.start()).resolves.toBe(false);
 
       const context = FxAudioContextMock.instances.at(-1)!;
-      expect(fx.error.value).toBe('wasm fetch failed');
+      // start() maps caught startup exceptions to a localizable error code
+      // (raw messages are no longer surfaced); a wasm fetch failure → 'start-failed'.
+      expect(fx.error.value).toBe('start-failed');
       expect(fx.ready.value).toBe(false);
       expect(fx.monitoring.value).toBe(false);
       expect(fx.latencyMs.value).toBe(0);
