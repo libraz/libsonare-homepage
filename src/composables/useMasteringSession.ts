@@ -13,10 +13,18 @@ import {
   MASTERING_VENUES,
   type MasteringMode,
   type MasteringSessionSettings,
+  moduleControlsFor,
 } from '@/utils/masteringUi';
 
 const sessionStorageKey = 'libsonare-mastering-session-v1';
 const chainPresetStorageKey = 'libsonare-mastering-chain-preset-v1';
+const MAX_CHAIN_SETTINGS_BYTES = 1_000_000;
+const MODULE_RANGES = new Map(
+  MASTERING_MODULES.flatMap((moduleId) => moduleControlsFor(moduleId)).map((control) => [
+    control.key,
+    { min: control.min, max: control.max },
+  ]),
+);
 
 interface MasteringSessionRefs {
   mode: Ref<MasteringMode>;
@@ -75,10 +83,16 @@ export function useMasteringSession(state: MasteringSessionRefs) {
     if (typeof settings.loudnessMatched === 'boolean')
       state.loudnessMatched.value = settings.loudnessMatched;
     if (settings.moduleSettings && typeof settings.moduleSettings === 'object') {
-      state.moduleSettings.value = {
-        ...state.moduleSettings.value,
-        ...settings.moduleSettings,
-      };
+      const current = state.moduleSettings.value;
+      const incoming = settings.moduleSettings as unknown as Record<string, unknown>;
+      const next = { ...current };
+      for (const key of Object.keys(current) as (keyof MasteringModuleSettings)[]) {
+        const value = incoming[key];
+        const range = MODULE_RANGES.get(key);
+        if (typeof value !== 'number' || !Number.isFinite(value) || !range) continue;
+        next[key] = clamp(value, range.min, range.max);
+      }
+      state.moduleSettings.value = next;
     }
   }
 
@@ -153,6 +167,7 @@ export function useMasteringSession(state: MasteringSessionRefs) {
     const file = input.files?.[0];
     if (!file) return;
     try {
+      if (file.size > MAX_CHAIN_SETTINGS_BYTES) throw new Error('settings file too large');
       const payload = JSON.parse(await file.text());
       applySessionSettings(payload.settings || payload);
       state.localError.value = null;

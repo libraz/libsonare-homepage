@@ -1,4 +1,5 @@
 import { ref, shallowRef } from 'vue';
+import { decodeAudioBuffer } from '@/utils/audio';
 import type { MasteringChainConfig, StreamingPlatform } from '@/wasm/index';
 
 export type MasteringPresetId =
@@ -112,6 +113,7 @@ type WorkerMessage =
   | { type: 'progress'; id: number; progress: number; stage: string }
   | { type: 'done'; id: number; result: RenderedMasteringAudio }
   | { type: 'analysisDone'; id: number; result: ReferenceAnalysisReport }
+  | { type: 'sourceAnalysisDone'; id: number; result: MasteringInsightReport }
   | { type: 'error'; id: number; error: string };
 
 export function useMastering() {
@@ -128,6 +130,8 @@ export function useMastering() {
   let audioContext: AudioContext | null = null;
   let worker: Worker | null = null;
   let renderRequestId = 0;
+  let operationGeneration = 0;
+  const pendingWorkerRejects = new Set<(reason?: unknown) => void>();
 
   async function initWasm() {
     if (isInitialized.value) return;
@@ -144,26 +148,28 @@ export function useMastering() {
   }
 
   async function loadFile(file: File): Promise<DecodedMasteringAudio> {
+    const generation = ++operationGeneration;
     isLoading.value = true;
     error.value = null;
     rendered.value = null;
 
     try {
       const decoded = await decodeFile(file);
+      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
       source.value = decoded;
       return decoded;
     } catch (e) {
       console.error('Failed to load mastering file:', e);
-      error.value = 'Failed to decode audio file';
+      if (generation === operationGeneration) error.value = 'Failed to decode audio file';
       throw e;
     } finally {
-      isLoading.value = false;
+      if (generation === operationGeneration) isLoading.value = false;
     }
   }
 
   async function decodeFile(file: File): Promise<DecodedMasteringAudio> {
     const ctx = getAudioContext();
-    const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+    const buffer = await decodeAudioBuffer(file, ctx);
     return {
       fileName: file.name,
       sampleRate: buffer.sampleRate,
@@ -182,6 +188,7 @@ export function useMastering() {
       throw new Error('No audio loaded');
     }
 
+    const generation = ++operationGeneration;
     isRendering.value = true;
     renderProgress.value = 0;
     renderStage.value = 'Queued';
@@ -192,16 +199,17 @@ export function useMastering() {
       const inputGainDb = options.moduleSettings?.inputGainDb ?? 0;
       const inputSource = inputGainDb !== 0 ? applyGain(source.value, inputGainDb) : source.value;
       const output = await renderInWorker(inputSource, config);
+      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
       rendered.value = output;
       renderProgress.value = 1;
       renderStage.value = 'Complete';
       return output;
     } catch (e) {
       console.error('Mastering render failed:', e);
-      error.value = 'Mastering render failed';
+      if (generation === operationGeneration) error.value = 'Mastering render failed';
       throw e;
     } finally {
-      isRendering.value = false;
+      if (generation === operationGeneration) isRendering.value = false;
     }
   }
 
@@ -213,6 +221,7 @@ export function useMastering() {
       throw new Error('No audio loaded');
     }
 
+    const generation = ++operationGeneration;
     isRendering.value = true;
     renderProgress.value = 0;
     renderStage.value = 'Queued';
@@ -229,47 +238,35 @@ export function useMastering() {
               right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
             };
       const output = await renderReferenceMatchInWorker(source.value, matchedReference, options);
+      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
       rendered.value = output;
       renderProgress.value = 1;
       renderStage.value = 'Complete';
       return output;
     } catch (e) {
       console.error('Reference match failed:', e);
-      error.value = 'Reference match failed';
+      if (generation === operationGeneration) error.value = 'Reference match failed';
       throw e;
     } finally {
-      isRendering.value = false;
+      if (generation === operationGeneration) isRendering.value = false;
     }
   }
 
   async function measureIntegratedLufs(audio: DecodedMasteringAudio): Promise<number> {
     await initWasm();
-    const mono = mixToMono(audio.left, audio.right);
-    return wasmModule.lufs(mono, audio.sampleRate).integratedLufs;
+    const interleaved = interleaveStereo(audio.left, audio.right);
+    return wasmModule.lufsInterleaved(interleaved, 2, audio.sampleRate).integratedLufs;
   }
 
   async function analyzeSource(platforms: StreamingPlatform[]): Promise<MasteringInsightReport> {
     if (!source.value) {
       throw new Error('No audio loaded');
     }
-    await initWasm();
-    const sampleRate = source.value.sampleRate;
-    const samples = mixToMono(source.value.left, source.value.right);
+    const generation = ++operationGeneration;
     try {
-      // Each pass is a heavy synchronous WASM call. Yield to the main thread
-      // between them so this background analysis does not freeze the UI while a
-      // full-length clip is profiled.
-      await yieldToMain();
-      const profile = parseJsonReport(wasmModule.masteringAudioProfile(samples, sampleRate));
-      await yieldToMain();
-      const suggestions = parseJsonReport(
-        wasmModule.masteringAssistantSuggest(samples, sampleRate),
-      );
-      await yieldToMain();
-      const streamingPreview = parseJsonReport(
-        wasmModule.masteringStreamingPreview(samples, sampleRate, platforms),
-      );
-      return { profile, suggestions, streamingPreview };
+      const report = await analyzeSourceInWorker(source.value, platforms);
+      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
+      return report;
     } catch (e) {
       // The mastering assistant rejects clips shorter than one analysis window.
       // It surfaces as a raw WASM exception pointer (a number), so normalise it
@@ -297,8 +294,11 @@ export function useMastering() {
             right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
           };
 
+    const generation = ++operationGeneration;
     try {
-      return await analyzeReferenceInWorker(source.value, matchedReference);
+      const report = await analyzeReferenceInWorker(source.value, matchedReference);
+      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
+      return report;
     } catch (e) {
       console.error('Reference analysis failed:', e);
       throw e instanceof Error ? e : new Error('Reference analysis failed');
@@ -316,6 +316,9 @@ export function useMastering() {
   }
 
   function dispose() {
+    operationGeneration++;
+    for (const reject of pendingWorkerRejects) reject(new Error('Mastering disposed'));
+    pendingWorkerRejects.clear();
     worker?.terminate();
     worker = null;
     audioContext?.close();
@@ -335,6 +338,7 @@ export function useMastering() {
     }
 
     return new Promise((resolve, reject) => {
+      pendingWorkerRejects.add(reject);
       const onMessage = (event: MessageEvent<WorkerMessage>) => {
         const message = event.data;
         if (message.id !== id) return;
@@ -347,6 +351,7 @@ export function useMastering() {
 
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
 
         if (message.type === 'done') {
           resolve(message.result);
@@ -360,6 +365,7 @@ export function useMastering() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
         // A genuine uncaught worker crash leaves the worker unusable — terminate
         // and null it so the next request spins up a fresh worker instead of
         // posting into a dead one (which never settles its promise).
@@ -370,14 +376,19 @@ export function useMastering() {
 
       worker!.addEventListener('message', onMessage);
       worker!.addEventListener('error', onError);
-      worker!.postMessage({
-        type: 'render',
-        id,
-        left: new Float32Array(audio.left),
-        right: new Float32Array(audio.right),
-        sampleRate: audio.sampleRate,
-        config,
-      });
+      const messageLeft = new Float32Array(audio.left);
+      const messageRight = new Float32Array(audio.right);
+      worker!.postMessage(
+        {
+          type: 'render',
+          id,
+          left: messageLeft,
+          right: messageRight,
+          sampleRate: audio.sampleRate,
+          config,
+        },
+        [messageLeft.buffer, messageRight.buffer],
+      );
     });
   }
 
@@ -395,6 +406,7 @@ export function useMastering() {
     }
 
     return new Promise((resolve, reject) => {
+      pendingWorkerRejects.add(reject);
       const onMessage = (event: MessageEvent<WorkerMessage>) => {
         const message = event.data;
         if (message.id !== id) return;
@@ -407,6 +419,7 @@ export function useMastering() {
 
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
 
         if (message.type === 'done') {
           resolve(message.result);
@@ -420,6 +433,7 @@ export function useMastering() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
         // A genuine uncaught worker crash leaves the worker unusable — terminate
         // and null it so the next request spins up a fresh worker instead of
         // posting into a dead one (which never settles its promise).
@@ -430,18 +444,25 @@ export function useMastering() {
 
       worker!.addEventListener('message', onMessage);
       worker!.addEventListener('error', onError);
-      worker!.postMessage({
-        type: 'referenceMatch',
-        id,
-        left: new Float32Array(audio.left),
-        right: new Float32Array(audio.right),
-        referenceLeft: new Float32Array(referenceAudio.left),
-        referenceRight: new Float32Array(referenceAudio.right),
-        sampleRate: audio.sampleRate,
-        targetLufs: options.targetLufs,
-        ceilingDb: options.ceilingDb,
-        lookaheadMs: options.lookaheadMs,
-      });
+      const left = new Float32Array(audio.left);
+      const right = new Float32Array(audio.right);
+      const referenceLeft = new Float32Array(referenceAudio.left);
+      const referenceRight = new Float32Array(referenceAudio.right);
+      worker!.postMessage(
+        {
+          type: 'referenceMatch',
+          id,
+          left,
+          right,
+          referenceLeft,
+          referenceRight,
+          sampleRate: audio.sampleRate,
+          targetLufs: options.targetLufs,
+          ceilingDb: options.ceilingDb,
+          lookaheadMs: options.lookaheadMs,
+        },
+        [left.buffer, right.buffer, referenceLeft.buffer, referenceRight.buffer],
+      );
     });
   }
 
@@ -458,6 +479,7 @@ export function useMastering() {
     }
 
     return new Promise((resolve, reject) => {
+      pendingWorkerRejects.add(reject);
       const onMessage = (event: MessageEvent<WorkerMessage>) => {
         const message = event.data;
         if (message.id !== id) return;
@@ -468,6 +490,7 @@ export function useMastering() {
 
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
 
         if (message.type === 'analysisDone') {
           resolve(message.result);
@@ -481,6 +504,7 @@ export function useMastering() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
         // A genuine uncaught worker crash leaves the worker unusable — terminate
         // and null it so the next request spins up a fresh worker instead of
         // posting into a dead one (which never settles its promise).
@@ -491,15 +515,66 @@ export function useMastering() {
 
       worker!.addEventListener('message', onMessage);
       worker!.addEventListener('error', onError);
-      worker!.postMessage({
-        type: 'referenceAnalyze',
-        id,
-        sourceLeft: new Float32Array(audio.left),
-        sourceRight: new Float32Array(audio.right),
-        referenceLeft: new Float32Array(referenceAudio.left),
-        referenceRight: new Float32Array(referenceAudio.right),
-        sampleRate: audio.sampleRate,
+      const sourceLeft = new Float32Array(audio.left);
+      const sourceRight = new Float32Array(audio.right);
+      const referenceLeft = new Float32Array(referenceAudio.left);
+      const referenceRight = new Float32Array(referenceAudio.right);
+      worker!.postMessage(
+        {
+          type: 'referenceAnalyze',
+          id,
+          sourceLeft,
+          sourceRight,
+          referenceLeft,
+          referenceRight,
+          sampleRate: audio.sampleRate,
+        },
+        [sourceLeft.buffer, sourceRight.buffer, referenceLeft.buffer, referenceRight.buffer],
+      );
+    });
+  }
+
+  function analyzeSourceInWorker(
+    audio: DecodedMasteringAudio,
+    platforms: StreamingPlatform[],
+  ): Promise<MasteringInsightReport> {
+    const id = ++renderRequestId;
+    if (!worker) {
+      worker = new Worker(new URL('../workers/mastering.worker.ts', import.meta.url), {
+        type: 'module',
       });
+    }
+
+    return new Promise((resolve, reject) => {
+      pendingWorkerRejects.add(reject);
+      const cleanup = () => {
+        worker?.removeEventListener('message', onMessage);
+        worker?.removeEventListener('error', onError);
+        pendingWorkerRejects.delete(reject);
+      };
+      const onMessage = (event: MessageEvent<WorkerMessage>) => {
+        const message = event.data;
+        if (message.id !== id) return;
+        if (message.type === 'progress') return;
+        cleanup();
+        if (message.type === 'sourceAnalysisDone') resolve(message.result);
+        else if (message.type === 'error') reject(new Error(message.error));
+        else reject(new Error('Unexpected worker response for source analysis'));
+      };
+      const onError = (event: ErrorEvent) => {
+        cleanup();
+        worker?.terminate();
+        worker = null;
+        reject(event.error || new Error(event.message));
+      };
+      worker!.addEventListener('message', onMessage);
+      worker!.addEventListener('error', onError);
+      const left = new Float32Array(audio.left);
+      const right = new Float32Array(audio.right);
+      worker!.postMessage(
+        { type: 'sourceAnalyze', id, left, right, sampleRate: audio.sampleRate, platforms },
+        [left.buffer, right.buffer],
+      );
     });
   }
 
@@ -526,23 +601,14 @@ export function useMastering() {
   };
 }
 
-function yieldToMain(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
+function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {
   const length = Math.min(left.length, right.length);
-  const mono = new Float32Array(length);
-  for (let i = 0; i < length; i++) mono[i] = (left[i] + right[i]) * 0.5;
-  return mono;
-}
-
-function parseJsonReport(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
+  const samples = new Float32Array(length * 2);
+  for (let i = 0; i < length; i++) {
+    samples[i * 2] = left[i];
+    samples[i * 2 + 1] = right[i];
   }
+  return samples;
 }
 
 function applyGain(audio: DecodedMasteringAudio, gainDb: number): DecodedMasteringAudio {

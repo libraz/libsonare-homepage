@@ -2,6 +2,7 @@ import type {
   MasteringChainConfig,
   MasteringResult,
   MasteringStereoChainResult,
+  StreamingPlatform,
 } from '../wasm/index';
 
 type WorkerRequest =
@@ -24,6 +25,14 @@ type WorkerRequest =
       targetLufs: number;
       ceilingDb: number;
       lookaheadMs: number;
+    }
+  | {
+      type: 'sourceAnalyze';
+      id: number;
+      left: Float32Array;
+      right: Float32Array;
+      sampleRate: number;
+      platforms: StreamingPlatform[];
     }
   | {
       type: 'referenceAnalyze';
@@ -65,6 +74,13 @@ type WasmModule = {
     sampleRate: number,
     params?: Record<string, number | boolean>,
   ) => string;
+  masteringAudioProfile: (samples: Float32Array, sampleRate: number) => string;
+  masteringAssistantSuggest: (samples: Float32Array, sampleRate: number) => string;
+  masteringStreamingPreview: (
+    samples: Float32Array,
+    sampleRate: number,
+    platforms: StreamingPlatform[],
+  ) => string;
 };
 
 let wasmModule: WasmModule | null = null;
@@ -84,6 +100,26 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (request.type === 'referenceAnalyze') {
       const result = analyzeReference(request);
       self.postMessage({ type: 'analysisDone', id: request.id, result });
+      return;
+    }
+
+    if (request.type === 'sourceAnalyze') {
+      const samples = mixToMono(request.left, request.right);
+      postProgress(request.id, 0.3, 'Profiling source');
+      const profile = parseJson(wasmModule.masteringAudioProfile(samples, request.sampleRate));
+      postProgress(request.id, 0.55, 'Building suggestions');
+      const suggestions = parseJson(
+        wasmModule.masteringAssistantSuggest(samples, request.sampleRate),
+      );
+      postProgress(request.id, 0.8, 'Previewing streaming delivery');
+      const streamingPreview = parseJson(
+        wasmModule.masteringStreamingPreview(samples, request.sampleRate, request.platforms),
+      );
+      self.postMessage({
+        type: 'sourceAnalysisDone',
+        id: request.id,
+        result: { profile, suggestions, streamingPreview },
+      });
       return;
     }
 

@@ -5,6 +5,7 @@ import { useMasteringInsights } from '@/composables/useMasteringInsights';
 const wasm = vi.hoisted(() => ({
   init: vi.fn(),
   lufs: vi.fn(),
+  lufsInterleaved: vi.fn(),
   masteringAudioProfile: vi.fn(),
   masteringAssistantSuggest: vi.fn(),
   masteringStreamingPreview: vi.fn(),
@@ -46,6 +47,7 @@ type WorkerErrorListener = (event: ErrorEvent) => void;
 class ErrorWorkerMock {
   static messages: unknown[] = [];
   static instances: ErrorWorkerMock[] = [];
+  static failSourceAnalysis = false;
   private messageListeners = new Set<WorkerMessageListener>();
   private errorListeners = new Set<WorkerErrorListener>();
   terminated = false;
@@ -72,6 +74,24 @@ class ErrorWorkerMock {
 
   postMessage(message: any) {
     ErrorWorkerMock.messages.push(message);
+    if (message.type === 'sourceAnalyze') {
+      for (const listener of this.messageListeners) {
+        listener({
+          data: ErrorWorkerMock.failSourceAnalysis
+            ? { type: 'error', id: message.id, error: 'audio too short' }
+            : {
+                type: 'sourceAnalysisDone',
+                id: message.id,
+                result: {
+                  profile: { duration: 12 },
+                  suggestions: 'not-json',
+                  streamingPreview: { platforms: [{ name: 'A' }] },
+                },
+              },
+        } as MessageEvent);
+      }
+      return;
+    }
     for (const listener of this.messageListeners) {
       listener({
         data: { type: 'progress', id: message.id, progress: 0.4, stage: 'Halfway' },
@@ -134,12 +154,14 @@ describe('useMastering failure paths and report parsing', () => {
     MasteringAudioContextMock.instances = [];
     ErrorWorkerMock.messages = [];
     ErrorWorkerMock.instances = [];
+    ErrorWorkerMock.failSourceAnalysis = false;
     CrashWorkerMock.instances = [];
     vi.stubGlobal('AudioContext', MasteringAudioContextMock);
     vi.stubGlobal('Worker', ErrorWorkerMock);
     wasm.init.mockResolvedValue(undefined);
 
     wasm.lufs.mockReturnValue({ integratedLufs: -16.25 });
+    wasm.lufsInterleaved.mockReturnValue({ integratedLufs: -16.25 });
     wasm.masteringAudioProfile.mockReturnValue('{"duration":12}');
     wasm.masteringAssistantSuggest.mockReturnValue('not-json');
     wasm.masteringStreamingPreview.mockReturnValue('{"platforms":[{"name":"A"}]}');
@@ -224,7 +246,7 @@ describe('useMastering failure paths and report parsing', () => {
     }
   });
 
-  it('mixes stereo to mono for lufs and preserves invalid json reports as raw text', async () => {
+  it('measures stereo LUFS and moves full source analysis to the worker', async () => {
     const mastering = useMastering();
     const audio: DecodedMasteringAudio = {
       fileName: 'source.wav',
@@ -237,7 +259,11 @@ describe('useMastering failure paths and report parsing', () => {
     mastering.source.value = audio;
 
     await expect(mastering.measureIntegratedLufs(audio)).resolves.toBe(-16.25);
-    expect(wasm.lufs).toHaveBeenCalledWith(new Float32Array([0, 0, 0.375]), 44_100);
+    expect(wasm.lufsInterleaved).toHaveBeenCalledWith(
+      new Float32Array([1, -1, -1, 1, 0.5, 0.25]),
+      2,
+      44_100,
+    );
 
     const report = await mastering.analyzeSource([
       { name: 'Service', targetLufs: -14, ceilingDb: -1 },
@@ -245,11 +271,11 @@ describe('useMastering failure paths and report parsing', () => {
     expect(report.profile).toEqual({ duration: 12 });
     expect(report.suggestions).toBe('not-json');
     expect(report.streamingPreview).toEqual({ platforms: [{ name: 'A' }] });
-    expect(wasm.masteringStreamingPreview).toHaveBeenCalledWith(
-      new Float32Array([0, 0, 0.375]),
-      44_100,
-      [{ name: 'Service', targetLufs: -14, ceilingDb: -1 }],
-    );
+    expect(ErrorWorkerMock.messages.at(-1)).toMatchObject({
+      type: 'sourceAnalyze',
+      sampleRate: 44_100,
+      platforms: [{ name: 'Service', targetLufs: -14, ceilingDb: -1 }],
+    });
   });
 
   it('throws analysis errors before wasm calls when no source is loaded', async () => {
@@ -290,9 +316,7 @@ describe('useMastering failure paths and report parsing', () => {
     try {
       // The assistant rejects clips shorter than one analysis window, but such a
       // clip still masters fine — the failure must stay non-fatal.
-      wasm.masteringAudioProfile.mockImplementation(() => {
-        throw new Error('audio too short');
-      });
+      ErrorWorkerMock.failSourceAnalysis = true;
 
       const mastering = useMastering();
       const file = new File(['audio'], 'short.wav', { type: 'audio/wav' });

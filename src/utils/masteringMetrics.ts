@@ -17,10 +17,16 @@ export function analyzeMasteringSignal(
   let count = 0;
   const stride = Math.max(1, Math.floor(left.length / 200000));
 
-  for (let i = 0; i < left.length; i += stride) {
+  // Peak is a safety/readout metric: never stride over a single-sample clip.
+  for (let i = 0; i < left.length; i++) {
     const leftSample = left[i];
     const rightSample = right[i] ?? leftSample;
     peak = Math.max(peak, Math.abs(leftSample), Math.abs(rightSample));
+  }
+
+  for (let i = 0; i < left.length; i += stride) {
+    const leftSample = left[i];
+    const rightSample = right[i] ?? leftSample;
     sumSquares += (leftSample * leftSample + rightSample * rightSample) / 2;
     sumLeftSquares += leftSample * leftSample;
     sumRightSquares += rightSample * rightSample;

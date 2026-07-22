@@ -84,6 +84,13 @@ describe('mastering metrics and report helpers', () => {
     expect(normalizeRange(0, -24, -8)).toBe(100);
   });
 
+  it('does not miss a single-sample peak between decimated RMS positions', () => {
+    const left = new Float32Array(400_002);
+    const right = new Float32Array(400_002);
+    left[1] = 1;
+    expect(analyzeMasteringSignal(left, right).peakDb).toBeCloseTo(0, 6);
+  });
+
   it('flattens nested report values and creates json blob urls', () => {
     const items = reportItems(
       {
@@ -313,6 +320,19 @@ describe('useMasteringSession', () => {
     expect(state.selectedVenue.value).toBe('livehouseSmall');
     expect(state.selectedPlatform.value).toBe('custom');
     expect(state.activeModule.value).toBe('limiter');
+
+    const originalSettings = { ...state.moduleSettings.value };
+    session.applySessionSettings({
+      moduleSettings: {
+        ...originalSettings,
+        limiterCeilingDb: 999,
+        compressorRatio: 'not-a-number',
+        unknownSetting: 12,
+      },
+    } as any);
+    expect(state.moduleSettings.value.limiterCeilingDb).toBeLessThan(999);
+    expect(state.moduleSettings.value.compressorRatio).toBe(originalSettings.compressorRatio);
+    expect(state.moduleSettings.value).not.toHaveProperty('unknownSetting');
   });
 
   it('saves/restores sessions, handles corrupt storage, and imports/exports presets', async () => {
@@ -363,6 +383,19 @@ describe('useMasteringSession', () => {
       target: {
         files: [{ text: async () => '{bad json' }],
         value: 'bad.json',
+      },
+    } as unknown as Event);
+    expect(restoredState.localError.value).toBe('master.errors.presetLoadFailed');
+
+    await restoredSession.handleChainImport({
+      target: {
+        files: [
+          {
+            size: 1_000_001,
+            text: vi.fn(async () => JSON.stringify({ settings: {} })),
+          },
+        ],
+        value: 'huge.json',
       },
     } as unknown as Event);
     expect(restoredState.localError.value).toBe('master.errors.presetLoadFailed');
