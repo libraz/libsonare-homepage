@@ -78,6 +78,9 @@ describe('AnalyzerDemo shell', () => {
       expect(wrapper.find('.tool-page__lang-switch').text()).toBe('EN');
       expect(wrapper.find('.audio-analyzer-stub').exists()).toBe(true);
       expect(wrapper.find('.tool-page__version').text()).toContain('v');
+      // WASM init failure surfaces an error status, not a hardcoded 'active'.
+      expect(wrapper.find('.status-indicator--error').exists()).toBe(true);
+      expect(wrapper.find('.status-indicator__label').text()).toBe('エンジンエラー');
 
       wrapper.unmount();
     } finally {

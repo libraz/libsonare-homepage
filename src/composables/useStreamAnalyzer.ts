@@ -587,6 +587,9 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
   }
 
   function destroy(): void {
+    // Release the native StreamAnalyzer before dropping the reference so its
+    // WASM-heap allocation does not leak on every route leave.
+    analyzer?.dispose();
     analyzer = null;
     wasmModule = null;
     isInitialized.value = false;

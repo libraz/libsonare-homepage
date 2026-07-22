@@ -342,6 +342,47 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(playerMock.setProcessCallback).toHaveBeenLastCalledWith(null);
   });
 
+  it('surfaces a decode error and restores the drop zone when an uploaded file fails to decode', async () => {
+    // Fail the auto-loaded demo so the drop zone is shown for the manual upload.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      })),
+    );
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    playerMock.loadAudio.mockReset();
+    playerMock.loadAudio.mockRejectedValue(new Error('decode failed'));
+
+    try {
+      const wrapper = mount(AudioAnalyzer);
+      await drainAsyncWork();
+
+      const dropZone = wrapper.findComponent({ name: 'DropZone' });
+      expect(dropZone.exists()).toBe(true);
+
+      const file = new File([new Uint8Array([1, 2, 3])], 'broken.wav', { type: 'audio/wav' });
+      dropZone.vm.$emit('file', file);
+      await drainAsyncWork();
+
+      // The error is surfaced to the user instead of being silently swallowed.
+      const errorEl = wrapper.find('.analyzer__error');
+      expect(errorEl.exists()).toBe(true);
+      expect(errorEl.text()).toContain('Could not decode');
+
+      // Upload state is rolled back: the loading overlay is gone and the drop
+      // zone is shown again so the visitor can retry (and the demo can fall back).
+      expect(wrapper.find('.analyzer__loading').exists()).toBe(false);
+      expect(wrapper.findComponent({ name: 'DropZone' }).exists()).toBe(true);
+      expect(playerMock.state.audioBuffer.value).toBeNull();
+
+      wrapper.unmount();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('falls back to the drop zone when the bundled demo cannot be fetched', async () => {
     vi.stubGlobal(
       'fetch',

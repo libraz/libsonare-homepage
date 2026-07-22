@@ -65,8 +65,12 @@ export function useAudioPlayer() {
       await ctx.resume();
     }
 
-    // Stop current playback
+    // Stop current playback. Clear the old source's 'ended' handler first: that
+    // event fires asynchronously, so without this the stale handler would run
+    // after the new source is assigned and tear down live playback (a seek or
+    // rewind would go silent and the playhead would jump to 0:00).
     if (sourceNode.value) {
+      sourceNode.value.onended = null;
       sourceNode.value.stop();
       sourceNode.value.disconnect();
     }
@@ -153,6 +157,7 @@ export function useAudioPlayer() {
     pauseTime.value = audioContext.value.currentTime - startTime.value;
 
     if (sourceNode.value) {
+      sourceNode.value.onended = null;
       sourceNode.value.stop();
       sourceNode.value.disconnect();
       sourceNode.value = null;
@@ -176,6 +181,7 @@ export function useAudioPlayer() {
 
   function stop() {
     if (sourceNode.value) {
+      sourceNode.value.onended = null;
       sourceNode.value.stop();
       sourceNode.value.disconnect();
       sourceNode.value = null;

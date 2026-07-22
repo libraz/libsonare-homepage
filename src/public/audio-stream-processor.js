@@ -6,8 +6,11 @@
 class AudioStreamProcessor extends AudioWorkletProcessor {
   constructor() {
     super()
-    this.buffer = []
     this.bufferSize = 4096  // Send samples in chunks of 4096
+    // Pre-allocated fill buffer; avoids per-block allocation/splice on the
+    // audio thread (which causes GC pauses = audible glitches).
+    this.chunk = new Float32Array(this.bufferSize)
+    this.fillCount = 0
     this.sampleOffset = 0
     this.isActive = true
 
@@ -16,12 +19,14 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
       if (event.data.type === 'stop') {
         this.isActive = false
       } else if (event.data.type === 'reset') {
-        this.buffer = []
+        this.fillCount = 0
         // Use provided sampleOffset or reset to 0
         this.sampleOffset = event.data.sampleOffset || 0
         this.isActive = true
       } else if (event.data.type === 'setBufferSize') {
         this.bufferSize = event.data.bufferSize
+        this.chunk = new Float32Array(this.bufferSize)
+        this.fillCount = 0
       }
     }
   }
@@ -45,20 +50,33 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
 
       // Collect samples for analysis (mono - use first channel)
       if (this.isActive && inputChannel) {
-        // Add samples to buffer
-        for (let i = 0; i < inputChannel.length; i++) {
-          this.buffer.push(inputChannel[i])
-        }
+        let read = 0
+        while (read < inputChannel.length) {
+          // Fill the pre-allocated chunk up to bufferSize.
+          const remaining = this.bufferSize - this.fillCount
+          const available = inputChannel.length - read
+          const take = remaining < available ? remaining : available
+          this.chunk.set(inputChannel.subarray(read, read + take), this.fillCount)
+          this.fillCount += take
+          read += take
 
-        // Send buffer to main thread when we have enough samples
-        while (this.buffer.length >= this.bufferSize) {
-          const chunk = this.buffer.splice(0, this.bufferSize)
-          this.port.postMessage({
-            type: 'samples',
-            samples: new Float32Array(chunk),
-            sampleOffset: this.sampleOffset,
-          })
-          this.sampleOffset += this.bufferSize
+          // Send to the main thread when a full chunk is ready. Transfer the
+          // buffer to avoid a copy, then allocate a fresh backing store for the
+          // next fill (transfer detaches the old one).
+          if (this.fillCount === this.bufferSize) {
+            const samples = this.chunk
+            this.chunk = new Float32Array(this.bufferSize)
+            this.fillCount = 0
+            this.port.postMessage(
+              {
+                type: 'samples',
+                samples,
+                sampleOffset: this.sampleOffset,
+              },
+              [samples.buffer],
+            )
+            this.sampleOffset += this.bufferSize
+          }
         }
       }
     }

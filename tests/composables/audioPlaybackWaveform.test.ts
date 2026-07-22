@@ -158,6 +158,60 @@ describe('useWaveform edge cases', () => {
       wrapper.unmount();
     }
   });
+
+  it('draws in logical pixels on a HiDPI display without double-applying the device pixel ratio', () => {
+    const fillRect = vi.fn();
+    const roundRect = vi.fn();
+    const scale = vi.fn();
+    const ctx = {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      fillRect,
+      beginPath: vi.fn(),
+      roundRect,
+      fill: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      scale,
+    };
+    // Backing store starts at logical size; handleResize rescales it to physical
+    // pixels (rect * dpr) and scales the context by dpr.
+    const canvas = {
+      width: 60,
+      height: 24,
+      getContext: vi.fn(() => ctx),
+      getBoundingClientRect: () => ({ width: 60, height: 24 }),
+    } as unknown as HTMLCanvasElement;
+    vi.stubGlobal('devicePixelRatio', 2);
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn().mockImplementation(function (callback: ResizeObserverCallback) {
+        return {
+          observe: vi.fn(() => callback([], {} as ResizeObserver)),
+          disconnect,
+        };
+      }),
+    );
+
+    const { wrapper, waveform } = mountWaveform(canvas);
+    try {
+      waveform.setAudioBuffer(audioBuffer([new Float32Array([0.1, 0.2, 0.3, 0.4])]));
+
+      // Backing store sized to physical pixels, context scaled by dpr once.
+      expect(canvas.width).toBe(120);
+      expect(canvas.height).toBe(48);
+      expect(scale).toHaveBeenCalledWith(2, 2);
+
+      // Bar count and background fill use logical (CSS) pixels, not physical —
+      // 60 / (barWidth + barGap) = 20, and the clear covers 60x24, not 120x48.
+      expect(waveform.waveformData.value).toHaveLength(20);
+      expect(fillRect).toHaveBeenCalledWith(0, 0, 60, 24);
+    } finally {
+      wrapper.unmount();
+    }
+  });
 });
 
 describe('useAudioPlayer edge cases', () => {
@@ -327,5 +381,43 @@ describe('useAudioPlayer edge cases', () => {
     wrapper.unmount();
     error.mockRestore();
     warn.mockRestore();
+  });
+
+  it('ignores a stale ended event from a previous source after a new source starts', async () => {
+    vi.stubGlobal('AudioContext', PlayerAudioContextMock);
+    vi.stubGlobal('AudioWorkletNode', PlayerWorkletNodeMock);
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const { wrapper, player } = mountPlayer();
+    await player.loadAudioFromArrayBuffer(new ArrayBuffer(4));
+    const context = PlayerAudioContextMock.instances[0];
+
+    await player.play();
+    const sourceA = context.sources[0];
+
+    // Simulate a seek/rewind: a new source B replaces A while playback continues.
+    await player.play();
+    const sourceB = context.sources[1];
+    expect(sourceB).not.toBe(sourceA);
+    expect(player.isPlaying.value).toBe(true);
+
+    // The old source's 'ended' event fires late, after B is already the current
+    // source. It must not tear down B (disconnect/null, reset time).
+    sourceA.onended?.();
+
+    expect(player.isPlaying.value).toBe(true);
+    expect(sourceB.disconnected).toBe(false);
+    expect(player.currentTime.value).toBe(0);
+
+    // The current source's own 'ended' event still resets playback.
+    sourceB.onended?.();
+    expect(player.isPlaying.value).toBe(false);
+    expect(sourceB.disconnected).toBe(true);
+
+    wrapper.unmount();
   });
 });

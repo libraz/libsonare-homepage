@@ -43,11 +43,11 @@ export function useWaveform(
 
   let resizeObserver: ResizeObserver | null = null;
   let currentAudioBuffer: AudioBuffer | null = null;
+  // Cached mono mixdown so resizes only re-bucket the existing samples instead
+  // of re-mixing the whole buffer channel-by-channel on every ResizeObserver tick.
+  let monoSamples: Float32Array | null = null;
 
-  function extractWaveformData(audioBuffer: AudioBuffer, numBars = 200): number[] {
-    const rawData =
-      audioBuffer.numberOfChannels > 1 ? mixToMono(audioBuffer) : audioBuffer.getChannelData(0);
-
+  function extractWaveformData(rawData: Float32Array, numBars = 200): number[] {
     const bars: number[] = [];
 
     for (let i = 0; i < numBars; i++) {
@@ -79,13 +79,19 @@ export function useWaveform(
 
   function mixToMono(audioBuffer: AudioBuffer): Float32Array {
     const length = audioBuffer.length;
-    const mono = new Float32Array(length);
     const channels = audioBuffer.numberOfChannels;
 
+    // Hoist the channel views out of the per-sample loop.
+    const channelData: Float32Array[] = [];
+    for (let ch = 0; ch < channels; ch++) {
+      channelData.push(audioBuffer.getChannelData(ch));
+    }
+
+    const mono = new Float32Array(length);
     for (let i = 0; i < length; i++) {
       let sum = 0;
       for (let ch = 0; ch < channels; ch++) {
-        sum += audioBuffer.getChannelData(ch)[i];
+        sum += channelData[ch][i];
       }
       mono[i] = sum / channels;
     }
@@ -95,16 +101,29 @@ export function useWaveform(
 
   function setAudioBuffer(audioBuffer: AudioBuffer) {
     currentAudioBuffer = audioBuffer;
+    monoSamples =
+      audioBuffer.numberOfChannels > 1 ? mixToMono(audioBuffer) : audioBuffer.getChannelData(0);
     recalcBars();
+  }
+
+  /**
+   * Logical (CSS-pixel) canvas size. The backing store is sized to physical
+   * pixels (rect * dpr) and the context is scaled by dpr, so all drawing must
+   * happen in logical pixels to avoid applying the device pixel ratio twice.
+   */
+  function logicalSize(canvas: HTMLCanvasElement): { width: number; height: number } {
+    const dpr = window.devicePixelRatio || 1;
+    return { width: canvas.width / dpr, height: canvas.height / dpr };
   }
 
   function recalcBars() {
     const canvas = canvasRef.value;
-    if (!canvas || !currentAudioBuffer) return;
+    if (!canvas || !currentAudioBuffer || !monoSamples) return;
 
-    const numBars = Math.floor(canvas.width / (barWidth + barGap));
+    const { width } = logicalSize(canvas);
+    const numBars = Math.floor(width / (barWidth + barGap));
     if (numBars > 0) {
-      waveformData.value = extractWaveformData(currentAudioBuffer, numBars);
+      waveformData.value = extractWaveformData(monoSamples, numBars);
     }
     draw();
   }
@@ -125,7 +144,8 @@ export function useWaveform(
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const { width, height } = canvas;
+    // Draw in logical pixels; the context is already dpr-scaled in handleResize.
+    const { width, height } = logicalSize(canvas);
     const data = waveformData.value;
 
     // Clear

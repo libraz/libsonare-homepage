@@ -51,7 +51,7 @@ export const enCopy = {
     },
     waveform: {
       title: 'Waveform & seek',
-      body: 'The full track amplitude over time. Click or drag anywhere on it to move the play head to that moment.',
+      body: 'The full track amplitude over time. Click anywhere on it to move the play head to that moment.',
       tip: 'Scrub to a chorus or drop and watch how the live BPM, key, and chord estimates react.',
     },
   },
@@ -104,7 +104,7 @@ export const jaCopy: typeof enCopy = {
     },
     waveform: {
       title: '波形とシーク',
-      body: '楽曲全体の振幅を時間軸で表したものです。どこをクリック／ドラッグしても再生ヘッドがその位置へ移動します。',
+      body: '楽曲全体の振幅を時間軸で表したものです。どこをクリックしても再生ヘッドがその位置へ移動します。',
       tip: 'サビやドロップへスクラブして、ライブの BPM・キー・コード推定がどう反応するか見てみましょう。',
     },
   },

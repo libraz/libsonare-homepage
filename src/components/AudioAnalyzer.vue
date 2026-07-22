@@ -48,6 +48,13 @@ function term(key: AnalyzerTermKey) {
 const isLoadingDemo = ref(false);
 const isStreamingMode = ref(true); // Enable streaming by default
 
+const decodeErrorMessage = computed(() =>
+  localizedValue({
+    en: 'Could not decode this audio file. Try a different WAV, MP3, or FLAC file.',
+    ja: 'この音声ファイルをデコードできませんでした。別の WAV・MP3・FLAC ファイルをお試しください。',
+  }),
+);
+
 const {
   isAnalyzing,
   progress,
@@ -120,6 +127,7 @@ async function handleFile(file: File) {
   isLoadingFile.value = true;
   fileProgress.value = 0;
   fileProgressStage.value = 'DECODING AUDIO';
+  analysisError.value = null;
 
   try {
     // Initialize WASM and StreamAnalyzer if needed
@@ -210,6 +218,13 @@ async function handleFile(file: File) {
   } catch (e) {
     console.error('Failed to process audio:', e);
     isLoadingFile.value = false;
+    // Surface the failure and roll back the upload state so the drop zone
+    // reappears with an explanation instead of silently showing a bare zone.
+    analysisError.value = decodeErrorMessage.value;
+    hasUserFile.value = false;
+    fileName.value = '';
+    resetStreamAnalyzer();
+    setProcessCallback(null);
   }
 }
 
