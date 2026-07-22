@@ -114,11 +114,11 @@ const progressRatio = computed(() =>
 // Localized label + character tag for the current movement.
 const movementLabel = computed(() => {
   const mv = GOLDBERG[currentMv.value];
-  return localizedValue({ en: mv.labelEn, ja: mv.labelJa });
+  return localizedValue(mv.label);
 });
 const movementTag = computed(() => {
   const mv = GOLDBERG[currentMv.value];
-  return localizedValue({ en: mv.tagEn ?? '', ja: mv.tagJa ?? '' });
+  return mv.tag ? localizedValue(mv.tag) : '';
 });
 
 // Notes currently sounding (from playback) plus any keys held by pointer, merged
@@ -805,7 +805,6 @@ const otherLocalePath = computed(() => alternateLocalePath('/practice'));
       <PracticeProgramBar
         :copy="copy"
         :movements="GOLDBERG"
-        :locale="locale"
         :current-movement="currentMv"
         :is-busy="isBusy"
         :game-mode="gameMode"

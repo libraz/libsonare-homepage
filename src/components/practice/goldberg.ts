@@ -4,25 +4,25 @@
  * verified bach-mcp reference transcription by `scripts/generate-practice-assets.mjs`
  * (`yarn generate:practice`) into `src/public/midi/goldberg/NN.mid`.
  *
- * Each entry carries a localized short label (for the piece selector) and an
+ * Each entry carries a localizable short label (for the piece selector) and an
  * optional character tag — the canon interval or the named form (Fughetta,
  * Ouverture, Quodlibet, …) — so the selector reads like a real program.
  */
+
+import type { LocalizedValueMap } from '@/locales';
 
 export interface GoldbergMovement {
   /** Movement number: 0 = Aria, 1–30 = variations, 31 = Aria da capo. */
   no: number;
   /** Public URL of the generated single-track MIDI. */
   file: string;
-  labelEn: string;
-  labelJa: string;
+  label: LocalizedValueMap<string>;
   /** Character of the movement (canon interval / named form), when notable. */
-  tagEn?: string;
-  tagJa?: string;
+  tag?: LocalizedValueMap<string>;
 }
 
 /** Character tags keyed by movement number (canons + named forms). */
-const TAGS: Record<number, { en: string; ja: string }> = {
+const TAGS: Record<number, LocalizedValueMap<string>> = {
   3: { en: 'Canon at the unison', ja: 'ユニゾンのカノン' },
   6: { en: 'Canon at the second', ja: '2度のカノン' },
   9: { en: 'Canon at the third', ja: '3度のカノン' },
@@ -46,25 +46,19 @@ function pad2(n: number): string {
 /** Build the 32-movement catalog (Aria, Var. 1–30, Aria da capo). */
 export const GOLDBERG: GoldbergMovement[] = Array.from({ length: 32 }, (_, no) => {
   const tag = TAGS[no];
-  let labelEn: string;
-  let labelJa: string;
+  let label: LocalizedValueMap<string>;
   if (no === 0) {
-    labelEn = 'Aria';
-    labelJa = 'アリア';
+    label = { en: 'Aria', ja: 'アリア' };
   } else if (no === 31) {
-    labelEn = 'Aria da Capo';
-    labelJa = 'アリア・ダ・カーポ';
+    label = { en: 'Aria da Capo', ja: 'アリア・ダ・カーポ' };
   } else {
-    labelEn = `Var. ${no}`;
-    labelJa = `第${no}変奏`;
+    label = { en: `Var. ${no}`, ja: `第${no}変奏` };
   }
   return {
     no,
     file: `/midi/goldberg/${pad2(no)}.mid`,
-    labelEn,
-    labelJa,
-    tagEn: tag?.en,
-    tagJa: tag?.ja,
+    label,
+    tag,
   };
 });
 

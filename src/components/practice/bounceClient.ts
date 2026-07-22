@@ -52,42 +52,77 @@ export interface BounceClient {
   dispose(): void;
 }
 
-/** Create a bounce client backed by a single dedicated worker. */
+/** Create a bounce client backed by a lazily replaceable dedicated worker. */
 export function createBounceClient(): BounceClient {
-  const worker = new Worker(new URL('./bounce.worker.ts', import.meta.url), { type: 'module' });
+  let worker: Worker | null = null;
+  let disposed = false;
   let nextId = 0;
   const pending = new Map<
     number,
     { resolve: (r: BounceResult) => void; reject: (e: Error) => void }
   >();
 
-  worker.onmessage = (event: MessageEvent<BounceResponse>) => {
-    const res = event.data;
-    const entry = pending.get(res.id);
-    if (!entry) return;
-    pending.delete(res.id);
-    if ('error' in res) entry.reject(new Error(res.error));
-    else entry.resolve({ pcm: res.pcm, version: res.version });
-  };
-  worker.onerror = (event) => {
-    // A worker crash would otherwise leave every request hanging forever.
-    const err = new Error(event.message || 'Bounce worker error');
+  function rejectPending(err: Error) {
     for (const entry of pending.values()) entry.reject(err);
     pending.clear();
-  };
+  }
+
+  function invalidateWorker(target: Worker, err: Error) {
+    if (worker !== target) return;
+    worker = null;
+    target.onmessage = null;
+    target.onerror = null;
+    target.terminate();
+    rejectPending(err);
+  }
+
+  function ensureWorker(): Worker {
+    if (disposed) throw new Error('Bounce worker disposed');
+    if (worker) return worker;
+    const created = new Worker(new URL('./bounce.worker.ts', import.meta.url), { type: 'module' });
+    worker = created;
+    created.onmessage = (event: MessageEvent<BounceResponse>) => {
+      if (worker !== created) return;
+      const res = event.data;
+      const entry = pending.get(res.id);
+      if (!entry) return;
+      pending.delete(res.id);
+      if ('error' in res) entry.reject(new Error(res.error));
+      else entry.resolve({ pcm: res.pcm, version: res.version });
+    };
+    created.onerror = (event) => {
+      invalidateWorker(created, new Error(event.message || 'Bounce worker error'));
+    };
+    return created;
+  }
 
   return {
     bounce(payload) {
       const id = ++nextId;
       return new Promise<BounceResult>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        worker.postMessage({ id, ...payload } satisfies BounceRequest);
+        let current: Worker;
+        try {
+          current = ensureWorker();
+          pending.set(id, { resolve, reject });
+          current.postMessage({ id, ...payload } satisfies BounceRequest);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          if (worker) invalidateWorker(worker, err);
+          else reject(err);
+        }
       });
     },
     dispose() {
-      for (const entry of pending.values()) entry.reject(new Error('Bounce worker disposed'));
-      pending.clear();
-      worker.terminate();
+      if (disposed) return;
+      disposed = true;
+      const current = worker;
+      worker = null;
+      if (current) {
+        current.onmessage = null;
+        current.onerror = null;
+        current.terminate();
+      }
+      rejectPending(new Error('Bounce worker disposed'));
     },
   };
 }

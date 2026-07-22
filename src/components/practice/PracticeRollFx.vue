@@ -45,6 +45,7 @@ let points: any = null;
 let beams: any[] = [];
 let strike: any = null;
 let resizeObserver: ResizeObserver | null = null;
+let disposed = false;
 
 // Pre-allocated particle buffers (note landings + game hit/miss bursts).
 const CAP = 1000;
@@ -320,7 +321,9 @@ function applyCamera(): void {
 
 onMounted(async () => {
   if (typeof window === 'undefined' || !host.value) return;
-  THREE = await import('three');
+  const loadedThree = await import('three');
+  if (disposed || !host.value) return;
+  THREE = loadedThree;
   rebuildKeyMap();
 
   scene = new THREE.Scene();
@@ -402,6 +405,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   resizeObserver?.disconnect();
   points?.geometry.dispose();
   points?.material.dispose();

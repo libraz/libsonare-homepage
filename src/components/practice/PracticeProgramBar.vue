@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { GoldbergMovement } from '@/components/practice/goldberg';
 import type { PracticeCopy } from '@/components/practice/practiceCopy';
+import { useI18n } from '@/composables/useI18n';
 
 const props = defineProps<{
   copy: PracticeCopy;
   movements: GoldbergMovement[];
-  locale: string;
   currentMovement: number;
   isBusy: boolean;
   gameMode: boolean;
@@ -26,10 +26,11 @@ const emit = defineEmits<{
   connectMidi: [];
 }>();
 
+const { localizedValue } = useI18n();
+
 function movementText(movement: GoldbergMovement): string {
-  const isJa = props.locale.startsWith('ja');
-  const label = isJa ? movement.labelJa : movement.labelEn;
-  const tag = isJa ? (movement.tagJa ?? movement.tagEn) : movement.tagEn;
+  const label = localizedValue(movement.label);
+  const tag = movement.tag ? localizedValue(movement.tag) : '';
   return tag ? `${label} - ${tag}` : label;
 }
 
