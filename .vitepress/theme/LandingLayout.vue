@@ -162,7 +162,7 @@ const localeCopy = {
       eyebrow: 'Apache-2.0 · ランタイム依存ゼロ · WebAssembly',
       title: '解析からアレンジまで、依存なしのオーディオエンジン。',
       subtitle:
-        'librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、リアルタイムなヘッドレス DAW ランタイム。C++・Python・ブラウザで使え、同じエンジンがネイティブと WASM で動きます。Python ランタイムなし、GPL/AGPL なし、モデル重みなし。',
+        'librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW のリアルタイムランタイム。ひとつのエンジンが C++・Python・ブラウザで、ネイティブでも WASM でも同じように動きます。Python ランタイムも、GPL/AGPL ライセンスも、学習済みモデルも要りません。',
       installCaption: 'インストール',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -182,7 +182,7 @@ const localeCopy = {
       eyebrow: 'ローカルで試す',
       heading: '9 つのデモ、ひとつのライブラリ。',
       subhead:
-        'すべてのデモは、同じ Apache-2.0 のプロセッサを WebAssembly でブラウザ内ローカル実行します。',
+        'どのデモも同じ Apache-2.0 のプロセッサを、WebAssembly でブラウザ内でそのまま動かします。',
       viewAll: 'すべてのデモを見る',
     },
     analyzer: {
@@ -207,7 +207,7 @@ const localeCopy = {
     },
     quickStart: {
       title: 'コードに組み込む',
-      subtitle: 'ひとつのライブラリ、3 つのランタイム。用途を選んでから実行環境を選びます。',
+      subtitle: 'ひとつのライブラリを、3 つのランタイムで。用途を選び、動かす場所を選ぶだけです。',
       docsLink: 'API ガイドを開く',
       disciplines: {
         analysis: '解析',
@@ -224,20 +224,20 @@ const localeCopy = {
       items: [
         {
           tag: 'ANALYSIS',
-          title: '音楽ツール向けの深い MIR 解析。',
-          body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、ルーム音響推定。デフォルト値は CI で生成した参照値と照合しています。',
+          title: '音楽ツールのための本格的な MIR 解析。',
+          body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、ルーム音響推定、幾何ベースのルームツール。デフォルト値は CI で生成した参照値と照合しています。',
           link: { label: '機能マップ', path: '/docs/api-surface' },
         },
         {
           tag: 'MASTERING & MIXING',
-          title: '放送品質のマスタリングとリアルタイム安全なミキシング。',
-          body: '公開リファレンスに基づく 76 個の名前付きマスタリング DSP プロセッサ（ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリング）に加え、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP、クリエイティブ FX を備えたリアルタイム安全なミキサー。',
+          title: '放送品質のマスタリングと、リアルタイムでも安全なミキシング。',
+          body: '公開リファレンスに基づく 76 個の名前付きマスタリング DSP プロセッサ（ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリング）に加え、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP、クリエイティブ FX を備えた、リアルタイムでも安全なミキサー。',
           link: { label: 'マスタリングプロセッサ', path: '/docs/mastering-processors' },
         },
         {
           tag: 'INSTRUMENTS & DAW',
           title: '内蔵インストゥルメントとヘッドレス DAW ランタイム。',
-          body: 'データ不要の GM フォールバックバンクを備えた 12 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤー。MIDI が無音になりません。オーディオと MIDI のトラックでプロジェクトを編集でき、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンス、ブラウザでは AudioWorklet 経由で動くサンプル精度のリアルタイムエンジンを提供します。',
+          body: 'データ不要の GM フォールバックバンクを備えた 12 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤーを内蔵。MIDI が無音になることはありません。オーディオと MIDI のトラックでプロジェクトを組み、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンスに対応。ブラウザでは AudioWorklet で動くサンプル精度のリアルタイムエンジンも使えます。',
           link: { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
         },
       ],

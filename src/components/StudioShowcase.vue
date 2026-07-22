@@ -1,10 +1,13 @@
 <script setup lang="ts">
 /**
- * StudioShowcase — a standalone band that points to sonare studio, the full
- * browser DAW built on libsonare, hosted on its own domain.
+ * StudioShowcase — a standalone band that points to sonare studio, a full
+ * browser DAW whose audio engine is libsonare, hosted on its own domain.
+ * (Score engraving and music theory live in separate libraries, so the copy
+ * scopes libsonare to the audio side rather than claiming the whole app.)
  *
  * It sits apart from the nine focused demos on purpose: those isolate one
- * capability each, whereas sonare studio drives the whole engine end-to-end.
+ * capability each, whereas sonare studio drives the audio engine end-to-end
+ * inside a real DAW.
  * The copy matches the libsonare README's temperature — a hosted live demo,
  * not a production product, source not public — so the framing stays honest
  * whether or not the source is ever published.
@@ -58,20 +61,20 @@ const LANES: Array<{ tone: 'a' | 'b' | 'c'; clips: Array<[number, number]> }> = 
 const copyMap = {
   en: {
     signal: 'LIVE',
-    eyebrow: 'FULL DAW · BUILT ON LIBSONARE',
+    eyebrow: 'FULL DAW · LIBSONARE AUDIO ENGINE',
     name: 'sonare studio',
     tagline: 'A full DAW in your browser',
-    body: 'Sequencing, piano roll, score engraving, a mixer, mastering, and WAV/MP3/MIDI/MusicXML export — a complete workstation, all client-side, built entirely on the libsonare engine. It shows how far one engine reaches, from analysis to a playable, exportable arrangement.',
+    body: 'A complete client-side workstation: sequencing, piano roll, score engraving, a mixer, mastering, and WAV/MP3/MIDI/MusicXML export. libsonare is its audio engine — playback, mixing, mastering, the built-in instruments, and WAV/MP3/MIDI export — while score engraving, MusicXML, and music theory come from separate libraries. It shows how far the audio engine reaches inside a real DAW.',
     note: 'Hosted live demo · source not public · not a production product.',
     cta: 'Open sonare studio',
     screenLabel: 'ARRANGEMENT',
   },
   ja: {
     signal: 'LIVE',
-    eyebrow: 'フルDAW · libsonare 製',
+    eyebrow: 'フルDAW · オーディオは libsonare',
     name: 'sonare studio',
     tagline: 'ブラウザで動くフルDAW',
-    body: 'シーケンス、ピアノロール、スコア浄書、ミキサー、マスタリング、WAV/MP3/MIDI/MusicXML 書き出しまで——すべてクライアントサイドで動く、libsonare エンジンだけで作られた完全なワークステーション。分析から、演奏でき書き出せるアレンジまで、1 つのエンジンがどこまで到達できるかを示します。',
+    body: 'シーケンス、ピアノロール、スコア浄書、ミキサー、マスタリング、WAV/MP3/MIDI/MusicXML 書き出しまで揃った、すべてクライアントサイドで動くワークステーション。libsonare はそのオーディオエンジンで、再生・ミキシング・マスタリング・内蔵音源・WAV/MP3/MIDI 書き出しを担います。スコア浄書・MusicXML・音楽理論は別ライブラリです。実際の DAW のなかでオーディオエンジンがどこまで通用するかを示しています。',
     note: 'ホスト型のライブデモ · ソース非公開 · 製品ではありません。',
     cta: 'sonare studio を開く',
     screenLabel: 'ARRANGEMENT',
