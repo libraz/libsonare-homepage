@@ -14,7 +14,11 @@ import type {
 type AnalyzeRequest = {
   type: 'analyze';
   id: number;
-  samples: Float32Array;
+  samples?: Float32Array;
+  // Full-resolution channel data is used for delivery metering. Musical
+  // analysis still runs on a mono mix derived inside the worker.
+  sourceLeft?: Float32Array;
+  sourceRight?: Float32Array;
   sampleRate: number;
   // Decimated stereo pair for the goniometer / stereo-field meters. Optional so
   // mono sources (or callers that skip it) simply omit the stereo metrics.
@@ -73,6 +77,7 @@ type WasmModule = {
     meanEnergy: number[];
   };
   lufs: (samples: Float32Array, sampleRate?: number) => LufsResult;
+  lufsInterleaved: (samples: Float32Array, channels: number, sampleRate?: number) => LufsResult;
   momentaryLufs: (samples: Float32Array, sampleRate?: number) => Float32Array;
   shortTermLufs: (samples: Float32Array, sampleRate?: number) => Float32Array;
   meteringTruePeakDb: (
@@ -236,7 +241,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
 function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
   if (!wasmModule) throw new Error('WASM module is not initialized');
-  const sourceSamples = request.samples;
+  const sourceLeft = request.sourceLeft;
+  const sourceRight = request.sourceRight;
+  const hasStereoSource = Boolean(
+    sourceLeft && sourceRight && sourceLeft.length > 0 && sourceLeft.length === sourceRight.length,
+  );
+  const sourceSamples = request.samples ?? mixChannels(sourceLeft, sourceRight);
   const sourceSampleRate = request.sampleRate;
   const duration = sourceSamples.length / sourceSampleRate;
   const prepared = prepareSamplesForAnalysis(sourceSamples, sourceSampleRate);
@@ -278,18 +288,20 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.58, 'Measuring loudness');
-  const loudness = wasmModule.lufs(samples, sampleRate);
+  const loudness = hasStereoSource
+    ? wasmModule.lufsInterleaved(interleaveStereo(sourceLeft!, sourceRight!), 2, sourceSampleRate)
+    : wasmModule.lufs(samples, sampleRate);
   const momentary = wasmModule.momentaryLufs(samples, sampleRate);
   const shortTerm = wasmModule.shortTermLufs(samples, sampleRate);
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.64, 'Metering signal');
-  // Meter the full-quality source mono so true peak / clipping reflect the
-  // delivered file, not the down-sampled analysis copy.
-  const truePeakDb = wasmModule.meteringTruePeakDb(sourceSamples, sourceSampleRate, 4);
-  const dcOffset = wasmModule.meteringDcOffset(sourceSamples, sourceSampleRate);
-  const clipping = wasmModule.meteringDetectClipping(sourceSamples, sourceSampleRate);
-  const metering = buildMetering(truePeakDb, dcOffset, clipping, request);
+  // Delivery metrics are evaluated independently per source channel. A mono
+  // downmix can cancel peaks, DC and clipping in anti-phase stereo material.
+  const delivery = hasStereoSource
+    ? meterStereoSource(sourceLeft!, sourceRight!, sourceSampleRate)
+    : meterMonoSource(sourceSamples, sourceSampleRate);
+  const metering = buildMetering(delivery, request);
 
   ensureNotCancelled(request.id);
   postProgress(request.id, 0.68, 'Computing chroma');
@@ -354,13 +366,11 @@ function runAnalysis(request: AnalyzeRequest): MusicAnalysisWorkerResult {
 const VECTORSCOPE_POINTS = 640;
 
 function buildMetering(
-  truePeakDb: number,
-  dcOffset: number,
-  clipping: ClippingReport,
+  delivery: DeliveryMetering,
   request: AnalyzeRequest,
 ): MusicAnalysisWorkerResult['metering'] {
-  const left = request.meterLeft;
-  const right = request.meterRight;
+  const left = request.meterLeft ?? request.sourceLeft;
+  const right = request.meterRight ?? request.sourceRight;
   const stereo: MusicAnalysisWorkerResult['metering']['stereo'] = {
     available: false,
     width: 0,
@@ -379,16 +389,73 @@ function buildMetering(
   }
 
   return {
-    truePeakDb,
-    dcOffset,
-    clipping: {
-      clippedSamples: clipping.clippedSamples,
-      clippingRatio: clipping.clippingRatio,
-      maxClippedPeak: clipping.maxClippedPeak,
-      regions: clipping.regions.length,
-    },
+    ...delivery,
     stereo,
   };
+}
+
+type DeliveryMetering = Omit<MusicAnalysisWorkerResult['metering'], 'stereo'>;
+
+function meterMonoSource(samples: Float32Array, sampleRate: number): DeliveryMetering {
+  if (!wasmModule) throw new Error('WASM module is not initialized');
+  const clipping = wasmModule.meteringDetectClipping(samples, sampleRate);
+  return {
+    truePeakDb: wasmModule.meteringTruePeakDb(samples, sampleRate, 4),
+    dcOffset: wasmModule.meteringDcOffset(samples, sampleRate),
+    clipping: serializeClipping(clipping),
+  };
+}
+
+function meterStereoSource(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate: number,
+): DeliveryMetering {
+  if (!wasmModule) throw new Error('WASM module is not initialized');
+  const leftClipping = wasmModule.meteringDetectClipping(left, sampleRate);
+  const rightClipping = wasmModule.meteringDetectClipping(right, sampleRate);
+  const leftDc = wasmModule.meteringDcOffset(left, sampleRate);
+  const rightDc = wasmModule.meteringDcOffset(right, sampleRate);
+  const clippedSamples = leftClipping.clippedSamples + rightClipping.clippedSamples;
+  return {
+    truePeakDb: Math.max(
+      wasmModule.meteringTruePeakDb(left, sampleRate, 4),
+      wasmModule.meteringTruePeakDb(right, sampleRate, 4),
+    ),
+    dcOffset: Math.abs(leftDc) >= Math.abs(rightDc) ? leftDc : rightDc,
+    clipping: {
+      clippedSamples,
+      clippingRatio: clippedSamples / Math.max(1, left.length + right.length),
+      maxClippedPeak: Math.max(leftClipping.maxClippedPeak, rightClipping.maxClippedPeak),
+      regions: leftClipping.regions.length + rightClipping.regions.length,
+    },
+  };
+}
+
+function serializeClipping(clipping: ClippingReport): DeliveryMetering['clipping'] {
+  return {
+    clippedSamples: clipping.clippedSamples,
+    clippingRatio: clipping.clippingRatio,
+    maxClippedPeak: clipping.maxClippedPeak,
+    regions: clipping.regions.length,
+  };
+}
+
+function mixChannels(left?: Float32Array, right?: Float32Array): Float32Array {
+  if (!left?.length) throw new Error('Audio samples are missing');
+  if (!right || right.length !== left.length) return new Float32Array(left);
+  const mono = new Float32Array(left.length);
+  for (let i = 0; i < left.length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+  return mono;
+}
+
+function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {
+  const interleaved = new Float32Array(left.length * 2);
+  for (let i = 0; i < left.length; i++) {
+    interleaved[i * 2] = left[i];
+    interleaved[i * 2 + 1] = right[i];
+  }
+  return interleaved;
 }
 
 // Even-stride a long sample series down to at most `target` plain numbers so the

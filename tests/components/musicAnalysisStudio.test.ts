@@ -148,11 +148,16 @@ type WorkerListener = (event: MessageEvent) => void;
 
 class MockWorker {
   static messages: any[] = [];
-  static mode: 'done' | 'error' = 'done';
+  static mode: 'done' | 'error' | 'defer' = 'done';
   static terminated = 0;
+  static instances: MockWorker[] = [];
 
   private messageListeners = new Set<WorkerListener>();
   private errorListeners = new Set<(event: ErrorEvent) => void>();
+
+  constructor() {
+    MockWorker.instances.push(this);
+  }
 
   addEventListener(
     type: 'message' | 'error',
@@ -177,6 +182,7 @@ class MockWorker {
       this.emit({ type: 'error', id: message.id, error: 'analysis failed', recoverable: true });
       return;
     }
+    if (MockWorker.mode === 'defer') return;
     this.emit({ type: 'done', id: message.id, result: analysisResult() });
   }
 
@@ -184,7 +190,7 @@ class MockWorker {
     MockWorker.terminated++;
   }
 
-  private emit(data: unknown) {
+  emit(data: unknown) {
     const event = { data } as MessageEvent;
     for (const listener of this.messageListeners) listener(event);
   }
@@ -198,6 +204,7 @@ describe('MusicAnalysisStudio', () => {
     MockWorker.messages = [];
     MockWorker.mode = 'done';
     MockWorker.terminated = 0;
+    MockWorker.instances = [];
     // @ts-expect-error test AudioContext mock implements decodeAudioData only
     globalThis.AudioContext = MockAudioContext;
     // @ts-expect-error test File mock implements the browser method decodeAudioFile needs
@@ -227,7 +234,8 @@ describe('MusicAnalysisStudio', () => {
       type: 'analyze',
       sampleRate: SAMPLE_RATE,
     });
-    expect(MockWorker.messages[0].samples).toBeInstanceOf(Float32Array);
+    expect(MockWorker.messages[0].sourceLeft).toBeInstanceOf(Float32Array);
+    expect(MockWorker.messages[0].sourceRight).toBeInstanceOf(Float32Array);
     expect(wrapper.text()).toContain('demo.mp3');
     expect(wrapper.text()).toContain('123.4');
     expect(wrapper.text()).toContain('D minor');
@@ -409,5 +417,31 @@ describe('MusicAnalysisStudio', () => {
       wrapper.unmount();
       consoleError.mockRestore();
     }
+  });
+
+  it('keeps only the latest dropped file result and terminates superseded analysis', async () => {
+    MockWorker.mode = 'defer';
+    const wrapper = mount(MusicAnalysisStudio);
+    const first = new MockFile([new Uint8Array([1])], 'first.wav', { type: 'audio/wav' });
+    const second = new MockFile([new Uint8Array([2])], 'second.wav', { type: 'audio/wav' });
+
+    void wrapper.find('.analysis-studio').trigger('drop', { dataTransfer: { files: [first] } });
+    await flushPromises();
+    expect(MockWorker.instances).toHaveLength(1);
+
+    void wrapper.find('.analysis-studio').trigger('drop', { dataTransfer: { files: [second] } });
+    await flushPromises();
+    expect(MockWorker.instances).toHaveLength(2);
+    expect(MockWorker.terminated).toBe(1);
+
+    const firstId = MockWorker.messages[0].id;
+    const secondId = MockWorker.messages[1].id;
+    MockWorker.instances[0].emit({ type: 'done', id: firstId, result: analysisResult() });
+    MockWorker.instances[1].emit({ type: 'done', id: secondId, result: analysisResult() });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('second.wav');
+    expect(wrapper.text()).not.toContain('first.wav');
+    wrapper.unmount();
   });
 });

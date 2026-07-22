@@ -47,6 +47,12 @@ const wasmMock = vi.hoisted(() => ({
     shortTermLufs: -16,
     loudnessRange: 4,
   })),
+  lufsInterleaved: vi.fn(() => ({
+    integratedLufs: -12,
+    momentaryLufs: -13,
+    shortTermLufs: -14,
+    loudnessRange: 5,
+  })),
   momentaryLufs: vi.fn(() => new Float32Array([Number.NaN, -15, -13, -14])),
   shortTermLufs: vi.fn(() => new Float32Array([-16, -15])),
   chroma: vi.fn(() => ({
@@ -294,6 +300,48 @@ describe('music analysis worker protocol', () => {
       id: 5,
       error: 'init failed',
       recoverable: true,
+    });
+  });
+
+  it('meters full-resolution stereo channels without destructive downmix cancellation', async () => {
+    const left = new Float32Array([1, 0.5, 0, -0.25]);
+    const right = new Float32Array([-1, -0.5, 0, 0.25]);
+    wasmMock.meteringTruePeakDb.mockReturnValueOnce(-3).mockReturnValueOnce(-0.2);
+    wasmMock.meteringDcOffset.mockReturnValueOnce(0.001).mockReturnValueOnce(-0.02);
+    wasmMock.meteringDetectClipping
+      .mockReturnValueOnce({
+        clippedSamples: 1,
+        clippingRatio: 0.25,
+        maxClippedPeak: 1.01,
+        regions: [{}],
+      })
+      .mockReturnValueOnce({
+        clippedSamples: 2,
+        clippingRatio: 0.5,
+        maxClippedPeak: 1.08,
+        regions: [{}, {}],
+      });
+
+    await (self as any).onmessage({
+      data: { type: 'analyze', id: 7, sourceLeft: left, sourceRight: right, sampleRate: 48_000 },
+    });
+
+    const interleaved = wasmMock.lufsInterleaved.mock.calls.at(-1)?.[0] as Float32Array;
+    expect(Array.from(interleaved)).toEqual([1, -1, 0.5, -0.5, 0, 0, -0.25, 0.25]);
+    expect(wasmMock.lufsInterleaved).toHaveBeenCalledWith(interleaved, 2, 48_000);
+    expect((posted.at(-1)!.message as any).result).toMatchObject({
+      summary: { integratedLufs: -12, loudnessRange: 5 },
+      metering: {
+        truePeakDb: -0.2,
+        dcOffset: -0.02,
+        clipping: {
+          clippedSamples: 3,
+          clippingRatio: 0.375,
+          maxClippedPeak: 1.08,
+          regions: 3,
+        },
+        stereo: { available: true },
+      },
     });
   });
 

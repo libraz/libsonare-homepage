@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
+import { computed, onUnmounted, ref, shallowRef } from 'vue';
 import { enCopy, jaCopy } from '@/components/analysis/musicAnalysisCopy';
 import {
   chordLabel as buildChordLabel,
@@ -25,6 +25,7 @@ import {
   TermLabel,
 } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
+import { useWasmBoot } from '@/composables/useWasmBoot';
 import {
   calculateCorrelation,
   calculatePeakRms,
@@ -35,7 +36,6 @@ import {
   formatDb,
   formatDuration,
   formatSampleRate,
-  mixToMono,
   type WaveformPeak,
 } from '@/utils/audio';
 import { buildTimeSeriesPath, invertedRangeToPercent } from '@/utils/scale';
@@ -52,7 +52,7 @@ type HeatmapKey = 'chroma' | 'mel' | 'cqt';
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
-const libVersion = ref('');
+const { version: libVersion } = useWasmBoot();
 const localError = ref<string | null>(null);
 const warning = ref<string | null>(null);
 const decoded = shallowRef<DecodedStereoAudio | null>(null);
@@ -71,6 +71,8 @@ const playFraction = ref(0);
 let audioContext: AudioContext | null = null;
 let worker: Worker | null = null;
 let requestId = 0;
+let loadGeneration = 0;
+let rejectActiveAnalysis: ((error: Error) => void) | null = null;
 let reportUrl: string | null = null;
 
 const docsPath = computed(() => localizedPath('/docs/glossary/concepts/mir-overview'));
@@ -234,30 +236,14 @@ const hasPlayback = computed(() => Boolean(mediaUrl.value));
 // a CSS var so the timeline, loudness, waveform, and melody overlays share a playhead.
 const playheadStyle = computed(() => ({ '--play': String(playFraction.value) }));
 
-onMounted(() => {
-  const ric = (window as any).requestIdleCallback;
-  if (ric) ric(initWasmVersion, { timeout: 2000 });
-  else setTimeout(initWasmVersion, 100);
-});
-
 onUnmounted(() => {
-  worker?.terminate();
+  loadGeneration += 1;
+  terminateAnalysisWorker();
   if (reportUrl) URL.revokeObjectURL(reportUrl);
   if (mediaUrl.value) URL.revokeObjectURL(mediaUrl.value);
   audioContext?.close();
   audioContext = null;
 });
-
-async function initWasmVersion() {
-  if (libVersion.value || typeof window === 'undefined') return;
-  try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
-    libVersion.value = wasm.version();
-  } catch (error) {
-    console.warn('Failed to initialize WASM version:', error);
-  }
-}
 
 function chooseFile() {
   fileInput.value?.click();
@@ -277,32 +263,43 @@ async function handleDrop(event: DragEvent) {
 }
 
 async function loadDemo() {
-  isLoading.value = true;
-  localError.value = null;
+  const generation = beginLoad();
   try {
     const response = await fetch('/demo.mp3');
+    if ('ok' in response && !response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
+    if (generation !== loadGeneration) return;
     const file = new File([blob], 'demo.mp3', { type: blob.type || 'audio/mpeg' });
-    await handleFile(file);
+    await handleFile(file, generation);
   } catch (error) {
+    if (generation !== loadGeneration) return;
     console.error(error);
     localError.value = copy.value.errors.demoFailed;
   } finally {
-    isLoading.value = false;
+    if (generation === loadGeneration) isLoading.value = false;
   }
 }
 
-async function handleFile(file: File) {
+function beginLoad(): number {
+  loadGeneration += 1;
+  terminateAnalysisWorker();
   isLoading.value = true;
+  isAnalyzing.value = false;
   localError.value = null;
   warning.value = null;
   result.value = null;
   progress.value = 0;
+  return loadGeneration;
+}
+
+async function handleFile(file: File, existingGeneration?: number) {
+  const generation = existingGeneration ?? beginLoad();
   progressStage.value = copy.value.progress.decoding;
 
   try {
     const context = getAudioContext();
     const audio = await decodeAudioFile(file, context);
+    if (generation !== loadGeneration) return;
     if (audio.duration > 10 * 60) {
       warning.value = copy.value.warnings.longFile;
     }
@@ -311,27 +308,31 @@ async function handleFile(file: File) {
     mediaUrl.value = URL.createObjectURL(file);
     playFraction.value = 0;
     waveform.value = downsampleWaveform(audio.left, audio.right, 900);
-    await analyzeCurrent();
+    await analyzeCurrent(generation);
   } catch (error) {
+    if (generation !== loadGeneration || String((error as Error)?.message) === 'cancelled') return;
     console.error(error);
     localError.value = copy.value.errors.loadFailed;
   } finally {
-    isLoading.value = false;
+    if (generation === loadGeneration) isLoading.value = false;
   }
 }
 
-async function analyzeCurrent() {
+async function analyzeCurrent(requestedGeneration?: number | Event) {
+  const generation = typeof requestedGeneration === 'number' ? requestedGeneration : loadGeneration;
   const audio = decoded.value;
-  if (!audio) return;
+  if (!audio || generation !== loadGeneration) return;
 
-  if (!worker) {
-    worker = new Worker(new URL('../workers/music-analysis.worker.ts', import.meta.url), {
-      type: 'module',
-    });
-  }
+  terminateAnalysisWorker();
+  const analysisWorker = new Worker(
+    new URL('../workers/music-analysis.worker.ts', import.meta.url),
+    { type: 'module' },
+  );
+  worker = analysisWorker;
 
   const id = ++requestId;
-  const mono = mixToMono(audio.left, audio.right);
+  const sourceLeft = new Float32Array(audio.left);
+  const sourceRight = new Float32Array(audio.right);
   const meter = decimateStereo(audio.left, audio.right, METER_STEREO_FRAMES);
   isAnalyzing.value = true;
   localError.value = null;
@@ -339,9 +340,10 @@ async function analyzeCurrent() {
   progressStage.value = copy.value.progress.queued;
 
   await new Promise<void>((resolve, reject) => {
+    rejectActiveAnalysis = reject;
     const onMessage = (event: MessageEvent<WorkerMessage>) => {
       const message = event.data;
-      if (message.id !== id) return;
+      if (message.id !== id || generation !== loadGeneration) return;
 
       if (message.type === 'progress') {
         progress.value = message.progress;
@@ -349,8 +351,9 @@ async function analyzeCurrent() {
         return;
       }
 
-      worker?.removeEventListener('message', onMessage);
-      worker?.removeEventListener('error', onError);
+      analysisWorker.removeEventListener('message', onMessage);
+      analysisWorker.removeEventListener('error', onError);
+      rejectActiveAnalysis = null;
 
       if (message.type === 'done') {
         result.value = message.result;
@@ -366,36 +369,46 @@ async function analyzeCurrent() {
     };
 
     const onError = (event: ErrorEvent) => {
-      worker?.removeEventListener('message', onMessage);
-      worker?.removeEventListener('error', onError);
+      analysisWorker.removeEventListener('message', onMessage);
+      analysisWorker.removeEventListener('error', onError);
+      rejectActiveAnalysis = null;
       reject(event.error || new Error(event.message));
     };
 
-    worker!.addEventListener('message', onMessage);
-    worker!.addEventListener('error', onError);
-    worker!.postMessage(
+    analysisWorker.addEventListener('message', onMessage);
+    analysisWorker.addEventListener('error', onError);
+    analysisWorker.postMessage(
       {
         type: 'analyze',
         id,
-        samples: mono,
+        sourceLeft,
+        sourceRight,
         sampleRate: audio.sampleRate,
         meterLeft: meter.left,
         meterRight: meter.right,
       },
-      [mono.buffer, meter.left.buffer, meter.right.buffer],
+      [sourceLeft.buffer, sourceRight.buffer, meter.left.buffer, meter.right.buffer],
     );
   })
     .catch((error) => {
-      if (String(error?.message || error) !== 'cancelled') {
+      if (generation === loadGeneration && String(error?.message || error) !== 'cancelled') {
         console.error(error);
         localError.value = copy.value.errors.analysisFailed;
-        worker?.terminate();
-        worker = null;
+        terminateAnalysisWorker();
       }
     })
     .finally(() => {
-      isAnalyzing.value = false;
+      if (generation === loadGeneration && id === requestId) isAnalyzing.value = false;
     });
+}
+
+function terminateAnalysisWorker() {
+  const reject = rejectActiveAnalysis;
+  rejectActiveAnalysis = null;
+  const currentWorker = worker;
+  worker = null;
+  currentWorker?.terminate();
+  reject?.(new Error('cancelled'));
 }
 
 function exportReport() {
