@@ -739,10 +739,6 @@ export default defineConfig({
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:image', content: `${siteUrl}/og-image.svg` }],
     ['meta', { name: 'twitter:image:alt', content: 'libsonare dependency-free audio engine' }],
-    [
-      'script',
-      { defer: '', 'data-domain': 'sonare.libraz.net', src: 'https://plausible.io/js/script.js' },
-    ],
   ],
 
   markdown: {
