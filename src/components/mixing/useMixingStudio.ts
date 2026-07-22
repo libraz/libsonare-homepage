@@ -417,12 +417,22 @@ export function useMixingStudio() {
             vcaGains.value[id] = clamp(scene.vcaGains[id], -24, 12);
         }
       }
-      for (const setting of scene.tracks || []) {
+      // A scene exported from a different session references tracks by id/name; when
+      // none match the loaded tracks the per-track settings are silently dropped, so
+      // count matches and surface it when nothing applied.
+      const sceneTracks = scene.tracks || [];
+      let applied = 0;
+      for (const setting of sceneTracks) {
         const track = tracks.value.find(
           (candidate) => candidate.id === setting.id || candidate.name === setting.name,
         );
         if (!track) continue;
         applySceneTrack(track, setting);
+        applied++;
+      }
+      if (sceneTracks.length > 0 && applied === 0) {
+        console.warn(`[mixing] scene import matched no tracks (${sceneTracks.length} skipped)`);
+        localError.value = copy.value.errors.sceneNoMatch;
       }
     } catch (error) {
       console.error(error);
@@ -644,7 +654,7 @@ export function useMixingStudio() {
     previewStartedAt = startAt;
 
     for (const track of tracks.value) {
-      if (soloActive ? !track.soloed : track.muted) continue;
+      if (soloActive ? !(track.soloed || track.soloSafe) : track.muted) continue;
       const clipStart = track.offsetSeconds;
       const clipEnd = track.offsetSeconds + track.audio.duration;
       if (clipEnd <= previewStartPosition) continue;

@@ -32,6 +32,7 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
     const o = options.processorOptions;
     this.ready = false;
     this.playing = false;
+    this.disposed = false;
     this.playhead = o.startFrame || 0;
     this.totalFrames = o.totalFrames || 0;
     this.masterGain = o.masterGain ?? 1;
@@ -63,9 +64,17 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
     else if (msg.type === 'gates') this.gates = msg.gates;
     else if (msg.type === 'masterGain') this.masterGain = msg.value;
     else if (msg.type === 'scene' && this.ready) { try { this.buildMixer(msg.sceneJson); } catch (e) {} }
+    else if (msg.type === 'dispose') {
+      this.playing = false;
+      this.disposed = true;
+      if (this.mixer) { try { this.mixer.delete(); } catch (e) {} this.mixer = null; }
+    }
   }
 
   process(_inputs, outputs) {
+    // Returning false lets the browser tear down this processor and free its
+    // WASM heap (native Mixer + strip PCM) after a dispose message.
+    if (this.disposed) return false;
     const out = outputs[0];
     if (!out || out.length < 2) return true;
     const outA = out[0], outB = out[1];
@@ -200,6 +209,13 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
 
   function teardownNode() {
     if (node) {
+      // Tell the processor to delete its native Mixer and stop processing so its
+      // audio-thread WASM heap is freed; disconnect alone leaks it on every restart.
+      try {
+        node.port.postMessage({ type: 'dispose' });
+      } catch {
+        /* port already closed */
+      }
       try {
         node.disconnect();
       } catch {
@@ -222,6 +238,10 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
         /* already closed */
       }
       context.value = null;
+    }
+    if (moduleUrl) {
+      URL.revokeObjectURL(moduleUrl);
+      moduleUrl = null;
     }
   }
 

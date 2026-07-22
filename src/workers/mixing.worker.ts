@@ -119,7 +119,12 @@ interface LufsResult {
 
 type WasmModule = {
   init: () => Promise<void>;
-  lufs: (samples: Float32Array, sampleRate?: number) => LufsResult;
+  lufsInterleaved: (samples: Float32Array, channels: number, sampleRate?: number) => LufsResult;
+  meteringTruePeakDb: (
+    samples: Float32Array,
+    sampleRate?: number,
+    oversampleFactor?: number,
+  ) => number;
   Mixer: {
     fromSceneJson(json: string, sampleRate?: number, blockSize?: number): MixerInstance;
   };
@@ -169,13 +174,17 @@ function bounce(request: WorkerRequest): MixingBounceResult {
     soloActive ? track.soloed || track.soloSafe : !track.muted,
   );
 
-  const frames = maxTrackFrames(request.tracks, sampleRate);
+  const dryFrames = maxTrackFrames(request.tracks, sampleRate);
 
-  if (!activeTracks.length || frames === 0) {
-    const left = new Float32Array(frames);
-    const right = new Float32Array(frames);
+  if (!activeTracks.length || dryFrames === 0) {
+    const left = new Float32Array(dryFrames);
+    const right = new Float32Array(dryFrames);
     return emptyResult(left, right, sampleRate);
   }
+
+  // Reverb decay and per-channel delay compensation ring out past the dry input;
+  // extend the render so processStereo is fed zero input through the whole tail.
+  const frames = dryFrames + tailFrames(activeTracks, request.reverb, sampleRate);
 
   // Pad each strip's audio by its arrangement offset so the bounce preserves timeline starts.
   const leftChannels = activeTracks.map((track) =>
@@ -259,11 +268,7 @@ function bounce(request: WorkerRequest): MixingBounceResult {
 
   const stats = calculateStats(outLeft, outRight);
   const integratedLufs = measureIntegratedLufs(outLeft, outRight, sampleRate, stats.integratedLufs);
-  // Aggregate the engine's per-strip true-peak (real inter-sample peak) for the master readout.
-  const masterTruePeakDb = stripMeters.reduce(
-    (max, meter) => Math.max(max, meter.truePeakDb),
-    -120,
-  );
+  const truePeakDb = measureMasterTruePeak(outLeft, outRight, sampleRate, stats.peakDb);
   return {
     left: outLeft,
     right: outRight,
@@ -275,7 +280,7 @@ function bounce(request: WorkerRequest): MixingBounceResult {
     peakDb: stats.peakDb,
     rmsDb: stats.rmsDb,
     integratedLufs,
-    truePeakDb: masterTruePeakDb > -120 ? masterTruePeakDb : stats.peakDb,
+    truePeakDb,
     correlation: stats.correlation,
   };
 }
@@ -289,13 +294,53 @@ function measureIntegratedLufs(
   if (!wasmModule) return fallback;
   try {
     const length = Math.min(left.length, right.length);
-    const mono = new Float32Array(length);
-    for (let i = 0; i < length; i++) mono[i] = (left[i] + right[i]) * 0.5;
-    const result = wasmModule.lufs(mono, sampleRate);
+    // Measure true stereo loudness: a mono (L+R)*0.5 downmix under-reads by ~3 dB
+    // versus the ITU-R BS.1770 channel-weighted sum used by lufsInterleaved.
+    const interleaved = new Float32Array(length * 2);
+    for (let i = 0; i < length; i++) {
+      interleaved[i * 2] = left[i];
+      interleaved[i * 2 + 1] = right[i];
+    }
+    const result = wasmModule.lufsInterleaved(interleaved, 2, sampleRate);
     return Number.isFinite(result.integratedLufs) ? result.integratedLufs : fallback;
   } catch {
     return fallback;
   }
+}
+
+// Master True Peak measured on the final post-master-fader stereo output; the
+// per-strip meter tap runs before the master fader and L/R sum and under-reads.
+function measureMasterTruePeak(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate: number,
+  fallback: number,
+): number {
+  if (!wasmModule) return fallback;
+  try {
+    const leftTp = wasmModule.meteringTruePeakDb(left, sampleRate, 4);
+    const rightTp = wasmModule.meteringTruePeakDb(right, sampleRate, 4);
+    const truePeak = Math.max(leftTp, rightTp);
+    return Number.isFinite(truePeak) ? truePeak : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// Extra render frames so reverb decay and per-channel delay compensation ring out
+// past the dry input instead of being truncated at the last dry sample.
+function tailFrames(
+  tracks: MixingTrackRenderState[],
+  reverb: ReverbConfig | undefined,
+  sampleRate: number,
+): number {
+  const maxDelay = tracks.reduce((max, track) => Math.max(max, track.channelDelaySamples ?? 0), 0);
+  let tail = maxDelay;
+  if (reverb?.enabled && reverb.decaySec > 0) {
+    tail += Math.ceil(reverb.decaySec * sampleRate);
+    tail += Math.ceil(((reverb.preDelayMs ?? 0) / 1000) * sampleRate);
+  }
+  return tail;
 }
 
 function applyAutomation(
@@ -350,7 +395,10 @@ function accumulateStripMeter(mixer: MixerInstance, index: number, state: StripM
     state.correlation = snapshot.correlation;
     state.monoCompatible = snapshot.likelyMonoCompatible;
     try {
-      state.goniometer = mixer.readGoniometerLatest(index, GONIO_POINTS) || [];
+      // readGoniometerLatest returns an embind-backed array whose constructor is a
+      // wrapped method, so it is not structured-cloneable and would break postMessage.
+      // Array.from() re-roots it as a plain array before it reaches the done payload.
+      state.goniometer = Array.from(mixer.readGoniometerLatest(index, GONIO_POINTS) || []);
     } catch {
       // Keep the previous trace if this read fails.
     }

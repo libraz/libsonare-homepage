@@ -98,6 +98,7 @@ export const enCopy = {
     loadFailed: 'Failed to decode one of the audio files.',
     bounceFailed: 'Mix bounce failed. Try fewer or shorter tracks.',
     sceneFailed: 'Could not import this scene JSON.',
+    sceneNoMatch: 'No track settings matched the loaded tracks. Load the matching audio first.',
   },
   stages: {
     'Preparing mix': 'Preparing mix',
@@ -401,6 +402,8 @@ export const jaCopy: typeof enCopy = {
     loadFailed: '音声ファイルのデコードに失敗しました。',
     bounceFailed: 'ミックスのバウンスに失敗しました。トラック数や長さを減らしてください。',
     sceneFailed: 'このシーン JSON を読み込めませんでした。',
+    sceneNoMatch:
+      '読み込み済みのトラックに一致する設定がありませんでした。先に対応する音源を読み込んでください。',
   },
   stages: {
     'Preparing mix': 'ミックスを準備中',
@@ -487,7 +490,7 @@ export const jaCopy: typeof enCopy = {
       panMode: {
         title: 'パンモード',
         body: 'バランスは既存の左右レベルを振り、ステレオパンはモノ合算した信号を定位し、デュアルパンは左右の入力を個別に配置します。',
-        tip: 'ステレオステムはバランス、モノ音源はステレオパン、ステレオ録音を手動で広げ／狭めたいときはデュアルパンを使います。',
+        tip: 'ステレオステムはバランス、モノラル音源はステレオパン、ステレオ録音を手動で広げ／狭めたいときはデュアルパンを使います。',
         default: 'バランス',
       },
       dualPan: {

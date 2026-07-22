@@ -4,6 +4,27 @@ const mixerInstances: any[] = [];
 
 const wasmMock = vi.hoisted(() => {
   const instances: any[] = [];
+
+  // Mimic an embind std::vector: an array-like carrying wrapped methods as own
+  // properties. Structured clone rejects it (DataCloneError), so the worker must
+  // re-root it with Array.from() before it reaches the postMessage payload.
+  function embindArray<T>(items: T[]): T[] {
+    const arr: any = {
+      length: items.length,
+      get(i: number) {
+        return this[i];
+      },
+      size() {
+        return this.length;
+      },
+      delete() {},
+    };
+    items.forEach((item, i) => {
+      arr[i] = item;
+    });
+    arr[Symbol.iterator] = Array.prototype[Symbol.iterator];
+    return arr as T[];
+  }
   class MixerMock {
     processCalls: Array<{ left: Float32Array[]; right: Float32Array[] }> = [];
     faderAutomation: unknown[] = [];
@@ -47,7 +68,7 @@ const wasmMock = vi.hoisted(() => {
     }
 
     readGoniometerLatest(index: number, maxPoints: number) {
-      return [{ left: index, right: maxPoints }];
+      return embindArray([{ left: index, right: maxPoints }]);
     }
 
     scheduleFaderAutomation(...args: unknown[]) {
@@ -79,12 +100,26 @@ const wasmMock = vi.hoisted(() => {
   return {
     instances,
     init: vi.fn(async () => undefined),
+    // Mono downmix path; the worker must NOT use this for the master readout.
     lufs: vi.fn(() => ({
       integratedLufs: -15,
       momentaryLufs: -15,
       shortTermLufs: -15,
       loudnessRange: 3,
     })),
+    lufsInterleaved: vi.fn(() => ({
+      integratedLufs: -14,
+      momentaryLufs: -14,
+      shortTermLufs: -14,
+      loudnessRange: 3,
+    })),
+    // Sample peak (dB) plus a small inter-sample bump so the value is distinguishable
+    // from the plain peak and proves the true-peak path ran on the passed buffer.
+    meteringTruePeakDb: vi.fn((samples: Float32Array) => {
+      let max = 0;
+      for (const value of samples) max = Math.max(max, Math.abs(value));
+      return max > 0 ? 20 * Math.log10(max) + 0.5 : -120;
+    }),
     Mixer: {
       fromSceneJson: vi.fn(
         (json: string, sampleRate = 48_000, blockSize = 512) =>
@@ -197,8 +232,8 @@ describe('mixing worker protocol', () => {
       result: {
         sampleRate: 10,
         duration: 0.4,
-        integratedLufs: -15,
-        truePeakDb: -5,
+        integratedLufs: -14,
+        truePeakDb: expect.closeTo(20 * Math.log10(0.5 * 10 ** (-6 / 20)) + 0.5, 3),
         stripMeters: [
           {
             id: 'solo',
@@ -283,5 +318,120 @@ describe('mixing worker protocol', () => {
       error: 'bad scene',
       recoverable: true,
     });
+  });
+
+  it('produces a done payload that survives structuredClone with goniometer data', async () => {
+    await (self as any).onmessage({
+      data: {
+        type: 'mixBounce',
+        id: 5,
+        sampleRate: 10,
+        masterFaderDb: 0,
+        tracks: [track({ soloed: true })],
+        reverb: { enabled: false, decaySec: 2, preDelayMs: 20 },
+        vcaGroups: [],
+      },
+    });
+
+    const done = posted.at(-1)!;
+    expect((done.message as any).type).toBe('done');
+    const goniometer = (done.message as any).result.stripMeters[0].goniometer;
+    expect(goniometer.length).toBeGreaterThan(0);
+    // The raw embind array is not structured-cloneable; the worker's Array.from()
+    // must have re-rooted it so the whole payload clones cleanly.
+    expect(() => structuredClone(done.message)).not.toThrow();
+    expect(structuredClone(done.message).result.stripMeters[0].goniometer).toEqual(goniometer);
+  });
+
+  it('measures integrated loudness from the interleaved stereo output', async () => {
+    await (self as any).onmessage({
+      data: {
+        type: 'mixBounce',
+        id: 6,
+        sampleRate: 10,
+        masterFaderDb: 0,
+        tracks: [track({ soloed: true })],
+        reverb: { enabled: false, decaySec: 2, preDelayMs: 20 },
+        vcaGroups: [],
+      },
+    });
+
+    expect(wasmMock.lufsInterleaved).toHaveBeenCalledTimes(1);
+    const [buffer, channels, sr] = wasmMock.lufsInterleaved.mock.calls[0];
+    expect(buffer).toBeInstanceOf(Float32Array);
+    expect(channels).toBe(2);
+    expect(sr).toBe(10);
+    // The mono downmix path must not be used for the master loudness readout.
+    expect(wasmMock.lufs).not.toHaveBeenCalled();
+    expect((posted.at(-1)!.message as any).result.integratedLufs).toBe(-14);
+  });
+
+  it('extends the render tail when reverb decay is active', async () => {
+    const dry = track({
+      soloed: true,
+      left: new Float32Array([0.5, 0.5]),
+      right: new Float32Array([0.5, 0.5]),
+    });
+
+    await (self as any).onmessage({
+      data: {
+        type: 'mixBounce',
+        id: 7,
+        sampleRate: 10,
+        masterFaderDb: 0,
+        tracks: [dry],
+        reverb: { enabled: false, decaySec: 1, preDelayMs: 0 },
+        vcaGroups: [],
+      },
+    });
+    const dryLength = (posted.at(-1)!.message as any).result.left.length;
+
+    await (self as any).onmessage({
+      data: {
+        type: 'mixBounce',
+        id: 8,
+        sampleRate: 10,
+        masterFaderDb: 0,
+        tracks: [
+          track({
+            soloed: true,
+            left: new Float32Array([0.5, 0.5]),
+            right: new Float32Array([0.5, 0.5]),
+          }),
+        ],
+        reverb: { enabled: true, decaySec: 1, preDelayMs: 0 },
+        vcaGroups: [],
+      },
+    });
+    const wetLength = (posted.at(-1)!.message as any).result.left.length;
+
+    expect(dryLength).toBe(2);
+    // 2 dry frames + ceil(1s * 10) reverb decay tail.
+    expect(wetLength).toBe(12);
+    expect(wetLength).toBeGreaterThan(dryLength);
+  });
+
+  it('measures master true peak on the post-master-fader output', async () => {
+    await (self as any).onmessage({
+      data: {
+        type: 'mixBounce',
+        id: 9,
+        sampleRate: 10,
+        masterFaderDb: -6,
+        tracks: [track({ soloed: true })],
+        reverb: { enabled: false, decaySec: 2, preDelayMs: 20 },
+        vcaGroups: [],
+      },
+    });
+
+    // Called once for the left channel and once for the right, on the faded output.
+    expect(wasmMock.meteringTruePeakDb).toHaveBeenCalledTimes(2);
+    const gain = 10 ** (-6 / 20);
+    const leftBuffer = wasmMock.meteringTruePeakDb.mock.calls[0][0] as Float32Array;
+    expect(leftBuffer[0]).toBeCloseTo(0.5 * gain, 6);
+    const result = (posted.at(-1)!.message as any).result;
+    // Reflects the −6 dB master fader, not the per-strip pre-fader true peak (−5).
+    expect(result.truePeakDb).toBeCloseTo(20 * Math.log10(0.5 * gain) + 0.5, 3);
+    expect(result.truePeakDb).not.toBe(-5);
   });
 });
