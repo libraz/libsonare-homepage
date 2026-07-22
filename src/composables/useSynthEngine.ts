@@ -155,6 +155,7 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
   /** True while the AudioContext is actually running (resumed by a gesture). */
   const running = ref(false);
   const meter = ref<SynthMeterState>({ peak: 0 });
+  const faultEpoch = ref(0);
 
   const context = shallowRef<AudioContext | null>(null);
   /** Post-worklet analyser tap, for the scope/spectrum display. */
@@ -210,6 +211,11 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
         outputChannelCount: [CHANNELS],
         processorOptions: { wasmBinary, patch: initialPatch },
       });
+      node.onprocessorerror = () => {
+        error.value = 'Synth audio processor failed';
+        faultEpoch.value++;
+        void dispose();
+      };
       const tap = ctx.createAnalyser();
       tap.fftSize = 2048;
       tap.smoothingTimeConstant = 0.75;
@@ -305,6 +311,7 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
         /* already disconnected */
       }
       node.port.onmessage = null;
+      node.onprocessorerror = null;
       node = null;
     }
     if (analyser.value) {
@@ -337,6 +344,7 @@ export function useSynthEngine(sonareUrl: string, wasmUrl: string) {
     error,
     running,
     meter,
+    faultEpoch,
     context,
     analyser,
     start,

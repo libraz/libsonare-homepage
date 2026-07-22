@@ -30,6 +30,7 @@ import ToolShell from '@/components/ToolShell.vue';
 import { RotaryKnob, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useSynthEngine } from '@/composables/useSynthEngine';
+import { bootWasm } from '@/composables/useWasmBoot';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
 import type { WebMidiBinding, WebMidiInputInfo } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -101,6 +102,7 @@ const midiSupported = ref<boolean | null>(null);
 const midiConnecting = ref(false);
 const midiError = ref(false);
 const midiBinding = shallowRef<WebMidiBinding | null>(null);
+let componentDisposed = false;
 const midiInputs = ref<WebMidiInputInfo[]>([]);
 
 const isReady = engine.ready;
@@ -199,6 +201,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  componentDisposed = true;
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('keyup', onKeyUp);
   window.removeEventListener('blur', releaseAll);
@@ -211,8 +214,7 @@ onUnmounted(() => {
 /** Load version, preset catalog, and enum tables from the main-thread WASM module. */
 async function initWasmMeta() {
   try {
-    const wasm = await import('@/wasm/index.js');
-    await wasm.init();
+    const wasm = await bootWasm();
     wasmModule.value = wasm;
     libVersion.value = wasm.version();
     const names = wasm.synthPresetNames();
@@ -356,6 +358,10 @@ async function connectMidi() {
         midiInputs.value = inputs;
       },
     });
+    if (componentDisposed) {
+      binding.close();
+      return;
+    }
     midiBinding.value = binding;
     midiInputs.value = binding.inputs();
   } catch (error) {
@@ -398,6 +404,8 @@ const { onKeyDown, onKeyUp, releaseHeldPcNotes } = useSynthKeyboardInput({
   noteOff,
   shiftOctave,
 });
+
+watch(engine.faultEpoch, () => releaseAll());
 
 /** Release every sounding note (octave shifts, panic, window blur). */
 function releaseAll() {
