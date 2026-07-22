@@ -443,8 +443,15 @@ function renderAdjustedNow(): void {
 
 async function runCompare(): Promise<void> {
   compareActive.value = true;
-  await ensureOriginal();
-  renderAdjustedNow();
+  // Every call site fires this as `void runCompare()`, so swallow failures here
+  // rather than let a rejection escape as an unhandled promise (e.g. an oracle
+  // render throwing) — a failed comparison must not tear down the demo.
+  try {
+    await ensureOriginal();
+    renderAdjustedNow();
+  } catch (err) {
+    console.error('[tuner] compare failed:', err);
+  }
 }
 
 /** Debounced adjusted re-render while the user drags parameters. */
@@ -1095,6 +1102,7 @@ onUnmounted(() => {
   window.removeEventListener('keyup', onKeyUp);
   window.removeEventListener('blur', releaseAll);
   for (const timer of scaleTimers) clearTimeout(timer);
+  for (const timer of phraseTimers) clearTimeout(timer);
   if (adjustTimer) clearTimeout(adjustTimer);
   autofit.dispose();
   void engine.dispose();

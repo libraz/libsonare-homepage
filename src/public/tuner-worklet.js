@@ -2321,6 +2321,7 @@
   // src/tuner/dsp/piano-voice.ts
   var TWO_PI9 = 2 * Math.PI;
   var MAX_PIANO_STRINGS = 3;
+  var PIANO_DIRECT_GAIN = 0.3;
   var PIANO_DISPERSION_STAGES = 4;
   var PIANO_MIN_FUNDAMENTAL_HZ = 26;
   var HAMMER_MF_VEL = 0.6;
@@ -2819,6 +2820,189 @@
         s.gFast = 0;
       }
       this.bridge = 0;
+    }
+  };
+  var RESONANCE_MODES = 16;
+  function makeModes(count) {
+    return Array.from({ length: count }, () => ({ a1: 0, a2: 0, gain: 0, y1: 0, y2: 0 }));
+  }
+  var PianoResonanceBank = class {
+    modes = makeModes(RESONANCE_MODES);
+    gate = 0;
+    gateOpenCoeff = 1;
+    gateCloseCoeff = 1;
+    ringout = 1;
+    outGain = 0;
+    /** Tunes the mode bank for `sampleRate` and clears the state. */
+    prepare(sampleRate2) {
+      const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
+      for (let i = 0; i < RESONANCE_MODES; ++i) {
+        const m = this.modes[i];
+        const note = 28 + 4 * i;
+        const f = noteToHz8(note);
+        if (f >= 0.45 * sr) {
+          m.a1 = 0;
+          m.a2 = 0;
+          m.gain = 0;
+          m.y1 = 0;
+          m.y2 = 0;
+          continue;
+        }
+        const w = TWO_PI9 * f / sr;
+        const r = Math.exp(-6.907755279 / (sr * 0.6));
+        m.a1 = 2 * r * Math.cos(w);
+        m.a2 = -r * r;
+        m.gain = 1 - r;
+        m.y1 = 0;
+        m.y2 = 0;
+      }
+      this.gate = 0;
+      this.gateOpenCoeff = 1 - Math.exp(-1 / (0.01 * sr));
+      this.gateCloseCoeff = 1 - Math.exp(-1 / (0.06 * sr));
+      this.ringout = Math.exp(-6.907755279 / (sr * 0.15));
+      this.outGain = 0.06;
+    }
+    /** Clears the resonator state and the damper gate. */
+    reset() {
+      for (const m of this.modes) {
+        m.y1 = 0;
+        m.y2 = 0;
+      }
+      this.gate = 0;
+    }
+    /**
+     * Adds the sympathetic resonance for one input sample. `damperOpen`
+     * (sustain pedal down) gates the excitation through a smoothed envelope.
+     */
+    process(bridgeIn, damperOpen) {
+      const duplexFloor = 0.3;
+      const target = damperOpen ? 1 : duplexFloor;
+      this.gate += (damperOpen ? this.gateOpenCoeff : this.gateCloseCoeff) * (target - this.gate);
+      const x = this.gate * bridgeIn;
+      let sum = 0;
+      for (const m of this.modes) {
+        const y = m.a1 * m.y1 + m.a2 * m.y2 + m.gain * x;
+        m.y2 = m.y1;
+        m.y1 = y;
+        sum += y;
+      }
+      if (!damperOpen && this.gate < 0.5 && this.gate > 1.2 * duplexFloor) {
+        for (const m of this.modes) {
+          m.y1 *= this.ringout;
+          m.y2 *= this.ringout;
+        }
+      }
+      return this.outGain * sum;
+    }
+  };
+  var SOUNDBOARD_MODES = 40;
+  var DIFFUSER_CAPACITY = 2048;
+  var PianoSoundboard = class {
+    modes = makeModes(SOUNDBOARD_MODES);
+    diffBuf = [
+      new Float32Array(DIFFUSER_CAPACITY),
+      new Float32Array(DIFFUSER_CAPACITY)
+    ];
+    diffLen = [0, 0];
+    diffIdx = [0, 0];
+    in1 = 0;
+    in2 = 0;
+    outGain = 0;
+    /** Tunes the mode bank for `sampleRate` at the patch soundboard `mix`. */
+    prepare(sampleRate2, mix) {
+      const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
+      this.outGain = clamp9(mix, 0, 1);
+      const diffuserMs = [4.1, 9.7];
+      for (let d = 0; d < 2; ++d) {
+        this.diffLen[d] = clamp9(Math.trunc(diffuserMs[d] * 1e-3 * sr), 4, DIFFUSER_CAPACITY);
+        this.diffBuf[d].fill(0);
+        this.diffIdx[d] = 0;
+      }
+      const fLow = 92;
+      const fHigh = 5400;
+      for (let i = 0; i < SOUNDBOARD_MODES; ++i) {
+        const m = this.modes[i];
+        const u = i / (SOUNDBOARD_MODES - 1);
+        const h = Math.imul(i + 1, 2654435761) >>> 0;
+        const jit = ((h >>> 9 & 65535) / 65535 - 0.5) * 0.08;
+        const f = fLow * (fHigh / fLow) ** u * (1 + jit);
+        if (f >= 0.45 * sr) {
+          m.a1 = 0;
+          m.a2 = 0;
+          m.gain = 0;
+          m.y1 = 0;
+          m.y2 = 0;
+          continue;
+        }
+        const w = TWO_PI9 * f / sr;
+        const t60 = clamp9(0.6 * (fLow / f) ** 0.55, 0.04, 0.6);
+        const r = Math.exp(-6.907755279 / (sr * t60));
+        m.a1 = 2 * r * Math.cos(w);
+        m.a2 = -r * r;
+        const tilt = (320 / f) ** 0.35;
+        const l = Math.log(f / 320);
+        const formant = 1 + Math.exp(-l * l / 0.9);
+        const dRe = 1 - m.a1 * Math.cos(w) - m.a2 * Math.cos(2 * w);
+        const dIm = m.a1 * Math.sin(w) + m.a2 * Math.sin(2 * w);
+        const dMag = Math.sqrt(dRe * dRe + dIm * dIm);
+        m.gain = tilt * formant * dMag / Math.max(2 * Math.sin(w), 1e-6);
+        m.y1 = 0;
+        m.y2 = 0;
+      }
+      this.in1 = 0;
+      this.in2 = 0;
+    }
+    /** Clears the resonator and diffuser state. */
+    reset() {
+      for (const m of this.modes) {
+        m.y1 = 0;
+        m.y2 = 0;
+      }
+      for (let d = 0; d < 2; ++d) {
+        this.diffBuf[d].fill(0);
+        this.diffIdx[d] = 0;
+      }
+      this.in1 = 0;
+      this.in2 = 0;
+    }
+    /**
+     * Radiates one summed input sample: the phase-diffused complement of the
+     * host's direct share plus the (mix-scaled) modal colour. The reference
+     * core's sustain-air texture ships with a zero gain, so it is omitted here.
+     */
+    process(input) {
+      const diffuserG = 0.55;
+      let d = input;
+      for (let st = 0; st < 2; ++st) {
+        const len = this.diffLen[st];
+        if (len === 0) break;
+        const buf = this.diffBuf[st];
+        const idx = this.diffIdx[st];
+        const v = d + diffuserG * buf[idx];
+        const y = buf[idx] - diffuserG * v;
+        buf[idx] = v;
+        this.diffIdx[st] = idx + 1 < len ? idx + 1 : 0;
+        d = y;
+      }
+      const bp = d - this.in2;
+      this.in2 = this.in1;
+      this.in1 = d;
+      let sum = 0;
+      for (const m of this.modes) {
+        const y = m.a1 * m.y1 + m.a2 * m.y2 + m.gain * bp;
+        m.y2 = m.y1;
+        m.y1 = y;
+        sum += y;
+      }
+      return (1 - PIANO_DIRECT_GAIN) * d + this.outGain * sum;
+    }
+    /**
+     * The phase-diffused sample computed by the last process() call. Feed
+     * resonance banks from this (not the raw dry) so their returns share the
+     * radiated path's phase field.
+     */
+    lastDiffused() {
+      return this.in1;
     }
   };
 
@@ -4063,6 +4247,12 @@
     freeReed;
     current = null;
     body = new BodyResonator();
+    // Piano's host-owned radiation chain (instrument-wide in the C++ engine): the
+    // modal soundboard and the pedal-gated sympathetic bank. Created lazily for
+    // the piano engine and composed around the voice core in renderCore().
+    pianoBoard;
+    pianoBank;
+    usePianoBoard = false;
     env;
     drive = 0;
     driveMakeup = 1;
@@ -4080,6 +4270,15 @@
       const sr = this.sampleRate;
       const seed = voiceSeed(voiceIndex, note, age);
       this.current = this.startCore(spec, note, velocity, seed);
+      if (spec.engineMode === "piano" && spec.piano) {
+        this.pianoBoard ??= new PianoSoundboard();
+        this.pianoBank ??= new PianoResonanceBank();
+        this.pianoBoard.prepare(sr, spec.piano.soundboard);
+        this.pianoBank.prepare(sr);
+        this.usePianoBoard = true;
+      } else {
+        this.usePianoBoard = false;
+      }
       this.body.start(spec.body, sr, noteToHz13(note), spec.bodyMix);
       this.env.configure(spec.ampEnv);
       this.env.trigger();
@@ -4159,7 +4358,12 @@
       this.note = -1;
     }
     renderCore() {
-      return this.current ? this.current.render(1) : 0;
+      if (!this.current) return 0;
+      const dry = this.current.render(1);
+      if (!this.usePianoBoard || !this.pianoBoard) return dry;
+      const board = this.pianoBoard.process(dry);
+      const symp = this.pianoBank ? this.pianoBank.process(this.pianoBoard.lastDiffused(), false) : 0;
+      return PIANO_DIRECT_GAIN * dry + board + symp;
     }
     /** Render one sample; returns 0 and deactivates when the envelope finishes. */
     render() {

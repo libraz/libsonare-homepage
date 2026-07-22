@@ -6,7 +6,7 @@
  * gain (not part of the physical model) so a shared patch reloads identically.
  */
 import { buildDefaultSpec, type ModelSpec } from '@/tuner/dsp/engine';
-import { ENGINE_INFO, type PhysicalEngineMode } from '@/tuner/dsp/params';
+import { ENGINE_INFO, type PhysicalEngineMode, paramSpecsFor } from '@/tuner/dsp/params';
 
 /** The deep `*PatchParams` object for a spec's active engine. */
 export function activeParams(spec: ModelSpec): Record<string, unknown> {
@@ -94,6 +94,65 @@ export function specToJson(spec: ModelSpec, target?: TunerTarget | null): TunerP
   };
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Merge an imported mode/rank table element (e.g. one modal mode) over its
+ * default, coercing each numeric field to a finite value and each boolean.
+ * Unknown fields on the incoming element are ignored.
+ */
+function mergeTableElement(def: unknown, incoming: unknown): unknown {
+  if (!isPlainObject(def)) return def;
+  const out: Record<string, unknown> = { ...def };
+  if (isPlainObject(incoming)) {
+    for (const key of Object.keys(out)) {
+      const dv = out[key];
+      const iv = incoming[key];
+      if (typeof dv === 'number') {
+        out[key] = typeof iv === 'number' && Number.isFinite(iv) ? iv : dv;
+      } else if (typeof dv === 'boolean') {
+        out[key] = typeof iv === 'boolean' ? iv : dv;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Merge imported `params` over the engine defaults with validation: scalar
+ * numbers are coerced finite and clamped to the tuning-UI range, booleans are
+ * coerced, and nested mode/rank tables are sized to the default's declared
+ * length (so a truncated or missing table can never index past its end and
+ * throw at render). Fields absent from the defaults are ignored.
+ */
+function sanitizeParams(
+  defaults: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): void {
+  const ranges = new Map(paramSpecsFor(defaults).map((s) => [s.key, s] as const));
+  for (const key of Object.keys(defaults)) {
+    if (!(key in incoming)) continue;
+    const dv = defaults[key];
+    const iv = incoming[key];
+    if (typeof dv === 'number') {
+      let n = typeof iv === 'number' && Number.isFinite(iv) ? iv : dv;
+      const r = ranges.get(key);
+      if (r) n = Math.min(Math.max(n, r.min), r.max);
+      defaults[key] = n;
+    } else if (typeof dv === 'boolean') {
+      defaults[key] = typeof iv === 'boolean' ? iv : dv;
+    } else if (Array.isArray(dv)) {
+      // Keep the default (fixed-capacity) table length; merge whatever the
+      // import supplied element-by-element.
+      const src = Array.isArray(iv) ? iv : [];
+      defaults[key] = dv.map((el, i) => mergeTableElement(el, src[i]));
+    }
+    // Non-array objects and unknown shapes: keep the default.
+  }
+}
+
 /** Rebuild a spec from imported JSON, merging over the engine defaults. */
 export function jsonToSpec(json: unknown): ModelSpec {
   if (!json || typeof json !== 'object') throw new Error('Not a tuner patch object');
@@ -102,15 +161,22 @@ export function jsonToSpec(json: unknown): ModelSpec {
   if (!engine || !(engine in ENGINE_INFO)) throw new Error(`Unknown engine: ${String(engine)}`);
   const spec = buildDefaultSpec(engine);
   if (j.params && typeof j.params === 'object') {
-    Object.assign(activeParams(spec), j.params);
+    sanitizeParams(activeParams(spec), j.params as Record<string, unknown>);
   }
   if (j.wrapper && typeof j.wrapper === 'object') {
     const w = j.wrapper;
     if (w.body !== undefined) spec.body = w.body;
-    if (typeof w.bodyMix === 'number') spec.bodyMix = w.bodyMix;
-    if (typeof w.drive === 'number') spec.drive = w.drive;
-    if (w.ampEnv) spec.ampEnv = { ...spec.ampEnv, ...w.ampEnv };
-    if (typeof w.gain === 'number') spec.gain = w.gain;
+    if (Number.isFinite(w.bodyMix)) spec.bodyMix = w.bodyMix as number;
+    if (Number.isFinite(w.drive)) spec.drive = w.drive as number;
+    if (w.ampEnv && typeof w.ampEnv === 'object') {
+      const env = { ...spec.ampEnv };
+      for (const key of Object.keys(env) as (keyof typeof env)[]) {
+        const v = (w.ampEnv as Record<string, unknown>)[key];
+        if (typeof v === 'number' && Number.isFinite(v)) env[key] = v;
+      }
+      spec.ampEnv = env;
+    }
+    if (Number.isFinite(w.gain)) spec.gain = w.gain as number;
   }
   return spec;
 }

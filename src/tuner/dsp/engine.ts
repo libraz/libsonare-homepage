@@ -33,7 +33,13 @@ import {
   type PhysicalEngineMode,
 } from './params';
 import { type PercussionPatchParams, PercussionVoiceCore } from './percussion-voice';
-import { type PianoPatchParams, PianoVoiceCore } from './piano-voice';
+import {
+  PIANO_DIRECT_GAIN,
+  type PianoPatchParams,
+  PianoResonanceBank,
+  PianoSoundboard,
+  PianoVoiceCore,
+} from './piano-voice';
 import { type PipeOrganPatchParams, PipeOrganVoiceCore } from './pipe-organ-voice';
 import { type PluckedStringPatchParams, PluckedStringVoiceCore } from './plucked-string-voice';
 import { type ReedPatchParams, ReedVoiceCore } from './reed-voice';
@@ -176,6 +182,12 @@ export class PhysicalVoice {
   private freeReed?: FreeReedVoiceCore;
   private current: CoreHandle | null = null;
   private body = new BodyResonator();
+  // Piano's host-owned radiation chain (instrument-wide in the C++ engine): the
+  // modal soundboard and the pedal-gated sympathetic bank. Created lazily for
+  // the piano engine and composed around the voice core in renderCore().
+  private pianoBoard?: PianoSoundboard;
+  private pianoBank?: PianoResonanceBank;
+  private usePianoBoard = false;
   private env: AmpEnv;
   private drive = 0;
   private driveMakeup = 1;
@@ -195,6 +207,17 @@ export class PhysicalVoice {
     const sr = this.sampleRate;
     const seed = voiceSeed(voiceIndex, note, age);
     this.current = this.startCore(spec, note, velocity, seed);
+    // Prepare the piano soundboard/sympathetic bank at the patch's soundboard
+    // mix so `spec.piano.soundboard` reaches the radiated output.
+    if (spec.engineMode === 'piano' && spec.piano) {
+      this.pianoBoard ??= new PianoSoundboard();
+      this.pianoBank ??= new PianoResonanceBank();
+      this.pianoBoard.prepare(sr, spec.piano.soundboard);
+      this.pianoBank.prepare(sr);
+      this.usePianoBoard = true;
+    } else {
+      this.usePianoBoard = false;
+    }
     this.body.start(spec.body, sr, noteToHz(note), spec.bodyMix);
     this.env.configure(spec.ampEnv);
     this.env.trigger();
@@ -283,7 +306,17 @@ export class PhysicalVoice {
   }
 
   private renderCore(): number {
-    return this.current ? this.current.render(1) : 0;
+    if (!this.current) return 0;
+    const dry = this.current.render(1);
+    if (!this.usePianoBoard || !this.pianoBoard) return dry;
+    // Compose the host piano radiation chain around the voice, exactly as
+    // NativeSynth (and the parity harness) does for a single voice: the direct
+    // share, the modal soundboard's phase-diffused complement, and the
+    // sympathetic bank fed from the board's diffused tap (dampers closed — the
+    // tuner has no sustain pedal).
+    const board = this.pianoBoard.process(dry);
+    const symp = this.pianoBank ? this.pianoBank.process(this.pianoBoard.lastDiffused(), false) : 0;
+    return PIANO_DIRECT_GAIN * dry + board + symp;
   }
 
   /** Render one sample; returns 0 and deactivates when the envelope finishes. */

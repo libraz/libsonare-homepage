@@ -22,6 +22,8 @@ interface StartArgs {
 export function useTunerAutofit() {
   let worker: Worker | null = null;
   let bestSpecCb: ((spec: ModelSpec) => void) | null = null;
+  /** Resolver for the in-flight start() promise, so a cancel/teardown settles it. */
+  let pendingResolve: ((result: AutofitResult | null) => void) | null = null;
 
   const running = ref(false);
   const progress = ref(0);
@@ -38,6 +40,12 @@ export function useTunerAutofit() {
     worker?.terminate();
     worker = null;
     running.value = false;
+    // Settle a start() awaiting this fit (cancel/dispose or a superseding start)
+    // so its promise never hangs. A 'done' handler nulls this first and resolves
+    // the real result itself.
+    const resolve = pendingResolve;
+    pendingResolve = null;
+    resolve?.(null);
   }
 
   function start(args: StartArgs): Promise<AutofitResult | null> {
@@ -55,6 +63,7 @@ export function useTunerAutofit() {
     const active = worker;
 
     return new Promise((resolve) => {
+      pendingResolve = resolve;
       active.onmessage = (event: MessageEvent) => {
         const msg = event.data;
         if (msg?.type === 'progress') {
@@ -68,18 +77,19 @@ export function useTunerAutofit() {
           progress.value = 1;
           specSimPct.value = result.specSimPct;
           rmsErrorPct.value = result.rmsErrorPct;
+          // Resolve with the real result; null the resolver so teardown()'s own
+          // settle is a no-op.
+          pendingResolve = null;
           teardown();
           resolve(result);
         } else if (msg?.type === 'error') {
           error.value = msg.message ?? 'autofit failed';
           teardown();
-          resolve(null);
         }
       };
       active.onerror = () => {
         error.value = 'autofit worker crashed';
         teardown();
-        resolve(null);
       };
 
       // De-proxy the reactive spec before posting (a Proxy fails structured clone).

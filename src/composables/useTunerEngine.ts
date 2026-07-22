@@ -44,6 +44,10 @@ export function useTunerEngine() {
   const context = shallowRef<AudioContext | null>(null);
   const analyser = shallowRef<AnalyserNode | null>(null);
   let node: AudioWorkletNode | null = null;
+  /** Set by dispose(); cancels an in-flight start() at its next await point. */
+  let disposed = false;
+  /** Rejects a start() still awaiting the worklet 'ready' when dispose() runs. */
+  let rejectReady: ((err: Error) => void) | null = null;
   /** Notified when a latched voice decays to silence on its own (note number). */
   let voiceEndedCb: ((note: number) => void) | null = null;
 
@@ -68,6 +72,11 @@ export function useTunerEngine() {
         running.value = ctx.state === 'running';
       };
       await ctx.audioWorklet.addModule(WORKLET_URL);
+      // Bail out cleanly if the component unmounted while the module loaded.
+      if (disposed) {
+        await dispose();
+        return false;
+      }
 
       node = new AudioWorkletNode(ctx, PROCESSOR, {
         numberOfInputs: 0,
@@ -86,6 +95,9 @@ export function useTunerEngine() {
           reject(new Error('worklet-node-missing'));
           return;
         }
+        // Let dispose() settle this promise so an unmount mid-boot never leaves
+        // start() awaiting a 'ready' that dispose() has already unhooked.
+        rejectReady = reject;
         node.port.onmessage = (event) => {
           const msg = event.data;
           if (msg?.type === 'ready') {
@@ -106,6 +118,7 @@ export function useTunerEngine() {
         /* resume re-attempted on the first gesture */
       });
       await readyPromise;
+      if (disposed) return false;
       // Re-send the spec once ready in case it arrived before the handler bound.
       node.port.postMessage({ type: 'spec', spec: toPlainSpec(initialSpec) });
       return true;
@@ -117,6 +130,7 @@ export function useTunerEngine() {
       await dispose();
       return false;
     } finally {
+      rejectReady = null;
       starting.value = false;
     }
   }
@@ -148,7 +162,14 @@ export function useTunerEngine() {
   }
 
   async function dispose(): Promise<void> {
+    disposed = true;
     ready.value = false;
+    // Settle a start() still awaiting the worklet 'ready' so it unwinds (its
+    // finally clears `starting`) instead of hanging on a dropped message.
+    if (rejectReady) {
+      rejectReady(new Error('disposed'));
+      rejectReady = null;
+    }
     if (node) {
       try {
         node.port.postMessage({ type: 'panic' });
