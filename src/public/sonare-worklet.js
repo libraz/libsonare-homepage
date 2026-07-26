@@ -340,6 +340,10 @@ var RealtimeEngine = class {
       options.maxValue ?? 1
     );
   }
+  /** Bind a 7/14-bit CC, RPN, or NRPN descriptor to a live parameter. */
+  bindMidiCcBinding(binding) {
+    this.native.bindMidiCcBinding(binding);
+  }
   clearMidiCcBindings() {
     this.native.clearMidiCcBindings();
   }
@@ -464,6 +468,7 @@ var RealtimeEngine = class {
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
   }
+  /** Set a finite tempo in the range (0, 100000] BPM. */
   setTempo(bpm) {
     this.native.setTempo(bpm);
   }
@@ -518,6 +523,7 @@ var RealtimeEngine = class {
   setLoopFromMarkers(startMarkerId, endMarkerId) {
     this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
   }
+  /** Set a metronome config; click lengths are limited to one second. */
   setMetronome(config) {
     this.native.setMetronome(config);
   }
@@ -725,6 +731,7 @@ var RealtimeEngine = class {
   setCaptureSource(source) {
     this.native.setCaptureSource(source);
   }
+  /** Positive values delay capture relative to the punch window. */
   setRecordOffsetSamples(offsetSamples) {
     this.native.setRecordOffsetSamples(offsetSamples);
   }
@@ -858,7 +865,10 @@ var Mixer = class _Mixer {
     const module2 = getSonareModule();
     return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
   }
-  /** Rebuild and compile the routing graph from the current scene topology. */
+  /**
+   * Rebuild and compile the routing graph without resetting its absolute
+   * automation sample position or queued strip automation.
+   */
   compile() {
     this.mixer.compile();
   }
@@ -1017,6 +1027,10 @@ var Mixer = class _Mixer {
   setVcaGroupGainDb(id, gainDb) {
     this.mixer.setVcaGroupGainDb(id, gainDb);
   }
+  /** Replace an existing VCA group's strip membership. */
+  setVcaGroupMembers(id, members) {
+    this.mixer.setVcaGroupMembers(id, members);
+  }
   /** Remove a VCA group by id. */
   removeVcaGroup(id) {
     this.mixer.removeVcaGroup(id);
@@ -1155,6 +1169,10 @@ var Mixer = class _Mixer {
       return this.mixer.stripMeter(stripIndex);
     }
     return this.mixer.meterTap(stripIndex, meterTapCode(tap));
+  }
+  /** Read the post-insert meter for a compiled bus, including master. */
+  busMeter(busId) {
+    return this.mixer.busMeter(busId);
   }
   /**
    * Schedule sample-accurate fader automation on a strip.
@@ -1754,6 +1772,8 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["CommandBacklogDeferred"] = 14] = "CommandBacklogDeferred";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["ClipPageUnderrun"] = 15] = "ClipPageUnderrun";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["InsertAutomationOverflow"] = 16] = "InsertAutomationOverflow";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["MidiClockOverflow"] = 17] = "MidiClockOverflow";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["MetronomeOverflow"] = 18] = "MetronomeOverflow";
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
 function toDb(value) {
@@ -3845,14 +3865,18 @@ var SonareEngine = class _SonareEngine {
 var DEFAULT_METRONOME_CONFIG = {
   beatGain: 0.35,
   accentGain: 0.7,
-  clickSamples: 96
+  clickSamples: 0
 };
 function resolveMetronomeConfig(config) {
-  return {
+  const resolved = {
     beatGain: config.beatGain ?? DEFAULT_METRONOME_CONFIG.beatGain,
     accentGain: config.accentGain ?? DEFAULT_METRONOME_CONFIG.accentGain,
     clickSamples: config.clickSamples ?? DEFAULT_METRONOME_CONFIG.clickSamples
   };
+  if (!Number.isFinite(resolved.beatGain) || resolved.beatGain < 0 || !Number.isFinite(resolved.accentGain) || resolved.accentGain < 0 || !Number.isInteger(resolved.clickSamples) || resolved.clickSamples < 0 || resolved.clickSamples > 384e3 || config.clickSeconds !== void 0 && (!Number.isFinite(config.clickSeconds) || config.clickSeconds < 0 || config.clickSeconds > 1)) {
+    throw new RangeError("invalid metronome gains or click length");
+  }
+  return resolved;
 }
 
 // src/worklet/engine-processor.ts

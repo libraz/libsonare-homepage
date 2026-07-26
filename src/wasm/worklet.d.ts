@@ -166,6 +166,21 @@ interface SynthPatch {
     /** Gain-neutral bus saturation [0, 1]. */
     busDrive?: number;
 }
+type ProjectMidiCcBindingKind = 0 | 1 | 2 | 3;
+/** MIDI CC <-> automation binding descriptor used by CC learn/conversion helpers. */
+interface ProjectMidiCcBinding {
+    ccNumber: number;
+    /** MIDI channel 0..15, or 255 for any channel. */
+    channel: number;
+    /** 0 = 7-bit CC, 1 = 14-bit CC, 2 = RPN, 3 = NRPN. */
+    kind: ProjectMidiCcBindingKind;
+    ccLsbNumber?: number;
+    selectorMsb?: number;
+    selectorLsb?: number;
+    paramId: number;
+    minValue: number;
+    maxValue: number;
+}
 
 type EngineClip = WasmEngineClip;
 type ClipPageRequest = WasmClipPageRequest;
@@ -310,6 +325,8 @@ declare class RealtimeEngine {
      * mapped into [minValue, maxValue] for `paramId`.
      */
     bindMidiCc(channel: number, controller: number, paramId: number, options?: MidiCcBindOptions): void;
+    /** Bind a 7/14-bit CC, RPN, or NRPN descriptor to a live parameter. */
+    bindMidiCcBinding(binding: ProjectMidiCcBinding): void;
     clearMidiCcBindings(): void;
     midiCcBindingCount(): number;
     /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
@@ -382,6 +399,7 @@ declare class RealtimeEngine {
      */
     settleParameters(): void;
     seekPpq(ppq: number, renderFrame?: number): void;
+    /** Set a finite tempo in the range (0, 100000] BPM. */
     setTempo(bpm: number): void;
     setTempoSegments(segments: readonly EngineTempoSegment[]): void;
     setTimeSignature(numerator: number, denominator: number): void;
@@ -400,6 +418,7 @@ declare class RealtimeEngine {
     marker(id: number): EngineMarker;
     seekMarker(markerId: number, renderFrame?: number): void;
     setLoopFromMarkers(startMarkerId: number, endMarkerId: number): void;
+    /** Set a metronome config; click lengths are limited to one second. */
     setMetronome(config: EngineMetronomeConfig): void;
     metronome(): Required<EngineMetronomeConfig>;
     countInEndSample(startSample: number, bars: number): number;
@@ -475,6 +494,7 @@ declare class RealtimeEngine {
     armCapture(armed?: boolean): void;
     setCapturePunch(startSample: number, endSample: number, enabled?: boolean): void;
     setCaptureSource(source: EngineCaptureStatus['source']): void;
+    /** Positive values delay capture relative to the punch window. */
     setRecordOffsetSamples(offsetSamples: number): void;
     setInputMonitor(enabled: boolean, gain?: number): void;
     resetCapture(): void;
@@ -651,7 +671,9 @@ declare enum SonareEngineTelemetryError {
     SmoothedParameterCapacity = 13,
     CommandBacklogDeferred = 14,
     ClipPageUnderrun = 15,
-    InsertAutomationOverflow = 16
+    InsertAutomationOverflow = 16,
+    MidiClockOverflow = 17,
+    MetronomeOverflow = 18
 }
 interface SonareMeterRingBuffer {
     sharedBuffer: SharedArrayBuffer;

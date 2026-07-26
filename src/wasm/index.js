@@ -200,6 +200,10 @@ function assertSampleRate(fnName, sampleRate) {
     );
   }
 }
+function validateAudioBuffer(samples, sampleRate) {
+  assertSamples("Audio.fromBuffer", samples, true);
+  assertSampleRate("Audio.fromBuffer", sampleRate);
+}
 function assertNonNegativeInteger(fnName, value, argName) {
   if (!Number.isInteger(value) || value < 0) {
     throw new RangeError(`${fnName}: ${argName} must be a non-negative integer`);
@@ -322,7 +326,7 @@ function noteStretch(samples, sampleRate = 22050, options = {}) {
     request.samples,
     request.sampleRate ?? 22050,
     request.onsetSample ?? 0,
-    request.offsetSample ?? 0,
+    request.offsetSample ?? request.samples.length,
     request.stretchRatio ?? 1
   );
 }
@@ -333,7 +337,7 @@ function noteMove(samples, sampleRate = 22050, options = {}) {
     request.samples,
     request.sampleRate ?? 22050,
     request.onsetSample ?? 0,
-    request.offsetSample ?? 0,
+    request.offsetSample ?? request.samples.length,
     request.targetOnsetSample ?? 0
   );
 }
@@ -405,22 +409,6 @@ function flattenChainConfig(config) {
     }
   };
   walk(config, "");
-  const aliases = {
-    "repair.denoise": "repair.denoise.enabled",
-    "repair.nFft": "repair.denoise.nFft",
-    "repair.hopLength": "repair.denoise.hopLength",
-    "repair.ddAlpha": "repair.denoise.ddAlpha",
-    "repair.gainFloor": "repair.denoise.gainFloor",
-    "eq.tiltDb": "eq.tilt.tiltDb",
-    "eq.pivotHz": "eq.tilt.pivotHz"
-  };
-  for (const [legacy, canonical] of Object.entries(aliases)) {
-    const value = out[legacy];
-    if (value !== void 0) {
-      out[canonical] = value;
-      delete out[legacy];
-    }
-  }
   return out;
 }
 
@@ -980,7 +968,17 @@ function vectorNormalize(values, normType = 0, threshold = 0) {
 function pcen(values, nBins = 0, nFrames = 0, options = {}) {
   if (!(values instanceof Float32Array)) {
     const r = values;
-    return pcen(r.values, r.nBins, r.nFrames, r.options);
+    const {
+      values: requestValues,
+      nBins: requestBins,
+      nFrames: requestFrames,
+      options: legacyOptions,
+      ...flatOptions
+    } = r;
+    return pcen(requestValues, requestBins, requestFrames, {
+      ...legacyOptions,
+      ...flatOptions
+    });
   }
   return requireModule8().pcen(values, nBins, nFrames, options);
 }
@@ -1056,7 +1054,13 @@ function nnlsChroma(samples, sampleRate = 22050, options = {}) {
     return nnlsChroma(samples.samples, samples.sampleRate, samples);
   }
   validateMusicSamples("nnlsChroma", samples, sampleRate, options);
-  return requireModule9().nnlsChroma(samples, sampleRate);
+  return requireModule9().nnlsChroma(
+    samples,
+    sampleRate,
+    options.enableStftBlend ?? true,
+    options.stftBlendWeight ?? 0.55,
+    options.stftBlendNFft ?? 4096
+  );
 }
 function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
   if (!(samples instanceof Float32Array)) {
@@ -1112,7 +1116,7 @@ function hybridCqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319
   validateFrequencyBounds("hybridCqt", fmin);
   return requireModule9().hybridCqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave);
 }
-function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma = 0, options = {}) {
+function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, gamma = -1, options = {}) {
   if (!(samples instanceof Float32Array)) {
     const request = samples;
     return vqt(
@@ -1130,9 +1134,6 @@ function vqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257
   validatePositiveIntegers("vqt", { hopLength, nBins, binsPerOctave });
   validateFrequencyBounds("vqt", fmin);
   assertFiniteScalar("vqt", gamma, "gamma");
-  if (gamma < 0) {
-    throw new RangeError("vqt: gamma must be non-negative");
-  }
   return requireModule9().vqt(samples, sampleRate, hopLength, fmin, nBins, binsPerOctave, gamma);
 }
 function validateCqtInverse(fnName, magnitude, nBins, nFrames, sampleRate, hopLength, fmin, binsPerOctave, nIter, options) {
@@ -1188,7 +1189,7 @@ function cqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLe
     nIter
   );
 }
-function vqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, gamma = 0, nIter = 32, options = {}) {
+function vqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, binsPerOctave = 12, gamma = -1, nIter = 32, options = {}) {
   if (!(magnitude instanceof Float32Array)) {
     const request = magnitude;
     return vqtToAudio(
@@ -1217,9 +1218,6 @@ function vqtToAudio(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, hopLe
     options
   );
   assertFiniteScalar("vqtToAudio", gamma, "gamma");
-  if (gamma < 0) {
-    throw new RangeError("vqtToAudio: gamma must be non-negative");
-  }
   return requireModule9().vqtToAudio(
     magnitude,
     nBins,
@@ -1243,8 +1241,8 @@ function analyzeSections(samples, sampleRate = 22050, options = {}) {
     hopLength: options.hopLength ?? 512
   });
   assertFiniteScalar("analyzeSections", options.minSectionSec ?? 4, "minSectionSec");
-  if ((options.minSectionSec ?? 4) <= 0) {
-    throw new RangeError("analyzeSections: minSectionSec must be positive");
+  if ((options.minSectionSec ?? 4) < 0) {
+    throw new RangeError("analyzeSections: minSectionSec must be non-negative");
   }
   const sections = requireModule9().analyzeSections(
     samples,
@@ -1394,7 +1392,7 @@ function shortTermLufs(samples, sampleRate = 22050, options = {}) {
 function requireModule10() {
   return getSonareModule();
 }
-function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.1, fillNa = false) {
   if (!(samples instanceof Float32Array)) {
     const request = samples;
     return pitchYin(
@@ -1419,7 +1417,7 @@ function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 5
     fillNa
   );
 }
-function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.1, fillNa = false) {
   if (!(samples instanceof Float32Array)) {
     const request = samples;
     return pitchPyin(
@@ -1575,10 +1573,10 @@ function remix(samples, intervals, sampleRate = 22050, alignZeros = false) {
   const intervalsI32 = intervals instanceof Int32Array ? intervals : Int32Array.from(intervals, (v) => Math.trunc(v));
   return requireModule12().remix(samples, intervalsI32, sampleRate, alignZeros);
 }
-function phaseVocoder(samples, rate = 1, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+function phaseVocoder(samples, sampleRate = 22050, rate = 1, nFft = 2048, hopLength = 512) {
   if (!(samples instanceof Float32Array)) {
     const r = samples;
-    return phaseVocoder(r.samples, r.rate, r.sampleRate, r.nFft, r.hopLength);
+    return phaseVocoder(r.samples, r.sampleRate ?? 22050, r.rate, r.nFft, r.hopLength);
   }
   return requireModule12().phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
 }
@@ -1708,7 +1706,7 @@ function stftDb(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, optio
   validatePositiveIntegers2("stftDb", { nFft, hopLength });
   return requireModule13().stftDb(samples, sampleRate, nFft, hopLength);
 }
-function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, binsPerOctave = 36, options = {}) {
   if (!(samples instanceof Float32Array)) {
     const request = samples;
     return chromaCens(
@@ -1716,14 +1714,18 @@ function chromaCens(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, 
       request.sampleRate,
       request.hopLength,
       request.nChroma,
+      request.binsPerOctave,
       request
     );
   }
   validateSpectrogramSamples("chromaCens", samples, sampleRate, options);
-  validatePositiveIntegers2("chromaCens", { hopLength, nChroma });
-  return requireModule13().chromaCens(samples, sampleRate, hopLength, nChroma);
+  validatePositiveIntegers2("chromaCens", { hopLength, nChroma, binsPerOctave });
+  if (binsPerOctave % nChroma !== 0) {
+    throw new RangeError("chromaCens: binsPerOctave must be a multiple of nChroma");
+  }
+  return requireModule13().chromaCens(samples, sampleRate, hopLength, nChroma, binsPerOctave);
 }
-function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
+function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, binsPerOctave = 36, options = {}) {
   if (!(samples instanceof Float32Array)) {
     const request = samples;
     return chromaCqt(
@@ -1731,12 +1733,16 @@ function chromaCqt(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, o
       request.sampleRate,
       request.hopLength,
       request.nChroma,
+      request.binsPerOctave,
       request
     );
   }
   validateSpectrogramSamples("chromaCqt", samples, sampleRate, options);
-  validatePositiveIntegers2("chromaCqt", { hopLength, nChroma });
-  return requireModule13().chromaCqt(samples, sampleRate, hopLength, nChroma);
+  validatePositiveIntegers2("chromaCqt", { hopLength, nChroma, binsPerOctave });
+  if (binsPerOctave % nChroma !== 0) {
+    throw new RangeError("chromaCqt: binsPerOctave must be a multiple of nChroma");
+  }
+  return requireModule13().chromaCqt(samples, sampleRate, hopLength, nChroma, binsPerOctave);
 }
 function bassChroma(samples, sampleRate = 22050, hopLength = 512, nChroma = 12, options = {}) {
   if (!(samples instanceof Float32Array)) {
@@ -1870,7 +1876,7 @@ function melToAudio(melPower, nMels = 0, nFrames = 0, sampleRate = 22050, nFft =
     htk
   );
 }
-function mfccToMel(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, options = {}) {
+function mfccToMel(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, lifter = 0, options = {}) {
   if (!(mfccCoefficients instanceof Float32Array)) {
     const request = mfccCoefficients;
     return mfccToMel(
@@ -1878,6 +1884,7 @@ function mfccToMel(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, option
       request.nMfcc,
       request.nFrames,
       request.nMels,
+      request.lifter,
       request
     );
   }
@@ -1891,9 +1898,9 @@ function mfccToMel(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, option
     options
   );
   validatePositiveIntegers2("mfccToMel", { nMels });
-  return requireModule13().mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels);
+  return requireModule13().mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels, lifter);
 }
-function mfccToAudio(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, options = {}) {
+function mfccToAudio(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 0, fmax = 0, nIter = 32, htk = false, lifter = 0, options = {}) {
   if (!(mfccCoefficients instanceof Float32Array)) {
     const request = mfccCoefficients;
     return mfccToAudio(
@@ -1908,6 +1915,7 @@ function mfccToAudio(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, samp
       request.fmax,
       request.nIter,
       request.htk,
+      request.lifter,
       request
     );
   }
@@ -1934,7 +1942,8 @@ function mfccToAudio(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, samp
     fmin,
     fmax,
     nIter,
-    htk
+    htk,
+    lifter
   );
 }
 function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
@@ -2011,6 +2020,23 @@ var SectionType = {
 };
 
 // src/analysis_helpers.ts
+var PITCH_CLASS_NAMES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B"
+];
+function pitchClassName(value) {
+  return PITCH_CLASS_NAMES[value] ?? "C";
+}
 function convertKeyCandidate(wasm) {
   return {
     key: {
@@ -2081,6 +2107,8 @@ function convertChordAnalysisResult(wasm) {
     chords: wasm.chords.map((c) => ({
       root: c.root,
       bass: c.bass,
+      rootName: pitchClassName(c.root),
+      bassName: pitchClassName(c.bass),
       quality: c.quality,
       start: c.start,
       end: c.end,
@@ -2119,6 +2147,8 @@ function convertAnalysisResult(wasm) {
     chords: wasm.chords.map((c) => ({
       root: c.root,
       bass: c.bass,
+      rootName: pitchClassName(c.root),
+      bassName: pitchClassName(c.bass),
       quality: c.quality,
       start: c.start,
       end: c.end,
@@ -2267,7 +2297,7 @@ function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, 
 function analyze(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   validateAnalysisInput("analyze", request.samples, request.sampleRate ?? 22050, request);
-  const result = requireModule14().analyze(request.samples, request.sampleRate ?? 22050);
+  const result = requireModule14().analyze(request.samples, request.sampleRate ?? 22050, request);
   return convertAnalysisResult(result);
 }
 function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
@@ -2441,7 +2471,8 @@ var Audio = class _Audio {
    *   Node/Python surfaces).
    */
   static fromBuffer(samples, sampleRate = 48e3) {
-    return new _Audio(samples, sampleRate);
+    validateAudioBuffer(samples, sampleRate);
+    return new _Audio(samples.slice(), sampleRate);
   }
   /**
    * Create an Audio instance by decoding audio bytes in memory.
@@ -2640,7 +2671,7 @@ var Audio = class _Audio {
   rmsEnergy(frameLength = 2048, hopLength = 512) {
     return rmsEnergy(this._samples, this._sampleRate, frameLength, hopLength);
   }
-  pitchYin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+  pitchYin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.1, fillNa = false) {
     return pitchYin(
       this._samples,
       this._sampleRate,
@@ -2652,7 +2683,7 @@ var Audio = class _Audio {
       fillNa
     );
   }
-  pitchPyin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.3, fillNa = false) {
+  pitchPyin(frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.1, fillNa = false) {
     return pitchPyin(
       this._samples,
       this._sampleRate,
@@ -3080,6 +3111,17 @@ function meteringRmsDb(samples, sampleRate = 22050, options = {}) {
   assertSamples("meteringRmsDb", request.samples, request.validate !== false);
   return requireModule15().meteringRmsDb(request.samples, request.sampleRate ?? 22050);
 }
+function meteringSilenceRatio(samples, sampleRate = 22050, thresholdDb = -45, frameLength = 1024, hopLength = 256, options = {}) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, thresholdDb, frameLength, hopLength, ...options } : samples;
+  assertSamples("meteringSilenceRatio", request.samples, request.validate !== false);
+  return requireModule15().meteringSilenceRatio(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.thresholdDb ?? -45,
+    request.frameLength ?? 1024,
+    request.hopLength ?? 256
+  );
+}
 function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   assertSamples("meteringCrestFactorDb", request.samples, request.validate !== false);
@@ -3100,11 +3142,15 @@ function meteringTruePeakDb(samples, sampleRate = 22050, oversampleFactor = 4, o
 function meteringDetectClipping(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   assertSamples("meteringDetectClipping", request.samples, request.validate !== false);
+  const minRegionSamples = request.minRegionSamples ?? 1;
+  if (!Number.isInteger(minRegionSamples) || minRegionSamples < 0) {
+    throw new RangeError("meteringDetectClipping: minRegionSamples must be a non-negative integer");
+  }
   return requireModule15().meteringDetectClipping(
     request.samples,
     request.sampleRate ?? 22050,
     request.threshold ?? 0.999,
-    request.minRegionSamples ?? 1
+    minRegionSamples
   );
 }
 function meteringDynamicRange(samples, sampleRate = 22050, options = {}) {
@@ -3587,7 +3633,11 @@ var Project = class _Project {
     assertProjectMidiEvents("Project.setMidiEvents", events);
     this.native.setMidiEvents(clipId, events);
   }
-  /** Import an in-memory SMF buffer; returns the first added clip id. */
+  /**
+   * Import an in-memory SMF buffer; returns the first added clip id.
+   * Malformed or partially truncated tracks are rejected instead of installing
+   * a silently shortened clip.
+   */
   importSmf(data) {
     return this.native.importSmf(data);
   }
@@ -3624,7 +3674,10 @@ var Project = class _Project {
   setProgramOnChannel(clipId, group, channel, program, bank = -1) {
     this.native.setProgramOnChannel(clipId, group, channel, program, bank);
   }
-  /** Destructively bake a MIDI-FX chain into a clip's stored MIDI events. */
+  /**
+   * Destructively bake a MIDI-FX chain into all stored events. Large clips are
+   * drained without truncation; failure leaves the original clip unchanged.
+   */
   bakeMidiFx(clipId, configJson) {
     this.native.bakeMidiFx(clipId, configJson);
   }
@@ -3634,9 +3687,9 @@ var Project = class _Project {
   }
   /**
    * Pre-flight check for hanging / unmatched notes in a MIDI clip: reports
-   * whether every note-on has a matching note-off (FIFO per channel+note).
-   * Useful before bouncing to catch a stuck note. Throws if `clipId` is unknown
-   * or not a MIDI clip.
+   * whether every note-on in the exported half-open playback window has a
+   * matching note-off (FIFO per group+channel+note). Useful before bouncing to
+   * catch a stuck note. Throws if `clipId` is unknown or not a MIDI clip.
    */
   validateMidiNotes(clipId) {
     return this.native.validateMidiNotes(clipId);
@@ -4218,6 +4271,10 @@ var RealtimeEngine = class {
       options.maxValue ?? 1
     );
   }
+  /** Bind a 7/14-bit CC, RPN, or NRPN descriptor to a live parameter. */
+  bindMidiCcBinding(binding) {
+    this.native.bindMidiCcBinding(binding);
+  }
   clearMidiCcBindings() {
     this.native.clearMidiCcBindings();
   }
@@ -4342,6 +4399,7 @@ var RealtimeEngine = class {
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
   }
+  /** Set a finite tempo in the range (0, 100000] BPM. */
   setTempo(bpm) {
     this.native.setTempo(bpm);
   }
@@ -4396,6 +4454,7 @@ var RealtimeEngine = class {
   setLoopFromMarkers(startMarkerId, endMarkerId) {
     this.native.setLoopFromMarkers(startMarkerId, endMarkerId);
   }
+  /** Set a metronome config; click lengths are limited to one second. */
   setMetronome(config) {
     this.native.setMetronome(config);
   }
@@ -4603,6 +4662,7 @@ var RealtimeEngine = class {
   setCaptureSource(source) {
     this.native.setCaptureSource(source);
   }
+  /** Positive values delay capture relative to the punch window. */
   setRecordOffsetSamples(offsetSamples) {
     this.native.setRecordOffsetSamples(offsetSamples);
   }
@@ -4980,7 +5040,10 @@ var Mixer = class _Mixer {
     const module2 = getSonareModule();
     return new _Mixer(module2.createMixerFromSceneJson(json, sampleRate, blockSize), blockSize);
   }
-  /** Rebuild and compile the routing graph from the current scene topology. */
+  /**
+   * Rebuild and compile the routing graph without resetting its absolute
+   * automation sample position or queued strip automation.
+   */
   compile() {
     this.mixer.compile();
   }
@@ -5139,6 +5202,10 @@ var Mixer = class _Mixer {
   setVcaGroupGainDb(id, gainDb) {
     this.mixer.setVcaGroupGainDb(id, gainDb);
   }
+  /** Replace an existing VCA group's strip membership. */
+  setVcaGroupMembers(id, members) {
+    this.mixer.setVcaGroupMembers(id, members);
+  }
   /** Remove a VCA group by id. */
   removeVcaGroup(id) {
     this.mixer.removeVcaGroup(id);
@@ -5277,6 +5344,10 @@ var Mixer = class _Mixer {
       return this.mixer.stripMeter(stripIndex);
     }
     return this.mixer.meterTap(stripIndex, meterTapCode(tap));
+  }
+  /** Read the post-insert meter for a compiled bus, including master. */
+  busMeter(busId) {
+    return this.mixer.busMeter(busId);
   }
   /**
    * Schedule sample-accurate fader automation on a strip.
@@ -5637,7 +5708,12 @@ var EQ_PHASE_MODES = {
 var StreamingMasteringChain = class {
   constructor(config) {
     const module2 = getSonareModule();
-    this.chain = module2.createStreamingMasteringChain(config);
+    const { loudnessStaticGainDb, loudnessStaticGainPeakDb, ...chainConfig } = config;
+    this.chain = module2.createStreamingMasteringChain({
+      __flatParams: flattenChainConfig(chainConfig),
+      loudnessStaticGainDb,
+      loudnessStaticGainPeakDb
+    });
   }
   /**
    * Initialize processors for the given sample rate and block layout.
@@ -6273,6 +6349,7 @@ export {
   meteringPhaseScope,
   meteringPhaseScopeDecimated,
   meteringRmsDb,
+  meteringSilenceRatio,
   meteringSpectrum,
   meteringSpectrumFrame,
   meteringStereoCorrelation,
