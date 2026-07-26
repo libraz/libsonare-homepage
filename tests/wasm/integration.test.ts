@@ -239,7 +239,9 @@ describe('wasm package integration', () => {
     expectFiniteArray(wasm.momentaryLufs(tone, SAMPLE_RATE));
     // Short-term LUFS uses a 3 s sliding window (BS.1770); the 1 s `tone` yields no frames.
     expectFiniteArray(wasm.shortTermLufs(sine(440, 4), SAMPLE_RATE));
-  });
+    // Real DSP over a 1 s tone: ~3 s locally, so the 5 s default leaves no room
+    // for a loaded machine. Matches the explicit budgets used elsewhere here.
+  }, 30_000);
 
   it('performs editing transforms and utility conversions with valid output', () => {
     const tone = sine();
@@ -348,7 +350,14 @@ describe('wasm package integration', () => {
     expect(trimmed).toHaveLength(5);
 
     const audio = wasm.Audio.fromBuffer(tone, SAMPLE_RATE);
-    expect(audio.data).toBe(tone);
+    // fromBuffer copies: the Audio owns its samples, so a later write through the
+    // caller's array cannot mutate audio that has already been constructed.
+    expect(audio.data).toStrictEqual(tone);
+    expect(audio.data).not.toBe(tone);
+    const probe = new Float32Array([0.25, -0.25]);
+    const owned = wasm.Audio.fromBuffer(probe, SAMPLE_RATE);
+    probe[0] = 1;
+    expect(owned.data[0]).toBeCloseTo(0.25, 6);
     expect(audio.length).toBe(tone.length);
     expect(audio.sampleRate).toBe(SAMPLE_RATE);
     expect(audio.duration).toBeCloseTo(1, 6);
@@ -394,7 +403,9 @@ describe('wasm package integration', () => {
     expectF0Track(audio.pitchYin(512, 128, 65, 1_000, 0.3).f0);
     expectF0Track(audio.pitchPyin(512, 128, 65, 1_000, 0.3).f0);
     expect(audio.resample(SAMPLE_RATE / 2)).toHaveLength(tone.length / 2);
-  });
+    // Griffin-Lim plus the full Audio surface: ~4 s locally, well past what the
+    // 5 s default tolerates once anything else is running.
+  }, 30_000);
 
   it('runs mastering processors, stereo analysis, assistant reports and preset paths', () => {
     const mono = sine();

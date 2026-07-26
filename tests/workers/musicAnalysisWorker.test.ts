@@ -259,7 +259,9 @@ describe('music analysis worker protocol', () => {
       sampleRate: 48_000,
       analysisSampleRate: 22_050,
     });
-  }, 15_000);
+    // Analyses a real 121 s file: ~5 s alone, but several times that when the
+    // rest of the suite is competing for the same cores.
+  }, 30_000);
 
   it('posts recoverable errors when analysis throws', async () => {
     wasmMock.analyzeWithProgress.mockImplementationOnce(() => {
