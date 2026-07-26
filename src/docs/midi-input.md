@@ -164,6 +164,28 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 // engine.clearMidiCcBindings() -> remove all mappings
 ```
 
+For high-resolution controllers, call `bindMidiCcBinding(...)` with a descriptor. Its `kind` selects the controller format:
+
+- `0`: 7-bit CC
+- `1`: paired 14-bit CC
+- `2`: RPN
+- `3`: NRPN
+
+Use `ccLsbNumber` for a 14-bit CC's LSB. Use `selectorMsb` and `selectorLsb` for an RPN or NRPN number. `channel: 255` matches every MIDI channel.
+
+```typescript
+engine.bindMidiCcBinding({
+  kind: 3, // NRPN
+  channel: 0,
+  ccNumber: 99,
+  selectorMsb: 1,
+  selectorLsb: 2,
+  paramId: 42,
+  minValue: 0,
+  maxValue: 1,
+});
+```
+
 `addParameter` also accepts `unit` (a display string), `rtSafe`, and `defaultCurve`. The one that matters here is **`rtSafe`** (default `true`): it declares whether the audio thread may change the parameter mid-playback. Keep it `true` for anything you intend to CC-bind and move while notes sound. Register it with `rtSafe: false` and the engine silently drops every live write to it — from automation *and* from a bound CC — applying changes only while transport is stopped.
 
 ::: tip CC "learn" workflows

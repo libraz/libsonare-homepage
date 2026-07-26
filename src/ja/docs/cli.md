@@ -367,12 +367,15 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | コマンド | 説明 | オプション |
 |----------|------|-----------|
 | `sonare pitch-correct vocal.wav -o out.wav` | 目標 MIDI ノートへピッチ補正 | `--current-midi`（69.0）, `--target-midi`（69.0） |
+| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | pYIN 輪郭を追跡し、1 音または音階へ補正 | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--retune-amount`, `--retune-speed-ms` |
+| `sonare note-move take.wav --target-onset 48000 -o out.wav` | ノート区間を指定サンプル位置へ移動 | `--onset`, `--offset`, `--target-onset`（サンプル位置） |
 | `sonare note-stretch take.wav -o out.wav` | 単一ノート区間をストレッチ | `--onset`, `--offset`（サンプル位置）, `--ratio`（1.0） |
+| `sonare scale-quantize 68.7` | MIDI 値を音階へ量子化 | `--root`, `--mode-mask`, `--reference-midi` |
 | `sonare voice-change vocal.wav -o out.wav` | ボイスチェンジ（ピッチ＋フォルマント） | `--pitch-semitones`（0.0）, `--formant-factor`（1.0） |
 
-Python CLI は、上の 3 つのファイル書き出し編集コマンドと HPSS サマリーを中心に提供します。
+Python CLI は、上のファイル書き出し編集コマンドと HPSS サマリーを提供します。
 
-ソースビルドの C++ CLI では、同じ 3 つの編集コマンドに加えて、低レベルの処理コマンドも使えます。
+ソースビルドの C++ CLI では、共通の編集コマンドに加えて、低レベルの処理コマンドも使えます。
 
 | C++ コマンド | 必須または主なオプション |
 |--------------|--------------------------|

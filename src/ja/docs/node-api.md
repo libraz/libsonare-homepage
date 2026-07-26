@@ -28,6 +28,10 @@ console.log(`キー: ${result.key.name}`);     // "C major" など
 console.log(`ビート数: ${result.beatTimes.length}`);
 ```
 
+上のアナライザーはどれも同じスペクトログラムを共有して読み出します。下のデモがたどるのがその変換で、BPM とキーをまとめて求めても片方だけの場合とコストがほとんど変わらないのは、これが理由です。
+
+<SonareDemo id="stft-basics" />
+
 ### オーディオエフェクト
 
 ```typescript
@@ -179,7 +183,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 体積、寸法、DRR、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
 | `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR |
 | `roomMorph(samples, sampleRate, options?)` | `Float32Array` | 目標ルームへ寄せるオフラインのルームモーフィング |
-| `lufs(samples, sampleRate?)` | `LufsResult` | 統合・モーメンタリー・ショートタームラウドネスとラウドネスレンジ（ITU-R BS.1770） |
+| `lufs(samples, sampleRate?)` | `LufsResult` | 統合値、最後のモーメンタリー／ショートターム窓、EBU R128 の最大値（Max-M / Max-S）、ラウドネスレンジ |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | インターリーブサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | EBU R128 loudness range（LRA、LU 単位） |
 | `momentaryLufs(samples, sampleRate?)` | `Float32Array` | モーメンタリーラウドネス（400ms）の時系列 |
@@ -224,7 +228,7 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 | `harmonic(samples, sr?)` | `Float32Array` | 倍音成分の抽出 |
 | `percussive(samples, sr?)` | `Float32Array` | 打撃成分の抽出 |
 | `timeStretch(samples, sampleRate, rate)` | `Float32Array` | ピッチを変えずにテンポを変更 |
-| `phaseVocoder(samples, rate, sr?, nFft?, hopLength?)` | `Float32Array` | 直接のフェーズボコーダー時間伸縮 |
+| `phaseVocoder(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | 直接のフェーズボコーダー時間伸縮 |
 | `pitchShift(samples, sampleRate, semitones)` | `Float32Array` | 長さを変えずにピッチを変更 |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | サンプル区間の並べ替え／連結 |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | 目標 dB にノーマライズ（デフォルト: 0.0） |
@@ -277,7 +281,9 @@ librosa 互換のフレーム RMS ベースのヘルパーで、元音源上の�
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | 近傍フィルタ |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | オンセット強度包絡（テンポグラム系の入力） |
 
-デフォルトパラメータ: `nFft=2048`、`hopLength=512`、`nMels=128`、`nMfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.3`、`rollPercent=0.85`。CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。`chromaCqt`／`bassChroma`／`chromaCens` は `nChroma=12`、`chromaCqt` は `hopLength=512`、`onsetStrengthMulti` は `nBands=3`、`decomposeWithInit` は `nIter=50`・`beta=2`・`init='random'` が既定です。
+主な既定値は、`nFft=2048`、`hopLength=512`、`nMels=128`、`nMfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`rollPercent=0.85` です。
+
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`bassChroma` と `chromaCens` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decomposeWithInit` は `nIter=50`・`beta=2`・`init='random'` が既定です。
 
 ### 逆再構成関数
 
@@ -360,7 +366,7 @@ librosa 互換のフレーム RMS ベースのヘルパーで、元音源上の�
 | `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | インターサンプル(トゥルー)ピーク(dBFS)。`oversampleFactor` は 1..16 の 2 の冪(既定 4) |
 | `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | クリップしたサンプルの連続区間。`options` で `threshold`(既定 `0.999`)と `minRegionSamples`(既定 `1`)を指定 |
 | `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`options` で `windowSec`・`hopSec`・`lowPercentile`・`highPercentile` を指定(省略時は既定値の窓 3 秒・ホップ 1 秒・low 0.10・high 0.95) |
-| `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | ピアソン相関、−1..1 |
+| `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | 非中心化相関（コサイン類似度）、−1..1 |
 | `meteringStereoWidth(left, right, sr?, options?)` | `number` | サイド／ミッドのエネルギー比。0 = モノ、約 1 = 広いステレオ。上限なし（ミッドが無音なら `Infinity`） |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | サンプルごとのミッド/サイド点列 |
 | `meteringPhaseScope(left, right, sr?, options?)` | `PhaseScopeReport` | フェーズスコープの点列と要約統計 |

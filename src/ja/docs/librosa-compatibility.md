@@ -103,7 +103,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 | `librosa.feature.tempogram_ratio()` | `tempogramRatio()` / `tempogram_ratio()` | テンポグラム比特徴量 |
 | `librosa.pcen()` | `pcen()` | `time_constant`／`gain`／`bias`／`power`／`eps` |
 | `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | 確率的 YIN。`fillNa` / `fill_na` で無声音 `f0` を `NaN` のままにするか `0` にするかを選択 |
-| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN。`fillNa` / `fill_na` で無声音 `f0` を `NaN` のままにするか `0` にするかを選択 |
+| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN。すべてのフレームで有限の周期推定値を返し、有声かどうかは別に報告 |
 | `librosa.pitch_tuning()` | `pitchTuning()` / `pitch_tuning()` | 周波数列からチューニングずれを推定 |
 | `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | 音声からチューニングずれを推定 |
 

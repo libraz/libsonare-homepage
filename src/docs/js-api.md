@@ -188,7 +188,7 @@ function voiceCharacterPresetId(preset: VoicePresetId | number): string | null
 function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null
 ```
 
-In v1.5.1 the resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case.
+The resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case.
 
 ### Realtime environment helpers
 
@@ -981,7 +981,7 @@ These functions are not just "more features"; they solve different modeling prob
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
-const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, 0);
+const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, -1);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
@@ -1000,7 +1000,7 @@ const { w, h } = decompose(spectrogram, nFeatures, nFrames, 8);
 const warmStarted = decomposeWithInit(spectrogram, nFeatures, nFrames, 8, 50, 2.0, 'nndsvd');
 const filtered = nnFilter(spectrogram, nFeatures, nFrames);
 const remixed = remix(samples, Int32Array.from([0, sampleRate, sampleRate, 2 * sampleRate]));
-const stretched = phaseVocoder(samples, 1.5, sampleRate);
+const stretched = phaseVocoder(samples, sampleRate, 1.5);
 const hpssResidual = hpssWithResidual(samples, sampleRate);
 const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
@@ -1037,8 +1037,8 @@ function pitchYin(
   hopLength?: number,    // default: 512
   fmin?: number,         // default: 65 Hz
   fmax?: number,         // default: 2093 Hz
-  threshold?: number,    // default: 0.3
-  fillNa?: boolean       // default: false; true writes 0 for unvoiced f0 frames
+  threshold?: number,    // default: 0.1
+  fillNa?: boolean       // retained for compatibility; YIN always returns finite f0
 ): PitchResult
 
 // pYIN algorithm (probabilistic YIN with HMM smoothing)
@@ -1063,7 +1063,9 @@ interface PitchResult {
 }
 ```
 
-By default, unvoiced `f0` frames remain `NaN`. Set `fillNa: true` when a downstream numeric pipeline cannot carry `NaN` and should treat unvoiced frames as `0`.
+YIN returns a finite estimate for every frame, including frames marked unvoiced by `voicedFlag`.
+
+pYIN keeps `NaN` for unvoiced frames by default. Set its `fillNa: true` when a downstream numeric pipeline should use `0` instead.
 
 ## Unit Conversion
 
@@ -1166,7 +1168,7 @@ interface DynamicRangeReport {
 ### Stereo image
 
 ```typescript
-// Pearson correlation between channels, −1..1
+// Uncentered channel correlation (cosine similarity), −1..1
 function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // Mid/side stereo width: 0 = mono, ~1 = wide stereo; unbounded above
 // (Infinity when the mid signal is silent, such as fully out-of-phase audio)
@@ -1972,7 +1974,7 @@ All functions throw if the module is not initialized — call `await init()` fir
 
 Native (C++) failures throw a structured **`SonareError`**: an `Error` subclass carrying a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. The same failure reports the same numeric code on every binding (WASM, Node native, Python, C ABI), so you can branch on the cause instead of matching message text. The package exports the `ErrorCode` enum, the `SonareError` class, and an `isSonareError(value)` type guard.
 
-Since v1.5.1, the facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
+The facades consistently reject non-finite numbers, invalid enum/index values, and oversized resources before they reach DSP or serialization. Treat these failures as invalid input; do not rely on a binding silently clamping or accepting malformed values.
 
 ```typescript
 import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
@@ -2021,6 +2023,9 @@ const result = masteringChainStereo(left, right, sampleRate, {
   loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
 })
 console.log(result.outputLufs, result.outputTruePeakDbtp, result.outputLra)
+if (result.loudnessTargetLimited) {
+  console.warn('The true-peak ceiling prevented the requested LUFS target.');
+}
 console.log(result.stageGainReductions)
 
 // Preset with flat dot-notation overrides
@@ -2032,7 +2037,9 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 
 Each of these has a `*WithProgress` variant taking an `(progress, stage) => void` callback. `masteringProcess(...)` / `masteringProcessStereo(...)` run one named processor, and `masteringStereoAnalyze(...)` returns a JSON report.
 
-Offline chain and preset results include `outputTruePeakDbtp` (the output true peak at the configured loudness oversample factor), `outputLra` (EBU R128 loudness range in LU), and `stageGainReductions`. Each `StageGainReduction` names a dynamics/maximizer stage and reports its most recent gain reduction in dB (zero or negative), so a delivery ceiling can be checked without an extra oversampled scan.
+Offline chain and preset results include `outputTruePeakDbtp`, `outputLra`, `loudnessTargetLimited`, and `stageGainReductions`.
+
+When `loudnessTargetLimited` is true, the true-peak ceiling prevented the requested LUFS target. Report `outputLufs`, not the requested target. Each `StageGainReduction` gives the most recent gain reduction for one dynamics or maximizer stage.
 
 The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration).
 
@@ -2312,7 +2319,7 @@ interface MasteringChainConfig {
   stereo?: {
     imager?: { width?: number; outputGainDb?: number;
                decorrelationAmount?: number; preserveEnergy?: boolean; };
-    monoMaker?: { amount?: number };
+    monoMaker?: { amount?: number; frequencyHz?: number };
   };
   maximizer?: {
     truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
@@ -2329,9 +2336,15 @@ interface MasteringResult {
   inputLufs: number;
   outputLufs: number;
   appliedGainDb: number;
+  loudnessTargetLimited?: boolean;
   latencySamples?: number;
 }
-interface MasteringChainResult extends MasteringResult { stages: string[] }
+interface MasteringChainResult extends MasteringResult {
+  stages: string[];
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+}
 interface MasteringStereoResult {
   left: Float32Array;
   right: Float32Array;

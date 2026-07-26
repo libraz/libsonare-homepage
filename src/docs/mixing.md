@@ -300,7 +300,7 @@ For example, pull the "drums" VCA down 2 dB and the kick, snare, and overheads a
 
 The group's `gainDb` is summed into each member's fader stage (step 7 above) as a **delta** on top of whatever fader value the strip already has. Because only the difference is applied, a per-strip fader trim you set inside the group survives — the group fader rides the whole set without overwriting the individual balance.
 
-Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)`, adjust it with `setVcaGroupGainDb(...)`, and remove it with `removeVcaGroup(id)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset you can adjust during a session; it is also persisted as the strip's `vcaOffsetDb` and round-trips through scene JSON.
+Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)`, adjust its gain with `setVcaGroupGainDb(...)`, replace its membership without rebuilding the graph with `setVcaGroupMembers(id, members)`, and remove it with `removeVcaGroup(id)`; that group definition (gain and membership) round-trips through scene JSON. A `setVcaOffsetDb(...)` move is a **live** per-strip offset you can adjust during a session; it is also persisted as the strip's `vcaOffsetDb` and round-trips through scene JSON.
 
 ### Solo and mute logic
 
@@ -369,7 +369,7 @@ The interpolation **curve** shapes the move between events:
 
 ## Metering
 
-Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-render from `mixStereo`'s `meters[]`, or live from `mixer.meterTap(strip, 'preFader' | 'postFader')`. `stripMeter(...)` is a convenience alias in WASM/Python and a post-fader convenience path in Node native.
+Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-render from `mixStereo`'s `meters[]`, or live from `mixer.meterTap(strip, 'preFader' | 'postFader')`. `stripMeter(...)` is a convenience alias in WASM/Python and a post-fader convenience path in Node native. `busMeter(busId)` reads the post-insert meter for a compiled bus, including `master`.
 
 | Field | Tells you |
 |-------|-----------|

@@ -62,7 +62,7 @@ Parameters like `f0Hz` (a per-frame pitch contour), `hopLength`, and `voiced` ar
 | One-shot realtime voice preset render | `voiceChangeRealtime(samples, sampleRate, preset, options?)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
 ::: tip Shared positional order
-Since v1.5.1, WASM and Node native use the same positional order for `timeStretch`, `pitchShift`, and `voiceChangeRealtime`: samples first, then sample rate, then the edit amount or preset.
+WASM and Node native use the same positional order for `timeStretch`, `pitchShift`, and `voiceChangeRealtime`: samples first, then sample rate, then the edit amount or preset.
 :::
 
 ## Usage
@@ -120,7 +120,9 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 **F0** is the fundamental frequency — the pitch — measured in Hz. A pitch detector reports one F0 per short time slice (a **frame**, here one `hopLength` of samples), giving an F0 **contour** that traces how the pitch moves. A frame is **voiced** when the singer is actually producing pitched sound (a sung vowel) rather than a breath or silence; only voiced frames are worth retuning.
 :::
 
-`pitchCorrectToMidi(...)` applies a single constant transpose, which flattens any vibrato or drift in the take. When you want to keep that expression while still pulling the note toward a target, use `pitchCorrectToMidiTimevarying(...)`. Instead of one current-pitch number, it follows a caller-supplied **per-frame F0 contour** and retunes every voiced frame toward `targetMidi`, so the natural pitch movement is tracked rather than ironed out.
+`pitchCorrectToMidi(...)` applies the full requested transpose immediately and preserves the input length. It does not follow a changing pitch contour.
+
+Use `pitchCorrectToMidiTimevarying(...)` when correction should change from frame to frame. It follows a caller-supplied **per-frame F0 contour** and retunes each voiced frame toward `targetMidi`.
 
 ```typescript
 import { init, pitchPyin, pitchCorrectToMidiTimevarying } from '@libraz/libsonare';
@@ -145,7 +147,9 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced` (non-zero = voiced) and `voicedProb` are optional; omit them to treat every frame as voiced. Use the same `hopLength` that produced the F0 contour, so frame `i` lines up with sample `i * hopLength`.
+`voiced` (non-zero = voiced) and `voicedProb` are optional. Omit them to treat every frame as voiced. Use the same `hopLength` that produced the F0 contour, so frame `i` lines up with sample `i * hopLength`.
+
+An `f0Hz` value of `NaN` is valid only when the matching `voiced` entry is zero.
 
 ::: tip Constant vs contour-following correction
 Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.
@@ -225,7 +229,7 @@ For the full mapping table and the `freq ↔ midi` formula, see [Editing Basics]
 
 ### Region selection for `noteStretch(...)`
 
-`noteStretch(...)` takes the region in **sample offsets**, not seconds.
+`noteStretch(...)` takes the region in **sample offsets**, not seconds. `onsetSample` defaults to the start of the input; `offsetSample` defaults to its end. Omit a boundary when the region already reaches that edge.
 
 If your UI works in seconds, convert like this:
 

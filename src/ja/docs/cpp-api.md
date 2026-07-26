@@ -674,7 +674,7 @@ config.frame_length = 2048;
 config.hop_length = 512;
 config.fmin = 65.0f;    // C2
 config.fmax = 2093.0f;  // C7
-config.threshold = 0.3f;
+config.threshold = 0.1f;
 
 // YIN アルゴリズム
 PitchResult yin = yin_track(audio, config);

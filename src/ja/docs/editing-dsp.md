@@ -62,7 +62,7 @@ DSP は Digital Signal Processing の略で、音声信号を数値として測�
 | リアルタイム音声プリセットを 1 回でレンダリング | `voiceChangeRealtime(samples, sampleRate, preset, options?)` | `voice_change_realtime(samples, sample_rate, preset)` |
 
 ::: tip 共通の位置引数順
-v1.5.1 以降、WASM と Node ネイティブの `timeStretch`・`pitchShift`・`voiceChangeRealtime` は同じ位置引数順です。サンプル、サンプルレート、編集量またはプリセットの順に渡します。
+WASM と Node ネイティブの `timeStretch`・`pitchShift`・`voiceChangeRealtime` は同じ位置引数順です。サンプル、サンプルレート、編集量またはプリセットの順に渡します。
 :::
 
 ## 使い方
@@ -120,7 +120,9 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 **F0** は基本周波数、つまりピッチのことで、Hz で測ります。ピッチ検出器は短い時間区切り（**フレーム**。ここではサンプル `hopLength` 個分）ごとに F0 を 1 つ返し、ピッチの動きをたどる F0 **輪郭**を作ります。フレームが**有声**とは、歌い手が息や無音ではなく実際に音高のある音（歌われた母音など）を出している状態で、補正する価値があるのは有声フレームだけです。
 :::
 
-`pitchCorrectToMidi(...)` は一定量のトランスポーズを 1 回かけるだけなので、テイクのビブラートや揺らぎは均されてしまいます。その表情を保ちつつ目標音へ寄せたいときは `pitchCorrectToMidiTimevarying(...)` を使います。現在ピッチを 1 つの数値で渡す代わりに、呼び出し側が用意した**フレームごとの F0 輪郭**をたどり、有声フレームごとに `targetMidi` へ補正するため、自然なピッチの動きを均さずに追従します。
+`pitchCorrectToMidi(...)` は、要求したトランスポーズ量をただちに全量適用し、入力の長さを保ちます。時間とともに変わるピッチ輪郭には追従しません。
+
+フレームごとに補正を変えたいときは `pitchCorrectToMidiTimevarying(...)` を使います。呼び出し側が用意した**フレームごとの F0 輪郭**に従い、有声フレームを `targetMidi` へ補正します。
 
 ```typescript
 import { init, pitchPyin, pitchCorrectToMidiTimevarying } from '@libraz/libsonare';
@@ -145,7 +147,9 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced`（非ゼロ＝有声）と `voicedProb` は任意で、省略するとすべてのフレームを有声として扱います。F0 輪郭を生成したときと同じ `hopLength` を使い、フレーム `i` がサンプル `i * hopLength` に対応するようにしてください。
+`voiced`（非ゼロ＝有声）と `voicedProb` は任意です。省略するとすべてのフレームを有声として扱います。F0 輪郭を生成したときと同じ `hopLength` を使い、フレーム `i` がサンプル `i * hopLength` に対応するようにしてください。
+
+`f0Hz` に `NaN` を入れられるのは、対応する `voiced` が 0 のフレームだけです。
 
 ::: tip 一定補正と輪郭追従補正
 1 回のトランスポーズで十分な、安定して伸ばすノートには `pitchCorrectToMidi(...)` を使います。ビブラートやスライド、揺らぎを保ちながら音程へ寄せたいテイクには `pitchCorrectToMidiTimevarying(...)` を選んでください。
@@ -225,7 +229,7 @@ MIDI ノート番号は、音の高さを半音単位の番号で表す方法で
 
 ### `noteStretch(...)` の区間指定
 
-`noteStretch(...)` は、伸ばしたい区間を秒ではなく**サンプル位置**で指定します。
+`noteStretch(...)` は、伸ばしたい区間を秒ではなく**サンプル位置**で指定します。`onsetSample` の既定値は入力の先頭、`offsetSample` の既定値は入力の末尾です。区間が端まで続く場合は、その境界を省略できます。
 
 秒で指定したい場合は、次のように変換します。
 

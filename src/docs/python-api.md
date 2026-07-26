@@ -429,7 +429,7 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `waveform_peaks(samples, channels, *, samples_per_bucket=512, validate=True)` | `WaveformPeaksReport` | Reduce interleaved multichannel audio (length a multiple of `channels`) to per-channel min/max buckets for waveform drawing; `min`/`max` are channel-major (`channel * bucket_count + bucket`) |
 | `waveform_peak_pyramid(samples, channels, *, samples_per_bucket_levels=(512, 1024, 2048, 4096), validate=True)` | `list[WaveformPeaksReport]` | One peaks report per zoom level (one entry per bucket width) |
 | `rms_energy(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | RMS energy per frame |
-| `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
+| `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN pitch estimation; every frame has a finite `f0`, while `voiced_flag` reports voicing |
 | `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN pitch estimation; unvoiced `f0` stays `nan` unless `fill_na=True` |
 | `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | Global tuning offset from detected frequencies, in fractions of a bin |
 | `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | Estimate tuning offset directly from audio |
@@ -446,13 +446,15 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
-| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/momentary/short-term [LUFS](./glossary/lufs.md) + loudness range (EBU R128) |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/final-window [LUFS](./glossary/lufs.md), Max-M / Max-S, and loudness range (EBU R128) |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range (LRA) in LU |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | Momentary LUFS per frame |
 | `short_term_lufs(samples, sample_rate)` | `list[float]` | Short-term LUFS per frame |
 
-Default parameters: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`.
+Common defaults: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `roll_percent=0.85`.
+
+CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` defaults to `n_bins=252` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31` and `kernel_percussive=31`.
 
 Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
 
@@ -484,7 +486,7 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | Inter-sample (true) peak (dBFS); `oversample_factor` is a power of two in 1..16 (0 = default 4) |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `min_region_samples` default `1` |
 | `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for `window_sec`/`hop_sec` defaults (3 s / 1 s); pass a negative value (the default `-1.0`) for `low_percentile`/`high_percentile` defaults (0.10 / 0.95) — `0.0` requests the 0th percentile, not the default |
-| `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Pearson correlation, −1..1 |
+| `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Uncentered correlation (cosine similarity), −1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | Mid/side stereo width |
 | `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | Per-sample mid/side point series |
 | `metering_vectorscope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | Display-sized mid/side vectorscope; `max_points` upper-bounds the point count (`0` or a value ≥ buffer length = one point per sample, identical to `metering_vectorscope`); otherwise deterministically decimated, keeping the largest-radius sample per bucket |

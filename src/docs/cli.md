@@ -362,12 +362,15 @@ These transform audio and write a WAV with `-o`:
 | Command | Description | Options |
 |---------|-------------|---------|
 | `sonare pitch-correct vocal.wav -o out.wav` | Pitch-correct toward a target MIDI note | `--current-midi` (69.0), `--target-midi` (69.0) |
+| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | Track a pYIN contour and correct it to one note or a scale | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--retune-amount`, `--retune-speed-ms` |
+| `sonare note-move take.wav --target-onset 48000 -o out.wav` | Move one note region to a sample offset | `--onset`, `--offset`, `--target-onset` (sample indices) |
 | `sonare note-stretch take.wav -o out.wav` | Time-stretch a single note region | `--onset`, `--offset` (sample indices), `--ratio` (1.0) |
+| `sonare scale-quantize 68.7` | Quantize one MIDI value to a scale | `--root`, `--mode-mask`, `--reference-midi` |
 | `sonare voice-change vocal.wav -o out.wav` | Voice change (pitch + formant) | `--pitch-semitones` (0.0), `--formant-factor` (1.0) |
 
-The Python CLI focuses on the file-writing edit commands above, plus HPSS summaries.
+The Python CLI provides the file-writing edit commands above, plus HPSS summaries.
 
-The source-built C++ CLI includes those same three edit commands and adds lower-level processing commands:
+The source-built C++ CLI includes the shared edit commands and adds lower-level processing commands:
 
 | C++ command | Required or notable option |
 |-------------|----------------------------|

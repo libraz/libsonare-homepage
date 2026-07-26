@@ -112,7 +112,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.feature.tempogram_ratio()` | `tempogramRatio()` / `tempogram_ratio()` | Tempogram ratio features |
 | `librosa.pcen()` | `pcen()` | `time_constant`, `gain`, `bias`, `power`, `eps` |
 | `librosa.pyin()` | `pitchPyin()` / `pitch_pyin()` | Probabilistic YIN; `fillNa` / `fill_na` controls whether unvoiced `f0` is `NaN` or `0` |
-| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN; `fillNa` / `fill_na` controls whether unvoiced `f0` is `NaN` or `0` |
+| `librosa.yin()` | `pitchYin()` / `pitch_yin()` | YIN; returns a finite period estimate for every frame and reports voicing separately |
 | `librosa.pitch_tuning()` | `pitchTuning()` / `pitch_tuning()` | Tuning offset from frequencies |
 | `librosa.estimate_tuning()` | `estimateTuning()` / `estimate_tuning()` | Tuning offset from audio |
 

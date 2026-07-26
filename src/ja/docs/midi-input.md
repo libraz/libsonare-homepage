@@ -164,6 +164,28 @@ engine.bindMidiCc(/* channel */ 0, /* controller */ 1, /* paramId */ 42, { minVa
 // engine.clearMidiCcBindings() -> すべてのマッピングを削除
 ```
 
+高分解能のコントローラーには、記述子を渡す `bindMidiCcBinding(...)` を使います。`kind` はコントローラーの形式です。
+
+- `0`: 7 ビット CC
+- `1`: 14 ビットの CC ペア
+- `2`: RPN
+- `3`: NRPN
+
+14 ビット CC の LSB は `ccLsbNumber`、RPN／NRPN 番号は `selectorMsb` と `selectorLsb` で指定します。`channel: 255` にすると、すべての MIDI チャンネルに一致します。
+
+```typescript
+engine.bindMidiCcBinding({
+  kind: 3, // NRPN
+  channel: 0,
+  ccNumber: 99,
+  selectorMsb: 1,
+  selectorLsb: 2,
+  paramId: 42,
+  minValue: 0,
+  maxValue: 1,
+});
+```
+
 `addParameter` は `unit`（表示用の文字列）・`rtSafe`・`defaultCurve` も受け取ります。ここで効いてくるのは **`rtSafe`**（既定は `true`）です。これは、音声スレッドが再生中にそのパラメータを変更してよいかを宣言します。演奏中に鳴らしながら CC バインドで動かしたいものは `true` のままにしてください。`rtSafe: false` で登録すると、オートメーションからでもバインド済み CC からでも、そのパラメータへのライブ書き込みはすべて無視され、変更はトランスポート停止中にのみ適用されます。
 
 ::: tip CC ラーンのワークフロー

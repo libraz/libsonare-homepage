@@ -244,7 +244,7 @@ Realtime voice processing is stateful. Reuse the same changer across blocks, kee
 Large pitch, formant, or ambience moves can be useful for sound design, but they will be less transparent. For natural monitoring, keep preset edits conservative and watch latency with `latencySamples()`.
 
 ::: info What "latency" means here
-**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds. Since v1.5.1 it follows the effective dry/wet mix: roughly `wetMix × retune grain`, plus the ISP limiter's fixed delay when that limiter is active. Here *grain* is the retune stage's pitch-shift analysis window measured in samples — a larger grain analyses more audio per step, so it adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field). Pure dry reports zero, while fully wet reports the full wet-path delay.
+**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds. It follows the effective dry/wet mix: roughly `wetMix × retune grain`, plus the ISP limiter's fixed delay when that limiter is active. Here *grain* is the retune stage's pitch-shift analysis window measured in samples — a larger grain analyses more audio per step, so it adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field). Pure dry reports zero, while fully wet reports the full wet-path delay.
 :::
 
 ## Related Pages

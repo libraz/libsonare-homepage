@@ -187,7 +187,7 @@ function voiceCharacterPresetId(preset: VoicePresetId | number): string | null
 function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null
 ```
 
-v1.5.1 以降、解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。
+解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。
 
 ### リアルタイム環境ヘルパー
 
@@ -905,7 +905,7 @@ interface WaveformPeaksReport {
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
-const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, 0);
+const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, -1);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
@@ -924,7 +924,7 @@ const { w, h } = decompose(spectrogram, nFeatures, nFrames, 8);
 const warmStarted = decomposeWithInit(spectrogram, nFeatures, nFrames, 8, 50, 2.0, 'nndsvd');
 const filtered = nnFilter(spectrogram, nFeatures, nFrames);
 const remixed = remix(samples, Int32Array.from([0, sampleRate, sampleRate, 2 * sampleRate]));
-const stretched = phaseVocoder(samples, 1.5, sampleRate);
+const stretched = phaseVocoder(samples, sampleRate, 1.5);
 const hpssResidual = hpssWithResidual(samples, sampleRate);
 const multichannel = lufsInterleaved(interleavedStereo, 2, sampleRate);
 const lra = ebur128LoudnessRange(samples, sampleRate);
@@ -958,8 +958,8 @@ function pitchYin(
   hopLength?: number,    // デフォルト: 512
   fmin?: number,         // デフォルト: 65 Hz
   fmax?: number,         // デフォルト: 2093 Hz
-  threshold?: number,    // デフォルト: 0.3
-  fillNa?: boolean       // デフォルト: false。true なら無声音 f0 フレームを 0 にする
+  threshold?: number,    // デフォルト: 0.1
+  fillNa?: boolean       // 互換性のために維持。YIN は常に有限の f0 を返す
 ): PitchResult
 
 // pYIN アルゴリズム（確率的 YIN + HMM 平滑化）
@@ -984,7 +984,9 @@ interface PitchResult {
 }
 ```
 
-既定では無声音の `f0` フレームは `NaN` のままです。後段の数値処理が `NaN` を扱えず、無声音を `0` として扱いたい場合だけ `fillNa: true` を指定します。
+YIN は、`voicedFlag` が無声音と示すフレームも含め、すべてのフレームで有限の推定値を返します。
+
+pYIN は既定では無声音の `NaN` を保持します。後段で `0` が必要な場合だけ `fillNa: true` を指定してください。
 
 ## 単位変換
 
@@ -1091,7 +1093,7 @@ interface DynamicRangeReport {
 ### ステレオイメージ
 
 ```typescript
-// チャンネル間のピアソン相関(−1..1)
+// チャンネル間の非中心化相関（コサイン類似度、−1..1）
 function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // ミッド/サイドのステレオ幅: 0 = モノ、約 1 = 広いステレオ。上限なし
 // （完全な逆相などでミッド信号が無音なら Infinity）
@@ -1873,7 +1875,7 @@ const SectionType = {
 
 ネイティブ(C++)側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング(WASM / Node ネイティブ / Python / C ABI)でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
 
-v1.5.1 以降、各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
+各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
 
 ```typescript
 import { ErrorCode, isSonareError, Mixer } from '@libraz/libsonare';
@@ -1922,6 +1924,9 @@ const result = masteringChainStereo(left, right, sampleRate, {
   loudness: { targetLufs: -14, ceilingDb: -1, truePeakOversample: 4 },
 })
 console.log(result.outputLufs, result.outputTruePeakDbtp, result.outputLra)
+if (result.loudnessTargetLimited) {
+  console.warn('トゥルーピーク上限のため、要求した LUFS 目標には届きませんでした。')
+}
 console.log(result.stageGainReductions)
 
 // プリセット + フラットなドット記法の上書き
@@ -1933,7 +1938,9 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 
 これらにはそれぞれ `(progress, stage) => void` のコールバックを取る `*WithProgress` 変種があります。`masteringProcess(...)` / `masteringProcessStereo(...)` は名前付きプロセッサを 1 つ実行し、`masteringStereoAnalyze(...)` は JSON レポートを返します。
 
-オフラインのチェーン／プリセット結果には、`outputTruePeakDbtp`（設定したラウドネス用オーバーサンプル倍率での出力トゥルーピーク）、`outputLra`（EBU R128 ラウドネスレンジ、LU）、`stageGainReductions` も含まれます。各 `StageGainReduction` はダイナミクス／マキシマイザーのステージ名と、その直近のゲインリダクション（0 以下の dB）を示すため、追加のオーバーサンプル解析なしで配信上限を確認できます。
+オフラインのチェーン／プリセット結果には、`outputTruePeakDbtp`、`outputLra`、`loudnessTargetLimited`、`stageGainReductions` が含まれます。
+
+`loudnessTargetLimited` が true なら、トゥルーピーク上限のため要求した LUFS 目標には届いていません。目標ではなく実際の `outputLufs` を報告してください。各 `StageGainReduction` は、ダイナミクスまたはマキシマイザーの直近のゲインリダクションを示します。
 
 説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。
 
@@ -2220,7 +2227,7 @@ interface MasteringChainConfig {
   stereo?: {
     imager?: { width?: number; outputGainDb?: number;
                decorrelationAmount?: number; preserveEnergy?: boolean; };
-    monoMaker?: { amount?: number };
+    monoMaker?: { amount?: number; frequencyHz?: number };
   };
   maximizer?: {
     truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
@@ -2237,9 +2244,15 @@ interface MasteringResult {
   inputLufs: number;
   outputLufs: number;
   appliedGainDb: number;
+  loudnessTargetLimited?: boolean;
   latencySamples?: number;
 }
-interface MasteringChainResult extends MasteringResult { stages: string[] }
+interface MasteringChainResult extends MasteringResult {
+  stages: string[];
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+}
 interface MasteringStereoResult {
   left: Float32Array;
   right: Float32Array;

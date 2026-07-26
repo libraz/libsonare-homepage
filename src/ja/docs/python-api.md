@@ -437,7 +437,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `waveform_peaks(samples, channels, *, samples_per_bucket=512, validate=True)` | `WaveformPeaksReport` | インターリーブされたマルチチャンネル音声（長さは `channels` の倍数）を波形描画用のチャンネルごとの min/max バケットに縮約。`min`/`max` はチャンネルメジャー（`channel * bucket_count + bucket`） |
 | `waveform_peak_pyramid(samples, channels, *, samples_per_bucket_levels=(512, 1024, 2048, 4096), validate=True)` | `list[WaveformPeaksReport]` | ズームレベルごとに 1 つの peaks レポート（バケット幅ごとに 1 エントリ） |
 | `rms_energy(samples, sample_rate, frame_length?, hop_length?)` | `list[float]` | フレームごとの RMS エネルギー |
-| `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
+| `pitch_yin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | YIN ピッチ推定。すべてのフレームの `f0` は有限で、有声かどうかは `voiced_flag` が示す |
 | `pitch_pyin(samples, sample_rate, frame_length?, hop_length?, fmin?, fmax?, threshold?, fill_na?)` | `PitchResult` | pYIN ピッチ推定。無声音の `f0` は `fill_na=True` でない限り `nan` |
 | `pitch_tuning(frequencies, resolution?, bins_per_octave?)` | `float` | 検出済み周波数からビン単位のチューニングずれを推定 |
 | `estimate_tuning(samples, sample_rate?, n_fft?, hop_length?, resolution?, bins_per_octave?)` | `float` | 音声からチューニングずれを直接推定 |
@@ -454,13 +454,15 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルタ |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度包絡（テンポグラム系の入力） |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | マルチバンドのオンセット強度。`(n_frames, [n_bands x n_frames])` を行優先で返す（`n_bands` 既定 3） |
-| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／momentary／short-term [LUFS](./glossary/lufs.md) とラウドネスレンジ（EBU R128） |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／最後の窓の [LUFS](./glossary/lufs.md)、Max-M / Max-S、ラウドネスレンジ（EBU R128） |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | インターリーブされたサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range（LRA、LU 単位） |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | フレームごとの momentary LUFS |
 | `short_term_lufs(samples, sample_rate)` | `list[float]` | フレームごとの short-term LUFS |
 
-デフォルトパラメータ: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, ピッチ検出の `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `roll_percent=0.85`。CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31` を既定値とします。
+主な既定値は、`n_fft=2048`、`hop_length=512`、`n_mels=128`、`n_mfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`roll_percent=0.85` です。
+
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` の既定は `n_bins=252`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31` を既定値とします。
 
 追加のエフェクト系ヘルパーとして `remix(samples, intervals, sample_rate?, align_zeros?)`、`phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)` も利用できます。librosa 型の区間リミックス、直接のフェーズボコーダー時間伸縮、残差信号を保持した HPSS が必要な場合に使います。
 
@@ -496,7 +498,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | インターサンプル（トゥルー）ピーク（dBFS）。`oversample_factor` は 1..16 の 2 の冪（0 で既定 4） |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | クリップしたサンプルの連続区間。`threshold` 既定 `0.999`、`min_region_samples` 既定 `1` |
 | `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`window_sec`/`hop_sec` は `0.0` で既定値（窓 3 秒・ホップ 1 秒）。`low_percentile`/`high_percentile` は負値（既定 `-1.0`）で既定値（low 0.10・high 0.95）。`0.0` は既定ではなく 0 パーセンタイルの指定 |
-| `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | ピアソン相関、−1..1 |
+| `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | 非中心化相関（コサイン類似度）、−1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | ミッド/サイドのステレオ幅 |
 | `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | サンプルごとのミッド/サイド点列 |
 | `metering_vectorscope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | 表示サイズのミッド/サイドベクトルスコープ。`max_points` が点数の上限（`0` またはバッファ長以上で 1 サンプル 1 点となり `metering_vectorscope` と同一）。それ以外は決定的に間引き、バケットごとに最大半径のサンプルを残す |

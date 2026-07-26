@@ -20,7 +20,7 @@ These helpers assume you already produce mel spectrograms or MFCCs. If you are j
 By the end of this page you should be able to:
 
 - explain why mel/MFCC inversion is approximate and why phase cannot be recovered from the feature alone;
-- keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, `nMfcc`, `fmin`, `fmax`, and `htk` values needed for a correct round trip;
+- keep the `sampleRate`, `nFft`, `hopLength`, `nMels`, `nMfcc`, `fmin`, `fmax`, `htk`, and MFCC `lifter` values needed for a correct round trip;
 - choose `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, or `vqtToAudio` based on the feature matrix and whether you need preview audio;
 - compare JavaScript and Python return shapes without confusing row counts, frame counts, and flattened data.
 
@@ -78,7 +78,9 @@ The two `*ToStft` / `*ToMel` helpers stay in the **spectral** domain and return 
 
 ## Reconstruct a spectrum
 
-`melToStft` undoes the mel filterbank: it maps a mel **power** spectrogram back to a linear-frequency STFT **power** spectrogram. `mfccToMel` undoes the cepstral compression: it maps MFCCs back to a (smoothed) mel **power** spectrogram.
+`melToStft` maps a mel **power** spectrogram back to linear-frequency STFT **power**. `mfccToMel` maps MFCCs back to a smoothed mel **power** spectrogram.
+
+If forward MFCC used a nonzero `lifter`, pass the same value to `mfccToMel` or `mfccToAudio`. The inverse then removes it.
 
 ::: code-group
 

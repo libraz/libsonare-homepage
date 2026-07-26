@@ -28,6 +28,10 @@ console.log(`Key: ${result.key.name}`);     // "C major"
 console.log(`Beats: ${result.beatTimes.length}`);
 ```
 
+Every analyzer above reads from the same shared spectrogram — the transform this demo walks through, and the reason asking for BPM and key together costs barely more than asking for one.
+
+<SonareDemo id="stft-basics" />
+
 ### Audio Effects
 
 ```typescript
@@ -182,7 +186,7 @@ finalization, so it cannot be released deterministically.
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
 | `synthesizeRir(options?)` | `RirResult` | Mono room impulse response from shoebox geometry |
 | `roomMorph(samples, sampleRate, options?)` | `Float32Array` | Offline creative morph toward a target room |
-| `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, momentary, short-term loudness and loudness range (ITU-R BS.1770) |
+| `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, final momentary/short-term windows, their EBU R128 maxima (Max-M / Max-S), and loudness range |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128LoudnessRange(samples, sampleRate?)` | `number` | Standards-compliant EBU R128 loudness range (LRA) in LU |
 | `momentaryLufs(samples, sampleRate?)` | `Float32Array` | Momentary loudness (400 ms) per step |
@@ -227,7 +231,7 @@ Progress callbacks are not available on the async path. If you need progress upd
 | `harmonic(samples, sr?)` | `Float32Array` | Extract harmonic component |
 | `percussive(samples, sr?)` | `Float32Array` | Extract percussive component |
 | `timeStretch(samples, sampleRate, rate)` | `Float32Array` | Time-stretch without pitch change |
-| `phaseVocoder(samples, rate, sr?, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
+| `phaseVocoder(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
 | `pitchShift(samples, sampleRate, semitones)` | `Float32Array` | Pitch-shift without tempo change |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
 | `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
@@ -280,7 +284,9 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbor filtering |
 | `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope (the input to the tempogram family) |
 
-Default parameters: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.3`, `rollPercent=0.85`. CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. `chromaCqt`/`bassChroma`/`chromaCens` default `nChroma=12`; `chromaCqt` defaults `hopLength=512`; `onsetStrengthMulti` defaults `nBands=3`; `decomposeWithInit` defaults `nIter=50`, `beta=2`, `init='random'`.
+Common defaults: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `rollPercent=0.85`.
+
+CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chromaCqt` defaults to `nChroma=12`, `nBins=252`, and `binsPerOctave=36`; `bassChroma` and `chromaCens` default to `nChroma=12`. `onsetStrengthMulti` defaults to `nBands=3`. `decomposeWithInit` defaults to `nIter=50`, `beta=2`, and `init='random'`.
 
 ### Inverse Reconstruction Functions
 
@@ -362,7 +368,7 @@ Standalone level, dynamics, and stereo-image meters. Each accepts an optional `o
 | `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | Inter-sample (true) peak (dBFS); `oversampleFactor` is a power of two in 1..16 (default 4) |
 | `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | Clipped-sample runs; `options` adds `threshold` (default `0.999`) and `minRegionSamples` (default `1`) |
 | `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | Sliding-window dynamic range; `options` adds `windowSec`, `hopSec`, `lowPercentile`, `highPercentile` (omit for defaults: window 3 s, hop 1 s, low 0.10, high 0.95) |
-| `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | Pearson correlation, −1..1 |
+| `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | Uncentered correlation (cosine similarity), −1..1 |
 | `meteringStereoWidth(left, right, sr?, options?)` | `number` | Side/mid energy ratio: 0 = mono, ~1 = wide stereo; unbounded (`Infinity` when mid is silent) |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | Per-sample mid/side point series |
 | `meteringPhaseScope(left, right, sr?, options?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |

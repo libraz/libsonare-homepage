@@ -313,7 +313,7 @@ strip の指定方法はランタイムで異なります。
 
 グループの `gainDb` は、各メンバーがすでに持つフェーダー値に対する**差分**として、各メンバーのフェーダー段（上記ステップ 7）に加算されます。差分だけが適用されるため、グループ内でストリップごとに設定したフェーダーの微調整は失われません。グループフェーダーは個別のバランスを上書きせずに、セット全体を一括で上下できます。
 
-ストリップのグループとグループゲインは `addVcaGroup(id, gainDb, members)` で追加し、`setVcaGroupGainDb(...)` で調整し、`removeVcaGroup(id)` で削除します。このグループ定義（ゲインとメンバー構成）はシーン JSON を往復します。`setVcaOffsetDb(...)` による調整は、セッション中に変更できるストリップごとの**ライブ**なオフセットです。これはストリップの `vcaOffsetDb` として保存され、シーン JSON を往復します。
+ストリップのグループとグループゲインは `addVcaGroup(id, gainDb, members)` で追加し、`setVcaGroupGainDb(...)` でゲインを調整し、`setVcaGroupMembers(id, members)` でグラフを再構築せずにメンバー構成を置き換え、`removeVcaGroup(id)` で削除します。このグループ定義（ゲインとメンバー構成）はシーン JSON を往復します。`setVcaOffsetDb(...)` による調整は、セッション中に変更できるストリップごとの**ライブ**なオフセットです。これはストリップの `vcaOffsetDb` として保存され、シーン JSON を往復します。
 
 ### ソロとミュートのロジック
 
@@ -382,7 +382,7 @@ mixer.scheduleInsertAutomation(stripIndex, insertIndex, paramId, sampleRate * 4,
 
 ## メーター
 
-各ストリップ（およびマスター）は豊富な `MixMeterSnapshot` を公開します。`mixStereo` の `meters[]` からレンダー後に、または `mixer.meterTap(strip, 'preFader' | 'postFader')` でライブに読み取れます。`stripMeter(...)` は WASM/Python では便利な別名、Node ネイティブではポストフェーダーの簡易入口です。
+各ストリップ（およびマスター）は豊富な `MixMeterSnapshot` を公開します。`mixStereo` の `meters[]` からレンダー後に、または `mixer.meterTap(strip, 'preFader' | 'postFader')` でライブに読み取れます。`stripMeter(...)` は WASM/Python では便利な別名、Node ネイティブではポストフェーダーの簡易入口です。`busMeter(busId)` は、`master` を含むコンパイル済みバスの post-insert メーターを返します。
 
 | フィールド | 意味 |
 |-----------|------|

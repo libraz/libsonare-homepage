@@ -123,7 +123,7 @@ A crossover splits the signal into frequency bands (e.g. lows / mids / highs) so
 | Stereo | `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.imager`, `stereo.monoMaker`, `stereo.phaseAlign`, `stereo.stereoBalance` |
 
 ::: warning Stereo-family processors use a different entry point
-Most processors run through the single-array `masteringProcess()` (mono, or interleaved). The stereo-family processors (`stereo.imager`, `stereo.monoMaker`, `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.phaseAlign`, `stereo.stereoBalance`) operate on true left/right channels, so call them through the separate stereo entry point `masteringProcessStereo()` / `mastering_process_stereo()`, which takes distinct `left` and `right` arrays. The same is true of `eq.midSide` and the `multiband.*` processors. Passing these to `masteringProcess()` cannot express independent channels — see [How to call them](#how-to-call-them) for the exact signatures.
+Most processors run through the single-array `masteringProcess()` (mono, or interleaved). The stereo-family processors (`stereo.imager`, `stereo.monoMaker`, `stereo.autoPan`, `stereo.haasEnhancer`, `stereo.phaseAlign`, `stereo.stereoBalance`) operate on true left/right channels, so call them through the separate stereo entry point `masteringProcessStereo()` / `mastering_process_stereo()`, which takes distinct `left` and `right` arrays. `stereo.monoMaker` uses `frequencyHz` as the crossover below which it collapses the signal toward mono; `amount` controls how strongly it does so. The same is true of `eq.midSide` and the `multiband.*` processors. Passing these to `masteringProcess()` cannot express independent channels — see [How to call them](#how-to-call-them) for the exact signatures.
 :::
 
 ::: details What is dither?
