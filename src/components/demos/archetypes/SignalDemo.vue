@@ -15,7 +15,7 @@ import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import { generateSignal } from '@/demos/signal';
 import { type GeneratedSignal, type SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -257,6 +257,9 @@ function paint(): void {
   ctx.fillText('5 kHz', padX + innerW, specBot + 2);
   ctx.textAlign = 'left';
 }
+
+/** Re-paint when the screen is first laid out and on every later resize. */
+useCanvasRedraw(canvas, paint);
 
 // ---- audition --------------------------------------------------------------
 async function onPlay(): Promise<void> {

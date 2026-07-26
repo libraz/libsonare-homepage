@@ -15,7 +15,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -286,6 +286,9 @@ function paint(): void {
   ctx.fillText('TIME', envX + envW, eBot + 2);
   ctx.textAlign = 'left';
 }
+
+/** Re-paint when the screen is first laid out and on every later resize. */
+useCanvasRedraw(canvas, paint);
 
 // ---- audition: synthesize and play the compressed program ------------------
 function buildAudio(): { samples: Float32Array; sampleRate: number } {

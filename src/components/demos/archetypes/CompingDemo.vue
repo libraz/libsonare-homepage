@@ -17,7 +17,7 @@ import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import { peakEnvelope } from '@/demos/audio/processors';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -268,6 +268,9 @@ function paint(): void {
   ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
   ctx.fillText('COMP', padX, compMid - amp - 7);
 }
+
+/** Re-paint when the screen is first laid out and on every later resize. */
+useCanvasRedraw(canvas, paint);
 
 // ---- audition --------------------------------------------------------------
 async function onPlay(): Promise<void> {

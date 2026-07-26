@@ -14,7 +14,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 import { PHRASE_BEATS, PHRASE_BEATS_PER_BAR, PHRASE_VOICES } from './midiPhrase';
@@ -351,6 +351,9 @@ function paint(): void {
     ctx.shadowBlur = 0;
   }
 }
+
+/** Re-paint when the screen is first laid out and on every later resize. */
+useCanvasRedraw(canvas, paint);
 
 // ---- audition --------------------------------------------------------------
 async function onPlay(): Promise<void> {

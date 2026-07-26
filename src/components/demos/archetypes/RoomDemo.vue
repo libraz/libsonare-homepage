@@ -13,7 +13,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import type { SonareDemoDef } from '@/demos/types';
 import { prepareCanvas2D } from '../canvas';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -265,6 +265,9 @@ function paint(): void {
   ctx.fillText(`${displaySec.value.toFixed(1)} s`, padX + innerW, bot + 14);
   ctx.textAlign = 'left';
 }
+
+/** Re-paint when the screen is first laid out and on every later resize. */
+useCanvasRedraw(canvas, paint);
 
 // ---- audition: a short clap convolved with the RIR -------------------------
 /** Convolve a brief synthesized clap with the current RIR; normalize for play. */
