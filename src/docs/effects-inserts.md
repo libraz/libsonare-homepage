@@ -11,6 +11,10 @@ description: The creative-FX insert catalog for the libsonare mixing and realtim
 This page catalogs **mixer/engine inserts**. The named [Mastering Processors](./mastering-processors.md) registry — compressors, EQ, saturation, stereo, repair, and the loudness/maximizer stages — is a separate topic with its own scope. The two overlap only where noted: a few FX inserts are *also* exposed as one-shot mastering processors. If you are looking for the mastering registry, start on that page instead.
 :::
 
+An insert sits *in* the channel path, so everything downstream — the fader, the sends, the bus — sees its output. That position is what separates an insert from a send, and it is the first thing to be sure of before reading the catalog below.
+
+<SonareDemo id="pre-post-fader" />
+
 ## Discovering the insert set
 
 Mixer scene inserts use the same processor factory as mastering inserts, but the valid insert set is slightly broader than `masteringProcessorNames()`. Four runtime APIs describe what is available and how to configure it:

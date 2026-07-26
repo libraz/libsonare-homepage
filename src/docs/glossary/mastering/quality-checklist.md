@@ -26,6 +26,10 @@ Use this checklist before treating a render as finished. It is deliberately shor
 - Correlation and phase scope do not suggest severe mono problems.
 - The reference track is used as a context check, not as a copy target.
 
+The mono check is the one most often skipped, and the one that fails most quietly — width built from opposite-polarity content survives every stereo check and then disappears on a phone.
+
+<SonareDemo id="mono-fold" />
+
 ## If A Check Fails
 
 Do not fix every failed check with the same control. Route the problem back to the part of the chain that can actually change it:

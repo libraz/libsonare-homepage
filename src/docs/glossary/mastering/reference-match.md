@@ -39,6 +39,10 @@ Poor uses:
 5. Re-listen with loudness matching enabled.
 6. Undo the move mentally if the track loses its own musical identity.
 
+A match move is a broad tonal tilt, not a surgical correction — the demo below is the same shape of decision on a single control, which is a good way to build a feel for how little of it is usually enough.
+
+<SonareDemo id="tilt-eq" />
+
 ## Signs to Back Off
 
 If the master sounds closer to the reference but loses the vocal distance, low-end groove, or arrangement space that defined the original track, the match strength is too high. A reference is a coordinate to navigate by, not a destination to copy.

@@ -260,6 +260,8 @@ Comping also composes safely with the other clip edits: `splitClip` and trims ca
 The **active take** is the single take that plays when there are no comp segments — handy while you are still auditioning. **Comp segments** override that per region: wherever a segment covers a position, its `takeId` wins; outside every segment the active take fills in. Build the comp by adding segments over the active take, not by replacing it.
 :::
 
+<SonareDemo id="comping" />
+
 ### How the edit compiler renders a comp
 
 When you `compile()` (or render) a project, the edit compiler walks the clip's timeline and, for each position, resolves which take's audio to read: a covering comp segment's take if one exists, otherwise the active take. Each take's source is read at its own `sourceOffsetPpq`, so a take that was recorded slightly late can be nudged into place without re-recording. The compiled timeline therefore plays one seamless performance assembled from many takes — the comp is a *view*, and the original takes stay intact for re-comping later.

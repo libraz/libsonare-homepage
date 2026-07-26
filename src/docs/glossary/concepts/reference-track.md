@@ -40,6 +40,8 @@ Reference Match EQ compares the spectrum of the source and reference, then appli
 
 It should be constrained. Large match-EQ moves often indicate that the source mix is fundamentally different from the reference. In that case, broad manual EQ or mix revision is usually safer than exact matching.
 
+<SonareDemo id="tilt-eq" />
+
 ## In The libsonare Demo
 
 The demo lets you load a reference track for comparison. It displays basic reference metrics and can run Reference Match EQ through the local WebAssembly worker.
