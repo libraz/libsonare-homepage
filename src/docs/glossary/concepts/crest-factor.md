@@ -9,6 +9,11 @@ Crest factor is the gap between peak level and average level. The "average" here
 
 A high crest factor means peaks rise far above the average level. A low crest factor means the signal is dense or heavily controlled. Neither is automatically good or bad.
 
+<CrestFactorFigure
+  title="Same peak, different crest"
+  caption="Both panels reach the same peak level. The difference is how much of the time the signal sits near it, which moves the RMS line and therefore the gap between the two. That gap is the crest factor — the reason peak level alone says so little about how a track feels."
+/>
+
 ## How To Read It
 
 Think of crest factor as a clue, not a verdict.

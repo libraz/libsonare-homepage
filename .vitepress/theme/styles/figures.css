@@ -1,0 +1,337 @@
+/* =========================================
+   Doc Figure Layer
+
+   Shared presentation for the hand-authored SVG figures under
+   `.vitepress/theme/components/figures/`. Those components own geometry
+   only; every stroke, fill, and type spec lives here so the whole figure
+   set reads as one system and tracks the light/dark token tables.
+
+   Figures reuse the `.doc-diagram-*` chrome from docs.css (frame, title,
+   caption) and add the `.fx-*` vocabulary below for plot internals.
+   ========================================= */
+
+:root {
+  /* Series palette — five hues that stay distinguishable in both themes
+     and against the code-block surface the figures sit on. */
+  --fx-1: var(--demo-accent);
+  --fx-2: var(--demo-cyan);
+  --fx-3: var(--demo-amber);
+  --fx-4: var(--demo-status-ok);
+  --fx-5: var(--demo-status-error);
+
+  --fx-ink: var(--color-text-primary);
+  --fx-ink-dim: var(--color-text-secondary);
+  --fx-ink-faint: var(--color-text-tertiary);
+  --fx-surface: var(--vp-code-block-bg);
+  --fx-rule: color-mix(in srgb, var(--color-text-primary) 22%, transparent);
+  --fx-grid: color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+}
+
+/* --- Structure ------------------------------------------------------- */
+
+/* Axes and tick rules. */
+.fx-axis {
+  fill: none;
+  stroke: var(--fx-rule);
+  stroke-width: 1.1;
+}
+
+.fx-grid {
+  fill: none;
+  stroke: var(--fx-grid);
+  stroke-width: 1;
+}
+
+.fx-grid--dashed {
+  stroke-dasharray: 3 4;
+}
+
+/* For grid lines the reader has to actually follow, not just orient by. */
+.fx-grid--strong {
+  stroke: color-mix(in srgb, var(--color-text-primary) 20%, transparent);
+}
+
+/* A labelled threshold / boundary line the reader is meant to notice. */
+.fx-guide {
+  fill: none;
+  stroke: color-mix(in srgb, var(--fx-3) 70%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 3;
+}
+
+.fx-guide--strong {
+  stroke: var(--fx-3);
+  stroke-dasharray: none;
+}
+
+.fx-guide--neutral {
+  stroke: var(--fx-rule);
+}
+
+/* --- Data marks ------------------------------------------------------ */
+
+.fx-curve {
+  fill: none;
+  stroke: var(--fx-1);
+  stroke-width: 1.9;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.fx-curve--2 {
+  stroke: var(--fx-2);
+}
+
+.fx-curve--3 {
+  stroke: var(--fx-3);
+}
+
+.fx-curve--4 {
+  stroke: var(--fx-4);
+}
+
+.fx-curve--5 {
+  stroke: var(--fx-5);
+}
+
+.fx-curve--thin {
+  stroke-width: 1.3;
+}
+
+.fx-curve--dashed {
+  stroke-dasharray: 5 4;
+}
+
+.fx-curve--ghost {
+  stroke: var(--fx-rule);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.fx-area {
+  stroke: none;
+  fill: color-mix(in srgb, var(--fx-1) 16%, transparent);
+}
+
+.fx-area--2 {
+  fill: color-mix(in srgb, var(--fx-2) 16%, transparent);
+}
+
+.fx-area--3 {
+  fill: color-mix(in srgb, var(--fx-3) 16%, transparent);
+}
+
+.fx-area--4 {
+  fill: color-mix(in srgb, var(--fx-4) 16%, transparent);
+}
+
+.fx-area--5 {
+  fill: color-mix(in srgb, var(--fx-5) 16%, transparent);
+}
+
+.fx-area--faint {
+  fill: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+}
+
+/* Solid blocks: bars, spans, lanes, cells. */
+.fx-block {
+  stroke-width: 1;
+  fill: color-mix(in srgb, var(--fx-1) 20%, transparent);
+  stroke: color-mix(in srgb, var(--fx-1) 55%, transparent);
+}
+
+.fx-block--2 {
+  fill: color-mix(in srgb, var(--fx-2) 20%, transparent);
+  stroke: color-mix(in srgb, var(--fx-2) 55%, transparent);
+}
+
+.fx-block--3 {
+  fill: color-mix(in srgb, var(--fx-3) 22%, transparent);
+  stroke: color-mix(in srgb, var(--fx-3) 58%, transparent);
+}
+
+.fx-block--4 {
+  fill: color-mix(in srgb, var(--fx-4) 20%, transparent);
+  stroke: color-mix(in srgb, var(--fx-4) 55%, transparent);
+}
+
+.fx-block--5 {
+  fill: color-mix(in srgb, var(--fx-5) 20%, transparent);
+  stroke: color-mix(in srgb, var(--fx-5) 58%, transparent);
+}
+
+.fx-block--muted {
+  fill: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+  stroke: var(--fx-rule);
+}
+
+.fx-block--outline {
+  fill: none;
+  stroke: var(--fx-rule);
+}
+
+/* Matrix cells: no stroke, so a dense grid reads as an image rather than a mesh. */
+.fx-cell {
+  stroke: none;
+  fill: var(--fx-1);
+}
+
+/* Lane/track backgrounds behind blocks. */
+.fx-lane {
+  fill: color-mix(in srgb, var(--color-text-primary) 4%, transparent);
+  stroke: var(--fx-grid);
+  stroke-width: 1;
+}
+
+.fx-dot {
+  fill: var(--fx-1);
+  stroke: var(--fx-surface);
+  stroke-width: 1.4;
+}
+
+.fx-dot--2 {
+  fill: var(--fx-2);
+}
+
+.fx-dot--3 {
+  fill: var(--fx-3);
+}
+
+.fx-dot--hollow {
+  fill: var(--fx-surface);
+  stroke: var(--fx-1);
+}
+
+/* --- Type ------------------------------------------------------------ */
+
+/* Axis tick numbers and units. */
+.fx-tick {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  fill: var(--fx-ink-faint);
+}
+
+/* Axis titles and lane names — the mono uppercase micro-label rhythm. */
+.fx-axis-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  fill: var(--fx-ink-faint);
+}
+
+/* Callouts pointing at a mark. Reading face, since these are sentences. */
+.fx-note {
+  font-family: var(--font-reading);
+  font-size: 10.5px;
+  fill: var(--fx-ink-dim);
+}
+
+.fx-note--strong {
+  font-weight: 600;
+  fill: var(--fx-ink);
+}
+
+/* Values printed on or beside a mark. */
+.fx-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--fx-ink);
+}
+
+.fx-value--1 {
+  fill: var(--fx-1);
+}
+
+.fx-value--2 {
+  fill: var(--fx-2);
+}
+
+.fx-value--3 {
+  fill: var(--fx-3);
+}
+
+.fx-value--4 {
+  fill: var(--fx-4);
+}
+
+.fx-value--5 {
+  fill: var(--fx-5);
+}
+
+/* Knockout plate so a label stays readable over a curve or fill. */
+.fx-plate {
+  fill: var(--fx-surface);
+  opacity: 0.86;
+}
+
+/* Thin leader line from a callout to the thing it names. */
+.fx-leader {
+  fill: none;
+  stroke: var(--fx-rule);
+  stroke-width: 1;
+}
+
+/* --- Legend ---------------------------------------------------------- */
+
+.doc-diagram-wrap .fx-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-diagram-wrap .fx-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.doc-diagram-wrap .fx-legend-swatch {
+  flex: none;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fx-1);
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-series='0'] {
+  background: var(--fx-rule);
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-series='2'] {
+  background: var(--fx-2);
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-series='3'] {
+  background: var(--fx-3);
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-series='4'] {
+  background: var(--fx-4);
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-series='5'] {
+  background: var(--fx-5);
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-shape='block'] {
+  height: 10px;
+  opacity: 0.65;
+}
+
+.doc-diagram-wrap .fx-legend-swatch[data-shape='dashed'] {
+  height: 0;
+  border-top: 2px dashed var(--fx-3);
+  background: none;
+  border-radius: 0;
+}

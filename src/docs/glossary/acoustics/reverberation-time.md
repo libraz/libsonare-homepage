@@ -25,6 +25,11 @@ T20 and T30 are the same RT60 number measured over different spans: T30 uses mor
 
 The first few dB are skipped because the very start of the decay is dominated by the direct sound and the strongest early reflections, which are not yet "reverberant."
 
+<RoomDecayFigure
+  title="One decay, two slopes"
+  caption="Both measures fit a straight line to a clean stretch of the decay and extrapolate it (dashed) to 60 dB, because the noise floor arrives long before the tail does. EDT takes its slope from the steeper first 10 dB, so its extrapolation lands earlier than T30's — that gap is EDT being shorter than RT60."
+/>
+
 ## EDT: what the ear actually hears
 
 **Early decay time (EDT)** measures only the first 10 dB of decay and scales that slope up to 60 dB. It weights the *beginning* of the tail — exactly the part the ear uses to judge how live a space feels.

@@ -23,6 +23,11 @@ You can read it as a "which parts sound alike?" table:
 | Block along the diagonal | A span is internally consistent, so it may be one section |
 | Stripe away from the diagonal | Two different times sound similar, often a repeated chorus or repeated verse |
 
+<SectionMatrixFigure
+  title="From repetition to a section list"
+  caption="Each A section is similar to itself along the diagonal and to the other A sections off it — those off-diagonal blocks are the repetition cue. The novelty curve measures how sharply the matrix changes from one moment to the next, and its peaks are where boundaries get placed."
+/>
+
 Two signals are especially useful:
 
 - **Novelty** means the SSM changes suddenly. It helps find boundaries.

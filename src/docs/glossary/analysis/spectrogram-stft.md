@@ -34,11 +34,21 @@ This is the **time–frequency resolution trade-off**: you cannot have perfect f
 
 Each block is multiplied by a **window function** (such as a Hann window) that tapers its edges to zero before the FFT. Without it, the abrupt block boundaries leak energy across frequencies (*spectral leakage*) and smear the result. Windowing is why frames overlap — the tapered edges are filled in by neighboring frames.
 
+<StftFramingFigure
+  title="nFft and hopLength, drawn to scale"
+  caption="At the defaults each window steps forward by a quarter of its own length, so most of every window is samples the previous one already covered — which is what fills in the tapered edges. One window is one FFT is one spectrogram column, so hopLength alone sets how many columns you get per second."
+/>
+
 ## Musical spacing: CQT and VQT
 
 A standard STFT spaces its frequency bins *evenly* in Hz. Musical notes are different: they are spaced *logarithmically*, because each octave doubles in frequency.
 
 That means an even-Hz grid can waste resolution high up and lack resolution down low.
+
+<BinSpacingFigure
+  title="The same octave, twice"
+  caption="Both panels are one octave wide and drawn the same size. A pitch-aware bank puts twelve bins in each; an STFT puts whatever a constant hertz spacing happens to give it — five bins in the low octave, over 160 in the high one. VQT keeps the pitch-aware spacing but relaxes it at the bottom, where strict per-note bins would need windows long enough to smear timing."
+/>
 
 | Transform | How it spaces frequency | Use when |
 |-----------|-------------------------|----------|

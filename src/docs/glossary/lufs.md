@@ -22,6 +22,17 @@ Loudness is only one delivery constraint. A master also needs enough [True Peak 
 
 <SonareDemo id="loudness-meter" />
 
+## What "Gated" Means
+
+An integrated LUFS reading is not the average of the whole file. Loudness is measured in short blocks, and two gates decide which blocks are allowed to count: an **absolute** gate at -70 LUFS drops silence outright, then a **relative** gate 10 LU below the surviving average drops the quiet material as well.
+
+<LoudnessGateFigure
+  title="Which blocks reach the average"
+  caption="Silence and a hushed intro are excluded before the average is taken, which is why the integrated value sits close to the level of the track's body rather than somewhere between its loud and quiet parts. Adding a long silent tail to a file therefore does not lower its integrated LUFS."
+/>
+
+That is why a fade-in, a spoken intro, or a silent tail cannot drag the number down — and why the reading tracks how loud the *music* is rather than how much of the timeline it occupies.
+
 ## Choosing a Target
 
 If you are unsure, start at -14 LUFS. It is a practical target for many music and video platforms, and it usually does not require crushing the limiter to reach.

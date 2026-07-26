@@ -19,6 +19,11 @@ The **mel scale** is a perceptual frequency scale that matches this behavior: fi
 
 A **mel spectrogram** re-maps the STFT onto that scale. Its detail is concentrated where our ears can actually discriminate, which is why it is the default front-end for many audio machine-learning systems.
 
+<MelBankFigure
+  title="Even spacing on one scale, uneven on the other"
+  caption="The filters are laid out at equal steps along the mel scale. Viewed back in hertz that same layout is narrow and tightly packed at the bottom and wide and sparse at the top — so the low range, where hearing discriminates finely, gets many filters and the top gets few."
+/>
+
 <SonareDemo id="mel-spectrogram" />
 
 ## MFCC: a compact timbre fingerprint

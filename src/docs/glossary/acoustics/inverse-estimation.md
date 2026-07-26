@@ -23,6 +23,13 @@ Turn on "Treat as impulse response" when the uploaded file is one of these clean
 
 In **blind mode**, the input is ordinary material — music, speech, a field recording — that was never meant to measure the room. There is no clean click; the reverberation is tangled up with the source signal. The analyzer must *blindly* recover the decay from the gaps, note offsets, and pauses in the audio, where the tail is briefly audible on its own.
 
+<BlindDecayFigure
+  title="Recovering a decay from music"
+  caption="The tail is only visible where the program gets out of the way. Each gap exposes a different, partial slice of the decay, and the fit has to reconcile fragments that do not quite agree — which is what the confidence score is reporting on. Dense, gapless material offers no fragments to fit."
+/>
+
+<SonareDemo id="room-decay" />
+
 Blind estimation is genuinely useful for ranking and visualizing spaces — comparing two rooms, getting a feel for a recording's environment — but it is **not an architectural measurement**. It is an informed inference: it can only recover decay that is actually audible in the source signal, so dense, gapless material — a loud, continuous master with no quiet moments — yields a weaker estimate than music with clear note releases and pauses.
 
 ## Confidence

@@ -9,6 +9,11 @@ description: C50, C80, and D50 — early-to-late energy ratios that measure whet
 
 Reverberation time tells you how long a room rings, but not whether you can understand it. A room can have a moderate RT60 and still be perfectly intelligible if the early energy dominates, or muddy if the late tail does. Clarity and definition put a number on that balance by splitting the impulse response at a time boundary and comparing the energy on each side.
 
+<ClarityWindowFigure
+  title="Where the split falls"
+  caption="C50, C80, and D50 all divide the same impulse response; only the boundary moves. The direct sound and the discrete early reflections land inside the early window, so they reinforce a syllable instead of masking the next one — while everything past the boundary is counted as late energy."
+/>
+
 <SonareDemo id="room-decay" />
 
 ## C50 — speech clarity

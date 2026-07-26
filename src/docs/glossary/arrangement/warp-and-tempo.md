@@ -54,6 +54,12 @@ A tempo change tells the clip *how fast* to play, but real performances are not 
 
 Each anchor ties a position in the source audio to a position on the project timeline. The downbeat of the loop snaps to bar 1, the snare hit snaps to beat 2, and the stretching between anchors is computed automatically. With enough anchors you can straighten a loose performance onto the grid, or deliberately bend a tight one to groove.
 
+<WarpMapFigure
+  title="Anchors pin, the spans between them stretch"
+  :labels="{ marker: 'warp anchor' }"
+  caption="An anchor fixes one point in the source to one point on the timeline. Whatever audio sits between two anchors is fitted to whatever distance the grid gives it, so a rushed phrase gets stretched and a dragging one gets compressed — inside the same clip, with no edit to the source file."
+/>
+
 ::: warning tempo-sync is real time-stretching, with limits
 Because tempo-sync changes duration while preserving pitch, it uses a phase vocoder under the hood — the same family of algorithm described in [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md). Small stretches are transparent; very large ones can smear transients or add a "phasey" quality. On stereo and multichannel clips the stretch is phase-locked across channels, so the stereo image does not drift between left and right. repitch has no such artifacts (it is just resampling) but it moves the pitch, so the two modes trade different costs.
 :::

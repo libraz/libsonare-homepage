@@ -9,6 +9,11 @@ Gain staging means keeping signal levels in a useful range as audio moves throug
 
 Good gain staging is not about making everything quiet. It is about leaving enough room for processing decisions to remain meaningful.
 
+<GainLadderFigure
+  title="One scale, every stage on it"
+  caption="Each bar spans a stage's average level up to its peak level. Read this way the three separate decisions stop overlapping: the space above the peaks is headroom, the compressor threshold is a level the incoming signal is compared against, and the ceiling is a peak-safety limit — not a loudness target, which is set later and measured in LUFS instead."
+/>
+
 <SonareDemo id="engine-lane-mixer" />
 
 ## Why It Matters

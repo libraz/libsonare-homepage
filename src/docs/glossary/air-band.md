@@ -24,6 +24,13 @@ Use restraint: too much air can sound brittle or noisy.
 
 When a source falls off sharply around 16 kHz, a normal high-shelf EQ may not be enough because there is little useful material to boost. In that case, treat air-band processing as a way to infer a natural upper edge from the remaining harmonics and noise floor, not as a replacement for missing recording detail.
 
+<BandMapFigure
+  title="Where the air band sits, and what a cliff leaves for it"
+  caption="A shelf multiplies whatever is already there, so above the cliff it has almost nothing to lift. The shaded wedge is the region reconstruction has to infer from the harmonics below it — which is also why pushing the shelf frequency higher tends to amplify the noise floor rather than musical content."
+/>
+
+<SonareDemo id="tilt-eq" />
+
 ## In Studio Mode
 
 Use Air band amount together with Exciter amount. Raise it slowly and compare with loudness matching enabled.

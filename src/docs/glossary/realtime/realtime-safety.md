@@ -11,6 +11,11 @@ description: The audio callback, why allocation and locks are forbidden, denorma
 
 Audio is delivered in blocks on a high-priority thread, and each block must be filled *before* the speaker needs it — often within a couple of milliseconds. Miss that deadline once and you get an audible click, pop, or dropout. So the callback has a hard real-time deadline, and anything that *might* take an unbounded amount of time is forbidden inside it.
 
+<CallbackBudgetFigure
+  title="A budget, and one block that overruns"
+  caption="Average speed is not the property that matters here. Every block has the same fixed budget, and normal blocks finish with headroom to spare — but a single wait on a mutex or an allocator blows through one deadline, the buffer is not ready, and the listener hears it. That is why the forbidden list is about operations whose cost is unbounded rather than operations that are merely slow."
+/>
+
 ## What is forbidden in the callback
 
 | Forbidden | Why it breaks audio |

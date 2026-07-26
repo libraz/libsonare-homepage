@@ -20,11 +20,18 @@ DRR is the single strongest cue for distance. Move the mic closer and the direct
 
 This is exactly the cue your ears use to judge distance in a familiar room, which is why a close-mic'd vocal sounds intimate and a far one sounds like it is "across the room."
 
+<SonareDemo id="room-decay" />
+
 ## Critical distance
 
 The **critical distance** is the distance from the source at which the direct sound and the reverberant field are *equally loud* — where DRR equals 0 dB.
 
 Closer than the critical distance, the direct sound wins and the source reads as clear and localized. Farther, the reverberant field wins and the sound becomes diffuse and room-dominated. Critical distance depends on the room: a dead room (high absorption, short RT60) pushes it far out, so you can stand well back and still hear a direct sound; a live room pulls it close, so even a few steps back drowns the source in reverberation.
+
+<DistanceBalanceFigure
+  title="Two curves, and where they cross"
+  caption="DRR is the vertical gap between the direct sound and the reverberant field. Treating the room lowers the reverberant line without moving the direct one, which pushes the crossing — the critical distance — further out. The same measured DRR therefore means a different distance in a different room."
+/>
 
 Roughly, the more absorptive the room, the weaker its reverberant field, so the direct sound stays dominant farther out — critical distance grows with the square root of the room's *total* absorption (the A in Sabine's equation: surface area weighted by how absorptive each surface is). That is why the same talker sounds intelligible across a treated studio but muddy across a cathedral at the same distance.
 

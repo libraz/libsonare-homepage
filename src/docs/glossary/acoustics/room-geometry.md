@@ -13,6 +13,11 @@ From a recording's reverberant tail, libsonare estimates an **equivalent room**:
 
 The estimate is a **shoebox model**: a simple rectangular room described by three dimensions. Real rooms have alcoves, balconies, furniture, and angled walls, but their *decay behavior* is governed mostly by two bulk properties — how much air the space encloses and how absorptive its surfaces are. The shoebox is the simplest shape that captures both, so libsonare solves for the rectangular room whose decay best matches what was measured.
 
+<RoomEquivalenceFigure
+  title="An equivalence, not a floor plan"
+  caption="The inversion recovers the rectangular room whose volume and total absorption decay the way the recording does. Alcoves, angled walls, and where the furniture sits leave no separable trace in a single-channel decay, so none of them come back out."
+/>
+
 This means the dimensions are **acoustic, not architectural**. They reproduce the measured decay, not the literal floor plan. A long, hard corridor and a square, soft room can ring identically; the estimate reports whichever shoebox reproduces that ring, which may not match a tape measure. On the built-in preset rooms — synthesized from known geometry and then estimated back — you can compare the estimate against the ground truth to see how close the blind inversion lands.
 
 ## Volume
