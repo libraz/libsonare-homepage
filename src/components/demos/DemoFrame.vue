@@ -108,6 +108,11 @@ function pct(v: number): string {
         <span v-if="axisTime" class="td__axis td__axis--time" aria-hidden="true">{{ axisTime }}</span>
 
         <transition name="td-fade">
+          <div v-if="tone === 'idle'" class="td__overlay td__overlay--idle" aria-hidden="true">
+            <span class="td__overlay-label">{{ t('demo.inline.idle') }}</span>
+          </div>
+        </transition>
+        <transition name="td-fade">
           <div v-if="tone === 'loading'" class="td__overlay" role="status" aria-live="polite">
             <span class="td__sweep" />
             <span class="td__overlay-label">{{ loadingLabel }}</span>
@@ -337,6 +342,13 @@ function pct(v: number): string {
   color: rgba(186, 230, 224, 0.85);
 }
 .td__overlay--error .td__overlay-label { color: var(--cb-danger); }
+/* Before activation the screen has nothing drawn on it; say so, so an empty
+   panel reads as "not loaded yet" rather than as a broken demo. */
+.td__overlay--idle {
+  background: none;
+  backdrop-filter: none;
+}
+.td__overlay--idle .td__overlay-label { color: rgba(186, 230, 224, 0.42); }
 .td__overlay-msg {
   max-width: 80%;
   font-family: var(--font-mono);

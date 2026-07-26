@@ -36,6 +36,7 @@
     },
     "inline": {
       "signalError": "Signal error",
+      "idle": "Scroll to load",
       "unknownId": "Unknown demo id",
       "unimplementedArchetype": "Archetype not yet implemented",
       "loadError": {
