@@ -58,12 +58,12 @@ const localeCopy = {
   en: {
     docsLabel: 'Docs',
     githubCta: 'GitHub',
-    tagline: 'Dependency-free audio engine',
+    tagline: 'Audio engine with a dependency-free C++ core',
     hero: {
-      eyebrow: 'Apache-2.0 · Zero runtime dependencies · WebAssembly',
-      title: 'From analysis to arrangement: a dependency-free audio engine.',
+      eyebrow: 'Apache-2.0 · Dependency-free C++ core · WebAssembly',
+      title: 'From analysis to arrangement, powered by a dependency-free C++ core.',
       subtitle:
-        'librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a realtime headless-DAW runtime — for C++, Python, and the browser. The same engine runs native and WASM: no Python runtime, no GPL/AGPL, no model weights.',
+        'librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a realtime headless-DAW runtime — for C++, Python, and the browser. The C++ core runs native and WASM with no Python runtime, GPL/AGPL code, or model weights.',
       installCaption: 'Install',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -77,7 +77,7 @@ const localeCopy = {
       { key: 'RUNTIME', value: 'C++17' },
       { key: 'TARGETS', value: 'LINUX · MACOS · WASM' },
       { key: 'PACKAGES', value: 'NPM · PYPI' },
-      { key: 'DEPS', value: 'ZERO RUNTIME' },
+      { key: 'CORE DEPS', value: 'ZERO RUNTIME' },
     ],
     demoSection: {
       eyebrow: 'Try it locally',
@@ -132,13 +132,13 @@ const localeCopy = {
         {
           tag: 'MASTERING & MIXING',
           title: 'Broadcast-grade mastering and real-time-safe mixing.',
-          body: '76 named mastering DSP processors against published references — loudness, true peak, crossovers, clippers, tube saturation, oversampling — plus a real-time-safe mixer with channel strips, buses, sends, metering, scene presets, editing DSP, and creative FX.',
+          body: '88 named DSP processors in the capability catalog, including 76 solo mastering processors plus pair and creative-insert APIs — loudness, true peak, crossovers, clippers, tube saturation, oversampling — alongside a real-time-safe mixer with channel strips, buses, sends, metering, scene presets, and editing DSP.',
           link: { label: 'Mastering processors', path: '/docs/mastering-processors' },
         },
         {
           tag: 'INSTRUMENTS & DAW',
           title: 'Built-in instruments and a headless-DAW runtime.',
-          body: 'A 12-engine synth with a data-free GM fallback bank and a GS-compatible SoundFont 2 player — MIDI never renders silent. Author projects with audio and MIDI tracks, undo/redo, MIDI sequencing, SMF import/export, offline bounce, and a sample-accurate realtime engine that runs in the browser via AudioWorklet.',
+          body: 'A 15-engine synth with a data-free GM fallback bank and a GS-compatible SoundFont 2 player — MIDI never renders silent. Author projects with audio and MIDI tracks, undo/redo, MIDI sequencing, SMF import/export, offline bounce, and a sample-accurate realtime engine that runs in the browser via AudioWorklet.',
           link: { label: 'Built-in instruments', path: '/docs/native-synth' },
         },
       ],
@@ -157,12 +157,12 @@ const localeCopy = {
   ja: {
     docsLabel: 'ドキュメント',
     githubCta: 'GitHub',
-    tagline: '依存なしのオーディオエンジン',
+    tagline: '外部依存のない C++ コアを備えたオーディオエンジン',
     hero: {
-      eyebrow: 'Apache-2.0 · ランタイム依存ゼロ · WebAssembly',
-      title: '解析からアレンジまで、依存なしのオーディオエンジン。',
+      eyebrow: 'Apache-2.0 · 外部依存のない C++ コア · WebAssembly',
+      title: '解析からアレンジまで、外部依存のない C++ コアで。',
       subtitle:
-        'librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW のリアルタイムランタイム。ひとつのエンジンが C++・Python・ブラウザで、ネイティブでも WASM でも同じように動きます。Python ランタイムも、GPL/AGPL ライセンスも、学習済みモデルも要りません。',
+        'librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW のリアルタイムランタイムを C++・Python・ブラウザで利用できます。C++ コアはネイティブと WASM で動き、Python ランタイム、GPL/AGPL コード、学習済みモデルを必要としません。',
       installCaption: 'インストール',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -176,7 +176,7 @@ const localeCopy = {
       { key: 'RUNTIME', value: 'C++17' },
       { key: 'TARGETS', value: 'LINUX · MACOS · WASM' },
       { key: 'PACKAGES', value: 'NPM · PYPI' },
-      { key: 'DEPS', value: 'ZERO RUNTIME' },
+      { key: 'CORE DEPS', value: 'ZERO RUNTIME' },
     ],
     demoSection: {
       eyebrow: 'ローカルで試す',
@@ -231,13 +231,13 @@ const localeCopy = {
         {
           tag: 'MASTERING & MIXING',
           title: '放送品質のマスタリングと、リアルタイムでも安全なミキシング。',
-          body: '公開リファレンスに基づく 76 個の名前付きマスタリング DSP プロセッサ（ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリング）に加え、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP、クリエイティブ FX を備えた、リアルタイムでも安全なミキサー。',
+          body: '機能カタログには 88 個の名前付き DSP プロセッサがあり、その内訳には 76 個の単体マスタリングプロセッサ、ペア処理、クリエイティブインサートが含まれます。ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリングのほか、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP を備えた、リアルタイムでも安全なミキサーも利用できます。',
           link: { label: 'マスタリングプロセッサ', path: '/docs/mastering-processors' },
         },
         {
           tag: 'INSTRUMENTS & DAW',
           title: '内蔵インストゥルメントとヘッドレス DAW ランタイム。',
-          body: 'データ不要の GM フォールバックバンクを備えた 12 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤーを内蔵。MIDI が無音になることはありません。オーディオと MIDI のトラックでプロジェクトを組み、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンスに対応。ブラウザでは AudioWorklet で動くサンプル精度のリアルタイムエンジンも使えます。',
+          body: 'データ不要の GM フォールバックバンクを備えた 15 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤーを内蔵。MIDI が無音になることはありません。オーディオと MIDI のトラックでプロジェクトを組み、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンスに対応。ブラウザでは AudioWorklet で動くサンプル精度のリアルタイムエンジンも使えます。',
           link: { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
         },
       ],
@@ -418,8 +418,15 @@ finally:
 await init()
 
 const tuned = pitchCorrectToMidi(vocal, sampleRate, 68.7, 69)
-const heldNote = noteStretch(vocal, sampleRate, 12000, 24000, 1.25)
-const character = voiceChange(vocal, sampleRate, 5, 1.1)`,
+const heldNote = noteStretch(vocal, sampleRate, {
+  onsetSample: 12000,
+  offsetSample: 24000,
+  stretchRatio: 1.25,
+})
+const character = voiceChange(vocal, sampleRate, {
+  pitchSemitones: 5,
+  formantFactor: 1.1,
+})`,
     python: `import libsonare as sonare
 
 tuned = sonare.pitch_correct_to_midi(vocal, sample_rate, current_midi=68.7, target_midi=69)

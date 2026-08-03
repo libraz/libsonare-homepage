@@ -602,7 +602,7 @@ const softwareApplicationJsonLd = {
   '@type': 'SoftwareApplication',
   name: 'libsonare',
   applicationCategory: 'MultimediaApplication',
-  applicationSubCategory: 'Dependency-free audio engine',
+  applicationSubCategory: 'Audio engine with a dependency-free C++ core',
   operatingSystem: 'Any (Browser, Node.js, Linux, macOS)',
   offers: {
     '@type': 'Offer',
@@ -610,7 +610,7 @@ const softwareApplicationJsonLd = {
     priceCurrency: 'USD',
   },
   description:
-    'Apache-2.0 dependency-free audio engine for C++, Python, Node, CLI, and WebAssembly: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
+    'Apache-2.0 audio engine for C++, Python, Node, CLI, and WebAssembly, built on a dependency-free C++ core: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
   url: siteUrl,
   softwareHelp: `${siteUrl}/docs/introduction.html`,
   downloadUrl: githubUrl,
@@ -620,9 +620,9 @@ const softwareApplicationJsonLd = {
   featureList: [
     'Browser-local analysis, mastering, mixing, and realtime FX demos',
     'BPM, key, chord, beat, downbeat, section, melody, loudness, room-acoustic analysis, and geometric room tools',
-    '76 named mastering DSP processors with preset, chain, solo, pair, and stereo entry points',
+    '88 named DSP processors with preset, chain, solo, pair, stereo, and creative-insert entry points',
     'Real-time-safe mixing, routing, metering, offline rendering, editing DSP, and creative FX',
-    'Built-in instruments: 12-engine synthesizer with GM fallback and SoundFont 2 player',
+    'Built-in instruments: 15-engine synthesizer with GM fallback and SoundFont 2 player',
     'Headless DAW runtime: MIDI sequencing, arrangement editing, offline bounce',
     'Realtime playback engine with live MIDI input and recording',
     'WebAssembly, Python, CLI, Node.js, and C++ APIs',
@@ -638,7 +638,7 @@ const softwareApplicationJsonLd = {
   ],
   programmingLanguage: ['C++', 'TypeScript', 'Python'],
   keywords:
-    'audio engine, dependency-free audio library, music mastering, mastering DSP, mixing engine, editing DSP, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, music information retrieval, MIR, BPM detection, key detection, chord recognition, beat tracking, loudness, true peak, WebAssembly, WASM, C++, Python, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
+    'audio engine, dependency-free C++ core, music mastering, mastering DSP, mixing engine, editing DSP, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, music information retrieval, MIR, BPM detection, key detection, chord recognition, beat tracking, loudness, true peak, WebAssembly, WASM, C++, Python, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
 };
 
 const webSiteJsonLd = {
@@ -647,7 +647,7 @@ const webSiteJsonLd = {
   name: 'libsonare',
   url: siteUrl,
   description:
-    'Documentation and browser-local demos for the libsonare dependency-free audio engine.',
+    'Documentation and browser-local demos for libsonare, an audio engine with a dependency-free C++ core.',
   inLanguage: siteLocales,
   publisher: {
     '@type': 'Person',
@@ -661,9 +661,9 @@ export default defineConfig({
   // public pages — keep them out of the built, localized route tree.
   srcExclude: ['**/README.md'],
 
-  title: 'libsonare - Dependency-Free Audio Engine',
+  title: 'libsonare - Audio Engine with a Dependency-Free C++ Core',
   description:
-    'Dependency-free audio engine for C++, Python, and the browser: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
+    'Audio engine for C++, Python, and the browser, built on a dependency-free C++ core: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
 
   // Sitemap
   sitemap: {
@@ -677,7 +677,7 @@ export default defineConfig({
       srcDir: siteConfig.srcDir,
       outDir: siteConfig.outDir,
       summary:
-        'Dependency-free C++/WebAssembly audio engine: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
+        'Audio engine built on a dependency-free C++ core compiled to WebAssembly: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
       demoMenu: enDemoMenu,
       docsSidebar: enDocsSidebar,
       glossaryRoot: glossarySidebar[0],
@@ -724,7 +724,7 @@ export default defineConfig({
       {
         name: 'keywords',
         content:
-          'audio engine, dependency-free audio library, music information retrieval, MIR, mastering DSP, mixing engine, editing DSP, creative FX, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, BPM detection, key detection, chord recognition, beat tracking, WebAssembly, WASM, C++ library, Python audio, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
+          'audio engine, dependency-free C++ core, music information retrieval, MIR, mastering DSP, mixing engine, editing DSP, creative FX, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, BPM detection, key detection, chord recognition, beat tracking, WebAssembly, WASM, C++ library, Python audio, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
       },
     ],
 
@@ -734,11 +734,23 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: `${siteUrl}/og-image.svg` }],
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
-    ['meta', { property: 'og:image:alt', content: 'libsonare dependency-free audio engine' }],
+    [
+      'meta',
+      {
+        property: 'og:image:alt',
+        content: 'libsonare audio engine with a dependency-free C++ core',
+      },
+    ],
     // Twitter
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:image', content: `${siteUrl}/og-image.svg` }],
-    ['meta', { name: 'twitter:image:alt', content: 'libsonare dependency-free audio engine' }],
+    [
+      'meta',
+      {
+        name: 'twitter:image:alt',
+        content: 'libsonare audio engine with a dependency-free C++ core',
+      },
+    ],
   ],
 
   markdown: {
@@ -821,9 +833,9 @@ export default defineConfig({
     ja: {
       label: '日本語',
       lang: 'ja',
-      title: 'libsonare - 依存なしのオーディオエンジン',
+      title: 'libsonare - 外部依存のない C++ コアを備えたオーディオエンジン',
       description:
-        'C++、Python、ブラウザで使える依存なしのオーディオエンジン。librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW / リアルタイムランタイムに対応。',
+        '外部依存のない C++ コアを基盤に、C++、Python、ブラウザで使えるオーディオエンジン。librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW / リアルタイムランタイムに対応。',
       themeConfig: {
         nav: [
           {
