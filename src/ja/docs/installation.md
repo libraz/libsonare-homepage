@@ -68,8 +68,20 @@ pnpm add @libraz/libsonare
 | インポート | 用途 |
 |--------|------|
 | `@libraz/libsonare` | 初期化、解析、特徴量、マスタリング、ミキシング、リアルタイムクラスを含む通常の TypeScript API |
+| `@libraz/libsonare/analysis` | 解析専用モジュール。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを含まないため、MIR だけが必要な場合はダウンロードがはるかに小さくなります |
 | `@libraz/libsonare/worklet` | `SonareRealtimeEngineNode`、`SonareEngine`、Worklet 側ライフサイクルエクスポートを含む AudioWorklet ブリッジヘルパー |
+| `@libraz/libsonare/worker` | ワンショットの解析・マスタリングを専用 Worker で実行する `OfflineWorkerClient` |
 | `@libraz/libsonare/wasm` | バンドラーや独自ローダー用の通常 WASM アセット |
+| `@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json` | ボイスチェンジャープリセットの JSON Schema |
+| `@libraz/libsonare/schemas/realtime-voice-changer-preset-pack.schema.json` | プリセットパックの JSON Schema |
+
+::: tip 解析だけならアナリシスバンドルを選ぶ
+`@libraz/libsonare/analysis` は同じ DSP を、マスタリング・ミキシング・リアルタイム・
+プロジェクトの各サーフェスを外してビルドしたものです（CI でサイズ上限を検査しています）。
+BPM・キー・コード検出やスペクトログラム表示だけを行い、マスタリングやミキシングをしない
+ページなら、メインエントリの代わりにこちらをインポートすると WASM のダウンロード量を
+大きく減らせます。
+:::
 
 ## PyPI（Python）
 
@@ -95,6 +107,28 @@ pip install bindings/python/dist/*.whl
 ```
 
 FFmpeg 有効ビルドには FFmpeg の開発ライブラリが必要です。macOS では `brew install ffmpeg`、Debian/Ubuntu 系では `libavformat-dev libavcodec-dev libavutil-dev libswresample-dev` をインストールしてください。
+
+## 対応プラットフォーム
+
+対応プラットフォームは **Linux・macOS・WebAssembly・WSL2** です。
+
+| プラットフォーム | 備考 |
+|------------------|------|
+| Linux | ホイールは対応する manylinux 2.28 イメージ内でビルドし、`auditwheel` で修復したうえで glibc 2.31 に対して検査しています |
+| macOS | macOS 11.0 以降が対象です |
+| WebAssembly | WebAssembly が動くブラウザ。既定の経路では SharedArrayBuffer は不要です |
+| WSL2 | Windows マシンでビルド・実行する場合はこちらを使います |
+
+::: warning Windows ネイティブビルドは拒否されます
+Windows 上の CMake 構成は、中途半端に構成を進めるのではなく WSL2 への案内を出して
+失敗します。Windows でネイティブビルドを行う場合は WSL2 を使ってください。npm の
+WebAssembly パッケージは Windows のブラウザでも問題なく動きます。この制限は
+ネイティブライブラリのコンパイルに関するもので、ブラウザ実行の話ではありません。
+:::
+
+公開されている成果物は、WebAssembly の npm パッケージ、Python ホイール、
+ネイティブ CLI のリリースアーカイブです。Node ネイティブバインディングは private 指定で、
+ローカル依存としてのみインストールされます（[ネイティブバインディング](/ja/docs/native-bindings) を参照）。
 
 ## ソースからビルド
 
@@ -130,7 +164,7 @@ cd .. && make wasm
 
 ## ネイティブバインディング（Python / Node.js）
 
-デスクトップ環境ではネイティブバインディングにより C++ の性能を直接活用できます。Python は PyPI から利用できます。Node.js N-API バインディングは現在ソースビルド前提です。詳細は [ネイティブバインディング](/ja/docs/native-bindings) を参照してください。
+デスクトップ環境ではネイティブバインディングにより C++ の性能を直接活用できます。Python は PyPI から利用できます。Node.js の N-API バインディングは **npm には公開されていません**。private 指定でローカル依存として使う前提なので、常にソースからビルドします。詳細は [ネイティブバインディング](/ja/docs/native-bindings) を参照してください。
 
 Node.js ネイティブバインディングは Yarn 4 を使い、Node.js 22 以上が必要です。
 

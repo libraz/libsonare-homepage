@@ -71,8 +71,20 @@ cases. Most app code should import from the main `@libraz/libsonare` entry.
 | Import | Use |
 |--------|-----|
 | `@libraz/libsonare` | Main TypeScript API: initialization, analysis, features, mastering, mixing, and realtime classes |
+| `@libraz/libsonare/analysis` | Analysis-only module, built without mastering, mixing, realtime, or project bindings — a much smaller download when all you need is MIR |
 | `@libraz/libsonare/worklet` | AudioWorklet bridge helpers, including `SonareRealtimeEngineNode`, `SonareEngine`, and worklet-side lifecycle exports |
+| `@libraz/libsonare/worker` | `OfflineWorkerClient`, which runs one-shot analysis and mastering calls in a dedicated Worker |
 | `@libraz/libsonare/wasm` | Raw main WASM asset for bundlers or custom loaders |
+| `@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json` | JSON Schema for a voice-changer preset document |
+| `@libraz/libsonare/schemas/realtime-voice-changer-preset-pack.schema.json` | JSON Schema for a preset pack |
+
+::: tip Pick the analysis bundle when you only analyze
+`@libraz/libsonare/analysis` compiles the same DSP with the mastering, mixing,
+realtime, and project surfaces left out, and CI enforces a size budget on it. If
+your page detects BPM, key, chords, or draws a spectrogram and never masters or
+mixes, importing it instead of the main entry cuts the WASM download
+substantially.
+:::
 
 ## Python (pip)
 
@@ -100,6 +112,28 @@ pip install bindings/python/dist/*.whl
 FFmpeg-enabled builds require FFmpeg development libraries. On macOS, install
 them with `brew install ffmpeg`. On Debian/Ubuntu, install `libavformat-dev
 libavcodec-dev libavutil-dev libswresample-dev`.
+
+## Supported Platforms
+
+The declared supported platforms are **Linux, macOS, WebAssembly, and WSL2**.
+
+| Platform | Notes |
+|----------|-------|
+| Linux | Wheels are built inside matching manylinux 2.28 images, repaired with `auditwheel`, and checked against glibc 2.31 |
+| macOS | Targets macOS 11.0 and later |
+| WebAssembly | Any browser with WebAssembly; no SharedArrayBuffer required for the default path |
+| WSL2 | The supported way to build and run on a Windows machine |
+
+::: warning Native Windows builds are rejected
+A Windows CMake configuration fails with a pointer to WSL2 rather than
+half-configuring. Use WSL2 for native builds on Windows. The npm WebAssembly
+package works in any browser on Windows — this limit is about compiling the
+native library, not about running the browser build.
+:::
+
+The published artifacts are the WebAssembly npm package, the Python wheel, and
+the native CLI release archives. The Node native binding is marked private and
+is installed as a local dependency only — see [Native Bindings](/docs/native-bindings).
 
 ## Building from Source
 
@@ -136,8 +170,9 @@ cd .. && make wasm
 ## Native Bindings (Python / Node.js)
 
 For desktop use, native bindings provide direct C++ performance. Python is
-available from PyPI; the Node.js N-API binding is currently built from source.
-See the [Native Bindings](/docs/native-bindings) page for details.
+available from PyPI. The Node.js N-API binding is **not published to npm** — it
+is marked private and is consumed as a local dependency, so it is always built
+from source. See the [Native Bindings](/docs/native-bindings) page for details.
 
 The Node.js native binding uses Yarn 4 and requires Node.js 22 or later:
 

@@ -51,7 +51,10 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | ミキシングエンジンとシーン | 対応 | `mix`（C++ CLI はシーンプリセット書き出しも対応） |
 | サラウンド・マルチチャンネルミキシング | リアルタイムエンジンでは、ストリップの `surroundPan` 位置に従ってレーンを 5.1/7.1 グループバスへパンし、ワイドメーターも取得できます。単体のオフライン `Mixer` はステレオのままで、`sourceChannelLayout` は保存されますが、レーン入力のマルチチャンネル保持にはまだ使われません。[サラウンドとマルチチャンネル](./mixing.md#サラウンドとマルチチャンネル)を参照してください。 | 非対応 |
 | プロジェクト・アレンジ編集（ヘッドレス DAW） | 対応 — [プロジェクト編集](./project-editing.md)を参照 | 対応 |
-| 組み込み楽器（NativeSynth の preset/patch） | 対応 — [組み込み楽器](./native-synth.md)を参照 | 一部のみ — `project bounce --synth` は簡易内蔵シンセの波形指定だけを公開し、NativeSynth の preset/patch カタログは公開しない |
+| 組み込み楽器（NativeSynth の preset/patch） | 対応 — [組み込み楽器](./native-synth.md)を参照 | 対応 — `project bounce --synth <preset>` で NativeSynth プリセットを固定でき（一覧は `project synth-presets`）、値なしの `--synth` は GM プログラムに追従する |
+| シンセバウンスでの GM プログラム追従 | C ABI（`use_gm_programs`）と Python（`auto_select_gm=`）。WASM と Node のバウンスバインディングは宛先ごとに固定パッチを受け取る | 対応 — 値なしの `--synth` フラグ |
+| ケイパビリティカタログとビルド診断 | 対応 — すべてのサーフェスで `capabilityCatalog()` / `capability_catalog()` と `capabilities()`。正規 JSON は C ABI 経由 | 対応 — `doctor` |
+| 長時間のオフライン呼び出しの協調キャンセル | 対応 — Node と WASM は `cancel?: () => boolean`、Python は `cancel=`、C ABI は `SonareCancelCallback`。キャンセルされた呼び出しはエラーコード 8 を返し、出力を確保しない | 非対応 |
 | SoundFont 2 プレイヤー | 対応 — [SoundFont 2 プレイヤー](./soundfont-player.md)を参照 | 非対応（Project API のみ） |
 | リアルタイムエンジンのライブ MIDI 入力 | 対応 — [MIDI 入力](./midi-input.md)を参照 | 非対応 |
 | 外部 MIDI 出力とクロック／トランスポート転送 | 対応 — WASM、Node、Python、C ABI。ブラウザのワークレットでは MIDI 1.0 に変換済みのメッセージを `onMidiOut` で受け取る | 非対応 |
@@ -101,6 +104,9 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | マスタリングリミッター設定 | `releaseMs` / `release_ms` と `applyGainAtInputRate` / `apply_gain_at_input_rate` をマスタリング helper API で使える。単発 helper ではリリースが 0 のときに 50 ms のライブラリ既定値を保ち、プリセット／チェーンの上書き値はそのまま適用される |
 | 音響解析 | 測定とブラインド推定の入口は `AcousticResult` を返す。幾何ベースのルーム音響では等価ルーム推定、RIR 合成、ルームモーフィングも使える（ブラインド推定と等価ルーム推定は信頼度と一緒に表示する） |
 | エンジンのレーンミキサー / MIDI クリップ | コンパイル済みの形はどのバインディングでも同一（`EngineTrackLane` / `EngineTrackSend` / `EngineBus`。MIDI イベントは絶対サンプルの `renderFrame` と UMP ワードを持つ）。Python は `EngineMidiClipSchedule` / `EngineMidiEvent` の dataclass を使い、JS/Node はプレーンオブジェクトを渡す。素のエンジンの `setSoloMute` は固定のレーンインデックスを取るが、ブラウザの `SonareEngine` Worklet API はトラック id *または名前*を受け取る。ストリップ EQ バンドはどちらの API でも `EqBand` オブジェクトまたはバンド JSON 文字列で渡せる（`setTrackStripEqBand` / `setMasterStripEqBand`、生 JSON 用に `…EqBandJson` 系もある） |
+| 自己類似度系の命名 | Python は JavaScript の `segment_` 接頭辞を落とします。`cross_similarity` / `recurrence_matrix` / `recurrence_to_lag` / `lag_to_recurrence` / `path_enhance` / `subsegment` / `agglomerative` が、`segmentCrossSimilarity` などに対応します |
+| `Audio` のサンプル取得 | Node と WASM の `audio.getData()` は**コピー**を返すため、書き込んでもインスタンスは変わらず、呼び出しごとに確保が発生します。Python の `audio.data` も同じ読み取り専用の契約です。その場で書き換えるのではなく、編集後のサンプルから新しいインスタンスを作ってください |
+| 配布形態 | 公開されている成果物は WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のアーカイブです。Node ネイティブバインディングは private 指定でローカル依存として使う前提のため、常にソースからビルドします |
 | エラー | どのバインディングも同じ C ABI 数値コードを持つ構造化 `SonareError` を送出する。WASM と Node は `code` + `codeName` 付きの `Error` サブクラスをスロー（`ErrorCode` enum と `isSonareError` ガードをエクスポート）。Python は `.code` 付きの `RuntimeError` サブクラスを送出。Python CLI はコードを終了コードへ対応付ける（C++ CLI は従来どおり `0`/`1`） |
 | WASM のオブジェクト戻り値 | 名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、`synthPresetPatch`、セクション結果、キー候補ヘルパーが返す WASM の配列／オブジェクトは、呼び出し元の JavaScript realm へ再ルートされるため、通常のオブジェクトと同様に `structuredClone()` / `postMessage()` へそのまま渡せる |
 | CLI の提供範囲 | PyPI の Python CLI か、ソースビルドの C++ CLI かで異なる。詳細は [CLI](./cli.md) を参照 |

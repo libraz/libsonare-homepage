@@ -378,6 +378,34 @@ The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYN
 
 To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either to bind several destinations at once. When you pass an array, each `SynthPatch` may set `destinationId` (default `0`) to choose which MIDI destination it binds to — for example `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` renders two destinations from one call. `destinationId` is a JS binding convenience, not part of the NativeSynth patch itself (Python takes the destination as a separate argument instead). An explicitly empty array (or `undefined` / `null`) produces zero bindings. The render is deterministic for a fixed project, options, and patch.
 
+### Following GM programs instead of pinning one patch
+
+A binding normally pins one patch to a destination: every note through it plays
+that voice, whatever program changes the MIDI carries. For a general MIDI file
+that is the wrong shape — you want each channel to pick up its own instrument.
+
+Turn on GM program following and the synth resolves melodic voices from the
+tracked bank and program change, and routes MIDI channel 10 through the GM
+drum-kit map. The bound patch stays as the fallback for anything the map does
+not cover, so nothing goes silent. With the mode off, the fixed-patch behaviour
+above is unchanged.
+
+```python
+# Python
+audio = project.bounce_with_synth_instrument(
+    "acoustic-piano",          # fallback for unmapped programs
+    auto_select_gm=True,
+    sample_rate=48000,
+)
+```
+
+The flag is `use_gm_programs` on the C ABI's `SonareSynthInstrumentBinding` and
+`auto_select_gm` in Python. On both CLIs it is the bare `--synth` flag
+(`sonare project bounce --in project.json --synth -o out.wav`); passing a preset
+name instead pins that patch. The WASM and Node bounce bindings take a fixed
+patch per destination and do not expose the flag — bind one destination per
+instrument there, or drive the render from Python or the CLI.
+
 ::: code-group
 
 ```typescript [Browser]

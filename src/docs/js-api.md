@@ -65,6 +65,43 @@ const legacyBpm = detectBpm(samples, sampleRate);
 
 The request fields use the same camelCase names on the Node and WASM packages. Python remains keyword-oriented (`detect_bpm(samples, sample_rate=...)`), rather than adopting a JavaScript-style options object.
 
+### Cancelling a long call
+
+Requests that report progress also accept `cancel`, a predicate polled at the
+same native boundaries `onProgress` fires on. Return `true` and the call aborts.
+
+```typescript
+let abandoned = false;
+cancelButton.onclick = () => { abandoned = true; };
+
+try {
+  const mastered = masterAudio({
+    samples,
+    sampleRate,
+    preset: 'pop',
+    onProgress: (progress, stage) => updateUi(progress, stage),
+    cancel: () => abandoned,
+  });
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.Cancelled) return;
+  throw error;
+}
+```
+
+A cancelled call throws `SONARE_ERROR_CANCELLED` (error code 8) and leaves its
+outputs unallocated, so there is no partial result to inspect. Python takes the
+same predicate as `cancel=`.
+
+### Inputs are validated, not coerced
+
+Node and WASM reject values they used to quietly reshape: wrong-typed repair and
+dynamics options, an unknown track kind, capture source, or pitch-correction
+mode, a negative spectrum setting, enum spellings and ordinals that are not
+declared, and mastering override values that are neither number nor boolean.
+Instance methods also throw after `destroy()` instead of touching a freed
+handle. Where you previously got a surprising default, you now get a
+`SonareError` at the call site.
+
 ## Pick The Smallest API That Solves The Job
 
 The package is broad, so start from the task rather than the function list:
@@ -155,6 +192,74 @@ Get the library version.
 function version(): string  // e.g., "{{ wasmMeta.version }}"
 ```
 
+### `capabilities()`
+
+Describe the build that is actually loaded — the same report the CLIs print as
+`doctor`. Synchronous, and only valid after `init()`.
+
+```typescript
+function capabilities(): {
+  version: string;
+  abi: { project: number; engine: number };
+  platform: string;
+  features: { mastering: boolean; mixing: boolean; fx: boolean; ffmpeg: boolean };
+  decode: { builtin: string[]; ffmpeg: string[] };
+  simd: string;
+  hardwareConcurrency: number;
+}
+```
+
+Branch on `features` instead of guessing: a build without `mixing` has no
+`Mixer`, and `decode.builtin` tells you which formats the module can open before
+you ask the browser to fall back.
+
+### `capabilityCatalog()`
+
+Return a machine-readable catalog of every processor, its parameters with bounds
+and defaults, and the built-in preset lists. It is the same canonical JSON the C
+ABI publishes and Python exposes as `capability_catalog`, validated against
+`schemas/capability-catalog.schema.json`.
+
+```typescript
+function capabilityCatalog(): {
+  version: string;
+  abi: { project: number; engine: number };
+  processors: Array<{
+    id: string;
+    kind: 'realtime' | 'offline' | 'pair';
+    realtimeInsertable: boolean;
+    stereoOnly: boolean;
+    latencySamples: number;
+    tailSamples: number;
+    /** Coarse realtime work estimate; null exactly when the processor is not insertable. */
+    realtimeCost: 'low' | 'moderate' | 'high' | null;
+    channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
+    category: string;
+    params: Array<{
+      name: string;
+      id: number;
+      rtSafe: boolean;
+      type: 'boolean' | 'number';
+      min: number | null;
+      max: number | null;
+      default: boolean | number | null;
+      unit: string | null;
+    }>;
+  }>;
+  presets: {
+    mastering: string[];
+    synth: string[];
+    mixingScene: string[];
+    voiceChanger: string[];
+  };
+}
+```
+
+This is what you build a generic parameter UI from: every slider's range and
+default comes from the catalog rather than from a table you maintain by hand. A
+bound the core does not know is reported as an explicit `null` — treat that as
+"unbounded/unknown", not as zero.
+
 ### `abiVersion()`
 
 Returns the aggregate native ABI version across the C POD surfaces. Persist or compare it when loading a prebuilt binary so an incompatible JS/native artifact pair fails early.
@@ -184,9 +289,13 @@ function voiceChangerAbiVersion(): number
 Use these when you need the canonical voice-character preset ID or the resolved flat POD config without parsing preset JSON.
 
 ```typescript
-function voiceCharacterPresetId(preset: VoicePresetId | number): string | null
-function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null
+function voiceCharacterPresetId(preset: VoicePresetId | number): string
+function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig
 ```
+
+Both throw on an out-of-range ordinal or unknown id rather than returning
+`null`, so a bad preset id surfaces at the call site instead of as a null
+dereference further down.
 
 The resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case.
 
@@ -1272,6 +1381,83 @@ function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32A
 
 `zi` provides an initial condition (a previous frame's tail) when streaming.
 
+### Test-signal generation
+
+Deterministic signals for fixtures, calibration, and click tracks — no asset
+files needed.
+
+```typescript
+function tone(request?: ToneRequest): Float32Array
+function chirp(request?: ChirpRequest): Float32Array
+function clicks(request: ClicksRequest): Float32Array
+```
+
+### Spectral reconstruction and pitch candidates
+
+```typescript
+function griffinLim(request: GriffinLimRequest): Float32Array
+function reassignedSpectrogram(request: ReassignedSpectrogramRequest): ReassignedSpectrogramResult
+function piptrack(request: PiptrackRequest): PiptrackResult
+function melDelta(request: MelDeltaRequest): Float32Array
+function spectralFlux(request: SpectralFrameRequest & { lag?: number }): Float32Array
+function onsetBacktrack(request: OnsetBacktrackRequest): Int32Array
+```
+
+`griffinLim` reconstructs audio from an STFT magnitude matrix; `melToAudio` and
+`mfccToAudio` are the mel-domain wrappers around it. `onsetBacktrack` moves
+detected onset frames back to the preceding energy minimum, which is what you
+want before slicing at an onset.
+
+`spectralBandwidth` takes a configurable Minkowski exponent `p` (positional
+argument 5, or `p` on the request object) rather than assuming `p = 2`.
+
+### Structure and self-similarity
+
+The segmentation family builds the matrices structural analysis is made of.
+
+```typescript
+function segmentCrossSimilarity(request: SegmentCrossSimilarityRequest): SegmentMatrix
+function segmentRecurrenceMatrix(request: SegmentRecurrenceMatrixRequest): SegmentMatrix
+function segmentRecurrenceToLag(request: SegmentRecurrenceToLagRequest): SegmentMatrix
+function segmentLagToRecurrence(request: SegmentLagToRecurrenceRequest): SegmentMatrix
+function segmentPathEnhance(request: SegmentPathEnhanceRequest): SegmentMatrix
+function segmentSubsegment(request: SegmentSubsegmentRequest): Int32Array
+function segmentAgglomerative(request: SegmentAgglomerativeRequest): Int32Array
+```
+
+`analyzeSections(...)` is the packaged answer for "where are the sections". Reach
+for these when you want the intermediate matrices — to draw a self-similarity
+plot, or to run your own boundary detection over an enhanced recurrence matrix.
+
+### Note segmentation
+
+Turn a monophonic F0 track into stable note regions. Pass a track you already
+have (from `pitchYin` / `pitchPyin`, or from your own tracker) together with the
+frame cadence that produced it.
+
+```typescript
+interface NoteSegmentsRequest {
+  f0Hz: Float32Array;
+  voicedProb: Float32Array;
+  /** Frames per second of the supplied track. */
+  frameRate: number;
+  segmentationThresholdCents?: number;
+  minNoteMs?: number;
+  referenceHz?: number;
+}
+
+function noteSegments(request: NoteSegmentsRequest): Array<{
+  frameStart: number;
+  frameEnd: number;
+  startSeconds: number;
+  endSeconds: number;
+  medianCents: number;
+}>
+```
+
+`f0Hz` and `voicedProb` must be the same non-zero length. Zero-Hz frames and
+probabilities below `0.5` count as unvoiced and break a note.
+
 ### Silence Trim / Split
 
 ```typescript
@@ -1789,8 +1975,10 @@ ordinary JS values and need no cleanup. Node native cleanup differs; see
 interface AnalysisResult {
   bpm: number;
   bpmConfidence: number;
+  bpmCandidates: BpmHypothesis[];          // Ranked, best first
   key: Key;
   timeSignature: TimeSignature;
+  timeSignatureCandidates: TimeSignature[]; // Ranked, best first
   beatTimes: Float32Array;  // Convenience copy of beats[].time, useful for librosa-style code
   beats: Beat[];            // Beat objects with per-beat strength
   chords: Chord[];
@@ -1801,7 +1989,29 @@ interface AnalysisResult {
   melody: MelodyContour;
   form: string;  // e.g., "IABABCO"
 }
+
+interface BpmHypothesis {
+  value: number;
+  confidence: number;
+  /** How this hypothesis relates to the reported `bpm`. */
+  relation: 'primary' | 'half' | 'double' | 'other';
+}
 ```
+
+`bpm` and `timeSignature` are the winners; the two `*Candidates` arrays are the
+ranked field behind them. They matter because tempo is genuinely ambiguous —
+a half-time feel and its double are both defensible readings of the same track.
+Rather than showing one number and hoping, offer the alternates:
+
+```typescript
+const { bpm, bpmCandidates } = analyze({ samples, sampleRate });
+const halfTime = bpmCandidates.find((c) => c.relation === 'half');
+if (halfTime && halfTime.confidence > 0.4) {
+  offerAlternative(halfTime.value);   // "or 84 BPM?"
+}
+```
+
+The same arrays are on the C ABI, Node, and Python.
 
 ### Beat
 
@@ -2041,6 +2251,43 @@ Offline chain and preset results include `outputTruePeakDbtp`, `outputLra`, `lou
 
 When `loudnessTargetLimited` is true, the true-peak ceiling prevented the requested LUFS target. Report `outputLufs`, not the requested target. Each `StageGainReduction` gives the most recent gain reduction for one dynamics or maximizer stage.
 
+#### `report` — before and after in one object
+
+Every offline chain result also carries a `report`, which is the "what did this
+actually do" summary you would otherwise assemble by measuring the input
+yourself:
+
+```typescript
+interface MasteringReport {
+  before: MasteringLoudnessSummary;
+  after: MasteringLoudnessSummary;
+  appliedGainDb: number;
+  maxGainReductionDb: number;
+  loudnessTargetLimited: boolean;
+  /** 32 logarithmically spaced after-minus-before energy deltas, in dB. */
+  bandEnergyDeltaDb: Float32Array;
+}
+
+interface MasteringLoudnessSummary {
+  integratedLufs: number;
+  maxMomentaryLufs: number;
+  maxShortTermLufs: number;
+  truePeakDbtp: number;
+  loudnessRange: number;
+}
+```
+
+```typescript
+const { report } = masteringChainStereo(left, right, sampleRate, config);
+console.log(report.before.integratedLufs, '→', report.after.integratedLufs);
+console.log(report.after.loudnessRange - report.before.loudnessRange, 'LU of range change');
+drawTiltCurve(report.bandEnergyDeltaDb);   // 32 bands, positive = brighter after
+```
+
+The same object is mirrored on the C ABI, ctypes, Node, Python, and both CLI
+report files, so a report exported from the CLI and one read in the browser have
+the same shape.
+
 The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration).
 
 ### StreamingEqualizer
@@ -2172,9 +2419,22 @@ const { left, right } = chain.processStereo(leftBlock, rightBlock); // 2ch
 console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
 console.log(chain.latencySamples());  // total latency reported by active stages
 
+// After the last input block, drain the chain latency and the finite tails.
+let tail: Float32Array;
+while ((tail = chain.flushMono()).length > 0) {
+  write(tail);
+}
+
 chain.reset();   // clear processor state without re-preparing
 chain.delete();  // release the WASM handle (call when done)
 ```
+
+`flushMono()` / `flushStereo()` emit the delayed audio plus finite processor
+tails once you have no more input. Call until an empty result comes back.
+Without the flush, a bounce built from a streaming chain loses its last
+`latencySamples()` samples and any reverb or limiter tail. The first
+`latencySamples()` samples of the concatenated stream are the chain's delay and
+should be dropped for a time-aligned result.
 
 Stereo-only stages are skipped when `numChannels === 1`. The chain-config repair stages (`repair.declick`, `repair.dereverb`, `repair.denoise`) are offline-only and throw if enabled on the streaming constructor — run them through `masteringChain*` / `masterAudio*`, or the one-shot `masteringRepair*` helpers (the `declip`/`decrackle`/`dehum` processors are not part of the chain config and run only through those helpers). The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
 

@@ -269,9 +269,85 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 });
 ```
 
+## Cancellation
+
+Long-running offline analysis and mastering calls take a `cancel` callback. It
+is polled at the same progress boundaries `onProgress` reports, so a user who
+loads the wrong file does not have to wait out the render.
+
+```typescript
+import { init, masteringChainWithProgress } from '@libraz/libsonare';
+
+await init();
+
+let abandoned = false;
+cancelButton.onclick = () => { abandoned = true; };
+
+try {
+  const result = masteringChainWithProgress({
+    samples,
+    sampleRate,
+    config,
+    onProgress: (progress, stage) => updateUi(progress, stage),
+    cancel: () => abandoned,
+  });
+  render(result);
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.Cancelled) {
+    // Expected: the user asked to stop.
+    return;
+  }
+  throw error;
+}
+```
+
+Returning `true` from `cancel` aborts the call, which throws with
+`SONARE_ERROR_CANCELLED` (error code 8). A cancelled call leaves its outputs
+unallocated — there is no partial result to read, so treat the throw as "nothing
+happened" rather than "half a master".
+
 ## Web Worker Usage
 
-Offload analysis to a Web Worker to avoid blocking the main thread.
+The package ships a Worker client, so the common case needs no worker file of
+your own. Import `OfflineWorkerClient` from `@libraz/libsonare/worker`:
+
+```typescript
+import { OfflineWorkerClient } from '@libraz/libsonare/worker';
+
+const client = new OfflineWorkerClient();
+
+const task = client.analyze(
+  { samples, sampleRate },
+  { onProgress: ({ progress, stage }) => updateUi(progress, stage) },
+);
+
+cancelButton.onclick = () => task.cancel();
+
+const result = await task;   // the task is thenable
+client.dispose();
+```
+
+`analyze`, `detectBpm`, `detectKey`, `detectChords`, `masterAudio`, and
+`masterAudioStereo` are available. Each returns an `OfflineWorkerTask`, which is
+awaitable and carries `cancel()`.
+
+::: warning Inputs are transferred, not copied
+`Float32Array` inputs are transferred to the Worker by default, so the buffer
+becomes detached on the calling thread and reading it afterwards yields an empty
+array. Pass `{ copy: true }` when you still need the samples — for drawing a
+waveform, say. Prompt cancellation of an already-running native call needs
+cross-origin isolation (the client uses a `SharedArrayBuffer` flag); without it,
+cancellation still lands, at the next task boundary.
+:::
+
+`Project`, `Mixer`, and the realtime classes are deliberately absent from the
+client: their native handles belong to one JavaScript realm and cannot be moved
+across threads.
+
+### Writing your own worker
+
+If you need an operation the client does not expose, the ordinary pattern still
+works — import the main entry inside a worker of your own.
 
 **worker.ts:**
 
@@ -847,11 +923,17 @@ The published package ships a few coordinated pieces:
 - **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
 - **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries `SonareEngine`, the worklet processor classes, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
 - **AudioWorklet bridge** — `worklet.js` / `worklet.d.ts`, the self-contained bundle for `AudioWorkletGlobalScope` that exposes the `SonareEngine` API and processor registration helpers.
+- **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry, compiled without the mastering, mixing, realtime, and project bindings. CI enforces a size budget on it.
+- **Offline Worker entry** — `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
+- **Voice-changer JSON Schemas** — both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.
 
 ## Bundle Size
 
-The size table covers the main module and the main API entry. The realtime
-runtime and worklet bundle are separate artifacts and are not listed here.
+The size table covers the main module and the main API entry. The analysis-only
+module, the realtime runtime, and the worklet bundle are separate artifacts and
+are not listed here — the analysis module is substantially smaller than
+`sonare.wasm` because it leaves the mastering, mixing, realtime, and project
+surfaces out.
 
 | File | Size | Gzipped |
 |------|------|---------|

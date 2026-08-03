@@ -237,8 +237,15 @@ That fallback is broad enough for practical previews: pianos use the extended wa
 | `destinationId` / `destination_id` | MIDI destination this player answers to | `0` |
 | `gain` | Master output gain, linear | `0.5` |
 | `polyphony` | Max simultaneous voices, clamped to `[1, 64]` | `48` |
+| `preferModelForModeledFamilies` / `prefer_model_for_modeled_families` | Route covered melodic GM programs to the dedicated physical model instead of the SoundFont | `false` |
 
 When the player runs out of voices it uses **deterministic voice stealing**, so a dense passage degrades the same way on every render.
+
+`preferModelForModeledFamilies` is the config's version-2 field. It is worth
+turning on when your SoundFont's samples for a family are weaker than the
+built-in model for it — a thin plucked-string or reed set, say. Drums stay
+SoundFont-first either way, so a good kit is never traded away for the modelled
+percussion voice.
 
 ## What the player implements
 

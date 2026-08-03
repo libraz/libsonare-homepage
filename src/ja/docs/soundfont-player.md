@@ -237,8 +237,14 @@ finally:
 | `destinationId` / `destination_id` | このプレイヤーが応答する MIDI 宛先 | `0` |
 | `gain` | マスター出力ゲイン（リニア） | `0.5` |
 | `polyphony` | 最大同時ボイス数。`[1, 64]` にクランプ | `48` |
+| `preferModelForModeledFamilies` / `prefer_model_for_modeled_families` | 対応するメロディック GM プログラムを SoundFont ではなく専用の物理モデルへ回す | `false` |
 
 ボイスが足りなくなると、プレイヤーは**決定的なボイススティール**を行うため、密なパッセージはどのレンダーでも同じように劣化します。
+
+`preferModelForModeledFamilies` は設定のバージョン 2 で追加されたフィールドです。
+手持ちの SoundFont のあるファミリーのサンプルが、内蔵モデルより見劣りする場合
+（撥弦やリードのセットが薄い、など）に有効化する価値があります。どちらの設定でも
+ドラムは SoundFont 優先のままなので、良いキットがモデル側の打楽器音に置き換わることはありません。
 
 ## プレイヤーが実装する内容
 

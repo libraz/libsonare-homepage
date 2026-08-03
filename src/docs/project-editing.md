@@ -483,19 +483,21 @@ An **automation lane** changes one host-defined parameter over time with breakpo
 ::: code-group
 
 ```typescript [Browser / WASM]
-const lane = project.addAutomationLane(trackId, {
+// addAutomationLane returns the lane's target parameter id — the handle the
+// edit and remove calls take.
+const laneParamId = project.addAutomationLane(trackId, {
   targetParamId: 1,                                   // host id of the parameter to change
   points: [
     { ppq: 0, value: 0.0, curve: 'linear' },
     { ppq: 4, value: 1.0, curve: 'exponential' },
   ],
 });
-project.editAutomationLane(trackId, lane, { targetParamId: 1, points: [/* … */] });
-project.removeAutomationLane(trackId, lane);
+project.editAutomationLane(trackId, laneParamId, { targetParamId: 1, points: [/* … */] });
+project.removeAutomationLane(trackId, laneParamId);
 ```
 
 ```python [Python]
-lane = project.add_automation_lane(
+lane_param_id = project.add_automation_lane(
     track_id,
     target_param_id=1,                # host id of the parameter to change
     points=[
@@ -503,15 +505,19 @@ lane = project.add_automation_lane(
         (4.0, 1.0, "exponential"),
     ],
 )
-project.edit_automation_lane(track_id, lane, target_param_id=1, points=[])
-project.remove_automation_lane(track_id, lane)
+project.edit_automation_lane(track_id, lane_param_id, target_param_id=1, points=[])
+project.remove_automation_lane(track_id, lane_param_id)
 ```
 
 :::
 
 In Python the breakpoints are `(ppq, value, curve)` tuples rather than objects, and `add_automation_lane` / `edit_automation_lane` take `target_param_id` and `points` as separate arguments.
 
-The lane's `targetParamId` is your own parameter id; the project stores the breakpoints verbatim and replays them through the compiled timeline.
+The lane's `targetParamId` is your own parameter id; the project stores the breakpoints verbatim and replays them through the compiled timeline. It is also the lane's **identity**: a track holds at most one lane per target, `addAutomationLane` returns that id, and the edit and remove calls address a lane by it. Changing which parameter a lane drives is therefore a remove followed by an add, not an edit.
+
+::: warning Lanes are addressed by target parameter id, not by position
+`editAutomationLane` and `removeAutomationLane` take the target parameter id where they used to take a positional lane index. Both are numbers and the argument count is unchanged, so an index-based call still runs — it just edits a different lane. Audit any call that passed a stored index.
+:::
 
 ## Key and chord annotation write-back
 
@@ -763,6 +769,66 @@ try {
 ```
 
 Python mirrors this with `project.to_json()`, `Project.from_json(json)`, and `Project.from_json_with_diagnostics(json)`.
+
+### Reading the model back, and rebinding audio after a load
+
+Project JSON stores the *arrangement*, not the PCM. A loaded project therefore
+knows it has a source, but has no samples behind it. Two read-only descriptor
+families plus one setter close that loop.
+
+```typescript
+const loaded = Project.fromJson(json);
+
+for (let i = 0; i < loaded.trackCount(); i++) {
+  const track = loaded.trackByIndex(i);      // { id, kind, midiDestinationId, gain, pan, mute, solo, name }
+  console.log(track.id, track.name);
+}
+for (let i = 0; i < loaded.clipCount(); i++) {
+  const clip = loaded.clipByIndex(i);        // { id, trackId, sourceId, startPpq, lengthPpq, … }
+  console.log(clip.id, clip.startPpq, clip.lengthPpq);
+}
+for (let i = 0; i < loaded.sourceCount(); i++) {
+  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint, nameOrUri }
+  const pcm = await decodeFromYourStorage(source.nameOrUri);
+  loaded.setSourceAudio(source.id, pcm, source.channelCount, source.sampleRateHint);
+}
+
+const audio = loaded.bounce({ sampleRate: 48000 });
+```
+
+`trackByIndex` / `clipByIndex` / `sourceByIndex` are 0-based over the stored
+order, paired with `trackCount()` / `clipCount()` / `sourceCount()`. They are
+descriptors, not handles: mutating the returned object changes nothing. Use them
+to render a project the host loaded from disk, or to build a UI over a project
+your own code did not construct.
+
+`setSourceAudio(sourceId, samples, channels, sampleRate)` rebinds decoded PCM to
+a source before a bounce — the step that turns "loaded arrangement" into
+"renderable project".
+
+### Importing host-separated stems
+
+If your app already ran source separation (or simply has per-instrument WAVs),
+`importExternalStems` turns them into one audio track and clip each, in one
+transaction.
+
+```typescript
+const { trackIds, clipIds } = project.importExternalStems({
+  sampleRate: 48000,
+  stems: [
+    { name: 'vocals', layout: 'stereo', planarSamples: [vocalL, vocalR], startFrame: 0 },
+    { name: 'drums',  layout: 'stereo', planarSamples: [drumL, drumR],   startFrame: 0 },
+    { name: 'bass',   layout: 'mono',   planarSamples: [bassMono],       startFrame: 0, role: 'bass' },
+  ],
+});
+```
+
+The import is **all-or-nothing**: if any stem is rejected, the project is left
+untouched rather than half-populated. It performs no resampling, no retiming,
+and no gain compensation — every stem must already be at `sampleRate`, and
+`startFrame` places it on the project timeline as-is. The optional per-stem
+`role` is host metadata that round-trips through the serializer and does not
+change any DSP.
 
 ## MIDI interchange: SMF and MIDI 2.0 Clip File
 

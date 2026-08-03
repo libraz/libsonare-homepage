@@ -123,6 +123,57 @@ print(f"Beats: {len(result.beat_times)} detected")
 
 Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code. The codes are the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), and the CLI maps them onto its [exit codes](./cli.md#exit-codes).
 
+### What this build can do
+
+`capabilities()` returns the build-diagnostics report `sonare doctor` prints, and
+`capability_catalog()` returns the machine-readable processor/parameter/preset
+catalog validated against `schemas/capability-catalog.schema.json`.
+
+```python
+import libsonare as sonare
+
+caps = sonare.capabilities()
+if not caps["features"]["ffmpeg"]:
+    print("This wheel decodes:", caps["decode"]["builtin"])
+
+catalog = sonare.capability_catalog()
+for processor in catalog["processors"]:
+    for param in processor["params"]:
+        # min / max / default are None when the core does not declare a bound.
+        build_slider(processor["id"], param)
+```
+
+Branch on the catalog rather than on a hand-maintained table: a parameter's
+range, default, unit, and realtime-safety all come from the loaded build. The
+same data is `capabilities()` / `capabilityCatalog()` on Node and WASM.
+
+### Cancelling a long call
+
+Analysis and mastering calls that report progress also take `cancel`, a
+predicate polled at the same native boundaries. Return `True` and the call
+aborts with `SonareError` code `8` (`SONARE_ERROR_CANCELLED`), leaving no
+partial output.
+
+```python
+import threading
+
+stop = threading.Event()
+
+try:
+    result = sonare.master_audio(
+        samples,
+        sample_rate,
+        preset="pop",
+        on_progress=lambda p, stage: print(stage, p),
+        cancel=stop.is_set,
+    )
+except sonare.SonareError as e:
+    if e.code == 8:
+        print("cancelled")
+    else:
+        raise
+```
+
 ## Audio Effects
 
 ```python
@@ -177,6 +228,47 @@ print(f"Median F0: {pitch_pyin.median_f0:.1f} Hz")
 ```
 
 <SonareDemo id="mel-spectrogram" />
+
+### Test signals, reconstruction, and structure
+
+```python
+import libsonare as sonare
+
+# Deterministic test signals — no asset files needed.
+sine = sonare.tone(frequency=440.0, sample_rate=48000, duration=1.0)
+sweep = sonare.chirp(fmin=100.0, fmax=8000.0, sample_rate=48000, duration=2.0)
+track = sonare.clicks(times=[0.0, 0.5, 1.0], sample_rate=48000)
+
+# Reconstruction and per-bin pitch candidates.
+audio_again = sonare.griffin_lim(magnitude, n_bins, n_frames, sample_rate=48000)
+reassigned = sonare.reassigned_spectrogram(samples, sample_rate=48000)
+peaks = sonare.piptrack(samples, sample_rate=48000)
+delta = sonare.mel_delta(features, n_features, n_frames)
+flux = sonare.spectral_flux(samples, sample_rate=48000)
+backtracked = sonare.onset_backtrack(onset_frames, energy)
+
+# Note segmentation from a monophonic F0 track.
+pitch = sonare.pitch_pyin(samples, sample_rate=48000)
+segments = sonare.note_segments(
+    pitch.f0_hz,
+    pitch.voiced_prob,
+    frame_rate=48000 / 512,
+    min_note_ms=60.0,
+)
+```
+
+The structural-similarity family is spelled without a `segment_` prefix in
+Python, unlike the JavaScript `segment*` names:
+
+| Python | JavaScript |
+|--------|------------|
+| `cross_similarity(...)` | `segmentCrossSimilarity(...)` |
+| `recurrence_matrix(...)` | `segmentRecurrenceMatrix(...)` |
+| `recurrence_to_lag(...)` | `segmentRecurrenceToLag(...)` |
+| `lag_to_recurrence(...)` | `segmentLagToRecurrence(...)` |
+| `path_enhance(...)` | `segmentPathEnhance(...)` |
+| `subsegment(...)` | `segmentSubsegment(...)` |
+| `agglomerative(...)` | `segmentAgglomerative(...)` |
 
 ::: details Pitch and feature terms: YIN/pYIN, zero-crossing rate, MIDI note
 - **YIN / pYIN** — algorithms that estimate the *fundamental frequency* (the perceived pitch) of monophonic audio. YIN uses autocorrelation; pYIN adds probabilistic smoothing so the pitch line stays steadier over time. Both track one note at a time, not chords.

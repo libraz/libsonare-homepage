@@ -483,19 +483,21 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 ::: code-group
 
 ```typescript [ブラウザ / WASM]
-const lane = project.addAutomationLane(trackId, {
+// addAutomationLane はレーンのターゲットパラメータ ID を返します。
+// これが編集・削除に渡すハンドルです。
+const laneParamId = project.addAutomationLane(trackId, {
   targetParamId: 1,                                   // 変化させるパラメータのホスト ID
   points: [
     { ppq: 0, value: 0.0, curve: 'linear' },
     { ppq: 4, value: 1.0, curve: 'exponential' },
   ],
 });
-project.editAutomationLane(trackId, lane, { targetParamId: 1, points: [/* … */] });
-project.removeAutomationLane(trackId, lane);
+project.editAutomationLane(trackId, laneParamId, { targetParamId: 1, points: [/* … */] });
+project.removeAutomationLane(trackId, laneParamId);
 ```
 
 ```python [Python]
-lane = project.add_automation_lane(
+lane_param_id = project.add_automation_lane(
     track_id,
     target_param_id=1,                # 変化させるパラメータのホスト ID
     points=[
@@ -503,15 +505,19 @@ lane = project.add_automation_lane(
         (4.0, 1.0, "exponential"),
     ],
 )
-project.edit_automation_lane(track_id, lane, target_param_id=1, points=[])
-project.remove_automation_lane(track_id, lane)
+project.edit_automation_lane(track_id, lane_param_id, target_param_id=1, points=[])
+project.remove_automation_lane(track_id, lane_param_id)
 ```
 
 :::
 
 Python ではブレークポイントがオブジェクトではなく `(ppq, value, curve)` タプルで、`add_automation_lane` / `edit_automation_lane` は `target_param_id` と `points` を別々の引数として受け取ります。
 
-レーンの `targetParamId` は自分のパラメータ ID です。プロジェクトはブレークポイントをそのまま保存し、コンパイル済みタイムラインで再生します。
+レーンの `targetParamId` は自分のパラメータ ID です。プロジェクトはブレークポイントをそのまま保存し、コンパイル済みタイムラインで再生します。この ID はレーンの**識別子**でもあります。1 トラックにつき同じターゲットのレーンは 1 本までで、`addAutomationLane` はその ID を返し、編集・削除もこの ID でレーンを指定します。レーンが動かすパラメータを変えるには、編集ではなく削除してから追加してください。
+
+::: warning レーンの指定は位置ではなくターゲットパラメータ ID
+`editAutomationLane` と `removeAutomationLane` は、以前の位置インデックスに代わってターゲットパラメータ ID を受け取ります。どちらも数値で引数の個数も同じなので、インデックスを渡す既存コードはエラーにならず、別のレーンを編集してしまいます。インデックスを保持して渡している箇所は見直してください。
+:::
 
 ## キーとコードの注釈書き戻し
 
@@ -763,6 +769,65 @@ try {
 ```
 
 Python では `project.to_json()`・`Project.from_json(json)`・`Project.from_json_with_diagnostics(json)` が対応します。
+
+### モデルを読み戻し、読み込み後に音声を再バインドする
+
+プロジェクト JSON が保存するのは**アレンジ**であって PCM ではありません。そのため読み込んだ
+プロジェクトはソースの存在は分かっていても、その実体となるサンプルを持っていません。
+読み取り専用のディスクリプタ 2 系統と 1 つのセッターで、この輪を閉じます。
+
+```typescript
+const loaded = Project.fromJson(json);
+
+for (let i = 0; i < loaded.trackCount(); i++) {
+  const track = loaded.trackByIndex(i);      // { id, kind, midiDestinationId, gain, pan, mute, solo, name }
+  console.log(track.id, track.name);
+}
+for (let i = 0; i < loaded.clipCount(); i++) {
+  const clip = loaded.clipByIndex(i);        // { id, trackId, sourceId, startPpq, lengthPpq, … }
+  console.log(clip.id, clip.startPpq, clip.lengthPpq);
+}
+for (let i = 0; i < loaded.sourceCount(); i++) {
+  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint, nameOrUri }
+  const pcm = await decodeFromYourStorage(source.nameOrUri);
+  loaded.setSourceAudio(source.id, pcm, source.channelCount, source.sampleRateHint);
+}
+
+const audio = loaded.bounce({ sampleRate: 48000 });
+```
+
+`trackByIndex` / `clipByIndex` / `sourceByIndex` は保存順に対する 0 始まりのインデックスで、
+`trackCount()` / `clipCount()` / `sourceCount()` と対になります。返るのはハンドルではなく
+ディスクリプタなので、返り値を書き換えても何も変わりません。ホストがディスクから読み込んだ
+プロジェクトをレンダリングしたいときや、自前のコードが構築したのではないプロジェクトに対して
+UI を組むときに使います。
+
+`setSourceAudio(sourceId, samples, channels, sampleRate)` は、バウンス前にデコード済み PCM を
+ソースへ再バインドします。「読み込んだだけのアレンジ」を「レンダリングできるプロジェクト」に
+変えるのがこの一手です。
+
+### ホスト側で分離したステムを取り込む
+
+アプリ側ですでに音源分離を済ませている場合（あるいは単に楽器ごとの WAV がある場合）、
+`importExternalStems` はそれらを 1 トランザクションで、それぞれ 1 本のオーディオトラックと
+クリップに変換します。
+
+```typescript
+const { trackIds, clipIds } = project.importExternalStems({
+  sampleRate: 48000,
+  stems: [
+    { name: 'vocals', layout: 'stereo', planarSamples: [vocalL, vocalR], startFrame: 0 },
+    { name: 'drums',  layout: 'stereo', planarSamples: [drumL, drumR],   startFrame: 0 },
+    { name: 'bass',   layout: 'mono',   planarSamples: [bassMono],       startFrame: 0, role: 'bass' },
+  ],
+});
+```
+
+取り込みは**全件成功か全件失敗**です。1 つでも拒否されればプロジェクトは中途半端に埋まらず、
+まったく変更されません。リサンプリング・タイミング調整・ゲイン補正は一切行いません。
+すべてのステムはあらかじめ `sampleRate` に揃っている必要があり、`startFrame` はそのままの値で
+プロジェクトのタイムライン上に配置されます。ステムごとの任意の `role` はホスト用メタデータで、
+シリアライザーを往復しますが DSP には影響しません。
 
 ## MIDI 交換: SMF と MIDI 2.0 クリップファイル
 

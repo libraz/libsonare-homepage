@@ -108,6 +108,7 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべての destination の発音中ノートを一括で解放します。
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
+- **UMP ワード 1 つ** — `pushMidiUmp(destinationId, word0, renderFrame = -1)` は、32 ビットの UMP ワードにパックした MIDI 1.0 チャンネルボイスメッセージを 1 つキューイングし、即座にディスパッチします。トランスポートのシーク後にプログラム・ピッチベンド・プレッシャーの状態を復元するのに適した簡潔な方法です。メッセージ種別ごとに別々の `pushMidi*` を呼び分けるのではなく、それぞれをワードにパックして送ります。
 
 同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じく「即時」を表す `-1` のレンダーフレームです。
 

@@ -378,6 +378,33 @@ synthEnumTables();
 
 MIDI アレンジを音声化するには、NativeSynth インストゥルメントを MIDI 出力先へバインドしてバウンスします。プリセット名の文字列、`SynthPatch`、またはそのどちらかの配列を渡して、複数の出力先を一度にバインドできます。配列を渡すと、各 `SynthPatch` は `destinationId`（既定 `0`）でバインドする MIDI 出力先を選べます。たとえば `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` なら、1 回のレンダー呼び出しで 2 つの出力先をレンダリングします。`destinationId` は JS のバインディング用の便宜機能で、NativeSynth パッチそのものの一部ではありません（Python では出力先を別の引数として渡します）。明示的に空の配列（または `undefined` ／ `null`）を渡すとバインディングは 0 件になります。レンダーはプロジェクト・オプション・パッチが固定なら決定論的です。
 
+### パッチを固定せず GM プログラムに追従させる
+
+バインディングは通常、1 つの出力先に 1 つのパッチを固定します。MIDI にどんなプログラム
+チェンジが入っていても、その出力先を通る音はすべて同じ音色で鳴ります。一般的な MIDI
+ファイルではこれは望ましくありません。チャンネルごとに自分の楽器を選んでほしいからです。
+
+GM プログラム追従を有効にすると、シンセはメロディックなボイスを、追跡しているバンクと
+プログラムチェンジから解決し、MIDI チャンネル 10 は GM ドラムキットマップへルーティング
+します。マップが対応しない部分にはバインドしたパッチがフォールバックとして残るので、
+音が消えることはありません。モードを切っていれば、上記の固定パッチの挙動は変わりません。
+
+```python
+# Python
+audio = project.bounce_with_synth_instrument(
+    "acoustic-piano",          # マップ外プログラムのフォールバック
+    auto_select_gm=True,
+    sample_rate=48000,
+)
+```
+
+このフラグは C ABI の `SonareSynthInstrumentBinding` では `use_gm_programs`、Python では
+`auto_select_gm` です。2 つの CLI では値なしの `--synth` フラグがこれにあたります
+（`sonare project bounce --in project.json --synth -o out.wav`）。プリセット名を渡した場合は
+そのパッチに固定されます。WASM と Node のバウンスバインディングは出力先ごとに固定パッチを
+受け取る形で、このフラグは公開していません。これらでは楽器ごとに出力先を分けるか、
+Python か CLI からレンダーしてください。
+
 ::: code-group
 
 ```typescript [ブラウザ]

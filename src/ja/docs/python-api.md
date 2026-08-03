@@ -127,6 +127,56 @@ print(f"ビート数: {len(result.beat_times)}")
 
 エラーは `SonareError` を送出します。これは `RuntimeError` のサブクラスで、`.code` 属性にネイティブのエラーコードを保持します。そのため `except RuntimeError:` はそのまま機能し、`except sonare.SonareError as e:` ではコードを取得できます。このコードは JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で([エラーハンドリング](./js-api.md#エラーハンドリング)参照)、CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
 
+### このビルドで何ができるか
+
+`capabilities()` は `sonare doctor` が表示するのと同じビルド診断レポートを返します。
+`capability_catalog()` は、`schemas/capability-catalog.schema.json` で検証された
+機械可読なプロセッサ／パラメータ／プリセットのカタログを返します。
+
+```python
+import libsonare as sonare
+
+caps = sonare.capabilities()
+if not caps["features"]["ffmpeg"]:
+    print("このホイールがデコードできる形式:", caps["decode"]["builtin"])
+
+catalog = sonare.capability_catalog()
+for processor in catalog["processors"]:
+    for param in processor["params"]:
+        # コアが範囲を宣言していない場合、min / max / default は None になります。
+        build_slider(processor["id"], param)
+```
+
+手で管理した表ではなくカタログで分岐してください。パラメータの範囲・既定値・単位・
+リアルタイム安全性は、すべて読み込まれているビルドから得られます。Node と WASM では
+同じデータが `capabilities()` / `capabilityCatalog()` です。
+
+### 長い処理をキャンセルする
+
+進捗を報告する解析・マスタリングの呼び出しは `cancel` も受け取ります。これは同じネイティブ
+境界でポーリングされる述語で、`True` を返すと呼び出しが中断され、`SonareError` のコード `8`
+（`SONARE_ERROR_CANCELLED`）になります。途中結果は残りません。
+
+```python
+import threading
+
+stop = threading.Event()
+
+try:
+    result = sonare.master_audio(
+        samples,
+        sample_rate,
+        preset="pop",
+        on_progress=lambda p, stage: print(stage, p),
+        cancel=stop.is_set,
+    )
+except sonare.SonareError as e:
+    if e.code == 8:
+        print("キャンセルされました")
+    else:
+        raise
+```
+
 ## オーディオエフェクト
 
 ```python
@@ -181,6 +231,47 @@ print(f"中央値 F0: {pitch_pyin.median_f0:.1f} Hz")
 ```
 
 <SonareDemo id="mel-spectrogram" />
+
+### テスト信号・再構成・構造解析
+
+```python
+import libsonare as sonare
+
+# 決定的なテスト信号。アセットファイルは不要です。
+sine = sonare.tone(frequency=440.0, sample_rate=48000, duration=1.0)
+sweep = sonare.chirp(fmin=100.0, fmax=8000.0, sample_rate=48000, duration=2.0)
+track = sonare.clicks(times=[0.0, 0.5, 1.0], sample_rate=48000)
+
+# 再構成とビンごとのピッチ候補
+audio_again = sonare.griffin_lim(magnitude, n_bins, n_frames, sample_rate=48000)
+reassigned = sonare.reassigned_spectrogram(samples, sample_rate=48000)
+peaks = sonare.piptrack(samples, sample_rate=48000)
+delta = sonare.mel_delta(features, n_features, n_frames)
+flux = sonare.spectral_flux(samples, sample_rate=48000)
+backtracked = sonare.onset_backtrack(onset_frames, energy)
+
+# モノフォニックの F0 トラックからノート区間を切り出す
+pitch = sonare.pitch_pyin(samples, sample_rate=48000)
+segments = sonare.note_segments(
+    pitch.f0_hz,
+    pitch.voiced_prob,
+    frame_rate=48000 / 512,
+    min_note_ms=60.0,
+)
+```
+
+自己類似度系の関数は、JavaScript の `segment*` という名前とは異なり、Python では
+`segment_` 接頭辞なしで公開されています。
+
+| Python | JavaScript |
+|--------|------------|
+| `cross_similarity(...)` | `segmentCrossSimilarity(...)` |
+| `recurrence_matrix(...)` | `segmentRecurrenceMatrix(...)` |
+| `recurrence_to_lag(...)` | `segmentRecurrenceToLag(...)` |
+| `lag_to_recurrence(...)` | `segmentLagToRecurrence(...)` |
+| `path_enhance(...)` | `segmentPathEnhance(...)` |
+| `subsegment(...)` | `segmentSubsegment(...)` |
+| `agglomerative(...)` | `segmentAgglomerative(...)` |
 
 ::: details ピッチ・特徴量の用語: YIN/pYIN・ゼロ交差率・MIDI ノート番号
 - **YIN / pYIN** — 単音の*基本周波数*（体感ピッチ）を推定するアルゴリズムです。YIN は自己相関を使い、pYIN は確率的な平滑化を加えてピッチラインを時間方向に安定させます。いずれも和音ではなく一度に 1 音を追跡します。

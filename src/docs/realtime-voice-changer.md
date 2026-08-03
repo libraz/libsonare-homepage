@@ -233,19 +233,64 @@ if (!validation.ok) {
 }
 ```
 
-Current built-in preset JSON uses schema version `1`. The native POD-config ABI is separate; check it with `voiceChangerAbiVersion()` when you are crossing FFI or native boundaries.
+Current built-in preset JSON uses schema version `1`. The native POD-config ABI is separate; check it with `voiceChangerAbiVersion()` when you are crossing FFI or native boundaries. Both JSON Schemas ship inside the npm package, so a host can validate a document offline:
+
+```typescript
+import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json';
+```
 
 If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. Python exposes the same native-config path as `realtime_voice_changer_preset_config(...)`.
+
+::: warning A preset document must be complete
+A partial document is rejected rather than silently filled in from unrelated
+defaults, and `deesser.ratio` is required. If you hand-author a preset, start
+from `realtimeVoiceChangerPresetJson('neutral-monitor')` and edit it, instead of
+writing only the fields you want to change. Reading a config back out with
+`configJson()`, editing it, and writing it with `setConfig(...)` is a safe
+round-trip. Unknown top-level keys are rejected too.
+:::
+
+### `macros` — the shorthand section
+
+Authoring a full `dsp` section by hand is a lot of surface for "make this voice
+brighter". A preset may instead carry a `macros` object, whose seven values map
+onto the ordinary DSP config:
+
+| Macro | Range | Moves |
+|-------|-------|-------|
+| `pitch` | −24 … 24 | Retune, in semitones |
+| `formant` | 0.55 … 1.65 | Formant scale factor |
+| `brightness` | 0 … 1 | Formant brightness tilt |
+| `space` | 0 … 1 | Reverb mix, up to the chain's 0.45 ceiling |
+| `intensity` | 0 … 1 | Compression and drive |
+| `noiseControl` | 0 … 1 | Gate and noise handling |
+| `sibilance` | 0 … 1 | De-esser amount |
+
+Macros are **input-only**. The shared parser expands them into the ordinary DSP
+config on the control thread, so they never appear in normalized output: read a
+config back and you get the expanded `dsp` section, not the macros you wrote. An
+explicit `dsp` section always wins over a macro that targets the same parameter.
+
+Each 0–1 macro maps onto its target's valid range rather than being written
+through raw — `macros.space` at `1.0` reaches the reverb mix ceiling of `0.45`,
+it does not write `1.0` into a parameter that would reject it.
 
 ## Practical Notes
 
 Realtime voice processing is stateful. Reuse the same changer across blocks, keep block sizes within the prepared maximum, and release handles when the component or stream stops.
 
-Large pitch, formant, or ambience moves can be useful for sound design, but they will be less transparent. For natural monitoring, keep preset edits conservative and watch latency with `latencySamples()`.
+Large pitch, formant, or ambience moves can be useful for sound design, but they will be less transparent. For natural monitoring, keep preset edits conservative and check latency once with `latencySamples()`.
 
 ::: info What "latency" means here
-**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds. It follows the effective dry/wet mix: roughly `wetMix × retune grain`, plus the ISP limiter's fixed delay when that limiter is active. Here *grain* is the retune stage's pitch-shift analysis window measured in samples — a larger grain analyses more audio per step, so it adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field). Pure dry reports zero, while fully wet reports the full wet-path delay.
+**Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds.
+
+It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field) — plus the ISP limiter's own delay when that limiter is active.
 :::
+
+Every live control is smoothed per sample, so adopting a new config snapshot with
+`setConfig(...)` ramps rather than stepping at a block boundary. Only the formant
+frequency displacement scales with the formant amount, so body, brightness, and
+nasal still act at amount zero.
 
 ## Related Pages
 

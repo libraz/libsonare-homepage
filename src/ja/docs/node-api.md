@@ -119,7 +119,7 @@ const result = masterAudio({ samples, sampleRate, preset: 'pop' });
 | `Audio.fromFile(path)` | WAV/MP3 ファイルを読み込み。FFmpeg 有効ビルドでは FFmpeg 対応形式も読み込めます |
 | `Audio.fromBuffer(samples, sampleRate?)` | `Float32Array` から作成 |
 | `Audio.fromMemory(data)` | `fromFile` と同じ形式対応で、`Buffer` / `Uint8Array` をデコード |
-| `audio.getData()` | サンプルの `Float32Array` |
+| `audio.getData()` | サンプルのコピーを `Float32Array` で返します |
 | `audio.getSampleRate()` | サンプルレート（Hz） |
 | `audio.getDuration()` | 長さ（秒） |
 | `audio.getLength()` | サンプル数 |
@@ -130,6 +130,15 @@ const result = masterAudio({ samples, sampleRate, preset: 'pop' });
 
 `analyzeSections(...)`、`analyzeMelody(...)`、`cqt(...)`、`vqt(...)` などの一部の詳細ヘルパーは
 スタンドアロン関数のままです。これらには `audio.getData()` と `audio.getSampleRate()` を渡します。
+
+::: warning `getData()` はコピーを返します
+呼び出すたびに新しい `Float32Array` を確保するため、返された配列に書き込んでも
+インスタンスが保持する音声は変わりません。あとから `audio.detectBpm()` や
+`audio.masteringChain(...)` を呼んでも、読み取られるのは元のサンプルです。
+編集後のサンプルを処理するには `Audio.fromBuffer(edited, sampleRate)` で
+新しいインスタンスを作ってください。ループ内で読む場合は配列を自分でキャッシュします。
+WASM でも同じ挙動です。
+:::
 
 ### `using` によるクリーンアップ（Node 22 以上）
 

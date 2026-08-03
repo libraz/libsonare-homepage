@@ -65,6 +65,41 @@ const legacyBpm = detectBpm(samples, sampleRate);
 
 リクエストのフィールド名は Node と WASM で同じ camelCase です。Python は JavaScript 形式の options object ではなく、従来どおりキーワード引数（`detect_bpm(samples, sample_rate=...)`）を使います。
 
+### 長い処理をキャンセルする
+
+進捗を報告するリクエストは `cancel` も受け取ります。これは `onProgress` が発火するのと
+同じネイティブ境界でポーリングされる述語で、`true` を返すと呼び出しが中断されます。
+
+```typescript
+let abandoned = false;
+cancelButton.onclick = () => { abandoned = true; };
+
+try {
+  const mastered = masterAudio({
+    samples,
+    sampleRate,
+    preset: 'pop',
+    onProgress: (progress, stage) => updateUi(progress, stage),
+    cancel: () => abandoned,
+  });
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.Cancelled) return;
+  throw error;
+}
+```
+
+キャンセルされた呼び出しは `SONARE_ERROR_CANCELLED`（エラーコード 8）で例外になり、
+出力を確保しません。途中結果を調べることはできません。Python も同じ述語を `cancel=` で受け取ります。
+
+### 入力は変換されずに検証されます
+
+Node と WASM は、以前なら黙って解釈し直していた値を拒否します。型の合わないリペア・
+ダイナミクスのオプション、未知のトラック種別・キャプチャソース・ピッチ補正モード、
+負のスペクトラム設定、宣言されていない enum の綴りや序数、数値でも真偽値でもない
+マスタリングのオーバーライド値などです。インスタンスメソッドも `destroy()` 後は解放済み
+ハンドルに触れずに例外を投げます。以前は意外なデフォルト値になっていた箇所で、
+呼び出し地点に `SonareError` が返るようになります。
+
 ## 目的から API を選ぶ
 
 関数数が多いため、まず「何を作りたいか」から最小の API を選ぶのが近道です。
@@ -154,6 +189,72 @@ function isInitialized(): boolean
 function version(): string  // 例: "{{ wasmMeta.version }}"
 ```
 
+### `capabilities()`
+
+実際に読み込まれているビルドの内容を返します。CLI が `doctor` で表示するのと同じレポートです。
+同期関数で、`init()` の後にのみ有効です。
+
+```typescript
+function capabilities(): {
+  version: string;
+  abi: { project: number; engine: number };
+  platform: string;
+  features: { mastering: boolean; mixing: boolean; fx: boolean; ffmpeg: boolean };
+  decode: { builtin: string[]; ffmpeg: string[] };
+  simd: string;
+  hardwareConcurrency: number;
+}
+```
+
+推測せず `features` で分岐してください。`mixing` を持たないビルドには `Mixer` がありません。
+また `decode.builtin` を見れば、ブラウザ側のフォールバックを試す前に、そのモジュールが
+どの形式を開けるか分かります。
+
+### `capabilityCatalog()`
+
+各プロセッサ、その全パラメータ（範囲と既定値つき）、組み込みプリセット一覧を、
+機械可読なカタログとして返します。C ABI が公開し Python が `capability_catalog` として
+公開しているのと同じ正規 JSON で、`schemas/capability-catalog.schema.json` で検証されます。
+
+```typescript
+function capabilityCatalog(): {
+  version: string;
+  abi: { project: number; engine: number };
+  processors: Array<{
+    id: string;
+    kind: 'realtime' | 'offline' | 'pair';
+    realtimeInsertable: boolean;
+    stereoOnly: boolean;
+    latencySamples: number;
+    tailSamples: number;
+    /** リアルタイム処理コストの目安。インサート不可のプロセッサでは必ず null */
+    realtimeCost: 'low' | 'moderate' | 'high' | null;
+    channelPolicy: 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
+    category: string;
+    params: Array<{
+      name: string;
+      id: number;
+      rtSafe: boolean;
+      type: 'boolean' | 'number';
+      min: number | null;
+      max: number | null;
+      default: boolean | number | null;
+      unit: string | null;
+    }>;
+  }>;
+  presets: {
+    mastering: string[];
+    synth: string[];
+    mixingScene: string[];
+    voiceChanger: string[];
+  };
+}
+```
+
+汎用のパラメータ UI はこれを基に作れます。各スライダーの範囲と既定値は、手で管理する表では
+なくカタログから得られます。コアが把握していない範囲は明示的な `null` で報告されるので、
+0 ではなく「上限・下限なし／不明」として扱ってください。
+
 ### `abiVersion()`
 
 C POD 公開 API 全体を集約したネイティブ ABI バージョンを返します。ビルド済みバイナリを読み込む際に保存・比較しておくと、互換性のない JS／ネイティブ成果物の組み合わせを早期に検出できます。
@@ -183,9 +284,12 @@ function voiceChangerAbiVersion(): number
 プリセット JSON を解析せずに、正規の voice-character プリセット ID や解決済みのフラットな POD 設定が必要なときに使います。
 
 ```typescript
-function voiceCharacterPresetId(preset: VoicePresetId | number): string | null
-function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig | null
+function voiceCharacterPresetId(preset: VoicePresetId | number): string
+function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig
 ```
+
+どちらも範囲外の序数や未知の ID では `null` を返さず例外を投げます。不正なプリセット ID は
+後続の null 参照ではなく、呼び出し地点で表面化します。
 
 解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。
 
@@ -1197,6 +1301,81 @@ function deemphasis(samples: Float32Array, coef?: number, zi?: number): Float32A
 
 `zi` はストリーミング処理で前ブロック末尾の値を受け渡すための初期条件です。
 
+### テスト信号の生成
+
+フィクスチャ、キャリブレーション、クリックトラック向けの決定的な信号です。アセットファイルは要りません。
+
+```typescript
+function tone(request?: ToneRequest): Float32Array
+function chirp(request?: ChirpRequest): Float32Array
+function clicks(request: ClicksRequest): Float32Array
+```
+
+### スペクトルからの再構成とピッチ候補
+
+```typescript
+function griffinLim(request: GriffinLimRequest): Float32Array
+function reassignedSpectrogram(request: ReassignedSpectrogramRequest): ReassignedSpectrogramResult
+function piptrack(request: PiptrackRequest): PiptrackResult
+function melDelta(request: MelDeltaRequest): Float32Array
+function spectralFlux(request: SpectralFrameRequest & { lag?: number }): Float32Array
+function onsetBacktrack(request: OnsetBacktrackRequest): Int32Array
+```
+
+`griffinLim` は STFT の振幅行列から音声を再構成します。`melToAudio` と `mfccToAudio` は
+その mel 領域ラッパーです。`onsetBacktrack` は検出したオンセットフレームを直前のエネルギー
+極小点まで戻します。オンセット位置で音を切り出す前に通しておきたい処理です。
+
+`spectralBandwidth` は Minkowski 指数 `p` を指定できます（位置引数では 5 番目、
+リクエストオブジェクトでは `p`）。`p = 2` 固定ではありません。
+
+### 構造と自己類似度
+
+セグメンテーション系は、構造解析の土台になる行列を作ります。
+
+```typescript
+function segmentCrossSimilarity(request: SegmentCrossSimilarityRequest): SegmentMatrix
+function segmentRecurrenceMatrix(request: SegmentRecurrenceMatrixRequest): SegmentMatrix
+function segmentRecurrenceToLag(request: SegmentRecurrenceToLagRequest): SegmentMatrix
+function segmentLagToRecurrence(request: SegmentLagToRecurrenceRequest): SegmentMatrix
+function segmentPathEnhance(request: SegmentPathEnhanceRequest): SegmentMatrix
+function segmentSubsegment(request: SegmentSubsegmentRequest): Int32Array
+function segmentAgglomerative(request: SegmentAgglomerativeRequest): Int32Array
+```
+
+「セクションはどこか」への既製の答えは `analyzeSections(...)` です。自己類似度プロットを
+描きたい、あるいは強調済みの recurrence 行列に自前の境界検出をかけたい、といった理由で
+中間行列そのものが欲しいときにこちらを使います。
+
+### ノートセグメンテーション
+
+モノフォニックの F0 トラックを、安定したノート区間に切り分けます。すでに手元にある
+トラック（`pitchYin` / `pitchPyin`、あるいは自前のトラッカーの出力）を、それを生成した
+フレームレートと一緒に渡します。
+
+```typescript
+interface NoteSegmentsRequest {
+  f0Hz: Float32Array;
+  voicedProb: Float32Array;
+  /** 渡したトラックの 1 秒あたりフレーム数 */
+  frameRate: number;
+  segmentationThresholdCents?: number;
+  minNoteMs?: number;
+  referenceHz?: number;
+}
+
+function noteSegments(request: NoteSegmentsRequest): Array<{
+  frameStart: number;
+  frameEnd: number;
+  startSeconds: number;
+  endSeconds: number;
+  medianCents: number;
+}>
+```
+
+`f0Hz` と `voicedProb` は長さが等しく、0 でない必要があります。0 Hz のフレームと
+`0.5` 未満の確率は無声として扱われ、そこでノートが切れます。
+
 ### 無音トリム／無音分割
 
 ```typescript
@@ -1690,8 +1869,10 @@ interface ProgressiveEstimate {
 interface AnalysisResult {
   bpm: number;
   bpmConfidence: number;
+  bpmCandidates: BpmHypothesis[];           // 上位から順に並んだ候補
   key: Key;
   timeSignature: TimeSignature;
+  timeSignatureCandidates: TimeSignature[]; // 上位から順に並んだ候補
   beatTimes: Float32Array;  // beats[].time のコピー。librosa 互換コードで便利
   beats: Beat[];            // 各拍の強度を含むオブジェクト配列
   chords: Chord[];
@@ -1702,7 +1883,28 @@ interface AnalysisResult {
   melody: MelodyContour;
   form: string;  // 例: "IABABCO"
 }
+
+interface BpmHypothesis {
+  value: number;
+  confidence: number;
+  /** 報告された `bpm` との関係 */
+  relation: 'primary' | 'half' | 'double' | 'other';
+}
 ```
+
+`bpm` と `timeSignature` は勝ち残った値で、2 つの `*Candidates` 配列はその背後にある
+順位付きの候補群です。テンポは本質的に曖昧で、ハーフタイム感とその倍テンポは同じ曲の
+どちらも妥当な読み方になり得ます。1 つの数字だけを見せて祈るのではなく、代替案を提示できます。
+
+```typescript
+const { bpm, bpmCandidates } = analyze({ samples, sampleRate });
+const halfTime = bpmCandidates.find((c) => c.relation === 'half');
+if (halfTime && halfTime.confidence > 0.4) {
+  offerAlternative(halfTime.value);   // 「84 BPM かもしれません」
+}
+```
+
+同じ配列は C ABI・Node・Python にもあります。
 
 ### Beat
 
@@ -1942,6 +2144,41 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 
 `loudnessTargetLimited` が true なら、トゥルーピーク上限のため要求した LUFS 目標には届いていません。目標ではなく実際の `outputLufs` を報告してください。各 `StageGainReduction` は、ダイナミクスまたはマキシマイザーの直近のゲインリダクションを示します。
 
+#### `report` — 処理前後を 1 つのオブジェクトで
+
+オフラインチェーンの結果は `report` も持ちます。これは「実際に何が起きたか」の要約で、
+自分で入力を測り直して組み立てる必要がなくなります。
+
+```typescript
+interface MasteringReport {
+  before: MasteringLoudnessSummary;
+  after: MasteringLoudnessSummary;
+  appliedGainDb: number;
+  maxGainReductionDb: number;
+  loudnessTargetLimited: boolean;
+  /** 対数等間隔 32 バンドの「後 − 前」エネルギー差（dB） */
+  bandEnergyDeltaDb: Float32Array;
+}
+
+interface MasteringLoudnessSummary {
+  integratedLufs: number;
+  maxMomentaryLufs: number;
+  maxShortTermLufs: number;
+  truePeakDbtp: number;
+  loudnessRange: number;
+}
+```
+
+```typescript
+const { report } = masteringChainStereo(left, right, sampleRate, config);
+console.log(report.before.integratedLufs, '→', report.after.integratedLufs);
+console.log(report.after.loudnessRange - report.before.loudnessRange, 'LU 変化');
+drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後の方が明るい
+```
+
+同じオブジェクトが C ABI・ctypes・Node・Python・両 CLI のレポートファイルにミラーされて
+いるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
+
 説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。
 
 ### StreamingEqualizer
@@ -2079,9 +2316,21 @@ const { left, right } = chain.processStereo(leftBlock, rightBlock); // 2ch
 console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
 console.log(chain.latencySamples());  // 有効ステージの合計レイテンシ
 
+// 入力の最終ブロックのあと、チェーンの遅延と有限のテールを吐き出す
+let tail: Float32Array;
+while ((tail = chain.flushMono()).length > 0) {
+  write(tail);
+}
+
 chain.reset();   // prepare し直さずに状態だけクリア
 chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 ```
+
+`flushMono()` / `flushStereo()` は、入力がもうない状態で遅延分の音声と有限のプロセッサ
+テールを吐き出します。空の結果が返るまで呼び続けてください。フラッシュしないと、
+ストリーミングチェーンで作ったバウンスは末尾の `latencySamples()` サンプルと、
+リバーブやリミッターのテールを失います。連結したストリームの先頭 `latencySamples()`
+サンプルはチェーンの遅延なので、時間を揃えるには捨ててください。
 
 `numChannels === 1` のときはステレオ専用ステージはスキップされます。チェーン設定のリペアステージ（`repair.declick`／`repair.dereverb`／`repair.denoise`）はオフライン専用で、streaming constructor で有効にすると例外を投げます。`masteringChain*` / `masterAudio*`、または単発の `masteringRepair*` ヘルパーで実行してください（`declip`／`decrackle`／`dehum` はチェーン設定に含まれず、これらのヘルパーからのみ実行できます）。`loudness` ステージも、ストリーミングチェーンが信号全体の積分 LUFS を計測できないため、`loudnessStaticGainDb`（任意で `loudnessStaticGainPeakDb` も）を指定しない限り例外を投げます。同じチェーンで複数曲を順に処理する場合は `reset()`、使い終わったら `delete()` を呼んでハンドルを解放してください。
 

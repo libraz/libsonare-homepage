@@ -8,7 +8,7 @@ CLI は、アプリケーションコードを書かずに、簡易確認、バ�
 
 このページを読むと、次のことを判断・実行できるようになります。
 
-- PyPI の `sonare` コマンドを導入し、ソースビルドの C++ CLI との違いを理解できる。
+- PyPI の `sonare` コマンドを導入し、ネイティブ CLI との違いを理解できる。
 - 簡易解析、特徴量サマリー、編集、マスタリング、音響チェック、簡単なミキシングに合うコマンドを選べる。
 - 人が読む出力と、スクリプト向けの `--json` 出力を使い分けられる。
 - CLI ではなく Python、WASM、ネイティブ API へ移るべきワークフローを判断できる。
@@ -22,7 +22,7 @@ CLI は、アプリケーションコードを書かずに、簡易確認、バ�
 | キーだけを見る | `sonare key music.mp3` |
 | スクリプトで扱いやすい出力にする | `sonare analyze music.mp3 --json` |
 
-この 4 つのコマンドは pip でインストールした CLI から実行できます。以降のセクションでは、ソースビルドの C++ CLI が必要なコマンドに印を付けています。コマンドが見つからないときは、入力ミスを疑う前にまずその表示を確認してください。
+この 4 つのコマンドは pip でインストールした CLI から実行できます。以降のセクションでは、ネイティブ CLI が必要なコマンドに印を付けています。コマンドが見つからないときは、入力ミスを疑う前にまずその表示を確認してください。
 
 ::: info CLI とは？
 CLI は Command Line Interface の略で、ターミナルから実行するコマンド形式の入口です。アプリに組み込む前の確認、複数ファイルのバッチ処理、JSON を別スクリプトへ渡す用途に向いています。画面 UI やライブ処理を作る場合は、WASM / Python / C++ API の方が扱いやすいことが多いです。
@@ -30,14 +30,23 @@ CLI は Command Line Interface の略で、ターミナルから実行するコ�
 
 ## どの CLI を使っているか
 
-ソースツリーには 2 種類の `sonare` コマンドライン入口があります。
+コマンドラインの入口は 2 つあります。
 
-| CLI | 入手方法 | 向いている用途 | コマンド範囲 |
-|-----|----------|----------------|--------------|
-| Python CLI | `pip install libsonare` | 多くのユーザー向け。バッチ解析、特徴量サマリー、編集、マスタリング、簡単なミキシング | 広く安定しており、ファイルデコードも扱いやすい |
-| C++ CLI | `BUILD_CLI=ON` でソースビルド | 開発、互換性確認、低レベルユーティリティ、追加のシーン書き出し | 一部の特徴量・ユーティリティは Python CLI より多い |
+| CLI | コマンド名 | 入手方法 | 向いている用途 |
+|-----|-----------|----------|----------------|
+| Python CLI | `sonare` | `pip install libsonare` | 多くのユーザー向け。バッチ解析、特徴量サマリー、編集、マスタリング、簡単なミキシング |
+| ネイティブ CLI | `sonare-cli` | リリースアーカイブ、または `BUILD_CLI=ON` でソースビルド | 低レベルユーティリティ、信号生成、librosa 互換ヘルパー、追加のシーン書き出し |
 
-このページで明示的に「ソースビルドの C++ CLI」と書いていない限り、PyPI の Python CLI で使えるコマンドとして読んでください。
+ネイティブ実行ファイルは、FFmpeg なしの Linux / macOS リリースアーカイブに
+`sonare-cli` という名前で（それぞれ SHA-256 チェックサム付きで）同梱されます。
+そのため Python の `sonare` コマンドと衝突せず、並べてインストールできます。
+このページの例は `sonare` と書いていますが、ネイティブ専用コマンドを実行するときは
+`sonare-cli` に読み替えてください。
+
+同じコマンドなら 2 つの CLI は同じ JSON を出力します。キーはすべて `snake_case` で、
+シリアライズ前に値を丸めることもなくなったため、どちらの出力でも同じスクリプトで読めます。
+
+このページで明示的に「ネイティブ CLI」と書いていない限り、PyPI の Python CLI で使えるコマンドとして読んでください。
 
 ::: tip pip で簡単インストール
 `sonare` CLI は PyPI の Python パッケージに含まれます。
@@ -52,17 +61,24 @@ npm の WebAssembly パッケージ `@libraz/libsonare` ではインストール
 標準の PyPI ホイールは WAV/MP3 をデコードします。M4A/AAC/FLAC/OGG/Opus を直接読むには FFmpeg 有効ビルドが必要です。
 :::
 
-::: info C++ CLI にはさらにコマンドがあります
+::: info ネイティブ CLI にしかないコマンド
 Python CLI はすでに解析・特徴量・編集・マスタリング・`mix` をカバーしています
-（下の [その他のコマンド](#その他のコマンド) を参照）。ソースからビルドすると、PyPI
-パッケージにはない追加コマンドを含む C++ CLI が利用できます。[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
+（下の [その他のコマンド](#その他のコマンド) を参照）。`sonare-cli` には PyPI
+パッケージにない追加コマンドがあります。リリースアーカイブから入手するか、[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
 
 - 解析: `sections`, `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
-- エフェクト／変換: `pitch-shift`, `time-stretch`, `preemphasis`, `deemphasis`, `trim-silence`, `split-silence`, `normalize`, `gain`, `fade`, `filter`, `resample`
+- エフェクト／変換: `preemphasis`, `deemphasis`, `split-silence`, `gain`, `fade`, `filter`
 - 合成: `tone`, `chirp`, `clicks`
 - 特徴量: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env`（`onset-envelope` の短縮エイリアス）, `fourier-tempogram`, `tempogram-ratio`
 - librosa 互換ユーティリティ: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
+- ミキシング: `mix-strip`（単一入力のチャンネルストリップ。`mix` は非推奨エイリアスとして残っています）
 - マスタリング: `mastering-pair-processor`（ソース／リファレンスのペア処理）, `mastering-stereo-analyses`, `mastering-stereo-analyze`
+
+逆に、ネイティブ CLI にはない Python CLI 専用のコマンドもあります。
+`pitch-correct-timevarying`, `note-move`, `scale-quantize`, `master`,
+`mastering-chain`, `mastering-streaming`, `mastering-suggest`,
+`mastering-profile`, `mastering-presets`, `declip`, `midi-render`、
+そしてシーンを読み込む `mix` です。
 :::
 
 ## 概要
@@ -83,6 +99,15 @@ sonare <command> [options] <audio_file>
 | `--n-fft <int>` | FFT サイズ（デフォルト: 2048） |
 | `--hop-length <int>` | ホップ長（デフォルト: 512） |
 | `--n-mels <int>` | Mel バンド数（デフォルト: 128） |
+
+`sonare <command> --help` は、そのコマンドが実際に受け付けるオプションだけを
+表示します。個々のコマンドについてはヘルプが正解です。上記の DSP オプション
+（`--n-fft`・`--hop-length`・`--n-mels`）は、それを使うコマンドだけが受け付けます。
+使わないコマンドに渡すと、黙って無視されるのではなく不正パラメータの終了コードで
+終了します。
+
+色付けは起動時に一度だけ設定されます。環境変数 `NO_COLOR` を設定するか、
+標準出力をファイルやパイプにリダイレクトすると、実行全体で ANSI エスケープが無効になります。
 
 `--json` はスクリプトで扱いやすい要約JSONを出力します。Python CLI の
 `mel` や `chroma` は特徴量の全行列をそのまま出力するのではなく、次元や
@@ -334,15 +359,15 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
-| `sonare meter music.wav` | ピーク、RMS、クレスト、トゥルーピーク、クリッピング率、無音率、DC オフセット | ソースビルド C++ CLI のみ。`--clip-threshold`, `--oversample` |
-| `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ソースビルド C++ CLI のみ。`--threshold`, `--min-region` |
-| `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ソースビルド C++ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
-| `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ソースビルド C++ CLI のみ |
-| `sonare phase left.wav --reference right.wav` | 左右ファイルからフェーズスコープ要約を測定 | ソースビルド C++ CLI のみ |
+| `sonare meter music.wav` | ピーク、RMS、クレスト、トゥルーピーク、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
+| `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
+| `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ネイティブ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
+| `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ネイティブ CLI のみ |
+| `sonare phase left.wav --reference right.wav` | 左右ファイルからフェーズスコープ要約を測定 | ネイティブ CLI のみ |
 
 ### その他の特徴量
 
-| コマンド | Python CLI | ソースビルド C++ CLI | 説明 |
+| コマンド | Python CLI | ネイティブ CLI | 説明 |
 |----------|------------|------------------------|------|
 | `sonare onset-envelope music.mp3` | 対応 | 対応 | オンセット強度包絡 |
 | `sonare onset-env music.mp3` | 非対応 | 対応 | オンセット強度包絡の短縮エイリアス |
@@ -372,21 +397,28 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | `sonare note-stretch take.wav -o out.wav` | 単一ノート区間をストレッチ | `--onset`, `--offset`（サンプル位置）, `--ratio`（1.0） |
 | `sonare scale-quantize 68.7` | MIDI 値を音階へ量子化 | `--root`, `--mode-mask`, `--reference-midi` |
 | `sonare voice-change vocal.wav -o out.wav` | ボイスチェンジ（ピッチ＋フォルマント） | `--pitch-semitones`（0.0）, `--formant-factor`（1.0） |
+| `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | 長さを変えずに移調 | `--semitones`（**必須**） |
+| `sonare time-stretch take.wav --rate 1.2 -o out.wav` | ピッチを変えずに長さを変更 | `--rate`（**必須**） |
+| `sonare normalize mix.wav -o out.wav` | ピークまたは RMS ノーマライズ | `--mode peak\|rms`, `--target-db` |
+| `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム | `--top-db` |
+| `sonare resample music.wav --target-sr 44100 -o out.wav` | リサンプリング | `--target-sr` |
 
 Python CLI は、上のファイル書き出し編集コマンドと HPSS サマリーを提供します。
 
-ソースビルドの C++ CLI では、共通の編集コマンドに加えて、低レベルの処理コマンドも使えます。
+::: warning 何もしないデフォルトはエラーになりました
+`--semitones` と `--rate` には以前デフォルト値があり、省略するとコマンドが何もしない
+状態になっていました。現在はどちらも必須です。また、ピッチシフトの未知の
+`--algorithm` やピッチ補正の未知の `--mode` も、既定値へフォールバックせずエラーになります。
+:::
 
-| C++ コマンド | 必須または主なオプション |
-|--------------|--------------------------|
-| `pitch-shift` | `--semitones` |
-| `time-stretch` | `--rate` |
-| `normalize` | `-o`; `--mode peak\|rms`, `--target-db` |
+ネイティブ CLI では、共通の編集コマンドに加えて、低レベルの処理コマンドも使えます。
+
+| ネイティブコマンド | 必須または主なオプション |
+|--------------------|--------------------------|
 | `gain` | `-o`, `--gain-db` |
 | `fade` | `-o`, `--fade-in` または `--fade-out` |
 | `filter` | `-o`, `--type hp\|lp\|bp\|notch`; hp/lp は `--cutoff`、bp/notch は `--center` + `--bandwidth` |
-| `resample` | `-o`, `--target-sr` |
-| `preemphasis`, `deemphasis`, `trim-silence`, `split-silence` | 処理後のファイルを書き出す場合は `-o` |
+| `preemphasis`, `deemphasis`, `split-silence` | 処理後のファイルを書き出す場合は `-o` |
 
 ### リアルタイムボイスプリセット
 
@@ -403,10 +435,10 @@ Python CLI は、上のファイル書き出し編集コマンドと HPSS サマ
 
 ### 合成
 
-ソースビルドの C++ CLI では、簡単なテスト信号も生成できます。
+ネイティブ CLI では、簡単なテスト信号も生成できます。
 
-| C++ コマンド | 必須または主なオプション |
-|--------------|--------------------------|
+| ネイティブコマンド | 必須または主なオプション |
+|--------------------|--------------------------|
 | `tone -o tone.wav` | `--frequency`; 任意で `--sr`, `--duration`, `--phase`, `--amplitude` |
 | `chirp -o sweep.wav` | `--fmax`; 任意で `--fmin`, `--exponential`, `--sr`, `--duration` |
 | `clicks -o clicks.wav` | 秒単位のカンマ区切り `--times`; 任意で `--sr`, `--length`, `--frequency`, `--click-duration` |
@@ -442,6 +474,33 @@ sonare version --json
 ```
 libsonare {{ wasmMeta.version }} (Python CLI)
 ```
+
+### doctor
+
+そのビルドで何ができるかを表示します。機能が見当たらない、ファイルがデコードできない
+といったときに最初に実行するコマンドです。2 つの CLI どちらにもあり、バインディングが
+`capabilities` として公開しているのと同じビルド診断レポートを出力します。
+
+```bash
+sonare doctor
+sonare doctor --json
+```
+
+**出力:**
+```
+libsonare {{ wasmMeta.version }}
+  Library:              /path/to/libsonare.so
+  Platform:             linux-x86_64
+  ABI:                  project=…, engine=…
+  Features:             mastering=true, mixing=true, fx=true, ffmpeg=false
+  Decode (built-in):    wav, mp3
+  Decode (FFmpeg):      none
+  SIMD:                 …
+  Hardware concurrency: 8
+```
+
+`ffmpeg=false` のビルドなら M4A/AAC/FLAC/OGG のデコード失敗はそれが原因です。
+`mastering`／`mixing`／`fx` は、どのコマンド群がビルドに含まれているかを示します。
 
 ## 使用例
 
@@ -486,7 +545,7 @@ done
 ::: info コマンドの提供範囲
 PyPI の Python CLI には `mastering`、`master`、`mastering-processor`、`mastering-processors`、`mastering-chain`、`mastering-presets`、`eq`、`declip`、および下記のペア解析コマンドが含まれます。
 
-ソースからビルドした C++ CLI では、ソース／リファレンスを処理する `mastering-pair-processor`、ステレオ解析一覧、ステレオ解析実行などの追加マスタリングコマンドも利用できます。
+ネイティブ CLI では、ソース／リファレンスを処理する `mastering-pair-processor`、ステレオ解析一覧、ステレオ解析実行などの追加マスタリングコマンドも利用できます。
 
 [ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
 :::
@@ -527,7 +586,11 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-ペア解析では、比較の前に CLI がリファレンスをソースのサンプルレートへリサンプリングするため、2 つのファイルでサンプルレートを揃えておく必要はありません。リサンプリングやトリムをより細かく制御したい場合は Python API を使ってください。
+ペア解析では、リファレンスがあらかじめソースと同じサンプルレートである必要があります。
+食い違いは黙ってリサンプリングされるのではなくエラーになるため、書き換えられた音声どうしを
+比較してしまうことがありません。先にリファレンスをリサンプリングするか（`sonare resample
+reference.wav --target-sr <sr> -o reference-matched.wav`）、比較前のリサンプリングやトリムを
+細かく制御したい場合は Python API を使ってください。
 
 `/ja/mastering` ブラウザデモも同じマスタリングプロセッサ群を呼び出しています。デモから書き出したレポートを CLI 自動化の起点として活用できます。
 
@@ -569,7 +632,7 @@ Python CLI の名前付きマスタリングコマンド:
 | `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |
 
-ソースビルド C++ CLI のみ: `sonare mastering-pair-processor`、`sonare mastering-stereo-analyses`、`sonare mastering-stereo-analyze`。
+ネイティブ CLI のみ: `sonare mastering-pair-processor`、`sonare mastering-stereo-analyses`、`sonare mastering-stereo-analyze`。
 
 関連するマスタリングガイド: [配信ターゲット](./glossary/mastering/delivery-targets.md)、[メーターの読み方](./glossary/mastering/meter-reading.md)、[エラー復旧](./glossary/mastering/error-recovery.md)。
 
@@ -607,11 +670,31 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 `mix` は `--scene` か `--preset` のいずれか一方が必須です。ストリップごとに
 `--input` を 1 つ渡し、ファイルへのレンダリングには `-o/--output` が必要です。
 
+ネイティブ CLI の単一入力チャンネルストリップは役割の異なる別コマンドで、
+名前が `mix-strip` になりました。
+
+```bash
+sonare-cli mix-strip vocal.wav -o strip.wav \
+  --input-trim-db -2 --fader-db 1.5 --pan 0.2 --width 1.4
+```
+
+::: info ネイティブ CLI の `mix` → `mix-strip`
+シーンミキサーと読み違えないよう、ストリップコマンドを改名しました。旧名の `mix` は
+非推奨エイリアスとして動きます。また、真のステレオで読み書きするようになったため
+`--width` が実際に音像を変えます（モノラル処理だった間は何も起きませんでした）。
+4 次フィルター経路が filtfilt を通るのは `--zero-phase` を指定したときだけです。
+:::
+
 関連: [ミキシングエンジン](./mixing.md)。
 
 ### プロジェクト＆ MIDI ワークフロー
 
-`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth <sine|saw|square|triangle>` はプロジェクトの MIDI トラックを組み込みのオシレーターシンセでレンダリングします。CLI の `--synth` はこれら組み込み波形だけを受け付けます。NativeSynth のプリセットカタログはバインディング側の `synthPresetNames()` で列挙するもので、CLI からは扱えません。
+`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth` はクリップ音声の代わりにプロジェクトの MIDI トラックを組み込みシンセでレンダリングします。このフラグは 2 通りの使い方があります。
+
+- **値なしの `--synth`** — プロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングします。プロジェクトが実際の GM プログラムを持っている場合はこちらを使います。
+- **`--synth <preset>`** — すべての宛先を 1 つの NativeSynth プリセットに固定します。名前の一覧は `sonare project synth-presets` で確認できます。
+
+`project bounce` は `--channels` で指定したチャンネル数で書き出します。
 
 ```bash
 # プロジェクトの ABI バージョンを表示
@@ -624,23 +707,33 @@ sonare project new --sample-rate 48000 -o project.json
 sonare project validate --in project.json
 sonare project validate --in project.json -o canonical.json
 
+# 修復診断が 1 件でも出たら失敗扱いにする（CI 向け）
+sonare project validate --in project.json --strict
+
 # プロジェクト JSON をコンパイルチェック（診断を表示。エラー時は非ゼロで終了。ファイルは書き出さない）
 sonare project compile --in project.json
 
-# プロジェクトをステレオ WAV にレンダリング（マルチチャンネルのバウンスもステレオ出力）
-sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
+# --synth が受け付ける NativeSynth プリセットを一覧表示
+sonare project synth-presets
 
-# クリップ音声ではなくプロジェクトの MIDI トラックを組み込みのオシレーターシンセでレンダリング
-sonare project bounce --in project.json --synth saw -o synth-bounce.wav
+# 指定したチャンネル数で WAV にレンダリング
+sonare project bounce --in project.json --sample-rate 48000 --channels 2 -o bounce.wav
+
+# MIDI トラックを組み込みシンセでレンダリング（GM プログラムに追従）
+sonare project bounce --in project.json --synth -o gm-bounce.wav
+
+# あるいはすべての宛先を 1 つのプリセットに固定
+sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 ```
 
 | コマンド | 説明 | 主なオプション |
 |----------|------|----------------|
 | `sonare project abi` | プロジェクトの ABI バージョンを表示 | — |
 | `sonare project new` | 空のプロジェクト JSON を作成 | `--sample-rate`, `-o` |
-| `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o` |
+| `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o`, `--strict`（診断が 1 件でもあれば失敗） |
 | `sonare project compile` | プロジェクト JSON をコンパイルチェック。診断を表示し、エラー時は非ゼロで終了（ファイルは書き出さない） | `--in`, `--json` |
-| `sonare project bounce` | プロジェクトをステレオ WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
+| `sonare project synth-presets` | `--synth` が受け付ける NativeSynth プリセット名を一覧表示 | `--json` |
+| `sonare project bounce` | 指定チャンネル数で WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
 | `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
 | `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |
@@ -655,13 +748,13 @@ sonare project import-smf --smf project.mid -o roundtrip.json
 sonare project export-midi2 --in project.json -o project.midi2
 sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 
-# プロジェクトの MIDI トラックを組み込みのオシレーターシンセでステレオ WAV にレンダリング
-sonare project bounce --in project.json --synth triangle --sample-rate 48000 -o render.wav
+# プロジェクトの MIDI トラックを組み込みシンセでレンダリング
+sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wav
 ```
 
-MIDI から音声へレンダリングする独立したコマンドはありません。上記の `project bounce --synth <sine|saw|square|triangle>` が担当します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
+Python CLI には `midi-render` もあります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
 
-バウンスコマンドはステレオ WAV を出力します。SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
+SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
 関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
 
@@ -692,7 +785,7 @@ Python CLI の失敗は、C ABI のエラーコード(バインディングが `
 | 9 | 無効な状態 |
 | 10 | その他のエラー |
 
-Python CLI では、`SONARE_LEGACY_EXIT=1` を設定すると「失敗はすべて `1`」という旧来の挙動に戻せます(終了コード 1 を前提に書かれたスクリプト向け)。ソースビルドの C++ CLI はこの変数の影響を受けず、従来どおり `0`(成功)/ `1`(エラー)のままです。
+Python CLI では、`SONARE_LEGACY_EXIT=1` を設定すると「失敗はすべて `1`」という旧来の挙動に戻せます(終了コード 1 を前提に書かれたスクリプト向け)。ネイティブ CLI はこの変数の影響を受けず、従来どおり `0`(成功)/ `1`(エラー)のままです。
 
 ## パフォーマンスのヒント
 

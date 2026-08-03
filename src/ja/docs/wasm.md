@@ -260,9 +260,84 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 });
 ```
 
+## キャンセル
+
+時間のかかるオフラインの解析・マスタリング呼び出しは `cancel` コールバックを受け取ります。
+`onProgress` が進捗を報告するのと同じ境界でポーリングされるため、間違ったファイルを
+読み込んでしまったユーザーがレンダリングの完了を待つ必要はありません。
+
+```typescript
+import { init, masteringChainWithProgress } from '@libraz/libsonare';
+
+await init();
+
+let abandoned = false;
+cancelButton.onclick = () => { abandoned = true; };
+
+try {
+  const result = masteringChainWithProgress({
+    samples,
+    sampleRate,
+    config,
+    onProgress: (progress, stage) => updateUi(progress, stage),
+    cancel: () => abandoned,
+  });
+  render(result);
+} catch (error) {
+  if (isSonareError(error) && error.code === ErrorCode.Cancelled) {
+    // ユーザーが中止を指示した場合。想定内です。
+    return;
+  }
+  throw error;
+}
+```
+
+`cancel` が `true` を返すと呼び出しは中断され、`SONARE_ERROR_CANCELLED`（エラーコード 8）
+で例外になります。キャンセルされた呼び出しは出力を確保しません。途中結果を読むことは
+できないので、「マスターが途中まで出来た」ではなく「何も起きなかった」として扱ってください。
+
 ## Web Worker の使用
 
-メインスレッドをブロックしないように解析を Web Worker にオフロードします。
+パッケージには Worker クライアントが同梱されているため、よくある用途では自前の
+worker ファイルは不要です。`@libraz/libsonare/worker` から `OfflineWorkerClient` を
+インポートします。
+
+```typescript
+import { OfflineWorkerClient } from '@libraz/libsonare/worker';
+
+const client = new OfflineWorkerClient();
+
+const task = client.analyze(
+  { samples, sampleRate },
+  { onProgress: ({ progress, stage }) => updateUi(progress, stage) },
+);
+
+cancelButton.onclick = () => task.cancel();
+
+const result = await task;   // task は thenable です
+client.dispose();
+```
+
+利用できるのは `analyze`・`detectBpm`・`detectKey`・`detectChords`・`masterAudio`・
+`masterAudioStereo` です。いずれも `OfflineWorkerTask` を返し、await できるほか
+`cancel()` を持ちます。
+
+::: warning 入力はコピーではなく転送されます
+`Float32Array` の入力は既定で Worker へ転送されるため、呼び出し側のバッファは detach され、
+あとから読むと空の配列になります。波形描画などでサンプルを引き続き使う場合は
+`{ copy: true }` を渡してください。すでに実行中のネイティブ呼び出しを即座にキャンセルするには
+cross-origin isolation が必要です（クライアントは `SharedArrayBuffer` のフラグを使います）。
+なくてもキャンセル自体は効きますが、次のタスク境界まで待つことになります。
+:::
+
+`Project`・`Mixer`・リアルタイム系のクラスは、意図的にクライアントから外しています。
+これらのネイティブハンドルは 1 つの JavaScript レルムに属しており、スレッドをまたいで
+移動できないためです。
+
+### 自前の worker を書く
+
+クライアントが公開していない処理が必要な場合は、従来どおりのパターンが使えます。
+自分の worker の中でメインエントリをインポートしてください。
 
 **worker.ts:**
 
@@ -837,11 +912,16 @@ try {
 - **メイン API エントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
 - **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine`、worklet プロセッサクラス、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
 - **AudioWorklet ブリッジ** — `worklet.js` / `worklet.d.ts`。`AudioWorkletGlobalScope` 向けの自己完結型バンドルで、`SonareEngine` API とプロセッサ登録ヘルパーを公開します。
+- **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしており、CI でサイズ上限を検査しています。
+- **オフライン Worker エントリ** — `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
+- **ボイスチェンジャーの JSON Schema** — 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。
 
 ## バンドルサイズ
 
-このサイズ表が対象とするのはメインモジュールとメイン API エントリです。realtime
-ランタイムと worklet バンドルは別の構成物で、ここには記載していません。
+このサイズ表が対象とするのはメインモジュールとメイン API エントリです。解析専用モジュール、
+realtime ランタイム、worklet バンドルは別の構成物で、ここには記載していません。解析専用
+モジュールは、マスタリング・ミキシング・リアルタイム・プロジェクトの各サーフェスを含まない分、
+`sonare.wasm` よりかなり小さくなります。
 
 | ファイル | サイズ | Gzip |
 |---------|--------|------|

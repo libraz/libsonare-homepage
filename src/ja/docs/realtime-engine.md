@@ -27,6 +27,7 @@ await init();
 const caps = engineCapabilities();
 if (!caps.abiCompatible) throw new Error('Realtime engine ABI mismatch');
 
+// (sampleRate, maxBlockSize, commandCapacity?, telemetryCapacity?, maxChannels?)
 const engine = new RealtimeEngine(48000, 128);
 engine.setTempo(128);
 engine.setTimeSignature(4, 4);
@@ -39,6 +40,33 @@ const telemetry = engine.drainTelemetry();
 
 engine.stop();
 engine.destroy();
+```
+
+### 実際のチャンネル数に合わせて prepare する
+
+コンストラクタと `prepare(...)` は、末尾に省略可能な `maxChannels` を取ります。prepare は
+キャプチャ・インストゥルメント・PDC・モニターの各プレーンを常に 64 本ではなくこの数だけ
+確保するため、ステレオのホストが一生使わない 64 プレーン分のスクラッチを抱える必要がなくなります。
+
+```typescript
+// ステレオのホスト: 64 ではなく 2 プレーンを確保
+const engine = new RealtimeEngine(48000, 128, /*commandCapacity=*/undefined,
+                                  /*telemetryCapacity=*/undefined, /*maxChannels=*/2);
+
+// 構築済みのエンジンに対して指定する場合
+engine.prepare(48000, 128, undefined, undefined, 8);   // 7.1 向け
+```
+
+実際にレンダリングする最大チャンネル数を指定してください。指定しなければ従来どおりの挙動です。
+
+### コントロール専用のホスト
+
+`process()` を呼ばないホスト（ヘッドレスのコントローラーや、コマンドをキューイングして
+状態を読むだけのオフライン経路）は、コマンドキューを明示的に流し込めます。
+
+```typescript
+engine.setTempo(140);
+engine.flushControlCommands();   // レンダリングせずにキュー済みコマンドを適用
 ```
 
 `getTransportState()` には生のサンプル位置／PPQ 位置だけでなく、音楽的な再生位置も含まれます。`barCount` は 0 始まり、`beat` はその小節内で 1 始まり、`beatFraction` は `[0, 1)` の範囲です。そのため、PPQ から自前で換算せずに一般的な小節:拍表示を作れます。

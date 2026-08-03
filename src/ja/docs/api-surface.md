@@ -88,7 +88,9 @@
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、アンドゥ/リドゥ、テイク／コンピング、ワープ、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声、CQT/VQT 振幅から音声 | [逆変換特徴量](./inverse-features.md) |
-| ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz | [librosa 互換性](./librosa-compatibility.md) |
+| ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz、テスト信号生成（tone / chirp / clicks） | [librosa 互換性](./librosa-compatibility.md) |
+| 構造とセグメンテーション | クロス類似度、recurrence／lag 行列、パス強調、サブセグメンテーション、凝集型クラスタリング、F0 トラックからのノートセグメンテーション | [JavaScript API](./js-api.md#librosa-互換ヘルパー), [Python API](./python-api.md#特徴抽出) |
+| ビルドのイントロスペクション | 機械可読なケイパビリティカタログ（プロセッサ、パラメータの範囲と既定値、プリセット一覧）とビルド診断レポート | [JavaScript API](./js-api.md#capabilitycatalog), [Python API](./python-api.md#このビルドで何ができるか), [CLI](./cli.md#doctor) |
 
 ## 実装と根拠のページ
 

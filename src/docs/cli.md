@@ -8,7 +8,7 @@ Use the CLI when you want quick checks, batch jobs, or script-friendly JSON with
 
 By the end of this page you should be able to:
 
-- install the PyPI `sonare` command and understand how it differs from the source-built C++ CLI;
+- install the PyPI `sonare` command and understand how it differs from the native CLI;
 - choose the right command for quick analysis, feature summaries, editing, mastering, acoustic checks, or simple mixing;
 - decide when to use human-readable output and when to use `--json` for scripts;
 - recognize which workflows should move from CLI commands to Python, WASM, or native APIs.
@@ -22,7 +22,7 @@ By the end of this page you should be able to:
 | Get only key | `sonare key music.mp3` |
 | Produce script-friendly output | `sonare analyze music.mp3 --json` |
 
-These four commands work from the pip-installed CLI. Later sections mark commands that need the source-built C++ CLI — if a command turns up missing, check that label before assuming you typed it wrong.
+These four commands work from the pip-installed CLI. Later sections mark commands that need the native CLI — if a command turns up missing, check that label before assuming you typed it wrong.
 
 ::: info What is a CLI?
 CLI means Command Line Interface: a tool you run from a terminal. It is good for quick checks before integration, batch processing many files, and piping JSON into another script. If you are building a visual UI or live audio path, a WASM, Python, or C++ API is usually the better entry point.
@@ -30,14 +30,24 @@ CLI means Command Line Interface: a tool you run from a terminal. It is good for
 
 ## Which CLI Are You Using?
 
-There are two `sonare` command-line entry points in the source tree:
+There are two command-line entry points:
 
-| CLI | How you get it | Best for | Command coverage |
-|-----|----------------|----------|------------------|
-| Python CLI | `pip install libsonare` | Most users: batch analysis, feature summaries, editing, mastering, simple mixing | Broad, stable, file-decoding friendly |
-| C++ CLI | Build from source with `BUILD_CLI=ON` | Development, parity checks, lower-level utilities, extra scene/export commands | Superset for some feature/utility commands |
+| CLI | Command name | How you get it | Best for |
+|-----|--------------|----------------|----------|
+| Python CLI | `sonare` | `pip install libsonare` | Most users: batch analysis, feature summaries, editing, mastering, simple mixing |
+| Native CLI | `sonare-cli` | Release archive, or build from source with `BUILD_CLI=ON` | Lower-level utilities, synthesis, librosa-parity helpers, extra scene/export commands |
 
-Unless this page explicitly says "source-built C++ CLI", assume the command is available from the PyPI Python CLI.
+The native executable ships as `sonare-cli` in the FFmpeg-free Linux and macOS
+release archives (each with a SHA-256 checksum), so it installs alongside the
+Python `sonare` command instead of colliding with it. This page writes `sonare`
+in examples; substitute `sonare-cli` when running a native-only command.
+
+Both CLIs emit the same JSON for the same command, with `snake_case` keys
+throughout, and no longer round values before serializing — so a script can read
+either one.
+
+Unless this page explicitly says "native CLI", assume the command is available
+from the PyPI Python CLI.
 
 ::: tip Install via pip
 The `sonare` CLI is installed from PyPI with the Python package:
@@ -51,17 +61,25 @@ The default PyPI wheels decode WAV and MP3. Rebuild with FFmpeg enabled for
 direct M4A/AAC/FLAC/OGG/Opus decoding.
 :::
 
-::: info C++ CLI has even more commands
+::: info The native CLI carries extra commands
 The Python CLI already covers analysis, features, editing, mastering, and `mix`
-(see [More Commands](#more-commands) below). Building from source adds a C++ CLI
-with extra commands not in the PyPI package. See [Building from Source](/docs/installation#building-from-source).
+(see [More Commands](#more-commands) below). `sonare-cli` adds commands the PyPI
+package does not have. Get it from a release archive, or see
+[Building from Source](/docs/installation#building-from-source).
 
 - Analysis: `sections`, `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
-- Effects / transforms: `pitch-shift`, `time-stretch`, `preemphasis`, `deemphasis`, `trim-silence`, `split-silence`, `normalize`, `gain`, `fade`, `filter`, `resample`
+- Effects / transforms: `preemphasis`, `deemphasis`, `split-silence`, `gain`, `fade`, `filter`
 - Synthesis: `tone`, `chirp`, `clicks`
 - Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (short alias for `onset-envelope`), `fourier-tempogram`, `tempogram-ratio`
 - librosa utilities: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
+- Mixing: `mix-strip` (single-input channel strip; `mix` is kept as a deprecated alias)
 - Mastering: `mastering-pair-processor` (process a source/reference pair), `mastering-stereo-analyses`, `mastering-stereo-analyze`
+
+Going the other way, the Python CLI has commands the native CLI does not:
+`pitch-correct-timevarying`, `note-move`, `scale-quantize`, `master`,
+`mastering-chain`, `mastering-streaming`, `mastering-suggest`,
+`mastering-profile`, `mastering-presets`, `declip`, `midi-render`, and the
+scene-based `mix`.
 :::
 
 ## Overview
@@ -84,6 +102,16 @@ sonare <command> [options] <audio_file>
 | `--n-fft <int>` | FFT size (default: 2048) |
 | `--hop-length <int>` | Hop length (default: 512) |
 | `--n-mels <int>` | Number of Mel bands (default: 128) |
+
+`sonare <command> --help` lists only the options that command actually accepts,
+so the help is the authority for any one command. The DSP options above
+(`--n-fft`, `--hop-length`, `--n-mels`) are accepted only by the commands that
+consume them: passing one to a command that ignores it exits with the
+invalid-parameter code rather than being silently dropped.
+
+Colour is configured once at startup, so `NO_COLOR` in the environment — or
+sending stdout to a file or pipe instead of a terminal — disables ANSI escapes
+for the whole run.
 
 `--json` outputs compact, script-friendly summaries. Feature commands such as
 `mel` and `chroma` do not dump full matrix data from the Python CLI; they print
@@ -329,15 +357,15 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 | `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | `--wet`, `--suppression`, geometry and placement options, `--max-seconds` |
-| `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Source-built C++ CLI only. `--clip-threshold`, `--oversample` |
-| `sonare clipping music.wav` | Clipped sample and region detection | Source-built C++ CLI only. `--threshold`, `--min-region` |
-| `sonare dynamic-range music.wav` | Percentile RMS dynamic range | Source-built C++ CLI only. `--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
-| `sonare stereo left.wav --reference right.wav` | Stereo correlation and width from left/right files | Source-built C++ CLI only |
-| `sonare phase left.wav --reference right.wav` | Phase-scope summary from left/right files | Source-built C++ CLI only |
+| `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Native CLI only. `--clip-threshold`, `--oversample` |
+| `sonare clipping music.wav` | Clipped sample and region detection | Native CLI only. `--threshold`, `--min-region` |
+| `sonare dynamic-range music.wav` | Percentile RMS dynamic range | Native CLI only. `--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
+| `sonare stereo left.wav --reference right.wav` | Stereo correlation and width from left/right files | Native CLI only |
+| `sonare phase left.wav --reference right.wav` | Phase-scope summary from left/right files | Native CLI only |
 
 ### More features
 
-| Command | Python CLI | Source-built C++ CLI | Description |
+| Command | Python CLI | Native CLI | Description |
 |---------|------------|----------------------|-------------|
 | `sonare onset-envelope music.mp3` | Yes | Yes | Onset strength envelope |
 | `sonare onset-env music.mp3` | No | Yes | Short alias for onset strength envelope |
@@ -367,21 +395,28 @@ These transform audio and write a WAV with `-o`:
 | `sonare note-stretch take.wav -o out.wav` | Time-stretch a single note region | `--onset`, `--offset` (sample indices), `--ratio` (1.0) |
 | `sonare scale-quantize 68.7` | Quantize one MIDI value to a scale | `--root`, `--mode-mask`, `--reference-midi` |
 | `sonare voice-change vocal.wav -o out.wav` | Voice change (pitch + formant) | `--pitch-semitones` (0.0), `--formant-factor` (1.0) |
+| `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | Transpose without changing length | `--semitones` (**required**) |
+| `sonare time-stretch take.wav --rate 1.2 -o out.wav` | Change length without changing pitch | `--rate` (**required**) |
+| `sonare normalize mix.wav -o out.wav` | Peak or RMS normalization | `--mode peak\|rms`, `--target-db` |
+| `sonare trim-silence take.wav -o out.wav` | Trim leading/trailing silence | `--top-db` |
+| `sonare resample music.wav --target-sr 44100 -o out.wav` | Resample | `--target-sr` |
 
 The Python CLI provides the file-writing edit commands above, plus HPSS summaries.
 
-The source-built C++ CLI includes the shared edit commands and adds lower-level processing commands:
+::: warning Inert defaults are now errors
+`--semitones` and `--rate` used to default to values that made the command a
+silent no-op. They are required, and an unknown `--algorithm` for pitch shift or
+an unknown `--mode` for pitch correction is rejected instead of falling back.
+:::
 
-| C++ command | Required or notable option |
-|-------------|----------------------------|
-| `pitch-shift` | `--semitones` |
-| `time-stretch` | `--rate` |
-| `normalize` | `-o`; `--mode peak\|rms`, `--target-db` |
+The native CLI includes the shared edit commands and adds lower-level processing commands:
+
+| Native command | Required or notable option |
+|----------------|----------------------------|
 | `gain` | `-o`, `--gain-db` |
 | `fade` | `-o`, `--fade-in` and/or `--fade-out` |
 | `filter` | `-o`, `--type hp\|lp\|bp\|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch |
-| `resample` | `-o`, `--target-sr` |
-| `preemphasis`, `deemphasis`, `trim-silence`, `split-silence` | `-o` when writing a processed file |
+| `preemphasis`, `deemphasis`, `split-silence` | `-o` when writing a processed file |
 
 ### Realtime voice presets
 
@@ -398,10 +433,10 @@ Without realtime preset options, `voice-change` uses the simple pitch/formant he
 
 ### Synthesis
 
-The source-built C++ CLI can generate simple test signals:
+The native CLI can generate simple test signals:
 
-| C++ command | Required or notable option |
-|-------------|----------------------------|
+| Native command | Required or notable option |
+|----------------|----------------------------|
 | `tone -o tone.wav` | `--frequency`; optional `--sr`, `--duration`, `--phase`, `--amplitude` |
 | `chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr`, `--duration` |
 | `clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr`, `--length`, `--frequency`, `--click-duration` |
@@ -437,6 +472,33 @@ sonare version --json
 ```
 libsonare {{ wasmMeta.version }} (Python CLI)
 ```
+
+### doctor
+
+Report what this build can actually do — the first command to run when a feature
+seems missing or a file will not decode. Both CLIs have it, and it prints the
+same build-diagnostics report the bindings expose as `capabilities`.
+
+```bash
+sonare doctor
+sonare doctor --json
+```
+
+**Output:**
+```
+libsonare {{ wasmMeta.version }}
+  Library:              /path/to/libsonare.so
+  Platform:             linux-x86_64
+  ABI:                  project=…, engine=…
+  Features:             mastering=true, mixing=true, fx=true, ffmpeg=false
+  Decode (built-in):    wav, mp3
+  Decode (FFmpeg):      none
+  SIMD:                 …
+  Hardware concurrency: 8
+```
+
+An `ffmpeg=false` build explains an M4A/AAC/FLAC/OGG decode failure, and
+`mastering`/`mixing`/`fx` tell you which command groups were compiled in.
 
 ## Examples
 
@@ -479,7 +541,7 @@ done
 ### Mastering Workflow
 
 ::: info Command availability
-The PyPI Python CLI includes `mastering`, `master`, `mastering-processor`, `mastering-processors`, `mastering-chain`, `mastering-presets`, `eq`, `declip`, and the pair-analysis commands shown below. Source-built C++ CLI builds expose additional mastering commands: `mastering-pair-processor` for source/reference processing, plus stereo-analysis lists and runners. See [Building from Source](/docs/installation#building-from-source).
+The PyPI Python CLI includes `mastering`, `master`, `mastering-processor`, `mastering-processors`, `mastering-chain`, `mastering-presets`, `eq`, `declip`, and the pair-analysis commands shown below. The native CLI exposes additional mastering commands: `mastering-pair-processor` for source/reference processing, plus stereo-analysis lists and runners. See [Building from Source](/docs/installation#building-from-source).
 :::
 
 ```bash
@@ -518,7 +580,11 @@ sonare mastering-pair-analyze track.wav \
   --json > mastering-report.json
 ```
 
-For pair analysis, the CLI resamples the reference to the source sample rate before comparing, so the two files do not need to share a sample rate. For finer control over resampling or trimming before comparison, use the Python API.
+For pair analysis, the reference must already be at the source's sample rate: a
+mismatch is an error rather than a quiet resample, so a comparison never runs
+against silently rewritten audio. Resample the reference first (`sonare resample
+reference.wav --target-sr <sr> -o reference-matched.wav`), or use the Python API
+when you need finer control over resampling or trimming before comparison.
 
 The `/mastering` browser demo uses the same mastering processor families. Use the exported report from the demo as a starting point for CLI automation.
 
@@ -560,7 +626,7 @@ The preset, chain, and repair commands take an audio file and write a WAV with `
 | `sonare mastering-presets` | honors the global `--json` flag | Lists the available mastering preset names |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |
 
-Source-built C++ CLI only: `sonare mastering-pair-processor`, `sonare mastering-stereo-analyses`, and `sonare mastering-stereo-analyze`.
+Native CLI only: `sonare mastering-pair-processor`, `sonare mastering-stereo-analyses`, and `sonare mastering-stereo-analyze`.
 
 Related mastering guides: [Delivery targets](./glossary/mastering/delivery-targets.md), [Meter reading](./glossary/mastering/meter-reading.md), [Error recovery](./glossary/mastering/error-recovery.md).
 
@@ -599,16 +665,38 @@ sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 `mix` requires exactly one of `--scene` or `--preset`. Pass one `--input` per
 strip; rendering to a file needs `-o/--output`.
 
+The native CLI's single-input channel strip is a different command with a
+different job, and it is now called `mix-strip`:
+
+```bash
+sonare-cli mix-strip vocal.wav -o strip.wav \
+  --input-trim-db -2 --fader-db 1.5 --pan 0.2 --width 1.4
+```
+
+::: info `mix` → `mix-strip` on the native CLI
+The strip command was renamed to stop it reading as the scene mixer. The old
+`mix` name still works as a deprecated alias. It also loads and writes true
+stereo now, so `--width` actually changes the image — it was a no-op while the
+command was mono. The fourth-order filter path runs through filtfilt only under
+`--zero-phase`.
+:::
+
 Related: [Mixing Engine](./mixing.md).
 
 ### Project & MIDI Workflow
 
 The `sonare project` command group runs headless project and Standard MIDI File
-(SMF) / MIDI 2.0 workflows from JSON project files. `project bounce --synth
-<sine|saw|square|triangle>` routes the project's MIDI tracks through the built-in
-oscillator synth. The CLI's `--synth` accepts only those built-in waveforms; the
-NativeSynth preset catalog is enumerated from the bindings (`synthPresetNames()`),
-not from the CLI.
+(SMF) / MIDI 2.0 workflows from JSON project files. `project bounce --synth`
+routes the project's MIDI tracks through the built-in synth instead of clip
+audio, and the flag reads two ways:
+
+- **Bare `--synth`** follows the project's General MIDI program changes per
+  channel, with channel 10 routed through the GM drum-kit map. This is the
+  option to use when the project carries real GM programs.
+- **`--synth <preset>`** pins every destination to one fixed NativeSynth preset.
+  Run `sonare project synth-presets` to list the names.
+
+`project bounce` writes the channel count you ask for with `--channels`.
 
 ```bash
 # Print the project ABI version
@@ -621,23 +709,33 @@ sonare project new --sample-rate 48000 -o project.json
 sonare project validate --in project.json
 sonare project validate --in project.json -o canonical.json
 
+# Treat any repair diagnostic as a failure — for CI
+sonare project validate --in project.json --strict
+
 # Compile-check a project JSON (prints diagnostics; exits non-zero on errors; does not write a file)
 sonare project compile --in project.json
 
-# Render a project to a stereo WAV (multi-channel bounces write stereo output)
-sonare project bounce --in project.json --sample-rate 48000 -o bounce.wav
+# List the NativeSynth presets --synth accepts
+sonare project synth-presets
 
-# Render the project's MIDI tracks through the built-in oscillator synth instead of clip audio
-sonare project bounce --in project.json --synth saw -o synth-bounce.wav
+# Render a project to a WAV at the requested channel count
+sonare project bounce --in project.json --sample-rate 48000 --channels 2 -o bounce.wav
+
+# Render the MIDI tracks through the built-in synth, following GM programs
+sonare project bounce --in project.json --synth -o gm-bounce.wav
+
+# …or pin every destination to one preset
+sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 ```
 
 | Command | Description | Notable options |
 |---------|-------------|-----------------|
 | `sonare project abi` | Print the project ABI version | — |
 | `sonare project new` | Create an empty project JSON | `--sample-rate`, `-o` |
-| `sonare project validate` | Validate a project JSON; optionally write canonicalized JSON | `--in`, `-o` |
+| `sonare project validate` | Validate a project JSON; optionally write canonicalized JSON | `--in`, `-o`, `--strict` (any diagnostic fails) |
 | `sonare project compile` | Compile-check a project JSON; prints diagnostics, exits non-zero on errors (writes no file) | `--in`, `--json` |
-| `sonare project bounce` | Render a project to a stereo WAV | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
+| `sonare project synth-presets` | List the NativeSynth preset names `--synth` accepts | `--json` |
+| `sonare project bounce` | Render a project to a WAV at the requested channel count | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
 | `sonare project export-smf` | Export the project to a Standard MIDI File | `--in`, `-o` |
 | `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |
 | `sonare project export-midi2` | Export the project to a MIDI 2.0 Clip File | `--in`, `-o` |
@@ -652,17 +750,17 @@ sonare project import-smf --smf project.mid -o roundtrip.json
 sonare project export-midi2 --in project.json -o project.midi2
 sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 
-# Render a project's MIDI tracks through the built-in oscillator synth to a stereo WAV
-sonare project bounce --in project.json --synth triangle --sample-rate 48000 -o render.wav
+# Render a project's MIDI tracks through the built-in synth
+sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wav
 ```
 
-There is no separate MIDI-render command: MIDI-to-audio rendering is the
-`project bounce --synth <sine|saw|square|triangle>` path shown above, whose full
-option set is listed in the `sonare project` table earlier in this section.
+The Python CLI also has `midi-render`, a shorthand for `project bounce` that
+always takes the synth path — omit `--synth` there and it follows GM programs.
+The full option set is listed in the `sonare project` table earlier in this
+section.
 
-Bounce commands write stereo WAV output. SoundFont (SF2) and
-per-destination synth JSON are not wired through these CLI commands; use the
-Project API for SoundFont-backed bounces.
+SoundFont (SF2) and per-destination synth JSON are not wired through these CLI
+commands; use the Project API for SoundFont-backed bounces.
 
 Related: [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md),
 [Native Synth](./native-synth.md), [SoundFont Player](./soundfont-player.md).
@@ -694,7 +792,7 @@ Python CLI failures map to exit codes aligned with the C-ABI error codes (the sa
 | 9 | Invalid state |
 | 10 | Other error |
 
-For the Python CLI, set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The source-built C++ CLI is unaffected by this variable — it always uses the plain `0` (success) / `1` (error) convention.
+For the Python CLI, set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The native CLI is unaffected by this variable — it always uses the plain `0` (success) / `1` (error) convention.
 
 ## Performance Tips
 

@@ -27,6 +27,7 @@ await init();
 const caps = engineCapabilities();
 if (!caps.abiCompatible) throw new Error('Realtime engine ABI mismatch');
 
+// (sampleRate, maxBlockSize, commandCapacity?, telemetryCapacity?, maxChannels?)
 const engine = new RealtimeEngine(48000, 128);
 engine.setTempo(128);
 engine.setTimeSignature(4, 4);
@@ -39,6 +40,35 @@ const telemetry = engine.drainTelemetry();
 
 engine.stop();
 engine.destroy();
+```
+
+### Sizing prepare for the real channel count
+
+The constructor and `prepare(...)` take an optional trailing `maxChannels`.
+Prepare reserves the capture, instrument, PDC, and monitor planes for that count
+rather than always reserving 64, so a stereo host is not paying for 64 planes of
+scratch it will never touch.
+
+```typescript
+// A stereo host: reserve 2 planes, not 64.
+const engine = new RealtimeEngine(48000, 128, /*commandCapacity=*/undefined,
+                                  /*telemetryCapacity=*/undefined, /*maxChannels=*/2);
+
+// Or on an already-constructed engine:
+engine.prepare(48000, 128, undefined, undefined, 8);   // 7.1 target
+```
+
+Set it to the largest channel count you will actually render. Leaving it unset
+keeps the previous behaviour.
+
+### Control-only hosts
+
+A host that never calls `process()` — a headless controller, or an offline path
+that queues commands and reads state — can drain the command queue explicitly:
+
+```typescript
+engine.setTempo(140);
+engine.flushControlCommands();   // apply queued commands without rendering
 ```
 
 `getTransportState()` includes a musical playhead as well as the raw sample and PPQ positions. `barCount` is zero-based, while `beat` is one-based within that bar and `beatFraction` is in `[0, 1)`. A UI can therefore render a conventional bar:beat display without deriving it from PPQ itself:

@@ -119,7 +119,7 @@ The corresponding `*Request` TypeScript types are exported from the package.
 | `Audio.fromFile(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when built with FFmpeg |
 | `Audio.fromBuffer(samples, sampleRate?)` | Create from `Float32Array`; `sampleRate` defaults to `48000` |
 | `Audio.fromMemory(data)` | Decode encoded audio bytes with the same format support as `fromFile` |
-| `audio.getData()` | `Float32Array` of samples |
+| `audio.getData()` | Copy of the samples as a `Float32Array` |
 | `audio.getSampleRate()` | Sample rate (Hz) |
 | `audio.getDuration()` | Duration (seconds) |
 | `audio.getLength()` | Number of samples |
@@ -133,6 +133,14 @@ loudness, and mastering helpers as methods. For example, use
 A few focused helpers remain standalone functions, including
 `analyzeSections(...)`, `analyzeMelody(...)`, `cqt(...)`, and `vqt(...)`. For
 those, pass `audio.getData()` and `audio.getSampleRate()` explicitly.
+
+::: warning `getData()` hands back a copy
+Each call allocates a fresh `Float32Array`, so writing into the returned array
+does not edit the audio the instance holds — a later `audio.detectBpm()` or
+`audio.masteringChain(...)` still reads the original samples. To process edited
+samples, build a new instance with `Audio.fromBuffer(edited, sampleRate)`. Cache
+the array yourself if you read it in a loop. The same applies on WASM.
+:::
 
 ### Cleanup with `using` (Node 22+)
 

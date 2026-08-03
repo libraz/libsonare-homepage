@@ -88,7 +88,9 @@ Each line is a one-line gloss; follow the link for the authoritative explanation
 | Projects & arrangement | Audio/MIDI tracks and clips, undo/redo, takes/comping, warp, MIDI sequencing, SMF and MIDI 2.0 Clip File (`SMF2CLIP`) import/export, JSON save/load, and offline bounce | [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Recording and Takes](./recording-and-takes.md), [Realtime and Streaming](./realtime-streaming.md) |
 | Instruments & MIDI | Multi-engine synth with a GM fallback bank, GS-compatible SoundFont 2 player, live MIDI playback, and GS insertion effects (EFX) selected over live SysEx | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md#queueing-live-events) |
 | Inverse features | Mel to STFT/audio, MFCC to mel/audio, CQT/VQT magnitude to audio | [Inverse Features](./inverse-features.md) |
-| Utility / librosa parity | Frame/sample/time conversions, dB conversion, pre/de-emphasis, silence trim/split, frame/pad/fix helpers, peak pick, vector normalize, PCEN, tonnetz | [librosa Compatibility](./librosa-compatibility.md) |
+| Utility / librosa parity | Frame/sample/time conversions, dB conversion, pre/de-emphasis, silence trim/split, frame/pad/fix helpers, peak pick, vector normalize, PCEN, tonnetz, test-signal generation (tone / chirp / clicks) | [librosa Compatibility](./librosa-compatibility.md) |
+| Structure and segmentation | Cross-similarity, recurrence and lag matrices, path enhancement, sub-segmentation, agglomerative clustering, and note segmentation from an F0 track | [JavaScript API](./js-api.md#librosa-compatible-helpers), [Python API](./python-api.md#feature-extraction) |
+| Build introspection | Machine-readable capability catalog (processors, parameter bounds and defaults, preset lists) plus a build-diagnostics report | [JavaScript API](./js-api.md#capabilitycatalog), [Python API](./python-api.md#what-this-build-can-do), [CLI](./cli.md#doctor) |
 
 ## Implementation And Evidence Pages
 
