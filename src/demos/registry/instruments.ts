@@ -348,12 +348,12 @@ export const instrumentsDemos: SonareDemoDef[] = [
     source: { kind: 'generate', signal: 'triangle', freq: 220 },
     viz: 'waveform',
     title: {
-      en: 'The preset catalog — one note, every engine',
-      ja: 'プリセットカタログ — 1 音で全エンジンを',
+      en: 'Representative presets — one note, many engines',
+      ja: '代表的なプリセット — 1 音で多彩なエンジンを',
     },
     caption: {
-      en: 'The same single A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch is read from `synthPresetPatch(name)`, so the preset keeps its real character: subtractive, FM, Karplus-Strong, modal, drawbar organ, drums, piano, pipe organ, bowed string, reed, brass, or flute. Watch the envelope and waveshape change, then press play to hear how different one note can become.',
-      ja: '同じ A3 の 1 音を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込むため、減算、FM、Karplus-Strong、モーダル、ドローバーオルガン、ドラム、ピアノ、パイプオルガン、ボウイング弦、リード、金管、フルートといった本来の性格で鳴ります。エンベロープと波形の変化を見てから再生し、同じ 1 音がどれだけ変わるかを聞いてください。',
+      en: 'The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, pipe organ, bowed string, reed, brass, or flute. Change the preset, watch the envelope and waveshape, then press play to compare them.',
+      ja: '同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
     },
     params: [
       {
@@ -371,7 +371,7 @@ export const instrumentsDemos: SonareDemoDef[] = [
           { value: 'bell', label: { en: 'Bell (FM)', ja: 'ベル（FM）' } },
           {
             value: 'pluck',
-            label: { en: 'Pluck (Karplus-Strong)', ja: 'プラック（Karplus-Strong）' },
+            label: { en: 'Pluck (buzzing bridge)', ja: 'プラック（バズブリッジ）' },
           },
           { value: 'marimba', label: { en: 'Marimba (modal)', ja: 'マリンバ（モーダル）' } },
           { value: 'organ', label: { en: 'Organ (drawbar)', ja: 'オルガン（ドローバー）' } },

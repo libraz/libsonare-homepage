@@ -5,7 +5,7 @@
     "dropzone": {
       "title": "Drop audio file here",
       "subtitle": "or click to select",
-      "formats": "MP3, WAV, FLAC, OGG supported"
+      "formats": "WAV and MP3 built in; FLAC and OGG where your browser supports them"
     },
     "analyzing": "Analyzing...",
     "progress": "{stage} - {percent}%",
@@ -87,7 +87,7 @@
       "step4": "Step 4 - Where will you publish?",
       "step5": "Step 5 - Optional fine-tune",
       "dropTitle": "Drop audio here",
-      "dropSubtitle": "WAV, MP3, FLAC, or OGG. Your audio never leaves this browser.",
+      "dropSubtitle": "WAV and MP3 built in; FLAC and OGG where your browser supports them. Your audio never leaves this browser.",
       "customTarget": "Custom target",
       "showFineTune": "Show fine-tune controls",
       "hideFineTune": "Hide fine-tune controls",
@@ -515,7 +515,7 @@
       "qualityGuard": "Quality guard: rendering at {value} to avoid noise and clipping."
     },
     "errors": {
-      "loadFailed": "Could not load this audio file. Try WAV, MP3, FLAC, or OGG.",
+      "loadFailed": "Could not load this audio file. WAV and MP3 are built in; FLAC and OGG require browser decoder support.",
       "renderFailed": "Mastering failed. Try a shorter file or a lighter preset.",
       "referenceFailed": "Reference matching failed. Try a shorter source or reference file.",
       "noSavedPreset": "No saved chain preset was found in this browser.",

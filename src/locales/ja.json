@@ -5,7 +5,7 @@
     "dropzone": {
       "title": "音声ファイルをドロップ",
       "subtitle": "またはクリックして選択",
-      "formats": "MP3, WAV, FLAC, OGG対応"
+      "formats": "WAV・MP3 は内蔵対応、FLAC・OGG はブラウザがデコードできる場合に対応"
     },
     "analyzing": "解析中...",
     "progress": "{stage} - {percent}%",
@@ -87,7 +87,7 @@
       "step4": "ステップ 4 - 公開先を選択",
       "step5": "ステップ 5 - 必要に応じて微調整",
       "dropTitle": "ここに音源をドロップ",
-      "dropSubtitle": "WAV、MP3、FLAC、OGG 対応。音源はブラウザ外へ送信されません。",
+      "dropSubtitle": "WAV・MP3 は内蔵対応、FLAC・OGG はブラウザがデコードできる場合に対応。音源はブラウザ外へ送信されません。",
       "customTarget": "カスタムターゲット",
       "showFineTune": "微調整を表示",
       "hideFineTune": "微調整を隠す",
@@ -515,7 +515,7 @@
       "qualityGuard": "音質優先: ノイズや音割れを避けるため、実レンダーは {value} までに抑えます。"
     },
     "errors": {
-      "loadFailed": "音声ファイルを読み込めませんでした。WAV、MP3、FLAC、OGG を試してください。",
+      "loadFailed": "音声ファイルを読み込めませんでした。WAV・MP3 は内蔵対応ですが、FLAC・OGG にはブラウザのデコーダー対応が必要です。",
       "renderFailed": "マスタリングに失敗しました。短いファイル、または軽いプリセットで再試行してください。",
       "referenceFailed": "リファレンスマッチに失敗しました。短い音源またはリファレンスファイルで再試行してください。",
       "noSavedPreset": "このブラウザに保存済みのチェーン設定がありません。",
