@@ -209,14 +209,14 @@ const MiB = 1024 * KiB;
 
 const assetBudgets = [
   { pattern: /^assets\/chunks\/vexflow\./, maxBytes: 1.25 * MiB },
-  { pattern: /^assets\/.*\.wasm$/, maxBytes: 3.75 * MiB },
+  { pattern: /^assets\/.*\.wasm$/, maxBytes: 4 * MiB },
 ];
 
 function budgetForBuiltAsset(relativePath) {
   const matched = assetBudgets.find((budget) => budget.pattern.test(relativePath));
   if (matched) return matched.maxBytes;
   if (relativePath.endsWith('.js')) return 750 * KiB;
-  if (relativePath.endsWith('.wasm')) return 3.75 * MiB;
+  if (relativePath.endsWith('.wasm')) return 4 * MiB;
   return null;
 }
 

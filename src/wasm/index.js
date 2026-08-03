@@ -8,6 +8,7 @@ var ErrorCode = /* @__PURE__ */ ((ErrorCode2) => {
   ErrorCode2[ErrorCode2["OutOfMemory"] = 5] = "OutOfMemory";
   ErrorCode2[ErrorCode2["NotSupported"] = 6] = "NotSupported";
   ErrorCode2[ErrorCode2["InvalidState"] = 7] = "InvalidState";
+  ErrorCode2[ErrorCode2["Cancelled"] = 8] = "Cancelled";
   ErrorCode2[ErrorCode2["Unknown"] = 99] = "Unknown";
   return ErrorCode2;
 })(ErrorCode || {});
@@ -405,6 +406,8 @@ function flattenChainConfig(config) {
         out[path] = value;
       } else if (value !== null && typeof value === "object") {
         walk(value, path);
+      } else if (value !== void 0) {
+        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
       }
     }
   };
@@ -446,12 +449,14 @@ function masterAudioStereoRequest(requestOrLeft, right, sampleRate, preset, over
 }
 function masteringChain(samples, sampleRate = 22050, config = {}, onProgress) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, config, onProgress } : samples;
-  if (request.onProgress) {
+  if (request.onProgress || request.cancel) {
     return requireModule3().masteringChainWithProgress(
       request.samples,
       request.sampleRate ?? 22050,
       canonicalChainConfig(request.config ?? {}),
-      request.onProgress
+      request.onProgress ?? (() => {
+      }),
+      request.cancel ?? (() => false)
     );
   }
   return requireModule3().masteringChain(
@@ -465,13 +470,15 @@ function masteringChainStereo(left, right, sampleRate = 22050, config = {}, onPr
   if (request.left.length !== request.right.length) {
     throw new Error("Stereo channel lengths must match.");
   }
-  if (request.onProgress) {
+  if (request.onProgress || request.cancel) {
     return requireModule3().masteringChainStereoWithProgress(
       request.left,
       request.right,
       request.sampleRate ?? 22050,
       canonicalChainConfig(request.config ?? {}),
-      request.onProgress
+      request.onProgress ?? (() => {
+      }),
+      request.cancel ?? (() => false)
     );
   }
   return requireModule3().masteringChainStereo(
@@ -490,7 +497,8 @@ function masteringChainWithProgress(samples, sampleRate = 22050, config = {}, on
     request.samples,
     request.sampleRate ?? 22050,
     canonicalChainConfig(request.config ?? {}),
-    request.onProgress
+    request.onProgress,
+    request.cancel ?? (() => false)
   );
 }
 function masteringChainStereoWithProgress(left, right, sampleRate = 22050, config = {}, onProgress) {
@@ -506,7 +514,8 @@ function masteringChainStereoWithProgress(left, right, sampleRate = 22050, confi
     request.right,
     request.sampleRate ?? 22050,
     canonicalChainConfig(request.config ?? {}),
-    request.onProgress
+    request.onProgress,
+    request.cancel ?? (() => false)
   );
 }
 function masteringPresetNames() {
@@ -515,13 +524,15 @@ function masteringPresetNames() {
 function masterAudio(samples, sampleRate = 22050, presetName = "pop", overrides = {}, onProgress) {
   const request = masterAudioRequest(samples, sampleRate, presetName, overrides, onProgress);
   const flat = flattenChainConfig(request.overrides ?? {});
-  if (request.onProgress) {
+  if (request.onProgress || request.cancel) {
     return requireModule3().masterAudioWithProgress(
       request.preset ?? "pop",
       request.samples,
       request.sampleRate ?? 22050,
       flat,
-      request.onProgress
+      request.onProgress ?? (() => {
+      }),
+      request.cancel ?? (() => false)
     );
   }
   return requireModule3().masterAudio(
@@ -544,14 +555,16 @@ function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName 
   if (request.left.length !== request.right.length) {
     throw new Error("Stereo channel lengths must match.");
   }
-  if (request.onProgress) {
+  if (request.onProgress || request.cancel) {
     return requireModule3().masterAudioStereoWithProgress(
       request.preset ?? "pop",
       request.left,
       request.right,
       request.sampleRate ?? 22050,
       flat,
-      request.onProgress
+      request.onProgress ?? (() => {
+      }),
+      request.cancel ?? (() => false)
     );
   }
   return requireModule3().masterAudioStereo(
@@ -572,7 +585,8 @@ function masterAudioWithProgress(samples, sampleRate = 22050, presetName = "pop"
     request.samples,
     request.sampleRate ?? 22050,
     flattenChainConfig(request.overrides ?? {}),
-    request.onProgress
+    request.onProgress,
+    request.cancel ?? (() => false)
   );
 }
 function masterAudioStereoWithProgress(left, right = void 0, sampleRate = 22050, presetName = "pop", overrides = null, onProgress) {
@@ -596,7 +610,8 @@ function masterAudioStereoWithProgress(left, right = void 0, sampleRate = 22050,
     request.right,
     request.sampleRate ?? 22050,
     flattenChainConfig(request.overrides ?? {}),
-    request.onProgress
+    request.onProgress,
+    request.cancel ?? (() => false)
   );
 }
 
@@ -759,7 +774,10 @@ function masteringDynamicsCompressor(samples, sampleRate, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   assertSamples("masteringDynamicsCompressor", request.samples, request.validate !== false);
   const detector = typeof request.detector === "string" ? COMPRESSOR_DETECTOR_MAP[request.detector] : request.detector;
-  const opts = { ...request };
+  const opts = Object.assign(
+    Object.create(Object.getPrototypeOf(request)),
+    request
+  );
   if (detector !== void 0) {
     opts.detector = detector;
   }
@@ -847,6 +865,36 @@ function mixStereo(leftChannels, rightChannels, sampleRate = 48e3, options = {})
 // src/feature_core.ts
 function requireModule8() {
   return getSonareModule();
+}
+function tone(frequency = 440, sampleRate = 22050, duration = 1, phase = 0, amplitude = 1) {
+  const request = typeof frequency === "number" ? { frequency, sampleRate, duration, phase, amplitude } : frequency;
+  return requireModule8().tone(
+    request.frequency ?? 440,
+    request.sampleRate ?? 22050,
+    request.duration ?? 1,
+    request.phase ?? 0,
+    request.amplitude ?? 1
+  );
+}
+function chirp(fmin = 440, fmax = 880, sampleRate = 22050, duration = 1, linear = true) {
+  const request = typeof fmin === "number" ? { fmin, fmax, sampleRate, duration, linear } : fmin;
+  return requireModule8().chirp(
+    request.fmin ?? 440,
+    request.fmax ?? 880,
+    request.sampleRate ?? 22050,
+    request.duration ?? 1,
+    request.linear ?? true
+  );
+}
+function clicks(times, sampleRate = 22050, length = 0, frequency = 1e3, clickDuration = 0.1) {
+  const request = times instanceof Float32Array ? { times, sampleRate, length, frequency, clickDuration } : times;
+  return requireModule8().clicks(
+    request.times,
+    request.sampleRate ?? 22050,
+    request.length ?? 0,
+    request.frequency ?? 1e3,
+    request.clickDuration ?? 0.1
+  );
 }
 function hzToMel(hz) {
   return requireModule8().hzToMel(hz);
@@ -944,6 +992,12 @@ function fixFrames(frames, xMin = 0, xMax = -1, pad = true) {
   }
   return requireModule8().fixFrames(frames, xMin, xMax, pad);
 }
+function onsetBacktrack(events, energy) {
+  if (!(events instanceof Int32Array)) {
+    return onsetBacktrack(events.events, events.energy);
+  }
+  return requireModule8().onsetBacktrack(events, energy);
+}
 function peakPick(values, preMax, postMax, preAvg, postAvg, delta, wait) {
   if (!(values instanceof Float32Array)) {
     const r = values;
@@ -988,12 +1042,28 @@ function tonnetz(chromagram, nChroma, nFrames) {
   }
   return requireModule8().tonnetz(chromagram, nChroma, nFrames);
 }
-function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation") {
+function tempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, mode = "autocorrelation", center = true, norm = true) {
   if (!(onsetEnvelope2 instanceof Float32Array)) {
     const r = onsetEnvelope2;
-    return tempogram(r.onsetEnvelope, r.sampleRate, r.hopLength, r.winLength, r.mode);
+    return tempogram(
+      r.onsetEnvelope,
+      r.sampleRate,
+      r.hopLength,
+      r.winLength,
+      r.mode,
+      r.center,
+      r.norm
+    );
   }
-  return requireModule8().tempogram(onsetEnvelope2, sampleRate, hopLength, winLength, mode);
+  return requireModule8().tempogram(
+    onsetEnvelope2,
+    sampleRate,
+    hopLength,
+    winLength,
+    mode,
+    center,
+    norm
+  );
 }
 function cyclicTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, bpmMin = 60, nBins = 60) {
   if (!(onsetEnvelope2 instanceof Float32Array)) {
@@ -1327,7 +1397,7 @@ function onsetStrengthMulti(samples, sampleRate = 22050, nFft = 2048, hopLength 
   validatePositiveIntegers("onsetStrengthMulti", { nFft, hopLength, nMels, nBands });
   return requireModule9().onsetStrengthMulti(samples, sampleRate, nFft, hopLength, nMels, nBands);
 }
-function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, options = {}) {
+function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, winLength = 384, center = true, norm = true, options = {}) {
   if (!(onsetEnvelope2 instanceof Float32Array)) {
     const request = onsetEnvelope2;
     return fourierTempogram(
@@ -1335,13 +1405,22 @@ function fourierTempogram(onsetEnvelope2, sampleRate = 22050, hopLength = 512, w
       request.sampleRate,
       request.hopLength,
       request.winLength,
+      request.center,
+      request.norm,
       request
     );
   }
   assertSampleRate("fourierTempogram", sampleRate);
   assertSamples("fourierTempogram", onsetEnvelope2, options.validate !== false, "onsetEnvelope");
   validatePositiveIntegers("fourierTempogram", { hopLength, winLength });
-  return requireModule9().fourierTempogram(onsetEnvelope2, sampleRate, hopLength, winLength);
+  return requireModule9().fourierTempogram(
+    onsetEnvelope2,
+    sampleRate,
+    hopLength,
+    winLength,
+    center,
+    norm
+  );
 }
 function tempogramRatio(tempogramData, winLength = 384, sampleRate = 22050, hopLength = 512, factors, options = {}) {
   if (!(tempogramData instanceof Float32Array)) {
@@ -1391,6 +1470,21 @@ function shortTermLufs(samples, sampleRate = 22050, options = {}) {
 // src/feature_pitch.ts
 function requireModule10() {
   return getSonareModule();
+}
+function piptrack(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, fmin = 150, fmax = 4e3, threshold = 0.1) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return piptrack(
+      request.samples,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.fmin,
+      request.fmax,
+      request.threshold
+    );
+  }
+  return requireModule10().piptrack(samples, sampleRate, nFft, hopLength, fmin, fmax, threshold);
 }
 function pitchYin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512, fmin = 65, fmax = 2093, threshold = 0.1, fillNa = false) {
   if (!(samples instanceof Float32Array)) {
@@ -1442,6 +1536,13 @@ function pitchPyin(samples, sampleRate = 22050, frameLength = 2048, hopLength = 
     fillNa
   );
 }
+function noteSegments(request) {
+  return requireModule10().noteSegments(request.f0Hz, request.voicedProb, request.frameRate, {
+    segmentationThresholdCents: request.segmentationThresholdCents,
+    minNoteMs: request.minNoteMs,
+    referenceHz: request.referenceHz
+  });
+}
 
 // src/feature_resample.ts
 function requireModule11() {
@@ -1457,6 +1558,15 @@ function resample(samples, srcSr, targetSr) {
 // src/feature_spectral.ts
 function requireModule12() {
   return getSonareModule();
+}
+function validateSegmentMatrix(fnName, data, rows, cols, dataName) {
+  assertPositiveInteger(fnName, rows, "rows");
+  assertPositiveInteger(fnName, cols, "cols");
+  assertSamples(fnName, data, true, dataName);
+  const expected = rows * cols;
+  if (!Number.isSafeInteger(expected) || data.length !== expected) {
+    throw new RangeError(`${fnName}: ${dataName} length must equal rows * cols`);
+  }
 }
 function spectralCentroid(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
   if (!(samples instanceof Float32Array)) {
@@ -1602,11 +1712,17 @@ function ebur128LoudnessRange(samples, sampleRate = 22050) {
   }
   return requireModule12().ebur128LoudnessRange(samples, sampleRate);
 }
-function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512) {
+function spectralBandwidth(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, p = 2) {
   if (!(samples instanceof Float32Array)) {
-    return spectralBandwidth(samples.samples, samples.sampleRate, samples.nFft, samples.hopLength);
+    return spectralBandwidth(
+      samples.samples,
+      samples.sampleRate,
+      samples.nFft,
+      samples.hopLength,
+      samples.p
+    );
   }
-  return requireModule12().spectralBandwidth(samples, sampleRate, nFft, hopLength);
+  return requireModule12().spectralBandwidth(samples, sampleRate, nFft, hopLength, p);
 }
 function spectralRolloff(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, rollPercent = 0.85) {
   if (!(samples instanceof Float32Array)) {
@@ -1626,6 +1742,18 @@ function spectralFlatness(samples, sampleRate = 22050, nFft = 2048, hopLength = 
   }
   return requireModule12().spectralFlatness(samples, sampleRate, nFft, hopLength);
 }
+function spectralFlux(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, lag = 1) {
+  if (!(samples instanceof Float32Array)) {
+    return spectralFlux(
+      samples.samples,
+      samples.sampleRate,
+      samples.nFft,
+      samples.hopLength,
+      samples.lag
+    );
+  }
+  return requireModule12().spectralFlux(samples, sampleRate, nFft, hopLength, lag);
+}
 function zeroCrossingRate(samples, sampleRate = 22050, frameLength = 2048, hopLength = 512) {
   if (!(samples instanceof Float32Array)) {
     return zeroCrossingRate(
@@ -1642,6 +1770,107 @@ function rmsEnergy(samples, sampleRate = 22050, frameLength = 2048, hopLength = 
     return rmsEnergy(samples.samples, samples.sampleRate, samples.frameLength, samples.hopLength);
   }
   return requireModule12().rmsEnergy(samples, sampleRate, frameLength, hopLength);
+}
+function segmentCrossSimilarity(request) {
+  validateSegmentMatrix("segmentCrossSimilarity", request.x, request.xRows, request.xCols, "x");
+  validateSegmentMatrix("segmentCrossSimilarity", request.y, request.yRows, request.yCols, "y");
+  if (request.xRows !== request.yRows) {
+    throw new RangeError("segmentCrossSimilarity: feature dimensions must match");
+  }
+  assertNonNegativeInteger("segmentCrossSimilarity", request.k ?? 0, "k");
+  return requireModule12().segmentCrossSimilarity(
+    request.x,
+    request.xRows,
+    request.xCols,
+    request.y,
+    request.yRows,
+    request.yCols,
+    request.k ?? 0,
+    request.metric ?? "cosine",
+    request.mode ?? "connectivity"
+  );
+}
+function segmentRecurrenceMatrix(request) {
+  validateSegmentMatrix(
+    "segmentRecurrenceMatrix",
+    request.data,
+    request.rows,
+    request.cols,
+    "data"
+  );
+  assertNonNegativeInteger("segmentRecurrenceMatrix", request.k ?? 0, "k");
+  assertNonNegativeInteger("segmentRecurrenceMatrix", request.width ?? 1, "width");
+  return requireModule12().segmentRecurrenceMatrix(
+    request.data,
+    request.rows,
+    request.cols,
+    request.k ?? 0,
+    request.width ?? 1,
+    request.sym ?? false,
+    request.metric ?? "euclidean",
+    request.mode ?? "connectivity"
+  );
+}
+function segmentRecurrenceToLag(request) {
+  validateSegmentMatrix(
+    "segmentRecurrenceToLag",
+    request.recurrence,
+    request.n,
+    request.n,
+    "recurrence"
+  );
+  return requireModule12().segmentRecurrenceToLag(
+    request.recurrence,
+    request.n,
+    request.pad ?? false
+  );
+}
+function segmentLagToRecurrence(request) {
+  validateSegmentMatrix("segmentLagToRecurrence", request.lag, request.rows, request.lags, "lag");
+  return requireModule12().segmentLagToRecurrence(request.lag, request.rows, request.lags);
+}
+function segmentSubsegment(request) {
+  validateSegmentMatrix("segmentSubsegment", request.data, request.rows, request.cols, "data");
+  assertPositiveInteger("segmentSubsegment", request.nSegments ?? 4, "nSegments");
+  return requireModule12().segmentSubsegment(
+    request.data,
+    request.rows,
+    request.cols,
+    request.boundaries,
+    request.nSegments ?? 4
+  );
+}
+function segmentAgglomerative(request) {
+  validateSegmentMatrix("segmentAgglomerative", request.data, request.rows, request.cols, "data");
+  assertPositiveInteger("segmentAgglomerative", request.k, "k");
+  return requireModule12().segmentAgglomerative(
+    request.data,
+    request.rows,
+    request.cols,
+    request.k,
+    request.linkage ?? "average"
+  );
+}
+function segmentPathEnhance(request) {
+  validateSegmentMatrix(
+    "segmentPathEnhance",
+    request.recurrence,
+    request.n,
+    request.n,
+    "recurrence"
+  );
+  assertPositiveInteger("segmentPathEnhance", request.win, "win");
+  assertPositiveInteger("segmentPathEnhance", request.maxRatio ?? 2, "maxRatio");
+  assertNonNegativeInteger("segmentPathEnhance", request.minRatio ?? 0, "minRatio");
+  assertPositiveInteger("segmentPathEnhance", request.nFilters ?? 7, "nFilters");
+  return requireModule12().segmentPathEnhance(
+    request.recurrence,
+    request.n,
+    request.win,
+    request.maxRatio ?? 2,
+    request.minRatio ?? 0,
+    request.nFilters ?? 7
+  );
 }
 
 // src/feature_spectrogram.ts
@@ -1821,6 +2050,53 @@ function mfcc(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, nMels =
     lifter
   );
 }
+function melDelta(features, nFeatures, nFrames, width = 9) {
+  const request = features instanceof Float32Array ? { features, nFeatures: nFeatures ?? 0, nFrames: nFrames ?? 0, width } : features;
+  assertPositiveInteger("melDelta", request.nFeatures, "nFeatures");
+  assertPositiveInteger("melDelta", request.nFrames, "nFrames");
+  assertPositiveInteger("melDelta", request.width ?? 9, "width");
+  if ((request.width ?? 9) < 3 || (request.width ?? 9) % 2 === 0) {
+    throw new RangeError("melDelta: width must be an odd integer of at least 3");
+  }
+  if (request.features.length !== request.nFeatures * request.nFrames) {
+    throw new RangeError("melDelta: feature matrix length must equal nFeatures * nFrames");
+  }
+  return requireModule13().melDelta(
+    request.features,
+    request.nFeatures,
+    request.nFrames,
+    request.width ?? 9
+  );
+}
+function reassignedSpectrogram(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, refPower = 1e-6, fillNan = false) {
+  if (!(samples instanceof Float32Array)) {
+    const request = samples;
+    return reassignedSpectrogram(
+      request.samples,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.refPower,
+      request.fillNan
+    );
+  }
+  assertSamples("reassignedSpectrogram", samples, true);
+  assertSampleRate("reassignedSpectrogram", sampleRate);
+  assertPositiveInteger("reassignedSpectrogram", nFft, "nFft");
+  assertPositiveInteger("reassignedSpectrogram", hopLength, "hopLength");
+  assertFiniteScalar("reassignedSpectrogram", refPower, "refPower");
+  if (refPower < 0) {
+    throw new RangeError("reassignedSpectrogram: refPower must be non-negative");
+  }
+  return requireModule13().reassignedSpectrogram(
+    samples,
+    sampleRate,
+    nFft,
+    hopLength,
+    refPower,
+    fillNan
+  );
+}
 function melToStft(melPower, nMels = 0, nFrames = 0, sampleRate = 22050, nFft = 2048, fmin = 0, fmax = 0, htk = false, options = {}) {
   if (!(melPower instanceof Float32Array)) {
     const request = melPower;
@@ -1874,6 +2150,35 @@ function melToAudio(melPower, nMels = 0, nFrames = 0, sampleRate = 22050, nFft =
     fmax,
     nIter,
     htk
+  );
+}
+function griffinLim(magnitude, nBins = 0, nFrames = 0, sampleRate = 22050, nFft = 2048, hopLength = 512, nIter = 32, momentum = 0.99, options = {}) {
+  if (!(magnitude instanceof Float32Array)) {
+    const request = magnitude;
+    return griffinLim(
+      request.magnitude,
+      request.nBins,
+      request.nFrames,
+      request.sampleRate,
+      request.nFft,
+      request.hopLength,
+      request.nIter,
+      request.momentum,
+      request
+    );
+  }
+  assertSampleRate("griffinLim", sampleRate);
+  validateMatrix("griffinLim", magnitude, nBins, nFrames, "magnitude", "nBins", options);
+  validatePositiveIntegers2("griffinLim", { nFft, hopLength, nIter });
+  return requireModule13().griffinLim(
+    magnitude,
+    nBins,
+    nFrames,
+    sampleRate,
+    nFft,
+    hopLength,
+    nIter,
+    momentum
   );
 }
 function mfccToMel(mfccCoefficients, nMfcc = 0, nFrames = 0, nMels = 128, lifter = 0, options = {}) {
@@ -2134,6 +2439,11 @@ function convertAnalysisResult(wasm) {
   return {
     bpm: wasm.bpm,
     bpmConfidence: wasm.bpmConfidence,
+    bpmCandidates: wasm.bpmCandidates.map((candidate) => ({
+      value: candidate.value,
+      confidence: candidate.confidence,
+      relation: candidate.relation
+    })),
     key: {
       root: wasm.key.root,
       mode: wasm.key.mode,
@@ -2142,6 +2452,7 @@ function convertAnalysisResult(wasm) {
       shortName: wasm.key.shortName
     },
     timeSignature: wasm.timeSignature,
+    timeSignatureCandidates: wasm.timeSignatureCandidates,
     beatTimes,
     beats: wasm.beats,
     chords: wasm.chords.map((c) => ({
@@ -2232,7 +2543,7 @@ function detectKeyCandidates(samples, sampleRate = 22050, options = {}) {
 function detectOnsets(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   validateAnalysisInput("detectOnsets", request.samples, request.sampleRate ?? 22050, request);
-  return requireModule14().detectOnsets(request.samples, request.sampleRate ?? 22050);
+  return requireModule14().detectOnsets(request.samples, request.sampleRate ?? 22050, request);
 }
 function detectBeats(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
@@ -2364,7 +2675,9 @@ function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
   const result = requireModule14().analyzeWithProgress(
     request.samples,
     request.sampleRate ?? 22050,
-    request.onProgress
+    request.onProgress ?? (() => {
+    }),
+    request.cancel ?? (() => false)
   );
   return convertAnalysisResult(result);
 }
@@ -2788,7 +3101,12 @@ self.onmessage = async (event) => {
 `;
 function createOpfsClipPageWorker() {
   const blob = new Blob([opfsClipPageWorkerSource], { type: "text/javascript" });
-  return new Worker(URL.createObjectURL(blob));
+  const url = URL.createObjectURL(blob);
+  try {
+    return new Worker(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 function createOpfsClipPageProvider(engine, options) {
   if (options.numChannels <= 0 || options.numSamples <= 0 || options.pageFrames <= 0) {
@@ -2828,6 +3146,7 @@ function createOpfsClipPageProvider(engine, options) {
     }
     try {
       provider.supply(response.pageIndex, channels);
+      options.onPageSupplied?.(response.pageIndex, channels);
     } catch {
       entry.resolve(false);
       return;
@@ -2875,6 +3194,13 @@ function createOpfsClipPageProvider(engine, options) {
     supplyRequest(request) {
       return supplyPage(Math.floor(request.sample / options.pageFrames));
     },
+    clearPage(pageIndex) {
+      if (closed) {
+        return;
+      }
+      provider.clear(pageIndex);
+      options.onPageCleared?.(pageIndex);
+    },
     close() {
       if (closed) {
         return;
@@ -2886,6 +3212,7 @@ function createOpfsClipPageProvider(engine, options) {
       }
       pending.clear();
       provider.destroy();
+      options.onClose?.();
       if (ownsWorker) {
         worker.terminate();
       }
@@ -2963,7 +3290,10 @@ var ClipPageStreamer = class {
       if (!state) {
         continue;
       }
-      const page = Math.floor(request.sample / state.source.pageFrames);
+      const page = request.pageIndex !== void 0 ? request.pageIndex : Math.floor((request.sample ?? Number.NaN) / state.source.pageFrames);
+      if (!Number.isInteger(page) || page < 0 || page > state.lastPage) {
+        continue;
+      }
       frontiers.set(request.clipId, page);
     }
     const fetches = [];
@@ -2998,7 +3328,7 @@ var ClipPageStreamer = class {
     const high = Math.min(state.lastPage, frontier + this.readAheadPages);
     for (const page of state.resident.keys()) {
       if (page < low || page > high) {
-        state.source.binding.provider.clear(page);
+        this.clearPage(state, page);
         state.resident.delete(page);
       }
     }
@@ -3013,7 +3343,7 @@ var ClipPageStreamer = class {
         state.source.binding.supplyPage(pageIndex).then(
           (ok) => {
             if (state.generation !== generation) {
-              state.source.binding.provider.clear(pageIndex);
+              this.clearPage(state, pageIndex);
             } else if (!ok && state.resident.get(pageIndex) === generation) {
               state.resident.delete(pageIndex);
             }
@@ -3034,12 +3364,28 @@ var ClipPageStreamer = class {
     state.generation += 1;
     state.lastFrontier = null;
     for (const page of state.resident.keys()) {
-      state.source.binding.provider.clear(page);
+      this.clearPage(state, page);
     }
     state.resident.clear();
   }
+  clearPage(state, pageIndex) {
+    if (state.source.binding.clearPage) {
+      state.source.binding.clearPage(pageIndex);
+    } else {
+      state.source.binding.provider.clear(pageIndex);
+    }
+  }
 };
-async function attachOpfsClipStream(streamer, engine, options) {
+async function attachOpfsClipStream(streamerOrEngine, engineOrOptions, maybeOptions) {
+  if (!(streamerOrEngine instanceof ClipPageStreamer)) {
+    return streamerOrEngine.attachOpfsClipStream(engineOrOptions);
+  }
+  const streamer = streamerOrEngine;
+  const engine = engineOrOptions;
+  const options = maybeOptions;
+  if (!options) {
+    throw new Error("attachOpfsClipStream requires options.");
+  }
   const { clipId, primePages = 1, ...providerOptions } = options;
   const binding = createOpfsClipPageProvider(engine, providerOptions);
   const lastPage = Math.ceil(providerOptions.numSamples / providerOptions.pageFrames) - 1;
@@ -3095,7 +3441,11 @@ async function bindMicrophoneInput(context, engine, options = {}) {
 function assertOversampleFactor(fnName, factor) {
   const normalized = factor === 0 ? 4 : factor;
   if (!Number.isInteger(normalized) || normalized < 1 || normalized > 16 || (normalized & normalized - 1) !== 0) {
-    throw new RangeError(`${fnName}: oversampleFactor must be 0 or a power of two from 1 to 16`);
+    throw new SonareError(
+      4 /* InvalidParameter */,
+      "InvalidParameter",
+      `${fnName}: oversampleFactor must be 0 or a power of two from 1 to 16`
+    );
   }
 }
 function requireModule15() {
@@ -3275,6 +3625,61 @@ function waveformPeakPyramid(samples, channels, options = {}) {
   return requireModule15().waveformPeakPyramid(request.samples, request.channels, levels);
 }
 
+// src/codes.ts
+function resolveEnumOrdinal(value, values, enumName) {
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || !Object.values(values).includes(value)) {
+      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+    }
+    return value;
+  }
+  if (typeof value === "string") {
+    const ordinal = values[value];
+    if (ordinal !== void 0) {
+      return ordinal;
+    }
+  }
+  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+}
+var AUTOMATION_CURVE_VALUES = {
+  linear: 0,
+  exponential: 1,
+  hold: 2,
+  "s-curve": 3
+};
+var PAN_LAW_VALUES = {
+  const3dB: 0,
+  "const4.5dB": 1,
+  const6dB: 2,
+  linear0dB: 3
+};
+var PAN_MODE_VALUES = {
+  balance: 0,
+  pan: 0,
+  stereopan: 1,
+  "stereo-pan": 1,
+  dualpan: 2,
+  "dual-pan": 2
+};
+var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
+var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+function automationCurveCode(curve) {
+  return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
+}
+function panLawCode(panLaw) {
+  return resolveEnumOrdinal(panLaw, PAN_LAW_VALUES, "pan law");
+}
+function panModeCode(panMode) {
+  const normalized = typeof panMode === "string" ? panMode.replace(/_/g, "-").toLowerCase() : panMode;
+  return resolveEnumOrdinal(normalized, PAN_MODE_VALUES, "pan mode");
+}
+function meterTapCode(tap) {
+  return resolveEnumOrdinal(tap, METER_TAP_VALUES, "meter tap");
+}
+function sendTimingCode(timing) {
+  return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
+}
+
 // src/project_internal.ts
 function projectModule() {
   const candidate = getSonareModule();
@@ -3341,37 +3746,17 @@ function assertProjectMidiEvents(fnName, events) {
   });
 }
 function projectTrackKindValue(kind) {
-  if (kind === void 0 || kind === "audio") {
-    return 0;
-  }
-  if (kind === "midi") {
-    return 1;
-  }
-  if (kind === "aux") {
-    return 2;
-  }
-  return kind;
+  return resolveEnumOrdinal(kind ?? "audio", { audio: 0, midi: 1, aux: 2 }, "project track kind");
 }
 function projectWarpModeValue(mode) {
-  if (mode === void 0 || mode === "off") {
-    return 0;
-  }
-  if (mode === "repitch") {
-    return 1;
-  }
-  if (mode === "tempo-sync") {
-    return 2;
-  }
-  return mode;
+  return resolveEnumOrdinal(
+    mode ?? "off",
+    { off: 0, repitch: 1, "tempo-sync": 2 },
+    "project warp mode"
+  );
 }
 function projectLoopModeValue(mode) {
-  if (mode === void 0 || mode === "off") {
-    return 0;
-  }
-  if (mode === "loop") {
-    return 1;
-  }
-  return mode;
+  return resolveEnumOrdinal(mode ?? "off", { off: 0, loop: 1 }, "project loop mode");
 }
 
 // src/project_class.ts
@@ -3544,6 +3929,16 @@ var Project = class _Project {
   addClip(desc) {
     return this.native.addClip(desc);
   }
+  /** Import host-separated PCM through the normal audio-track/clip path. */
+  importExternalStems(request) {
+    return this.native.importExternalStems({
+      ...request,
+      stems: request.stems.map((stem) => ({
+        ...stem,
+        layout: stem.layout === "mono" ? 1 : stem.layout === "stereo" ? 2 : stem.layout
+      }))
+    });
+  }
   /** Split captured loop-recording audio into takes and add one clip. */
   addLoopRecordingTakes(desc) {
     return this.native.addLoopRecordingTakes(desc);
@@ -3588,7 +3983,11 @@ var Project = class _Project {
    * Route a track's MIDI to host-instrument `destinationId` (0 = default). The
    * compiler stamps every MIDI clip on the track with this id so the engine
    * dispatches its events to the instrument registered for that destination.
-   * Routes through an undoable edit command.
+   * Routes through an undoable edit command. Builtin, NativeSynth, and SF2
+   * instruments retain source-track provenance inside a shared destination
+   * voice pool. With only zero-latency instruments bound, live lanes and
+   * channel-strip bounces remain aligned. Configure one live lane per source
+   * track that needs strip processing.
    */
   setTrackMidiDestination(trackId, destinationId) {
     this.native.setTrackMidiDestination(trackId, destinationId);
@@ -3825,6 +4224,14 @@ var Project = class _Project {
   setClipFade(clipId, fadeIn = {}, fadeOut = {}) {
     this.native.setClipFade(clipId, fadeIn, fadeOut);
   }
+  /** Audio source ids that need decoded PCM after deserialization. */
+  unresolvedAudioSourceIds() {
+    return this.native.unresolvedAudioSourceIds();
+  }
+  /** Register decoded interleaved PCM for an existing audio source (undoable). */
+  setSourceAudio(sourceId, audio, channels, sampleRate) {
+    this.native.setSourceAudio(sourceId, audio, channels, sampleRate);
+  }
   /** Replace a clip's take list and active take id (undoable). */
   setClipTakes(clipId, takes, activeTakeId = 0) {
     this.native.setClipTakes(clipId, takes, activeTakeId);
@@ -3866,23 +4273,23 @@ var Project = class _Project {
   setTrackRoute(trackId, channelStripRef, outputTarget) {
     this.native.setTrackRoute(trackId, channelStripRef ?? "", outputTarget ?? "");
   }
-  /** Append an automation lane to a track; returns the lane index (undoable). */
+  /** Append an automation lane; returns its stable target parameter id (undoable). */
   addAutomationLane(trackId, desc) {
     return this.native.addAutomationLane(trackId, {
       targetParamId: desc.targetParamId,
       points: desc.points
     });
   }
-  /** Replace an existing automation lane in place (undoable). */
-  editAutomationLane(trackId, laneIndex, desc) {
-    this.native.editAutomationLane(trackId, laneIndex, {
+  /** Replace the lane identified by its stable target parameter id (undoable). */
+  editAutomationLane(trackId, targetParamId, desc) {
+    this.native.editAutomationLane(trackId, targetParamId, {
       targetParamId: desc.targetParamId,
       points: desc.points
     });
   }
-  /** Remove an automation lane from a track (undoable). */
-  removeAutomationLane(trackId, laneIndex) {
-    this.native.removeAutomationLane(trackId, laneIndex);
+  /** Remove the lane identified by its stable target parameter id (undoable). */
+  removeAutomationLane(trackId, targetParamId) {
+    this.native.removeAutomationLane(trackId, targetParamId);
   }
   /** Replace the project's key annotation stream (undoable). */
   annotateKeys(keys) {
@@ -3945,6 +4352,18 @@ var Project = class _Project {
   /** Read a project marker by index (0-based, in stored order). */
   markerByIndex(index) {
     return this.native.markerByIndex(index);
+  }
+  /** Read a stored project track by 0-based index. */
+  trackByIndex(index) {
+    return this.native.trackByIndex(index);
+  }
+  /** Read a stored project clip by 0-based index. */
+  clipByIndex(index) {
+    return this.native.clipByIndex(index);
+  }
+  /** Read a stored project source by 0-based index. */
+  sourceByIndex(index) {
+    return this.native.sourceByIndex(index);
   }
   /** Number of markers in the project. */
   markerCount() {
@@ -4019,6 +4438,7 @@ var MarkerKind = {
   cuePoint: 3,
   keySignature: 4
 };
+var BUILTIN_SYNTH_WAVEFORMS = ["sine", "saw", "sawtooth", "square", "triangle"];
 var SYNTH_ENGINE_MODES = [
   "default",
   "subtractive",
@@ -4081,82 +4501,6 @@ var SYNTH_MOD_DESTINATIONS = [
   "pan-units"
 ];
 
-// src/codes.ts
-function automationCurveCode(curve) {
-  switch (curve) {
-    case "linear":
-      return 0;
-    case "exponential":
-      return 1;
-    case "hold":
-      return 2;
-    case "s-curve":
-      return 3;
-    default:
-      throw new Error(`Invalid automation curve: ${curve}`);
-  }
-}
-function panLawCode(panLaw) {
-  if (typeof panLaw === "number") {
-    return panLaw;
-  }
-  switch (panLaw) {
-    case "const3dB":
-      return 0;
-    case "const4.5dB":
-      return 1;
-    case "const6dB":
-      return 2;
-    case "linear0dB":
-      return 3;
-    default:
-      throw new Error(`Invalid pan law: ${panLaw}`);
-  }
-}
-function panModeCode(panMode) {
-  if (typeof panMode === "number") {
-    return panMode;
-  }
-  switch (panMode) {
-    case "balance":
-      return 0;
-    case "stereoPan":
-    case "stereo-pan":
-      return 1;
-    case "dualPan":
-    case "dual-pan":
-      return 2;
-    default:
-      throw new Error(`Invalid pan mode: ${panMode}`);
-  }
-}
-function meterTapCode(tap) {
-  if (typeof tap === "number") {
-    return tap;
-  }
-  switch (tap) {
-    case "preFader":
-      return 0;
-    case "postFader":
-      return 1;
-    default:
-      throw new Error(`Invalid meter tap: ${tap}`);
-  }
-}
-function sendTimingCode(timing) {
-  if (typeof timing === "number") {
-    return timing;
-  }
-  switch (timing) {
-    case "postFader":
-      return 0;
-    case "preFader":
-      return 1;
-    default:
-      throw new Error(`Invalid send timing: ${timing}`);
-  }
-}
-
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
 function engineCapabilities() {
@@ -4175,23 +4519,30 @@ function engineCapabilities() {
   };
 }
 var RealtimeEngine = class {
-  constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024) {
+  constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
     const module2 = getSonareModule();
-    const capabilities = engineCapabilities();
-    if (!capabilities.abiCompatible) {
+    const capabilities2 = engineCapabilities();
+    if (!capabilities2.abiCompatible) {
       throw new Error(
-        `Engine ABI mismatch: wasm=${capabilities.engineAbiVersion}, expected=${capabilities.expectedEngineAbiVersion}`
+        `Engine ABI mismatch: wasm=${capabilities2.engineAbiVersion}, expected=${capabilities2.expectedEngineAbiVersion}`
       );
     }
     this.native = new module2.RealtimeEngine(
       sampleRate,
       maxBlockSize,
       commandCapacity,
-      telemetryCapacity
+      telemetryCapacity,
+      maxChannels
     );
   }
-  prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024) {
-    this.native.prepare(sampleRate, maxBlockSize, commandCapacity, telemetryCapacity);
+  prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
+    this.native.prepareWithChannels(
+      sampleRate,
+      maxBlockSize,
+      commandCapacity,
+      telemetryCapacity,
+      maxChannels
+    );
   }
   /** Queue a sample-accurate parameter change (engine kSetParam). */
   setParameter(paramId, value, renderFrame = -1) {
@@ -4317,6 +4668,9 @@ var RealtimeEngine = class {
   externalMidiDroppedCount() {
     return this.native.externalMidiDroppedCount();
   }
+  externalMidiPendingCount() {
+    return this.native.externalMidiPendingCount();
+  }
   /**
    * Drain queued external-MIDI events, already lowered to MIDI 1.0 byte
    * messages ready to write to a Web MIDI output port. Call once per audio
@@ -4326,6 +4680,25 @@ var RealtimeEngine = class {
    */
   drainExternalMidi(maxRecords = 1024) {
     return this.native.drainExternalMidi(maxRecords);
+  }
+  /** Scalar, allocation-free external-MIDI drain for AudioWorklet SAB output. */
+  popExternalMidiToScratch() {
+    return this.native.popExternalMidiToScratch();
+  }
+  externalMidiScratchDestinationId() {
+    return this.native.externalMidiScratchDestinationId();
+  }
+  externalMidiScratchRenderFrame() {
+    return this.native.externalMidiScratchRenderFrame();
+  }
+  externalMidiScratchByteWord() {
+    return this.native.externalMidiScratchByteWord();
+  }
+  externalMidiScratchByteCount() {
+    return this.native.externalMidiScratchByteCount();
+  }
+  consumeExternalMidiScratch() {
+    this.native.consumeExternalMidiScratch();
   }
   pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples = 0) {
     this.native.pushMidiInputNoteOn(group, channel, note, velocity, portTimeSamples);
@@ -4350,6 +4723,10 @@ var RealtimeEngine = class {
    */
   pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
     this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  }
+  /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
+  pushMidiUmp(destinationId, word0, renderFrame = -1) {
+    this.native.pushMidiUmp(destinationId, word0, renderFrame);
   }
   /**
    * Queue an immediate (live) MIDI SysEx frame to a MIDI destination. `data` is
@@ -4395,6 +4772,10 @@ var RealtimeEngine = class {
    */
   settleParameters() {
     this.native.settleParameters();
+  }
+  /** Drains queued commands on an offline/control-only engine immediately. */
+  flushControlCommands() {
+    this.native.flushControlCommands();
   }
   seekPpq(ppq, renderFrame = -1) {
     this.native.seekPpq(ppq, renderFrame);
@@ -4650,6 +5031,23 @@ var RealtimeEngine = class {
   popClipPageRequest() {
     return this.native.popClipPageRequest();
   }
+  /**
+   * Moves one native request into the binding's persistent scalar scratch.
+   * This avoids creating an embind JS object in AudioWorklet process().
+   */
+  popClipPageRequestToScratch() {
+    return this.native.popClipPageRequestToScratch();
+  }
+  clipPageRequestScratchClipId() {
+    return this.native.clipPageRequestScratchClipId();
+  }
+  clipPageRequestScratchSample() {
+    return this.native.clipPageRequestScratchSample();
+  }
+  /** Cumulative page misses dropped because the native bounded request queue was full. */
+  clipPageRequestOverflowCount() {
+    return this.native.clipPageRequestOverflowCount();
+  }
   setCaptureBuffer(numChannels, capacityFrames) {
     this.native.setCaptureBuffer(numChannels, capacityFrames);
   }
@@ -4678,6 +5076,10 @@ var RealtimeEngine = class {
   capturedAudio() {
     return this.native.capturedAudio();
   }
+  /**
+   * Renders in place, adding engine output to `channels`. Zero each plane first
+   * when it contains no upstream input.
+   */
   process(channels) {
     return this.native.process(channels);
   }
@@ -4700,6 +5102,7 @@ var RealtimeEngine = class {
   }
   /**
    * Runs the engine in place over the prepared per-channel scratch buffers.
+   * Zero each active span first when it contains no upstream input.
    * Allocation-free: safe to call on the AudioWorklet render thread after
    * `prepareChannels`.
    */
@@ -4720,6 +5123,42 @@ var RealtimeEngine = class {
   }
   drainTelemetry(maxRecords = 1024) {
     return this.native.drainTelemetry(maxRecords);
+  }
+  popTelemetryToScratch() {
+    return this.native.popTelemetryToScratch();
+  }
+  telemetryScratchType() {
+    return this.native.telemetryScratchType();
+  }
+  telemetryScratchError() {
+    return this.native.telemetryScratchError();
+  }
+  telemetryScratchRenderFrame() {
+    return Number(this.native.telemetryScratchRenderFrame());
+  }
+  telemetryScratchTimelineSample() {
+    return Number(this.native.telemetryScratchTimelineSample());
+  }
+  telemetryScratchAudibleTimelineSample() {
+    return Number(this.native.telemetryScratchAudibleTimelineSample());
+  }
+  telemetryScratchGraphLatencySamplesQ8() {
+    return this.native.telemetryScratchGraphLatencySamplesQ8();
+  }
+  telemetryScratchValue() {
+    return this.native.telemetryScratchValue();
+  }
+  popMeterTelemetryToScratch() {
+    return this.native.popMeterTelemetryToScratch();
+  }
+  meterScratchTargetId() {
+    return this.native.meterScratchTargetId();
+  }
+  meterScratchRenderFrame() {
+    return Number(this.native.meterScratchRenderFrame());
+  }
+  meterScratchValue(field) {
+    return this.native.meterScratchValue(field);
   }
   drainMeterTelemetry(maxRecords = 1024) {
     return this.native.drainMeterTelemetry(maxRecords);
@@ -4747,6 +5186,30 @@ var RealtimeEngine = class {
   /** Drains pending spectrum + vectorscope snapshots (per mix target). */
   drainScopeTelemetry(maxRecords = 1024) {
     return this.native.drainScopeTelemetry(maxRecords);
+  }
+  popScopeTelemetryToScratch() {
+    return this.native.popScopeTelemetryToScratch();
+  }
+  scopeScratchTargetId() {
+    return this.native.scopeScratchTargetId();
+  }
+  scopeScratchRenderFrame() {
+    return Number(this.native.scopeScratchRenderFrame());
+  }
+  scopeScratchBandCount() {
+    return this.native.scopeScratchBandCount();
+  }
+  scopeScratchBand(index) {
+    return this.native.scopeScratchBand(index);
+  }
+  scopeScratchPointCount() {
+    return this.native.scopeScratchPointCount();
+  }
+  scopeScratchPointLeft(index) {
+    return this.native.scopeScratchPointLeft(index);
+  }
+  scopeScratchPointRight(index) {
+    return this.native.scopeScratchPointRight(index);
   }
   destroy() {
     this.native.delete();
@@ -5449,65 +5912,18 @@ var Mixer = class _Mixer {
 };
 
 // src/realtime_voice_changer.ts
-function isFlatVoiceChangerPod(config) {
-  return typeof config === "object" && config !== null && "retuneSemitones" in config;
-}
-function flatVoiceChangerPodToNested(pod) {
-  return {
-    inputGainDb: pod.inputGainDb,
-    outputGainDb: pod.outputGainDb,
-    wetMix: pod.wetMix,
-    retune: { semitones: pod.retuneSemitones, mix: pod.retuneMix, grainSize: pod.retuneGrainSize },
-    formant: {
-      factor: pod.formantFactor,
-      amount: pod.formantAmount,
-      body: pod.formantBody,
-      brightness: pod.formantBrightness,
-      nasal: pod.formantNasal
-    },
-    eq: {
-      highpassHz: pod.eqHighpassHz,
-      bodyDb: pod.eqBodyDb,
-      presenceDb: pod.eqPresenceDb,
-      airDb: pod.eqAirDb
-    },
-    gate: {
-      thresholdDb: pod.gateThresholdDb,
-      attackMs: pod.gateAttackMs,
-      releaseMs: pod.gateReleaseMs,
-      rangeDb: pod.gateRangeDb
-    },
-    compressor: {
-      thresholdDb: pod.compressorThresholdDb,
-      ratio: pod.compressorRatio,
-      attackMs: pod.compressorAttackMs,
-      releaseMs: pod.compressorReleaseMs,
-      makeupGainDb: pod.compressorMakeupGainDb
-    },
-    deesser: {
-      frequencyHz: pod.deesserFrequencyHz,
-      thresholdDb: pod.deesserThresholdDb,
-      ratio: pod.deesserRatio,
-      rangeDb: pod.deesserRangeDb
-    },
-    reverb: {
-      mix: pod.reverbMix,
-      timeMs: pod.reverbTimeMs,
-      damping: pod.reverbDamping,
-      seed: pod.reverbSeed
-    },
-    limiter: {
-      ceilingDb: pod.limiterCeilingDb,
-      releaseMs: pod.limiterReleaseMs,
-      enableIspLimiter: pod.limiterEnableIspLimiter,
-      ispCeilingDbtp: pod.limiterIspCeilingDbtp
-    }
-  };
-}
 var RealtimeVoiceChanger = class {
-  constructor(config = "neutral-monitor") {
+  /**
+   * Creates a voice changer. Supplying `sampleRate` prepares it immediately,
+   * matching the Node and Python constructors; omitting it preserves the
+   * explicit {@link prepare} lifecycle for callers that configure later.
+   */
+  constructor(config = "neutral-monitor", sampleRate, maxBlockSize = 128, channels = 1) {
     const module2 = getSonareModule();
     this.changer = module2.createRealtimeVoiceChanger(config);
+    if (sampleRate !== void 0) {
+      this.changer.prepare(sampleRate, maxBlockSize, channels);
+    }
   }
   prepare(sampleRate, maxBlockSize = 128, channels = 1) {
     this.changer.prepare(sampleRate, maxBlockSize, channels);
@@ -5516,14 +5932,28 @@ var RealtimeVoiceChanger = class {
     this.changer.reset();
   }
   setConfig(config) {
-    const resolved = isFlatVoiceChangerPod(config) ? flatVoiceChangerPodToNested(config) : config;
-    this.changer.setConfig(resolved);
+    this.changer.setConfig(config);
+  }
+  /**
+   * Apply a flat, pre-normalized config without JSON serialization. Intended
+   * for AudioWorklet control messages whose sender prepared the POD on the
+   * main thread.
+   */
+  setPodConfig(config) {
+    this.changer.setPodConfig(config);
   }
   configJson() {
     return this.changer.configJson();
   }
   latencySamples() {
     return this.changer.latencySamples();
+  }
+  /**
+   * Monotonically increases whenever {@link prepare} can replace the native
+   * scratch buffers. Cached WASM heap views must be reacquired after it changes.
+   */
+  bufferGeneration() {
+    return this.changer.bufferGeneration();
   }
   processMono(samples) {
     return this.changer.processMono(samples);
@@ -5601,10 +6031,12 @@ var RealtimeVoiceChanger = class {
   createRealtimeMonoBuffer(numSamples) {
     let input = this.getMonoInputBuffer(numSamples);
     let output = this.getMonoOutputBuffer(numSamples);
+    let generation = this.bufferGeneration();
     const reacquireIfDetached = () => {
-      if (input.byteLength === 0 || output.byteLength === 0) {
+      if (generation !== this.bufferGeneration() || input.byteLength === 0 || output.byteLength === 0) {
         input = this.getMonoInputBuffer(numSamples);
         output = this.getMonoOutputBuffer(numSamples);
+        generation = this.bufferGeneration();
       }
     };
     return {
@@ -5626,10 +6058,12 @@ var RealtimeVoiceChanger = class {
   createRealtimeInterleavedBuffer(numFrames, numChannels) {
     let input = this.getInterleavedInputBuffer(numFrames, numChannels);
     let output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+    let generation = this.bufferGeneration();
     const reacquireIfDetached = () => {
-      if (input.byteLength === 0 || output.byteLength === 0) {
+      if (generation !== this.bufferGeneration() || input.byteLength === 0 || output.byteLength === 0) {
         input = this.getInterleavedInputBuffer(numFrames, numChannels);
         output = this.getInterleavedOutputBuffer(numFrames, numChannels);
+        generation = this.bufferGeneration();
       }
     };
     return {
@@ -5656,15 +6090,17 @@ var RealtimeVoiceChanger = class {
    */
   createRealtimePlanarBuffer(numFrames, numChannels) {
     let channels = [];
+    let generation = this.bufferGeneration();
     const acquire = () => {
       channels = [];
       for (let ch = 0; ch < numChannels; ch++) {
         channels.push(this.getPlanarChannelBuffer(ch, numFrames));
       }
+      generation = this.bufferGeneration();
     };
     acquire();
     const reacquireIfDetached = () => {
-      if ((channels[0]?.byteLength ?? 0) === 0) {
+      if (generation !== this.bufferGeneration() || (channels[0]?.byteLength ?? 0) === 0) {
         acquire();
       }
     };
@@ -5739,6 +6175,19 @@ var StreamingMasteringChain = class {
       throw new Error("Stereo channel lengths must match.");
     }
     return this.chain.processStereo(left, right);
+  }
+  /**
+   * Emit delayed audio and finite processor tails after the final mono block.
+   * Call until this returns an empty array. The initial `latencySamples()`
+   * samples of the concatenated stream are delayed and should be discarded for
+   * time-aligned output.
+   */
+  flushMono() {
+    return this.chain.flushMono();
+  }
+  /** Stereo counterpart of {@link flushMono}. */
+  flushStereo() {
+    return this.chain.flushStereo();
   }
   /** Reset all processor state without rebuilding. */
   reset() {
@@ -6131,6 +6580,214 @@ function iterInputs(access) {
   return access.inputs instanceof Map ? access.inputs.entries() : access.inputs;
 }
 
+// src/worker_client.ts
+var OfflineWorkerTask = class {
+  constructor(result, cancelRequest) {
+    this.result = result;
+    this.cancelRequest = cancelRequest;
+  }
+  cancel() {
+    this.cancelRequest();
+  }
+  // biome-ignore lint/suspicious/noThenProperty: this intentionally implements PromiseLike so callers can await a task and cancel it.
+  then(onfulfilled, onrejected) {
+    return this.result.then(onfulfilled, onrejected);
+  }
+  catch(onrejected) {
+    return this.result.catch(onrejected);
+  }
+  finally(onfinally) {
+    return this.result.finally(onfinally);
+  }
+};
+function cloneForWorker(value, copy, transfers, transferred = /* @__PURE__ */ new Set()) {
+  if (value instanceof Float32Array) {
+    const samples = copy ? value.slice() : value;
+    const buffer = samples.buffer;
+    if (!(buffer instanceof ArrayBuffer)) {
+      throw new TypeError(
+        "OfflineWorkerClient only transfers Float32Array values backed by ArrayBuffer"
+      );
+    }
+    if (!transferred.has(buffer)) {
+      transferred.add(buffer);
+      transfers.push(buffer);
+    }
+    return samples;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneForWorker(item, copy, transfers, transferred));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        cloneForWorker(item, copy, transfers, transferred)
+      ])
+    );
+  }
+  return value;
+}
+function cancellationFlag() {
+  if (typeof SharedArrayBuffer === "undefined") {
+    return void 0;
+  }
+  return new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+}
+function workerError(message) {
+  if (message.error.code !== void 0) {
+    return new SonareError(
+      message.error.code,
+      message.error.codeName ?? "Unknown",
+      message.error.message
+    );
+  }
+  const error = new Error(message.error.message);
+  error.name = message.error.name;
+  return error;
+}
+var OfflineWorkerClient = class {
+  constructor(options = {}) {
+    this.pending = /* @__PURE__ */ new Map();
+    this.nextId = 1;
+    this.closed = false;
+    this.usesEventTarget = false;
+    this.onMessage = (event) => {
+      const message = event.data;
+      const pending = this.pending.get(message.id);
+      if (!pending) {
+        return;
+      }
+      if (message.type === "sonare:offline-progress") {
+        pending.onProgress?.({ progress: message.progress, stage: message.stage });
+        return;
+      }
+      this.pending.delete(message.id);
+      if (message.type === "sonare:offline-result") {
+        pending.resolve(message.result);
+        return;
+      }
+      pending.reject(workerError(message));
+    };
+    this.onError = (event) => {
+      const error = new Error(event.message || "Offline Worker failed");
+      for (const { reject } of this.pending.values()) {
+        reject(error);
+      }
+      this.pending.clear();
+    };
+    this.onNodeMessage = (data) => {
+      this.onMessage({ data });
+    };
+    this.onNodeError = (error) => {
+      this.onError(
+        error instanceof Error ? { message: error.message } : { message: String(error) }
+      );
+    };
+    this.ownsWorker = options.worker === void 0 || options.terminateWorkerOnDispose === true;
+    if (options.worker) {
+      this.worker = options.worker;
+    } else {
+      if (!options.workerFactory && typeof Worker === "undefined") {
+        throw new Error("OfflineWorkerClient requires a browser Worker implementation");
+      }
+      const url = options.workerUrl === void 0 ? new URL("./worker.js", import.meta.url) : new URL(options.workerUrl, import.meta.url);
+      this.worker = options.workerFactory?.(url) ?? new Worker(url, { type: "module", name: "sonare-offline" });
+    }
+    if (this.worker.addEventListener) {
+      this.usesEventTarget = true;
+      this.worker.addEventListener("message", this.onMessage);
+      this.worker.addEventListener("error", this.onError);
+    } else if (this.worker.on) {
+      this.worker.on("message", this.onNodeMessage);
+      this.worker.on("error", this.onNodeError);
+    } else {
+      throw new TypeError("OfflineWorkerClient requires Worker event listeners");
+    }
+  }
+  /** Dispatch full music analysis to the Worker. */
+  analyze(request, options) {
+    return this.call("analyze", request, options);
+  }
+  /** Dispatch BPM detection to the Worker. */
+  detectBpm(request, options) {
+    return this.call("detectBpm", request, options);
+  }
+  /** Dispatch key detection to the Worker. */
+  detectKey(request, options) {
+    return this.call("detectKey", request, options);
+  }
+  /** Dispatch chord detection to the Worker. */
+  detectChords(request, options) {
+    return this.call("detectChords", request, options);
+  }
+  /** Dispatch mono preset mastering to the Worker. */
+  masterAudio(request, options) {
+    return this.call("masterAudio", request, options);
+  }
+  /** Dispatch stereo preset mastering to the Worker. */
+  masterAudioStereo(request, options) {
+    return this.call("masterAudioStereo", request, options);
+  }
+  /** Stop accepting calls, reject outstanding work, and release the Worker if owned. */
+  dispose() {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    if (this.usesEventTarget) {
+      this.worker.removeEventListener?.("message", this.onMessage);
+      this.worker.removeEventListener?.("error", this.onError);
+    } else {
+      this.worker.off?.("message", this.onNodeMessage);
+      this.worker.off?.("error", this.onNodeError);
+    }
+    for (const { reject } of this.pending.values()) {
+      reject(new Error("OfflineWorkerClient was disposed"));
+    }
+    this.pending.clear();
+    if (this.ownsWorker) {
+      this.worker.terminate();
+    }
+  }
+  call(operation, request, options = {}) {
+    if (this.closed) {
+      throw new Error("OfflineWorkerClient was disposed");
+    }
+    const id = this.nextId++;
+    const transfers = [];
+    const preparedRequest = cloneForWorker(request, options.copy === true, transfers);
+    const cancelFlag = cancellationFlag();
+    const result = new Promise((resolve, reject) => {
+      this.pending.set(id, {
+        resolve: (value) => resolve(value),
+        reject,
+        onProgress: options.onProgress,
+        cancelFlag
+      });
+    });
+    this.worker.postMessage(
+      {
+        type: "sonare:offline-run",
+        id,
+        operation,
+        request: preparedRequest,
+        ...cancelFlag ? { cancelBuffer: cancelFlag.buffer } : {}
+      },
+      transfers
+    );
+    return new OfflineWorkerTask(result, () => {
+      if (!this.pending.has(id)) {
+        return;
+      }
+      if (cancelFlag) {
+        Atomics.store(cancelFlag, 0, 1);
+      }
+      this.worker.postMessage({ type: "sonare:offline-cancel", id });
+    });
+  }
+};
+
 // src/index.ts
 var module = null;
 var initPromise = null;
@@ -6162,6 +6819,18 @@ function version() {
   }
   return module.version();
 }
+function capabilities() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return module.capabilities();
+}
+function capabilityCatalog() {
+  if (!module) {
+    throw new Error("Module not initialized. Call init() first.");
+  }
+  return JSON.parse(module.capabilityCatalog());
+}
 function abiVersion() {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
@@ -6190,6 +6859,9 @@ var VOICE_PRESET_ORDINALS = [
 ];
 function resolveVoicePresetOrdinal(preset) {
   if (typeof preset === "number") {
+    if (!Number.isSafeInteger(preset) || preset < 0 || preset >= VOICE_PRESET_ORDINALS.length) {
+      throw new RangeError(`Unknown voice-character preset ordinal: ${String(preset)}`);
+    }
     return preset;
   }
   const ordinal = VOICE_PRESET_ORDINALS.indexOf(preset);
@@ -6212,7 +6884,9 @@ function realtimeVoiceChangerPresetConfig(preset) {
 }
 export {
   Audio,
+  BUILTIN_SYNTH_WAVEFORMS,
   ChordQuality,
+  ClipPageProvider,
   ClipPageStreamer,
   EXPECTED_ENGINE_ABI_VERSION,
   EXPECTED_PROJECT_ABI_VERSION,
@@ -6221,6 +6895,8 @@ export {
   MarkerKind,
   Mixer,
   Mode,
+  OfflineWorkerClient,
+  OfflineWorkerTask,
   PitchClass as Pitch,
   PitchClass,
   Project,
@@ -6254,10 +6930,14 @@ export {
   bassChroma,
   bindMicrophoneInput,
   bindWebMidi,
+  capabilities,
+  capabilityCatalog,
+  chirp,
   chordFunctionalAnalysis,
   chroma,
   chromaCens,
   chromaCqt,
+  clicks,
   cqt,
   cqtToAudio,
   createOpfsClipPageProvider,
@@ -6287,6 +6967,7 @@ export {
   frameSignal,
   framesToSamples,
   framesToTime,
+  griffinLim,
   harmonic,
   hasFfmpegSupport,
   hpss,
@@ -6337,6 +7018,7 @@ export {
   masteringStereoAnalysisNames,
   masteringStereoAnalyze,
   masteringStreamingPreview,
+  melDelta,
   melSpectrogram,
   melToAudio,
   melToHz,
@@ -6369,8 +7051,10 @@ export {
   nnlsChroma,
   normalize,
   noteMove,
+  noteSegments,
   noteStretch,
   noteToHz,
+  onsetBacktrack,
   onsetEnvelope,
   onsetStrengthMulti,
   opfsClipPageWorkerSource,
@@ -6379,6 +7063,7 @@ export {
   peakPick,
   percussive,
   phaseVocoder,
+  piptrack,
   pitchCorrectTimevarying,
   pitchCorrectToMidi,
   pitchCorrectToMidiTimevarying,
@@ -6395,6 +7080,7 @@ export {
   realtimeVoiceChangerPresetConfig,
   realtimeVoiceChangerPresetJson,
   realtimeVoiceChangerPresetNames,
+  reassignedSpectrogram,
   remix,
   resample,
   rmsEnergy,
@@ -6403,12 +7089,20 @@ export {
   scaleCorrectionSemitones,
   scalePitchClassEnabled,
   scaleQuantizeMidi,
+  segmentAgglomerative,
+  segmentCrossSimilarity,
+  segmentLagToRecurrence,
+  segmentPathEnhance,
+  segmentRecurrenceMatrix,
+  segmentRecurrenceToLag,
+  segmentSubsegment,
   shortTermLufs,
   spectralBandwidth,
   spectralCentroid,
   spectralContrast,
   spectralEdit,
   spectralFlatness,
+  spectralFlux,
   spectralRolloff,
   splitSilence,
   stft,
@@ -6422,6 +7116,7 @@ export {
   tempogramRatio,
   timeStretch,
   timeToFrames,
+  tone,
   tonnetz,
   trim,
   trimSilence,

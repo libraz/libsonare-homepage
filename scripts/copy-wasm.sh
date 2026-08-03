@@ -11,8 +11,11 @@ DEST_DIR="src/wasm"
 # runtime (sonare-rt, C-ABI-only build selectable via runtimeTarget).
 WASM_FILES=("sonare.wasm" "sonare.js" "sonare-rt.wasm" "sonare-rt.js" "sonare-rt-module.js")
 # tsup bundle: index.* is the high-level API, worklet.* is the AudioWorklet
-# entry that index.d.ts re-exports its types from.
-JS_FILES=("index.js" "index.d.ts" "worklet.js" "worklet.d.ts")
+# entry that index.d.ts re-exports its types from, and worker.* is the offline
+# Worker entry `OfflineWorkerClient` resolves with
+# `new URL('./worker.js', import.meta.url)` — copying it keeps that specifier
+# resolvable instead of leaving a dangling runtime URL in the bundle.
+JS_FILES=("index.js" "index.d.ts" "worklet.js" "worklet.d.ts" "worker.js" "worker.d.ts")
 JS_CHUNK_GLOB="chunk-*.js"
 
 # Obsolete sub-module files from the previous tsc-based layout — removed after
