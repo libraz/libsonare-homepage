@@ -21,7 +21,7 @@ Most Python APIs accept raw sample arrays plus `sample_rate`. Raw samples are th
 For a first script, keep it this small:
 
 1. `audio = sonare.Audio.from_file("song.mp3")`;
-2. call `sonare.detect_bpm(audio.samples, audio.sample_rate)` or `sonare.analyze(audio.samples, audio.sample_rate)`;
+2. call `sonare.detect_bpm(audio.data, audio.sample_rate)` or `sonare.analyze(audio.data, audio.sample_rate)`;
 3. print the result or save it as JSON.
 
 ::: tip Start with `Audio` or call functions directly
@@ -65,17 +65,16 @@ pip install libsonare
 
 This also installs the `sonare` CLI command. See [CLI Reference](/docs/cli) for details.
 
-Default PyPI wheels decode WAV and MP3. Use `libsonare.has_ffmpeg_support()` to
-check the loaded build. If you need direct M4A/AAC/FLAC/OGG/Opus decoding,
-install from source with FFmpeg enabled:
+Default PyPI wheels decode WAV and MP3. Use `libsonare.has_ffmpeg_support()` to check the loaded build. If you need direct M4A/AAC/FLAC/OGG/Opus decoding, clone the repository, build an FFmpeg-enabled wheel, and install that wheel:
 
 ```bash
-SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
+git clone https://github.com/libraz/libsonare.git
+cd libsonare
+SONARE_FFMPEG=1 bash bindings/python/build_wheel.sh
+python3 -m pip install bindings/python/dist/*.whl
 ```
 
-FFmpeg-enabled builds require FFmpeg development libraries. On macOS, install
-them with `brew install ffmpeg`. On Debian/Ubuntu, install `libavformat-dev
-libavcodec-dev libavutil-dev libswresample-dev`.
+FFmpeg-enabled builds require FFmpeg development libraries. On macOS, install them with `brew install ffmpeg`. On Debian/Ubuntu, install `libavformat-dev libavcodec-dev libavutil-dev libswresample-dev`.
 
 ### Building from Source (alternative)
 
@@ -163,7 +162,7 @@ try:
     result = sonare.master_audio(
         samples,
         sample_rate,
-        preset="pop",
+        preset_name="pop",
         on_progress=lambda p, stage: print(stage, p),
         cancel=stop.is_set,
     )
@@ -330,7 +329,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | Downbeat timestamps (seconds) |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time; frames below the detection threshold are explicit `N.C.` intervals |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM, key, time signature, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
@@ -358,7 +357,7 @@ helpers such as `analyze_sections(...)`, `analyze_melody(...)`, `cqt(...)`, and
 `vqt(...)` remain standalone functions; pass `audio.data` and
 `audio.sample_rate` to those.
 
-In Python, `analyze(...)` calls `sonare_analyze_json` and returns the all-in-one `AnalysisResult`: BPM (with confidence), key, time signature, beat times and per-beat strengths, chords, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
+In Python, `analyze(...)` calls `sonare_analyze_json` and returns the all-in-one `AnalysisResult`: BPM and ranked BPM hypotheses, key, time signature and its candidates, beat times and per-beat strengths, chords, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -702,6 +701,11 @@ class TimeSignature:
     denominator: int
     confidence: float
 
+class BpmHypothesis:
+    value: float
+    confidence: float
+    relation: Literal["primary", "half", "double", "other"]
+
 class Chord:
     root: PitchClass
     quality: str             # "major", "minor", "diminished", "augmented",
@@ -725,6 +729,8 @@ class AnalysisResult:
     time_signature: TimeSignature
     beat_times: list[float]
     beat_strengths: list[float]    # per-beat strength
+    bpm_candidates: list[BpmHypothesis]
+    time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # property: per-beat objects with strength
     chords: list[Chord]
     sections: list[Section]
@@ -1010,6 +1016,9 @@ chain_result = sonare.master_audio(
 )
 print(chain_result.output_lufs, chain_result.output_true_peak_dbtp, chain_result.output_lra)
 print(chain_result.stage_gain_reductions)
+if chain_result.report is not None:
+    print(chain_result.report.before, chain_result.report.after)
+    print(chain_result.report.band_energy_delta_db)
 
 # Block-by-block streaming variant
 with sonare.StreamingMasteringChain({
@@ -1018,7 +1027,12 @@ with sonare.StreamingMasteringChain({
 }) as chain:
     chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
     print(chain.stage_names(), chain.latency_samples())
-    out_block = chain.process_mono([0.0] * 512)
+    output = chain.process_mono([0.0] * 512)
+    while True:
+        tail = chain.flush_mono()
+        if not tail:
+            break
+        output.extend(tail)
 
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
     "n_fft": 2048,
@@ -1041,6 +1055,10 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 Mastering helpers also accept limiter-release and static-gain staging controls. The simple `mastering()` helper uses `release_ms` (`0` keeps the 50 ms library default) and `apply_gain_at_input_rate`. Preset/chain overrides use the flat keys `"maximizer.truePeakLimiter.releaseMs"` and `"maximizer.truePeakLimiter.applyGainAtInputRate"`; supplied override values are applied directly.
 
 Offline chain and preset results also report `output_true_peak_dbtp` at the configured loudness oversample factor, `output_lra` (EBU R128 loudness range in LU), and `stage_gain_reductions`. Each reduction identifies the reporting dynamics/maximizer stage and its most recent gain reduction in dB (zero or negative).
+
+When `result.report` is present, its `before` and `after` summaries each contain `integrated_lufs`, `max_momentary_lufs`, `max_short_term_lufs`, `true_peak_dbtp`, and `loudness_range`. The report also contains applied gain, maximum gain reduction, whether peak headroom limited the loudness target, and `band_energy_delta_db`, a 32-band logarithmic spectral-energy change from before to after.
+
+After the final streaming input block, call `flush_mono()` until it returns an empty list; for stereo, call `flush_stereo()` until it returns two empty lists.
 
 Reference-track workflows use `mastering_pair_processor_names()`, `mastering_pair_process()`, `mastering_pair_analysis_names()`, and `mastering_pair_analyze()`. Pair inputs should use the same sample rate and comparable length.
 

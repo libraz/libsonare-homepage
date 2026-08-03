@@ -21,6 +21,7 @@ If you want to read the docs linearly, use this order:
 | I want to build... | Read first | Then read |
 |--------------------|------------|-----------|
 | A browser app that shows BPM, key, chords, or sections | [Getting Started](./getting-started.md) | [WebAssembly Guide](./wasm.md), [JavaScript API](./js-api.md) |
+| Song-structure, self-similarity, or note-segmentation analysis | [Feature Map](./api-surface.md) | [JavaScript API](./js-api.md#librosa-compatible-helpers), [Python API](./python-api.md#feature-extraction) |
 | A Python script or notebook for audio analysis | [Getting Started](./getting-started.md#python) | [Python API](./python-api.md) |
 | A terminal workflow for quick checks or batch analysis | [Getting Started](./getting-started.md#cli) | [CLI Reference](./cli.md) |
 | Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#audio-effects) |

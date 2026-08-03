@@ -71,6 +71,8 @@ Requests that report progress also accept `cancel`, a predicate polled at the
 same native boundaries `onProgress` fires on. Return `true` and the call aborts.
 
 ```typescript
+import { ErrorCode, isSonareError, masterAudio } from '@libraz/libsonare';
+
 let abandoned = false;
 cancelButton.onclick = () => { abandoned = true; };
 
@@ -83,8 +85,7 @@ try {
     cancel: () => abandoned,
   });
 } catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.Cancelled) return;
-  throw error;
+  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
 }
 ```
 
@@ -2211,6 +2212,7 @@ try {
 | `OutOfMemory` | `5` |
 | `NotSupported` | `6` |
 | `InvalidState` | `7` |
+| `Cancelled` | `8` |
 | `Unknown` | `99` |
 
 The codes match Python's `SonareError.code` and the C ABI `SonareError` enum, and the Python CLI maps them onto its [exit codes](./cli.md#exit-codes).

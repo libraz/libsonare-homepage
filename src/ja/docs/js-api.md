@@ -71,6 +71,8 @@ const legacyBpm = detectBpm(samples, sampleRate);
 同じネイティブ境界でポーリングされる述語で、`true` を返すと呼び出しが中断されます。
 
 ```typescript
+import { ErrorCode, isSonareError, masterAudio } from '@libraz/libsonare';
+
 let abandoned = false;
 cancelButton.onclick = () => { abandoned = true; };
 
@@ -83,8 +85,7 @@ try {
     cancel: () => abandoned,
   });
 } catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.Cancelled) return;
-  throw error;
+  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
 }
 ```
 
@@ -2104,6 +2105,7 @@ try {
 | `OutOfMemory` | `5` |
 | `NotSupported` | `6` |
 | `InvalidState` | `7` |
+| `Cancelled` | `8` |
 | `Unknown` | `99` |
 
 このコードは Python の `SonareError.code` および C ABI の `SonareError` enum と一致し、Python CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。

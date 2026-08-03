@@ -309,11 +309,11 @@ key = detect_key(result.harmonic, result.sample_rate)
 ```
 
 ```bash [CLI]
-# The Python CLI reports harmonic/percussive energies:
-sonare hpss song.mp3 --json
+# The pip-installed Python CLI writes both stems and reports their energies:
+sonare hpss song.mp3 -o separated --json
 
-# Writing harmonic/percussive WAV stems is available in the C++ sonare_cli build:
-#   sonare hpss song.wav -o separated
+# The native release executable supports the same operation under its own name:
+#   sonare-cli hpss song.wav -o separated --json
 ```
 
 :::
@@ -350,8 +350,8 @@ with Audio.from_file("song.mp3") as audio:
     trimmed = audio.trim(-60)               # trim silence below -60 dB
 ```
 
-```bash [C++ CLI]
-# Source-built C++ CLI
+```bash [CLI]
+# These commands work with the pip-installed Python CLI.
 sonare time-stretch song.wav --rate 0.8 -o slower.wav
 sonare pitch-shift song.wav --semitones 2 -o higher.wav
 sonare normalize song.wav --target-db -3 -o normalized.wav
@@ -772,13 +772,13 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### Audio Processing (C++ CLI only)
+### Audio Processing
 
 ::: info
-`pitch-shift`, `time-stretch`, and the `hpss` export commands are provided by the C++ `sonare_cli` binary built from source. The Python CLI installed via `pip install libsonare` exposes the analysis and feature commands listed in the [CLI Reference](/docs/cli).
+The Python CLI installed by `pip install libsonare` provides `pitch-shift`, `time-stretch`, and file-writing `hpss`. The native executable is named `sonare-cli`; substitute that name when using a release archive or source-built native CLI.
 :::
 
-```bash [C++ CLI]
+```bash [Python CLI]
 # Transpose up 2 semitones
 sonare pitch-shift --semitones 2 input.wav -o output.wav
 

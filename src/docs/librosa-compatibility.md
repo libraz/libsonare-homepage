@@ -308,7 +308,7 @@ result = sonare.hpss(samples, sample_rate, kernel_harmonic=31, kernel_percussive
 # result.percussive
 ```
 ```bash [CLI]
-sonare hpss song.wav --json
+sonare hpss song.wav -o separated --json
 ```
 :::
 

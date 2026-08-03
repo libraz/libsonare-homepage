@@ -205,6 +205,7 @@ Node native's `Audio` object has more methods because it can call into the nativ
 |------------|-------------|------|
 | Extra `Audio` methods | More focused analysis and room-acoustic methods are available as instance methods | Use standalone focused helpers where available |
 | File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)`, `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)` |
+| Sample access | `audio.getData()` returns a copy | `audio.data` returns the instance's mutable `Float32Array` |
 
 Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and `detectChords(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions. The full method and function reference is on the [Node.js Native API](./node-api.md) page.
 
@@ -213,7 +214,8 @@ Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoust
 The native addon (and the WASM package) exposes a `StreamingMasteringChain`
 class for incremental rendering — for example when bridging an Electron app,
 worker, or audio capture pipeline. It accepts the same nested config as
-`masteringChain()` and renders one block at a time.
+`masteringChain()`, plus `loudnessStaticGainDb` and the optional
+`loudnessStaticGainPeakDb`, and renders one block at a time.
 
 ```typescript
 import { StreamingMasteringChain } from '@libraz/libsonare-native';
@@ -234,10 +236,11 @@ chain.reset();   // clear state without rebuilding
 ```
 
 Stereo-only stages are skipped when `numChannels === 1`. The streaming chain
-rejects offline-only repair stages and the whole-file `loudness` stage; use
-`masteringChain*` or `masterAudio*` for those. The WASM build also exposes
-`chain.delete()` to release the underlying handle; the native addon releases
-its handle on GC.
+rejects offline-only repair stages. A `loudness` stage requires a precomputed
+static gain in `loudnessStaticGainDb`; optionally pass the source true-peak in
+`loudnessStaticGainPeakDb` so the gain is clamped against the configured ceiling.
+The WASM build also exposes `chain.delete()` to release the underlying handle;
+the native addon releases its handle on GC.
 
 Related mastering guides: [Browser local processing](./glossary/concepts/browser-local-processing.md), [Reference match](./glossary/mastering/reference-match.md), [Quality checklist](./glossary/mastering/quality-checklist.md).
 

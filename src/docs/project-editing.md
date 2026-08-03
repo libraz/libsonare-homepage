@@ -773,7 +773,7 @@ Python mirrors this with `project.to_json()`, `Project.from_json(json)`, and `Pr
 ### Reading the model back, and rebinding audio after a load
 
 Project JSON stores the *arrangement*, not the PCM. A loaded project therefore
-knows it has a source, but has no samples behind it. Two read-only descriptor
+knows it has a source, but has no samples behind it. Three read-only descriptor
 families plus one setter close that loop.
 
 ```typescript

@@ -80,7 +80,8 @@ cases. Most app code should import from the main `@libraz/libsonare` entry.
 
 ::: tip Pick the analysis bundle when you only analyze
 `@libraz/libsonare/analysis` compiles the same DSP with the mastering, mixing,
-realtime, and project surfaces left out, and CI enforces a size budget on it. If
+realtime, and project surfaces left out. CI records its size in a report, but
+size growth alone does not fail the build. If
 your page detects BPM, key, chords, or draws a spectrogram and never masters or
 mixes, importing it instead of the main entry cuts the WASM download
 substantially.
@@ -132,8 +133,10 @@ native library, not about running the browser build.
 :::
 
 The published artifacts are the WebAssembly npm package, the Python wheel, and
-the native CLI release archives. The Node native binding is marked private and
-is installed as a local dependency only — see [Native Bindings](/docs/native-bindings).
+the native CLI release archives. Native CLI archives are published for Linux
+`x86_64` and `aarch64`, and macOS `arm64`. The Node native binding is marked
+private and is installed as a local dependency only — see
+[Native Bindings](/docs/native-bindings).
 
 ## Building from Source
 
@@ -161,7 +164,7 @@ cmake ..                         # auto-detect FFmpeg
 # cmake .. -DSONARE_WITH_FFMPEG=ON  # require FFmpeg-backed decoding
 # cmake .. -DBUILD_ACOUSTIC_SIM=ON  # enable geometric room acoustics (default ON)
 
-make -j$(nproc)
+cmake --build . --parallel
 
 # Build WebAssembly (run from the repository root, not from build/)
 cd .. && make wasm

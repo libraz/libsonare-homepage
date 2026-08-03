@@ -76,11 +76,7 @@ pnpm add @libraz/libsonare
 | `@libraz/libsonare/schemas/realtime-voice-changer-preset-pack.schema.json` | プリセットパックの JSON Schema |
 
 ::: tip 解析だけならアナリシスバンドルを選ぶ
-`@libraz/libsonare/analysis` は同じ DSP を、マスタリング・ミキシング・リアルタイム・
-プロジェクトの各サーフェスを外してビルドしたものです（CI でサイズ上限を検査しています）。
-BPM・キー・コード検出やスペクトログラム表示だけを行い、マスタリングやミキシングをしない
-ページなら、メインエントリの代わりにこちらをインポートすると WASM のダウンロード量を
-大きく減らせます。
+`@libraz/libsonare/analysis` は同じ DSP からマスタリング・ミキシング・リアルタイム・プロジェクトの各サーフェスを外してビルドしたものです。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。BPM・キー・コード検出やスペクトログラム表示だけを行い、マスタリングやミキシングをしないページなら、メインエントリの代わりにこちらをインポートすると WASM のダウンロード量を大きく減らせます。
 :::
 
 ## PyPI（Python）
@@ -126,9 +122,7 @@ WebAssembly パッケージは Windows のブラウザでも問題なく動き�
 ネイティブライブラリのコンパイルに関するもので、ブラウザ実行の話ではありません。
 :::
 
-公開されている成果物は、WebAssembly の npm パッケージ、Python ホイール、
-ネイティブ CLI のリリースアーカイブです。Node ネイティブバインディングは private 指定で、
-ローカル依存としてのみインストールされます（[ネイティブバインディング](/ja/docs/native-bindings) を参照）。
+公開されている成果物は、WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のリリースアーカイブです。ネイティブ CLI アーカイブは Linux `x86_64`／`aarch64` と macOS `arm64` 向けに公開されます。Node ネイティブバインディングは private 指定で、ローカル依存としてのみインストールされます（[ネイティブバインディング](/ja/docs/native-bindings) を参照）。
 
 ## ソースからビルド
 
@@ -156,7 +150,7 @@ cmake ..                         # FFmpeg を自動検出
 # cmake .. -DSONARE_WITH_FFMPEG=ON  # FFmpeg デコードを必須にする
 # cmake .. -DBUILD_ACOUSTIC_SIM=ON  # 幾何ベースのルーム音響を有効化（既定 ON）
 
-make -j$(nproc)
+cmake --build . --parallel
 
 # WebAssembly をビルド（build/ ではなくリポジトリルートで実行）
 cd .. && make wasm

@@ -258,9 +258,9 @@ import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.sche
 |--------|------|------------|
 | `pitch` | −24 〜 24 | リチューン（半音） |
 | `formant` | 0.55 〜 1.65 | フォルマントのスケール係数 |
-| `brightness` | 0 〜 1 | フォルマントの明るさ傾斜 |
+| `brightness` | 0 〜 1 | フォルマントの明るさ、EQ のプレゼンスとエア |
 | `space` | 0 〜 1 | リバーブミックス（チェーンの上限 0.45 まで） |
-| `intensity` | 0 〜 1 | コンプレッションとドライブ |
+| `intensity` | 0 〜 1 | コンプレッサーのレシオ |
 | `noiseControl` | 0 〜 1 | ゲートとノイズ処理 |
 | `sibilance` | 0 〜 1 | ディエッサーの量 |
 

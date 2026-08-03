@@ -25,6 +25,7 @@
 | 作りたいもの | 最初に読むページ | 次に読むページ |
 |--------------|------------------|----------------|
 | BPM、キー、コード、セクションを表示するブラウザアプリ | [はじめに](./getting-started.md) | [WebAssembly ガイド](./wasm.md)、[JavaScript API](./js-api.md) |
+| 曲構造、自己類似度、ノート区間を解析するツール | [機能マップ](./api-surface.md) | [JavaScript API](./js-api.md#librosa-互換ヘルパー)、[Python API](./python-api.md#特徴抽出) |
 | 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
 | ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md) | [CLI リファレンス](./cli.md) |
 | ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#オーディオエフェクト) |

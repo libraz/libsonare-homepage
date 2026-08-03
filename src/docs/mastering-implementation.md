@@ -106,11 +106,13 @@ Use these entry points by intent:
 | Use a preset | `masterAudio()`, `masterAudioStereo()`, `masteringPresetNames()` |
 | Run a full chain | `masteringChain()`, `masteringChainStereo()` |
 | Show progress | `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
-| Render block-by-block | `StreamingMasteringChain` (`prepare` / `processMono` / `processStereo` / `reset` / `latencySamples` / `stageNames`) |
+| Render block-by-block | `StreamingMasteringChain` (`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `reset` / `latencySamples` / `stageNames`) |
 | Run one named processor | `masteringProcessorNames()`, `masteringProcess()`, `masteringProcessStereo()` |
 | Compare source and reference | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()` |
 | Analyze stereo output | `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Profile, suggest, and preview | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
+
+After the last input block, call `flushMono()` or `flushStereo()` until it returns an empty buffer. Skipping the flush drops the chain's delayed samples and finite processor tails from the rendered output.
 
 Related: [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), [JavaScript API](./js-api.md), [WASM](./wasm.md)
 

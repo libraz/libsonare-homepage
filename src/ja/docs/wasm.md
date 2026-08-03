@@ -197,7 +197,7 @@ console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
 
 ```bash [Mixed CLI]
 sonare analyze music.mp3 --json
-sonare hpss music.mp3 --json
+sonare hpss music.mp3 -o separated --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
 sonare pitch music.mp3 --algorithm pyin --json
 ```
@@ -267,7 +267,12 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 読み込んでしまったユーザーがレンダリングの完了を待つ必要はありません。
 
 ```typescript
-import { init, masteringChainWithProgress } from '@libraz/libsonare';
+import {
+  ErrorCode,
+  init,
+  isSonareError,
+  masteringChainWithProgress,
+} from '@libraz/libsonare';
 
 await init();
 
@@ -284,11 +289,8 @@ try {
   });
   render(result);
 } catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.Cancelled) {
-    // ユーザーが中止を指示した場合。想定内です。
-    return;
-  }
-  throw error;
+  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
+  // ユーザーが中止を指示した場合。想定内です。
 }
 ```
 
@@ -323,7 +325,7 @@ client.dispose();
 `cancel()` を持ちます。
 
 ::: warning 入力はコピーではなく転送されます
-`Float32Array` の入力は既定で Worker へ転送されるため、呼び出し側のバッファは detach され、
+`Float32Array` の入力は既定で Worker へ転送されるため、呼び出し側のバッファは切り離され、
 あとから読むと空の配列になります。波形描画などでサンプルを引き続き使う場合は
 `{ copy: true }` を渡してください。すでに実行中のネイティブ呼び出しを即座にキャンセルするには
 cross-origin isolation が必要です（クライアントは `SharedArrayBuffer` のフラグを使います）。
@@ -912,7 +914,7 @@ try {
 - **メイン API エントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
 - **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine`、worklet プロセッサクラス、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
 - **AudioWorklet ブリッジ** — `worklet.js` / `worklet.d.ts`。`AudioWorkletGlobalScope` 向けの自己完結型バンドルで、`SonareEngine` API とプロセッサ登録ヘルパーを公開します。
-- **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしており、CI でサイズ上限を検査しています。
+- **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
 - **オフライン Worker エントリ** — `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
 - **ボイスチェンジャーの JSON Schema** — 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。
 

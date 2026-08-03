@@ -53,7 +53,7 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | プロジェクト・アレンジ編集（ヘッドレス DAW） | 対応 — [プロジェクト編集](./project-editing.md)を参照 | 対応 |
 | 組み込み楽器（NativeSynth の preset/patch） | 対応 — [組み込み楽器](./native-synth.md)を参照 | 対応 — `project bounce --synth <preset>` で NativeSynth プリセットを固定でき（一覧は `project synth-presets`）、値なしの `--synth` は GM プログラムに追従する |
 | シンセバウンスでの GM プログラム追従 | C ABI（`use_gm_programs`）と Python（`auto_select_gm=`）。WASM と Node のバウンスバインディングは宛先ごとに固定パッチを受け取る | 対応 — 値なしの `--synth` フラグ |
-| ケイパビリティカタログとビルド診断 | 対応 — すべてのサーフェスで `capabilityCatalog()` / `capability_catalog()` と `capabilities()`。正規 JSON は C ABI 経由 | 対応 — `doctor` |
+| 機能カタログとビルド診断 | 対応 — すべてのサーフェスで `capabilityCatalog()` / `capability_catalog()` と `capabilities()`。正規 JSON は C ABI 経由 | 対応 — `doctor` |
 | 長時間のオフライン呼び出しの協調キャンセル | 対応 — Node と WASM は `cancel?: () => boolean`、Python は `cancel=`、C ABI は `SonareCancelCallback`。キャンセルされた呼び出しはエラーコード 8 を返し、出力を確保しない | 非対応 |
 | SoundFont 2 プレイヤー | 対応 — [SoundFont 2 プレイヤー](./soundfont-player.md)を参照 | 非対応（Project API のみ） |
 | リアルタイムエンジンのライブ MIDI 入力 | 対応 — [MIDI 入力](./midi-input.md)を参照 | 非対応 |
@@ -90,9 +90,9 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | 項目 | 違いの内容 |
 |------|-----------|
 | マスタリングチェーン設定 | `masteringChain(...)` と `StreamingMasteringChain` はネストした設定オブジェクトを使い、`masterAudio(...)` の上書き値はフラットなドット記法を使う |
-| `StreamingMasteringChain` の対象 | ブロック処理できるステージ専用。前後文脈やファイル全体が必要な repair 段と `loudness` 段は拒否されるため、それらは 1 回呼び出しのマスタリング API を使う |
+| `StreamingMasteringChain` の対象 | ブロック処理できるステージ専用。前後文脈やファイル全体が必要な repair 段は拒否する。`loudness` 段は、事前計算した静的ゲインを `loudnessStaticGainDb`（JS）/ `loudness_static_gain_db`（Python）で渡せば利用でき、音源のトゥルーピークも任意で指定できる。静的ゲインを指定しない場合はコンストラクタが拒否する |
 | `analyze(...)` の戻り値 | C ABI・Python・Node ネイティブ・WASM のいずれも完全な `analyze` 結果を返す。コード、セクション、音色、ダイナミクス、リズム、メロディー、フォーム、ビートごとの強さが含まれる。専用関数（`detect_chords`、`analyze_sections` …）は、追加パラメータが必要なときや、全パイプラインを通さず 1 ファミリーだけ欲しいときに引き続き使える |
-| `normalize(...)` の既定値 | モジュール関数 `normalize(...)`（Python・WASM・Node ネイティブ）はいずれも `0.0` dBFS が既定。これはゲイン 0 ではなく、ピークをフルスケールへ正規化する意味。Python の `Audio.normalize()` 便利メソッドのみ `target_db=-3.0` が既定のまま |
+| `normalize(...)` の既定値 | Python・WASM・Node ネイティブでは、モジュール関数 `normalize(...)` と `Audio.normalize()` 便利メソッドのどちらも `0.0` dBFS が既定。これはゲイン 0 を適用するのではなく、ピークをフルスケールへ正規化する意味 |
 | `bounceOffline(...)` の LUFS | C API と WASM で LUFS 正規化の既定値が揃っている。古いコードを移植するときは、意図が重要なら `normalizeLufs` / `normalize_lufs` を明示する |
 | `mfcc` の lifter | `mfcc(...)` / `mfcc` はどのバインディングでも末尾に `lifter` / `lifter` 引数を取る（ケプストラルリフタリング。既定は `0` でリフタリングなし）。C ABI の明示レンジ入口は `sonare_mfcc_ex` |
 | `trim` と `trimSilence` | `trim(...)` は単純な `thresholdDb` で音声だけを返す。`trimSilence(...)` / `trim_silence(...)` は `librosa.effects.trim` 互換で、`topDb`・フレーム RMS・元音源上のサンプル範囲を扱う |
@@ -105,7 +105,7 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | 音響解析 | 測定とブラインド推定の入口は `AcousticResult` を返す。幾何ベースのルーム音響では等価ルーム推定、RIR 合成、ルームモーフィングも使える（ブラインド推定と等価ルーム推定は信頼度と一緒に表示する） |
 | エンジンのレーンミキサー / MIDI クリップ | コンパイル済みの形はどのバインディングでも同一（`EngineTrackLane` / `EngineTrackSend` / `EngineBus`。MIDI イベントは絶対サンプルの `renderFrame` と UMP ワードを持つ）。Python は `EngineMidiClipSchedule` / `EngineMidiEvent` の dataclass を使い、JS/Node はプレーンオブジェクトを渡す。素のエンジンの `setSoloMute` は固定のレーンインデックスを取るが、ブラウザの `SonareEngine` Worklet API はトラック id *または名前*を受け取る。ストリップ EQ バンドはどちらの API でも `EqBand` オブジェクトまたはバンド JSON 文字列で渡せる（`setTrackStripEqBand` / `setMasterStripEqBand`、生 JSON 用に `…EqBandJson` 系もある） |
 | 自己類似度系の命名 | Python は JavaScript の `segment_` 接頭辞を落とします。`cross_similarity` / `recurrence_matrix` / `recurrence_to_lag` / `lag_to_recurrence` / `path_enhance` / `subsegment` / `agglomerative` が、`segmentCrossSimilarity` などに対応します |
-| `Audio` のサンプル取得 | Node と WASM の `audio.getData()` は**コピー**を返すため、書き込んでもインスタンスは変わらず、呼び出しごとに確保が発生します。Python の `audio.data` も同じ読み取り専用の契約です。その場で書き換えるのではなく、編集後のサンプルから新しいインスタンスを作ってください |
+| `Audio` のサンプル取得 | WASM の `audio.data` はインスタンスが持つ `Float32Array` そのもので、書き込むと以降のインスタンスメソッドが読む値も変わる。Node の `audio.getData()` と Python の `audio.data` はコピーを返すため、返り値に書き込んでもインスタンスは変わらず、取得するたびに確保が発生する |
 | 配布形態 | 公開されている成果物は WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のアーカイブです。Node ネイティブバインディングは private 指定でローカル依存として使う前提のため、常にソースからビルドします |
 | エラー | どのバインディングも同じ C ABI 数値コードを持つ構造化 `SonareError` を送出する。WASM と Node は `code` + `codeName` 付きの `Error` サブクラスをスロー（`ErrorCode` enum と `isSonareError` ガードをエクスポート）。Python は `.code` 付きの `RuntimeError` サブクラスを送出。Python CLI はコードを終了コードへ対応付ける（C++ CLI は従来どおり `0`/`1`） |
 | WASM のオブジェクト戻り値 | 名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、`synthPresetPatch`、セクション結果、キー候補ヘルパーが返す WASM の配列／オブジェクトは、呼び出し元の JavaScript realm へ再ルートされるため、通常のオブジェクトと同様に `structuredClone()` / `postMessage()` へそのまま渡せる |

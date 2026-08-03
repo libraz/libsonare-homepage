@@ -43,8 +43,7 @@ CLI は Command Line Interface の略で、ターミナルから実行するコ�
 このページの例は `sonare` と書いていますが、ネイティブ専用コマンドを実行するときは
 `sonare-cli` に読み替えてください。
 
-同じコマンドなら 2 つの CLI は同じ JSON を出力します。キーはすべて `snake_case` で、
-シリアライズ前に値を丸めることもなくなったため、どちらの出力でも同じスクリプトで読めます。
+対応するコマンドでは、どちらの CLI も同じ `snake_case` のキーとペイロード形状を使うため、同じスクリプトで読めます。ただし、バイト単位で同一の出力や同じ小数精度には依存しないでください。各フロントエンドは浮動小数点値を個別にシリアライズし、一部の単機能コマンドは要約値を意図的に丸めます。
 
 このページで明示的に「ネイティブ CLI」と書いていない限り、PyPI の Python CLI で使えるコマンドとして読んでください。
 
@@ -145,11 +144,42 @@ sonare analyze music.mp3 --json
   },
   "time_signature": {
     "numerator": 4,
-    "denominator": 4
+    "denominator": 4,
+    "confidence": 0.91
   },
-  "beats": 240
+  "beats": [
+    {"time": 0.52, "strength": 0.84},
+    {"time": 1.02, "strength": 0.78}
+  ],
+  "chords": [
+    {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
+  ],
+  "sections": [
+    {"type": "intro", "start": 0.0, "end": 8.0}
+  ],
+  "timbre": {
+    "brightness": 0.61,
+    "warmth": 0.47,
+    "density": 0.72,
+    "roughness": 0.18,
+    "complexity": 0.56
+  },
+  "dynamics": {
+    "dynamic_range_db": 9.4,
+    "loudness_range_db": 6.8,
+    "crest_factor": 7.2,
+    "is_compressed": false
+  },
+  "rhythm": {
+    "syncopation": 0.32,
+    "groove_type": "straight",
+    "pattern_regularity": 0.89
+  },
+  "form": "IAB"
 }
 ```
+
+上の配列は省略した例です。特に `beats` はビート数ではなく、検出したビートごとの `{"time", "strength"}` オブジェクトを保持します。
 
 ### bpm
 
@@ -322,8 +352,8 @@ sonare pitch music.mp3 --algorithm yin
 HPSS（Harmonic / Percussive Source Separation）。倍音成分（ボーカル／メロディ）と打撃成分（ドラム）を分離します。
 
 ```bash
-sonare hpss music.mp3
-sonare hpss music.mp3 --json
+sonare hpss music.mp3 -o separated
+sonare hpss music.mp3 -o separated --json
 ```
 
 **出力:**
@@ -331,6 +361,7 @@ sonare hpss music.mp3 --json
   HPSS: 3980000 samples
   Harmonic energy:   0.025000
   Percussive energy: 0.018000
+  Wrote: separated_harmonic.wav, separated_percussive.wav
 ```
 
 ## その他のコマンド
@@ -403,7 +434,7 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム | `--top-db` |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | リサンプリング | `--target-sr` |
 
-Python CLI は、上のファイル書き出し編集コマンドと HPSS サマリーを提供します。
+Python CLI は、上のファイル書き出し編集コマンドを提供します。`hpss` も `-o` が必須で、エネルギー要約を表示しながら `<base>_harmonic.wav` と `<base>_percussive.wav` を書き出します。
 
 ::: warning 何もしないデフォルトはエラーになりました
 `--semitones` と `--rate` には以前デフォルト値があり、省略するとコマンドが何もしない
@@ -770,7 +801,7 @@ SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマン
 
 ## 終了コード
 
-Python CLI の失敗は、C ABI のエラーコード(バインディングが `SonareError.code` / `ErrorCode` として持つのと同じ値)に揃えた終了コードに対応付けられるため、スクリプトから失敗の種類を区別できます。
+次の表は Python CLI のプロセス終了コード対応表です。エラー分類は C ABI とバインディングに揃えていますが、これらの API 間ですべての数値が同一であることを示す表ではありません。
 
 | コード | 説明 |
 |------|-------------|
@@ -784,6 +815,7 @@ Python CLI の失敗は、C ABI のエラーコード(バインディングが `
 | 8 | 非対応 |
 | 9 | 無効な状態 |
 | 10 | その他のエラー |
+| 11 | キャンセル |
 
 Python CLI では、`SONARE_LEGACY_EXIT=1` を設定すると「失敗はすべて `1`」という旧来の挙動に戻せます(終了コード 1 を前提に書かれたスクリプト向け)。ネイティブ CLI はこの変数の影響を受けず、従来どおり `0`(成功)/ `1`(エラー)のままです。
 

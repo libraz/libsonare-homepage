@@ -272,7 +272,7 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 :::
 
 ::: info `mix --scene` でのストリップごとの入力指定は Python CLI 限定
-JSON ファイルからシーン全体をレンダーし、ストリップごとに `--input` を 1 つずつ渡す機能は Python CLI が実装しています。C++ CLI の `mix` コマンドは単一ストリップ・単一入力のプロセッサ（`--scene` 非対応）です。フルシーンのレンダーではなく、ストリップ単位の手早い確認に使ってください。
+JSON ファイルからシーン全体をレンダーし、ストリップごとに `--input` を 1 つずつ渡す機能は Python CLI が実装しています。ネイティブ CLI の正式なコマンドは `sonare-cli mix-strip` で、`--scene` 非対応の単一ストリップ・単一入力プロセッサです。ネイティブの `mix` という名前は非推奨エイリアスとしてのみ残っています。フルシーンのレンダーではなく、ストリップ単位の手早い確認には `mix-strip` を使ってください。
 :::
 
 ::: tip いつ再コンパイルするか

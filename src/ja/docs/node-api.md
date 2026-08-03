@@ -179,7 +179,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。末尾の引数で HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）を制御 |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | 小節頭（ダウンビート）の位置 |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | 相関スコア付きのキー候補ランキング |
-| `analyze(samples, sampleRate?)` | `AnalysisResult` | 1 回の呼び出しでフル解析: `bpm`、`bpmConfidence`、`key`、`timeSignature`、`beatTimes`、`beats` に加えて `chords`、`sections`、`timbre`、`dynamics`、`rhythm`、`melody`、`form`。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
+| `analyze(samples, sampleRate?)` | `AnalysisResult` | 1 回の呼び出しで、BPM と順位付き BPM 仮説、キー、拍子と順位付き拍子候補、ビート、コード、セクション、音色、ダイナミクス、リズム、メロディ、フォームを解析。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
 | `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | `analyze` と同じ。長尺入力向けに `(progress, stage)` コールバックを受け取ります |
 | `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | 確信度と候補付きテンポ。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength`、`maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | 拍子・グルーブ・シンコペーション。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength` |
@@ -218,7 +218,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 
 Node アドオンは、Promise 返却版も公開しています。これらは DSP パイプラインを libuv のワーカースレッドで実行するため、JS イベントループをブロックしません。
 
-戻り値の形は同期版と同じです。ただし Node ネイティブ専用で、WASM ビルドにワーカースレッド相当はありません。
+戻り値の形は同期版と同じで、これらの関数自体は Node ネイティブ専用です。ブラウザでは `@libraz/libsonare/worker` の `OfflineWorkerClient` を使うと、同名関数ではなくタスク形式の API で解析とマスタリングを Web Worker 上へ移せます。
 
 非同期版では進捗コールバックを使えません。進捗が必要な場合は `onProgress` 付きの同期版を使います。並行実行だけが目的なら、複数の非同期呼び出しを同時に走らせます。
 
@@ -479,11 +479,19 @@ interface TimeSignature {
   confidence: number;
 }
 
+interface BpmHypothesis {
+  value: number;
+  confidence: number;
+  relation: 'primary' | 'half' | 'double' | 'other';
+}
+
 interface AnalysisResult {
   bpm: number;
   bpmConfidence: number;
+  bpmCandidates: BpmHypothesis[];
   key: Key;
   timeSignature: TimeSignature;
+  timeSignatureCandidates: TimeSignature[];
   beatTimes: Float32Array;                       // beats[].time から導出
   beats: Array<{ time: number; strength: number }>;
   chords: AnalysisChord[];                       // 検出したコード進行

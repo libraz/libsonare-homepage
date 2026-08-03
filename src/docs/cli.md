@@ -42,9 +42,10 @@ release archives (each with a SHA-256 checksum), so it installs alongside the
 Python `sonare` command instead of colliding with it. This page writes `sonare`
 in examples; substitute `sonare-cli` when running a native-only command.
 
-Both CLIs emit the same JSON for the same command, with `snake_case` keys
-throughout, and no longer round values before serializing — so a script can read
-either one.
+Corresponding commands in both CLIs use the same `snake_case` keys and payload
+shapes, so a script can read either one. Do not depend on byte-identical output
+or identical decimal precision: each frontend serializes floating-point values
+independently, and some focused commands intentionally round summaries.
 
 Unless this page explicitly says "native CLI", assume the command is available
 from the PyPI Python CLI.
@@ -149,11 +150,43 @@ sonare analyze music.mp3 --json
   },
   "time_signature": {
     "numerator": 4,
-    "denominator": 4
+    "denominator": 4,
+    "confidence": 0.91
   },
-  "beats": 240
+  "beats": [
+    {"time": 0.52, "strength": 0.84},
+    {"time": 1.02, "strength": 0.78}
+  ],
+  "chords": [
+    {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
+  ],
+  "sections": [
+    {"type": "intro", "start": 0.0, "end": 8.0}
+  ],
+  "timbre": {
+    "brightness": 0.61,
+    "warmth": 0.47,
+    "density": 0.72,
+    "roughness": 0.18,
+    "complexity": 0.56
+  },
+  "dynamics": {
+    "dynamic_range_db": 9.4,
+    "loudness_range_db": 6.8,
+    "crest_factor": 7.2,
+    "is_compressed": false
+  },
+  "rhythm": {
+    "syncopation": 0.32,
+    "groove_type": "straight",
+    "pattern_regularity": 0.89
+  },
+  "form": "IAB"
 }
 ```
+
+The arrays above are abbreviated. In particular, `beats` contains one
+`{"time", "strength"}` object per detected beat; it is not a beat count.
 
 ### bpm
 
@@ -324,8 +357,8 @@ sonare pitch music.mp3 --algorithm yin
 Harmonic-Percussive Source Separation.
 
 ```bash
-sonare hpss music.mp3
-sonare hpss music.mp3 --json
+sonare hpss music.mp3 -o separated
+sonare hpss music.mp3 -o separated --json
 ```
 
 **Output:**
@@ -333,6 +366,7 @@ sonare hpss music.mp3 --json
   HPSS: 3980000 samples
   Harmonic energy:   0.025000
   Percussive energy: 0.018000
+  Wrote: separated_harmonic.wav, separated_percussive.wav
 ```
 
 ## More Commands
@@ -401,7 +435,9 @@ These transform audio and write a WAV with `-o`:
 | `sonare trim-silence take.wav -o out.wav` | Trim leading/trailing silence | `--top-db` |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | Resample | `--target-sr` |
 
-The Python CLI provides the file-writing edit commands above, plus HPSS summaries.
+The Python CLI provides the file-writing edit commands above. `hpss` also
+requires `-o` and writes `<base>_harmonic.wav` and `<base>_percussive.wav` while
+printing its energy summary.
 
 ::: warning Inert defaults are now errors
 `--semitones` and `--rate` used to default to values that made the command a
@@ -777,7 +813,9 @@ Check the active build from Python with `libsonare.has_ffmpeg_support()`.
 
 ## Exit Codes
 
-Python CLI failures map to exit codes aligned with the C-ABI error codes (the same values the bindings carry in `SonareError.code` / `ErrorCode`), so scripts can distinguish failure classes:
+The table below is the Python CLI's process-exit mapping. It is aligned by error
+class with the C ABI and binding errors, but these are CLI exit values rather
+than a claim that every numeric value is identical across those APIs:
 
 | Code | Description |
 |------|-------------|
@@ -791,6 +829,7 @@ Python CLI failures map to exit codes aligned with the C-ABI error codes (the sa
 | 8 | Not supported |
 | 9 | Invalid state |
 | 10 | Other error |
+| 11 | Cancelled |
 
 For the Python CLI, set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The native CLI is unaffected by this variable — it always uses the plain `0` (success) / `1` (error) convention.
 

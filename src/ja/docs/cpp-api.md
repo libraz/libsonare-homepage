@@ -680,13 +680,13 @@ config.threshold = 0.1f;
 PitchResult yin = yin_track(audio, config);
 
 // pYIN アルゴリズム（確率的 YIN + HMM 平滑化）
-PitchResult pyin = pyin(audio, config);
+PitchResult pyin_result = pyin(audio, config);
 
 // 結果へのアクセス
-float median = pyin.median_f0();
-float mean = pyin.mean_f0();
-const std::vector<float>& f0 = pyin.f0;
-const std::vector<bool>& voiced = pyin.voiced_flag;
+float median = pyin_result.median_f0();
+float mean = pyin_result.mean_f0();
+const std::vector<float>& f0 = pyin_result.f0;
+const std::vector<bool>& voiced = pyin_result.voiced_flag;
 ```
 
 ### CQT / VQT <Badge type="info" text="Medium" />
@@ -899,8 +899,10 @@ struct Chord {
 struct AnalysisResult {
   float bpm;
   float bpm_confidence;
+  std::vector<BpmCandidateHypothesis> bpm_candidates;
   Key key;
   TimeSignature time_signature;
+  std::vector<TimeSignature> time_signature_candidates;
   std::vector<Beat> beats;
   std::vector<Chord> chords;
   std::vector<Section> sections;
@@ -1156,7 +1158,7 @@ C ABI のリアルタイム・インサートオートメーションと外部 M
 - `sonare_engine_set_midi_destination_external` を使うと、送出先は内蔵インストゥルメントラックを通らず、ホストが回収する出力キューへ送られます。外部化できる送出先は最大 16 個です。クロック／トランスポート転送は `sonare_engine_set_external_midi_clock_enabled` で明示的に有効化し、そのメッセージの送出先 id は `0xFFFFFFFF` です。
 - ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP レコードが 3 メッセージへ展開される場合があるため、`max_events` は 3 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
 
-C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","channelPolicy"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値です。`tailSamples` は可聴な減衰テールの長さを表し、どちらもオフライン id では 0 です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするかを示します。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
+C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値です。`tailSamples` は可聴な減衰テールの長さを表し、どちらもオフライン id では 0 です。`realtimeCost` はライブインサート向けの大まかな `low`／`moderate`／`high` のアルゴリズム負荷見積もりであり、ハードウェア上のベンチマークではなく、非インサート id では `null` です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするか、`category` は id 名前空間から導出する安定した UI グループ、`params` はリアルタイムインサートのパラメータ記述子を示します（非インサートプロセッサでは空配列）。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
 
 リアルタイムボイスプリセットは C では `sonare_realtime_voice_changer_preset_names()`、`sonare_realtime_voice_changer_preset_json()`、`sonare_realtime_voice_changer_validate_preset_json()` から扱えます。型付きのプリセット選択子は `SonareVoiceCharacterPreset` 列挙です（`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 から `SONARE_VC_PRESET_DARK_VILLAIN` = 5）。`sonare_voice_character_preset_id(preset)` は正規の id 文字列を返し（不明値には NULL）、`SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` マクロはコンパイル時のバインディング生成向けに改行区切りの id 一覧を提供します。ネイティブ POD 設定の ABI は `SONARE_VOICE_CHANGER_ABI_VERSION` で、プリセット JSON の `schemaVersion` とは別です。
 

@@ -261,7 +261,17 @@ const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { t
 const basePreset = suggestion.genreCandidates[0].name;        // 例 "hipHop"
 
 const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
-// mastered: { samples, sampleRate, inputLufs, outputLufs, appliedGainDb, stages }
+console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
+console.log(mastered.report.bandEnergyDeltaDb.length); // 32 周波数帯
+```
+
+```typescript [Node]
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
+const basePreset = suggestion.genreCandidates[0].name;
+
+const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
+console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
+console.log(mastered.report.bandEnergyDeltaDb.length); // 32 周波数帯
 ```
 
 ```python [Python]
@@ -274,15 +284,20 @@ mastered = sonare.master_audio(
     preset_name=base_preset,
     overrides=suggestion["chainConfig"]["params"],
 )
-# mastered: samples, sample_rate, input_lufs, output_lufs, applied_gain_db, stages
+assert mastered.report is not None
+print(mastered.report.before.integrated_lufs, "→", mastered.report.after.integrated_lufs)
+print(len(mastered.report.band_energy_delta_db))  # 32 周波数帯
 ```
 
 ```bash [CLI]
-sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+sonare mastering source.wav --target-lufs -14 --ceiling-db -1 \
+  --report mastering-report.json -o master.wav
 sonare mastering-processors
 ```
 
 :::
+
+戻り値には従来のトップレベルのラウドネス値に加え、処理前後を UI で比較するための `report` が入ります。処理前後の各値は、統合・最大モーメンタリ・最大ショートターム LUFS、トゥルーピーク、ラウドネスレンジです。レポートには適用ゲイン、最大ゲインリダクション、ピーク上限によってラウドネスターゲットが制限されたかどうか、処理後と処理前の差を示す 32 帯域のエネルギー差も含まれます。CLI に `--report` を渡すと、同じ形を snake_case キーで書き出します。
 
 ::: tip suggest と render の間でユーザーに編集させる
 意図したパターンは、`chainConfig.params` を編集可能な UI コントロールへ展開し、ユーザーに値を調整させてから、*編集後*のマップを `masterAudio` へ渡すことです。`explanation[]` の文字列は、各段を有効にした理由を短く添える表示に向いています。

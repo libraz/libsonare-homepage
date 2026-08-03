@@ -27,7 +27,7 @@ Python パッケージは、呼び出しを C++ ライブラリと同じネイ�
 最初のスクリプトは、これくらい小さく始めるのがおすすめです。
 
 1. `audio = sonare.Audio.from_file("song.mp3")`
-2. `sonare.detect_bpm(audio.samples, audio.sample_rate)` または `sonare.analyze(audio.samples, audio.sample_rate)` を呼ぶ。
+2. `sonare.detect_bpm(audio.data, audio.sample_rate)` または `sonare.analyze(audio.data, audio.sample_rate)` を呼ぶ。
 3. 結果を表示するか、JSON として保存する。
 
 ::: tip `Audio` から始めるか、関数を直接呼ぶか
@@ -71,13 +71,13 @@ pip install libsonare
 
 `sonare` コマンドもあわせてインストールされます。詳しくは [CLI リファレンス](/ja/docs/cli) をご覧ください。
 
-標準の PyPI ホイールは WAV と MP3 をデコードします。読み込まれているビルドが
-FFmpeg デコードに対応しているかは `libsonare.has_ffmpeg_support()` で確認できます。
-M4A/AAC/FLAC/OGG/Opus を直接読み込みたい場合は、FFmpeg を有効にしてソースから
-インストールします。
+標準の PyPI ホイールは WAV と MP3 をデコードします。読み込まれているビルドが FFmpeg デコードに対応しているかは `libsonare.has_ffmpeg_support()` で確認できます。M4A/AAC/FLAC/OGG/Opus を直接読み込みたい場合は、リポジトリをクローンし、FFmpeg を有効にしたホイールをビルドしてインストールします。
 
 ```bash
-SONARE_FFMPEG=1 pip install libsonare --no-binary libsonare
+git clone https://github.com/libraz/libsonare.git
+cd libsonare
+SONARE_FFMPEG=1 bash bindings/python/build_wheel.sh
+python3 -m pip install bindings/python/dist/*.whl
 ```
 
 FFmpeg 有効ビルドには FFmpeg の開発ライブラリが必要です。macOS では `brew install ffmpeg`、Debian/Ubuntu 系では `libavformat-dev libavcodec-dev libavutil-dev libswresample-dev` をインストールしてください。
@@ -166,7 +166,7 @@ try:
     result = sonare.master_audio(
         samples,
         sample_rate,
-        preset="pop",
+        preset_name="pop",
         on_progress=lambda p, stage: print(stage, p),
         cancel=stop.is_set,
     )
@@ -333,7 +333,7 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | ダウンビート位置（秒） |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | 相関値つきのキー候補（順位付き） |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | 時系列のコードセグメント。検出しきい値未満のフレームは明示的な `N.C.` 区間になります |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM・キー・拍子・ビート・コード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・コード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果に、オプションの `(progress, stage)` コールバックを付けたもの |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | 検出したコードに対する、キーを基準としたローマ数字ラベル（`"I"`、`"IV"`、`"V"`、`"vi"` …） |
@@ -361,7 +361,7 @@ with Audio.from_file("music.mp3") as audio:
 など一部の詳細ヘルパーはスタンドアロン関数です。これらには `audio.data` と
 `audio.sample_rate` を渡してください。
 
-Python の `analyze(...)` は内部で `sonare_analyze_json` を呼び、BPM（確信度つき）・キー・拍子・ビート時刻・拍ごとの強度に加えてコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。室内音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
+Python の `analyze(...)` は内部で `sonare_analyze_json` を呼び、BPM と順位付き BPM 仮説、キー、拍子とその候補、ビート時刻・拍ごとの強度に加えてコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。室内音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -717,6 +717,11 @@ class TimeSignature:
     denominator: int
     confidence: float
 
+class BpmHypothesis:
+    value: float
+    confidence: float
+    relation: Literal["primary", "half", "double", "other"]
+
 class Chord:
     root: PitchClass
     quality: str             # "major"、"minor"、"diminished"、"augmented"、
@@ -740,6 +745,8 @@ class AnalysisResult:
     time_signature: TimeSignature
     beat_times: list[float]
     beat_strengths: list[float]    # 拍ごとの強度
+    bpm_candidates: list[BpmHypothesis]
+    time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # プロパティ: 各拍の強度を持つオブジェクト
     chords: list[Chord]
     sections: list[Section]
@@ -1027,6 +1034,9 @@ chain_result = sonare.master_audio(
 )
 print(chain_result.output_lufs, chain_result.output_true_peak_dbtp, chain_result.output_lra)
 print(chain_result.stage_gain_reductions)
+if chain_result.report is not None:
+    print(chain_result.report.before, chain_result.report.after)
+    print(chain_result.report.band_energy_delta_db)
 
 # ブロック単位のストリーミング処理
 with sonare.StreamingMasteringChain({
@@ -1035,7 +1045,12 @@ with sonare.StreamingMasteringChain({
 }) as chain:
     chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
     print(chain.stage_names(), chain.latency_samples())
-    out_block = chain.process_mono([0.0] * 512)
+    output = chain.process_mono([0.0] * 512)
+    while True:
+        tail = chain.flush_mono()
+        if not tail:
+            break
+        output.extend(tail)
 
 profile = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sample_rate, params={
     "n_fft": 2048,
@@ -1058,6 +1073,10 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
 マスタリング helper では、リミッターのリリースと静的ゲイン段の位置も指定できます。単発の `mastering()` helper は `release_ms`（`0` なら 50 ms のライブラリ既定値を維持）と `apply_gain_at_input_rate` を使います。プリセット／チェーンの上書きではフラットキーの `"maximizer.truePeakLimiter.releaseMs"` と `"maximizer.truePeakLimiter.applyGainAtInputRate"` を使い、渡した上書き値がそのまま適用されます。
 
 オフラインのチェーン／プリセット結果は、設定したラウドネス用オーバーサンプル倍率での `output_true_peak_dbtp`、EBU R128 ラウドネスレンジ（LU）の `output_lra`、`stage_gain_reductions` も報告します。各リダクションには、報告したダイナミクス／マキシマイザーステージと、その直近のゲインリダクション（0 以下の dB）が入ります。
+
+`result.report` が存在する場合、その `before` と `after` にはそれぞれ `integrated_lufs`、`max_momentary_lufs`、`max_short_term_lufs`、`true_peak_dbtp`、`loudness_range` が入ります。レポートには適用ゲイン、最大ゲインリダクション、ピークの余裕によってラウドネス目標が制限されたかどうか、処理前後の対数スペクトルエネルギー変化を示す 32 バンドの `band_energy_delta_db` も入ります。
+
+ストリーミング入力の最終ブロック後は、空のリストが返るまで `flush_mono()` を呼び、ステレオでは 2 つの空リストが返るまで `flush_stereo()` を呼びます。
 
 リファレンストラックを使う処理では `mastering_pair_processor_names()`、`mastering_pair_process()`、`mastering_pair_analysis_names()`、`mastering_pair_analyze()` を使います。ペア入力はサンプルレートを揃え、長さもなるべく近づけてください。
 

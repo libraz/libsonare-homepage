@@ -202,7 +202,7 @@ CLI equivalents for the calls above. `analyze`, `hpss`, and `pitch` are availabl
 
 ```bash [Mixed CLI]
 sonare analyze music.mp3 --json
-sonare hpss music.mp3 --json
+sonare hpss music.mp3 -o separated --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
 sonare pitch music.mp3 --algorithm pyin --json
 ```
@@ -276,7 +276,12 @@ is polled at the same progress boundaries `onProgress` reports, so a user who
 loads the wrong file does not have to wait out the render.
 
 ```typescript
-import { init, masteringChainWithProgress } from '@libraz/libsonare';
+import {
+  ErrorCode,
+  init,
+  isSonareError,
+  masteringChainWithProgress,
+} from '@libraz/libsonare';
 
 await init();
 
@@ -293,11 +298,8 @@ try {
   });
   render(result);
 } catch (error) {
-  if (isSonareError(error) && error.code === ErrorCode.Cancelled) {
-    // Expected: the user asked to stop.
-    return;
-  }
-  throw error;
+  if (!(isSonareError(error) && error.code === ErrorCode.Cancelled)) throw error;
+  // Expected: the user asked to stop.
 }
 ```
 
@@ -923,7 +925,7 @@ The published package ships a few coordinated pieces:
 - **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
 - **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries `SonareEngine`, the worklet processor classes, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
 - **AudioWorklet bridge** — `worklet.js` / `worklet.d.ts`, the self-contained bundle for `AudioWorkletGlobalScope` that exposes the `SonareEngine` API and processor registration helpers.
-- **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry, compiled without the mastering, mixing, realtime, and project bindings. CI enforces a size budget on it.
+- **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry, compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
 - **Offline Worker entry** — `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
 - **Voice-changer JSON Schemas** — both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.
 

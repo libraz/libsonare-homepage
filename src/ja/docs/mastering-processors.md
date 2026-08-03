@@ -189,9 +189,14 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 
 ## 呼び出し方
 
+単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ範囲と既定値、組み込みプリセット一覧も取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
+
 ::: code-group
 
 ```typescript [ブラウザ]
+const build = capabilityCatalog();
+console.log(build.processors.length, build.presets.mastering);
+
 masteringProcessorNames();   // 実行時にソロプロセッサ id を取得
 masteringProcessorCatalog(); // ピッカー／フィルタ用にプロセッサを分類
 masteringInsertParamInfo('eq.parametric'); // リアルタイムオートメーション用メタデータ
@@ -208,9 +213,40 @@ const report = JSON.parse(masteringPairAnalyze('match.referenceLoudness', source
 const mono   = JSON.parse(masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate));
 ```
 
+```typescript [Node]
+import {
+  capabilityCatalog,
+  masteringInsertParamInfo,
+  masteringPairAnalyze,
+  masteringProcess,
+  masteringProcessStereo,
+  masteringProcessorCatalog,
+  masteringProcessorNames,
+  masteringStereoAnalyze,
+} from '@libraz/libsonare-native';
+
+const build = capabilityCatalog();
+console.log(build.processors.length, build.presets.mastering);
+
+masteringProcessorNames();
+masteringProcessorCatalog();
+masteringInsertParamInfo('eq.parametric');
+
+const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
+  thresholdDb: -24,
+  ratio: 1.5,
+});
+const stereo = masteringProcessStereo('stereo.imager', left, right, sampleRate, { width: 1.1 });
+const report = JSON.parse(masteringPairAnalyze('match.referenceLoudness', source, reference, sampleRate));
+const mono = JSON.parse(masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate));
+```
+
 ```python [Python]
 import json
 import libsonare as sonare
+
+build = sonare.capability_catalog()
+print(len(build["processors"]), build["presets"]["mastering"])
 
 sonare.mastering_processor_names()   # 実行時にソロプロセッサ id を取得
 
@@ -227,6 +263,9 @@ mono   = json.loads(sonare.mastering_stereo_analyze('stereo.monoCompatCheck', le
 ```
 
 ```bash [CLI]
+# 現在のビルドと機能カタログの概要を確認
+sonare doctor --json
+
 # ソロプロセッサ id を取得
 sonare mastering-processors
 

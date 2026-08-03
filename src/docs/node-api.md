@@ -181,7 +181,7 @@ finalization, so it cannot be released deterministically.
 | `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Frames below `threshold` are returned as explicit `N.C.` intervals; trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | Downbeat (bar-start) timestamps |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | Ranked key candidates with correlation scores |
-| `analyze(samples, sampleRate?)` | `AnalysisResult` | All-in-one analysis in one call: `bpm`, `bpmConfidence`, `key`, `timeSignature`, `beatTimes`, `beats`, plus `chords`, `sections`, `timbre`, `dynamics`, `rhythm`, `melody`, and `form`. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
+| `analyze(samples, sampleRate?)` | `AnalysisResult` | All-in-one analysis in one call: BPM and ranked BPM hypotheses, key, time signature and ranked time-signature candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, and form. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
 | `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback for long inputs |
 | `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | Time signature, groove, syncopation. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength` |
@@ -220,7 +220,7 @@ The tables below document the Node native API. The WASM package uses the same ca
 
 The Node addon also exposes Promise-returning variants. They run the DSP pipeline on a libuv worker thread, so the JS event loop is not blocked.
 
-These functions resolve with the same shape as their synchronous counterparts. They are Node-native-only; the WASM build has no worker-thread equivalent.
+These functions resolve with the same shape as their synchronous counterparts and are Node-native-only. Browser code can instead use `OfflineWorkerClient` from `@libraz/libsonare/worker`; it provides task-based analysis and mastering in a Web Worker rather than these identically named functions.
 
 Progress callbacks are not available on the async path. If you need progress updates, use the synchronous call with `onProgress`. If you only need concurrency, run several async calls in parallel.
 
@@ -472,11 +472,19 @@ interface TimeSignature {
   confidence: number;
 }
 
+interface BpmHypothesis {
+  value: number;
+  confidence: number;
+  relation: 'primary' | 'half' | 'double' | 'other';
+}
+
 interface AnalysisResult {
   bpm: number;
   bpmConfidence: number;
+  bpmCandidates: BpmHypothesis[];
   key: Key;
   timeSignature: TimeSignature;
+  timeSignatureCandidates: TimeSignature[];
   beatTimes: Float32Array;                       // Derived from beats[].time
   beats: Array<{ time: number; strength: number }>;
   chords: AnalysisChord[];                       // Detected chord progression

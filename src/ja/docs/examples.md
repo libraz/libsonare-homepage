@@ -302,11 +302,11 @@ key = detect_key(result.harmonic, result.sample_rate)
 ```
 
 ```bash [CLI]
-# Python CLI は倍音／打撃成分のエネルギーを表示します:
-sonare hpss song.mp3 --json
+# pip で入る Python CLI は両方のステムを書き出し、エネルギーも表示します:
+sonare hpss song.mp3 -o separated --json
 
-# 倍音／打撃成分の WAV 書き出しは C++ 製 sonare_cli ビルドで提供されます:
-#   sonare hpss song.wav -o separated
+# ネイティブのリリース実行ファイルでも、固有のコマンド名で同じ処理ができます:
+#   sonare-cli hpss song.wav -o separated --json
 ```
 
 :::
@@ -343,8 +343,8 @@ with Audio.from_file("song.mp3") as audio:
     trimmed = audio.trim(-60)               # -60 dB 以下の無音をトリム
 ```
 
-```bash [C++ CLI]
-# ソースビルド C++ CLI
+```bash [CLI]
+# pip で入る Python CLI で実行できます
 sonare time-stretch song.wav --rate 0.8 -o slower.wav
 sonare pitch-shift song.wav --semitones 2 -o higher.wav
 sonare normalize song.wav --target-db -3 -o normalized.wav
@@ -709,13 +709,13 @@ sonare key song.mp3
 sonare analyze song.mp3 --json > analysis.json
 ```
 
-### オーディオ処理（C++ CLI 専用）
+### オーディオ処理
 
 ::: info
-`pitch-shift`、`time-stretch`、エクスポート用 `hpss` などのコマンドは、ソースからビルドする C++ 製 `sonare_cli` バイナリで提供されます。`pip install libsonare` でインストールされる Python CLI には、[CLI リファレンス](/ja/docs/cli) で説明する解析・特徴抽出系コマンドのみが含まれます。
+`pip install libsonare` でインストールされる Python CLI は、`pitch-shift`、`time-stretch`、ファイル書き出しを行う `hpss` を提供します。ネイティブ実行ファイルの名前は `sonare-cli` なので、リリースアーカイブまたはソースビルドのネイティブ CLI を使う場合はコマンド名を読み替えてください。
 :::
 
-```bash [C++ CLI]
+```bash [Python CLI]
 # 2 半音上に移調
 sonare pitch-shift --semitones 2 input.wav -o output.wav
 

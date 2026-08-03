@@ -261,7 +261,17 @@ const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { t
 const basePreset = suggestion.genreCandidates[0].name;        // e.g. "hipHop"
 
 const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
-// mastered: { samples, sampleRate, inputLufs, outputLufs, appliedGainDb, stages }
+console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
+console.log(mastered.report.bandEnergyDeltaDb.length); // 32 frequency bands
+```
+
+```typescript [Node]
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
+const basePreset = suggestion.genreCandidates[0].name;
+
+const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
+console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
+console.log(mastered.report.bandEnergyDeltaDb.length); // 32 frequency bands
 ```
 
 ```python [Python]
@@ -274,15 +284,20 @@ mastered = sonare.master_audio(
     preset_name=base_preset,
     overrides=suggestion["chainConfig"]["params"],
 )
-# mastered: samples, sample_rate, input_lufs, output_lufs, applied_gain_db, stages
+assert mastered.report is not None
+print(mastered.report.before.integrated_lufs, "→", mastered.report.after.integrated_lufs)
+print(len(mastered.report.band_energy_delta_db))  # 32 frequency bands
 ```
 
 ```bash [CLI]
-sonare mastering source.wav --target-lufs -14 --ceiling-db -1 -o master.wav
+sonare mastering source.wav --target-lufs -14 --ceiling-db -1 \
+  --report mastering-report.json -o master.wav
 sonare mastering-processors
 ```
 
 :::
+
+The result keeps the convenient top-level loudness fields and adds a `report` for before/after UI. Each side includes integrated, maximum momentary, and maximum short-term LUFS, true peak, and loudness range. The report also carries applied gain, maximum gain reduction, whether the peak ceiling limited the loudness target, and 32 after-minus-before band-energy deltas. The CLI writes the same report shape with snake_case keys when `--report` is supplied.
 
 ::: tip Let the user edit between suggest and render
 The intended pattern is to render `chainConfig.params` into editable UI controls, let the user nudge values, then pass the *edited* map to `masterAudio`. The `explanation[]` strings make good inline captions for why each stage is on.

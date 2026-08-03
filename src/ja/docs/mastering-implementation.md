@@ -106,11 +106,13 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
 | プリセットを使う | `masterAudio()`、`masterAudioStereo()`、`masteringPresetNames()` |
 | フルチェーンを実行する | `masteringChain()`、`masteringChainStereo()` |
 | 進捗を表示する | `masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
-| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `reset` / `latencySamples` / `stageNames`） |
+| ブロック単位でレンダリングする | `StreamingMasteringChain`（`prepare` / `processMono` / `processStereo` / `flushMono` / `flushStereo` / `reset` / `latencySamples` / `stageNames`） |
 | 名前付きプロセッサを単体で実行する | `masteringProcessorNames()`、`masteringProcess()`、`masteringProcessStereo()` |
 | ソースとリファレンスを比較する | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()` |
 | ステレオ出力を解析する | `masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
 | プロファイル・提案・プレビュー | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()` |
+
+最後の入力ブロックを処理した後は、空のバッファが返るまで `flushMono()` または `flushStereo()` を呼びます。フラッシュしないと、チェーンの遅延分と有限長のプロセッサテールが出力から欠落します。
 
 関連: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md), [マスタリング](./glossary/mastering.md), [JavaScript API](./js-api.md), [WASM](./wasm.md)
 

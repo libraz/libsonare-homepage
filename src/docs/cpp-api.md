@@ -718,13 +718,13 @@ config.threshold = 0.1f;
 PitchResult yin = yin_track(audio, config);
 
 // pYIN algorithm (probabilistic YIN with HMM smoothing)
-PitchResult pyin = pyin(audio, config);
+PitchResult pyin_result = pyin(audio, config);
 
 // Access results
-float median = pyin.median_f0();
-float mean = pyin.mean_f0();
-const std::vector<float>& f0 = pyin.f0;
-const std::vector<bool>& voiced = pyin.voiced_flag;
+float median = pyin_result.median_f0();
+float mean = pyin_result.mean_f0();
+const std::vector<float>& f0 = pyin_result.f0;
+const std::vector<bool>& voiced = pyin_result.voiced_flag;
 ```
 
 ### CQT / VQT <Badge type="info" text="Medium" />
@@ -954,8 +954,10 @@ struct Section {
 struct AnalysisResult {
   float bpm;
   float bpm_confidence;
+  std::vector<BpmCandidateHypothesis> bpm_candidates;
   Key key;
   TimeSignature time_signature;
+  std::vector<TimeSignature> time_signature_candidates;
   std::vector<Beat> beats;
   std::vector<Chord> chords;
   std::vector<Section> sections;
@@ -1257,7 +1259,7 @@ For realtime insert automation and external MIDI in the C ABI:
 - `sonare_engine_set_midi_destination_external` moves a destination out of the internal instrument rack and into the host-drained output queue. Up to 16 destinations may be external. Clock/transport forwarding is opt-in through `sonare_engine_set_external_midi_clock_enabled`; those messages use destination `0xFFFFFFFF`.
 - On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
 
-To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","channelPolicy"}, ...]`, where `kind` is `realtime`/`offline`/`pair` and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); `tailSamples` is the audible decay length, and both are 0 for offline ids. `channelPolicy` tells a surround host how the mixer wraps the processor. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
+To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]`. `kind` is `realtime`/`offline`/`pair`, and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); `tailSamples` is the audible decay length, and both are 0 for offline ids. `realtimeCost` is a coarse `low`/`moderate`/`high` algorithmic estimate for live inserts, not a hardware benchmark, and is `null` for non-insert ids. `channelPolicy` tells a surround host how the mixer wraps the processor, `category` is the stable UI grouping derived from the id namespace, and `params` contains the realtime-insert parameter descriptors (empty for non-insert processors). The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
 
 Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The typed preset selector is the `SonareVoiceCharacterPreset` enum (`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 through `SONARE_VC_PRESET_DARK_VILLAIN` = 5); `sonare_voice_character_preset_id(preset)` returns its canonical id string (NULL for unknown values), and the `SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` macro provides the newline-separated id list for compile-time binding generation. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
 

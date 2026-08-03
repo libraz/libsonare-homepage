@@ -205,14 +205,13 @@ Node ネイティブの `Audio` オブジェクトは、ネイティブアドオ
 
 読み込み入口も異なります。Node ネイティブは `Audio.fromFile(...)` と `Audio.fromMemory(...)` に対応します。WASM は `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` に対応します。
 
+サンプルの取得方法も異なります。Node ネイティブの `audio.getData()` はコピーを返しますが、WASM の `audio.data` はインスタンスが持つ可変な `Float32Array` そのものを返します。
+
 メソッドと関数の完全なリファレンスは [Node.js Native API](./node-api.md) を参照してください。
 
 ### StreamingMasteringChain
 
-ネイティブアドオン（および WASM パッケージ）は、ブロック単位でレンダリングする
-`StreamingMasteringChain` クラスも公開しています。Electron アプリや
-ワーカー、音声入力パイプラインなどから、`masteringChain()` と同じ
-ネスト構造の設定を使ってブロックごとに処理を進められます。
+ネイティブアドオン（および WASM パッケージ）は、ブロック単位でレンダリングする `StreamingMasteringChain` クラスも公開しています。Electron アプリや Worker、音声入力パイプラインなどから、`masteringChain()` と同じネスト構造の設定に `loudnessStaticGainDb` と任意の `loudnessStaticGainPeakDb` を加えて、ブロックごとに処理を進められます。
 
 ```typescript
 import { StreamingMasteringChain } from '@libraz/libsonare-native';
@@ -232,12 +231,7 @@ console.log(chain.stageNames(), chain.latencySamples());
 chain.reset();   // 状態だけクリア（prepare し直さない）
 ```
 
-`numChannels === 1` のときはステレオ専用ステージはスキップされます。
-ストリーミングチェーンはオフライン専用の repair 段と、ファイル全体が必要な
-`loudness` 段を拒否します。これらが必要な場合は `masteringChain*` または
-`masterAudio*` を使ってください。WASM ビルドは追加で `chain.delete()` を
-公開しておりハンドルを解放できます。
-ネイティブアドオンは GC で自動的に解放します。
+`numChannels === 1` のときはステレオ専用ステージはスキップされます。ストリーミングチェーンはオフライン専用の repair 段を拒否します。`loudness` 段を使うには事前計算した静的ゲインを `loudnessStaticGainDb` で指定し、必要に応じて音源のトゥルーピークを `loudnessStaticGainPeakDb` で渡します。後者を指定すると、静的ゲインは設定したシーリングを超えないように制限されます。WASM ビルドは `chain.delete()` も公開し、ハンドルを明示的に解放できます。ネイティブアドオンのハンドルは GC で解放されます。
 
 関連するマスタリングガイド: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)、[品質チェックリスト](./glossary/mastering/quality-checklist.md)。
 

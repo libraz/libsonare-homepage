@@ -260,9 +260,9 @@ onto the ordinary DSP config:
 |-------|-------|-------|
 | `pitch` | −24 … 24 | Retune, in semitones |
 | `formant` | 0.55 … 1.65 | Formant scale factor |
-| `brightness` | 0 … 1 | Formant brightness tilt |
+| `brightness` | 0 … 1 | Formant brightness plus EQ presence and air |
 | `space` | 0 … 1 | Reverb mix, up to the chain's 0.45 ceiling |
-| `intensity` | 0 … 1 | Compression and drive |
+| `intensity` | 0 … 1 | Compressor ratio |
 | `noiseControl` | 0 … 1 | Gate and noise handling |
 | `sibilance` | 0 … 1 | De-esser amount |
 

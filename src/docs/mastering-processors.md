@@ -185,9 +185,14 @@ The creative-FX insert catalog — reverb, modulation, and delay insert IDs, the
 
 ## How to call them
 
+Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It includes each processor's parameter bounds and defaults plus the built-in preset lists. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+
 ::: code-group
 
 ```typescript [Browser]
+const build = capabilityCatalog();
+console.log(build.processors.length, build.presets.mastering);
+
 masteringProcessorNames();   // discover solo processor ids at runtime
 masteringProcessorCatalog(); // classify processors for picker/filter UIs
 masteringInsertParamInfo('eq.parametric'); // realtime automation metadata
@@ -204,9 +209,40 @@ const report = JSON.parse(masteringPairAnalyze('match.referenceLoudness', source
 const mono   = JSON.parse(masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate));
 ```
 
+```typescript [Node]
+import {
+  capabilityCatalog,
+  masteringInsertParamInfo,
+  masteringPairAnalyze,
+  masteringProcess,
+  masteringProcessStereo,
+  masteringProcessorCatalog,
+  masteringProcessorNames,
+  masteringStereoAnalyze,
+} from '@libraz/libsonare-native';
+
+const build = capabilityCatalog();
+console.log(build.processors.length, build.presets.mastering);
+
+masteringProcessorNames();
+masteringProcessorCatalog();
+masteringInsertParamInfo('eq.parametric');
+
+const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
+  thresholdDb: -24,
+  ratio: 1.5,
+});
+const stereo = masteringProcessStereo('stereo.imager', left, right, sampleRate, { width: 1.1 });
+const report = JSON.parse(masteringPairAnalyze('match.referenceLoudness', source, reference, sampleRate));
+const mono = JSON.parse(masteringStereoAnalyze('stereo.monoCompatCheck', left, right, sampleRate));
+```
+
 ```python [Python]
 import json
 import libsonare as sonare
+
+build = sonare.capability_catalog()
+print(len(build["processors"]), build["presets"]["mastering"])
 
 sonare.mastering_processor_names()   # discover solo processor ids at runtime
 
@@ -223,6 +259,9 @@ mono   = json.loads(sonare.mastering_stereo_analyze('stereo.monoCompatCheck', le
 ```
 
 ```bash [CLI]
+# inspect this build and its capability-catalog summary
+sonare doctor --json
+
 # discover solo processor ids
 sonare mastering-processors
 

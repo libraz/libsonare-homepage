@@ -481,4 +481,4 @@ Build:  Emscripten with Embind
 Flags:  -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```
 
-The full mastering + mixing + analysis API set accounts for the bundle size; an analysis-only build would be smaller.
+The full mastering + mixing + analysis API set accounts for the bundle size. The published [`@libraz/libsonare/analysis`](./installation.md) build is substantially smaller because it leaves out the mastering, mixing, realtime, and project surfaces.
