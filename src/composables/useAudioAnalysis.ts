@@ -61,14 +61,24 @@ export function useAudioAnalysis() {
   const result = shallowRef<AnalysisResult | null>(null);
   const error = ref<string | null>(null);
 
+  // Timings taken on the visitor's own machine. A published table can only
+  // describe the machine it was measured on; these describe the one running
+  // the demo. realtimeFactor is how many seconds of audio each second of
+  // analysis covers, which is the figure that survives a hardware change.
+  const initMs = ref(0);
+  const analysisMs = ref(0);
+  const realtimeFactor = ref(0);
+
   let wasmModule: any = null;
 
   async function initWasm() {
     if (isInitialized.value) return;
 
     try {
+      const startedAt = performance.now();
       wasmModule = await import('@/wasm/index.js');
       await wasmModule.init();
+      initMs.value = performance.now() - startedAt;
       isInitialized.value = true;
     } catch (e) {
       console.error('Failed to initialize WASM:', e);
@@ -100,6 +110,7 @@ export function useAudioAnalysis() {
       const sampleRate = audioBuffer.sampleRate;
 
       // Analyze with progress callback
+      const startedAt = performance.now();
       const analysisResult = wasmModule.analyzeWithProgress(
         samples,
         sampleRate,
@@ -108,6 +119,9 @@ export function useAudioAnalysis() {
           progressStage.value = stage;
         },
       );
+      analysisMs.value = performance.now() - startedAt;
+      realtimeFactor.value =
+        analysisMs.value > 0 ? audioBuffer.duration / (analysisMs.value / 1000) : 0;
 
       result.value = analysisResult;
       return analysisResult;
@@ -167,6 +181,9 @@ export function useAudioAnalysis() {
     progressStage,
     result,
     error,
+    initMs,
+    analysisMs,
+    realtimeFactor,
     initWasm,
     getVersion,
     analyze,

@@ -19,7 +19,10 @@
       "timeSig": "拍子",
       "duration": "長さ",
       "rate": "レート",
-      "source": "ソース"
+      "source": "ソース",
+      "analysisTime": "解析時間",
+      "realtime": "実時間比",
+      "measuredHere": "いま、この端末で計測した値です。"
     },
     "results": {
       "title": "解析結果",

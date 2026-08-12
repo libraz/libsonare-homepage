@@ -67,6 +67,8 @@ const {
   progressStage,
   result,
   error: analysisError,
+  analysisMs,
+  realtimeFactor,
   analyze,
 } = useAudioAnalysis();
 
@@ -743,6 +745,17 @@ onMounted(() => {
               <template #label><TermLabel v-bind="term('rate')">{{ t('demo.panel.rate') }}</TermLabel></template>
             </MetricItem>
             <div class="analyzer__metrics-divider"></div>
+            <!-- Measured on this visitor's machine, not read from a table -->
+            <template v-if="analysisMs > 0">
+              <MetricItem :value="`${(analysisMs / 1000).toFixed(2)}s`">
+                <template #label>{{ t('demo.panel.analysisTime') }}</template>
+              </MetricItem>
+              <MetricItem :value="`${realtimeFactor.toFixed(0)}x`">
+                <template #label>{{ t('demo.panel.realtime') }}</template>
+              </MetricItem>
+              <p class="analyzer__measured-note">{{ t('demo.panel.measuredHere') }}</p>
+              <div class="analyzer__metrics-divider"></div>
+            </template>
             <!-- Source -->
             <MetricItem :value="fileName" variant="success">
               <template #label><TermLabel v-bind="term('source')">{{ t('demo.panel.source') }}</TermLabel></template>

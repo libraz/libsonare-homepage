@@ -19,7 +19,10 @@
       "timeSig": "TIME",
       "duration": "LEN",
       "rate": "RATE",
-      "source": "SRC"
+      "source": "SRC",
+      "analysisTime": "ANALYSIS",
+      "realtime": "VS REALTIME",
+      "measuredHere": "Measured on this device just now."
     },
     "results": {
       "title": "Analysis Results",
