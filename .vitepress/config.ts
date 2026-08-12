@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitepress';
-import { generateLlmsTxt } from './llms';
+import { generateLlmsTxt, type LlmsLocale, llmsDevPlugin } from './llms';
 
 const siteUrl = 'https://sonare.libraz.net';
 const githubUrl = 'https://github.com/libraz/libsonare';
@@ -22,6 +22,65 @@ function languageLabel(locale: string): string {
   const english = englishLanguageNames.of(locale) ?? locale;
   const native = new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
   return english === native ? english : `${english} (${native})`;
+}
+
+/**
+ * Prose for the per-locale llms.txt indexes. A locale added to `src/locales`
+ * without an entry here still gets an index, falling back to the English copy.
+ */
+const llmsProse: Record<
+  string,
+  Pick<LlmsLocale, 'summary' | 'intro' | 'overviewHeading' | 'homeText'> & {
+    alternateHeading: string;
+    alternateDescription: (label: string) => string;
+  }
+> = {
+  en: {
+    summary:
+      'Audio engine built on a dependency-free C++ core compiled to WebAssembly: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
+    intro:
+      'libsonare runs entirely client-side in the browser (WebAssembly) and natively in\nNode.js, Python, the CLI, and C++. Every demo listed below is a live browser page that\nexercises the same core the native builds use. The links below point to the canonical\nHTML documentation.',
+    overviewHeading: 'Demos and key pages',
+    homeText: 'libsonare home',
+    alternateHeading: 'Other languages',
+    alternateDescription: (label) => `The same index in ${label}.`,
+  },
+  ja: {
+    summary:
+      '外部依存のない C++ コアを WebAssembly にコンパイルしたオーディオエンジン。librosa 互換の解析（BPM・調・コード・ビート・セクション・メロディ・ラウドネス）、放送品質のマスタリングとミキシング、室内音響、内蔵インストゥルメント（シンセ + SoundFont）、ヘッドレス DAW / リアルタイムランタイムを備える。Apache-2.0。',
+    intro:
+      'libsonare はブラウザ内（WebAssembly）で完結して動作し、Node.js・Python・CLI・C++ では\nネイティブに動作する。以下に挙げるデモはすべて実際に動くブラウザページで、ネイティブ版と\n同じコアを呼んでいる。以下は日本語ドキュメントへのリンク一覧。',
+    overviewHeading: 'デモと主要ページ',
+    homeText: 'libsonare トップ',
+    alternateHeading: '他の言語',
+    alternateDescription: (label) => `${label} 版の同じ構成のインデックス。`,
+  },
+};
+
+/** One llms.txt spec per discovered locale, each cross-linking to all the others. */
+function llmsLocales(): LlmsLocale[] {
+  return siteLocales.map((locale) => {
+    const prose = llmsProse[locale] ?? llmsProse[defaultLocale];
+    return {
+      key: locale === defaultLocale ? 'root' : locale,
+      prefix: locale === defaultLocale ? '' : `/${locale}`,
+      title: 'libsonare',
+      summary: prose.summary,
+      intro: prose.intro,
+      overviewHeading: prose.overviewHeading,
+      homeText: prose.homeText,
+      alternate: {
+        heading: prose.alternateHeading,
+        items: siteLocales
+          .filter((other) => other !== locale)
+          .map((other) => ({
+            text: languageLabel(other),
+            link: other === defaultLocale ? '/llms.txt' : `/${other}/llms.txt`,
+            description: prose.alternateDescription(languageLabel(other)),
+          })),
+      },
+    };
+  });
 }
 
 type WasmAssetMeta = {
@@ -597,21 +656,24 @@ const generatedLocaleConfigs = Object.fromEntries(
 );
 
 // JSON-LD: SoftwareApplication schema
-const softwareApplicationJsonLd = {
+const softwareApplicationJsonLd = (lang: 'en' | 'ja') => ({
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'libsonare',
   applicationCategory: 'MultimediaApplication',
   applicationSubCategory: 'Audio engine with a dependency-free C++ core',
   operatingSystem: 'Any (Browser, Node.js, Linux, macOS)',
+  inLanguage: lang,
   offers: {
     '@type': 'Offer',
     price: '0',
     priceCurrency: 'USD',
   },
   description:
-    'Apache-2.0 audio engine for C++, Python, Node, CLI, and WebAssembly, built on a dependency-free C++ core: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
-  url: siteUrl,
+    lang === 'ja'
+      ? '依存ゼロの C++ コアの上に構築された、Apache-2.0 の音声エンジン。C++・Python・Node・CLI・WebAssembly から使え、librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵音源、ヘッドレス DAW / リアルタイムランタイムを備えます。'
+      : 'Apache-2.0 audio engine for C++, Python, Node, CLI, and WebAssembly, built on a dependency-free C++ core: librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a headless-DAW/realtime runtime.',
+  url: lang === 'ja' ? `${siteUrl}/ja/` : siteUrl,
   softwareHelp: `${siteUrl}/docs/introduction.html`,
   downloadUrl: githubUrl,
   softwareVersion: wasmMeta.version,
@@ -638,22 +700,26 @@ const softwareApplicationJsonLd = {
   ],
   programmingLanguage: ['C++', 'TypeScript', 'Python'],
   keywords:
-    'audio engine, dependency-free C++ core, music mastering, mastering DSP, mixing engine, editing DSP, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, music information retrieval, MIR, BPM detection, key detection, chord recognition, beat tracking, loudness, true peak, WebAssembly, WASM, C++, Python, 音声解析, マスタリング, ミキシング, シンセサイザー, SoundFont, MIDI, テンポ検出, キー検出, コード認識',
-};
+    lang === 'ja'
+      ? '音声エンジン, 依存ゼロ C++ コア, マスタリング, ミキシング, 編集 DSP, 内蔵音源, ソフトシンセ, SoundFont SF2 プレイヤー, MIDI シーケンス, ヘッドレス DAW, リアルタイム音声エンジン, 音楽情報検索, MIR, テンポ検出, キー検出, コード認識, ビート検出, ラウドネス, トゥルーピーク, WebAssembly, WASM, C++, Python'
+      : 'audio engine, dependency-free C++ core, music mastering, mastering DSP, mixing engine, editing DSP, built-in instruments, software synthesizer, SoundFont SF2 player, MIDI sequencing, headless DAW, realtime audio engine, music information retrieval, MIR, BPM detection, key detection, chord recognition, beat tracking, loudness, true peak, WebAssembly, WASM, C++, Python',
+});
 
-const webSiteJsonLd = {
+const webSiteJsonLd = (lang: 'en' | 'ja') => ({
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: 'libsonare',
-  url: siteUrl,
+  url: lang === 'ja' ? `${siteUrl}/ja/` : siteUrl,
   description:
-    'Documentation and browser-local demos for libsonare, an audio engine with a dependency-free C++ core.',
-  inLanguage: siteLocales,
+    lang === 'ja'
+      ? '依存ゼロの C++ コアを持つ音声エンジン libsonare のドキュメントと、ブラウザ内で動くデモ。'
+      : 'Documentation and browser-local demos for libsonare, an audio engine with a dependency-free C++ core.',
+  inLanguage: lang,
   publisher: {
     '@type': 'Person',
     name: 'libraz',
   },
-};
+});
 
 export default defineConfig({
   srcDir: 'src',
@@ -670,32 +736,15 @@ export default defineConfig({
     hostname: siteUrl,
   },
 
-  // Emit an llms.txt index (https://llmstxt.org) into the build output.
+  // Emit an llms.txt index (https://llmstxt.org) into the build output, one per locale.
   buildEnd(siteConfig) {
     generateLlmsTxt({
       siteUrl,
       srcDir: siteConfig.srcDir,
       outDir: siteConfig.outDir,
-      summary:
-        'Audio engine built on a dependency-free C++ core compiled to WebAssembly: librosa-compatible analysis (BPM, key, chord, beat, section, melody, loudness), broadcast-grade mastering and mixing, room acoustics, built-in instruments (synth + SoundFont), and a headless-DAW/realtime runtime. Apache-2.0.',
-      demoMenu: enDemoMenu,
-      docsSidebar: enDocsSidebar,
-      glossaryRoot: glossarySidebar[0],
-      localizedSections: siteLocales
-        .filter((locale) => locale !== defaultLocale)
-        .map((locale) => {
-          const label = languageLabel(locale);
-          return {
-            locale,
-            label,
-            docsLink: `/${locale}/docs/introduction`,
-            demosLink: `/${locale}/demos`,
-            docsText: `${label} documentation`,
-            demosText: `${label} demos`,
-            docsDescription: `Localized documentation for ${label}.`,
-            demosDescription: `Localized browser demos for ${label}.`,
-          };
-        }),
+      cleanUrls: siteConfig.cleanUrls,
+      site: siteConfig.site,
+      locales: llmsLocales(),
     });
   },
 
@@ -713,10 +762,6 @@ export default defineConfig({
         rel: 'stylesheet',
       },
     ],
-
-    // JSON-LD structured data
-    ['script', { type: 'application/ld+json' }, JSON.stringify(softwareApplicationJsonLd)],
-    ['script', { type: 'application/ld+json' }, JSON.stringify(webSiteJsonLd)],
 
     // SEO - Keywords
     [
@@ -798,6 +843,16 @@ export default defineConfig({
           hreflang: 'x-default',
           href: defaultAlternate ? absoluteUrl(defaultAlternate.path) : url,
         },
+      ],
+      [
+        'script',
+        { type: 'application/ld+json' },
+        JSON.stringify(softwareApplicationJsonLd(lang as 'en' | 'ja')),
+      ],
+      [
+        'script',
+        { type: 'application/ld+json' },
+        JSON.stringify(webSiteJsonLd(lang as 'en' | 'ja')),
       ],
       ['script', { type: 'application/ld+json' }, JSON.stringify(webPageJsonLd)],
     ] as any[];
@@ -961,6 +1016,7 @@ export default defineConfig({
   },
 
   vite: {
+    plugins: [llmsDevPlugin({ siteUrl, locales: llmsLocales() })],
     build: {
       // Heavy docs/demo chunks are checked explicitly by `check:built-routes`.
       chunkSizeWarningLimit: 1280,
