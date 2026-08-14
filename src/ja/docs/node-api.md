@@ -164,9 +164,8 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 長時間動くプロセスではそちらを推奨します。
 
 `RealtimeVoiceChanger` も明示的な `destroy()` に加えて `[Symbol.dispose]` を実装しているため、
-`using` を使えます。一方、ストリーミング／解析クラスの `StreamingMasteringChain`、
-`StreamingEqualizer`、`StreamAnalyzer` は `destroy()` も `[Symbol.dispose]` も公開しておらず、
-ネイティブ状態は GC のファイナライズで回収されるため、決定的に解放することはできません。
+`using` を使えます。`StreamingMasteringChain`、`StreamingEqualizer`、`StreamAnalyzer` も同様に
+冪等な `destroy()` と `[Symbol.dispose]` を公開しており、決定的に解放できます。
 
 ### 解析関数
 
@@ -188,7 +187,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | 構造セクション（イントロ／ヴァース／コーラスなど）と時刻。`options`: `nFft`、`hopLength`、`minSectionSec`。長尺入力では境界グリッドがプーリングされる場合があるため、配置には各セクションの `start` / `end` を使います |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | 主旋律の輪郭（フレームごとの F0）。`options`: `fmin`、`fmax`、`frameLength`、`hopLength`、`threshold`、`usePyin`、`center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | 録音からの室内音響（RT60 など）。`options`: `nOctaveBands`、`nThirdOctaveSubbands`、`minDecayDb`、`noiseFloorMarginDb` |
-| `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?)` | `AcousticResult` | 測定済みインパルス応答からの室内音響 |
+| `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | 測定済みインパルス応答からの室内音響。`minDecayDb` は減衰フィットのしきい値（既定 `30`） |
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 体積、寸法、DRR、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
 | `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR |
 | `roomMorph(samples, sampleRate, options?)` | `Float32Array` | 目標ルームへ寄せるオフラインのルームモーフィング |
@@ -199,7 +198,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `shortTermLufs(samples, sampleRate?)` | `Float32Array` | ショートタームラウドネス（3s）の時系列 |
 | `version()` | `string` | ライブラリバージョン |
 | `voiceChangerAbiVersion()` | `number` | リアルタイムボイスチェンジャー POD 設定の ABI バージョン。プリセット JSON の `schemaVersion` とは別 |
-| `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | 序数または ID から正規の voice-character プリセット ID を返す |
+| `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | 正規の voice-character プリセット ID。未知の数値序数は `null`、未知の文字列 ID は例外 |
 | `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig` | JSON 解析なしで、組み込みボイスプリセットの解決済みフラット POD 設定を返す。未知のプリセット名や範囲外の序数では例外を投げる |
 | `hasFfmpegSupport()` | `boolean` | 読み込まれたネイティブアドオンが FFmpeg デコードに対応しているか |
 
@@ -232,16 +231,16 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `hpss(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS） |
-| `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssWithResidualResult` | 倍音、打撃、残差を返す HPSS |
+| `hpss(samples, sr?, kernelHarmonic?, kernelPercussive?, nFft?, hopLength?, hardMask?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS）。既定は `nFft=2048`、`hopLength=512`、`hardMask=false` |
+| `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?, nFft?, hopLength?, hardMask?)` | `HpssWithResidualResult` | 倍音、打撃、残差を返す HPSS。同じ STFT／マスクオプションを受け取ります |
 | `harmonic(samples, sr?)` | `Float32Array` | 倍音成分の抽出 |
 | `percussive(samples, sr?)` | `Float32Array` | 打撃成分の抽出 |
-| `timeStretch(samples, sampleRate, rate)` | `Float32Array` | ピッチを変えずにテンポを変更 |
+| `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | ピッチを変えずにテンポを変更。既定は `nFft=2048`、`hopLength=512` |
 | `phaseVocoder(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | 直接のフェーズボコーダー時間伸縮 |
-| `pitchShift(samples, sampleRate, semitones)` | `Float32Array` | 長さを変えずにピッチを変更 |
+| `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` | `Float32Array` | 長さを変えずにピッチを変更。既定は `nFft=2048`、`hopLength=512` |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | サンプル区間の並べ替え／連結 |
-| `normalize(samples, sr?, targetDb?)` | `Float32Array` | 目標 dB にノーマライズ（デフォルト: 0.0） |
-| `trim(samples, sr?, thresholdDb?)` | `Float32Array` | 無音区間をトリム（デフォルト: -60.0 dB） |
+| `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | 目標ピーク／RMS dB にノーマライズ（`mode`: `'peak'` または `'rms'`、既定 `'peak'`） |
+| `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | 無音区間をトリム（既定: `-60.0` dB、`frameLength=2048`、`hopLength=512`） |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | 目標サンプルレートへリサンプリング |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | 保持された音を MIDI ピッチ間で補正 |
 | `noteStretch(samples, sr?, options?)` | `Float32Array` | 1 つの音の区間をその場でタイムストレッチ。`options` は `{ onsetSample, offsetSample, stretchRatio }` |
@@ -251,7 +250,8 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 librosa 互換のフレーム RMS ベースのヘルパーで、元音源上のサンプル範囲も返します。
 
 `hpss(...)` と `hpssWithResidual(...)` は、メディアンフィルタのカーネルを既定で
-`kernelHarmonic=31`、`kernelPercussive=31` とします。
+`kernelHarmonic=31`、`kernelPercussive=31` とします。リクエストオブジェクト形式でも
+位置引数形式と同じ `nFft`、`hopLength`、`hardMask` の名前を使います。
 
 ### 特徴抽出関数
 
@@ -279,7 +279,7 @@ librosa 互換のフレーム RMS ベースのヘルパーで、元音源上の�
 | `cqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 定 Q 変換の振幅 |
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | 可変 Q 変換の振幅（`gamma` で Q を制御） |
 | `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q クロマグラム（`librosa.feature.chroma_cqt` 相当） |
-| `nnlsChroma(samples, sr?)` | `{ nChroma, nFrames, data }` | NNLS クロマグラム（音符活性化クロマ） |
+| `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS クロマグラム（音符活性化クロマ）。`options.hopLength` の既定値は `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | 行優先スペクトログラムから NMF 分解行列を返す |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | ハイブリッド CQT 振幅（低域は真の CQT、高域は擬似 CQT） |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 近似（擬似）CQT 振幅（単一 FFT） |
@@ -462,6 +462,13 @@ changer.destroy();
 | WASM | `engineCapabilities()` を追加し、構築前に ABI 互換性を確認します。キャプチャバッファは `setCaptureBuffer(numChannels, capacityFrames)` で設定します。 |
 | Node ネイティブ | `engineAbiVersion()` を公開します。ブラウザ向けの機能確認ヘルパーはありません。キャプチャバッファは、事前確保したチャンネルバッファを `setCaptureBuffer(channels)` として渡します。 |
 
+`Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と
+`assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、
+`ProjectAutomationTargetKind` と `targetKind` でオートメーションレーンの対象種別を付けられます。
+`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、`'pfl'`、
+`'afl'`（および数値序数）を受け取ります。トラック／ミキサーのパン則セッターは、下記の
+`PanLawInput` エイリアスを受け取ります。
+
 ### 型定義
 
 ```typescript
@@ -568,8 +575,9 @@ interface PitchResult {
 | 解析オプション／結果 | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
 | ストリーミング解析 | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | マスタリングとメータリング | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
-| ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanMode`, `SendTiming` |
-| リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
+| ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
+| リアルタイム音声 | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | リアルタイムエンジングラフ | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
-| リアルタイムエンジントランスポート | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig` |
+| リアルタイムエンジントランスポート | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig`, `EngineTrackMonitorMode` |
+| プロジェクトのメタデータ／オートメーション | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |

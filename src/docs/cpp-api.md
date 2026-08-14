@@ -785,6 +785,18 @@ auto reconstructed_vqt = griffinlim_vqt(vqt_result, vqt_result.sample_rate());
 ```
 :::
 
+### NNLS Chroma
+
+NNLS chroma uses a configurable CQT hop length. The default is `512` samples;
+set it on `NnlsChromaConfig::cqt` when matching another frame grid.
+
+```cpp
+NnlsChromaConfig nnls_config;
+nnls_config.cqt.hop_length = 512;
+nnls_config.enable_stft_blend = true;
+auto nnls_result = nnls_chroma(audio, nnls_config);
+```
+
 ## Effects
 
 ### HPSS <Badge type="warning" text="Heavy" />
@@ -797,10 +809,18 @@ HPSS requires STFT computation and median filtering. Processing time scales with
 HpssConfig config;
 config.kernel_size_harmonic = 31;
 config.kernel_size_percussive = 31;
+config.use_soft_mask = false;  // hard mask; true is the default
 
-auto result = hpss(audio, config);
+StftConfig stft_config;
+stft_config.n_fft = 2048;
+stft_config.hop_length = 512;
+
+auto result = hpss(audio, config, stft_config);
 // result.harmonic
 // result.percussive
+
+auto with_residual = hpss_with_residual(audio, config, stft_config);
+// with_residual.harmonic / .percussive / .residual
 
 // Convenience functions
 auto harm = harmonic(audio);
@@ -814,9 +834,13 @@ Uses phase vocoder algorithm. Processing time increases with audio duration.
 :::
 
 ```cpp
+TimeStretchConfig stretch_config;
+stretch_config.n_fft = 2048;
+stretch_config.hop_length = 512;
+
 // 0.5 = half speed, 2.0 = double speed
-auto slow = time_stretch(audio, 0.5f);
-auto fast = time_stretch(audio, 1.5f);
+auto slow = time_stretch(audio, 0.5f, stretch_config);
+auto fast = time_stretch(audio, 1.5f, stretch_config);
 ```
 
 ### Pitch Shift <Badge type="warning" text="Heavy" />
@@ -826,9 +850,13 @@ Combines time stretching and resampling. Processing time increases with audio du
 :::
 
 ```cpp
+PitchShiftConfig shift_config;
+shift_config.n_fft = 2048;
+shift_config.hop_length = 512;
+
 // Semitones: +12 = one octave up
-auto higher = pitch_shift(audio, 2.0f);
-auto lower = pitch_shift(audio, -3.0f);
+auto higher = pitch_shift(audio, 2.0f, shift_config);
+auto lower = pitch_shift(audio, -3.0f, shift_config);
 ```
 
 ### Normalize & Audio Utilities
@@ -842,6 +870,11 @@ auto rms_norm = normalize_rms(audio, -20.0f);  // Target RMS level in dB
 
 // Silence trimming (absolute dBFS threshold)
 auto trimmed = trim_absolute(audio, -60.0f);   // Threshold in dBFS
+
+// Frame/RMS silence trimming; defaults are frame_length=2048, hop_length=512.
+std::vector<float> samples(audio.begin(), audio.end());
+auto framed_trim = trim(samples, /*top_db=*/60.0f, /*frame_length=*/2048,
+                        /*hop_length=*/512);
 
 // Level measurement (metering/basic.h, namespace sonare::metering)
 float peak = sonare::metering::peak_db(audio);  // Peak amplitude in dB
@@ -1204,12 +1237,19 @@ Several helper families also have sample-based C ABI entry points:
 
 | Family | Examples |
 |--------|----------|
-| Effects | `sonare_hpss`, `sonare_time_stretch`, `sonare_phase_vocoder`, `sonare_pitch_shift`, `sonare_spectral_edit`, `sonare_normalize`, `sonare_trim` |
-| Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_mfcc_ex`, `sonare_chroma`, `sonare_chroma_cqt`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
-| Geometric room acoustics | `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
+| Effects | `sonare_hpss`, `sonare_hpss_ex`, `sonare_hpss_with_residual`, `sonare_time_stretch_ex`, `sonare_phase_vocoder`, `sonare_pitch_shift_ex`, `sonare_spectral_edit`, `sonare_normalize`, `sonare_normalize_rms`, `sonare_trim_ex` |
+| Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_mfcc_ex`, `sonare_chroma`, `sonare_chroma_cqt`, `sonare_nnls_chroma_ex2`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
+| Room acoustics | `sonare_analyze_impulse_response_ex`, `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
 | Conversions and resampling | See `src/sonare_c.h` for the full list |
 
 `sonare_chroma_cqt` computes a constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) alongside the note-activation `sonare_chroma`. The explicit-range MFCC entry point `sonare_mfcc_ex` (fmin/fmax/htk) also carries a trailing cepstral `lifter` argument (`0` disables liftering).
+
+The extended C ABI effect calls expose the FFT settings used by the bindings:
+`sonare_hpss_ex` accepts `n_fft`, `hop_length`, `use_soft_mask`, and a
+residual-output flag; `sonare_time_stretch_ex` and `sonare_pitch_shift_ex`
+accept `n_fft` and `hop_length`; and `sonare_trim_ex` accepts `frame_length`
+and `hop_length`. `sonare_analyze_impulse_response_ex` adds `min_decay_db`,
+while `sonare_nnls_chroma_ex2` adds the CQT `hop_length` to the NNLS options.
 
 Project editing lives in `sonare_c_project.h`. `sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` accepts the optional equal-power seam crossfade as the final argument. It must be finite and non-negative; `0` keeps a hard loop. The engine clamps it to the available pre-roll and half the loop, and ignores it under warp.
 

@@ -338,14 +338,14 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbre_over_time` (`timbreOverTime` alias) |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | Song-structure sections (intro/verse/chorus/...) |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | Monophonic melody contour (YIN) |
-| `analyze_impulse_response(samples, sample_rate, ...)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80) |
+| `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80); `min_decay_db` controls the decay-fit threshold |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
 | `estimate_room(samples, sample_rate, ...)` | `RoomEstimate` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
 | `synthesize_rir(length_m, width_m, height_m, ...)` | `RirResult` | Mono room impulse response from shoebox geometry |
 | `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `list[float]` | Offline creative morph toward a target room |
 | `version()` | `str` | Library version |
 | `voice_changer_abi_version()` | `int` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
-| `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal |
+| `voice_character_preset_id(preset)` | `str \| None` | Canonical voice-character preset ID for an integer ordinal; unknown ordinals return `None` |
 | `realtime_voice_changer_preset_config(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing |
 | `engine_abi_version()` | `int` | ABI version of the realtime engine interface |
 | `project_abi_version()` | `int` | ABI version of the project/editing API used by `Project` serialization, bounce, and realtime clip exchange |
@@ -419,7 +419,7 @@ Use these functions for the room or playback space, not for song structure.
 :::
 
 ```python
-ir = sonare.analyze_impulse_response(ir_samples, sample_rate, n_octave_bands=6)
+ir = sonare.analyze_impulse_response(ir_samples, sample_rate, n_octave_bands=6, min_decay_db=30.0)
 print(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence)
 
 blind = sonare.detect_acoustic(
@@ -454,18 +454,20 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | Harmonic-Percussive Source Separation; median-filter kernels default to `kernel_harmonic=31`, `kernel_percussive=31` |
+| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` | `HpssResult` | Harmonic-Percussive Source Separation; defaults: `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, `hard_mask=False` |
+| `hpss_with_residual(samples, sample_rate, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` | `dict[str, object]` | HPSS with harmonic, percussive, and residual outputs |
 | `harmonic(samples, sample_rate)` | `list[float]` | Extract harmonic component |
 | `percussive(samples, sample_rate)` | `list[float]` | Extract percussive component |
-| `time_stretch(samples, sample_rate, rate)` | `list[float]` | Time-stretch without pitch change |
-| `pitch_shift(samples, sample_rate, semitones)` | `list[float]` | Pitch-shift without tempo change |
+| `time_stretch(samples, sample_rate, rate, n_fft?, hop_length?)` | `list[float]` | Time-stretch without pitch change; defaults: `n_fft=2048`, `hop_length=512` |
+| `pitch_shift(samples, sample_rate, semitones, n_fft?, hop_length?)` | `list[float]` | Pitch-shift without tempo change; defaults: `n_fft=2048`, `hop_length=512` |
 | `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
 | `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
-| `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize to target dB (default: 0.0) |
-| `trim(samples, sample_rate, threshold_db?)` | `list[float]` | Trim silence (default: -60.0 dB) |
+| `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize peak level to target dB (default: 0.0) |
+| `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | Normalize RMS level to target dB (default: -20.0) |
+| `trim(samples, sample_rate, threshold_db?, frame_length?, hop_length?)` | `list[float]` | Trim silence (defaults: `-60.0` dB, `frame_length=2048`, `hop_length=512`) |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
 
 `trim(...)` is the simple threshold-based edit helper. The librosa-compatible `trim_silence(...)` helper below uses frame RMS and `top_db`, and returns the trimmed audio together with its original sample range.
@@ -495,6 +497,10 @@ processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-
 ```
 
 Preset IDs currently include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`.
+
+Built-in IDs are the strict canonical strings shown above. A custom mapping
+must pass the preset JSON validator and contain either a `dsp` object or a
+`macros` object, not both; malformed preset shapes are rejected.
 
 Use `realtime_voice_changer_preset_config(preset)` when you want the resolved POD config rather than the JSON form. It returns the canonical, normalized `RealtimeVoiceChangerConfig` for a built-in preset by ID or index.
 
@@ -531,7 +537,7 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
 | `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
 | `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?)` | `tuple[int, list[float]]` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) — returns `(n_frames, row-major 12 x n_frames data)` |
-| `nnls_chroma(samples, sample_rate)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)` |
+| `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)`; `hop_length` defaults to `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | NMF decomposition `(w, h)` with a selectable initialiser; `init` defaults to `'random'`, also accepts `'nndsvd'` (SVD warm start) |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
@@ -545,9 +551,9 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 
 Common defaults: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `roll_percent=0.85`.
 
-CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` defaults to `n_bins=252` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31` and `kernel_percussive=31`.
+CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` defaults to `n_bins=252` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, and `hard_mask=False`.
 
-Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
+Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
 
 ### Inverse Reconstruction Functions
 
@@ -1170,6 +1176,12 @@ finally:
 
 `mixer.process_stereo(...)` returns a `MixerStereoResult` named tuple with `.left` and `.right` (`list[float]`) and `.sample_rate` (`int`), mirroring the Node/WASM `{left, right, sampleRate}` shape.
 
+`Mixer.set_pan_law(...)` and `RealtimeEngine.set_track_strip_pan_law(...)`
+accept a `PanLaw` enum, an integer ordinal, or a case-insensitive string alias.
+Accepted spellings include `const3db`, `const-3db`, `-3db`, `const4.5db`,
+`const-4.5db`, `-4.5db`, `const6db`, `const-6db`, `-6db`, `linear0db`,
+`linear-0db`, `linear`, and `0db`; underscores are treated like hyphens.
+
 See [Mixing Engine](./mixing.md) for routing concepts, scene presets, and real-time notes.
 
 ## Projects, Instruments & Live MIDI
@@ -1184,6 +1196,7 @@ The headless-DAW API is available in Python as well: author arrangements with `P
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
 | Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
+| Set per-track cue monitoring | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)` with `EngineTrackMonitorMode` (`off`/`pfl`/`afl`) | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
 | Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) |

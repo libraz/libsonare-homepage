@@ -154,6 +154,38 @@ Once a track id occupies a lane, its lane index stays fixed for the engine's lif
 
 <SonareDemo id="engine-lane-mixer" />
 
+## Track monitor taps: off, PFL, and AFL
+
+Each configured track lane can contribute to a separate cue/monitor bus. Queue a
+mode with `setTrackMonitorMode(laneIndex, mode, renderFrame?)`; `laneIndex` is
+the fixed, append-only index from `setTrackLanes`, `renderFrame` defaults to
+`-1` (the next block head), and `mode` accepts `'off'`, `'pfl'`, or `'afl'`
+(or ordinals `0`, `1`, and `2`).
+
+- **off** — the lane contributes nothing to the monitor bus.
+- **PFL** (pre-fader listen) — taps after the lane strip and its plugin-delay
+  compensation, but before the lane fader, gate, and pan. It remains audible
+  there when the lane is muted or solo-gated.
+- **AFL** (after-fader listen) — taps after the fader, gate, and pan. For a
+  surround lane it is after fader/gate and the surround plane placement; stereo
+  AFL is post-pan.
+
+The monitor bus sums every lane with a PFL/AFL tap. The ordinary `process(...)`
+path folds that bus into the main output for compatibility. Use
+`processWithMonitor(...)` when the program output and cue output must stay
+separate:
+
+```typescript
+engine.setTrackMonitorMode(0, 'pfl');
+const { output, monitor } = engine.processWithMonitor([leftBlock, rightBlock]);
+engine.setTrackMonitorMode(0, 'off');
+```
+
+WASM and Node return `{ output, monitor }`; Python uses
+`set_track_monitor_mode(0, 'afl')` and receives `(output, monitor)` from
+`process_with_monitor(...)`. The C entry points are
+`sonare_engine_set_track_monitor_mode` and `sonare_engine_process_with_monitor`.
+
 ## Group routing, sidechains, and live strip controls
 
 Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan without rebuilding a strip:

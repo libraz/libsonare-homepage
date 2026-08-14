@@ -285,12 +285,12 @@ function voiceChangerAbiVersion(): number
 プリセット JSON を解析せずに、正規の voice-character プリセット ID や解決済みのフラットな POD 設定が必要なときに使います。
 
 ```typescript
-function voiceCharacterPresetId(preset: VoicePresetId | number): string
+function voiceCharacterPresetId(preset: VoicePresetId | number): VoicePresetId | null
 function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig
 ```
 
-どちらも範囲外の序数や未知の ID では `null` を返さず例外を投げます。不正なプリセット ID は
-後続の null 参照ではなく、呼び出し地点で表面化します。
+`voiceCharacterPresetId(...)` は未知の数値序数で `null` を返します。未知の文字列 ID は例外になります。
+`realtimeVoiceChangerPresetConfig(...)` は解決済み POD 設定を返す必要があるため、無効な序数や未知の ID で例外になります。
 
 解決済みの `RealtimeVoiceChangerPodConfig` は両 JavaScript 公開 API で camelCase キー（`inputGainDb`、`wetMix`、`formantFactor`、`limiterIspCeilingDbtp` など）を使います。対応する C / Python の POD フィールドは snake_case のままです。
 
@@ -569,7 +569,7 @@ console.log(roman);  // 例: ["I", "IV", "V", "vi"]
 :::
 
 ```typescript
-const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6);
+const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6, 30);
 console.log(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence);
 
 const blind = detectAcoustic(roomRecording, sampleRate, {
@@ -593,11 +593,14 @@ console.log(rir.sampleRate, rir.rir.length, rir.hasError);
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
+`analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` の
+`minDecayDb` は減衰フィットのしきい値で、既定値は `30` です。
+
 RT60、EDT、C50、C80、D50、バンド別配列、ルーム推定、生成 RIR、信頼度の読み方は [ルーム音響解析](./acoustic-analysis.md) を参照してください。
 
 ## オーディオエフェクト
 
-### `hpss(samples, sampleRate, kernelHarmonic?, kernelPercussive?)` <Badge type="warning" text="高負荷" />
+### `hpss(samples, sampleRate, kernelHarmonic?, kernelPercussive?, nFft?, hopLength?, hardMask?)` <Badge type="warning" text="高負荷" />
 
 HPSS（Harmonic / Percussive Source Separation。倍音成分／打撃成分の分離）。音源を倍音成分（ボーカル、シンセなどの持続音）と打撃成分（ドラム、過渡音）に分離します。
 
@@ -619,7 +622,10 @@ function hpss(
   samples: Float32Array,
   sampleRate: number,
   kernelHarmonic?: number,    // デフォルト: 31
-  kernelPercussive?: number   // デフォルト: 31
+  kernelPercussive?: number,   // デフォルト: 31
+  nFft?: number,               // デフォルト: 2048
+  hopLength?: number,          // デフォルト: 512
+  hardMask?: boolean           // デフォルト: false
 ): HpssResult
 
 interface HpssResult {
@@ -627,6 +633,21 @@ interface HpssResult {
   percussive: Float32Array;
   sampleRate: number;
 }
+```
+
+`hpssWithResidual(...)` は同じカーネル、STFT、マスクのオプションを受け取り、
+倍音／打撃のどちらにも分類されなかった残差成分も返します。
+
+```typescript
+function hpssWithResidual(
+  samples: Float32Array,
+  sampleRate?: number,
+  kernelHarmonic?: number,
+  kernelPercussive?: number,
+  nFft?: number,               // デフォルト: 2048
+  hopLength?: number,          // デフォルト: 512
+  hardMask?: boolean           // デフォルト: false
+): HpssWithResidualResult
 ```
 
 ### `harmonic(samples, sampleRate)` <Badge type="warning" text="高負荷" />
@@ -645,7 +666,7 @@ function harmonic(samples: Float32Array, sampleRate: number): Float32Array
 function percussive(samples: Float32Array, sampleRate: number): Float32Array
 ```
 
-### `timeStretch(samples, sampleRate, rate)` <Badge type="warning" text="高負荷" />
+### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
 
 ピッチを変えずにテンポを変更します。Rate < 1.0 = 遅く、> 1.0 = 速く。
 
@@ -666,11 +687,13 @@ function percussive(samples: Float32Array, sampleRate: number): Float32Array
 function timeStretch(
   samples: Float32Array,
   sampleRate: number,
-  rate: number   // 0.5 = 半速、2.0 = 倍速
+  rate: number,      // 0.5 = 半速、2.0 = 倍速
+  nFft?: number,     // デフォルト: 2048
+  hopLength?: number // デフォルト: 512
 ): Float32Array
 ```
 
-### `pitchShift(samples, sampleRate, semitones)` <Badge type="warning" text="高負荷" />
+### `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
 
 長さを変えずにピッチを変更します。半音単位で測定（+12 = 1オクターブ上）。
 
@@ -689,7 +712,9 @@ function timeStretch(
 function pitchShift(
   samples: Float32Array,
   sampleRate: number,
-  semitones: number   // +12 = 1オクターブ上
+  semitones: number,   // +12 = 1オクターブ上
+  nFft?: number,        // デフォルト: 2048
+  hopLength?: number    // デフォルト: 512
 ): Float32Array
 ```
 
@@ -793,19 +818,21 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice
 
 `pitchCorrectTimevarying(...)` はスケールスナップ式オートチューンの経路です。スケールマスク、`mode`、リチューンの効き方の詳細は [編集 DSP](./editing-dsp.md) を参照してください。領域指定の例とオプションの考え方は [スペクトル編集](./spectral-editing.md) を参照してください。
 
-### `normalize(samples, sampleRate, targetDb?)`
+### `normalize(samples, sampleRate, targetDb?, mode?)`
 
-オーディオを目標ピークレベルに正規化します。
+オーディオを目標レベルに正規化します。`mode` の既定値は `'peak'` で、
+RMS レベルを目標にする場合は `'rms'` を指定します。
 
 ```typescript
 function normalize(
   samples: Float32Array,
   sampleRate: number,
-  targetDb?: number   // デフォルト: 0.0 (フルスケール)
+  targetDb?: number,        // デフォルト: 0.0 (フルスケール)
+  mode?: 'peak' | 'rms'     // デフォルト: 'peak'
 ): Float32Array
 ```
 
-### `trim(samples, sampleRate, thresholdDb?)`
+### `trim(samples, sampleRate, thresholdDb?, frameLength?, hopLength?)`
 
 オーディオの始めと終わりから無音を除去します。
 
@@ -813,7 +840,9 @@ function normalize(
 function trim(
   samples: Float32Array,
   sampleRate: number,
-  thresholdDb?: number   // デフォルト: -60.0
+  thresholdDb?: number,   // デフォルト: -60.0
+  frameLength?: number,   // デフォルト: 2048
+  hopLength?: number      // デフォルト: 512
 ): Float32Array
 ```
 
@@ -1014,7 +1043,7 @@ const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, -1);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
-const nnls = nnlsChroma(samples, sampleRate);
+const nnls = nnlsChroma(samples, sampleRate, { hopLength: 512 });
 const cens = chromaCens(samples, sampleRate);
 const bass = bassChroma(samples, sampleRate);
 const loudness = lufs(samples, sampleRate);
@@ -1038,7 +1067,7 @@ const cqtPreview = cqtToAudio(cqtResult.magnitude, cqtResult.nBins, cqtResult.nF
 const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nFrames, sampleRate, 512, 32.7, 12, 0, 32);
 ```
 
-`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma` は倍音の漏れを抑える別物の音符活性化（NNLS）クロマで、コードや低音域の処理ではこちらの方がすっきりする場合が多いです。
+`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma(samples, sampleRate?, options?)` は倍音の漏れを抑える別物の音符活性化（NNLS）クロマで、コードや低音域の処理ではこちらの方がすっきりする場合が多いです。`options.hopLength` の既定値は `512` です。
 
 ソースビルド C++ CLI で近いコマンド:
 
@@ -2250,7 +2279,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 
 ### RealtimeVoiceChanger
 
-`RealtimeVoiceChanger` はプリセットで動かすライブ音声チェーン（ハイパス、ゲート、リチューン、フォルマント、EQ、コンプレッサー、ディエッサー、リバーブ、リミッターの各段）で、音声ブロックをまたいで状態を保持します。モニタリング、AudioWorklet 形式の処理、または `voiceChange(...)` では単純すぎるチャンク単位の音声処理で使います。標準プリセット ID は `realtimeVoiceChangerPresetNames()` で取得し、プリセット JSON は `realtimeVoiceChangerPresetJson(...)` で取得、`validateRealtimeVoiceChangerPresetJson(...)` で検証できます（スキーマバージョン `1`）。
+`RealtimeVoiceChanger` はプリセットで動かすライブ音声チェーン（ハイパス、ゲート、リチューン、フォルマント、EQ、コンプレッサー、ディエッサー、リバーブ、リミッターの各段）で、音声ブロックをまたいで状態を保持します。モニタリング、AudioWorklet 形式の処理、または `voiceChange(...)` では単純すぎるチャンク単位の音声処理で使います。標準プリセット ID は `realtimeVoiceChangerPresetNames()` で取得し、プリセット JSON は `realtimeVoiceChangerPresetJson(...)` で取得、`validateRealtimeVoiceChangerPresetJson(...)` で検証できます（スキーマバージョン `1`）。`RealtimeVoiceChangerConfigInput` は厳密な型で、6 種類の `VoicePresetId` 文字列、または `dsp` と `macros` のどちらか一方だけを持つプリセットオブジェクトを指定します。
 
 ```typescript
 import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
@@ -2279,7 +2308,7 @@ try {
 function voiceChangeRealtime(
   samples: Float32Array,
   sampleRate?: number, // デフォルト 48000
-  preset?: VoicePresetId | number | RealtimeVoiceChangerConfigInput,
+  preset?: RealtimeVoiceChangerConfigInput,
   options?: {
     channels?: 1 | 2;   // デフォルト 1（モノラル）。2 = インターリーブステレオ (L0,R0,L1,R1,...)
     blockSize?: number; // デフォルト 512
@@ -2580,11 +2609,15 @@ AudioWorklet のようにレンダーブロックごとのアロケーション�
 
 | 目的 | 使う API | ガイド |
 |------|----------|--------|
+| 空のプロジェクトを作る | `Project.create()`（または `new Project()`） | [プロジェクト編集](./project-editing.md) |
 | クリップ＋MIDI アレンジの作成・読み込み・編集 | `Project`（`Project.fromJson`、`toSceneJson`、MIDI イベントヘルパー） | [プロジェクト編集](./project-editing.md) |
+| 解析・補助メタデータを不透明なまま保持する | `project.setAssistSidecar(...)`、`assistSidecars()` | [プロジェクト編集](./project-editing.md) |
+| オートメーションレーンの対象種別を付ける | `ProjectAutomationTargetKind`、`ProjectAutomationLaneDesc` の `targetKind` | [プロジェクト編集](./project-editing.md) |
 | プロジェクトを音声にレンダー | `project.bounceWithSynthInstrument(s)` | [プロジェクトバウンス](./project-bounce.md) |
 | 組み込みシンセボイスを選ぶ | `synthPresetNames()`、`synthPresetPatch(name)`、`engine.setSynthInstrument(...)` | [NativeSynth](./native-synth.md) |
 | SoundFont で再生 | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `engine.setMidiClips(...)`、`engine.sampleAtPpq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
+| トラック単位のキューモニタリングを設定する | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | エンジンのトラックをレーン・バス・センド・ストリップでライブミックスする | `engine.setTrackLanes(...)`、`engine.setTrackBuses(...)`、ストリップ JSON セッター | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | トラックを外部 MIDI ハードウェアへ送り、必要ならクロック／トランスポートも転送する | `engine.setMidiDestinationExternal(...)`、`engine.setExternalMidiClockEnabled(...)`、`engine.drainExternalMidi(...)`。Worklet ファサードでは `onMidiOut(...)` | [リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る) |
 | ハードウェア／Web MIDI デバイスからエンジンへ演奏イベントを送る | `bindWebMidi(engine, ...)` <Badge type="info" text="ブラウザ専用" /> | [MIDI 入力](./midi-input.md) |
@@ -2617,6 +2650,8 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | ストリーミング EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | ミキシング／Worklet 用リアルタイムバッファ | `MixerRealtimeBuffer`, `SonareScopeRingBuffer`, `SonareScopeRingReadResult`, `SonareWorkletScopeSnapshot` |
+| プロジェクト／エンジンのオートメーション | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `EngineTrackMonitorMode`, `TrackMonitorMode` |
+| パン則の入力 | `PanLaw`, `PanLawName`, `PanLawInput` |
 
 ## パフォーマンスサマリー
 

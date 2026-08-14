@@ -290,13 +290,13 @@ function voiceChangerAbiVersion(): number
 Use these when you need the canonical voice-character preset ID or the resolved flat POD config without parsing preset JSON.
 
 ```typescript
-function voiceCharacterPresetId(preset: VoicePresetId | number): string
+function voiceCharacterPresetId(preset: VoicePresetId | number): VoicePresetId | null
 function realtimeVoiceChangerPresetConfig(preset: VoicePresetId | number): RealtimeVoiceChangerPodConfig
 ```
 
-Both throw on an out-of-range ordinal or unknown id rather than returning
-`null`, so a bad preset id surfaces at the call site instead of as a null
-dereference further down.
+`voiceCharacterPresetId(...)` returns `null` for an unknown numeric ordinal.
+Unknown string IDs throw. `realtimeVoiceChangerPresetConfig(...)` throws for
+an invalid ordinal or unknown ID because it must return a resolved POD config.
 
 The resolved `RealtimeVoiceChangerPodConfig` uses camelCase keys on both JavaScript surfaces (`inputGainDb`, `wetMix`, `formantFactor`, `limiterIspCeilingDbtp`, and so on). The equivalent C and Python POD fields remain snake_case.
 
@@ -592,7 +592,7 @@ These functions describe or apply the recording space rather than the song itsel
 :::
 
 ```typescript
-const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6);
+const ir = analyzeImpulseResponse(impulseResponseSamples, sampleRate, 6, 30);
 console.log(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence);
 
 const blind = detectAcoustic(roomRecording, sampleRate, {
@@ -616,11 +616,14 @@ console.log(rir.sampleRate, rir.rir.length, rir.hasError);
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
+`analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)`
+uses `minDecayDb` to set the decay-fit threshold (default `30`).
+
 See [Room Acoustics](./acoustic-analysis.md) for how to interpret RT60, EDT, C50, C80, D50, band arrays, room estimates, generated RIRs, and confidence.
 
 ## Audio Effects
 
-### `hpss(samples, sampleRate, kernelHarmonic?, kernelPercussive?)` <Badge type="warning" text="Heavy" />
+### `hpss(samples, sampleRate, kernelHarmonic?, kernelPercussive?, nFft?, hopLength?, hardMask?)` <Badge type="warning" text="Heavy" />
 
 Harmonic-Percussive Source Separation. Splits audio into tonal (vocals, synths) and transient (drums) components.
 
@@ -642,7 +645,10 @@ function hpss(
   samples: Float32Array,
   sampleRate: number,
   kernelHarmonic?: number,    // default: 31
-  kernelPercussive?: number   // default: 31
+  kernelPercussive?: number,   // default: 31
+  nFft?: number,               // default: 2048
+  hopLength?: number,          // default: 512
+  hardMask?: boolean           // default: false
 ): HpssResult
 
 interface HpssResult {
@@ -650,6 +656,22 @@ interface HpssResult {
   percussive: Float32Array;
   sampleRate: number;
 }
+```
+
+`hpssWithResidual(...)` accepts the same kernel, STFT, and mask options and
+also returns the residual component that is not classified as harmonic or
+percussive.
+
+```typescript
+function hpssWithResidual(
+  samples: Float32Array,
+  sampleRate?: number,
+  kernelHarmonic?: number,
+  kernelPercussive?: number,
+  nFft?: number,               // default: 2048
+  hopLength?: number,          // default: 512
+  hardMask?: boolean           // default: false
+): HpssWithResidualResult
 ```
 
 ### `harmonic(samples, sampleRate)` <Badge type="warning" text="Heavy" />
@@ -668,7 +690,7 @@ Extract percussive component from audio.
 function percussive(samples: Float32Array, sampleRate: number): Float32Array
 ```
 
-### `timeStretch(samples, sampleRate, rate)` <Badge type="warning" text="Heavy" />
+### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="Heavy" />
 
 Time-stretch audio without changing pitch. Rate < 1.0 = slower, > 1.0 = faster.
 
@@ -689,11 +711,13 @@ Uses phase vocoder algorithm. Processing time increases with audio duration.
 function timeStretch(
   samples: Float32Array,
   sampleRate: number,
-  rate: number   // 0.5 = half speed, 2.0 = double speed
+  rate: number,      // 0.5 = half speed, 2.0 = double speed
+  nFft?: number,     // default: 2048
+  hopLength?: number // default: 512
 ): Float32Array
 ```
 
-### `pitchShift(samples, sampleRate, semitones)` <Badge type="warning" text="Heavy" />
+### `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` <Badge type="warning" text="Heavy" />
 
 Pitch-shift audio without changing duration. Measured in semitones (+12 = one octave up).
 
@@ -712,7 +736,9 @@ Combines time stretching and resampling. Processing time increases with audio du
 function pitchShift(
   samples: Float32Array,
   sampleRate: number,
-  semitones: number   // +12 = one octave up
+  semitones: number,   // +12 = one octave up
+  nFft?: number,        // default: 2048
+  hopLength?: number    // default: 512
 ): Float32Array
 ```
 
@@ -818,19 +844,21 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice
 
 `pitchCorrectTimevarying(...)` is the scale-snap auto-tune path; see [Editing DSP](./editing-dsp.md) for the scale masks, `mode`, and retune-feel options in full. See [Spectral Editing](./spectral-editing.md) for region examples and option notes.
 
-### `normalize(samples, sampleRate, targetDb?)`
+### `normalize(samples, sampleRate, targetDb?, mode?)`
 
-Normalize audio to target peak level.
+Normalize audio to the requested target level. `mode` is `'peak'` by default;
+use `'rms'` to target RMS level instead.
 
 ```typescript
 function normalize(
   samples: Float32Array,
   sampleRate: number,
-  targetDb?: number   // default: 0.0 (full scale)
+  targetDb?: number,        // default: 0.0 (full scale)
+  mode?: 'peak' | 'rms'     // default: 'peak'
 ): Float32Array
 ```
 
-### `trim(samples, sampleRate, thresholdDb?)`
+### `trim(samples, sampleRate, thresholdDb?, frameLength?, hopLength?)`
 
 Trim silence from beginning and end of audio.
 
@@ -838,7 +866,9 @@ Trim silence from beginning and end of audio.
 function trim(
   samples: Float32Array,
   sampleRate: number,
-  thresholdDb?: number   // default: -60.0
+  thresholdDb?: number,   // default: -60.0
+  frameLength?: number,   // default: 2048
+  hopLength?: number      // default: 512
 ): Float32Array
 ```
 
@@ -1095,7 +1125,7 @@ const vqtResult = vqt(samples, sampleRate, 512, 32.7, 84, 12, -1);
 const pseudo = pseudoCqt(samples, sampleRate);
 const hybrid = hybridCqt(samples, sampleRate);
 const cqtChroma = chromaCqt(samples, sampleRate);
-const nnls = nnlsChroma(samples, sampleRate);
+const nnls = nnlsChroma(samples, sampleRate, { hopLength: 512 });
 const cens = chromaCens(samples, sampleRate);
 const bass = bassChroma(samples, sampleRate);
 const loudness = lufs(samples, sampleRate);
@@ -1121,8 +1151,9 @@ const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nF
 
 `chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` is the direct
 `librosa.feature.chroma_cqt` equivalent (log-frequency / constant-Q pitch
-folding), while `nnlsChroma` is a distinct note-activation (NNLS) chroma that
-suppresses harmonic leakage — often cleaner for chord or bass-register work.
+folding), while `nnlsChroma(samples, sampleRate?, options?)` is a distinct
+note-activation (NNLS) chroma that suppresses harmonic leakage — often cleaner
+for chord or bass-register work. Its `options.hopLength` defaults to `512`.
 
 Closest CLI equivalents from the source-built C++ CLI:
 
@@ -2355,7 +2386,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.
 
 ### RealtimeVoiceChanger
 
-`RealtimeVoiceChanger` is the preset-based live voice chain (high-pass, gate, retune, formant, EQ, compressor, de-esser, reverb, and limiter stages) that keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple. Factory preset IDs come from `realtimeVoiceChangerPresetNames()`; preset JSON is fetched with `realtimeVoiceChangerPresetJson(...)` and checked with `validateRealtimeVoiceChangerPresetJson(...)` (schema version `1`).
+`RealtimeVoiceChanger` is the preset-based live voice chain (high-pass, gate, retune, formant, EQ, compressor, de-esser, reverb, and limiter stages) that keeps state across audio blocks. Use it for monitoring, AudioWorklet-style processing, or chunked voice rendering where `voiceChange(...)` is too simple. Factory preset IDs come from `realtimeVoiceChangerPresetNames()`; preset JSON is fetched with `realtimeVoiceChangerPresetJson(...)` and checked with `validateRealtimeVoiceChangerPresetJson(...)` (schema version `1`). `RealtimeVoiceChangerConfigInput` is strict: use one of the six `VoicePresetId` strings or a preset object with either a `dsp` object or a `macros` object, never both.
 
 ```typescript
 import { init, RealtimeVoiceChanger, realtimeVoiceChangerPresetNames } from '@libraz/libsonare';
@@ -2384,7 +2415,7 @@ The zero-copy buffer helpers (`createRealtimeMonoBuffer`, `createRealtimeInterle
 function voiceChangeRealtime(
   samples: Float32Array,
   sampleRate?: number, // default 48000
-  preset?: VoicePresetId | number | RealtimeVoiceChangerConfigInput,
+  preset?: RealtimeVoiceChangerConfigInput,
   options?: {
     channels?: 1 | 2;   // default 1 (mono); 2 = interleaved stereo (L0,R0,L1,R1,...)
     blockSize?: number; // default 512
@@ -2685,11 +2716,15 @@ a dedicated guide.
 
 | Goal | Use | Guide |
 |------|-----|-------|
+| Start an empty project | `Project.create()` (or `new Project()`) | [Project Editing](./project-editing.md) |
 | Build/load a clip + MIDI arrangement and edit it | `Project` (`Project.fromJson`, `toSceneJson`, MIDI event helpers) | [Project Editing](./project-editing.md) |
+| Preserve opaque analysis/assist metadata | `project.setAssistSidecar(...)`, `assistSidecars()` | [Project Editing](./project-editing.md) |
+| Classify automation lanes | `ProjectAutomationTargetKind`, `targetKind` on `ProjectAutomationLaneDesc` | [Project Editing](./project-editing.md) |
 | Render a project to audio | `project.bounceWithSynthInstrument(s)` | [Project Bounce](./project-bounce.md) |
 | Pick a built-in synth voice | `synthPresetNames()`, `synthPresetPatch(name)`, `engine.setSynthInstrument(...)` | [Native Synth](./native-synth.md) |
 | Play through a SoundFont | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont Player](./soundfont-player.md) |
 | Schedule MIDI clips into the live engine, sample-accurately | `engine.setMidiClips(...)`, `engine.sampleAtPpq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
+| Set per-track cue monitoring | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Mix the engine's tracks live with lanes, buses, sends, and strips | `engine.setTrackLanes(...)`, `engine.setTrackBuses(...)`, strip JSON setters | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Send a track to external MIDI hardware and optionally forward clock/transport | `engine.setMidiDestinationExternal(...)`, `engine.setExternalMidiClockEnabled(...)`, `engine.drainExternalMidi(...)`; Worklet facade: `onMidiOut(...)` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
 | Drive the engine from a hardware/Web MIDI device | `bindWebMidi(engine, ...)` <Badge type="info" text="Browser only" /> | [MIDI Input](./midi-input.md) |
@@ -2727,6 +2762,8 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | Mixing and Worklet realtime buffers | `MixerRealtimeBuffer`, `SonareScopeRingBuffer`, `SonareScopeRingReadResult`, `SonareWorkletScopeSnapshot` |
+| Project and engine automation | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `EngineTrackMonitorMode`, `TrackMonitorMode` |
+| Pan-law inputs | `PanLaw`, `PanLawName`, `PanLawInput` |
 
 ## Performance Summary
 

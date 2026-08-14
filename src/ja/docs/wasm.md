@@ -888,7 +888,7 @@ try {
 
 組み込みプリセットの内容確認には `realtimeVoiceChangerPresetJson(name)` を使います。
 
-ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。現在のファクトリープリセットはスキーマバージョン `1` です。
+ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。`RealtimeVoiceChangerConfigInput` は、6 種類の厳密な `VoicePresetId` 文字列、または `dsp` と `macros` のどちらか一方だけを持つプリセットオブジェクトを受け取ります。`voiceCharacterPresetId(...)` は未知の数値序数で `null` を返し、未知の文字列 ID では例外になります。`realtimeVoiceChangerPresetConfig(...)` は解決できないプリセットで例外になります。
 
 正規 ID や解決済みのフラット POD 設定だけが必要な場合は、`voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。
 

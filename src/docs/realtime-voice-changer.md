@@ -213,7 +213,11 @@ The `sonare voice-change` command has two modes:
 | Simple pitch/formant edit | `--pitch-semitones`, `--formant-factor` |
 | Realtime preset-chain render | `--preset`, `--preset-json`, `--preset-pack`, `--set PATH=VALUE` |
 
-If you pass realtime preset options, the command uses the preset chain and ignores the simple pitch/formant options. See [CLI Reference](./cli.md#realtime-voice-presets) for the full command table.
+If you pass realtime preset options, the command uses the preset chain; combining
+them with the simple pitch/formant options is rejected as an invalid-parameter
+error. `--preset-pack FILE` must be paired with `--preset ID` to select an entry;
+there is no first-entry fallback. See [CLI Reference](./cli.md#realtime-voice-presets)
+for the full selector rules and command table.
 
 ## Preset JSON
 
@@ -239,15 +243,17 @@ Current built-in preset JSON uses schema version `1`. The native POD-config ABI 
 import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json';
 ```
 
-If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. Python exposes the same native-config path as `realtime_voice_changer_preset_config(...)`.
+If you only need a canonical preset ID or the resolved flat native config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)` instead of round-tripping through JSON. On WASM, `voiceCharacterPresetId(...)` accepts a canonical ID or integer ordinal: an unknown numeric ordinal returns `null`, while an unknown string ID throws. `realtimeVoiceChangerPresetConfig(...)` throws for an invalid ordinal. Python exposes the same native-config path as `realtime_voice_changer_preset_config(...)`.
 
 ::: warning A preset document must be complete
-A partial document is rejected rather than silently filled in from unrelated
-defaults, and `deesser.ratio` is required. If you hand-author a preset, start
-from `realtimeVoiceChangerPresetJson('neutral-monitor')` and edit it, instead of
-writing only the fields you want to change. Reading a config back out with
-`configJson()`, editing it, and writing it with `setConfig(...)` is a safe
-round-trip. Unknown top-level keys are rejected too.
+A valid document includes the required schema metadata and exactly one complete
+`dsp` or `macros` section. Partial documents are rejected rather than silently
+filled in from unrelated defaults, and `deesser.ratio` is required. If you
+hand-author a preset, start from `realtimeVoiceChangerPresetJson('neutral-monitor')`
+and edit it, instead of writing only the fields you want to change. Reading a
+config back out with `configJson()`, editing it, and writing it with
+`setConfig(...)` is a safe round-trip. Unknown keys at the top level or inside
+sections are rejected.
 :::
 
 ### `macros` — the shorthand section

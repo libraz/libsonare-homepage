@@ -120,7 +120,7 @@ import { init, Project } from '@libraz/libsonare';
 
 await init();
 
-const project = new Project();
+const project = Project.create();
 try {
   project.setSampleRate(48000);
 
@@ -167,7 +167,7 @@ with sonare.Project() as project:
 Use `project.trackCount()` and `project.clipCount()` to update project summaries or validate imported arrangements without walking the serialized JSON. Python exposes the same values as `track_count()` and `clip_count()`.
 
 ::: danger Always release the project
-`Project`, like every WASM-backed object, holds a heap handle that JavaScript's garbage collector cannot reclaim. In the WASM package, construct it with `new Project()` and call `project.delete()` in a `finally` block. In Node native, construct it with `Project.create()` and call `project.destroy()` or `project.delete()`. In Python use `Project` as a context manager (`with sonare.Project() as project:`) or call `project.close()`. Leaking handles slowly exhausts native or WASM memory in long sessions.
+`Project`, like every WASM-backed object, holds a heap handle that JavaScript's garbage collector cannot reclaim. In the WASM package, construct it with `Project.create()` and call `project.delete()` in a `finally` block. In Node native, construct it with `Project.create()` and call `project.destroy()` or `project.delete()`. In Python use `Project` as a context manager (`with sonare.Project() as project:`) or call `project.close()`. Leaking handles slowly exhausts native or WASM memory in long sessions.
 :::
 
 ## Editing clips
@@ -277,10 +277,11 @@ project.redo()   # re-applies the gain edit
 
 :::
 
-For long-lived editors, you can bound the memory retained for undo or start a fresh editing session without changing the arrangement. `setMaxUndoDepth(depth)` keeps the most recent `depth` edits and immediately discards older entries; the WASM method requires an integer of at least `1`. `clearHistory()` removes both undo and redo entries while leaving the current project state untouched. Node exposes the same camelCase methods; Python uses `set_max_undo_depth(...)` and `clear_history()`.
+For long-lived editors, you can bound the memory retained for undo and redo or start a fresh editing session without changing the arrangement. `setMaxHistoryBytes(bytes)` sets one combined byte cap across both stacks and applies it immediately; `0` disables retention, so successful edits are not undoable. `setMaxUndoDepth(depth)` remains available when an edit-count bound is more useful and keeps the most recent `depth` edits; the WASM method requires an integer of at least `1`. `clearHistory()` removes both undo and redo entries while leaving the current project state untouched. Node exposes the same camelCase methods; Python uses `set_max_history_bytes(...)`, `set_max_undo_depth(...)`, and `clear_history()`.
 
 ```typescript
 project.setMaxUndoDepth(100); // retain at most the 100 most recent edits
+project.setMaxHistoryBytes(8 * 1024 * 1024); // one cap shared by undo and redo
 // ... save or hand the project to another editing session ...
 project.clearHistory();       // the arrangement stays as-is; undo/redo are now empty
 ```
@@ -484,7 +485,7 @@ An **automation lane** changes one host-defined parameter over time with breakpo
 
 ```typescript [Browser / WASM]
 // addAutomationLane returns the lane's target parameter id — the handle the
-// edit and remove calls take.
+// edit and remove calls take. Omitting targetKind keeps the legacy opaque lane.
 const laneParamId = project.addAutomationLane(trackId, {
   targetParamId: 1,                                   // host id of the parameter to change
   points: [
@@ -494,6 +495,20 @@ const laneParamId = project.addAutomationLane(trackId, {
 });
 project.editAutomationLane(trackId, laneParamId, { targetParamId: 1, points: [/* … */] });
 project.removeAutomationLane(trackId, laneParamId);
+
+const faderLaneId = project.addAutomationLane(trackId, {
+  targetParamId: 2,
+  targetKind: 'track-fader-db',                   // or 'track-pan'
+  points: [
+    { ppq: 0, value: 0, curve: 'linear' },       // fader values are dB
+    { ppq: 4, value: -6, curve: 'linear' },
+  ],
+});
+project.editAutomationLane(trackId, faderLaneId, {
+  targetParamId: 2,
+  targetKind: 'track-fader-db',
+  points: [{ ppq: 0, value: -3, curve: 'linear' }],
+});
 ```
 
 ```python [Python]
@@ -507,13 +522,22 @@ lane_param_id = project.add_automation_lane(
 )
 project.edit_automation_lane(track_id, lane_param_id, target_param_id=1, points=[])
 project.remove_automation_lane(track_id, lane_param_id)
+
+fader_lane_id = project.add_automation_lane(
+    track_id,
+    target_param_id=2,
+    target_kind="track-fader-db",     # or "track-pan"
+    points=[(0.0, 0.0, "linear"), (4.0, -6.0, "linear")],
+)
 ```
 
 :::
 
-In Python the breakpoints are `(ppq, value, curve)` tuples rather than objects, and `add_automation_lane` / `edit_automation_lane` take `target_param_id` and `points` as separate arguments.
+In Python the breakpoints are `(ppq, value, curve)` tuples rather than objects, and `add_automation_lane` / `edit_automation_lane` take `target_param_id` and `points` as separate arguments. Pass `target_kind="opaque"` (or omit it) for the legacy lane, or `"track-fader-db"` / `"track-pan"` for a typed mixer target; Python accepts those names or ordinals `0` / `1` / `2`, and also accepts a mapping descriptor with snake_case or camelCase keys.
 
 The lane's `targetParamId` is your own parameter id; the project stores the breakpoints verbatim and replays them through the compiled timeline. It is also the lane's **identity**: a track holds at most one lane per target, `addAutomationLane` returns that id, and the edit and remove calls address a lane by it. Changing which parameter a lane drives is therefore a remove followed by an add, not an edit.
+
+Typed lanes use `targetKind: 'track-fader-db'` or `'track-pan'` to target the owning track's mixer fader or pan. JavaScript accepts the names or ordinals `0` / `1` / `2`; at compile/install time the project resolves that lane to the engine's reserved parameter namespace (the persistent `targetParamId` is not the realtime id), and an offline bounce applies it through the track mixer. A track may have at most one lane for each typed kind. `targetKind: 'opaque'` is the host-defined legacy target and is used when `targetKind` is omitted. The JSON field is `target_kind`; a project containing a typed lane serializes as schema version `2`, while a project with only opaque lanes keeps schema version `1` and its existing bytes. The C extended entry points are `sonare_project_add_automation_lane_ex` and `sonare_project_edit_automation_lane_ex`; the legacy C calls remain opaque/preserve-kind paths.
 
 ::: warning Lanes are addressed by target parameter id, not by position
 `editAutomationLane` and `removeAutomationLane` take the target parameter id where they used to take a positional lane index. Both are numbers and the argument count is unchanged, so an index-based call still runs — it just edits a different lane. Audit any call that passed a stored index.
@@ -567,24 +591,23 @@ An **assist sidecar** is an opaque, undoable per-project metadata blob — a pla
 
 ```typescript
 const payload = new TextEncoder().encode(JSON.stringify({ suggestion: 'tighten chorus' }));
-project.setAssistSidecar(
-  'my-assistant',  // moduleId (must be non-empty)
-  1,               // schemaVersion
-  0,               // targetTrackId (0 = project scope)
-  0,               // regionStartPpq
-  16,              // regionEndPpq
-  payload,         // Uint8Array (copied)
-);
+project.setAssistSidecar({
+  moduleId: 'my-assistant',  // must be non-empty
+  schemaVersion: 1,
+  targetTrackId: 0,          // 0 = project scope
+  regionStartPpq: 0,
+  regionEndPpq: 16,
+  payload,                    // Uint8Array (copied)
+});
 
-for (let i = 0; i < project.assistSidecarCount(); i += 1) {
-  const sc = project.getAssistSidecar(i);
-  // { moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload }
-}
+project.assistSidecars();     // all descriptors in stable project order
+project.getAssistSidecar(0);  // { moduleId, schemaVersion, targetTrackId,
+                              //   regionStartPpq, regionEndPpq, payload }
 ```
 
 A sidecar that shares the same `moduleId` + `targetTrackId` + region scope as an existing one **replaces** it; otherwise it is appended. `targetTrackId` `0` means project scope. Because the write is an undoable edit, `undo()` / `redo()` reverse it.
 
-The binding APIs differ (consistent with the snake_case Python note elsewhere on this page). The WASM call above is positional and exposes only the count plus an index accessor. **Node** takes an options object — `project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })` — and Node/Python additionally offer `assistSidecars()` / `assist_sidecars()` to read them all at once. **Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`, `project.assist_sidecar_count()`, `project.get_assist_sidecar(index)`, `project.assist_sidecars()`.
+The descriptor form above is the canonical **WASM and Node** JavaScript API; WASM also keeps the legacy positional overload `setAssistSidecar(moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload)`. Both JavaScript bindings expose the count, index accessor, and `assistSidecars()` all-at-once reader. **Python** uses `set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)` (a mapping descriptor is also accepted), plus `assist_sidecar_count()`, `get_assist_sidecar(index)`, and `assist_sidecars()`. The C ABI remains positional as `sonare_project_set_assist_sidecar(...)`, with the matching count/get/free functions.
 
 ## MIDI content
 
@@ -774,7 +797,7 @@ Python mirrors this with `project.to_json()`, `Project.from_json(json)`, and `Pr
 
 Project JSON stores the *arrangement*, not the PCM. A loaded project therefore
 knows it has a source, but has no samples behind it. Three read-only descriptor
-families plus one setter close that loop.
+families plus the PCM and source-metadata setters close that loop.
 
 ```typescript
 const loaded = Project.fromJson(json);
@@ -787,10 +810,14 @@ for (let i = 0; i < loaded.clipCount(); i++) {
   const clip = loaded.clipByIndex(i);        // { id, trackId, sourceId, startPpq, lengthPpq, … }
   console.log(clip.id, clip.startPpq, clip.lengthPpq);
 }
+const unresolvedAudioIds = new Set(loaded.unresolvedAudioSourceIds());
 for (let i = 0; i < loaded.sourceCount(); i++) {
-  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint, nameOrUri }
+  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint,
+                                             //   nameOrUri, contentHash, externalStemRole }
+  if (source.kind !== 0 || !unresolvedAudioIds.has(source.id)) continue; // 0 = audio; skip MIDI
   const pcm = await decodeFromYourStorage(source.nameOrUri);
   loaded.setSourceAudio(source.id, pcm, source.channelCount, source.sampleRateHint);
+  loaded.setAudioSourceMetadata(source.id, 'sha256:...', 'lead-vocal');
 }
 
 const audio = loaded.bounce({ sampleRate: 48000 });
@@ -805,6 +832,8 @@ your own code did not construct.
 `setSourceAudio(sourceId, samples, channels, sampleRate)` rebinds decoded PCM to
 a source before a bounce — the step that turns "loaded arrangement" into
 "renderable project".
+
+`unresolvedAudioSourceIds()` is the public list of source ids that still need decoded PCM after deserialization. The `kind !== 0` guard above is defensive when walking descriptors (`0` is audio, `1` is MIDI): MIDI sources have no PCM to bind and no source metadata to update. `contentHash` and `externalStemRole` are owning metadata on audio-source descriptors (they are empty for MIDI sources). `setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` replaces both strings as one undoable edit; pass an empty string to clear either value. WASM uses that positional form, Node also accepts `{ contentHash, externalStemRole }` as its second argument, and Python uses `set_audio_source_metadata(source_id, content_hash, external_stem_role)` (the C ABI is `sonare_project_set_audio_source_metadata`). Python uses `unresolved_audio_source_ids()` and source descriptors named `content_hash` / `external_stem_role`; the C getter returns heap strings that the matching free function must release.
 
 ### Importing host-separated stems
 

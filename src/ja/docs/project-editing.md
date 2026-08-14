@@ -120,7 +120,7 @@ import { init, Project } from '@libraz/libsonare';
 
 await init();
 
-const project = new Project();
+const project = Project.create();
 try {
   project.setSampleRate(48000);
 
@@ -167,7 +167,7 @@ with sonare.Project() as project:
 プロジェクト概要の更新や、インポートしたアレンジの検証には `project.trackCount()` と `project.clipCount()` を使えます。シリアライズ済み JSON を走査せず、トラック数とクリップ数を取得できます。Python では `track_count()` と `clip_count()` です。
 
 ::: danger プロジェクトは必ず解放する
-`Project` はすべての WASM オブジェクトと同様、JavaScript の GC では回収できないヒープハンドルを保持します。WASM パッケージでは `new Project()` で作り、`finally` ブロックで `project.delete()` を呼んでください。Node ネイティブでは `Project.create()` で作り、`project.destroy()` または `project.delete()` で解放します。Python ではコンテキストマネージャ（`with sonare.Project() as project:`）として使うか、`project.close()` を呼びます。ハンドルをリークすると、長時間のセッションでネイティブまたは WASM メモリが徐々に枯渇します。
+`Project` はすべての WASM オブジェクトと同様、JavaScript の GC では回収できないヒープハンドルを保持します。WASM パッケージでは `Project.create()` で作り、`finally` ブロックで `project.delete()` を呼んでください。Node ネイティブでも `Project.create()` で作り、`project.destroy()` または `project.delete()` で解放します。Python ではコンテキストマネージャ（`with sonare.Project() as project:`）として使うか、`project.close()` を呼びます。ハンドルをリークすると、長時間のセッションでネイティブまたは WASM メモリが徐々に枯渇します。
 :::
 
 ## クリップを編集する
@@ -277,10 +277,11 @@ project.redo()   # ゲイン編集を再適用する
 
 :::
 
-長時間動作するエディターでは、アンドゥが保持するメモリを制限したり、アレンジを変えずに編集セッションを切り替えたりできます。`setMaxUndoDepth(depth)` は直近 `depth` 件だけを残し、より古い履歴を直ちに破棄します。WASM では `depth` は `1` 以上の整数でなければなりません。`clearHistory()` は現在のプロジェクト状態を変えずに、アンドゥとリドゥの両方を消去します。Node も同じ camelCase 名、Python では `set_max_undo_depth(...)` と `clear_history()` を使います。
+長時間動作するエディターでは、アンドゥとリドゥが保持するメモリを制限したり、アレンジを変えずに編集セッションを切り替えたりできます。`setMaxHistoryBytes(bytes)` は両方の履歴スタックに共通するバイト上限を設定し、直ちに適用します。`0` にすると保持を無効にするため、成功した編集もアンドゥできません。編集件数で制限したい場合は `setMaxUndoDepth(depth)` も使え、直近 `depth` 件だけを残します。WASM では `depth` は `1` 以上の整数でなければなりません。`clearHistory()` は現在のプロジェクト状態を変えずに、アンドゥとリドゥの両方を消去します。Node も同じ camelCase 名、Python では `set_max_history_bytes(...)`、`set_max_undo_depth(...)`、`clear_history()` を使います。
 
 ```typescript
 project.setMaxUndoDepth(100); // 直近 100 件の編集だけを保持
+project.setMaxHistoryBytes(8 * 1024 * 1024); // アンドゥ／リドゥ共通の上限
 // ... 保存する、または別の編集セッションへ渡す ...
 project.clearHistory();       // アレンジはそのまま。アンドゥ／リドゥだけが空になる
 ```
@@ -484,7 +485,7 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 
 ```typescript [ブラウザ / WASM]
 // addAutomationLane はレーンのターゲットパラメータ ID を返します。
-// これが編集・削除に渡すハンドルです。
+// これが編集・削除に渡すハンドルです。targetKind を省略すると従来の opaque レーンです。
 const laneParamId = project.addAutomationLane(trackId, {
   targetParamId: 1,                                   // 変化させるパラメータのホスト ID
   points: [
@@ -494,6 +495,20 @@ const laneParamId = project.addAutomationLane(trackId, {
 });
 project.editAutomationLane(trackId, laneParamId, { targetParamId: 1, points: [/* … */] });
 project.removeAutomationLane(trackId, laneParamId);
+
+const faderLaneId = project.addAutomationLane(trackId, {
+  targetParamId: 2,
+  targetKind: 'track-fader-db',                   // または 'track-pan'
+  points: [
+    { ppq: 0, value: 0, curve: 'linear' },       // フェーダー値は dB
+    { ppq: 4, value: -6, curve: 'linear' },
+  ],
+});
+project.editAutomationLane(trackId, faderLaneId, {
+  targetParamId: 2,
+  targetKind: 'track-fader-db',
+  points: [{ ppq: 0, value: -3, curve: 'linear' }],
+});
 ```
 
 ```python [Python]
@@ -507,13 +522,22 @@ lane_param_id = project.add_automation_lane(
 )
 project.edit_automation_lane(track_id, lane_param_id, target_param_id=1, points=[])
 project.remove_automation_lane(track_id, lane_param_id)
+
+fader_lane_id = project.add_automation_lane(
+    track_id,
+    target_param_id=2,
+    target_kind="track-fader-db",     # または "track-pan"
+    points=[(0.0, 0.0, "linear"), (4.0, -6.0, "linear")],
+)
 ```
 
 :::
 
-Python ではブレークポイントがオブジェクトではなく `(ppq, value, curve)` タプルで、`add_automation_lane` / `edit_automation_lane` は `target_param_id` と `points` を別々の引数として受け取ります。
+Python ではブレークポイントがオブジェクトではなく `(ppq, value, curve)` タプルで、`add_automation_lane` / `edit_automation_lane` は `target_param_id` と `points` を別々の引数として受け取ります。従来のレーンは `target_kind="opaque"`（または省略）、ミキサーの型付きターゲットは `"track-fader-db"` ／ `"track-pan"` を渡します。Python は名前のほか序数 `0` ／ `1` ／ `2` も受け付け、snake_case または camelCase のキーを持つマッピング記述子も使えます。
 
 レーンの `targetParamId` は自分のパラメータ ID です。プロジェクトはブレークポイントをそのまま保存し、コンパイル済みタイムラインで再生します。この ID はレーンの**識別子**でもあります。1 トラックにつき同じターゲットのレーンは 1 本までで、`addAutomationLane` はその ID を返し、編集・削除もこの ID でレーンを指定します。レーンが動かすパラメータを変えるには、編集ではなく削除してから追加してください。
+
+型付きレーンでは `targetKind: 'track-fader-db'` または `'track-pan'` を指定し、レーンを所有するトラックのミキサーフェーダー／パンを対象にします。JavaScript は名前のほか序数 `0` ／ `1` ／ `2` も受け付けます。コンパイル／インストール時にプロジェクトがエンジンの予約パラメータ名前空間へ解決するため、永続化された `targetParamId` はリアルタイム用 ID ではありません。オフラインバウンスではトラックミキサーを通って適用されます。1 トラックにつき各型のレーンは 1 本までです。`targetKind` を省略した場合は `targetKind: 'opaque'` と同じ従来のホスト定義ターゲットになります。JSON のフィールド名は `target_kind` で、型付きレーンを 1 本でも含むプロジェクトはスキーマバージョン `2`、opaque だけのプロジェクトはスキーマバージョン `1` のまま既存バイト列を維持します。C の拡張エントリーポイントは `sonare_project_add_automation_lane_ex` と `sonare_project_edit_automation_lane_ex` で、従来の C 呼び出しは opaque／既存種別維持の経路です。
 
 ::: warning レーンの指定は位置ではなくターゲットパラメータ ID
 `editAutomationLane` と `removeAutomationLane` は、以前の位置インデックスに代わってターゲットパラメータ ID を受け取ります。どちらも数値で引数の個数も同じなので、インデックスを渡す既存コードはエラーにならず、別のレーンを編集してしまいます。インデックスを保持して渡している箇所は見直してください。
@@ -567,24 +591,23 @@ Python では `annotate_keys` が `(start_ppq, end_ppq, tonic_pc, mode)` タプ�
 
 ```typescript
 const payload = new TextEncoder().encode(JSON.stringify({ suggestion: 'tighten chorus' }));
-project.setAssistSidecar(
-  'my-assistant',  // moduleId（空にできない）
-  1,               // schemaVersion
-  0,               // targetTrackId（0 = プロジェクトスコープ）
-  0,               // regionStartPpq
-  16,              // regionEndPpq
-  payload,         // Uint8Array（コピーされる）
-);
+project.setAssistSidecar({
+  moduleId: 'my-assistant',  // 空にできない
+  schemaVersion: 1,
+  targetTrackId: 0,          // 0 = プロジェクトスコープ
+  regionStartPpq: 0,
+  regionEndPpq: 16,
+  payload,                    // Uint8Array（コピーされる）
+});
 
-for (let i = 0; i < project.assistSidecarCount(); i += 1) {
-  const sc = project.getAssistSidecar(i);
-  // { moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload }
-}
+project.assistSidecars();     // プロジェクト順の全記述子
+project.getAssistSidecar(0);  // { moduleId, schemaVersion, targetTrackId,
+                              //   regionStartPpq, regionEndPpq, payload }
 ```
 
 `moduleId` + `targetTrackId` + 領域スコープが既存のものと同じサイドカーは**置換**され、それ以外は追加されます。`targetTrackId` `0` はプロジェクトスコープを意味します。書き込みはアンドゥ可能な編集なので、`undo()` / `redo()` で取り消し・やり直しできます。
 
-バインディングごとの API は少し異なります（本ページの他の Python snake_case の注記と同じ方針です）。上の WASM 呼び出しは位置引数で、件数とインデックスアクセサだけを公開します。**Node** はオプションオブジェクトを取り（`project.setAssistSidecar({ moduleId, schemaVersion?, targetTrackId?, regionStartPpq?, regionEndPpq?, payload? })`）、Node/Python はさらに `assistSidecars()` / `assist_sidecars()` で全件を一度に読めます。**Python:** `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index)`、`project.assist_sidecars()`。
+上の記述子形式が **WASM と Node** の標準 JavaScript API です。WASM には互換性のため、従来の位置引数形式 `setAssistSidecar(moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload)` も残っています。どちらの JavaScript バインディングにも件数、インデックスアクセサー、全件をまとめて読む `assistSidecars()` があります。**Python** は `set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)` を使い（マッピング記述子も受け付けます）、`assist_sidecar_count()`、`get_assist_sidecar(index)`、`assist_sidecars()` で読み取ります。C ABI は位置引数の `sonare_project_set_assist_sidecar(...)` と、対応する count/get/free 関数です。
 
 ## MIDI の内容
 
@@ -772,7 +795,7 @@ Python では `project.to_json()`・`Project.from_json(json)`・`Project.from_js
 
 ### モデルを読み戻し、読み込み後に音声を再バインドする
 
-プロジェクト JSON が保存するのは**アレンジ**であって PCM ではありません。そのため読み込んだプロジェクトはソースの存在は分かっていても、その実体となるサンプルを持っていません。読み取り専用のディスクリプタ 3 系統と 1 つのセッターで、この輪を閉じます。
+プロジェクト JSON が保存するのは**アレンジ**であって PCM ではありません。そのため読み込んだプロジェクトはソースの存在は分かっていても、その実体となるサンプルを持っていません。読み取り専用のディスクリプタ 3 系統と PCM／ソースメタデータのセッターで、この輪を閉じます。
 
 ```typescript
 const loaded = Project.fromJson(json);
@@ -785,10 +808,14 @@ for (let i = 0; i < loaded.clipCount(); i++) {
   const clip = loaded.clipByIndex(i);        // { id, trackId, sourceId, startPpq, lengthPpq, … }
   console.log(clip.id, clip.startPpq, clip.lengthPpq);
 }
+const unresolvedAudioIds = new Set(loaded.unresolvedAudioSourceIds());
 for (let i = 0; i < loaded.sourceCount(); i++) {
-  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint, nameOrUri }
+  const source = loaded.sourceByIndex(i);    // { id, kind, channelCount, sampleRateHint,
+                                             //   nameOrUri, contentHash, externalStemRole }
+  if (source.kind !== 0 || !unresolvedAudioIds.has(source.id)) continue; // 0 = audio、MIDI は除外
   const pcm = await decodeFromYourStorage(source.nameOrUri);
   loaded.setSourceAudio(source.id, pcm, source.channelCount, source.sampleRateHint);
+  loaded.setAudioSourceMetadata(source.id, 'sha256:...', 'lead-vocal');
 }
 
 const audio = loaded.bounce({ sampleRate: 48000 });
@@ -803,6 +830,8 @@ UI を組むときに使います。
 `setSourceAudio(sourceId, samples, channels, sampleRate)` は、バウンス前にデコード済み PCM を
 ソースへ再バインドします。「読み込んだだけのアレンジ」を「レンダリングできるプロジェクト」に
 変えるのがこの一手です。
+
+`unresolvedAudioSourceIds()` は、デシリアライズ後もデコード済み PCM が必要なソース ID の公開リストです。ディスクリプタを走査するときの上の `kind !== 0` ガードは防御的なもので、`0` がオーディオ、`1` が MIDI です。MIDI ソースにはバインドする PCM も更新するソースメタデータもありません。オーディオソースのディスクリプタには所有メタデータ `contentHash` と `externalStemRole` もあり、MIDI ソースでは空文字列です。`setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` は両方の文字列を 1 つのアンドゥ可能な編集として置き換え、空文字列で個別にクリアできます。WASM はこの位置引数形式を使い、Node は第 2 引数に `{ contentHash, externalStemRole }` のオブジェクトも受け付けます。Python は `set_audio_source_metadata(source_id, content_hash, external_stem_role)`（C ABI は `sonare_project_set_audio_source_metadata`）です。Python には `unresolved_audio_source_ids()` があり、ソースディスクリプタの名前は `content_hash` と `external_stem_role` です。C の getter が返すヒープ文字列は対応する free 関数で解放します。
 
 ### ホスト側で分離したステムを取り込む
 

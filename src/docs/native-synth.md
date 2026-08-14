@@ -215,7 +215,7 @@ await init();
 synthPresetNames();
 // ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
 //  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-//  'electric-guitar', 'harp', 'bass-acoustic', ...,
+//  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
 //  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 const pad = synthPresetPatch('warm-pad');
@@ -229,7 +229,7 @@ import libsonare as sonare
 sonare.synth_preset_names()
 # ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
 #  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-#  'electric-guitar', 'harp', 'bass-acoustic', ...,
+#  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
 #  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 pad = sonare.synth_preset_patch("warm-pad")
@@ -255,7 +255,7 @@ The catalog maps to the engines like this (one preset per row is enough to feel 
 | `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | reed woodwinds |
 | `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | brass instruments |
 | `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | air-jet flutes and whistles |
-| `koto` `sitar` `tanpura` | `plucked-string` | buzzing-bridge plucked strings |
+| `koto` `sitar` `tanpura` `harp-plucked` | `plucked-string` | buzzing-bridge plucked strings |
 | `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | choir and solo voices |
 | `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | accordion, harmonica, reed organ |
 
@@ -399,12 +399,21 @@ audio = project.bounce_with_synth_instrument(
 )
 ```
 
-The flag is `use_gm_programs` on the C ABI's `SonareSynthInstrumentBinding` and
-`auto_select_gm` in Python. On both CLIs it is the bare `--synth` flag
+```typescript [WASM / Node]
+// A SynthPatch object carries the JS binding option; a preset string cannot.
+const audio = project.bounceWithSynthInstrument(
+  { preset: 'acoustic-piano', useGmPrograms: true },
+  { totalFrames: 48000, numChannels: 2 },
+);
+```
+
+The flag is `use_gm_programs` on the C ABI's `SonareSynthInstrumentBinding`,
+`auto_select_gm` in Python, and `useGmPrograms` on the WASM/Node JavaScript
+`SynthPatch` descriptor. All default to `false`, preserving the fixed-patch
+fallback. `useGmPrograms` is a JS binding convenience, not a NativeSynth patch
+field. On both CLIs it is the bare `--synth` flag
 (`sonare project bounce --in project.json --synth -o out.wav`); passing a preset
-name instead pins that patch. The WASM and Node bounce bindings take a fixed
-patch per destination and do not expose the flag — bind one destination per
-instrument there, or drive the render from Python or the CLI.
+name instead pins that patch.
 
 ::: code-group
 

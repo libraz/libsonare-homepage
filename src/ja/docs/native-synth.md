@@ -215,7 +215,7 @@ await init();
 synthPresetNames();
 // ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
 //  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-//  'electric-guitar', 'harp', 'bass-acoustic', ...,
+//  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
 //  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 const pad = synthPresetPatch('warm-pad');
@@ -229,7 +229,7 @@ import libsonare as sonare
 sonare.synth_preset_names()
 # ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
 #  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-#  'electric-guitar', 'harp', 'bass-acoustic', ...,
+#  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
 #  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 pad = sonare.synth_preset_patch("warm-pad")
@@ -255,7 +255,7 @@ pad = sonare.synth_preset_patch("warm-pad")
 | `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | リード木管 |
 | `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | 金管 |
 | `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | エアジェットフルートと笛 |
-| `koto` `sitar` `tanpura` | `plucked-string` | バズブリッジの撥弦 |
+| `koto` `sitar` `tanpura` `harp-plucked` | `plucked-string` | バズブリッジの撥弦 |
 | `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | 合唱・ソロの声 |
 | `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | アコーディオン、ハーモニカ、リードオルガン |
 
@@ -398,12 +398,21 @@ audio = project.bounce_with_synth_instrument(
 )
 ```
 
+```typescript [WASM / Node]
+// JS バインディングのオプションは SynthPatch オブジェクトに指定する（文字列には指定できない）。
+const audio = project.bounceWithSynthInstrument(
+  { preset: 'acoustic-piano', useGmPrograms: true },
+  { totalFrames: 48000, numChannels: 2 },
+);
+```
+
 このフラグは C ABI の `SonareSynthInstrumentBinding` では `use_gm_programs`、Python では
-`auto_select_gm` です。2 つの CLI では値なしの `--synth` フラグがこれにあたります
+`auto_select_gm`、WASM／Node の JavaScript では `SynthPatch` 記述子の `useGmPrograms` です。
+いずれも既定値は `false` で、固定パッチをフォールバックにする挙動を保ちます。
+`useGmPrograms` は JS バインディングの便宜機能で、NativeSynth パッチのフィールドではありません。
+2 つの CLI では値なしの `--synth` フラグがこれにあたります
 （`sonare project bounce --in project.json --synth -o out.wav`）。プリセット名を渡した場合は
-そのパッチに固定されます。WASM と Node のバウンスバインディングは出力先ごとに固定パッチを
-受け取る形で、このフラグは公開していません。これらでは楽器ごとに出力先を分けるか、
-Python か CLI からレンダーしてください。
+そのパッチに固定されます。
 
 ::: code-group
 

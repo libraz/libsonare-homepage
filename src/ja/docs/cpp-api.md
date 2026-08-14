@@ -745,6 +745,18 @@ auto reconstructed_vqt = griffinlim_vqt(vqt_result, vqt_result.sample_rate());
 ```
 :::
 
+### NNLS クロマ
+
+NNLS クロマは CQT の hop 長を設定できます。既定値は `512` サンプルです。
+別のフレームグリッドに合わせる場合は `NnlsChromaConfig::cqt` に指定します。
+
+```cpp
+NnlsChromaConfig nnls_config;
+nnls_config.cqt.hop_length = 512;
+nnls_config.enable_stft_blend = true;
+auto nnls_result = nnls_chroma(audio, nnls_config);
+```
+
 ## エフェクト
 
 ### HPSS <Badge type="warning" text="Heavy" />
@@ -757,10 +769,18 @@ HPSS は STFT 計算とメディアンフィルタリングを必要とします
 HpssConfig config;
 config.kernel_size_harmonic = 31;
 config.kernel_size_percussive = 31;
+config.use_soft_mask = false;  // ハードマスク。既定値は true
 
-auto result = hpss(audio, config);
+StftConfig stft_config;
+stft_config.n_fft = 2048;
+stft_config.hop_length = 512;
+
+auto result = hpss(audio, config, stft_config);
 // result.harmonic
 // result.percussive
+
+auto with_residual = hpss_with_residual(audio, config, stft_config);
+// with_residual.harmonic / .percussive / .residual
 
 // 便利関数
 auto harm = harmonic(audio);
@@ -774,9 +794,13 @@ auto perc = percussive(audio);
 :::
 
 ```cpp
+TimeStretchConfig stretch_config;
+stretch_config.n_fft = 2048;
+stretch_config.hop_length = 512;
+
 // 0.5 = 半速、2.0 = 倍速
-auto slow = time_stretch(audio, 0.5f);
-auto fast = time_stretch(audio, 1.5f);
+auto slow = time_stretch(audio, 0.5f, stretch_config);
+auto fast = time_stretch(audio, 1.5f, stretch_config);
 ```
 
 ### ピッチシフト <Badge type="warning" text="Heavy" />
@@ -786,9 +810,13 @@ auto fast = time_stretch(audio, 1.5f);
 :::
 
 ```cpp
+PitchShiftConfig shift_config;
+shift_config.n_fft = 2048;
+shift_config.hop_length = 512;
+
 // 半音: +12 = 1オクターブ上
-auto higher = pitch_shift(audio, 2.0f);
-auto lower = pitch_shift(audio, -3.0f);
+auto higher = pitch_shift(audio, 2.0f, shift_config);
+auto lower = pitch_shift(audio, -3.0f, shift_config);
 ```
 
 ### ノーマライズ & オーディオユーティリティ
@@ -802,6 +830,11 @@ auto rms_norm = normalize_rms(audio, -20.0f);  // 目標 RMS レベル (dB)
 
 // 無音トリミング（絶対 dBFS 閾値）
 auto trimmed = trim_absolute(audio, -60.0f);   // 閾値 (dBFS)
+
+// フレーム RMS の無音トリミング。既定値は frame_length=2048、hop_length=512。
+std::vector<float> samples(audio.begin(), audio.end());
+auto framed_trim = trim(samples, /*top_db=*/60.0f, /*frame_length=*/2048,
+                        /*hop_length=*/512);
 
 // レベル測定 (metering/basic.h, namespace sonare::metering)
 float peak = sonare::metering::peak_db(audio);  // ピーク振幅 (dB)
@@ -1118,9 +1151,15 @@ int         sonare_has_ffmpeg_support(void);     // FFmpeg 専用フォーマッ
 （段階ごとの進捗が要るなら `sonare_analyze_json_with_progress`）を呼び出します。
 camelCase の JSON 文字列を返し、`sonare_free_string` で解放します。
 
-エフェクト、特徴量、幾何ベースのルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。幾何ベースのルーム音響は `sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。関数一覧は `src/sonare_c.h` を参照してください。
+エフェクト、特徴量、ルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。ルーム音響は `sonare_analyze_impulse_response_ex`、`sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。関数一覧は `src/sonare_c.h` を参照してください。
 
 特徴量では、ノート活性の `sonare_chroma` に加えて、定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当）の `sonare_chroma_cqt` があります。明示レンジ版の MFCC 入口 `sonare_mfcc_ex`（fmin/fmax/htk）は、末尾にケプストラルリフタリング引数 `lifter` を持ちます（`0` で無効）。
+
+拡張 C ABI のエフェクト関数はバインディングと同じ FFT 設定を公開します。
+`sonare_hpss_ex` は `n_fft`、`hop_length`、`use_soft_mask`、残差出力フラグを受け取り、
+`sonare_time_stretch_ex` と `sonare_pitch_shift_ex` は `n_fft` と `hop_length` を受け取ります。
+`sonare_trim_ex` は `frame_length` と `hop_length`、`sonare_analyze_impulse_response_ex` は
+`min_decay_db`、`sonare_nnls_chroma_ex2` は NNLS オプションの CQT `hop_length` を追加します。
 
 プロジェクト編集は `sonare_c_project.h` にあります。`sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` の最後の引数が任意の equal-power 継ぎ目クロスフェードです。有限で 0 以上である必要があり、`0` ならハードループのままです。エンジンは使用可能なプリロールとループ長の半分を上限にクランプし、ワープ時は無視します。
 

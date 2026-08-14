@@ -213,7 +213,7 @@ AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm.md#リア�
 | 単純なピッチ／フォルマント変換 | `--pitch-semitones`、`--formant-factor` |
 | リアルタイムプリセットチェーンでのレンダリング | `--preset`、`--preset-json`、`--preset-pack`、`--set PATH=VALUE` |
 
-リアルタイムプリセット系のオプションを渡した場合、コマンドはプリセットチェーンを使い、単純なピッチ／フォルマント指定は参照しません。詳細なコマンド表は [CLI リファレンス](./cli.md#リアルタイムボイスプリセット) を参照してください。
+リアルタイムプリセット系のオプションを渡した場合、コマンドはプリセットチェーンを使います。単純なピッチ／フォルマント指定との併用は無効パラメータとして拒否されます。`--preset-pack FILE` にはエントリ選択用の `--preset ID` が必須で、先頭エントリへのフォールバックはありません。selector の規則とコマンド表は [CLI リファレンス](./cli.md#リアルタイムボイスプリセット) を参照してください。
 
 ## プリセット JSON
 
@@ -239,14 +239,15 @@ if (!validation.ok) {
 import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json';
 ```
 
-正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_config(...)` として公開しています。
+正規のプリセット ID や解決済みのフラットなネイティブ設定だけが必要なら、JSON を往復せず `voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。WASM の `voiceCharacterPresetId(...)` は正規 ID または整数の序数を受け取り、未知の数値序数は `null` を返し、未知の文字列 ID は throw します。`realtimeVoiceChangerPresetConfig(...)` は無効な序数で throw します。Python では同じネイティブ設定取得経路を `realtime_voice_changer_preset_config(...)` として公開しています。
 
 ::: warning プリセット文書は完全である必要があります
-部分的な文書は、無関係な既定値で黙って埋められるのではなく拒否されます。`deesser.ratio` は
-必須です。プリセットを手で書く場合は、変更したいフィールドだけを書くのではなく
-`realtimeVoiceChangerPresetJson('neutral-monitor')` を出発点にして編集してください。
-`configJson()` で設定を読み出し、編集して `setConfig(...)` で書き戻す往復は安全です。
-未知のトップレベルキーも拒否されます。
+有効な文書には必須のスキーマメタデータと、完全な `dsp` または `macros` のどちらか
+1 つが必要です。部分的な文書は、無関係な既定値で黙って埋められるのではなく拒否され、
+`deesser.ratio` も必須です。プリセットを手で書く場合は、変更したいフィールドだけを書く
+のではなく `realtimeVoiceChangerPresetJson('neutral-monitor')` を出発点にして編集して
+ください。`configJson()` で設定を読み出し、編集して `setConfig(...)` で書き戻す往復は
+安全です。トップレベルや各セクション内の未知のキーも拒否されます。
 :::
 
 ### `macros` — 省略記法のセクション

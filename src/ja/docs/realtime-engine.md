@@ -153,6 +153,24 @@ engine.setSoloMute(0, true, false, -1);
 
 <SonareDemo id="engine-lane-mixer" />
 
+## トラックモニタータップ: off・PFL・AFL
+
+設定済みの各トラックレーンは、独立したキュー／モニターバスへ信号を送れます。`setTrackMonitorMode(laneIndex, mode, renderFrame?)` でモードをキューします。`laneIndex` は `setTrackLanes` で決まる追加専用のインデックス、`renderFrame` の既定値は `-1`（次のブロック先頭）、`mode` は `'off'`・`'pfl'`・`'afl'`（または序数 `0`・`1`・`2`）です。
+
+- **off** — レーンはモニターバスへ何も送らない。
+- **PFL**（pre-fader listen）— レーンストリップとプラグインディレイ補正の後、レーンのフェーダー・ゲート・パンの前でタップします。そのため、レーンをミュートしたりソロ制御でゲートしたりしても、ここでは聞こえます。
+- **AFL**（after-fader listen）— フェーダー・ゲート・パンの後でタップします。サラウンドレーンではフェーダー／ゲートとサラウンドのプレーン配置の後、ステレオ AFL ではパンの後です。
+
+モニターバスには PFL／AFL を設定した複数レーンが合算されます。通常の `process(...)` は互換性のためこのバスをメイン出力へ折り込みます。プログラム出力とキュー出力を分けるには `processWithMonitor(...)` を使います。
+
+```typescript
+engine.setTrackMonitorMode(0, 'pfl');
+const { output, monitor } = engine.processWithMonitor([leftBlock, rightBlock]);
+engine.setTrackMonitorMode(0, 'off');
+```
+
+WASM と Node は `{ output, monitor }` を返します。Python は `set_track_monitor_mode(0, 'afl')` を使い、`process_with_monitor(...)` から `(output, monitor)` を受け取ります。C のエントリーポイントは `sonare_engine_set_track_monitor_mode` と `sonare_engine_process_with_monitor` です。
+
 ## グループルーティング・サイドチェイン・ライブストリップ操作
 
 レーン／センドのグラフ以外にも、ストリップを作り直さずにルーティングとパンを変えるリアルタイムセーフな操作がいくつかあります。

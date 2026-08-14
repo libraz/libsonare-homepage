@@ -43,9 +43,9 @@ Python `sonare` command instead of colliding with it. This page writes `sonare`
 in examples; substitute `sonare-cli` when running a native-only command.
 
 Corresponding commands in both CLIs use the same `snake_case` keys and payload
-shapes, so a script can read either one. Do not depend on byte-identical output
-or identical decimal precision: each frontend serializes floating-point values
-independently, and some focused commands intentionally round summaries.
+shapes, so a script can read either one. Do not depend on byte-identical output:
+each frontend serializes independently. JSON values retain native precision;
+some focused human-readable summaries may still round.
 
 Unless this page explicitly says "native CLI", assume the command is available
 from the PyPI Python CLI.
@@ -99,7 +99,7 @@ sonare <command> [options] <audio_file>
 |--------|-------------|
 | `--json` | Output results in JSON format |
 | `--help`, `-h` | Show help for command |
-| `-o`, `--output` | Output WAV path. Editing, mastering, `eq`, and `mix` commands write a WAV here; analysis/feature commands print to stdout |
+| `-o`, `--output` | Output WAV path. Editing, mastering, `eq`, and `mix` commands write a WAV here; analysis/feature commands print to stdout and reject this option |
 | `--n-fft <int>` | FFT size (default: 2048) |
 | `--hop-length <int>` | Hop length (default: 512) |
 | `--n-mels <int>` | Number of Mel bands (default: 128) |
@@ -107,8 +107,8 @@ sonare <command> [options] <audio_file>
 `sonare <command> --help` lists only the options that command actually accepts,
 so the help is the authority for any one command. The DSP options above
 (`--n-fft`, `--hop-length`, `--n-mels`) are accepted only by the commands that
-consume them: passing one to a command that ignores it exits with the
-invalid-parameter code rather than being silently dropped.
+consume them: passing one to a command that ignores it is a usage error (exit
+code 2), rather than being silently dropped.
 
 Colour is configured once at startup, so `NO_COLOR` in the environment — or
 sending stdout to a file or pipe instead of a terminal — disables ANSI escapes
@@ -465,7 +465,13 @@ These commands inspect, validate, or render the realtime voice-changer preset ch
 | `sonare voice-preset` | Print one preset's config as JSON | `--preset` (`neutral-monitor`), `--json` |
 | `sonare voice-preset-validate preset.json` | Validate and normalize a preset JSON file or preset pack | `--preset` when validating a pack, `--set PATH=VALUE`, `--json` |
 
-Without realtime preset options, `voice-change` uses the simple pitch/formant helper controlled by `--pitch-semitones` and `--formant-factor`. With preset options, it uses the realtime voice chain and ignores those simple pitch/formant controls.
+Without realtime preset options, `voice-change` uses the simple pitch/formant helper controlled by `--pitch-semitones` and `--formant-factor`. With preset options, it uses the realtime voice chain; combining preset options with either simple control is rejected as an invalid-parameter error.
+
+Preset selection is explicit: choose a built-in `--preset ID`, a
+`--preset-json FILE`, or the pair `--preset-pack FILE --preset ID`. The pack file
+and entry ID form one selector; `--preset-pack` without `--preset` is rejected
+(there is no first-entry fallback). `--preset-json` cannot be combined with a
+pack, and `--set PATH=VALUE` requires a preset selector.
 
 ### Synthesis
 
@@ -813,14 +819,13 @@ Check the active build from Python with `libsonare.has_ffmpeg_support()`.
 
 ## Exit Codes
 
-The table below is the Python CLI's process-exit mapping. It is aligned by error
-class with the C ABI and binding errors, but these are CLI exit values rather
-than a claim that every numeric value is identical across those APIs:
+Both the Python and native CLIs use the following process-exit mapping, aligned
+with the C ABI error classes:
 
 | Code | Description |
 |------|-------------|
 | 0 | Success |
-| 2 | Usage error (bad arguments; argparse's native code) |
+| 2 | Usage error (bad arguments) |
 | 3 | Invalid parameter |
 | 4 | File not found |
 | 5 | Invalid format |
@@ -831,7 +836,10 @@ than a claim that every numeric value is identical across those APIs:
 | 10 | Other error |
 | 11 | Cancelled |
 
-For the Python CLI, set `SONARE_LEGACY_EXIT=1` to fold every failure back to exit `1` for scripts that hardcode the old all-failures-are-1 contract. The native CLI is unaffected by this variable — it always uses the plain `0` (success) / `1` (error) convention.
+Usage/parse errors use exit code 2; semantic invalid parameters use 3, and a
+cancelled run uses 11. Set `SONARE_LEGACY_EXIT=1` for either CLI to fold every
+failure back to exit `1` for scripts that hardcode the old all-failures-are-1
+contract.
 
 ## Performance Tips
 

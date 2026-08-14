@@ -165,10 +165,9 @@ reclaims handles eventually, but `using`/explicit release gives deterministic
 cleanup that long-lived processes should prefer.
 
 `RealtimeVoiceChanger` also implements `[Symbol.dispose]` alongside an explicit
-`destroy()`, so it supports `using` as well. The streaming/analysis classes
-`StreamingMasteringChain`, `StreamingEqualizer`, and `StreamAnalyzer` expose
-neither `destroy()` nor `[Symbol.dispose]`; their native state is reclaimed by GC
-finalization, so it cannot be released deterministically.
+`destroy()`, so it supports `using` as well. `StreamingMasteringChain`,
+`StreamingEqualizer`, and `StreamAnalyzer` likewise expose idempotent
+`destroy()` and `[Symbol.dispose]` for deterministic release.
 
 ### Analysis Functions
 
@@ -190,7 +189,7 @@ finalization, so it cannot be released deterministically.
 | `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings. `options`: `nFft`, `hopLength`, `minSectionSec`. Long inputs may use a pooled boundary grid; use each section's `start` / `end` for placement |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | Lead-melody contour (F0 per frame). `options`: `fmin`, `fmax`, `frameLength`, `hopLength`, `threshold`, `usePyin`, `center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | Room acoustics from a recording (RT60, etc.). `options`: `nOctaveBands`, `nThirdOctaveSubbands`, `minDecayDb`, `noiseFloorMarginDb` |
-| `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?)` | `AcousticResult` | Room acoustics from a measured impulse response |
+| `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | Room acoustics from a measured impulse response; `minDecayDb` controls the decay-fit threshold (default `30`) |
 | `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
 | `synthesizeRir(options?)` | `RirResult` | Mono room impulse response from shoebox geometry |
 | `roomMorph(samples, sampleRate, options?)` | `Float32Array` | Offline creative morph toward a target room |
@@ -201,7 +200,7 @@ finalization, so it cannot be released deterministically.
 | `shortTermLufs(samples, sampleRate?)` | `Float32Array` | Short-term loudness (3 s) per step |
 | `version()` | `string` | Library version |
 | `voiceChangerAbiVersion()` | `number` | ABI version of the realtime voice-changer POD config; separate from preset JSON `schemaVersion` |
-| `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | Canonical voice-character preset ID for an ordinal or ID |
+| `voiceCharacterPresetId(preset)` | `VoicePresetId \| null` | Canonical voice-character preset ID; an unknown numeric ordinal returns `null`, while an unknown string ID throws |
 | `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig` | Resolved flat POD config for a built-in voice preset, without JSON parsing. Throws on an unknown preset name or out-of-range ordinal |
 | `hasFfmpegSupport()` | `boolean` | Whether the loaded native addon can decode via FFmpeg |
 
@@ -234,16 +233,16 @@ Progress callbacks are not available on the async path. If you need progress upd
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
-| `hpss(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssResult` | Harmonic-Percussive Source Separation |
-| `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?)` | `HpssWithResidualResult` | HPSS with harmonic, percussive, and residual outputs |
+| `hpss(samples, sr?, kernelHarmonic?, kernelPercussive?, nFft?, hopLength?, hardMask?)` | `HpssResult` | Harmonic-Percussive Source Separation; `nFft=2048`, `hopLength=512`, `hardMask=false` by default |
+| `hpssWithResidual(samples, sr?, kernelHarmonic?, kernelPercussive?, nFft?, hopLength?, hardMask?)` | `HpssWithResidualResult` | HPSS with harmonic, percussive, and residual outputs; accepts the same STFT/mask options |
 | `harmonic(samples, sr?)` | `Float32Array` | Extract harmonic component |
 | `percussive(samples, sr?)` | `Float32Array` | Extract percussive component |
-| `timeStretch(samples, sampleRate, rate)` | `Float32Array` | Time-stretch without pitch change |
+| `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | Time-stretch without pitch change; defaults to `nFft=2048`, `hopLength=512` |
 | `phaseVocoder(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
-| `pitchShift(samples, sampleRate, semitones)` | `Float32Array` | Pitch-shift without tempo change |
+| `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` | `Float32Array` | Pitch-shift without tempo change; defaults to `nFft=2048`, `hopLength=512` |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
-| `normalize(samples, sr?, targetDb?)` | `Float32Array` | Normalize to target dB (default: 0.0) |
-| `trim(samples, sr?, thresholdDb?)` | `Float32Array` | Trim silence (default: -60.0 dB) |
+| `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | Normalize to target peak or RMS dB (`mode`: `'peak'` or `'rms'`, default: `'peak'`) |
+| `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | Trim silence (defaults: `-60.0` dB, `frameLength=2048`, `hopLength=512`) |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | Retune a held note from one MIDI pitch to another |
 | `noteStretch(samples, sr?, options?)` | `Float32Array` | Time-stretch a single note span in place; `options` is `{ onsetSample, offsetSample, stretchRatio }` |
@@ -253,7 +252,8 @@ Progress callbacks are not available on the async path. If you need progress upd
 the librosa-compatible frame/RMS helper that returns the original sample range.
 
 `hpss(...)` and `hpssWithResidual(...)` default their median-filter kernels to
-`kernelHarmonic=31` and `kernelPercussive=31`.
+`kernelHarmonic=31` and `kernelPercussive=31`. The request-object forms use the
+same names (`nFft`, `hopLength`, and `hardMask`) as the positional overloads.
 
 ### Feature Extraction Functions
 
@@ -281,7 +281,7 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 | `cqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Constant-Q transform magnitude |
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | Variable-Q transform magnitude (`gamma` controls Q) |
 | `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) |
-| `nnlsChroma(samples, sr?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma) |
+| `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma); `options.hopLength` defaults to `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | NMF factor matrices from a row-major spectrogram |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Hybrid CQT magnitude (true CQT in low bins, pseudo-CQT in high bins) |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude (single FFT) |
@@ -455,6 +455,13 @@ changer.destroy();
 | Capability check | Adds `engineCapabilities()` and checks ABI compatibility before construction | Exposes `engineAbiVersion()` but not the browser capability helper |
 | Capture buffer setup | `setCaptureBuffer(numChannels, capacityFrames)` | `setCaptureBuffer(channels)` with preallocated channel buffers |
 
+`Project.create()` constructs an empty project. Its `setAssistSidecar(...)`
+and `assistSidecars()` methods preserve opaque module metadata, while
+`ProjectAutomationTargetKind` and `targetKind` classify automation lanes.
+`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` accepts
+`'off'`, `'pfl'`, or `'afl'` (and their numeric ordinals). Track and mixer pan
+law setters accept the `PanLawInput` aliases described below.
+
 ### Types
 
 ```typescript
@@ -561,8 +568,9 @@ The native package also exports TypeScript helper types for option objects, call
 | Analysis options/results | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
-| Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanMode`, `SendTiming` |
-| Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
+| Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
+| Realtime voice | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |
-| Realtime engine transport | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig` |
+| Realtime engine transport | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig`, `EngineTrackMonitorMode` |
+| Project metadata and automation | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |

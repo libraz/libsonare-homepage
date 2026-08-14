@@ -342,14 +342,14 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | ブライトネス・ウォームス・密度・粗さ・複雑さと、窓ごとの `timbre_over_time`（`timbreOverTime` alias） |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | 楽曲構造のセクション（イントロ／ヴァース／コーラス…） |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | 単音メロディの輪郭（YIN） |
-| `analyze_impulse_response(samples, sample_rate, ...)` | `AcousticResult` | インパルス応答からの室内音響（RT60／EDT／C50／C80） |
+| `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | インパルス応答からの室内音響（RT60／EDT／C50／C80）。`min_decay_db` は減衰フィットのしきい値 |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | ブラインドなルーム音響推定 |
 | `estimate_room(samples, sample_rate, ...)` | `RoomEstimate` | 体積、寸法、DRR、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
 | `synthesize_rir(length_m, width_m, height_m, ...)` | `RirResult` | シューボックス形状からのモノラル RIR |
 | `room_morph(samples, sample_rate, length_m, width_m, height_m, ...)` | `list[float]` | 目標ルームへ寄せるオフラインのルームモーフィング |
 | `version()` | `str` | ライブラリバージョン |
 | `voice_changer_abi_version()` | `int` | リアルタイムボイスチェンジャー POD 設定の ABI バージョン。プリセット JSON の `schemaVersion` とは別 |
-| `voice_character_preset_id(preset)` | `str \| None` | 整数の序数から正規の voice-character プリセット ID を返す |
+| `voice_character_preset_id(preset)` | `str \| None` | 整数の序数から正規の voice-character プリセット ID を返す。未知の序数は `None` |
 | `realtime_voice_changer_preset_config(preset)` | `RealtimeVoiceChangerConfig` | JSON 解析なしで、組み込みボイスプリセットの解決済みフラット POD 設定を返す |
 | `engine_abi_version()` | `int` | リアルタイムエンジンインターフェースの ABI バージョン |
 | `project_abi_version()` | `int` | `Project` のシリアライズ、バウンス、リアルタイムクリップ交換で使うプロジェクト／編集 API の ABI バージョン |
@@ -423,7 +423,7 @@ print(labels)  # 例: ['I', 'V', 'vi', 'IV']
 :::
 
 ```python
-ir = sonare.analyze_impulse_response(ir_samples, sample_rate, n_octave_bands=6)
+ir = sonare.analyze_impulse_response(ir_samples, sample_rate, n_octave_bands=6, min_decay_db=30.0)
 print(ir.rt60, ir.edt, ir.c50, ir.c80, ir.confidence)
 
 blind = sonare.detect_acoustic(
@@ -458,18 +458,20 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS）。メディアンフィルタのカーネル既定値は `kernel_harmonic=31`、`kernel_percussive=31` |
+| `hpss(samples, sample_rate, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` | `HpssResult` | 倍音成分／打撃成分の分離（HPSS）。既定は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` |
+| `hpss_with_residual(samples, sample_rate, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` | `dict[str, object]` | 倍音、打撃、残差を返す HPSS |
 | `harmonic(samples, sample_rate)` | `list[float]` | 倍音成分を抽出 |
 | `percussive(samples, sample_rate)` | `list[float]` | 打撃成分を抽出 |
-| `time_stretch(samples, sample_rate, rate)` | `list[float]` | ピッチを変えずにテンポ変更 |
-| `pitch_shift(samples, sample_rate, semitones)` | `list[float]` | テンポを変えずにピッチ変更 |
+| `time_stretch(samples, sample_rate, rate, n_fft?, hop_length?)` | `list[float]` | ピッチを変えずにテンポ変更。既定は `n_fft=2048`、`hop_length=512` |
+| `pitch_shift(samples, sample_rate, semitones, n_fft?, hop_length?)` | `list[float]` | テンポを変えずにピッチ変更。既定は `n_fft=2048`、`hop_length=512` |
 | `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | 目標 MIDI ノートへピッチ補正 |
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | コントゥアに沿うピッチ補正。フレームごとの `f0_hz` コントゥアに沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
 | `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | ピッチとフォルマントを独立にシフト |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
-| `normalize(samples, sample_rate, target_db?)` | `list[float]` | 目標 dB にノーマライズ（デフォルト: 0.0） |
-| `trim(samples, sample_rate, threshold_db?)` | `list[float]` | 無音区間をトリム（デフォルト: -60.0 dB） |
+| `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（デフォルト: 0.0） |
+| `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB にノーマライズ（デフォルト: -20.0） |
+| `trim(samples, sample_rate, threshold_db?, frame_length?, hop_length?)` | `list[float]` | 無音区間をトリム（既定: `-60.0` dB、`frame_length=2048`、`hop_length=512`） |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | 目標サンプルレートへリサンプリング |
 
 `trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の librosa 互換 `trim_silence(...)` はフレーム RMS と `top_db` を使い、トリム後の音声と元音源上のサンプル範囲を返します。
@@ -502,7 +504,7 @@ with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128
 processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
 ```
 
-現在のプリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。
+現在のプリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。組み込み ID はここに示した厳密な文字列です。カスタムマッピングはプリセット JSON のバリデーターを通し、`dsp` または `macros` のどちらか一方だけを持つ必要があります。壊れた形は拒否されます。
 
 JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voice_changer_preset_config(preset)` を使います。組み込みプリセット（ID またはインデックス）の正規化済み `RealtimeVoiceChangerConfig` を返します。
 
@@ -539,7 +541,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | 低域寄りのクロマ（低音域のピッチクラス分布） |
 | `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | CENS のエネルギー正規化・平滑化クロマ |
 | `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?)` | `tuple[int, list[float]]` | 定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当） — `(n_frames, 行優先 12 x n_frames データ)` を返す |
-| `nnls_chroma(samples, sample_rate)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す |
+| `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す。`hop_length` の既定値は `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | 行優先スペクトログラムから NMF 分解係数 `(w, h)` を返す |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | 初期化方式を選べる NMF 分解 `(w, h)`。`init` は既定 `'random'`、`'nndsvd'`（SVD ウォームスタート）も受け付ける |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルタ |
@@ -553,9 +555,9 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 
 主な既定値は、`n_fft=2048`、`hop_length=512`、`n_mels=128`、`n_mfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`roll_percent=0.85` です。
 
-CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` の既定は `n_bins=252`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31` を既定値とします。
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` の既定は `n_bins=252`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` を既定値とします。
 
-追加のエフェクト系ヘルパーとして `remix(samples, intervals, sample_rate?, align_zeros?)`、`phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?)` も利用できます。librosa 型の区間リミックス、直接のフェーズボコーダー時間伸縮、残差信号を保持した HPSS が必要な場合に使います。
+追加のエフェクト系ヘルパーとして `remix(samples, intervals, sample_rate?, align_zeros?)`、`phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` も利用できます。librosa 型の区間リミックス、直接のフェーズボコーダー時間伸縮、残差信号を保持した HPSS が必要な場合に使います。
 
 ### 逆再構成関数
 
@@ -1192,6 +1194,12 @@ finally:
 
 `mixer.process_stereo(...)` は `MixerStereoResult` 名前付きタプルを返します。`.left` と `.right`（`list[float]`）、`.sample_rate`（`int`）を持ち、Node/WASM の `{left, right, sampleRate}` と同じ形です。
 
+`Mixer.set_pan_law(...)` と `RealtimeEngine.set_track_strip_pan_law(...)` は、
+`PanLaw` enum、整数の序数、または大文字小文字を区別しない文字列エイリアスを受け取ります。
+`const3db`、`const-3db`、`-3db`、`const4.5db`、`const-4.5db`、`-4.5db`、
+`const6db`、`const-6db`、`-6db`、`linear0db`、`linear-0db`、`linear`、`0db` が使え、
+アンダースコアはハイフンとして扱われます。
+
 ルーティングの考え方、シーンプリセット、リアルタイム処理の注意点は [ミキシングエンジン](./mixing.md) を参照してください。
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
@@ -1206,6 +1214,7 @@ finally:
 | バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。**Python 専用です**。 | [プロジェクトのバウンス](./project-bounce.md) |
 | MIDI イベントからインストゥルメントをライブ演奏し、デスティネーションの MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
+| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る) |
 | エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター) |
