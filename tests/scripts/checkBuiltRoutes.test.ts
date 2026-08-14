@@ -32,7 +32,7 @@ const demoRoutes = [
   'ja/practice.html',
 ];
 
-const siteUrl = 'https://sonare.libraz.net';
+const siteUrl = 'https://libsonare.libraz.net';
 const scriptPath = path.resolve('scripts/check-built-routes.mjs');
 
 let workspaces: string[] = [];
@@ -90,17 +90,38 @@ function sitemap(files: string[]) {
   ].join('');
 }
 
-function llmsTxt(locales = ['ja']) {
+function llmsTxt(
+  locale = 'en',
+  locales = ['en', 'ja'],
+  {
+    includeDocs = true,
+    includeDemos = true,
+    includeAlternates = true,
+  }: { includeDocs?: boolean; includeDemos?: boolean; includeAlternates?: boolean } = {},
+) {
+  const prefix = locale === 'en' ? '' : `/${locale}`;
   return [
     '# libsonare',
     '',
-    `- [Introduction](${siteUrl}/docs/introduction.html)`,
-    ...locales.flatMap((locale) => [
-      `- [${locale} documentation](${siteUrl}/${locale}/docs/introduction.html)`,
-      `- [${locale} demos](${siteUrl}/${locale}/demos.html)`,
-    ]),
+    ...(includeDocs ? [`- [Introduction](${siteUrl}${prefix}/docs/introduction.html)`] : []),
+    ...(includeDemos ? [`- [${locale} demos](${siteUrl}${prefix}/demos.html)`] : []),
+    ...(includeAlternates
+      ? locales
+          .filter((otherLocale) => otherLocale !== locale)
+          .map((otherLocale) => {
+            const otherPrefix = otherLocale === 'en' ? '' : `/${otherLocale}`;
+            return `- [${otherLocale} llms index](${siteUrl}${otherPrefix}/llms.txt)`;
+          })
+      : []),
     '',
   ].join('\n');
+}
+
+function writeLlmsIndexes(dist: string, locales = ['en', 'ja']) {
+  for (const locale of locales) {
+    const relativePath = locale === 'en' ? 'llms.txt' : `${locale}/llms.txt`;
+    writeFile(dist, relativePath, llmsTxt(locale, locales));
+  }
 }
 
 describe('check-built-routes script helpers', () => {
@@ -150,7 +171,7 @@ describe('check-built-routes script helpers', () => {
     writeFile(dist, 'index.html', '<a href="/mixing">Mixing</a><a href="/assets/app.js">Asset</a>');
     writeFile(dist, 'assets/app.js', 'console.log("ok")');
     writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
-    writeFile(dist, 'llms.txt', llmsTxt());
+    writeLlmsIndexes(dist);
 
     const result = checkBuiltRoutes({ dist, manifestPath });
 
@@ -171,16 +192,69 @@ describe('check-built-routes script helpers', () => {
     for (const file of [...demoRoutes, ...glossaryFiles]) writeFile(dist, file);
     writeFile(dist, 'index.html');
     writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
-    writeFile(dist, 'llms.txt', llmsTxt());
+    writeLlmsIndexes(dist, ['en', 'ja', 'fr']);
 
     const result = checkBuiltRoutes({ root, dist, manifestPath });
 
     expect(result.failures).toEqual(
       expect.arrayContaining([
         'missing built route: fr/analyzer.html',
-        'sitemap missing route: https://sonare.libraz.net/fr/analyzer.html',
-        'llms.txt missing localized links for fr',
+        'sitemap missing route: https://libsonare.libraz.net/fr/analyzer.html',
       ]),
+    );
+  });
+
+  it('requires a localized llms index for every locale', () => {
+    const { dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    writeFile(dist, 'llms.txt', llmsTxt('en'));
+
+    const result = checkBuiltRoutes({ dist, manifestPath });
+
+    expect(result.failures).toContain('missing built ja/llms.txt');
+  });
+
+  it('requires localized llms indexes to list their docs and demos', () => {
+    const { dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    writeFile(dist, 'llms.txt', llmsTxt('en'));
+    writeFile(
+      dist,
+      'ja/llms.txt',
+      llmsTxt('ja', ['en', 'ja'], { includeDocs: false, includeDemos: false }),
+    );
+
+    const result = checkBuiltRoutes({ dist, manifestPath });
+
+    expect(result.failures).toEqual(
+      expect.arrayContaining([
+        'ja/llms.txt missing canonical docs links',
+        'ja/llms.txt missing canonical demos links',
+      ]),
+    );
+  });
+
+  it('requires the root llms index to list its own demos', () => {
+    const { dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    writeFile(dist, 'llms.txt', llmsTxt('en', ['en', 'ja'], { includeDemos: false }));
+    writeFile(dist, 'ja/llms.txt', llmsTxt('ja'));
+
+    const result = checkBuiltRoutes({ dist, manifestPath });
+
+    expect(result.failures).toContain('llms.txt missing canonical demos links');
+  });
+
+  it('requires the root llms index to link to the localized index', () => {
+    const { dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    writeFile(dist, 'llms.txt', llmsTxt('en', ['en', 'ja'], { includeAlternates: false }));
+    writeFile(dist, 'ja/llms.txt', llmsTxt('ja'));
+
+    const result = checkBuiltRoutes({ dist, manifestPath });
+
+    expect(result.failures).toContain(
+      'llms.txt missing alternate llms link: https://libsonare.libraz.net/ja/llms.txt',
     );
   });
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const siteUrl = 'https://sonare.libraz.net';
+const siteUrl = 'https://libsonare.libraz.net';
 
 export function checkBuiltRoutes({
   root = process.cwd(),
@@ -99,25 +99,41 @@ function checkSitemap(dist, glossaryFiles, failures, locales, defaultLocale) {
 }
 
 function checkLlmsTxt(dist, failures, locales, defaultLocale) {
-  const llmsPath = path.join(dist, 'llms.txt');
+  for (const locale of locales) {
+    checkLlmsIndex(dist, failures, locale, locales, defaultLocale);
+  }
+}
+
+function checkLlmsIndex(dist, failures, locale, locales, defaultLocale) {
+  const indexPath = locale === defaultLocale ? 'llms.txt' : `${locale}/llms.txt`;
+  const llmsPath = path.join(dist, indexPath);
   if (!fs.existsSync(llmsPath)) {
-    failures.push('missing built llms.txt');
+    failures.push(`missing built ${indexPath}`);
     return;
   }
 
   const content = fs.readFileSync(llmsPath, 'utf8');
   if (!content.startsWith('# libsonare')) {
-    failures.push('llms.txt missing expected "# libsonare" heading');
+    failures.push(`${indexPath} missing expected "# libsonare" heading`);
   }
-  if (!content.includes(`${siteUrl}/docs/introduction.html`)) {
-    failures.push('llms.txt missing canonical docs links');
+
+  const localePrefix = locale === defaultLocale ? '' : `/${locale}`;
+  const docsUrl = `${siteUrl}${localePrefix}/docs/introduction.html`;
+  if (!content.includes(docsUrl)) {
+    failures.push(`${indexPath} missing canonical docs links`);
   }
-  for (const locale of locales) {
-    if (locale === defaultLocale) continue;
-    const localizedDocs = `${siteUrl}/${locale}/docs/introduction.html`;
-    const localizedDemos = `${siteUrl}/${locale}/demos.html`;
-    if (!content.includes(localizedDocs) || !content.includes(localizedDemos)) {
-      failures.push(`llms.txt missing localized links for ${locale}`);
+
+  const demosUrl = `${siteUrl}${localePrefix}/demos.html`;
+  if (!content.includes(demosUrl)) {
+    failures.push(`${indexPath} missing canonical demos links`);
+  }
+
+  for (const otherLocale of locales) {
+    if (otherLocale === locale) continue;
+    const otherIndexPath = otherLocale === defaultLocale ? '/llms.txt' : `/${otherLocale}/llms.txt`;
+    const otherIndexUrl = `${siteUrl}${otherIndexPath}`;
+    if (!content.includes(otherIndexUrl)) {
+      failures.push(`${indexPath} missing alternate llms link: ${otherIndexUrl}`);
     }
   }
 }
