@@ -19,10 +19,23 @@ libsonare と librosa (Python) の音声解析タスクにおける性能比較�
 
 ::: info 計測方法
 以下の数値はすべて「**生音声からのスタンドアロン計測**」です。各呼び出しは必要な中間状態（STFT、Mel など）を元のサンプルから毎回再構築します。これは両 API を単発で使うユーザーが体験するのと同じコードパスなので、フェアな比較になっています。ベンチマークのソースと結果 JSON は libsonare リポジトリの [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) にあります。
+
+各ケースは**3回実行し、表に載せているのはその中央値**です。これは両側とも同じで、libsonare 側は `bench_cpp.cpp`、librosa 側は `run_bench.py` がそれぞれ3回の中央値を取ります。個々の実行時間は結果 JSON に書き出していないため、ばらつきはここには載せていません。3サンプルでは標準偏差もあまり意味を持たないためです。
 :::
 
 ::: info ハードウェア
 Apple M5 Max (18 ハードウェアスレッド、128 GB ユニファイドメモリ) のアイドル状態で計測。ベンチマークは両側とも実行時のロードアベレージを記録しており、ここでは 2.0 でした。絶対値はお使いのハードウェアでスケールします。持ち越せるのは倍率のほうです。
+:::
+
+::: info 比較対象のバージョン
+Python 側は `benchmarks/requirements.lock` に固定したバージョンで実行しています。
+
+- **librosa** 0.11.0
+- **scipy** 1.17.1
+- **numpy** 2.4.4
+- **numba** 0.65.1
+
+インタプリタは CPython 3.11 以降です（下限は `benchmarks/pyproject.toml` にあり、実際に使ったバージョンは結果に記録していません）。このうち2つは数値に直接効きます。librosa は FFT を scipy に委譲しており、pYIN の内側ループは numba が JIT コンパイルします。
 :::
 
 ## 総合パイプライン解析
@@ -48,7 +61,7 @@ Apple M5 Max (18 ハードウェアスレッド、128 GB ユニファイドメ�
 | bpm-detector 1.1.0 `--comprehensive` (librosaベース) | Python | 34.5秒 | 約30倍遅い |
 
 ::: warning この 30 倍が何に対する数字か
-比較対象は **librosa ではありません**。[bpm-detector](https://github.com/libraz/bpm-detector) 1.1.0 を `--comprehensive` で走らせたもの、つまり librosa の上に構築されたパイプラインです。
+比較対象は **librosa ではありません**。[bpm-detector](https://github.com/libraz/bpm-detector) 1.1.0 を `--comprehensive` で走らせたもの、つまり librosa の上に構築されたパイプラインです。しかもこれは libsonare と同じ作者が書いたもので、libsonare はその後継にあたります。この倍率は両側とも自作である、という前提で読んでください。
 
 librosa は特徴量ライブラリであって単発の解析器ではなく、`librosa.analyze()` に相当するものが存在しません。そのためパイプライン全体を比較するには、librosa の上に載った何かを選ぶ必要があります。bpm-detector は同じ特徴量群をエンドツーエンドで計算するため、比較可能です。
 

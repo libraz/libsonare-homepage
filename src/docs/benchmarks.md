@@ -19,10 +19,23 @@ By the end of this page you should be able to:
 
 ::: info Methodology
 All numbers below are measured **standalone from raw audio** — every call rebuilds whatever intermediate state it needs (STFT, Mel, etc.) from the original samples. This is the same code path a one-shot user of either API exercises, so the comparison is apples-to-apples. The full benchmark source and results JSON live in [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) inside the libsonare repo.
+
+Every case runs **3 times and the tables report the median**, on both sides — `bench_cpp.cpp` takes the median of 3 for libsonare, `run_bench.py` does the same for librosa. The individual run times are not written to the results JSON, so no spread is published here; with 3 samples a standard deviation would not say much anyway.
 :::
 
 ::: info Hardware
 Measured on Apple M5 Max (18 hardware threads, 128 GB unified memory), on an idle machine — both halves of the benchmark record the load average they ran under, here 2.0. Absolute times scale with your hardware; the ratios are what carries over.
+:::
+
+::: info Comparison versions
+The Python side ran the versions pinned in `benchmarks/requirements.lock`:
+
+- **librosa** 0.11.0
+- **scipy** 1.17.1
+- **numpy** 2.4.4
+- **numba** 0.65.1
+
+on CPython 3.11 or later — `benchmarks/pyproject.toml` sets the floor and the exact interpreter is not recorded in the results. Two of these move the numbers directly: librosa delegates its FFT to scipy, and numba JIT-compiles the inner loop of pYIN.
 :::
 
 ## All-In-One Pipeline Analysis
@@ -48,7 +61,7 @@ Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the
 | bpm-detector 1.1.0 `--comprehensive` (librosa-based) | Python | 34.5s | ~30x slower |
 
 ::: warning What the 30x is against
-The comparison target is **not librosa**. It is [bpm-detector](https://github.com/libraz/bpm-detector) 1.1.0 run with `--comprehensive`, a pipeline built on top of librosa.
+The comparison target is **not librosa**. It is [bpm-detector](https://github.com/libraz/bpm-detector) 1.1.0 run with `--comprehensive`, a pipeline built on top of librosa — and it is written by the same author as libsonare, which libsonare supersedes. Read the ratio knowing that both sides of it are ours.
 
 librosa is a feature library rather than a one-shot analyzer — there is no `librosa.analyze()` to time — so any full-pipeline comparison has to pick some pipeline built on it. bpm-detector computes the same feature set end to end, which makes it comparable.
 
