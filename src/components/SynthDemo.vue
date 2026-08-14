@@ -217,10 +217,9 @@ async function initWasmMeta() {
     const wasm = await bootWasm();
     wasmModule.value = wasm;
     libVersion.value = wasm.version();
-    // The catalog can list the same short name twice when two synth families
-    // ship a preset under it (e.g. `harp`). A bare name resolves to the first
-    // match, so a second button would be an unselectable duplicate — keep one
-    // entry per name.
+    // A bare preset name resolves to the first catalog match, so a repeated
+    // name would render an unselectable duplicate button — keep one entry per
+    // name even though the current catalog has no collisions.
     const names = [...new Set(wasm.synthPresetNames())];
     if (names.length > 0) presetNames.value = names;
     const tables = wasm.synthEnumTables();
