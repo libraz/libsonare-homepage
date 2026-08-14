@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vitepress';
 import { generateLlmsTxt, type LlmsLocale, llmsDevPlugin } from './llms';
 
-const siteUrl = 'https://sonare.libraz.net';
+const siteUrl = 'https://libsonare.libraz.net';
 const githubUrl = 'https://github.com/libraz/libsonare';
 const defaultLocale = 'en';
 
