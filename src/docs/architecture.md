@@ -482,3 +482,19 @@ Flags:  -sWASM=1 -sMODULARIZE=1 -sEXPORT_ES6=1
 ```
 
 The full mastering + mixing + analysis API set accounts for the bundle size. The published [`@libraz/libsonare/analysis`](./installation.md) build is substantially smaller because it leaves out the mastering, mixing, realtime, and project surfaces.
+
+## Non-goals
+
+libsonare is the headless engine, not an application. The boundary is deliberate, and everything below is outside it:
+
+| Not included | Why |
+|---|---|
+| UI or DAW workflow | The engine returns data structures. Arrangement, editing and playback UI belong to the application on top of it. |
+| Third-party plugin hosting (VST/CLAP) | Hosting means adopting another plugin ABI, its threading model and its licence terms. |
+| Cross-platform real-time I/O abstraction | Every host already has one, and wrapping them all would pull in per-platform dependencies for no gain. |
+| Bundled sample data | Audio corpora carry their own licences, which would attach to the library. |
+| Deep-learning models | Weights are large, hard to license cleanly, and would make the build depend on a runtime. |
+| Windows | Use Linux, macOS, WebAssembly, or WSL2. |
+| Owning the audio callback | Callers own both the callback and the UI. The experimental macOS backends are the one opt-in, unpublished exception to that boundary. |
+
+Together these keep the library dependency-free and its licensing Apache-2.0 throughout — the property that makes it safe to link into something else.
