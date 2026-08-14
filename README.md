@@ -1,6 +1,6 @@
 # libsonare Homepage
 
-Homepage for [libsonare](https://sonare.libraz.net) - built with VitePress.
+Homepage for [libsonare](https://libsonare.libraz.net) - built with VitePress.
 
 The site hosts both the browser audio analysis demo and the local-only
 mastering demo at `/mastering`.
