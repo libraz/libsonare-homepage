@@ -52,6 +52,8 @@ interface SynthPatch {
      * `(destination_id, patch)` bindings instead. Defaults to `0`.
      */
     destinationId?: number;
+    /** Resolve MIDI channels from incoming GM bank/program changes; defaults to false. */
+    useGmPrograms?: boolean;
     /** Base preset name (see {@link synthPresetNames}); omit for the init patch. */
     preset?: string;
     engineMode?: SynthEngineMode | number;
@@ -128,6 +130,10 @@ type AutomationCurve = 'linear' | 'exponential' | 'hold' | 's-curve';
  * remains unity. Maps to the underlying integer code.
  */
 type PanLaw = 'const3dB' | 'const4.5dB' | 'const6dB' | 'linear0dB';
+/** Accepted pan-law name aliases for mixer and realtime-engine inputs. */
+type PanLawName = PanLaw | 'const-3db' | '-3db' | 'const-4.5db' | '-4.5db' | 'const-6db' | '-6db' | 'linear-0db' | 'linear' | '0db';
+/** Pan-law name or raw C ABI ordinal. */
+type PanLawInput = PanLawName | number;
 /** Pre/post-fader send timing (see {@link Mixer.addSend}). */
 type SendTiming = 'preFader' | 'postFader';
 
@@ -174,14 +180,21 @@ interface EqBand {
     sidechainQ?: number;
 }
 type VoicePresetId = 'neutral-monitor' | 'bright-idol' | 'soft-whisper' | 'deep-narrator' | 'robot-mascot' | 'dark-villain';
-interface RealtimeVoiceChangerPreset {
+type VoicePresetCategory = 'monitor' | 'bright' | 'soft' | 'deep' | 'robot' | 'dark' | 'custom';
+interface RealtimeVoiceChangerPresetMetadata {
     schemaVersion: 1;
-    id?: string;
-    name?: string;
+    id: string;
+    name: string;
     description?: string;
-    macros?: Record<string, number>;
-    dsp?: Record<string, unknown>;
+    category: VoicePresetCategory;
 }
+type RealtimeVoiceChangerPreset = (RealtimeVoiceChangerPresetMetadata & {
+    dsp: Record<string, unknown>;
+    macros?: never;
+}) | (RealtimeVoiceChangerPresetMetadata & {
+    macros: Record<string, number>;
+    dsp?: never;
+});
 type RealtimeVoiceChangerConfigInput = VoicePresetId | RealtimeVoiceChangerPreset;
 /**
  * Flat (POD) realtime voice-changer configuration. Keys are camelCase to match
@@ -274,6 +287,8 @@ interface EngineTrackLane {
      */
     sourceChannelLayout?: number;
 }
+/** Per-track cue/monitor tap mode: off, pre-fader listen, or after-fader listen. */
+type EngineTrackMonitorMode = 'off' | 'pfl' | 'afl' | 0 | 1 | 2;
 interface EngineBus {
     busId: number;
     gainDb?: number;
@@ -330,6 +345,8 @@ declare class RealtimeEngine {
      */
     setParamSmoothingMs(smoothingMs: number): void;
     setSoloMute(laneIndex: number, solo: boolean, mute: boolean, renderFrame?: number): void;
+    /** Queue a per-track PFL/AFL monitor tap mode change. */
+    setTrackMonitorMode(laneIndex: number, mode: EngineTrackMonitorMode, renderFrame?: number): void;
     setMidiClips(clips: readonly EngineMidiClipSchedule[]): void;
     setBuiltinInstrument(config?: {
         destinationId?: number;
@@ -536,7 +553,7 @@ declare class RealtimeEngine {
     /** Sets a track lane strip's pan position in realtime (glitch-free). */
     setTrackStripPan(trackId: number, pan: number): void;
     /** Sets a track lane strip's pan law in realtime. */
-    setTrackStripPanLaw(trackId: number, panLaw: PanLaw | number): void;
+    setTrackStripPanLaw(trackId: number, panLaw: PanLawInput): void;
     /** Sets a track lane strip's pan mode in realtime. */
     setTrackStripPanMode(trackId: number, panMode: PanMode | number): void;
     /** Sets a track lane strip's dual-pan left/right positions in realtime. */
@@ -902,7 +919,8 @@ declare enum SonareEngineCommandType {
     Punch = 14,
     SetMetronome = 15,
     SetMarker = 16,
-    SeekMarker = 17
+    SeekMarker = 17,
+    SetTrackMonitorMode = 26
 }
 declare enum SonareEngineTelemetryType {
     ProcessBlock = 0,
@@ -928,7 +946,8 @@ declare enum SonareEngineTelemetryError {
     InsertAutomationOverflow = 16,
     MidiClockOverflow = 17,
     MetronomeOverflow = 18,
-    InvalidCommand = 19
+    InvalidCommand = 19,
+    MaxChannelsExceeded = 20
 }
 interface SonareMeterRingBuffer {
     sharedBuffer: SharedArrayBuffer;
@@ -1220,7 +1239,7 @@ interface SonareEngineSyncErrorMessage {
 }
 type SonareWorkletTransportMessage = SonareWorkletMeterSnapshot | SonareWorkletSpectrumSnapshot | SonareWorkletExternalMidiMessage | SonareEngineClipPageRequestMessage | SonareEngineTelemetryRecord;
 interface WorkletTransport {
-    postMessage?: (message: SonareWorkletTransportMessage | SonareEngineCaptureResponseMessage | SonareEngineTransportResponseMessage | SonareEngineSyncErrorMessage, transfer?: Transferable[]) => void;
+    postMessage?: (message: SonareWorkletTransportMessage | SonareEngineCaptureResponseMessageInternal | SonareEngineTransportResponseMessage | SonareEngineSyncErrorMessage, transfer?: Transferable[]) => void;
     onMeter?: (meter: SonareWorkletMeterSnapshot) => void;
     onSpectrum?: (spectrum: SonareWorkletSpectrumSnapshot) => void;
 }
@@ -1524,6 +1543,12 @@ interface SonareEngineCaptureRequestMessage {
     requestId: number;
     op: 'status' | 'read' | 'reset';
 }
+/**
+ * Public capture response shape retained for source compatibility.
+ *
+ * The worklet wire protocol is stricter than this legacy structural type; use
+ * `SonareEngineCaptureResponseMessageInternal` inside the implementation.
+ */
 interface SonareEngineCaptureResponseMessage {
     type: 'captureResponse';
     requestId: number;
@@ -1532,6 +1557,31 @@ interface SonareEngineCaptureResponseMessage {
     channels?: Float32Array[] | number[][];
     error?: string;
 }
+interface SonareEngineCaptureStatusResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: true;
+    status: EngineCaptureStatus;
+}
+interface SonareEngineCaptureReadResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: true;
+    channels: Float32Array[];
+}
+interface SonareEngineCaptureResetResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: true;
+}
+interface SonareEngineCaptureErrorResponseMessageInternal {
+    type: 'captureResponse';
+    requestId: number;
+    ok: false;
+    error: string;
+}
+/** Strict wire response type used only by the worklet implementation. */
+type SonareEngineCaptureResponseMessageInternal = SonareEngineCaptureStatusResponseMessageInternal | SonareEngineCaptureReadResponseMessageInternal | SonareEngineCaptureResetResponseMessageInternal | SonareEngineCaptureErrorResponseMessageInternal;
 interface SonareEngineTransportRequestMessage {
     type: 'transportRequest';
     requestId: number;
@@ -1687,6 +1737,8 @@ declare class SonareEngine {
     /** Clears custom parameters and their automation lanes on both engines. */
     clearParameters(): void;
     setSoloMute(target: string | number, solo: boolean, mute: boolean): boolean;
+    /** Queues a per-track PFL/AFL monitor tap mode change. */
+    setTrackMonitorMode(target: string | number, mode: EngineTrackMonitorMode, renderFrame?: number): boolean;
     setStripGain(target: string | number, db: number): boolean;
     setStripPan(target: string | number, pan: number): boolean;
     /**

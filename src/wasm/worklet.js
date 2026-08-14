@@ -545,12 +545,25 @@ function getSonareModule() {
 }
 
 // src/codes.ts
+function resolveOrdinalInRange(value, min, max, enumName) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+  }
+  return value;
+}
 function resolveEnumOrdinal(value, values, enumName) {
   if (typeof value === "number") {
-    if (!Number.isSafeInteger(value) || !Object.values(values).includes(value)) {
+    const ordinals = Object.values(values);
+    const ordinal = resolveOrdinalInRange(
+      value,
+      Math.min(...ordinals),
+      Math.max(...ordinals),
+      enumName
+    );
+    if (!ordinals.includes(ordinal)) {
       throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
     }
-    return value;
+    return ordinal;
   }
   if (typeof value === "string") {
     const ordinal = values[value];
@@ -567,14 +580,23 @@ var AUTOMATION_CURVE_VALUES = {
   "s-curve": 3
 };
 var PAN_LAW_VALUES = {
-  const3dB: 0,
-  "const4.5dB": 1,
-  const6dB: 2,
-  linear0dB: 3
+  const3db: 0,
+  "const-3db": 0,
+  "-3db": 0,
+  "const4.5db": 1,
+  "const-4.5db": 1,
+  "-4.5db": 1,
+  const6db: 2,
+  "const-6db": 2,
+  "-6db": 2,
+  linear0db: 3,
+  "linear-0db": 3,
+  linear: 3,
+  "0db": 3
 };
 var PAN_MODE_VALUES = {
   balance: 0,
-  pan: 0,
+  pan: 1,
   stereopan: 1,
   "stereo-pan": 1,
   dualpan: 2,
@@ -582,11 +604,13 @@ var PAN_MODE_VALUES = {
 };
 var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
 var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
 function automationCurveCode(curve) {
   return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
 }
 function panLawCode(panLaw) {
-  return resolveEnumOrdinal(panLaw, PAN_LAW_VALUES, "pan law");
+  const normalized = typeof panLaw === "string" ? panLaw.toLowerCase().replace(/_/g, "-") : panLaw;
+  return resolveEnumOrdinal(normalized, PAN_LAW_VALUES, "pan law");
 }
 function panModeCode(panMode) {
   const normalized = typeof panMode === "string" ? panMode.replace(/_/g, "-").toLowerCase() : panMode;
@@ -597,6 +621,9 @@ function meterTapCode(tap) {
 }
 function sendTimingCode(timing) {
   return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
+}
+function trackMonitorModeCode(mode) {
+  return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
 }
 
 // src/realtime_engine.ts
@@ -660,6 +687,10 @@ var RealtimeEngine = class {
   }
   setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
     this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
+  }
+  /** Queue a per-track PFL/AFL monitor tap mode change. */
+  setTrackMonitorMode(laneIndex, mode, renderFrame = -1) {
+    this.native.setTrackMonitorMode(laneIndex, trackMonitorModeCode(mode), renderFrame);
   }
   setMidiClips(clips) {
     this.native.setMidiClips(clips);
@@ -1579,7 +1610,7 @@ var Mixer = class _Mixer {
   setPolarityInvert(stripIndex, invertLeft, invertRight) {
     this.mixer.setPolarityInvert(stripIndex, invertLeft, invertRight);
   }
-  /** Set the strip's pan law. */
+  /** Set the strip's pan law (a {@link PanLawName} alias or raw C ABI ordinal). */
   setPanLaw(stripIndex, panLaw) {
     this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
   }
@@ -2220,6 +2251,7 @@ var SonareEngineCommandType = /* @__PURE__ */ ((SonareEngineCommandType2) => {
   SonareEngineCommandType2[SonareEngineCommandType2["SetMetronome"] = 15] = "SetMetronome";
   SonareEngineCommandType2[SonareEngineCommandType2["SetMarker"] = 16] = "SetMarker";
   SonareEngineCommandType2[SonareEngineCommandType2["SeekMarker"] = 17] = "SeekMarker";
+  SonareEngineCommandType2[SonareEngineCommandType2["SetTrackMonitorMode"] = 26] = "SetTrackMonitorMode";
   return SonareEngineCommandType2;
 })(SonareEngineCommandType || {});
 var SonareEngineTelemetryType = /* @__PURE__ */ ((SonareEngineTelemetryType2) => {
@@ -2248,6 +2280,7 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["MidiClockOverflow"] = 17] = "MidiClockOverflow";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["MetronomeOverflow"] = 18] = "MetronomeOverflow";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["InvalidCommand"] = 19] = "InvalidCommand";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["MaxChannelsExceeded"] = 20] = "MaxChannelsExceeded";
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
 function toDb(value) {
@@ -3136,8 +3169,60 @@ function isEngineSyncMessage(value) {
 function isEngineCaptureRequestMessage(value) {
   return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
 }
+function isCaptureStatus(value) {
+  return isRecord(value) && typeof value.capturedFrames === "number" && Number.isSafeInteger(value.capturedFrames) && value.capturedFrames >= 0 && typeof value.overflowCount === "number" && Number.isSafeInteger(value.overflowCount) && value.overflowCount >= 0 && typeof value.armed === "boolean" && typeof value.punchEnabled === "boolean" && (value.source === "input" || value.source === "output") && typeof value.recordOffsetSamples === "number" && Number.isSafeInteger(value.recordOffsetSamples);
+}
+function isCaptureChannel(value) {
+  return value instanceof Float32Array && typeof ArrayBuffer !== "undefined" && value.buffer instanceof ArrayBuffer;
+}
+function isCaptureChannels(value) {
+  return Array.isArray(value) && value.every((channel) => isCaptureChannel(channel));
+}
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+function engineCaptureResponseRequestId(value) {
+  if (!isRecord(value) || value.type !== "captureResponse" || typeof value.requestId !== "number" || !Number.isSafeInteger(value.requestId)) {
+    return void 0;
+  }
+  return value.requestId;
+}
 function isEngineCaptureResponseMessage(value) {
-  return isRecord(value) && value.type === "captureResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
+  const requestId = engineCaptureResponseRequestId(value);
+  if (requestId === void 0 || !isRecord(value)) {
+    return false;
+  }
+  if (value.ok === false) {
+    return typeof value.error === "string" && !hasOwn(value, "status") && !hasOwn(value, "channels");
+  }
+  if (value.ok !== true || hasOwn(value, "error")) {
+    return false;
+  }
+  const hasStatus = hasOwn(value, "status");
+  const hasChannels = hasOwn(value, "channels");
+  if (hasStatus && hasChannels) {
+    return false;
+  }
+  if (hasStatus) {
+    return isCaptureStatus(value.status);
+  }
+  if (hasChannels) {
+    return isCaptureChannels(value.channels);
+  }
+  return true;
+}
+function isEngineCaptureResponseForOperation(response, op) {
+  if (!response.ok) {
+    return true;
+  }
+  switch (op) {
+    case "status":
+      return "status" in response;
+    case "read":
+      return "channels" in response;
+    case "reset":
+      return !("status" in response) && !("channels" in response);
+  }
 }
 function isEngineTransportRequestMessage(value) {
   return isRecord(value) && value.type === "transportRequest" && typeof value.requestId === "number" && value.op === "state";
@@ -3173,12 +3258,22 @@ function isFiniteInteger(value) {
   }
   return typeof value === "bigint" || Number.isFinite(value) && Number.isSafeInteger(value);
 }
-function isValidCommandRecord(command) {
-  const type = Number(command.type);
-  if (!Number.isSafeInteger(type) || type < 0 /* SetParam */ || type > 17 /* SeekMarker */) {
+function isTrackMonitorMode(value) {
+  if (value === void 0) {
     return false;
   }
-  return (command.targetId === void 0 || Number.isSafeInteger(command.targetId)) && (command.argFloat === void 0 || Number.isFinite(command.argFloat)) && isFiniteInteger(command.argInt) && isFiniteInteger(command.sampleTime);
+  const mode = typeof value === "bigint" ? Number(value) : value;
+  return typeof mode === "number" && Number.isSafeInteger(mode) && mode >= 0 && mode <= 2;
+}
+function isTrackMonitorLaneIndex(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 4294967295;
+}
+function isValidCommandRecord(command) {
+  const type = Number(command.type);
+  if (!Number.isSafeInteger(type) || type < 0 /* SetParam */ || type > 17 /* SeekMarker */ && type !== 26 /* SetTrackMonitorMode */) {
+    return false;
+  }
+  return (command.targetId === void 0 || Number.isSafeInteger(command.targetId)) && (command.argFloat === void 0 || Number.isFinite(command.argFloat)) && isFiniteInteger(command.argInt) && isFiniteInteger(command.sampleTime) && (type !== 26 /* SetTrackMonitorMode */ || isTrackMonitorLaneIndex(command.targetId) && isTrackMonitorMode(command.argInt));
 }
 var AUDIO_WORKLET_RENDER_QUANTUM = 128;
 function workletBlockSize(blockSize) {
@@ -3223,14 +3318,19 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       this.resolveReady();
     }
     this.node.port.onmessage = (event) => {
-      if (isEngineCaptureResponseMessage(event.data)) {
-        const pending = this.captureRequests.get(event.data.requestId);
+      const captureRequestId = engineCaptureResponseRequestId(event.data);
+      if (captureRequestId !== void 0) {
+        const pending = this.captureRequests.get(captureRequestId);
         if (pending) {
-          this.captureRequests.delete(event.data.requestId);
-          if (event.data.ok) {
+          this.captureRequests.delete(captureRequestId);
+          if (!isEngineCaptureResponseMessage(event.data)) {
+            pending.reject(new Error("Malformed capture response."));
+          } else if (!isEngineCaptureResponseForOperation(event.data, pending.op)) {
+            pending.reject(new Error("Capture response does not match request operation."));
+          } else if (event.data.ok) {
             pending.resolve(event.data);
           } else {
-            pending.reject(new Error(event.data.error ?? "Capture request failed"));
+            pending.reject(new Error(event.data.error));
           }
         }
       } else if (isEngineTransportResponseMessage(event.data)) {
@@ -3398,18 +3498,19 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
   }
   requestCaptureStatus() {
     return this.sendCaptureRequest("status").then((response) => {
-      if (!response.status) {
+      if (!response.ok || !("status" in response)) {
         throw new Error("Capture status response is missing status.");
       }
       return response.status;
     });
   }
   requestCapturedAudio() {
-    return this.sendCaptureRequest("read").then(
-      (response) => (response.channels ?? []).map(
-        (channel) => channel instanceof Float32Array ? channel : new Float32Array(channel)
-      )
-    );
+    return this.sendCaptureRequest("read").then((response) => {
+      if (!response.ok || !("channels" in response)) {
+        throw new Error("Capture read response is missing channels.");
+      }
+      return response.channels;
+    });
   }
   requestCaptureReset() {
     return this.sendCaptureRequest("reset").then(() => void 0);
@@ -3540,6 +3641,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.startRingPolling();
     return () => {
       this.midiOutListeners.delete(callback);
+      this.stopRingPollingIfUnused();
     };
   }
   /**
@@ -3628,10 +3730,17 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       return Promise.reject(new Error("Realtime engine node is destroyed."));
     }
     const requestId = this.captureRequestId++;
+    let rejectRequest;
     const promise = new Promise((resolve, reject) => {
-      this.captureRequests.set(requestId, { resolve, reject });
+      rejectRequest = reject;
+      this.captureRequests.set(requestId, { op, resolve, reject });
     });
-    this.node.port.postMessage({ type: "captureRequest", requestId, op });
+    try {
+      this.node.port.postMessage({ type: "captureRequest", requestId, op });
+    } catch (error) {
+      this.captureRequests.delete(requestId);
+      rejectRequest(error);
+    }
     return promise;
   }
   sendTransportRequest() {
@@ -3666,6 +3775,21 @@ function setSoloMute(ctx, target, solo, mute) {
     targetId: laneIndex,
     sampleTime: -1,
     argInt: (mute ? 1 : 0) | (solo ? 2 : 0)
+  });
+}
+function setTrackMonitorMode(ctx, target, mode, renderFrame = -1) {
+  const modeOrdinal = trackMonitorModeCode(mode);
+  const laneIndex = ctx.ensureTrackLane(target);
+  ctx.offlineEngine.setTrackMonitorMode(
+    laneIndex,
+    modeOrdinal,
+    renderFrame
+  );
+  return ctx.sendCommand({
+    type: 26 /* SetTrackMonitorMode */,
+    targetId: laneIndex,
+    sampleTime: renderFrame,
+    argInt: modeOrdinal
   });
 }
 function automationParamId(ctx, target, kind) {
@@ -4180,6 +4304,10 @@ var SonareEngine = class _SonareEngine {
   }
   setSoloMute(target, solo, mute) {
     return setSoloMute(this.parameterContext, target, solo, mute);
+  }
+  /** Queues a per-track PFL/AFL monitor tap mode change. */
+  setTrackMonitorMode(target, mode, renderFrame = -1) {
+    return setTrackMonitorMode(this.parameterContext, target, mode, renderFrame);
   }
   setStripGain(target, db) {
     return this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_FADER_DB), db);
@@ -4965,6 +5093,21 @@ function resolveMetronomeConfig(config) {
 }
 
 // src/worklet/engine-processor.ts
+function captureTransferList(channels) {
+  const transfers = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const channel of channels) {
+    const buffer = channel.buffer;
+    if (!(buffer instanceof ArrayBuffer)) {
+      throw new TypeError("capture response channels must use plain ArrayBuffers");
+    }
+    if (!seen.has(buffer)) {
+      seen.add(buffer);
+      transfers.push(buffer);
+    }
+  }
+  return transfers;
+}
 var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletProcessor {
   constructor(options = {}, transport) {
     this.closed = false;
@@ -5445,22 +5588,17 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         return;
       }
       if (message.op === "read") {
-        const captured = this.engine.capturedAudio();
-        const channels = [];
-        for (let ch = 0; ch < captured.length; ch++) {
-          const source = captured[ch];
-          const copy = [];
-          for (let i = 0; i < source.length; i++) {
-            copy.push(Number(source[i]));
-          }
-          channels.push(copy);
-        }
-        this.transport?.postMessage?.({
-          type: "captureResponse",
-          requestId: message.requestId,
-          ok: true,
-          channels
-        });
+        const channels = Array.from(this.engine.capturedAudio());
+        const transfer = captureTransferList(channels);
+        this.transport?.postMessage?.(
+          {
+            type: "captureResponse",
+            requestId: message.requestId,
+            ok: true,
+            channels
+          },
+          transfer
+        );
         return;
       }
       this.engine.resetCapture();
@@ -5598,6 +5736,19 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           sampleTime
         );
         break;
+      case 26 /* SetTrackMonitorMode */: {
+        const rawMode = command.argInt;
+        const mode = typeof rawMode === "bigint" ? Number(rawMode) : rawMode;
+        if (typeof mode !== "number" || !Number.isSafeInteger(mode) || mode < 0 || mode > 2) {
+          throw new RangeError(`Invalid track monitor mode: ${String(rawMode)}`);
+        }
+        const laneIndex = command.targetId;
+        if (typeof laneIndex !== "number" || !Number.isSafeInteger(laneIndex) || laneIndex < 0 || laneIndex > 4294967295) {
+          throw new RangeError(`Invalid track monitor lane index: ${String(laneIndex)}`);
+        }
+        this.engine.setTrackMonitorMode(laneIndex, mode, sampleTime);
+        break;
+      }
       default:
         this.publishTelemetryRecord({
           type: 1 /* Error */,
@@ -5995,7 +6146,7 @@ function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-en
           throw new Error("AudioWorklet initialization message buffer overflowed.");
         }
         this.bridge = new SonareRealtimeEngineWorkletProcessor(options, {
-          postMessage: (message) => port?.postMessage?.(message),
+          postMessage: (message, transfer) => port?.postMessage?.(message, transfer),
           onMeter: (meter) => port?.postMessage?.(meter)
         });
         for (const message of options.initialSyncMessages ?? []) {

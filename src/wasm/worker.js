@@ -284,6 +284,36 @@ function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName 
   );
 }
 
+// src/codes.ts
+function resolveOrdinalInRange(value, min, max, enumName) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+  }
+  return value;
+}
+function resolveEnumOrdinal(value, values, enumName) {
+  if (typeof value === "number") {
+    const ordinals = Object.values(values);
+    const ordinal = resolveOrdinalInRange(
+      value,
+      Math.min(...ordinals),
+      Math.max(...ordinals),
+      enumName
+    );
+    if (!ordinals.includes(ordinal)) {
+      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+    }
+    return ordinal;
+  }
+  if (typeof value === "string") {
+    const ordinal = values[value];
+    if (ordinal !== void 0) {
+      return ordinal;
+    }
+  }
+  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+}
+
 // src/public_types_music.ts
 var PitchClass = {
   C: 0,
@@ -336,6 +366,30 @@ var PITCH_CLASS_NAMES = [
 function pitchClassName(value) {
   return PITCH_CLASS_NAMES[value] ?? "C";
 }
+var KEY_MODE_VALUES = {
+  major: Mode.Major,
+  minor: Mode.Minor,
+  dorian: Mode.Dorian,
+  phrygian: Mode.Phrygian,
+  lydian: Mode.Lydian,
+  mixolydian: Mode.Mixolydian,
+  locrian: Mode.Locrian
+};
+var KEY_PROFILE_VALUES = {
+  ks: KeyProfile.KrumhanslSchmuckler,
+  krumhansl: KeyProfile.KrumhanslSchmuckler,
+  temperley: KeyProfile.Temperley,
+  shaath: KeyProfile.Shaath,
+  keyfinder: KeyProfile.Shaath,
+  "faraldo-edmt": KeyProfile.FaraldoEDMT,
+  edmt: KeyProfile.FaraldoEDMT,
+  "faraldo-edma": KeyProfile.FaraldoEDMA,
+  edma: KeyProfile.FaraldoEDMA,
+  "faraldo-edmm": KeyProfile.FaraldoEDMM,
+  edmm: KeyProfile.FaraldoEDMM,
+  "bellman-budge": KeyProfile.BellmanBudge,
+  bellman: KeyProfile.BellmanBudge
+};
 function keyModeValues(modes) {
   if (!modes) {
     return [];
@@ -354,40 +408,13 @@ function keyModeValues(modes) {
       Mode.Locrian
     ];
   }
-  const names = {
-    major: Mode.Major,
-    minor: Mode.Minor,
-    dorian: Mode.Dorian,
-    phrygian: Mode.Phrygian,
-    lydian: Mode.Lydian,
-    mixolydian: Mode.Mixolydian,
-    locrian: Mode.Locrian
-  };
-  return modes.map((mode) => typeof mode === "number" ? mode : names[mode]);
+  return modes.map((mode) => resolveEnumOrdinal(mode, KEY_MODE_VALUES, "key mode"));
 }
 function keyProfileValue(profile) {
   if (profile === void 0) {
     return -1;
   }
-  if (typeof profile === "number") {
-    return profile;
-  }
-  const names = {
-    ks: KeyProfile.KrumhanslSchmuckler,
-    krumhansl: KeyProfile.KrumhanslSchmuckler,
-    temperley: KeyProfile.Temperley,
-    shaath: KeyProfile.Shaath,
-    keyfinder: KeyProfile.Shaath,
-    "faraldo-edmt": KeyProfile.FaraldoEDMT,
-    edmt: KeyProfile.FaraldoEDMT,
-    "faraldo-edma": KeyProfile.FaraldoEDMA,
-    edma: KeyProfile.FaraldoEDMA,
-    "faraldo-edmm": KeyProfile.FaraldoEDMM,
-    edmm: KeyProfile.FaraldoEDMM,
-    "bellman-budge": KeyProfile.BellmanBudge,
-    bellman: KeyProfile.BellmanBudge
-  };
-  return names[profile];
+  return resolveEnumOrdinal(profile, KEY_PROFILE_VALUES, "key profile");
 }
 function convertChordAnalysisResult(wasm) {
   return {

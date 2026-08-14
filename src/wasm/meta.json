@@ -1,33 +1,33 @@
 {
-  "version": "1.6.0",
-  "size": 4065446,
-  "sizeKB": 3970,
-  "gzipSize": 1376758,
-  "gzipKB": 1344,
+  "version": "1.7.0",
+  "size": 4139372,
+  "sizeKB": 4042,
+  "gzipSize": 1405361,
+  "gzipKB": 1372,
   "assets": {
     "sonare.js": {
       "size": 59836,
       "sizeKB": 58,
-      "gzipSize": 14938,
+      "gzipSize": 14935,
       "gzipKB": 14
     },
     "index.js": {
-      "size": 243452,
-      "sizeKB": 237,
-      "gzipSize": 48851,
-      "gzipKB": 47
+      "size": 256985,
+      "sizeKB": 250,
+      "gzipSize": 51551,
+      "gzipKB": 50
     },
     "sonare.wasm": {
-      "size": 4065446,
-      "sizeKB": 3970,
-      "gzipSize": 1376758,
-      "gzipKB": 1344
+      "size": 4139372,
+      "sizeKB": 4042,
+      "gzipSize": 1405361,
+      "gzipKB": 1372
     },
     "worklet.js": {
-      "size": 242569,
-      "sizeKB": 236,
-      "gzipSize": 49624,
-      "gzipKB": 48
+      "size": 248593,
+      "sizeKB": 242,
+      "gzipSize": 51002,
+      "gzipKB": 49
     },
     "sonare-rt.wasm": {
       "size": 283895,
@@ -49,12 +49,12 @@
     }
   },
   "total": {
-    "size": 4368734,
-    "sizeKB": 4266,
-    "gzipSize": 1440547,
-    "gzipKB": 1406
+    "size": 4456193,
+    "sizeKB": 4351,
+    "gzipSize": 1471847,
+    "gzipKB": 1437
   },
-  "md5": "cfdeb3e5e9c69225e40aa24f4258b21f",
-  "buildDate": "2026-08-03T04:31:11Z",
-  "commitHash": "9e23b374"
+  "md5": "925c5aa0e18cb03970617539bd3abbcc",
+  "buildDate": "2026-08-14T17:28:26Z",
+  "commitHash": "fc4f0565"
 }

@@ -227,13 +227,59 @@ function assertInterleavedSamples(fnName, samples, channels, validate) {
 function requireModule() {
   return getSonareModule();
 }
-function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, kernelHarmonic, kernelPercussive } : samples;
-  return requireModule().hpss(
+function resolveEffectFftOptions(fnName, nFft, hopLength) {
+  const resolvedNFft = nFft === void 0 ? 2048 : nFft;
+  const resolvedHopLength = hopLength === void 0 ? 512 : hopLength;
+  if (typeof resolvedNFft !== "number" || !Number.isInteger(resolvedNFft)) {
+    throw new TypeError(`${fnName}: nFft must be an integer`);
+  }
+  if (resolvedNFft < 2 || resolvedNFft > 2 ** 30) {
+    throw new RangeError(`${fnName}: nFft must be an even power of two >= 2`);
+  }
+  if ((resolvedNFft & resolvedNFft - 1) !== 0) {
+    throw new RangeError(`${fnName}: nFft must be an even power of two >= 2`);
+  }
+  if (typeof resolvedHopLength !== "number" || !Number.isInteger(resolvedHopLength)) {
+    throw new TypeError(`${fnName}: hopLength must be an integer`);
+  }
+  if (resolvedHopLength <= 0 || resolvedHopLength > 2 ** 31 - 1) {
+    throw new RangeError(`${fnName}: hopLength must be a positive integer`);
+  }
+  return { nFft: resolvedNFft, hopLength: resolvedHopLength };
+}
+function resolveNormalizeMode(value) {
+  if (value === void 0) {
+    return "peak";
+  }
+  if (typeof value !== "string") {
+    throw new TypeError("normalize: mode must be the string 'peak' or 'rms'");
+  }
+  if (value !== "peak" && value !== "rms") {
+    throw new RangeError("normalize: mode must be the string 'peak' or 'rms'");
+  }
+  return value;
+}
+function resolveHardMask(value, fnName) {
+  if (value === void 0) {
+    return false;
+  }
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${fnName}: hardMask must be a boolean`);
+  }
+  return value;
+}
+function hpss(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31, nFft, hopLength, hardMask) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, kernelHarmonic, kernelPercussive, nFft, hopLength, hardMask } : samples;
+  const fftOptions = resolveEffectFftOptions("hpss", request.nFft, request.hopLength);
+  const resolvedHardMask = resolveHardMask(request.hardMask, "hpss");
+  return requireModule().hpssEx(
     request.samples,
     request.sampleRate ?? 22050,
     request.kernelHarmonic ?? 31,
-    request.kernelPercussive ?? 31
+    request.kernelPercussive ?? 31,
+    fftOptions.nFft,
+    fftOptions.hopLength,
+    resolvedHardMask
   );
 }
 function harmonic(samples, sampleRate = 22050, options = {}) {
@@ -246,18 +292,58 @@ function percussive(samples, sampleRate = 22050, options = {}) {
   assertSamples("percussive", request.samples, request.validate !== false);
   return requireModule().percussive(request.samples, request.sampleRate ?? 22050);
 }
-function timeStretch(samples, sampleRate, rate, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, rate, ...options } : samples;
+function timeStretch(samples, sampleRate, rate, nFftOrOptions, hopLength, options = {}) {
+  if (nFftOrOptions !== void 0 && nFftOrOptions !== null && typeof nFftOrOptions !== "number" && typeof nFftOrOptions !== "object") {
+    throw new TypeError("timeStretch: nFft must be an integer or options object");
+  }
+  if (nFftOrOptions === null) {
+    throw new TypeError("timeStretch: nFft must be an integer or options object");
+  }
+  const positionalOptions = typeof nFftOrOptions === "object" && nFftOrOptions !== null ? nFftOrOptions : options;
+  const positionalNFft = typeof nFftOrOptions === "number" ? nFftOrOptions : void 0;
+  const request = samples instanceof Float32Array ? {
+    samples,
+    sampleRate,
+    rate,
+    nFft: positionalNFft,
+    hopLength,
+    ...positionalOptions
+  } : samples;
   assertSamples("timeStretch", request.samples, request.validate !== false);
-  return requireModule().timeStretch(request.samples, request.sampleRate ?? 22050, request.rate);
-}
-function pitchShift(samples, sampleRate, semitones, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, semitones, ...options } : samples;
-  assertSamples("pitchShift", request.samples, request.validate !== false);
-  return requireModule().pitchShift(
+  const fftOptions = resolveEffectFftOptions("timeStretch", request.nFft, request.hopLength);
+  return requireModule().timeStretchEx(
     request.samples,
     request.sampleRate ?? 22050,
-    request.semitones
+    request.rate,
+    fftOptions.nFft,
+    fftOptions.hopLength
+  );
+}
+function pitchShift(samples, sampleRate, semitones, nFftOrOptions, hopLength, options = {}) {
+  if (nFftOrOptions !== void 0 && nFftOrOptions !== null && typeof nFftOrOptions !== "number" && typeof nFftOrOptions !== "object") {
+    throw new TypeError("pitchShift: nFft must be an integer or options object");
+  }
+  if (nFftOrOptions === null) {
+    throw new TypeError("pitchShift: nFft must be an integer or options object");
+  }
+  const positionalOptions = typeof nFftOrOptions === "object" && nFftOrOptions !== null ? nFftOrOptions : options;
+  const positionalNFft = typeof nFftOrOptions === "number" ? nFftOrOptions : void 0;
+  const request = samples instanceof Float32Array ? {
+    samples,
+    sampleRate,
+    semitones,
+    nFft: positionalNFft,
+    hopLength,
+    ...positionalOptions
+  } : samples;
+  assertSamples("pitchShift", request.samples, request.validate !== false);
+  const fftOptions = resolveEffectFftOptions("pitchShift", request.nFft, request.hopLength);
+  return requireModule().pitchShiftEx(
+    request.samples,
+    request.sampleRate ?? 22050,
+    request.semitones,
+    fftOptions.nFft,
+    fftOptions.hopLength
   );
 }
 function pitchCorrectToMidi(samples, sampleRate = 22050, currentMidi = 69, targetMidi = 69, options = {}) {
@@ -342,13 +428,23 @@ function noteMove(samples, sampleRate = 22050, options = {}) {
     request.targetOnsetSample ?? 0
   );
 }
-function normalize(samples, sampleRate, targetDb = 0, options = {}) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, targetDb, ...options } : samples;
+function normalize(samples, sampleRate, targetDb = 0, modeOrOptions = "peak", options = {}) {
+  if (modeOrOptions !== void 0 && modeOrOptions !== null && typeof modeOrOptions !== "string" && typeof modeOrOptions !== "object") {
+    throw new TypeError("normalize: mode must be the string 'peak' or 'rms'");
+  }
+  if (modeOrOptions === null) {
+    throw new TypeError("normalize: mode must be the string 'peak' or 'rms'");
+  }
+  const positionalOptions = typeof modeOrOptions === "object" && modeOrOptions !== null ? modeOrOptions : options;
+  const positionalMode = typeof modeOrOptions === "string" ? modeOrOptions : void 0;
+  const request = samples instanceof Float32Array ? { samples, sampleRate, targetDb, mode: positionalMode, ...positionalOptions } : samples;
   assertSamples("normalize", request.samples, request.validate !== false);
-  return requireModule().normalize(
+  const mode = resolveNormalizeMode(request.mode);
+  return requireModule().normalizeEx(
     request.samples,
     request.sampleRate ?? 22050,
-    request.targetDb ?? 0
+    request.targetDb ?? 0,
+    mode
   );
 }
 function spectralEdit(samples, sampleRate, ops = [], options = {}) {
@@ -1124,12 +1220,18 @@ function nnlsChroma(samples, sampleRate = 22050, options = {}) {
     return nnlsChroma(samples.samples, samples.sampleRate, samples);
   }
   validateMusicSamples("nnlsChroma", samples, sampleRate, options);
-  return requireModule9().nnlsChroma(
+  const hopLength = options.hopLength === void 0 ? 512 : options.hopLength;
+  assertPositiveInteger("nnlsChroma", hopLength, "hopLength");
+  if (hopLength > 2 ** 31 - 1) {
+    throw new RangeError("nnlsChroma: hopLength must fit in a signed 32-bit integer");
+  }
+  return requireModule9().nnlsChromaEx(
     samples,
     sampleRate,
     options.enableStftBlend ?? true,
     options.stftBlendWeight ?? 0.55,
-    options.stftBlendNFft ?? 4096
+    options.stftBlendNFft ?? 4096,
+    hopLength
   );
 }
 function cqt(samples, sampleRate = 22050, hopLength = 512, fmin = 32.70319566257483, nBins = 84, binsPerOctave = 12, options = {}) {
@@ -1559,6 +1661,35 @@ function resample(samples, srcSr, targetSr) {
 function requireModule12() {
   return getSonareModule();
 }
+function resolveEffectFftOptions2(fnName, nFft, hopLength) {
+  const resolvedNFft = nFft === void 0 ? 2048 : nFft;
+  const resolvedHopLength = hopLength === void 0 ? 512 : hopLength;
+  if (typeof resolvedNFft !== "number" || !Number.isInteger(resolvedNFft)) {
+    throw new TypeError(`${fnName}: nFft must be an integer`);
+  }
+  if (resolvedNFft < 2 || resolvedNFft > 2 ** 30) {
+    throw new RangeError(`${fnName}: nFft must be an even power of two >= 2`);
+  }
+  if ((resolvedNFft & resolvedNFft - 1) !== 0) {
+    throw new RangeError(`${fnName}: nFft must be an even power of two >= 2`);
+  }
+  if (typeof resolvedHopLength !== "number" || !Number.isInteger(resolvedHopLength)) {
+    throw new TypeError(`${fnName}: hopLength must be an integer`);
+  }
+  if (resolvedHopLength <= 0 || resolvedHopLength > 2 ** 31 - 1) {
+    throw new RangeError(`${fnName}: hopLength must be a positive integer`);
+  }
+  return { nFft: resolvedNFft, hopLength: resolvedHopLength };
+}
+function resolveHardMask2(fnName, value) {
+  if (value === void 0) {
+    return false;
+  }
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${fnName}: hardMask must be a boolean`);
+  }
+  return value;
+}
 function validateSegmentMatrix(fnName, data, rows, cols, dataName) {
   assertPositiveInteger(fnName, rows, "rows");
   assertPositiveInteger(fnName, cols, "cols");
@@ -1690,12 +1821,30 @@ function phaseVocoder(samples, sampleRate = 22050, rate = 1, nFft = 2048, hopLen
   }
   return requireModule12().phaseVocoder(samples, sampleRate, rate, nFft, hopLength);
 }
-function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31) {
+function hpssWithResidual(samples, sampleRate = 22050, kernelHarmonic = 31, kernelPercussive = 31, nFft, hopLength, hardMask) {
   if (!(samples instanceof Float32Array)) {
     const r = samples;
-    return hpssWithResidual(r.samples, r.sampleRate, r.kernelHarmonic, r.kernelPercussive);
+    return hpssWithResidual(
+      r.samples,
+      r.sampleRate,
+      r.kernelHarmonic,
+      r.kernelPercussive,
+      r.nFft,
+      r.hopLength,
+      r.hardMask
+    );
   }
-  return requireModule12().hpssWithResidual(samples, sampleRate, kernelHarmonic, kernelPercussive);
+  const fftOptions = resolveEffectFftOptions2("hpssWithResidual", nFft, hopLength);
+  const resolvedHardMask = resolveHardMask2("hpssWithResidual", hardMask);
+  return requireModule12().hpssWithResidualEx(
+    samples,
+    sampleRate,
+    kernelHarmonic,
+    kernelPercussive,
+    fftOptions.nFft,
+    fftOptions.hopLength,
+    resolvedHardMask
+  );
 }
 function lufsInterleaved(samples, channels = 0, sampleRate = 22050, options = {}) {
   if (!(samples instanceof Float32Array)) {
@@ -1908,14 +2057,35 @@ function validateMatrix(fnName, data, rows, frames, dataName, rowName, options =
     throw new RangeError(`${fnName}: ${dataName} length must equal ${rowName} * nFrames`);
   }
 }
-function trim(samples, sampleRate = 22050, thresholdDb = -60, options = {}) {
+function trim(samples, sampleRate = 22050, thresholdDb = -60, frameLengthOrOptions, hopLength, options = {}) {
   if (!(samples instanceof Float32Array)) {
     const r = samples;
-    return trim(r.samples, r.sampleRate, r.thresholdDb, r);
+    return trim(r.samples, r.sampleRate, r.thresholdDb, r.frameLength, r.hopLength, r);
   }
-  validateSpectrogramSamples("trim", samples, sampleRate, options);
+  if (frameLengthOrOptions === null) {
+    throw new TypeError("trim: frameLength must be an integer or options object");
+  }
+  if (frameLengthOrOptions !== void 0 && typeof frameLengthOrOptions !== "number" && typeof frameLengthOrOptions !== "object") {
+    throw new TypeError("trim: frameLength must be an integer or options object");
+  }
+  const positionalOptions = typeof frameLengthOrOptions === "object" && frameLengthOrOptions !== null ? frameLengthOrOptions : options;
+  const positionalFrameLength = typeof frameLengthOrOptions === "number" ? frameLengthOrOptions : void 0;
+  const resolvedFrameLength = positionalFrameLength ?? 2048;
+  const resolvedHopLength = hopLength === void 0 ? 512 : hopLength;
+  validateSpectrogramSamples("trim", samples, sampleRate, positionalOptions);
   assertFiniteScalar("trim", thresholdDb, "thresholdDb");
-  return requireModule13().trim(samples, sampleRate, thresholdDb);
+  assertPositiveInteger("trim", resolvedFrameLength, "frameLength");
+  assertPositiveInteger("trim", resolvedHopLength, "hopLength");
+  if (resolvedFrameLength > 2 ** 31 - 1 || resolvedHopLength > 2 ** 31 - 1) {
+    throw new RangeError("trim: frameLength and hopLength must fit in a signed 32-bit integer");
+  }
+  return requireModule13().trimEx(
+    samples,
+    sampleRate,
+    thresholdDb,
+    resolvedFrameLength,
+    resolvedHopLength
+  );
 }
 function stft(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, options = {}) {
   if (!(samples instanceof Float32Array)) {
@@ -2261,6 +2431,88 @@ function chroma(samples, sampleRate = 22050, nFft = 2048, hopLength = 512, optio
   return requireModule13().chroma(samples, sampleRate, nFft, hopLength);
 }
 
+// src/codes.ts
+function resolveOrdinalInRange(value, min, max, enumName) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+  }
+  return value;
+}
+function resolveEnumOrdinal(value, values, enumName) {
+  if (typeof value === "number") {
+    const ordinals = Object.values(values);
+    const ordinal = resolveOrdinalInRange(
+      value,
+      Math.min(...ordinals),
+      Math.max(...ordinals),
+      enumName
+    );
+    if (!ordinals.includes(ordinal)) {
+      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+    }
+    return ordinal;
+  }
+  if (typeof value === "string") {
+    const ordinal = values[value];
+    if (ordinal !== void 0) {
+      return ordinal;
+    }
+  }
+  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+}
+var AUTOMATION_CURVE_VALUES = {
+  linear: 0,
+  exponential: 1,
+  hold: 2,
+  "s-curve": 3
+};
+var PAN_LAW_VALUES = {
+  const3db: 0,
+  "const-3db": 0,
+  "-3db": 0,
+  "const4.5db": 1,
+  "const-4.5db": 1,
+  "-4.5db": 1,
+  const6db: 2,
+  "const-6db": 2,
+  "-6db": 2,
+  linear0db: 3,
+  "linear-0db": 3,
+  linear: 3,
+  "0db": 3
+};
+var PAN_MODE_VALUES = {
+  balance: 0,
+  pan: 1,
+  stereopan: 1,
+  "stereo-pan": 1,
+  dualpan: 2,
+  "dual-pan": 2
+};
+var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
+var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
+function automationCurveCode(curve) {
+  return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
+}
+function panLawCode(panLaw) {
+  const normalized = typeof panLaw === "string" ? panLaw.toLowerCase().replace(/_/g, "-") : panLaw;
+  return resolveEnumOrdinal(normalized, PAN_LAW_VALUES, "pan law");
+}
+function panModeCode(panMode) {
+  const normalized = typeof panMode === "string" ? panMode.replace(/_/g, "-").toLowerCase() : panMode;
+  return resolveEnumOrdinal(normalized, PAN_MODE_VALUES, "pan mode");
+}
+function meterTapCode(tap) {
+  return resolveEnumOrdinal(tap, METER_TAP_VALUES, "meter tap");
+}
+function sendTimingCode(timing) {
+  return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
+}
+function trackMonitorModeCode(mode) {
+  return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
+}
+
 // src/public_types_music.ts
 var PitchClass = {
   C: 0,
@@ -2354,6 +2606,30 @@ function convertKeyCandidate(wasm) {
     correlation: wasm.correlation
   };
 }
+var KEY_MODE_VALUES = {
+  major: Mode.Major,
+  minor: Mode.Minor,
+  dorian: Mode.Dorian,
+  phrygian: Mode.Phrygian,
+  lydian: Mode.Lydian,
+  mixolydian: Mode.Mixolydian,
+  locrian: Mode.Locrian
+};
+var KEY_PROFILE_VALUES = {
+  ks: KeyProfile.KrumhanslSchmuckler,
+  krumhansl: KeyProfile.KrumhanslSchmuckler,
+  temperley: KeyProfile.Temperley,
+  shaath: KeyProfile.Shaath,
+  keyfinder: KeyProfile.Shaath,
+  "faraldo-edmt": KeyProfile.FaraldoEDMT,
+  edmt: KeyProfile.FaraldoEDMT,
+  "faraldo-edma": KeyProfile.FaraldoEDMA,
+  edma: KeyProfile.FaraldoEDMA,
+  "faraldo-edmm": KeyProfile.FaraldoEDMM,
+  edmm: KeyProfile.FaraldoEDMM,
+  "bellman-budge": KeyProfile.BellmanBudge,
+  bellman: KeyProfile.BellmanBudge
+};
 function keyModeValues(modes) {
   if (!modes) {
     return [];
@@ -2372,40 +2648,13 @@ function keyModeValues(modes) {
       Mode.Locrian
     ];
   }
-  const names = {
-    major: Mode.Major,
-    minor: Mode.Minor,
-    dorian: Mode.Dorian,
-    phrygian: Mode.Phrygian,
-    lydian: Mode.Lydian,
-    mixolydian: Mode.Mixolydian,
-    locrian: Mode.Locrian
-  };
-  return modes.map((mode) => typeof mode === "number" ? mode : names[mode]);
+  return modes.map((mode) => resolveEnumOrdinal(mode, KEY_MODE_VALUES, "key mode"));
 }
 function keyProfileValue(profile) {
   if (profile === void 0) {
     return -1;
   }
-  if (typeof profile === "number") {
-    return profile;
-  }
-  const names = {
-    ks: KeyProfile.KrumhanslSchmuckler,
-    krumhansl: KeyProfile.KrumhanslSchmuckler,
-    temperley: KeyProfile.Temperley,
-    shaath: KeyProfile.Shaath,
-    keyfinder: KeyProfile.Shaath,
-    "faraldo-edmt": KeyProfile.FaraldoEDMT,
-    edmt: KeyProfile.FaraldoEDMT,
-    "faraldo-edma": KeyProfile.FaraldoEDMA,
-    edma: KeyProfile.FaraldoEDMA,
-    "faraldo-edmm": KeyProfile.FaraldoEDMM,
-    edmm: KeyProfile.FaraldoEDMM,
-    "bellman-budge": KeyProfile.BellmanBudge,
-    bellman: KeyProfile.BellmanBudge
-  };
-  return names[profile];
+  return resolveEnumOrdinal(profile, KEY_PROFILE_VALUES, "key profile");
 }
 function convertChordAnalysisResult(wasm) {
   return {
@@ -2611,18 +2860,27 @@ function analyze(samples, sampleRate = 22050, options = {}) {
   const result = requireModule14().analyze(request.samples, request.sampleRate ?? 22050, request);
   return convertAnalysisResult(result);
 }
-function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, nOctaveBands } : samples;
+function analyzeImpulseResponse(samples, sampleRate = 48e3, nOctaveBands = 6, minDecayDb) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, nOctaveBands, minDecayDb } : samples;
+  if (request.minDecayDb === null) {
+    throw new TypeError("analyzeImpulseResponse: minDecayDb must be a finite number");
+  }
+  const resolvedMinDecayDb = request.minDecayDb === void 0 ? 30 : request.minDecayDb;
+  assertFiniteScalar("analyzeImpulseResponse", resolvedMinDecayDb, "minDecayDb");
+  if (resolvedMinDecayDb <= 0) {
+    throw new RangeError("analyzeImpulseResponse: minDecayDb must be greater than zero");
+  }
   validateAnalysisInput(
     "analyzeImpulseResponse",
     request.samples,
     request.sampleRate ?? 48e3,
     request
   );
-  const result = requireModule14().analyzeImpulseResponse(
+  const result = requireModule14().analyzeImpulseResponseEx(
     request.samples,
     request.sampleRate ?? 48e3,
-    request.nOctaveBands ?? 6
+    request.nOctaveBands ?? 6,
+    resolvedMinDecayDb
   );
   return result;
 }
@@ -2831,9 +3089,14 @@ var Audio = class _Audio {
       }
     }
   }
-  /** The raw audio samples. */
+  /**
+   * A copy of the raw audio samples. Mirrors Node's `getData()` contract: the
+   * returned array is independent of the Audio's internal buffer, so mutating
+   * it (or transferring it to a Worker) does not affect subsequent facade
+   * calls, which all read the internal snapshot directly.
+   */
   get data() {
-    return this._samples;
+    return this._samples.slice();
   }
   /** Number of samples. */
   get length() {
@@ -3625,61 +3888,6 @@ function waveformPeakPyramid(samples, channels, options = {}) {
   return requireModule15().waveformPeakPyramid(request.samples, request.channels, levels);
 }
 
-// src/codes.ts
-function resolveEnumOrdinal(value, values, enumName) {
-  if (typeof value === "number") {
-    if (!Number.isSafeInteger(value) || !Object.values(values).includes(value)) {
-      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-    }
-    return value;
-  }
-  if (typeof value === "string") {
-    const ordinal = values[value];
-    if (ordinal !== void 0) {
-      return ordinal;
-    }
-  }
-  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-}
-var AUTOMATION_CURVE_VALUES = {
-  linear: 0,
-  exponential: 1,
-  hold: 2,
-  "s-curve": 3
-};
-var PAN_LAW_VALUES = {
-  const3dB: 0,
-  "const4.5dB": 1,
-  const6dB: 2,
-  linear0dB: 3
-};
-var PAN_MODE_VALUES = {
-  balance: 0,
-  pan: 0,
-  stereopan: 1,
-  "stereo-pan": 1,
-  dualpan: 2,
-  "dual-pan": 2
-};
-var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
-var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
-function automationCurveCode(curve) {
-  return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
-}
-function panLawCode(panLaw) {
-  return resolveEnumOrdinal(panLaw, PAN_LAW_VALUES, "pan law");
-}
-function panModeCode(panMode) {
-  const normalized = typeof panMode === "string" ? panMode.replace(/_/g, "-").toLowerCase() : panMode;
-  return resolveEnumOrdinal(normalized, PAN_MODE_VALUES, "pan mode");
-}
-function meterTapCode(tap) {
-  return resolveEnumOrdinal(tap, METER_TAP_VALUES, "meter tap");
-}
-function sendTimingCode(timing) {
-  return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
-}
-
 // src/project_internal.ts
 function projectModule() {
   const candidate = getSonareModule();
@@ -3748,6 +3956,13 @@ function assertProjectMidiEvents(fnName, events) {
 function projectTrackKindValue(kind) {
   return resolveEnumOrdinal(kind ?? "audio", { audio: 0, midi: 1, aux: 2 }, "project track kind");
 }
+function projectAutomationTargetKindValue(kind) {
+  return resolveEnumOrdinal(
+    kind,
+    { opaque: 0, "track-fader-db": 1, "track-pan": 2 },
+    "project automation target kind"
+  );
+}
 function projectWarpModeValue(mode) {
   return resolveEnumOrdinal(
     mode ?? "off",
@@ -3760,9 +3975,39 @@ function projectLoopModeValue(mode) {
 }
 
 // src/project_class.ts
+function validateAssistSidecarUint32(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > 4294967295) {
+    throw new RangeError(`Project.setAssistSidecar: ${field} must be a uint32`);
+  }
+  return value;
+}
+function validateAssistSidecarPpq(value, field) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new RangeError(
+      `Project.setAssistSidecar: ${field} must be a finite, non-negative number`
+    );
+  }
+  return value;
+}
+function validateAssistSidecarPayload(value) {
+  if (!(value instanceof Uint8Array)) {
+    throw new TypeError("Project.setAssistSidecar: payload must be a Uint8Array");
+  }
+  return value;
+}
+function validateAssistSidecarModuleId(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError("Project.setAssistSidecar: moduleId must be a non-empty string");
+  }
+  return value;
+}
 var Project = class _Project {
   constructor() {
     this.native = new (projectModule()).Project();
+  }
+  /** Create a new empty project. */
+  static create() {
+    return new _Project();
   }
   /** Pack a MIDI 1.0 note-on event accepted by {@link setMidiEvents}. */
   static midiNoteOn(ppq, group, channel, note, velocity) {
@@ -4027,6 +4272,18 @@ var Project = class _Project {
     }
     this.native.setMaxUndoDepth(depth);
   }
+  /** Set the combined undo/redo history byte cap. Zero disables retention. */
+  setMaxHistoryBytes(bytes) {
+    if (typeof bytes !== "number") {
+      throw new TypeError("Project.setMaxHistoryBytes: bytes must be a number");
+    }
+    if (!Number.isFinite(bytes) || !Number.isInteger(bytes) || bytes < 0 || bytes > 4294967295) {
+      throw new RangeError(
+        "Project.setMaxHistoryBytes: bytes must be a finite integer in the uint32 range"
+      );
+    }
+    this.native.setMaxHistoryBytes(bytes);
+  }
   /** Replace a MIDI clip's entire event list. */
   setMidiEvents(clipId, events) {
     assertProjectMidiEvents("Project.setMidiEvents", events);
@@ -4157,8 +4414,11 @@ var Project = class _Project {
    * Karplus-Strong / modal / additive / percussion / extended-waveguide-piano
    * engines plus the realism layer). Pass a {@link SynthPatch}, a preset-name
    * string (`'saw-lead'` / `'va:saw-lead'`; see {@link synthPresetNames}), or
-   * an array of either; each object entry may carry a `destinationId` binding
-   * convenience (default 0), which is not part of the NativeSynth patch itself.
+   * an array of either; each object entry may carry `destinationId` (default
+   * 0) and `useGmPrograms` (default `false`) binding conveniences, neither of
+   * which is part of the NativeSynth patch itself. When enabled, MIDI program
+   * changes select the corresponding General MIDI voice while the patch remains
+   * the fallback.
    * Because the parameter defaults to `{}`, omission and explicit `undefined`
    * both create one default binding. Use an explicitly empty array `[]` (or
    * runtime `null`) for zero bindings. Unknown preset names throw.
@@ -4232,6 +4492,10 @@ var Project = class _Project {
   setSourceAudio(sourceId, audio, channels, sampleRate) {
     this.native.setSourceAudio(sourceId, audio, channels, sampleRate);
   }
+  /** Replace an audio source's metadata strings as one undoable edit. */
+  setAudioSourceMetadata(sourceId, contentHash, externalStemRole) {
+    this.native.setAudioSourceMetadata(sourceId, contentHash, externalStemRole);
+  }
   /** Replace a clip's take list and active take id (undoable). */
   setClipTakes(clipId, takes, activeTakeId = 0) {
     this.native.setClipTakes(clipId, takes, activeTakeId);
@@ -4275,17 +4539,29 @@ var Project = class _Project {
   }
   /** Append an automation lane; returns its stable target parameter id (undoable). */
   addAutomationLane(trackId, desc) {
-    return this.native.addAutomationLane(trackId, {
-      targetParamId: desc.targetParamId,
-      points: desc.points
-    });
+    if (desc.targetParamId === 0) {
+      throw new RangeError("project automation lane targetParamId must be non-zero");
+    }
+    const nativeDesc = { ...desc };
+    if (Object.keys(desc).includes("targetKind")) {
+      nativeDesc.targetKind = projectAutomationTargetKindValue(
+        desc.targetKind
+      );
+    }
+    return this.native.addAutomationLane(trackId, nativeDesc);
   }
   /** Replace the lane identified by its stable target parameter id (undoable). */
   editAutomationLane(trackId, targetParamId, desc) {
-    this.native.editAutomationLane(trackId, targetParamId, {
-      targetParamId: desc.targetParamId,
-      points: desc.points
-    });
+    if (desc.targetParamId === 0) {
+      throw new RangeError("project automation lane targetParamId must be non-zero");
+    }
+    const nativeDesc = { ...desc };
+    if (Object.keys(desc).includes("targetKind")) {
+      nativeDesc.targetKind = projectAutomationTargetKindValue(
+        desc.targetKind
+      );
+    }
+    this.native.editAutomationLane(trackId, targetParamId, nativeDesc);
   }
   /** Remove the lane identified by its stable target parameter id (undoable). */
   removeAutomationLane(trackId, targetParamId) {
@@ -4299,15 +4575,33 @@ var Project = class _Project {
   annotateChords(chords) {
     this.native.annotateChords(chords);
   }
-  /** Add or update an opaque assist sidecar by module id + target scope (undoable). */
-  setAssistSidecar(moduleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload) {
+  setAssistSidecar(sidecarOrModuleId, schemaVersion, targetTrackId, regionStartPpq, regionEndPpq, payload) {
+    if (typeof sidecarOrModuleId === "string") {
+      if (schemaVersion === void 0 || targetTrackId === void 0 || regionStartPpq === void 0 || regionEndPpq === void 0 || payload === void 0) {
+        throw new TypeError("Project.setAssistSidecar: positional form requires six arguments");
+      }
+      this.native.setAssistSidecar(
+        validateAssistSidecarModuleId(sidecarOrModuleId),
+        validateAssistSidecarUint32(schemaVersion, "schemaVersion"),
+        validateAssistSidecarUint32(targetTrackId, "targetTrackId"),
+        validateAssistSidecarPpq(regionStartPpq, "regionStartPpq"),
+        validateAssistSidecarPpq(regionEndPpq, "regionEndPpq"),
+        validateAssistSidecarPayload(payload)
+      );
+      return;
+    }
+    if (sidecarOrModuleId === null || typeof sidecarOrModuleId !== "object" || Array.isArray(sidecarOrModuleId)) {
+      throw new TypeError("Project.setAssistSidecar: expected a sidecar descriptor object");
+    }
+    const sidecar = sidecarOrModuleId;
+    const moduleId = validateAssistSidecarModuleId(sidecar.moduleId);
     this.native.setAssistSidecar(
       moduleId,
-      schemaVersion,
-      targetTrackId,
-      regionStartPpq,
-      regionEndPpq,
-      payload
+      validateAssistSidecarUint32(sidecar.schemaVersion ?? 0, "schemaVersion"),
+      validateAssistSidecarUint32(sidecar.targetTrackId ?? 0, "targetTrackId"),
+      validateAssistSidecarPpq(sidecar.regionStartPpq ?? 0, "regionStartPpq"),
+      validateAssistSidecarPpq(sidecar.regionEndPpq ?? 0, "regionEndPpq"),
+      validateAssistSidecarPayload(sidecar.payload ?? new Uint8Array())
     );
   }
   /** Number of assist sidecars currently stored on the project. */
@@ -4317,6 +4611,11 @@ var Project = class _Project {
   /** Read one assist sidecar by stable project order. */
   getAssistSidecar(index) {
     return this.native.getAssistSidecar(index);
+  }
+  /** Read every stored assist sidecar in the same order as the index getter. */
+  assistSidecars() {
+    const count = this.assistSidecarCount();
+    return Array.from({ length: count }, (_, index) => this.getAssistSidecar(index));
   }
   /** Set the project's clip-overlap policy (SonareProjectOverlapPolicy ordinal). */
   setOverlapPolicy(policy) {
@@ -4500,6 +4799,14 @@ var SYNTH_MOD_DESTINATIONS = [
   "amp-gain",
   "pan-units"
 ];
+var AutomationTargetKind = {
+  opaque: 0,
+  trackFaderDb: 1,
+  trackPan: 2
+};
+var PROJECT_AUTOMATION_TARGET_OPAQUE = AutomationTargetKind.opaque;
+var PROJECT_AUTOMATION_TARGET_TRACK_FADER_DB = AutomationTargetKind.trackFaderDb;
+var PROJECT_AUTOMATION_TARGET_TRACK_PAN = AutomationTargetKind.trackPan;
 
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
@@ -4562,6 +4869,10 @@ var RealtimeEngine = class {
   }
   setSoloMute(laneIndex, solo, mute, renderFrame = -1) {
     this.native.setSoloMute(laneIndex, solo, mute, renderFrame);
+  }
+  /** Queue a per-track PFL/AFL monitor tap mode change. */
+  setTrackMonitorMode(laneIndex, mode, renderFrame = -1) {
+    this.native.setTrackMonitorMode(laneIndex, trackMonitorModeCode(mode), renderFrame);
   }
   setMidiClips(clips) {
     this.native.setMidiClips(clips);
@@ -5276,6 +5587,7 @@ var StreamAnalyzer = class {
     if (config.outputFormat !== void 0 && (typeof config.outputFormat !== "number" || !Number.isFinite(config.outputFormat) || !Number.isInteger(config.outputFormat) || config.outputFormat !== 0)) {
       throw new TypeError("outputFormat must be the integer 0 (Float32)");
     }
+    const window = config.window === void 0 ? void 0 : resolveOrdinalInRange(config.window, 0, 3, "stream analyzer window");
     const module2 = getSonareModule();
     const defaults = streamAnalyzerConfigDefaults();
     this.analyzer = new module2.StreamAnalyzer(
@@ -5297,7 +5609,7 @@ var StreamAnalyzer = class {
       config.maxProgressionEntries ?? defaults.maxProgressionEntries,
       config.keyUpdateIntervalSec ?? defaults.keyUpdateIntervalSec,
       config.bpmUpdateIntervalSec ?? defaults.bpmUpdateIntervalSec,
-      config.window ?? defaults.window,
+      window ?? defaults.window,
       config.outputFormat ?? defaults.outputFormat
     );
   }
@@ -5725,7 +6037,7 @@ var Mixer = class _Mixer {
   setPolarityInvert(stripIndex, invertLeft, invertRight) {
     this.mixer.setPolarityInvert(stripIndex, invertLeft, invertRight);
   }
-  /** Set the strip's pan law. */
+  /** Set the strip's pan law (a {@link PanLawName} alias or raw C ABI ordinal). */
   setPanLaw(stripIndex, panLaw) {
     this.mixer.setPanLaw(stripIndex, panLawCode(panLaw));
   }
@@ -6430,7 +6742,6 @@ async function bindWebMidi(engine, options = {}) {
     for (const [, input] of iterInputs(access)) {
       bindInput(input);
     }
-    notify();
   };
   const stateListener = (event) => {
     if (closed) {
@@ -6449,6 +6760,7 @@ async function bindWebMidi(engine, options = {}) {
     notify();
   };
   refreshInputs();
+  notify();
   if (access.addEventListener) {
     access.addEventListener("statechange", stateListener);
   } else {
@@ -6550,12 +6862,8 @@ function dispatchUmpMessage(engine, words, portTimeSamples) {
     if (status === 8) {
       engine.pushMidiInputNoteOff(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
     } else if (status === 9) {
-      const velocity = word1 >>> 25 & 127;
-      if (velocity === 0) {
-        engine.pushMidiInputNoteOff(group, channel, data1, 0, portTimeSamples);
-      } else {
-        engine.pushMidiInputNoteOn(group, channel, data1, velocity, portTimeSamples);
-      }
+      const velocity = Math.max(1, word1 >>> 25 & 127);
+      engine.pushMidiInputNoteOn(group, channel, data1, velocity, portTimeSamples);
     } else if (status === 11) {
       engine.pushMidiInputCc(group, channel, data1, word1 >>> 25 & 127, portTimeSamples);
     }
@@ -6874,6 +7182,9 @@ function voiceCharacterPresetId(preset) {
   if (!module) {
     throw new Error("Module not initialized. Call init() first.");
   }
+  if (typeof preset === "number" && (!Number.isSafeInteger(preset) || preset < 0 || preset >= VOICE_PRESET_ORDINALS.length)) {
+    return null;
+  }
   return module.voiceCharacterPresetId(resolveVoicePresetOrdinal(preset));
 }
 function realtimeVoiceChangerPresetConfig(preset) {
@@ -6884,6 +7195,7 @@ function realtimeVoiceChangerPresetConfig(preset) {
 }
 export {
   Audio,
+  AutomationTargetKind,
   BUILTIN_SYNTH_WAVEFORMS,
   ChordQuality,
   ClipPageProvider,
@@ -6897,6 +7209,9 @@ export {
   Mode,
   OfflineWorkerClient,
   OfflineWorkerTask,
+  PROJECT_AUTOMATION_TARGET_OPAQUE,
+  PROJECT_AUTOMATION_TARGET_TRACK_FADER_DB,
+  PROJECT_AUTOMATION_TARGET_TRACK_PAN,
   PitchClass as Pitch,
   PitchClass,
   Project,
