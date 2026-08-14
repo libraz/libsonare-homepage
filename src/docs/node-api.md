@@ -117,6 +117,7 @@ The corresponding `*Request` TypeScript types are exported from the package.
 | Method | Description |
 |--------|-------------|
 | `Audio.fromFile(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when built with FFmpeg |
+| `Audio.fileChannelCount(path)` | Channel count of the source file, read without decoding; distinct from `fromFile`, which downmixes to mono |
 | `Audio.fromBuffer(samples, sampleRate?)` | Create from `Float32Array`; `sampleRate` defaults to `48000` |
 | `Audio.fromMemory(data)` | Decode encoded audio bytes with the same format support as `fromFile` |
 | `audio.getData()` | Copy of the samples as a `Float32Array` |
@@ -380,7 +381,11 @@ Standalone level, dynamics, and stereo-image meters. Each accepts an optional `o
 | `meteringStereoWidth(left, right, sr?, options?)` | `number` | Side/mid energy ratio: 0 = mono, ~1 = wide stereo; unbounded (`Infinity` when mid is silent) |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | Per-sample mid/side point series |
 | `meteringPhaseScope(left, right, sr?, options?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
-| `meteringSpectrum(samples, sr?, options?)` | `SpectrumReport` | Single-frame magnitude/power/dB spectrum; `options` adds `nFft`, `applyOctaveSmoothing`, `octaveFraction`, `dbRef`, `dbAmin` |
+| `meteringSpectrum(samples, sr?, options?)` | `SpectrumReport` | Welch-averaged magnitude/power/dB spectrum over the whole signal (50%-overlapping Hann frames, averaged); `options` adds `nFft`, `applyOctaveSmoothing`, `octaveFraction`, `dbRef`, `dbAmin` |
+| `meteringSpectrumFrame(samples, sr?, frameOffset?, options?)` | `SpectrumReport` | True single-frame magnitude/power/dB spectrum (one Hann-windowed FFT), not time-averaged like `meteringSpectrum`; `frameOffset` selects where the analysis frame starts |
+| `meteringSilenceRatio(samples, sr?, thresholdDb?, frameLength?, hopLength?, options?)` | `number` | Fraction of analysis frames whose RMS is below `thresholdDb` (defaults: `-45` dBFS, `frameLength=1024`, `hopLength=256`) |
+| `waveformPeaks(samples, channels, options?)` | `WaveformPeaksReport` | Per-channel min/max waveform buckets from interleaved audio; `options.samplesPerBucket` defaults to `512` |
+| `waveformPeakPyramid(samples, channels, options?)` | `WaveformPeaksReport[]` | Waveform peak buckets at several zoom levels; `options.samplesPerBucketLevels` defaults to `[512, 1024, 2048, 4096]` |
 
 ### Scale Quantization
 
@@ -414,7 +419,7 @@ const frames = analyzer.readFramesSoa(analyzer.availableFrames());
 const stats = analyzer.stats();          // stats.estimate.bpm / .key (PitchClass int)
 ```
 
-Node native names the float Structure-of-Arrays read `readFramesSoa(...)`. The WASM package exposes the same operation as `readFrames(...)` for browser examples.
+Node native's canonical name for the float Structure-of-Arrays read is `readFramesSoa(...)`; it also exposes `readFrames(...)` as an alias, for naming consistency with the WASM package, which uses `readFrames(...)` for the same operation.
 
 `RealtimeVoiceChanger` in Node native is constructed with `{ sampleRate, maxBlockSize, channels, preset }`, then used with `processMono(...)`, `processMonoInto(...)`, `processInterleaved(...)`, or `processPlanarStereo(...)`. For offline convenience, `voiceChangeRealtime(...)` runs a whole mono buffer through the same preset chain in 512-sample blocks.
 
@@ -453,7 +458,7 @@ changer.destroy();
 | Detail | WASM | Node native |
 |--------|------|-------------|
 | Capability check | Adds `engineCapabilities()` and checks ABI compatibility before construction | Exposes `engineAbiVersion()` but not the browser capability helper |
-| Capture buffer setup | `setCaptureBuffer(numChannels, capacityFrames)` | `setCaptureBuffer(channels)` with preallocated channel buffers |
+| Capture buffer setup | `setCaptureBuffer(numChannels, capacityFrames)` — the canonical cross-binding form | Same canonical `setCaptureBuffer(numChannels, capacityFrames)`, plus a `@deprecated` `setCaptureBuffer(channels: Float32Array[])` overload retained for backward compatibility |
 
 `Project.create()` constructs an empty project. Its `setAssistSidecar(...)`
 and `assistSidecars()` methods preserve opaque module metadata, while
@@ -567,7 +572,7 @@ The native package also exports TypeScript helper types for option objects, call
 |------|----------------|
 | Analysis options/results | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
-| Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
+| Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
 | Realtime voice | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |

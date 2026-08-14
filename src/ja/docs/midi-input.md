@@ -105,7 +105,7 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 キューイングの経路は 2 つあり、デスティネーションごとにどちらかを選びます。目安として、イベントを自分のコードで生成する場合（シーケンサーのステップ、オンスクリーンキーボード）は**即時コマンド**を使い、ハードウェアキーボードのように外部から独自のタイムスタンプ付きでイベントが届く場合（`bindWebMidi` 経由）は**入力ソース**を使います。後者のレーンは、Web MIDI ブリッジが必要とするポートごとのタイムスタンプを運ぶためです。
 
-- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべての destination の発音中ノートを一括で解放します。
+- **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
 - **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
 - **UMP ワード 1 つ** — `pushMidiUmp(destinationId, word0, renderFrame = -1)` は、32 ビットの UMP ワードにパックした MIDI 1.0 チャンネルボイスメッセージを 1 つキューイングし、即座にディスパッチします。トランスポートのシーク後にプログラム・ピッチベンド・プレッシャーの状態を復元するのに適した簡潔な方法です。メッセージ種別ごとに別々の `pushMidi*` を呼び分けるのではなく、それぞれをワードにパックして送ります。
@@ -187,7 +187,7 @@ engine.bindMidiCcBinding({
 });
 ```
 
-`addParameter` は `unit`（表示用の文字列）・`rtSafe`・`defaultCurve` も受け取ります。ここで効いてくるのは **`rtSafe`**（既定は `true`）です。これは、音声スレッドが再生中にそのパラメータを変更してよいかを宣言します。演奏中に鳴らしながら CC バインドで動かしたいものは `true` のままにしてください。`rtSafe: false` で登録すると、オートメーションからでもバインド済み CC からでも、そのパラメータへのライブ書き込みはすべて無視され、変更はトランスポート停止中にのみ適用されます。
+`addParameter` は `unit`（表示用の文字列）・`rtSafe`・`defaultCurve` も受け取ります。ここで効いてくるのは **`rtSafe`**（既定は `true`）です。これは、音声スレッドが再生中にそのパラメータを変更してよいかを宣言します。演奏中に鳴らしながら CC バインドで動かしたいものは `true` のままにしてください。`rtSafe: false` で登録すると、オートメーションからでもバインド済み CC からでも、直接の `setParameter(...)` 呼び出しからでも、そのパラメータへのライブ書き込みはすべて拒否されます。トランスポートが再生中か停止中かにかかわらずです。
 
 ::: tip CC ラーンのワークフロー
 オフラインで「ツマミを動かし、どの CC が動いたか取り込む」流れには、プロジェクト API の `Project.midiCcLearn(events, paramId, options)` と、録音した CC ストリームをオートメーションへ変換する `midiCcToBreakpoint` / `midiParamToCc` があります。これらはライブエンジンではなく、取り込んだ `ProjectMidiEvent` データを対象とします。[プロジェクト編集](./project-editing.md) を参照してください。
@@ -225,12 +225,12 @@ sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
 
 設定 JSON は [`bakeMidiFx`](./project-editing.md) と同じスキーマです。各ステージはそのパラメータをキーにするので、ステージのキーを含めれば有効になり、省けばスキップされます。主なキーは `transpose_semitones`、`velocity_scale` / `velocity_offset` / `velocity_gamma`、`quantize_ppq` / `quantize_strength`、`chord_intervals`、`arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq` です。キーの全一覧と例は [プロジェクト編集](./project-editing.md) を参照してください。
 
-`setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ます。そのため、よくあるケース（フレーズ間で 1 つの変換を別の変換へ差し替える）では、鳴っているノートはそのまま保たれます。鍵を押したまま FX を変える場合の注意点が 2 つあります。
+`setMidiFx` は楽器のボイスをリセットせずにインサートをその場で*置き換え*ます。ただし、すでにアクティブなデスティネーションへの差し替えは、そのデスティネーションの鳴っているノートを解放します。呼び出しのたびに世代（generation）カウンタが進み、音声スレッドは次のブロックで、現在の世代と一致しないデスティネーションをすべてフラッシュ（all-notes-off）するためです。鍵を押したまま FX を変える場合の注意点が 2 つあります。
 
 この呼び出しは制御スレッドから不変の設定を publish し、音声スレッドが次のブロック境界で採用するため、エンジンの処理中にも実行できます。
 
-- 現在の状態が不確かなら、先に FX をクリアしてください。
-- 変換がノートオフのルーティングを変えてノートが鳴り続けたら、差し替えの後にパニック（次節）を送ってください。
+- そのデスティネーションにまだアクティブな FX が無い状態での最初の `setMidiFx` 呼び出しは、何もフラッシュしません。置き換える対象の設定がまだ存在しないためです。
+- すでにアクティブなデスティネーションへのそれ以降の差し替えは、そのデスティネーションの鳴っているノートを自動的に解放するため、クリアのために差し替え後のパニックを送る必要はありません。ただし、差し替えによって鳴っているノートを途中で切りたくない場合は、ノートのサステイン中ではなく、ノートとノートの間で差し替えてください。
 
 ## MIDI パニックとスタックノート復帰
 

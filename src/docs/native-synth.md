@@ -105,7 +105,7 @@ Every preset selects one `engineMode`. The shared sections (filter, envelopes, L
 
 ### `subtractive` — virtual-analog
 
-The classic oscillator → filter → amp voice. Detuned unison, drift, a pre-filter drive stage, and a choice of four filter models give it everything from fat saw leads to wide pads. Good for **leads, basses, pads, and plucks** — anything you'd reach for an analog synth to do. Presets: `sine`, `saw-lead`, `square-lead`, `sub-bass`, `warm-pad`.
+The classic oscillator → filter → amp voice. Detuned unison, drift, a pre-filter drive stage, and a choice of four filter models give it everything from fat saw leads to wide pads. Good for **leads, basses, pads, and plucks** — anything you'd reach for an analog synth to do. Presets: `sine`, `saw`, `square`, `triangle`, `saw-lead`, `square-lead`, `sub-bass`, `warm-pad`.
 
 <SonareDemo id="synth-note" />
 
@@ -124,15 +124,15 @@ All four stay stable and zipper-free under per-sample cutoff/resonance modulatio
 
 ### `fm` — frequency modulation
 
-A phase-modulation operator stack (one oscillator's pitch modulates another → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`, `bell`, `brass`.
+A phase-modulation operator stack (one oscillator's pitch modulates another → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`.
 
 ### `karplus-strong` — plucked string
 
-A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Treat the acoustic realism as **in calibration**, not as a finished instrument model. Good for **plucked and strummed strings** — guitar, bass, harp, harpsichord, and the plucked ethnic family. Presets: `pluck`, `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
+A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Treat the acoustic realism as **in calibration**, not as a finished instrument model. Good for **plucked and strummed strings** — guitar, bass, harp, harpsichord, and the plucked ethnic family. Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
 
 ### `modal` — mallet percussion
 
-A modal resonator bank (a bank of tuned resonators modeling a struck bar or bell) tuned to physical mode ratios (uniform-bar glockenspiel, deep-arch marimba/vibraphone), with mallet-hardness velocity weighting and per-mode decay. Good for **tuned mallet instruments** — glockenspiel, vibraphone, marimba, xylophone. Presets: `marimba`, `glass`.
+A modal resonator bank (a bank of tuned resonators modeling a struck bar or bell) tuned to physical mode ratios (uniform-bar glockenspiel, deep-arch marimba/vibraphone), with mallet-hardness velocity weighting and per-mode decay. Good for **tuned mallet instruments** — glockenspiel, vibraphone, marimba, xylophone. Presets: `marimba`, `glass`, `bell`.
 
 ### `additive` — drawbar organ
 
@@ -160,7 +160,7 @@ A reed-bore waveguide with cylindrical and conical variants, tonehole/growth-con
 
 ### `brass` — lip-reed brass
 
-A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing. This is a provisional physical model, so use it as a built-in brass fallback rather than as a final brass simulation. Presets: `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
+A brass waveguide with lip tension, brass-bell body resonance, conical/cylindrical voicing, register scaling, and a bright cuivré edge for loud playing. This is a provisional physical model, so use it as a built-in brass fallback rather than as a final brass simulation. Presets: `brass`, `trumpet`, `trombone`, `tuba`, `french-horn`, `muted-trumpet`, `cornet`, `flugelhorn`, `euphonium`.
 
 ### `flute` — air-jet flute
 
@@ -168,7 +168,7 @@ A breath-driven air-jet / open-pipe model with jet/reflection brightness, chiff/
 
 ### `plucked-string` — buzzing-bridge plucked string
 
-A plucked-string waveguide whose bridge model keeps grazing the string, spraying energy back into the upper partials so the note shimmers and buzzes for its whole ring. The `buzz` control sweeps from a clean harp or koto (no buzz) to the bright, sustaining rattle of a sitar's curved jawari bridge or a shamisen's sawari. Distinct from `karplus-strong`, which models a clean-terminated pluck (the named `harp` preset stays there). Good for **the koto / sitar buzzing-bridge plucked family**. Presets: `koto`, `sitar`, `tanpura`.
+A plucked-string waveguide whose bridge model keeps grazing the string, spraying energy back into the upper partials so the note shimmers and buzzes for its whole ring. The `buzz` control sweeps from a clean harp or koto (no buzz) to the bright, sustaining rattle of a sitar's curved jawari bridge or a shamisen's sawari. Distinct from `karplus-strong`, which models a clean-terminated pluck (the named `harp` preset stays there — `pluck`, `bell`, and `brass` are GM-fallback aliases whose engine differs from what the name suggests). Good for **the koto / sitar buzzing-bridge plucked family**. Presets: `pluck`, `harp-plucked`, `koto`, `sitar`, `tanpura`.
 
 ### `vocal` — source-filter voice
 
@@ -187,7 +187,7 @@ The GM fallback is not just a last-resort sine bank. When a SoundFont is absent 
 | Programs 0-7, keyboard | Extended-waveguide grand piano, FM electric pianos/clavinet, and Karplus-Strong harpsichord bank variants |
 | Programs 8-15, chromatic percussion | Modal celesta, glockenspiel, music box, vibraphone, marimba, xylophone, and tubular bells, plus a Karplus-Strong dulcimer |
 | Programs 16-23, organ | Additive drawbar organs (16-18), the physical church-organ flue pipe (19), and free-reed-engine reed-organ/accordion, harmonica, and bandoneon voices (20-23) |
-| Programs 24-37, guitar and bass | Karplus-Strong nylon, steel, electric, muted/overdriven/distorted guitars, harp, and dedicated bass variants |
+| Programs 24-37, guitar and bass | Karplus-Strong nylon, steel, electric, muted/overdriven/distorted guitars, and dedicated bass variants |
 | Programs 40-47, strings/orchestra | Bowed violin family, a tremolo-strings pad, Karplus-Strong pizzicato strings and harp, and a timpani fallback |
 | Programs 52-54, choir/voice | Choir-aahs, voice-oohs, and synth-voice programs voiced on the dedicated source-filter vocal engine |
 | Programs 56-79, brass/reed/flute | Provisional lip-reed brass (56-60) and FM brass (61-63), plus reed woodwinds/saxophones and air-jet flutes |
@@ -213,9 +213,10 @@ import { init, synthPresetNames, synthPresetPatch } from '@libraz/libsonare';
 await init();
 
 synthPresetNames();
-// ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
-//  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-//  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
+// ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', 'sub-bass',
+//  'warm-pad', 'e-piano', 'bell', 'brass', 'pluck', 'classical-guitar',
+//  'steel-guitar', 'electric-guitar', 'harp', 'bass-acoustic', ...,
+//  'harp-plucked', 'koto', 'sitar', 'tanpura', ...,
 //  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 const pad = synthPresetPatch('warm-pad');
@@ -227,9 +228,10 @@ const pad = synthPresetPatch('warm-pad');
 import libsonare as sonare
 
 sonare.synth_preset_names()
-# ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
-#  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-#  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
+# ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', 'sub-bass',
+#  'warm-pad', 'e-piano', 'bell', 'brass', 'pluck', 'classical-guitar',
+#  'steel-guitar', 'electric-guitar', 'harp', 'bass-acoustic', ...,
+#  'harp-plucked', 'koto', 'sitar', 'tanpura', ...,
 #  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 pad = sonare.synth_preset_patch("warm-pad")
@@ -243,19 +245,19 @@ The catalog maps to the engines like this (one preset per row is enough to feel 
 
 | Preset | Engine | Good for |
 |--------|--------|----------|
-| `sine` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | leads, basses, pads |
-| `e-piano` `bell` `brass` | `fm` | electric piano, bells, brass |
-| `pluck` `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | plucked strings and basses |
-| `marimba` `glass` | `modal` | tuned mallets |
+| `sine` `saw` `square` `triangle` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | leads, basses, pads |
+| `e-piano` | `fm` | electric piano, bells, brass |
+| `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | plucked strings and basses |
+| `marimba` `glass` `bell` | `modal` | tuned mallets |
 | `organ` | `additive` | drawbar organ |
 | `drum-kit` | `percussion` | GM drum map |
 | `acoustic-piano` | `piano` | acoustic piano |
 | `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | pipe organ ranks |
 | `violin` `viola` `cello` `contrabass` | `bowed-string` | bowed strings |
 | `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | reed woodwinds |
-| `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | brass instruments |
+| `brass` `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | brass instruments |
 | `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | air-jet flutes and whistles |
-| `koto` `sitar` `tanpura` `harp-plucked` | `plucked-string` | buzzing-bridge plucked strings |
+| `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | buzzing-bridge plucked strings |
 | `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | choir and solo voices |
 | `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | accordion, harmonica, reed organ |
 

@@ -195,17 +195,25 @@ WASM パッケージと同じく、ネイティブアドオンもネイティブ
 
 ## Audio メソッドの違い
 
-WASM の `Audio` クラスは、よく使う単発ヘルパーをメソッド形式で呼ぶための入口です。BPM／キー／ビート／コードなどの基本解析、HPSS／編集、マスタリング、特徴量抽出、ラウドネス、リサンプリングをメソッドとして持ちます。
+WASM の `Audio` クラスは、よく使う単発ヘルパーをメソッド形式で呼ぶための入口です。使用頻度が低い、または呼び出し方が異なるヘルパーはスタンドアロン関数のままです。
 
-`analyzeSections(...)`、`analyzeMelody(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`、ルーム音響解析・推定・RIR 合成・ルームモーフィングのような個別ヘルパーは、WASM では独立した関数として呼び出します。
+| `Audio` メソッドとして使える | WASM でスタンドアロンのまま |
+|------------------------------|------------------------------|
+| BPM／キー／ビート／コードなどの基本解析 | `analyzeSections(...)` |
+| HPSS／編集ヘルパー | `analyzeMelody(...)` |
+| マスタリングヘルパー | `analyzeDynamics(...)` |
+| 特徴量抽出 | `analyzeTimbre(...)` |
+| ラウドネス、リサンプリング | ルーム音響ヘルパー、セクション／メロディ／ダイナミクス／音色ヘルパー |
 
 Node ネイティブの `Audio` オブジェクトは、ネイティブアドオンへ直接委譲できるためメソッドの範囲が広くなっています。
 
-共通メソッドに加えて、次のような focused helper も `Audio` メソッドとして持ちます: `analyzeBpm(...)`、`analyzeImpulseResponse(...)`、`detectAcoustic(...)`、`analyzeRhythm(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`、`detectChords(...)`。ルーム系ヘルパーの `estimateRoom(...)`、`synthesizeRir(...)`、`roomMorph(...)` はスタンドアロン関数のままです。
+| 機能 | Node ネイティブ | WASM |
+|------|-----------------|------|
+| 追加の `Audio` メソッド | より詳細な解析・ルーム音響系メソッドをインスタンスメソッドとして持つ | 使えるところはスタンドアロンの詳細ヘルパーを使う |
+| ファイル構築 | `Audio.fromFile(...)`、`Audio.fromMemory(...)` | `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` |
+| サンプル取得 | `audio.getData()` はコピーを返す | `audio.data` はインスタンスが持つ可変な `Float32Array` そのもの |
 
-読み込み入口も異なります。Node ネイティブは `Audio.fromFile(...)` と `Audio.fromMemory(...)` に対応します。WASM は `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` に対応します。
-
-サンプルの取得方法も異なります。Node ネイティブの `audio.getData()` はコピーを返しますが、WASM の `audio.data` はインスタンスが持つ可変な `Float32Array` そのものを返します。
+共通メソッドに加えて、次のような focused helper も `Audio` メソッドとして持ちます: `analyzeBpm(...)`、`analyzeImpulseResponse(...)`、`detectAcoustic(...)`、`analyzeRhythm(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`。ルーム系ヘルパーの `estimateRoom(...)`、`synthesizeRir(...)`、`roomMorph(...)` はスタンドアロン関数のままです。
 
 メソッドと関数の完全なリファレンスは [Node.js Native API](./node-api.md) を参照してください。
 

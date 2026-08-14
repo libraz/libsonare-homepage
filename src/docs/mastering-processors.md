@@ -98,10 +98,10 @@ Most full chains use only a small subset: repair if needed, one tone stage, one 
 ::: info Loudness, oversampling, and metering details
 A few capabilities sit underneath the maximizer/final and analysis APIs:
 
-- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights.
+- Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights. BS.1770-4 itself normatively defines layouts only up to 5.1 (6 channels); the 7.1/8-channel weighting (treating the side-surround pair like the rear surrounds, +1.5 dB) is a non-normative extrapolation, not part of the standard.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
 - For UI metering there are display-decimated variants: `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
-- A **stereo imager** (widens or narrows the stereo field per band) and a **dynamic EQ** (an EQ whose boost/cut reacts to level, like a frequency-targeted compressor) are available in multiband form: `multiband.imager` and `multiband.dynamicEq` expose per-band parameters and accept a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three.
+- Every `multiband.*` solo processor — `compressor`, `dynamicEq`, `expander`, `imager`, `limiter`, and `saturation` — shares the same crossover mechanism and accepts a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three. This entry point exposes up to 8 `cutoffNHz` slots (`cutoff0Hz` … `cutoff7Hz`), so a single `multiband.*` call can address up to 9 bands.
 :::
 
 ::: info What is a crossover?
@@ -289,10 +289,27 @@ When you assemble a *chain* rather than a single processor, the config style dep
 |-------------|--------------|
 | WASM `masteringChain(...)` | Nested config objects |
 | `masterAudio(...)` and Python/Node equivalents | Flat dot-notation overrides such as `'loudness.targetLufs'` |
-| [Mastering Assistant](./mastering-assistant.md) `chainConfig.params` | Flat form, ready for `masterAudio` |
+| [Mastering Assistant](./mastering-assistant.md) `chainConfig.params` | Flat form, ready for `masterAudio`. `params["dynamics.multibandComp"]` can also carry the nested, arbitrary-band v2 object described below — see [The chain-config JSON schema](#the-chain-config-json-schema) |
 
 Repair chain keys follow the chain slots, not the one-shot registry names: use `repair.denoise.*` / `repair.dereverb.*` in flat overrides or the nested `repair: { denoise: ..., dereverb: ... }` shape in `masteringChain(...)`.
 ::::
+
+## The chain-config JSON schema
+
+The flat `chainConfig.params` map (the shape `chainConfig.params` uses in the table above, and the shape `masterAudio` overrides accept) has a JSON-document serialization used by the CLI and the [Mastering Assistant](./mastering-assistant.md): `sonare mastering --config <file>` reads it, and `masteringAssistantSuggest`'s `chainConfig` is expressed in it. That serialization auto-selects one of two schema versions.
+
+::: details Version 1 vs. version 2
+- **Version 1** — the flat, fixed **3-band** low/mid/high multiband compressor shape: `dynamics.multibandComp.lowCutoffHz`, `.highCutoffHz`, and per-band `lowThresholdDb`/`midThresholdDb`/`highThresholdDb` and their ratio/attack/release siblings. This is what every flat-override entry point sends, and what the Mastering Assistant always emits in practice — it never customizes the multiband compressor beyond the default 3-band shape, so its `chainConfig` stays version 1.
+- **Version 2** — selected automatically once the multiband compressor configuration can no longer be represented as the fixed 3-band shape (a different cutoff count, non-default crossover slope/mode, or a non-default FIR kernel size). In that case `params["dynamics.multibandComp"]` becomes a structured object instead of the flat `low`/`mid`/`high` keys:
+  - `crossover.cutoffsHz[]`, `crossover.slope`, `crossover.mode`, `crossover.firKernelSize`
+  - `bands[]` — up to **64 bands**, each with `thresholdDb`, `ratio`, `attackMs`, `releaseMs`, `kneeDb`, `makeupGainDb`, `autoMakeup`, `detector`, `sidechainHpfEnabled`, `sidechainHpfHz`, `pdrTimeMs`, `pdrReleaseScale`
+
+  Field validation is strict: unknown keys anywhere in the version-2 `dynamics.multibandComp` object are rejected, and the band count must equal the cutoff count plus one.
+:::
+
+::: warning Reachability: JSON-document feature, not a JS-object feature
+The version-2 structured form is reachable through the JSON document — the CLI's `sonare mastering --config <file>`, or any code that reads/writes chain config as JSON. The WASM `masteringChain()` TypeScript `MasteringChainConfig.dynamics.multibandComp` interface still only exposes the fixed low/mid/high shorthand, so the arbitrary-band form cannot be reached by building a `MasteringChainConfig` object directly in JavaScript — only by writing the JSON document yourself or generating one with the wider crossover count (for example through the [named processor](#solo-processors) `multiband.compressor` and its up-to-9-band `cutoffNHz` slots) and passing it through the JSON path.
+:::
 
 ## Related
 

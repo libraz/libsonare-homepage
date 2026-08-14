@@ -240,8 +240,8 @@ mixer.close()                                               # ネイティブハ
 # CLI にシーンミキシング用のコマンドはない。`sonare mix` は単一ファイル／単一ストリップで、
 # Mixer シーンをレンダリングできない。永続的なマルチストリップのミックスはバインディング専用
 # （WASM/JS・Node・Python）。CLI はシーン JSON を出力できるだけで、レンダリングはしない。
-sonare mixing-presets                   # 組み込みシーンプリセット名の一覧
-sonare mixing-preset vocalReverbSend    # 1 つのシーンの JSON を標準出力へ出力
+sonare mixing-presets                            # 組み込みシーンプリセット名の一覧
+sonare mixing-preset --preset vocalReverbSend    # 1 つのシーンの JSON を標準出力へ出力
 ```
 
 :::

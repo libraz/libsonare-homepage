@@ -290,7 +290,7 @@ libsonare のミキシングエンジンは、チャンネルストリップ、�
 | **Node.js** | JavaScript/TypeScript（WebAssembly） | サーバーサイド処理 |
 | **Node.js** | JavaScript/TypeScript（N-API ネイティブアドオン） | 高性能なサーバーサイド処理 |
 | **Linux / macOS** | C++ | ネイティブアプリ、CLI ツール |
-| **Python** | Python（ネイティブ C API を `ctypes` 経由で利用） | スクリプト、研究、CLI |
+| **Python** | Python（ネイティブ C API を `ctypes` 経由で利用） | データサイエンス、スクリプティング、librosa からの移行 |
 | **その他**（C API 経由） | C | 他言語との FFI 連携 |
 
 現在のサイト同梱版では、WebAssembly / JavaScript アセットは圧縮前で合計約 {{ wasmMeta.total.sizeKB }} KB です。内訳は [WebAssembly ガイド](/ja/docs/wasm#バンドルサイズ) を参照してください。
@@ -313,7 +313,7 @@ libsonare は通常、呼び出し側がサンプルレートを明示します�
 
 - よく使う DSP パラメータと API は、実用上可能な範囲で librosa に近づけています
 - STFT、メルスペクトログラム、MFCC、クロマなどのコア特徴量は librosa 参照テストで確認しています
-- 関数名と API パターンを意図的に類似させ、移行を容易に
+- 関数名と API パターンを意図的に類似させ、移行を容易にしています
 
 さらに libsonare は librosa の範囲を超えた <strong>コード認識</strong>、<strong>セクション検出</strong>、<strong>音色解析</strong>、<strong>リアルタイムストリーミング</strong> も提供します。これらは Python エコシステムでは通常別々のツールとして提供される機能です。
 

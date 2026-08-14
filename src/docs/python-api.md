@@ -301,6 +301,7 @@ time_to_frames(2.32, sr=22050, hop_length=512) # → frame index
 | `Audio.from_file(path)` | Load WAV/MP3 from disk; also FFmpeg-supported formats when the library is built with FFmpeg |
 | `Audio.from_buffer(data, sample_rate)` | Create from float samples |
 | `Audio.from_memory(data)` | Decode encoded audio bytes with the same format support as `from_file` |
+| `Audio.file_channel_count(path)` | Probe the source channel count encoded in an audio file, without decoding; unlike `from_file`, it never downmixes to mono |
 | `audio.data` | Raw float samples |
 | `audio.sample_rate` | Sample rate (Hz) |
 | `audio.duration` | Duration (seconds) |
@@ -463,6 +464,7 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | Pitch-correct toward a target MIDI note |
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | Contour-following pitch correction: retunes every voiced frame toward `target_midi` along a per-frame `f0_hz` contour, preserving vibrato/drift instead of flattening it |
 | `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | Stretch a single note region in place |
+| `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | Move a note region to a new onset without changing its duration |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | Independent pitch + formant shift |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize peak level to target dB (default: 0.0) |
@@ -580,6 +582,7 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_rms_db(samples, sample_rate?, *, validate?)` | `float` | RMS level (dBFS) |
 | `metering_crest_factor_db(samples, sample_rate?, *, validate?)` | `float` | Crest factor, peak − RMS (dB) |
 | `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | Mean (DC) offset, linear amplitude |
+| `metering_silence_ratio(samples, sample_rate?, threshold_db?, frame_length?, hop_length?, *, validate?)` | `float` | Fraction of analysis frames whose RMS is below `threshold_db` (defaults: `threshold_db=-45.0`, `frame_length=1024`, `hop_length=256`) |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | Inter-sample (true) peak (dBFS); `oversample_factor` is a power of two in 1..16 (0 = default 4) |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | Clipped-sample runs; `threshold` default `0.999`, `min_region_samples` default `1` |
 | `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for `window_sec`/`hop_sec` defaults (3 s / 1 s); pass a negative value (the default `-1.0`) for `low_percentile`/`high_percentile` defaults (0.10 / 0.95) — `0.0` requests the 0th percentile, not the default |

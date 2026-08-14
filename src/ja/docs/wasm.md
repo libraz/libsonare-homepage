@@ -550,6 +550,10 @@ function AudioAnalyzer() {
 
 ### 基本的な例
 
+::: warning `ScriptProcessorNode` は非推奨 — 本番環境では AudioWorklet を使用
+下の最初の例ではフレームの流れを最短で確認できる `createScriptProcessor()` を使っています。`ScriptProcessorNode` は**非推奨**です。メインスレッドで動作するため、負荷がかかるとグリッチが発生する可能性があります。実運用では、この直後にある[AudioWorklet 連携](#audioworklet-連携)を使ってください。アナライザーがメインスレッド外で動作します。
+:::
+
 ```typescript
 import { init, StreamAnalyzer } from '@libraz/libsonare';
 

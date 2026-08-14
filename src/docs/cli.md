@@ -103,6 +103,7 @@ sonare <command> [options] <audio_file>
 | `--n-fft <int>` | FFT size (default: 2048) |
 | `--hop-length <int>` | Hop length (default: 512) |
 | `--n-mels <int>` | Number of Mel bands (default: 128) |
+| `--quiet`, `-q` | Native CLI only. Suppress progress output |
 
 `sonare <command> --help` lists only the options that command actually accepts,
 so the help is the authority for any one command. The DSP options above
@@ -128,6 +129,12 @@ Full music analysis including BPM, key, time signature, and beats.
 sonare analyze music.mp3
 sonare analyze music.mp3 --json
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--with-seventh` | off | Include seventh chords in the chord analysis |
+| `--no-hpss` | off | Disable harmonic-percussive separation |
+| `--chroma-highpass` | 80.0 | High-pass cutoff for chroma analysis in Hz |
 
 **Output:**
 ```
@@ -343,6 +350,10 @@ sonare pitch music.mp3 --algorithm yin
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--algorithm` | pyin | Pitch algorithm: "yin" or "pyin" |
+| `--threshold` | 0.1 | YIN threshold (> 0 and <= 1) |
+| `--fmin` | 65.0 | Minimum tracked frequency in Hz |
+| `--fmax` | 2093.0 | Maximum tracked frequency in Hz |
+| `--hop-length` | 512 | Hop length in samples (redeclared locally with domain checks, distinct from the global `--hop-length`) |
 
 **Output:**
 ```
@@ -360,6 +371,17 @@ Harmonic-Percussive Source Separation.
 sonare hpss music.mp3 -o separated
 sonare hpss music.mp3 -o separated --json
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--kernel-harmonic <int>` | 31 | Harmonic median-filter kernel size |
+| `--kernel-percussive <int>` | 31 | Percussive median-filter kernel size |
+| `--harmonic-only` | off | Write only the harmonic component |
+| `--percussive-only` | off | Write only the percussive component |
+| `--with-residual` | off | Also separate and write a residual component |
+| `--hard-mask` | off | Use a hard mask instead of the default soft mask |
+
+`--harmonic-only`, `--percussive-only`, and `--with-residual` are mutually exclusive.
 
 **Output:**
 ```
@@ -383,11 +405,11 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 |---------|-------------|-----------------|
 | `sonare downbeats music.mp3` | Downbeat times (seconds) | — |
 | `sonare chords music.mp3` | Chord progression | `--min-duration`, `--smoothing-window`, `--threshold`, `--triads-only`, `--nnls`, `--no-beat-sync`, `--use-hmm`, `--hmm-beam-width`, `--key-context`, `--key-root`, `--key-mode`, `--detect-inversions` |
-| `sonare rhythm music.mp3` | Rhythm primitives (syncopation, groove, regularity) | — |
-| `sonare dynamics music.mp3` | Dynamics / loudness summary | — |
+| `sonare rhythm music.mp3` | Rhythm primitives (syncopation, groove, regularity) | `--start-bpm` (120.0), `--bpm-min` (60.0), `--bpm-max` (200.0) |
+| `sonare dynamics music.mp3` | Dynamics / loudness summary | `--window-sec` (0.4) |
 | `sonare timbre music.mp3` | Timbre / spectral-shape summary | — |
 | `sonare lufs music.mp3` | EBU R128 loudness | `--series` (also emit momentary/short-term series) |
-| `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | `--ir` (treat input as an impulse response) |
+| `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | `--ir` (treat input as an impulse response), `--n-bands` (6), `--min-decay-db` (30.0), `--noise-floor-margin-db` (10.0) |
 | `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | `--wet`, `--suppression`, geometry and placement options, `--max-seconds` |
@@ -432,8 +454,12 @@ These transform audio and write a WAV with `-o`:
 | `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | Transpose without changing length | `--semitones` (**required**) |
 | `sonare time-stretch take.wav --rate 1.2 -o out.wav` | Change length without changing pitch | `--rate` (**required**) |
 | `sonare normalize mix.wav -o out.wav` | Peak or RMS normalization | `--mode peak\|rms`, `--target-db` |
-| `sonare trim-silence take.wav -o out.wav` | Trim leading/trailing silence | `--top-db` |
+| `sonare trim-silence take.wav -o out.wav` | Trim leading/trailing silence | `--top-db`, `--threshold-db` (-60) |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | Resample | `--target-sr` |
+
+`--top-db` and `--threshold-db` are mutually exclusive, alternate silence
+selectors: passing neither defaults `--threshold-db` to `-60`; passing
+`--top-db` switches to a top-dB-relative-to-peak selector instead.
 
 The Python CLI provides the file-writing edit commands above. `hpss` also
 requires `-o` and writes `<base>_harmonic.wav` and `<base>_percussive.wav` while
@@ -663,7 +689,7 @@ The preset, chain, and repair commands take an audio file and write a WAV with `
 
 | Command | Key options | Notes |
 |---------|------------|-------|
-| `sonare master track.wav -o out.wav` | `--preset NAME` (default `pop`), `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | Applies a named mastering preset; `--config`/`--config-file`/`--params` override preset values |
+| `sonare master track.wav -o out.wav` | `--preset NAME` (default `pop`), `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Applies a named mastering preset; `--config`/`--config-file`/`--params` override preset values; `--report` writes a mastering report JSON file |
 | `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | Runs a configurable mastering chain from JSON config |
 | `sonare mastering-presets` | honors the global `--json` flag | Lists the available mastering preset names |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |

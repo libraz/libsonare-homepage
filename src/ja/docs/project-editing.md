@@ -235,7 +235,7 @@ copy_id = project.duplicate_clip(tail_id, 8.0)
 | ミュート | `setTrackMute(trackId, mute)` | トラックをミュート／解除する |
 | ソロ | `setTrackSolo(trackId, solo)` | トラックをソロにし、他をミュート扱いにする |
 | パン | `setTrackPan(trackId, pan)` | トラックを `[-1, 1]` でパンする（非有限値は拒否される） |
-| MIDI 送り先 | `setTrackMidiDestination(trackId, destinationId)` | トラックの MIDI を楽器の送り先 ID へルーティングする（[内蔵楽器](./native-synth.md)を参照） |
+| MIDI デスティネーション | `setTrackMidiDestination(trackId, destinationId)` | トラックの MIDI を楽器のデスティネーション ID へルーティングする（[内蔵楽器](./native-synth.md)を参照） |
 
 ::: code-group
 
@@ -709,8 +709,10 @@ config は JSON オブジェクトで、**各ステージはそのパラメー�
 | トランスポーズ | `transpose_semitones` |
 | ベロシティカーブ | `velocity_scale`、`velocity_offset`、`velocity_gamma`（>0） |
 | クオンタイズ | `quantize_ppq`（>0）、`quantize_strength`（0–1、既定 1） |
-| コード | `chord_intervals`（半音オフセットの配列） |
-| アルペジエーター | `arpeggiator_intervals`（半音オフセットの配列）、`arpeggiator_step_ppq`（>0）、`arpeggiator_gate_ppq`（既定はステップ長で、それに丸められる） |
+| コード | `chord_intervals`（半音オフセットの配列、1〜8 要素） |
+| アルペジエーター | `arpeggiator_intervals`（半音オフセットの配列、1〜16 要素）、`arpeggiator_step_ppq`（>0）、`arpeggiator_gate_ppq`（既定はステップ長で、それに丸められる） |
+
+`chord_intervals` は 8 要素、`arpeggiator_intervals` は 16 要素が上限です。空配列、またはいずれかの上限を超える配列を渡すと、`bakeMidiFx` は黙って切り詰めるのではなく `SONARE_ERROR_INVALID_PARAMETER` を投げます。
 
 ```typescript
 // 押さえた各ノートを 3 ステップの上昇アルペジオにする（1 ステップ 16 分音符）。

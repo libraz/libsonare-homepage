@@ -95,25 +95,25 @@ sonare mastering-streaming source.wav \
 
 :::
 
-::: warning Short clips: profile and suggest need real spectral content
-`masteringAudioProfile` and `masteringAssistantSuggest` run a full STFT-based analysis (default `nFft` = 2048) and throw a `SonareError` on clips too short to fill an analysis window. Two thresholds matter: a buffer shorter than ~512 samples will throw outright, and a buffer shorter than one full window (`nFft`, default 2048 samples) has too little spectral content for a meaningful profile. Guard at one full window to be safe. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty buffer (it just requires a non-empty audio buffer and a non-empty platform list). When feeding short captures or file-picker selections from the UI, guard the profile/suggest calls with a minimum-length check, and wrap them in `try`/`catch` using `isSonareError`, before passing the buffer.
+::: warning Short clips: profile and suggest work, but need real spectral content to be meaningful
+`masteringAudioProfile` and `masteringAssistantSuggest` run a full STFT-based analysis (default `nFft` = 2048). They only reject a **completely empty** buffer (`SonareError`, "audio input must be a non-empty buffer") — any non-empty buffer, however short, is accepted and processed. The `nFft`-sized window (default 2048 samples) is advisory, not an error condition: a buffer shorter than one full window has too little spectral content to produce a meaningful profile, so treat "shorter than `nFft`" as a quality warning to show the user, not a failure to guard against. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty audio buffer; an empty `platforms` list is also fine — it falls back to a built-in default set (Spotify, Apple Music, YouTube). When feeding short captures or file-picker selections from the UI, wrap the profile/suggest calls in `try`/`catch` using `isSonareError` to handle the empty-buffer case, and consider a soft length hint (rather than a hard block) for buffers shorter than `nFft`.
 
 ```typescript [Browser]
 import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
 
-const MIN_ANALYSIS_SAMPLES = 2048; // one default analysis window (nFft)
-if (samples.length < MIN_ANALYSIS_SAMPLES) {
-  // Too short to profile — skip or pad before analyzing.
-} else {
-  try {
-    const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
-    // …
-  } catch (err) {
-    if (isSonareError(err)) {
-      // Surface a "clip too short / no spectral content" message in the UI.
-    } else {
-      throw err;
-    }
+const ONE_ANALYSIS_WINDOW = 2048; // default nFft — a quality hint, not a hard limit
+const shortClip = samples.length < ONE_ANALYSIS_WINDOW; // show a "limited spectral content" note
+
+try {
+  const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
+  if (shortClip) {
+    // Still succeeded — flag the result as low-confidence in the UI.
+  }
+} catch (err) {
+  if (isSonareError(err)) {
+    // Only a completely empty buffer reaches here.
+  } else {
+    throw err;
   }
 }
 ```

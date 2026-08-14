@@ -46,10 +46,10 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [チャンネルストリップ](./glossary/mixing/channel-strip.md) | 固定された信号順と、それが各コントロールの働きを決める理由。 |
+| [チャンネルストリップ](./glossary/mixing/channel-strip.md) | 固定された信号順、それが各コントロールの働きを決める理由、PFL/AFL キューモニタリング。 |
 | [バスとセンド](./glossary/mixing/buses-sends.md) | master/aux/submix のロール、プリ／ポストフェーダーセンド、FX バス、VCA グループ。 |
 | [パンとステレオ幅](./glossary/mixing/pan-width.md) | パンモード、パンロー、ステレオ幅とモノラル互換性。 |
-| [オートメーションとメーター](./glossary/mixing/automation-metering.md) | オートメーションカーブ、ゴニオメーター、相関、トゥルーピークメーター。 |
+| [オートメーションとメーター](./glossary/mixing/automation-metering.md) | オートメーションカーブ、型付きオートメーションレーンのターゲット、ゴニオメーター、相関、トゥルーピークメーター。 |
 
 ## 編集ガイド
 
@@ -78,7 +78,7 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [クリップとトラック](./glossary/arrangement/clips-and-tracks.md) | プロジェクトの構造 — トラック、クリップ、タイムライン、MIDI 宛先、クリップ編集。 |
+| [クリップとトラック](./glossary/arrangement/clips-and-tracks.md) | プロジェクトの構造 — トラック、クリップ、タイムライン、MIDI 宛先、クリップ編集、ソースのメタデータ、Undo 履歴のバイト上限。 |
 | [テイクとコンピング](./glossary/arrangement/takes-and-comping.md) | クリップ内の複数テイク、アクティブテイク、コンプセグメント、ループ録音。 |
 | [ワープとテンポ同期](./glossary/arrangement/warp-and-tempo.md) | ワープモード、アンカー、テンポマップ、拍子、ピッチを保つストレッチ。 |
 | [バウンスとレンダリング](./glossary/arrangement/bounce-and-rendering.md) | アレンジを音声へ書き出す、ミキサーシーン、楽器バウンス、レイテンシ補償。 |
@@ -133,7 +133,7 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 | ガイド | 扱う内容 |
 |--------|----------|
 | [リペアと入力コントロール](./glossary/mastering/repair.md) | インプットゲイン、ディノイズ、ソースのクリッピング、メイン処理前の準備。 |
-| [ダイナミクスコントロール](./glossary/mastering/dynamics.md) | スレッショルド、レシオ、アタック、リリース、ニー、ゲインリダクション、パンチ。 |
+| [ダイナミクスコントロール](./glossary/mastering/dynamics.md) | スレッショルド、レシオ、アタック、リリース、ニー、ゲインリダクション、パンチ、マルチバンドコンプレッション。 |
 | [トーンと Air コントロール](./glossary/mastering/tone-air.md) | Tilt EQ、エキサイター量、Air バンド量、明るさの判断。 |
 | [ステレオ、リミッター、ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) | ステレオ幅、リミッターのシーリング、ラウドネス目標、最終レンダリング。 |
 | [リファレンスマッチ](./glossary/mastering/reference-match.md) | リファレンスの読み込み、レベルマッチング、スペクトル比較、マッチ強度。 |

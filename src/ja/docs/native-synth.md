@@ -45,7 +45,7 @@ description: libsonare のデータ不要なパッチ駆動シンセ NativeSynth
 - **reed／brass／flute waveguide** — 木管・金管のための、息で励起される持続音モデルです。
 - **バズブリッジ撥弦** — ブリッジが弦をこすり続け、上部倍音へエネルギーを撒くことでシタール・箏・ハープのきらめきを生む撥弦ループです。
 - **ソースフィルター方式のボイス** — 声門音源（ノコギリ波＋スペクトルティルト）を母音フォルマント共鳴のバンクに通し、合唱やソロの声を作ります。
-- **フリーリード** — 駆動される金属舌の発振器（アコーディオン、ハーモニカ、バンドネオン）です。ミュゼットデチューンで 2 枚のうなる舌にもできます。
+- **フリーリード** — 駆動される金属リードの発振器（アコーディオン、ハーモニカ、バンドネオン）です。ミュゼットデチューンで 2 枚のうなるリードにもできます。
 
 パッチ操作でよく出てくる用語が 2 つあります。**ADSR エンベロープ**（attack／decay／sustain／release。音量などが、ノートの間にどう立ち上がり減衰するか）と、**モッドマトリクス**（LFO やエンベロープなどの変化の元を、ピッチやフィルターカットオフなどの送り先へつなぐ表）です。
 :::
@@ -105,7 +105,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI 出力先�
 
 ### `subtractive` — バーチャルアナログ
 
-オシレーター → フィルター → アンプという古典的なボイスです。デチューンユニゾン、ドリフト、フィルター前段のドライブ、4 種のフィルターモデルにより、太いソウリードから広がりのあるパッドまで作れます。**リード・ベース・パッド・プラック**、つまりアナログシンセで作りたいものに向きます。プリセット: `sine`、`saw-lead`、`square-lead`、`sub-bass`、`warm-pad`。
+オシレーター → フィルター → アンプという古典的なボイスです。デチューンユニゾン、ドリフト、フィルター前段のドライブ、4 種のフィルターモデルにより、太いソウリードから広がりのあるパッドまで作れます。**リード・ベース・パッド・プラック**、つまりアナログシンセで作りたいものに向きます。プリセット: `sine`、`saw`、`square`、`triangle`、`saw-lead`、`square-lead`、`sub-bass`、`warm-pad`。
 
 <SonareDemo id="synth-note" />
 
@@ -124,15 +124,15 @@ NativeSynth パッチは**インストゥルメント**です。MIDI 出力先�
 
 ### `fm` — 周波数変調
 
-小さなアルゴリズムテーブルを持つ位相変調オペレータスタック（1 つのオシレーターのピッチがもう 1 つを変調 → 金属的・鐘的な音色）で、指数エンベロープ、フィードバックオペレータ、ベロシティ → インデックス（明るさ）スケーリングを備えます。**エレクトリックピアノ・ベル・マレット・クラビネット・ブラス**、つまり減算合成が苦手な金属的・鐘的・非整数次倍音の音に向きます。プリセット: `e-piano`、`bell`、`brass`。
+小さなアルゴリズムテーブルを持つ位相変調オペレータスタック（1 つのオシレーターのピッチがもう 1 つを変調 → 金属的・鐘的な音色）で、指数エンベロープ、フィードバックオペレータ、ベロシティ → インデックス（明るさ）スケーリングを備えます。**エレクトリックピアノ・ベル・マレット・クラビネット・ブラス**、つまり減算合成が苦手な金属的・鐘的・非整数次倍音の音に向きます。プリセット: `e-piano`。
 
 ### `karplus-strong` — 撥弦
 
-位相が正確にチューニングされた分数遅延導波路ループ（撥弦をモデル化する短い遅延ループ）に、ピック位置コム、ベロシティ駆動の明るさ、ディケイストレッチ、ノートオフ時のループダンピング（フィンガー／パームミュート）を加えたものです。ギター、ハープ、ベース系プリセットでは、仮実装の物理的な細部として、ピックアップ位置、ボディ結合、スチール弦の分散、開放弦の共鳴、弦の張りによるベンド、2 方向の振動による減衰差も使います。アコースティックなリアリティは**調整中**であり、完成済みの楽器モデルではありません。**撥弦・ストローク弦**、すなわちギター・ベース・ハープ・ハープシコード・撥弦系民族楽器に向きます。プリセット: `pluck`、`classical-guitar`、`steel-guitar`、`electric-guitar`、`harp`、`bass-acoustic`、`bass-fingered`、`bass-picked`、`bass-fretless`、`bass-slap`。
+位相が正確にチューニングされた分数遅延導波路ループ（撥弦をモデル化する短い遅延ループ）に、ピック位置コム、ベロシティ駆動の明るさ、ディケイストレッチ、ノートオフ時のループダンピング（フィンガー／パームミュート）を加えたものです。ギター、ハープ、ベース系プリセットでは、仮実装の物理的な細部として、ピックアップ位置、ボディ結合、スチール弦の分散、開放弦の共鳴、弦の張りによるベンド、2 方向の振動による減衰差も使います。アコースティックなリアリティは**調整中**であり、完成済みの楽器モデルではありません。**撥弦・ストローク弦**、すなわちギター・ベース・ハープ・ハープシコード・撥弦系民族楽器に向きます。プリセット: `classical-guitar`、`steel-guitar`、`electric-guitar`、`harp`、`bass-acoustic`、`bass-fingered`、`bass-picked`、`bass-fretless`、`bass-slap`。
 
 ### `modal` — マレット打楽器
 
-物理的なモード比（一様バーのグロッケン、深いアーチのマリンバ／ビブラフォン）に合わせたモーダル共鳴バンク（叩いたバーや鐘をモデル化する、チューニングされた共鳴器のバンク）で、マレット硬さのベロシティ重みづけとモードごとのディケイを持ちます。**音程のあるマレット楽器**、グロッケン・ビブラフォン・マリンバ・シロフォンに向きます。プリセット: `marimba`、`glass`。
+物理的なモード比（一様バーのグロッケン、深いアーチのマリンバ／ビブラフォン）に合わせたモーダル共鳴バンク（叩いたバーや鐘をモデル化する、チューニングされた共鳴器のバンク）で、マレット硬さのベロシティ重みづけとモードごとのディケイを持ちます。**音程のあるマレット楽器**、グロッケン・ビブラフォン・マリンバ・シロフォンに向きます。プリセット: `marimba`、`glass`、`bell`。
 
 ### `additive` — ドローバーオルガン
 
@@ -160,7 +160,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI 出力先�
 
 ### `brass` — リップリード金管
 
-リップテンション、金管ベルのボディ共鳴、円筒／円錐の音色差、音域に応じた音作り、大音量時の明るい cuivré エッジを備えた金管導波路です。これは仮実装の物理モデルなので、完成済みの金管シミュレーションではなく、内蔵の金管フォールバックとして扱ってください。プリセット: `trumpet`、`trombone`、`tuba`、`french-horn`、`muted-trumpet`、`cornet`、`flugelhorn`、`euphonium`。
+リップテンション、金管ベルのボディ共鳴、円筒／円錐の音色差、音域に応じた音作り、大音量時の明るい cuivré エッジを備えた金管導波路です。これは仮実装の物理モデルなので、完成済みの金管シミュレーションではなく、内蔵の金管フォールバックとして扱ってください。プリセット: `brass`、`trumpet`、`trombone`、`tuba`、`french-horn`、`muted-trumpet`、`cornet`、`flugelhorn`、`euphonium`。
 
 ### `flute` — エアジェットフルート
 
@@ -168,7 +168,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI 出力先�
 
 ### `plucked-string` — バズブリッジ撥弦
 
-ブリッジのモデルが弦をこすり続け、エネルギーを上部倍音へ撒き戻すことで、鳴っている間ずっと音がきらめき、うなる撥弦導波路です。`buzz` コントロールは、バズのないクリーンなハープや箏から、シタールの湾曲したジャワリブリッジや三味線のサワリが生む明るく持続するびりつきまでを連続的に変化させます。クリーンに終端する撥弦をモデル化する `karplus-strong` とは別物です。**箏／シタール系のバズブリッジ撥弦**に向きます（名前付きの `harp` プリセットは `karplus-strong` のままです）。プリセット: `koto`、`sitar`、`tanpura`。
+ブリッジのモデルが弦をこすり続け、エネルギーを上部倍音へ撒き戻すことで、鳴っている間ずっと音がきらめき、うなる撥弦導波路です。`buzz` コントロールは、バズのないクリーンなハープや箏から、シタールの湾曲したジャワリブリッジや三味線のサワリが生む明るく持続するびりつきまでを連続的に変化させます。クリーンに終端する撥弦をモデル化する `karplus-strong` とは別物です。**箏／シタール系のバズブリッジ撥弦**に向きます（名前付きの `harp` プリセットは `karplus-strong` のままです。`pluck`、`bell`、`brass` は GM フォールバックのエイリアスで、名前から連想されるエンジンとは実際のエンジンが異なります）。プリセット: `pluck`、`harp-plucked`、`koto`、`sitar`、`tanpura`。
 
 ### `vocal` — ソースフィルター方式のボイス
 
@@ -176,7 +176,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI 出力先�
 
 ### `free-reed` — 駆動されるフリーリード
 
-駆動される金属舌の発振器（非対称サチュレーターとボディローパスで整形された位相アキュムレータ）で、アコーディオン・ハーモニカ・バンドネオンのフリーリードをモデル化します。舌自身のピッチがノートを決め、連成する気柱はありません。`detune` コントロールで、きらめくミュゼットのうなりを出すために、わずかに高い 2 枚の舌へ分割できます。**アコーディオン・ハーモニカ・リードオルガンのプレビュー**に向きます。プリセット: `accordion`、`harmonica`、`bandoneon`、`reed-organ`。
+駆動される金属リードの発振器（非対称サチュレーターとボディローパスで整形された位相アキュムレータ）で、アコーディオン・ハーモニカ・バンドネオンのフリーリードをモデル化します。リード自身のピッチがノートを決め、連成する気柱はありません。`detune` コントロールで、きらめくミュゼットのうなりを出すために、わずかに高い 2 枚のリードへ分割できます。**アコーディオン・ハーモニカ・リードオルガンのプレビュー**に向きます。プリセット: `accordion`、`harmonica`、`bandoneon`、`reed-organ`。
 
 ## GM フォールバックバンク
 
@@ -187,7 +187,7 @@ GM フォールバックは、最後の手段として単純なサイン波を�
 | プログラム 0-7、鍵盤 | 拡張導波路グランドピアノ、FM エレピ／クラビ、Karplus-Strong ハープシコードのバンク違い |
 | プログラム 8-15、クロマチックパーカッション | モーダルのチェレスタ、グロッケン、オルゴール、ビブラフォン、マリンバ、シロフォン、チューブラーベル、それに Karplus-Strong のダルシマー |
 | プログラム 16-23、オルガン | 加算ドローバーオルガン（16-18）、物理モデルの教会オルガンのフルーパイプ（19）、フリーリードエンジンのリードオルガン／アコーディオン、ハーモニカ、バンドネオン（20-23） |
-| プログラム 24-37、ギター／ベース | Karplus-Strong のナイロン、スチール、エレキ、ミュート／オーバードライブ／ディストーションギター、ハープ、ベース各種 |
+| プログラム 24-37、ギター／ベース | Karplus-Strong のナイロン、スチール、エレキ、ミュート／オーバードライブ／ディストーションギター、ベース各種 |
 | プログラム 40-47、弦／オーケストラ | ボウイング弦、トレモロ弦のパッド、Karplus-Strong のピチカート弦とハープ、ティンパニのフォールバック |
 | プログラム 52-54、合唱／声 | 専用のソースフィルター方式のボーカルエンジンで鳴らす choir、voice ooh、synth voice |
 | プログラム 56-79、金管／リード／フルート | 仮実装のリップリード金管（56-60）と FM 金管（61-63）、リード木管／サックス、エアジェットフルート |
@@ -213,9 +213,10 @@ import { init, synthPresetNames, synthPresetPatch } from '@libraz/libsonare';
 await init();
 
 synthPresetNames();
-// ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
-//  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-//  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
+// ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', 'sub-bass',
+//  'warm-pad', 'e-piano', 'bell', 'brass', 'pluck', 'classical-guitar',
+//  'steel-guitar', 'electric-guitar', 'harp', 'bass-acoustic', ...,
+//  'harp-plucked', 'koto', 'sitar', 'tanpura', ...,
 //  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 const pad = synthPresetPatch('warm-pad');
@@ -227,9 +228,10 @@ const pad = synthPresetPatch('warm-pad');
 import libsonare as sonare
 
 sonare.synth_preset_names()
-# ['sine', 'saw-lead', 'square-lead', 'sub-bass', 'warm-pad', 'e-piano',
-#  'bell', 'brass', 'pluck', 'classical-guitar', 'steel-guitar',
-#  'electric-guitar', 'harp', 'harp-plucked', 'bass-acoustic', ...,
+# ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', 'sub-bass',
+#  'warm-pad', 'e-piano', 'bell', 'brass', 'pluck', 'classical-guitar',
+#  'steel-guitar', 'electric-guitar', 'harp', 'bass-acoustic', ...,
+#  'harp-plucked', 'koto', 'sitar', 'tanpura', ...,
 #  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
 
 pad = sonare.synth_preset_patch("warm-pad")
@@ -243,19 +245,19 @@ pad = sonare.synth_preset_patch("warm-pad")
 
 | プリセット | エンジン | 向いている用途 |
 |------------|----------|----------------|
-| `sine` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | リード・ベース・パッド |
-| `e-piano` `bell` `brass` | `fm` | エレピ・ベル・ブラス |
-| `pluck` `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | 撥弦とベース |
-| `marimba` `glass` | `modal` | 音程のあるマレット |
+| `sine` `saw` `square` `triangle` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | リード・ベース・パッド |
+| `e-piano` | `fm` | エレピ・ベル・ブラス |
+| `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | 撥弦とベース |
+| `marimba` `glass` `bell` | `modal` | 音程のあるマレット |
 | `organ` | `additive` | ドローバーオルガン |
 | `drum-kit` | `percussion` | GM ドラムマップ |
 | `acoustic-piano` | `piano` | アコースティックピアノ |
 | `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | パイプオルガンのランク |
 | `violin` `viola` `cello` `contrabass` | `bowed-string` | ボウイング弦 |
 | `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | リード木管 |
-| `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | 金管 |
+| `brass` `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | 金管 |
 | `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | エアジェットフルートと笛 |
-| `koto` `sitar` `tanpura` `harp-plucked` | `plucked-string` | バズブリッジの撥弦 |
+| `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | バズブリッジの撥弦 |
 | `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | 合唱・ソロの声 |
 | `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | アコーディオン、ハーモニカ、リードオルガン |
 
@@ -603,9 +605,9 @@ General MIDI の各プログラムは、15エンジンのいずれかに解決�
 | 17 | Percussive Organ | `additive` | |
 | 18 | Rock Organ | `additive` | |
 | 19 | Church Organ | `pipe-organ` | 暫定。マルチランクのプレナム |
-| 20 | Reed Organ | `free-reed` | 暫定。ハルモニウム — 柔らかなプレート |
+| 20 | Reed Organ | `free-reed` | 暫定。ハルモニウム — 柔らかなプレート、柔らかいリード |
 | 21 | Accordion | `free-reed` | 暫定。リードオルガンの音作りを共有 |
-| 22 | Harmonica | `free-reed` | 暫定。小さく明るい硬い舌＋ハンドビブラート |
+| 22 | Harmonica | `free-reed` | 暫定。小さく明るい硬いリード＋ハンドビブラート |
 | 23 | Tango Accordion | `free-reed` | 暫定。バンドネオン、ミュゼット（うなりのある）デチューン |
 
 #### ギター（24-31）

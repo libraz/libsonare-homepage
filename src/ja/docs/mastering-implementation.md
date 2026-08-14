@@ -71,7 +71,7 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
 | スレッショルド、レシオ、アタック、リリース | ダイナミクス | [ダイナミクスコントロール](./glossary/mastering/dynamics.md) |
 | 幅、シーリング、目標 LUFS | 最終ステージ | [ステレオ・リミッター・ラウドネスコントロール](./glossary/mastering/stereo-limiter-loudness.md) |
 | ソース／リファレンスの比較 | ペア解析 | [リファレンスマッチ](./glossary/mastering/reference-match.md) |
-| LUFS、True Peak、クレスト、相関値 | メーター | [マスタリングメーターの読み方](./glossary/mastering/meter-reading.md) |
+| LUFS、トゥルーピーク、クレスト、相関値 | メーター | [マスタリングメーターの読み方](./glossary/mastering/meter-reading.md) |
 
 ::: info 相関値の読み方
 相関値（位相相関、おおよそ −1〜+1）は、左右チャンネルがどれだけ似ているかを表します。+1 に近いとモノラルでも安全、0 に近いと広がりがあり、負の値はモノラルに合算したときミックスの一部が打ち消し合う恐れを示します。

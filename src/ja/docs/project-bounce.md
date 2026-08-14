@@ -190,6 +190,10 @@ const c = project.bounceWithSynthInstrument(
 
 有効な名前はマジック文字列をハードコードせず [`synthPresetNames()`](./native-synth.md) で取得してください。未知の名前は例外を投げます。パッチオブジェクトは `preset` ベース（`preset` 省略時は既定の減算パッチ）から始まり、共通設定を上書きします。フィールドの一覧は [NativeSynth](./native-synth.md) を参照してください。複数のデスティネーションをバインドするには配列を渡します。空配列は何もバインドしません。
 
+::: tip 1 つのパッチに固定する代わりに GM プログラムへ追従する
+`bounceWithSynthInstrument` に渡す各エントリ（バレのプリセット文字列ではなく `SynthPatch` オブジェクト）は、`destinationId`（既定 `0`）と `useGmPrograms`（既定 `false`）も持てます。`useGmPrograms` を有効にすると、MIDI のプログラムチェンジがデスティネーションごとに対応する General MIDI ボイスを選び、バインドしたパッチはそのマップがカバーしないものへのフォールバックとして残ります。姉妹スペルは C ABI の `use_gm_programs` と Python の `auto_select_gm` です。詳しい説明と例は [パッチを固定せず GM プログラムに追従させる](./native-synth.md#パッチを固定せず-gm-プログラムに追従させる) を参照してください。
+:::
+
 下のピアノロールはまさにこの呼び出しです。1 つの MIDI フレーズを `bounceWithSynthInstrument` に通し、プリセットを切り替えるたびに同じ音符が別の音色で鳴り直します。再生ヘッドはバウンスした音声に追従します。
 
 <SonareDemo id="midi-piano-roll" />
@@ -342,7 +346,7 @@ sonare project bounce --in song.json -o master.wav --synth saw
 sonare project compile --in song.json --json
 ```
 
-`--synth` フラグは値が任意です。省略すると既定のサイン波、値を渡すと内蔵オシレーターの波形（`sine`、`saw`、`square`、`triangle`）を選びます。NativeSynth のプリセット名は受け付けません。NativeSynth のプリセットカタログや SF2 は CLI からは扱えず、バインディング専用（WASM／Node／Python）です。プリセットや SoundFont を使うバウンスは Project API を使ってください。ほかに `project new`、`project validate`、`project abi` も使えます。
+`--synth` フラグは 2 通りに読まれます。バレの `--synth` はプロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングされ、マップがカバーしないものは `sine` パッチへフォールバックします。プロジェクトが本物の GM プログラムを持つときはこちらを選びます。`--synth <preset>` はすべてのデスティネーションを、`sonare_synth_preset_patch` が受け付ける固定の 1 つの NativeSynth プリセット——つまり[フルの NativeSynth プリセットカタログ](./native-synth.md)（`--synth warm-pad`、`--synth saw-lead` など）へ固定します。名前の一覧は `sonare project synth-presets` で取得できます。SF2 と出力先ごとの synth JSON は引き続きバインディング専用（WASM／Node／Python）です。SoundFont を使うバウンスには Project API を使ってください。ほかに `project new`、`project validate`、`project synth-presets`、`project abi` も使えます。
 
 ## レシピ
 

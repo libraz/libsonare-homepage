@@ -18,7 +18,7 @@ libsonare は、[librosa](https://librosa.org/) と同じような MIR（music i
 
 | librosa コードでやっていること | libsonare で使うもの | 注意点 |
 |--------------------------------|----------------------|--------|
-| ファイルを読み込み、単発解析する | `Audio.from_file(...)` のあと `detect_bpm`, `detect_key`, `analyze` | ブラウザ/WASM はファイルをデコードしません。先に Web Audio などで PCM にします |
+| ファイルを読み込み、単発解析する | `Audio.from_file(...)` のあと `detect_bpm`, `detect_key`, `analyze` | ブラウザ/WASM はファイルをデコードしません。先に Web Audio または `Audio.fromMemory*` で PCM にします |
 | ML 用のスペクトログラム特徴を作る | `stft`, `melSpectrogram` / `mel_spectrogram`, `mfcc`, `pcen` | 比較時は `n_fft`, `hop_length`, `n_mels`, `n_mfcc` を明示してください |
 | クロマや和声特徴を計算する | `chroma`, `chromaCqt` / `chroma_cqt`, `nnlsChroma` / `nnls_chroma`, `tonnetz` | `chromaCqt` / `chroma_cqt` が `librosa.feature.chroma_cqt` の直接の相当。`nnlsChroma` は別物の NNLS 音符活性化クロマです |
 | テンポ、ビート、オンセット、パルスを見る | `onsetEnvelope`, `detectOnsets`, `detectBeats`, `detectBpm`, `tempogram`, `plp` | 高レベル検出器はビート／オンセット時刻を秒で返します |
@@ -60,7 +60,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 | librosa | libsonare | 備考 |
 |---------|-----------|-------|
 | `librosa.effects.hpss()` | `hpss()` | メディアンフィルタリング |
-| residual を含む `librosa.effects.hpss()` 相当 | `hpssWithResidual()` / `hpss_with_residual()` | 倍音、打撃、残差信号を返す |
+| residual を含む `librosa.effects.hpss()` 相当 | `hpssWithResidual()` / `hpss_with_residual()` | 倍音成分、打撃成分、残差信号を返す |
 | `librosa.effects.harmonic()` | `harmonic()` | 倍音成分のみ |
 | `librosa.effects.percussive()` | `percussive()` | 打撃成分のみ |
 | `librosa.effects.time_stretch()` | `time_stretch()` / `timeStretch()` | フェーズボコーダー |
@@ -165,9 +165,9 @@ librosa は低レベル DSP の充実が強みで、上位の音楽解析は別�
 | libsonare | 説明 |
 |-----------|-------------|
 | `KeyAnalyzer` | 音楽キー検出（Krumhansl-Schmuckler プロファイル） |
-| `ChordAnalyzer` | コード認識（108 種のテンプレートマッチング） |
+| `ChordAnalyzer` | コード認識（192 種のテンプレートマッチング） |
 | `SectionAnalyzer` | 楽曲構造解析（イントロ／Aメロ／サビなど） |
-| `TimbreAnalyzer` | 音色特性（ブライトネス、ウォームス、密度ほか） |
+| `TimbreAnalyzer` | 音色特性（ブライトネス、温かみ、密度ほか） |
 | `DynamicsAnalyzer` | ラウドネス・ダイナミックレンジ・クレストファクター |
 | `RhythmAnalyzer` | 拍子、グルーブ、シンコペーション、規則性 |
 
@@ -234,12 +234,12 @@ mel_db = librosa.power_to_db(mel, ref=np.max)
 ::: code-group
 ```typescript [ブラウザ]
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
-// mel.power - パワースペクトラム
+// mel.power - パワースペクトル
 // mel.db - dB スケール
 ```
 ```python [Python]
 mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
-# mel.power - パワースペクトラム
+# mel.power - パワースペクトル
 # mel.db - dB スケール
 ```
 ```bash [CLI]

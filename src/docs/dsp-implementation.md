@@ -187,6 +187,7 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 
 | Processor | Implementation | Main use | Real-time notes |
 |-----------|----------------|----------|-----------------|
+| `saturation.ampSim` | Preamp drive → tone stack → optional power amp (sag/transformer/NFB) → cabinet voicing | Guitar/bass amp color insert | Discrete `cab`/`cabModel`/`ampModel` topology choices belong at construction time, not automation |
 | `saturation.bitcrusher` | Bit-depth and/or sample-rate style degradation | Lo-fi texture | Keep output gain controlled |
 | `saturation.exciter` | High-frequency harmonic generation and blend | Add brightness and perceived detail | Can become harsh quickly |
 | `saturation.hardClipper` | Hard nonlinear transfer curve | Aggressive peak shaving and distortion | Use oversampling or conservative drive |

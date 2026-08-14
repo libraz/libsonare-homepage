@@ -180,7 +180,7 @@ The same `StreamQuantizeConfig` applies to `readFramesI16(...)`. Omit the argume
 
 ### Progressive estimates: BPM, key, chord, and pattern
 
-`stats()` returns an `AnalyzerStats` whose `estimate` field is a **`ProgressiveEstimate`** — the analyzer's running best guess at the music, refined as more audio arrives. Check `estimate.updated` before reading: it is `true` only on frames where the estimate actually changed, so you can avoid redundant UI work.
+`stats()` returns an `AnalyzerStats` whose `estimate` field is a **`ProgressiveEstimate`** — the analyzer's running best guess at the music, refined as more audio arrives. Check `estimate.updated` before reading: it is `true` on the periodic frames where the key or BPM estimate is recomputed (not only on frames where the recomputed value actually differs from before), so you can skip the frames where nothing was recomputed at all.
 
 ```typescript
 const { estimate } = analyzer.stats();

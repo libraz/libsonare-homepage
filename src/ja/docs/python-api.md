@@ -305,6 +305,7 @@ time_to_frames(2.32, sr=22050, hop_length=512) # → フレームインデック
 | `Audio.from_file(path)` | WAV/MP3 ファイルを読み込み。FFmpeg 有効ビルドでは FFmpeg が対応する形式も読み込めます |
 | `Audio.from_buffer(data, sample_rate)` | floatサンプルから作成 |
 | `Audio.from_memory(data)` | `from_file` と同じ形式対応で、メモリ上のエンコード済み音声をデコード |
+| `Audio.file_channel_count(path)` | デコードせずに音声ファイルのソースチャンネル数を調べる。`from_file` と異なり、モノラルへのダウンミックスは行わない |
 | `audio.data` | 生のfloatサンプル |
 | `audio.sample_rate` | サンプルレート（Hz） |
 | `audio.duration` | 長さ（秒） |
@@ -467,6 +468,7 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 | `pitch_correct_to_midi(samples, sample_rate, current_midi?, target_midi?)` | `list[float]` | 目標 MIDI ノートへピッチ補正 |
 | `pitch_correct_to_midi_timevarying(samples, f0_hz, target_midi, sample_rate?, hop_length?, voiced?, voiced_prob?)` | `list[float]` | コントゥアに沿うピッチ補正。フレームごとの `f0_hz` コントゥアに沿って、有声フレームを `target_midi` へ寄せます。ビブラートやドリフトを平坦化せず保持します |
 | `note_stretch(samples, sample_rate, onset_sample?, offset_sample?, stretch_ratio?)` | `list[float]` | 単一ノート区間をその場でストレッチ |
+| `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | ノート区間の長さを変えずに、新しいオンセット位置へ移動 |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | ピッチとフォルマントを独立にシフト |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（デフォルト: 0.0） |
@@ -588,6 +590,7 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` �
 | `metering_rms_db(samples, sample_rate?, *, validate?)` | `float` | RMS レベル（dBFS） |
 | `metering_crest_factor_db(samples, sample_rate?, *, validate?)` | `float` | クレストファクター。ピーク − RMS（dB） |
 | `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | 平均（DC）オフセット、リニア振幅 |
+| `metering_silence_ratio(samples, sample_rate?, threshold_db?, frame_length?, hop_length?, *, validate?)` | `float` | RMS が `threshold_db` を下回る解析フレームの割合。既定は `threshold_db=-45.0`、`frame_length=1024`、`hop_length=256` |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | インターサンプル（トゥルー）ピーク（dBFS）。`oversample_factor` は 1..16 の 2 の冪（0 で既定 4） |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | クリップしたサンプルの連続区間。`threshold` 既定 `0.999`、`min_region_samples` 既定 `1` |
 | `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`window_sec`/`hop_sec` は `0.0` で既定値（窓 3 秒・ホップ 1 秒）。`low_percentile`/`high_percentile` は負値（既定 `-1.0`）で既定値（low 0.10・high 0.95）。`0.0` は既定ではなく 0 パーセンタイルの指定 |

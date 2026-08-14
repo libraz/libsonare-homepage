@@ -301,4 +301,4 @@ ISP リミッターが有効な場合は、その遅延が加わります。
 - [ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー)
 - [JavaScript API](./js-api.md#realtimevoicechanger)
 - [Python API](./python-api.md#リアルタイムボイスチェンジャー)
-- [Node.js ネイティブ API](./node-api.md#ストリーミング／リアルタイムクラス)
+- [Node.js ネイティブ API](./node-api.md#ストリーミング-リアルタイムクラス)

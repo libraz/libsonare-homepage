@@ -694,6 +694,68 @@ int main() {
 }
 ```
 
+## C API
+
+```c
+#include <sonare_c.h>
+#include <stdio.h>
+
+static const char* kPitchNames[] = {
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+int main() {
+  SonareAudio* audio = NULL;
+  SonareError err;
+
+  // 音声を読み込む
+  err = sonare_audio_from_file("music.mp3", &audio);
+  if (err != SONARE_OK) {
+    printf("Error: %s\n", sonare_error_message(err));
+    return 1;
+  }
+
+  // BPM を検出（audio ハンドルを直接使うため、余分なデータコピーは発生しない）
+  float bpm;
+  err = sonare_audio_detect_bpm(audio, &bpm);
+  if (err == SONARE_OK) {
+    printf("BPM: %.1f\n", bpm);
+  }
+
+  // キーを検出（SonareKey はルート・モード・信頼度を保持）
+  SonareKey key;
+  err = sonare_audio_detect_key(audio, &key);
+  if (err == SONARE_OK) {
+    printf("Key: %s %s (confidence: %.0f%%)\n",
+           kPitchNames[key.root],
+           key.mode == SONARE_MODE_MAJOR ? "major" : "minor",
+           key.confidence * 100);
+  }
+
+  // ビートを検出
+  float* beat_times = NULL;
+  size_t beat_count = 0;
+  err = sonare_audio_detect_beats(audio, &beat_times, &beat_count);
+  if (err == SONARE_OK) {
+    printf("Beats: %zu\n", beat_count);
+    sonare_free_floats(beat_times);
+  }
+
+  sonare_audio_free(audio);
+  return 0;
+}
+```
+
+::: tip サンプルベースのバリアント
+すでに生のサンプル（別の音声ソースから取得したものなど）を持っている場合は、`SonareAudio` ハンドルを構築する代わりにサンプルベースのバリアントを使えます。
+
+```c
+sonare_detect_bpm(samples, length, sample_rate, &out_bpm);
+sonare_detect_key(samples, length, sample_rate, &out_key);
+sonare_detect_beats(samples, length, sample_rate, &out_times, &out_count);
+sonare_analyze(samples, length, sample_rate, &out_result);
+```
+:::
+
 ## CLI 例
 
 ### クイック解析

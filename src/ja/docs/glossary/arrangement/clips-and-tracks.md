@@ -102,6 +102,14 @@ DAW で曲をアレンジするとき、実際にやっているのは小さく�
 複数のクリップが *同じ* 素材を指すことがあります。クリップを複製しても、多くの場合は音声を丸ごと複製するのではなくソースを共有するため、プロジェクトは小さく保たれますが、一方のクリップのソース差し替えがもう一方と独立になることを意味します。パートをコピーして回すときは覚えておいてください。
 :::
 
+## ソースのメタデータと Undo 履歴
+
+個々のクリップより一段上に位置する編集がもう 2 つあります。
+
+**オーディオソースのメタデータ。** 複数のクリップが 1 つのソースを共有できるため（上記の警告を参照）、情報を持たせるべきなのはクリップではなくソース側であることがよくあります。`setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` は、1 回の undo 可能な編集として、ソースに 2 つの情報文字列を付与します。`contentHash` は、同じ音声実体が別のソース id で再登場したことをホスト側が認識するために使えます（重複インポートのスキップ、古い参照の検出など）。`externalStemRole` は、外部で分離されたステムが何を表すか（たとえば「vocals」や「drums」）を記録するもので、ステム分離を前提としたプロジェクトが保存・再読み込みの後もステムを区別できるようにします。
+
+**Undo/Redo 履歴のバイト上限。** このモデルにおけるあらゆる編集 — `moveClip`、`setClipGain`、`addAutomationLane` など — は undo スタックに保持され、`undo()` / `redo()` でセッションを前後に移動できます。各編集コマンドは自身の保持バイト数を報告し、`Project.setMaxHistoryBytes(bytes)` は undo と redo 両方のスタックが保持できる*合計*メモリ量に上限を設けます。上限に達すると、古いエントリから順に破棄されて空きが作られます。上限を 0 にすると履歴の保持自体が無効になります。`setMaxUndoDepth` は同じ履歴を別の軸 — バイト数ではなくエントリ数 — で制限するもので、2 つの上限は併用されます。
+
 ::: details libsonare での実装
 このモデルは編集エンジンの `Project` クラスにあります。`addTrack` がトラック（audio または midi）を作り、`addMidiClip(startPpq, lengthPpq)` は新しい MIDI トラック + クリップに対して `{ trackId, clipId }` を返します。`addClip` は既存トラックへオーディオ / MIDI クリップを追加します。すべての位置は 4 分音符単位（浮動小数点数、`1.0` = 4 分音符 1 個）なので、`moveClip(clipId, newStartPpq, newTrackId?)`、`setClipGain(clipId, gain)`、`setClipFade(clipId, fadeIn, fadeOut)`、`setClipLoop`、`duplicateClip`、`setClipSource`、`removeClip` はすべて音楽的な時間で動きます。トラックのライフサイクルは `removeTrack`、`renameTrack`、`setTrackKind`、`setTrackRoute` です。MIDI トラックは `setTrackMidiDestination(trackId, destinationId)` で楽器へつながります。コンパイラが各 MIDI クリップにその id を刻印するため、エンジンはその宛先にバインドされた楽器へイベントを送ります。プロジェクト全体は `toJson()` / `Project.fromJson(json)` で JSON を往復し、音楽的な時間は `compile()` / `bounce()` のときに初めてサンプルへ変換されます。
 :::

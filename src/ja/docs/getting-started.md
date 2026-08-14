@@ -93,11 +93,10 @@ pip install libsonare
 標準のホイールは WAV と MP3 を読み込みます。M4A/AAC/FLAC/OGG/Opus を直接読み込む場合は、FFmpeg を有効にしてソースからビルドします。
 
 ```python
-from libsonare import Audio, analyze
+from libsonare import Audio
 
-# 音声ファイルを解析
 audio = Audio.from_file("music.mp3")
-result = analyze(audio.data, audio.sample_rate)
+result = audio.analyze()
 
 print(f"BPM: {result.bpm}")
 print(f"キー: {result.key.name}")

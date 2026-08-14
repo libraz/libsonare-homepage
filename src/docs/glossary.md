@@ -46,10 +46,10 @@ These pages expand the mixing-engine terms — the channel strip, routing, image
 
 | Guide | Covers |
 |-------|--------|
-| [Channel Strip](./glossary/mixing/channel-strip.md) | The fixed strip signal order and why it decides what each control does. |
+| [Channel Strip](./glossary/mixing/channel-strip.md) | The fixed strip signal order, why it decides what each control does, and PFL/AFL cue monitoring. |
 | [Buses and Sends](./glossary/mixing/buses-sends.md) | Master/aux/submix roles, pre/post-fader sends, FX buses, and VCA groups. |
 | [Pan and Stereo Width](./glossary/mixing/pan-width.md) | Pan modes, pan law, and stereo width vs mono compatibility. |
-| [Automation and Metering](./glossary/mixing/automation-metering.md) | Automation curves, goniometer, correlation, and true-peak metering. |
+| [Automation and Metering](./glossary/mixing/automation-metering.md) | Automation curves, typed automation-lane targets, goniometer, correlation, and true-peak metering. |
 
 ## Editing Guides
 
@@ -78,7 +78,7 @@ These pages expand the headless-DAW terms used by [Project Editing](./project-ed
 
 | Guide | Covers |
 |-------|--------|
-| [Clips and Tracks](./glossary/arrangement/clips-and-tracks.md) | The project model: tracks, clips, the timeline, MIDI destinations, and clip edits. |
+| [Clips and Tracks](./glossary/arrangement/clips-and-tracks.md) | The project model: tracks, clips, the timeline, MIDI destinations, clip edits, source metadata, and bounded undo history. |
 | [Takes and Comping](./glossary/arrangement/takes-and-comping.md) | Multiple recorded takes in a clip, the active take, comp segments, and loop recording. |
 | [Warp and Tempo Sync](./glossary/arrangement/warp-and-tempo.md) | Warp modes, anchors, tempo maps, time signatures, and pitch-preserving stretch. |
 | [Bounce and Rendering](./glossary/arrangement/bounce-and-rendering.md) | Rendering an arrangement to audio, the mixer scene, instrument bounces, and latency compensation. |
@@ -133,7 +133,7 @@ These pages group controls by how they are used in the chain. Individual paramet
 | Guide | Covers |
 |-------|--------|
 | [Repair and Input Controls](./glossary/mastering/repair.md) | Input gain, denoise, source clipping, and preparation before the main chain. |
-| [Dynamics Controls](./glossary/mastering/dynamics.md) | Threshold, ratio, attack, release, knee, gain reduction, and punch. |
+| [Dynamics Controls](./glossary/mastering/dynamics.md) | Threshold, ratio, attack, release, knee, gain reduction, punch, and multiband compression. |
 | [Tone and Air Controls](./glossary/mastering/tone-air.md) | Tilt EQ, exciter amount, air-band amount, and brightness decisions. |
 | [Stereo, Limiter, and Loudness Controls](./glossary/mastering/stereo-limiter-loudness.md) | Stereo width, limiter ceiling, loudness target, and final rendering. |
 | [Reference Match](./glossary/mastering/reference-match.md) | Reference import, level matching, spectral comparison, and match strength. |

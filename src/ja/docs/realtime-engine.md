@@ -109,7 +109,7 @@ engine.settleParameters(); // 最初に聴こえるブロックの前に、全�
 `captureStatus()` は、現在のキャプチャ元 `source`（`'output'` または `'input'`）と現在の `recordOffsetSamples` の両方を返すので、何を録っているかを UI 側で確認できます。全体の流れは [録音とテイク](./recording-and-takes.md) を参照してください。
 
 ::: info ライブ MIDI と録音
-エンジンは、楽器への**ライブ MIDI** 入力と、再生されている内容の**録音**も受け付けます。これらには専用ページがあります。Web MIDI からエンジンへのブリッジ（ポート管理、CC バインド、NativeSynth／SF2 の宛先）は [MIDI 入力](./midi-input.md)、キャプチャ・ループ録音のテイク／コンプレーン・`getUserMedia` をエンジンノードへつなぐブラウザマイクヘルパー `bindMicrophoneInput(...)` は [録音とテイク](./recording-and-takes.md) を参照してください。
+エンジンは、楽器への**ライブ MIDI** 入力と、再生されている内容の**録音**も受け付けます。これらには専用ページがあります。Web MIDI からエンジンへのブリッジ（ポート管理、CC バインド、NativeSynth／SF2 のデスティネーション）は [MIDI 入力](./midi-input.md)、キャプチャ・ループ録音のテイク／コンプレーン・`getUserMedia` をエンジンノードへつなぐブラウザマイクヘルパー `bindMicrophoneInput(...)` は [録音とテイク](./recording-and-takes.md) を参照してください。
 :::
 
 ## レーンミキサー
@@ -144,7 +144,7 @@ engine.setSoloMute(0, true, false, -1);
 ```
 
 ::: info レーンインデックスは追加専用
-あるトラック id が一度レーンを占有すると、そのレーンインデックスはエンジンの生存期間中固定されます。`setTrackLanes(...)` を呼ぶたびに、宣言済みのレーン id を現在の順序どおりに並べ、新しいトラック id はその後ろにのみ追加できます。`sends` を持つエントリーはそのトラックのセンドリストを置き換え、`sends` のないエントリー（id だけの指定を含む）は既存のセンドに触れません。`setSoloMute` はこの固定インデックスでレーンを指定します。
+あるトラック id が一度レーンを占有すると、そのレーンインデックスはエンジンの生存期間中固定されます。`setTrackLanes(...)` を呼ぶたびに、宣言済みのレーン id を現在の順序どおりに並べ、新しいトラック id はその後ろにのみ追加できます。生の `RealtimeEngine` では、呼び出しのたびに各レーンのセンドを、そのレーンのエントリーが渡した `sends` 配列から作り直します。`sends` を省略すると（id だけの指定を含む）、既存のセンドは維持されず消去されます。省略時にセンドを維持するのは `SonareEngine` ワークレットファサードのほうで、JS 側にセンドのキャッシュを持ち、呼び出しのたびに完全なリストを裏で再送信しています。`setSoloMute` はこの固定インデックスでレーンを指定します。
 :::
 
 ::: warning 構造を変えるストリップ呼び出しはコントロールスレッドで
@@ -248,7 +248,7 @@ engine.setTrackStripJson(1, JSON.stringify({
 
 ## MIDI クリップスケジューリングと `sampleAtPpq`
 
-音声クリップにはクリップスケジュールとページプロバイダがあり、**MIDI クリップ**には専用のリアルタイムスケジュールがあります。`setMidiClips(clips)` はエンジンの MIDI クリップスケジュール全体を 1 回の呼び出しで置き換え、各クリップはイベントを MIDI の**宛先 id** に従って楽器へルーティングします（`setBuiltinInstrument`、`setSynthInstrument`、`setSf2Instrument` でバインドした楽器。宛先モデルは [MIDI 入力](./midi-input.md)を参照）。
+音声クリップにはクリップスケジュールとページプロバイダがあり、**MIDI クリップ**には専用のリアルタイムスケジュールがあります。`setMidiClips(clips)` はエンジンの MIDI クリップスケジュール全体を 1 回の呼び出しで置き換え、各クリップはイベントを MIDI の**デスティネーション id** に従って楽器へルーティングします（`setBuiltinInstrument`、`setSynthInstrument`、`setSf2Instrument` でバインドした楽器。デスティネーションモデルは [MIDI 入力](./midi-input.md)を参照）。
 
 このスケジュールは*コンパイル済み*です。タイミングは PPQ ではなく**エンジンタイムライン上の絶対サンプル**で表します。音楽的な位置の変換には `sampleAtPpq(ppq)` を使ってください。エンジンのテンポマップ（`setTempo` / `setTempoSegments` のすべての変更）を積分するため、テンポが途中で変わっても正しい位置が得られます。
 

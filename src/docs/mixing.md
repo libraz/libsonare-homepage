@@ -225,8 +225,8 @@ mixer.close()                                               # release the native
 # The CLI has no scene-mixing command: `sonare mix` is single-file/single-strip
 # and cannot render a Mixer scene. Persistent multi-strip mixing is binding-only
 # (WASM/JS, Node, Python). The CLI can only PRINT scene JSON, never render it:
-sonare mixing-presets                   # list the built-in scene preset names
-sonare mixing-preset vocalReverbSend    # print one scene's JSON to stdout
+sonare mixing-presets                            # list the built-in scene preset names
+sonare mixing-preset --preset vocalReverbSend    # print one scene's JSON to stdout
 ```
 
 :::

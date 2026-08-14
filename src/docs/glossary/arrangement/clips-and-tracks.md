@@ -102,6 +102,14 @@ Once the structure exists, arranging is mostly a handful of operations.
 Several clips can point at the *same* source material. Duplicating a clip usually shares the source rather than cloning the audio, which keeps projects small but means re-sourcing one clip can be independent of another. Keep this in mind when you copy parts around.
 :::
 
+## Source metadata and undo history
+
+Two more edits sit above individual clips.
+
+**Audio-source metadata.** Since several clips can share one source (see the warning above), it is often the source — not the clip — that needs to carry information. `setAudioSourceMetadata(sourceId, contentHash, externalStemRole)` attaches two informational strings to a source as one undoable edit: a `contentHash` a host can use to recognize the same underlying audio reappearing under a different source id (skip a redundant import, flag a stale reference), and an `externalStemRole` that records what an externally separated stem represents (for example "vocals" or "drums"), so a project built around stem separation can still tell its stems apart after a save and reload.
+
+**Bounded undo/redo memory.** Every edit in this model — `moveClip`, `setClipGain`, `addAutomationLane`, and the rest — is retained on an undo stack so `undo()` / `redo()` can step back and forward through a session. Each edit command reports its own retained byte footprint, and `Project.setMaxHistoryBytes(bytes)` caps the *combined* memory the undo and redo stacks are allowed to hold; once the cap is reached, the oldest entries are evicted to make room. Setting the cap to zero disables retention entirely. `setMaxUndoDepth` caps the same history a different way, by entry count rather than bytes — the two limits apply together.
+
 ::: details How libsonare implements this
 The model lives on the `Project` class in the editing engine. `addTrack` creates a track (audio or MIDI), and `addMidiClip(startPpq, lengthPpq)` returns `{ trackId, clipId }` for a fresh MIDI track + clip; `addClip` adds an audio or MIDI clip to an existing track. All positions are floating-point quarter-note units (`1.0` = one quarter note), so `moveClip(clipId, newStartPpq, newTrackId?)`, `setClipGain(clipId, gain)`, `setClipFade(clipId, fadeIn, fadeOut)`, `setClipLoop`, `duplicateClip`, `setClipSource`, and `removeClip` work in musical time. Track lifecycle is `removeTrack`, `renameTrack`, `setTrackKind`, and `setTrackRoute`. A MIDI track reaches its instrument through `setTrackMidiDestination(trackId, destinationId)`: the compiler stamps each MIDI clip with that id so the engine dispatches its events to the instrument bound at that destination. The whole project round-trips through JSON via `toJson()` / `Project.fromJson(json)`, and musical time is converted to samples only at `compile()` / `bounce()`.
 :::

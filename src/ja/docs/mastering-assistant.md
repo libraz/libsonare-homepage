@@ -95,25 +95,25 @@ sonare mastering-streaming source.wav \
 
 :::
 
-::: warning 短いクリップ: profile と suggest には実際のスペクトル成分が必要
-`masteringAudioProfile` と `masteringAssistantSuggest` は STFT ベースの解析全体を実行し（既定の `nFft` は 2048）、解析窓を満たせないほど短いクリップでは `SonareError` を投げます。しきい値は 2 つあります。~512 サンプルより短いバッファはそのまま例外になり、1 窓ぶん（`nFft`、既定 2048 サンプル）より短いバッファは、意味のあるプロファイルを取るにはスペクトル成分が足りません。安全のため 1 窓ぶんを下限として守ってください。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファと空でないプラットフォームのリストさえあれば、どんなバッファでも受け付けます。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを最小長チェックで守り、`isSonareError` を使った `try`／`catch` で囲んでから、バッファを渡してください。
+::: warning 短いクリップ: profile と suggest は動くが、意味のある結果には実際のスペクトル成分が必要
+`masteringAudioProfile` と `masteringAssistantSuggest` は STFT ベースの解析全体を実行します（既定の `nFft` は 2048）。例外を投げるのは**完全に空のバッファ**だけです（`SonareError`、メッセージは "audio input must be a non-empty buffer"）。どれほど短くても、空でなければバッファは受理され、解析されます。`nFft` サイズの窓（既定 2048 サンプル）はあくまで目安であってエラー条件ではありません。1 窓ぶんより短いバッファは、意味のあるプロファイルを得るにはスペクトル成分が足りないというだけなので、「`nFft` より短い」はガードすべき失敗ではなく、UI に出す品質上の注意として扱ってください。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファであればどんなバッファでも受け付けます。`platforms` が空リストでも問題なく、その場合は既定のプラットフォーム集合（Spotify、Apple Music、YouTube）にフォールバックします。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを `isSonareError` を使った `try`／`catch` で囲んで空バッファのケースに備え、`nFft` より短い場合はハードブロックではなく、やわらかい長さのヒントを検討してください。
 
 ```typescript [ブラウザ]
 import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
 
-const MIN_ANALYSIS_SAMPLES = 2048; // 既定の解析窓 1 つ分（nFft）
-if (samples.length < MIN_ANALYSIS_SAMPLES) {
-  // 短すぎてプロファイルできない — スキップするか、解析前にパディングする
-} else {
-  try {
-    const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
-    // …
-  } catch (err) {
-    if (isSonareError(err)) {
-      // 「クリップが短すぎる／スペクトル成分がない」旨を UI に表示する
-    } else {
-      throw err;
-    }
+const ONE_ANALYSIS_WINDOW = 2048; // 既定の nFft — ハード制限ではなく品質のヒント
+const shortClip = samples.length < ONE_ANALYSIS_WINDOW; // 「スペクトル成分が限定的」と注記する
+
+try {
+  const profile = JSON.parse(masteringAudioProfile(samples, sampleRate));
+  if (shortClip) {
+    // 成功はしている — UI では低信頼度の結果として表示する
+  }
+} catch (err) {
+  if (isSonareError(err)) {
+    // ここに来るのは完全に空のバッファのときだけ
+  } else {
+    throw err;
   }
 }
 ```

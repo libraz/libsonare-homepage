@@ -145,7 +145,7 @@ engine.setSoloMute(0, true, false, -1);
 ```
 
 ::: info Lane indices are append-only
-Once a track id occupies a lane, its lane index stays fixed for the engine's lifetime. Each `setTrackLanes(...)` call must list the already-declared lane ids in their current order and may only append new track ids after them. Entries carrying `sends` replace that track's send list; entries without `sends` (including bare ids) leave existing sends untouched. `setSoloMute` addresses lanes by that fixed index.
+Once a track id occupies a lane, its lane index stays fixed for the engine's lifetime. Each `setTrackLanes(...)` call must list the already-declared lane ids in their current order and may only append new track ids after them. On the raw `RealtimeEngine`, every call rebuilds each lane's sends from scratch from whatever `sends` array that lane's entry passed — omitting `sends` (including a bare id) clears that lane's sends rather than leaving them untouched. The `SonareEngine` worklet facade is the one that preserves sends on omission: it keeps its own JS-side send cache and resends the full list underneath on every call. `setSoloMute` addresses lanes by that fixed index.
 :::
 
 ::: warning Structural strip calls belong on the control thread

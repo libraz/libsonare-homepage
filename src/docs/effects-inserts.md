@@ -55,7 +55,7 @@ In addition to the mastering [solo processors](./mastering-processors.md#solo-pr
 | `effects.delay.stereo` | Stereo delay |
 
 ::: warning Build-flag gating
-These insert IDs are available only in builds with `SONARE_HAVE_FX`. The geometric room inserts (`effects.reverb.room`, `effects.acoustic.roomMorph`) also require `BUILD_ACOUSTIC_SIM`. In a build without a flag, the corresponding IDs simply do not appear in `masteringInsertNames()`.
+These insert IDs are available only in builds configured with the CMake option `BUILD_FX` (which derives the internal `SONARE_HAVE_FX` define). The geometric room inserts (`effects.reverb.room`, `effects.acoustic.roomMorph`) also require `BUILD_ACOUSTIC_SIM`. In a build without an option, the corresponding IDs simply do not appear in `masteringInsertNames()`.
 :::
 
 There are a few practical details to know:

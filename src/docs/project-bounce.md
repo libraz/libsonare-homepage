@@ -190,6 +190,10 @@ const c = project.bounceWithSynthInstrument(
 
 Use [`synthPresetNames()`](./native-synth.md) to discover valid names instead of hardcoding magic strings; unknown names throw. A patch object starts from its `preset` base (or the default subtractive patch when `preset` is omitted) and overrides the shared controls — see [NativeSynth](./native-synth.md) for the field list. Pass an array to bind several destinations; an empty array binds nothing.
 
+::: tip Following GM programs instead of pinning one patch
+Each entry passed to `bounceWithSynthInstrument` (as a `SynthPatch` object, not a bare preset string) may also carry `destinationId` (default `0`) and `useGmPrograms` (default `false`). With `useGmPrograms` on, MIDI program changes select the matching General MIDI voice per destination while the bound patch stays as the fallback for anything the map does not cover. The sibling spellings are `use_gm_programs` on the C ABI and `auto_select_gm` in Python. See [Following GM programs instead of pinning one patch](./native-synth.md#following-gm-programs-instead-of-pinning-one-patch) for the full explanation and examples.
+:::
+
 The piano roll below is exactly this call at work — one MIDI passage routed through `bounceWithSynthInstrument` and re-voiced live as you switch the preset; the playhead tracks the bounced audio.
 
 <SonareDemo id="midi-piano-roll" />
@@ -342,7 +346,7 @@ sonare project bounce --in song.json -o master.wav --synth saw
 sonare project compile --in song.json --json
 ```
 
-The `--synth` flag takes an optional value: omit it for the default (sine) waveform, or pass a built-in oscillator waveform (`sine`, `saw`, `square`, `triangle`). It does not accept NativeSynth preset names. The CLI does not expose the NativeSynth preset catalog or SF2 — those are binding-only (WASM/Node/Python), so use the Project API for preset- or SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, and `project abi`.
+The `--synth` flag reads two ways. Bare `--synth` follows the project's General MIDI program changes per channel, with channel 10 routed through the GM drum-kit map, and falls back to the `sine` patch for anything the map does not cover — this is the option to use when the project carries real GM programs. `--synth <preset>` instead pins every destination to one fixed NativeSynth preset accepted by `sonare_synth_preset_patch`, i.e. the full [NativeSynth preset catalog](./native-synth.md) (`--synth warm-pad`, `--synth saw-lead`, and so on) — run `sonare project synth-presets` to list the names. SF2 and per-destination synth JSON remain binding-only (WASM/Node/Python); use the Project API for SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, `project synth-presets`, and `project abi`.
 
 ## Recipes
 

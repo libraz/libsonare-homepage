@@ -709,8 +709,10 @@ The config is a JSON object whose **stages are keyed by their parameters** — i
 | Transpose | `transpose_semitones` |
 | Velocity curve | `velocity_scale`, `velocity_offset`, `velocity_gamma` (>0) |
 | Quantize | `quantize_ppq` (>0), `quantize_strength` (0–1, default 1) |
-| Chord | `chord_intervals` (array of semitone offsets) |
-| Arpeggiator | `arpeggiator_intervals` (array of semitone offsets), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
+| Chord | `chord_intervals` (array of semitone offsets, 1-8 entries) |
+| Arpeggiator | `arpeggiator_intervals` (array of semitone offsets, 1-16 entries), `arpeggiator_step_ppq` (>0), `arpeggiator_gate_ppq` (defaults to the step length, capped to it) |
+
+`chord_intervals` is capped at 8 entries and `arpeggiator_intervals` at 16 — an empty array, or one past either limit, makes `bakeMidiFx` throw `SONARE_ERROR_INVALID_PARAMETER` rather than silently truncating.
 
 ```typescript
 // Turn each held note into a three-step up-arpeggio, one sixteenth per step.

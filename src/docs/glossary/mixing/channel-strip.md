@@ -45,8 +45,18 @@ Picking the wrong tap point is one of the most common routing mistakes.
 
 EQ can sit pre- or post-fader. Pre-fader EQ shapes the tone the inserts and fader then act on; post-fader EQ shapes the already-balanced signal. libsonare exposes this as a strip option rather than forcing one choice.
 
+## Cue monitoring: PFL and AFL
+
+Sometimes you need to hear one track in isolation without disturbing the mix everyone else is hearing — checking a vocal for breath noise before a show, or auditioning a track while the room keeps listening to the main output. That is **cue monitoring**: a separate tap that feeds a headphone or monitor bus alongside the regular mix, not instead of it.
+
+**PFL** (pre-fader listen) taps the signal after the lane strip but before the lane's fader, gate, and pan, so a PFL cue stays audible even when the track is muted, gated, or panned away — useful for checking a source's raw content regardless of where the fader sits. **AFL** (after-fader listen) taps after those stages instead, including the surround path, so it reflects the same level and placement the track is actually contributing to the mix.
+
+::: details How libsonare schedules a cue tap
+Cue monitoring is a queueable realtime command: `setTrackMonitorMode(laneIndex, mode, renderFrame?)` on `RealtimeEngine` (`EngineTrackMonitorMode` = `'off' | 'pfl' | 'afl'`), mirrored in the C ABI as `sonare_engine_set_track_monitor_mode` (`SonareEngineTrackMonitorMode`) and exposed in Python as `set_track_monitor_mode`. It is reachable from the WASM AudioWorklet path the same as any other engine command, and the monitor bus is folded into the engine's regular output while also being readable on its own.
+:::
+
 ::: details How libsonare models a strip
 A strip is a `ChannelStrip` configured by `ChannelStripConfig`, processing a block through trim, polarity, channel delay, EQ (`EqPosition` chooses pre/post-fader), pre-fader `InsertSlot`s, fader with VCA offset, `PannerProcessor` (`PanLaw`/`PanMode`), post-fader inserts, and `StereoWidthProcessor`, in that order. `TapPoint` marks where pre- and post-fader sends and the `GoniometerBuffer`/`MeterProcessor` read the signal. All gain and pan changes are parameter-smoothed and the path is real-time-safe (pre-allocated, denormal-guarded), so the same strip runs offline and inside an AudioWorklet.
 :::
 
-Related: [Mixing Basics](../concepts/mixing-basics.md), [Buses and Sends](./buses-sends.md), [Pan and Stereo Width](./pan-width.md), [Mixing Engine](../../mixing.md)
+Related: [Mixing Basics](../concepts/mixing-basics.md), [Buses and Sends](./buses-sends.md), [Pan and Stereo Width](./pan-width.md), [Realtime Engine](../realtime/realtime-engine.md), [Mixing Engine](../../mixing.md)

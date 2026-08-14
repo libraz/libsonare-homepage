@@ -432,7 +432,7 @@ Detect onset times (note attacks) from audio samples. More granular than beats -
 :::
 
 ```typescript
-function detectOnsets(samples: Float32Array, sampleRate: number): Float32Array
+function detectOnsets(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate default: 22050
 ```
 
 **Returns:** Float32Array of onset times in seconds
@@ -554,7 +554,7 @@ and the same `options` you would give `detectChords(...)`.
 function chordFunctionalAnalysis(
   samples: Float32Array,
   keyRoot: PitchClass,
-  keyMode: Mode,
+  keyMode?: Mode,
   sampleRate?: number,
   options?: ChordDetectionOptions,
 ): string[]   // one Roman-numeral label per detected chord, e.g. ["I", "IV", "V", "vi"]
@@ -643,7 +643,7 @@ HPSS requires STFT computation and median filtering. Processing time scales with
 ```typescript
 function hpss(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,        // default: 22050
   kernelHarmonic?: number,    // default: 31
   kernelPercussive?: number,   // default: 31
   nFft?: number,               // default: 2048
@@ -679,7 +679,7 @@ function hpssWithResidual(
 Extract harmonic component from audio.
 
 ```typescript
-function harmonic(samples: Float32Array, sampleRate: number): Float32Array
+function harmonic(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate default: 22050
 ```
 
 ### `percussive(samples, sampleRate)` <Badge type="warning" text="Heavy" />
@@ -687,7 +687,7 @@ function harmonic(samples: Float32Array, sampleRate: number): Float32Array
 Extract percussive component from audio.
 
 ```typescript
-function percussive(samples: Float32Array, sampleRate: number): Float32Array
+function percussive(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate default: 22050
 ```
 
 ### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="Heavy" />
@@ -805,6 +805,22 @@ function noteStretch(
   },
 ): Float32Array
 
+// Move a note region to a new onset without changing its duration
+// (complements noteStretch, which changes duration but not onset).
+function noteMove(
+  samples: Float32Array,
+  sampleRate?: number,
+  options?: {
+    onsetSample?: number,        // note onset position in samples
+    offsetSample?: number,       // note offset position in samples; defaults to the input length
+    targetOnsetSample?: number,  // where the region's onset moves to
+  },
+): Float32Array
+```
+
+`Audio.noteStretch(options?)` and `Audio.noteMove(options?)` are the equivalent instance methods on an `Audio` wrapper (sample rate taken from the instance).
+
+```typescript
 function spectralEdit(
   samples: Float32Array,
   sampleRate: number,
@@ -981,7 +997,7 @@ Compute chromagram (pitch class distribution). Maps all frequencies to 12 pitch 
 ```typescript
 function chroma(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number, // default: 22050
   nFft?: number,      // default: 2048
   hopLength?: number  // default: 512
 ): ChromaResult
@@ -1002,7 +1018,7 @@ interface ChromaResult {
 // Spectral centroid (center of mass) in Hz
 function spectralCentroid(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,  // default: 22050
   nFft?: number,
   hopLength?: number
 ): Float32Array
@@ -1010,15 +1026,16 @@ function spectralCentroid(
 // Spectral bandwidth in Hz
 function spectralBandwidth(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,  // default: 22050
   nFft?: number,
-  hopLength?: number
+  hopLength?: number,
+  p?: number             // Minkowski exponent, default: 2
 ): Float32Array
 
 // Spectral rolloff frequency in Hz
 function spectralRolloff(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,  // default: 22050
   nFft?: number,
   hopLength?: number,
   rollPercent?: number  // default: 0.85
@@ -1027,7 +1044,7 @@ function spectralRolloff(
 // Spectral flatness (0 = tonal, 1 = noise-like)
 function spectralFlatness(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,  // default: 22050
   nFft?: number,
   hopLength?: number
 ): Float32Array
@@ -1055,7 +1072,7 @@ function polyFeatures(
 // Zero crossing rate
 function zeroCrossingRate(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,  // default: 22050
   frameLength?: number,
   hopLength?: number
 ): Float32Array
@@ -1072,7 +1089,7 @@ function zeroCrossings(
 // RMS energy
 function rmsEnergy(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,  // default: 22050
   frameLength?: number,
   hopLength?: number
 ): Float32Array
@@ -1173,7 +1190,7 @@ For reconstruction limits and parameter notes, see [Inverse Features](./inverse-
 // YIN algorithm
 function pitchYin(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,   // default: 22050
   frameLength?: number,  // default: 2048
   hopLength?: number,    // default: 512
   fmin?: number,         // default: 65 Hz
@@ -1185,7 +1202,7 @@ function pitchYin(
 // pYIN algorithm (probabilistic YIN with HMM smoothing)
 function pitchPyin(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,   // default: 22050
   frameLength?: number,
   hopLength?: number,
   fmin?: number,
@@ -1257,6 +1274,16 @@ function meteringCrestFactorDb(samples: Float32Array, sampleRate?: number, optio
 function meteringDcOffset(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // Inter-sample (true) peak, dBFS. oversampleFactor is a power of two in 1..16 (0 / omit = 4)
 function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversampleFactor?: number, options?: ValidateOptions): number
+// Fraction of frames below thresholdDb, in [0, 1]. thresholdDb default -60,
+// frameLength default 1024, hopLength default 256.
+function meteringSilenceRatio(
+  samples: Float32Array,
+  sampleRate?: number,
+  thresholdDb?: number,
+  frameLength?: number,
+  hopLength?: number,
+  options?: ValidateOptions
+): number
 ```
 
 ### Clipping and dynamic range
@@ -2469,7 +2496,7 @@ Without the flush, a bounce built from a streaming chain loses its last
 `latencySamples()` samples of the concatenated stream are the chain's delay and
 should be dropped for a time-aligned result.
 
-Stereo-only stages are skipped when `numChannels === 1`. The chain-config repair stages (`repair.declick`, `repair.dereverb`, `repair.denoise`) are offline-only and throw if enabled on the streaming constructor — run them through `masteringChain*` / `masterAudio*`, or the one-shot `masteringRepair*` helpers (the `declip`/`decrackle`/`dehum` processors are not part of the chain config and run only through those helpers). The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
+Stereo-only stages are skipped when `numChannels === 1`. The chain-config repair stages (`repair.declick`, `repair.dereverb`, `repair.denoise`, `repair.declip`, `repair.decrackle`, `repair.dehum`) are offline-only and throw if enabled on the streaming constructor — run them through `masteringChain*` / `masterAudio*`, or the one-shot `masteringRepair*` helpers. The `loudness` stage also throws unless you supply `loudnessStaticGainDb` (optionally with `loudnessStaticGainPeakDb`), since the streaming chain cannot measure whole-signal integrated LUFS. Call `reset()` between independent songs and `delete()` to free the handle.
 
 The named mastering API families are:
 
@@ -2569,6 +2596,14 @@ interface MasteringChainConfig {
   repair?: {
     denoise?: boolean;
     nFft?: number; hopLength?: number; ddAlpha?: number; gainFloor?: number;
+    declip?: { enabled?: boolean; clipThreshold?: number; lpcOrder?: number;
+               iterations?: number; lpcBlend?: number; };
+    decrackle?: { enabled?: boolean; threshold?: number;
+                  /** 0 = median, 1 = wavelet shrinkage. */
+                  mode?: number; levels?: number; };
+    dehum?: { enabled?: boolean; fundamentalHz?: number; harmonics?: number;
+              q?: number; adaptive?: boolean; searchRangeHz?: number;
+              adaptation?: number; frameSize?: number; pllBandwidth?: number; };
     declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
                 lpcOrder?: number; residualRatio?: number; };
     dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
@@ -2577,7 +2612,14 @@ interface MasteringChainConfig {
                  wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
                  wpeStrength?: number; };
   };
-  eq?: { tiltDb?: number; pivotHz?: number };
+  eq?: {
+    /** Canonical nested tilt stage. */
+    tilt?: { enabled?: boolean; tiltDb?: number; pivotHz?: number };
+    /** @deprecated Use `eq.tilt.tiltDb`. */
+    tiltDb?: number;
+    /** @deprecated Use `eq.tilt.pivotHz`. */
+    pivotHz?: number;
+  };
   dynamics?: {
     compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
                    releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
@@ -2637,6 +2679,8 @@ interface MasteringChainResult extends MasteringResult {
   outputTruePeakDbtp: number;
   outputLra: number;
   loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
 }
 interface MasteringStereoResult {
   left: Float32Array;
@@ -2649,8 +2693,9 @@ interface MasteringStereoResult {
 }
 // Returned by masteringChainStereo / masterAudioStereo (and their
 // WithProgress variants); MasteringStereoResult is the return type of
-// masteringProcessStereo.
-interface MasteringStereoChainResult {
+// masteringProcessStereo. There is no latencySamples field — the offline
+// chain output is already latency-compensated.
+interface MasteringChainStereoResult {
   left: Float32Array;
   right: Float32Array;
   sampleRate: number;
@@ -2658,8 +2703,15 @@ interface MasteringStereoChainResult {
   outputLufs: number;
   appliedGainDb: number;
   stages: string[];
-  latencySamples?: number;
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
 }
+// MasteringStereoChainResult is a @deprecated alias for
+// MasteringChainStereoResult, retained for source compatibility with the
+// Node and Python bindings.
 ```
 
 :::
@@ -2753,17 +2805,19 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Area | Exported types/constants |
 |------|--------------------------|
 | Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
-| Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker`, `SurroundPan` |
+| Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | Spectral, pitch, and feature transforms | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | Paged clip streaming | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringStereoChainResult` |
+| Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | Mixing and Worklet realtime buffers | `MixerRealtimeBuffer`, `SonareScopeRingBuffer`, `SonareScopeRingReadResult`, `SonareWorkletScopeSnapshot` |
 | Project and engine automation | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `EngineTrackMonitorMode`, `TrackMonitorMode` |
 | Pan-law inputs | `PanLaw`, `PanLawName`, `PanLawInput` |
+
+`SurroundPan` (the parameter type of `Mixer.setSurroundPan`) is not part of the package's public export list — type it inline or with a local alias rather than importing it.
 
 ## Performance Summary
 

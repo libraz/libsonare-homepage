@@ -8,5 +8,5 @@ head:
       content: libsonare 空間ルームスキャナー
   - - meta
     - property: og:description
-      content: libsonare の依存なし WebAssembly ルーム音響エンジンで、1 本の録音から部屋の形状・RT60・明瞭度・音源までの距離を 3D 推定。
+      content: libsonare の外部依存なし WebAssembly ルーム音響エンジンで、1 本の録音から部屋の形状・RT60・明瞭度・音源までの距離を 3D 推定。
 ---

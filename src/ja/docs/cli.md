@@ -98,6 +98,7 @@ sonare <command> [options] <audio_file>
 | `--n-fft <int>` | FFT サイズ（デフォルト: 2048） |
 | `--hop-length <int>` | ホップ長（デフォルト: 512） |
 | `--n-mels <int>` | Mel バンド数（デフォルト: 128） |
+| `--quiet`, `-q` | ネイティブ CLI のみ。進捗出力を抑制する |
 
 `sonare <command> --help` は、そのコマンドが実際に受け付けるオプションだけを
 表示します。個々のコマンドについてはヘルプが正解です。上記の DSP オプション
@@ -122,6 +123,12 @@ BPM、キー、拍子、ビートを含む音楽解析。
 sonare analyze music.mp3
 sonare analyze music.mp3 --json
 ```
+
+| オプション | デフォルト | 説明 |
+|--------|---------|-------------|
+| `--with-seventh` | 無効 | コード解析にセブンスコードを含める |
+| `--no-hpss` | 無効 | 倍音／打撃成分分離を無効化する |
+| `--chroma-highpass` | 80.0 | クロマ解析用のハイパスカットオフ周波数（Hz） |
 
 **出力:**
 ```
@@ -338,6 +345,10 @@ sonare pitch music.mp3 --algorithm yin
 | オプション | デフォルト | 説明 |
 |--------|---------|-------------|
 | `--algorithm` | pyin | ピッチアルゴリズム: "yin" または "pyin" |
+| `--threshold` | 0.1 | YIN のしきい値（0 より大きく 1 以下） |
+| `--fmin` | 65.0 | 追跡する最低周波数（Hz） |
+| `--fmax` | 2093.0 | 追跡する最高周波数（Hz） |
+| `--hop-length` | 512 | ホップ長（サンプル数）。グローバルの `--hop-length` とは別に、範囲チェック付きでこのコマンド用に再定義されています |
 
 **出力:**
 ```
@@ -355,6 +366,17 @@ HPSS（Harmonic / Percussive Source Separation）。倍音成分（ボーカル�
 sonare hpss music.mp3 -o separated
 sonare hpss music.mp3 -o separated --json
 ```
+
+| オプション | デフォルト | 説明 |
+|--------|---------|-------------|
+| `--kernel-harmonic <int>` | 31 | 倍音成分側のメディアンフィルターカーネルサイズ |
+| `--kernel-percussive <int>` | 31 | 打撃成分側のメディアンフィルターカーネルサイズ |
+| `--harmonic-only` | 無効 | 倍音成分のみを書き出す |
+| `--percussive-only` | 無効 | 打撃成分のみを書き出す |
+| `--with-residual` | 無効 | 残差成分も分離して書き出す |
+| `--hard-mask` | 無効 | デフォルトのソフトマスクの代わりにハードマスクを使う |
+
+`--harmonic-only`、`--percussive-only`、`--with-residual` は同時に指定できません。
 
 **出力:**
 ```
@@ -382,11 +404,11 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 |----------|------|----------------|
 | `sonare downbeats music.mp3` | ダウンビート時刻（秒） | — |
 | `sonare chords music.mp3` | コード進行 | `--min-duration`, `--smoothing-window`, `--threshold`, `--triads-only`, `--nnls`, `--no-beat-sync`, `--use-hmm`, `--hmm-beam-width`, `--key-context`, `--key-root`, `--key-mode`, `--detect-inversions` |
-| `sonare rhythm music.mp3` | リズム特性（シンコペーション、グルーヴ、規則性） | — |
-| `sonare dynamics music.mp3` | ダイナミクス／ラウドネスの要約 | — |
+| `sonare rhythm music.mp3` | リズム特性（シンコペーション、グルーヴ、規則性） | `--start-bpm`（120.0）, `--bpm-min`（60.0）, `--bpm-max`（200.0） |
+| `sonare dynamics music.mp3` | ダイナミクス／ラウドネスの要約 | `--window-sec`（0.4） |
 | `sonare timbre music.mp3` | 音色／スペクトル形状の要約 | — |
 | `sonare lufs music.mp3` | EBU R128 ラウドネス | `--series`（momentary／short-term の系列も出力） |
-| `sonare acoustic room.wav` | ルーム音響推定（RT60／EDT／C50／C80） | `--ir`（入力をインパルス応答として扱う） |
+| `sonare acoustic room.wav` | ルーム音響推定（RT60／EDT／C50／C80） | `--ir`（入力をインパルス応答として扱う）, `--n-bands`（6）, `--min-decay-db`（30.0）, `--noise-floor-margin-db`（10.0） |
 | `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
@@ -431,8 +453,12 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | `sonare pitch-shift vocal.wav --semitones 3 -o out.wav` | 長さを変えずに移調 | `--semitones`（**必須**） |
 | `sonare time-stretch take.wav --rate 1.2 -o out.wav` | ピッチを変えずに長さを変更 | `--rate`（**必須**） |
 | `sonare normalize mix.wav -o out.wav` | ピークまたは RMS ノーマライズ | `--mode peak\|rms`, `--target-db` |
-| `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム | `--top-db` |
+| `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム | `--top-db`, `--threshold-db`（-60） |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | リサンプリング | `--target-sr` |
+
+`--top-db` と `--threshold-db` は同時に指定できない、択一の無音判定方式です。
+どちらも省略すると `--threshold-db` が `-60` として扱われ、`--top-db` を指定すると
+ピーク相対のトップ dB 方式に切り替わります。
 
 Python CLI は、上のファイル書き出し編集コマンドを提供します。`hpss` も `-o` が必須で、エネルギー要約を表示しながら `<base>_harmonic.wav` と `<base>_percussive.wav` を書き出します。
 
@@ -660,7 +686,7 @@ Python CLI の名前付きマスタリングコマンド:
 
 | コマンド | 主なオプション | 備考 |
 |---------|--------------|------|
-| `sonare master track.wav -o out.wav` | `--preset NAME`（デフォルト `pop`）, `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | 名前付きマスタリングプリセットを適用する。`--config`／`--config-file`／`--params` でプリセット値を上書きできる |
+| `sonare master track.wav -o out.wav` | `--preset NAME`（デフォルト `pop`）, `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | 名前付きマスタリングプリセットを適用する。`--config`／`--config-file`／`--params` でプリセット値を上書きできる。`--report` はマスタリングレポート JSON ファイルを書き出す |
 | `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | JSON 設定から構成可能なマスタリングチェーンを実行する |
 | `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |
@@ -725,7 +751,7 @@ sonare-cli mix-strip vocal.wav -o strip.wav \
 `sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth` はクリップ音声の代わりにプロジェクトの MIDI トラックを組み込みシンセでレンダリングします。このフラグは 2 通りの使い方があります。
 
 - **値なしの `--synth`** — プロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングします。プロジェクトが実際の GM プログラムを持っている場合はこちらを使います。
-- **`--synth <preset>`** — すべての宛先を 1 つの NativeSynth プリセットに固定します。名前の一覧は `sonare project synth-presets` で確認できます。
+- **`--synth <preset>`** — すべてのデスティネーションを 1 つの NativeSynth プリセットに固定します。名前の一覧は `sonare project synth-presets` で確認できます。
 
 `project bounce` は `--channels` で指定したチャンネル数で書き出します。
 
@@ -755,7 +781,7 @@ sonare project bounce --in project.json --sample-rate 48000 --channels 2 -o boun
 # MIDI トラックを組み込みシンセでレンダリング（GM プログラムに追従）
 sonare project bounce --in project.json --synth -o gm-bounce.wav
 
-# あるいはすべての宛先を 1 つのプリセットに固定
+# あるいはすべてのデスティネーションを 1 つのプリセットに固定
 sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 ```
 
@@ -787,7 +813,7 @@ sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wa
 
 Python CLI には `midi-render` もあります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
 
-SoundFont（SF2）と宛先ごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
+SoundFont（SF2）とデスティネーションごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
 関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
 

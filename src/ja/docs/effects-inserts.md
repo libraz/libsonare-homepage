@@ -55,7 +55,7 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `effects.delay.stereo` | ステレオディレイ |
 
 ::: warning ビルドフラグによる有効化
-これらの insert ID は、`SONARE_HAVE_FX` 有効ビルドでのみ使えます。幾何ベースのルーム系インサート（`effects.reverb.room`、`effects.acoustic.roomMorph`）は `BUILD_ACOUSTIC_SIM` も必要です。フラグのないビルドでは、対応する ID は `masteringInsertNames()` に現れません。
+これらの insert ID は、CMake オプション `BUILD_FX` を有効にしたビルドでのみ使えます（内部的にはこのオプションから `SONARE_HAVE_FX` マクロが導出されます）。幾何ベースのルーム系インサート（`effects.reverb.room`、`effects.acoustic.roomMorph`）は `BUILD_ACOUSTIC_SIM` も必要です。オプションを有効にしていないビルドでは、対応する ID は `masteringInsertNames()` に現れません。
 :::
 
 実用上の注意は次の通りです。

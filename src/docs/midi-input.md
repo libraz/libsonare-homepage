@@ -187,7 +187,7 @@ engine.bindMidiCcBinding({
 });
 ```
 
-`addParameter` also accepts `unit` (a display string), `rtSafe`, and `defaultCurve`. The one that matters here is **`rtSafe`** (default `true`): it declares whether the audio thread may change the parameter mid-playback. Keep it `true` for anything you intend to CC-bind and move while notes sound. Register it with `rtSafe: false` and the engine silently drops every live write to it — from automation *and* from a bound CC — applying changes only while transport is stopped.
+`addParameter` also accepts `unit` (a display string), `rtSafe`, and `defaultCurve`. The one that matters here is **`rtSafe`** (default `true`): it declares whether the audio thread may change the parameter mid-playback. Keep it `true` for anything you intend to CC-bind and move while notes sound. Register it with `rtSafe: false` and the engine rejects every live write to it outright — from automation *and* from a bound CC, and from a direct `setParameter(...)` call — regardless of whether the transport is playing or stopped.
 
 ::: tip CC "learn" workflows
 For an offline "wiggle a knob, capture which CC moved" flow, the project API exposes `Project.midiCcLearn(events, paramId, options)` plus `midiCcToBreakpoint` / `midiParamToCc` for turning recorded CC streams into automation. Those operate on captured `ProjectMidiEvent` data rather than the live engine — see [Project Editing](./project-editing.md).
@@ -225,12 +225,12 @@ sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
 
 The JSON schema is the same one [`bakeMidiFx`](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
 
-`setMidiFx` *replaces* the insert in place without resetting the instrument's voices, so the common case — swapping one transform for another between phrases — leaves sounding notes untouched. Two safety notes for changing FX while keys are held:
+`setMidiFx` *replaces* the insert in place without resetting the instrument's voices — but a swap onto an already-active destination releases that destination's sounding notes: each call bumps a generation counter, and the audio thread flushes (all-notes-off) any destination whose live generation no longer matches on the next block. Two safety notes for changing FX while keys are held:
 
 The call publishes an immutable configuration from the control thread and the audio thread adopts it at the next block boundary, so it may run while engine processing is active.
 
-- If you are unsure of the current state, clear the FX first.
-- If a transform changes how note-offs are routed and a note is left ringing, follow the swap with a panic (below).
+- The very first `setMidiFx` call on a destination with no active FX does not flush anything — there is no live configuration to replace yet.
+- Because every later swap on an already-active destination releases that destination's sounding notes automatically, you do not need a follow-up panic to clear them — but if a swap must not audibly cut a currently-held note, time it for a gap between notes rather than mid-sustain.
 
 ## MIDI panic and stuck-note recovery
 

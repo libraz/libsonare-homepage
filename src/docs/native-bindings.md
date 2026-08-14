@@ -207,7 +207,7 @@ Node native's `Audio` object has more methods because it can call into the nativ
 | File construction | `Audio.fromFile(...)`, `Audio.fromMemory(...)` | `Audio.fromBuffer(...)`, `Audio.fromMemory(...)`, `Audio.fromMemoryWithBrowserFallback(...)` |
 | Sample access | `audio.getData()` returns a copy | `audio.data` returns the instance's mutable `Float32Array` |
 
-Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, `analyzeTimbre(...)`, and `detectChords(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions. The full method and function reference is on the [Node.js Native API](./node-api.md) page.
+Node native adds `analyzeBpm(...)`, `analyzeImpulseResponse(...)`, `detectAcoustic(...)`, `analyzeRhythm(...)`, `analyzeDynamics(...)`, and `analyzeTimbre(...)` to `Audio`. The room helpers `estimateRoom(...)`, `synthesizeRir(...)`, and `roomMorph(...)` remain standalone functions. The full method and function reference is on the [Node.js Native API](./node-api.md) page.
 
 ### StreamingMasteringChain
 

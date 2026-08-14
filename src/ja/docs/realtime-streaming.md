@@ -198,7 +198,7 @@ const u8 = analyzer.readFramesU8(analyzer.availableFrames(), {
 
 ### 更新されていく推定: BPM、キー、コード、パターン
 
-`stats()` は `AnalyzerStats` を返し、その `estimate` フィールドが **`ProgressiveEstimate`** です — 音声が届くほど精緻になる、解析器の音楽に対する現在の最良推定です。読む前に `estimate.updated` を確認してください。推定が実際に変化したフレームでのみ `true` になるので、無駄な UI 更新を避けられます。
+`stats()` は `AnalyzerStats` を返し、その `estimate` フィールドが **`ProgressiveEstimate`** です — 音声が届くほど精緻になる、解析器の音楽に対する現在の最良推定です。読む前に `estimate.updated` を確認してください。これは、キーまたは BPM の推定を再計算した周期的なフレームで `true` になります（再計算した値が以前と実際に変わったフレームだけではありません）。そのため、そもそも再計算が起きなかったフレームをスキップできます。
 
 ```typescript
 const { estimate } = analyzer.stats();

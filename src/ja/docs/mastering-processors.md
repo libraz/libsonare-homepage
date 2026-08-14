@@ -100,10 +100,10 @@ description: libsonare の名前付きマスタリング API、プリセット�
 ::: info ラウドネス・オーバーサンプリング・メーターの詳細
 マキシマイザー／final と解析の API の下には、いくつかの機能があります。
 
-- インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けを適用します。
+- インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けを適用します。BS.1770-4 自体が規格として定めているのは 5.1（6 チャンネル）までで、7.1／8 チャンネルの重み付け（サイドサラウンドのペアをリアサラウンドと同様に +1.5 dB として扱う）は規格に含まれない非公式の拡張です。
 - 内部のオーバーサンプラーとトゥルーピーク段はオーバーサンプリング係数として 1〜16 の 2 のべき乗（1, 2, 4, 8, 16）を受け付けます（ライブメーターも同じ係数）。CPU と引き換えにサンプル間ピークの精度を上げます。
 - UI 向けには表示用に間引いたメーターのバリアントがあります。`meteringVectorscopeDecimated(...)` と `meteringPhaseScopeDecimated(...)` は点列を最大 `maxPoints` 点まで間引くので、点数の多いスコープでも描画コストを抑えられます。`meteringSpectrumFrame(...)` は、スペクトラムアナライザーのスナップショット向けに単一フレーム（時間平均なし）のスペクトラムを読み取ります。
-- **ステレオイメージャー**（バンドごとにステレオ幅を広げる／狭める）と**ダイナミック EQ**（レベルに応じてブースト／カットが変化する、周波数を狙ったコンプのような EQ）はマルチバンド版も用意されています。`multiband.imager` と `multiband.dynamicEq` はバンドごとのパラメータを公開し、クロスオーバー数も任意に指定できます。固定 3 バンドではなく、素材に合わせたバンド数で分割できます。
+- `multiband.*` のソロプロセッサ（`compressor`、`dynamicEq`、`expander`、`imager`、`limiter`、`saturation` の全 6 種）は、いずれも同じクロスオーバー機構を共有し、クロスオーバー数を任意に指定できます。固定 3 バンドではなく、素材に合わせたバンド数で分割できます。この入口が公開する `cutoffNHz` スロットは最大 8 個（`cutoff0Hz` 〜 `cutoff7Hz`）なので、`multiband.*` の呼び出し 1 回で最大 9 バンドまで扱えます。
 :::
 
 ::: info クロスオーバーとは？
@@ -293,10 +293,27 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 |------|--------------|
 | WASM `masteringChain(...)` | ネストした設定オブジェクト |
 | `masterAudio(...)` と Python/Node 相当 | `'loudness.targetLufs'` のようなフラットなドット記法 |
-| [マスタリングアシスタント](./mastering-assistant.md) の `chainConfig.params` | `masterAudio` にそのまま渡せるフラット形式 |
+| [マスタリングアシスタント](./mastering-assistant.md) の `chainConfig.params` | `masterAudio` にそのまま渡せるフラット形式。`params["dynamics.multibandComp"]` には、後述する任意バンド数のネストされた v2 オブジェクトが入ることもあります — [チェーン設定 JSON スキーマ](#チェーン設定-json-スキーマ) を参照してください |
 
-repair のチェーンキーは、単発プロセッサの registry 名ではなくチェーン内の slot に合わせます。フラットな上書きでは `repair.denoise.*` / `repair.dereverb.*`、`masteringChain(...)` のネスト形式では `repair: { denoise: ..., dereverb: ... }` を使ってください。
+repair のチェーンキーは、単発プロセッサのレジストリ名ではなくチェーン内のスロットに合わせます。フラットな上書きでは `repair.denoise.*` / `repair.dereverb.*`、`masteringChain(...)` のネスト形式では `repair: { denoise: ..., dereverb: ... }` を使ってください。
 ::::
+
+## チェーン設定 JSON スキーマ
+
+フラットな `chainConfig.params` マップ（上の表にある `chainConfig.params` の形、`masterAudio` の上書きが受け付ける形）には、CLI と[マスタリングアシスタント](./mastering-assistant.md)が使う JSON ドキュメント表現があります。`sonare mastering --config <file>` はこれを読み込み、`masteringAssistantSuggest` の `chainConfig` もこの形式で表現されます。このシリアライズは 2 つのスキーマバージョンを自動的に選びます。
+
+::: details バージョン 1 と バージョン 2
+- **バージョン 1** — フラットで固定 **3 バンド**の low/mid/high マルチバンドコンプレッサー形式です。`dynamics.multibandComp.lowCutoffHz`、`.highCutoffHz`、およびバンドごとの `lowThresholdDb`／`midThresholdDb`／`highThresholdDb` とそのレシオ／アタック／リリースの兄弟キーを使います。フラット上書き系の入口はすべてこの形で送り、マスタリングアシスタントも実運用では常にこの形で出力します — アシスタントはマルチバンドコンプレッサーを既定の 3 バンド形状から変更しないため、その `chainConfig` は常にバージョン 1 のままです。
+- **バージョン 2** — マルチバンドコンプレッサーの設定が固定 3 バンド形状で表現できなくなった時点（クロスオーバーのカットオフ数が違う、クロスオーバーのスロープ／モードが既定と異なる、FIR カーネルサイズが既定と異なる、など）で自動的に選ばれます。この場合、`params["dynamics.multibandComp"]` はフラットな `low`／`mid`／`high` キーではなく、構造化されたオブジェクトになります。
+  - `crossover.cutoffsHz[]`、`crossover.slope`、`crossover.mode`、`crossover.firKernelSize`
+  - `bands[]` — 最大 **64 バンド**、各バンドに `thresholdDb`、`ratio`、`attackMs`、`releaseMs`、`kneeDb`、`makeupGainDb`、`autoMakeup`、`detector`、`sidechainHpfEnabled`、`sidechainHpfHz`、`pdrTimeMs`、`pdrReleaseScale`
+
+  フィールド検証は厳格です。バージョン 2 の `dynamics.multibandComp` オブジェクト内で未知のキーがあれば拒否され、バンド数はカットオフ数 + 1 と一致していなければなりません。
+:::
+
+::: warning 到達性: JSON ドキュメントの機能であって JS オブジェクトの機能ではない
+バージョン 2 の構造化形式に到達できるのは JSON ドキュメント経由です — CLI の `sonare mastering --config <file>`、またはチェーン設定を JSON として読み書きするコードです。WASM `masteringChain()` の TypeScript 型 `MasteringChainConfig.dynamics.multibandComp` インターフェースは、依然として固定の low/mid/high 省略形しか公開していないため、JavaScript で `MasteringChainConfig` オブジェクトを直接組み立てる方法では任意バンド数の形式には到達できません。到達するには、JSON ドキュメントを自分で書くか、より広いクロスオーバー数（たとえば[名前付きプロセッサ](#ソロプロセッサ)の `multiband.compressor` とその最大 9 バンドまでの `cutoffNHz` スロット）で生成したものを JSON 経路に渡す必要があります。
+:::
 
 ## 関連
 

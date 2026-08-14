@@ -138,6 +138,7 @@ pnpm add @libraz/libsonare
 ```typescript
 import {
   init,
+  Audio,
   detectBpm,
   detectKey,
   detectBeats,
@@ -407,6 +408,14 @@ function detectBeats(samples: Float32Array, sampleRate?: number): Float32Array  
 
 **戻り値:** 秒単位のビート時刻の Float32Array
 
+```typescript
+const beats = detectBeats(samples, sampleRate);
+console.log(`${beats.length} 個のビートを検出`);
+for (let i = 0; i < beats.length; i++) {
+  console.log(`ビート ${i + 1}: ${beats[i].toFixed(3)}秒`);
+}
+```
+
 ### `detectOnsets(samples, sampleRate)`
 
 オーディオサンプルからオンセット時刻（音の立ち上がり）を検出します。ビートより細かい粒度 - すべての音をキャプチャ。
@@ -418,7 +427,7 @@ function detectBeats(samples: Float32Array, sampleRate?: number): Float32Array  
 :::
 
 ```typescript
-function detectOnsets(samples: Float32Array, sampleRate: number): Float32Array
+function detectOnsets(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate 既定: 22050
 ```
 
 ### `analyze(samples, sampleRate)` <Badge type="warning" text="高負荷" />
@@ -532,7 +541,7 @@ const sections = analyzeSections(samples, sampleRate);
 function chordFunctionalAnalysis(
   samples: Float32Array,
   keyRoot: PitchClass,
-  keyMode: Mode,
+  keyMode?: Mode,
   sampleRate?: number,
   options?: ChordDetectionOptions,
 ): string[]   // 検出されたコードごとに 1 つのローマ数字ラベル。例: ["I", "IV", "V", "vi"]
@@ -620,7 +629,7 @@ HPSS は STFT とメディアンフィルタリングを必要とします。処
 ```typescript
 function hpss(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,        // デフォルト: 22050
   kernelHarmonic?: number,    // デフォルト: 31
   kernelPercussive?: number,   // デフォルト: 31
   nFft?: number,               // デフォルト: 2048
@@ -655,7 +664,7 @@ function hpssWithResidual(
 音源から倍音成分を抽出します。
 
 ```typescript
-function harmonic(samples: Float32Array, sampleRate: number): Float32Array
+function harmonic(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate 既定: 22050
 ```
 
 ### `percussive(samples, sampleRate)` <Badge type="warning" text="高負荷" />
@@ -663,7 +672,7 @@ function harmonic(samples: Float32Array, sampleRate: number): Float32Array
 音源から打撃成分を抽出します。
 
 ```typescript
-function percussive(samples: Float32Array, sampleRate: number): Float32Array
+function percussive(samples: Float32Array, sampleRate?: number): Float32Array  // sampleRate 既定: 22050
 ```
 
 ### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
@@ -779,6 +788,22 @@ function noteStretch(
   },
 ): Float32Array
 
+// ノート区間の長さを変えずに、新しいオンセット位置へ移動する
+// （長さは変えずオンセットを変えない noteStretch を補完する）。
+function noteMove(
+  samples: Float32Array,
+  sampleRate?: number,
+  options?: {
+    onsetSample?: number,        // ノートのオンセット位置（サンプル）
+    offsetSample?: number,       // ノートのオフセット位置（サンプル）。既定は入力の長さ
+    targetOnsetSample?: number,  // 区間のオンセットの移動先
+  },
+): Float32Array
+```
+
+`Audio.noteStretch(options?)` と `Audio.noteMove(options?)` は `Audio` インスタンス上の対応メソッドです（サンプルレートはインスタンスの値を使用）。
+
+```typescript
 function spectralEdit(
   samples: Float32Array,
   sampleRate: number,
@@ -950,7 +975,7 @@ interface MfccResult {
 ```typescript
 function chroma(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number, // デフォルト: 22050
   nFft?: number,      // デフォルト: 2048
   hopLength?: number  // デフォルト: 512
 ): ChromaResult
@@ -969,16 +994,16 @@ interface ChromaResult {
 
 ```typescript
 // スペクトル重心 (Hz)
-function spectralCentroid(samples, sampleRate, nFft?, hopLength?): Float32Array
+function spectralCentroid(samples, sampleRate?, nFft?, hopLength?): Float32Array  // sampleRate 既定: 22050
 
 // スペクトル帯域幅 (Hz)
-function spectralBandwidth(samples, sampleRate, nFft?, hopLength?): Float32Array
+function spectralBandwidth(samples, sampleRate?, nFft?, hopLength?, p?): Float32Array  // sampleRate 既定: 22050; p はミンコフスキー指数、既定: 2
 
 // スペクトルロールオフ (Hz)
-function spectralRolloff(samples, sampleRate, nFft?, hopLength?, rollPercent?): Float32Array
+function spectralRolloff(samples, sampleRate?, nFft?, hopLength?, rollPercent?): Float32Array  // sampleRate 既定: 22050
 
 // スペクトル平坦度 (0=調性的, 1=ノイズ的)
-function spectralFlatness(samples, sampleRate, nFft?, hopLength?): Float32Array
+function spectralFlatness(samples, sampleRate?, nFft?, hopLength?): Float32Array  // sampleRate 既定: 22050
 
 // スペクトルコントラスト行列、形状は (nBands + 1) x nFrames
 function spectralContrast(samples, sampleRate?, nFft?, hopLength?, nBands?, fmin?, quantile?): Matrix2dResult
@@ -987,13 +1012,13 @@ function spectralContrast(samples, sampleRate?, nFft?, hopLength?, nBands?, fmin
 function polyFeatures(samples, sampleRate?, nFft?, hopLength?, order?): Matrix2dResult
 
 // ゼロ交差率
-function zeroCrossingRate(samples, sampleRate, frameLength?, hopLength?): Float32Array
+function zeroCrossingRate(samples, sampleRate?, frameLength?, hopLength?): Float32Array  // sampleRate 既定: 22050
 
 // 波形がゼロを横切るサンプル位置
 function zeroCrossings(samples, threshold?, refMagnitude?, pad?, zeroPos?): Int32Array
 
 // RMSエネルギー
-function rmsEnergy(samples, sampleRate, frameLength?, hopLength?): Float32Array
+function rmsEnergy(samples, sampleRate?, frameLength?, hopLength?): Float32Array  // sampleRate 既定: 22050
 ```
 
 ### 波形ピーク <Badge type="info" text="WASM/Node" />
@@ -1087,7 +1112,7 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 // YIN アルゴリズム
 function pitchYin(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,   // デフォルト: 22050
   frameLength?: number,  // デフォルト: 2048
   hopLength?: number,    // デフォルト: 512
   fmin?: number,         // デフォルト: 65 Hz
@@ -1099,7 +1124,7 @@ function pitchYin(
 // pYIN アルゴリズム（確率的 YIN + HMM 平滑化）
 function pitchPyin(
   samples: Float32Array,
-  sampleRate: number,
+  sampleRate?: number,   // デフォルト: 22050
   frameLength?: number,
   hopLength?: number,
   fmin?: number,
@@ -1175,6 +1200,16 @@ function meteringCrestFactorDb(samples: Float32Array, sampleRate?: number, optio
 function meteringDcOffset(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // インターサンプル(トゥルー)ピーク(dBFS)。oversampleFactor は 1..16 の 2 の冪(0 / 省略で 4)
 function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversampleFactor?: number, options?: ValidateOptions): number
+// thresholdDb 未満のフレームの割合、範囲 [0, 1]。thresholdDb 既定 -60、
+// frameLength 既定 1024、hopLength 既定 256。
+function meteringSilenceRatio(
+  samples: Float32Array,
+  sampleRate?: number,
+  thresholdDb?: number,
+  frameLength?: number,
+  hopLength?: number,
+  options?: ValidateOptions
+): number
 ```
 
 ### クリッピングとダイナミックレンジ
@@ -1229,7 +1264,7 @@ interface DynamicRangeReport {
 ```typescript
 // チャンネル間の非中心化相関（コサイン類似度、−1..1）
 function meteringStereoCorrelation(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// ミッド/サイドのステレオ幅: 0 = モノ、約 1 = 広いステレオ。上限なし
+// ミッド/サイドのステレオ幅: 0 = モノラル、約 1 = 広いステレオ。上限なし
 // （完全な逆相などでミッド信号が無音なら Infinity）
 function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // サンプルごとのミッド/サイド点列
@@ -2363,7 +2398,7 @@ chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 リバーブやリミッターのテールを失います。連結したストリームの先頭 `latencySamples()`
 サンプルはチェーンの遅延なので、時間を揃えるには捨ててください。
 
-`numChannels === 1` のときはステレオ専用ステージはスキップされます。チェーン設定のリペアステージ（`repair.declick`／`repair.dereverb`／`repair.denoise`）はオフライン専用で、streaming constructor で有効にすると例外を投げます。`masteringChain*` / `masterAudio*`、または単発の `masteringRepair*` ヘルパーで実行してください（`declip`／`decrackle`／`dehum` はチェーン設定に含まれず、これらのヘルパーからのみ実行できます）。`loudness` ステージも、ストリーミングチェーンが信号全体の積分 LUFS を計測できないため、`loudnessStaticGainDb`（任意で `loudnessStaticGainPeakDb` も）を指定しない限り例外を投げます。同じチェーンで複数曲を順に処理する場合は `reset()`、使い終わったら `delete()` を呼んでハンドルを解放してください。
+`numChannels === 1` のときはステレオ専用ステージはスキップされます。チェーン設定のリペアステージ（`repair.declick`／`repair.dereverb`／`repair.denoise`／`repair.declip`／`repair.decrackle`／`repair.dehum`）はオフライン専用で、streaming constructor で有効にすると例外を投げます。`masteringChain*` / `masterAudio*`、または単発の `masteringRepair*` ヘルパーで実行してください。`loudness` ステージも、ストリーミングチェーンが信号全体の積分 LUFS を計測できないため、`loudnessStaticGainDb`（任意で `loudnessStaticGainPeakDb` も）を指定しない限り例外を投げます。同じチェーンで複数曲を順に処理する場合は `reset()`、使い終わったら `delete()` を呼んでハンドルを解放してください。
 
 名前付きマスタリング API は次の系統に分かれます。
 
@@ -2464,6 +2499,14 @@ interface MasteringChainConfig {
   repair?: {
     denoise?: boolean;
     nFft?: number; hopLength?: number; ddAlpha?: number; gainFloor?: number;
+    declip?: { enabled?: boolean; clipThreshold?: number; lpcOrder?: number;
+               iterations?: number; lpcBlend?: number; };
+    decrackle?: { enabled?: boolean; threshold?: number;
+                  /** 0 = メディアン、1 = ウェーブレット縮小 */
+                  mode?: number; levels?: number; };
+    dehum?: { enabled?: boolean; fundamentalHz?: number; harmonics?: number;
+              q?: number; adaptive?: boolean; searchRangeHz?: number;
+              adaptation?: number; frameSize?: number; pllBandwidth?: number; };
     declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
                 lpcOrder?: number; residualRatio?: number; };
     dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
@@ -2472,7 +2515,14 @@ interface MasteringChainConfig {
                  wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
                  wpeStrength?: number; };
   };
-  eq?: { tiltDb?: number; pivotHz?: number };
+  eq?: {
+    /** 正規のネストされた tilt ステージ */
+    tilt?: { enabled?: boolean; tiltDb?: number; pivotHz?: number };
+    /** @deprecated `eq.tilt.tiltDb` を使用してください */
+    tiltDb?: number;
+    /** @deprecated `eq.tilt.pivotHz` を使用してください */
+    pivotHz?: number;
+  };
   dynamics?: {
     compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
                    releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
@@ -2532,6 +2582,8 @@ interface MasteringChainResult extends MasteringResult {
   outputTruePeakDbtp: number;
   outputLra: number;
   loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
 }
 interface MasteringStereoResult {
   left: Float32Array;
@@ -2544,7 +2596,9 @@ interface MasteringStereoResult {
 }
 // masteringChainStereo / masterAudioStereo（および WithProgress 変種）の
 // 戻り値。MasteringStereoResult は masteringProcessStereo の戻り値。
-interface MasteringStereoChainResult {
+// latencySamples フィールドはない — オフラインチェーンの出力はすでに
+// レイテンシ補正済み。
+interface MasteringChainStereoResult {
   left: Float32Array;
   right: Float32Array;
   sampleRate: number;
@@ -2552,8 +2606,15 @@ interface MasteringStereoChainResult {
   outputLufs: number;
   appliedGainDb: number;
   stages: string[];
-  latencySamples?: number;
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
 }
+// MasteringStereoChainResult は MasteringChainStereoResult の
+// @deprecated エイリアス。Node/Python バインディングとのソース互換性のために
+// 維持されている。
 ```
 
 :::
@@ -2641,17 +2702,19 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | 分野 | エクスポートされる型／定数 |
 |------|----------------------|
 | 環境とエンジン | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
-| エンジンのレーンミキサー、マーカー、MIDI クリップ | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker`, `SurroundPan` |
+| エンジンのレーンミキサー、マーカー、MIDI クリップ | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
 | キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | ページ式クリップストリーミング | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| マスタリング | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringStereoChainResult` |
+| マスタリング | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult` |
 | ストリーミングリチューン | `StreamingRetuneConfig` |
 | ストリーミング EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
 | ミキシング／Worklet 用リアルタイムバッファ | `MixerRealtimeBuffer`, `SonareScopeRingBuffer`, `SonareScopeRingReadResult`, `SonareWorkletScopeSnapshot` |
 | プロジェクト／エンジンのオートメーション | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `EngineTrackMonitorMode`, `TrackMonitorMode` |
 | パン則の入力 | `PanLaw`, `PanLawName`, `PanLawInput` |
+
+`SurroundPan`（`Mixer.setSurroundPan` のパラメータ型）はパッケージの公開エクスポート一覧に含まれていません。インポートせず、インラインまたはローカルなエイリアスとして型付けしてください。
 
 ## パフォーマンスサマリー
 

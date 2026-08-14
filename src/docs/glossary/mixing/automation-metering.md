@@ -20,6 +20,10 @@ A static mix is rarely the best mix, and ears alone are not enough to trust one.
 
 Automation can target faders, pans, sends, and insert parameters, so the whole strip — not just level — can move.
 
+### Engine automation vs. typed project lanes
+
+The `AutomationTarget` described above is **engine-level**: it points at a fader, pan, send, or insert parameter inside a live `RealtimeEngine` mix and plays back in real time. A **project-level automation lane** is a different, persisted structure — `Project.addAutomationLane(trackId, desc)` stores a `ProjectAutomationLaneDesc` of breakpoints and an optional `targetKind` (`ProjectAutomationTargetKind` = `'opaque' | 'track-fader-db' | 'track-pan'`). Omitting `targetKind` keeps the legacy `'opaque'` route, which drives a host-defined parameter id with no built-in meaning; a typed lane (`'track-fader-db'` or `'track-pan'`, installed via the C ABI's `sonare_project_add_automation_lane_ex`) is instead resolved into the engine's reserved parameter namespace when the project is installed, so an offline bounce applies it through the track mixer automatically, without the host having to know which raw parameter id a fader or pan happens to occupy.
+
 ## Metering: trusting your eyes too
 
 Rooms lie and ears tire, so a mix is also judged on meters:

@@ -41,6 +41,14 @@ Compression does not have to be all-or-nothing. **Parallel** (or "New York") com
 
 <SonareDemo id="parallel-compression" />
 
+## Multiband compression
+
+The compressor described above acts on the whole signal at once. libsonare's mastering chain also supports a **multiband compressor** that splits the signal into frequency bands and compresses each one independently — useful when only one register is misbehaving (a boomy low end, a harsh top) and squashing the whole mix would cost more than it fixes.
+
+::: warning Not reachable from the browser demo
+The demo's `masteringChain()` config exposes only a fixed three-band shorthand (`dynamics.multibandComp.lowThresholdDb`, `midRatio`, `highAttackMs`, and so on — low/mid/high, never more). An arbitrary band count (validated to between 1 and 64 bands) is a JSON-document-level feature: it requires the mastering CLI's `--config <file>` pointing at a **chain config schema version 2**, where `dynamics.multibandComp` becomes a structured object — a `crossover` plus a `bands` array of independent compressor configs — instead of the flat low/mid/high keys. Schema version 1, and the browser's TypeScript config object, cannot express more than three bands.
+:::
+
 ## In libsonare
 
 Studio exposes threshold, ratio, attack, and release directly. Knee is part of the underlying compressor model and preset design, but it is not a first-line control in the browser UI.

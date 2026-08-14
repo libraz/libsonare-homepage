@@ -368,6 +368,7 @@ struct StreamConfig {
   int emit_every_n_frames = 1;   // 4 = ~60fps at 44100Hz
   int magnitude_downsample = 1;  // Downsample factor for magnitude
   size_t max_pending_frames = 4096; // unread cap; overflow drops newly produced frames
+  size_t max_progression_entries = 4096; // per-progression cap; overflow drops the oldest entry
 
   // Progressive estimation intervals
   float key_update_interval_sec = 5.0f;
@@ -515,6 +516,10 @@ struct AnalyzerStats {
   int total_frames;
   size_t total_samples;
   float duration_seconds;
+  size_t pending_frames;                        // unread output frames currently retained
+  size_t dropped_output_frames;                 // output frames dropped at the pending-frame limit
+  size_t dropped_chord_progression_entries;     // chord changes dropped at the history cap
+  size_t dropped_bar_progression_entries;       // bar chords dropped at the history cap
   ProgressiveEstimate estimate;
 };
 ```
@@ -1166,6 +1171,7 @@ SonareError sonare_audio_from_buffer(const float* data, size_t length, int sampl
                                      SonareAudio** out);
 SonareError sonare_audio_from_memory(const uint8_t* data, size_t length, SonareAudio** out);
 SonareError sonare_audio_from_file(const char* path, SonareAudio** out);  // Not available in WASM
+SonareError sonare_audio_file_channel_count(const char* path, int* out_channels);  // Not available in WASM
 void        sonare_audio_free(SonareAudio* audio);
 const float* sonare_audio_data(const SonareAudio* audio);
 size_t      sonare_audio_length(const SonareAudio* audio);
@@ -1226,6 +1232,8 @@ Every C ABI call that returns `SonareError` clears the thread-local detail on en
 
 `SonareKey` carries only `root`, `mode`, and `confidence`. There is no `name` field on the struct — format the human-readable name yourself from the enum values.
 
+`sonare_audio_file_channel_count(path, out_channels)` probes a file's source channel count without decoding it, distinct from `sonare_audio_from_file`, which always produces a mono `SonareAudio`. It is not available in WASM.
+
 `SonareAnalysisResult` is the compact C ABI result: BPM, BPM confidence, key,
 time signature, and beat times. For the all-in-one analysis (chords, sections, timbre,
 dynamics, rhythm, melody, and form, with per-beat strength), call
@@ -1272,7 +1280,9 @@ The current C ABI is split across focused headers. Use this index when a symbol 
 | `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, engine lane/bus/send structs (`SonareEngineTrackLane`, `SonareEngineBus`, `SonareEngineTrackSend`) and the `SonareChannelLayout` enum, error/version/FFmpeg helpers |
 | `sonare_c_project.h` | Headless project/arrangement lifecycle, track/clip counts and editing (`sonare_project_clip_count`), MIDI events and MIDI-FX (`sonare_project_set_midi_events`, `set_midi_fx`, `bake_midi_fx`), compile/bounce (incl. `bounce_with_builtin_instruments`/`bounce_with_synth_instruments`), warp maps, loop-recording takes and comp segments, NativeSynth and SoundFont/SF2 instrument bindings, assist sidecar, chord/key annotations, `SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | Focused analysis, STFT/mel/MFCC/chroma, inverse features, CQT/VQT, pitch, tempogram/PLP, LUFS |
-| `sonare_c_effects.h` | HPSS/editing DSP, region-based spectral editing (`sonare_spectral_edit`, modes GAIN/ATTENUATE/MUTE/HEAL), realtime voice changer, realtime engine, decomposition/remix helpers |
+| `sonare_c_effects.h` | HPSS/editing DSP, region-based spectral editing (`sonare_spectral_edit`, modes GAIN/ATTENUATE/MUTE/HEAL), decomposition/remix helpers |
+| `sonare_c_engine.h` | `RealtimeEngine` C ABI: transport (play/stop/seek/loop/tempo/time-signature), live parameter and automation-lane control, MIDI push/drain (CC, panic, SysEx, external MIDI destinations), capture, and telemetry (`SonareEngineTelemetry`, meter telemetry drain, `SonareEngineTelemetryError`) |
+| `sonare_c_voice_changer.h` | Realtime voice changer: create/destroy, config (POD and JSON, live-safe hand-off), per-block process (mono/interleaved/planar-stereo), built-in preset lookup, latency |
 | `sonare_c_acoustic.h` | RIR synthesis from room geometry, equivalent-room estimation, offline room-character morphing, `SONARE_ACOUSTIC_ABI_VERSION` |
 | `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum, multi-channel interleaved LUFS (`sonare_lufs_interleaved`) and EBU R128 loudness range (`sonare_ebur128_loudness_range`) |
 | `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON, streaming mastering chain with latency and realized-stage inspection (`sonare_streaming_mastering_chain_stage_names`), streaming EQ, repair/dynamics one-shot helpers |
@@ -1298,6 +1308,7 @@ For realtime insert automation and external MIDI in the C ABI:
 - `sonare_engine_push_midi_sysex` copies one complete SysEx frame, including `0xF0` and `0xF7`; its size must be 1–512 bytes.
 - `sonare_engine_set_midi_destination_external` moves a destination out of the internal instrument rack and into the host-drained output queue. Up to 16 destinations may be external. Clock/transport forwarding is opt-in through `sonare_engine_set_external_midi_clock_enabled`; those messages use destination `0xFFFFFFFF`.
 - On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
+- Each drained `SonareEngineTelemetry` record's `error` field is a `SonareEngineTelemetryError` ordinal (`sonare_c_types_engine.h`): `NONE = 0`, then queue/backlog/overflow conditions `1`–`18` (command queue, pending-command, boundary, telemetry, capture, automation-bind-target, insert-automation, MIDI-clock, and metronome overflow among them), and `MAX_CHANNELS_EXCEEDED = 20`.
 
 To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]`. `kind` is `realtime`/`offline`/`pair`, and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); `tailSamples` is the audible decay length, and both are 0 for offline ids. `realtimeCost` is a coarse `low`/`moderate`/`high` algorithmic estimate for live inserts, not a hardware benchmark, and is `null` for non-insert ids. `channelPolicy` tells a surround host how the mixer wraps the processor, `category` is the stable UI grouping derived from the id namespace, and `params` contains the realtime-insert parameter descriptors (empty for non-insert processors). The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
 

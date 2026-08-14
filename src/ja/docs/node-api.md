@@ -117,7 +117,8 @@ const result = masterAudio({ samples, sampleRate, preset: 'pop' });
 | メソッド | 説明 |
 |---------|------|
 | `Audio.fromFile(path)` | WAV/MP3 ファイルを読み込み。FFmpeg 有効ビルドでは FFmpeg 対応形式も読み込めます |
-| `Audio.fromBuffer(samples, sampleRate?)` | `Float32Array` から作成 |
+| `Audio.fileChannelCount(path)` | デコードせずに音声ファイルのチャンネル数を取得。モノラルへダウンミックスする `fromFile` とは別物 |
+| `Audio.fromBuffer(samples, sampleRate?)` | `Float32Array` から作成。`sampleRate` の既定値は `48000` |
 | `Audio.fromMemory(data)` | `fromFile` と同じ形式対応で、`Buffer` / `Uint8Array` をデコード |
 | `audio.getData()` | サンプルのコピーを `Float32Array` で返します |
 | `audio.getSampleRate()` | サンプルレート（Hz） |
@@ -376,10 +377,14 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を�
 | `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | クリップしたサンプルの連続区間。`options` で `threshold`(既定 `0.999`)と `minRegionSamples`(既定 `1`)を指定 |
 | `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`options` で `windowSec`・`hopSec`・`lowPercentile`・`highPercentile` を指定(省略時は既定値の窓 3 秒・ホップ 1 秒・low 0.10・high 0.95) |
 | `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | 非中心化相関（コサイン類似度）、−1..1 |
-| `meteringStereoWidth(left, right, sr?, options?)` | `number` | サイド／ミッドのエネルギー比。0 = モノ、約 1 = 広いステレオ。上限なし（ミッドが無音なら `Infinity`） |
+| `meteringStereoWidth(left, right, sr?, options?)` | `number` | サイド／ミッドのエネルギー比。0 = モノラル、約 1 = 広いステレオ。上限なし（ミッドが無音なら `Infinity`） |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | サンプルごとのミッド/サイド点列 |
 | `meteringPhaseScope(left, right, sr?, options?)` | `PhaseScopeReport` | フェーズスコープの点列と要約統計 |
-| `meteringSpectrum(samples, sr?, options?)` | `SpectrumReport` | 単一フレームの振幅/パワー/dB スペクトラム。`options` で `nFft`・`applyOctaveSmoothing`・`octaveFraction`・`dbRef`・`dbAmin` を指定 |
+| `meteringSpectrum(samples, sr?, options?)` | `SpectrumReport` | 信号全体に対する Welch 平均の振幅/パワー/dB スペクトラム（50% 重複する Hann フレームで平均）。`options` で `nFft`・`applyOctaveSmoothing`・`octaveFraction`・`dbRef`・`dbAmin` を指定 |
+| `meteringSpectrumFrame(samples, sr?, frameOffset?, options?)` | `SpectrumReport` | 単一フレーム（Hann 窓 1 回分）の振幅/パワー/dB スペクトラム。`meteringSpectrum` と異なり時間平均しません。`frameOffset` で解析フレームの開始位置を指定 |
+| `meteringSilenceRatio(samples, sr?, thresholdDb?, frameLength?, hopLength?, options?)` | `number` | RMS が `thresholdDb` を下回るフレームの割合（既定: `-45` dBFS、`frameLength=1024`、`hopLength=256`） |
+| `waveformPeaks(samples, channels, options?)` | `WaveformPeaksReport` | インターリーブ音声からチャンネルごとの min/max 波形バケットを算出。`options.samplesPerBucket` の既定値は `512` |
+| `waveformPeakPyramid(samples, channels, options?)` | `WaveformPeaksReport[]` | 複数のズームレベル向けの波形ピークバケット。`options.samplesPerBucketLevels` の既定値は `[512, 1024, 2048, 4096]` |
 
 ### スケール量子化
 
@@ -417,7 +422,7 @@ const frames = analyzer.readFramesSoa(analyzer.availableFrames());
 const stats = analyzer.stats();          // stats.estimate.bpm / .key（PitchClass の整数）
 ```
 
-Node ネイティブでは float の Structure-of-Arrays 読み出し名は `readFramesSoa(...)` です。WASM パッケージは、ブラウザ向け例で同じ操作を `readFrames(...)` として公開しています。
+Node ネイティブでは float の Structure-of-Arrays 読み出しの正式名は `readFramesSoa(...)` です。バインディング間の命名を揃えるためのエイリアス `readFrames(...)` も公開しており、これは WASM パッケージが同じ操作に使う名前と一致します。
 
 Node ネイティブの `RealtimeVoiceChanger` は `{ sampleRate, maxBlockSize, channels, preset }` で構築します。
 
@@ -459,8 +464,8 @@ changer.destroy();
 
 | Runtime | 違い |
 |---------|------|
-| WASM | `engineCapabilities()` を追加し、構築前に ABI 互換性を確認します。キャプチャバッファは `setCaptureBuffer(numChannels, capacityFrames)` で設定します。 |
-| Node ネイティブ | `engineAbiVersion()` を公開します。ブラウザ向けの機能確認ヘルパーはありません。キャプチャバッファは、事前確保したチャンネルバッファを `setCaptureBuffer(channels)` として渡します。 |
+| WASM | `engineCapabilities()` を追加し、構築前に ABI 互換性を確認します。キャプチャバッファは正規形の `setCaptureBuffer(numChannels, capacityFrames)` で設定します。 |
+| Node ネイティブ | `engineAbiVersion()` を公開します。ブラウザ向けの機能確認ヘルパーはありません。キャプチャバッファは WASM と同じ正規形 `setCaptureBuffer(numChannels, capacityFrames)` に加えて、後方互換のために非推奨の `setCaptureBuffer(channels: Float32Array[])` も残しています。 |
 
 `Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と
 `assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、
@@ -574,7 +579,7 @@ interface PitchResult {
 |------|----------------|
 | 解析オプション／結果 | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
 | ストリーミング解析 | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
-| マスタリングとメータリング | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot` |
+| マスタリングとメータリング | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
 | ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
 | リアルタイム音声 | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | リアルタイムエンジングラフ | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |

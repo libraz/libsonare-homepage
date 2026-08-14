@@ -112,6 +112,17 @@ const float* end() const;
 非常に大きなファイルを扱う場合は、読み込み後に `slice()` でセグメントに分割して処理することを検討してください。
 :::
 
+#### 使用例
+
+```cpp
+auto audio = sonare::Audio::from_file("song.mp3");
+std::cout << "Duration: " << audio.duration() << "s\n";
+
+// ゼロコピースライシング
+auto intro = audio.slice(0.0f, 30.0f);
+auto chorus = audio.slice(60.0f, 90.0f);
+```
+
 ### Spectrogram
 
 オーディオ信号の短時間フーリエ変換（STFT）。
@@ -359,6 +370,7 @@ struct StreamConfig {
   int emit_every_n_frames = 1;   // 4 = 44100Hz で約 60fps
   int magnitude_downsample = 1;  // マグニチュードのダウンサンプル係数
   size_t max_pending_frames = 4096; // 未読上限。超過時は新たに生成したフレームを破棄
+  size_t max_progression_entries = 4096; // 進行データの保持上限。超過時は最も古いエントリを破棄
 
   // 推定を更新する間隔
   float key_update_interval_sec = 5.0f;
@@ -456,6 +468,22 @@ analyzer.read_frames_soa(max_frames, buffer);
 - **量子化**（後述） — 各 32bit float を固定の min/max 範囲で 8bit / 16bit 整数に詰め、精度と引き換えにバッファを約 1/4・1/2 に縮めます。UI スレッドへフレームを渡すのに向いています。
 :::
 
+### 量子化形式（帯域幅削減）
+
+```cpp
+// 8 ビット量子化（帯域幅 4 分の 1）
+QuantizedFrameBufferU8 u8_buffer;
+QuantizeConfig qconfig;
+qconfig.mel_db_min = -80.0f;
+qconfig.mel_db_max = 0.0f;
+
+analyzer.read_frames_quantized_u8(max_frames, u8_buffer, qconfig);
+
+// 16 ビット量子化（帯域幅 2 分の 1）
+QuantizedFrameBufferI16 i16_buffer;
+analyzer.read_frames_quantized_i16(max_frames, i16_buffer, qconfig);
+```
+
 ### ChordChange
 
 ```cpp
@@ -488,6 +516,10 @@ struct AnalyzerStats {
   int total_frames;
   size_t total_samples;
   float duration_seconds;
+  size_t pending_frames;                        // 現在保持されている未読出力フレーム数
+  size_t dropped_output_frames;                 // pending-frame 上限で破棄された出力フレーム数
+  size_t dropped_chord_progression_entries;     // 履歴上限で破棄されたコード進行エントリ数
+  size_t dropped_bar_progression_entries;       // 履歴上限で破棄された小節コード進行エントリ数
   ProgressiveEstimate estimate;
 };
 ```
@@ -563,6 +595,30 @@ if (!stats.estimate.detected_pattern_name.empty()) {
 }
 ```
 
+### 外部同期
+
+外部タイムラインに正確に同期させるには:
+
+```cpp
+// 累積サンプルオフセットは呼び出し側で管理する
+size_t sample_offset = 0;
+
+void audio_callback(const float* samples, size_t n_samples) {
+  analyzer.process(samples, n_samples, sample_offset);
+  sample_offset += n_samples;
+}
+```
+
+### リセット
+
+```cpp
+// 新しいストリームのためにリセット
+analyzer.reset();
+
+// 基準オフセットを指定してリセット
+analyzer.reset(initial_sample_offset);
+```
+
 ### 設定メソッド
 
 ```cpp
@@ -585,22 +641,9 @@ int count = analyzer.frame_count();
 
 // 現在の時間位置（秒）
 float time = analyzer.current_time();
-```
 
-### 量子化形式（帯域幅削減）
-
-```cpp
-// 8 ビット量子化（帯域幅 4 分の 1）
-QuantizedFrameBufferU8 u8_buffer;
-QuantizeConfig qconfig;
-qconfig.mel_db_min = -80.0f;
-qconfig.mel_db_max = 0.0f;
-
-analyzer.read_frames_quantized_u8(max_frames, u8_buffer, qconfig);
-
-// 16 ビット量子化（帯域幅 2 分の 1）
-QuantizedFrameBufferI16 i16_buffer;
-analyzer.read_frames_quantized_i16(max_frames, i16_buffer, qconfig);
+// サンプルレートを取得
+int sr = analyzer.config().sample_rate;
 ```
 
 ## 特徴抽出
@@ -926,6 +969,21 @@ struct Chord {
 };
 ```
 
+### Section
+
+```cpp
+struct Section {
+  SectionType type;    // Intro, Verse, Chorus 等
+  float start;
+  float end;
+  float energy_level;
+  float confidence;
+
+  std::string type_string() const;
+  float duration() const;
+};
+```
+
 ### AnalysisResult
 
 ```cpp
@@ -1108,6 +1166,7 @@ SonareError sonare_audio_from_buffer(const float* data, size_t length, int sampl
                                      SonareAudio** out);
 SonareError sonare_audio_from_memory(const uint8_t* data, size_t length, SonareAudio** out);
 SonareError sonare_audio_from_file(const char* path, SonareAudio** out);  // WASM では利用不可
+SonareError sonare_audio_file_channel_count(const char* path, int* out_channels);  // WASM では利用不可
 void        sonare_audio_free(SonareAudio* audio);
 
 SonareError sonare_audio_detect_bpm(const SonareAudio* audio, float* out_bpm);
@@ -1145,6 +1204,8 @@ int         sonare_has_ffmpeg_support(void);     // FFmpeg 専用フォーマッ
 
 `SonareError` を返す C ABI 呼び出しはすべて、開始時にスレッドローカルの詳細をクリアし、以前のメッセージが後続結果へ漏れるのを防ぎます。診断アクセサと `void` の後始末ヘルパーは意図的にクリアしないため、部分出力を解放してから `sonare_last_error_message()` を読めます。
 
+`sonare_audio_file_channel_count(path, out_channels)` はデコードせずにファイルのソースチャンネル数を調べます。常にモノラルの `SonareAudio` を作る `sonare_audio_from_file` とは別物です。WASM では利用できません。
+
 `SonareAnalysisResult` は C ABI 用のコンパクトな結果で、BPM、BPM 確信度、キー、
 拍子、ビート時刻を保持します。フル解析（コード、セクション、音色、ダイナミクス、
 リズム、メロディ、form、拍ごとの強度）が必要なときは `sonare_analyze_json`
@@ -1170,7 +1231,9 @@ camelCase の JSON 文字列を返し、`sonare_free_string` で解放します�
 | `sonare_c_types.h` | オーディオハンドル、コンパクト解析、キー候補、ダウンビート、エンジンのレーン／バス／センド構造体（`SonareEngineTrackLane`、`SonareEngineBus`、`SonareEngineTrackSend`）と `SonareChannelLayout` 列挙、エラー／バージョン／FFmpeg ヘルパー |
 | `sonare_c_project.h` | ヘッドレスのプロジェクト／アレンジメントのライフサイクル、トラック／クリップ件数と編集（`sonare_project_clip_count`）、MIDI イベントと MIDI-FX（`sonare_project_set_midi_events`、`set_midi_fx`、`bake_midi_fx`）、コンパイル／バウンス（`bounce_with_builtin_instruments`／`bounce_with_synth_instruments` を含む）、ワープマップ、ループ録音のテイクとコンプ区間、NativeSynth と SoundFont/SF2 楽器バインディング、アシストサイドカー、コード／キー注釈、`SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | 個別解析、STFT／メル／MFCC／クロマ、逆変換特徴量、CQT/VQT、ピッチ、テンポグラム／PLP、LUFS |
-| `sonare_c_effects.h` | HPSS／編集 DSP、領域ベースのスペクトル編集（`sonare_spectral_edit`、モード GAIN/ATTENUATE/MUTE/HEAL）、リアルタイムボイスチェンジャー、リアルタイムエンジン、分解／リミックスヘルパー |
+| `sonare_c_effects.h` | HPSS／編集 DSP、領域ベースのスペクトル編集（`sonare_spectral_edit`、モード GAIN/ATTENUATE/MUTE/HEAL）、分解／リミックスヘルパー |
+| `sonare_c_engine.h` | `RealtimeEngine` の C ABI: トランスポート（再生／停止／シーク／ループ／テンポ／拍子）、ライブパラメータとオートメーションレーン制御、MIDI push/drain（CC、パニック、SysEx、外部 MIDI 送出先）、キャプチャ、テレメトリ（`SonareEngineTelemetry`、メーターテレメトリの drain、`SonareEngineTelemetryError`） |
+| `sonare_c_voice_changer.h` | リアルタイムボイスチェンジャー: 生成／破棄、設定（POD と JSON、ライブ安全なハンドオフ）、ブロック単位の処理（mono／interleaved／planar-stereo）、組み込みプリセット参照、レイテンシ |
 | `sonare_c_acoustic.h` | ルーム形状からの RIR 合成、等価ルーム推定、オフラインのルームモーフィング、`SONARE_ACOUSTIC_ABI_VERSION` |
 | `sonare_c_metering.h` | ピーク／RMS／クレストファクター／DC オフセット／トゥルーピーク、クリッピング、ダイナミックレンジ、ステレオ相関／幅、ベクトルスコープ、位相スコープ、スペクトル、マルチチャンネルのインターリーブ LUFS（`sonare_lufs_interleaved`）と EBU R128 ラウドネスレンジ（`sonare_ebur128_loudness_range`） |
 | `sonare_c_mastering.h` | プリセット、フルチェーン、進捗コールバック、名前付きプロセッサと機械可読なプロセッサカタログ、アシスタント／プロファイル／プレビュー JSON、レイテンシと実現ステージを検査できるストリーミングマスタリングチェーン（`sonare_streaming_mastering_chain_stage_names`）、ストリーミング EQ、リペア／ダイナミクスの単発ヘルパー |
@@ -1196,6 +1259,7 @@ C ABI のリアルタイム・インサートオートメーションと外部 M
 - `sonare_engine_push_midi_sysex` には、先頭の `0xF0` と末尾の `0xF7` を含む完全な SysEx フレームを渡します。長さは 1〜512 バイトです。
 - `sonare_engine_set_midi_destination_external` を使うと、送出先は内蔵インストゥルメントラックを通らず、ホストが回収する出力キューへ送られます。外部化できる送出先は最大 16 個です。クロック／トランスポート転送は `sonare_engine_set_external_midi_clock_enabled` で明示的に有効化し、そのメッセージの送出先 id は `0xFFFFFFFF` です。
 - ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP レコードが 3 メッセージへ展開される場合があるため、`max_events` は 3 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
+- drain した各 `SonareEngineTelemetry` レコードの `error` フィールドは `SonareEngineTelemetryError`（`sonare_c_types_engine.h`）の序数です。`NONE = 0` に続き、キュー／バックログ／オーバーフロー系の条件が `1`〜`18`（コマンドキュー、保留コマンド、境界、テレメトリ、キャプチャ、オートメーションバインドターゲット、インサートオートメーション、MIDI クロック、メトロノームのオーバーフローなど）、そして `MAX_CHANNELS_EXCEEDED = 20` と続きます。
 
 C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値です。`tailSamples` は可聴な減衰テールの長さを表し、どちらもオフライン id では 0 です。`realtimeCost` はライブインサート向けの大まかな `low`／`moderate`／`high` のアルゴリズム負荷見積もりであり、ハードウェア上のベンチマークではなく、非インサート id では `null` です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするか、`category` は id 名前空間から導出する安定した UI グループ、`params` はリアルタイムインサートのパラメータ記述子を示します（非インサートプロセッサでは空配列）。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
 
