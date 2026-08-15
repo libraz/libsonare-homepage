@@ -32,10 +32,11 @@ describe('audio analyzer processing helpers', () => {
   });
 
   it('splits mel power into low and high RMS bands', () => {
+    // Row-major [nMels x nFrames]: each pair is one mel band across the two frames.
     const bands = splitMelBands({
       nMels: 8,
       nFrames: 2,
-      power: new Float32Array([1, 1, 0, 0, 4, 4, 4, 4, 9, 9, 0, 0, 16, 16, 16, 16]),
+      power: new Float32Array([1, 9, 1, 9, 0, 0, 0, 0, 4, 16, 4, 16, 4, 16, 4, 16]),
     });
 
     expect(Array.from(bands.low)).toEqual([1, 3]);

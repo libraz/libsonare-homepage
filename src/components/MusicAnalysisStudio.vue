@@ -536,6 +536,12 @@ function chordLabel(chord: { start: number; end: number; name: string }): string
 function waveformPath(): string {
   return buildWaveformPath(waveform.value);
 }
+
+// Loudness Range is reported in LU (loudness units), not dB.
+function formatLu(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return `${value.toFixed(1)} LU`;
+}
 </script>
 
 <template>
@@ -692,7 +698,7 @@ function waveformPath(): string {
             <MetricItem :value="result.summary.integratedLufs.toFixed(1)" layout="column" variant="success">
               <template #label><TermLabel v-bind="term('lufs')">{{ copy.metrics.lufs }}</TermLabel></template>
             </MetricItem>
-            <MetricItem :value="formatDb(result.summary.loudnessRange)" layout="column">
+            <MetricItem :value="formatLu(result.summary.loudnessRange)" layout="column">
               <template #label><TermLabel v-bind="term('lra')">{{ copy.metrics.lra }}</TermLabel></template>
             </MetricItem>
             <MetricItem :value="formatDb(result.summary.dynamicRangeDb)" layout="column">
@@ -847,7 +853,7 @@ function waveformPath(): string {
               v-for="candidate in result.keyCandidates"
               :key="candidate.name"
               class="analysis-table__row"
-              :title="`${candidate.name} · ${copy.metrics.confidence} ${confidencePct(candidate.confidence)}%`"
+              :title="`${candidate.name} · ${copy.metrics.keyMatch} ${confidencePct(candidate.correlation)}%`"
             >
               <span class="analysis-table__name">{{ candidate.name }}</span>
               <span class="analysis-table__meter">

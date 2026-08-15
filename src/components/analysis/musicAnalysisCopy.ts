@@ -70,6 +70,9 @@ export const enCopy = {
     clipping: 'Clipping',
     stereoWidth: 'Stereo Width',
     confidence: 'Confidence',
+    // Pearson correlation between the track's mean chroma and each key profile —
+    // the score the candidate list is ranked by.
+    keyMatch: 'Profile Match',
     pitchRange: 'Pitch Range',
     pitchStability: 'Pitch Stability',
     meanPitch: 'Mean Pitch',
@@ -341,6 +344,7 @@ export const jaCopy: typeof enCopy = {
     clipping: 'クリッピング',
     stereoWidth: 'ステレオ幅',
     confidence: '信頼度',
+    keyMatch: 'プロファイル一致度',
     pitchRange: '音域',
     pitchStability: 'ピッチ安定度',
     meanPitch: '平均ピッチ',

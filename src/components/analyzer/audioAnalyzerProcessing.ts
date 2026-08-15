@@ -50,6 +50,13 @@ export function mixToMono(audioBuffer: AudioBuffer, maxLength?: number): Float32
   return mono;
 }
 
+/**
+ * Collapse a mel power spectrogram into low- and high-band RMS envelopes.
+ *
+ * `melSpectrogram` returns `power` as a row-major `[nMels x nFrames]` matrix
+ * (one contiguous run of frames per mel band), so a band/frame pair lives at
+ * `bin * nFrames + frame`.
+ */
 export function splitMelBands(mel: MelSpectrogramLike): { low: Float32Array; high: Float32Array } {
   const low = new Float32Array(mel.nFrames);
   const high = new Float32Array(mel.nFrames);
@@ -60,10 +67,10 @@ export function splitMelBands(mel: MelSpectrogramLike): { low: Float32Array; hig
     let lowSum = 0;
     let highSum = 0;
     for (let bin = 0; bin < lowEnd; bin++) {
-      lowSum += mel.power[frame * mel.nMels + bin];
+      lowSum += mel.power[bin * mel.nFrames + frame];
     }
     for (let bin = highStart; bin < mel.nMels; bin++) {
-      highSum += mel.power[frame * mel.nMels + bin];
+      highSum += mel.power[bin * mel.nFrames + frame];
     }
     low[frame] = Math.sqrt(lowSum / lowEnd);
     high[frame] = Math.sqrt(highSum / (mel.nMels - highStart));

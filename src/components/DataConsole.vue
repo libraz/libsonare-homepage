@@ -51,15 +51,25 @@ function formatHex(val: number): string {
   return `0x${hex}`;
 }
 
+// `chroma` returns `features` as a row-major [nChroma x nFrames] matrix, so a
+// pitch-class/frame pair lives at `pitchClass * nFrames + frame`.
+function chromaAt(
+  data: { features: Float32Array; nFrames: number },
+  pitchClass: number,
+  frame: number,
+): number {
+  return data.features[pitchClass * data.nFrames + frame] || 0;
+}
+
 function getDominantNote(): { name: string; value: number } | null {
   if (!props.chromaData) return null;
   const frame = currentFrame.value;
-  const { features, nChroma } = props.chromaData;
+  const { nChroma } = props.chromaData;
 
   let maxIdx = 0;
   let maxVal = 0;
   for (let i = 0; i < nChroma; i++) {
-    const v = features[frame * nChroma + i] || 0;
+    const v = chromaAt(props.chromaData, i, frame);
     if (v > maxVal) {
       maxVal = v;
       maxIdx = i;
@@ -116,9 +126,9 @@ function generateLog() {
   }
 
   if (props.chromaData && logType === 3) {
-    const { features, nChroma } = props.chromaData;
+    const { nChroma } = props.chromaData;
     const chromaStr = Array.from({ length: nChroma }, (_, i) => {
-      const v = features[frame * nChroma + i] || 0;
+      const v = chromaAt(props.chromaData!, i, frame);
       return v > 0.3 ? '█' : v > 0.1 ? '▓' : v > 0.05 ? '░' : '·';
     }).join('');
     addLog(`[${timestamp}] CHROMA:  ${chromaStr}`, 'data');
