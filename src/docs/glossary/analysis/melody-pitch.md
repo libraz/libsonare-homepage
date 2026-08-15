@@ -11,11 +11,15 @@ Unlike [chroma](./chroma-features.md), which folds octaves away, pitch tracking 
 
 ## Fundamental frequency (F0)
 
-A pitched sound is not one frequency. It is a stack made from a **fundamental frequency (F0)** plus **harmonics** at integer multiples.
+A pitched sound is not one frequency. It is a stack made from a **fundamental frequency (F0)** plus **partials** above it. For voices and for bowed or blown instruments those partials sit at near-integer multiples of F0, which is why they are called harmonics.
 
 For example, when a singer holds A4, the F0 is 440 Hz. The recording also contains energy at 880 Hz, 1320 Hz, and other multiples.
 
 The pitch you *perceive* corresponds to the F0. That is why pitch tracking is really **F0 estimation** over time. The hard part is deciding which peak is the fundamental and which peaks are harmonics.
+
+::: tip The integer-multiple picture has two limits
+Stiff strings are progressively sharp of the ideal series — a piano's upper partials land tens of cents above exact multiples — and struck idiophones such as bells, cymbals, and drums have partials with no integer relation and often no well-defined F0 at all. In the other direction, the pitch is still heard at F0 when the F0 component is missing from the spectrum entirely. So the fundamental is the lowest member of the series, not the loudest peak; that is exactly why the estimators below measure a waveform period instead of picking a spectral maximum.
+:::
 
 ## YIN and pYIN
 
@@ -28,9 +32,13 @@ libsonare offers two related estimators:
 
 These estimators assume **monophonic** input: one note at a time, such as a solo voice, lead line, or bass.
 
-They are not chord transcribers. If you feed them a full mix or a chord, the single-F0 assumption breaks down.
+::: warning Bass needs a lower `fmin` than the default
+`fmin` defaults to 65 Hz (C2) and `fmax` to 2093 Hz (C7), so out of the box the trackers cover roughly C2–C7. An open low E on an electric bass is 41.2 Hz and a five-string low B is 30.9 Hz — both below the search range, so they come back as a harmonic or pinned to the range edge. Lower `fmin` explicitly for bass work, and lengthen `frameLength` to match: the YIN lag search is capped at half the frame, so a 2048-sample frame at 44.1 kHz cannot resolve anything under about 43 Hz however low you set `fmin`.
+:::
 
-To track a melody inside a busy track, isolate the line first with a stem, [HPSS](./mel-mfcc-timbre.md), or source separation. Then run pitch tracking on the cleaner signal.
+These estimators are also not chord transcribers. If you feed them a full mix or a chord, the single-F0 assumption breaks down.
+
+To track a melody inside a busy track, isolate the line first with a stem, [HPSS](./mel-mfcc-timbre.md) (harmonic/percussive separation), or source separation. Then run pitch tracking on the cleaner signal.
 
 ## Voicing: when there is no pitch
 

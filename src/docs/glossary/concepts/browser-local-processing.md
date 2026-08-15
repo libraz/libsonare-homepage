@@ -7,14 +7,14 @@ description: What it means when libsonare says audio stays in your browser.
 
 Browser local processing means the audio file is decoded and processed on your device, inside the browser. The libsonare demos do not upload your source audio to a server for analysis, mixing, realtime FX, or mastering renders.
 
-This is one of libsonare's main product differences: it demonstrates serious DSP while keeping user audio private by design.
+This is one of libsonare's main product differences: it demonstrates serious DSP (digital signal processing) while keeping user audio private by design.
 
 ## What Stays Local
 
 Across the browser demos:
 
 - File decoding happens through browser audio APIs or the WASM `Audio.fromMemory*` helpers.
-- Analysis, rendering, mixing, or realtime FX processing runs in the page, a Web Worker, or an AudioWorklet depending on the demo.
+- Analysis, rendering, mixing, or realtime FX processing runs in the page, a Web Worker (a background thread that keeps the UI responsive), or an AudioWorklet (the browser's realtime audio-callback thread), depending on the demo.
 - DSP runs through libsonare WebAssembly.
 - WAV export, JSON report generation, and visualization data are produced in the browser.
 - Source audio, rendered output, reference audio, and settings are held as local objects.

@@ -13,7 +13,7 @@ You usually **edit** individual parts (timing, pitch, noise), then **mix** them 
 
 ## Tracks and channel strips
 
-A **track** is one recorded part: a lead vocal, a bass DI, a stereo drum overhead pair. In a mixer, each track flows through a **channel strip** — a vertical lane of controls that processes just that part. The whole art of mixing is setting each strip so the parts combine well, then routing them to a common output.
+A **track** is one recorded part: a lead vocal, a bass DI (a direct-injected line signal taken straight from the instrument), a stereo drum overhead pair. In a mixer, each track flows through a **channel strip** — a vertical lane of controls that processes just that part. The whole art of mixing is setting each strip so the parts combine well, then routing them to a common output.
 
 <SonareDemo id="engine-lane-mixer" />
 
@@ -41,7 +41,7 @@ This is the distinction beginners most often miss, and it is simple once named:
 - A **send** routes a *copy* of the track in *parallel* to a shared destination. Use sends for effects several tracks share — one reverb fed by the vocal, the snare, and the guitar, so they all sit in the same space.
 
 ::: info Pre-fader vs post-fader
-A send can tap the signal **before** the fader (independent of the balance — good for headphone/cue mixes) or **after** it (follows the balance — so an effect stays proportional as you ride the fader). Choosing the right one is a common gotcha; the [Mixing Engine](../../mixing.md#the-channel-strip-signal-by-signal) page traces exactly where each tap sits.
+A send can tap the signal **before** the fader or **after** it. A pre-fader send is independent of the balance, which is what you want for headphone/cue mixes; a post-fader send follows the balance, so an effect stays proportional as you ride the fader. Choosing the right one is a common gotcha; the [Mixing Engine](../../mixing.md#the-channel-strip-signal-by-signal) page traces exactly where each tap sits.
 :::
 
 ## Buses and subgroups
@@ -51,7 +51,7 @@ A **bus** is a shared destination that sums several signals. The most important 
 - An **aux bus** is the return for sends (your shared reverb lives here).
 - A **subgroup** (or submix) collects related tracks — all the drums, say — so you can process and ride them as one. A compressor on the drum subgroup glues the kit together; one fader controls the whole kit's level.
 
-A **VCA group** is a related idea: a single fader that trims several tracks at once *without* re-routing their audio, useful when the parts must still flow to different buses.
+A **VCA group** (VCA, from voltage-controlled amplifier) is a related idea: a single fader that trims several tracks at once *without* re-routing their audio, useful when the parts must still flow to different buses.
 
 ## Automation
 
@@ -62,7 +62,7 @@ A static mix is rarely the best mix. **Automation** lets a control change over t
 Ears tire and rooms lie, so mixers watch meters too. The ones that matter most:
 
 - **Peak / true peak** — the highest level; [true peak](../true-peak.md) catches inter-sample overs your sample meter misses.
-- **RMS / LUFS** — average level and perceived [loudness](../lufs.md), which is what listeners actually judge.
+- **RMS / LUFS** — average level (root mean square) and perceived [loudness](../lufs.md) in LUFS, Loudness Units relative to Full Scale, which is what listeners actually judge.
 - **Correlation** — whether the left and right channels agree; strongly negative values warn that the mix may weaken or cancel in [mono](./mono-compatibility.md).
 
 :::: details How libsonare models all of this

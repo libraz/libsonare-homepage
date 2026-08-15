@@ -43,17 +43,17 @@ If the processed version only sounds better when matching is off, the processing
 
 Loudness matching is not a delivery target. A file can compare fairly in A/B mode and still be too loud, too quiet, or unsafe for release.
 
-It also does not replace metering. Use LUFS and true-peak readings to check delivery constraints, then use matched listening to decide whether the processing is musically useful.
+It also does not replace metering. Use [LUFS](../lufs.md) (Loudness Units relative to Full Scale, the broadcast/streaming unit for perceived loudness) and [true-peak](../true-peak.md) readings to check delivery constraints, then use matched listening to decide whether the processing is musically useful.
 
 ## In The libsonare Demo
 
-The mastering demo enables Match loudness for A/B playback by default. When you switch between Before and After, the player lowers the louder side so the comparison is less biased by level.
+The mastering demo enables Match loudness for A/B playback by default. Whichever version you switch to is attenuated down to the quietest of the versions you have loaded, so nothing in the comparison is favoured by raw level. With a reference track loaded, that anchor can be the reference, in which case both the source and the rendered master play back attenuated.
 
 The exported audio is not changed by this playback setting. The WAV download keeps the rendered level. Loudness matching only affects how the browser player compares the two versions.
 
 :::: details Implementation notes
 
-The demo uses rendered input/output LUFS values to calculate a playback-only gain offset. When the source is louder, the source playback is lowered; when the rendered master is louder, the rendered playback is lowered.
+The demo takes the integrated LUFS of the source, the rendered master, and the reference track when one is loaded, and uses the lowest of the three as an anchor. Whichever side is playing gets a playback-only gain offset that brings it down to that anchor; the offset is never positive, so matching only ever attenuates.
 
 This avoids modifying either buffer and keeps the exported WAV authoritative. It also means any report or CLI/API reproduction should use the rendered LUFS values, not the temporary comparison gain used by the browser player.
 

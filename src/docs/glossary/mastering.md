@@ -13,10 +13,10 @@ In the libsonare demo, mastering runs locally in WebAssembly. The file is decode
 
 | Area | Goal |
 |------|------|
-| Loudness | Match the selected target such as -14 LUFS or -16 LUFS. |
+| Loudness | Match the selected target such as -14 LUFS (Loudness Units relative to Full Scale) or -16 LUFS. |
 | Tone | Make broad corrections without remixing individual instruments. |
 | Dynamics | Control peaks and density while preserving movement. |
-| Stereo | Keep width useful without breaking mono compatibility. |
+| Stereo | Keep width useful without breaking [mono compatibility](./concepts/mono-compatibility.md). |
 | Peaks | Avoid clipping after conversion or streaming playback. |
 
 ## In The Demo

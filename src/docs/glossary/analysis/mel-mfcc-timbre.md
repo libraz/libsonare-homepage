@@ -36,7 +36,7 @@ The calculation has three main steps:
 
 1. Build a mel spectrogram.
 2. Take the log of the mel energies.
-3. Apply a DCT, a cosine-basis transform that concentrates information into the first few coefficients.
+3. Apply a DCT (discrete cosine transform), a cosine-basis transform that concentrates information into the first few coefficients.
 
 The result is a compact timbre "fingerprint" used to classify instruments, voices, and sound types.
 
@@ -52,6 +52,12 @@ Two scalars summarize spectral shape per frame:
 | Spectral **flatness** | How noise-like vs. tonal (0–1) | Closer to noise (1) rather than a clear pitch (0) |
 
 These are cheap brightness/noisiness proxies — useful for UI meters, thresholds, and quick descriptors when a full MFCC vector is more than you need.
+
+::: warning Silence reads as flatness 1.0, not 0
+Flatness is the geometric mean of the power spectrum divided by its arithmetic mean, with every bin floored at `amin` (1e-10) before the means are taken. A digitally silent frame therefore has a perfectly constant floored spectrum, and the ratio comes back as `1.0` — "maximally noise-like", the opposite of what the silence suggests. libsonare matches `librosa.feature.spectral_flatness` here and deliberately does not special-case silence.
+
+Gate on level first: check RMS or peak for the frame and ignore the flatness reading below your noise floor. A UI meter or noise gate driven straight off flatness will light up during the quiet parts.
+:::
 
 ::: details How libsonare computes these
 libsonare builds the mel spectrogram with a mel filterbank applied to STFT power, then derives MFCCs via log compression and a DCT-style step, following librosa conventions closely enough for reference comparison. `mfcc` accepts a trailing `lifter` parameter (cepstral liftering, default 0 = no liftering) that matches librosa's `lifter` argument. Spectral centroid and flatness are computed directly from the magnitude spectrum per frame. These features are exposed through the feature-extraction APIs and reused by higher-level timbre and section descriptors; mel and MFCC can also be inverted to approximate audio for previews (see Inverse Features).

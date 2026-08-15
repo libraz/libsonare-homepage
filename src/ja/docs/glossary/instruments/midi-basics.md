@@ -50,7 +50,7 @@ MIDI ファイルは波形ではなく指示を保存するため、サイズは
 
 ## 音色を選ぶ: プログラムチェンジとバンクセレクト
 
-**プログラムチェンジ**メッセージは、チャンネルが*どの*楽器を鳴らすかを、プログラム番号 0〜127 で選びます。128 音色では足りないことが多いため、**バンクセレクト**でアドレスを広げます。**CC0** がバンク MSB、**CC32** がバンク LSB で、プログラムチェンジの直前に送って、128 プログラムからなる別のバンクを選びます。
+**プログラムチェンジ**メッセージは、チャンネルが*どの*楽器を鳴らすかを、プログラム番号 0〜127 で選びます。128 音色では足りないことが多いため、**バンクセレクト**でアドレスを広げます。**CC0** がバンク MSB（上位バイト）、**CC32** がバンク LSB（下位バイト）で、プログラムチェンジの直前に送って、128 プログラムからなる別のバンクを選びます。
 
 ::: info GM（General MIDI）
 **General MIDI** は、各プログラム番号の意味を固定する標準です。プログラム 0 は必ずアコースティックグランドピアノ、24 はナイロン弦ギター、という具合に 128 楽器のマップ全体を定め、さらにチャンネル 10 に標準のドラムマップを置きます。GM があるおかげで、ある機器で作った MIDI ファイルが、別の機器でも*正しい種類*の楽器で鳴ります。
@@ -93,7 +93,7 @@ MIDI が演奏と音を切り分けている様子は、一本道のパイプラ
 />
 
 ::: details libsonare での実装
-libsonare のリアルタイムエンジンは、ノートを `pushMidiNoteOn(destinationId, group, channel, note, velocity)` と `pushMidiNoteOff(...)` で、コントロールチェンジを `pushMidiCc(destinationId, group, channel, controller, value)` で受け取ります — `destinationId` はどの読み込み済み楽器がイベントを受けるかを選び、`channel` は 0〜15 の MIDI チャンネルです。ブラウザでは Web MIDI ブリッジ（`bindWebMidi`）が、物理 MIDI 鍵盤のイベントをそれらのエンジン入力へ直接つなぎ、ハードウェアコントローラーで NativeSynth や読み込んだ SoundFont をライブ演奏できます。同じノート／CC の語彙は、ライブエンジンとオフラインのアレンジメントバウンスの両方で使われます。
+libsonare のリアルタイムエンジンは、ノートを `pushMidiNoteOn(destinationId, group, channel, note, velocity)` と `pushMidiNoteOff(...)` で、コントロールチェンジを `pushMidiCc(destinationId, group, channel, controller, value)` で受け取ります — `destinationId` は送出先（デスティネーション）、つまりどの読み込み済み楽器がイベントを受けるかを選び、`channel` は 0〜15 の MIDI チャンネルです。ブラウザでは Web MIDI ブリッジ（`bindWebMidi`）が、物理 MIDI 鍵盤のイベントをそれらのエンジン入力へ直接つなぎ、ハードウェアコントローラーで NativeSynth や読み込んだ SoundFont をライブ演奏できます。同じノート／CC の語彙は、ライブエンジンとオフラインのアレンジメントバウンスの両方で使われます。
 :::
 
 関連: [MIDI 入力](../../midi-input.md)、[SoundFont とサンプル音源](./soundfont.md)、[編集の基礎](../concepts/editing-basics.md)

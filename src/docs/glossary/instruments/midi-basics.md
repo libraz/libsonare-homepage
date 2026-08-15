@@ -50,7 +50,7 @@ The most common controllers:
 
 ## Choosing a sound: Program Change and bank select
 
-A **Program Change** message picks *which* instrument a channel plays, by program number 0-127. Because 128 sounds is often not enough, **bank select** widens the address: **CC0** is the bank MSB and **CC32** is the bank LSB, sent just before the Program Change to choose a different bank of 128 programs.
+A **Program Change** message picks *which* instrument a channel plays, by program number 0-127. Because 128 sounds is often not enough, **bank select** widens the address: **CC0** is the bank MSB (most significant byte) and **CC32** is the bank LSB (least significant byte), sent just before the Program Change to choose a different bank of 128 programs.
 
 ::: info GM (General MIDI)
 **General MIDI** is a standard that fixes what each program number means: program 0 is always an acoustic grand piano, 24 a nylon guitar, and so on across a 128-instrument map, plus a standard drum map on channel 10. GM is why a MIDI file made on one device plays the *right kinds* of instruments on another.

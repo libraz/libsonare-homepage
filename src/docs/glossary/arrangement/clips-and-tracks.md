@@ -57,7 +57,7 @@ Inside each track are **clips**. A clip is one block of content placed at a spec
 
 Here is the idea that trips up most beginners: clip positions are stored in **musical time**, not in seconds.
 
-A clip does not start "at 4.27 seconds". It starts "at bar 3, beat 1". The unit underneath is the **quarter note**: positions and lengths are floating-point numbers where `1.0` is exactly one quarter note. One bar of 4/4 is `4.0`, an eighth note is `0.5`, a dotted quarter is `1.5` — they are not integer ticks or a 960-based resolution, even though the parameter names use `Ppq` (e.g. `startPpq`, `lengthPpq`). Every clip start and length you set is in these quarter-note units, so `lengthPpq: 4` is four quarter notes long.
+A clip does not start "at 4.27 seconds". It starts "at bar 3, beat 1". The unit underneath is the **quarter note**: positions and lengths are floating-point numbers where `1.0` is exactly one quarter note. One bar of 4/4 is `4.0`, an eighth note is `0.5`, a dotted quarter is `1.5` — they are not integer ticks or a 960-based resolution, even though the parameter names use `Ppq` (short for *pulses per quarter note*; e.g. `startPpq`, `lengthPpq`). Every clip start and length you set is in these quarter-note units, so `lengthPpq: 4` is four quarter notes long.
 
 ::: tip Why musical time matters
 Because positions are musical, the arrangement stays correct when you change the tempo. Move the song from 120 BPM to 100 BPM and "bar 3, beat 1" simply happens later in seconds — but it is still bar 3, beat 1. The notes never drift off the grid. The conversion from musical time to actual sample positions happens later, when the project is compiled and rendered. See [Warp and Tempo Sync](./warp-and-tempo.md) for how tempo and the grid interact.

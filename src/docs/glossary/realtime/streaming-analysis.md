@@ -7,7 +7,7 @@ description: Blocks, frames, hops, updating estimates, and compact frame reads �
 
 Offline analysis sees the whole file at once. **Streaming analysis** sees the audio a chunk at a time and must produce results *as it goes*.
 
-libsonare's `StreamAnalyzer` runs the same MIR pipeline incrementally. It emits per-frame features and musical estimates that update over time for visualizers and live displays.
+libsonare's `StreamAnalyzer` runs the same [MIR (Music Information Retrieval)](../concepts/mir-overview.md) pipeline incrementally. It emits per-frame features and musical estimates that update over time for visualizers and live displays.
 
 Use it when audio is arriving live — from a microphone, an AudioWorklet, or a playback graph — and you want meters, a spectrogram, or running BPM/key estimates to update in real time. For a fixed file you already have in full, batch (offline) analysis is simpler and more accurate.
 
@@ -20,7 +20,7 @@ This page explains the streaming model. For the API recipe, see [Realtime and St
 Four words are easy to confuse, and mixing them up causes most streaming bugs:
 
 - **Block** (or chunk) — the slice of samples the host hands you each callback (e.g. 128 or 512 samples from an AudioWorklet). Its size is set by the audio system, not by you.
-- **Frame** — one STFT analysis window's worth of output. The analyzer may emit several frames per block, or none, depending on sizes.
+- **Frame** — one [STFT (short-time Fourier transform)](../analysis/spectrogram-stft.md) analysis window's worth of output. The analyzer may emit several frames per block, or none, depending on sizes.
 - **Hop** (`hopLength`) — how far the analysis window advances between frames; it sets the frame rate, independent of the block size.
 - **`nFft`** — the analysis window size; bigger means finer frequency detail, blurrier timing.
 
@@ -35,7 +35,7 @@ Musical estimates — BPM, key, current chord, progression, pattern — **update
 Frames accumulate in a buffer between your `process()` calls. You drain whatever is available and render it, rather than expecting one frame per block. This **batched read** model keeps the audio callback cheap (it just buffers) and moves the variable-rate frame handling to your UI loop, where jitter is harmless. The API uses "quantized" for optional 8-bit / 16-bit output formats; that is about reducing data size, not about timing.
 
 ::: details How libsonare streams analysis
-`StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`; `readFrames(availableFrames())` drains buffered mel/chroma/onset/spectral frames, and `stats()` returns BPM/key/chord/progression/pattern estimates with an `updated` flag when a value has changed. Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. `emitEveryNFrames` throttles frame output for UI rendering. It reuses the same STFT-derived feature stages as offline analysis.
+`StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`; `readFrames(availableFrames())` drains buffered mel/chroma/onset/spectral frames, and `stats()` returns BPM/key/chord/progression/pattern estimates with an `updated` flag that is `true` on the periodic frames where the key or BPM estimate was recomputed — not only on the frames where the recomputed value differs from the previous one, so do not use it as a change detector. Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. `emitEveryNFrames` throttles frame output for UI rendering. It reuses the same STFT-derived feature stages as offline analysis.
 :::
 
 Related: [Realtime and Streaming](../../realtime-streaming.md), [Spectrogram and STFT](../analysis/spectrogram-stft.md), [Realtime Engine](./realtime-engine.md), [Realtime Safety](./realtime-safety.md)

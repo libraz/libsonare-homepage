@@ -81,9 +81,9 @@ The blocks above describe *subtractive* synthesis, but it is only one way to mak
 | **Reed woodwind** | A reed and bore waveguide | Clarinet, saxophones, oboe, bassoon |
 | **Brass** | A lip-reed brass waveguide | Trumpet, trombone, tuba, horns |
 | **Flute** | An air jet exciting an open-pipe waveguide | Flute, recorder, pan flute, whistles |
-| **Buzzing-bridge plucked string** | A plucked string whose bridge keeps grazing it, spraying energy into the upper partials | Sitar, koto, harp |
-| **Source-filter vocal** | A glottal source (a buzzy sawtooth) shaped by a bank of vowel formant resonators | Choir and solo-voice vowels |
-| **Free reed** | A driven metal tongue swinging through a slot; two slightly detuned tongues give the shimmering musette beat | Accordion, harmonica, bandoneon |
+| **Buzzing-bridge plucked string** | A plucked string whose bridge can be made to graze it and spray energy into the upper partials; at buzz 0 the termination stays clean (harp, koto) | Sitar, koto, harp |
+| **Source-filter vocal** | A glottal source (a buzzy sawtooth) shaped by a bank of vowel [formant](../editing/voice-formant.md) resonators (the resonant peaks that make one vowel sound different from another) | Choir and solo-voice vowels |
+| **Free reed** | A driven metal tongue swinging through a slot; adding a second tongue a few cents sharp of it gives the shimmering musette beat | Accordion, harmonica, bandoneon |
 
 ::: tip FM in one sentence
 In **FM (frequency modulation)** synthesis, instead of filtering a rich waveform, you take two simple sine oscillators and let one wobble the other's pitch very fast. The result is a complex, often metallic or bell-like tone that subtractive synthesis cannot easily make.

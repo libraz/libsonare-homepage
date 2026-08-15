@@ -5,7 +5,7 @@ description: A practical explanation of mastering, what it can fix, and what it 
 
 # What Is Mastering?
 
-Mastering is the final quality-control and delivery step after mixing. It prepares a finished mix so it translates across streaming platforms, phones, headphones, speakers, cars, and codec conversion.
+Mastering is the final quality-control and delivery step after mixing. It prepares a finished mix so it *translates* — sounds the way you intended — across streaming platforms, phones, headphones, speakers, cars, and codec conversion.
 
 The key point is that mastering works on the finished stereo mix. It can adjust broad tone, loudness, density, stereo behavior, and peak safety, but it cannot independently rebalance the vocal, kick, guitar, or snare once those sounds are already combined.
 
@@ -15,11 +15,11 @@ Mastering usually answers five practical questions:
 
 | Question | Mastering task |
 |----------|----------------|
-| Is the track too quiet or too loud compared with its destination? | Loudness measurement and normalization |
+| Is the track too quiet or too loud compared with its destination? | [Loudness](../lufs.md) measurement and normalization |
 | Is the tonal balance broadly too dark, harsh, thin, or boomy? | Wide EQ, tilt EQ, and tonal shaping |
 | Does the mix feel too jumpy or too flat? | Gentle dynamics control and limiting |
-| Is the stereo image useful and mono-compatible? | Stereo width, mid/side checks, phase correlation |
-| Will the file survive encoding and playback without clipping? | True-peak limiting and ceiling management |
+| Is the stereo image useful and [mono-compatible](./mono-compatibility.md)? | Stereo width, mid/side (center versus sides) checks, phase correlation |
+| Will the file survive encoding and playback without clipping? | [True-peak](../true-peak.md) limiting and ceiling management |
 
 Good mastering is often subtle. A useful master may only be 1-2 dB of EQ, a small amount of compression, and a limiter catching peaks. Heavy processing is sometimes appropriate, but it should solve a real problem rather than make every track louder by default.
 
@@ -47,11 +47,11 @@ Quick Master is designed for a practical first pass:
 3. Choose the destination loudness target.
 4. Render and compare before/after with loudness matching.
 
-Studio mode exposes the same idea as modules: repair, EQ, dynamics, air band, stereo image, limiter, loudness target, and output.
+Studio mode exposes the same idea as modules: repair, EQ, dynamics, [air band](../air-band.md), stereo image, limiter, loudness target, and output.
 
 ## How To Judge A Master
 
-Use loudness-matched A/B comparison when judging whether processing helped. Louder usually sounds better for a few seconds, even when it is not actually better.
+Use [loudness-matched](./loudness-matching.md) A/B comparison when judging whether processing helped. Louder usually sounds better for a few seconds, even when it is not actually better.
 
 <SonareDemo id="loudness-meter" />
 

@@ -34,7 +34,7 @@ Poor uses:
 
 1. Load your source and render a first master.
 2. Drop a reference track into the Reference panel.
-3. Compare crest factor, peak level, and stereo correlation.
+3. Compare [crest factor](../concepts/crest-factor.md) (the gap between peak and average level), peak level, and stereo correlation.
 4. Use Match Reference EQ only as a starting point.
 5. Re-listen with loudness matching enabled.
 6. Undo the move mentally if the track loses its own musical identity.

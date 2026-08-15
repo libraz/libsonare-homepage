@@ -42,12 +42,17 @@ Most MIR features are derived from a small set of intermediate representations. 
     { from: 'chroma', to: 'key' },
     { from: 'chroma', to: 'chords' },
     { from: 'onset', to: 'bpm' },
-    { from: 'onset', to: 'sections' }
+    { from: 'mel', to: 'sections' },
+    { from: 'chroma', to: 'sections' }
   ]"
-  caption="One STFT feeds every branch, so asking for several features on the same source reuses the same intermediates instead of recomputing them."
+  caption="One STFT feeds every branch. Section analysis is a timbre-and-harmony task, not a rhythm one: its boundaries come from the mel/MFCC and chroma branches, never from the onset envelope."
 />
 
-Because these intermediates are shared, asking for BPM, key, chord, and section results back-to-back on the same source does **not** repeat the heavy work — the STFT and friends are computed once and reused.
+Sharing these intermediates only pays off inside a single whole-track analysis. `analyze` (`MusicAnalyzer`) computes the STFT and its derivatives once and reuses them across BPM, key, chord, and section results.
+
+::: warning The per-feature helpers do not share anything
+`detectBpm`, `detectKey`, `detectChords`, and the section helpers each start again from the raw samples: four back-to-back calls mean four STFTs, two independent chromagrams, and a second onset envelope. There is no cache keyed on the audio. If you want more than one answer about the same track, call the whole-track analysis once instead of assembling it from the individual helpers.
+:::
 
 ## Which question, which feature
 
@@ -56,12 +61,12 @@ Because these intermediates are shared, asking for BPM, key, chord, and section 
 | How fast is it? Where are the beats? | BPM / beat tracking | onset strength |
 | What key is it in? | key detection | chroma |
 | What chord is playing? | chord recognition | chroma |
-| Where does the chorus start? | section analysis | rhythm + harmony + timbre |
+| Where does the chorus start? | section analysis | MFCC (timbre) + chroma (harmony) + energy |
 | What note is the melody? | pitch / melody tracking | pitch tracking (see Separation and pitch below) |
 | What does it *sound* like (timbre)? | MFCC | mel spectrogram |
 | Can I separate drums from the rest? | HPSS | spectrogram structure |
 | What is the raw frequency content over time? | STFT / spectrogram | the waveform |
-| What does the recording space sound like? | room-acoustic analysis | impulse-response decay or blind free-decay estimates |
+| What does the recording space sound like? | room-acoustic analysis | impulse-response (IR) decay or blind free-decay estimates |
 
 ## Timing: BPM, beat, onset, section
 
@@ -72,7 +77,7 @@ The timing family builds up in layers:
 | **Onset detection** | Where notes, drums, or consonants begin: the spikes in an onset-strength envelope. |
 | **BPM** | How periodic those onsets are. |
 | **Beat tracking** | Where pulses land on the timeline. |
-| **Section analysis** | Where longer spans such as intros, verse-like sections, chorus-like sections, and breaks begin and end. |
+| **Section analysis** | Where longer spans such as intros, verse-like sections, chorus-like sections, and breaks begin and end. Unlike the three rows above it, this one does not read the onset envelope: boundaries come from timbre (MFCC) and harmony (chroma). |
 
 ::: info Onset is the root of the rhythm family
 BPM, beats, and tempograms all start from the same onset-strength envelope. If you want the time × tempo picture behind a BPM estimate, see the tempogram family in [Realtime and Streaming](../../realtime-streaming.md#tempograms-from-an-onset-envelope).
@@ -92,9 +97,9 @@ Folding octaves together is exactly what makes chroma good for key/chord work �
 
 ## Spectrum: FFT, STFT, spectrogram
 
-The **FFT** is an efficient algorithm for the DFT (Discrete Fourier Transform), which converts a block of samples into frequency content.
+The **FFT** (Fast Fourier Transform) is an efficient algorithm for the DFT (Discrete Fourier Transform), which converts a block of samples into frequency content.
 
-The **STFT** repeats that over many short, overlapping windows so frequency content can be tracked *over time*.
+The **STFT** (short-time Fourier transform) repeats that over many short, overlapping windows so frequency content can be tracked *over time*.
 
 A **spectrogram** is the visual result: time on one axis, frequency on another, intensity as brightness.
 
@@ -109,8 +114,8 @@ These perceptual features answer different questions:
 | Feature | What it emphasizes |
 |---------|--------------------|
 | **Mel spectrogram** | Frequency resolution shaped toward human hearing: fine detail low, coarser detail high. |
-| **MFCCs** | A compact "timbre fingerprint". It is computed by taking the mel spectrogram, compressing its loudness with a logarithm, then summarizing each frame into a handful of numbers that capture overall spectral shape rather than exact pitch. |
-| **CQT** / **VQT** | Musically spaced bins, useful when pitch relationships matter more than equal-Hz spacing. |
+| **MFCCs** (mel-frequency cepstral coefficients) | A compact "timbre fingerprint". It is computed by taking the mel spectrogram, compressing its loudness with a logarithm, then summarizing each frame into a handful of numbers that capture overall spectral shape rather than exact pitch. |
+| **CQT** / **VQT** (constant-Q / variable-Q transform) | Musically spaced bins — geometric spacing with a configurable `binsPerOctave` (12 by default, so one bin per semitone; 24 or 36 are common for chroma and tuning work). Useful when pitch relationships matter more than equal-Hz spacing. |
 
 You can also run these transforms backwards for previews and debugging — see [Inverse Features](../../inverse-features.md).
 
@@ -127,13 +132,13 @@ Separating them first often improves downstream tasks because drums and pitched 
 
 <SonareDemo id="hpss-separation" />
 
-**Pitch estimation** tracks the fundamental frequency — the lowest, strongest frequency that we hear as the note's pitch — useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
+**Pitch estimation** tracks the fundamental frequency: the lowest partial of the harmonic series, equivalently the rate at which the waveform repeats. It is not necessarily the *strongest* frequency — an upper harmonic often dominates a bright brass note or a bass heard through a small speaker, and the pitch is still heard at F0 even when no energy is present there at all. That is why the estimators work from the waveform period rather than from the loudest spectral peak. Useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
 
 ## Adjacent: room acoustics
 
 Room-acoustic analysis is adjacent to MIR. It describes the space captured by the recording rather than the notes, rhythm, or form of the music.
 
-Use direct IR analysis when you have a clean impulse response. That path measures RT60, EDT, C50, C80, D50, and band decay.
+Use direct IR analysis when you have a clean impulse response. That path measures RT60 (the time reverberation takes to decay by 60 dB), EDT, C50, C80, D50, and band decay.
 
 Use blind acoustic estimation when you only have a normal recording. That path reports room-decay cues with a confidence value because the free-decay evidence may be weak or missing. See [Room Acoustics](../../acoustic-analysis.md).
 
@@ -141,7 +146,7 @@ Use blind acoustic estimation when you only have a normal recording. That path r
 
 libsonare exposes MIR functions across browser/WASM, JavaScript, Python, native bindings, CLI, and C++ APIs.
 
-Many features share intermediate representations such as STFT, chroma, and spectral energy curves. Asking for BPM, key, chord, and section results back-to-back on the same source does not repeat the heavy work; the intermediates are computed once and reused.
+Many features share intermediate representations such as STFT, chroma, and spectral energy curves. That sharing lives inside `MusicAnalyzer`: a whole-track `analyze` computes each intermediate once and reuses it across BPM, key, chord, and section results. The single-feature entry points hold no cross-call cache, so each one rebuilds what it needs from the samples.
 
 The browser demos are built for interactive use, but each one emphasizes a different part of the library:
 

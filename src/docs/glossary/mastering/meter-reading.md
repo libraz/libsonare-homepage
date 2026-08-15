@@ -15,6 +15,8 @@ No single reading proves a master is good. Loudness + peak answer "is it on targ
 
 ## The Main Readings
 
+Loudness is reported in [LUFS](../lufs.md) (Loudness Units relative to Full Scale), which tracks perceived loudness rather than raw sample level.
+
 | Meter | Question it answers |
 |-------|---------------------|
 | Output LUFS | Is the master near the chosen delivery target? |
@@ -23,6 +25,8 @@ No single reading proves a master is good. Loudness + peak answer "is it on targ
 | Correlation | Is the stereo image likely to survive mono playback? |
 | Phase Scope | Is the stereo field balanced or unstable? |
 | Stereo Image | Is width coming from useful side energy or risky spread? |
+
+The demo below covers the first two rows on a real clip — loudness and peak safety. Correlation and the phase scope are a different measurement and are shown on [Mono Compatibility](../concepts/mono-compatibility.md).
 
 <SonareDemo id="loudness-meter" />
 
@@ -51,7 +55,7 @@ The demo uses two measurement paths:
 | Lightweight UI metrics | Immediate feedback while interacting | Vue components |
 | Authoritative render metrics | Values to keep in the report | libsonare render result and JSON report |
 
-Peak, RMS, crest factor, and correlation in the UI are sampled from the source or rendered buffers with a stride — reading every Nth sample rather than all of them — so the interface stays responsive. The phase scope and stereo image are visualization aids.
+Peak in the UI is scanned across every sample of the source or rendered buffer, because a peak readout is a safety number and a decimated scan can step straight over a single-sample clip. RMS, crest factor, and correlation are averages, so they are computed from a strided subset — roughly 200,000 points — to keep the interface responsive. The phase scope and stereo image are visualization aids.
 
 Because the UI metrics and the post-render metrics come from separate paths, the numbers can differ slightly. Treat the JSON report as the processing record.
 

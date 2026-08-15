@@ -8,13 +8,13 @@ description: Why true peak limiting matters for browser and streaming mastering.
 True Peak estimates the highest level a signal will actually reach when it is played back. Digital audio is stored as a series of separate sample points; on playback those points are smoothed back into a continuous waveform. That reconstructed waveform can rise higher between two samples than either sample itself, and True Peak estimates that in-between maximum.
 
 A file can have sample peaks below 0 dBFS and still clip after conversion or playback reconstruction.
-This is the inter-sample peak problem. The visible sample points can look safe while the reconstructed analog-like waveform rises above the limit between those points.
+This is the inter-sample peak (ISP) problem. The visible sample points can look safe while the reconstructed analog-like waveform rises above the limit between those points.
 
 <SonareDemo id="inter-sample-peak" />
 
 ## Practical Starting Point
 
-A common release ceiling is around `-1 dBTP`. The libsonare demo uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode.
+A common release ceiling is around `-1 dBTP` — decibels true peak, the same dB scale as sample peak but measured on the reconstructed waveform. The libsonare demo uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode.
 
 For the delivery-safety side of this topic, see [True Peak Safety](./concepts/true-peak-safety.md).
 
@@ -42,7 +42,7 @@ Right before release, check both the exported WAV and a quick render through the
 
 :::: details Implementation notes
 
-True peak detection is different from sample peak detection. It estimates the maximum level between samples using oversampling or a polyphase filter.
+True peak detection is different from sample peak detection: it oversamples the signal and takes the maximum of the reconstructed waveform rather than of the stored sample points. libsonare performs that oversampling with a polyphase interpolation filter, evaluating the reconstruction at each intermediate phase — the polyphase filter is how the oversampling is done, not an alternative to it. The meter supports 1x, 2x, 4x, 8x, and 16x, and the demo defaults to 4x.
 
 The demo limiter has lookahead, so it can prepare gain reduction before a peak arrives rather than reacting after the peak has already clipped. Longer lookahead can be safer, but excessive values may soften transient feel.
 

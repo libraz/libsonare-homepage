@@ -79,7 +79,7 @@ The implementation uses the same C++ DSP core as analysis and mastering, but the
 
 | Function family | Implementation idea | Beginner takeaway |
 |-----------------|---------------------|-------------------|
-| Time stretch / pitch shift | Phase vocoder plus resampling | Duration and pitch can be changed separately, but large moves create artifacts |
+| Time stretch / pitch shift | Phase vocoder (rebuilds the signal from short overlapping spectral frames) plus resampling | Duration and pitch can be changed separately, but large moves create artifacts |
 | `voiceChange` | Shift the spectral envelope separately from harmonic pitch | Voice character can move without changing the target note |
 | `pitchCorrectToMidi` | Move from a caller-supplied current MIDI note to a target MIDI note | Estimate the current pitch first with `pitchYin`, `pitchPyin`, or your own detector |
 | `noteStretch` | Process an exact sample-offset region | Convert seconds to samples before calling it |

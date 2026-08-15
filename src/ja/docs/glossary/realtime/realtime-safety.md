@@ -76,4 +76,4 @@ libsonare のリアルタイム経路は、コールバックの規則を次の�
 スレッドをまたぐ必要のある状態は、ロックフリーチャンネルで移され、直接読むのではなくテレメトリとして公開されます。そのため同じ DSP が、オフラインレンダリングでもブラウザの AudioWorklet 内でも、コード変更なしに動きます。
 :::
 
-関連: [リアルタイムとストリーミング](../../realtime-streaming.md), [ストリーミング解析](./streaming-analysis.md), [リアルタイムエンジン](./realtime-engine.md), [ブラウザ内ローカル処理](../concepts/browser-local-processing.md)
+関連: [リアルタイムとストリーミング](../../realtime-streaming.md)、[ストリーミング解析](./streaming-analysis.md)、[リアルタイムエンジン](./realtime-engine.md)、[ブラウザ内ローカル処理](../concepts/browser-local-processing.md)

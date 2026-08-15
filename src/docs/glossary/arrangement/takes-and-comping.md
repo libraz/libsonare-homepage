@@ -19,7 +19,7 @@ This is convenient because the takes stay aligned: they share the same start pos
 
 ## Loop recording: collecting takes fast
 
-The fastest way to gather takes is **loop recording**. You set a loop region — say one verse — and the transport keeps cycling around it while you keep performing. Every time around the loop captures a **new take** into the clip. Ten passes around the loop give you ten takes stacked in one clip, ready to be comped.
+The fastest way to gather takes is **loop recording**. You set a loop region — say one verse — and the transport (the play/record cursor that walks the timeline) keeps cycling around it while you keep performing. Every time around the loop captures a **new take** into the clip. Ten passes around the loop give you ten takes stacked in one clip, ready to be comped.
 
 ::: tip Why this beats recording into separate clips
 Because all the takes live in one clip on one track, they are pre-aligned and easy to compare. You are not juggling ten clips on ten lanes; you are flipping through alternatives in place.

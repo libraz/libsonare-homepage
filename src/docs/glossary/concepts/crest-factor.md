@@ -5,7 +5,7 @@ description: The gap between peak level and average level, and how it helps inte
 
 # Crest Factor
 
-Crest factor is the gap between peak level and average level. The "average" here is the RMS level — a measure of the signal's sustained energy rather than its momentary spikes — and crest factor is the difference between the two, reported in dB. In mastering, it is a quick way to understand how peaky, dense, or transient-heavy a signal is.
+Crest factor is the gap between peak level and average level. The "average" here is the RMS level — a measure of the signal's sustained energy rather than its momentary spikes — and crest factor is the difference between the two, reported in dB. In mastering, it is a quick way to understand how peaky, dense, or transient-heavy a signal is. A *transient* is the short, sharp burst at the start of a sound — a drum hit, a pick attack, a consonant.
 
 A high crest factor means peaks rise far above the average level. A low crest factor means the signal is dense or heavily controlled. Neither is automatically good or bad.
 
@@ -30,15 +30,15 @@ A solo snare can have a high crest factor and still be healthy. A dense synth pa
 
 Limiters react to peaks. If a mix has a few peaks much louder than the rest, the limiter may work hard on those moments while the overall master remains quieter than expected.
 
-<SonareDemo id="loudness-meter" />
+<SonareDemo id="compressor-curve" />
 
-Compression, clipping, saturation, and transient shaping can reduce crest factor. Used carefully, that can make a master feel more controlled. Used carelessly, it removes punch and makes the track tiring.
+Compression, clipping, saturation, and transient shaping can reduce crest factor. Used carefully, that can make a master feel more controlled. Used carelessly, it removes punch and makes the track tiring. Transient shaping runs both ways: pushed in the attack-boost direction it lifts peaks while barely moving RMS, so it *raises* crest factor instead.
 
 ## Relationship To Dynamic Range
 
 Crest factor is related to dynamics, but it is not the same as musical dynamic range. It mostly describes peak-to-average behavior over a measurement window. A song can have a low crest factor in each section while still having macro dynamics between sections.
 
-Use it alongside listening, LUFS, true peak, and arrangement context.
+Use it alongside listening, [LUFS](../lufs.md) (Loudness Units relative to Full Scale, the loudness measure delivery targets are written in), true peak, and arrangement context.
 
 ## Common Pitfalls
 

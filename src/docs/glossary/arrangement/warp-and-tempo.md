@@ -5,7 +5,7 @@ description: How warping makes an audio clip follow the project tempo — off, r
 
 # Warp and Tempo Sync
 
-Drop a drum loop recorded at 90 BPM into a project running at 120 BPM and it will not line up — it plays at its own speed while your grid moves faster. **Warping** is the feature that makes an audio clip bend to the project's tempo so everything stays locked together.
+Drop a drum loop recorded at 90 BPM (beats per minute) into a project running at 120 BPM and it will not line up — it plays at its own speed while your grid moves faster. **Warping** is the feature that makes an audio clip bend to the project's tempo so everything stays locked together.
 
 ::: info One-line definition
 **Warp** = time-stretching an audio clip so it follows the project tempo instead of its own original tempo.
@@ -37,7 +37,7 @@ Every audio clip has a **warp mode** that decides *how* (or whether) it follows 
 ::: tip off vs repitch vs tempo-sync
 - **off** — no stretching. The clip plays at its native speed and pitch, ignoring the project tempo. Use this for one-shots and sound effects that should not bend.
 - **repitch** — like changing the speed of a tape. The clip is sped up or slowed down to fit the tempo, and the **pitch moves with it**: faster means higher, slower means lower. Simple, CPU-cheap, and musically useful when you *want* that vintage varispeed character.
-- **tempo-sync** — follow the tempo while **keeping the original pitch**. The clip is time-stretched so its timing matches the grid, but a phase vocoder holds the pitch constant. This is what you want for vocals, melodic loops, and anything where the notes must stay in tune.
+- **tempo-sync** — follow the tempo while **keeping the original pitch**. The clip is time-stretched so its timing matches the grid, but a phase vocoder — an algorithm that stretches audio in the frequency domain — holds the pitch constant. This is what you want for vocals, melodic loops, and anything where the notes must stay in tune.
 :::
 
 <SonareDemo id="time-stretch" />
@@ -59,6 +59,10 @@ Each anchor ties a position in the source audio to a position on the project tim
   :labels="{ marker: 'warp anchor' }"
   caption="An anchor fixes one point in the source to one point on the timeline. Whatever audio sits between two anchors is fitted to whatever distance the grid gives it, so a rushed phrase gets stretched and a dragging one gets compressed — inside the same clip, with no edit to the source file."
 />
+
+::: tip Your app owns the anchors
+The engine reads anchors, it does not invent them. Each anchor is an absolute pair of sample positions, so a clip bends to the grid exactly as far as the map you supplied says — and editing the tempo map afterwards does not rewrite it. A host that lets the user change tempo has to recompute the anchors and push a new warp map. A map with fewer than two anchors describes no stretch at all: a `repitch` clip then plays at its native rate, and a `tempo-sync` clip fails to compile.
+:::
 
 ::: warning tempo-sync is real time-stretching, with limits
 Because tempo-sync changes duration while preserving pitch, it uses a phase vocoder under the hood — the same family of algorithm described in [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md). Small stretches are transparent; very large ones can smear transients or add a "phasey" quality. On stereo and multichannel clips the stretch is phase-locked across channels, so the stereo image does not drift between left and right. repitch has no such artifacts (it is just resampling) but it moves the pitch, so the two modes trade different costs.

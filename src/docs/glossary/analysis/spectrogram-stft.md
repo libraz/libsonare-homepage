@@ -25,10 +25,12 @@ Two parameters appear everywhere because they control this grid:
 
 | Parameter | What it sets | Trade-off |
 |-----------|--------------|-----------|
-| `nFft` | Window size in samples (e.g. `2048`) | Bigger = finer frequency detail, but blurrier timing |
+| `nFft` | FFT length in samples (e.g. `2048`) — and, unless you shorten the window separately, the analysis window length too | A longer *window* = finer frequency detail, but blurrier timing |
 | `hopLength` | Step between windows (e.g. `512`) | Smaller = more frames per second (smoother motion), more CPU |
 
 This is the **time–frequency resolution trade-off**: you cannot have perfect frequency *and* perfect time resolution at once. It is physics, not a libsonare limitation.
+
+Strictly, it is the *window* length that sets that trade-off, not the transform length. They are the same number by default, and always the same through the JS/WASM bindings. In C++ you can set `StftConfig::win_length` shorter than `n_fft`; from there, raising `n_fft` only zero-pads each frame, which adds bins that interpolate the same spectrum more finely without buying any real frequency resolution — and without costing any time resolution either.
 
 ## Windowing
 
@@ -47,17 +49,17 @@ That means an even-Hz grid can waste resolution high up and lack resolution down
 
 <BinSpacingFigure
   title="The same octave, twice"
-  caption="Both panels are one octave wide and drawn the same size. A pitch-aware bank puts twelve bins in each; an STFT puts whatever a constant hertz spacing happens to give it — five bins in the low octave, over 160 in the high one. VQT keeps the pitch-aware spacing but relaxes it at the bottom, where strict per-note bins would need windows long enough to smear timing."
+  caption="Both panels are one octave wide and drawn the same size. A pitch-aware bank puts twelve bins in each; an STFT puts whatever a constant hertz spacing happens to give it — five bins in the low octave, over 160 in the high one. VQT keeps exactly these pitch-aware bin centres and instead widens the filters at the bottom, where a strict constant Q would need windows long enough to smear timing."
 />
 
 | Transform | How it spaces frequency | Use when |
 |-----------|-------------------------|----------|
 | STFT | Evenly in Hz | You want a general time-frequency view |
-| CQT | By musical interval, often one set per semitone | Pitch relationships matter |
-| VQT | Like CQT, but it loosens the strict per-note spacing in the low range so low notes do not smear in time | You want CQT-style pitch-aware bins but cleaner timing on bass and low percussion |
+| CQT (constant-Q transform) | By musical interval, often one set per semitone | Pitch relationships matter |
+| VQT (variable-Q transform) | Bin centres stay on CQT's per-semitone grid, but the low-frequency filters are widened (lower Q), so they are shorter in time and low notes do not smear | You want CQT-style pitch-aware bins but cleaner timing on bass and low percussion |
 
 ::: details How libsonare computes the STFT
-libsonare's STFT and framing utilities apply a window (Hann by default), advance by `hopLength`, and run a real FFT per frame, producing the magnitude/power spectra that mel, chroma, onset, and tempogram stages reuse. Because the intermediate spectrogram is shared, asking for several features on one source does not recompute the FFT each time. The `nFft`/`hopLength` defaults (`2048`/`512`) mirror common librosa usage so reference tests can compare outputs. CQT/VQT use log-frequency bins layered on top of the same framing conventions.
+libsonare's STFT and framing utilities apply a window (Hann by default), advance by `hopLength`, and run a real FFT per frame, producing the magnitude/power spectra that mel, chroma, onset, and tempogram stages reuse. That reuse is scoped: inside `analyze()` (`MusicAnalyzer`) the spectrogram is computed once and shared by the chroma and mel stages, while the standalone per-feature helpers — `chroma()`, `melSpectrogram()`, and the individual key/chord/section analyzers — each run their own STFT. Ask for several features through `analyze()` if you want the FFT paid for once. The `nFft`/`hopLength` defaults (`2048`/`512`) mirror common librosa usage so reference tests can compare outputs. CQT/VQT use log-frequency bins layered on top of the same framing conventions.
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Chroma Features](./chroma-features.md), [Mel, MFCC, and Timbre](./mel-mfcc-timbre.md), [Audio Basics](../concepts/audio-basics.md)

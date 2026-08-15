@@ -25,7 +25,7 @@ These pages cover the signal and analysis concepts that recur across the API, CL
 
 ## Analysis Guides
 
-These pages expand the MIR terms used by the analyzer, realtime views, and feature-extraction APIs.
+These pages expand the MIR (Music Information Retrieval) terms used by the analyzer, realtime views, and feature-extraction APIs.
 
 | Guide | Covers |
 |-------|--------|
@@ -104,7 +104,7 @@ These pages expand the room-acoustic terms used by the [Spatial Room Scanner](/s
 | [Source Distance and DRR](./glossary/acoustics/source-distance.md) | Direct-to-reverberant ratio, critical distance, and why one channel resolves distance but not direction. |
 | [Room Geometry and Volume](./glossary/acoustics/room-geometry.md) | The equivalent shoebox, volume, and Sabine's volume/absorption trade-off. |
 | [Per-Band Decay and Absorption](./glossary/acoustics/absorption-bands.md) | Per-band RT60, absorption coefficients, and the high-frequency rolloff. |
-| [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md) | Impulse-response vs blind estimation and how to read the confidence score. |
+| [Inverse Room Estimation](./glossary/acoustics/inverse-estimation.md) | Impulse-response (IR) based vs blind estimation, and how to read the confidence score. |
 
 ## Mastering Concepts
 

@@ -7,13 +7,13 @@ description: How true-peak margin prevents clipping after reconstruction, codec 
 
 True peak safety is the practice of leaving enough margin so a mastered file does not clip after reconstruction, codec conversion, or streaming playback.
 
-Sample peaks only show the values stored in the digital file. Playback systems and encoders reconstruct a continuous waveform between those samples. That reconstructed waveform can rise above the stored sample peaks; the part that pokes above is called an **inter-sample peak**. A master that looks safe at sample level can still distort after conversion.
+Sample peaks only show the values stored in the digital file. Playback systems and encoders reconstruct a continuous waveform between those samples. That reconstructed waveform can rise above the stored sample peaks; the part that pokes above is called an **inter-sample peak** (ISP). A master that looks safe at sample level can still distort after conversion.
 
 <SonareDemo id="loudness-meter" />
 
 ## Why Sample Peak Is Not Enough
 
-A digital audio file is a series of points, not a complete curve. When a DAC or encoder turns those points back into sound, it reconstructs the curve implied by the samples. The curve can rise above the points.
+A digital audio file is a series of points, not a complete curve. When a DAC (digital-to-analog converter) or encoder turns those points back into sound, it reconstructs the curve implied by the samples. The curve can rise above the points.
 
 This matters most when:
 
@@ -28,7 +28,7 @@ True-peak measurement estimates this by oversampling the signal before checking 
 
 ## Practical Ceiling
 
-A common release ceiling is around `-1 dBTP`. Some workflows use `-2 dBTP` for extra codec safety; others use a tighter ceiling when the destination is known and controlled.
+The **ceiling** is the highest level the limiter will let through. A common release ceiling is around `-1 dBTP` — decibels true peak, the same decibel scale as dBFS but measured on the reconstructed waveform. Some workflows use `-2 dBTP` for extra codec safety; others use a tighter ceiling when the destination is known and controlled.
 
 The ceiling is not a loudness target. It is a safety margin. You can have a quiet file with unsafe peaks or a loud file that stays within true-peak limits.
 
@@ -40,7 +40,7 @@ In offline mastering, a few milliseconds of lookahead is usually acceptable beca
 
 ## In libsonare
 
-The libsonare mastering chain uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode. The WASM inter-sample-peak (ISP) benchmark checks the browser path with 4x oversampling (the minimum required by ITU-R BS.1770-4 for true-peak measurement) and a sliding-max guard so peak detection stays fast enough for local rendering.
+The libsonare mastering chain uses a true-peak limiter stage and exposes ceiling and lookahead controls in Studio mode. The WASM ISP benchmark checks the browser path with 4x oversampling (the minimum required by ITU-R BS.1770-4 for true-peak measurement) and a sliding-max guard so peak detection stays fast enough for local rendering.
 
 :::: details Implementation notes
 

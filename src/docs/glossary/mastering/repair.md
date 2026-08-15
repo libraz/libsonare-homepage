@@ -47,7 +47,7 @@ With generated music, noise and tone can be hard to separate. Aim to make the no
 
 :::: details Implementation notes
 
-When repair is active, the demo sends denoise settings to libsonare WASM through the worker so spectral processing does not block the UI thread. The current configuration uses FFT frame processing with a conservative gain floor. Higher Denoise Amount lowers that floor and allows stronger suppression after noise estimation.
+When repair is active, the demo sends denoise settings to libsonare WASM through the worker so spectral processing does not block the UI thread. The current configuration uses FFT (fast Fourier transform) frame processing with a conservative gain floor — the lowest level the stage is allowed to pull a frequency band down to. Higher Denoise Amount lowers that floor and allows stronger suppression after noise estimation.
 
 Input Gain is intentionally narrow in range because final loudness is handled by the LUFS optimizer. Large input moves would make compressor threshold decisions harder to interpret and could push unnecessary work into the limiter.
 

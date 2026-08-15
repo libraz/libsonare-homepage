@@ -45,7 +45,7 @@ The instinct to fix a bad master with *more* processing usually deepens the prob
 
 ## When To Revisit The Mix
 
-Mastering cannot fix every mix issue. If the vocal is buried, the kick and bass fight, or the stereo image collapses before mastering, fix the mix first. A mastering chain can improve translation, but it should not become a rescue operation for problems that belong upstream.
+Mastering cannot fix every mix issue. If the vocal is buried, the kick and bass fight, or the stereo image collapses before mastering, fix the mix first. A mastering chain can improve how well a mix holds up across different playback systems, but it should not become a rescue operation for problems that belong upstream.
 
 :::: details Implementation notes
 

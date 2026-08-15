@@ -25,9 +25,13 @@ Use it when a source feels veiled or flat. Back off if vocals become sharp, cymb
 
 ## Air Band Amount
 
-Air Band Amount works in the very high-frequency region. It can restore openness, especially on AI-generated sources with weak or missing upper harmonics.
+Air Band Amount works in the very high-frequency region: it lifts and re-excites whatever already sits above the shelf frequency (12 kHz by default). A dynamic high shelf raises the band, and a harmonic generator fed from that same band adds a little extra texture over it.
 
 It should be subtle. If the track starts to hiss or feel detached from the midrange, the amount is too high.
+
+::: warning It re-excites a present top end; it cannot synthesise a missing one
+Both halves of the stage are driven by the energy of the band they are meant to fill, so it is self-limiting. While the band's envelope sits below roughly −36 dBFS it produces no boost at all; even fully open the shelf tops out near +3 dB, and the synthesised component is held at least 6 dB below the band it was derived from. That is enough to open up a dull-but-present top end. If the upper octave was genuinely removed — a hard cliff from a lossy or generated render — the detector has nothing to follow, so use Exciter Amount instead: it builds new harmonics from the midrange and can reach above the cliff.
+:::
 
 ## Adjustment Order
 
@@ -41,7 +45,7 @@ Brightness controls add presence; they do not rebalance the spectrum. If the mas
 
 ## What To Listen For
 
-Use loudness-matched A/B and listen past the first impression. Good tone moves make the vocal, snare, cymbals, and ambience easier to place without pulling the mix apart. Bad moves create a separate shiny layer above the song, make sibilants jump forward, or make the low end feel smaller only because the top end became exaggerated.
+Use loudness-matched A/B and listen past the first impression. Good tone moves make the vocal, snare, cymbals, and ambience easier to place without pulling the mix apart. Bad moves create a separate shiny layer above the song, make sibilants — the "s" and "sh" consonant sounds — jump forward, or make the low end feel smaller only because the top end became exaggerated.
 
 :::: details Implementation notes
 

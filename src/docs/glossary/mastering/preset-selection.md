@@ -7,7 +7,7 @@ description: How to choose Pop, EDM, Acoustic, Hip-Hop, AI-Generated, or Speech 
 
 Presets are starting points. They choose a sensible chain shape for the source, but they cannot know the mix intent better than you do.
 
-Use the preset that matches the material's density, transient behavior, and release context. Then use the fine-tune controls or Studio mode for small corrections.
+Use the preset that matches the material's density, its transient behavior (how sharp the attacks of drums and consonants are), and where the track will be published. Then use the fine-tune controls or Studio mode for small corrections.
 
 ## Preset Guide
 

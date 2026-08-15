@@ -7,7 +7,11 @@ description: C50, C80, and D50 — early-to-late energy ratios that measure whet
 
 **Clarity** measures how much sound energy arrives *early* — soon enough to reinforce a note or syllable — versus *late*, where it blurs into reverberant wash.
 
-Reverberation time tells you how long a room rings, but not whether you can understand it. A room can have a moderate RT60 and still be perfectly intelligible if the early energy dominates, or muddy if the late tail does. Clarity and definition put a number on that balance by splitting the impulse response at a time boundary and comparing the energy on each side.
+[Reverberation time](./reverberation-time.md) tells you how long a room rings, but not whether you can understand it. A room can have a moderate RT60 and still be perfectly intelligible if the early energy dominates, or muddy if the late tail does. Clarity and definition put a number on that balance by splitting the impulse response at a time boundary and comparing the energy on each side.
+
+::: warning Clarity needs an impulse response
+C50, C80, and D50 are produced only by `analyzeImpulseResponse(...)`. Blind analysis of ordinary music (`detectAcoustic(...)`) recovers a decay *rate* and nothing more: all three come back `NaN`, and the per-band `c50Bands` / `c80Bands` arrays come back empty. If you need clarity figures, record a clap, a balloon pop, or a sweep and analyse that instead.
+:::
 
 <ClarityWindowFigure
   title="Where the split falls"
@@ -46,16 +50,16 @@ C80 is the standard "clarity index" for concert halls. Hall designers balance it
 
 **Definition (D50)** — *Deutlichkeit* is simply the original German name for the same quantity — expresses the same 50 ms split as a **fraction** rather than a ratio:
 
-> D50 = early energy (0–50 ms) / total energy  (as a percentage)
+> D50 = early energy (0–50 ms) / total energy
 
-D50 and C50 are two views of the same measurement and convert directly into each other. D50 ranges from 0% to 100%; higher means more of the energy is early, so the room is more "defined." Many people find the percentage more intuitive than a dB ratio for intelligibility.
+D50 and C50 are two views of the same measurement and convert directly into each other. libsonare returns D50 as a fraction between 0 and 1 — `0.72` means 72% of the energy arrived inside the first 50 ms — and interfaces conventionally display it as that percentage. Higher means more of the energy is early, so the room is more "defined." Many people find the percentage more intuitive than a dB ratio for intelligibility.
 
 ## Why all three
 
 They answer subtly different questions: C50 for *speech*, C80 for *music*, D50 for an intuitive *percentage* of early energy. A space optimized for spoken word (high C50, high D50) is not the same as one optimized for an orchestra (moderate, balanced C80). Seeing all three lets you judge what a recording space is actually good for, not just how long it rings.
 
 ::: details How libsonare computes clarity
-libsonare integrates the squared impulse response on each side of the 50 ms and 80 ms boundaries to form the early and late energy sums, then reports C50 and C80 as 10·log₁₀ of the early/late ratio and D50 as the early/total fraction. The integration stops at the noise-floor truncation point (found by the Lundeby method) — where the decay meets the recording’s noise floor — so background noise after the reverberant tail does not count as late energy and drag the clarity values down. The same boundaries are applied to the blindly recovered decay when the input is ordinary music, though clarity is most reliable from a clean impulse response. Because clarity depends on the exact arrival time of the direct sound, the analysis first locates the direct-sound peak and measures the windows relative to it; a mislocated direct sound is one reason a low confidence score should make you treat C50/C80/D50 as approximate.
+libsonare integrates the squared impulse response on each side of the 50 ms and 80 ms boundaries to form the early and late energy sums, then reports C50 and C80 as 10·log₁₀ of the early/late ratio and D50 as the early/total fraction. The integration stops at the noise-floor truncation point (found by the Lundeby method) — where the decay meets the recording’s noise floor — so background noise after the reverberant tail does not count as late energy and drag the clarity values down. All of that runs on the impulse-response path only. Blind analysis of ordinary music never forms an early/late split at all — it fits a decay rate to the fragments of tail the programme happens to expose — so C50, C80, and D50 are returned as `NaN` there rather than as rough approximations. Because clarity depends on the exact arrival time of the direct sound, the analysis first locates the direct-sound peak and measures the windows relative to it; a mislocated direct sound is one reason a low confidence score should make you treat C50/C80/D50 as approximate.
 :::
 
 Related: [Reverberation Time (RT60 and EDT)](./reverberation-time.md), [Source Distance and DRR](./source-distance.md), [Inverse Room Estimation](./inverse-estimation.md), [Acoustic Analysis](../../acoustic-analysis.md)

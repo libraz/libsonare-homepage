@@ -20,11 +20,13 @@ If the music has a steady pulse, its onset envelope is **periodic**: peaks recur
 
 Tempo estimates famously land at **half or double** the "true" tempo — 75 BPM reported as 150, or 140 as 70. This is not a bug; it is genuinely ambiguous. A listener tapping along to the same groove can reasonably tap at half-time or double-time, and the periodicity supports both. These are called **octave errors** (by analogy with pitch octaves).
 
-Practical handling: pick a sensible BPM range for your material (e.g. 70–180 for pop), and treat the estimate as one candidate among its half/double partners rather than an exact truth — especially early in a stream, before enough audio has accumulated.
+The ambiguity is not limited to factors of two. Triple relations are just as common: a shuffle or a 6/8 groove is routinely reported at 2/3 or 3/2 of the tempo a listener would tap, and libsonare's harmonic clustering weighs 1/2, 2/3, 3/4, 4/3, 3/2, 2, 3, and 4 alongside the estimate itself.
+
+Practical handling: pick a sensible BPM range for your material (e.g. 70–180 for pop), and treat the estimate as one candidate among its metrical relatives — the triple ones included — rather than an exact truth. This matters most early in a stream, before enough audio has accumulated.
 
 ## Confidence and stability
 
-A single number hides how *sure* the estimate is. A track with a tight, repetitive groove yields a sharp tempogram peak and high confidence; rubato, ambient, or sparse material yields a flat tempogram and low confidence. When a confidence value is available, use it to decide whether to display the BPM, hedge it, or hide it.
+A single number hides how *sure* the estimate is. A track with a tight, repetitive groove yields a sharp tempogram peak and high confidence; rubato (freely elastic timing), ambient, or sparse material yields a flat tempogram and low confidence. When a confidence value is available, use it to decide whether to display the BPM, hedge it, or hide it.
 
 ::: details How libsonare estimates tempo
 libsonare computes the onset-strength envelope from the STFT, then estimates tempo via tempogram and autocorrelation analysis of that envelope, selecting a dominant period and converting it to BPM. The streaming analyzer exposes a BPM value that refines as more audio arrives, so early values should be treated as provisional. Beat tracking then uses the tempo as a prior when placing individual beats, so tempo and beats are computed from the same onset information rather than independently.

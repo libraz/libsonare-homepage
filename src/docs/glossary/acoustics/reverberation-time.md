@@ -36,7 +36,7 @@ The first few dB are skipped because the very start of the decay is dominated by
 
 EDT and RT60 agree in an ideal, perfectly diffuse room. They diverge in real ones:
 
-- **EDT much shorter than RT60** — strong early reflections steepen the start of the decay, so the room *sounds* tighter than its long late tail suggests. Common in rooms with a reflective near field but absorptive far surfaces.
+- **EDT much shorter than RT60** — strong early reflections steepen the start of the decay, so the room *sounds* tighter than its long late tail suggests. Typical of measurement positions close to the source, where direct sound dominates the first 10 dB, and of acoustically coupled spaces, where a damped room decays into a less damped one and leaves a double-sloped tail.
 - **EDT close to RT60** — a smooth, well-diffused decay; the perceived reverberance matches the measured tail.
 
 Because perception tracks EDT, two rooms with identical RT60 can feel quite different. EDT is the better predictor of "reverberance"; RT60 is the better predictor of how long a sustained note will smear into the next.
@@ -56,7 +56,7 @@ RT60 scales with **room volume** and falls with **absorption**: a big, hard-surf
 <SonareDemo id="room-decay" />
 
 ::: details How libsonare measures decay time
-libsonare derives reverberation time from the energy decay curve (the Schroeder backward integral of the squared impulse response). It fits a line to the decay over the T20/T30 region, rejects segments where the curve is not linear enough, and extrapolates the slope to 60 dB; EDT is fit over the first 10 dB. Per-band reverberation time is computed by running the same fit on octave-band-filtered versions of the response, which is what the per-band decay table shows. When the input is ordinary music rather than a clean impulse, the decay is recovered blindly from the signal's gaps and offsets, and the confidence score reflects how clean that recovered decay was.
+libsonare derives reverberation time from the energy decay curve (the Schroeder backward integral of the squared impulse response). It fits one unweighted least-squares line to every point of that curve inside the T30 window and extrapolates the slope to 60 dB, retrying over the narrower T20 window when the wider one yields no usable slope; EDT is fit over the first 10 dB. There is no linearity test on this path: a double-sloped or noise-contaminated decay is fitted as though it were straight, so compare EDT against RT60 yourself rather than assume a bad decay would have been rejected. Per-band reverberation time is computed by running the same fit on octave-band-filtered versions of the response, which is what the per-band decay table shows. When the input is ordinary music rather than a clean impulse, the decay is recovered blindly from the signal's gaps and offsets, and the confidence score reflects how clean that recovered decay was.
 :::
 
 Related: [Clarity and Definition (C50, C80, D50)](./clarity-definition.md), [Per-Band Decay and Absorption](./absorption-bands.md), [Inverse Room Estimation](./inverse-estimation.md), [Acoustic Analysis](../../acoustic-analysis.md)

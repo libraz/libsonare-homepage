@@ -5,7 +5,7 @@ description: libsonare のオーディオ解析、MIR、ブラウザ内マスタ
 
 # 用語集
 
-この用語集は、自動生成した用語の羅列ではなく、手で整えた解説ページへの索引です。まず機能群ごとのガイドを読み、実装上の詳細は各ページ内の折りたたみメモを参照してください。
+この用語集は、自動生成した用語の羅列ではなく、手で整えた解説ページへの索引です。まず機能群ごとのガイドを読み、実装上の詳細が必要になったら各ページ内の関連リンクをたどってください。
 
 ::: tip オーディオ解析が初めての場合
 まず [オーディオ基礎](./glossary/concepts/audio-basics.md)、次に [MIR の全体像](./glossary/concepts/mir-overview.md) を読んでください。マスタリングデモから来た場合は [マスタリングとは?](./glossary/concepts/what-is-mastering.md) から始めると全体像をつかみやすくなります。
@@ -25,12 +25,12 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 
 ## 解析ガイド
 
-アナライザー、リアルタイム表示、特徴抽出 API で使う MIR 用語を掘り下げます。
+アナライザー、リアルタイム表示、特徴抽出 API で使う MIR（Music Information Retrieval、音楽情報検索）の用語を掘り下げます。
 
 | ガイド | 扱う内容 |
 |--------|----------|
 | [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) | FFT、STFT 窓、`nFft`、`hopLength`、スペクトログラム、CQT、VQT。 |
-| [オンセット検出](./glossary/analysis/onset-detection.md) | オンセット、トランジェント、オンセット強度エンベロープ、テンポ推定との関係。 |
+| [オンセット検出](./glossary/analysis/onset-detection.md) | オンセット、トランジェント、オンセット強度の包絡線、テンポ推定との関係。 |
 | [テンポと BPM](./glossary/analysis/tempo-bpm.md) | BPM 推定、テンポグラム、自己相関、信頼度、半分／2 倍テンポの曖昧さ。 |
 | [ビートとダウンビート](./glossary/analysis/beats-downbeats.md) | ビート追跡、動的計画法、拍子位相、ダウンビート推定。 |
 | [クロマ特徴量](./glossary/analysis/chroma-features.md) | ピッチクラス、クロマグラム、キー／コード解析でクロマが使われる理由。 |
@@ -49,7 +49,7 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 | [チャンネルストリップ](./glossary/mixing/channel-strip.md) | 固定された信号順、それが各コントロールの働きを決める理由、PFL/AFL キューモニタリング。 |
 | [バスとセンド](./glossary/mixing/buses-sends.md) | master/aux/submix のロール、プリ／ポストフェーダーセンド、FX バス、VCA グループ。 |
 | [パンとステレオ幅](./glossary/mixing/pan-width.md) | パンモード、パンロー、ステレオ幅とモノラル互換性。 |
-| [オートメーションとメーター](./glossary/mixing/automation-metering.md) | オートメーションカーブ、型付きオートメーションレーンのターゲット、ゴニオメーター、相関、トゥルーピークメーター。 |
+| [オートメーションとメーター](./glossary/mixing/automation-metering.md) | オートメーションカーブ、型付きオートメーションレーンのターゲット、ゴニオメーター、相関、True Peak メーター。 |
 
 ## 編集ガイド
 
@@ -63,11 +63,11 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 
 ## 楽器と MIDI
 
-libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)、そして両者が共有する MIDI の語彙を解説します。
+libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー](./native-synth.md)（NativeSynth）、[SoundFont プレイヤー](./soundfont-player.md)、そして両者が共有する MIDI の語彙を解説します。
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [シンセの音作りの基礎](./glossary/instruments/synthesis-basics.md) | オシレーター、フィルター、NativeSynth が使う音作り方式（減算・FM・物理モデリング・モーダル・加算）。 |
+| [シンセの音作りの基礎](./glossary/instruments/synthesis-basics.md) | オシレーター、フィルター、内蔵シンセサイザーが使う音作り方式（減算・FM・物理モデリング・モーダル・加算）。 |
 | [エンベロープとモジュレーション](./glossary/instruments/envelopes-modulation.md) | ADSR エンベロープ、LFO、ベロシティ、キートラック、モッドマトリクス。 |
 | [MIDI の基礎](./glossary/instruments/midi-basics.md) | ノート、ベロシティ、チャンネル、CC、プログラムチェンジ、バンク、General MIDI、ピッチベンド、MIDI 2.0。 |
 | [SoundFont とサンプル音源](./glossary/instruments/soundfont.md) | サンプル音源と合成音源の違い、SF2 のバンクとプログラム、General MIDI の補完。 |
@@ -78,7 +78,7 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 
 | ガイド | 扱う内容 |
 |--------|----------|
-| [クリップとトラック](./glossary/arrangement/clips-and-tracks.md) | プロジェクトの構造 — トラック、クリップ、タイムライン、MIDI 宛先、クリップ編集、ソースのメタデータ、Undo 履歴のバイト上限。 |
+| [クリップとトラック](./glossary/arrangement/clips-and-tracks.md) | プロジェクトの構造 — トラック、クリップ、タイムライン、MIDI の送出先（デスティネーション）、クリップ編集、ソースのメタデータ、Undo 履歴のバイト上限。 |
 | [テイクとコンピング](./glossary/arrangement/takes-and-comping.md) | クリップ内の複数テイク、アクティブテイク、コンプセグメント、ループ録音。 |
 | [ワープとテンポ同期](./glossary/arrangement/warp-and-tempo.md) | ワープモード、アンカー、テンポマップ、拍子、ピッチを保つストレッチ。 |
 | [バウンスとレンダリング](./glossary/arrangement/bounce-and-rendering.md) | アレンジを音声へ書き出す、ミキサーシーン、楽器バウンス、レイテンシ補償。 |
@@ -93,9 +93,9 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 | [リアルタイムエンジン](./glossary/realtime/realtime-engine.md) | トランスポート、クリップスケジュール、メトロノーム、メーター情報。 |
 | [リアルタイム安全性](./glossary/realtime/realtime-safety.md) | 音声コールバックの締め切り、確保なし／ロックフリーの規則、AudioWorklet。 |
 
-## 室内音響
+## ルーム音響
 
-[空間ルームスキャナー](/ja/spatial) と [音響解析](./acoustic-analysis.md) で使う室内音響の用語を掘り下げます。部屋の減衰が、その大きさ・面・音源までの距離について何を明かすか。
+[空間ルームスキャナー](/ja/spatial) と [音響解析](./acoustic-analysis.md) で使うルーム音響の用語を掘り下げます。部屋の減衰が、その大きさ・面・音源までの距離について何を明かすか。
 
 | ガイド | 扱う内容 |
 |--------|----------|
@@ -104,7 +104,7 @@ libsonare が MIDI を音に変える仕組み — 内蔵の [NativeSynth](./nat
 | [音源距離と DRR](./glossary/acoustics/source-distance.md) | 直接音／残響音比、臨界距離、1 チャンネルが距離は解けても方向は解けない理由。 |
 | [部屋の形状と容積](./glossary/acoustics/room-geometry.md) | 等価なシューボックス、容積、サビーンの容積／吸音のトレードオフ。 |
 | [帯域別の減衰と吸音](./glossary/acoustics/absorption-bands.md) | 帯域別 RT60、吸音係数、高域のロールオフ。 |
-| [逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md) | インパルス応答とブラインドの推定、信頼度スコアの読み方。 |
+| [逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md) | インパルス応答（IR）を使う推定とブラインド推定、信頼度スコアの読み方。 |
 
 ## マスタリング概念
 

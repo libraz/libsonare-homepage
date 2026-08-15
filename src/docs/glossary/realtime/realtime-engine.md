@@ -29,7 +29,7 @@ A **metronome** generates click events locked to the transport's tempo and meter
 
 ## Telemetry: watching a realtime graph
 
-You cannot inspect a realtime audio callback with a debugger without breaking timing. Instead the engine emits **telemetry** — periodic snapshots of meters and state — that your UI reads on a normal (non-audio) thread. This keeps the audio path untouched while still letting you draw level meters, a goniometer, or transport state.
+You cannot inspect a realtime audio callback with a debugger without breaking timing. Instead the engine emits **telemetry** — periodic snapshots of meters and state — that your UI reads on a normal (non-audio) thread. This keeps the audio path untouched while still letting you draw level meters, a goniometer (a scope that plots the stereo phase relationship between left and right), or transport state.
 
 ::: details How libsonare models the engine
 `RealtimeEngine` works with `EngineController`: it owns the transport, schedules clips through `ClipPlayer`/`ClipSchedule` over `ClipAudioBuffer` storage, generates clicks with `Metronome` (`MetronomeConfig` → `MetronomeEvent`), and plays automation back on the mixer graph. Metering is reported through a `MeterTelemetryTap` producing `MeterTelemetryRecord`s and a general `Telemetry` channel (`TelemetryType`/`TelemetryErrorCode`) that a UI reads off the audio thread. The whole engine is real-time-safe and runs the same offline (bounce) and inside an AudioWorklet, including freeze and capture paths.

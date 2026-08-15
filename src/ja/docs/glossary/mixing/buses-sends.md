@@ -1,6 +1,6 @@
 ---
 title: バスとセンド
-description: バス、master/aux/submix のロール、プリ／ポストフェーダーセンド、FX バス、VCA グループ — libsonare が信号をルーティング・グループ化する仕組み。
+description: バス、master/aux/subgroup のロール、プリ／ポストフェーダーセンド、FX バス、VCA グループ — libsonare が信号をルーティング・グループ化する仕組み。
 ---
 
 # バスとセンド
@@ -38,17 +38,19 @@ description: バス、master/aux/submix のロール、プリ／ポストフェ�
 
 ## VCA グループと submix
 
-**submix** は音声を再ルーティングします — グループ化したトラックは実際に submix バスを流れます。**VCA グループ**はそうしません — 音声の行き先を変えずに、複数トラックのレベルを 1 本のフェーダーでまとめて調整します。パートを別々のバスへ流したまま、合計レベルだけを 1 か所で握りたいときに VCA を使います。
+**submix** は音声を再ルーティングします — グループ化したトラックは実際に submix バスを流れます。**VCA グループ**はそうしません。VCA（voltage-controlled amplifier）は名前の由来となったコンソールの回路で、ここでは音声の行き先を変えずに複数トラックのレベルを 1 本のフェーダーでまとめて調整する仕組みを指します。パートを別々のバスへ流したまま、合計レベルだけを 1 か所で握りたいときに VCA を使います。
 
 ::: details libsonare がルーティングをどうモデル化するか
 | 要素 | 役割 |
 |------|------|
-| `Bus` | `BusRole`（`master`/`aux`/`submix`）を持ち、`BusProcessor` を実行 |
+| `Bus` | `BusRole`（`Master`/`Aux`/`Subgroup`）を持ち、`BusProcessor` を実行 |
 | `FxBus` | 共有エフェクトをホスト |
 | `SendProcessor` | `SendTiming`（プリ／ポストフェーダー）で選んだ `TapPoint` から行き先バスへ送る |
 | `VcaGroup` | 音声を再ルーティングせずに、メンバーストリップへ共有ゲインオフセットを適用 |
 
-ストリップ・バス・センド・接続からなるグラフ全体は、保存可能なシーンで記述されます。プラグインディレイ補償付きで動くため、並列経路の時間整合も保たれます。フィールド単位の形式は [ミキシングシーン JSON](../../mixing-scene-json.md) を参照してください。
+`submix` というロール値は存在しません。シーンレベルの `role` は自由文字列で、特別に解釈されるのは `master` だけです。`submix`・`subgroup`・`group` などはいずれも同じ「master ではない一般のバス」としてコンパイルされます（組み込みのドラムバスプリセットは `"subgroup"` を書き出します）。
+
+ストリップ・バス・センド・接続からなるグラフ全体は、保存可能なシーンで記述されます。プラグインディレイ補償（PDC）付きで動くため、並列経路の時間整合も保たれます。フィールド単位の形式は [ミキシングシーン JSON](../../mixing-scene-json.md) を参照してください。
 :::
 
-関連: [ミキシングの基礎](../concepts/mixing-basics.md), [チャンネルストリップ](./channel-strip.md), [オートメーションとメーター](./automation-metering.md), [ミキシングシーン JSON](../../mixing-scene-json.md)
+関連: [ミキシングの基礎](../concepts/mixing-basics.md)、[チャンネルストリップ](./channel-strip.md)、[オートメーションとメーター](./automation-metering.md)、[ミキシングシーン JSON](../../mixing-scene-json.md)

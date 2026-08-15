@@ -19,14 +19,14 @@ libsonare processes each block of a strip in one fixed order. Reading it top to 
 
 1. **Input trim** — a clean level adjustment on the way in, before anything else sees the signal.
 2. **Polarity invert (L/R)** — flips the waveform; used to fix phase between mics or channels.
-3. **Channel delay** — time-aligns the track against others (sample- or millisecond-accurate).
+3. **Channel delay** — time-aligns the track against others. It is set in whole samples (`setChannelDelaySamples`, scene field `channelDelaySamples`); there is no millisecond form, so convert yourself.
 4. **EQ** — tone shaping; its position can be pre- or post-fader (see below).
 5. **Pre-fader inserts** — in-series processors that run before the fader.
 6. **Fader (+ VCA offset)** — the balance control you ride against other tracks.
-7. **Pan** — places the track across the stereo field, using the chosen pan law.
+7. **Pan** — places the track across the stereo field, using the chosen [pan law](./pan-width.md) (the rule that keeps a part's loudness steady as it moves off center).
 8. **Post-fader inserts** — in-series processors after the fader.
 9. **Stereo width** — narrows or widens the stereo image.
-10. **Meter / goniometer tap** — measurement, not processing.
+10. **Meter / goniometer tap** — measurement, not processing. The goniometer is the dot-plot display that shows how wide the stereo image is.
 
 ## Why the order matters
 

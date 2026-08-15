@@ -56,12 +56,12 @@ description: アレンジを完成オーディオファイルに書き出すと�
 
 | やりたいこと | 使うもの |
 |-------------|---------|
-| パッチ駆動のフルシンセ | **NativeSynth** 楽器でバウンス |
+| パッチ駆動のフルシンセ | **内蔵シンセサイザー（NativeSynth）** 楽器でバウンス |
 | General MIDI の SoundFont | **SoundFont** 楽器でバウンス |
 | 手軽な内蔵オシレーター | 内蔵楽器でバウンス |
 | 自前の外部楽器（Python） | ホスト提供の楽器でバウンス |
 
-楽器をバインド *せずに* バウンスすると、MIDI トラックは無音でレンダリングされます — ノートはあるのに、演奏する者がいません。オーディオトラックは常に音をレンダリングします。シンセ側は [NativeSynth](../../native-synth.md) を参照してください。
+楽器をバインド *せずに* バウンスすると、MIDI トラックは無音でレンダリングされます — ノートはあるのに、演奏する者がいません。オーディオトラックは常に音をレンダリングします。シンセ側は [内蔵シンセサイザー](../../native-synth.md) を参照してください。
 
 ## 長さは自動導出される（指定しない限り）
 
@@ -81,4 +81,4 @@ PDC は、与えたレイテンシー値が楽器の実際の値と一致して�
 バウンスは `Project` クラスから実行します。素の `bounce(options?)` はオーディオトラックをレンダリングし、MIDI トラックは無音のままです。MIDI を可聴にするには楽器をバインドします。`bounceWithSynthInstrument`（パッチ駆動の NativeSynth。`SynthPatch`、プリセット名、またはその配列を受け取る）、`bounceWithSf2Instrument`（`loadSoundFont` で読み込んだ SoundFont を使う GS 互換の SoundFont プレイヤー）、`bounceWithBuiltinInstrument`（シンプルなオシレーターシンセ）があり、Python では `bounce_with_instruments` で自前の外部楽器をホストできます。`ProjectBounceOptions` で `totalFrames` を省略（または `<= 0`）すると、レンダリング長はアレンジと楽器のリリーステールから自動導出されます。すべてのバウンスはクリップの合算ではなく、ミキサーシーン — トラックごとのチャンネルストリップ・センド・バス — を通してレンダリングされます。レイテンシー補正はバウンスオプションの `instrumentLatencySamples` で与え、これがコンパイラに渡されて遅延のある楽器がタイミングを保ちます。レンダリング全体は、固定のプロジェクト + オプション + 楽器に対して決定的です。
 :::
 
-関連: [Project Bounce](../../project-bounce.md)、[NativeSynth](../../native-synth.md)、[ワープとテンポ同期](./warp-and-tempo.md)
+関連: [Project Bounce](../../project-bounce.md)、[内蔵シンセサイザー](../../native-synth.md)、[ワープとテンポ同期](./warp-and-tempo.md)

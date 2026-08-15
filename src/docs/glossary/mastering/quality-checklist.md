@@ -17,7 +17,7 @@ Use this checklist before treating a render as finished. It is deliberately shor
 
 ## After Rendering
 
-- Output LUFS is near the chosen target.
+- Output LUFS (Loudness Units relative to Full Scale) is near the chosen target.
 - Peak safety is reasonable for the delivery path.
 - Loudness-matched A/B still sounds better, not merely louder.
 - Drums, consonants, and transients have not been flattened.
@@ -47,13 +47,11 @@ If several checks fail at once, move earlier in the chain. Fixing input, repair,
 
 ## When To Stop
 
-Stop when the master translates and the musical intent is still intact. Do not keep processing just because another control is available.
+Stop when the master translates — when it holds up across different playback systems, from a car to a phone speaker to cheap earbuds — and the musical intent is still intact. Do not keep processing just because another control is available.
 
 ::: tip If the next move is vague, go listen elsewhere
 A car, a phone speaker, cheap earbuds, and a quiet playback level reveal more than another 30 minutes of parameter changes. Export the render and check translation before touching anything else.
 :::
-
-If the next move is vague, export the current render and listen elsewhere. A car, phone speaker, cheap earbuds, and quiet playback level often reveal more than another 30 minutes of parameter changes.
 
 :::: details Implementation notes
 

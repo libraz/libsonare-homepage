@@ -13,7 +13,7 @@ The demo exposes common platform-style targets such as Spotify, YouTube, Apple M
 
 ## Loudness Target
 
-The loudness target is the integrated LUFS value the renderer aims for after processing.
+The loudness target is the integrated [LUFS](../lufs.md) (Loudness Units relative to Full Scale) value the renderer aims for after processing. LUFS measures perceived loudness rather than raw sample level, and "integrated" means a *gated* average across the whole track: loudness is taken in 400 ms blocks, and blocks below -70 LUFS or more than 10 LU below the track's own mean are dropped before averaging. A silent tail or a hushed intro therefore cannot pull the number down — see [LUFS](../lufs.md) for the gating in detail.
 
 | Target | Practical use |
 |--------|---------------|
@@ -29,7 +29,7 @@ Streaming platforms normalize playback loudness. Past a point, raising the targe
 
 ## True-Peak Ceiling
 
-The ceiling protects the rendered file from peaks that may appear during reconstruction or codec conversion. A common streaming-oriented starting point is around `-1 dBTP`.
+The ceiling protects the rendered file from peaks that may appear during reconstruction or codec conversion. A common streaming-oriented starting point is around `-1 dBTP` — dBTP means decibels true peak, the peak level measured between samples rather than at the sample points themselves.
 
 Use a lower ceiling, such as `-2 dBTP`, when you want more codec safety. Use a tighter ceiling only when the delivery path is known and controlled.
 

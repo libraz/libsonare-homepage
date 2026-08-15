@@ -13,7 +13,9 @@ Together they shape the horizontal space of a mix, giving each part room instead
 
 ## Pan position
 
-**Pan** moves a track between hard left and hard right. Spreading parts across the field lets each breathe and reduces masking. But "pan" hides two separate decisions — *how* a position maps to the channels, and *how loud* the center is — and libsonare exposes both.
+**Pan** moves a track between hard left and hard right. Spreading parts across the field lets each breathe and reduces masking — one part burying another that shares its frequency range. But "pan" hides two separate decisions — *how* a position maps to the channels, and *how loud* the center is — and libsonare exposes both.
+
+Keep the vocal in the center, the guitar to the left, and the keys to the right, and each part gets a spot of its own, so each one is easier to follow than when all three are stacked in the middle. The busier the mix, the more this left-right placement decides how well the parts separate.
 
 ## Pan mode: how position maps to channels
 
@@ -31,7 +33,7 @@ When a source pans from center to a side, its perceived loudness can jump unless
 
 ## Stereo width
 
-**Stereo width** narrows or widens the image, usually by adjusting the side signal (left-minus-right) relative to the mid signal.
+**Stereo width** narrows or widens the image, usually by adjusting the side signal (left minus right — what differs between the channels) relative to the mid signal (what the two channels share).
 
 Widening adds spaciousness, but it can create [mono compatibility](../concepts/mono-compatibility.md) problems. Too much side energy can weaken or cancel when summed to mono.
 

@@ -5,7 +5,7 @@ description: Keeping signal levels sensible before, during, and after mastering.
 
 # Gain Staging
 
-Gain staging means keeping signal levels in a useful range as audio moves through a chain. In mastering, it prevents the compressor, exciter, stereo stage, limiter, and loudness optimizer from reacting to a misleading level.
+Gain staging means keeping signal levels in a useful range as audio moves through a chain. In mastering, it prevents the compressor, exciter (a processor that adds harmonic brightness), stereo stage, limiter, and loudness optimizer from reacting to a misleading level.
 
 Good gain staging is not about making everything quiet. It is about leaving enough room for processing decisions to remain meaningful.
 

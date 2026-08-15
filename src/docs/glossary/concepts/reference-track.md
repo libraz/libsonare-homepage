@@ -21,14 +21,14 @@ Use it to notice broad differences:
 | Low end | Is the bass controlled, or does it blur the groove? |
 | Midrange | Are vocals and lead elements stable enough? |
 | High end | Is the top end open, harsh, or dull? |
-| Stereo | Is the width helping the track, or weakening mono focus? |
+| Stereo | Is the width helping the track, or weakening [mono](./mono-compatibility.md) focus? |
 | Density | Does the master feel finished without crushing movement? |
 
 The reference should match the intended style, arrangement density, and release context. A sparse acoustic track should not be forced to behave like a dense dance master.
 
 ## Common Mistakes
 
-The most common mistake is comparing references without matching loudness. A commercial reference may be louder or denser than your mix, and that can make it seem better for the wrong reason.
+The most common mistake is comparing references without [matching loudness](./loudness-matching.md). A commercial reference may be louder or denser than your mix, and that can make it seem better for the wrong reason.
 
 Another mistake is choosing a reference with a different arrangement. If the reference has fewer instruments, a brighter vocal, or a different bass role, copying its spectral shape may make your track worse.
 

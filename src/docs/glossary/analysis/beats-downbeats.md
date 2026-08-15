@@ -23,7 +23,7 @@ You might expect beats to be trivial once the tempo is known: divide the timelin
 
 - tempo can drift;
 - players can push or pull the beat;
-- intros can be rubato;
+- intros can be rubato (played with free, elastic timing);
 - onset evidence can be noisy.
 
 Beat tracking therefore solves an *optimization* problem. It tries to find beat times that line up with strong onsets **and** keep roughly steady spacing near the tempo.
@@ -38,12 +38,14 @@ When adaptive tempo is enabled in the native configuration, the tracker can foll
 
 ## Downbeat tracking
 
-Downbeats are inferred after beats are placed. libsonare estimates meter phase and scores beat positions with beat strength, low-frequency energy, chord-change evidence, and a phase prior. The downbeat result is therefore more dependent on arrangement cues than raw beat tracking.
+Downbeats are inferred after beats are placed. libsonare estimates meter phase and scores beat positions with beat strength, low-frequency energy, and a phase prior. The downbeat result is therefore more dependent on arrangement cues than raw beat tracking.
 
-Sparse intros, pickups, weak bass, or ambiguous meter can shift the perceived "one." For UI, it is useful to show downbeats as an assistive overlay rather than as an absolute truth.
+Chord-change evidence is a fourth cue, but it only becomes available once chords are known. The whole-track analysis path detects chords and then refines the downbeats a second time with that evidence; the standalone `detectDownbeats` helper never reaches that stage. Run the full music analysis when downbeat placement matters and the harmony is the clearest cue in the arrangement.
+
+Sparse intros, pickups (notes that lead in before the first downbeat), weak bass, or ambiguous meter can shift the perceived "one." For UI, it is useful to show downbeats as an assistive overlay rather than as an absolute truth.
 
 ::: details How libsonare computes it
-`BeatAnalyzer` computes mel onset strength, estimates BPM with `BpmAnalyzer`, and tracks beats with a dynamic program over candidate frames. It then refines downbeats with `DownbeatObservations` using onset strength, low-frequency energy, chord changes, and meter phase. Public helpers such as `detectBeats` and `detectDownbeats` return `Float32Array` / float-array time lists in seconds.
+`BeatAnalyzer` computes mel onset strength, estimates BPM with `BpmAnalyzer`, and tracks beats with a dynamic program over candidate frames. It then refines downbeats with `DownbeatObservations` using onset strength, low-frequency energy, and meter phase; the chord-change term is left empty at that point, and `MusicAnalyzer` calls the refinement again with it once chord detection has run. Public helpers such as `detectBeats` and `detectDownbeats` return `Float32Array` / float-array time lists in seconds and stop at the first, chordless refinement.
 :::
 
 Related: [Onset Detection](./onset-detection.md), [Tempo and BPM](./tempo-bpm.md), [Chord Recognition](./chord-recognition.md)

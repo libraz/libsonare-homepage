@@ -20,19 +20,19 @@ Major usually sounds bright and resolved. Minor usually sounds darker.
 
 Twelve tonics times two common modes gives 24 candidate keys. Naming a key means choosing the tonic-and-mode pair that best fits which notes the track emphasizes.
 
-Relative pairs such as C major and A minor share the same seven notes, so mode is often the easier half to get wrong.
+Relative pairs such as C major and A minor share all seven notes, so a chroma profile can easily prefer the wrong one — and that mistake moves the tonic as well as the mode. Mode-only confusion comes from the *parallel* pair instead (C major vs C minor), which shares only four of its seven scale degrees. The two are worth separating when you judge results: a relative swap means the profile match landed on the wrong rotation, a parallel swap means the major/minor evidence was weak.
 
 ## From chroma to key
 
 Key detection starts from a mean chroma vector: the 12 pitch-class bins are averaged over the material, optionally after preparation such as [HPSS](./mel-mfcc-timbre.md) (which suppresses percussion so harmony reads more cleanly), loudness weighting, or high-pass filtering. libsonare compares that vector with rotated key profiles for each candidate root and mode.
 
-A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default compatible profile is Krumhansl-Schmuckler, a classic set of reference pitch-class weights derived from listener experiments. The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
+A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default profile is Krumhansl-Schmuckler, a classic set of reference pitch-class weights derived from listener experiments. The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
 
 <SonareDemo id="chromagram" />
 
 ## Confidence is relative
 
-The confidence value reflects how strongly the best profile wins against alternatives. It is not proof that the track has one unambiguous key. Modal mixture, key changes, sparse arrangements, heavy percussion, or detuned material can all lower confidence or make neighboring keys plausible.
+The confidence value reflects how strongly the best profile wins against alternatives. It is not proof that the track has one unambiguous key. Modal mixture (borrowing chords from the parallel major or minor), key changes, sparse arrangements, heavy percussion, or detuned material can all lower confidence or make neighboring keys plausible.
 
 Use `detectKeyCandidates` when the runner-up matters. For UI, showing the top candidate plus confidence is usually better than treating the key as a fixed label.
 

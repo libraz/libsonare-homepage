@@ -31,7 +31,7 @@ Threshold decides where compression starts. Ratio decides how strongly levels ab
 
 1. Start with moderate ratio and a soft knee.
 2. Lower threshold until loud sections show controlled reduction.
-3. Adjust attack so transients are controlled but not flattened.
+3. Adjust attack so transients — the short level spikes at the front of drum hits and consonants — are controlled but not flattened.
 4. Adjust release so the gain returns with the groove.
 5. Use loudness-matched A/B before deciding the compression is better.
 
@@ -55,7 +55,7 @@ Studio exposes threshold, ratio, attack, and release directly. Knee is part of t
 
 :::: details Implementation notes
 
-libsonare evaluates a detector level in dB and compares it with the threshold. Stereo detection is linked: the loudest channel at a sample decides the gain reduction, and that same gain is applied to both channels so the stereo image does not pull sideways.
+libsonare evaluates a detector level in dB and compares it with the threshold. Stereo detection is linked: one detector level is derived from all channels and the same gain is applied to every channel, so the stereo image does not pull sideways. How that linked level is formed depends on the detector — peak takes the loudest channel at that sample, while the RMS detectors take the mean power across channels, so anti-correlated content does not collapse the detected level.
 
 The hard-knee static curve is conceptually:
 
@@ -64,9 +64,9 @@ over_db = input_db - threshold_db
 gain_reduction_db = over_db * (1 - 1 / ratio)
 ```
 
-Soft knee replaces the abrupt corner around threshold with a quadratic transition. Attack and release then smooth the target reduction into a continuous gain envelope. The detector can measure the incoming level in different ways: peak (the instantaneous maximum, reacts fastest), RMS (a short running average, closer to perceived loudness), or log-RMS (that same average computed in decibels). The choice changes how twitchy the compressor is. That detector smoothing is separate from attack/release envelope timing.
+Soft knee replaces the abrupt corner around threshold with a quadratic transition. Attack and release then smooth the target reduction into a continuous gain envelope. The detector can measure the incoming level in different ways: peak (the instantaneous maximum, reacts fastest), RMS (a short running average over 10 ms, closer to perceived loudness), or log-RMS (the same linear RMS average taken over a longer 50 ms window, so it estimates the sustained level and ignores brief transients). RMS is the default. The choice changes how twitchy the compressor is. That detector smoothing is separate from attack/release envelope timing.
 
-When auto-makeup is enabled, the compressor restores the average level that compression removed before passing the signal downstream. The restoration tracks average loudness, not peak level — final loudness landing is still the responsibility of the loudness optimizer that sits after the compressor in the chain.
+Auto-makeup is an open-loop estimate, not a measurement: it is computed once per block from threshold and ratio alone, as half of the makeup that would exactly restore a signal sitting at the threshold. The half factor is deliberate, because real program material averages well below threshold and the full figure overshoots. Auto-makeup and manual makeup are mutually exclusive — any non-zero `makeupGainDb` overrides the automatic value rather than adding to it. Final loudness landing is still the responsibility of the loudness optimizer that sits after the compressor in the chain.
 
 ::::
 

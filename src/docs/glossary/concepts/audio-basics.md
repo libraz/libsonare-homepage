@@ -17,15 +17,15 @@ For most browser analysis and mastering work, the best first choice is the file'
 
 ## Bit Depth
 
-Bit depth describes the resolution of stored sample values. Higher bit depth gives more room for quiet detail and processing headroom. Final consumer files are often 16-bit or compressed formats, while production files are commonly 24-bit or floating point.
+Bit depth describes the resolution of stored sample values. More bits do not raise the ceiling — full scale is `0 dBFS` at any word length — they lower the quantization noise floor underneath it, roughly 6 dB per bit. That is what lets quiet detail survive and what makes it cheap to work well below full scale. Final consumer files are often 16-bit or compressed formats, while production files are commonly 24-bit or floating point.
 
-Inside Web Audio and libsonare processing, samples are represented as floating-point values. That gives processing headroom, but final export still needs sensible peak safety.
+Inside Web Audio and libsonare processing, samples are represented as floating-point values. Floating point is the one case where the format itself has room *above* full scale, so an intermediate stage can overshoot `1.0` without clipping; the final export back to fixed-point still needs sensible peak safety.
 
 ## Mono and Stereo
 
 Mono has one channel. Stereo has left and right channels. Stereo can create width and spatial placement, but it also introduces mono-compatibility questions.
 
-When a stereo signal is summed to mono, some side information can weaken or cancel. This is why the mastering demo shows correlation and stereo image.
+When a stereo signal is summed to mono, some side information can weaken or cancel. This is why the mastering demo shows correlation (a `-1` to `+1` reading of how in-phase the left and right channels are) and stereo image.
 
 ## Amplitude and dB
 
@@ -37,7 +37,7 @@ Typical digital sample values are normalized to the range `-1.0` to `1.0`. When 
 
 Clipping happens when a signal asks for more level than the system can represent. Digital clipping can sound harsh because waveform peaks are cut flat.
 
-Headroom is the margin between the current peak level and the ceiling. Mastering needs enough headroom before final limiting, and enough true-peak safety after final rendering.
+Headroom is the margin between the current peak level and the ceiling. Mastering needs enough headroom before final limiting, and enough true-peak safety after final rendering. True peak counts the higher peaks that appear *between* the stored samples once playback or lossy encoding reconstructs the waveform, so it can sit above the plain sample peak.
 
 ## Latency
 

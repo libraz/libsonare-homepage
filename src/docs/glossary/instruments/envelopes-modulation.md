@@ -71,12 +71,12 @@ Two modulation sources come from *how you play* rather than from the synth itsel
 
 ## The mod matrix
 
-The **mod matrix** is the patch bay that connects everything. Each routing is three choices:
+The **mod matrix** is the patch bay — a routing table of "what moves what" — that connects the sources above to the things they control. Each routing is three choices:
 
 | Part | Meaning | Examples |
 |------|---------|----------|
 | **Source** | What does the moving | LFO 1, LFO 2, amp envelope, filter envelope, velocity, key tracking, mod wheel, random |
-| **Destination** | What gets moved | Pitch (cents), filter cutoff (cents), amplitude (gain), pan (position) |
+| **Destination** | What gets moved | Pitch (cents — 100 cents is one semitone), filter cutoff (cents), amplitude (gain), pan (position) |
 | **Depth** | How much, and which direction | A large positive depth = a strong upward push; negative = the opposite |
 
 So "LFO 1 → pitch, small depth" is vibrato; "velocity → cutoff, large depth" is dynamic brightness; "filter envelope → cutoff" is the classic synth pluck. The same handful of sources and destinations, recombined, produce an enormous range of expressive behavior.

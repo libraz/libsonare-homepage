@@ -9,6 +9,8 @@ Dynamic range is the distance between quieter and louder parts of audio. In musi
 
 Mastering often reduces dynamic range a little so the track feels controlled and translates across playback systems. Reducing it too much can make the master loud but tiring, small, or lifeless.
 
+LRA — the loudness range in the demo below — is the reading that puts a number on this. It measures how far the loudness moves across the clip, so flattening a master shrinks it. The contour beside the meter is that movement over time; crest factor and correlation are separate readings and are not shown here.
+
 <SonareDemo id="loudness-meter" />
 
 ## Macro And Micro Dynamics
@@ -41,7 +43,7 @@ Use loudness-matched A/B comparison. Otherwise, the denser version may seem bett
 
 ## Common Pitfalls
 
-If the post-processing chorus no longer lifts, the kick rounds off, only the vocal consonants jump forward, or the air in quiet sections disappears, the chain is probably taking too much dynamic range away. A higher LUFS alone is not evidence of improvement; verify with loudness-matched A/B that the musical movement is still there.
+If the post-processing chorus no longer lifts, the kick rounds off, only the vocal consonants jump forward, or the air in quiet sections disappears, the chain is probably taking too much dynamic range away. A higher [LUFS](../lufs.md) reading (Loudness Units relative to Full Scale — the integrated loudness measure) alone is not evidence of improvement; verify with loudness-matched A/B that the musical movement is still there.
 
 The opposite mistake is leaving too much movement, which makes the master hard to follow on small speakers or in noisy rooms. The goal is not to erase movement but to land in a range where the intended movement still reaches the listener.
 

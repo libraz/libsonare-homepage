@@ -14,7 +14,8 @@ It contributes:
 | Openness | The mix feels less covered or dull |
 | Shimmer | Cymbals, breath, and bright textures feel more present |
 | Perceived detail | Small high-frequency cues become easier to notice |
-This region carries more of the breath, cymbal edge, room tail, and surface texture than the actual musical pitch. Small moves can make a master feel clearer, but excessive moves often reveal hiss, sibilance, or a brittle top end before they reveal useful detail.
+
+This region carries more of the breath, cymbal edge, room tail, and surface texture than the actual musical pitch. Small moves can make a master feel clearer, but excessive moves often reveal hiss, sibilance (the sharp "s" and "sh" sounds of a vocal), or a brittle top end before they reveal useful detail.
 
 ## AI-Generated Sources
 
@@ -22,7 +23,7 @@ Some generated music has a dull or sharply limited upper band. Air-band synthesi
 
 Use restraint: too much air can sound brittle or noisy.
 
-When a source falls off sharply around 16 kHz, a normal high-shelf EQ may not be enough because there is little useful material to boost. In that case, treat air-band processing as a way to infer a natural upper edge from the remaining harmonics and noise floor, not as a replacement for missing recording detail.
+When a source falls off sharply around 16 kHz, a normal high-shelf EQ may not be enough because there is little useful material to boost. The air-band stage runs into the same wall: it is driven by the energy already present above its shelf frequency, and it stops working entirely once that band drops below roughly −36 dBFS. Above a cliff like that, the control that can still reach is the exciter, which builds new harmonics out of the midrange. Treat either one as a way to shape a plausible upper edge, not as a replacement for missing recording detail.
 
 <BandMapFigure
   title="Where the air band sits, and what a cliff leaves for it"
@@ -34,7 +35,7 @@ When a source falls off sharply around 16 kHz, a normal high-shelf EQ may not be
 ## In Studio Mode
 
 Use Air band amount together with Exciter amount. Raise it slowly and compare with loudness matching enabled.
-Start with Air Band, then add Exciter only if the master still feels dull. Exciter changes harmonic character, so it affects texture as well as brightness.
+Reach for Exciter first and use Air band amount last — that is the order the chain itself runs them in, and the exciter changes harmonic character, so it affects texture as well as brightness. See [Tone and Air Controls](./mastering/tone-air.md) for the full tilt → exciter → air sequence.
 
 A good setting usually sounds like the ceiling opened slightly. A bad setting makes cymbals papery, vocals sharp on sibilants, or silent sections noisier.
 
