@@ -189,10 +189,10 @@ cleanup that long-lived processes should prefer.
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime`. `options`: `nFft`, `hopLength`, `nMels`, `nMfcc`, `windowSec` |
 | `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings. `options`: `nFft`, `hopLength`, `minSectionSec`. Long inputs may use a pooled boundary grid; use each section's `start` / `end` for placement |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | Lead-melody contour (F0 per frame). `options`: `fmin`, `fmax`, `frameLength`, `hopLength`, `threshold`, `usePyin`, `center` |
-| `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | Room acoustics from a recording (RT60, etc.). `options`: `nOctaveBands`, `nThirdOctaveSubbands`, `minDecayDb`, `noiseFloorMarginDb` |
+| `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | Room acoustics from a recording (RT60 — the time reverberation takes to decay 60 dB — and related measures). `options`: `nOctaveBands`, `nThirdOctaveSubbands`, `minDecayDb`, `noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | Room acoustics from a measured impulse response; `minDecayDb` controls the decay-fit threshold (default `30`) |
-| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR, absorption bands, RT60 bands, and confidence |
-| `synthesizeRir(options?)` | `RirResult` | Mono room impulse response from shoebox geometry |
+| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | Equivalent-room estimate with volume, dimensions, DRR (direct-to-reverberant ratio), absorption bands, RT60 bands, and confidence |
+| `synthesizeRir(options?)` | `RirResult` | Mono RIR (room impulse response) from shoebox geometry |
 | `roomMorph(samples, sampleRate, options?)` | `Float32Array` | Offline creative morph toward a target room |
 | `lufs(samples, sampleRate?)` | `LufsResult` | Integrated, final momentary/short-term windows, their EBU R128 maxima (Max-M / Max-S), and loudness range |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
@@ -246,6 +246,8 @@ Progress callbacks are not available on the async path. If you need progress upd
 | `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | Trim silence (defaults: `-60.0` dB, `frameLength=2048`, `hopLength=512`) |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | Retune a held note from one MIDI pitch to another |
+| `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sr?, hopLength?, voiced?, voicedProb?)` | `Float32Array` | Retune a tracked pitch contour to a fixed note, frame by frame. `voiced` takes the `VoicedFlags` union |
+| `pitchCorrectTimevarying(samples, f0Hz, sr?, hopLength?, options?)` | `Float32Array` | Snap a tracked pitch contour to a scale or a fixed note; `options` is `PitchCorrectOptions`, whose `voiced` field takes the same `VoicedFlags` union |
 | `noteStretch(samples, sr?, options?)` | `Float32Array` | Time-stretch a single note span in place; `options` is `{ onsetSample, offsetSample, stretchRatio }` |
 | `voiceChange(samples, sr?, options?)` | `Float32Array` | Pitch + formant shift for voice transformation; `options` is `{ pitchSemitones, formantFactor }` |
 
@@ -255,6 +257,27 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 `hpss(...)` and `hpssWithResidual(...)` default their median-filter kernels to
 `kernelHarmonic=31` and `kernelPercussive=31`. The request-object forms use the
 same names (`nFft`, `hopLength`, and `hardMask`) as the positional overloads.
+
+`VoicedFlags` is `Int32Array | Uint8Array | Float32Array | readonly number[] |
+readonly boolean[]`, so the `boolean[]` that `PitchResult.voicedFlag` hands back
+goes straight into pitch correction with no conversion step:
+
+```typescript
+const pitch = pitchPyin(samples, sampleRate);
+const tuned = pitchCorrectToMidiTimevarying(
+  samples,
+  pitch.f0,
+  69,
+  sampleRate,
+  512,
+  pitch.voicedFlag,   // boolean[] accepted as-is
+  pitch.voicedProb,
+);
+```
+
+`voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch
+throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
+`SonareError`, so `isSonareError` does not catch it.
 
 ### Feature Extraction Functions
 
@@ -283,19 +306,18 @@ same names (`nFft`, `hopLength`, and `hardMask`) as the positional overloads.
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | Variable-Q transform magnitude (`gamma` controls Q) |
 | `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) |
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma); `options.hopLength` defaults to `512` |
-| `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | NMF factor matrices from a row-major spectrogram |
+| `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | NMF (non-negative matrix factorization) factor matrices from a row-major spectrogram, with selectable `init` (`'random'` default, `'nndsvd'`) |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Hybrid CQT magnitude (true CQT in low bins, pseudo-CQT in high bins) |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude (single FFT) |
 | `bassChroma(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
 | `chromaCens(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
 | `onsetStrengthMulti(samples, sr?, nFft?, hopLength?, nMels?, nBands?)` | `{ nBands, nFrames, data }` | Multi-band onset strength (`nBands` default 3; `data` row-major `[nBands x nFrames]`) |
-| `decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | NMF factor matrices with selectable `init` (`'random'` default, `'nndsvd'`) |
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | Nearest-neighbor filtering |
-| `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope (the input to the tempogram family) |
+| `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | Onset strength envelope — how sharply energy rises per frame; the input to the tempogram family |
 
 Common defaults: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `rollPercent=0.85`.
 
-CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chromaCqt` defaults to `nChroma=12`, `nBins=252`, and `binsPerOctave=36`; `bassChroma` and `chromaCens` default to `nChroma=12`. `onsetStrengthMulti` defaults to `nBands=3`. `decomposeWithInit` defaults to `nIter=50`, `beta=2`, and `init='random'`.
+CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chromaCqt` defaults to `nChroma=12`, `nBins=252`, and `binsPerOctave=36`; `bassChroma` and `chromaCens` default to `nChroma=12`. `onsetStrengthMulti` defaults to `nBands=3`. `decompose` defaults to `nIter=50`, `beta=2`, and `init='random'`.
 
 ### Inverse Reconstruction Functions
 
@@ -304,8 +326,8 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
 | `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | Linear STFT power from a mel spectrogram |
-| `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
-| `mfccToMel(mfcc, nMfcc, nFrames, nMels?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
+| `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from a mel spectrogram (Griffin-Lim) |
+| `mfccToMel(mfcc, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | Mel spectrogram from MFCC coefficients |
 | `mfccToAudio(mfcc, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Audio from MFCC coefficients |
 | `cqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, nIter?)` | `Float32Array` | Audio from a row-major CQT magnitude matrix (Griffin-Lim) |
 | `vqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, gamma?, nIter?)` | `Float32Array` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
@@ -341,7 +363,7 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `tonnetz(chromagram, nChroma, nFrames)` | `Float32Array` | `librosa.feature.tonnetz` (`[6 x nFrames]`) |
 | `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`; `mode` is `'autocorrelation'` (default) or `'cosine'` |
 | `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
-| `cyclicTempogram(onsetEnvelope, sr, hopLength?, winLength?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | Cyclic (tempo-octave-invariant) tempogram |
+| `cyclicTempogram(onsetEnvelope, sr?, hopLength?, winLength?, center?, norm?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | Cyclic (tempo-octave-invariant) tempogram |
 | `tempogramRatio(tempogramData, winLength?, sr?, hopLength?, factors?)` | `Float32Array` | `librosa.feature.tempogram_ratio`; factors default to `[0.5, 1, 2, 3, 4]` |
 | `plp(onsetEnvelope, sr?, hopLength?, tempoMin?, tempoMax?, winLength?)` | `Float32Array` | `librosa.beat.plp` |
 
@@ -372,9 +394,10 @@ Standalone level, dynamics, and stereo-image meters. Each accepts an optional `o
 |----------|-------------|-------------|
 | `meteringPeakDb(samples, sr?, options?)` | `number` | Sample peak (dBFS) |
 | `meteringRmsDb(samples, sr?, options?)` | `number` | RMS level (dBFS) |
-| `meteringCrestFactorDb(samples, sr?, options?)` | `number` | Crest factor, peak − RMS (dB) |
+| `meteringCrestFactorDb(samples, sr?, options?)` | `number` | Crest factor, peak − RMS (dB). A high value means peaks stand far above the average level, so the signal is uncompressed |
+| `meteringCrestFactorDbStereo(request)` | `number` | Crest factor over a channel pair (dB): peak across both channels, RMS over the two together. Request-only — takes `MeteringStereoRequest` (`{ left, right, sampleRate?, validate? }`) and has no positional overload |
 | `meteringDcOffset(samples, sr?, options?)` | `number` | Mean (DC) offset, linear amplitude |
-| `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | Inter-sample (true) peak (dBFS); `oversampleFactor` is a power of two in 1..16 (default 4) |
+| `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | Inter-sample peak, ISP — the highest level the waveform reaches *between* samples, also called true peak (dBFS); `oversampleFactor` is a power of two in 1..16 (default 4) |
 | `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | Clipped-sample runs; `options` adds `threshold` (default `0.999`) and `minRegionSamples` (default `1`) |
 | `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | Sliding-window dynamic range; `options` adds `windowSec`, `hopSec`, `lowPercentile`, `highPercentile` (omit for defaults: window 3 s, hop 1 s, low 0.10, high 0.95) |
 | `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | Uncentered correlation (cosine similarity), −1..1 |
@@ -387,9 +410,43 @@ Standalone level, dynamics, and stereo-image meters. Each accepts an optional `o
 | `waveformPeaks(samples, channels, options?)` | `WaveformPeaksReport` | Per-channel min/max waveform buckets from interleaved audio; `options.samplesPerBucket` defaults to `512` |
 | `waveformPeakPyramid(samples, channels, options?)` | `WaveformPeaksReport[]` | Waveform peak buckets at several zoom levels; `options.samplesPerBucketLevels` defaults to `[512, 1024, 2048, 4096]` |
 
+Reach for `meteringCrestFactorDbStereo(...)` whenever the two channels may be out of phase. An inverted pair cancels in the `0.5 * (left + right)` downmix `meteringCrestFactorDb(...)` would need, which understates RMS and so overstates crest factor: on a fully inverted pair the stereo meter reads 11.64 dB while the downmix path reads 0.00 dB.
+
+### Mastering Analysis Functions
+
+The explainable-mastering helpers return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes. Each stereo entry point below is request-only — it takes a single request object and has no positional overload, so a positional call throws.
+
+| Function | Return Type | Description |
+|----------|-------------|-------------|
+| `masteringAudioProfileStereo(request)` | `string` | Mastering-assistant profile of a channel pair, as JSON. Takes `MasteringAudioProfileStereoRequest` |
+| `masteringAssistantSuggestStereo(request)` | `string` | Suggested mastering moves for a channel pair, as JSON. Takes `MasteringAssistantSuggestStereoRequest` |
+| `masteringStreamingPreviewStereo(request)` | `string` | Delivery-platform loudness preview for a channel pair, as JSON. Takes `MasteringStreamingPreviewStereoRequest`; omitting `platforms` or passing an empty array falls back to the built-in Spotify / Apple Music / YouTube set (three rows) rather than throwing |
+
+```typescript
+import { masteringAudioProfileStereo, masteringStreamingPreviewStereo } from '@libraz/libsonare-native';
+
+const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
+const preview = JSON.parse(
+  masteringStreamingPreviewStereo({
+    left,
+    right,
+    sampleRate,
+    platforms: [{ name: 'Spotify', targetLufs: -14, ceilingDb: -1 }],
+  }),
+);
+```
+
+Use the stereo entry points for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that reads about 6 dB low, so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported -22.55 LUFS against the stereo path's -16.44 LUFS — a 6.11 dB gap — and Spotify `normalizationGainDb` came out at +8.55 through the downmix versus +2.44 through the stereo path.
+
+Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and the true peak is the larger of the two. The spectral, dynamics, and tempo fields stay measured on the downmix, so they remain comparable with `masteringAudioProfile`.
+
+::: warning Request-type names differ between the bindings
+Node declares two names for the profile and suggest requests — `MasteringAudioProfileStereoRequest` extends `MasteringAssistantSuggestStereoRequest` and adds no fields. The WASM package uses one shared `MasteringStereoParamsRequest` for both. The field set is identical, so only the type name has to change when porting code between the two surfaces.
+:::
+
 ### Scale Quantization
 
-12-TET scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (`PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69). Pair with `pitchCorrectToMidi(...)` to retune to the nearest scale degree.
+12-TET (twelve-tone equal temperament) scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (`PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69). Pair with `pitchCorrectToMidi(...)` to retune to the nearest scale degree.
 
 | Function | Return Type | Description |
 |----------|-------------|-------------|
@@ -464,7 +521,8 @@ changer.destroy();
 and `assistSidecars()` methods preserve opaque module metadata, while
 `ProjectAutomationTargetKind` and `targetKind` classify automation lanes.
 `RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` accepts
-`'off'`, `'pfl'`, or `'afl'` (and their numeric ordinals). Track and mixer pan
+`'off'`, `'pfl'` (pre-fader listen), or `'afl'` (after-fader listen), and their
+numeric ordinals. Track and mixer pan
 law setters accept the `PanLawInput` aliases described below.
 
 ### Types
@@ -564,6 +622,39 @@ interface PitchResult {
   medianF0: number;
   meanF0: number;
 }
+
+// Per-frame voicing decision, one entry per f0Hz frame. Accepted by the
+// `voiced` argument and by PitchCorrectOptions.voiced.
+type VoicedFlags =
+  | Int32Array
+  | Uint8Array
+  | Float32Array
+  | readonly number[]
+  | readonly boolean[];
+
+interface MasteringAssistantSuggestStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: Record<string, number | boolean>;
+}
+
+// Same fields; a distinct name for the profile entry point.
+interface MasteringAudioProfileStereoRequest extends MasteringAssistantSuggestStereoRequest {}
+
+interface MasteringStreamingPreviewStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  platforms?: StreamingPlatform[];
+}
+
+interface MeteringStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  validate?: boolean;
+}
 ```
 
 The native package also exports TypeScript helper types for option objects, callbacks, streaming snapshots, and realtime engine messages. Use these names when annotating application code instead of re-declaring the shapes locally.
@@ -573,6 +664,8 @@ The native package also exports TypeScript helper types for option objects, call
 | Analysis options/results | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
+| Stereo mastering and metering requests | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest` |
+| Pitch correction | `PitchCorrectOptions`, `VoicedFlags` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
 | Realtime voice | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | Realtime engine graph | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |

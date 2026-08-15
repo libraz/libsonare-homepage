@@ -19,7 +19,7 @@ For a first browser integration, keep the path narrow:
 | **All-In-One Analysis** | `analyze`, `analyzeWithProgress` | Music production, song metadata |
 | **Audio Effects** | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | Remixing, practice tools, region repair |
 | **Features** | `melSpectrogram`, `chroma`, `mfcc` | ML input, visualization |
-| **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS targets, true-peak limiting, presets, streaming chains |
+| **Mastering** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS (Loudness Units relative to Full Scale) targets, true-peak limiting, presets, streaming chains |
 | **Mixing** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | Stem mixing, routing, automation, meters |
 | **Editing DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | Vocal tuning, note edits, pitch/formant changes |
 | **Audio Class** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | File-loading helper and method-style access for common functions |
@@ -216,10 +216,18 @@ you ask the browser to fall back.
 
 ### `capabilityCatalog()`
 
-Return a machine-readable catalog of every processor, its parameters with bounds
-and defaults, and the built-in preset lists. It is the same canonical JSON the C
-ABI publishes and Python exposes as `capability_catalog`, validated against
+Return a machine-readable catalog of every processor, its parameter descriptors,
+and the built-in preset lists. It is the same canonical JSON the C ABI publishes
+and Python exposes as `capability_catalog`, validated against
 `schemas/capability-catalog.schema.json`.
+
+::: warning `min` / `max` / `default` are always `null`
+The registry publishes no generic bounds interface, so every parameter reports
+`min`, `max` and `default` as `null` rather than a guessed value. Use the
+catalog to discover which processors and parameters a build exposes, their
+types, units and realtime-safety — not to size a slider. For value ranges,
+consult the processor's own reference page.
+:::
 
 ```typescript
 function capabilityCatalog(): {
@@ -634,10 +642,10 @@ Harmonic-Percussive Source Separation. Splits audio into tonal (vocals, synths) 
 - **Drum Extraction**: Get just the percussion for sampling
 :::
 
-<SonareDemo id="waveform-harmonics" />
+<SonareDemo id="hpss-separation" />
 
 ::: tip Performance
-HPSS requires STFT computation and median filtering. Processing time scales with audio duration.
+HPSS requires STFT (short-time Fourier transform) computation and median filtering. Processing time scales with audio duration.
 :::
 
 ```typescript
@@ -766,7 +774,7 @@ function pitchCorrectToMidiTimevarying(
   targetMidi: number,
   sampleRate: number,
   hopLength: number,
-  voiced?: Int32Array,
+  voiced?: VoicedFlags,
   voicedProb?: Float32Array,
 ): Float32Array
 
@@ -791,10 +799,42 @@ interface PitchCorrectOptions {
   maxCorrectionSemitones?: number; // per-frame clamp in semitones; default 12
   retuneSpeedMs?: number;          // glide time constant; default 50
   vibratoThresholdCents?: number;  // corrections below this are bypassed; default 20
-  voiced?: Int32Array;             // per-frame voiced flags (non-zero = voiced)
+  voiced?: VoicedFlags;            // per-frame voiced flags (truthy / non-zero = voiced)
   voicedProb?: Float32Array;       // per-frame voicing probability 0-1
 }
 
+// Per-frame voicing decision, one entry per f0Hz frame.
+type VoicedFlags =
+  | Int32Array
+  | Uint8Array
+  | Float32Array
+  | readonly number[]
+  | readonly boolean[];
+```
+
+`VoicedFlags` is the accepted shape of the `voiced` argument and of
+`PitchCorrectOptions.voiced`. It covers what the analysis side hands back:
+`PitchResult.voicedFlag` is a `boolean[]`, so a pitch track goes straight into
+pitch correction with no conversion step.
+
+```typescript
+const pitch = pitchPyin(samples, sampleRate);
+const tuned = pitchCorrectToMidiTimevarying(
+  samples,
+  pitch.f0,
+  69,
+  sampleRate,
+  512,
+  pitch.voicedFlag,   // boolean[] accepted as-is
+  pitch.voicedProb,
+);
+```
+
+`voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch
+throws a `RangeError` (`'pitchCorrectToMidiTimevarying: voiced length must match
+f0Hz length'`), not a `SonareError`, so `isSonareError` does not catch it.
+
+```typescript
 function noteStretch(
   samples: Float32Array,
   sampleRate: number,
@@ -1134,7 +1174,7 @@ These functions are not just "more features"; they solve different modeling prob
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
 | Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, nearest-neighbor filtering, interval remixing, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. CQT/VQT inputs are magnitude matrices. |
-| Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA. |
+| Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA (loudness range — how much the loudness varies over the program). |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
@@ -1169,7 +1209,8 @@ const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nF
 `chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` is the direct
 `librosa.feature.chroma_cqt` equivalent (log-frequency / constant-Q pitch
 folding), while `nnlsChroma(samples, sampleRate?, options?)` is a distinct
-note-activation (NNLS) chroma that suppresses harmonic leakage — often cleaner
+note-activation chroma built on NNLS (non-negative least squares) that
+suppresses harmonic leakage — often cleaner
 for chord or bass-register work. Its `options.hopLength` defaults to `512`.
 
 Closest CLI equivalents from the source-built C++ CLI:
@@ -1259,7 +1300,7 @@ function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 
 ## Metering
 
-Standalone meters report level, dynamics, and stereo-image statistics from a decoded buffer. They are independent of the mastering chain and the streaming engine: pass a `Float32Array` or a left/right pair and get back a value or report. Every function accepts optional `options` with a `validate` flag (default `true`); set `validate: false` to skip NaN/Inf input checks on hot paths.
+Standalone meters report level, dynamics, and stereo-image statistics from a decoded buffer. They are independent of the mastering chain and the streaming engine: pass a `Float32Array` or a left/right pair and get back a value or report. Every function accepts optional `options` with a `validate` flag (default `true`); set `validate: false` on hot paths to skip the O(n) JavaScript-side NaN/Inf pre-scan. It is not a way to push non-finite samples into the core — the native layer always re-validates, so a NaN/Inf buffer still throws, just with a generic native message instead of one naming the offending index. Empty-buffer checks always run.
 
 ### Single-channel level meters
 
@@ -1274,7 +1315,7 @@ function meteringCrestFactorDb(samples: Float32Array, sampleRate?: number, optio
 function meteringDcOffset(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // Inter-sample (true) peak, dBFS. oversampleFactor is a power of two in 1..16 (0 / omit = 4)
 function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversampleFactor?: number, options?: ValidateOptions): number
-// Fraction of frames below thresholdDb, in [0, 1]. thresholdDb default -60,
+// Fraction of frames below thresholdDb, in [0, 1]. thresholdDb default -45,
 // frameLength default 1024, hopLength default 256.
 function meteringSilenceRatio(
   samples: Float32Array,
@@ -1285,6 +1326,30 @@ function meteringSilenceRatio(
   options?: ValidateOptions
 ): number
 ```
+
+### Stereo level meters
+
+A level meter that reads both channels instead of the `0.5 * (left + right)` downmix the single-channel meters need. Unlike the meters above, it is **request-object only** — there is no positional overload, and a positional call throws.
+
+```typescript
+// Crest factor over a channel pair, dB. Peak is taken across both channels
+// and RMS is measured over the two together.
+function meteringCrestFactorDbStereo(request: MeteringStereoRequest): number
+
+interface MeteringStereoRequest extends ValidateOptions {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+}
+```
+
+```typescript
+const crestDb = meteringCrestFactorDbStereo({ left, right, sampleRate });
+```
+
+Reach for it whenever the two channels may be out of phase. An inverted pair cancels in the downmix, which understates RMS and so overstates crest factor: on a fully inverted pair the stereo meter reads **11.64 dB** while the downmix path reads **0.00 dB**.
+
+`meteringStereoCorrelation` and `meteringStereoWidth` accept the same `MeteringStereoRequest` shape alongside their positional forms.
 
 ### Clipping and dynamic range
 
@@ -1341,16 +1406,20 @@ function meteringStereoCorrelation(left: Float32Array, right: Float32Array, samp
 // Mid/side stereo width: 0 = mono, ~1 = wide stereo; unbounded above
 // (Infinity when the mid signal is silent, such as fully out-of-phase audio)
 function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// Per-sample mid/side point series
-function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): VectorscopeReport
-// Phase-scope point series plus summary stats
-function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): PhaseScopeReport
+// Mid/side point series. One point per sample by default; pass maxPoints for a
+// display-sized, deterministically decimated point set (0 / >= length = one point per sample).
+function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ScopeOptions): VectorscopeReport
+// Phase-scope point series plus summary stats. maxPoints decimates the point cloud the same way;
+// the summary stats are always computed over the full-resolution signal.
+function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ScopeOptions): PhaseScopeReport
 
-// Display-sized mid/side vectorscope: like meteringVectorscope but the point series is
-// deterministically decimated to at most maxPoints (0 / >= length = one point per sample).
+interface ScopeOptions extends ValidateOptions {
+  maxPoints?: number;   // 0 / omit / >= length = one point per input sample
+}
+
+// Deprecated aliases: pass maxPoints to meteringVectorscope / meteringPhaseScope instead.
+// They simply delegate and are kept for backward compatibility.
 function meteringVectorscopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): VectorscopeReport
-// Display-sized phase scope: like meteringPhaseScope but the point series is decimated to at
-// most maxPoints; summary stats are still computed over the full-resolution signal.
 function meteringPhaseScopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): PhaseScopeReport
 
 interface VectorscopeReport {
@@ -1411,7 +1480,7 @@ interface SpectrumReport {
 
 ## Scale Quantization
 
-12-TET scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (a `PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69).
+12-TET (twelve-tone equal temperament) scale helpers for building pitch-correction targets. `modeMask` is a 12-bit mask where bit *i* enables the *i*-th pitch class relative to `root` (a `PitchClass`, C = 0); natural major is `0b101010110101`. `referenceMidi` is the tuning anchor (pass `0` for A4 = 69).
 
 ```typescript
 // Snap a (possibly fractional) MIDI number to the nearest enabled pitch class
@@ -2294,14 +2363,14 @@ const result = masteringChainStereo(left, right, sampleRate, {
 })
 console.log(result.outputLufs, result.outputTruePeakDbtp, result.outputLra)
 if (result.loudnessTargetLimited) {
-  console.warn('The true-peak ceiling prevented the requested LUFS target.');
+  console.warn('The true-peak ceiling prevented the requested LUFS target.')
 }
 console.log(result.stageGainReductions)
 
-// Preset with flat dot-notation overrides
+// Preset with nested overrides (the typed MasteringChainConfig shape)
 const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
-  'loudness.targetLufs': -14,
-  'maximizer.truePeakLimiter.releaseMs': 50,
+  loudness: { targetLufs: -14 },
+  maximizer: { truePeakLimiter: { releaseMs: 50 } },
 })
 ```
 
@@ -2349,6 +2418,49 @@ report files, so a report exported from the CLI and one read in the browser have
 the same shape.
 
 The explainable-mastering helpers — `masteringAudioProfile(...)`, `masteringAssistantSuggest(...)`, and `masteringStreamingPreview(...)` — return JSON strings; see [Mastering Assistant](./mastering-assistant.md) for their exact shapes, accepted options, and how to turn a suggestion into a rendered master. Reference-track workflows use `masteringPairProcessorNames()` and `masteringPairAnalyze()` (matched sample rate and comparable duration).
+
+#### Stereo entry points for the explainable helpers
+
+Each of the three has a stereo counterpart that measures the channel pair directly. They are **request-object only** — there is no positional overload, and a positional call throws.
+
+```typescript
+function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string
+function masteringAssistantSuggestStereo(request: MasteringStereoParamsRequest): string
+function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string
+
+interface MasteringStereoParamsRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: MasteringProcessorParams;
+}
+
+interface MasteringStreamingPreviewStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  platforms?: StreamingPlatform[];
+}
+```
+
+```typescript
+const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
+const suggestion = JSON.parse(masteringAssistantSuggestStereo({ left, right, sampleRate }));
+const preview = JSON.parse(
+  masteringStreamingPreviewStereo({
+    left,
+    right,
+    sampleRate,
+    platforms: [{ name: 'Spotify', targetLufs: -14, ceilingDb: -1 }],
+  }),
+);
+```
+
+Use them for anything stereo. The mono helpers measure a `0.5 * (left + right)` downmix, and on decorrelated material that downmix reads about 6 dB low — so the integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement are all under-reported by the same amount. Measured on a decorrelated pink-noise pair (48 kHz, 4 s), the downmix path reported **-22.55 LUFS** against the stereo path's **-16.44 LUFS**, a **6.11 dB** gap, and Spotify `normalizationGainDb` came out at **+8.55** through the downmix versus **+2.44** through the stereo path. On a correlated pair the gap shrinks to 3.01 dB, which is just the halving; the remaining ~3 dB is the decorrelation.
+
+Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and the true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay measured on the downmix and remain directly comparable with `masteringAudioProfile`.
+
+`masteringStreamingPreviewStereo` treats `platforms` exactly as the mono helper does: omit it or pass an empty array and the preview falls back to the built-in Spotify / Apple Music / YouTube set, returning three rows rather than throwing.
 
 ### StreamingEqualizer
 
@@ -2445,7 +2557,8 @@ function voiceChangeRealtime(
   preset?: RealtimeVoiceChangerConfigInput,
   options?: {
     channels?: 1 | 2;   // default 1 (mono); 2 = interleaved stereo (L0,R0,L1,R1,...)
-    blockSize?: number; // default 512
+    /** @deprecated Ignored — the shared C-ABI renderer uses a fixed block size. */
+    blockSize?: number;
   },
 ): Float32Array  // same layout/length as the input
 ```
@@ -2466,23 +2579,25 @@ import { init, StreamingMasteringChain } from '@libraz/libsonare';
 await init();
 
 const chain = new StreamingMasteringChain({
-  eq: { tiltDb: 0.5 },
+  eq: { tilt: { tiltDb: 0.5 } },
   dynamics: { compressor: { thresholdDb: -20 } },
   maximizer: { truePeakLimiter: { ceilingDb: -1, oversampleFactor: 4 } },
 });
 
 chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
 
-const monoOut = chain.processMono(monoBlock);                // 1ch
-const { left, right } = chain.processStereo(leftBlock, rightBlock); // 2ch
+// Use the path that matches the prepared channel count: processMono() /
+// flushMono() after prepare(..., 1), processStereo() / flushStereo() after
+// prepare(..., 2). Mixing them throws a num_channels mismatch.
+const { left, right } = chain.processStereo(leftBlock, rightBlock);
 
 console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
 console.log(chain.latencySamples());  // total latency reported by active stages
 
 // After the last input block, drain the chain latency and the finite tails.
-let tail: Float32Array;
-while ((tail = chain.flushMono()).length > 0) {
-  write(tail);
+let tail: { left: Float32Array; right: Float32Array };
+while ((tail = chain.flushStereo()).left.length > 0) {
+  write(tail.left, tail.right);
 }
 
 chain.reset();   // clear processor state without re-preparing
@@ -2515,8 +2630,11 @@ The named mastering API families are:
 | Run block-by-block EQ | `StreamingEqualizer` |
 | Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
 | Summarize source audio for mastering decisions | `masteringAudioProfile()` |
+| Summarize a stereo pair for mastering decisions | `masteringAudioProfileStereo()` |
 | Suggest mastering moves from source analysis | `masteringAssistantSuggest()` |
+| Suggest mastering moves from a stereo pair | `masteringAssistantSuggestStereo()` |
 | Preview loudness targets for delivery platforms | `masteringStreamingPreview()` |
+| Preview delivery loudness for a stereo pair | `masteringStreamingPreviewStereo()` |
 | List mono/stereo processors | `masteringProcessorNames()` |
 | Get machine-readable processor classifications | `masteringProcessorCatalog()` |
 | List chain insert processors | `masteringInsertNames()` |
@@ -2807,9 +2925,10 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Environment and engine | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
 | Engine lane mixer, markers, and MIDI clips | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
-| Spectral, pitch, and feature transforms | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
+| Spectral, pitch, and feature transforms | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | Paged clip streaming | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult` |
+| Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
+| Metering requests | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | Realtime voice | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |

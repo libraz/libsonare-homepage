@@ -71,7 +71,7 @@ cases. Most app code should import from the main `@libraz/libsonare` entry.
 | Import | Use |
 |--------|-----|
 | `@libraz/libsonare` | Main TypeScript API: initialization, analysis, features, mastering, mixing, and realtime classes |
-| `@libraz/libsonare/analysis` | Analysis-only module, built without mastering, mixing, realtime, or project bindings — a much smaller download when all you need is MIR |
+| `@libraz/libsonare/analysis` | Analysis-only module, built without mastering, mixing, realtime, or project bindings — a much smaller download when all you need is MIR (Music Information Retrieval) |
 | `@libraz/libsonare/worklet` | AudioWorklet bridge helpers, including `SonareRealtimeEngineNode`, `SonareEngine`, and worklet-side lifecycle exports |
 | `@libraz/libsonare/worker` | `OfflineWorkerClient`, which runs one-shot analysis and mastering calls in a dedicated Worker |
 | `@libraz/libsonare/wasm` | Raw main WASM asset for bundlers or custom loaders |
@@ -169,6 +169,10 @@ cmake --build . --parallel
 # Build WebAssembly (run from the repository root, not from build/)
 cd .. && make wasm
 ```
+
+::: warning Rebuild the shared library and the binding together
+The Python binding refuses a shared library built from a different tree, so a locally built `.so` / `.dylib` and the binding that loads it have to come from the same checkout. After pulling a version that changes a C struct layout, rebuild the library rather than pointing the new binding at the old artifact. Installing the published wheel instead avoids the problem entirely, since it ships a matched pair.
+:::
 
 ## Native Bindings (Python / Node.js)
 

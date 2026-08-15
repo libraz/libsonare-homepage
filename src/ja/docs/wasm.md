@@ -193,9 +193,9 @@ console.log(`BPM: ${bpm}, キー: ${key.name}`);
 console.log(`中央値ピッチ: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
-上の呼び出しに対応する CLI 例です。`analyze`、`hpss`、`pitch` は Python CLI、`pitch-shift` はソースビルド C++ CLI のコマンドです。
+上の呼び出しに対応する CLI 例です。4 つとも Python CLI で使えます。
 
-```bash [Mixed CLI]
+```bash
 sonare analyze music.mp3 --json
 sonare hpss music.mp3 -o separated --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
@@ -301,11 +301,12 @@ try {
 ## Web Worker の使用
 
 パッケージには Worker クライアントが同梱されているため、よくある用途では自前の
-worker ファイルは不要です。`@libraz/libsonare/worker` から `OfflineWorkerClient` を
-インポートします。
+worker ファイルは不要です。`OfflineWorkerClient` はメインエントリ `@libraz/libsonare`
+からインポートします（`/worker` サブパスは Worker 側のエントリで、
+`installOfflineWorkerEndpoint` を公開しています）。
 
 ```typescript
-import { OfflineWorkerClient } from '@libraz/libsonare/worker';
+import { OfflineWorkerClient } from '@libraz/libsonare';
 
 const client = new OfflineWorkerClient();
 
@@ -564,7 +565,7 @@ async function setupStreaming() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const source = audioCtx.createMediaStreamSource(stream);
 
-  // 60fps 用にスロットリングしたアナライザーを作成
+  // 出力フレームをスロットリングしたアナライザーを作成
   const analyzer = new StreamAnalyzer({
     sampleRate: audioCtx.sampleRate,
     nFft: 2048,
@@ -573,7 +574,7 @@ async function setupStreaming() {
     computeMel: true,
     computeChroma: true,
     computeOnset: true,
-    emitEveryNFrames: 4, // 4 フレームごとに出力（44100Hz で約 60fps）
+    emitEveryNFrames: 4, // 4 ホップごとに 1 フレーム出力（44100Hz・hopLength 512 で毎秒約 21 フレーム）
   });
 
   // シンプルさのため ScriptProcessor を使用（本番では AudioWorklet 推奨）
@@ -607,7 +608,7 @@ async function setupStreaming() {
 
 ### AudioWorklet 連携
 
-本番用途では、解析がメインスレッドをブロックしないよう `StreamAnalyzer` を AudioWorklet 内で動かします。下の例は、自己完結型の analyzer worklet です。
+本番用途では、解析がメインスレッドをブロックしないよう `StreamAnalyzer` を AudioWorklet（ブラウザの音声処理専用スレッド）内で動かします。下の例は、自己完結型の analyzer worklet です。
 
 ::: warning AudioWorklet での WASM 利用
 AudioWorklet での WASM ロードには、特別な扱いが必要です。WASM モジュールはワークレットのコンテキスト内でロード・インスタンス化する必要があります。
@@ -698,7 +699,7 @@ source.connect(workletNode);
 ```
 
 ::: details 関連するエントリポイント（リアルタイムエンジン、MIDI）
-上の例は独自の analyzer worklet を作るものです。トラックレーン、チャンネルストリップ、バス、MIDI クリップ、ライブ MIDI、楽器、キャプチャといった再生エンジン全体を worklet 内で動かしたい場合は、`@libraz/libsonare/worklet` の AudioWorklet bridge を使います。ブリッジの `SonareEngine` API がそのエンジンを worklet へミラーします。詳しくは [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。
+上の例は独自の analyzer worklet を作るものです。トラックレーン、チャンネルストリップ、バス、MIDI クリップ、ライブ MIDI、楽器、キャプチャといった再生エンジン全体を worklet 内で動かしたい場合は、`@libraz/libsonare/worklet` の AudioWorklet ブリッジを使います。ブリッジの `SonareEngine` API がそのエンジンを worklet へミラーします。詳しくは [リアルタイムとストリーミング](./realtime-streaming.md) を参照してください。
 
 メインエントリ（`@libraz/libsonare`）には、メインスレッド用のブラウザ連携ヘルパーが 2 つ同梱されています。`bindMicrophoneInput(...)` は `getUserMedia` を AudioWorklet のエンジンノードへつなぎ（[録音とテイク](./recording-and-takes.md) を参照）、`bindWebMidi(...)` は Web MIDI 入力をエンジンへ橋渡しします（[MIDI 入力](./midi-input.md) を参照）。
 :::
@@ -815,7 +816,7 @@ sonare mfcc-to-audio music.wav -o mfcc-reconstructed.wav
 
 | 関数 | 戻り値 | 備考 |
 |------|--------|------|
-| `melToStft(melPower, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | メルフィルタバンクの擬似逆変換 |
+| `melToStft(melPower, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `StftPowerResult` `{ nBins, nFrames, power }` | メルフィルターバンクの擬似逆変換 |
 | `melToAudio(melPower, nMels, nFrames, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | Griffin-Lim による音声合成 |
 | `mfccToMel(mfccCoefficients, nMfcc, nFrames, nMels?, lifter?)` | `MelPowerResult` `{ nMels, nFrames, power }` | 逆 DCT でメルスペクトログラムへ。順変換で使った lifter を渡す |
 | `mfccToAudio(mfccCoefficients, nMfcc, nFrames, nMels, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?, lifter?)` | `Float32Array` | MFCC → メル → 音声を一度に。順変換で使った lifter を渡す |
@@ -846,9 +847,9 @@ try {
 }
 ```
 
-ファイル単位のオフライン処理をターミナルで行う場合は、近い CLI コマンドとして次を使います。`pitch-shift` はソースビルド C++ CLI、`voice-change` は Python CLI のコマンドです。
+ファイル単位のオフライン処理をターミナルで行う場合は、近い CLI コマンドとして次を使います。どちらも Python CLI で使えます。
 
-```bash [Mixed CLI]
+```bash
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
@@ -916,8 +917,7 @@ try {
 
 - **メインモジュール** — `sonare.js` と `sonare.wasm`。解析・マスタリング・ミキシング・編集の各 API を支える Emscripten ビルドです。
 - **メイン API エントリ** — パッケージの `index`（`index.js` / `index.d.ts`）は `import ... from '@libraz/libsonare'` を支える tsup バンドルです。解析・マスタリング・ミキシング・編集の全 API を公開します。
-- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine`、worklet プロセッサクラス、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
-- **AudioWorklet ブリッジ** — `worklet.js` / `worklet.d.ts`。`AudioWorkletGlobalScope` 向けの自己完結型バンドルで、`SonareEngine` API とプロセッサ登録ヘルパーを公開します。
+- **AudioWorklet エントリ** — `worklet.js` / `worklet.d.ts`。独立した自己完結型の tsup バンドル（コード分割なし、`AudioWorkletGlobalScope` への移植を想定）で、`SonareEngine` API、worklet プロセッサクラスとその登録ヘルパー、リングバッファプロトコルを収録します。worklet レルムが独自の WASM インスタンスを初期化できるよう、メインエントリから `init` / `isInitialized` のみを再エクスポートします。
 - **解析専用モジュール** — `@libraz/libsonare/analysis` エントリの背後にある `sonare-analysis.js` / `sonare-analysis.wasm`。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを外してコンパイルしています。CI はサイズをレポートに記録しますが、増加だけでビルドを失敗させません。
 - **オフライン Worker エントリ** — `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
 - **ボイスチェンジャーの JSON Schema** — 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。

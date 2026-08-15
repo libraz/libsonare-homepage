@@ -409,6 +409,10 @@ sonare chroma song.mp3 --json
 
 ### Pitch Detection
 
+Pitch tracking reports F0 — the fundamental frequency, the lowest frequency of a
+periodic sound and the one you hear as its pitch — frame by frame, which is how
+you get a melody line out of monophonic audio.
+
 ::: code-group
 
 ```typescript [Browser]
@@ -465,7 +469,7 @@ const analyzer = new StreamAnalyzer({
   computeMel: true,
   computeChroma: true,
   computeOnset: true,
-  emitEveryNFrames: 4, // emit every 4 frames (~60fps)
+  emitEveryNFrames: 4, // emit one frame per 4 hops (~21 fps at 44.1 kHz with hopLength 512)
 });
 
 // Process incoming audio chunks
@@ -698,7 +702,7 @@ int main() {
 ## C API
 
 ```c
-#include <sonare_c.h>
+#include <sonare/sonare_c.h>
 #include <stdio.h>
 
 static const char* kPitchNames[] = {

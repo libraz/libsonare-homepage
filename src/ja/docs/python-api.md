@@ -45,7 +45,7 @@ Python パッケージは、呼び出しを C++ ライブラリと同じネイ�
 `analyze(...)` を 1 回呼べば、コード、セクション、音色、ダイナミクス、リズム、メロディ、フォーム、拍ごとの強度を含む総合結果が返り、他のバインディングと揃っています。1 つのフィールドだけが欲しいときや、呼び出しごとにオプションを変えたいときは、下の専用関数を使ってください。
 
 ::: info 既定のサンプルレートはファミリーごとに異なる
-楽曲解析系とメータリング系のヘルパーは `sample_rate=22050` を既定とし、室内音響系のヘルパー（`analyze_impulse_response`、`detect_acoustic`、`estimate_room`）は `48000` を既定とします。`Audio.from_file(...)` で読み込んだ場合は、必ず `audio.sample_rate` を渡してください。そうすれば、別のレートで録音した音声にファミリーごとの既定値が静かに当たることはありません。
+楽曲解析系とメータリング系のヘルパーは `sample_rate=22050` を既定とし、ルーム音響系のヘルパー（`analyze_impulse_response`、`detect_acoustic`、`estimate_room`）は `48000` を既定とします。`Audio.from_file(...)` で読み込んだ場合は、必ず `audio.sample_rate` を渡してください。そうすれば、別のレートで録音した音声にファミリーごとの既定値が静かに当たることはありません。ここでいうインパルス応答（IR）とは、短い一発の音に対して空間がどう応答するかを録音したものです。
 :::
 
 ## 目的から API を選ぶ
@@ -125,7 +125,7 @@ print(f"ビート数: {len(result.beat_times)}")
 
 ### エラーハンドリング
 
-エラーは `SonareError` を送出します。これは `RuntimeError` のサブクラスで、`.code` 属性にネイティブのエラーコードを保持します。そのため `except RuntimeError:` はそのまま機能し、`except sonare.SonareError as e:` ではコードを取得できます。このコードは JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で([エラーハンドリング](./js-api.md#エラーハンドリング)参照)、CLI は同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+エラーは `SonareError` を送出します。これは `RuntimeError` のサブクラスで、`.code` 属性にネイティブのエラーコードを保持します。そのため `except RuntimeError:` はそのまま機能し、`except sonare.SonareError as e:` ではコードを取得できます。このコードは JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値であり（[エラーハンドリング](./js-api.md#エラーハンドリング)を参照）、CLI も同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
 
 ### このビルドで何ができるか
 
@@ -253,7 +253,7 @@ backtracked = sonare.onset_backtrack(onset_frames, energy)
 # モノフォニックの F0 トラックからノート区間を切り出す
 pitch = sonare.pitch_pyin(samples, sample_rate=48000)
 segments = sonare.note_segments(
-    pitch.f0_hz,
+    pitch.f0,
     pitch.voiced_prob,
     frame_rate=48000 / 512,
     min_note_ms=60.0,
@@ -341,9 +341,9 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | シンコペーション・グルーヴ・規則性 |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | ブライトネス・ウォームス・密度・粗さ・複雑さと、窓ごとの `timbre_over_time`（`timbreOverTime` alias） |
-| `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | 楽曲構造のセクション（イントロ／ヴァース／コーラス…） |
+| `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | 楽曲構造のセクション（イントロ／Aメロ／サビ…） |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | 単音メロディの輪郭（YIN） |
-| `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | インパルス応答からの室内音響（RT60／EDT／C50／C80）。`min_decay_db` は減衰フィットのしきい値 |
+| `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | インパルス応答（IR）から求めるルーム音響（RT60／EDT／C50／C80）。`min_decay_db` は減衰フィットのしきい値 |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | ブラインドなルーム音響推定 |
 | `estimate_room(samples, sample_rate, ...)` | `RoomEstimate` | 体積、寸法、DRR、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
 | `synthesize_rir(length_m, width_m, height_m, ...)` | `RirResult` | シューボックス形状からのモノラル RIR |
@@ -362,7 +362,7 @@ with Audio.from_file("music.mp3") as audio:
 など一部の詳細ヘルパーはスタンドアロン関数です。これらには `audio.data` と
 `audio.sample_rate` を渡してください。
 
-Python の `analyze(...)` は内部で `sonare_analyze_json` を呼び、BPM と順位付き BPM 仮説、キー、拍子とその候補、ビート時刻・拍ごとの強度に加えてコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。室内音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
+Python の `analyze(...)` は内部で `sonare_analyze_json` を呼び、BPM と順位付き BPM 仮説、キー、拍子とその候補、ビート時刻・拍ごとの強度に加えてコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。ルーム音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -413,14 +413,14 @@ print(labels)  # 例: ['I', 'V', 'vi', 'IV']
 
 | 目的 | 使う API |
 |------|----------|
-| きれいなインパルスレスポンスを測る | `analyze_impulse_response(...)` |
+| きれいなインパルス応答を測る | `analyze_impulse_response(...)` |
 | 通常音声から部屋の減衰を推定する | `detect_acoustic(...)` |
 | 音声から実用的な部屋モデルを推定する | `estimate_room(...)` |
-| 寸法からモノラルのルームインパルスレスポンスを作る | `synthesize_rir(...)` |
+| 寸法からモノラルのルームインパルス応答（RIR）を作る | `synthesize_rir(...)` |
 | 目標ルームの響きを音作り効果として足す | `room_morph(...)` |
 
 ::: info デフォルト値と用語
-`analyze_impulse_response(...)` と `detect_acoustic(...)` は `AcousticResult` を返し、RT60、EDT、C50、C80、D50、バンド別配列、信頼度、`is_blind` を含みます。これらの `sample_rate` デフォルトは `48000` で、多くの楽曲解析ヘルパーの `22050` とは異なります。RIR は room impulse response の略です。
+`analyze_impulse_response(...)` と `detect_acoustic(...)` は `AcousticResult` を返し、RT60、EDT、C50、C80、D50、バンド別配列、信頼度、`is_blind` を含みます。これらの `sample_rate` デフォルトは `48000` で、多くの楽曲解析ヘルパーの `22050` とは異なります。RIR は room impulse response（ルームインパルス応答）の略です。RT60 は残響時間で、残響が 60 dB 減衰するまでの長さを指します。C50 と C80 は、初期エネルギーと後期エネルギーの比で明瞭度を表します。
 :::
 
 ```python
@@ -541,15 +541,15 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `hybrid_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | ハイブリッド CQT の振幅（ビンごとに CQT／擬似 CQT を切り替えて合成） |
 | `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | 擬似 CQT の近似振幅 |
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | 低域寄りのクロマ（低音域のピッチクラス分布） |
-| `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | CENS のエネルギー正規化・平滑化クロマ |
-| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?)` | `tuple[int, list[float]]` | 定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当） — `(n_frames, 行優先 12 x n_frames データ)` を返す |
+| `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | CENS のエネルギー正規化・平滑化クロマ |
+| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | 定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当） — `features` は行優先 `[n_chroma x n_frames]` |
 | `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す。`hop_length` の既定値は `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | 行優先スペクトログラムから NMF 分解係数 `(w, h)` を返す |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | 初期化方式を選べる NMF 分解 `(w, h)`。`init` は既定 `'random'`、`'nndsvd'`（SVD ウォームスタート）も受け付ける |
-| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルタ |
-| `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度包絡（テンポグラム系の入力） |
+| `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルター |
+| `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度の包絡線（テンポグラム系の入力） |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | マルチバンドのオンセット強度。`(n_frames, [n_bands x n_frames])` を行優先で返す（`n_bands` 既定 3） |
-| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／最後の窓の [LUFS](./glossary/lufs.md)、Max-M / Max-S、ラウドネスレンジ（EBU R128） |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated／最後の窓の [LUFS](./glossary/lufs.md)（Loudness Units relative to Full Scale）、Max-M / Max-S、ラウドネスレンジ（EBU R128） |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | インターリーブされたサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range（LRA、LU 単位） |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | フレームごとの momentary LUFS |
@@ -557,7 +557,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 
 主な既定値は、`n_fft=2048`、`hop_length=512`、`n_mels=128`、`n_mfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`roll_percent=0.85` です。
 
-CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` の既定は `n_bins=252`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` を既定値とします。
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` と `chroma_cens` の既定は `n_chroma=12`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` を既定値とします。
 
 追加のエフェクト系ヘルパーとして `remix(samples, intervals, sample_rate?, align_zeros?)`、`phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` も利用できます。librosa 型の区間リミックス、直接のフェーズボコーダー時間伸縮、残差信号を保持した HPSS が必要な場合に使います。
 
@@ -569,7 +569,7 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` �
 |------|--------|------|
 | `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | メルスペクトログラムからリニア STFT パワー |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | メルスペクトログラムから音声（Griffin-Lim） |
-| `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?)` | `InverseResult` | MFCC 係数からメルスペクトログラム（dB） |
+| `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | MFCC 係数からメルスペクトログラム（dB）。`lifter` は順方向の `mfcc(...)` と揃えます |
 | `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | MFCC 係数から音声 |
 | `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | row-major CQT 振幅行列から音声（Griffin-Lim） |
 | `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma?, n_iter?)` | `list[float]` | row-major VQT 振幅行列から音声（Griffin-Lim） |
@@ -589,19 +589,22 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` �
 | `metering_peak_db(samples, sample_rate?, *, validate?)` | `float` | サンプルピーク（dBFS） |
 | `metering_rms_db(samples, sample_rate?, *, validate?)` | `float` | RMS レベル（dBFS） |
 | `metering_crest_factor_db(samples, sample_rate?, *, validate?)` | `float` | クレストファクター。ピーク − RMS（dB） |
+| `metering_crest_factor_db_stereo(left, right, sample_rate?, *, validate?)` | `float` | 両チャンネルから測るクレストファクター。ピークは 2 つのうち大きい方、RMS は両チャンネルをまとめて計算する |
 | `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | 平均（DC）オフセット、リニア振幅 |
 | `metering_silence_ratio(samples, sample_rate?, threshold_db?, frame_length?, hop_length?, *, validate?)` | `float` | RMS が `threshold_db` を下回る解析フレームの割合。既定は `threshold_db=-45.0`、`frame_length=1024`、`hop_length=256` |
-| `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | インターサンプル（トゥルー）ピーク（dBFS）。`oversample_factor` は 1..16 の 2 の冪（0 で既定 4） |
+| `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | サンプル間ピーク（ISP、True Peak）を dBFS で返す。`oversample_factor` は 1..16 の 2 の冪（0 で既定 4） |
 | `metering_detect_clipping(samples, sample_rate?, threshold?, min_region_samples?, *, validate?)` | `ClippingReport` | クリップしたサンプルの連続区間。`threshold` 既定 `0.999`、`min_region_samples` 既定 `1` |
 | `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`window_sec`/`hop_sec` は `0.0` で既定値（窓 3 秒・ホップ 1 秒）。`low_percentile`/`high_percentile` は負値（既定 `-1.0`）で既定値（low 0.10・high 0.95）。`0.0` は既定ではなく 0 パーセンタイルの指定 |
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | 非中心化相関（コサイン類似度）、−1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | ミッド/サイドのステレオ幅 |
-| `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | サンプルごとのミッド/サイド点列 |
+| `metering_vectorscope(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | ミッド/サイドの点列。`max_points` で上限を与えない限り 1 サンプル 1 点 |
 | `metering_vectorscope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | 表示サイズのミッド/サイドベクトルスコープ。`max_points` が点数の上限（`0` またはバッファ長以上で 1 サンプル 1 点となり `metering_vectorscope` と同一）。それ以外は決定的に間引き、バケットごとに最大半径のサンプルを残す |
-| `metering_phase_scope(left, right, sample_rate?, *, validate?)` | `PhaseScopeReport` | フェーズスコープの点列と要約統計 |
+| `metering_phase_scope(left, right, sample_rate?, max_points?, *, validate?)` | `PhaseScopeReport` | フェーズスコープの点列と要約統計。`max_points` で上限を与えない限り 1 サンプル 1 点 |
 | `metering_phase_scope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `PhaseScopeReport` | 表示サイズのフェーズスコープ（リサージュ＋要約統計）。`max_points` が点群の上限（同じ規則）。要約統計は常にフル解像度の信号で計算する |
 | `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | バッファ全体の Welch 平均による振幅/パワー/dB スペクトラム（Hann 窓・50% オーバーラップの `n_fft` フレームを平均。単一フレームのスナップショットではない）。`n_fft`/`octave_fraction`/`db_ref`/`db_amin` に `0` で既定値（2048 / 3 / 1.0 / 下限値） |
 | `metering_spectrum_frame(samples, sample_rate?, frame_offset?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | 真の単一フレームスペクトラム（Hann 窓 FFT 1 回）。`[frame_offset, frame_offset + n_fft)` の範囲を処理し、末尾はゼロパディング。`frame_offset`/`n_fft`/`octave_fraction`/`db_ref`/`db_amin` に `0` で既定値 |
+
+ダウンミックスを `metering_crest_factor_db(...)` に渡すのではなく、`metering_crest_factor_db_stereo(...)` を使ってください。`0.5 * (left + right)` のダウンミックスは逆相のペアを打ち消してしまうため、RMS を小さく見積もり、その分クレストファクターを大きく見せます。位相を反転させたペアでは、ステレオメーターが `11.64` dB、ダウンミックス経由が `0.00` dB になります。左右の長さが違う場合は `ValueError("left and right channel lengths must match")` を送出します。
 
 ### スケール量子化
 
@@ -649,7 +652,7 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` �
 | `pcen(values, n_bins, n_frames, sample_rate?, hop_length?, time_constant?, gain?, bias?, power?, eps?)` | `list[float]` | `librosa.pcen`。入力は row-major の `[n_bins x n_frames]` メル |
 | `tonnetz(chromagram, n_chroma, n_frames)` | `list[float]` | `librosa.feature.tonnetz`。row-major の `[6 x n_frames]` を返す |
 | `tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, center?, norm?, mode?)` | `tuple[int, list[float]]` | `librosa.feature.tempogram`。`mode`: `"autocorrelation"`（既定）または `"cosine"` |
-| `fourier_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, center?, norm?)` | `tuple[int, list[float]]` | FFT ベースのテンポグラム（オンセット包絡の STFT）|
+| `fourier_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, center?, norm?)` | `tuple[int, list[float]]` | FFT ベースのテンポグラム（オンセット包絡線の STFT）|
 | `cyclic_tempogram(onset_envelope, sample_rate?, hop_length?, win_length?, bpm_min?, n_bins?)` | `tuple[int, list[float]]` | オクターブ畳み込みの循環テンポグラム |
 | `tempogram_ratio(tempogram_data, win_length?, sample_rate?, hop_length?, factors?)` | `list[float]` | テンポグラムからのテンポ比特徴量 |
 | `plp(onset_envelope, sample_rate?, hop_length?, tempo_min?, tempo_max?, win_length?)` | `list[float]` | `librosa.beat.plp`。Predominant Local Pulse |
@@ -753,6 +756,7 @@ class AnalysisResult:
     bpm_candidates: list[BpmHypothesis]
     time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # プロパティ: 各拍の強度を持つオブジェクト
+                                   #   (Beat はパッケージ直下ではなく libsonare.types にある)
     chords: list[Chord]
     sections: list[Section]
     timbre: AnalysisTimbre | None
@@ -830,6 +834,7 @@ class StreamConfig:
     emit_every_n_frames: int = 1
     magnitude_downsample: int = 1
     max_pending_frames: int = 4096  # 上限到達時は新たに生成されたフレームを破棄
+    max_progression_entries: int = 4096  # 進行データそれぞれの保持上限
     key_update_interval_sec: float = 5.0
     bpm_update_interval_sec: float = 10.0
     window: int = 0          # 0=Hann, 1=Hamming, 2=Blackman, 3=Rectangular
@@ -874,6 +879,8 @@ class StreamStats:
     duration_seconds: float
     pending_frames: int
     dropped_output_frames: int
+    dropped_chord_progression_entries: int
+    dropped_bar_progression_entries: int
     bpm: float
     bpm_confidence: float
     bpm_candidate_count: int
@@ -906,7 +913,7 @@ class StreamStats:
 | マスタリング | `MasteringResult`, `MasteringStereoResult` |
 | ミキシング | `MixerStereoResult` |
 | プロジェクト | `AssistSidecar`（`project.get_assist_sidecar(index)` / `project.assist_sidecars()` の戻り値 — [プロジェクト編集](./project-editing.md#アシストサイドカー) を参照）、`NotePairValidation` |
-| リアルタイムエンジンのテレメトリ | `MeterTelemetryRecord` |
+| リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
 
 ## ストリーミング解析 API
 
@@ -1049,7 +1056,7 @@ with sonare.StreamingMasteringChain({
     "dynamics.compressor.thresholdDb": -20.0,
 }) as chain:
     chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
-    print(chain.stage_names(), chain.latency_samples())
+    print(chain.stage_names(), chain.latency_samples)  # latency_samples はプロパティ
     output = chain.process_mono([0.0] * 512)
     while True:
         tail = chain.flush_mono()
@@ -1071,7 +1078,25 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
     {"name": "YouTube", "targetLufs": -14, "ceilingDb": -1},
     {"name": "Podcast", "targetLufs": -16, "ceilingDb": -1},
 ]))
+
+# ステレオ入口: パラメータも戻り値の JSON も同じで、測定だけが両チャンネル基準になります。
+stereo_profile = json.loads(sonare.mastering_audio_profile_stereo(left, right, sample_rate=sample_rate, params={
+    "n_fft": 2048,
+    "hop_length": 512,
+    "true_peak_oversample": 4,
+}))
+stereo_suggestions = json.loads(sonare.mastering_assistant_suggest_stereo(left, right, sample_rate=sample_rate, params={
+    "target_lufs": -14,
+    "ceiling_db": -1,
+    "prefer_streaming_safe": True,
+}))
+# platforms を省略すると、組み込みの Spotify / Apple Music / YouTube のセットが使われます。
+stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
 ```
+
+3 つの JSON ヘルパーにはそれぞれ `_stereo` 版があります。バッファ 1 本ではなく `left` と `right` を受け取り、`params` / `platforms` は同じもの、戻り値も同じ JSON 文字列です。2 チャンネルの素材を扱うときは常にこちらを使ってください。モノラル側の入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差は 3.01 dB にとどまり、これはダウンミックスで振幅が半分になる分です。残りの約 3 dB が相関の低さによるものです。
+
+ステレオプロファイルのうち、両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA はチャンネルを合算したプログラムから求め、True Peak は 2 つのうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
 
 `mastering_audio_profile()` は任意のプロファイル設定として `n_fft`、`hop_length`、`true_peak_oversample` を受け取れます。`mastering_assistant_suggest()` は `target_lufs`、`ceiling_db`、`enable_repair`、`prefer_streaming_safe`、`speech_mono_amount` を受け取ります。共有ネイティブパーサーを通るため、camelCase の別名も使えます。
 
@@ -1146,8 +1171,11 @@ result = sonare.mastering_chain(
 | フルチェーン実行（ステレオ） | `mastering_chain_stereo()` |
 | ブロック単位のストリーミング | `StreamingMasteringChain` |
 | マスタリング判断用の音源プロファイルを取得 | `mastering_audio_profile()` |
+| ステレオ両チャンネルから音源プロファイルを取得 | `mastering_audio_profile_stereo()` |
 | 音源解析からマスタリングの提案を取得 | `mastering_assistant_suggest()` |
+| ステレオ両チャンネルからマスタリングの提案を取得 | `mastering_assistant_suggest_stereo()` |
 | 配信先ごとのラウドネス見込みをプレビュー | `mastering_streaming_preview()` |
+| ステレオ両チャンネルから配信先ごとのラウドネス見込みをプレビュー | `mastering_streaming_preview_stereo()` |
 | 名前付きプロセッサ一覧（モノラル／ステレオ） | `mastering_processor_names()` |
 | プロセッサ分類カタログを取得 | `mastering_processor_catalog()` |
 | チェーンのインサートプロセッサ一覧 | `mastering_insert_names()` |
@@ -1207,17 +1235,17 @@ finally:
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
 
-ヘッドレス DAW の機能群は Python からも利用できます。`Project` でアレンジを作り、組み込みインストゥルメントでレンダーし、ライブ MIDI をリアルタイムエンジンへ送れます。詳細は各専用ガイドにあります。ここは Python の入口をまとめたマップです。
+ヘッドレス DAW の機能群は Python からも利用できます。`Project` でアレンジを作り、内蔵インストゥルメントでレンダーし、ライブ MIDI をリアルタイムエンジンへ送れます。詳細は各専用ガイドにあります。ここは Python の入口をまとめたマップです。
 
 | やりたいこと | API | ガイド |
 |--------------|-----|--------|
 | トラック、クリップ、テンポ、マーカー、undo/redo を編集する | `Project`（コンテキストマネージャ。`with` を使う） | [プロジェクト編集](./project-editing.md) |
-| 組み込みシンセサイザーで MIDI をレンダーする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [組み込みシンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
+| 内蔵シンセサイザー（NativeSynth）で MIDI をレンダーする | `Project.bounce_with_synth_instrument(...)`、`synth_preset_names()`、`synth_preset_patch(name)`、`SynthPatch` | [内蔵シンセサイザー](./native-synth.md)、[プロジェクトのバウンス](./project-bounce.md) |
 | SoundFont で MIDI をレンダーする | `Project.load_soundfont(data)`、`Project.bounce_with_sf2_instrument(...)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | バウンス中に自前のインストゥルメントをホストする | `ExternalInstrument` プロトコルを使う `Project.bounce_with_instruments(...)`。`render(channels, num_frames)` コールバックに加え、任意の `prepare`/`on_event` フックと `latency_samples` を持ちます。**Python 専用です**。 | [プロジェクトのバウンス](./project-bounce.md) |
-| MIDI イベントからインストゥルメントをライブ演奏し、デスティネーションの MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
-| ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
-| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
+| MIDI イベントからインストゥルメントをライブ演奏し、送出先（デスティネーション）の MIDI FX を差し替える | `RealtimeEngine.set_synth_instrument(...)`、`RealtimeEngine.load_soundfont(...)`、`RealtimeEngine.set_midi_fx(...)`、およびエンジンの MIDI 入力キュー | [MIDI 入力](./midi-input.md) |
+| ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `EngineMidiClipSchedule` / `EngineMidiEvent` を渡す `RealtimeEngine.set_midi_clips([...])`、`RealtimeEngine.sample_at_ppq(ppq)`。ppq は音楽的時間の単位で、四分音符あたりのパルス数です | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
+| トラック単位のキューモニタリングを設定する | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)`。`EngineTrackMonitorMode`（`off`／`pfl`／`afl`）を使います。PFL はフェーダー前、AFL はフェーダー後を試聴します | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | デスティネーションを外部 MIDI ハードウェアへ送る | `set_midi_destination_external(...)`、`set_external_midi_clock_enabled(...)`、`drain_external_midi(...)`、`external_midi_dropped_count()` | [リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る) |
 | エンジンのトラックをライブミックス／自動化する | レーン／ストリップ操作に加え、`set_bus_strip_insert_param_by_name(...)`、`set_bus_strip_insert_bypassed(...)`、`resolve_track_insert_automation_id(...)`、`resolve_master_insert_automation_id(...)`、`resolve_bus_insert_automation_id(...)`、`set_param_smoothing_ms(...)` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
 | ワイドメーターとスコープを読む | `drain_meter_telemetry_wide(...)`、`configure_scope_telemetry(...)`、`drain_scope_telemetry(...)` | [リアルタイムエンジン](./realtime-engine.md#サラウンドグループバスとワイドメーター) |
@@ -1235,6 +1263,8 @@ with sonare.Project() as project:
 `Project` は自動クリーンアップのために `with` に対応しますが、`Mixer` は対応しません（`mixer.close()` を明示的に呼んでください）。
 
 シンセプリセットの確認には `synth_preset_patch(name)` を使います。名前付きカタログプリセットを `SynthPatch` として返すので、バインドする前にフィールドを確認・調整できます（不明な名前では `SonareError` を送出し、`'va:'` ルーティング接頭辞も受け付けます）。`synth_enum_tables()` は実行時の enum 名テーブル（`dict[str, tuple[str, ...]]`）を返し、`SynthModRouting` のソース／デスティネーション名を、読み込まれたビルドに対して検証できます。
+
+`SynthPatch` の数値フィールドはすべて既定値が `None` で、「ベースプリセットの値を保つ」という意味です。設定していないフィールドを読むと `0.0` ではなく `None` が返り、値を渡せばそれは明示的な上書きになります。`0` も同様なので、`SynthPatch(preset="warm-pad", amp_sustain=0)` は未設定として扱われず、アンプサステインを本当にゼロにします。`synth_preset_patch(name)` から得たパッチはプリセットの具体値で埋まって返るため、数値フィールドが `None` になることはありません。enum フィールド（`engine_mode`、`waveform`、`filter_model`、`filter_output`、`body`）では `0` ／ `"default"` が「ベースを保つ」を意味します。`mod_routings=None` はベースのモッドマトリクスを保ち、空タプルは消去、要素のあるタプルは置き換えです。
 
 ### 不透明なアシストサイドカー
 

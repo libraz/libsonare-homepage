@@ -92,11 +92,14 @@ import {
   masterAudioStereo,
   masteringChainStereo,
   masteringAssistantSuggest,
+  masteringAssistantSuggestStereo,
   masteringAudioProfile,
+  masteringAudioProfileStereo,
   masteringPresetNames,
   masteringPairAnalyze,
   masteringProcessorNames,
   masteringStreamingPreview,
+  masteringStreamingPreviewStereo,
 } from '@libraz/libsonare-native'
 
 console.log(masteringProcessorNames())
@@ -119,7 +122,7 @@ const mastered = masteringChainStereo(left, right, sampleRate, {
 console.log(mastered.outputLufs, mastered.stages)
 
 const presetMaster = masterAudioStereo(left, right, sampleRate, 'pop', {
-  'loudness.targetLufs': -14,
+  loudness: { targetLufs: -14 },
 })
 console.log(presetMaster.outputLufs, presetMaster.stages)
 
@@ -148,7 +151,40 @@ const deliveryPreview = JSON.parse(masteringStreamingPreview(samples, sampleRate
   { name: 'Streaming', targetLufs: -14, ceilingDb: -1 },
 ]))
 console.log(profile, suggestions, deliveryPreview)
+
+// The stereo entry points are request-object only — there is no positional
+// overload, so a positional call throws.
+const stereoProfile = JSON.parse(masteringAudioProfileStereo({
+  left,
+  right,
+  sampleRate,
+  params: { nFft: 2048, hopLength: 512, truePeakOversample: 4 },
+}))
+const stereoSuggestions = JSON.parse(masteringAssistantSuggestStereo({
+  left,
+  right,
+  sampleRate,
+  params: { targetLufs: -14, ceilingDb: -1, preferStreamingSafe: true },
+}))
+// Omitting platforms uses the built-in Spotify / Apple Music / YouTube set.
+const stereoPreview = JSON.parse(masteringStreamingPreviewStereo({ left, right, sampleRate }))
+console.log(stereoProfile, stereoSuggestions, stereoPreview)
 ```
+
+Use the stereo entry points whenever you have two channels. The mono ones measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement down by the same amount. Those readings are in LUFS (Loudness Units relative to Full Scale), the loudness unit streaming platforms normalize against; see [LUFS](./glossary/lufs.md).
+
+Measured on a pink-noise pair at 48 kHz for 4 s:
+
+| Pair type | Downmix vs stereo reading | Gap |
+|-----------|---------------------------|-----|
+| Decorrelated | -22.55 LUFS vs -16.44 LUFS | 6.11 dB — 3.01 dB of it is the plain downmix halving, the remaining ~3 dB is the decorrelation |
+| Correlated | the downmix halving only | 3.01 dB |
+
+On the decorrelated pair that gap turns a Spotify `normalizationGainDb` of +2.44 into +8.55.
+
+Only the `loudness` block of the stereo profile is measured from both channels — integrated LUFS and LRA (loudness range, the spread between the quiet and loud parts of a program) from the channel-summed program, true peak as the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
+
+Note the calling-convention difference: these four take a single request object and nothing else, unlike the positional mastering examples above. The metering sibling `meteringCrestFactorDbStereo({ left, right, sampleRate })` follows the same request-object shape and returns a `number`. Node native and WASM also name the request types differently — Node declares `MasteringAssistantSuggestStereoRequest` and `MasteringAudioProfileStereoRequest` (the latter extends the former and adds nothing), where WASM uses one shared `MasteringStereoParamsRequest`.
 
 The assistant/profile helpers accept the same option names as the WASM entry points. Profile params are `nFft`, `hopLength`, and `truePeakOversample`; assistant params are `targetLufs`, `ceilingDb`, `enableRepair`, `preferStreamingSafe`, and `speechMonoAmount`. The native parser also accepts snake_case aliases.
 
@@ -162,7 +198,7 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Full chains | `masteringChain()`, `masteringChainStereo()`, `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
 | Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
 | Offline repair (one-shot) | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
-| Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()` |
+| Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()`, `masteringAudioProfileStereo()`, `masteringAssistantSuggestStereo()`, `masteringStreamingPreviewStereo()` |
 | Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name)`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
@@ -175,11 +211,15 @@ The native addon and the WASM package both expose the mixing API: `mixStereo(...
 
 Use it for channel-strip processing, scene presets, sends, buses, automation, meters, and offline stem rendering. See [Mixing Engine](./mixing.md) for the cross-runtime guide.
 
-For persistent mixers, Node native accepts a `StripRef` (`number | string`) for most strip control methods; WASM methods use numeric strip indexes and expose `stripById(id)` for lookup. Node `stripMeter(strip)` reads the post-fader meter; use `meterTap(strip, 'preFader' | 'postFader')` when you need an explicit tap. After loading scene JSON, `mixer.sceneWarnings()` lists insert params no processor consumed (typically typos) as non-fatal warnings.
+For persistent mixers, Node native accepts a `StripRef` (`number | string`) for most strip control methods; WASM methods use numeric strip indexes and expose `stripById(id)` for lookup.
+
+Node `stripMeter(strip)` reads the post-fader meter; use `meterTap(strip, 'preFader' | 'postFader')` when you need an explicit tap. After loading scene JSON, `mixer.sceneWarnings()` lists insert params no processor consumed (typically typos) as non-fatal warnings.
 
 ## Projects, Instruments & Live MIDI
 
-The Node native addon exposes the same headless-DAW API as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input. The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, strip JSON and insert controls for tracks, the master, and buses, insert automation-id resolvers, `setParamSmoothingMs`, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM. It also exposes external-device routing through `setMidiDestinationExternal`, `setExternalMidiClockEnabled`, `drainExternalMidi`, and `externalMidiDroppedCount` (see [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
+The Node native addon exposes the same headless-DAW API as WASM and Python: the `Project` class (tracks, clips, tempo, undo/redo, SMF/MIDI 2.0 interchange), instrument-bound bounces (`bounceWithSynthInstrument(s)`, SoundFont loading), the NativeSynth preset catalog (`synthPresetNames()` / `synthPresetPatch()` / `SynthPatch`), `chordFunctionalAnalysis(...)`, and the `RealtimeEngine` with live MIDI input.
+
+The engine carries the same lane mixer and MIDI clip schedule as the other bindings — `setTrackLanes` / `setTrackBuses`, strip JSON and insert controls for tracks, the master, and buses, insert automation-id resolvers, `setParamSmoothingMs`, wide/scope telemetry, `setMidiClips`, and `sampleAtPpq` — with the same camelCase names as WASM. It also exposes external-device routing through `setMidiDestinationExternal`, `setExternalMidiClockEnabled`, `drainExternalMidi`, and `externalMidiDroppedCount` (see [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear)). The browser-only helpers (`bindWebMidi`, `bindMicrophoneInput`) are WASM-specific and not part of the native addon.
 
 The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing Projects](./project-bounce.md), [Built-in Synthesizer](./native-synth.md), [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md).
 
@@ -239,8 +279,11 @@ Stereo-only stages are skipped when `numChannels === 1`. The streaming chain
 rejects offline-only repair stages. A `loudness` stage requires a precomputed
 static gain in `loudnessStaticGainDb`; optionally pass the source true-peak in
 `loudnessStaticGainPeakDb` so the gain is clamped against the configured ceiling.
-The WASM build also exposes `chain.delete()` to release the underlying handle;
-the native addon releases its handle on GC.
+The WASM build exposes `chain.delete()` to release the underlying handle; the
+native addon exposes an idempotent `destroy()` (and `[Symbol.dispose]`, so
+`using` works on Node 22+). GC eventually reclaims a native handle, but a
+long-lived process that builds one chain per request must release it explicitly
+or native memory accumulates.
 
 Related mastering guides: [Browser local processing](./glossary/concepts/browser-local-processing.md), [Reference match](./glossary/mastering/reference-match.md), [Quality checklist](./glossary/mastering/quality-checklist.md).
 

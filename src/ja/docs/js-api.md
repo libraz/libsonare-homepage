@@ -19,7 +19,7 @@ libsonare は Web アプリケーション向けのオーディオ解析、マ�
 | **総合解析** | `analyze`, `analyzeWithProgress` | 音楽制作、楽曲メタデータ |
 | **オーディオエフェクト** | `hpss`, `timeStretch`, `pitchShift`, `spectralEdit` | リミックス、練習ツール、領域補修 |
 | **特徴量** | `melSpectrogram`, `chroma`, `mfcc` | ML 入力、可視化 |
-| **マスタリング** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS ターゲット、トゥルーピークリミッター、プリセット、ストリーミングチェーン |
+| **マスタリング** | `masterAudio`, `masteringChain`, `StreamingMasteringChain` | LUFS（Loudness Units relative to Full Scale）ターゲット、True Peak リミッター、プリセット、ストリーミングチェーン |
 | **ミキシング** | `mixStereo`, `Mixer`, `mixingScenePresetNames` | ステムミックス、ルーティング、オートメーション、メーター |
 | **編集 DSP** | `pitchCorrectToMidi`, `noteStretch`, `spectralEdit`, `voiceChange`, `StreamingRetune`, `RealtimeVoiceChanger` | ボーカル補正、ノート編集、ピッチ／フォルマント変更 |
 | **Audio クラス** | `Audio.fromBuffer`, `Audio.fromMemory`, `Audio.fromMemoryWithBrowserFallback` | ファイル読み込みと、よく使う関数をメソッド形式で呼ぶための補助 |
@@ -214,9 +214,17 @@ function capabilities(): {
 
 ### `capabilityCatalog()`
 
-各プロセッサ、その全パラメータ（範囲と既定値つき）、組み込みプリセット一覧を、
-機械可読なカタログとして返します。C ABI が公開し Python が `capability_catalog` として
-公開しているのと同じ正規 JSON で、`schemas/capability-catalog.schema.json` で検証されます。
+各プロセッサ、そのパラメータ記述子、組み込みプリセット一覧を、機械可読なカタログとして
+返します。C ABI が公開し Python が `capability_catalog` として公開しているのと同じ正規
+JSON で、`schemas/capability-catalog.schema.json` で検証されます。
+
+::: warning `min` / `max` / `default` は常に `null`
+レジストリは範囲を公開する汎用インターフェースを持たないため、推測値を入れる代わりに
+すべてのパラメータで `min`・`max`・`default` を `null` として返します。このカタログは
+「そのビルドがどのプロセッサ／パラメータを公開しているか」「型・単位・リアルタイム安全性」
+を知るためのもので、スライダーの範囲決めには使えません。値の範囲は各プロセッサの
+リファレンスページを参照してください。
+:::
 
 ```typescript
 function capabilityCatalog(): {
@@ -512,7 +520,7 @@ const result = analyzeWithProgress(samples, sampleRate, (progress, stage) => {
 | ダイナミクス | `analyzeDynamics(samples, sampleRate, ...)` | ダイナミックレンジ、ラウドネスレンジ、クレストファクター、圧縮傾向を見ます。 |
 | 音色 | `analyzeTimbre(samples, sampleRate, ...)` | ブライトネス、ウォームス、密度、粗さ、複雑さを返します。 |
 | コード | `detectChords(samples, sampleRate, options?)` | コード区間を `{ chords }` として返します。HMM 平滑化、キー文脈、転回形、`chromaMethod: 'stft' \| 'nnls'` を指定できます。 |
-| セクション | `analyzeSections(samples, sampleRate, ...)` | イントロ、ヴァース、コーラス、ブリッジ、アウトロなどの構造を推定します。長尺入力で内部の境界グリッドがプーリングされても、`start` / `end` は元タイムライン上の正確な秒数を保ちます。 |
+| セクション | `analyzeSections(samples, sampleRate, ...)` | イントロ、Aメロ、サビ、ブリッジ、アウトロなどの構造を推定します。長尺入力で内部の境界グリッドがプーリングされても、`start` / `end` は元タイムライン上の正確な秒数を保ちます。 |
 | メロディ | `analyzeMelody(samples, sampleRate, ...)` | ピッチ追跡ベースの単音メロディ輪郭です。 |
 
 ```typescript
@@ -567,14 +575,14 @@ console.log(roman);  // 例: ["I", "IV", "V", "vi"]
 
 | 目的 | 使う API |
 |------|----------|
-| きれいなインパルスレスポンスを測る | `analyzeImpulseResponse(...)` |
+| きれいなインパルス応答（IR）を測る | `analyzeImpulseResponse(...)` |
 | 通常音声から部屋の減衰を推定する | `detectAcoustic(...)` |
 | 音声から実用的な部屋モデルを推定する | `estimateRoom(...)` |
-| 寸法からモノラルのルームインパルスレスポンスを作る | `synthesizeRir(...)` |
+| 寸法からモノラルのルームインパルス応答を作る | `synthesizeRir(...)` |
 | 目標ルームの響きを音作り効果として足す | `roomMorph(...)` |
 
 ::: info RIR とルームモーフィング
-**RIR** は room impulse response の略で、部屋が短い音にどう反応するかを表すサンプル列です。`roomMorph(...)` は音作り効果であり、残響除去ではありません。
+**RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表すサンプル列です。`roomMorph(...)` は音作り効果であり、残響除去ではありません。
 :::
 
 ```typescript
@@ -615,15 +623,15 @@ HPSS（Harmonic / Percussive Source Separation。倍音成分／打撃成分の�
 
 ::: info ユースケース
 - **リミックス**: ドラムを分離または除去する
-- **カラオケ**: ボーカルを除去してインストゥルメンタルを取り出す（倍音成分を使用）
+- **カラオケ**: ボーカルを除去して伴奏だけを取り出す（倍音成分を使用）
 - **解析精度の向上**: クリーンなコード検出のために倍音成分のみを使う
 - **ドラム抽出**: サンプリング用に打撃成分だけを取り出す
 :::
 
-<SonareDemo id="waveform-harmonics" />
+<SonareDemo id="hpss-separation" />
 
 ::: tip パフォーマンス
-HPSS は STFT とメディアンフィルタリングを必要とします。処理時間は音源の長さに比例します。
+HPSS は STFT（短時間フーリエ変換）とメディアンフィルター処理を必要とします。処理時間は音源の長さに比例します。
 :::
 
 ```typescript
@@ -749,7 +757,7 @@ function pitchCorrectToMidiTimevarying(
   targetMidi: number,
   sampleRate: number,
   hopLength: number,
-  voiced?: Int32Array,
+  voiced?: VoicedFlags,
   voicedProb?: Float32Array,
 ): Float32Array
 
@@ -774,10 +782,37 @@ interface PitchCorrectOptions {
   maxCorrectionSemitones?: number; // フレームごとのクランプ（セミトーン）。既定 12
   retuneSpeedMs?: number;          // グライドの時定数。既定 50
   vibratoThresholdCents?: number;  // これ未満の補正はバイパス。既定 20
-  voiced?: Int32Array;             // フレームごとの有声フラグ（非ゼロ = 有声）
+  voiced?: VoicedFlags;            // フレームごとの有声フラグ（真値 / 非ゼロ = 有声）
   voicedProb?: Float32Array;       // フレームごとの有声確率 0-1
 }
 
+// フレームごとの有声判定。f0Hz のフレーム数と 1 対 1 で対応します。
+type VoicedFlags =
+  | Int32Array
+  | Uint8Array
+  | Float32Array
+  | readonly number[]
+  | readonly boolean[];
+```
+
+`VoicedFlags` は `voiced` 引数と `PitchCorrectOptions.voiced` が受け付ける型です。解析側が返す形をそのまま含んでいるため、`boolean[]` である `PitchResult.voicedFlag` を変換なしでピッチ補正へ渡せます。
+
+```typescript
+const pitch = pitchPyin(samples, sampleRate);
+const tuned = pitchCorrectToMidiTimevarying(
+  samples,
+  pitch.f0,
+  69,
+  sampleRate,
+  512,
+  pitch.voicedFlag,   // boolean[] is accepted as-is
+  pitch.voicedProb,
+);
+```
+
+`voiced` と `voicedProb` は、どちらも `f0Hz` と同じ長さである必要があります。長さが食い違うと `RangeError`（`'pitchCorrectToMidiTimevarying: voiced length must match f0Hz length'`）を投げます。`SonareError` ではないため `isSonareError` では捕捉できません。
+
+```typescript
 function noteStretch(
   samples: Float32Array,
   sampleRate: number,
@@ -994,31 +1029,83 @@ interface ChromaResult {
 
 ```typescript
 // スペクトル重心 (Hz)
-function spectralCentroid(samples, sampleRate?, nFft?, hopLength?): Float32Array  // sampleRate 既定: 22050
+function spectralCentroid(
+  samples: Float32Array,
+  sampleRate?: number,  // 既定: 22050
+  nFft?: number,
+  hopLength?: number
+): Float32Array
 
 // スペクトル帯域幅 (Hz)
-function spectralBandwidth(samples, sampleRate?, nFft?, hopLength?, p?): Float32Array  // sampleRate 既定: 22050; p はミンコフスキー指数、既定: 2
+function spectralBandwidth(
+  samples: Float32Array,
+  sampleRate?: number,  // 既定: 22050
+  nFft?: number,
+  hopLength?: number,
+  p?: number             // ミンコフスキー指数、既定: 2
+): Float32Array
 
 // スペクトルロールオフ (Hz)
-function spectralRolloff(samples, sampleRate?, nFft?, hopLength?, rollPercent?): Float32Array  // sampleRate 既定: 22050
+function spectralRolloff(
+  samples: Float32Array,
+  sampleRate?: number,  // 既定: 22050
+  nFft?: number,
+  hopLength?: number,
+  rollPercent?: number  // 既定: 0.85
+): Float32Array
 
 // スペクトル平坦度 (0=調性的, 1=ノイズ的)
-function spectralFlatness(samples, sampleRate?, nFft?, hopLength?): Float32Array  // sampleRate 既定: 22050
+function spectralFlatness(
+  samples: Float32Array,
+  sampleRate?: number,  // 既定: 22050
+  nFft?: number,
+  hopLength?: number
+): Float32Array
 
 // スペクトルコントラスト行列、形状は (nBands + 1) x nFrames
-function spectralContrast(samples, sampleRate?, nFft?, hopLength?, nBands?, fmin?, quantile?): Matrix2dResult
+function spectralContrast(
+  samples: Float32Array,
+  sampleRate?: number,
+  nFft?: number,
+  hopLength?: number,
+  nBands?: number,
+  fmin?: number,
+  quantile?: number
+): Matrix2dResult
 
 // フレームごとの多項式スペクトル係数、形状は (order + 1) x nFrames
-function polyFeatures(samples, sampleRate?, nFft?, hopLength?, order?): Matrix2dResult
+function polyFeatures(
+  samples: Float32Array,
+  sampleRate?: number,
+  nFft?: number,
+  hopLength?: number,
+  order?: number
+): Matrix2dResult
 
 // ゼロ交差率
-function zeroCrossingRate(samples, sampleRate?, frameLength?, hopLength?): Float32Array  // sampleRate 既定: 22050
+function zeroCrossingRate(
+  samples: Float32Array,
+  sampleRate?: number,  // 既定: 22050
+  frameLength?: number,
+  hopLength?: number
+): Float32Array
 
 // 波形がゼロを横切るサンプル位置
-function zeroCrossings(samples, threshold?, refMagnitude?, pad?, zeroPos?): Int32Array
+function zeroCrossings(
+  samples: Float32Array,
+  threshold?: number,
+  refMagnitude?: boolean,
+  pad?: boolean,
+  zeroPos?: boolean
+): Int32Array
 
 // RMSエネルギー
-function rmsEnergy(samples, sampleRate?, frameLength?, hopLength?): Float32Array  // sampleRate 既定: 22050
+function rmsEnergy(
+  samples: Float32Array,
+  sampleRate?: number,  // 既定: 22050
+  frameLength?: number,
+  hopLength?: number
+): Float32Array
 ```
 
 ### 波形ピーク <Badge type="info" text="WASM/Node" />
@@ -1060,7 +1147,7 @@ interface WaveformPeaksReport {
 | ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。 |
 | 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `nnFilter(...)`, `remix(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、近傍フィルタ、区間リミックス、時間スケーリング、残差付き HPSS。 |
 | 特徴量や音声の近似復元 | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | 可視化、デバッグ、特徴量の往復確認に使います。CQT/VQT の入力は振幅行列です。 |
-| 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA も含みます。 |
+| 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA（ラウドネスレンジ。曲全体でラウドネスがどれだけ変動するか）も含みます。 |
 
 ```typescript
 const cqtResult = cqt(samples, sampleRate, 512, 32.7, 84, 12);
@@ -1092,7 +1179,7 @@ const cqtPreview = cqtToAudio(cqtResult.magnitude, cqtResult.nBins, cqtResult.nF
 const vqtPreview = vqtToAudio(vqtResult.magnitude, vqtResult.nBins, vqtResult.nFrames, sampleRate, 512, 32.7, 12, 0, 32);
 ```
 
-`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma(samples, sampleRate?, options?)` は倍音の漏れを抑える別物の音符活性化（NNLS）クロマで、コードや低音域の処理ではこちらの方がすっきりする場合が多いです。`options.hopLength` の既定値は `512` です。
+`chromaCqt(samples, sampleRate?, hopLength?, nChroma?)` は `librosa.feature.chroma_cqt` に直接対応します（対数周波数／Constant-Q でのピッチ畳み込み）。一方 `nnlsChroma(samples, sampleRate?, options?)` は別物の音符活性化クロマで、NNLS（非負最小二乗法）で倍音の漏れを抑えます。コードや低音域の処理ではこちらの方がすっきりする場合が多いです。`options.hopLength` の既定値は `512` です。
 
 ソースビルド C++ CLI で近いコマンド:
 
@@ -1185,7 +1272,7 @@ function dbToAmplitude(values: Float32Array, ref?: number): Float32Array
 
 `Float32Array`、またはステレオの左右ペアを渡すと、値またはレポートが返ります。
 
-各関数は、`validate` フラグ（既定 `true`）を持つ `options` を任意で受け取ります。ホットパスでは `validate: false` を指定して、NaN/Inf 入力チェックを省略できます。
+各関数は、`validate` フラグ（既定 `true`）を持つ `options` を任意で受け取ります。ホットパスでは `validate: false` を指定して、JavaScript 側の O(n) の NaN/Inf 事前スキャンを省略できます。ただし非有限のサンプルをコアへ通すための手段ではありません。ネイティブ層が必ず再検証するため、NaN/Inf を含むバッファは変わらず例外になります（該当インデックスを示さない、汎用のネイティブメッセージになるだけです）。空バッファのチェックは常に実行されます。
 
 ### 単一チャンネルのレベルメーター
 
@@ -1198,9 +1285,9 @@ function meteringRmsDb(samples: Float32Array, sampleRate?: number, options?: Val
 function meteringCrestFactorDb(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
 // 平均(DC)オフセット(リニア振幅)
 function meteringDcOffset(samples: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// インターサンプル(トゥルー)ピーク(dBFS)。oversampleFactor は 1..16 の 2 の冪(0 / 省略で 4)
+// サンプル間ピーク（ISP、いわゆる True Peak）を dBFS で返す。oversampleFactor は 1..16 の 2 の冪（0 / 省略で 4）
 function meteringTruePeakDb(samples: Float32Array, sampleRate?: number, oversampleFactor?: number, options?: ValidateOptions): number
-// thresholdDb 未満のフレームの割合、範囲 [0, 1]。thresholdDb 既定 -60、
+// thresholdDb 未満のフレームの割合、範囲 [0, 1]。thresholdDb 既定 -45、
 // frameLength 既定 1024、hopLength 既定 256。
 function meteringSilenceRatio(
   samples: Float32Array,
@@ -1211,6 +1298,30 @@ function meteringSilenceRatio(
   options?: ValidateOptions
 ): number
 ```
+
+### ステレオのレベルメーター
+
+単一チャンネルのメーターが必要とする `0.5 * (left + right)` のダウンミックスではなく、左右 2 チャンネルをそのまま読むレベルメーターです。上のメーターと違い、**リクエストオブジェクト専用です**。位置引数のオーバーロードはなく、位置引数で呼ぶと例外になります。
+
+```typescript
+// Crest factor over a channel pair, dB. Peak is taken across both channels
+// and RMS is measured over the two together.
+function meteringCrestFactorDbStereo(request: MeteringStereoRequest): number
+
+interface MeteringStereoRequest extends ValidateOptions {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+}
+```
+
+```typescript
+const crestDb = meteringCrestFactorDbStereo({ left, right, sampleRate });
+```
+
+左右が逆相になりうる素材では、こちらを使ってください。逆相のペアはダウンミックスで打ち消し合い、RMS が小さく出るぶんクレストファクターが過大に出ます。完全な逆相ペアでの実測値は、ステレオ版が **11.64 dB**、ダウンミックス経由が **0.00 dB** でした。
+
+`meteringStereoCorrelation` と `meteringStereoWidth` も、位置引数形式に加えて同じ `MeteringStereoRequest` を受け付けます。
 
 ### クリッピングとダイナミックレンジ
 
@@ -1267,16 +1378,20 @@ function meteringStereoCorrelation(left: Float32Array, right: Float32Array, samp
 // ミッド/サイドのステレオ幅: 0 = モノラル、約 1 = 広いステレオ。上限なし
 // （完全な逆相などでミッド信号が無音なら Infinity）
 function meteringStereoWidth(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): number
-// サンプルごとのミッド/サイド点列
-function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): VectorscopeReport
-// フェーズスコープの点列と要約統計
-function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ValidateOptions): PhaseScopeReport
+// Mid/side point series. One point per sample by default; pass maxPoints for a
+// display-sized, deterministically decimated point set (0 / >= length = one point per sample).
+function meteringVectorscope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ScopeOptions): VectorscopeReport
+// Phase-scope point series plus summary stats. maxPoints decimates the point cloud the same way;
+// the summary stats are always computed over the full-resolution signal.
+function meteringPhaseScope(left: Float32Array, right: Float32Array, sampleRate?: number, options?: ScopeOptions): PhaseScopeReport
 
-// 表示サイズのミッド/サイドベクタースコープ。meteringVectorscope と同じだが、点列を
-// 最大 maxPoints 点まで決定的に間引く（0 / length 以上 = サンプルごとに 1 点）。
+interface ScopeOptions extends ValidateOptions {
+  maxPoints?: number;   // 0 / omit / >= length = one point per input sample
+}
+
+// Deprecated aliases: pass maxPoints to meteringVectorscope / meteringPhaseScope instead.
+// They simply delegate and are kept for backward compatibility.
 function meteringVectorscopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): VectorscopeReport
-// 表示サイズのフェーズスコープ。meteringPhaseScope と同じだが、点列を最大 maxPoints 点まで
-// 間引く。要約統計はフル解像度の信号全体で計算される。
 function meteringPhaseScopeDecimated(left: Float32Array, right: Float32Array, sampleRate?: number, maxPoints?: number, options?: ValidateOptions): PhaseScopeReport
 
 interface VectorscopeReport {
@@ -1337,7 +1452,11 @@ interface SpectrumReport {
 
 ## スケール量子化
 
-ピッチ補正のターゲットを構築するための 12-TET スケールヘルパーです。`modeMask` は 12 ビットのマスクで、ビット *i* が `root`(`PitchClass`、C = 0)を基準とした *i* 番目のピッチクラスを有効化します。自然な長調は `0b101010110101` です。`referenceMidi` はチューニングの基準音です(A4 = 69 にするには `0` を渡します)。
+ピッチ補正のターゲットを構築するための 12-TET（12 平均律）スケールヘルパーです。
+
+`modeMask` は 12 ビットのマスクで、ビット *i* が `root`（`PitchClass`、C = 0）を基準とした *i* 番目のピッチクラスを有効化します。自然な長調は `0b101010110101` です。
+
+`referenceMidi` はチューニングの基準音です。A4 = 69 にするには `0` を渡します。
 
 ```typescript
 // (小数を含む)MIDI 番号を最も近い有効なピッチクラスにスナップ
@@ -1501,7 +1620,7 @@ function vectorNormalize(
 ): Float32Array
 ```
 
-`peakPick` は `librosa.util.peak_pick`（オンセット包絡などの 1 次元信号に対する後処理）、
+`peakPick` は `librosa.util.peak_pick`（オンセット包絡線などの 1 次元信号に対する後処理）、
 `vectorNormalize` は `librosa.util.normalize` に対応します。`peakPick` の窓パラメータや
 各 `normType` の意味は [librosa 互換性](/ja/docs/librosa-compatibility) を参照してください。
 
@@ -2140,7 +2259,7 @@ const SectionType = {
 
 モジュールが未初期化の場合、すべての関数はエラーをスローします。まず `await init()` を呼んでください。
 
-ネイティブ(C++)側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング(WASM / Node ネイティブ / Python / C ABI)でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
+ネイティブ（C++）側の失敗は、構造化された **`SonareError`** としてスローされます。`Error` のサブクラスで、C ABI のエラー enum をそのまま映した数値の `code` と正準名 `codeName` を持つため、メッセージ文字列の照合ではなく原因コードで分岐できます。同じ失敗はどのバインディング（WASM / Node ネイティブ / Python / C ABI）でも同じ数値コードを報告します。パッケージは `ErrorCode` enum、`SonareError` クラス、型ガード `isSonareError(value)` をエクスポートします。
 
 各 facade は非有限数、不正な enum／インデックス値、過大なリソースを DSP やシリアライズへ渡す前に一貫して拒否します。これらは入力不正として扱い、バインディングが暗黙にクランプしたり不正値を受理したりすることへ依存しないでください。
 
@@ -2197,10 +2316,10 @@ if (result.loudnessTargetLimited) {
 }
 console.log(result.stageGainReductions)
 
-// プリセット + フラットなドット記法の上書き
+// プリセット + ネストした上書き（型定義どおりの MasteringChainConfig 形式）
 const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
-  'loudness.targetLufs': -14,
-  'maximizer.truePeakLimiter.releaseMs': 50,
+  loudness: { targetLufs: -14 },
+  maximizer: { truePeakLimiter: { releaseMs: 50 } },
 })
 ```
 
@@ -2208,7 +2327,7 @@ const presetResult = masterAudioStereo(left, right, sampleRate, 'pop', {
 
 オフラインのチェーン／プリセット結果には、`outputTruePeakDbtp`、`outputLra`、`loudnessTargetLimited`、`stageGainReductions` が含まれます。
 
-`loudnessTargetLimited` が true なら、トゥルーピーク上限のため要求した LUFS 目標には届いていません。目標ではなく実際の `outputLufs` を報告してください。各 `StageGainReduction` は、ダイナミクスまたはマキシマイザーの直近のゲインリダクションを示します。
+`loudnessTargetLimited` が true なら、True Peak 上限のため要求した LUFS 目標には届いていません。目標ではなく実際の `outputLufs` を報告してください。各 `StageGainReduction` は、ダイナミクスまたはマキシマイザーの直近のゲインリダクションを示します。
 
 #### `report` — 処理前後を 1 つのオブジェクトで
 
@@ -2246,6 +2365,49 @@ drawTiltCurve(report.bandEnergyDeltaDb);   // 32 バンド。正なら処理後�
 いるため、CLI から書き出したレポートとブラウザで読むレポートは同じ形になります。
 
 説明可能なマスタリングのヘルパー（`masteringAudioProfile(...)`、`masteringAssistantSuggest(...)`、`masteringStreamingPreview(...)`）は JSON 文字列を返します。正確な形、受け付けるオプション、提案をレンダー済みマスターに変換する方法は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。リファレンストラック用途では `masteringPairProcessorNames()` と `masteringPairAnalyze()` を使います（サンプルレートを揃え、長さも近づける）。
+
+#### 説明可能なヘルパーのステレオ版
+
+この 3 つには、チャンネルペアを直接計測するステレオ版があります。いずれも、**リクエストオブジェクト専用です**。位置引数のオーバーロードはなく、位置引数で呼ぶと例外になります。
+
+```typescript
+function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string
+function masteringAssistantSuggestStereo(request: MasteringStereoParamsRequest): string
+function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string
+
+interface MasteringStereoParamsRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: MasteringProcessorParams;
+}
+
+interface MasteringStreamingPreviewStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  platforms?: StreamingPlatform[];
+}
+```
+
+```typescript
+const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
+const suggestion = JSON.parse(masteringAssistantSuggestStereo({ left, right, sampleRate }));
+const preview = JSON.parse(
+  masteringStreamingPreviewStereo({
+    left,
+    right,
+    sampleRate,
+    platforms: [{ name: 'Spotify', targetLufs: -14, ceilingDb: -1 }],
+  }),
+);
+```
+
+ステレオ素材ならこちらを使ってください。モノラル版は `0.5 * (left + right)` のダウンミックスを計測するため、相関の低い素材では約 6 dB 低く出ます。積分ラウドネス、そこから導かれる正規化ゲイン、天井に当たるリスクの判断が、そろって同じぶんだけ過小に報告されます。相関の低いピンクノイズのペア（48 kHz、4 秒）での実測値は、ダウンミックス経由が **-22.55 LUFS**、ステレオ版が **-16.44 LUFS** で、差は **6.11 dB** でした。Spotify の `normalizationGainDb` もダウンミックス経由が **+8.55**、ステレオ版が **+2.44** です。相関の高いペアでは差が 3.01 dB まで縮みますが、これは単純に半分になったぶんで、残りの約 3 dB がデコリレーションによるものです。
+
+ステレオプロファイルのうち、左右両チャンネルから計測されるのは `loudness` ブロックだけです。積分 LUFS と LRA はチャンネル加算したプログラムから求め、True Peak は左右の大きいほうを採ります。スペクトル、ダイナミクス、テンポの各フィールドは絶対レベルではなく形と時間を表すため、引き続きダウンミックス上で計測され、`masteringAudioProfile` の値とそのまま比較できます。
+
+`masteringStreamingPreviewStereo` の `platforms` の扱いはモノラル版と同じです。省略するか空配列を渡すと、組み込みの Spotify / Apple Music / YouTube のセットにフォールバックし、例外ではなく 3 行分の結果を返します。
 
 ### StreamingEqualizer
 
@@ -2346,7 +2508,8 @@ function voiceChangeRealtime(
   preset?: RealtimeVoiceChangerConfigInput,
   options?: {
     channels?: 1 | 2;   // デフォルト 1（モノラル）。2 = インターリーブステレオ (L0,R0,L1,R1,...)
-    blockSize?: number; // デフォルト 512
+    /** @deprecated Ignored — the shared C-ABI renderer uses a fixed block size. */
+    blockSize?: number;
   },
 ): Float32Array  // 入力と同じレイアウト・長さ
 ```
@@ -2360,7 +2523,7 @@ function voiceChangeRealtime(
 `StreamingMasteringChain` を公開しています。受け取るのは `StreamingMasteringChainConfig` で、これは `masteringChain()` の `MasteringChainConfig` に、ストリーミング専用の任意フィールドを 2 つ追加したものです。
 
 - `loudnessStaticGainDb` — 事前計算した静的ラウドネスゲイン（dB、例: `targetLufs - measuredIntegratedLufs`）。ブロックごとに適用され、`loudness` ステージを有効にしたプリセットのストリーミングプレビューがオフラインレンダリングと一致するようにします。
-- `loudnessStaticGainPeakDb` — オフラインで計測した音源のトゥルーピーク（dBFS）。指定すると静的ゲインが `loudness.ceilingDb - loudnessStaticGainPeakDb` にクランプされ、ストリーミングのリミッターへオフラインチェーンより大きい入力が入らないようにします。
+- `loudnessStaticGainPeakDb` — オフラインで計測した音源の True Peak（dBFS）。指定すると静的ゲインが `loudness.ceilingDb - loudnessStaticGainPeakDb` にクランプされ、ストリーミングのリミッターへオフラインチェーンより大きい入力が入らないようにします。
 
 それ以外は、固定ブロックサイズで内部状態を準備したうえで、入力ブロックに対してチェーンを順番に適用します。
 
@@ -2369,23 +2532,25 @@ import { init, StreamingMasteringChain } from '@libraz/libsonare';
 await init();
 
 const chain = new StreamingMasteringChain({
-  eq: { tiltDb: 0.5 },
+  eq: { tilt: { tiltDb: 0.5 } },
   dynamics: { compressor: { thresholdDb: -20 } },
   maximizer: { truePeakLimiter: { ceilingDb: -1, oversampleFactor: 4 } },
 });
 
 chain.prepare(48000, /*maxBlockSize=*/512, /*numChannels=*/2);
 
-const monoOut = chain.processMono(monoBlock);                // 1ch
-const { left, right } = chain.processStereo(leftBlock, rightBlock); // 2ch
+// Use the path that matches the prepared channel count: processMono() /
+// flushMono() after prepare(..., 1), processStereo() / flushStereo() after
+// prepare(..., 2). Mixing them throws a num_channels mismatch.
+const { left, right } = chain.processStereo(leftBlock, rightBlock);
 
 console.log(chain.stageNames());      // ['eq.tilt', 'dynamics.compressor', ...]
 console.log(chain.latencySamples());  // 有効ステージの合計レイテンシ
 
 // 入力の最終ブロックのあと、チェーンの遅延と有限のテールを吐き出す
-let tail: Float32Array;
-while ((tail = chain.flushMono()).length > 0) {
-  write(tail);
+let tail: { left: Float32Array; right: Float32Array };
+while ((tail = chain.flushStereo()).left.length > 0) {
+  write(tail.left, tail.right);
 }
 
 chain.reset();   // prepare し直さずに状態だけクリア
@@ -2417,8 +2582,11 @@ chain.delete();  // WASM ハンドルを解放（使い終わったら呼ぶ）
 | 進捗付きフルチェーン実行（ステレオ） | `masteringChainStereoWithProgress()` |
 | ストリーミング（ブロック単位）チェーン | `StreamingMasteringChain` |
 | マスタリング判断用の音源プロファイルを取得 | `masteringAudioProfile()` |
+| ステレオペアの音源プロファイルを取得 | `masteringAudioProfileStereo()` |
 | 音源解析からマスタリングの提案を取得 | `masteringAssistantSuggest()` |
+| ステレオペアからマスタリングの提案を取得 | `masteringAssistantSuggestStereo()` |
 | 配信先ごとのラウドネス見込みをプレビュー | `masteringStreamingPreview()` |
+| ステレオペアの配信ラウドネスをプレビュー | `masteringStreamingPreviewStereo()` |
 | 名前付きプロセッサ一覧（モノラル／ステレオ） | `masteringProcessorNames()` |
 | プロセッサ分類カタログを取得 | `masteringProcessorCatalog()` |
 | チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
@@ -2675,7 +2843,7 @@ AudioWorklet のようにレンダーブロックごとのアロケーション�
 | 解析・補助メタデータを不透明なまま保持する | `project.setAssistSidecar(...)`、`assistSidecars()` | [プロジェクト編集](./project-editing.md) |
 | オートメーションレーンの対象種別を付ける | `ProjectAutomationTargetKind`、`ProjectAutomationLaneDesc` の `targetKind` | [プロジェクト編集](./project-editing.md) |
 | プロジェクトを音声にレンダー | `project.bounceWithSynthInstrument(s)` | [プロジェクトバウンス](./project-bounce.md) |
-| 組み込みシンセボイスを選ぶ | `synthPresetNames()`、`synthPresetPatch(name)`、`engine.setSynthInstrument(...)` | [NativeSynth](./native-synth.md) |
+| 内蔵シンセサイザー（NativeSynth）のボイスを選ぶ | `synthPresetNames()`、`synthPresetPatch(name)`、`engine.setSynthInstrument(...)` | [内蔵シンセサイザー](./native-synth.md) |
 | SoundFont で再生 | `project.loadSoundFont(bytes)` / `engine.loadSoundFont(bytes)` | [SoundFont プレイヤー](./soundfont-player.md) |
 | ライブエンジンへ MIDI クリップをサンプル精度でスケジュールする | `engine.setMidiClips(...)`、`engine.sampleAtPpq(ppq)` | [リアルタイムエンジン](./realtime-engine.md#midi-クリップスケジューリングと-sampleatppq) |
 | トラック単位のキューモニタリングを設定する | `engine.setTrackMonitorMode(laneIndex, 'off' | 'pfl' | 'afl')` | [リアルタイムエンジン](./realtime-engine.md#レーンミキサー) |
@@ -2704,9 +2872,10 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | 環境とエンジン | `EXPECTED_ENGINE_ABI_VERSION`, `EXPECTED_PROJECT_ABI_VERSION`, `EngineCapabilities`, `ProgressCallback` |
 | エンジンのレーンミキサー、マーカー、MIDI クリップ | `EngineTrackLane`, `EngineTrackSend`, `EngineBus`, `EngineMarker`, `EngineMidiClipSchedule`, `EngineMidiEvent`, `ExternalMidiEvent`, `MarkerKind`, `ProjectMarker` |
 | キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
-| スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
+| スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | ページ式クリップストリーミング | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| マスタリング | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult` |
+| マスタリング | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
+| メータリングのリクエスト | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
 | ストリーミングリチューン | `StreamingRetuneConfig` |
 | ストリーミング EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
 | リアルタイム音声 | `VoicePresetId`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerPodConfig`, `RealtimeVoiceChangerMonoBuffer`, `RealtimeVoiceChangerInterleavedBuffer`, `RealtimeVoiceChangerPlanarBuffer` |
@@ -2723,7 +2892,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | `StreamAnalyzer` | <Badge type="tip" text="リアルタイム" /> | チャンクごとの処理、〜2ms/フレーム、更新される BPM/キー/コード推定 |
 | `Mixer` | <Badge type="tip" text="リアルタイム" /> | オートメーションとメーターを持つシーンベースのブロック処理 |
 | `analyze` / `analyzeWithProgress` | <Badge type="warning" text="高負荷" /> | 総合解析パイプライン |
-| `hpss` / `harmonic` / `percussive` | <Badge type="warning" text="高負荷" /> | STFT + メディアンフィルタ |
+| `hpss` / `harmonic` / `percussive` | <Badge type="warning" text="高負荷" /> | STFT + メディアンフィルター |
 | `timeStretch` | <Badge type="warning" text="高負荷" /> | フェーズボコーダー |
 | `pitchShift` | <Badge type="warning" text="高負荷" /> | タイムストレッチ + リサンプル |
 | `stft` / `stftDb` | <Badge type="info" text="中負荷" /> | 複数の FFT 演算 |

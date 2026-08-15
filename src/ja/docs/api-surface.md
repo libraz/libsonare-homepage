@@ -67,6 +67,7 @@
 - **PLP** — リズムの主な脈動を推定する特徴量。
 - **LUFS / LRA** — ラウドネスとラウドネスレンジの指標。詳細は[LUFS](./glossary/lufs.md)。
 - **VCA** — 複数ストリップの音量をまとめて動かすグループ制御。詳細は[バスとセンド](./glossary/mixing/buses-sends.md)。
+- **PFL / AFL** — pre-fader listen（フェーダー前）と after-fader listen（フェーダー後）。本線の出力を変えずに 1 トラックだけを試聴するためのキュータップです。
 - **RIR** — room impulse response（部屋のインパルス応答）。詳細は[部屋の形状と容積](./glossary/acoustics/room-geometry.md)。
 - **等価ルーム推定** — 音声から実用上の部屋モデルを推定する処理。詳細は[逆問題による部屋推定](./glossary/acoustics/inverse-estimation.md)。
 - **ルームモーフィング** — 目標ルームの響きを音作り効果として適用する処理。
@@ -75,18 +76,18 @@
 | ファミリー | 対象 | 主なページ |
 |------------|------|------------|
 | 解析 | BPM、キー、キー候補、ビート、ダウンビート、オンセット、コード、セクション、メロディ、音色、ダイナミクス、リズム、音響解析 | [JavaScript API](./js-api.md)、[Python API](./python-api.md)、[C++ API](./cpp-api.md) |
-| 特徴量 | STFT、メル、MFCC、クロマ、定Qクロマ（`chromaCqt`）、spectral contrast/poly features、zero crossings、ピッチとチューニング、CQT/VQT、NNLS クロマ、NMF 分解、近傍フィルタ、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS/LRA | [JavaScript API](./js-api.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
-| メータリング | レベル、ラウドネス、クレストファクター、トゥルーピーク、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
+| 特徴量 | STFT、メル、MFCC、クロマ、定Qクロマ（`chromaCqt`）、spectral contrast/poly features、zero crossings、ピッチとチューニング、CQT/VQT、NNLS クロマ、NMF 分解、近傍フィルタリング、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS/LRA | [JavaScript API](./js-api.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
+| メータリング | レベル、ラウドネス、クレストファクター（モノラルとステレオペアの両方）、True Peak（トゥルーピーク）、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
 | スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api.md#スケール量子化)、[Python API](./python-api.md) |
 | エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api.md#オーディオエフェクト) |
 | ルーム音響解析 | インパルス応答からの残響時間（RT60 / EDT）、明瞭度（C50 / C80）、定義度（D50）、ブラインド音響推定、等価ルーム推定、幾何ベースの RIR 合成、ルームモーフィング | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
 | ミキシング | チャンネルストリップ、バス、センド、VCA グループ、シーンプリセット、オートメーション、ステレオ／デュアルパン、リアルタイムエンジンの 5.1/7.1 サラウンドパン、メーター、ゴニオメーター、オフラインレンダー | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
-| マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON | [マスタリングアシスタント](./mastering-assistant.md) |
+| マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON、およびダウンミックスではなく左右のペアを測定する 3 つのステレオ版 | [マスタリングアシスタント](./mastering-assistant.md) |
 | マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングチェーン、任意バンド数の構造化マルチバンドコンプレッサー（チェーン設定スキーマバージョン 2） | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm.md#ストリーミング解析) |
 | リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン、グラフトポロジー、クリップ、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、トラックごとの PFL/AFL キューモニタリング、名前付きテレメトリエラー序数を伴うステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムエンジン](./realtime-engine.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、メモリ上でのプロジェクト作成、上限付き履歴メモリを備えたアンドゥ/リドゥ、テイク／コンピング、ワープ、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、アシストサイドカー、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
-| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [組み込み楽器](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング) |
+| インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声、CQT/VQT 振幅から音声 | [逆変換特徴量](./inverse-features.md) |
 | ユーティリティ / librosa 互換 | フレーム／サンプル／時間変換、dB 変換、pre/de-emphasis、無音 trim/split、frame/pad/fix、peak pick、vector normalize、PCEN、tonnetz、テスト信号生成（tone / chirp / clicks） | [librosa 互換性](./librosa-compatibility.md) |
 | 構造とセグメンテーション | クロス類似度、再帰行列／ラグ行列、パス強調、サブセグメンテーション、凝集型クラスタリング、F0 トラックからのノートセグメンテーション | [JavaScript API](./js-api.md#librosa-互換ヘルパー)、[Python API](./python-api.md#特徴抽出) |

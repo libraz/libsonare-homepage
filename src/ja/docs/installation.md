@@ -68,7 +68,7 @@ pnpm add @libraz/libsonare
 | インポート | 用途 |
 |--------|------|
 | `@libraz/libsonare` | 初期化、解析、特徴量、マスタリング、ミキシング、リアルタイムクラスを含む通常の TypeScript API |
-| `@libraz/libsonare/analysis` | 解析専用モジュール。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを含まないため、MIR だけが必要な場合はダウンロードがはるかに小さくなります |
+| `@libraz/libsonare/analysis` | 解析専用モジュール。マスタリング・ミキシング・リアルタイム・プロジェクトのバインディングを含まないため、MIR（音楽情報検索）だけが必要な場合はダウンロードがはるかに小さくなります |
 | `@libraz/libsonare/worklet` | `SonareRealtimeEngineNode`、`SonareEngine`、Worklet 側ライフサイクルエクスポートを含む AudioWorklet ブリッジヘルパー |
 | `@libraz/libsonare/worker` | ワンショットの解析・マスタリングを専用 Worker で実行する `OfflineWorkerClient` |
 | `@libraz/libsonare/wasm` | バンドラーや独自ローダー用の通常 WASM アセット |
@@ -155,6 +155,10 @@ cmake --build . --parallel
 # WebAssembly をビルド（build/ ではなくリポジトリルートで実行）
 cd .. && make wasm
 ```
+
+::: warning 共有ライブラリとバインディングは一緒にビルドし直す
+Python バインディングは、別のツリーでビルドされた共有ライブラリを受け付けません。自前でビルドした `.so` / `.dylib` と、それを読み込むバインディングは、同じチェックアウトから生成する必要があります。C 構造体のレイアウトが変わるバージョンを取り込んだあとは、新しいバインディングを古い成果物へ向けるのではなく、ライブラリをビルドし直してください。公開されている wheel を使えば、対応の取れた組み合わせがそのまま入るため、この問題は起きません。
+:::
 
 ## ネイティブバインディング（Python / Node.js）
 
@@ -251,7 +255,7 @@ sonare::Key key = sonare::quick::detect_key(samples, size, sample_rate);
 sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rate);
 ```
 
-室内音響メトリクスでは、測定済みインパルスレスポンスに
+ルーム音響メトリクスでは、測定済みインパルス応答（IR）に
 `sonare::quick::analyze_impulse_response()`、通常音声からのブラインド推定に
 `sonare::quick::detect_acoustic()` を使います。
 幾何ベースのルーム音響では、次の 2 点を確認します。

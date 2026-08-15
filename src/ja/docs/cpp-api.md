@@ -12,7 +12,7 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 
 このページを読むと、次のことを判断・実装できるようになります。
 
-- quick helper、`MusicAnalyzer`、`StreamAnalyzer`、各モジュールヘッダー、C ABI を使い分けられる。
+- クイックヘルパー（`sonare::quick::*`）、`MusicAnalyzer`、`StreamAnalyzer`、各モジュールヘッダー、C ABI を使い分けられる。
 - どの C++ 側の入口が各言語バインディングの土台になっているかを理解できる。
 - 音声読み込み、解析、ストリーミングフレーム、マスタリング、ミキシング、FFI に必要な struct / class を探せる。
 - 目的別ガイドを読んだ後のリファレンスとして、このページを使える。
@@ -23,11 +23,11 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 | **Quick API** | 一行解析とルーム音響の入口 | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
 | **幾何ベースのルーム音響** | 等価ルーム推定、RIR 合成、ルームモーフィング | `estimate_room()`, `acoustic::synthesize_rir()`, `effects::acoustic::room_morph()` |
 | **MusicAnalyzer** | コールバック付きの楽曲解析 | `MusicAnalyzer`, `AnalysisResult` |
-| **ストリーミング** | ブロック単位の MIR フレームと更新されていく推定 | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
+| **ストリーミング** | ブロック単位の MIR（音楽情報検索）フレームと更新されていく推定 | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
 | **特徴量** | 低レベル特徴抽出と逆変換特徴量 | `MelSpectrogram`, `Chroma`, `cqt()`, `vqt()`, `mel_to_audio()` |
 | **エフェクト／編集** | オーディオ処理と小さな編集部品 | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer モジュール |
 | **マスタリング** | プリセット、チェーン、名前付きプロセッサ、assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
-| **ミキシング／エンジン** | シーンベースのミキサーと DAW 風リアルタイムトランスポート | `mixing::api::Scene`, `mixing::MixerController`, `RealtimeEngine` |
+| **ミキシング／エンジン** | シーンベースのミキサーと DAW 風リアルタイムトランスポート | `mixing::api::Scene`, `mixing::ChannelStrip`, `mixing::FxBus`, `RealtimeEngine` |
 | **C ABI** | バインディング向けの安定 FFI | `sonare_c.h` |
 
 ## C++ でどの入口を使うか
@@ -41,6 +41,28 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 | マスタリングプリセットや名前付きプロセッサ | `src/mastering/api/*` ヘッダー。[マスタリングプロセッサ](./mastering-processors.md) も参照 |
 | ステムミキサー / シーン JSON | `src/mixing/api/scene.h` と `src/mixing/api/scene_json.cpp` の概念。[ミキシングエンジン](./mixing.md) も参照 |
 | 言語バインディングやプラグイン境界 | C++ クラスではなく `sonare_c.h` |
+
+### この API を切り分けるビルドフラグ
+
+解析、特徴量、エフェクト、メータリングは常にビルドされます。以下のサブシステムは
+個別の CMake オプションで、ソースビルドではすべて既定 `ON` ですが、絞ったビルドでは
+外すことができ、そのとき該当するシンボルはすべて消えます。
+
+| オプション | 対象 |
+|------------|------|
+| `BUILD_MASTERING` | `sonare::mastering::*`、マスタリングの C ABI |
+| `BUILD_MIXING` | `sonare::mixing::*`、ミキサーの C ABI |
+| `BUILD_GRAPH` | ルーティンググラフライブラリ |
+| `BUILD_FX` | クリエイティブ系リアルタイム FX プロセッサ |
+| `BUILD_ACOUSTIC_SIM` | 幾何ベースのルーム音響（RIR 合成、ルーム推定、ルームモーフ） |
+| `BUILD_PITCH_EDITOR` | モノフォニックのピッチエディタ基盤 |
+| `BUILD_VOICE_CHANGER` | リアルタイムボイスチェンジャー |
+| `BUILD_ARRANGEMENT` | ヘッドレスのアレンジメント／DAW プロジェクト（`sonare_c_project.h`） |
+| `BUILD_ASSIST` | 作曲アシストの差し込み口（制御／オフラインのみ） |
+
+C ABI はプロジェクト系のシンボルを常に *エクスポート* します。`BUILD_ARRANGEMENT`
+なしでビルドした場合、それらは `SONARE_ERROR_NOT_SUPPORTED` を返し、
+`sonare_project_abi_version()` は 0 を返します。
 
 ::: tip 用語について
 オーディオ解析が初めてですか？[用語集](/ja/docs/glossary) で BPM、STFT、Chroma、HPSS などの用語の説明をご覧ください。
@@ -207,7 +229,8 @@ namespace sonare::quick {
 
 ::: info このセクションの用語
 - **等価ルーム** は、音声から推定した実用上の部屋モデルです。実際の部屋の正確な形状ではありません。
-- **RIR** は room impulse response の略で、部屋が短い音にどう反応するかを表すサンプル列です。
+- **RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表すサンプル列です。
+- **RT60** は残響時間です。残響が 60 dB 減衰するまでの長さを指します。
 - **DRR (direct-to-reverberant ratio)** は直接音と残響の音量比を dB で表します。値が大きいほど、乾いた近い音になります。
 - **ルームモーフィング** は、部屋の響きを足す音作り効果です。残響除去ではありません。
 :::
@@ -805,7 +828,7 @@ auto nnls_result = nnls_chroma(audio, nnls_config);
 ### HPSS <Badge type="warning" text="Heavy" />
 
 ::: tip パフォーマンス
-HPSS は STFT 計算とメディアンフィルタリングを必要とします。処理時間はオーディオの長さに比例します。
+HPSS は STFT の計算とメディアンフィルターによる処理を必要とします。処理時間はオーディオの長さに比例します。
 :::
 
 ```cpp
@@ -874,7 +897,8 @@ auto rms_norm = normalize_rms(audio, -20.0f);  // 目標 RMS レベル (dB)
 // 無音トリミング（絶対 dBFS 閾値）
 auto trimmed = trim_absolute(audio, -60.0f);   // 閾値 (dBFS)
 
-// フレーム RMS の無音トリミング。既定値は frame_length=2048、hop_length=512。
+// フレーム RMS の無音トリミング（#include <effects/silence.h> が必要。<sonare.h> には含まれない）。
+// 既定値は frame_length=2048、hop_length=512。
 std::vector<float> samples(audio.begin(), audio.end());
 auto framed_trim = trim(samples, /*top_db=*/60.0f, /*frame_length=*/2048,
                         /*hop_length=*/512);
@@ -911,32 +935,57 @@ auto [start, end] = detect_silence_boundaries(audio, -60.0f);
 - **`tempogram` / `plp`** — オンセット包絡線から構築するテンポ表現と支配的なパルスの抽出。
 :::
 
-```cpp
-// プリエンファシス／ディエンファシス（librosa.effects.preemphasis / deemphasis）
-auto pre   = preemphasis(audio, /*coef=*/0.97f);
-auto deemp = deemphasis(audio, /*coef=*/0.97f);
+これらのヘルパーは個別のヘッダーにあり、`<sonare.h>` には含まれません。
+使う関数ごとにヘッダーを include してください。入力は `Audio` ではなく生のサンプル
+バッファ（`std::vector<float>` または `const float*` と長さ）です。
 
-// 無音トリム／分割（librosa.effects.trim / split）— バッファ入力、サンプル区間を返す
+```cpp
+#include <core/pcen.h>
+#include <effects/preemphasis.h>
+#include <effects/silence.h>
+#include <feature/rhythm.h>
+#include <feature/tonnetz.h>
+#include <util/frame.h>
+#include <util/padding.h>
+#include <util/peak.h>
+#include <util/vector_normalize.h>
+
+using namespace sonare;
+
+// Pre-emphasis / de-emphasis (librosa.effects.preemphasis / deemphasis)
+// Buffer in, buffer out — pass audio samples, not an Audio object.
+auto pre   = preemphasis(samples, /*coef=*/0.97f);
+auto deemp = deemphasis(samples, /*coef=*/0.97f);
+
+// Silence trim / split (librosa.effects.trim / split) — buffer in, sample-index ranges out
 TrimResult trimmed = trim(samples, /*top_db=*/60.0f);  // {audio, start_sample, end_sample}
 auto intervals = split(samples, /*top_db=*/60.0f);     // std::vector<std::pair<int,int>>
 
-// フレーミング／パディングのヘルパー（librosa.util.*）
+// Frame / pad / length helpers (librosa.util.*)
 auto frames = frame(samples, /*frame_length=*/2048, /*hop_length=*/512);
 auto padded = pad_center(values, /*size=*/4096);
 auto fixed  = fix_length(values, /*size=*/4096);
 auto bounds = fix_frames(frame_indices, /*x_min=*/0, /*x_max=*/-1);
 
-// ピーク検出／ベクトル正規化（librosa.util.peak_pick / normalize）
+// Peak picking and vector normalize (librosa.util.peak_pick / normalize).
+// The C++ name is normalize(); vector_normalize is the header/C-ABI name.
+// Overload resolution keeps it distinct from normalize(const Audio&, float).
 auto peaks  = peak_pick(onset_envelope, pre_max, post_max, pre_avg, post_avg, delta, wait);
-auto normed = vector_normalize(values, /*norm_type=*/2);  // 0=inf, 1=L1, 2=L2, 3=power
+auto normed = normalize(values, NormType::L2);  // Inf, L1, L2, Power
 
-// PCEN（librosa.pcen）— 入力は row-major の [n_bins x n_frames]
-auto pcen_out = pcen(mel, n_bins, n_frames, sample_rate, hop_length);
+// PCEN (librosa.pcen) — input is row-major [n_bins x n_frames].
+// Sample rate and hop length are PcenConfig fields, not positional arguments.
+PcenConfig pcen_config;
+pcen_config.sr = sample_rate;
+pcen_config.hop_length = hop_length;
+auto pcen_out = pcen(mel, n_bins, n_frames, pcen_config);
 
-// Tonnetz／Tempogram／PLP
-auto tonnetz_out = tonnetz(chromagram, n_chroma, n_frames);
+// Tonnetz / tempogram / PLP
+auto tonnetz_out = tonnetz(chromagram.data(), n_chroma, n_frames);
 auto tempo_out   = tempogram(onset_env, sample_rate);
-auto plp_out     = plp(onset_env, sample_rate);
+PlpConfig plp_config;
+plp_config.sr = sample_rate;
+auto plp_out     = plp(onset_env, plp_config);
 ```
 
 ## 型
@@ -1085,7 +1134,8 @@ int time_to_frames(float time, int sr, int hop_length);
 int frames_to_samples(int frames, int hop_length, int n_fft = 0);
 int samples_to_frames(int samples, int hop_length, int n_fft = 0);
 
-// dB 変換（librosa.power_to_db / amplitude_to_db とその逆）
+// dB 変換（librosa.power_to_db / amplitude_to_db とその逆）。
+// 宣言は <core/db_convert.h>。<sonare.h> には含まれない。
 std::vector<float> power_to_db(const std::vector<float>& values,
                                float ref = 1.0f, float amin = 1e-10f, float top_db = 80.0f);
 std::vector<float> amplitude_to_db(const std::vector<float>& values,
@@ -1155,28 +1205,79 @@ api::MonoChainResult result = api::master_audio_mono(
 
 C ABI レベルでは、`SonareMasteringConfig` が同じリミッター制御を追加フィールドの `release_ms` と `apply_gain_at_input_rate` として公開します。呼び出し側は引き続き実際の `target_lufs` と `ceiling_db` を渡す必要があります。追加されたリミッターフィールドを 0 のままにすると従来動作を保ち、`release_ms == 0` は 50 ms の既定値、`apply_gain_at_input_rate == 0` は入力レートでのゲイン適用をオフのまま保ちます。
 
+### ステレオのプロファイル・アシスタント・プレビュー
+
+プロファイル、アシスタント、配信プレビューの各 JSON ヘルパーには、両チャンネルを読むステレオ入口があります。ステレオのクレストファクターメーターも同じ系統です。
+
+```c
+#include <sonare/sonare_c_mastering.h>
+#include <sonare/sonare_c_metering.h>
+
+SonareError sonare_mastering_audio_profile_stereo(const float* left, const float* right,
+                                                  size_t length, int sample_rate,
+                                                  const SonareMasteringParam* params,
+                                                  size_t param_count, char** json_out);
+SonareError sonare_mastering_assistant_suggest_stereo(const float* left, const float* right,
+                                                      size_t length, int sample_rate,
+                                                      const SonareMasteringParam* params,
+                                                      size_t param_count, char** json_out);
+SonareError sonare_mastering_streaming_preview_stereo(const float* left, const float* right,
+                                                      size_t length, int sample_rate,
+                                                      const SonareStreamingPlatform* platforms,
+                                                      size_t platform_count, char** json_out);
+SonareError sonare_metering_crest_factor_db_stereo(const float* left, const float* right,
+                                                   size_t length, int sample_rate, float* out_db);
+```
+
+`*json_out` はヒープ確保されるので、モノラル入口と同じ契約で `sonare_free_string` により解放します。`platforms` に `NULL` ／ `0` を渡すとエラーにはならず、組み込みの Spotify ／ Apple Music ／ YouTube のリストが使われます。
+
+2 チャンネルの素材を扱うときは、常にステレオ側を使ってください。モノラル入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差は 3.01 dB にとどまり、これはダウンミックスで振幅が半分になる分です。残りの約 3 dB が相関の低さによるものです。
+
+ステレオプロファイルのうち、両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA はチャンネルを合算したプログラムから求め、True Peak（トゥルーピーク）は 2 つのうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
+
+`sonare_metering_crest_factor_db_stereo` は逆向きの誤差を正します。ピークは両チャンネルにまたがって取り、RMS は両チャンネルをまとめて計算します。ダウンミックスでは逆相のペアが打ち消し合い、RMS を小さく見積もる分だけクレストファクターが大きく出てしまうためです。位相を反転させたペアでは、ステレオメーターが `11.64` dB、ダウンミックス経由が `0.00` dB になります。
+
 ## C API
 
 FFI 統合向けの C ABI です。`SonareAudio*` を受け取るハンドルベースの入口と、`float*` の生サンプルを受け取るサンプルベースの入口があります。
 
 ```c
-#include <sonare_c.h>
+#include <sonare/sonare_c.h>
 
+// オーディオハンドル
 SonareError sonare_audio_from_buffer(const float* data, size_t length, int sample_rate,
                                      SonareAudio** out);
 SonareError sonare_audio_from_memory(const uint8_t* data, size_t length, SonareAudio** out);
 SonareError sonare_audio_from_file(const char* path, SonareAudio** out);  // WASM では利用不可
 SonareError sonare_audio_file_channel_count(const char* path, int* out_channels);  // WASM では利用不可
 void        sonare_audio_free(SonareAudio* audio);
+const float* sonare_audio_data(const SonareAudio* audio);
+size_t      sonare_audio_length(const SonareAudio* audio);
+int         sonare_audio_sample_rate(const SonareAudio* audio);
+float       sonare_audio_duration(const SonareAudio* audio);
 
+// ハンドルベースの解析（FFI 境界をまたぐサンプルのコピーを避ける）
 SonareError sonare_audio_detect_bpm(const SonareAudio* audio, float* out_bpm);
 SonareError sonare_audio_detect_key(const SonareAudio* audio, SonareKey* out_key);
+SonareError sonare_audio_detect_beats(const SonareAudio* audio,
+                                      float** out_times, size_t* out_count);
+SonareError sonare_audio_detect_downbeats(const SonareAudio* audio,
+                                          float** out_times, size_t* out_count);
+SonareError sonare_audio_detect_onsets(const SonareAudio* audio,
+                                       float** out_times, size_t* out_count);
 SonareError sonare_audio_analyze(const SonareAudio* audio, SonareAnalysisResult* out);
 
+// サンプルベースの解析（生の float バッファを既に持っている場合に使う）
 SonareError sonare_detect_bpm(const float* samples, size_t length, int sample_rate,
                               float* out_bpm);
 SonareError sonare_detect_key(const float* samples, size_t length, int sample_rate,
                               SonareKey* out_key);
+SonareError sonare_detect_beats(const float* samples, size_t length, int sample_rate,
+                                float** out_times, size_t* out_count);
+SonareError sonare_detect_downbeats(const float* samples, size_t length, int sample_rate,
+                                    float** out_times, size_t* out_count);
+SonareError sonare_detect_onsets(const float* samples, size_t length, int sample_rate,
+                                 float** out_times, size_t* out_count);
 SonareError sonare_analyze(const float* samples, size_t length, int sample_rate,
                            SonareAnalysisResult* out);
 
@@ -1191,9 +1292,25 @@ SonareError sonare_analyze_json_with_progress(const float* samples, size_t lengt
 
 void sonare_free_floats(float* ptr);
 void sonare_free_ints(int* ptr);
+void sonare_free_bytes(uint8_t* ptr);
 void sonare_free_string(char* ptr);             // *_json など char* を返す C ABI 呼び出しのヒープ文字列
 void sonare_free_key_candidates(SonareKeyCandidate* ptr);  // sonare_detect_key_candidates* が返す配列
 void sonare_free_result(SonareAnalysisResult* result);
+// 各結果構造体には、その構造体名を冠した専用の解放関数があります。
+// 例: sonare_free_stft_result / _mel_result / _mfcc_result / _chroma_result /
+// _pitch_result / _hpss_result。構造体は必ず対応する関数でのみ解放してください。
+
+// リサンプリングと 12-TET スケールクォンタイザー（どちらも sonare_c.h 自体で宣言）
+SonareError sonare_resample(const float* samples, size_t length, int src_sr, int target_sr,
+                            float** out, size_t* out_length);   // *out は sonare_free_floats で解放
+SonareError sonare_scale_quantize_midi(int root, uint16_t mode_mask, float reference_midi,
+                                       float midi, float* out_quantized_midi);
+SonareError sonare_scale_correction_semitones(int root, uint16_t mode_mask, float reference_midi,
+                                              float midi, float* out_semitones);
+SonareError sonare_scale_pitch_class_enabled(int root, uint16_t mode_mask, int pitch_class,
+                                             int* out_enabled);
+
+// ユーティリティ
 const char* sonare_error_message(SonareError error);
 const char* sonare_last_error_message(void);    // 直近の失敗のスレッドローカルな詳細メッセージ
 const char* sonare_last_warning_message(void);  // スレッドローカルな非致命的警告（例: どのプロセッサも読まなかったシーンインサートのパラメータ）
@@ -1212,7 +1329,7 @@ int         sonare_has_ffmpeg_support(void);     // FFmpeg 専用フォーマッ
 （段階ごとの進捗が要るなら `sonare_analyze_json_with_progress`）を呼び出します。
 camelCase の JSON 文字列を返し、`sonare_free_string` で解放します。
 
-エフェクト、特徴量、ルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。ルーム音響は `sonare_analyze_impulse_response_ex`、`sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。関数一覧は `src/sonare_c.h` を参照してください。
+エフェクト、特徴量、ルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。ルーム音響は `sonare_analyze_impulse_response_ex`、`sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。関数一覧は `include/sonare/sonare_c.h` を参照してください。
 
 特徴量では、ノート活性の `sonare_chroma` に加えて、定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当）の `sonare_chroma_cqt` があります。明示レンジ版の MFCC 入口 `sonare_mfcc_ex`（fmin/fmax/htk）は、末尾にケプストラルリフタリング引数 `lifter` を持ちます（`0` で無効）。
 
@@ -1224,19 +1341,22 @@ camelCase の JSON 文字列を返し、`sonare_free_string` で解放します�
 
 プロジェクト編集は `sonare_c_project.h` にあります。`sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` の最後の引数が任意の equal-power 継ぎ目クロスフェードです。有限で 0 以上である必要があり、`0` ならハードループのままです。エンジンは使用可能なプリロールとループ長の半分を上限にクランプし、ワープ時は無視します。
 
+`sonare_project_bounce_with_synth_instruments` と `sonare_engine_set_synth_instrument` が受け取る NativeSynth のパッチ `SonareSynthPatch` は、先頭の `struct_version` フィールドでバージョン管理されています。元のレイアウトでは数値フィールドはすべて「0 はベースプリセットの値を保つ」という規則に従うため、明示的なゼロを表現できませんでした。`struct_version = 2` は、呼び出し側が意図して設定したフィールドを示すビットマスク `present_fields`（`SONARE_SYNTH_FIELD_*`）を末尾に追加します。ビットが立っていれば、その値がゼロであってもベースを上書きし、立っていなければ従来の挙動のままです。この末尾のワードは `struct_version` が 2 以上のときだけ読まれます。したがって、これまで通りに構造体を埋める呼び出し側は、`struct_version` を `0` や `1` のままにしていても従来の挙動を保ち、ソースを変更する必要はありません。enum フィールドに存在ビットがないのは意図的です。ゼロがすでに「ベースを保つ」の予約値で、実際の値はすべて非ゼロだからです。`num_mod_routings == 0` の状態で `SONARE_SYNTH_FIELD_MOD_ROUTINGS` を立てると、ベースのモッドマトリクスを保つのではなく消去します。要素のあるテーブルはどちらの場合でも置き換えです。マスクは 32 ビット 1 ワードで、うち 27 ビットを使用しています。さらに拡張する場合は、このワードを広げるのではなく、新しい `struct_version` のもとで 2 ワード目を追加します。
+
 現在の C ABI は、用途別のヘッダーに分かれています。上の短い例に出ていないシンボルは、この表から探してください。
 
 | ヘッダー | 公開範囲 |
 |----------|---------|
+| `sonare_c.h` | アンブレラヘッダー。他の公開ヘッダーをすべて推移的に取り込みます（エンジンとボイスチェンジャーは `sonare_c_effects.h` 経由）。加えて集約 ABI バージョン `SONARE_ABI_VERSION` / `sonare_abi_version()`、`sonare_resample`、12-TET スケールクォンタイザー、各結果構造体の解放関数をこのヘッダー自身で宣言します |
 | `sonare_c_types.h` | オーディオハンドル、コンパクト解析、キー候補、ダウンビート、エンジンのレーン／バス／センド構造体（`SonareEngineTrackLane`、`SonareEngineBus`、`SonareEngineTrackSend`）と `SonareChannelLayout` 列挙、エラー／バージョン／FFmpeg ヘルパー |
 | `sonare_c_project.h` | ヘッドレスのプロジェクト／アレンジメントのライフサイクル、トラック／クリップ件数と編集（`sonare_project_clip_count`）、MIDI イベントと MIDI-FX（`sonare_project_set_midi_events`、`set_midi_fx`、`bake_midi_fx`）、コンパイル／バウンス（`bounce_with_builtin_instruments`／`bounce_with_synth_instruments` を含む）、ワープマップ、ループ録音のテイクとコンプ区間、NativeSynth と SoundFont/SF2 楽器バインディング、アシストサイドカー、コード／キー注釈、`SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | 個別解析、STFT／メル／MFCC／クロマ、逆変換特徴量、CQT/VQT、ピッチ、テンポグラム／PLP、LUFS |
 | `sonare_c_effects.h` | HPSS／編集 DSP、領域ベースのスペクトル編集（`sonare_spectral_edit`、モード GAIN/ATTENUATE/MUTE/HEAL）、分解／リミックスヘルパー |
-| `sonare_c_engine.h` | `RealtimeEngine` の C ABI: トランスポート（再生／停止／シーク／ループ／テンポ／拍子）、ライブパラメータとオートメーションレーン制御、MIDI push/drain（CC、パニック、SysEx、外部 MIDI 送出先）、キャプチャ、テレメトリ（`SonareEngineTelemetry`、メーターテレメトリの drain、`SonareEngineTelemetryError`） |
+| `sonare_c_engine.h` | `RealtimeEngine` の C ABI: トランスポート（再生／停止／シーク／ループ／テンポ／拍子）、ライブパラメータとオートメーションレーン制御、MIDI push/drain（CC、パニック、SysEx、外部 MIDI のデスティネーション）、キャプチャ、テレメトリ（`SonareEngineTelemetry`、メーターテレメトリの drain、`SonareEngineTelemetryError`） |
 | `sonare_c_voice_changer.h` | リアルタイムボイスチェンジャー: 生成／破棄、設定（POD と JSON、ライブ安全なハンドオフ）、ブロック単位の処理（mono／interleaved／planar-stereo）、組み込みプリセット参照、レイテンシ |
 | `sonare_c_acoustic.h` | ルーム形状からの RIR 合成、等価ルーム推定、オフラインのルームモーフィング、`SONARE_ACOUSTIC_ABI_VERSION` |
-| `sonare_c_metering.h` | ピーク／RMS／クレストファクター／DC オフセット／トゥルーピーク、クリッピング、ダイナミックレンジ、ステレオ相関／幅、ベクトルスコープ、位相スコープ、スペクトル、マルチチャンネルのインターリーブ LUFS（`sonare_lufs_interleaved`）と EBU R128 ラウドネスレンジ（`sonare_ebur128_loudness_range`） |
-| `sonare_c_mastering.h` | プリセット、フルチェーン、進捗コールバック、名前付きプロセッサと機械可読なプロセッサカタログ、アシスタント／プロファイル／プレビュー JSON、レイテンシと実現ステージを検査できるストリーミングマスタリングチェーン（`sonare_streaming_mastering_chain_stage_names`）、ストリーミング EQ、リペア／ダイナミクスの単発ヘルパー |
+| `sonare_c_metering.h` | ピーク／RMS／クレストファクター／DC オフセット／True Peak（両チャンネルから測る `sonare_metering_crest_factor_db_stereo` を含む）、クリッピング、ダイナミックレンジ、ステレオ相関／幅、ベクトルスコープ、位相スコープ、スペクトル、マルチチャンネルのインターリーブ LUFS（`sonare_lufs_interleaved`）と EBU R128 ラウドネスレンジ（`sonare_ebur128_loudness_range`） |
+| `sonare_c_mastering.h` | プリセット、フルチェーン、進捗コールバック、名前付きプロセッサと機械可読なプロセッサカタログ、アシスタント／プロファイル／プレビュー JSON とその `*_stereo` 入口、レイテンシと実現ステージを検査できるストリーミングマスタリングチェーン（`sonare_streaming_mastering_chain_stage_names`）、ストリーミング EQ、リペア／ダイナミクスの単発ヘルパー |
 | `sonare_c_mixing.h` | チャンネルストリップ制御、センド、バス、VCA グループ、オートメーション、メーター、ゴニオメーター、シーンプリセット |
 | `sonare_c_streaming.h` | `StreamAnalyzer`、上限付き未読出力（`max_pending_frames`）、量子化フレーム読み出し、滞留／破棄を含む更新統計、チューニング／正規化制御 |
 
@@ -1257,8 +1377,8 @@ C ABI のリアルタイム・インサートオートメーションと外部 M
 - トラック、マスター、バスの各ストリップには、インサートのバイパスとリアルタイム安全なパラメータを変更する関数があります。パラメータ名には `sonare_mastering_insert_param_info` が返す JSON キーを使います。未対応またはリアルタイム安全でない名前には `SONARE_ERROR_INVALID_PARAMETER` が返ります。
 - `sonare_engine_resolve_{track,master,bus}_insert_automation_id` は、インサートのパラメータ名を `sonare_engine_set_automation_lane`、`sonare_engine_set_parameter`、`sonare_engine_set_parameter_smoothed` が受け取る数値 id に変換します。共通のランプ時間は `sonare_engine_set_param_smoothing_ms` で変更でき、既定は 20 ms、`0` は即時変更です。
 - `sonare_engine_push_midi_sysex` には、先頭の `0xF0` と末尾の `0xF7` を含む完全な SysEx フレームを渡します。長さは 1〜512 バイトです。
-- `sonare_engine_set_midi_destination_external` を使うと、送出先は内蔵インストゥルメントラックを通らず、ホストが回収する出力キューへ送られます。外部化できる送出先は最大 16 個です。クロック／トランスポート転送は `sonare_engine_set_external_midi_clock_enabled` で明示的に有効化し、そのメッセージの送出先 id は `0xFFFFFFFF` です。
-- ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP レコードが 3 メッセージへ展開される場合があるため、`max_events` は 3 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
+- `sonare_engine_set_midi_destination_external` を使うと、その送出先（デスティネーション）は内蔵インストゥルメントラックを通らず、ホストが回収する出力キューへ送られます。外部化できるデスティネーションは最大 16 個です。クロック／トランスポート転送は `sonare_engine_set_external_midi_clock_enabled` で明示的に有効化し、そのメッセージのデスティネーション id は `0xFFFFFFFF` です。
+- ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP（Universal MIDI Packet）レコードが 3 メッセージへ展開される場合があるため、`max_events` は 3 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
 - drain した各 `SonareEngineTelemetry` レコードの `error` フィールドは `SonareEngineTelemetryError`（`sonare_c_types_engine.h`）の序数です。`NONE = 0` に続き、キュー／バックログ／オーバーフロー系の条件が `1`〜`18`（コマンドキュー、保留コマンド、境界、テレメトリ、キャプチャ、オートメーションバインドターゲット、インサートオートメーション、MIDI クロック、メトロノームのオーバーフローなど）、そして `MAX_CHANNELS_EXCEEDED = 20` と続きます。
 
 C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値です。`tailSamples` は可聴な減衰テールの長さを表し、どちらもオフライン id では 0 です。`realtimeCost` はライブインサート向けの大まかな `low`／`moderate`／`high` のアルゴリズム負荷見積もりであり、ハードウェア上のベンチマークではなく、非インサート id では `null` です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするか、`category` は id 名前空間から導出する安定した UI グループ、`params` はリアルタイムインサートのパラメータ記述子を示します（非インサートプロセッサでは空配列）。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。

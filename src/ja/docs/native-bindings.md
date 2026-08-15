@@ -92,11 +92,14 @@ import {
   masterAudioStereo,
   masteringChainStereo,
   masteringAssistantSuggest,
+  masteringAssistantSuggestStereo,
   masteringAudioProfile,
+  masteringAudioProfileStereo,
   masteringPresetNames,
   masteringPairAnalyze,
   masteringProcessorNames,
   masteringStreamingPreview,
+  masteringStreamingPreviewStereo,
 } from '@libraz/libsonare-native'
 
 console.log(masteringProcessorNames())
@@ -119,7 +122,7 @@ const mastered = masteringChainStereo(left, right, sampleRate, {
 console.log(mastered.outputLufs, mastered.stages)
 
 const presetMaster = masterAudioStereo(left, right, sampleRate, 'pop', {
-  'loudness.targetLufs': -14,
+  loudness: { targetLufs: -14 },
 })
 console.log(presetMaster.outputLufs, presetMaster.stages)
 
@@ -148,7 +151,40 @@ const deliveryPreview = JSON.parse(masteringStreamingPreview(samples, sampleRate
   { name: 'Streaming', targetLufs: -14, ceilingDb: -1 },
 ]))
 console.log(profile, suggestions, deliveryPreview)
+
+// The stereo entry points are request-object only — there is no positional
+// overload, so a positional call throws.
+const stereoProfile = JSON.parse(masteringAudioProfileStereo({
+  left,
+  right,
+  sampleRate,
+  params: { nFft: 2048, hopLength: 512, truePeakOversample: 4 },
+}))
+const stereoSuggestions = JSON.parse(masteringAssistantSuggestStereo({
+  left,
+  right,
+  sampleRate,
+  params: { targetLufs: -14, ceilingDb: -1, preferStreamingSafe: true },
+}))
+// Omitting platforms uses the built-in Spotify / Apple Music / YouTube set.
+const stereoPreview = JSON.parse(masteringStreamingPreviewStereo({ left, right, sampleRate }))
+console.log(stereoProfile, stereoSuggestions, stereoPreview)
 ```
+
+2 チャンネルの素材を扱うときは、ステレオ入口を使ってください。モノラル側は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。ここで使う LUFS はフルスケール基準のラウドネス単位（Loudness Units relative to Full Scale）で、配信プラットフォームが音量を揃える基準でもあります。詳細は[LUFS](./glossary/lufs.md)を参照してください。
+
+48 kHz・4 秒のピンクノイズのペアで測ると次のようになります。
+
+| ペアの種類 | ダウンミックス経由とステレオ経由 | 差 |
+|------------|----------------------------------|-----|
+| 相関が低い | -22.55 LUFS と -16.44 LUFS | 6.11 dB。うち 3.01 dB はダウンミックスで振幅が半分になる分、残りの約 3 dB が相関の低さによる分 |
+| 相関が高い | 振幅が半分になる分のみ | 3.01 dB |
+
+相関の低いペアでは、この差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。
+
+ステレオプロファイルのうち両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA（ラウドネスレンジ。曲中の静かな部分と大きな部分の開き）はチャンネルを合算したプログラムから求め、True Peak（トゥルーピーク）は左右のうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
+
+呼び出し規約の違いに注意してください。上のマスタリング例が位置引数なのに対し、この 4 つはリクエストオブジェクト 1 つだけを取ります。メータリング側の `meteringCrestFactorDbStereo({ left, right, sampleRate })` も同じリクエストオブジェクト形式で、`number` を返します。リクエスト型の名前は Node ネイティブと WASM で異なります。Node は `MasteringAssistantSuggestStereoRequest` と `MasteringAudioProfileStereoRequest` を宣言し（後者は前者を継承するだけで何も追加しません）、WASM は共通の `MasteringStereoParamsRequest` 1 つを使います。
 
 アシスタント／プロファイル系ヘルパーは、WASM 入口と同じオプション名を受け取ります。プロファイル設定は `nFft`、`hopLength`、`truePeakOversample`、アシスタント設定は `targetLufs`、`ceilingDb`、`enableRepair`、`preferStreamingSafe`、`speechMonoAmount` です。共有ネイティブパーサーを通るため、snake_case の別名も受け付けます。
 
@@ -162,7 +198,7 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 | フルチェーン | `masteringChain()`、`masteringChainStereo()`、`masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
 | オフラインのダイナミクス（単発） | `masteringDynamicsCompressor()`、`masteringDynamicsGate()`、`masteringDynamicsTransientShaper()` |
 | オフラインのリペア（単発） | `masteringRepairDeclick()`、`masteringRepairDeclip()`、`masteringRepairDecrackle()`、`masteringRepairDehum()`、`masteringRepairDenoiseClassical()`、`masteringRepairDereverbClassical()`、`masteringRepairTrimSilence()` |
-| アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()` |
+| アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringStreamingPreviewStereo()` |
 | 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name)`、`masteringProcess()`、`masteringProcessStereo()` |
 | ペア処理とステレオ解析 | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()`、`masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
 | ストリーミングレンダー | `StreamingMasteringChain` |
@@ -179,7 +215,7 @@ Node ネイティブは同じ基本名を使いますが、進捗は個別の `*
 
 永続ミキサーでは、Node ネイティブは多くのストリップ制御メソッドで `StripRef`（`number | string`）を受け取ります。WASM メソッドは数値のストリップインデックスを使い、ID からは `stripById(id)` で引きます。
 
-Node の `stripMeter(strip)` はポストフェーダーメーターを読みます。タップを明示したい場合は `meterTap(strip, 'preFader' | 'postFader')` を使います。シーン JSON の読み込み後は、`mixer.sceneWarnings()` がどのプロセッサも消費しなかった insert パラメータ(典型的にはタイプミス)を非致命的な警告として一覧します。
+Node の `stripMeter(strip)` はポストフェーダーメーターを読みます。タップを明示したい場合は `meterTap(strip, 'preFader' | 'postFader')` を使います。シーン JSON の読み込み後は、`mixer.sceneWarnings()` がどのプロセッサも消費しなかった insert パラメータ（典型的にはタイプミス）を非致命的な警告として一覧します。
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
 
@@ -239,7 +275,7 @@ console.log(chain.stageNames(), chain.latencySamples());
 chain.reset();   // 状態だけクリア（prepare し直さない）
 ```
 
-`numChannels === 1` のときはステレオ専用ステージはスキップされます。ストリーミングチェーンはオフライン専用の repair 段を拒否します。`loudness` 段を使うには事前計算した静的ゲインを `loudnessStaticGainDb` で指定し、必要に応じて音源のトゥルーピークを `loudnessStaticGainPeakDb` で渡します。後者を指定すると、静的ゲインは設定したシーリングを超えないように制限されます。WASM ビルドは `chain.delete()` も公開し、ハンドルを明示的に解放できます。ネイティブアドオンのハンドルは GC で解放されます。
+`numChannels === 1` のときはステレオ専用ステージはスキップされます。ストリーミングチェーンはオフライン専用の repair 段を拒否します。`loudness` 段を使うには事前計算した静的ゲインを `loudnessStaticGainDb` で指定し、必要に応じて音源の True Peak を `loudnessStaticGainPeakDb` で渡します。後者を指定すると、静的ゲインは設定したシーリングを超えないように制限されます。WASM ビルドは `chain.delete()` でハンドルを解放します。ネイティブアドオンは冪等な `destroy()` を公開し、`[Symbol.dispose]` も実装しているので Node 22+ では `using` が使えます。ネイティブハンドルは最終的には GC でも回収されますが、リクエストごとにチェーンを生成するような長寿命プロセスでは明示的に解放しないとネイティブメモリが積み上がります。
 
 関連するマスタリングガイド: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)、[品質チェックリスト](./glossary/mastering/quality-checklist.md)。
 

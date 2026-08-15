@@ -185,16 +185,16 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | 拍子・グルーブ・シンコペーション。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength` |
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター。`options`: `windowSec`、`hopLength`、`compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | 明るさ・暖かさ・密度・粗さ・複雑さと、窓ごとの `timbreOverTime`。`options`: `nFft`、`hopLength`、`nMels`、`nMfcc`、`windowSec` |
-| `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | 構造セクション（イントロ／ヴァース／コーラスなど）と時刻。`options`: `nFft`、`hopLength`、`minSectionSec`。長尺入力では境界グリッドがプーリングされる場合があるため、配置には各セクションの `start` / `end` を使います |
+| `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | 構造セクション（イントロ／Aメロ／サビなど）と時刻。`options`: `nFft`、`hopLength`、`minSectionSec`。長尺入力では境界グリッドがプーリングされる場合があるため、配置には各セクションの `start` / `end` を使います |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | 主旋律の輪郭（フレームごとの F0）。`options`: `fmin`、`fmax`、`frameLength`、`hopLength`、`threshold`、`usePyin`、`center` |
-| `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | 録音からの室内音響（RT60 など）。`options`: `nOctaveBands`、`nThirdOctaveSubbands`、`minDecayDb`、`noiseFloorMarginDb` |
-| `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | 測定済みインパルス応答からの室内音響。`minDecayDb` は減衰フィットのしきい値（既定 `30`） |
-| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 体積、寸法、DRR、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
-| `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR |
+| `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | 録音からのルーム音響（残響が 60 dB 減衰するまでの時間である RT60 など）。`options`: `nOctaveBands`、`nThirdOctaveSubbands`、`minDecayDb`、`noiseFloorMarginDb` |
+| `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | 測定済みインパルス応答（IR）からのルーム音響。`minDecayDb` は減衰フィットのしきい値（既定 `30`） |
+| `estimateRoom(samples, sampleRate?, options?)` | `RoomEstimateResult` | 体積、寸法、DRR（直接音と残響音のエネルギー比）、吸音率バンド、RT60 バンド、信頼度を含む等価ルーム推定 |
+| `synthesizeRir(options?)` | `RirResult` | シューボックス形状からのモノラル RIR（ルームインパルス応答） |
 | `roomMorph(samples, sampleRate, options?)` | `Float32Array` | 目標ルームへ寄せるオフラインのルームモーフィング |
 | `lufs(samples, sampleRate?)` | `LufsResult` | 統合値、最後のモーメンタリー／ショートターム窓、EBU R128 の最大値（Max-M / Max-S）、ラウドネスレンジ |
 | `lufsInterleaved(samples, channels, sampleRate?)` | `LufsResult` | インターリーブサンプルからチャンネル重み付きマルチチャンネルラウドネスを測定 |
-| `ebur128LoudnessRange(samples, sampleRate?)` | `number` | EBU R128 loudness range（LRA、LU 単位） |
+| `ebur128LoudnessRange(samples, sampleRate?)` | `number` | EBU R128 準拠のラウドネスレンジ（LRA、LU 単位） |
 | `momentaryLufs(samples, sampleRate?)` | `Float32Array` | モーメンタリーラウドネス（400ms）の時系列 |
 | `shortTermLufs(samples, sampleRate?)` | `Float32Array` | ショートタームラウドネス（3s）の時系列 |
 | `version()` | `string` | ライブラリバージョン |
@@ -244,15 +244,38 @@ Node アドオンは、Promise 返却版も公開しています。これらは 
 | `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | 無音区間をトリム（既定: `-60.0` dB、`frameLength=2048`、`hopLength=512`） |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | 目標サンプルレートへリサンプリング |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | 保持された音を MIDI ピッチ間で補正 |
+| `pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sr?, hopLength?, voiced?, voicedProb?)` | `Float32Array` | 追跡したピッチ輪郭を、フレーム単位で固定の音へリチューン。`voiced` は `VoicedFlags` を受け取る |
+| `pitchCorrectTimevarying(samples, f0Hz, sr?, hopLength?, options?)` | `Float32Array` | 追跡したピッチ輪郭をスケールまたは固定音へスナップ。`options` は `PitchCorrectOptions` で、その `voiced` フィールドも `VoicedFlags` を受け取る |
 | `noteStretch(samples, sr?, options?)` | `Float32Array` | 1 つの音の区間をその場でタイムストレッチ。`options` は `{ onsetSample, offsetSample, stretchRatio }` |
 | `voiceChange(samples, sr?, options?)` | `Float32Array` | ボイス変換のためのピッチ＋フォルマントシフト。`options` は `{ pitchSemitones, formantFactor }` |
 
 `trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の `trimSilence(...)` は
 librosa 互換のフレーム RMS ベースのヘルパーで、元音源上のサンプル範囲も返します。
 
-`hpss(...)` と `hpssWithResidual(...)` は、メディアンフィルタのカーネルを既定で
+`hpss(...)` と `hpssWithResidual(...)` は、メディアンフィルターのカーネルを既定で
 `kernelHarmonic=31`、`kernelPercussive=31` とします。リクエストオブジェクト形式でも
 位置引数形式と同じ `nFft`、`hopLength`、`hardMask` の名前を使います。
+
+`VoicedFlags` は `Int32Array | Uint8Array | Float32Array | readonly number[] |
+readonly boolean[]` です。`PitchResult.voicedFlag` が返す `boolean[]` を、変換なしで
+そのままピッチ補正へ渡せます。
+
+```typescript
+const pitch = pitchPyin(samples, sampleRate);
+const tuned = pitchCorrectToMidiTimevarying(
+  samples,
+  pitch.f0,
+  69,
+  sampleRate,
+  512,
+  pitch.voicedFlag,   // boolean[] is accepted as-is
+  pitch.voicedProb,
+);
+```
+
+`voiced` と `voicedProb` は、どちらも `f0Hz` と同じ長さである必要があります。長さが
+食い違うと `RangeError`（`'voiced must have the same length as f0Hz'`）を投げます。
+`SonareError` ではないため `isSonareError` では捕捉できません。
 
 ### 特徴抽出関数
 
@@ -281,19 +304,18 @@ librosa 互換のフレーム RMS ベースのヘルパーで、元音源上の�
 | `vqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?, gamma?)` | `CqtResult` | 可変 Q 変換の振幅（`gamma` で Q を制御） |
 | `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q クロマグラム（`librosa.feature.chroma_cqt` 相当） |
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS クロマグラム（音符活性化クロマ）。`options.hopLength` の既定値は `512` |
-| `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?)` | `DecomposeResult` | 行優先スペクトログラムから NMF 分解行列を返す |
+| `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | 行優先スペクトログラムから NMF（非負値行列因子分解）の分解行列を返す。`init` を選択できる（`'random'` 既定、`'nndsvd'`） |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | ハイブリッド CQT 振幅（低域は真の CQT、高域は擬似 CQT） |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 近似（擬似）CQT 振幅（単一 FFT） |
 | `bassChroma(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | 低域重視クロマ（低音域のピッチクラス分布） |
 | `chromaCens(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | CENS エネルギー正規化・平滑化クロマ |
 | `onsetStrengthMulti(samples, sr?, nFft?, hopLength?, nMels?, nBands?)` | `{ nBands, nFrames, data }` | マルチバンドオンセット強度（`nBands` 既定 3、`data` は行優先 `[nBands x nFrames]`） |
-| `decomposeWithInit(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | `init` を選択できる NMF 分解行列（`'random'` 既定、`'nndsvd'`） |
 | `nnFilter(s, nFeatures, nFrames, aggregate?, k?, width?)` | `Matrix2dResult` | 近傍フィルタ |
-| `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | オンセット強度包絡（テンポグラム系の入力） |
+| `onsetEnvelope(samples, sr?, nFft?, hopLength?, nMels?)` | `Float32Array` | オンセット強度の包絡線。フレームごとにエネルギーがどれだけ急に立ち上がったかを表し、テンポグラム系の入力になります |
 
 主な既定値は、`nFft=2048`、`hopLength=512`、`nMels=128`、`nMfcc=20`、ピッチ検出の `fmin=65.0`、`fmax=2093.0`、`threshold=0.1`、`rollPercent=0.85` です。
 
-CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`bassChroma` と `chromaCens` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decomposeWithInit` は `nIter=50`・`beta=2`・`init='random'` が既定です。
+CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chromaCqt` の既定は `nChroma=12`、`nBins=252`、`binsPerOctave=36` です。`bassChroma` と `chromaCens` は `nChroma=12`、`onsetStrengthMulti` は `nBands=3`、`decompose` は `nIter=50`・`beta=2`・`init='random'` が既定です。
 
 ### 逆再構成関数
 
@@ -302,8 +324,8 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を�
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `melToStft(mel, nMels, nFrames, sampleRate?, nFft?, fmin?, fmax?, htk?)` | `InverseStftResult` | メルスペクトログラムから線形 STFT パワーへ |
-| `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, nIter?, fmin?, fmax?)` | `Float32Array` | メルスペクトログラムから音声へ（Griffin-Lim） |
-| `mfccToMel(mfcc, nMfcc, nFrames, nMels?)` | `InverseMelResult` | MFCC 係数からメルスペクトログラムへ |
+| `melToAudio(mel, nMels, nFrames, sr?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | メルスペクトログラムから音声へ（Griffin-Lim） |
+| `mfccToMel(mfcc, nMfcc, nFrames, nMels?, lifter?)` | `InverseMelResult` | MFCC 係数からメルスペクトログラムへ |
 | `mfccToAudio(mfcc, nMfcc, nFrames, nMels?, sampleRate?, nFft?, hopLength?, fmin?, fmax?, nIter?, htk?)` | `Float32Array` | MFCC 係数から音声へ |
 | `cqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, nIter?)` | `Float32Array` | row-major CQT 振幅行列から音声へ（Griffin-Lim） |
 | `vqtToAudio(magnitude, nBins, nFrames, sampleRate?, hopLength?, fmin?, binsPerOctave?, gamma?, nIter?)` | `Float32Array` | row-major VQT 振幅行列から音声へ（Griffin-Lim） |
@@ -340,7 +362,7 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を�
 | `tonnetz(chromagram, nChroma, nFrames)` | `Float32Array` | `librosa.feature.tonnetz`（`[6 x nFrames]`） |
 | `tempogram(onsetEnvelope, sr?, hopLength?, winLength?, mode?)` | `{ nFrames: number; winLength: number; data: Float32Array }` | `librosa.feature.tempogram`。`mode` は `'autocorrelation'`（既定）または `'cosine'` |
 | `fourierTempogram(onsetEnvelope, sr?, hopLength?, winLength?)` | `{ nBins: number; nFrames: number; data: Float32Array }` | `librosa.feature.fourier_tempogram` |
-| `cyclicTempogram(onsetEnvelope, sr, hopLength?, winLength?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | 巡回（テンポオクターブ不変）テンポグラム |
+| `cyclicTempogram(onsetEnvelope, sr?, hopLength?, winLength?, center?, norm?, bpmMin?, nBins?)` | `{ nFrames: number; nBins: number; data: Float32Array }` | 巡回（テンポオクターブ不変）テンポグラム |
 | `tempogramRatio(tempogramData, winLength?, sr?, hopLength?, factors?)` | `Float32Array` | `librosa.feature.tempogram_ratio`。factors の既定値は `[0.5, 1, 2, 3, 4]` |
 | `plp(onsetEnvelope, sr?, hopLength?, tempoMin?, tempoMax?, winLength?)` | `Float32Array` | `librosa.beat.plp` |
 
@@ -365,17 +387,18 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を�
 
 ### メータリング関数
 
-レベル・ダイナミクス・ステレオイメージを測る単体メーターです。各関数は `validate` フラグ(既定 `true`)を持つ `options` を任意で受け取ります。ホットパスでは `{ validate: false }` を渡して NaN/Inf 入力チェックを省略できます。ステレオメーターは `left` と `right` が同じ長さである必要があります。
+レベル・ダイナミクス・ステレオイメージを測る単体メーターです。各関数は `validate` フラグ（既定 `true`）を持つ `options` を任意で受け取ります。ホットパスでは `{ validate: false }` を渡して NaN/Inf 入力チェックを省略できます。ステレオメーターは `left` と `right` が同じ長さである必要があります。
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `meteringPeakDb(samples, sr?, options?)` | `number` | サンプルピーク(dBFS) |
-| `meteringRmsDb(samples, sr?, options?)` | `number` | RMS レベル(dBFS) |
-| `meteringCrestFactorDb(samples, sr?, options?)` | `number` | クレストファクター、ピーク − RMS(dB) |
-| `meteringDcOffset(samples, sr?, options?)` | `number` | 平均(DC)オフセット、リニア振幅 |
-| `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | インターサンプル(トゥルー)ピーク(dBFS)。`oversampleFactor` は 1..16 の 2 の冪(既定 4) |
-| `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | クリップしたサンプルの連続区間。`options` で `threshold`(既定 `0.999`)と `minRegionSamples`(既定 `1`)を指定 |
-| `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`options` で `windowSec`・`hopSec`・`lowPercentile`・`highPercentile` を指定(省略時は既定値の窓 3 秒・ホップ 1 秒・low 0.10・high 0.95) |
+| `meteringPeakDb(samples, sr?, options?)` | `number` | サンプルピーク（dBFS） |
+| `meteringRmsDb(samples, sr?, options?)` | `number` | RMS レベル（dBFS） |
+| `meteringCrestFactorDb(samples, sr?, options?)` | `number` | クレストファクター（ピーク − RMS、dB）。値が大きいほどピークとレベルの差が大きく、圧縮されていない信号を意味します |
+| `meteringCrestFactorDbStereo(request)` | `number` | チャンネルペアのクレストファクター（dB）。ピークは左右をまたいで取り、RMS は左右まとめて測ります。リクエスト専用で、`MeteringStereoRequest`（`{ left, right, sampleRate?, validate? }`）だけを受け取り、位置引数のオーバーロードはありません |
+| `meteringDcOffset(samples, sr?, options?)` | `number` | 平均（DC）オフセット、リニア振幅 |
+| `meteringTruePeakDb(samples, sr?, oversampleFactor?, options?)` | `number` | サンプル間ピーク（ISP、いわゆる True Peak。サンプル点の間で波形が到達する最大値、dBFS）。`oversampleFactor` は 1..16 の 2 の冪（既定 4） |
+| `meteringDetectClipping(samples, sr?, options?)` | `ClippingReport` | クリップしたサンプルの連続区間。`options` で `threshold`（既定 `0.999`）と `minRegionSamples`（既定 `1`）を指定 |
+| `meteringDynamicRange(samples, sr?, options?)` | `DynamicRangeReport` | スライディングウィンドウのダイナミックレンジ。`options` で `windowSec`・`hopSec`・`lowPercentile`・`highPercentile` を指定（省略時は既定値の窓 3 秒・ホップ 1 秒・low 0.10・high 0.95） |
 | `meteringStereoCorrelation(left, right, sr?, options?)` | `number` | 非中心化相関（コサイン類似度）、−1..1 |
 | `meteringStereoWidth(left, right, sr?, options?)` | `number` | サイド／ミッドのエネルギー比。0 = モノラル、約 1 = 広いステレオ。上限なし（ミッドが無音なら `Infinity`） |
 | `meteringVectorscope(left, right, sr?, options?)` | `VectorscopeReport` | サンプルごとのミッド/サイド点列 |
@@ -386,9 +409,43 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を�
 | `waveformPeaks(samples, channels, options?)` | `WaveformPeaksReport` | インターリーブ音声からチャンネルごとの min/max 波形バケットを算出。`options.samplesPerBucket` の既定値は `512` |
 | `waveformPeakPyramid(samples, channels, options?)` | `WaveformPeaksReport[]` | 複数のズームレベル向けの波形ピークバケット。`options.samplesPerBucketLevels` の既定値は `[512, 1024, 2048, 4096]` |
 
+左右が逆相になりうる素材では `meteringCrestFactorDbStereo(...)` を使ってください。逆相のペアは `meteringCrestFactorDb(...)` が必要とする `0.5 * (left + right)` のダウンミックスで打ち消し合い、RMS が小さく出るぶんクレストファクターが過大に出ます。完全な逆相ペアでの実測値は、ステレオ版が 11.64 dB、ダウンミックス経由が 0.00 dB でした。
+
+### マスタリング解析関数
+
+説明可能なマスタリングのヘルパーは JSON 文字列を返します。正確な形は [マスタリングアシスタント](./mastering-assistant.md) を参照してください。下のステレオ版はいずれもリクエスト専用で、リクエストオブジェクト 1 つだけを受け取ります。位置引数のオーバーロードはなく、位置引数で呼ぶと例外になります。
+
+| 関数 | 戻り値 | 説明 |
+|------|--------|------|
+| `masteringAudioProfileStereo(request)` | `string` | チャンネルペアのマスタリングアシスタントプロファイルを JSON で返す。`MasteringAudioProfileStereoRequest` を受け取る |
+| `masteringAssistantSuggestStereo(request)` | `string` | チャンネルペアに対するマスタリングの提案を JSON で返す。`MasteringAssistantSuggestStereoRequest` を受け取る |
+| `masteringStreamingPreviewStereo(request)` | `string` | チャンネルペアの配信ラウドネスのプレビューを JSON で返す。`MasteringStreamingPreviewStereoRequest` を受け取る。`platforms` を省略するか空配列を渡すと、例外ではなく組み込みの Spotify / Apple Music / YouTube のセット（3 行）にフォールバックする |
+
+```typescript
+import { masteringAudioProfileStereo, masteringStreamingPreviewStereo } from '@libraz/libsonare-native';
+
+const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
+const preview = JSON.parse(
+  masteringStreamingPreviewStereo({
+    left,
+    right,
+    sampleRate,
+    platforms: [{ name: 'Spotify', targetLufs: -14, ceilingDb: -1 }],
+  }),
+);
+```
+
+ステレオ素材ならステレオ版を使ってください。モノラル版は `0.5 * (left + right)` のダウンミックスを計測するため、相関の低い素材では約 6 dB 低く出ます。積分ラウドネス、そこから導かれる正規化ゲイン、天井に当たるリスクの判断が、そろって同じぶんだけ過小に報告されます。相関の低いピンクノイズのペア（48 kHz、4 秒）での実測値は、ダウンミックス経由が -22.55 LUFS、ステレオ版が -16.44 LUFS で、差は 6.11 dB でした。Spotify の `normalizationGainDb` もダウンミックス経由が +8.55、ステレオ版が +2.44 です。
+
+ステレオプロファイルのうち、左右両チャンネルから計測されるのは `loudness` ブロックだけです。積分 LUFS と LRA はチャンネル加算したプログラムから求め、True Peak は左右の大きいほうを採ります。スペクトル、ダイナミクス、テンポの各フィールドはダウンミックス上で計測されるため、`masteringAudioProfile` の値とそのまま比較できます。
+
+::: warning リクエスト型の名前がバインディングごとに違います
+Node はプロファイル用と提案用で 2 つの型名を宣言しています。`MasteringAudioProfileStereoRequest` は `MasteringAssistantSuggestStereoRequest` を継承し、フィールドを追加しません。WASM パッケージは両方に共通の `MasteringStereoParamsRequest` を使います。フィールドは同一なので、両者の間でコードを移植するときに変えるのは型名だけです。
+:::
+
 ### スケール量子化
 
-ピッチ補正ターゲットを構築するための 12-TET スケールヘルパーです。
+ピッチ補正ターゲットを構築するための 12-TET（12 平均律）スケールヘルパーです。
 
 `modeMask` は 12 ビットのマスクです。ビット *i* が、`root`（`PitchClass`、C = 0）を基準とした *i* 番目のピッチクラスを有効化します。自然な長調は `0b101010110101` です。
 
@@ -470,8 +527,9 @@ changer.destroy();
 `Project.create()` は空のプロジェクトを作成します。`setAssistSidecar(...)` と
 `assistSidecars()` でモジュール固有の不透明なメタデータを保持でき、
 `ProjectAutomationTargetKind` と `targetKind` でオートメーションレーンの対象種別を付けられます。
-`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、`'pfl'`、
-`'afl'`（および数値序数）を受け取ります。トラック／ミキサーのパン則セッターは、下記の
+`RealtimeEngine.setTrackMonitorMode(laneIndex, mode, renderFrame?)` は `'off'`、
+`'pfl'`（pre-fader listen＝フェーダー前で試聴）、`'afl'`（after-fader listen＝フェーダー後で試聴）、
+および対応する数値序数を受け取ります。トラック／ミキサーのパン則セッターは、下記の
 `PanLawInput` エイリアスを受け取ります。
 
 ### 型定義
@@ -571,6 +629,39 @@ interface PitchResult {
   medianF0: number;
   meanF0: number;
 }
+
+// Per-frame voicing decision, one entry per f0Hz frame. Accepted by the
+// `voiced` argument and by PitchCorrectOptions.voiced.
+type VoicedFlags =
+  | Int32Array
+  | Uint8Array
+  | Float32Array
+  | readonly number[]
+  | readonly boolean[];
+
+interface MasteringAssistantSuggestStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  params?: Record<string, number | boolean>;
+}
+
+// Same fields; a distinct name for the profile entry point.
+interface MasteringAudioProfileStereoRequest extends MasteringAssistantSuggestStereoRequest {}
+
+interface MasteringStreamingPreviewStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  platforms?: StreamingPlatform[];
+}
+
+interface MeteringStereoRequest {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate?: number;
+  validate?: boolean;
+}
 ```
 
 ネイティブパッケージは、オプション、コールバック、ストリーミングスナップショット、リアルタイムエンジンメッセージ用の TypeScript 補助型もエクスポートしています。アプリ側で同じ構造を再定義せず、これらの型名を使ってください。
@@ -580,6 +671,8 @@ interface PitchResult {
 | 解析オプション／結果 | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
 | ストリーミング解析 | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | マスタリングとメータリング | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
+| ステレオのマスタリング／メータリングのリクエスト | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest` |
+| ピッチ補正 | `PitchCorrectOptions`, `VoicedFlags` |
 | ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
 | リアルタイム音声 | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |
 | リアルタイムエンジングラフ | `EngineGraphSpec`, `EngineGraphNode`, `EngineGraphNodeType`, `EngineGraphConnection`, `EngineGraphMix`, `EngineGraphParameterBinding`, `EngineParameterInfo` |

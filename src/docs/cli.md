@@ -71,7 +71,7 @@ package does not have. Get it from a release archive, or see
 - Analysis: `sections`, `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
 - Effects / transforms: `preemphasis`, `deemphasis`, `split-silence`, `gain`, `fade`, `filter`
 - Synthesis: `tone`, `chirp`, `clicks`
-- Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (short alias for `onset-envelope`), `fourier-tempogram`, `tempogram-ratio`
+- Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (onset-envelope summary: peak time, peak strength, mean), `fourier-tempogram`, `tempogram-ratio`
 - librosa utilities: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
 - Mixing: `mix-strip` (single-input channel strip; `mix` is kept as a deprecated alias)
 - Mastering: `mastering-pair-processor` (process a source/reference pair), `mastering-stereo-analyses`, `mastering-stereo-analyze`
@@ -319,7 +319,7 @@ sonare chroma music.mp3 --json
 
 ### spectral
 
-Compute spectral features (centroid, bandwidth, rolloff, flatness, ZCR, RMS).
+Compute spectral features: centroid, bandwidth, rolloff, flatness, ZCR (zero-crossing rate), and RMS (root mean square level).
 
 ```bash
 sonare spectral music.mp3
@@ -340,7 +340,7 @@ sonare spectral music.mp3 --json
 
 ### pitch
 
-Track pitch using YIN or pYIN algorithm.
+Track pitch over time with the YIN or pYIN fundamental-frequency estimator.
 
 ```bash
 sonare pitch music.mp3
@@ -365,7 +365,7 @@ sonare pitch music.mp3 --algorithm yin
 
 ### hpss
 
-Harmonic-Percussive Source Separation.
+Harmonic-Percussive Source Separation (HPSS): splits a mix into its harmonic component (vocals, melody, sustained tones) and its percussive component (drums, transients).
 
 ```bash
 sonare hpss music.mp3 -o separated
@@ -399,6 +399,8 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 
 ::: info Room-acoustic command terms
 **Equivalent room** means a useful model inferred from audio, not exact measured geometry. **RIR** means room impulse response. **Room morphing** is a creative room effect, not dereverberation.
+
+The metrics these commands report are decay and clarity descriptors: **RT60** is the reverberation time, **EDT** the early decay time, **C50** and **C80** clarity ratios, and **DRR** the direct-to-reverberant ratio. Each field is defined in [Room Acoustics](./acoustic-analysis.md).
 :::
 
 | Command | Description | Notable options |
@@ -408,7 +410,7 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 | `sonare rhythm music.mp3` | Rhythm primitives (syncopation, groove, regularity) | `--start-bpm` (120.0), `--bpm-min` (60.0), `--bpm-max` (200.0) |
 | `sonare dynamics music.mp3` | Dynamics / loudness summary | `--window-sec` (0.4) |
 | `sonare timbre music.mp3` | Timbre / spectral-shape summary | — |
-| `sonare lufs music.mp3` | EBU R128 loudness | `--series` (also emit momentary/short-term series) |
+| `sonare lufs music.mp3` | EBU R128 loudness in LUFS (Loudness Units relative to Full Scale, the standard perceptual loudness unit — see [Delivery targets](./glossary/mastering/delivery-targets.md)) | `--series` (also emit momentary/short-term series) |
 | `sonare acoustic room.wav` | Room-acoustic estimate (RT60/EDT/C50/C80) | `--ir` (treat input as an impulse response), `--n-bands` (6), `--min-decay-db` (30.0), `--noise-floor-margin-db` (10.0) |
 | `sonare estimate-room room.wav` | Equivalent room estimate: volume, dimensions, absorption, DRR, confidence | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
@@ -423,8 +425,8 @@ The Python CLI ships many more subcommands than the core set above. Audio-file a
 
 | Command | Python CLI | Native CLI | Description |
 |---------|------------|----------------------|-------------|
-| `sonare onset-envelope music.mp3` | Yes | Yes | Onset strength envelope |
-| `sonare onset-env music.mp3` | No | Yes | Short alias for onset strength envelope |
+| `sonare onset-envelope music.mp3` | Yes | Yes | Onset strength envelope (how strongly notes attack over time); the native CLI's `--json` carries the full `values` array plus mean/std/min/max |
+| `sonare onset-env music.mp3` | No | Yes | Same envelope, summary only: frame count, peak time, peak strength, mean — no array |
 | `sonare tempogram music.mp3` | Yes | Yes | Autocorrelation tempogram |
 | `sonare plp music.mp3` | Yes | Yes | Predominant local pulse |
 | `sonare nnls-chroma music.mp3` | Yes | Yes | NNLS chromagram |
@@ -446,7 +448,7 @@ These transform audio and write a WAV with `-o`:
 | Command | Description | Options |
 |---------|-------------|---------|
 | `sonare pitch-correct vocal.wav -o out.wav` | Pitch-correct toward a target MIDI note | `--current-midi` (69.0), `--target-midi` (69.0) |
-| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | Track a pYIN contour and correct it to one note or a scale | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--retune-amount`, `--retune-speed-ms` |
+| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | Track a pYIN contour and correct it to one note or a scale | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--reference-midi`, `--hop-length` |
 | `sonare note-move take.wav --target-onset 48000 -o out.wav` | Move one note region to a sample offset | `--onset`, `--offset`, `--target-onset` (sample indices) |
 | `sonare note-stretch take.wav -o out.wav` | Time-stretch a single note region | `--onset`, `--offset` (sample indices), `--ratio` (1.0) |
 | `sonare scale-quantize 68.7` | Quantize one MIDI value to a scale | `--root`, `--mode-mask`, `--reference-midi` |
@@ -478,7 +480,8 @@ The native CLI includes the shared edit commands and adds lower-level processing
 | `gain` | `-o`, `--gain-db` |
 | `fade` | `-o`, `--fade-in` and/or `--fade-out` |
 | `filter` | `-o`, `--type hp\|lp\|bp\|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch |
-| `preemphasis`, `deemphasis`, `split-silence` | `-o` when writing a processed file |
+| `preemphasis`, `deemphasis` | `-o` when writing a processed file; `--coef` (0.97) |
+| `split-silence` | `--top-db` (60.0). Prints the non-silent intervals to stdout; it writes no file, so `-o` is a usage error (exit code 2) |
 
 ### Realtime voice presets
 
@@ -664,7 +667,7 @@ Named mastering commands in the Python CLI:
 | Apply a named mastering preset | `sonare master` |
 | Run a configurable mastering chain | `sonare mastering-chain` |
 | List mastering preset names | `sonare mastering-presets` |
-| Repair clipped audio (LPC reconstruction) | `sonare declip` |
+| Repair clipped audio (reconstruction by linear predictive coding, LPC) | `sonare declip` |
 | Apply the unified equalizer | `sonare eq` |
 | List mono/stereo processors | `sonare mastering-processors` |
 | Apply a named processor | `sonare mastering-processor` |
@@ -690,7 +693,7 @@ The preset, chain, and repair commands take an audio file and write a WAV with `
 | Command | Key options | Notes |
 |---------|------------|-------|
 | `sonare master track.wav -o out.wav` | `--preset NAME` (default `pop`), `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Applies a named mastering preset; `--config`/`--config-file`/`--params` override preset values; `--report` writes a mastering report JSON file |
-| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | Runs a configurable mastering chain from JSON config |
+| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | Runs a configurable mastering chain from JSON config |
 | `sonare mastering-presets` | honors the global `--json` flag | Lists the available mastering preset names |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold` (0.98), `--lpc-order` (36), `--iterations` (2), `--lpc-blend` (0.65) | Repairs clipped audio via LPC reconstruction |
 
@@ -730,8 +733,9 @@ sonare mix \
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
-`mix` requires exactly one of `--scene` or `--preset`. Pass one `--input` per
-strip; rendering to a file needs `-o/--output`.
+`mix` requires `--scene` or `--preset`; if both are given, `--scene` wins. Pass
+one `--input` per strip. `--input` and `-o/--output` go together — either both or
+neither, and without them `mix` just loads the scene and reports its strip count.
 
 The native CLI's single-input channel strip is a different command with a
 different job, and it is now called `mix-strip`:
@@ -803,7 +807,7 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | Validate a project JSON; optionally write canonicalized JSON | `--in`, `-o`, `--strict` (any diagnostic fails) |
 | `sonare project compile` | Compile-check a project JSON; prints diagnostics, exits non-zero on errors (writes no file) | `--in`, `--json` |
 | `sonare project synth-presets` | List the NativeSynth preset names `--synth` accepts | `--json` |
-| `sonare project bounce` | Render a project to a WAV at the requested channel count | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
+| `sonare project bounce` | Render a project to a WAV at the requested channel count | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `-o` |
 | `sonare project export-smf` | Export the project to a Standard MIDI File | `--in`, `-o` |
 | `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |
 | `sonare project export-midi2` | Export the project to a MIDI 2.0 Clip File | `--in`, `-o` |

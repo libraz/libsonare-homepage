@@ -187,27 +187,27 @@ sonare analyze song.mp3 --json > analysis.json
 :::
 
 ::: details 「セクション」と「フォーム」とは？
-**セクション** は曲の構造的なパートです。イントロ、ヴァース、コーラス、ブリッジ、アウトロのように、音楽的な性格が変わる場所から検出します。
+**セクション** は曲の構造的なパートです。イントロ、Aメロ、サビ、ブリッジ、アウトロのように、音楽的な性格が変わる場所から検出します。
 
-**フォーム** は、それらのセクションをコンパクトなパターンで表した曲全体の構成です。たとえば `イントロ-ヴァース-コーラス-ヴァース-コーラス-アウトロ` や `ABABCB` のように書きます。
+**フォーム** は、それらのセクションをコンパクトなパターンで表した曲全体の構成です。たとえば `イントロ-Aメロ-サビ-Aメロ-サビ-アウトロ` や `ABABCB` のように書きます。
 
 両者は「この曲が時間軸上でどう構成されているか」に答えます。
 :::
 
-### 室内音響メトリクス
+### ルーム音響メトリクス
 
 まず、手元の入力や目的から選びます。
 
 | 入力または目的 | 使う API |
 |----------------|----------|
-| 測定済みのインパルスレスポンス | `analyzeImpulseResponse()` |
+| 測定済みのインパルス応答（IR） | `analyzeImpulseResponse()` |
 | 通常の音楽・音声録音 | `detectAcoustic()` |
 | 音声から実用的な部屋モデルを推定する | `estimateRoom()` |
-| 部屋寸法からインパルスレスポンスを作る | `synthesizeRir()` |
+| 部屋寸法からインパルス応答を作る | `synthesizeRir()` |
 | 目標ルームへ寄せる音作り効果 | `roomMorph()` |
 
 ::: info RIR と等価ルーム
-**RIR** は room impulse response の略で、部屋が短い音にどう反応するかを表す音声サンプルです。**等価ルーム** は、音声から推定した実用上のモデルであり、実際の部屋を正確にスキャンした結果ではありません。
+**RIR** は room impulse response（ルームインパルス応答）の略で、部屋が短い音にどう反応するかを表す音声サンプルです。**等価ルーム** は、音声から推定した実用上のモデルであり、実際の部屋を正確にスキャンした結果ではありません。
 :::
 
 ブラインド推定と等価ルーム推定はタグ付けやモニタリングに便利です。UI で強く見せるかどうかは `confidence` を見て判断してください。
@@ -255,7 +255,7 @@ print(f"推定ルーム: {estimate.length:.1f} x {estimate.width:.1f} x {estimat
 ```
 
 ```bash [CLI]
-# 測定済みインパルスレスポンスとして扱う:
+# 測定済みインパルス応答として扱う:
 sonare acoustic room-ir.wav --ir --json
 
 # 通常の音声から音響パラメータを推定する:
@@ -402,6 +402,8 @@ sonare chroma song.mp3 --json
 
 ### ピッチ検出
 
+ピッチ検出は F0（基本周波数。周期的な音の最も低い周波数で、人が音の高さとして聞き取る成分）をフレームごとに推定します。単旋律の音声からメロディラインを取り出すのはこの値です。
+
 ::: code-group
 
 ```typescript [ブラウザ]
@@ -464,7 +466,7 @@ const analyzer = new StreamAnalyzer({
   computeMel: true,
   computeChroma: true,
   computeOnset: true,
-  emitEveryNFrames: 4, // 4 フレームごとに出力（約 60fps）
+  emitEveryNFrames: 4, // emit one frame per 4 hops (~21 fps at 44.1 kHz with hopLength 512)
 });
 
 // 入力音声チャンクを処理
@@ -697,7 +699,7 @@ int main() {
 ## C API
 
 ```c
-#include <sonare_c.h>
+#include <sonare/sonare_c.h>
 #include <stdio.h>
 
 static const char* kPitchNames[] = {

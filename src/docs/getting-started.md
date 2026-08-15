@@ -131,8 +131,10 @@ and available commands.
 
 ### Node.js (Native)
 
-Use the N-API package when you need native file loading and desktop/server-side
-performance from Node.js. It is currently source-build oriented.
+Use the N-API package — N-API is Node.js's native addon interface, so libsonare
+runs as compiled machine code instead of WebAssembly — when you need native file
+loading and desktop/server-side performance from Node.js. It is currently
+source-build oriented.
 
 ```bash
 git clone https://github.com/libraz/libsonare.git
@@ -156,7 +158,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 ## What libsonare Can Analyze
 
 ::: info Room-acoustic terms in the list
-**RIR** means room impulse response. **Equivalent-room estimate** means a practical room model inferred from audio, not exact measured geometry. **Room morphing** is a creative room effect.
+**RIR** means room impulse response — a recording of how a space rings. **Equivalent-room estimate** means a practical room model inferred from audio, not exact measured geometry. **Room morphing** is a creative room effect.
 :::
 
 - **BPM Detection** - Tempo estimation using tempogram and autocorrelation
@@ -181,7 +183,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **MFCC** — compact timbre features often used for ML or classification.
 - **CQT / VQT** — frequency analyses shaped around musical pitch spacing.
 - **HPSS** — harmonic/percussive source separation.
-- **LUFS / True Peak** — mastering metrics for perceived loudness and peak safety.
+- **LUFS / True Peak** — mastering metrics: LUFS (Loudness Units relative to Full Scale) for perceived loudness, true peak for peak safety including inter-sample peaks (ISP).
 - **Goniometer** — a stereo meter that visualizes width and phase behavior.
 :::
 

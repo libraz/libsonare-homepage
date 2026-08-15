@@ -198,9 +198,9 @@ console.log(`BPM: ${bpm}, Key: ${key.name}`);
 console.log(`Median pitch: ${pitch.medianF0.toFixed(1)} Hz`);
 ```
 
-CLI equivalents for the calls above. `analyze`, `hpss`, and `pitch` are available in the Python CLI; `pitch-shift` is from the source-built C++ CLI:
+CLI equivalents for the calls above. All four are available in the Python CLI:
 
-```bash [Mixed CLI]
+```bash
 sonare analyze music.mp3 --json
 sonare hpss music.mp3 -o separated --json
 sonare pitch-shift music.wav --semitones 2 -o shifted.wav
@@ -311,10 +311,11 @@ happened" rather than "half a master".
 ## Web Worker Usage
 
 The package ships a Worker client, so the common case needs no worker file of
-your own. Import `OfflineWorkerClient` from `@libraz/libsonare/worker`:
+your own. Import `OfflineWorkerClient` from the main entry point `@libraz/libsonare`
+(the `/worker` subpath is the worker-side entry, and exports `installOfflineWorkerEndpoint`):
 
 ```typescript
-import { OfflineWorkerClient } from '@libraz/libsonare/worker';
+import { OfflineWorkerClient } from '@libraz/libsonare';
 
 const client = new OfflineWorkerClient();
 
@@ -574,7 +575,7 @@ async function setupStreaming() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const source = audioCtx.createMediaStreamSource(stream);
 
-  // Create analyzer with throttling for 60fps
+  // Create analyzer with output-frame throttling
   const analyzer = new StreamAnalyzer({
     sampleRate: audioCtx.sampleRate,
     nFft: 2048,
@@ -583,7 +584,7 @@ async function setupStreaming() {
     computeMel: true,
     computeChroma: true,
     computeOnset: true,
-    emitEveryNFrames: 4, // emit every 4 frames (~60fps at 44100Hz)
+    emitEveryNFrames: 4, // emit one frame per 4 hops (~21 frames/s at 44100Hz, hopLength 512)
   });
 
   // Use ScriptProcessor for simplicity (AudioWorklet recommended for production)
@@ -617,7 +618,7 @@ async function setupStreaming() {
 
 ### AudioWorklet Integration
 
-For production use, run `StreamAnalyzer` in an AudioWorklet so analysis does not block the main thread. The example below shows a self-contained analyzer worklet.
+For production use, run `StreamAnalyzer` in an AudioWorklet — the browser's dedicated audio-rendering thread — so analysis does not block the main thread. The example below shows a self-contained analyzer worklet.
 
 ::: warning WASM in AudioWorklet
 Loading WASM in AudioWorklet requires special handling. The WASM module must be loaded and instantiated within the worklet context.
@@ -857,9 +858,9 @@ try {
 ```
 
 For file-based offline processing from the terminal, use the closest CLI
-commands. `pitch-shift` is from the source-built C++ CLI; `voice-change` is available in the Python CLI:
+commands. Both are available in the Python CLI:
 
-```bash [Mixed CLI]
+```bash
 sonare pitch-shift vocal.wav --semitones 3 -o shifted.wav
 sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.0 -o voice.wav
 ```
@@ -923,8 +924,7 @@ The published package ships a few coordinated pieces:
 
 - **Main module** — `sonare.js` plus `sonare.wasm`, the Emscripten build behind every analysis, mastering, mixing, and editing API.
 - **Main API entry** — the package `index` (`index.js` / `index.d.ts`) is the tsup bundle behind `import ... from '@libraz/libsonare'`; it exposes the all-in-one analysis, mastering, mixing, and editing API.
-- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries `SonareEngine`, the worklet processor classes, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
-- **AudioWorklet bridge** — `worklet.js` / `worklet.d.ts`, the self-contained bundle for `AudioWorkletGlobalScope` that exposes the `SonareEngine` API and processor registration helpers.
+- **AudioWorklet entry** — `worklet.js` / `worklet.d.ts`, a separate, self-contained tsup bundle (no code-splitting, so it is fully portable into an `AudioWorkletGlobalScope`); it carries the `SonareEngine` API, the worklet processor classes and their registration helpers, and the ring-buffer protocol, and re-exports only `init` / `isInitialized` from the main entry so the worklet realm can initialize its own WASM instance.
 - **Analysis-only module** — `sonare-analysis.js` / `sonare-analysis.wasm` behind the `@libraz/libsonare/analysis` entry, compiled without the mastering, mixing, realtime, and project bindings. CI records its size in a report, but size growth alone does not fail the build.
 - **Offline Worker entry** — `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
 - **Voice-changer JSON Schemas** — both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.

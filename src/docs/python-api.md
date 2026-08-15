@@ -39,7 +39,7 @@ Read this page in three passes:
 A single `analyze(...)` call returns the all-in-one analysis result — chords, sections, timbre, dynamics, rhythm, melody, form, and per-beat strength — matching the other bindings. Reach for the focused functions below when you only need one field or want per-call options.
 
 ::: info Default sample rate varies by family
-Music-analysis and metering helpers default to `sample_rate=22050`; room-acoustic helpers (`analyze_impulse_response`, `detect_acoustic`, `estimate_room`) default to `48000`. When you load with `Audio.from_file(...)`, always pass `audio.sample_rate` so the per-family default never silently applies to audio recorded at a different rate.
+Music-analysis and metering helpers default to `sample_rate=22050`; room-acoustic helpers (`analyze_impulse_response`, `detect_acoustic`, `estimate_room`) default to `48000`. When you load with `Audio.from_file(...)`, always pass `audio.sample_rate` so the per-family default never silently applies to audio recorded at a different rate. An impulse response (IR) here is a recording of how a space responds to one short burst of sound.
 :::
 
 ## Pick The Smallest API That Solves The Job
@@ -249,7 +249,7 @@ backtracked = sonare.onset_backtrack(onset_frames, energy)
 # Note segmentation from a monophonic F0 track.
 pitch = sonare.pitch_pyin(samples, sample_rate=48000)
 segments = sonare.note_segments(
-    pitch.f0_hz,
+    pitch.f0,
     pitch.voiced_prob,
     frame_rate=48000 / 512,
     min_note_ms=60.0,
@@ -416,7 +416,7 @@ Use these functions for the room or playback space, not for song structure.
 | Add a target-room character as an effect | `room_morph(...)` |
 
 ::: info Defaults and terms
-`analyze_impulse_response(...)` and `detect_acoustic(...)` return `AcousticResult` with RT60, EDT, C50, C80, D50, per-band arrays, confidence, and `is_blind`. Their `sample_rate` default is `48000`, unlike most music-analysis helpers that default to `22050`. RIR means room impulse response.
+`analyze_impulse_response(...)` and `detect_acoustic(...)` return `AcousticResult` with RT60, EDT, C50, C80, D50, per-band arrays, confidence, and `is_blind`. Their `sample_rate` default is `48000`, unlike most music-analysis helpers that default to `22050`. RIR means room impulse response. RT60 is the reverberation time — how long a tail takes to decay by 60 dB — while C50 and C80 are clarity ratios between early and late energy.
 :::
 
 ```python
@@ -537,15 +537,15 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `hybrid_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Hybrid CQT magnitude (CQT/pseudo-CQT blend across bins) |
 | `pseudo_cqt(samples, sample_rate?, hop_length?, fmin?, n_bins?, bins_per_octave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude |
 | `bass_chroma(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
-| `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
-| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?)` | `tuple[int, list[float]]` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) — returns `(n_frames, row-major 12 x n_frames data)` |
+| `chroma_cens(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | CENS energy-normalized/smoothed chroma |
+| `chroma_cqt(samples, sample_rate?, hop_length?, n_chroma?, bins_per_octave?)` | `ChromaResult` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) — `features` is row-major `[n_chroma x n_frames]` |
 | `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)`; `hop_length` defaults to `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | NMF decomposition `(w, h)` with a selectable initialiser; `init` defaults to `'random'`, also accepts `'nndsvd'` (SVD warm start) |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
-| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/final-window [LUFS](./glossary/lufs.md), Max-M / Max-S, and loudness range (EBU R128) |
+| `lufs(samples, sample_rate)` | `LufsResult` | Integrated/final-window [LUFS](./glossary/lufs.md) (Loudness Units relative to Full Scale), Max-M / Max-S, and loudness range (EBU R128) |
 | `lufs_interleaved(samples, channels, sample_rate?)` | `LufsResult` | Channel-weighted multichannel loudness from interleaved samples |
 | `ebur128_loudness_range(samples, sample_rate?)` | `float` | EBU R128 loudness range (LRA) in LU |
 | `momentary_lufs(samples, sample_rate)` | `list[float]` | Momentary LUFS per frame |
@@ -553,7 +553,7 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 
 Common defaults: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `roll_percent=0.85`.
 
-CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` defaults to `n_bins=252` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, and `hard_mask=False`.
+CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` and `chroma_cens` default to `n_chroma=12` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, and `hard_mask=False`.
 
 Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
 
@@ -565,7 +565,7 @@ Reconstruct a spectrum or audio from a mel spectrogram or MFCC matrix. Phase is 
 |----------|-------------|-------------|
 | `mel_to_stft(mel, n_mels, n_frames, sample_rate?, n_fft?, fmin?, fmax?, htk?)` | `InverseResult` | Linear STFT power from a mel spectrogram |
 | `mel_to_audio(mel, n_mels, n_frames, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from a mel spectrogram (Griffin-Lim) |
-| `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients |
+| `mfcc_to_mel(mfcc_coeffs, n_mfcc, n_frames, n_mels?, lifter?)` | `InverseResult` | Mel spectrogram (dB) from MFCC coefficients (`lifter` must match the forward `mfcc(...)` call) |
 | `mfcc_to_audio(mfcc_coeffs, n_mfcc, n_frames, n_mels?, sample_rate?, n_fft?, hop_length?, fmin?, fmax?, n_iter?, htk?)` | `list[float]` | Audio from MFCC coefficients |
 | `cqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, n_iter?)` | `list[float]` | Audio from a row-major CQT magnitude matrix (Griffin-Lim) |
 | `vqt_to_audio(magnitude, n_bins, n_frames, sample_rate?, hop_length?, fmin?, bins_per_octave?, gamma?, n_iter?)` | `list[float]` | Audio from a row-major VQT magnitude matrix (Griffin-Lim) |
@@ -581,6 +581,7 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_peak_db(samples, sample_rate?, *, validate?)` | `float` | Sample peak (dBFS) |
 | `metering_rms_db(samples, sample_rate?, *, validate?)` | `float` | RMS level (dBFS) |
 | `metering_crest_factor_db(samples, sample_rate?, *, validate?)` | `float` | Crest factor, peak − RMS (dB) |
+| `metering_crest_factor_db_stereo(left, right, sample_rate?, *, validate?)` | `float` | Crest factor measured across both channels — peak is the larger of the two, RMS is taken over both together |
 | `metering_dc_offset(samples, sample_rate?, *, validate?)` | `float` | Mean (DC) offset, linear amplitude |
 | `metering_silence_ratio(samples, sample_rate?, threshold_db?, frame_length?, hop_length?, *, validate?)` | `float` | Fraction of analysis frames whose RMS is below `threshold_db` (defaults: `threshold_db=-45.0`, `frame_length=1024`, `hop_length=256`) |
 | `metering_true_peak_db(samples, sample_rate?, oversample_factor?, *, validate?)` | `float` | Inter-sample (true) peak (dBFS); `oversample_factor` is a power of two in 1..16 (0 = default 4) |
@@ -588,12 +589,14 @@ Standalone level, dynamics, and stereo-image meters. Each accepts a keyword-only
 | `metering_dynamic_range(samples, sample_rate?, window_sec?, hop_sec?, low_percentile?, high_percentile?, *, validate?)` | `DynamicRangeReport` | Sliding-window dynamic range; pass `0.0` for `window_sec`/`hop_sec` defaults (3 s / 1 s); pass a negative value (the default `-1.0`) for `low_percentile`/`high_percentile` defaults (0.10 / 0.95) — `0.0` requests the 0th percentile, not the default |
 | `metering_stereo_correlation(left, right, sample_rate?, *, validate?)` | `float` | Uncentered correlation (cosine similarity), −1..1 |
 | `metering_stereo_width(left, right, sample_rate?, *, validate?)` | `float` | Mid/side stereo width |
-| `metering_vectorscope(left, right, sample_rate?, *, validate?)` | `VectorscopeReport` | Per-sample mid/side point series |
+| `metering_vectorscope(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | Mid/side point series; one point per sample unless `max_points` bounds it |
 | `metering_vectorscope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `VectorscopeReport` | Display-sized mid/side vectorscope; `max_points` upper-bounds the point count (`0` or a value ≥ buffer length = one point per sample, identical to `metering_vectorscope`); otherwise deterministically decimated, keeping the largest-radius sample per bucket |
-| `metering_phase_scope(left, right, sample_rate?, *, validate?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats |
+| `metering_phase_scope(left, right, sample_rate?, max_points?, *, validate?)` | `PhaseScopeReport` | Phase-scope point series plus summary stats; one point per sample unless `max_points` bounds it |
 | `metering_phase_scope_decimated(left, right, sample_rate?, max_points?, *, validate?)` | `PhaseScopeReport` | Display-sized phase-scope (Lissajous + summary stats); `max_points` upper-bounds the point cloud the same way; summary stats are always computed over the full-resolution signal |
 | `metering_spectrum(samples, sample_rate?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | Welch-averaged magnitude/power/dB spectrum over the whole buffer (Hann-windowed, 50%-overlapping `n_fft` frames; not a single-frame snapshot); pass `0` for `n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults (2048 / 3 / 1.0 / floor) |
 | `metering_spectrum_frame(samples, sample_rate?, frame_offset?, n_fft?, apply_octave_smoothing?, octave_fraction?, db_ref?, db_amin?, *, validate?)` | `SpectrumReport` | True single-frame spectrum (one Hann-windowed FFT) spanning `[frame_offset, frame_offset + n_fft)`, zero-padded past the end; pass `0` for `frame_offset`/`n_fft`/`octave_fraction`/`db_ref`/`db_amin` defaults |
+
+Prefer `metering_crest_factor_db_stereo(...)` over feeding a downmix to `metering_crest_factor_db(...)`. A `0.5 * (left + right)` downmix cancels an out-of-phase pair, which understates RMS and therefore overstates crest factor. An inverted pair reads `11.64` dB through the stereo meter and `0.00` dB through the downmix. Unequal channel lengths raise `ValueError("left and right channel lengths must match")`.
 
 ### Scale Quantization
 
@@ -741,6 +744,7 @@ class AnalysisResult:
     bpm_candidates: list[BpmHypothesis]
     time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # property: per-beat objects with strength
+                                   #   (Beat lives in libsonare.types, not the package root)
     chords: list[Chord]
     sections: list[Section]
     timbre: AnalysisTimbre | None
@@ -818,6 +822,7 @@ class StreamConfig:
     emit_every_n_frames: int = 1
     magnitude_downsample: int = 1
     max_pending_frames: int = 4096  # newly produced frames are dropped at the cap
+    max_progression_entries: int = 4096  # per-progression history cap
     key_update_interval_sec: float = 5.0
     bpm_update_interval_sec: float = 10.0
     window: int = 0          # 0=Hann, 1=Hamming, 2=Blackman, 3=Rectangular
@@ -862,6 +867,8 @@ class StreamStats:
     duration_seconds: float
     pending_frames: int
     dropped_output_frames: int
+    dropped_chord_progression_entries: int
+    dropped_bar_progression_entries: int
     bpm: float
     bpm_confidence: float
     bpm_candidate_count: int
@@ -894,7 +901,7 @@ Additional Python result classes used by focused APIs:
 | Mastering | `MasteringResult`, `MasteringStereoResult` |
 | Mixing | `MixerStereoResult` |
 | Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing.md#assist-sidecars)), `NotePairValidation` |
-| Realtime engine telemetry | `MeterTelemetryRecord` |
+| Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
 
 ## Streaming Analysis API
 
@@ -1035,7 +1042,7 @@ with sonare.StreamingMasteringChain({
     "dynamics.compressor.thresholdDb": -20.0,
 }) as chain:
     chain.prepare(sample_rate=48000, max_block_size=512, num_channels=1)
-    print(chain.stage_names(), chain.latency_samples())
+    print(chain.stage_names(), chain.latency_samples)  # latency_samples is a property
     output = chain.process_mono([0.0] * 512)
     while True:
         tail = chain.flush_mono()
@@ -1057,7 +1064,25 @@ preview = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sam
     {"name": "YouTube", "targetLufs": -14, "ceilingDb": -1},
     {"name": "Podcast", "targetLufs": -16, "ceilingDb": -1},
 ]))
+
+# Stereo entry points: same params, same JSON, measured from both channels.
+stereo_profile = json.loads(sonare.mastering_audio_profile_stereo(left, right, sample_rate=sample_rate, params={
+    "n_fft": 2048,
+    "hop_length": 512,
+    "true_peak_oversample": 4,
+}))
+stereo_suggestions = json.loads(sonare.mastering_assistant_suggest_stereo(left, right, sample_rate=sample_rate, params={
+    "target_lufs": -14,
+    "ceiling_db": -1,
+    "prefer_streaming_safe": True,
+}))
+# Omitting platforms uses the built-in Spotify / Apple Music / YouTube set.
+stereo_preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
 ```
+
+Each of the three JSON helpers has a `_stereo` sibling that takes `left` and `right` instead of one buffer, accepts the same `params` / `platforms`, and returns the same JSON string. Reach for it whenever you actually have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, and on decorrelated stereo material that downmix reads about 6 dB low — which drags down integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55. A correlated pair differs by only 3.01 dB, the plain downmix halving; the remaining ~3 dB is the decorrelation.
+
+Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
 
 `mastering_audio_profile()` accepts optional profile params: `n_fft`, `hop_length`, and `true_peak_oversample`. `mastering_assistant_suggest()` accepts `target_lufs`, `ceiling_db`, `enable_repair`, `prefer_streaming_safe`, and `speech_mono_amount`; camelCase aliases also work through the shared native parser.
 
@@ -1128,8 +1153,11 @@ The named mastering API families are:
 | Run a full stereo chain | `mastering_chain_stereo()` |
 | Run a streaming chain (block-by-block) | `StreamingMasteringChain` |
 | Generate an audio profile for mastering decisions | `mastering_audio_profile()` |
+| Generate an audio profile from both stereo channels | `mastering_audio_profile_stereo()` |
 | Generate assistant suggestions from source analysis | `mastering_assistant_suggest()` |
+| Generate assistant suggestions from both stereo channels | `mastering_assistant_suggest_stereo()` |
 | Preview delivery loudness by platform | `mastering_streaming_preview()` |
+| Preview delivery loudness from both stereo channels | `mastering_streaming_preview_stereo()` |
 | List mono/stereo processors | `mastering_processor_names()` |
 | Get machine-readable processor classifications | `mastering_processor_catalog()` |
 | List chain insert processors | `mastering_insert_names()` |
@@ -1198,8 +1226,8 @@ The headless-DAW API is available in Python as well: author arrangements with `P
 | Render MIDI through a SoundFont | `Project.load_soundfont(data)`, `Project.bounce_with_sf2_instrument(...)` | [SoundFont Player](./soundfont-player.md) |
 | Host your own instrument during a bounce | `Project.bounce_with_instruments(...)` with the `ExternalInstrument` protocol — a `render(channels, num_frames)` callback plus optional `prepare`/`on_event` hooks and `latency_samples`. **Python-only.** | [Bouncing Projects](./project-bounce.md) |
 | Play instruments live from MIDI events and replace destination MIDI FX | `RealtimeEngine.set_synth_instrument(...)`, `RealtimeEngine.load_soundfont(...)`, `RealtimeEngine.set_midi_fx(...)`, plus the engine's MIDI input queue | [MIDI Input](./midi-input.md) |
-| Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
-| Set per-track cue monitoring | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)` with `EngineTrackMonitorMode` (`off`/`pfl`/`afl`) | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
+| Schedule MIDI clips into the live engine, sample-accurately | `RealtimeEngine.set_midi_clips([...])` with `EngineMidiClipSchedule` / `EngineMidiEvent`, `RealtimeEngine.sample_at_ppq(ppq)` — ppq is pulses per quarter note, the musical-time unit | [Realtime Engine](./realtime-engine.md#midi-clip-scheduling-and-sampleatppq) |
+| Set per-track cue monitoring | `RealtimeEngine.set_track_monitor_mode(lane_index, mode, render_frame=-1)` with `EngineTrackMonitorMode` (`off`/`pfl`/`afl` — PFL listens pre-fader, AFL post-fader) | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Send a destination to external MIDI hardware | `set_midi_destination_external(...)`, `set_external_midi_clock_enabled(...)`, `drain_external_midi(...)`, `external_midi_dropped_count()` | [Realtime Engine](./realtime-engine.md#sending-a-track-to-external-midi-gear) |
 | Mix and automate the engine's tracks live | Lane/strip methods plus `set_bus_strip_insert_param_by_name(...)`, `set_bus_strip_insert_bypassed(...)`, `resolve_track_insert_automation_id(...)`, `resolve_master_insert_automation_id(...)`, `resolve_bus_insert_automation_id(...)`, and `set_param_smoothing_ms(...)` | [Realtime Engine](./realtime-engine.md#track-lanes-buses-and-channel-strips) |
 | Read wide meters and scopes | `drain_meter_telemetry_wide(...)`, `configure_scope_telemetry(...)`, `drain_scope_telemetry(...)` | [Realtime Engine](./realtime-engine.md#surround-group-buses-and-wide-meters) |
@@ -1217,6 +1245,8 @@ with sonare.Project() as project:
 Note that `Project` supports `with` for automatic cleanup, while `Mixer` does not (call `mixer.close()` explicitly).
 
 For synth preset introspection, `synth_preset_patch(name)` returns a named catalog preset as a `SynthPatch` (it raises `SonareError` for unknown names and accepts a `'va:'` routing prefix) so you can inspect and tweak fields before binding it. `synth_enum_tables()` returns the runtime enum-name tables (`dict[str, tuple[str, ...]]`) for validating `SynthModRouting` source/destination names against the loaded build.
+
+Every numeric `SynthPatch` field defaults to `None`, meaning "keep the base preset's value". A field you never set therefore reads back as `None`, not `0.0`, and any value you do supply is a real override — including an explicit `0`, so `SynthPatch(preset="warm-pad", amp_sustain=0)` genuinely zeroes the amp sustain instead of being indistinguishable from leaving it unset. A patch obtained from `synth_preset_patch(name)` comes back fully populated with the preset's concrete values, so its numeric fields are never `None`. Enum fields (`engine_mode`, `waveform`, `filter_model`, `filter_output`, `body`) keep `0` / `"default"` as their keep-the-base value. `mod_routings=None` keeps the base mod matrix, an empty tuple clears it, and a non-empty tuple replaces it.
 
 ### Opaque assist sidecars
 

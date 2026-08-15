@@ -21,11 +21,11 @@ By the end of this page you should be able to:
 | **Quick API** | Simple one-line analysis and room-acoustic entry points | `quick::detect_bpm()`, `quick::detect_key()`, `quick::detect_beats()`, `quick::detect_acoustic()` |
 | **Geometric room acoustics** | Equivalent-room estimation, RIR synthesis, and room-character morphing | `estimate_room()`, `acoustic::synthesize_rir()`, `effects::acoustic::room_morph()` |
 | **MusicAnalyzer** | Full music analysis with callbacks | `MusicAnalyzer`, `AnalysisResult` |
-| **Streaming** | Block-by-block MIR frames and estimates that update over time | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
+| **Streaming** | Block-by-block MIR (music information retrieval) frames and estimates that update over time | `StreamAnalyzer`, `StreamConfig`, `FrameBuffer` |
 | **Features** | Low-level feature extraction and inverse feature reconstruction | `MelSpectrogram`, `Chroma`, `cqt()`, `vqt()`, `mel_to_audio()` |
 | **Effects / editing** | Audio processing and small editing building blocks | `hpss()`, `time_stretch()`, `pitch_shift()`, pitch editor / voice changer modules |
 | **Mastering** | Presets, chains, named processors, assistant/profile JSON | `mastering::MasteringChain`, `mastering::api::*` |
-| **Mixing / engine** | Scene-based mixer and DAW-style realtime transport | `mixing::api::Scene`, `mixing::MixerController`, `RealtimeEngine` |
+| **Mixing / engine** | Scene-based mixer and DAW-style realtime transport | `mixing::api::Scene`, `mixing::ChannelStrip`, `mixing::FxBus`, `RealtimeEngine` |
 | **C ABI** | Stable FFI API for bindings | `sonare_c.h` |
 
 ## Pick The Right C++ Surface
@@ -39,6 +39,27 @@ By the end of this page you should be able to:
 | Mastering presets or named processors | `src/mastering/api/*` headers; see [Mastering Processors](./mastering-processors.md) |
 | Stem mixer / scene JSON | `src/mixing/api/scene.h`, `src/mixing/api/scene_json.cpp` concepts; see [Mixing Engine](./mixing.md) |
 | Language binding or plugin boundary | `sonare_c.h` rather than C++ classes |
+
+### Build flags that gate part of this surface
+
+Analysis, features, effects, and metering are always built. The subsystems below
+are separate CMake options — all default to `ON` in a source build, but a trimmed
+build can drop them, and every symbol they own disappears with them.
+
+| Option | Gates |
+|--------|-------|
+| `BUILD_MASTERING` | `sonare::mastering::*`, the mastering C ABI |
+| `BUILD_MIXING` | `sonare::mixing::*`, the mixer C ABI |
+| `BUILD_GRAPH` | the routing-graph library |
+| `BUILD_FX` | creative realtime FX processors |
+| `BUILD_ACOUSTIC_SIM` | geometric room acoustics (RIR synthesis, room estimation, room morph) |
+| `BUILD_PITCH_EDITOR` | monophonic pitch-editor primitives |
+| `BUILD_VOICE_CHANGER` | realtime voice changer |
+| `BUILD_ARRANGEMENT` | headless arrangement / DAW project (`sonare_c_project.h`) |
+| `BUILD_ASSIST` | composition-assist seam (control/offline only) |
+
+The C ABI always *exports* the project symbols; without `BUILD_ARRANGEMENT` they
+return `SONARE_ERROR_NOT_SUPPORTED` and `sonare_project_abi_version()` returns 0.
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, HPSS, and more.
@@ -206,6 +227,7 @@ These APIs estimate, synthesize, or apply a room model. They live in focused mod
 ::: info Terms in this section
 - **Equivalent room** is a practical room model inferred from audio. It is not exact measured geometry.
 - **RIR** means room impulse response: samples that describe how a room reacts to a short sound.
+- **RT60** is the reverberation time: how long a tail takes to decay by 60 dB.
 - **DRR (direct-to-reverberant ratio)** compares the level of the direct sound against the reverberant tail, in dB. Higher means a drier, closer-sounding source.
 - **Room morphing** is a creative room-character effect, not dereverberation.
 :::
@@ -876,7 +898,8 @@ auto rms_norm = normalize_rms(audio, -20.0f);  // Target RMS level in dB
 // Silence trimming (absolute dBFS threshold)
 auto trimmed = trim_absolute(audio, -60.0f);   // Threshold in dBFS
 
-// Frame/RMS silence trimming; defaults are frame_length=2048, hop_length=512.
+// Frame/RMS silence trimming (needs #include <effects/silence.h>; not in <sonare.h>).
+// Defaults are frame_length=2048, hop_length=512.
 std::vector<float> samples(audio.begin(), audio.end());
 auto framed_trim = trim(samples, /*top_db=*/60.0f, /*frame_length=*/2048,
                         /*hop_length=*/512);
@@ -913,10 +936,27 @@ full mapping.
 - **`tempogram` / `plp`** — time-varying tempo representation and dominant local pulse.
 :::
 
+These helpers live in focused headers and are **not** pulled in by `<sonare.h>`;
+include the header for each one you use. They take raw sample buffers
+(`std::vector<float>` or `const float*` + length), not `Audio`.
+
 ```cpp
+#include <core/pcen.h>
+#include <effects/preemphasis.h>
+#include <effects/silence.h>
+#include <feature/rhythm.h>
+#include <feature/tonnetz.h>
+#include <util/frame.h>
+#include <util/padding.h>
+#include <util/peak.h>
+#include <util/vector_normalize.h>
+
+using namespace sonare;
+
 // Pre-emphasis / de-emphasis (librosa.effects.preemphasis / deemphasis)
-auto pre   = preemphasis(audio, /*coef=*/0.97f);
-auto deemp = deemphasis(audio, /*coef=*/0.97f);
+// Buffer in, buffer out — pass audio samples, not an Audio object.
+auto pre   = preemphasis(samples, /*coef=*/0.97f);
+auto deemp = deemphasis(samples, /*coef=*/0.97f);
 
 // Silence trim / split (librosa.effects.trim / split) — buffer in, sample-index ranges out
 TrimResult trimmed = trim(samples, /*top_db=*/60.0f);  // {audio, start_sample, end_sample}
@@ -928,17 +968,25 @@ auto padded = pad_center(values, /*size=*/4096);
 auto fixed  = fix_length(values, /*size=*/4096);
 auto bounds = fix_frames(frame_indices, /*x_min=*/0, /*x_max=*/-1);
 
-// Peak picking and vector normalize (librosa.util.peak_pick / normalize)
+// Peak picking and vector normalize (librosa.util.peak_pick / normalize).
+// The C++ name is normalize(); vector_normalize is the header/C-ABI name.
+// Overload resolution keeps it distinct from normalize(const Audio&, float).
 auto peaks  = peak_pick(onset_envelope, pre_max, post_max, pre_avg, post_avg, delta, wait);
-auto normed = vector_normalize(values, /*norm_type=*/2);  // 0=inf, 1=L1, 2=L2, 3=power
+auto normed = normalize(values, NormType::L2);  // Inf, L1, L2, Power
 
-// PCEN (librosa.pcen) — input is row-major [n_bins x n_frames]
-auto pcen_out = pcen(mel, n_bins, n_frames, sample_rate, hop_length);
+// PCEN (librosa.pcen) — input is row-major [n_bins x n_frames].
+// Sample rate and hop length are PcenConfig fields, not positional arguments.
+PcenConfig pcen_config;
+pcen_config.sr = sample_rate;
+pcen_config.hop_length = hop_length;
+auto pcen_out = pcen(mel, n_bins, n_frames, pcen_config);
 
 // Tonnetz / tempogram / PLP
-auto tonnetz_out = tonnetz(chromagram, n_chroma, n_frames);
+auto tonnetz_out = tonnetz(chromagram.data(), n_chroma, n_frames);
 auto tempo_out   = tempogram(onset_env, sample_rate);
-auto plp_out     = plp(onset_env, sample_rate);
+PlpConfig plp_config;
+plp_config.sr = sample_rate;
+auto plp_out     = plp(onset_env, plp_config);
 ```
 
 ## Types
@@ -1088,7 +1136,8 @@ int time_to_frames(float time, int sr, int hop_length);
 int frames_to_samples(int frames, int hop_length, int n_fft = 0);
 int samples_to_frames(int samples, int hop_length, int n_fft = 0);
 
-// dB conversions (librosa.power_to_db / amplitude_to_db / inverses)
+// dB conversions (librosa.power_to_db / amplitude_to_db / inverses).
+// Declared in <core/db_convert.h>, which <sonare.h> does not include.
 std::vector<float> power_to_db(const std::vector<float>& values,
                                float ref = 1.0f, float amin = 1e-10f, float top_db = 80.0f);
 std::vector<float> amplitude_to_db(const std::vector<float>& values,
@@ -1159,12 +1208,44 @@ For the named processor registry and the assistant/profile JSON helpers, see [Ma
 
 At the C ABI level, `SonareMasteringConfig` exposes the same limiter controls as appended fields: `release_ms` and `apply_gain_at_input_rate`. Callers should still pass real `target_lufs` and `ceiling_db` values; leaving the appended limiter fields at zero preserves prior behavior (`release_ms == 0` keeps the 50 ms default and `apply_gain_at_input_rate == 0` keeps input-rate staging off).
 
+### Stereo profiling, assistant, and preview
+
+The profiling, assistant, and delivery-preview JSON helpers each have a stereo entry point that reads both channels, alongside a stereo crest-factor meter:
+
+```c
+#include <sonare/sonare_c_mastering.h>
+#include <sonare/sonare_c_metering.h>
+
+SonareError sonare_mastering_audio_profile_stereo(const float* left, const float* right,
+                                                  size_t length, int sample_rate,
+                                                  const SonareMasteringParam* params,
+                                                  size_t param_count, char** json_out);
+SonareError sonare_mastering_assistant_suggest_stereo(const float* left, const float* right,
+                                                      size_t length, int sample_rate,
+                                                      const SonareMasteringParam* params,
+                                                      size_t param_count, char** json_out);
+SonareError sonare_mastering_streaming_preview_stereo(const float* left, const float* right,
+                                                      size_t length, int sample_rate,
+                                                      const SonareStreamingPlatform* platforms,
+                                                      size_t platform_count, char** json_out);
+SonareError sonare_metering_crest_factor_db_stereo(const float* left, const float* right,
+                                                   size_t length, int sample_rate, float* out_db);
+```
+
+`*json_out` is heap-allocated; release it with `sonare_free_string`, the same contract as the mono entry points. Pass `NULL` / `0` for `platforms` to use the built-in Spotify / Apple Music / YouTube list rather than an error.
+
+Use the stereo forms whenever you have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement down by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55. A correlated pair differs by only 3.01 dB, the plain downmix halving; the remaining ~3 dB is the decorrelation.
+
+Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
+
+`sonare_metering_crest_factor_db_stereo` fixes the opposite error — it takes the peak across both channels and the RMS over both together, where a downmix cancels an out-of-phase pair, understates RMS, and so overstates crest factor. An inverted pair reads `11.64` dB through the stereo meter and `0.00` dB through the downmix.
+
 ## C API
 
 For FFI integration. Two parallel entry-point styles are provided: handle-based (takes a `SonareAudio*`) and sample-based (takes a raw `float*` buffer).
 
 ```c
-#include <sonare_c.h>
+#include <sonare/sonare_c.h>
 
 // Audio handle
 SonareError sonare_audio_from_buffer(const float* data, size_t length, int sample_rate,
@@ -1215,9 +1296,23 @@ SonareError sonare_analyze_json_with_progress(const float* samples, size_t lengt
 // Memory management
 void sonare_free_floats(float* ptr);
 void sonare_free_ints(int* ptr);
+void sonare_free_bytes(uint8_t* ptr);
 void sonare_free_string(char* ptr);             // heap char* from *_json and other string-returning C ABI calls
 void sonare_free_key_candidates(SonareKeyCandidate* ptr);  // arrays from sonare_detect_key_candidates*
 void sonare_free_result(SonareAnalysisResult* result);
+// Every result struct has its own matching releaser named after the struct,
+// e.g. sonare_free_stft_result / _mel_result / _mfcc_result / _chroma_result /
+// _pitch_result / _hpss_result. Release a struct only with its own function.
+
+// Resampling and the 12-TET scale quantizer (both declared in sonare_c.h itself)
+SonareError sonare_resample(const float* samples, size_t length, int src_sr, int target_sr,
+                            float** out, size_t* out_length);   // free *out with sonare_free_floats
+SonareError sonare_scale_quantize_midi(int root, uint16_t mode_mask, float reference_midi,
+                                       float midi, float* out_quantized_midi);
+SonareError sonare_scale_correction_semitones(int root, uint16_t mode_mask, float reference_midi,
+                                              float midi, float* out_semitones);
+SonareError sonare_scale_pitch_class_enabled(int root, uint16_t mode_mask, int pitch_class,
+                                             int* out_enabled);
 
 // Utility
 const char* sonare_error_message(SonareError error);
@@ -1248,7 +1343,7 @@ Several helper families also have sample-based C ABI entry points:
 | Effects | `sonare_hpss`, `sonare_hpss_ex`, `sonare_hpss_with_residual`, `sonare_time_stretch_ex`, `sonare_phase_vocoder`, `sonare_pitch_shift_ex`, `sonare_spectral_edit`, `sonare_normalize`, `sonare_normalize_rms`, `sonare_trim_ex` |
 | Features | `sonare_stft`, `sonare_mel_spectrogram`, `sonare_mfcc`, `sonare_mfcc_ex`, `sonare_chroma`, `sonare_chroma_cqt`, `sonare_nnls_chroma_ex2`, `sonare_spectral_*`, `sonare_pitch_yin`, `sonare_pitch_pyin` |
 | Room acoustics | `sonare_analyze_impulse_response_ex`, `sonare_synthesize_rir`, `sonare_estimate_room`, `sonare_room_morph` |
-| Conversions and resampling | See `src/sonare_c.h` for the full list |
+| Conversions and resampling | `sonare_resample`; see `include/sonare/sonare_c.h` for the full list |
 
 `sonare_chroma_cqt` computes a constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) alongside the note-activation `sonare_chroma`. The explicit-range MFCC entry point `sonare_mfcc_ex` (fmin/fmax/htk) also carries a trailing cepstral `lifter` argument (`0` disables liftering).
 
@@ -1260,6 +1355,8 @@ and `hop_length`. `sonare_analyze_impulse_response_ex` adds `min_decay_db`,
 while `sonare_nnls_chroma_ex2` adds the CQT `hop_length` to the NNLS options.
 
 Project editing lives in `sonare_c_project.h`. `sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` accepts the optional equal-power seam crossfade as the final argument. It must be finite and non-negative; `0` keeps a hard loop. The engine clamps it to the available pre-roll and half the loop, and ignores it under warp.
+
+`SonareSynthPatch` — the NativeSynth patch accepted by `sonare_project_bounce_with_synth_instruments` and `sonare_engine_set_synth_instrument` — is versioned through its leading `struct_version` field. Under the original layout every numeric field follows a "0 means keep the base preset's value" rule, so an explicit zero could not be expressed at all. `struct_version = 2` adds a trailing `present_fields` bitmask (`SONARE_SYNTH_FIELD_*`) naming the fields the caller set on purpose: a set bit overrides the base with that field's value even when the value is zero, and a clear bit keeps the earlier behaviour. The trailing word is read only when `struct_version` is 2 or higher, so a caller that fills the struct exactly the way it always did — including leaving `struct_version` at `0` or `1` — keeps its previous behaviour and needs no source change. Enum fields have no presence bits on purpose: zero is already their reserved keep-the-base value and every real value is non-zero. Setting `SONARE_SYNTH_FIELD_MOD_ROUTINGS` with `num_mod_routings == 0` clears the base mod matrix instead of keeping it; a non-empty table replaces it either way. The mask is one 32-bit word with 27 bits in use — a further extension appends a second word under a new `struct_version` rather than widening this one.
 
 The librosa-parity helpers are also exposed through the C API:
 
@@ -1277,6 +1374,7 @@ The current C ABI is split across focused headers. Use this index when a symbol 
 
 | Header | Surface |
 |--------|---------|
+| `sonare_c.h` | Umbrella header. Transitively pulls in every other public header (the engine and voice-changer surfaces arrive through `sonare_c_effects.h`), and itself declares the aggregate `SONARE_ABI_VERSION` / `sonare_abi_version()`, `sonare_resample`, the 12-TET scale quantizer, and the per-result releasers |
 | `sonare_c_types.h` | Audio handles, compact analysis, key candidates, downbeats, engine lane/bus/send structs (`SonareEngineTrackLane`, `SonareEngineBus`, `SonareEngineTrackSend`) and the `SonareChannelLayout` enum, error/version/FFmpeg helpers |
 | `sonare_c_project.h` | Headless project/arrangement lifecycle, track/clip counts and editing (`sonare_project_clip_count`), MIDI events and MIDI-FX (`sonare_project_set_midi_events`, `set_midi_fx`, `bake_midi_fx`), compile/bounce (incl. `bounce_with_builtin_instruments`/`bounce_with_synth_instruments`), warp maps, loop-recording takes and comp segments, NativeSynth and SoundFont/SF2 instrument bindings, assist sidecar, chord/key annotations, `SONARE_PROJECT_ABI_VERSION` |
 | `sonare_c_features.h` | Focused analysis, STFT/mel/MFCC/chroma, inverse features, CQT/VQT, pitch, tempogram/PLP, LUFS |
@@ -1284,8 +1382,8 @@ The current C ABI is split across focused headers. Use this index when a symbol 
 | `sonare_c_engine.h` | `RealtimeEngine` C ABI: transport (play/stop/seek/loop/tempo/time-signature), live parameter and automation-lane control, MIDI push/drain (CC, panic, SysEx, external MIDI destinations), capture, and telemetry (`SonareEngineTelemetry`, meter telemetry drain, `SonareEngineTelemetryError`) |
 | `sonare_c_voice_changer.h` | Realtime voice changer: create/destroy, config (POD and JSON, live-safe hand-off), per-block process (mono/interleaved/planar-stereo), built-in preset lookup, latency |
 | `sonare_c_acoustic.h` | RIR synthesis from room geometry, equivalent-room estimation, offline room-character morphing, `SONARE_ACOUSTIC_ABI_VERSION` |
-| `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak, clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum, multi-channel interleaved LUFS (`sonare_lufs_interleaved`) and EBU R128 loudness range (`sonare_ebur128_loudness_range`) |
-| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON, streaming mastering chain with latency and realized-stage inspection (`sonare_streaming_mastering_chain_stage_names`), streaming EQ, repair/dynamics one-shot helpers |
+| `sonare_c_metering.h` | Peak/RMS/crest/DC/true peak (plus the both-channel `sonare_metering_crest_factor_db_stereo`), clipping, dynamic range, stereo correlation/width, vectorscope, phase scope, spectrum, multi-channel interleaved LUFS (`sonare_lufs_interleaved`) and EBU R128 loudness range (`sonare_ebur128_loudness_range`) |
+| `sonare_c_mastering.h` | Presets, full chains, progress callbacks, named processors and the machine-readable processor catalog, assistant/profile/preview JSON and their `*_stereo` entry points, streaming mastering chain with latency and realized-stage inspection (`sonare_streaming_mastering_chain_stage_names`), streaming EQ, repair/dynamics one-shot helpers |
 | `sonare_c_mixing.h` | Channel strip controls, sends, buses, VCA groups, automation, meters, goniometer, scene presets |
 | `sonare_c_streaming.h` | `StreamAnalyzer`, bounded unread output (`max_pending_frames`), compact frame reads, pending/drop-aware updating stats, tuning/normalization controls |
 
@@ -1307,7 +1405,7 @@ For realtime insert automation and external MIDI in the C ABI:
 - `sonare_engine_resolve_{track,master,bus}_insert_automation_id` converts an insert parameter name into the numeric id accepted by `sonare_engine_set_automation_lane`, `sonare_engine_set_parameter`, and `sonare_engine_set_parameter_smoothed`. `sonare_engine_set_param_smoothing_ms` changes the shared ramp time (20 ms by default; `0` makes changes immediate).
 - `sonare_engine_push_midi_sysex` copies one complete SysEx frame, including `0xF0` and `0xF7`; its size must be 1–512 bytes.
 - `sonare_engine_set_midi_destination_external` moves a destination out of the internal instrument rack and into the host-drained output queue. Up to 16 destinations may be external. Clock/transport forwarding is opt-in through `sonare_engine_set_external_midi_clock_enabled`; those messages use destination `0xFFFFFFFF`.
-- On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
+- On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP (Universal MIDI Packet) record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
 - Each drained `SonareEngineTelemetry` record's `error` field is a `SonareEngineTelemetryError` ordinal (`sonare_c_types_engine.h`): `NONE = 0`, then queue/backlog/overflow conditions `1`–`18` (command queue, pending-command, boundary, telemetry, capture, automation-bind-target, insert-automation, MIDI-clock, and metronome overflow among them), and `MAX_CHANNELS_EXCEEDED = 20`.
 
 To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]`. `kind` is `realtime`/`offline`/`pair`, and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); `tailSamples` is the audible decay length, and both are 0 for offline ids. `realtimeCost` is a coarse `low`/`moderate`/`high` algorithmic estimate for live inserts, not a hardware benchmark, and is `null` for non-insert ids. `channelPolicy` tells a surround host how the mixer wraps the processor, `category` is the stable UI grouping derived from the id namespace, and `params` contains the realtime-insert parameter descriptors (empty for non-insert processors). The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.

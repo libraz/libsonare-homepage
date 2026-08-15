@@ -68,7 +68,7 @@ Python CLI はすでに解析・特徴量・編集・マスタリング・`mix` 
 - 解析: `sections`, `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
 - エフェクト／変換: `preemphasis`, `deemphasis`, `split-silence`, `gain`, `fade`, `filter`
 - 合成: `tone`, `chirp`, `clicks`
-- 特徴量: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env`（`onset-envelope` の短縮エイリアス）, `fourier-tempogram`, `tempogram-ratio`
+- 特徴量: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env`（onset-envelope の要約版。ピーク時刻・ピーク強度・平均）, `fourier-tempogram`, `tempogram-ratio`
 - librosa 互換ユーティリティ: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
 - ミキシング: `mix-strip`（単一入力のチャンネルストリップ。`mix` は非推奨エイリアスとして残っています）
 - マスタリング: `mastering-pair-processor`（ソース／リファレンスのペア処理）, `mastering-stereo-analyses`, `mastering-stereo-analyze`
@@ -314,7 +314,7 @@ sonare chroma music.mp3 --json
 
 ### spectral
 
-スペクトル特徴（セントロイド、帯域幅、ロールオフ、フラットネス、ZCR、RMS）を計算。
+スペクトル特徴を計算します。セントロイド、帯域幅、ロールオフ、フラットネス、ZCR（zero-crossing rate、ゼロ交差率）、RMS（root mean square、実効値レベル）を出力します。
 
 ```bash
 sonare spectral music.mp3
@@ -335,7 +335,7 @@ sonare spectral music.mp3 --json
 
 ### pitch
 
-YIN または pYIN アルゴリズムでピッチを追跡。
+YIN または pYIN の基本周波数推定器で、ピッチの時間変化を追跡します。
 
 ```bash
 sonare pitch music.mp3
@@ -397,7 +397,9 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 ### その他の解析
 
 ::: info ルーム音響コマンドの用語
-**等価ルーム** は、音声から推定した実用上の部屋モデルで、正確な実寸ではありません。**RIR** は room impulse response の略です。**ルームモーフィング**は音作り向けのルーム効果であり、残響除去ではありません。
+**等価ルーム** は、音声から推定した実用上の部屋モデルで、正確な実寸ではありません。**RIR** は room impulse response（部屋のインパルス応答）の略です。**ルームモーフィング**は音作り向けのルーム効果であり、残響除去ではありません。
+
+これらのコマンドが返す指標は、残響の減衰と明瞭度を表す値です。**RT60** は残響時間、**EDT** は初期減衰時間、**C50**／**C80** は明瞭度の比、**DRR** は直接音と残響音の比です。各フィールドの定義は [ルーム音響解析](./acoustic-analysis.md) にあります。
 :::
 
 | コマンド | 説明 | 主なオプション |
@@ -407,12 +409,12 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare rhythm music.mp3` | リズム特性（シンコペーション、グルーヴ、規則性） | `--start-bpm`（120.0）, `--bpm-min`（60.0）, `--bpm-max`（200.0） |
 | `sonare dynamics music.mp3` | ダイナミクス／ラウドネスの要約 | `--window-sec`（0.4） |
 | `sonare timbre music.mp3` | 音色／スペクトル形状の要約 | — |
-| `sonare lufs music.mp3` | EBU R128 ラウドネス | `--series`（momentary／short-term の系列も出力） |
+| `sonare lufs music.mp3` | EBU R128 ラウドネス。単位は LUFS（Loudness Units relative to Full Scale。聴感上の音量を表す標準単位。[配信ターゲット](./glossary/mastering/delivery-targets.md) を参照） | `--series`（momentary／short-term の系列も出力） |
 | `sonare acoustic room.wav` | ルーム音響推定（RT60／EDT／C50／C80） | `--ir`（入力をインパルス応答として扱う）, `--n-bands`（6）, `--min-decay-db`（30.0）, `--noise-floor-margin-db`（10.0） |
 | `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
-| `sonare meter music.wav` | ピーク、RMS、クレスト、トゥルーピーク、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
+| `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak（トゥルーピーク）、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ネイティブ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
 | `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ネイティブ CLI のみ |
@@ -422,8 +424,8 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 
 | コマンド | Python CLI | ネイティブ CLI | 説明 |
 |----------|------------|------------------------|------|
-| `sonare onset-envelope music.mp3` | 対応 | 対応 | オンセット強度包絡 |
-| `sonare onset-env music.mp3` | 非対応 | 対応 | オンセット強度包絡の短縮エイリアス |
+| `sonare onset-envelope music.mp3` | 対応 | 対応 | オンセット強度の包絡線（音の立ち上がりの強さの時間変化）。ネイティブ CLI の `--json` は `values` 配列全体と mean/std/min/max を返す |
+| `sonare onset-env music.mp3` | 非対応 | 対応 | 同じ包絡線の要約のみ。フレーム数・ピーク時刻・ピーク強度・平均で、配列は返さない |
 | `sonare tempogram music.mp3` | 対応 | 対応 | 自己相関テンポグラム |
 | `sonare plp music.mp3` | 対応 | 対応 | 主要局所パルス |
 | `sonare nnls-chroma music.mp3` | 対応 | 対応 | NNLS クロマグラム |
@@ -445,7 +447,7 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | コマンド | 説明 | オプション |
 |----------|------|-----------|
 | `sonare pitch-correct vocal.wav -o out.wav` | 目標 MIDI ノートへピッチ補正 | `--current-midi`（69.0）, `--target-midi`（69.0） |
-| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | pYIN 輪郭を追跡し、1 音または音階へ補正 | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--retune-amount`, `--retune-speed-ms` |
+| `sonare pitch-correct-timevarying vocal.wav -o out.wav` | pYIN 輪郭を追跡し、1 音または音階へ補正 | `--mode midi\|scale`, `--target-midi`, `--scale-root`, `--scale-mode-mask`, `--reference-midi`, `--hop-length` |
 | `sonare note-move take.wav --target-onset 48000 -o out.wav` | ノート区間を指定サンプル位置へ移動 | `--onset`, `--offset`, `--target-onset`（サンプル位置） |
 | `sonare note-stretch take.wav -o out.wav` | 単一ノート区間をストレッチ | `--onset`, `--offset`（サンプル位置）, `--ratio`（1.0） |
 | `sonare scale-quantize 68.7` | MIDI 値を音階へ量子化 | `--root`, `--mode-mask`, `--reference-midi` |
@@ -475,7 +477,8 @@ Python CLI は、上のファイル書き出し編集コマンドを提供しま
 | `gain` | `-o`, `--gain-db` |
 | `fade` | `-o`, `--fade-in` または `--fade-out` |
 | `filter` | `-o`, `--type hp\|lp\|bp\|notch`; hp/lp は `--cutoff`、bp/notch は `--center` + `--bandwidth` |
-| `preemphasis`, `deemphasis`, `split-silence` | 処理後のファイルを書き出す場合は `-o` |
+| `preemphasis`, `deemphasis` | 処理後のファイルを書き出す場合は `-o`。`--coef`（0.97） |
+| `split-silence` | `--top-db`（60.0）。非無音区間を標準出力へ表示するだけでファイルは書き出さないため、`-o` は使用法エラー（終了コード 2）になる |
 
 ### リアルタイムボイスプリセット
 
@@ -490,7 +493,7 @@ Python CLI は、上のファイル書き出し編集コマンドを提供しま
 
 リアルタイムプリセット系のオプションを渡さない場合、`voice-change` は `--pitch-semitones` と `--formant-factor` で制御する単純なピッチ／フォルマント変換を使います。プリセット系のオプションを渡した場合はリアルタイム音声チェーンを使い、単純なピッチ／フォルマント指定との併用は無効パラメータとして拒否されます。
 
-プリセットの選択は明示的に行います。組み込みの `--preset ID`、`--preset-json FILE`、または `--preset-pack FILE --preset ID` の組み合わせから 1 つを選びます。パックファイルとエントリ ID は 1 つの selector であり、`--preset-pack` だけでは拒否されます（先頭エントリへのフォールバックはありません）。`--preset-json` とパックは併用できず、`--set PATH=VALUE` にはプリセット selector が必要です。
+プリセットの選択は明示的に行います。組み込みの `--preset ID`、`--preset-json FILE`、または `--preset-pack FILE --preset ID` の組み合わせから 1 つを選びます。パックファイルとエントリ ID はセットで 1 つの指定として扱われるため、`--preset-pack` だけを渡すと拒否されます（先頭エントリへのフォールバックはありません）。`--preset-json` とパックは併用できません。`--set PATH=VALUE` を使うには、いずれかのプリセット指定が必要です。
 
 ### 合成
 
@@ -610,7 +613,7 @@ PyPI の Python CLI には `mastering`、`master`、`mastering-processor`、`mas
 :::
 
 ```bash
-# 目標ラウドネスとトゥルーピーク上限でノーマライズし、WAV を書き出す
+# 目標ラウドネスと True Peak 上限でノーマライズし、WAV を書き出す
 sonare mastering track.wav --target-lufs -14 --ceiling-db -1 -o master.wav
 
 # このビルドに含まれるマスタリングプロセッサを確認
@@ -657,11 +660,11 @@ Python CLI の名前付きマスタリングコマンド:
 
 | 目的 | コマンド |
 |------|---------|
-| 目標ラウドネス＋トゥルーピーク上限でノーマライズ | `sonare mastering` |
+| 目標ラウドネス＋True Peak 上限でノーマライズ | `sonare mastering` |
 | 名前付きマスタリングプリセットを適用 | `sonare master` |
 | 構成可能なマスタリングチェーンを実行 | `sonare mastering-chain` |
 | マスタリングプリセット名を一覧表示 | `sonare mastering-presets` |
-| クリップしたオーディオを修復（LPC 再構成） | `sonare declip` |
+| クリップしたオーディオを修復（LPC＝線形予測符号化による再構成） | `sonare declip` |
 | 統合イコライザを適用 | `sonare eq` |
 | モノラル／ステレオプロセッサ一覧 | `sonare mastering-processors` |
 | 名前付きプロセッサを適用 | `sonare mastering-processor` |
@@ -687,7 +690,7 @@ Python CLI の名前付きマスタリングコマンド:
 | コマンド | 主なオプション | 備考 |
 |---------|--------------|------|
 | `sonare master track.wav -o out.wav` | `--preset NAME`（デフォルト `pop`）, `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | 名前付きマスタリングプリセットを適用する。`--config`／`--config-file`／`--params` でプリセット値を上書きできる。`--report` はマスタリングレポート JSON ファイルを書き出す |
-| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...` | JSON 設定から構成可能なマスタリングチェーンを実行する |
+| `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | JSON 設定から構成可能なマスタリングチェーンを実行する |
 | `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |
 
@@ -726,8 +729,10 @@ sonare mix \
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
-`mix` は `--scene` か `--preset` のいずれか一方が必須です。ストリップごとに
-`--input` を 1 つ渡し、ファイルへのレンダリングには `-o/--output` が必要です。
+`mix` には `--scene` か `--preset` が必須です。両方渡した場合は `--scene` が優先
+されます。ストリップごとに `--input` を 1 つ渡してください。`--input` と
+`-o/--output` はセットで、どちらか片方だけは指定できません。どちらも省略した
+場合、`mix` はシーンを読み込んでストリップ数を報告するだけです。
 
 ネイティブ CLI の単一入力チャンネルストリップは役割の異なる別コマンドで、
 名前が `mix-strip` になりました。
@@ -748,10 +753,10 @@ sonare-cli mix-strip vocal.wav -o strip.wav \
 
 ### プロジェクト＆ MIDI ワークフロー
 
-`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth` はクリップ音声の代わりにプロジェクトの MIDI トラックを組み込みシンセでレンダリングします。このフラグは 2 通りの使い方があります。
+`sonare project` コマンドグループは、JSON プロジェクトファイルを使ったヘッドレスのプロジェクト処理や、Standard MIDI File（SMF）／MIDI 2.0 のワークフローを実行します。`project bounce --synth` はクリップ音声の代わりに、プロジェクトの MIDI トラックを内蔵シンセサイザー（NativeSynth）でレンダリングします。このフラグは 2 通りの使い方があります。
 
 - **値なしの `--synth`** — プロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングします。プロジェクトが実際の GM プログラムを持っている場合はこちらを使います。
-- **`--synth <preset>`** — すべてのデスティネーションを 1 つの NativeSynth プリセットに固定します。名前の一覧は `sonare project synth-presets` で確認できます。
+- **`--synth <preset>`** — すべての送出先（デスティネーション）を 1 つの NativeSynth プリセットに固定します。名前の一覧は `sonare project synth-presets` で確認できます。
 
 `project bounce` は `--channels` で指定したチャンネル数で書き出します。
 
@@ -778,7 +783,7 @@ sonare project synth-presets
 # 指定したチャンネル数で WAV にレンダリング
 sonare project bounce --in project.json --sample-rate 48000 --channels 2 -o bounce.wav
 
-# MIDI トラックを組み込みシンセでレンダリング（GM プログラムに追従）
+# MIDI トラックを内蔵シンセサイザーでレンダリング（GM プログラムに追従）
 sonare project bounce --in project.json --synth -o gm-bounce.wav
 
 # あるいはすべてのデスティネーションを 1 つのプリセットに固定
@@ -792,7 +797,7 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o`, `--strict`（診断が 1 件でもあれば失敗） |
 | `sonare project compile` | プロジェクト JSON をコンパイルチェック。診断を表示し、エラー時は非ゼロで終了（ファイルは書き出さない） | `--in`, `--json` |
 | `sonare project synth-presets` | `--synth` が受け付ける NativeSynth プリセット名を一覧表示 | `--json` |
-| `sonare project bounce` | 指定チャンネル数で WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--synth`, `-o` |
+| `sonare project bounce` | 指定チャンネル数で WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `-o` |
 | `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
 | `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |
@@ -807,7 +812,7 @@ sonare project import-smf --smf project.mid -o roundtrip.json
 sonare project export-midi2 --in project.json -o project.midi2
 sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 
-# プロジェクトの MIDI トラックを組み込みシンセでレンダリング
+# プロジェクトの MIDI トラックを内蔵シンセサイザーでレンダリング
 sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wav
 ```
 
@@ -815,7 +820,7 @@ Python CLI には `midi-render` もあります。これは常にシンセ経路
 
 SoundFont（SF2）とデスティネーションごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
-関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
+関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
 
 ## 対応オーディオ形式
 
@@ -849,13 +854,13 @@ Python CLI とネイティブ CLI は、C ABI のエラー分類に揃えた次�
 
 ## パフォーマンスのヒント
 
-1. **大きなファイル**: 10分を超えるファイルは、セグメントを解析することを検討:
+1. **大きなファイル**: 10 分を超えるファイルは、先に一部を切り出してから解析することを検討してください。
    ```bash
-   # 最初の60秒のみ解析（ffmpeg使用）
+   # 最初の 60 秒のみ解析（ffmpeg を使用）
    ffmpeg -i long_song.mp3 -t 60 sample.wav
    sonare analyze sample.wav
    ```
 
-2. **FFT サイズ**: 小さい FFT サイズ（`--n-fft 1024`）は高速だが周波数解像度が低い。
+2. **FFT サイズ**: 小さい FFT サイズ（`--n-fft 1024`）は高速ですが、周波数解像度が下がります。
 
-3. **ホップ長**: 大きいホップ長（`--hop-length 1024`）は高速だが時間解像度が低い。
+3. **ホップ長**: 大きいホップ長（`--hop-length 1024`）は高速ですが、時間解像度が下がります。
