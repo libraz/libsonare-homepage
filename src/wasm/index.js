@@ -227,6 +227,13 @@ function assertInterleavedSamples(fnName, samples, channels, validate) {
 function requireModule() {
   return getSonareModule();
 }
+function toVoicedFloat32(voiced) {
+  const out = new Float32Array(voiced.length);
+  for (let index = 0; index < voiced.length; index += 1) {
+    out[index] = voiced[index] ? 1 : 0;
+  }
+  return out;
+}
 function resolveEffectFftOptions(fnName, nFft, hopLength) {
   const resolvedNFft = nFft === void 0 ? 2048 : nFft;
   const resolvedHopLength = hopLength === void 0 ? 512 : hopLength;
@@ -374,7 +381,7 @@ function pitchCorrectToMidiTimevarying(samples, f0Hz, targetMidi, sampleRate = 2
   if (request.voicedProb && request.voicedProb.length !== request.f0Hz.length) {
     throw new RangeError("pitchCorrectToMidiTimevarying: voicedProb length must match f0Hz length");
   }
-  const voicedF32 = request.voiced ? Float32Array.from(request.voiced) : void 0;
+  const voicedF32 = request.voiced ? toVoicedFloat32(request.voiced) : void 0;
   return requireModule().pitchCorrectToMidiTimevarying(
     request.samples,
     request.sampleRate ?? 22050,
@@ -396,7 +403,7 @@ function pitchCorrectTimevarying(samples, f0Hz, sampleRate = 22050, hopLength = 
   }
   const nativeOptions = {
     ...request,
-    voiced: request.voiced ? Float32Array.from(request.voiced) : void 0
+    voiced: request.voiced ? toVoicedFloat32(request.voiced) : void 0
   };
   return requireModule().pitchCorrectTimevarying(
     request.samples,
@@ -852,6 +859,30 @@ function masteringStreamingPreview(samples, sampleRate = 22050, platforms = []) 
   const request = samples instanceof Float32Array ? { samples, sampleRate, platforms } : samples;
   return requireModule4().masteringStreamingPreview(
     request.samples,
+    request.sampleRate ?? 22050,
+    request.platforms ?? []
+  );
+}
+function masteringAssistantSuggestStereo(request) {
+  return requireModule4().masteringAssistantSuggestStereo(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
+}
+function masteringAudioProfileStereo(request) {
+  return requireModule4().masteringAudioProfileStereo(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050,
+    request.params ?? {}
+  );
+}
+function masteringStreamingPreviewStereo(request) {
+  return requireModule4().masteringStreamingPreviewStereo(
+    request.left,
+    request.right,
     request.sampleRate ?? 22050,
     request.platforms ?? []
   );
@@ -3739,6 +3770,15 @@ function meteringCrestFactorDb(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
   assertSamples("meteringCrestFactorDb", request.samples, request.validate !== false);
   return requireModule15().meteringCrestFactorDb(request.samples, request.sampleRate ?? 22050);
+}
+function meteringCrestFactorDbStereo(request) {
+  assertSamples("meteringCrestFactorDbStereo", request.left, request.validate !== false);
+  assertSamples("meteringCrestFactorDbStereo", request.right, request.validate !== false);
+  return requireModule15().meteringCrestFactorDbStereo(
+    request.left,
+    request.right,
+    request.sampleRate ?? 22050
+  );
 }
 function meteringDcOffset(samples, sampleRate = 22050, options = {}) {
   const request = samples instanceof Float32Array ? { samples, sampleRate, ...options } : samples;
@@ -7303,7 +7343,9 @@ export {
   masterAudioWithProgress,
   mastering,
   masteringAssistantSuggest,
+  masteringAssistantSuggestStereo,
   masteringAudioProfile,
+  masteringAudioProfileStereo,
   masteringChain,
   masteringChainStereo,
   masteringChainStereoWithProgress,
@@ -7333,12 +7375,14 @@ export {
   masteringStereoAnalysisNames,
   masteringStereoAnalyze,
   masteringStreamingPreview,
+  masteringStreamingPreviewStereo,
   melDelta,
   melSpectrogram,
   melToAudio,
   melToHz,
   melToStft,
   meteringCrestFactorDb,
+  meteringCrestFactorDbStereo,
   meteringDcOffset,
   meteringDetectClipping,
   meteringDynamicRange,
