@@ -41,9 +41,10 @@ const waveform = computed<GeneratedSignal>(() => (values.waveform as GeneratedSi
 const cutoff = computed<number>(() => Number(values.cutoff ?? 2200));
 const attack = computed<number>(() => Number(values.attack ?? 8));
 // Optional patch controls. Each falls back to the value the original `synth-note`
-// patch hardcoded, so a demo that omits the param renders exactly as before. The
-// engine reads `0` / `'default'` as "keep the base value", so the range minimums
-// below stay strictly positive and the filter selector passes real model names.
+// patch hardcoded, so a demo that omits the param renders exactly as before.
+// Numeric fields honour an explicit `0` as a real override, so a range minimum is
+// only ever set by what the control means musically. The filter selector still
+// passes real model names, since `'default'` does mean "keep the base model".
 const decay = computed<number>(() => Number(values.decay ?? 140));
 const sustain = computed<number>(() => Number(values.sustain ?? 0.75));
 const release = computed<number>(() => Number(values.release ?? 280));
@@ -75,6 +76,21 @@ const NOTE_HZ = 220;
 const ENV_COLS = 180; // amplitude-envelope columns (window > one period → smooth)
 const SCOPE_N = 480; // zoomed-scope points
 const SCOPE_CYCLES = 5; // cycles shown in the zoomed scope
+/** Seconds per quarter note at the project's default tempo (120 BPM). */
+const QUARTER_SEC = 0.5;
+/** Buffer length for demos that hold the key down for the whole render. */
+const HELD_RENDER_SEC = 1.3;
+/** Key-down time for demos that expose a release control. */
+const RELEASE_HOLD_SEC = 0.6;
+
+/** True when the demo offers a release control, so the key has to actually lift. */
+const hasRelease = computed(() => (props.def.params ?? []).some((p) => p.key === 'release'));
+/** Seconds the key stays down; without a release control the note is held throughout. */
+const holdSec = computed(() => (hasRelease.value ? RELEASE_HOLD_SEC : HELD_RENDER_SEC));
+/** Rendered buffer length; with a release control it grows to fit the whole tail. */
+const renderSec = computed(() =>
+  hasRelease.value ? RELEASE_HOLD_SEC + release.value / 1000 + 0.2 : HELD_RENDER_SEC,
+);
 
 // Top panel: amplitude envelope (shows attack/release). Bottom panel: a zoomed
 // scope of the sustain (shows oscillator shape + how the cutoff rounds it off).
@@ -126,10 +142,16 @@ function renderNote(wasm: WasmModule): Float32Array {
   const project = new Project();
   try {
     project.setSampleRate(SR);
-    const { clipId } = project.addMidiClip(0, 480);
+    // MIDI events are positioned in quarter-note units (1.0 = one quarter note),
+    // not in PPQ ticks. Passing ticks would push the note-off hundreds of quarter
+    // notes past the bounce, so the key would never lift and the release stage of
+    // the envelope would never be reached.
+    const offQuarters = holdSec.value / QUARTER_SEC;
+    const totalFrames = Math.round(SR * renderSec.value);
+    const { clipId } = project.addMidiClip(0, offQuarters + 4);
     project.setMidiEvents(clipId, [
       Project.midiNoteOn(0, 0, 0, NOTE, 100),
-      Project.midiNoteOff(480, 0, 0, NOTE, 0),
+      Project.midiNoteOff(offQuarters, 0, 0, NOTE, 0),
     ]);
     // Preset mode: take the named preset's full patch verbatim (just trim the gain)
     // so each engine's real timbre is auditioned, not a subtractive override of it.
@@ -139,7 +161,7 @@ function renderNote(wasm: WasmModule): Float32Array {
       ).synthPresetPatch(preset.value);
       return project.bounceWithSynthInstrument(
         { ...presetPatch, gain: 0.5 },
-        { numChannels: 1, sampleRate: SR, totalFrames: Math.round(SR * 1.3) },
+        { numChannels: 1, sampleRate: SR, totalFrames },
       );
     }
     const patch: Record<string, unknown> = {
@@ -163,7 +185,7 @@ function renderNote(wasm: WasmModule): Float32Array {
     return project.bounceWithSynthInstrument(patch, {
       numChannels: 1,
       sampleRate: SR,
-      totalFrames: Math.round(SR * 1.3),
+      totalFrames,
     });
   } finally {
     project.delete();
@@ -190,7 +212,10 @@ function fillTargets(pcm: Float32Array): void {
   // oscillator shape fills the panel regardless of the cutoff's level cut.
   const period = SR / NOTE_HZ;
   const span = Math.min(n - 1, Math.round(period * SCOPE_CYCLES));
-  const start = Math.min(n - span - 1, Math.floor(n * 0.42));
+  // Sample inside the key-down region so the scope shows the sustaining
+  // oscillator, not the release tail, however long that tail is.
+  const keyDown = Math.min(n, Math.round(holdSec.value * SR));
+  const start = Math.max(0, Math.min(n - span - 1, Math.floor(keyDown * 0.42)));
   let lp = 1e-6;
   for (let i = start; i < start + span; i++) lp = Math.max(lp, Math.abs(pcm[i]));
   const ls = 1 / lp;

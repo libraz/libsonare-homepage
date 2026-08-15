@@ -34,6 +34,9 @@ describe('useMasteringInsights', () => {
     const mastering = {
       source,
       analyzeSource: vi.fn(async () => ({
+        // masteringAudioProfileStereo measures the `loudness` block from the
+        // stereo pair, so every level-derived figure the panel shows — LUFS,
+        // LRA, true peak, crest factor — is read straight from it.
         profile: {
           durationSec: 125,
           bpm: 119.94,
@@ -47,8 +50,8 @@ describe('useMasteringInsights', () => {
         suggestions: { explanation: ['Trim low end', 12, 'Limit true peak', 'Add air'] },
         streamingPreview: {
           platforms: [
-            { name: 'Spotify', normalizationGainDb: -1.5, ceilingRisk: false },
-            { name: 123, normalizationGainDb: 'bad', ceilingRisk: true },
+            { name: 'Spotify', ceilingDb: -1, normalizationGainDb: -1.5, ceilingRisk: false },
+            { name: 123, ceilingDb: 'bad', normalizationGainDb: 'bad', ceilingRisk: true },
           ],
         },
       })),
@@ -108,7 +111,9 @@ describe('useMasteringInsights', () => {
         profile: {},
         suggestions: { explanation: [] },
         streamingPreview: {
-          platforms: [{ name: 'YouTube', normalizationGainDb: 1.2, ceilingRisk: true }],
+          platforms: [
+            { name: 'YouTube', ceilingDb: -1, normalizationGainDb: 1.2, ceilingRisk: true },
+          ],
         },
       })),
     } as any;

@@ -157,4 +157,28 @@ describe('checkDemos', () => {
     seedRegistry(root, [], ['band']);
     expect(checkDemos({ root })).toContainEqual(expect.stringContaining('clip "band"'));
   });
+
+  it('flags a missing asset for a clip listed in config.clips', () => {
+    const root = createWorkspace();
+    write(
+      root,
+      'src/demos/registry/instruments.ts',
+      [
+        'export const instrumentDemos = [',
+        "  { id: 'comping', archetype: 'comping', source: { kind: 'clip', clip: 'take-a' },",
+        "    config: { clips: ['take-a', 'take-b', 'take-c'] } },",
+        '];',
+      ].join('\n'),
+    );
+    write(root, 'src/docs/intro.md', '<SonareDemo id="comping" />');
+    write(root, 'src/ja/docs/intro.md', '<SonareDemo id="comping" />');
+    mkdirSync(path.join(root, 'src/public/demo-clips'), { recursive: true });
+    for (const name of ['take-a', 'take-b']) {
+      write(root, `src/public/demo-clips/${name}.wav`, '');
+    }
+
+    const failures = checkDemos({ root });
+    expect(failures).toContainEqual(expect.stringContaining('clip "take-c"'));
+    expect(failures.filter((f) => f.includes('take-a') || f.includes('take-b'))).toEqual([]);
+  });
 });

@@ -21,8 +21,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'ラウドネス計測 — LUFS・トゥルーピーク・レンジ',
     },
     caption: {
-      en: 'The bar tracks momentary loudness as the clip plays; the panel is the loudness over time. Integrated LUFS is the single overall number, true-peak is the real ceiling between samples, and LRA captures how much the loudness moves. Switch the window to compare the fast momentary meter with the smoother short-term one.',
-      ja: 'バーは再生中の瞬時ラウドネスを追い、パネルは時間ごとのラウドネスです。インテグレーテッド LUFS は全体を表す一つの数値、トゥルーピークはサンプル間も含む本当の上限、LRA はラウドネスの動く幅を表します。ウィンドウを切り替えると、速い瞬時メーターと滑らかな短時間メーターを比べられます。',
+      en: 'The bar tracks momentary loudness as the clip plays; the panel is the loudness over time. Integrated LUFS is the single overall number, true-peak is the real ceiling between samples, and LRA captures how much the loudness moves. Switch the window to compare the fast momentary meter with the smoother short-term one — each reports only once its window has filled, so the short-term contour starts three seconds into the clip.',
+      ja: 'バーは再生中の瞬時ラウドネスを追い、パネルは時間ごとのラウドネスです。インテグレーテッド LUFS は全体を表す一つの数値、トゥルーピークはサンプル間も含む本当の上限、LRA はラウドネスの動く幅を表します。ウィンドウを切り替えると、速い瞬時メーターと滑らかな短時間メーターを比べられます。どちらもウィンドウが埋まってから値を出すため、短時間の曲線はクリップの 3 秒後から始まります。',
     },
     params: [
       {
@@ -48,8 +48,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'デノイズ修復 — 修復前と修復後',
     },
     caption: {
-      en: 'The clean chord is given a layer of broadband hiss (Damaged); the repair stage removes it (Repaired). Both averaged spectra are drawn together — the raised high-frequency floor is the hiss, and it drops back onto the music once denoised. Flip Compare to audition each side at the same loudness, and switch the algorithm to see how much floor each one pulls down. FLOOR is the high-band reduction in dB.',
-      ja: 'きれいなコードに広帯域のヒスノイズを乗せたものが「修復前」、リペアステージで取り除いたものが「修復後」です。平均スペクトルを重ねて表示しており、持ち上がった高域のフロアがヒスノイズで、デノイズすると音楽の上に落ち着きます。Compare を切り替えると同じラウドネスで聴き比べ、アルゴリズムを変えるとフロアの下がり方の違いが分かります。FLOOR は高域の低減量（dB）です。',
+      en: 'The clean chord is given a layer of broadband hiss (Damaged); the repair stage removes it (Repaired). Both averaged spectra are drawn together — the raised high-frequency floor is the hiss, and it drops back onto the music once denoised. Flip Compare to audition each side — the gain is untouched, so the hiss is the only thing that moves — and switch the algorithm to see how much floor each one pulls down. FLOOR is the high-band reduction in dB.',
+      ja: 'きれいなコードに広帯域のヒスノイズを乗せたものが「修復前」、リペアステージで取り除いたものが「修復後」です。平均スペクトルを重ねて表示しており、持ち上がった高域のフロアがヒスノイズで、デノイズすると音楽の上に落ち着きます。Compare を切り替えると両者を聴き比べできます。ゲインには手を加えていないので、動くのはヒスノイズだけです。アルゴリズムを変えるとフロアの下がり方の違いが分かります。FLOOR は高域の低減量（dB）です。',
     },
     params: [
       {
@@ -154,8 +154,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'サンプル間ピーク — マスターが再生時にクリップする理由',
     },
     caption: {
-      en: 'The dots are the stored samples; the curve is the continuous waveform a converter rebuilds from them. They are aligned worst-case, so the true peak falls between two samples. Raise the frequency toward Nyquist and the samples land further down the slope — the reconstruction rises higher above them. Push the sample peak to 0 dBFS and the true peak pokes above it: every stored number looks safe, yet the signal clips on playback. That gap is what a true-peak meter catches and a true-peak limiter tames.',
-      ja: 'ドットは保存されたサンプル、曲線はそこからコンバーターが再構成する連続波形です。最悪条件で並べてあるため、真のピークは 2 つのサンプルのあいだに落ちます。周波数をナイキストへ近づけるほどサンプルは斜面の下側に来て、再構成はその上へより高く伸びます。サンプルピークを 0 dBFS まで上げると、真のピークがそれを超えます。保存された数値はどれも安全に見えるのに、再生すると信号はクリップします。この差こそ、トゥルーピークメーターが捉え、トゥルーピークリミッターが抑えるものです。',
+      en: 'The dots are the stored samples; the curve is the continuous waveform a converter rebuilds from them. The middle pair straddles a crest, so there the true peak falls between two samples. The nearer the frequency sits to Nyquist, the fewer dots there are per cycle and the further the reconstruction can rise above every stored one — but the overshoot does not grow smoothly: at some frequencies a dot lands right on a crest and the gap closes to nothing. Push the sample peak to 0 dBFS and the true peak pokes above it: every stored number looks safe, yet the signal clips on playback. That gap is what a true-peak meter catches and a true-peak limiter tames.',
+      ja: 'ドットは保存されたサンプル、曲線はそこからコンバーターが再構成する連続波形です。中央の 2 つは山をまたいでいるので、そこでは真のピークがサンプルのあいだに落ちます。周波数がナイキストに近いほど 1 周期あたりのドットは減り、再構成はどのサンプルよりも高く伸びられます。ただし、はみ出し方は滑らかに増えるわけではありません。周波数によってはドットがちょうど山の頂点に乗り、差がゼロになります。サンプルピークを 0 dBFS まで上げると、真のピークがそれを超えます。保存された数値はどれも安全に見えるのに、再生すると信号はクリップします。この差こそ、トゥルーピークメーターが捉え、トゥルーピークリミッターが抑えるものです。',
     },
     params: [
       {
@@ -213,7 +213,7 @@ export const masteringDemos: SonareDemoDef[] = [
     // No clip: the transfer curve, envelopes, and auditioned tone are computed from
     // the sliders, the same as compressor-curve, plus a dry/compressed blend.
     source: { kind: 'generate', signal: 'saw', freq: 150 },
-    viz: 'meters',
+    viz: 'overlay',
     title: {
       en: 'Parallel compression — squash a copy, keep the punch',
       ja: 'パラレルコンプレッション — コピーを潰し、パンチは残す',
@@ -267,8 +267,8 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'チルト EQ — スペクトル全体を一度に整える',
     },
     caption: {
-      en: 'Tilt EQ rotates the broad tonal balance around a fixed midrange pivot (the amber line). Positive tilt lifts the highs and trims the lows for a brighter master; negative tilt does the reverse for a warmer one. Loudness is matched on every render, so what you hear is tone, not level. Watch the averaged spectrum see-saw around the pivot as you drag. Use it for broad correction — reach for a narrow band, not tilt, to tame a single resonance.',
-      ja: 'チルト EQ は、固定したミッドレンジのピボット（橙色の線）を軸に、おおまかな音色バランスを回転させます。プラス方向は高域を持ち上げ低域を削って明るく、マイナス方向はその逆で温かくします。レンダーごとにラウドネスを揃えているので、聞こえる違いはレベルではなく音色です。ドラッグすると、平均スペクトルがピボットを軸にシーソーのように傾くのが見えます。用途は広い範囲の補正です。特定の共鳴を抑えたいときは、チルトではなく狭いバンドを使ってください。',
+      en: 'Tilt EQ rotates the broad tonal balance around a fixed midrange pivot (the amber line). Positive tilt lifts the highs and trims the lows for a brighter master; negative tilt does the reverse for a warmer one. Every render is peak-normalized to the same ceiling, which keeps a positive tilt from clipping — but that matches peaks, not loudness, so a bright setting still measures a couple of LU under a dark one. Watch the averaged spectrum see-saw around the pivot as you drag. Use it for broad correction — reach for a narrow band, not tilt, to tame a single resonance.',
+      ja: 'チルト EQ は、固定したミッドレンジのピボット（橙色の線）を軸に、おおまかな音色バランスを回転させます。プラス方向は高域を持ち上げ低域を削って明るく、マイナス方向はその逆で温かくします。レンダーごとにピークを同じ高さへ揃えているためプラス方向でもクリップしませんが、揃えているのはピークであってラウドネスではないので、明るい設定は暗い設定より 2 LU ほど低く出ます。ドラッグすると、平均スペクトルがピボットを軸にシーソーのように傾くのが見えます。用途は広い範囲の補正です。特定の共鳴を抑えたいときは、チルトではなく狭いバンドを使ってください。',
     },
     params: [
       {

@@ -18,9 +18,12 @@
  *   and less "phasey". The magnitude is fixed; only the phase quality improves.
  * - `tilt-eq` — drag the tilt amount and the broadband spectrum rotates around a fixed
  *   midrange pivot: positive tilt lifts the highs and trims the lows (brighter),
- *   negative tilt does the reverse (warmer). Loudness is matched per render so the
- *   change you hear is tone, not level. A complementary low-/high-shelf pair around
- *   the pivot, the mastering-EQ way to rebalance the whole spectrum at once.
+ *   negative tilt does the reverse (warmer). A complementary low-/high-shelf pair
+ *   around the pivot, the mastering-EQ way to rebalance the whole spectrum at once.
+ *
+ * Every render is peak-normalized to a fixed ceiling (see `paramSweepProcessing`).
+ * That is peak matching, not loudness matching — a bright tilt still measures a
+ * couple of LU under a dark one.
  *
  * The top panel is the waveform you hear; the bottom is the averaged magnitude
  * spectrum. A playback-synced beam sweeps the waveform.

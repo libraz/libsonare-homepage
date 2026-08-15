@@ -104,7 +104,7 @@ const CARD_META: Array<
     accent: false,
     status: 'NEW',
     eyebrow: 'INSTRUMENTS',
-    chips: ['15 ENGINES', '68 PRESETS', 'MIDI', 'PATCH'],
+    chips: ['15 ENGINES', '69 PRESETS', 'MIDI', 'PATCH'],
   },
   {
     id: 'studio',
@@ -122,7 +122,7 @@ const CARD_META: Array<
     accent: false,
     status: 'NEW',
     eyebrow: 'PLAY · LEARN',
-    chips: ['SOUNDFONT', 'SF2 RENDER', 'WEB MIDI', 'FALLING NOTES'],
+    chips: ['SYNTH + SF2', 'RHYTHM GAME', 'WEB MIDI', 'FALLING NOTES'],
   },
 ];
 
@@ -167,7 +167,7 @@ export const demoCardsCopy = {
       practice: {
         title: 'Piano Practice',
         tagline:
-          "libsonare's built-in SoundFont engine renders single-track MIDI on-device — practice with falling notes, a lit keyboard, and MIDI scoring.",
+          "libsonare's built-in synth and SoundFont engines render single-track MIDI on-device — practice with falling notes, a lit keyboard, and MIDI scoring.",
       },
     },
   },
@@ -211,7 +211,7 @@ export const demoCardsCopy = {
       practice: {
         title: 'ピアノ練習',
         tagline:
-          '1 トラック MIDI を libsonare 内蔵 SoundFont 音源で端末内レンダリング。落下ノート、光る鍵盤、MIDI 採点で練習できます。',
+          '1 トラック MIDI を libsonare 内蔵の合成音源／SoundFont 音源で端末内レンダリング。落下ノート、光る鍵盤、MIDI 採点で練習できます。',
       },
     },
   },

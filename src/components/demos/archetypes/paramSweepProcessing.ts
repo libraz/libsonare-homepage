@@ -89,36 +89,31 @@ export function renderParamSweepAudio(
     fundHz = PARAM_SWEEP_BASE_F0;
   } else if (options.processor === 'griffin-lim') {
     const mel = wasm.melSpectrogram(baseClip.samples, sampleRate, 2048, 512, 128);
-    samples = peakNormalize(
-      wasm.melToAudio(
-        mel.power,
-        mel.nMels,
-        mel.nFrames,
-        sampleRate,
-        2048,
-        512,
-        0,
-        0,
-        options.iters,
-      ),
-      0.7,
+    samples = wasm.melToAudio(
+      mel.power,
+      mel.nMels,
+      mel.nFrames,
+      sampleRate,
+      2048,
+      512,
+      0,
+      0,
+      options.iters,
     );
     outDur = samples.length / sampleRate;
   } else if (options.processor === 'tilt-eq') {
-    let tilted: Float32Array;
     if (options.tilt === 0) {
-      tilted = Float32Array.from(baseClip.samples);
+      samples = Float32Array.from(baseClip.samples);
     } else {
-      tilted = shelfFilter(
+      const low = shelfFilter(
         baseClip.samples,
         sampleRate,
         'low',
         PARAM_SWEEP_TILT_PIVOT_HZ,
         -options.tilt / 2,
       );
-      tilted = shelfFilter(tilted, sampleRate, 'high', PARAM_SWEEP_TILT_PIVOT_HZ, options.tilt / 2);
+      samples = shelfFilter(low, sampleRate, 'high', PARAM_SWEEP_TILT_PIVOT_HZ, options.tilt / 2);
     }
-    samples = peakNormalize(tilted, 0.7);
     pivotHz = PARAM_SWEEP_TILT_PIVOT_HZ;
   } else {
     samples =
@@ -128,5 +123,20 @@ export function renderParamSweepAudio(
     fundHz = PARAM_SWEEP_BASE_F0 * 2 ** (options.semitones / 12);
   }
 
-  return { samples, sampleRate, fundHz, pivotHz, outDur, widthFrac };
+  // Every render is peak-normalized to the same target, for two reasons that split
+  // across the five processors. Four of them run past 0 dBFS somewhere in their
+  // slider range and would clip on playback: measured on the clips these demos ship
+  // with, `pitchShift` reaches about 1.34, `melToAudio` about 1.28, the tilt shelf
+  // pair about 1.77 at +12 dB, and `voiceChange` about 2.25 at formant 1.4 — that
+  // last one holds its level (RMS stays within roughly 1.7 dB of the input across
+  // the range) but its resynthesis sharpens the crest factor. `timeStretch` is the
+  // opposite case: it never clips here, yet it loses up to about 10 dB at the
+  // fastest rates, so an un-normalized render would simply arrive quieter than its
+  // neighbours. One fixed peak target covers both and keeps the sweep an A/B of the
+  // transform rather than of the level. It matches peaks, not loudness — integrated
+  // LUFS still moves by a couple of units across a sweep. Copy first when a branch
+  // passed the cached clip through untouched, since normalization is in place and
+  // the clip cache is shared page-wide.
+  const out = samples === baseClip.samples ? Float32Array.from(samples) : samples;
+  return { samples: peakNormalize(out, 0.7), sampleRate, fundHz, pivotHz, outDur, widthFrac };
 }

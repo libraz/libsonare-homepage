@@ -70,8 +70,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'ADSR エンベロープ — 音の立ち上がりと減衰',
     },
     caption: {
-      en: 'The same held A3, shaped by its amplitude envelope. Attack and decay set how the note reaches and leaves its peak; sustain is the level it holds while a key is down; release is the fade after the key lifts. The top outline is that envelope — drag a control and watch the shape, then press play to hear it. (Sustain cannot reach a true zero here: the engine reads 0 as "leave the preset value", so the slider stops just above it.)',
-      ja: '同じ A3 を、振幅エンベロープで形づくります。アタックとディケイは音がピークへ到達し離れる速さを、サステインはキーを押している間に保つレベルを、リリースはキーを離した後の減衰を決めます。上段の輪郭がそのエンベロープです。コントロールを動かして形を見て、再生で確かめてください。（ここではサステインを完全な 0 にはできません。エンジンは 0 を「プリセット値を保持」と解釈するため、スライダーは 0 の少し上で止まります。）',
+      en: 'The same held A3, shaped by its amplitude envelope. Attack and decay set how the note reaches and leaves its peak; sustain is the level it holds while a key is down; release is the fade after the key lifts. The top outline is that envelope — drag a control and watch the shape, then press play to hear it. (Pull sustain all the way to zero and the note decays to silence while the key is still down: a plucked shape rather than a held one.)',
+      ja: '同じ A3 を、振幅エンベロープで形づくります。アタックとディケイは音がピークへ到達し離れる速さを、サステインはキーを押している間に保つレベルを、リリースはキーを離した後の減衰を決めます。上段の輪郭がそのエンベロープです。コントロールを動かして形を見て、再生で確かめてください。（サステインを 0 まで下げると、キーを押したままでも音が減衰しきって無音になります。持続する音ではなく、弾いて減衰するだけの形です。）',
     },
     params: [
       {
@@ -98,7 +98,7 @@ export const instrumentsDemos: SonareDemoDef[] = [
         key: 'sustain',
         kind: 'range',
         default: 0.75,
-        min: 0.02,
+        min: 0,
         max: 1,
         step: 0.01,
         label: { en: 'Sustain', ja: 'サステイン' },
@@ -285,16 +285,18 @@ export const instrumentsDemos: SonareDemoDef[] = [
   {
     id: 'comping',
     archetype: 'comping',
-    // Three takes share one clip name prefix; the archetype loads comp-take-a/b/c.
+    // The archetype auditions several takes at once, so `source` alone cannot name
+    // every asset it loads; `config.clips` lists all of them, in take order.
     source: { kind: 'clip', clip: 'comp-take-a' },
+    config: { clips: ['comp-take-a', 'comp-take-b', 'comp-take-c'] },
     viz: 'waveform',
     title: {
       en: 'Comping — one performance from three takes',
       ja: 'コンピング — 3 つのテイクから 1 つの演奏を',
     },
     caption: {
-      en: "Three takes of the same phrase, each strong somewhere: Take A is warm and even, Take B is bright with an accented middle but fluffs a note in segment 3, Take C builds to an expressive finish. Pick a take for each of the four segments and the comp lane assembles them with short crossfades at the seams — the recipe for a performance that never happened in one pass. Press play to audition your comp; route around Take B's wrong note and keep its bright middle. The takes are never altered — you are only choosing which one plays when.",
-      ja: '同じフレーズの 3 テイクは、それぞれ得意な場所が違います。テイク A は温かく均一、テイク B は明るく中盤にアクセントがありますが第 3 区間で音を外し、テイク C は表情豊かな終わりへ向かって盛り上がります。4 つの区間それぞれにテイクを選ぶと、コンプレーンが継ぎ目に短いクロスフェードを入れて組み上げます — 一度の演奏では実現しなかった「いいとこ取り」のレシピです。再生して自分のコンプを試聴しましょう。テイク B の外した音を避けつつ、その明るい中盤は活かせます。テイク自体は一切変更されません — どれをいつ鳴らすかを選んでいるだけです。',
+      en: "Three takes of the same phrase, each strong somewhere: Take A is warm and even, Take B is bright and lands its accents in the opening segment but fluffs a note in segment 2, Take C builds to an expressive finish. Pick a take for each of the four segments and the comp lane assembles them with short crossfades at the seams — the recipe for a performance that never happened in one pass. Press play to audition your comp; route around Take B's wrong note and keep its bright opening. The takes are never altered — you are only choosing which one plays when.",
+      ja: '同じフレーズの 3 テイクは、それぞれ得意な場所が違います。テイク A は温かく均一、テイク B は明るく最初の区間にアクセントが決まりますが第 2 区間で音を外し、テイク C は表情豊かな終わりへ向かって盛り上がります。4 つの区間それぞれにテイクを選ぶと、コンプレーンが継ぎ目に短いクロスフェードを入れて組み上げます — 一度の演奏では実現しなかった「いいとこ取り」のレシピです。再生して自分のコンプを試聴しましょう。テイク B の外した音を避けつつ、その明るい出だしは活かせます。テイク自体は一切変更されません — どれをいつ鳴らすかを選んでいるだけです。',
     },
     params: [
       {
@@ -354,8 +356,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: '代表的なプリセット — 1 音で多彩なエンジンを',
     },
     caption: {
-      en: 'The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, pipe organ, bowed string, reed, brass, or flute. Change the preset, watch the envelope and waveshape, then press play to compare them.',
-      ja: '同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
+      en: 'The same A3, auditioned through representative named presets from the current NativeSynth catalog. Each patch comes from `synthPresetPatch(name)` and keeps its actual engine character: subtractive, FM, buzzing-bridge plucked string, modal, drawbar organ, percussion, piano, pipe organ, bowed string, reed, brass, or flute. The drum kit is the exception: it plays the GM percussion map, where a key selects a kit piece instead of a pitch, so that key strikes a crash cymbal. Change the preset, watch the envelope and waveshape, then press play to compare them.',
+      ja: '同じ A3 を、現在の NativeSynth カタログにある代表的なプリセットで試聴します。各パッチは `synthPresetPatch(name)` から読み込み、減算、FM、バズブリッジ式の撥弦、モーダル、ドローバーオルガン、打楽器、ピアノ、パイプオルガン、擦弦、リード、金管、フルートという実際のエンジン特性を保ちます。例外はドラムキットで、GM のパーカッションマップを鳴らすためキーは音高ではなくキットの打楽器を選び、このキーはクラッシュシンバルになります。プリセットを切り替え、エンベロープと波形を見てから再生して比べてください。',
     },
     params: [
       {
@@ -370,7 +372,7 @@ export const instrumentsDemos: SonareDemoDef[] = [
             label: { en: 'Warm pad (subtractive)', ja: 'ウォームパッド（減算）' },
           },
           { value: 'e-piano', label: { en: 'E-piano (FM)', ja: 'エレピ（FM）' } },
-          { value: 'bell', label: { en: 'Bell (FM)', ja: 'ベル（FM）' } },
+          { value: 'bell', label: { en: 'Bell (modal)', ja: 'ベル（モーダル）' } },
           {
             value: 'pluck',
             label: { en: 'Pluck (buzzing bridge)', ja: 'プラック（バズブリッジ）' },

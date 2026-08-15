@@ -304,7 +304,7 @@ html:not(.dark) .demo-grid__fader-cap {
   animation: demo-grid-wave 2.2s ease-in-out infinite;
 }
 
-/* Tuner rack knobs */
+/* Realtime FX rack knobs */
 .demo-grid__rack-knob {
   fill: var(--demo-control-bg, rgba(139, 92, 246, 0.06));
   stroke: var(--demo-accent-dim, rgba(139, 92, 246, 0.3));

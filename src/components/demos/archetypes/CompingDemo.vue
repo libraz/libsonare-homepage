@@ -105,9 +105,23 @@ function assemble(segs: Take[]): Float32Array {
   return comp;
 }
 
+/**
+ * Clip asset keys, one per take, in take order. They come from the registry rather
+ * than a name template so every asset this demo loads is named in one place — the
+ * clip-existence gate can only see clip names that appear in the registry.
+ */
+function takeClipNames(): string[] {
+  const configured = props.def.config?.clips;
+  const names = Array.isArray(configured) ? configured.filter((c) => typeof c === 'string') : [];
+  if (names.length !== TAKES.length) {
+    throw new Error(`comping demo "${props.def.id}": config.clips must name ${TAKES.length} clips`);
+  }
+  return names;
+}
+
 async function ensureClips(): Promise<void> {
   if (takeBuf.a) return;
-  const loaded = await Promise.all(TAKES.map((t) => loadClip(`comp-take-${t}`)));
+  const loaded = await Promise.all(takeClipNames().map((name) => loadClip(name)));
   sampleRate = loaded[0].sampleRate;
   clipLen = Math.min(...loaded.map((c) => c.samples.length));
   TAKES.forEach((t, i) => {

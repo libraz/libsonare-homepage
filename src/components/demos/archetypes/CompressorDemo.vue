@@ -295,7 +295,6 @@ function buildAudio(): { samples: Float32Array; sampleRate: number } {
   const sampleRate = 44100;
   const n = Math.round(sampleRate * DUR);
   const out = new Float32Array(n);
-  const gridRate = COLS / DUR;
   const aCoef = Math.exp(-1 / Math.max(1e-4, (attackMs.value / 1000) * sampleRate));
   const rCoef = Math.exp(-1 / Math.max(1e-4, (releaseMs.value / 1000) * sampleRate));
   let gr = 0;
@@ -312,7 +311,6 @@ function buildAudio(): { samples: Float32Array; sampleRate: number } {
     if (ph >= 1) ph -= 1;
     out[i] = (2 * ph - 1) * 0.6 * ampLin; // saw × envelope
   }
-  void gridRate;
   return { samples: out, sampleRate };
 }
 

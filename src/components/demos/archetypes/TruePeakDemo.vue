@@ -33,7 +33,7 @@ const { values, updateParams } = useDemoParams(props.def);
 // `level` is the sample peak in dBFS (what a sample meter reads); `nyq` is the tone
 // frequency as a fraction of Nyquist (closer to 1 → fewer samples per cycle).
 const sampleDb = computed<number>(() => Number(values.level ?? -0.3));
-const nyq = computed<number>(() => Number(values.nyquist ?? 0.4));
+const nyq = computed<number>(() => Number(values.nyquist ?? 0.48));
 
 // Half the sample spacing in phase, i.e. the phase from a sample to the true peak
 // under worst-case alignment. cos(theta) = sample peak / true peak.

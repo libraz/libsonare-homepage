@@ -254,7 +254,7 @@ function paint(): void {
   ctx.fillText('WAVEFORM', padX, waveTop - 2);
   ctx.fillText('SPECTRUM', padX, specTop - 2);
   ctx.textAlign = 'right';
-  ctx.fillText('5 kHz', padX + innerW, specBot + 2);
+  ctx.fillText(`${(SPEC_MAX_HZ / 1000).toFixed(1)} kHz`, padX + innerW, specBot + 2);
   ctx.textAlign = 'left';
 }
 

@@ -149,7 +149,7 @@ const fallingNotes = [
       </g>
     </svg>
 
-    <svg v-else-if="visual === 'rack'" viewBox="0 0 220 60" preserveAspectRatio="none">
+    <svg v-else-if="visual === 'fx'" viewBox="0 0 220 60" preserveAspectRatio="none">
       <g class="demo-grid__rack">
         <rect
           v-for="(x, i) in [16, 54, 92, 130, 168]"

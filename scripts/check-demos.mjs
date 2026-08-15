@@ -6,7 +6,8 @@
  *  1. every `id` referenced from markdown is defined in the demo registry;
  *  2. every registry definition is referenced from markdown at least once;
  *  3. mirrored locale docs reference the same set of ids (i18n parity for widgets);
- *  4. every clip referenced by the registry has a file under public/demo-clips/.
+ *  4. every clip the registry names — `source.clip` plus the `config.clips` list a
+ *     multi-clip archetype loads — has a file under public/demo-clips/.
  *
  * Deep per-definition shape (localized labels have the expected fallback) is asserted by the
  * vitest test `test/demo-registry.test.ts`, which can import the TypeScript directly.
@@ -20,6 +21,11 @@ const DEMO_TAG = /<SonareDemo\s+[^>]*\bid=["']([^"']+)["']/g;
 const DEMO_TAG_FULL = /<SonareDemo\b([^>]*)\/?>/g;
 const REGISTRY_ID = /\bid:\s*["']([^"']+)["']/g;
 const REGISTRY_CLIP = /\bclip:\s*["']([^"']+)["']/g;
+// Archetypes that load more than one asset list them in `config.clips`, so the whole
+// clip set stays in the registry instead of being built from a name template inside a
+// component (where this gate could not see it).
+const REGISTRY_CLIP_LIST = /\bclips:\s*\[([^\]]*)\]/g;
+const QUOTED = /["']([^"']+)["']/g;
 const TAG_ATTR = /(?:^|\s)(:?[\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
 const DEMO_ID_FORMAT = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -86,19 +92,31 @@ function validateDemoTagsInFile(file) {
   return failures;
 }
 
-function collectFromRegistry(dir, pattern) {
+function collectFromRegistry(dir, pattern, expand = (match) => [match[1]]) {
   const found = new Set();
   if (!fs.existsSync(dir)) return found;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      for (const v of collectFromRegistry(full, pattern)) found.add(v);
+      for (const v of collectFromRegistry(full, pattern, expand)) found.add(v);
     } else if (entry.isFile() && entry.name.endsWith('.ts')) {
       const src = fs.readFileSync(full, 'utf8');
-      for (const m of src.matchAll(pattern)) found.add(m[1]);
+      for (const m of src.matchAll(pattern)) {
+        for (const v of expand(m)) found.add(v);
+      }
     }
   }
   return found;
+}
+
+/** Every clip asset the registry names, from both `source.clip` and `config.clips`. */
+function collectClipNames(dir) {
+  const names = collectFromRegistry(dir, REGISTRY_CLIP);
+  const listed = collectFromRegistry(dir, REGISTRY_CLIP_LIST, (match) =>
+    [...match[1].matchAll(QUOTED)].map((quoted) => quoted[1]),
+  );
+  for (const name of listed) names.add(name);
+  return names;
 }
 
 function listLocaleNames(localesDir, defaultLocale) {
@@ -157,7 +175,7 @@ export function checkDemos({ root = process.cwd(), defaultLocale = 'en' } = {}) 
   const locales = listLocaleNames(localesDir, defaultLocale);
 
   const definedIds = collectFromRegistry(registryDir, REGISTRY_ID);
-  const clipNames = collectFromRegistry(registryDir, REGISTRY_CLIP);
+  const clipNames = collectClipNames(registryDir);
 
   // 1 + 2: all markdown references must resolve, and all definitions must be used.
   const referencedIds = new Set();

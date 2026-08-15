@@ -136,8 +136,6 @@ let rawF0: Float32Array | null = null; // measured Hz per hop, reused for correc
 let voicedInt: Int32Array | null = null; // per-hop voiced flags for correction
 let rawContour: Contour | null = null;
 let tunedContour: Contour | null = null;
-/** Audio buffer duration in seconds (phrase + release tail) for playhead mapping. */
-let audioDur = 0;
 
 /** Peak-normalize a buffer in place to a fixed headroom. */
 function peakNormalize(pcm: Float32Array, target = 0.85): void {
@@ -188,7 +186,6 @@ function renderRaw(wasm: WasmModule): Float32Array {
 
     const phraseSec = (beats * 60) / BPM;
     const totalFrames = Math.round(SR * (phraseSec + TAIL_SEC));
-    audioDur = totalFrames / SR;
     const pcm = project.bounceWithSynthInstrument(
       { engineMode: 'vocal', gain: 1, polyphony: 1, ampAttackMs: 8, ampReleaseMs: 120 },
       { numChannels: 1, sampleRate: SR, totalFrames },
@@ -467,12 +464,11 @@ function paint(): void {
   ctx.fillRect(PAD_X + 44, PAD_TOP - 1, 9, 3);
   ctx.fillText('Tuned', PAD_X + 57, PAD_TOP - 2);
 
-  // Playhead — locked to the audio clock, mapping the phrase span onto the width.
+  // Playhead — locked to the audio clock. The contours are plotted across every
+  // analysis frame of the bounced buffer (phrase plus release tail), and
+  // `progress` is the fraction of that same buffer, so it maps straight onto x.
   if (isPlaying.value && progress.value > 0) {
-    const phraseSec = (MELODY.length * 60) / BPM;
-    const ratio = phraseSec > 0 ? audioDur / phraseSec : 1;
-    const frac = Math.min(1, progress.value * ratio);
-    const px = xOf(frac);
+    const px = xOf(Math.min(1, progress.value));
     ctx.strokeStyle = dispEmph > 0.5 ? TUNED_COL : RAW_COL;
     ctx.lineWidth = 1.5;
     ctx.beginPath();

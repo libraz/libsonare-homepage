@@ -156,17 +156,23 @@ function efxPartOnSysex(channel: number): Uint8Array {
 }
 
 // ---- renderers -------------------------------------------------------------
-/** gm-program mode: bounce one note through a GM program, no SoundFont loaded. */
+/**
+ * gm-program mode: bounce one note through a GM program, no SoundFont loaded.
+ *
+ * Project MIDI positions are QUARTER NOTES (floats), not PPQ ticks, so the clip
+ * is two beats long and the note is released after one and a half — at the
+ * default 120 BPM that is a 0.75 s note whose release tail fits the render below.
+ */
 function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
   const Project = (wasm as unknown as { Project: ProjectCtor }).Project;
   const project = new Project();
   try {
     project.setSampleRate(SR);
-    const { clipId } = project.addMidiClip(0, 960);
+    const { clipId } = project.addMidiClip(0, 2);
     project.setMidiEvents(clipId, [
       Project.midiProgram(0, 0, 0, program),
       Project.midiNoteOn(0, 0, 0, 60, 112),
-      Project.midiNoteOff(720, 0, 0, 60, 0),
+      Project.midiNoteOff(1.5, 0, 0, 60, 0),
     ]);
     return project.bounceWithSf2Instrument(
       {},

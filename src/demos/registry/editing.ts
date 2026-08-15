@@ -48,8 +48,8 @@ export const editingDemos: SonareDemoDef[] = [
       ja: 'タイムストレッチ — 音程はそのまま、長さを変える',
     },
     caption: {
-      en: "Time stretching is pitch shift's exact opposite: it changes how long the audio lasts while leaving the pitch alone. Drag the rate and the drum hits spread out or bunch up — the waveform fills more or less of the panel — but the spectrum below barely moves. Below 1.0 the clip slows down and grows; above 1.0 it speeds up and shrinks. Press play to hear the groove change tempo with no chipmunk effect.",
-      ja: 'タイムストレッチはピッチシフトのちょうど逆で、音程はそのままに、音の長さを変えます。レート（rate）をドラッグするとドラムの打点が広がったり詰まったりして波形がパネルを占める幅も変わりますが、下のスペクトルはほとんど動きません。1.0 より下では遅く長く、1.0 より上では速く短くなります。再生すると、チップマンク効果なしにグルーヴのテンポだけが変わるのが聴けます。',
+      en: "Time stretching is pitch shift's exact opposite: it changes how long the audio lasts while leaving the pitch alone. Drag the rate and the drum hits spread out or bunch up — the waveform fills more or less of the panel — but the spectrum below barely moves. Below 1.0 the clip slows down and grows; above 1.0 it speeds up and shrinks. Every render is peak-normalized, so a fast rate does not simply arrive quieter than a slow one; the level you hear is set by the demo, not by the stretch. Press play to hear the groove change tempo with no chipmunk effect.",
+      ja: 'タイムストレッチはピッチシフトのちょうど逆で、音程はそのままに、音の長さを変えます。レート（rate）をドラッグするとドラムの打点が広がったり詰まったりして波形がパネルを占める幅も変わりますが、下のスペクトルはほとんど動きません。1.0 より下では遅く長く、1.0 より上では速く短くなります。レンダーごとにピークを揃えているので、速いレートがそのまま小さく聞こえることはありません。聞こえるレベルを決めているのはデモ側で、ストレッチではありません。再生すると、チップマンク効果なしにグルーヴのテンポだけが変わるのが聴けます。',
     },
     params: [
       {

@@ -8,7 +8,8 @@
  * loudest moment. The readouts give the single numbers an engineer ships against:
  * integrated LUFS (overall loudness), true-peak (the real ceiling), and LRA (how much
  * the loudness varies). Switch the window to compare fast momentary metering with the
- * slower short-term measure.
+ * slower short-term measure — a meter emits nothing until its window has filled, so
+ * the short-term contour only starts three seconds into the clip.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
@@ -17,6 +18,11 @@ import { prepareCanvas2D } from '../canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import {
+  loudnessContourColumns,
+  MOMENTARY_WINDOW_SEC,
+  SHORT_TERM_WINDOW_SEC,
+} from './loudnessContour';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -59,7 +65,14 @@ const HI = 0; // LUFS axis top
 const COLS = 240;
 const dispContour = new Float32Array(COLS); // 0..1 normalized fill height
 const targetContour = new Float32Array(COLS);
+// First column that has a measurement behind it; columns before it fall inside the
+// initial window and carry no reading at all.
+let contourStart = COLS;
 let peakHold = 0; // max momentary fill seen during the current playback
+
+// Window the current contour was measured with (see `loudnessContour.ts` for why the
+// series does not start at t = 0).
+let contourWindowSec = MOMENTARY_WINDOW_SEC;
 
 let clip: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
@@ -71,17 +84,16 @@ function fill(lufsValue: number): number {
   return Math.max(0, Math.min(1, (lufsValue - LO) / (HI - LO)));
 }
 
-/** Resample a loudness series to COLS, converting each value to a meter fill. */
-function fillContour(series: Float32Array): void {
-  const n = series.length;
-  for (let c = 0; c < COLS; c++) {
-    const idx = n <= 1 ? 0 : (c / (COLS - 1)) * (n - 1);
-    const i0 = Math.floor(idx);
-    const frac = idx - i0;
-    const v = i0 + 1 < n ? series[i0] * (1 - frac) + series[i0 + 1] * frac : series[i0];
-    // Loudness can be -inf for silence; clamp to the axis floor.
-    targetContour[c] = fill(Number.isFinite(v) ? v : LO);
-  }
+/**
+ * Resample a loudness series onto the clip's time axis, converting each value to a
+ * meter fill. Columns before the first completed window carry no reading and are left
+ * out of the drawn contour.
+ */
+function fillContour(series: Float32Array, durationSec: number, windowSec: number): void {
+  contourWindowSec = windowSec;
+  const contour = loudnessContourColumns(series, durationSec, windowSec, COLS, LO);
+  contourStart = contour.start;
+  for (let c = 0; c < COLS; c++) targetContour[c] = fill(contour.values[c]);
 }
 
 async function compute(): Promise<void> {
@@ -94,11 +106,15 @@ async function compute(): Promise<void> {
     integrated.value = summary.integratedLufs;
     lra.value = summary.loudnessRange;
     truePeak.value = wasm.meteringTruePeakDb(samples, sampleRate);
-    const series =
-      windowMode.value === 'short-term'
-        ? wasm.shortTermLufs(samples, sampleRate)
-        : wasm.momentaryLufs(samples, sampleRate);
-    fillContour(series);
+    const shortTerm = windowMode.value === 'short-term';
+    const series = shortTerm
+      ? wasm.shortTermLufs(samples, sampleRate)
+      : wasm.momentaryLufs(samples, sampleRate);
+    fillContour(
+      series,
+      samples.length / sampleRate,
+      shortTerm ? SHORT_TERM_WINDOW_SEC : MOMENTARY_WINDOW_SEC,
+    );
     status.value = 'ready';
     startMorph();
   } catch (e) {
@@ -173,10 +189,11 @@ function paint(): void {
   const playT = isPlaying.value ? progress.value : -1;
   const playCol = playT >= 0 ? Math.min(COLS - 1, Math.round(playT * (COLS - 1))) : -1;
 
-  // Current meter level: live momentary at rest shows integrated reference.
+  // Current meter level: live momentary at rest shows integrated reference. Inside
+  // the opening window the meter has nothing to show yet, so it reads empty.
   let level = fill(integrated.value);
   if (playCol >= 0) {
-    level = dispContour[playCol];
+    level = playCol >= contourStart ? dispContour[playCol] : 0;
     if (level > peakHold) peakHold = level;
   }
   level *= reveal.value;
@@ -221,14 +238,32 @@ function paint(): void {
   ctx.textAlign = 'left';
 
   // --- right: loudness contour over time ---
+  const colX = (c: number) => plotX + (c / (COLS - 1)) * plotW;
+
+  // Lead-in: the first window has not elapsed, so the meter has emitted nothing.
+  if (contourStart > 0) {
+    // A clip shorter than the window never completes one: the whole plot is lead-in.
+    const leadW = contourStart >= COLS ? plotW : colX(contourStart) - plotX;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.09)';
+    ctx.fillRect(plotX, top, leadW, innerH);
+    ctx.font = '8px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    const label = `${contourWindowSec}s WINDOW`;
+    if (leadW > ctx.measureText(label).width + 8) {
+      ctx.fillText(label, plotX + leadW / 2, (top + bot) / 2);
+    }
+    ctx.textAlign = 'left';
+  }
+
   const grad2 = ctx.createLinearGradient(0, top, 0, bot);
   grad2.addColorStop(0, 'rgba(45, 212, 191, 0.4)');
   grad2.addColorStop(1, 'rgba(45, 212, 191, 0.03)');
   ctx.beginPath();
-  ctx.moveTo(plotX, bot);
-  for (let c = 0; c < COLS; c++) {
-    const x = plotX + (c / (COLS - 1)) * plotW;
-    ctx.lineTo(x, bot - dispContour[c] * innerH * reveal.value);
+  ctx.moveTo(colX(Math.min(contourStart, COLS - 1)), bot);
+  for (let c = contourStart; c < COLS; c++) {
+    ctx.lineTo(colX(c), bot - dispContour[c] * innerH * reveal.value);
   }
   ctx.lineTo(plotX + plotW, bot);
   ctx.closePath();
@@ -238,10 +273,10 @@ function paint(): void {
   // Contour line; passed portion brightens during playback.
   ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
-  for (let c = 1; c < COLS; c++) {
-    const x0 = plotX + ((c - 1) / (COLS - 1)) * plotW;
+  for (let c = contourStart + 1; c < COLS; c++) {
+    const x0 = colX(c - 1);
     const y0 = bot - dispContour[c - 1] * innerH * reveal.value;
-    const x1 = plotX + (c / (COLS - 1)) * plotW;
+    const x1 = colX(c);
     const y1 = bot - dispContour[c] * innerH * reveal.value;
     ctx.strokeStyle = playCol >= 0 && c <= playCol ? '#5eead4' : 'rgba(45, 212, 191, 0.55)';
     ctx.beginPath();
@@ -259,9 +294,9 @@ function paint(): void {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Playhead marker on the contour.
-  if (playCol >= 0) {
-    const x = plotX + (playCol / (COLS - 1)) * plotW;
+  // Playhead marker on the contour (only where a measurement exists).
+  if (playCol >= contourStart) {
+    const x = colX(playCol);
     const y = bot - dispContour[playCol] * innerH * reveal.value;
     ctx.fillStyle = '#5eead4';
     ctx.shadowColor = 'rgba(94, 234, 212, 0.9)';

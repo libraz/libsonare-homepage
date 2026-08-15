@@ -367,8 +367,13 @@ function buildVowel(wasm) {
  * `comp-take-*`: three takes of one short phrase for the comping demo. The note
  * timing and total length are identical across takes so the demo's four segment
  * boundaries line up; each take is given a distinct character — and take "b" a
- * wrong note in the third segment — so different segments are best taken from
+ * wrong note on the fifth note — so different segments are best taken from
  * different takes. Rendered per-note (monophonic) like {@link buildLead}.
+ *
+ * The demo splits the rendered clip into four equal-duration segments. Because
+ * the final note is held and followed by a release tail, those segments are not
+ * evenly spread across the eight notes: notes 0-3 fall in segment 1, notes 4-6
+ * in segment 2, and the held final note plus its tail occupy segments 3 and 4.
  */
 const COMP_PITCHES = [72, 74, 76, 79, 81, 79, 76, 72]; // C5 D5 E5 G5 A5 G5 E5 C5
 const COMP_E = PPQ / 2; // eighth note
@@ -405,7 +410,7 @@ function buildTake(wasm, { cutoffHz, vels, swap = {} }) {
 /** Take A — warm and even: a safe, slightly dark reading. */
 const buildCompTakeA = (wasm) =>
   buildTake(wasm, { cutoffHz: 2400, vels: [86, 86, 86, 86, 86, 86, 86, 86] });
-/** Take B — bright with an accented middle, but a wrong note (A5→G#5) in segment 3. */
+/** Take B — bright, accented early, but a wrong note (A5→G#5) in segment 2. */
 const buildCompTakeB = (wasm) =>
   buildTake(wasm, { cutoffHz: 5600, vels: [80, 80, 104, 104, 80, 80, 80, 80], swap: { 4: 80 } });
 /** Take C — a crescendo: weak opening, strong, expressive finish. */

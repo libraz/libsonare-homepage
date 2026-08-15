@@ -353,7 +353,7 @@ describe('wasm-backed demo composables', () => {
     expect(message.type).toBe('render');
     expect(message.left[0]).toBeCloseTo(0.25 * 10 ** (6 / 20), 6);
     expect(message.config.loudness.targetLufs).toBe(-13);
-    expect(message.config.repair.denoise).toBe(true);
+    expect(message.config.repair.denoise).toMatchObject({ enabled: true });
     expect(message.config.repair.declick).toBeTruthy();
     expect(message.config.repair.dereverb).toBeTruthy();
     expect(message.config.saturation.tape).toBeTruthy();

@@ -11,7 +11,7 @@
  * (the tune, drums gone), Percussive keeps the vertical streaks (the drums, tune
  * gone). A playback-synced beam sweeps the spectrogram.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { type MonoAudio, useSonareDemoAudio } from '@/composables/useSonareDemoAudio';
 import type { SonareDemoDef } from '@/demos/types';
 import { useDemoChrome, useDemoParams } from '../composables';
@@ -141,6 +141,10 @@ watch(
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  if (pending) cancelAnimationFrame(pending);
+});
 </script>
 
 <template>

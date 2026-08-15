@@ -71,6 +71,25 @@ describe('param sweep helpers', () => {
     expect(audio.widthFrac).toBe(1);
   });
 
+  it('peak-normalizes every render without mutating the shared clip', () => {
+    const before = Array.from(baseClip.samples);
+
+    // Semitone 0 is the branch that hands the cached clip straight through, so it
+    // is where an in-place normalization would corrupt the page-wide clip cache.
+    const audio = renderParamSweepAudio(fakeWasm(), baseClip, {
+      processor: 'pitch-shift',
+      semitones: 0,
+      rate: 1,
+      formant: 1,
+      iters: 8,
+      tilt: 0,
+      minRate: 0.5,
+    });
+
+    expect(Math.max(...Array.from(audio.samples, Math.abs))).toBeCloseTo(0.7);
+    expect(Array.from(baseClip.samples)).toEqual(before);
+  });
+
   it('reports stretched duration and normalized width for time-stretch', () => {
     const audio = renderParamSweepAudio(fakeWasm(), baseClip, {
       processor: 'time-stretch',

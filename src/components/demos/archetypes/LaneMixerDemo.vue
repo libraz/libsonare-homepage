@@ -213,7 +213,7 @@ async function compute(): Promise<void> {
     for (let t = 0; t < 3; t++) {
       e.setTrackStripJson(
         t + 1,
-        JSON.stringify({ strips: [{ id: ids[t], gainDb: faderDb.value[t] }] }),
+        JSON.stringify({ strips: [{ id: ids[t], faderDb: faderDb.value[t] }] }),
       );
       e.setSoloMute(t, false, muted.value[t], -1);
     }
