@@ -1,7 +1,7 @@
 ---
 layout: studio
 title: libsonare Studio Mini
-description: A tiny headless-DAW session in the browser — step-sequence three NativeSynth tracks, mix with faders and meters, and bounce to WAV with libsonare's Project engine.
+description: A tiny headless-DAW session in the browser — a DAW driven entirely through its engine API, with no GUI of its own. Step-sequence three NativeSynth tracks, mix with faders and meters, and bounce to WAV with libsonare's Project engine.
 head:
   - - meta
     - property: og:title

@@ -4,9 +4,10 @@
  *
  * A single melodic line scrolls down a vertical piano roll toward a strike line
  * sitting on a full-range keyboard; each key lights as its note lands. The audio
- * is rendered offline by the libsonare Project through its SoundFont player (a
- * public-domain acoustic grand), so the roll, the strike line, and the sound all
- * advance on one clock — the lit keys always match what you hear. A practice
+ * is rendered offline by the libsonare Project — through the built-in NativeSynth
+ * piano by default, or the bundled public-domain acoustic-grand SoundFont when
+ * the sampled source is selected — so the roll, the strike line, and the sound
+ * all advance on one clock; the lit keys always match what you hear. A practice
  * speed control re-renders the passage slower without changing pitch.
  *
  * Everything runs locally: the MIDI is parsed in the browser and the audio is

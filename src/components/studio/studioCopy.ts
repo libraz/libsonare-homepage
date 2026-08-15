@@ -210,7 +210,7 @@ export const enCopy = {
       level: {
         title: 'Channel level',
         body: 'The track fader, in dB (−∞ up to about +3). The LED meter beside it shows live post-fader peak, and the M button mutes the channel.',
-        tip: 'Set levels so no single track dominates; double-click the fader to return to unity.',
+        tip: 'Set levels so no single track dominates; double-click the fader to return to its starting position.',
         defaultRationale: 'Double-click the fader to reset the level.',
       },
       master: {
@@ -324,7 +324,7 @@ export const jaCopy: typeof enCopy = {
       level: {
         title: 'チャンネルレベル',
         body: 'トラックのフェーダー（dB、−∞ から約 +3）。横の LED メーターはフェーダー後のライブピーク、M ボタンはチャンネルのミュートです。',
-        tip: '特定のトラックが突出しないようレベルを整えます。フェーダーをダブルクリックでユニティに戻ります。',
+        tip: '特定のトラックが突出しないようレベルを整えます。フェーダーをダブルクリックすると初期位置に戻ります。',
         defaultRationale: 'フェーダーをダブルクリックするとレベルがリセットされます。',
       },
       master: {

@@ -1,7 +1,7 @@
 ---
 layout: studio
 title: libsonare スタジオミニ
-description: ブラウザで動くヘッドレス DAW のミニセッション。3 つの NativeSynth トラックをステップ入力し、フェーダーとメーターでミックスして、libsonare の Project エンジンで WAV にバウンス。
+description: ブラウザで動くヘッドレス DAW（画面を持たず、エンジン API だけで動かす DAW）のミニセッション。3 つの内蔵シンセサイザー（NativeSynth）トラックをステップ入力し、フェーダーとメーターでミックスして、libsonare の Project エンジンで WAV にバウンス。
 head:
   - - meta
     - property: og:title

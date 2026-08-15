@@ -131,7 +131,7 @@ export const enCopy = {
       },
       latency: {
         title: 'Latency',
-        body: 'Round-trip delay between mic input and speaker output, in milliseconds.',
+        body: "Delay added on the way to the speaker, in milliseconds: the native chain's own processing latency plus the browser's output buffer. Microphone capture delay is not included.",
         tip: 'Lower is better for live output. The retune grain and device buffers set the floor here.',
       },
     },
@@ -272,7 +272,7 @@ export const jaCopy: typeof enCopy = {
       },
       latency: {
         title: 'レイテンシ',
-        body: 'マイク入力からスピーカー出力までの往復遅延（ミリ秒）です。',
+        body: 'スピーカーへ届くまでに加わる遅延（ミリ秒）。ネイティブチェーン自体の処理レイテンシと、ブラウザの出力バッファの合計です。マイク側の取り込み遅延は含みません。',
         tip: 'ライブ出力では小さいほど有利です。リチューンのグレインと端末のバッファが下限を決めます。',
       },
     },

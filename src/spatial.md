@@ -1,7 +1,7 @@
 ---
 layout: spatial
 title: libsonare Spatial Room Scanner
-description: Browser-local 3D room and source estimation powered by libsonare WebAssembly — reconstruct room geometry, RT60, clarity, and source distance from a single recording.
+description: Browser-local 3D room and source estimation powered by libsonare WebAssembly — reconstruct room geometry, RT60 (reverberation decay time), clarity (early-to-late energy ratio), and source distance from a single recording.
 head:
   - - meta
     - property: og:title
