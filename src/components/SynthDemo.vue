@@ -463,7 +463,7 @@ function applyGain() {
         :pulse="isStarting"
         :peak-label="copy.output.peak"
         :peak-db="peakDb"
-        :engine-label="copy.output.engine"
+        :rate-label="copy.output.rate"
         :sample-rate-label="sampleRateLabel"
         :error-message="engine.error.value ? copy.errors.start : undefined"
       />

@@ -89,6 +89,14 @@ export function controlsFromPreset(base: Partial<SynthPatch>): {
   };
 }
 
+/**
+ * Build the instrument argument for the engine: the bare preset name while the
+ * user has touched nothing, otherwise the preset plus only the touched fields.
+ *
+ * Membership in `dirtyTweaks` alone decides what is sent — never the value — so
+ * an explicit `0` (a fully centered Width, an instant Glide) is emitted and
+ * overrides the preset's own value.
+ */
 export function buildSynthPatch(
   preset: string,
   dirtyTweaks: Set<SynthTweakKey>,

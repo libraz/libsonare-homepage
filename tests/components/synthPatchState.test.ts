@@ -52,4 +52,27 @@ describe('synth patch state helpers', () => {
       cutoffHz: expect.any(Number),
     });
   });
+
+  it('emits zero-valued overrides so a centered width reaches the engine', () => {
+    const controls = controlsFromPreset({ stereoSpread: 0.6, glideMs: 120 }).controls;
+    const dirty = new Set<SynthTweakKey>(['stereoSpread', 'glideMs']);
+
+    const patch = buildSynthPatch('warm-pad', dirty, {
+      ...controls,
+      stereoSpread: 0,
+      glideMs: 0,
+    });
+
+    expect(patch).toMatchObject({ preset: 'warm-pad', stereoSpread: 0, glideMs: 0 });
+    expect(Object.hasOwn(patch as object, 'stereoSpread')).toBe(true);
+    expect(Object.hasOwn(patch as object, 'glideMs')).toBe(true);
+  });
+
+  it('keeps an untouched zero-valued control out of the patch', () => {
+    const controls = controlsFromPreset({ stereoSpread: 0, glideMs: 0 }).controls;
+
+    expect(buildSynthPatch('warm-pad', new Set(['glideMs']), controls)).not.toHaveProperty(
+      'stereoSpread',
+    );
+  });
 });

@@ -61,7 +61,7 @@ export const enCopy = {
   },
   output: {
     peak: 'Peak',
-    engine: 'Engine',
+    rate: 'Rate',
     gain: 'Gain',
   },
   keyboardHint:
@@ -88,7 +88,7 @@ export const enCopy = {
       waveform: {
         title: 'Waveform',
         body: "The oscillator's raw tone before filtering. Sine is pure; saw and square are bright and harmonically rich; triangle is soft; noise is unpitched. AUTO keeps the program's own waveform.",
-        tip: 'Reach for saw or square when a patch needs more bite, triangle or sine when it should sit back.',
+        tip: 'Reach for saw or square when a patch needs more bite, triangle or sine when it should sit back. Only the subtractive programs (sine, saw, square, triangle, the leads, sub bass, warm pad) have a switchable oscillator — the physical-model, FM, and sampled-style programs generate their tone from their own engine and ignore this switch.',
       },
       cutoff: {
         title: 'Cutoff',
@@ -217,7 +217,7 @@ export const jaCopy: typeof enCopy = {
   },
   output: {
     peak: 'ピーク',
-    engine: 'エンジン',
+    rate: 'レート',
     gain: 'ゲイン',
   },
   keyboardHint:
@@ -244,7 +244,7 @@ export const jaCopy: typeof enCopy = {
       waveform: {
         title: '波形',
         body: 'フィルターに入る前の、オシレーターの元の音です。サイン波は純粋、ノコギリ波と矩形波は明るく倍音が豊か、三角波は柔らかく、ノイズは音程を持ちません。AUTO はプログラム本来の波形を使います。',
-        tip: 'もっと前に出したいときはノコギリ波／矩形波、後ろに収めたいときは三角波／サイン波を。',
+        tip: 'もっと前に出したいときはノコギリ波／矩形波、後ろに収めたいときは三角波／サイン波を。オシレーターを切り替えられるのは減算方式のプログラム（sine・saw・square・triangle・各リード・サブベース・ウォームパッド）だけで、物理モデルや FM などのプログラムはそれぞれのエンジンで音を作るため、この切り替えは効きません。',
       },
       cutoff: {
         title: 'カットオフ',
