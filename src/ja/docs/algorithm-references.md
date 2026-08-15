@@ -7,7 +7,7 @@
 このページを読むと、次のことを判断・確認できるようになります。
 
 - ソースで確認済みの根拠、参照値で検証した互換性、アルゴリズムファミリー名のみの記載を区別できる。
-- ラウドネス、トゥルーピーク、デノイズ、EQ、ピッチ、室内音響、シーケンスヘルパー、リバーブ系の標準・論文・根拠を探せる。
+- ラウドネス、True Peak、デノイズ、EQ、ピッチ、ルーム音響、シーケンスヘルパー、リバーブ系の標準・論文・根拠を探せる。
 - このページを「すべての高レベル推定が別ライブラリと同一」という保証として読まないようにできる。
 - テスト範囲を確認したいときに [実装検証](./implementation-validation.md) と組み合わせて読める。
 
@@ -27,14 +27,14 @@
 
 | 領域 | 根拠 | 根拠箇所 |
 |------|------|----------|
-| ラウドネスとトゥルーピーク | ITU-R BS.1770-4/5、EBU R128、EBU Tech 3342 loudness range | `README.md`、`src/rt/biquad_design.h`、`src/rt/true_peak_filter.h`、`src/metering/lufs.cpp`、`tests/rt/true_peak_filter_test.cpp` |
+| ラウドネスと True Peak（トゥルーピーク） | ITU-R BS.1770-4/5、EBU R128、EBU Tech 3342 loudness range | `README.md`、`src/rt/biquad_design.h`、`src/rt/true_peak_filter.h`、`src/metering/lufs.cpp`、`tests/rt/true_peak_filter_test.cpp` |
 | K-weighting | 48 kHz の BS.1770 参照係数と、他サンプルレート向けの解析式設計 | `src/rt/biquad_design.h`、`src/rt/biquad_design.cpp` |
-| トゥルーピーク補間 | BS.1770 の目標周波数応答に合わせた 2x/4x/8x/16x polyphase FIR。規格準拠の測定には 4x 以上を使う。2x は BS.1770 の最小要件である 4x を下回る、意図的に非準拠の高速近似。 | `src/rt/true_peak_filter.h`、`src/rt/true_peak_filter.cpp` |
+| True Peak 補間 | BS.1770 の目標周波数応答に合わせた 2x/4x/8x/16x polyphase FIR。規格準拠の測定には 4x 以上を使う。2x は BS.1770 の最小要件である 4x を下回る、意図的に非準拠の高速近似。 | `src/rt/true_peak_filter.h`、`src/rt/true_peak_filter.cpp` |
 | 古典的デノイズ | Ephraim-Malah MMSE-STSA (1984)、Ephraim-Malah LogMMSE (1985)、Berouti spectral subtraction with over-subtraction (1979)、MCRA、IMCRA | `src/mastering/repair/denoise_classical.h` |
 | テープヒステリシス | Jiles-Atherton hysteresis、Chowdhury "Real-time Physical Modelling for Analog Tape Machines", DAFx-19 2019, equations 6-10 | `src/mastering/common/hysteresis_ja.cpp`、`src/mastering/saturation/tape.h` |
 | EQ フィルター | RBJ biquads、Vicanek matched-Z IIR、Butterworth Q、Linkwitz-Riley crossovers with all-pass phase compensation | `README.md`、`src/rt/biquad_design.h`、`src/rt/biquad_design.cpp`、EQ routing / cut-filter sources |
 | 非線形処理のアンチエイリアシング | ADAA / antiderivative anti-aliasing | `README.md`、`src/rt/adaa.h`、`src/rt/aliasing_control.h` |
-| スライディング最大値 | Lemire sliding max | `README.md`、リミッター／トゥルーピーク補助処理の利用箇所 |
+| スライディング最大値 | Lemire sliding max | `README.md`、リミッター／True Peak 補助処理の利用箇所 |
 | Tonnetz | Harte et al. 2006 と `librosa.feature.tonnetz` の挙動 | `src/feature/tonnetz.h`、`src/feature/tonnetz.cpp`、`tests/librosa/tonnetz_test.cpp` |
 | ピッチ追跡 | YIN と pYIN。pYIN は確率的な複数ピッチ候補と Viterbi decoding を使う | `src/feature/pitch.h`、`tests/librosa/pitch_test.cpp` |
 | ルーム音響解析 | 減衰指標、ブラインド減衰フィット、RIR 合成、ルーム推定、ルームモーフィング | `src/analysis/acoustic_analyzer.*`、`src/acoustic/*`、`src/analysis/room_estimator.*`、`src/effects/acoustic/room_morph.*`、`tests/acoustic/*`、`tests/effects/room_morph_test.cpp` |
@@ -55,7 +55,7 @@ Tonnetz（「音のネットワーク」）は、和声を幾何空間へ写像�
 - **スペクトル減算／MCRA／IMCRA** — スペクトル減算はノイズスペクトルを推定し、各フレームから差し引きます。MCRA と IMCRA は、音声や音楽が鳴っている間もそのノイズフロアを時間方向に追従させるため、固定した推定値ではなく状況に合わせて減算が適応します。
 - **Jiles-Atherton ヒステリシス** — 磁気テープが直近の信号を「記憶」する様子を表す物理モデルで、テープサチュレーション特有の非線形で履歴依存の質感を与えます。
 - **ADAA**（反微分アンチエイリアシング） — 歪み曲線を数学的な積分に通すことで、非線形処理が生むエイリアシングを抑える手法です。
-- **Schroeder エネルギー減衰曲線** — 部屋のインパルスレスポンスを時間方向に逆積分して滑らかな減衰曲線を得ます。RT60／EDT はこれを基に測定します。
+- **Schroeder エネルギー減衰曲線** — 部屋のインパルス応答を時間方向に逆積分して滑らかな減衰曲線を得ます。RT60／EDT はこれを基に測定します。
 - **RBJ バイカッド／Linkwitz-Riley クロスオーバー** — EQ フィルターの標準的な設計法と、正しい位相特性で音声を帯域分割する方式です。
 :::
 
@@ -80,7 +80,7 @@ Tonnetz（「音のネットワーク」）は、和声を幾何空間へ写像�
 
 ### General MIDI と GS の互換
 
-libsonare は、公開されている General MIDI・General MIDI 2 の楽器／打楽器マップ（MIDI Association）と、Roland が定義した GS 拡張（追加バンク・NRPN・ドラムキットの変種・挿入エフェクト（EFX））に、アドレスのレベルで準拠します。その際に用いるのは、公開されている MIDI／SysEx の実装仕様とエフェクトのタイプ番号体系です。この互換ターゲットにより、GM/GS 準拠で作られた MIDI が、作者の意図したバンク・キット・エフェクトを選べます。
+libsonare は、公開されている General MIDI・General MIDI 2 の楽器／打楽器マップ（MIDI Association）と、Roland が定義した GS 拡張（追加バンク・NRPN（非登録パラメーター番号）・ドラムキットの変種・挿入エフェクト（EFX））に、アドレスのレベルで準拠します。その際に用いるのは、公開されている MIDI／SysEx の実装仕様とエフェクトのタイプ番号体系です。この互換ターゲットにより、GM/GS 準拠で作られた MIDI が、作者の意図したバンク・キット・エフェクトを選べます。
 
 これらのアドレスに割り当てられる音自体は、公開資料と上記の文献をもとに再構成した libsonare 独自のプロシージャル合成および DSP です。libsonare は、いかなるハードウェアモジュールのサンプル・ROM データ・ファームウェアも同梱しておらず、各エフェクトは独自のアルゴリズムです。したがってこれは**独立した再構成**であり、GS のアドレス指定とエフェクト構成には従いますが、特定機器の音そのものを再現するものでは**ありません**。以下の librosa フィクスチャと同様、これは互換ターゲットであって実装コードの複製ではなく、出力が同一であるという主張でもありません。
 
@@ -100,29 +100,29 @@ libsonare は、公開されている General MIDI・General MIDI 2 の楽器／
 | 分解と変換 | HPSS、harmonic/percussive、decompose、remix、inverse mel/MFCC helpers、Griffin-Lim 関連の synthesis tests |
 | sequence と構造 | segment helpers、cross-similarity、recurrence matrix、DTW/Viterbi 系 sequence helpers |
 | ユーティリティ | frame/sample/time conversion、dB conversion、pre/de-emphasis、padding、fix length/frames、peak pick、vector normalize、trim/split silence、weighting |
-| NNLS | NNLS tests は SciPy/librosa 参照データと比較し、NNLS chroma の挙動を支える |
+| NNLS（非負最小二乗法） | NNLS tests は SciPy/librosa 参照データと比較し、NNLS chroma の挙動を支える |
 
 ## スコープの境界
 
 ソース上のリペア処理は、古典的 DSP として位置づけられています。
 
-つまり、DNN restoration、source separation、interactive spectral repair ではありません。
+つまり、これらの経路は DNN（ディープニューラルネットワーク）による修復、音源分離、インタラクティブなスペクトル編集ではありません。
 
 | リペア経路 | 読み方 |
 |------------|--------|
 | `repair.denoiseClassical`, `repair.declick`, `repair.declip`, `repair.decrackle`, `repair.dehum`, `repair.dereverbClassical`, `repair.trimSilence` | 現在の実装では、古典的または決定的な DSP 経路です。 |
 
-室内音響には、性質の違う 5 つの入口があります。
+ルーム音響には、性質の違う 5 つの入口があります。
 
 | 入口 | 入力 | 何をしているか | 結果の扱い |
 |------|------|----------------|------------|
 | `analyze_impulse_response` / `analyzeImpulseResponse` | 拍手、風船破裂音、スターターピストル音、スイープ由来 IR など、部屋の反応だけが分かりやすい短い励振音の録音 | 音が鳴った後の減衰曲線を直接測る | 測定値として扱いやすい |
 | `detect_acoustic` / `detectAcoustic` | 通常の音楽、会話、環境録音など | 録音の中から「部屋の残響だけが自然に減っている区間」を探して推定する | 目安として扱い、`confidence` を必ず見る |
-| `estimate_room` / `estimateRoom` | 録音またはインパルスレスポンス | 体積、寸法、直接音対残響音比（DRR）、吸音率バンド、RT60 バンド、信頼度を含む等価ルームを推定する | 正確な実寸ではなくモデルフィットとして扱う |
+| `estimate_room` / `estimateRoom` | 録音またはインパルス応答 | 体積、寸法、直接音対残響音比（DRR）、吸音率バンド、RT60 バンド、信頼度を含む等価ルームを推定する | 正確な実寸ではなくモデルフィットとして扱う |
 | `synthesize_rir` / `synthesizeRir` | シューボックス寸法と音源／聴取位置 | モノラル RIR を合成する | 不正な形状は `hasError` / `has_error` を確認する |
 | `room_morph` / `roomMorph` | 録音と目標ルーム形状 | 元の残響尾部を少し抑えて目標ルームの響きを足す | 残響除去ではなく音作り効果として扱う |
 
-ここでいう **decay curve**（減衰曲線） は、音が止まった後にエネルギーがどれくらいの速さで小さくなるかを表す曲線です。インパルスレスポンス解析では、この曲線を直接作って RT60 や EDT を読みます。
+ここでいう **decay curve**（減衰曲線） は、音が止まった後にエネルギーがどれくらいの速さで小さくなるかを表す曲線です。インパルス応答解析では、この曲線を直接作って RT60 や EDT を読みます。
 
 一方、ブラインド推定では、入力が通常音声なので「今見えている減衰が本当に部屋の残響なのか」を常に判断する必要があります。楽器の余韻、声の伸ばし、コンプレッサー、背景ノイズなども減衰に見えることがあるためです。
 

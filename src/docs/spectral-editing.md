@@ -5,7 +5,7 @@ description: "Region-based STFT editing in libsonare: attenuate, mute, gain, or 
 
 # Spectral Editing
 
-`spectralEdit(...)` is libsonare's region-based STFT editor. Use it when you want to change a time and frequency rectangle inside a mono clip: attenuate a whistle, mute a short hum, boost a narrow band, or heal a small dropout from neighboring frames.
+`spectralEdit(...)` is libsonare's region-based STFT editor — STFT (short-time Fourier transform) is the time–frequency grid a signal is cut into before it can be edited by frequency, and it is [explained in the glossary](./glossary/analysis/spectrogram-stft.md). Use `spectralEdit` when you want to change a time and frequency rectangle inside a mono clip: attenuate a whistle, mute a short hum, boost a narrow band, or heal a small dropout from neighboring frames.
 
 It is an offline transform. The output keeps the same sample rate and length as the input, and each region operation is applied in order to the same STFT buffer.
 
@@ -90,6 +90,13 @@ repaired = sonare.spectral_edit(
 :::
 
 ## Options
+
+You give the region in samples and hertz, but the edit lands on the STFT grid those two options build:
+
+<StftFramingFigure
+  title="What nFft and hopLength build"
+  caption="nFft is the length of one analysis window and hopLength is how far the next one starts after it, so at the defaults every window overlaps the previous one by three quarters. Each window becomes one spectrogram column — the vertical strips your time range is applied to, sliced into frequency bins your lowHz/highHz range picks from."
+/>
 
 | Field | Meaning |
 |-------|---------|

@@ -71,7 +71,7 @@ description: libsonare の Project を決定論的にオフラインレンダリ
 | 自前の（Python）シンセで鳴らす MIDI | `bounce_with_instruments` — **Python 専用** | ホスト側が用意する [`ExternalInstrument`](#python-自前のインストゥルメントをホストする) |
 
 ::: info 1 つの Project、すべての実行環境
-同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`（MIDI を内蔵オシレーターへ通す `--synth` を含む）や SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、出力先ごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジメントモデル・コンパイラ・DSP は実行環境を問わず同一です。
+同じ `Project` モデルと中核のバウンス挙動は、WASM/JS、Node ネイティブ、Python から使えます。名前は各言語の慣習に従います（`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`）。CLI では `project bounce`（MIDI を内蔵シンセへ通す `--synth` を含む）や SMF/MIDI 2.0 入出力としてプロジェクトワークフローを使えますが、出力先ごとの楽器バインドオプションがすべて配線されているわけではありません。アレンジメントモデル・コンパイラ・DSP は実行環境を問わず同一です。
 :::
 
 ## プレーンバウンス: オーディオクリップ
@@ -191,7 +191,7 @@ const c = project.bounceWithSynthInstrument(
 有効な名前はマジック文字列をハードコードせず [`synthPresetNames()`](./native-synth.md) で取得してください。未知の名前は例外を投げます。パッチオブジェクトは `preset` ベース（`preset` 省略時は既定の減算パッチ）から始まり、共通設定を上書きします。フィールドの一覧は [NativeSynth](./native-synth.md) を参照してください。複数のデスティネーションをバインドするには配列を渡します。空配列は何もバインドしません。
 
 ::: tip 1 つのパッチに固定する代わりに GM プログラムへ追従する
-`bounceWithSynthInstrument` に渡す各エントリ（バレのプリセット文字列ではなく `SynthPatch` オブジェクト）は、`destinationId`（既定 `0`）と `useGmPrograms`（既定 `false`）も持てます。`useGmPrograms` を有効にすると、MIDI のプログラムチェンジがデスティネーションごとに対応する General MIDI ボイスを選び、バインドしたパッチはそのマップがカバーしないものへのフォールバックとして残ります。姉妹スペルは C ABI の `use_gm_programs` と Python の `auto_select_gm` です。詳しい説明と例は [パッチを固定せず GM プログラムに追従させる](./native-synth.md#パッチを固定せず-gm-プログラムに追従させる) を参照してください。
+`bounceWithSynthInstrument` に渡す各エントリは、プリセット名の文字列ではなく `SynthPatch` オブジェクトで渡した場合にかぎり、`destinationId`（既定 `0`）と `useGmPrograms`（既定 `false`）も持てます。`useGmPrograms` を有効にすると、MIDI のプログラムチェンジがデスティネーションごとに対応する General MIDI ボイスを選び、バインドしたパッチはそのマップがカバーしないものへのフォールバックとして残ります。姉妹スペルは C ABI の `use_gm_programs` と Python の `auto_select_gm` です。詳しい説明と例は [パッチを固定せず GM プログラムに追従させる](./native-synth.md#パッチを固定せず-gm-プログラムに追従させる) を参照してください。
 :::
 
 下のピアノロールはまさにこの呼び出しです。1 つの MIDI フレーズを `bounceWithSynthInstrument` に通し、プリセットを切り替えるたびに同じ音符が別の音色で鳴り直します。再生ヘッドはバウンスした音声に追従します。
@@ -225,7 +225,7 @@ SoundFont がカバーしないプログラム（SoundFont を 1 つも読み込
 
 ## Python: 自前のインストゥルメントをホストする
 
-Python バインディングは、`ExternalInstrument` プロトコルで書いた**任意**のインストゥルメントをホストでき、`bounce_with_instruments` がそれをディスパッチします。必須なのは `render` だけで、`prepare`、`on_event`、`latency_samples` / `tail_samples` 属性は任意（ダックタイピング）です。
+Python バインディングは、`ExternalInstrument` プロトコルで書いた**任意**のインストゥルメントをホストでき、`bounce_with_instruments` がそれをディスパッチします。必須なのは `render` だけで、`prepare`、`on_event`、`latency_samples` / `tail_samples` 属性は任意（ダックタイピング）です。イベントは **UMP**（Universal MIDI Packet）ワード、つまり MIDI 2.0 のパケット形式として `on_event` に届くため、ノートオンもデコード済みのオブジェクトではなくパケットワードのタプルとして渡されます。
 
 ```python
 import numpy as np
@@ -336,17 +336,19 @@ Python パッケージには `project` サブコマンドが付属し、プロ�
 # プレーンバウンス（オーディオクリップ。MIDI トラックは無音）
 sonare project bounce --in song.json -o master.wav --sample-rate 48000
 
-# MIDI を内蔵オシレーターシンセで鳴らす（既定はサイン波）
+# MIDI を内蔵シンセで鳴らす（プロジェクトの GM プログラムに追従）
 sonare project bounce --in song.json -o master.wav --synth
 
-# 内蔵オシレーターの波形を選ぶ: sine | saw | square | triangle
+# または NativeSynth カタログの 1 プリセットへ全デスティネーションを固定する
+# （全一覧は `sonare project synth-presets`）
 sonare project bounce --in song.json -o master.wav --synth saw
+sonare project bounce --in song.json -o pad.wav --synth warm-pad
 
 # まず確認: コンパイル診断（インストゥルメント未バインド警告を含む）
 sonare project compile --in song.json --json
 ```
 
-`--synth` フラグは 2 通りに読まれます。バレの `--synth` はプロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングされ、マップがカバーしないものは `sine` パッチへフォールバックします。プロジェクトが本物の GM プログラムを持つときはこちらを選びます。`--synth <preset>` はすべてのデスティネーションを、`sonare_synth_preset_patch` が受け付ける固定の 1 つの NativeSynth プリセット——つまり[フルの NativeSynth プリセットカタログ](./native-synth.md)（`--synth warm-pad`、`--synth saw-lead` など）へ固定します。名前の一覧は `sonare project synth-presets` で取得できます。SF2 と出力先ごとの synth JSON は引き続きバインディング専用（WASM／Node／Python）です。SoundFont を使うバウンスには Project API を使ってください。ほかに `project new`、`project validate`、`project synth-presets`、`project abi` も使えます。
+`--synth` フラグは 2 通りに読まれます。プリセットを指定しない `--synth` はプロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングされ、マップがカバーしないものは `sine` パッチへフォールバックします。プロジェクトが本物の GM プログラムを持つときはこちらを選びます。`--synth <preset>` はすべてのデスティネーションを、`sonare_synth_preset_patch` が受け付ける固定の 1 つの NativeSynth プリセット——つまり[フルの NativeSynth プリセットカタログ](./native-synth.md)（`--synth warm-pad`、`--synth saw-lead` など）へ固定します。名前の一覧は `sonare project synth-presets` で取得できます。SF2 と出力先ごとの synth JSON は引き続きバインディング専用（WASM／Node／Python）です。SoundFont を使うバウンスには Project API を使ってください。ほかに `project new`、`project validate`、`project synth-presets`、`project abi` も使えます。
 
 ## レシピ
 

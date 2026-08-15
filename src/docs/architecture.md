@@ -124,7 +124,7 @@ class list — see the Page Map for where each subsystem's full API is documente
 | `mastering/` | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Mastering Assistant](./mastering-assistant.md) |
 | `mixing/` | [Mixing Engine](./mixing.md), [Mixing Scene JSON](./mixing-scene-json.md) |
 | `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [Realtime and Streaming](./realtime-streaming.md), especially `RealtimeEngine` |
-| `midi/` and `midi/synth/` | [Native Synth](./native-synth.md), [SoundFont Player](./soundfont-player.md), [MIDI Input](./midi-input.md) |
+| `midi/` and `midi/synth/` | [Built-in Synthesizer](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md) |
 | `arrangement/` (edit model) | [Project Editing](./project-editing.md), [Recording and Takes](./recording-and-takes.md), [Project Bounce](./project-bounce.md) |
 | `mir/` (warp, grid snap, key context) | [Warp and Tempo](./glossary/arrangement/warp-and-tempo.md), [Realtime and Streaming](./realtime-streaming.md) |
 | `editing/` and `effects/` | [Editing DSP](./editing-dsp.md), [DSP Implementation Notes](./dsp-implementation.md#effects-and-editing-dsp) |
@@ -249,8 +249,9 @@ src/
 
 ### Audio Analysis Pipeline
 
-Every analyzer branches off the same STFT/Spectrogram output instead of
-recomputing it: onset strength drives BPM and beat tracking, while the
+Every analyzer branches off the same STFT (short-time Fourier transform) /
+Spectrogram output instead of recomputing it: onset strength drives BPM and
+beat tracking, while the
 chromagram drives key and chord recognition, and `MusicAnalyzer.analyze()`
 just collects whichever of these were touched into one `AnalysisResult`.
 
@@ -300,8 +301,10 @@ just collects whichever of these were touched into one `AnalysisResult`.
 
 ### Audio Effects Pipeline
 
-HPSS and the phase vocoder both run on the same complex STFT and reconstruct
-through a shared iSTFT, so they never diverge on transform parameters. Time
+HPSS — harmonic/percussive source separation, which splits a signal into its
+sustained-tone and transient parts — and the phase vocoder both run on the same
+complex STFT and reconstruct through a shared iSTFT, so they never diverge on
+transform parameters. Time
 stretch and pitch shift instead take a separate path straight from `Audio`,
 since pitch shift layers a resampler on top of the same time-stretch core.
 

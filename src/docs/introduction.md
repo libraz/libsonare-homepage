@@ -7,7 +7,7 @@ If you are new to libsonare, read this page for the vocabulary, then follow the 
 By the end of this page you should be able to:
 
 - explain what libsonare is and which kinds of music/audio tools it supports;
-- understand the basic MIR pipeline from waveform to spectrogram, features, and higher-level music analysis;
+- understand the basic MIR (Music Information Retrieval) pipeline from waveform to spectrogram, features, and higher-level music analysis;
 - distinguish between analysis, editing, mixing, mastering, realtime streaming, room acoustics, built-in instruments, the headless-DAW runtime, and inverse features;
 - choose the next page from the [Learning Path](./learning-path.md) without needing DSP background.
 
@@ -28,7 +28,7 @@ libsonare covers several related jobs:
 | Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
 
 ::: info Loudness, LUFS, and true peak
-LUFS (Loudness Units Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including peaks that occur between samples, which ordinary peak meters miss — important for avoiding distortion on playback.
+LUFS (Loudness Units relative to Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including inter-sample peaks (ISP) — peaks that occur between samples, which ordinary peak meters miss. Tracking them matters because they can distort on playback.
 :::
 
 libsonare is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.

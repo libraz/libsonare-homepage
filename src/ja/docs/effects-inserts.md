@@ -40,7 +40,7 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `effects.reverb.dattorro` | Dattorro リバーブ |
 | `effects.reverb.fdn` | フィードバックディレイネットワークリバーブ |
 | `effects.reverb.velvet` | Velvet-noise 系リバーブ |
-| `effects.reverb.convolution` | Convolution リバーブ。ネイティブ insert 作成経路ではインパルスレスポンスを使えます |
+| `effects.reverb.convolution` | Convolution リバーブ。ネイティブ insert 作成経路ではインパルス応答（IR。実際の空間が短い衝撃音にどう応答するかを記録したもの）を使えます |
 | `effects.reverb.room` | ルームパラメータから合成する幾何ベースのルームリバーブ |
 | `effects.acoustic.roomMorph` | 目標の幾何ベースルームへ寄せるルームモーフィング |
 | `effects.modulation.ensemble` | Solina 系 BBD ストリングマシンアンサンブル |
@@ -63,7 +63,7 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | 項目 | 意味 |
 |------|------|
 | `effects.reverb.plate` と `effects.reverb.dattorro` | 同じ Dattorro プロセッサの別名 |
-| リバーブの params | `decaySec`、`decay`、`damping` / `hfDamping`、`dryWet`、`preDelayMs`、`reverbTimeS`、`densityHz`、`enableShelf`（アルゴリズムにより該当キーは異なる）。`effects.reverb.convolution` は構築時に `decaySec` を、合成テイルの上限である 12 秒へクランプする。Dattorro／プレート insert はコーラスのかかったテイル用に `modRateHz`（図形8タンクの LFO レート[Hz]、既定値 `0.5`）と `modDepthSamples`（リバーブの基準レートでの変調深さ[サンプル]、既定値 `6.0`）も受け付ける |
+| リバーブの params | `decaySec`、`decay`、`damping` / `hfDamping`、`dryWet`、`preDelayMs`、`reverbTimeS`、`densityHz`、`enableShelf`（アルゴリズムにより該当キーは異なる）。`effects.reverb.convolution` は構築時に `decaySec` を、合成テイルの上限である 12 秒へクランプする。Dattorro／プレート insert はコーラスのかかったテイル用に `modRateHz`（図形8タンクの LFO＝低周波オシレーターのレート[Hz]、既定値 `0.5`）と `modDepthSamples`（リバーブの基準レートでの変調深さ[サンプル]、既定値 `6.0`）も受け付ける |
 | `effects.modulation.chorus` の params | `rateHz`、`depthMs`、`centerDelayMs`、`dryWet` |
 | `effects.modulation.flanger` の params | `rateHz`、`depthMs`、`centerDelayMs`、`feedback`、`dryWet` |
 | `effects.modulation.phaser` の params | `rateHz`、`minHz`、`maxHz`、`stages`、`dryWet` |
@@ -74,7 +74,7 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `effects.modulation.ringModulator` の params | `carrierHz`、`dryWet` |
 | `effects.modulation.pitchShifter` の params | `semitones`、`dryWet` |
 | `effects.delay.stereo` の params | `delayTimeLMs`、`delayTimeRMs`、`feedback`、`pingPong`、`dryWet` |
-| `effects.reverb.convolution` | ネイティブの insert 構築時にインパルスレスポンスを渡す必要がある |
+| `effects.reverb.convolution` | ネイティブの insert 構築時にインパルス応答を渡す必要がある |
 | IR のない convolution insert | 実質的にパススルーとして動作する |
 
 ::: details これらのリバーブアルゴリズムの違いは？
@@ -83,7 +83,7 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 - **Plate / Dattorro** — 滑らかで密度の高い、定番スタジオ的な響き。Dattorro 方式は広く使われるプレート系の設計で、`plate` はその別名です。
 - **FDN**（フィードバックディレイネットワーク） — 相互接続したディレイラインで構成する柔軟なアルゴリズミックリバーブ。小さな部屋から大ホールまで調整しやすいのが特長です。
 - **Velvet-noise** — まばらなランダムインパルスを使い、低い CPU 負荷で自然なテイルを作ります。
-- **Convolution**（畳み込み） — 実空間で測定したインパルスレスポンスと信号を畳み込み、*実際の*空間を再現します。
+- **Convolution**（畳み込み） — 実空間で測定したインパルス応答と信号を畳み込み、*実際の*空間を再現します。
 :::
 
 ::: details `effects.modulation.ensemble` とは？

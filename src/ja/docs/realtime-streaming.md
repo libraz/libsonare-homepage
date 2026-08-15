@@ -93,7 +93,7 @@ Python / CLI で同じファイルを解析したい場合は [Python API](./pyt
 :::
 
 ::: tip `nFft` と `hopLength` を一言で
-アナライザは内部で STFT を実行します。
+アナライザは内部で STFT（短時間フーリエ変換。短い窓を重ねながら FFT を繰り返す手法）を実行します。
 
 | パラメータ | 意味 | 値を大きく／小さくしたとき |
 |------------|------|-----------------------------|
@@ -149,7 +149,7 @@ if (stats.estimate.updated) {
 
 | 指標 | 意味 | 読み方 |
 |------|------|--------|
-| スペクトル重心 | エネルギーで重み付けした平均周波数 | 高いほど「明るい」（高域成分が多い）音に聞こえます |
+| スペクトル重心 | 振幅で重み付けした平均周波数（Σ f·\|X\| / Σ\|X\|。エネルギー重み付けではありません） | 高いほど「明るい」（高域成分が多い）音に聞こえます |
 | スペクトル平坦度 | エネルギーが周波数全体にどれだけ均等に広がっているか | 1 に近いとノイズ的、0 に近いと音程的です |
 
 組み合わせると、フレームごとの音色を手軽に記述できます。
@@ -244,9 +244,9 @@ if (estimate.updated) {
 
 `StreamAnalyzer` はライブの**オンセット強度**ストリームを返します。各フレームの `onsetStrength` 配列がそれです。
 
-*テンポグラム*は、オンセット包絡を時間 × テンポの画像に変換します。各時点で、候補となる各テンポがどれだけ強く存在するかを示すものです。ライブ BPM 推定は、この画像を時間方向に最も強いテンポへとつぶしたものに相当します。ただしストリーム序盤ではまだ仮の値です。テンポグラムは、その推定の元になるより広い全体像です。
+*テンポグラム*は、オンセット包絡線を時間 × テンポの画像に変換します。各時点で、候補となる各テンポがどれだけ強く存在するかを示すものです。ライブ BPM 推定は、この画像を時間方向に最も強いテンポへとつぶしたものに相当します。ただしストリーム序盤ではまだ仮の値です。テンポグラムは、その推定の元になるより広い全体像です。
 
-蓄積した包絡、または `onsetEnvelope(...)` で得た任意のオンセット包絡から計算します。これは音声コールバック内で毎回実行する処理ではなく、バッファした窓に対するバッチ処理です。
+蓄積した包絡線、または `onsetEnvelope(...)` で得た任意のオンセット包絡線から計算します。これは音声コールバック内で毎回実行する処理ではなく、バッファした窓に対するバッチ処理です。
 
 ```typescript
 import { init, onsetEnvelope, tempogram, fourierTempogram, cyclicTempogram, tempogramRatio, plp } from '@libraz/libsonare';
@@ -265,15 +265,15 @@ const pulse = plp(env, sampleRate, 512, 30, 300, 384);
 
 | 関数 | 計算するもの | 戻り値 |
 |------|--------------|--------|
-| `tempogram(..., 'autocorrelation')` | オンセット包絡の局所自己相関（librosa 既定） | `{ nFrames, winLength, data }` |
+| `tempogram(..., 'autocorrelation')` | オンセット包絡線の局所自己相関（librosa 既定） | `{ nFrames, winLength, data }` |
 | `tempogram(..., 'cosine')` | ラグ付きオンセット片どうしの窓内**コサイン類似度** | `{ nFrames, winLength, data }` |
-| `fourierTempogram(...)` | オンセット包絡の STFT（フーリエテンポグラム） | `{ nBins, nFrames, data }` |
+| `fourierTempogram(...)` | オンセット包絡線の STFT（フーリエテンポグラム） | `{ nBins, nFrames, data }` |
 | `cyclicTempogram(...)` | オクターブ畳み込みしたテンポクラス（60・120・240 BPM が同一になる） | `{ nBins, nFrames, data }` |
 | `tempogramRatio(...)` | テンポグラムからのテンポ比特徴量 | `Float32Array` |
 | `plp(...)` | 主要局所パルス曲線 | `Float32Array` |
 
 ::: details 自己相関テンポグラムとコサインテンポグラム
-既定の**自己相関**テンポグラムは、オンセット包絡をラグ付きのコピーと相関させ、`librosa.feature.tempogram` を再現します。**コサイン**モードは代わりに、窓内のラグ付きオンセット片どうしのコサイン類似度を測ります。コサインはオンセットの生エネルギーよりパターンの*形*の一致を強調するため、窓内でオンセット振幅が大きく変動する場合に安定しやすいことがあります。どちらも row `i` がラグ `i` の強度である `[winLength x nFrames]` 行列を生成します。第 5 引数 `mode`（`'autocorrelation'` | `'cosine'`）で切り替えます。
+既定の**自己相関**テンポグラムは、オンセット包絡線をラグ付きのコピーと相関させ、`librosa.feature.tempogram` を再現します。**コサイン**モードは代わりに、窓内のラグ付きオンセット片どうしのコサイン類似度を測ります。コサインはオンセットの生エネルギーよりパターンの*形*の一致を強調するため、窓内でオンセット振幅が大きく変動する場合に安定しやすいことがあります。どちらも row `i` がラグ `i` の強度である `[winLength x nFrames]` 行列を生成します。第 5 引数 `mode`（`'autocorrelation'` | `'cosine'`）で切り替えます。
 :::
 
 ## AudioWorklet での使い分け
@@ -297,7 +297,7 @@ const audioCtx = new AudioContext();
 const engineNode = await SonareRealtimeEngineNode.create(audioCtx, {
   moduleUrl: '/sonare-engine-worklet.js',
   channelCount: 2,
-  mode: 'auto',            // 可能なら SAB、なければ postMessage
+  mode: 'auto',            // 可能なら SharedArrayBuffer (SAB)、なければ postMessage
 });
 
 engineNode.node.connect(audioCtx.destination);
@@ -319,7 +319,7 @@ engineNode.destroy();
 | Worklet ノード | リアルタイム音声側を実行します。 |
 | main thread 側の `RealtimeEngine` | オフライン処理やタイムライン操作を扱います。 |
 
-`transport` API は play/stop、秒または PPQ への seek、テンポ、ループ更新を扱います。トランスポート以外も、ワークレット API はエンジンのほぼ全面をコントロールメッセージ経由で Worklet にミラーします。メインスレッドが唯一の正であり、音声スレッドは同期済みスナップショットを受け取るだけです。
+`transport` API は play/stop、秒または PPQ（4 分音符単位の音楽的な位置）への seek、テンポ、ループ更新を扱います。トランスポート以外も、ワークレット API はエンジンのほぼ全面をコントロールメッセージ経由で Worklet にミラーします。メインスレッドが唯一の正であり、音声スレッドは同期済みスナップショットを受け取るだけです。
 
 | やりたいこと | ワークレット API |
 |--------------|----------------|
@@ -484,7 +484,8 @@ import { init, waveformPeaks, waveformPeakPyramid } from '@libraz/libsonare';
 
 await init();
 
-// インターリーブステレオ（L0,R0,L1,R1,...）。ここでは mono なので channels = 1
+// インターリーブ配置はステレオなら（L0,R0,L1,R1,...）。この例はモノラルなので
+// channels = 1。
 const peaks = waveformPeaks(samples, /* channels */ 1, { samplesPerBucket: 512 });
 // peaks.min / peaks.max は長さ peaks.channels * peaks.bucketCount の
 // チャンネルメジャー Float32Array。バケットごとに縦線を描く

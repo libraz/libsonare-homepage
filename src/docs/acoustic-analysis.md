@@ -204,6 +204,13 @@ Use this section when you are not only measuring a recording, but also creating 
 
 `estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay.
 
+::: warning What `estimateRoom(...)` actually solves
+It solves the *scale* of a shape you supply, not the shape itself.
+
+- The length : width : height ratios come from `aspectHintLw` / `aspectHintLh`, which default to `1`. A call that omits them always returns three identical dimensions — a cube — so do not present `length`, `width`, and `height` as recovered proportions unless you passed hints.
+- A single decay fixes only the *product* of volume and absorption, so `referenceAbsorption` (default `0.15`) is the prior that pins the volume down. The reported volume scales with the cube of it: a prior half the room's true mean absorption reports roughly an eighth of the volume. Keep it fixed when comparing recordings.
+:::
+
 `roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. Do not treat or present its output as dereverberation: it adds room character, it does not remove existing reverb.
 
 ### Wall absorption and materials
@@ -270,13 +277,17 @@ When sound bounces off walls, each reflection can be modeled as if it came from 
 | Field | Meaning |
 |-------|---------|
 | `rt60` | Estimated time for reverberation to decay by 60 dB. Larger values mean a more reverberant room. |
-| `edt` | Early decay time. Often tracks perceived reverberance more closely than full RT60. |
-| `c50` | Clarity for speech. Higher values usually mean consonants and dialog are easier to understand. |
-| `c80` | Clarity for music. Higher values indicate more direct/early energy relative to late reverberation. |
-| `d50` | Definition, the fraction of early energy in the first 50 ms. |
+| `edt` | Early decay time, fitted over the first 10 dB. Often tracks perceived reverberance more closely than full RT60. Independently fitted only in impulse-response mode. |
+| `c50` | Clarity for speech. Higher values usually mean consonants and dialog are easier to understand. Impulse-response mode only. |
+| `c80` | Clarity for music. Higher values indicate more direct/early energy relative to late reverberation. Impulse-response mode only. |
+| `d50` | Definition, the fraction (`0`–`1`) of early energy in the first 50 ms. Impulse-response mode only. |
 | `rt60Bands`, `edtBands`, `c50Bands`, `c80Bands` | Per-band versions of the same measurements. Python uses snake_case names with camelCase aliases. |
 | `confidence` | Heuristic confidence from `0` to `1`. Low values mean the recording did not contain a clean enough decay. |
 | `isBlind` / `is_blind` | Whether the result came from blind estimation rather than an impulse-response assumption. |
+
+::: warning Blind analysis returns decay only
+`detectAcoustic(...)` always runs the blind path, and the blind path recovers a decay rate and nothing else. `c50`, `c80`, and `d50` come back `NaN`; `c50Bands` and `c80Bands` come back empty; `edt` is a copy of `rt60` rather than an independently fitted early decay time, and `edtBands` likewise mirrors `rt60Bands`. Call `analyzeImpulseResponse(...)` on a clap, pop, or sweep-derived IR whenever you need clarity numbers or a real EDT, and guard for `NaN` before formatting these fields in a UI.
+:::
 
 ::: details What do RT60, EDT, C50/C80, and D50 measure?
 These are standard room-acoustic numbers derived from how sound decays in a space after it stops.

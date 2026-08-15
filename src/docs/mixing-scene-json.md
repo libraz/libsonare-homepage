@@ -141,6 +141,8 @@ The engine treats `master` and `aux` specially; **any other role string is just 
 
 ## VCA group
 
+A VCA (voltage-controlled amplifier) group is one fader that trims several strips at once without re-routing their audio.
+
 | Field | Type | Meaning |
 |-------|------|---------|
 | `id` | string | Group identifier |

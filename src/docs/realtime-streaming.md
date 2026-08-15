@@ -93,7 +93,7 @@ The demo below shows the same "audio in, markers out" idea visually: onset detec
 :::
 
 ::: tip `nFft` and `hopLength` in one line
-The analyzer runs an STFT under the hood. `nFft` is the analysis window size in samples (bigger = finer frequency detail, coarser timing); `hopLength` is how far the window advances between frames (smaller = more frames per second, more CPU). The `2048`/`512` defaults below are the common starting point. See [MIR Overview](./glossary/concepts/mir-overview.md) if these are new.
+The analyzer runs an STFT (short-time Fourier transform — repeated FFTs over short, overlapping windows) under the hood. `nFft` is the analysis window size in samples (bigger = finer frequency detail, coarser timing); `hopLength` is how far the window advances between frames (smaller = more frames per second, more CPU). The `2048`/`512` defaults below are the common starting point. See [MIR Overview](./glossary/concepts/mir-overview.md) if these are new.
 :::
 
 ```typescript
@@ -134,7 +134,7 @@ if (stats.estimate.updated) {
 A `FrameBuffer` is **Structure-of-Arrays**: timestamps, mel, chroma, onset strength, RMS, spectral centroid, spectral flatness, chord root, chord quality, and chord confidence each live in their own typed array. That layout is cheap to slice and cheap to hand to another thread. Check `featureFlags` before consuming optional arrays (`MEL=1`, `CHROMA=2`, `ONSET=4`, `SPECTRAL=8`); disabled features are empty, and `nChroma` is `0` when chroma is absent.
 
 ::: details What are spectral centroid and flatness?
-Both reduce the *shape* of one frame's spectrum to a single number you can plot or threshold. The **spectral centroid** is the energy-weighted average frequency — a higher centroid sounds "brighter" (more high-frequency content). The **spectral flatness** measures how evenly energy is spread across frequencies: values near 1 are noise-like (energy everywhere at once), values near 0 are tonal (energy concentrated in a few strong peaks). Together they are a cheap way to describe timbre frame by frame.
+Both reduce the *shape* of one frame's spectrum to a single number you can plot or threshold. The **spectral centroid** is the magnitude-weighted mean frequency of the frame, Σ f·|X| / Σ|X| (magnitude, not energy — the two definitions give materially different numbers on a peaky spectrum) — a higher centroid sounds "brighter" (more high-frequency content). The **spectral flatness** measures how evenly energy is spread across frequencies: values near 1 are noise-like (energy everywhere at once), values near 0 are tonal (energy concentrated in a few strong peaks). Together they are a cheap way to describe timbre frame by frame.
 :::
 
 For thread transfer and visualization you often do not need full float precision. `StreamAnalyzer` can quantize the feature arrays, trading precision for bandwidth:
@@ -282,7 +282,7 @@ const audioCtx = new AudioContext();
 const engineNode = await SonareRealtimeEngineNode.create(audioCtx, {
   moduleUrl: '/sonare-engine-worklet.js',
   channelCount: 2,
-  mode: 'auto',            // uses SAB when available, postMessage otherwise
+  mode: 'auto',            // uses SharedArrayBuffer (SAB) when available, postMessage otherwise
 });
 
 engineNode.node.connect(audioCtx.destination);
@@ -304,7 +304,7 @@ For app code that wants a higher-level worklet API, `SonareEngine` combines two 
 | Worklet node | Runs the realtime audio side. |
 | Main-thread `RealtimeEngine` | Handles offline and timeline operations. |
 
-Its `transport` API covers play/stop, seek by seconds or PPQ, tempo, and loop updates. Beyond transport, the worklet API mirrors essentially the whole engine to the worklet through control messages — the main thread stays the single source of truth and the audio thread receives synced snapshots:
+Its `transport` API covers play/stop, seek by seconds or PPQ (musical position in quarter-note units), tempo, and loop updates. Beyond transport, the worklet API mirrors essentially the whole engine to the worklet through control messages — the main thread stays the single source of truth and the audio thread receives synced snapshots:
 
 | Need | Facade API |
 |------|-----------|
@@ -469,7 +469,8 @@ import { init, waveformPeaks, waveformPeakPyramid } from '@libraz/libsonare';
 
 await init();
 
-// interleaved stereo (L0,R0,L1,R1,...); here `mono` is channels = 1
+// Interleaved layout is (L0,R0,L1,R1,...) for stereo; this example is mono,
+// so channels = 1.
 const peaks = waveformPeaks(samples, /* channels */ 1, { samplesPerBucket: 512 });
 // peaks.min / peaks.max are channel-major Float32Array of length
 // peaks.channels * peaks.bucketCount; draw a vertical line per bucket

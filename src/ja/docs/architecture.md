@@ -40,14 +40,14 @@ libsonare の内部アーキテクチャについて説明します。
     { id: 'creativeFx', label: '分解・リバーブ・クリエイティブ FX', col: 2, row: 3, group: 'effects' },
     { id: 'roomFx', label: 'Room Morph・ボイス変換', col: 3, row: 3, group: 'effects' },
     { id: 'nativeSynth', label: 'NativeSynth（15 エンジン）', col: 0, row: 4, group: 'instruments', variant: 'accent' },
-    { id: 'soundfont', label: 'SoundFont プレーヤー（SF2）', col: 1, row: 4, group: 'instruments' },
+    { id: 'soundfont', label: 'SoundFont プレイヤー（SF2）', col: 1, row: 4, group: 'instruments' },
     { id: 'midiSeq', label: 'MIDI・シーケンサー・SMF/UMP', col: 2, row: 4, group: 'instruments' },
     { id: 'instrumentRack', label: 'インストゥルメントラック', col: 3, row: 4, group: 'instruments' },
     { id: 'masterChain', label: 'MasteringChain', col: 0, row: 5, group: 'mastering', variant: 'accent' },
     { id: 'streamMaster', label: 'StreamingMasteringChain / EQ', col: 1, row: 5, group: 'mastering' },
     { id: 'mixerEngine', label: 'Mixer（ストリップ／バス／センド）', col: 2, row: 5, group: 'mastering' },
     { id: 'rtEngine', label: 'RealtimeEngine', col: 3, row: 5, group: 'mastering' },
-    { id: 'metering', label: 'メータリング（LUFS/トゥルーピーク）', col: 4, row: 5, group: 'mastering' },
+    { id: 'metering', label: 'メータリング（LUFS／True Peak）', col: 4, row: 5, group: 'mastering' },
     { id: 'specFeatures', label: 'Mel・Chroma・CQT/VQT', col: 0, row: 6, group: 'feature', variant: 'accent' },
     { id: 'otherFeatures', label: 'スペクトル・オンセット・ピッチ', col: 1, row: 6, group: 'feature' },
     { id: 'inverseFeatures', label: '逆変換特徴量（再構成）', col: 2, row: 6, group: 'feature' },
@@ -119,7 +119,7 @@ libsonare の内部アーキテクチャについて説明します。
 | `mastering/` | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[マスタリングアシスタント](./mastering-assistant.md) |
 | `mixing/` | [ミキシングエンジン](./mixing.md)、[ミキシングシーン JSON](./mixing-scene-json.md) |
 | `engine/`, `transport/`, `automation/`, `graph/`, `rt/` | [リアルタイムとストリーミング](./realtime-streaming.md)、特に `RealtimeEngine` |
-| `midi/` と `midi/synth/` | [ネイティブシンセ](./native-synth.md)、[SoundFont プレーヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
+| `midi/` と `midi/synth/` | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md) |
 | `arrangement/`（編集モデル） | [プロジェクト編集](./project-editing.md)、[録音とテイク](./recording-and-takes.md)、[プロジェクトバウンス](./project-bounce.md) |
 | `mir/`（ワープ・グリッドスナップ・キーコンテキスト） | [ワープとテンポ](./glossary/arrangement/warp-and-tempo.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | `editing/` と `effects/` | [編集 DSP](./editing-dsp.md)、[DSP 実装解説](./dsp-implementation.md#エフェクトと編集-dsp) |
@@ -215,7 +215,7 @@ src/
 │   └── api/            # シーン JSON ＋シーンプリセット
 │
 ├── midi/               # MIDI 入出力と内蔵インストゥルメント
-│   ├── synth/          # NativeSynth のボイス群＋SoundFont プレーヤー
+│   ├── synth/          # NativeSynth のボイス群＋SoundFont プレイヤー
 │   │   ├── native_synth.*      # 12 物理モデル＋サブトラクティブ/FM/アディティブ
 │   │   ├── ks_/piano_/pipe_organ_/bowed_string_/reed_/brass_/flute_/... voice.*
 │   │   ├── sf2_player.* sf2_file.* sf2_voice.*   # SoundFont（SF2）再生
@@ -244,7 +244,7 @@ src/
 
 ### オーディオ解析パイプライン
 
-どのアナライザーも同じ STFT／Spectrogram の出力を再計算せずに分岐して使います。オンセット強度は BPM とビート追跡を駆動し、クロマグラムはキーとコード認識を駆動します。そして `MusicAnalyzer.analyze()` は、実際に計算されたものだけをまとめて 1 つの `AnalysisResult` に収めます。
+どのアナライザーも同じ STFT（短時間フーリエ変換）／Spectrogram の出力を再計算せずに分岐して使います。オンセット強度は BPM とビート追跡を駆動し、クロマグラムはキーとコード認識を駆動します。そして `MusicAnalyzer.analyze()` は、実際に計算されたものだけをまとめて 1 つの `AnalysisResult` に収めます。
 
 <FlowDiagram
   title="オーディオ解析パイプライン"
@@ -292,7 +292,7 @@ src/
 
 ### オーディオエフェクトパイプライン
 
-HPSS とフェーズボコーダーはどちらも同じ複素 STFT 上で動作し、共有の iSTFT を通して再構成するため、変換パラメータが食い違うことはありません。一方タイムストレッチとピッチシフトは `Audio` から直接分岐する別経路をたどります。ピッチシフトは同じタイムストレッチのコアの上にリサンプラーを重ねているためです。
+HPSS（音を倍音成分と打撃成分に分ける処理）とフェーズボコーダーは、どちらも同じ複素 STFT 上で動作し、共有の iSTFT を通して再構成するため、変換パラメータが食い違うことはありません。一方タイムストレッチとピッチシフトは `Audio` から直接分岐する別経路をたどります。ピッチシフトは同じタイムストレッチのコアの上にリサンプラーを重ねているためです。
 
 <FlowDiagram
   title="オーディオエフェクトパイプライン"
@@ -346,7 +346,7 @@ libsonare は `timeStretch` / `pitchShift` や、編集 DSP のボイス系ツ�
 <FlowDiagram
   title="ストリーミングパイプライン"
   :nodes="[
-    { id: 'chunk', label: '音声チャンク (128–512 サンプル)', col: 0, row: 1, group: 'input' },
+    { id: 'chunk', label: '音声チャンク（128–512 サンプル）', col: 0, row: 1, group: 'input' },
     { id: 'overlap', label: 'オーバーラップバッファ', col: 1, row: 1, group: 'buffering' },
     { id: 'frame', label: '完全フレーム (n_fft)', col: 2, row: 1, group: 'buffering' },
     { id: 'fft', label: 'FFT', col: 3, row: 1, group: 'processing' },
@@ -394,7 +394,7 @@ libsonare は `timeStretch` / `pitchShift` や、編集 DSP のボイス系ツ�
 
 ### 遅延初期化
 
-MusicAnalyzer は個別のアナライザーを遅延初期化します。必要になったタイミングで初めて中間特徴量（STFT、クロマ、オンセットなど）を計算し、その後の問い合わせでは結果を再利用します。
+MusicAnalyzer は個別のアナライザーを遅延初期化します。必要になったタイミングで初めて中間特徴量（STFT、クロマ、オンセット包絡線など）を計算し、その後の問い合わせでは結果を再利用します。
 
 ```cpp
 // BPM のみ計算（オンセット包絡線まで）

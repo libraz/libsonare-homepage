@@ -107,7 +107,7 @@ API の一覧へ進む前に、この流れを頭に入れておくと迷いに�
 - クリップの重なりポリシーとワープモード（`off` / `repitch` / `tempo-sync`）をワープアンカーとともに選ぶ。
 - キー／コード注釈とオートメーションレーンをプロジェクトへ書き込む。
 - 再生可能なタイムラインへコンパイルし、構造化された診断と致命的でない警告を読む。
-- 決定的な JSON で保存・読み込みし、SMF と MIDI 2.0 クリップファイル形式で MIDI を交換する。
+- 決定的な JSON で保存・読み込みし、SMF（標準 MIDI ファイル）と MIDI 2.0 クリップファイル形式で MIDI を交換する。
 
 ## プロジェクトを作成して内容を追加する
 
@@ -198,7 +198,7 @@ project.setClipLoop(tailId, 'loop', 2, 0.05); // 短い継ぎ目クロスフェ�
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-フェードカーブは `'linear'`・`'equal-power'`・`'exponential'`・`'logarithmic'` です。各フェード長はクリップ長を上限にクランプされ（負の長さは 0）、過大なフェードがクリップ開始より前から始まることはありません。ループモードは `'off'` または `'loop'` で、ループ時は正の `loopLengthPpq` が必要です。`loopCrossfadePpq` はループ継ぎ目に入れる任意の equal-power クロスフェードです。`0` なら従来どおりのハードループ、正の値ならループ末尾とプリロール側のソース素材をブレンドします。エンジンは使用可能なソースオフセットとループ長の半分を上限にクランプし、ワープ済みクリップではこの継ぎ目クロスフェードを無効にします。
+フェードカーブは `'linear'`・`'equal-power'`・`'exponential'`・`'logarithmic'` です。各フェード長はクリップ長を上限にクランプされるため、過大なフェードがクリップ開始より前から始まることはありません。負の長さはそのまま拒否されます。ループモードは `'off'` または `'loop'` で、ループ時は正の `loopLengthPpq` が必要です。`loopCrossfadePpq` はループ継ぎ目に入れる任意の equal-power クロスフェードです。`0` なら従来どおりのハードループ、正の値ならループ末尾とプリロール側のソース素材をブレンドします。エンジンは使用可能なソースオフセットとループ長の半分を上限にクランプし、ワープ済みクリップではこの継ぎ目クロスフェードを無効にします。
 
 ::: warning `setClipGain` / `setClipFade` はオーディオクリップのみに効く
 `setClipGain` と `setClipFade` が効くのは**オーディオクリップのみ**です。MIDI クリップでは値が保存され（アンドゥ可能で `toJson()` でも往復します）が、レンダリングされるノートには反映されません。コンパイラは MIDI クリップのイベントをそのままレンダースケジュールへコピーし、クリップはトラックのミュート／ソロ／ゲインだけでゲートするため、クリップごとのゲインとフェードは音には影響しません。MIDI で鳴る楽器の音量を制御するには、**トラックゲイン**（`setTrackGain(trackId, gain)`。[ミキサーシーン](./mixing.md)のチャンネルストリップのフェーダーに畳み込まれます）を設定してください。トラックゲイン `0` はそのトラックの MIDI ノートを完全に無音にします。
@@ -235,7 +235,7 @@ copy_id = project.duplicate_clip(tail_id, 8.0)
 | ミュート | `setTrackMute(trackId, mute)` | トラックをミュート／解除する |
 | ソロ | `setTrackSolo(trackId, solo)` | トラックをソロにし、他をミュート扱いにする |
 | パン | `setTrackPan(trackId, pan)` | トラックを `[-1, 1]` でパンする（非有限値は拒否される） |
-| MIDI デスティネーション | `setTrackMidiDestination(trackId, destinationId)` | トラックの MIDI を楽器のデスティネーション ID へルーティングする（[内蔵楽器](./native-synth.md)を参照） |
+| MIDI デスティネーション | `setTrackMidiDestination(trackId, destinationId)` | トラックの MIDI を楽器のデスティネーション ID へルーティングする。[内蔵シンセサイザー（NativeSynth）](./native-synth.md)を参照 |
 
 ::: code-group
 
@@ -408,11 +408,11 @@ project.setOverlapPolicy(1); // 重なりを許可（クロスフェードや重
 project.getOverlapPolicy();  // 読み戻す
 ```
 
-`0` は重なりを禁止し、`1` は許可します。重ねたクリップやクロスフェードを意図する場合は許可し、トラックを厳密に逐次にしたい場合は禁止します。このポリシーが素の整数なのは、ネイティブの列挙体をそのまま反映しているためです。定義されているのは `0`（禁止）と `1`（許可）だけで、それ以外の値は禁止として扱われます。
+`0` は重なりを禁止し、`1` は許可します。重ねたクリップやクロスフェードを意図する場合は許可し、トラックを厳密に逐次にしたい場合は禁止します。このポリシーが素の整数なのは、ネイティブの列挙体をそのまま反映しているためです。定義されているのは `0`（禁止）と `1`（許可）だけで、それ以外の値は不正なパラメータとして拒否されます。
 
 ## ワープ: クリップをグリッドに合わせて伸縮する
 
-**ワープ**は、録音したオーディオクリップを固定の元の速度で再生する代わりに、プロジェクトのテンポへ追従させる機能です。録音を少し前後させたり伸縮させたりして、拍をグリッドに合わせるイメージです。内部的には、クリップは自身の録音タイムラインを保ったまま、その録音タイムライン上の位置をプロジェクト時間上の位置へ対応づけます。そのため、プロジェクトのテンポを変えるとクリップが伸縮し直されます。各クリップはワープ**モード**と、任意のアンカーから成るワープ**マップ**を持ちます。
+**ワープ**は、録音したオーディオクリップを固定の元の速度で再生する代わりに、プロジェクトのグリッドへ追従させる機能です。録音を少し前後させたり伸縮させたりして、拍を狙った位置に合わせるイメージです。内部的には、クリップは自身の録音タイムラインを保ったまま、ワープマップがその録音タイムライン上の位置をプロジェクト時間上の位置へピン留めします。各クリップはワープ**モード**を持ち、`'off'` 以外のモードが実際に効くにはアンカーから成るワープ**マップ**が必要です。
 
 | ワープモード | 意味 |
 |--------------|------|
@@ -473,6 +473,12 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 
 ワープマップは ID で管理される第一級オブジェクトです。`setWarpMap({ id, name, anchors })` で追加・置換し、`setClipWarpRef(clipId, id)`（`0` で解除）でクリップに割り当て、`project.removeWarpMap(id)` で ID を指定して削除します。クリップがまだ参照しているマップを削除すると、そのクリップにはワープ参照が宙ぶらりんで残るため、先に `setClipWarpRef(clipId, 0)` で参照を解除してください。
 
+::: warning アンカーはアプリ側で維持する。最低 2 個が必要
+アンカーはサンプル単位の絶対的な対応表であり、エンジンがテンポマップから導き直すことはありません。したがって `setTempoSegments(...)` でテンポを変えても、ワープ済みクリップが伸縮し直されることは**ありません**。変わるのはタイムライン上のクリップの開始位置と長さだけで、固定されたワープ曲線のうち再生される範囲が変わるにすぎません。テンポ変更に音声を追従させたいときは、アプリ側でアンカーを計算し直し、`setWarpMap(...)` で新しいマップを渡してください。
+
+また、マップがストレッチを表すにはアンカーが 2 個以上必要です。ワープマップも事前ベイク済み音声も持たない `'tempo-sync'` クリップは、`compile()` が参照切れとして報告するコンパイルエラーになります。`'repitch'` クリップでマップが無い、あるいはアンカーが 1 個だけの場合はエラーにならず、`'off'` と同じくネイティブ速度で静かに再生されます。
+:::
+
 ## テイクとコンプレーン
 
 クリップは代替の**テイク**と、複数テイクの良い箇所をつなぐ**コンプ**（合成）を持てます。これらは `Project` の第一級機能（`setClipTakes`・`setClipCompSegments`・`addLoopRecordingTakes`）で、ループ録音のキャプチャを含めて専用ページで詳しく扱います。[録音とテイク](./recording-and-takes.md)を参照してください。
@@ -520,7 +526,7 @@ lane_param_id = project.add_automation_lane(
         (4.0, 1.0, "exponential"),
     ],
 )
-project.edit_automation_lane(track_id, lane_param_id, target_param_id=1, points=[])
+project.edit_automation_lane(track_id, lane_param_id, points=[])
 project.remove_automation_lane(track_id, lane_param_id)
 
 fader_lane_id = project.add_automation_lane(
@@ -639,13 +645,13 @@ project.set_program(midi_clip, 4)          # GM プログラム（例: 4 = エ�
 
 Python では静的パッカーが `Project.midi_note_on(...)` / `Project.midi_note_off(...)` で、それぞれ `(ppq, data0, data1)` タプルを返します。イベントリストはそのタプルの任意のシーケンスです。
 
-`setProgram` は 3 つ目の任意引数 `bank` を取ります——`setProgram(clipId, program, bank = -1)`。既定は `-1`（バンクセレクトを送出しない）で、`>= 0` を渡すとプログラムチェンジの前にバンクセレクトを送出します。クリップ既定ではなく特定の UMP グループ・チャンネルでプログラムを変えるには `setProgramOnChannel(clipId, group, channel, program, bank?)` を使います。どちらも WASM・Node・Python すべてで同じ任意の `bank` を取ります（`set_program(clip_id, program, bank=-1)`、`set_program_on_channel(clip_id, group, channel, program, bank=-1)`）。
+`setProgram` は 3 つ目の任意引数 `bank` を取ります——`setProgram(clipId, program, bank = -1)`。既定は `-1`（バンクセレクトを送出しない）で、`>= 0` を渡すとプログラムチェンジの前にバンクセレクトを送出します。クリップ既定ではなく特定の UMP（Universal MIDI Packet）グループ・チャンネルでプログラムを変えるには `setProgramOnChannel(clipId, group, channel, program, bank?)` を使います。どちらも WASM・Node・Python すべてで同じ任意の `bank` を取ります（`set_program(clip_id, program, bank=-1)`、`set_program_on_channel(clip_id, group, channel, program, bank=-1)`）。
 
-::: warning `ppq` はティックではなく四分音符単位
-`ppq` 引数は**四分音符単位の位置**（浮動小数点）であり、MIDI のティック数ではありません。`Project.midiNoteOn(1, …)` は1四分音符後、`Project.midiNoteOn(0.5, …)` は8分音符後を指します。名前に反して **480 ティック/四分音符ではありません** — `Project.midiNoteOn(480, …)` は480四分音符（120小節）先にノートを置くため、ほぼ常にレンダリング範囲の遥か外となり、何も鳴らずに終わります。ティックベースのソース（480 PPQ の SMF など）から変換する場合は、まずソースの「1四分音符あたりのティック数」で割ってください。同じ単位が `addMidiClip(startPpq, lengthPpq)` と、本ページのすべてのクリップ／オートメーション位置に適用されます。
+::: warning `ppq` はティックではなく 4 分音符単位
+`ppq` 引数は **4 分音符単位の位置**（浮動小数点）であり、MIDI のティック数ではありません。`Project.midiNoteOn(1, …)` は 4 分音符 1 つ分あと、`Project.midiNoteOn(0.5, …)` は 8 分音符 1 つ分あとを指します。名前に反して **480 ティック/4 分音符ではありません** — `Project.midiNoteOn(480, …)` は 4 分音符 480 個分（120 小節）先にノートを置くため、ほぼ常にレンダリング範囲のはるか外となり、何も鳴らずに終わります。ティックベースのソース（480 PPQ の SMF など）から変換する場合は、まずソースの「4 分音符あたりのティック数」で割ってください。同じ単位が `addMidiClip(startPpq, lengthPpq)` と、本ページのすべてのクリップ／オートメーション位置に適用されます。
 :::
 
-各静的パッカーは、`setMidiEvents` のリストにそのまま渡せる MIDI 1.0 UMP（Universal MIDI Packet）ワード（1 つまたは複数）を返します。
+各静的パッカーは、`setMidiEvents` のリストにそのまま渡せる MIDI 1.0 の UMP ワード（1 つまたは複数）を返します。
 
 | パッカー | シグネチャ | イベント |
 |----------|------------|----------|
@@ -672,7 +678,7 @@ if (!check.ok) {
 }
 ```
 
-MIDI アレンジを鳴らすには、レンダリング時に楽器をバインドします。[音声をレンダリングする](#音声をレンダリングする)、[NativeSynth](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)を参照してください。コントローラからプロジェクトをライブ演奏するには、[MIDI 入力](./midi-input.md)を参照してください。
+MIDI アレンジを鳴らすには、レンダリング時に楽器をバインドします。[音声をレンダリングする](#音声をレンダリングする)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)を参照してください。コントローラからプロジェクトをライブ演奏するには、[MIDI 入力](./midi-input.md)を参照してください。
 
 ### キャプチャした MIDI ストリームをルーティングする
 
@@ -864,7 +870,7 @@ const { trackIds, clipIds } = project.importExternalStems({
 
 ### 標準 MIDI ファイル (SMF)
 
-`exportSmf` は常にフォーマット1（マルチトラック）で書き出します。トラック0がテンポ／拍子マップを、以降は各クリップが1つの MTrk となり、四分音符あたり480ティックに量子化されます。
+`exportSmf` は常にフォーマット 1（マルチトラック）で書き出します。トラック 0 がテンポ／拍子マップを、以降は各クリップが 1 つの MTrk となり、4 分音符あたり 480 ティックに量子化されます。
 
 ```typescript
 const smf = project.exportSmf();        // Uint8Array — SMF フォーマット1、480 PPQN
@@ -911,7 +917,7 @@ const audio = project.bounce({ numChannels: 2 });
 - [編集の基礎](./glossary/concepts/editing-basics.md) — 初学者向けの用語
 - [プロジェクトバウンス & レンダリング](./project-bounce.md) — タイムラインを音声へ。楽器ありでもなしでも
 - [録音とテイク](./recording-and-takes.md) — テイク、コンプレーン、ループ録音キャプチャ
-- [NativeSynth](./native-synth.md) · [SoundFont プレイヤー](./soundfont-player.md) — MIDI トラックを鳴らす
+- [内蔵シンセサイザー](./native-synth.md) · [SoundFont プレイヤー](./soundfont-player.md) — MIDI トラックを鳴らす
 - [MIDI 入力](./midi-input.md) — コントローラからプロジェクトをライブ演奏する
 - [ミキシングシーン JSON](./mixing-scene-json.md) — トラックのルーティング先となるシーン
 - [バインディング対応表](./binding-parity.md) — 実行環境ごとの API 差分

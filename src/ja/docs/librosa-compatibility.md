@@ -59,7 +59,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 
 | librosa | libsonare | 備考 |
 |---------|-----------|-------|
-| `librosa.effects.hpss()` | `hpss()` | メディアンフィルタリング |
+| `librosa.effects.hpss()` | `hpss()` | メディアンフィルターによる分離 |
 | residual を含む `librosa.effects.hpss()` 相当 | `hpssWithResidual()` / `hpss_with_residual()` | 倍音成分、打撃成分、残差信号を返す |
 | `librosa.effects.harmonic()` | `harmonic()` | 倍音成分のみ |
 | `librosa.effects.percussive()` | `percussive()` | 打撃成分のみ |
@@ -78,7 +78,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney 正規化 |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II。librosa と合わせる場合は `n_mfcc` を明示してください。末尾の `lifter`（ケプストラルリフタリング、既定 0 = リフタリングなし）は librosa の `lifter` に対応します |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース。各フレームは 12 個のピッチクラス値の最大が 1.0 になるよう正規化され（L-infinity／最大値正規化）、librosa の既定 `norm=np.inf` と一致 |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT ベース。各フレームは 12 個のピッチクラス値の最大が 1.0 になるよう正規化され（L-infinity／最大値正規化）、librosa の既定 `norm=np.inf` と一致。ただし `tuning` の既定は 0（A440）で、自動推定は行いません（「既知の違い」を参照） |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | フレーム単位 |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | フレーム単位 |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` 対応 |
@@ -113,7 +113,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 |----------------|-----------|------|
 | `librosa.decompose.decompose()` | `decompose()` | 行優先スペクトログラムから NMF 分解行列を返す |
 | `librosa.decompose.decompose(init=...)` | `decomposeWithInit()` / `decompose_with_init()` | 初期化方式を選べる NMF。`init='random'`（既定）または `init='nndsvd'`（SVD によるウォームスタート） |
-| `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | 近傍フィルタ |
+| `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | 近傍フィルター |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | インターリーブサンプルからマルチチャンネル Integrated loudness を測定 |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | LU 単位の loudness range |
 
@@ -127,7 +127,7 @@ NMF（非負値行列因子分解）は、スペクトログラムを少数の�
 
 | librosa | libsonare | 備考 |
 |---------|-----------|-------|
-| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | メルパワー → 線形 STFT パワー。`fmin`／`fmax`／`htk` でカスタムメル域・HTK も往復可 |
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | メルパワー → 線形 STFT **振幅**（librosa の既定 `power=2.0` を平方根で戻すため、呼び出し側でさらに平方根を取る必要はありません）。`fmin`／`fmax`／`htk` でカスタムメル域・HTK も往復可 |
 | _（mel_to_stft + `librosa.griffinlim`）_ | `melToAudio()` / `mel_to_audio()` | メルパワー → 音声（Griffin-Lim） |
 | `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → メルパワー |
 | `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → 音声（Griffin-Lim） |
@@ -141,7 +141,7 @@ NMF（非負値行列因子分解）は、スペクトログラムを少数の�
 | `librosa.onset.onset_detect()` | `detectOnsets()` / `detect_onsets()` | オンセット時刻 |
 | `librosa.beat.beat_track()` | `BeatAnalyzer` / `detectBeats()` | DP ベース |
 | `librosa.beat.tempo()` | `BpmAnalyzer` / `detectBpm()` | テンポグラム |
-| `librosa.beat.plp()` | `plp()` | Predominant Local Pulse |
+| `librosa.beat.plp()` | `plp()` | PLP（Predominant Local Pulse。支配的な局所パルス） |
 | `librosa.util.peak_pick()` | `peakPick()` / `peak_pick()` | ピーク位置のインデックス |
 
 #### ユーティリティ
@@ -347,7 +347,7 @@ librosa の出力と比較する場合は、実行環境ごとのデフォルト
 
 ## Mel スケール式
 
-### Slaney (librosa デフォルト、libsonare デフォルト)
+### Slaney（librosa デフォルト、libsonare デフォルト）
 
 ```
 f < 1000 Hz の場合:  mel = 3 * f / 200
@@ -402,14 +402,21 @@ mel_slaney = sonare.hz_to_mel(hz)  # Slaney（デフォルト）
 
 ### 3. 窓の正規化
 
-- **librosa**: COLA 用に窓を正規化
-- **libsonare**: 生の窓値を使用
+- **librosa**: 解析窓と合成窓が同一で、`istft` はオーバーラップ加算した出力をその窓の二乗和で割ります
+- **libsonare**: 解析側に周期窓、合成側に対称窓を使い、`toAudio()` は両者の積の累積和で割ります
 
-逆 STFT 後には小さな振幅差が出る場合があります。出力の絶対レベルを librosa に合わせる必要があるワークフローでは、再構成後に音声を（たとえば元音源のピークや RMS に合わせて）スケーリングし直してください。
+どちらのライブラリも窓そのものをスケーリングせず、オーバーラップ加算後に正規化するため、逆 STFT のゲインは両者とも保たれます。レベルを「補正」する目的で再構成後の音声を元音源のピークや RMS に合わせ直さないでください。減衰する素材や無音を含む素材では、すでに正しいレベルを壊してしまいます。
 
 ::: details COLA とは？
-**COLA** は *Constant Overlap-Add*（定数オーバーラップ加算）の略です。STFT から音声を再構成するとき、重なり合う窓掛けフレームを足し合わせます。重なる窓がどのサンプル位置でも一定値に合算されるなら、再構成のゲインはどこでも均一になります — これが COLA 条件です。librosa はこれが厳密に成り立つよう窓を正規化しますが、libsonare は生の窓を使うため、合算後のレベルがわずかに異なることがあります。逆 STFT 後の絶対レベルに依存する場合だけ問題になります。
+**COLA** は *Constant Overlap-Add*（定数オーバーラップ加算）の略です。STFT から音声を再構成するとき、重なり合う窓掛けフレームを足し合わせます。重なる窓がどのサンプル位置でも一定値に合算されるなら、再構成のゲインはどこでも均一になります — これが COLA 条件です。解析側だけでなく合成側にも窓を掛けるため、一定であるべき量は窓そのものの和ではなく*窓の積*の和です。どちらのライブラリも、窓とホップの組み合わせがこの条件を満たすことを前提にしていません。オーバーラップ加算しながらサンプルごとに窓の積を累積し、最後にそれで割るので、どの窓とホップの組み合わせでも再構成ゲインは平坦になります。
 :::
+
+### 4. クロマのチューニング基準
+
+- **librosa**: `chroma_stft` の既定は `tuning=None` で、`estimate_tuning()` を信号に対して実行し、ピッチクラスの格子を録音に合わせ直します
+- **libsonare**: `tuning` の既定は固定値 `0`（A440）で、推定は行いません
+
+A440 から外れた素材では、両者のクロマグラムは許容誤差の範囲ではなく構造的に食い違います。libsonare 側はエネルギーが隣のピッチクラスへにじみ、キーやコードの結果も劣化します。librosa に合わせるには、`estimateTuning()`／`estimate_tuning()` でずれを求め、その値を `tuning` に渡してください。
 
 ## 移行ガイド
 

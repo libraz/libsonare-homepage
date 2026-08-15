@@ -87,7 +87,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 |---------|-----------|-------|
 | `librosa.feature.melspectrogram()` | `MelSpectrogram::compute()` / `melSpectrogram()` | Slaney normalization |
 | `librosa.feature.mfcc()` | `MelSpectrogram::mfcc()` / `mfcc()` | DCT-II; specify `n_mfcc` explicitly when matching librosa; trailing `lifter` (cepstral liftering, default 0 = no liftering) matches librosa's `lifter` |
-| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; each frame is scaled so its largest of the 12 pitch-class values is 1.0 (L-infinity / max normalization), matching librosa's default `norm=np.inf` |
+| `librosa.feature.chroma_stft()` | `Chroma::compute()` / `chroma()` | STFT-based; each frame is scaled so its largest of the 12 pitch-class values is 1.0 (L-infinity / max normalization), matching librosa's default `norm=np.inf`. `tuning` defaults to 0 (A440) and is never auto-estimated — see Known Differences |
 | `librosa.feature.spectral_centroid()` | `spectralCentroid()` / `spectral_centroid()` | Per-frame |
 | `librosa.feature.spectral_bandwidth()` | `spectralBandwidth()` / `spectral_bandwidth()` | Per-frame |
 | `librosa.feature.spectral_rolloff()` | `spectralRolloff()` / `spectral_rolloff()` | `roll_percent` supported |
@@ -102,7 +102,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.vqt()` | `vqt()` | Variable-Q transform; `gamma` controls Q |
 | `librosa.feature.chroma_cqt()` | `chromaCqt()` / `chroma_cqt()` | Constant-Q chromagram; direct `librosa.feature.chroma_cqt` equivalent |
 | _(no strict librosa clone)_ | `nnlsChroma()` / `nnls_chroma()` | Additional NNLS note-activation chroma; no strict librosa equivalent |
-| `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS (Energy Normalized Statistics) chroma; smoothed/L1-normalized |
+| `librosa.feature.chroma_cens()` | `chromaCens()` / `chroma_cens()` | CENS (Chroma Energy Normalized Statistics) chroma; smoothed/L1-normalized |
 | _(no exact librosa equivalent)_ | `bassChroma()` / `bass_chroma()` | CQT-based low-register chroma for bass/inversion estimation |
 | `librosa.hybrid_cqt()` | `hybridCqt()` / `hybrid_cqt()` | Hybrid CQT (CQT for low bins, pseudo-CQT for high bins) |
 | `librosa.pseudo_cqt()` | `pseudoCqt()` / `pseudo_cqt()` | Approximate (lower-fidelity) CQT |
@@ -136,7 +136,7 @@ These mirror `librosa.feature.inverse.*` and use Griffin-Lim for phase, so round
 
 | librosa | libsonare | Notes |
 |---------|-----------|-------|
-| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT power; custom Mel ranges / HTK round-trip via `fmin`/`fmax`/`htk` |
+| `librosa.feature.inverse.mel_to_stft()` | `melToStft()` / `mel_to_stft()` | Mel power → linear STFT **magnitude** (librosa's `power=2.0` default is undone by a square root, so no further root is needed); custom Mel ranges / HTK round-trip via `fmin`/`fmax`/`htk` |
 | _(mel_to_stft + `librosa.griffinlim`)_ | `melToAudio()` / `mel_to_audio()` | Mel power → audio (Griffin-Lim) |
 | `librosa.feature.inverse.mfcc_to_mel()` | `mfccToMel()` / `mfcc_to_mel()` | MFCC → mel power |
 | `librosa.feature.inverse.mfcc_to_audio()` | `mfccToAudio()` / `mfcc_to_audio()` | MFCC → audio (Griffin-Lim) |
@@ -150,7 +150,7 @@ These mirror `librosa.feature.inverse.*` and use Griffin-Lim for phase, so round
 | `librosa.onset.onset_detect()` | `detectOnsets()` / `detect_onsets()` | Returns onset times |
 | `librosa.beat.beat_track()` | `BeatAnalyzer` / `detectBeats()` | DP-based |
 | `librosa.beat.tempo()` | `BpmAnalyzer` / `detectBpm()` | Tempogram |
-| `librosa.beat.plp()` | `plp()` | Predominant local pulse |
+| `librosa.beat.plp()` | `plp()` | PLP — predominant local pulse |
 | `librosa.util.peak_pick()` | `peakPick()` / `peak_pick()` | Returns peak indices |
 
 #### Utilities
@@ -415,16 +415,27 @@ This can slightly change downstream features after resampling.
 
 ### 3. Window Normalization
 
-- **librosa**: Normalizes window for COLA
-- **libsonare**: Uses raw window values
+- **librosa**: One window serves as both analysis and synthesis window; `istft` divides the overlap-added output by the accumulated sum of that window squared
+- **libsonare**: A periodic analysis window is paired with a symmetric synthesis window, and `toAudio()` divides by the accumulated sum of their product
 
-Expect small amplitude differences after an inverse STFT. If your workflow
-depends on the absolute output level matching librosa, rescale the reconstructed
-audio (for example, to the source's peak or RMS) after reconstruction.
+Neither library scales the window itself, and both normalize the overlap-add,
+so inverse-STFT gain is preserved on either side. Do not rescale the
+reconstruction to the source's peak or RMS to "fix" the level — on decaying or
+partly silent material that changes a level which was already correct.
 
 ::: details What is COLA?
-**COLA** stands for *Constant Overlap-Add*. When you reconstruct audio from an STFT, the overlapping windowed frames are added back together. If those overlapping windows sum to a constant value at every sample position, the reconstruction has even gain everywhere — that is the COLA condition. librosa normalizes the window so this holds exactly; libsonare uses the raw window, so the summed level can differ slightly. It only matters if you depend on the absolute output level after an inverse STFT.
+**COLA** stands for *Constant Overlap-Add*. When you reconstruct audio from an STFT, the overlapping windowed frames are added back together. If those overlapping windows sum to a constant value at every sample position, the reconstruction has even gain everywhere — that is the COLA condition. Because a window is applied on the synthesis side as well as the analysis side, the quantity that has to be constant is the sum of the *window product*, not the sum of the window. Neither library relies on the window/hop pair satisfying that on its own: both accumulate the window product per sample while overlap-adding, then divide by it, which flattens the reconstruction gain for any window/hop combination.
 :::
+
+### 4. Chroma Tuning Reference
+
+- **librosa**: `chroma_stft` defaults to `tuning=None`, which runs `estimate_tuning()` on the signal and re-centres the pitch-class grid on the recording
+- **libsonare**: `tuning` defaults to a fixed `0` (concert A440) and is never estimated
+
+On material recorded away from A440 the two chromagrams diverge structurally,
+not within a tolerance: libsonare's bins smear across neighbouring pitch classes
+and key/chord results degrade. To match librosa, estimate the offset yourself
+with `estimateTuning()` / `estimate_tuning()` and pass it in as `tuning`.
 
 ## Migration Guide
 

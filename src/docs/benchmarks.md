@@ -18,7 +18,7 @@ By the end of this page you should be able to:
 - find the benchmark source and reproduce or update the measurements when hardware, inputs, or implementations change.
 
 ::: info Methodology
-All numbers below are measured **standalone from raw audio** — every call rebuilds whatever intermediate state it needs (STFT, Mel, etc.) from the original samples. This is the same code path a one-shot user of either API exercises, so the comparison is apples-to-apples. The full benchmark source and results JSON live in [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) inside the libsonare repo.
+All numbers below are measured **standalone from raw audio** — every call rebuilds whatever intermediate state it needs (the short-time Fourier transform (STFT), the mel spectrogram, and so on) from the original samples. This is the same code path a one-shot user of either API exercises, so the comparison is apples-to-apples. The full benchmark source and results JSON live in [`benchmarks/`](https://github.com/libraz/libsonare/tree/main/benchmarks) inside the libsonare repo.
 
 Every case runs **3 times and the tables report the median**, on both sides — `bench_cpp.cpp` takes the median of 3 for libsonare, `run_bench.py` does the same for librosa. The individual run times are not written to the results JSON, so no spread is published here; with 3 samples a standard deviation would not say much anyway.
 :::
@@ -95,7 +95,7 @@ Individual feature extraction on the same 73-second audio (resampled to 22050 Hz
 |---------|---------|-----------|---------|
 | STFT (2048, hop 512) | 12.6ms | 13.5ms | 0.93x — slower |
 | Mel Spectrogram (128 bands) | 19.5ms | 22.2ms | 0.88x — slower |
-| HPSS (kernel 31) | 1,681ms | 81.9ms | **20.5x** |
+| HPSS (harmonic/percussive separation, kernel 31) | 1,681ms | 81.9ms | **20.5x** |
 | Onset Strength | 20.5ms | 22.7ms | 0.90x — slower |
 | Chroma (STFT-based) | 42.0ms | 14.8ms | **2.84x** |
 | Beat Track | 32.9ms | 55.0ms | **0.60x — slower** |
@@ -145,9 +145,9 @@ Otherwise, judge accuracy on your own audio with the [browser demo](/demos) or t
 ## WASM Mastering ISP Guard
 
 An inter-sample peak (ISP) is a peak that falls *between* two samples — silent in
-the raw numbers but real once a DAC reconstructs the waveform — so the limiter
-must oversample to catch it. This benchmark confirms that detector is fast enough
-to run in the browser.
+the raw numbers but real once a DAC (digital-to-analog converter) reconstructs
+the waveform — so the limiter must oversample to catch it. This benchmark
+confirms that detector is fast enough to run in the browser.
 
 The mastering true-peak path is also checked in WebAssembly with a 48 kHz stereo
 1 ms block, 4x oversampling, and the same sliding-max guard used by the final
@@ -220,7 +220,7 @@ libsonare replaces this with a custom sliding median:
 A **median filter** replaces each value with the *median* of its neighbors in a small window. Unlike averaging, it removes spikes and outliers while keeping edges sharp — which is exactly why HPSS uses it: a horizontal median pass keeps steady (harmonic) lines, a vertical pass keeps sharp (percussive) hits. A **sliding median** computes this efficiently as the window moves across the data, instead of re-sorting from scratch at every step.
 :::
 
-<SonareDemo id="waveform-harmonics" />
+<SonareDemo id="hpss-separation" />
 
 ### pYIN (12.8x): native YIN difference and Viterbi decoding
 
@@ -277,7 +277,7 @@ Both halves record the one-minute load average before and after the run — `son
 :::
 
 ::: tip Calling libsonare from Python
-The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI boundary, which dominates the runtime for cheap features. The all-in-one pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
+The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI (foreign function interface) boundary, which dominates the runtime for cheap features. The all-in-one pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
 :::
 
 ## Notes

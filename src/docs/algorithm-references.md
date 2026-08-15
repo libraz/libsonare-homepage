@@ -80,7 +80,7 @@ The data-free [built-in synthesizer](./native-synth.md) is built from published 
 
 ### General MIDI and GS compatibility
 
-libsonare follows the open General MIDI and General MIDI 2 instrument/percussion maps (MIDI Association) and the Roland-defined GS extensions — extra banks, NRPNs, drum-kit variations, and insertion effects (EFX) — at the addressing level, using their publicly documented MIDI/SysEx implementation and effect type-numbering. This compatibility target lets GM/GS-authored MIDI select the banks, kits, and effects a composer intended.
+libsonare follows the open General MIDI and General MIDI 2 instrument/percussion maps (MIDI Association) and the Roland-defined GS extensions — extra banks, NRPNs (non-registered parameter numbers), drum-kit variations, and insertion effects (EFX) — at the addressing level, using their publicly documented MIDI/SysEx implementation and effect type-numbering. This compatibility target lets GM/GS-authored MIDI select the banks, kits, and effects a composer intended.
 
 The sounds behind those addresses are libsonare's own procedural synthesis and DSP, reconstructed from public documentation and the literature above. libsonare ships no samples, ROM data, or firmware from any hardware module, and each effect is one of its own algorithms. The result is an **independent re-creation** — it follows the GS addressing and effect structure, but does **not** reproduce the exact sound of any specific device. As with the librosa fixtures below, this is a compatibility target, not copied implementation code, and not a claim of identical output.
 
@@ -100,13 +100,13 @@ This is a compatibility target, not copied implementation code.
 | Decomposition and transforms | HPSS, harmonic/percussive, decompose, remix, inverse mel/MFCC helpers, Griffin-Lim-related synthesis tests |
 | Sequence and structure | segment helpers, cross-similarity, recurrence matrix, DTW/Viterbi-style sequence helpers |
 | Utilities | frame/sample/time conversion, dB conversion, pre/de-emphasis, padding, fix length/frames, peak pick, vector normalize, trim/split silence, weighting |
-| NNLS | NNLS tests compare against SciPy/librosa reference data and support NNLS chroma behavior |
+| NNLS (non-negative least squares) | NNLS tests compare against SciPy/librosa reference data and support NNLS chroma behavior |
 
 ## Scope Boundaries
 
 The source explicitly frames repair as classical DSP.
 
-That means these paths are not DNN restoration, source separation, or interactive spectral repair:
+That means these paths are not DNN (deep neural network) restoration, source separation, or interactive spectral repair:
 
 | Repair path | How to read it |
 |-------------|----------------|

@@ -16,7 +16,7 @@ A **strip** is one track's processing lane. A **bus** is a shared destination fo
 :::
 
 ::: tip Where mixing sits in the pipeline
-**Analysis** tells you *what* a track is. **Editing** fixes timing and pitch of one track. **Mixing** balances *several* tracks into a stereo bus. **Mastering** polishes that finished stereo mix for delivery. Mixing is the stage that turns "a folder of stems" into "a song". You usually mix first, then master the result.
+**Analysis** tells you *what* a track is. **Editing** fixes timing and pitch of one track. **Mixing** balances *several* tracks into a stereo bus. **Mastering** polishes that finished stereo mix for delivery. Mixing is the stage that turns "a folder of stems" — the individual instrument tracks or submixes exported from a session — into "a song". You usually mix first, then master the result.
 :::
 
 ## What You Will Learn
@@ -40,7 +40,7 @@ The engine is deliberately split into two levels. Start at the top row and only 
 | You are inside a browser `AudioWorklet` or audio callback | WASM [`Mixer.createRealtimeBuffer()`](#realtime-and-the-audioworklet-bridge) | Reuses buffers, never allocates per block |
 
 ::: info One engine, every runtime
-The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLI is the exception: its `mix` command is a single-file, single-strip processor and does **not** render scenes — the persistent multi-strip `Mixer` is available only through WASM/JS, Node, and Python. See [Binding Parity](./binding-parity.md) for the per-runtime table.
+The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLIs are the exception, and they differ from each other: the Python CLI's `mix` renders a scene in one shot (one `--input` WAV per strip), while the native CLI's `mix-strip` is a single-file, single-strip processor with no `--scene`. A **persistent** multi-strip `Mixer` you drive block by block is available only through WASM/JS, Node, and Python. See [Binding Parity](./binding-parity.md) for the per-runtime table.
 :::
 
 ## The channel strip, signal by signal
@@ -156,14 +156,14 @@ mix = sonare.mix_stereo(
 ```
 
 ```bash [CLI]
-# The CLI mix command processes ONE file through ONE channel strip.
-# Combining several stems into one master is binding-only (mixStereo above).
-sonare mix \
-  --input vocal.wav \
+# The native CLI's mix-strip processes ONE file through ONE channel strip.
+# Combining several stems with per-track settings in one call is binding-only
+# (mixStereo above); the Python CLI's scene-based `mix` is the other CLI route.
+sonare-cli mix-strip vocal.wav \
   --input-trim-db 3 \
   --fader-db -3 \
   --pan 0.2 \
-  --pan-mode stereo \
+  --pan-mode stereopan \
   --width 1.1 \
   -o out.wav
 ```
@@ -222,11 +222,13 @@ mixer.close()                                               # release the native
 ```
 
 ```bash [CLI]
-# The CLI has no scene-mixing command: `sonare mix` is single-file/single-strip
-# and cannot render a Mixer scene. Persistent multi-strip mixing is binding-only
-# (WASM/JS, Node, Python). The CLI can only PRINT scene JSON, never render it:
+# The Python CLI's `mix` renders a scene one-shot: it loads the scene, feeds one
+# --input WAV per strip, and writes the master. A persistent, block-by-block
+# Mixer you can re-parameterize between blocks is binding-only (WASM/JS, Node,
+# Python). The native CLI has no --scene at all; its `mix-strip` is one strip.
 sonare mixing-presets                            # list the built-in scene preset names
 sonare mixing-preset --preset vocalReverbSend    # print one scene's JSON to stdout
+sonare mix --scene scene.json --input vocal.wav --input reverb-return.wav -o master.wav
 ```
 
 :::
@@ -264,7 +266,7 @@ A **bus** is a shared destination. Strips connect to buses, buses connect to oth
 | `aux` | A parallel destination for sends, typically an effect return (reverb, delay). |
 | `submix` | A group of strips processed together before the master (a "drum bus"). |
 
-Only `master` and `aux` are special tokens; any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
+`master` is the only role string the graph treats specially — `aux` is simply the default value a bus gets when you do not give it one. Any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
 
 Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph while constructing the mixer, so the returned mixer is ready to process immediately. After construction, buses are added and removed with `mixer.addBus(id, role?)` (`role` defaults to `'aux'`) and `mixer.removeBus(id)`, and `mixer.busCount()` reports the current count. A topology change marks the graph dirty, and it is recompiled lazily on the next `processStereo` call — or eagerly when you call `compile()`.
 
@@ -289,7 +291,7 @@ Sends on a strip are addressed by index in **add order**. Removing one with `rem
 Removing a bus also cleans up the routing that pointed at it: any send whose destination was that bus is dropped, because its target no longer exists. Audit a strip's sends after removing a bus they fed.
 
 ::: warning Buses that go nowhere
-Compiling (or processing) a scene emits a **non-fatal** warning when an explicit `submix` or `aux` bus has no path to the `master`. The graph still runs, but a bus with no route to the master contributes nothing to the output — usually a missing connection rather than an intentional dead end. Treat the warning as a prompt to check that every bus you added is actually wired through to `master`.
+An explicit `submix` or `aux` bus with no path to the `master` is **not** flagged. The graph compiles and runs, but that bus contributes nothing to the output — usually a missing connection rather than an intentional dead end. `sceneWarnings()` only reports ignored insert params, so check yourself that every bus you added is actually wired through to `master`.
 :::
 
 ### VCA groups
@@ -327,24 +329,28 @@ The persistent `Mixer` also drives the other in-strip stages live, each a **para
 
 Pan law options are `const3dB`, `const4.5dB`, `const6dB`, and `linear0dB` in the JavaScript APIs. Python accepts the same values as enums/ints, or normalized strings such as `const-3db` and `linear-0db`.
 
-Each law dips the center by a fixed amount, so a sound panned to the center is not louder than one panned hard left or right:
+Most laws dip the center by a fixed amount, so a sound panned to the center is not louder than one panned hard left or right:
 
 | Law | Center dip | Use for |
 |-----|-----------|---------|
-| `const3dB` | −3 dB | most material (default) |
+| `const3dB` | −3 dB | most material (default) — constant *power* |
 | `const4.5dB` | −4.5 dB | a compromise often used on consoles |
-| `const6dB` | −6 dB | already-mono sources you want to feel centered, not boosted |
-| `linear0dB` | 0 dB | keeps the summed (mono) level steady instead of perceived loudness |
+| `const6dB` | −6 dB | constant *amplitude* — keeps the mono sum steady |
+| `linear0dB` | 0 dB | no center compensation at all |
 
-The constant-power laws (3 / 4.5 / 6 dB) keep *perceived* loudness even as you pan; `linear0dB` keeps the *summed* level even instead.
+`const3dB` is the constant-**power** law (cos/sin, 0.707 per channel at center): total energy stays put as you pan, which is what matters over speakers, while the coherent mono sum rises 3 dB toward the center. `const6dB` is the constant-**amplitude** law (0.5 per channel at center): the two channels add up to the same 1.0 as a hard pan, so the *mono sum* stays put and the power falls 3 dB instead. `const4.5dB` is the geometric mean of the two. `linear0dB` compensates nothing — both channels sit at unity in the center — so a centered source is 3 dB hotter in power and 6 dB hotter in the mono sum than a hard-panned one; pick it only when something downstream already applies its own pan compensation.
+
+::: warning The center dip only reaches the output in `stereoPan` mode
+Those figures are the raw pan-law gains. In `balance` — the default mode — the panner divides both gains by the louder (near) one, so the near channel is always unity and only the away channel is pulled down. The center stays at 0 dB whichever law you choose; the law only sets the near/away *ratio*. Switch the strip to `stereoPan` if you want the center dip itself. A single-channel (mono) strip is a third case: it receives the law's combined energy `sqrt(l² + r²)` as one gain, which is unity at center under the default `const3dB`.
+:::
 
 ### Surround and multichannel
 
-For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the offline `Mixer` still renders stereo — the surround panner that consumes these values runs in the [realtime engine's surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters), so set the position here and render the surround mix through the engine.
+For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE — low-frequency effects — plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the offline `Mixer` still renders stereo — the surround panner that consumes these values runs in the [realtime engine's surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters), so set the position here and render the surround mix through the engine.
 
 ## Automation
 
-Every time-varying control is scheduled at an **absolute sample position** measured from the first `processStereo` call (recompiling resets the clock to 0). Available lanes:
+Every time-varying control is scheduled at an **absolute sample position** measured from the first `processStereo` call. Recompiling does not reset that clock, and queued automation survives the rebuild. Available lanes:
 
 ```typescript
 mixer.scheduleFaderAutomation(stripIndex, sampleRate * 8,  -6, 's-curve');   // ride the vocal down at 8 s
@@ -374,7 +380,7 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 | Field | Tells you |
 |-------|-----------|
 | `peakDbL` / `peakDbR` | Sample peak per channel |
-| `truePeakDbL` / `truePeakDbR` / `maxTruePeakDb` | Inter-sample [true peak](./glossary/true-peak.md) — what a DAC actually reconstructs |
+| `truePeakDbL` / `truePeakDbR` / `maxTruePeakDb` | Inter-sample [true peak](./glossary/true-peak.md), estimated with 4x oversampling per ITU-R BS.1770-4 — close to what a DAC (digital-to-analog converter) reconstructs, though a real reconstruction filter can peak a little higher |
 | `rmsDbL` / `rmsDbR` | Short-term average level |
 | `momentaryLufs` / `shortTermLufs` / `integratedLufs` | [Loudness](./glossary/lufs.md) over 400 ms / 3 s / the whole signal |
 | `correlation` | −1…+1 phase correlation; near +1 is mono-safe, negative warns of cancellation |

@@ -30,13 +30,13 @@ libsonare の大半は、音声を特徴量へ変換します。たとえばメ�
 
 順変換は**意図的に不可逆**です。捨てられる情報が 2 種類あり、どんな逆変換も取り戻せません。
 
-- **メルフィルタバンクは正方行列ではない。** メルスペクトログラムは STFT の周波数ビン（`nFft = 2048` なら約 1025 本、すなわち `nFft/2 + 1`）を、たとえば 128 のメルバンドに畳み込みます。逆変換は各メルバンドのエネルギーを元のビン群へ広げ直しますが、これは最小二乗の最良推定であって元の細部ではありません。
+- **メルフィルタバンクは正方行列ではない。** メルスペクトログラムは STFT（短時間フーリエ変換）の周波数ビン（`nFft = 2048` なら約 1025 本、すなわち `nFft/2 + 1`）を、たとえば 128 のメルバンドに畳み込みます。逆変換は各メルバンドのエネルギーを元のビン群へ広げ直しますが、これは最小二乗の最良推定であって元の細部ではありません。
 - **位相は完全に失われる。** 振幅／パワースペクトログラムは各周波数に*どれだけ*エネルギーがあるかを保ちますが、波形周期の*どこ*にあるかは保ちません。音声再構成は**もっともらしい位相を作り出す**必要があり、それを担うのが Griffin-Lim です。
 
-MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（多くは 13〜20）のケプストラム係数だけを残し、細かいスペクトル包絡を捨てます。そのため MFCC の逆変換は、音声を取り戻す前に*平滑化された*メルスペクトログラムを再構成します。
+MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（多くは 13〜20）のケプストラム係数だけを残します。この係数が保持するのはスペクトル包絡の大まかな形で、その内側の細かい構造 — 倍音のディテールやフォルマントの鋭いエッジ — は捨てられます。そのため MFCC の逆変換は、音声を取り戻す前に*平滑化された*メルスペクトログラムを再構成します。
 
 ::: details ケプストラム係数とは？
-ケプストラムは、対数スペクトルに変換（DCT）をかけた結果です。スペクトルの大まかな形（音色）と細かいディテールを分離します。MFCC はこの係数の先頭の数個だけを残すため、全体的な音色をコンパクトに表せる一方で、細かいスペクトルのディテールは再構成できません。
+ケプストラムは、対数スペクトルに DCT（離散コサイン変換）をかけた結果です。スペクトルの大まかな形（音色）と細かいディテールを分離します。MFCC はこの係数の先頭の数個だけを残すため、全体的な音色をコンパクトに表せる一方で、細かいスペクトルのディテールは再構成できません。
 :::
 
 ::: warning 再構成は近似であって復元ではない
@@ -53,7 +53,7 @@ MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（�
     { id: 'audio', label: '音声', col: 0, row: 0 },
     { id: 'mel', label: 'メルパワー', col: 1, row: 0 },
     { id: 'mfcc', label: 'MFCC 係数', col: 1, row: 1 },
-    { id: 'stft', label: 'STFT パワー', col: 2, row: 0, variant: 'success' },
+    { id: 'stft', label: 'STFT 振幅', col: 2, row: 0, variant: 'success' },
     { id: 'preview', label: 'プレビュー音声', col: 2, row: 1, variant: 'success' }
   ]"
   :edges="[
@@ -71,7 +71,7 @@ MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（�
 
 | 目的 | JavaScript | Python |
 |------|------------|--------|
-| メルパワー → STFT パワー | `melToStft(...)` は `{ nBins, nFrames, power }` を返す | `mel_to_stft(...)` は `InverseResult(rows, n_frames, data)` を返す |
+| メルパワー → STFT 振幅 | `melToStft(...)` は `{ nBins, nFrames, power }` を返す | `mel_to_stft(...)` は `InverseResult(rows, n_frames, data)` を返す |
 | メルパワー → 音声 | `melToAudio(...)` は `Float32Array` を返す | `mel_to_audio(...)` は `list[float]` を返す |
 | MFCC → メルパワー | `mfccToMel(...)` は `{ nMels, nFrames, power }` を返す | `mfcc_to_mel(...)` は `InverseResult(rows, n_frames, data)` を返す |
 | MFCC → 音声 | `mfccToAudio(...)` は `Float32Array` を返す | `mfcc_to_audio(...)` は `list[float]` を返す |
@@ -82,7 +82,11 @@ MFCC はさらにもう 1 段の損失を加えます — 先頭 `nMfcc` 個（�
 
 ## スペクトルを再構成する
 
-`melToStft` は、メル**パワー**スペクトログラムを線形周波数の STFT **パワー**へ戻します。`mfccToMel` は、MFCC を平滑化されたメル**パワー**スペクトログラムへ戻します。
+`melToStft` は、メル**パワー**スペクトログラムを線形周波数の STFT **振幅**スペクトログラムへ戻します。`mfccToMel` は、MFCC を平滑化されたメル**パワー**スペクトログラムへ戻します。
+
+::: warning `melToStft` が返すのはフィールド名に反して振幅です
+このヘルパーは非負最小二乗をパワー領域で解いたあと平方根を取ります。既定が `power=2.0` の `librosa.feature.inverse.mel_to_stft` に合わせた挙動です。したがって返ってくる値は振幅であり、パワーだと思わせるのは JavaScript のフィールド名 `power`（Python では `data`）だけです。dB へ変換するときは `10·log₁₀(x)` ではなく `20·log₁₀(x)` を使い、パワースペクトルを前提とする処理へ渡す前には値を 2 乗してください。
+:::
 
 順変換で 0 以外の `lifter` を使った場合は、`mfccToMel` または `mfccToAudio` に同じ値を渡してください。逆変換で取り除かれます。
 
@@ -95,7 +99,7 @@ import { init, melSpectrogram, melToStft, mfcc, mfccToMel } from '@libraz/libson
 
 await init();
 
-// メルパワー -> STFT パワー
+// メルパワー -> STFT 振幅
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 const stft = melToStft(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048);
 // stft: { nBins, nFrames, power }   nBins = nFft/2 + 1 = 1025
@@ -109,7 +113,7 @@ const reMel = mfccToMel(coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames, 128);
 ```python [Python]
 import libsonare as sonare
 
-# メルパワー -> STFT パワー
+# メルパワー -> STFT 振幅
 mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
 stft = sonare.mel_to_stft(mel.power, mel.n_mels, mel.n_frames, sample_rate=sample_rate, n_fft=2048)
 # stft.rows = n_fft/2 + 1 = 1025。stft.data は row-major の [rows x n_frames]
@@ -133,7 +137,7 @@ sonare mel-to-audio song.wav --n-fft 2048 --hop-length 512 --n-mels 128 -o mel-p
 
 `melToAudio` と `mfccToAudio` は、再生やファイル書き出しができるモノラルの `Float32Array` を返します。特徴量に位相がないため、どちらも **Griffin-Lim** を実行します — 振幅にランダム（またはゼロ）位相を与えて開始し、STFT → 新しい位相を保持 → 既知の振幅を課す → 逆 STFT を繰り返し、位相が自己整合するまで反復します。
 
-`cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)` が返す row-major の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
+`cqtToAudio` と `vqtToAudio` も、`cqt(...)`／`vqt(...)`（定 Q 変換と可変 Q 変換。周波数ビンを線形ではなく対数間隔で並べる変換です）が返す row-major の振幅行列に同じ反復手法を使います。順変換時の `sampleRate`、`hopLength`、`fmin`、`binsPerOctave`（VQT は `gamma` も）を変えずに渡してください。メル／MFCC の復元と同じく、これは近似的なモノラルプレビューであり、原音の復元ではありません。
 
 聴いたときに、元の曲の輪郭やリズムは分かるが、にじみ・金属的な質感・ざらつきが出ることがあります。これは多くの場合、実装の失敗ではなく、捨てた位相を推定しているために起きる自然な限界です。
 

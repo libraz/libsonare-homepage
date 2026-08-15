@@ -3,7 +3,7 @@
 このページは、libsonare のドキュメントを初学者向けに読むための道案内です。DSP、MIR、WebAssembly、マスタリング用語を最初から理解している必要はありません。
 
 ::: info 最初に出る略語
-**DSP** は音を数値として測定・加工する信号処理、**MIR** は BPM・キー・コードなどを音楽から読み取る処理です。
+**DSP**（digital signal processing、デジタル信号処理）は音を数値として測定・加工する処理、**MIR**（Music Information Retrieval、音楽情報検索）は BPM・キー・コードなどを音楽から読み取る処理です。
 
 **WASM / WebAssembly** はブラウザで使う実行形式、**API** はアプリから呼ぶ関数やクラス、**CLI** はターミナルで使うコマンドです。
 
@@ -32,9 +32,9 @@
 | 領域指定のスペクトル編集（時間×周波数の矩形を減衰・ミュート・ゲイン・修復） | [スペクトル編集](./spectral-editing.md) | [編集 DSP](./editing-dsp.md) |
 | ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
 | マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
-| MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [組み込み楽器](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [内蔵シンセサイザー](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | DAW、アレンジ、MIDI シーケンスツール | [プロジェクト編集](./project-editing.md) | [MIDI 入力](./midi-input.md)、[プロジェクトバウンス](./project-bounce.md) |
-| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [組み込み楽器](./native-synth.md)、[MIDI 入力](./midi-input.md) |
+| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [内蔵シンセサイザー](./native-synth.md)、[MIDI 入力](./midi-input.md) |
 | ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
 | マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm.md#リアルタイムボイスチェンジャー) |
 | ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
@@ -52,7 +52,7 @@
 
 リアルタイムエンジンや AudioWorklet のように実行環境が WASM / C++ 側に寄る機能では、Python / CLI に同じライブコールバック API があるかのようには書きません。代替となるバッチ API や参照先を明記します。
 
-ルーム音響には、残響時間、明瞭度、ブラインド推定、等価ルーム推定、RIR 合成、ルームモーフィングが含まれます。
+ルーム音響には、残響時間、明瞭度、ブラインド推定、等価ルーム推定、RIR（ルームインパルス応答）合成、ルームモーフィングが含まれます。
 :::
 
 ## 実装者向けチェックポイント
@@ -72,7 +72,7 @@ libsonare は、4 つの層に分けて読むと理解しやすくなります�
 
 | 層 | 内容 | ページ |
 |----|------|--------|
-| 概念 | BPM、キー、STFT、クロマ、LUFS、トゥルーピークなどの意味 | [イントロダクション](./introduction.md)、[用語集](./glossary.md) |
+| 概念 | BPM、キー、STFT、クロマ、LUFS、True Peak などの意味 | [イントロダクション](./introduction.md)、[用語集](./glossary.md) |
 | 目的 | 解析、ストリーミング、編集、ミキシング、マスタリングなど、作りたい機能 | [機能マップ](./api-surface.md)、各機能ガイド |
 | 実行環境 | ブラウザ、Python、Node、CLI、C++ のどこで動かすか | [はじめに](./getting-started.md)、利用環境別リファレンス |
 | 根拠 | 実装の構造、アルゴリズム、検証状況 | [DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[実装検証](./implementation-validation.md) |

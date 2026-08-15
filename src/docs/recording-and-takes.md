@@ -184,7 +184,7 @@ The options object **extends `MediaStreamConstraints`**, so any constraint you w
 `binding.close()` disconnects the source node so the microphone stops sending audio to the engine. Pair every `bindMicrophoneInput` with a `close()` — typically when the user stops recording or the component unmounts. The default also stops microphone tracks so the OS recording indicator goes away; pass `stopTracksOnClose: false` only when another part of your app still needs the same stream.
 :::
 
-For the surrounding AudioWorklet plumbing — building the engine node, registering the worklet processor, and the SAB-free realtime path — see [Realtime Streaming](./realtime-streaming.md). To play a synth or sampler *into* the recording instead of an external mic, see [Native Synth](./native-synth.md) and the [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md) for driving them live.
+For the surrounding AudioWorklet plumbing — building the engine node, registering the worklet processor, and the SAB-free (SharedArrayBuffer-free) realtime path — see [Realtime Streaming](./realtime-streaming.md). To play a synth or sampler *into* the recording instead of an external mic, see [Native Synth](./native-synth.md) and the [SoundFont Player](./soundfont-player.md), and [MIDI Input](./midi-input.md) for driving them live.
 
 ## Loop recording into takes
 

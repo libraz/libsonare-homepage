@@ -23,7 +23,7 @@ libsonare には、[マスタリングプロセッサ](./mastering-processors.md
 | ミキシング | 複数トラックをステレオバスへまとめる |
 | マスタリング | 仕上がったステレオミックスを配信向けに磨く |
 
-ミキシングは「ステムのフォルダ」を「1 曲」に変える工程です。通常はミックスしてから、その結果をマスタリングします。
+ミキシングは「ステム（セッションから書き出した楽器ごとのトラックやサブミックス）のフォルダ」を「1 曲」に変える工程です。通常はミックスしてから、その結果をマスタリングします。
 :::
 
 ## このページで身につくこと
@@ -47,7 +47,7 @@ libsonare には、[マスタリングプロセッサ](./mastering-processors.md
 | ブラウザの `AudioWorklet` や音声コールバック内で使う | WASM [`Mixer.createRealtimeBuffer()`](#リアルタイムと-audioworklet-ブリッジ) | バッファを再利用し、ブロックごとに確保しない |
 
 ::: info 1 つのエンジン、すべての実行環境
-同じミキサーエンジンが WASM/JS、Node ネイティブ、Python、C ABI、CLI から使えます。名前は各言語の慣習に従います（`mixStereo` ↔ `mix_stereo`、`fromSceneJson` ↔ `from_scene_json`）が、ルーティンググラフ・シーン JSON・DSP は同一です。ただし CLI だけは例外で、その `mix` コマンドは単一ファイル・単一ストリップのプロセッサです。シーンはレンダリング**しません**。永続的なマルチストリップの `Mixer` は WASM/JS・Node・Python でのみ使えます。実行環境ごとの一覧は [バインディング対応表](./binding-parity.md) を参照してください。
+同じミキサーエンジンが WASM/JS、Node ネイティブ、Python、C ABI、CLI から使えます。名前は各言語の慣習に従います（`mixStereo` ↔ `mix_stereo`、`fromSceneJson` ↔ `from_scene_json`）が、ルーティンググラフ・シーン JSON・DSP は同一です。ただし 2 つの CLI は例外で、しかも互いに異なります。Python CLI の `mix` はシーンを一括でレンダリングします（ストリップごとに `--input` の WAV を 1 つ渡す）。一方ネイティブ CLI の `mix-strip` は `--scene` を持たない単一ファイル・単一ストリップのプロセッサです。ブロック単位で駆動できる**永続的な**マルチストリップの `Mixer` は WASM/JS・Node・Python でのみ使えます。実行環境ごとの一覧は [バインディング対応表](./binding-parity.md) を参照してください。
 :::
 
 ## チャンネルストリップを信号順にたどる
@@ -171,14 +171,14 @@ mix = sonare.mix_stereo(
 ```
 
 ```bash [CLI]
-# CLI の mix コマンドは 1 ファイルを 1 つのチャンネルストリップで処理する。
-# 複数ステムを 1 つのマスターへまとめるのはバインディング専用（上記 mixStereo）。
-sonare mix \
-  --input vocal.wav \
+# ネイティブ CLI の mix-strip は 1 ファイルを 1 つのチャンネルストリップで処理する。
+# 複数ステムをトラックごとの設定で 1 回にまとめるのはバインディング専用（上記
+# mixStereo）。CLI のもう 1 つの経路は Python CLI のシーンベース `mix`。
+sonare-cli mix-strip vocal.wav \
   --input-trim-db 3 \
   --fader-db -3 \
   --pan 0.2 \
-  --pan-mode stereo \
+  --pan-mode stereopan \
   --width 1.1 \
   -o out.wav
 ```
@@ -237,11 +237,13 @@ mixer.close()                                               # ネイティブハ
 ```
 
 ```bash [CLI]
-# CLI にシーンミキシング用のコマンドはない。`sonare mix` は単一ファイル／単一ストリップで、
-# Mixer シーンをレンダリングできない。永続的なマルチストリップのミックスはバインディング専用
-# （WASM/JS・Node・Python）。CLI はシーン JSON を出力できるだけで、レンダリングはしない。
+# Python CLI の `mix` はシーンを一括でレンダリングする。シーンを読み込み、ストリップ
+# ごとに --input の WAV を 1 つ渡し、マスターを書き出す。ブロック単位でパラメーターを
+# 変えながら回せる永続的な Mixer はバインディング専用（WASM/JS・Node・Python）。
+# ネイティブ CLI に --scene はなく、その `mix-strip` は 1 ストリップ専用。
 sonare mixing-presets                            # 組み込みシーンプリセット名の一覧
 sonare mixing-preset --preset vocalReverbSend    # 1 つのシーンの JSON を標準出力へ出力
+sonare mix --scene scene.json --input vocal.wav --input reverb-return.wav -o master.wav
 ```
 
 :::
@@ -253,7 +255,7 @@ sonare mixing-preset --preset vocalReverbSend    # 1 つのシーンの JSON を
 シーンスキーマの全体、各フィールド、注釈つきのプリセット JSON は [ミキシングシーン JSON](./mixing-scene-json.md) にあります。3 つの組み込みプリセット（`vocalReverbSend`、`drumBusSubgroup`、`commentaryDucking`）はブラックボックスではありません。読み込んで編集し、`toSceneJson()`（Python では `to_scene_json()`）で再シリアライズすれば、実例で形式を学べます。
 
 ::: tip シーン読み込み後は `sceneWarnings()` を確認する
-シーンを読み込むと、各インサートの `params` が監査されます。どのプロセッサも読まないキー(たいていはタイプミスか、別のプロセッサ向けのキー)は**非致命的な警告**として収集され、`mixer.sceneWarnings()`(Python は `mixer.scene_warnings()`)で読み出せます。シーン自体は読み込まれ、該当キーは単に効果を持ちません。`fromSceneJson(...)` の直後に警告を読むのが、黙って「何もしないつまみ」を見つける最も安上がりな方法です。インサートが受け付けるキーは `masteringInsertParamNames(name)` で列挙できます。
+シーンを読み込むと、各インサートの `params` が監査されます。どのプロセッサも読まないキー（たいていはタイプミスか、別のプロセッサ向けのキー）は**非致命的な警告**として収集され、`mixer.sceneWarnings()`（Python は `mixer.scene_warnings()`）で読み出せます。シーン自体は読み込まれ、該当キーは単に効果を持ちません。`fromSceneJson(...)` の直後に警告を読むのが、黙って「何もしないつまみ」を見つける最も安上がりな方法です。インサートが受け付けるキーは `masteringInsertParamNames(name)` で列挙できます。
 :::
 
 ### インサートとセンド
@@ -279,7 +281,7 @@ sonare mixing-preset --preset vocalReverbSend    # 1 つのシーンの JSON を
 | `aux` | センドの並列行き先。通常はエフェクトリターン（リバーブ、ディレイ）。 |
 | `submix` | マスターの前にまとめて処理するストリップ群（「ドラムバス」）。 |
 
-特別なトークンは `master` と `aux` だけで、それ以外のロール文字列（`submix`、`subgroup`、`group` など）はマスター以外の一般的なバスとして扱われます。組み込みの `drumBusSubgroup` プリセットはドラムバスに `subgroup` というラベルを付けているため、シーンを出力すると `"role": "submix"` ではなく `"role": "subgroup"` が表示されることがあります。
+グラフが特別に解釈するロール文字列は `master` だけです。`aux` はロールを指定しなかったバスに付く既定値にすぎません。それ以外のロール文字列（`submix`、`subgroup`、`group` など）はマスター以外の一般的なバスとして扱われます。組み込みの `drumBusSubgroup` プリセットはドラムバスに `subgroup` というラベルを付けているため、シーンを出力すると `"role": "submix"` ではなく `"role": "subgroup"` が表示されることがあります。
 
 接続はグラフを形成します。`Mixer.fromSceneJson` はミキサー構築時にそのグラフをビルドしてコンパイルするため、返されたミキサーはすぐに処理できます。構築後は `mixer.addBus(id, role?)`（`role` の既定は `'aux'`）と `mixer.removeBus(id)` でバスを追加・削除でき、`mixer.busCount()` で現在の本数を取得できます。トポロジーを変更するとグラフはダーティになり、次の `processStereo` 呼び出しで遅延再コンパイルされます（`compile()` を呼べば即時に再コンパイルできます）。
 
@@ -304,7 +306,7 @@ strip の指定方法はランタイムで異なります。
 バスを削除すると、そのバスを指していたルーティングも整理されます。宛先がそのバスだったセンドは、送り先が存在しなくなるため破棄されます。フィードしていたバスを削除した後は、そのストリップのセンドを確認してください。
 
 ::: warning どこにも届かないバス
-シーンをコンパイル（または処理）すると、明示的な `submix` または `aux` バスから `master` への経路がない場合に**致命的でない**警告が出ます。グラフ自体は動きますが、`master` へ届かないバスは出力に何も寄与しません。多くは意図的な行き止まりではなく、接続の付け忘れです。この警告は、追加した各バスが実際に `master` まで配線されているかを確認する合図と捉えてください。
+明示的な `submix` または `aux` バスから `master` への経路がない場合でも、警告は**出ません**。グラフはそのままコンパイルされて動きますが、`master` へ届かないバスは出力に何も寄与しません。多くは意図的な行き止まりではなく、接続の付け忘れです。`sceneWarnings()` が報告するのは無視されたインサートパラメータだけなので、追加した各バスが実際に `master` まで配線されているかは自分で確認してください。
 :::
 
 ### VCA グループ
@@ -340,24 +342,28 @@ strip の指定方法はランタイムで異なります。
 
 JavaScript API のパンローは `const3dB`、`const4.5dB`、`const6dB`、`linear0dB` です。Python では同じ値を enum/int、または `const-3db`、`linear-0db` のような正規化文字列で指定します。
 
-各パンローは中央を一定量だけ下げます。これにより、中央へパンした音が左右いっぱいへパンした音より大きくならないようにします。
+ほとんどのパンローは中央を一定量だけ下げます。これにより、中央へパンした音が左右いっぱいへパンした音より大きくならないようにします。
 
 | パンロー | 中央の減衰 | 用途 |
 |----------|-----------|------|
-| `const3dB` | −3 dB | 多くの素材（既定） |
+| `const3dB` | −3 dB | 多くの素材（既定）。定**パワー** |
 | `const4.5dB` | −4.5 dB | コンソールでよく使われる中間的な選択 |
-| `const6dB` | −6 dB | すでにモノラルで、持ち上げず中央に定位させたいソース |
-| `linear0dB` | 0 dB | 知覚音量ではなく合算（モノラル）レベルを一定に保つ |
+| `const6dB` | −6 dB | 定**振幅**。モノラル合算レベルを一定に保つ |
+| `linear0dB` | 0 dB | 中央の補正を一切行わない |
 
-定パワー則（3 / 4.5 / 6 dB）はパンしても*知覚*音量を一定に保ち、`linear0dB` は代わりに*合算*レベルを一定に保ちます。
+`const3dB` は定**パワー**則です（cos/sin、中央で各チャンネル 0.707）。パンしても総エネルギーが変わらないため、スピーカー再生ではこれが基準になります。一方でコヒーレントなモノラル合算は中央で 3 dB 上がります。`const6dB` は定**振幅**則です（中央で各チャンネル 0.5）。左右が加算されると左右いっぱいへパンしたときと同じ 1.0 になるため、**モノラル合算**が一定に保たれ、代わりにパワーが 3 dB 下がります。`const4.5dB` はこの 2 つの幾何平均です。`linear0dB` は補正を行わず、中央でも両チャンネルが等倍のままです。そのため中央の音はハードパンした音よりパワーで 3 dB、モノラル合算で 6 dB 大きくなります。後段ですでに独自のパン補正が入っている場合にだけ選んでください。
+
+::: warning 中央の減衰が出力に現れるのは `stereoPan` モードだけです
+表の値はパンローが返す生のゲインです。既定の `balance` モードでは、パンナーが両チャンネルのゲインを大きいほう（近い側）で割るため、近い側は常に等倍になり、遠い側だけが下がります。つまりどのパンローを選んでも中央は 0 dB のままで、パンローは近い側と遠い側の**比**だけを決めます。中央の減衰そのものが必要なら、ストリップを `stereoPan` に切り替えてください。1 チャンネル（モノラル）のストリップは第 3 のケースで、パンローの合成エネルギー `sqrt(l² + r²)` を単一ゲインとして受け取ります。既定の `const3dB` では中央が等倍になります。
+:::
 
 ### サラウンドとマルチチャンネル
 
-ステレオより広いバス向けに、ストリップは `SurroundPan` 位置（`setSurroundPan(strip, { azimuth, divergence, lfe })`、Python は `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`）を保持します。フェーズ 1 では `azimuth`（−180…180°、0 = 正面中央）・`divergence`（0 = 点音源、1 = 前方へ広がる）・`lfe`（0…1 の LFE プレーンへの送り）が有効で、`elevation` と `distance` は予約です。位置はシーンに保存され JSON で往復しますが、オフラインの `Mixer` は依然ステレオでレンダリングします。これらの値を消費するサラウンドパンナーは[リアルタイムエンジンのサラウンドグループバス](./realtime-engine.md#サラウンドグループバスとワイドメーター)で動くため、ここで位置を設定し、サラウンドミックスはエンジンでレンダリングしてください。
+ステレオより広いバス向けに、ストリップは `SurroundPan` 位置（`setSurroundPan(strip, { azimuth, divergence, lfe })`、Python は `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`）を保持します。フェーズ 1 では `azimuth`（−180…180°、0 = 正面中央）・`divergence`（0 = 点音源、1 = 前方へ広がる）・`lfe`（0…1 の LFE＝低域効果チャンネルのプレーンへの送り）が有効で、`elevation` と `distance` は予約です。位置はシーンに保存され JSON で往復しますが、オフラインの `Mixer` は依然ステレオでレンダリングします。これらの値を消費するサラウンドパンナーは[リアルタイムエンジンのサラウンドグループバス](./realtime-engine.md#サラウンドグループバスとワイドメーター)で動くため、ここで位置を設定し、サラウンドミックスはエンジンでレンダリングしてください。
 
 ## オートメーション
 
-時間変化するコントロールはすべて、最初の `processStereo` 呼び出しからの**絶対サンプル位置**でスケジュールします（再コンパイルでクロックは 0 に戻ります）。利用できるレーンは次のとおりです。
+時間変化するコントロールはすべて、最初の `processStereo` 呼び出しからの**絶対サンプル位置**でスケジュールします。再コンパイルしてもこのクロックはリセットされず、キュー済みのオートメーションもそのまま残ります。利用できるレーンは次のとおりです。
 
 ```typescript
 mixer.scheduleFaderAutomation(stripIndex, sampleRate * 8,  -6, 's-curve');   // 8 秒でボーカルを下げる
@@ -387,7 +393,7 @@ mixer.scheduleInsertAutomation(stripIndex, insertIndex, paramId, sampleRate * 4,
 | フィールド | 意味 |
 |-----------|------|
 | `peakDbL` / `peakDbR` | チャンネルごとのサンプルピーク |
-| `truePeakDbL` / `truePeakDbR` / `maxTruePeakDb` | サンプル間 [トゥルーピーク](./glossary/true-peak.md) — DAC が実際に再構成する値 |
+| `truePeakDbL` / `truePeakDbR` / `maxTruePeakDb` | サンプル間ピーク（ISP）を含む [True Peak](./glossary/true-peak.md)。ITU-R BS.1770-4 に沿った 4 倍オーバーサンプリングによる推定値で、DAC（デジタルアナログ変換器）が再構成するピークに近い値ですが、実際の再構成フィルターはこれよりわずかに高く出ることがあります |
 | `rmsDbL` / `rmsDbR` | 短時間の平均レベル |
 | `momentaryLufs` / `shortTermLufs` / `integratedLufs` | 400 ms / 3 s / 全体の [ラウドネス](./glossary/lufs.md) |
 | `correlation` | −1…+1 の位相相関。+1 付近はモノラル安全、負は打ち消しの警告 |
@@ -494,4 +500,4 @@ const mixer = Mixer.fromSceneJson(mixingScenePresetJson('commentaryDucking'), sa
 - [ミキシングシーン JSON](./mixing-scene-json.md) — シーンスキーマ全体と注釈つきプリセット
 - [マスタリングプロセッサ](./mastering-processors.md) — ストリップ／バスのインサートとして読み込むプロセッサ
 - [バインディング対応表](./binding-parity.md) — 実行環境ごとの API 差分
-- [モノラル互換性](./glossary/concepts/mono-compatibility.md) · [ゲインステージング](./glossary/concepts/gain-staging.md) · [トゥルーピーク](./glossary/true-peak.md)
+- [モノラル互換性](./glossary/concepts/mono-compatibility.md) · [ゲインステージング](./glossary/concepts/gain-staging.md) · [True Peak](./glossary/true-peak.md)

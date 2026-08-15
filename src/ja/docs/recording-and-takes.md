@@ -23,7 +23,7 @@ libsonare はこれを協調する 2 つの層に分けています。[リアル
 
 ## マイクからコンプ済みクリップまで
 
-録音はリアルタイム層とプロジェクト層をまたぎます。エンジンがサンプルをキャプチャし、プロジェクトがそのサンプルをテイクとコンプ指示として保持します。この2つの層は `capturedAudio()` という単一の受け渡し地点でつながっており、ここがオーディオスレッドからメイン／制御スレッドへ切り替えるべき地点でもあります。
+録音はリアルタイム層とプロジェクト層をまたぎます。エンジンがサンプルをキャプチャし、プロジェクトがそのサンプルをテイクとコンプ指示として保持します。この 2 つの層は `capturedAudio()` という単一の受け渡し地点でつながっており、ここがオーディオスレッドからメイン／制御スレッドへ切り替えるべき地点でもあります。
 
 <FlowDiagram
   title="キャプチャからバウンスまでのパイプライン"
@@ -184,7 +184,7 @@ binding.close();             // ソースを切断する（stopTracksOnClose な
 `binding.close()` はソースノードを切断し、マイク音声がエンジンへ送られるのを止めます。`bindMicrophoneInput` には必ず `close()` を組にしてください（通常はユーザーが録音を止めたとき、またはコンポーネントのアンマウント時）。既定ではマイクトラックも停止するため OS の録音インジケーターが消えます。同じストリームをアプリの別部分で使い続ける場合だけ `stopTracksOnClose: false` を渡してください。
 :::
 
-周辺の AudioWorklet 配線（エンジンノードの構築、ワークレットプロセッサの登録、SAB なしのリアルタイム経路）は [リアルタイムストリーミング](./realtime-streaming.md) を参照してください。外部マイクではなくシンセやサンプラーを録音へ*入れたい*場合は、[NativeSynth](./native-synth.md) と [SoundFont プレイヤー](./soundfont-player.md)、ライブ演奏で鳴らすなら [MIDI 入力](./midi-input.md) を参照してください。
+周辺の AudioWorklet 配線（エンジンノードの構築、ワークレットプロセッサの登録、SAB（SharedArrayBuffer）なしのリアルタイム経路）は [リアルタイムストリーミング](./realtime-streaming.md) を参照してください。外部マイクではなくシンセやサンプラーを録音へ*入れたい*場合は、[内蔵シンセサイザー（NativeSynth）](./native-synth.md)と [SoundFont プレイヤー](./soundfont-player.md)、ライブ演奏で鳴らすなら [MIDI 入力](./midi-input.md) を参照してください。
 
 ## ループ録音からテイクへ
 
@@ -243,7 +243,7 @@ project.setClipTakes(clipId, [
   { id: 2, sourceOffsetPpq: 0, name: 'take B' },
 ], /* activeTakeId */ 2);
 
-// comp segments: 各 PPQ 範囲が 1 つのテイクを選ぶ。ヴァースは A、コーラスは B。
+// comp segments: 各 PPQ 範囲が 1 つのテイクを選ぶ。Aメロは take A、サビは take B。
 project.setClipCompSegments(clipId, [
   { startPpq: 0, endPpq: 2, takeId: 1 },
   { startPpq: 2, endPpq: 4, takeId: 2 },
@@ -387,5 +387,5 @@ project.setClipCompSegments(result.clipId, [
 - [リアルタイムストリーミング](./realtime-streaming.md) — エンジンノード、AudioWorklet ブリッジ、SAB なしのリアルタイム経路
 - [プロジェクト編集](./project-editing.md) — クリップ、PPQ、フェード、ワープ、コンプをレンダリングする編集コンパイラ
 - [MIDI 入力](./midi-input.md) — 録音しながら楽器をライブで鳴らす
-- [NativeSynth](./native-synth.md) · [SoundFont プレイヤー](./soundfont-player.md) — エンジンへ録音するソース
+- [内蔵シンセサイザー](./native-synth.md) · [SoundFont プレイヤー](./soundfont-player.md) — エンジンへ録音するソース
 - [プロジェクトのバウンス](./project-bounce.md) — 録音し終えたアレンジをオフラインでレンダリングする

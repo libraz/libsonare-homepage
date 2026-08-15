@@ -37,7 +37,7 @@ A formant is a peak of acoustic energy in a particular frequency range. It is cr
 
 Formants shape the vowel sound and the perceived size or character of a voice, *independent* of the pitch (the note being sung).
 
-That is why `voiceChange` separates the two controls. Lowering the formant factor makes a voice sound larger and darker. Raising it makes the voice sound smaller and brighter. The pitch stays where you set it.
+That is why `voiceChange` separates the two controls. Lowering the formant factor makes a voice sound larger and darker. Raising it makes the voice sound smaller and brighter. The note stays where `pitchSemitones` puts it, because the formant stage moves only the spectral envelope.
 :::
 
 <SonareDemo id="pitch-shift" />
@@ -96,6 +96,20 @@ sonare voice-change vocal.wav --pitch-semitones 5 --formant-factor 1.1 -o charac
 
 :::
 
+::: warning `formantFactor` is applied *after* the pitch shift
+`voiceChange` transposes first, and a transpose already drags the formants with it. The formant stage then runs on that shifted signal, so `formantFactor` multiplies a displacement that is already there. `formantFactor: 1.0` means "no extra formant move", not "formants preserved" — `{ pitchSemitones: 5, formantFactor: 1.1 }` above lands the formants at roughly 2<sup>5/12</sup> × 1.1 ≈ 1.47×, which is a deliberate character change rather than a transparent transpose.
+
+For a natural-sounding transpose, cancel the pitch-induced move by passing the reciprocal of the pitch ratio:
+
+```typescript
+const pitchSemitones = 5;
+const transposed = voiceChange(vocal, sampleRate, {
+  pitchSemitones,
+  formantFactor: 2 ** (-pitchSemitones / 12), // 0.749 — keeps the vocal tract where it was
+});
+```
+:::
+
 For rectangular time/frequency edits such as whistle attenuation or short artifact repair, see [Spectral Editing](./spectral-editing.md).
 
 ### How `pitchCorrectToMidi(...)` works
@@ -120,7 +134,13 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 **F0** is the fundamental frequency — the pitch — measured in Hz. A pitch detector reports one F0 per short time slice (a **frame**, here one `hopLength` of samples), giving an F0 **contour** that traces how the pitch moves. A frame is **voiced** when the singer is actually producing pitched sound (a sung vowel) rather than a breath or silence; only voiced frames are worth retuning.
 :::
 
-`pitchCorrectToMidi(...)` applies the full requested transpose immediately and preserves the input length. It does not follow a changing pitch contour.
+`pitchCorrectToMidi(...)` applies the requested transpose immediately and preserves the input length. It does not follow a changing pitch contour.
+
+::: warning Correction is clamped to ±12 semitones
+`pitchCorrectToMidi(...)` and `pitchCorrectToMidiTimevarying(...)` build the corrector with its default limit of one octave, and neither entry point exposes a way to raise it. A larger interval is clamped silently, with no error and no diagnostic: `pitchCorrectToMidi(vocal, sampleRate, 48, 72)` asks for +24 semitones and returns audio moved by +12.
+
+When you need a wider move, call `pitchShift(...)` for a plain transpose, or `pitchCorrectTimevarying(...)` with an explicit `maxCorrectionSemitones`.
+:::
 
 Use `pitchCorrectToMidiTimevarying(...)` when correction should change from frame to frame. It follows a caller-supplied **per-frame F0 contour** and retunes each voiced frame toward `targetMidi`.
 
@@ -147,9 +167,13 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced` (non-zero = voiced) and `voicedProb` are optional. Omit them to treat every frame as voiced. Use the same `hopLength` that produced the F0 contour, so frame `i` lines up with sample `i * hopLength`.
+`voiced` and `voicedProb` are optional. Omit them to treat every frame as voiced. Use the same `hopLength` that produced the F0 contour, so frame `i` lines up with sample `i * hopLength`.
 
-An `f0Hz` value of `NaN` is valid only when the matching `voiced` entry is zero.
+`voiced` is typed `VoicedFlags` — `Int32Array`, `Uint8Array`, `Float32Array`, `readonly number[]`, or `readonly boolean[]`. Each entry is read as a flag, not a magnitude: any truthy value means voiced. That is why `pitch.voicedFlag`, which `pitchPyin` returns as a `boolean[]`, goes straight in with no conversion step.
+
+`voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch throws a `RangeError` rather than a `SonareError`, so an `isSonareError` guard will not catch it.
+
+An `f0Hz` value of `NaN` is valid only on a frame whose `voiced` entry is unset — `0` or `false`.
 
 ::: tip Constant vs contour-following correction
 Use `pitchCorrectToMidi(...)` for a steady held note where one transpose is enough. Reach for `pitchCorrectToMidiTimevarying(...)` when the take has vibrato, slides, or drift you want to preserve while nudging it onto pitch.
@@ -170,7 +194,6 @@ const hopLength = 256;
 const pitch = pitchPyin(vocal, sampleRate, 2048, hopLength, 65, 1000, 0.1, true);
 
 // Snap every voiced frame to C major, gently, keeping vibrato.
-const voiced = Int32Array.from(pitch.voicedFlag, (v) => (v ? 1 : 0));
 const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   mode: 'scale',
   scaleRoot: 0,             // 0 = C .. 11 = B
@@ -180,7 +203,7 @@ const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   retuneSpeedMs: 15,        // larger = slower glide onto pitch
   vibratoThresholdCents: 20, // corrections under this are skipped to keep vibrato
   maxCorrectionSemitones: 2, // safety valve: clamp any single frame's jump (default 12)
-  voiced,
+  voiced: pitch.voicedFlag,  // the boolean[] from pitchPyin, passed as-is
 });
 ```
 
@@ -209,6 +232,8 @@ tuned = sonare.pitch_correct_timevarying(
 ```
 
 `scaleModeMask` is a 12-bit mask where bit `i` enables the semitone `i` above `scaleRoot`, so any scale is expressible (C natural minor `{0,2,3,5,7,8,10}` is `0x5ad`). With `mode: 'midi'` (the default) the same function behaves like `pitchCorrectToMidiTimevarying(...)`, retuning toward `targetMidi` instead of a scale. `retuneAmount` controls how hard the snap is — lower values leave a natural, human wobble; `retuneAmount: 1` with a short `retuneSpeedMs` is the hard, robotic effect. See the interactive [pitch-correction demo](./glossary/editing/pitch-correction.md) for this in action.
+
+`vibratoThresholdCents` is measured in **cents** — one cent is 1/100 of a semitone — so the `20` above leaves any correction smaller than a fifth of a semitone alone, which is the range natural vibrato lives in.
 
 `referenceMidi` (default `69` = A4) anchors where the scale grid sits, so every degree is measured from a fixed reference note. `maxCorrectionSemitones` (default `12`) is the safety valve behind the "keep correction intervals small" advice below: it hard-clamps how far a single frame can jump, so an octave-off detector glitch on one frame is bounded instead of yanking that frame a full octave. Lower it when the detector is noisy or the take should stay close to the original.
 
@@ -290,7 +315,7 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 
 :::
 
-For a preset applied to a whole buffer in one call — without managing the class yourself — use `voiceChangeRealtime(samples, sampleRate, preset, options?)`. By default it treats `samples` as mono; pass `{ channels: 2 }` to feed an **interleaved** stereo buffer (`L0, R0, L1, R1, ...`) for a stereo source, and `{ blockSize }` to set the internal render block size (default 512). The returned buffer keeps the same layout and length as the input.
+For a preset applied to a whole buffer in one call — without managing the class yourself — use `voiceChangeRealtime(samples, sampleRate, preset, options?)`. By default it treats `samples` as mono; pass `{ channels: 2 }` to feed an **interleaved** stereo buffer (`L0, R0, L1, R1, ...`) for a stereo source. The internal render block size is fixed by the shared C-ABI renderer, so WASM, Node, and Python produce the same result; the legacy `blockSize` option is deprecated and ignored. The returned buffer keeps the same layout and length as the input.
 
 ### Using `Audio` methods
 
@@ -301,7 +326,7 @@ The `Audio` object exposes the same operations as methods. In file-based Python 
 Beyond pitch and time transforms, two of the mixer/mastering insert processors are go-to voice and instrument color tools:
 
 - `effects.modulation.ensemble` — a BBD-style (an analog bucket-brigade delay chorus) string-machine ensemble that thickens a thin source into a wide, chorused pad.
-- `saturation.ampSim` — a guitar/bass amp color insert with preamp drive, tone stack, optional power-amp sag/transformer/NFB behavior, and guitar 4x12 or bass 8x10 cab voicing.
+- `saturation.ampSim` — a guitar/bass amp color insert with preamp drive, tone stack, optional power-amp sag/transformer/NFB (negative feedback) behavior, and guitar 4x12 or bass 8x10 cab voicing.
 
 Load them as inserts on a strip (see [Mixing Engine](./mixing.md)) rather than as standalone functions on a raw buffer.
 

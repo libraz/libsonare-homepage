@@ -9,8 +9,18 @@ description: The libsonare RealtimeEngine reference — transport and telemetry,
 
 For the streaming analyzer (`StreamAnalyzer`), tempograms, the AudioWorklet bridge, paged clip audio streaming, and display waveform peaks, see [Realtime and Streaming](./realtime-streaming.md).
 
+## What You Will Learn
+
+The sections below are largely independent — read the first one, then jump to whichever matches your host. By the end of this page you should be able to:
+
+- construct the engine, size it for your real channel count, and run transport plus meter/scope telemetry;
+- mix the tracks you play with the built-in lane mixer, and tap a lane into a separate cue bus with PFL or AFL;
+- reshape routing live — group buses, sidechains, pan — without rebuilding a channel strip;
+- automate engine parameters and insert parameters along the timeline;
+- schedule MIDI clips against the tempo map, and send a track to external MIDI gear.
+
 ::: warning Check the engine ABI before constructing
-`engineCapabilities().abiCompatible` confirms the loaded WASM matches the JS package's expected engine ABI. The realtime engine is the most version-sensitive API in the library; constructing it against a mismatched binary is undefined. Guard with the check below; if it fails, update your `@libraz/libsonare` package so the WASM binary and JS package come from the same release.
+`engineCapabilities().abiCompatible` confirms the loaded WASM matches the JS package's expected engine ABI — the application binary interface, the exact memory layout and call signatures the two sides agree on. The realtime engine is the most version-sensitive API in the library; constructing it against a mismatched binary is undefined. Guard with the check below; if it fails, update your `@libraz/libsonare` package so the WASM binary and JS package come from the same release.
 :::
 
 ## Transport and output
@@ -45,9 +55,9 @@ engine.destroy();
 ### Sizing prepare for the real channel count
 
 The constructor and `prepare(...)` take an optional trailing `maxChannels`.
-Prepare reserves the capture, instrument, PDC, and monitor planes for that count
-rather than always reserving 64, so a stereo host is not paying for 64 planes of
-scratch it will never touch.
+Prepare reserves the capture, instrument, PDC (plugin delay compensation), and
+monitor planes for that count rather than always reserving 64, so a stereo host
+is not paying for 64 planes of scratch it will never touch.
 
 ```typescript
 // A stereo host: reserve 2 planes, not 64.
@@ -71,7 +81,7 @@ engine.setTempo(140);
 engine.flushControlCommands();   // apply queued commands without rendering
 ```
 
-`getTransportState()` includes a musical playhead as well as the raw sample and PPQ positions. `barCount` is zero-based, while `beat` is one-based within that bar and `beatFraction` is in `[0, 1)`. A UI can therefore render a conventional bar:beat display without deriving it from PPQ itself:
+`getTransportState()` includes a musical playhead as well as the raw sample and PPQ (musical position in quarter-note units) positions. `barCount` is zero-based, while `beat` is one-based within that bar and `beatFraction` is in `[0, 1)`. A UI can therefore render a conventional bar:beat display without deriving it from PPQ itself:
 
 ```typescript
 const { barCount, beat, beatFraction } = transport;
@@ -86,7 +96,7 @@ Beyond transport, `RealtimeEngine` also registers parameter metadata, sets autom
   - `intervalFrames` — the minimum render-frame gap between snapshots (`0` disables capture).
   - `bandCount` — the FFT band resolution, clamped to `1..64`; the call returns the band count actually applied.
 
-Each drained scope snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds an interleaved stereo goniometer cloud `[l0, r0, l1, r1, …]` (up to 32 stereo points) for a vectorscope display. Band levels are block-size-independent: the amplitude normalization accounts for short blocks, so the dB readings stay stable regardless of the AudioWorklet block size.
+Each drained scope snapshot is addressed by `targetId` (master, a lane, or a bus) and carries two arrays: `bands` holds the linear-band FFT magnitudes in dB (length = the applied band count), and `points` holds up to 32 stereo goniometer samples as `{ left, right }` records for a vectorscope display. (The worklet scope ring buffer carries the same cloud in its own interleaved `[l0, r0, l1, r1, …]` `Float32Array` form.) Band levels scale with the render block size — roughly −3 dB per doubling of the block — so compare snapshots only within one fixed block size.
 
 Each record returned by `drainMeterTelemetry()`, `drainMeterTelemetryWide()`, and `drainScopeTelemetry()` carries a `droppedRecords` count of snapshots lost from the lock-free telemetry ring since the previous drain. A non-zero value means the consumer is draining too slowly (back-pressure) — poll more frequently to keep the meters and scopes glitch-free.
 
@@ -116,7 +126,7 @@ The engine also accepts **live MIDI** into its instruments and **records** what 
 
 ## Track lanes, buses, and channel strips
 
-The engine carries its own realtime-safe **lane mixer**, so a playback engine can mix the tracks it plays without a second mixing pass. Each track occupies a **lane**; lanes can feed **aux sends** into numbered **buses**; and tracks, buses, and the master each own a full **channel strip** — the same strip model (EQ, inserts, fader, pan, sends) as the [Mixing Engine](./mixing.md). Plugin delay compensation is recomputed automatically whenever the lane layout is republished.
+The engine carries its own realtime-safe **lane mixer**, so a playback engine can mix the tracks it plays without a second mixing pass. Each track occupies a **lane**; lanes can feed **aux sends** into numbered **buses**; and tracks, buses, and the master each own a full **channel strip** — the same strip model (EQ, inserts, fader, pan, sends) as the [Mixing Engine](./mixing.md). Plugin delay compensation (PDC) is recomputed automatically whenever the lane layout is republished.
 
 ```typescript
 // Declare buses first, then the lane order with sends.
@@ -169,6 +179,27 @@ the fixed, append-only index from `setTrackLanes`, `renderFrame` defaults to
 - **AFL** (after-fader listen) — taps after the fader, gate, and pan. For a
   surround lane it is after fader/gate and the surround plane placement; stereo
   AFL is post-pan.
+
+<FlowDiagram
+  title="Where PFL and AFL tap the lane"
+  :nodes="[
+    { id: 'strip', label: 'Lane strip + PDC', col: 0, row: 0 },
+    { id: 'fader', label: 'Fader, gate, pan', col: 1, row: 0 },
+    { id: 'out', label: 'Main output', col: 2, row: 0, variant: 'success' },
+    { id: 'pfl', label: 'PFL tap', col: 1, row: 1, variant: 'accent' },
+    { id: 'afl', label: 'AFL tap', col: 2, row: 1, variant: 'accent' },
+    { id: 'cue', label: 'Cue / monitor bus', col: 3, row: 1, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'strip', to: 'fader' },
+    { from: 'fader', to: 'out' },
+    { from: 'strip', to: 'pfl', label: 'pre-fader' },
+    { from: 'fader', to: 'afl', label: 'post-fader' },
+    { from: 'pfl', to: 'cue' },
+    { from: 'afl', to: 'cue' }
+  ]"
+  caption="PFL listens before the fader, gate, and pan, so it stays audible on a muted lane; AFL listens after them."
+/>
 
 The monitor bus sums every lane with a PFL/AFL tap. The ordinary `process(...)`
 path folds that bus into the main output for compatibility. Use
@@ -246,8 +277,8 @@ engine.setAutomationLane(thresholdId, [
 A bus declared with a surround `channelLayout` (`SonareChannelLayout`: `0` mono, `1` stereo, `2` 5.1, `3` 7.1) becomes a **surround group bus**: it sums into the master plane-by-plane and exposes per-plane meters. A lane routed to it is folded to a point source, then placed from its strip [`surroundPan`](./mixing.md#surround-and-multichannel) values. `azimuth`, `divergence`, and `lfe` are active; `elevation` and `distance` are reserved. The standalone `Mixer` remains stereo, so this DSP is specific to the realtime engine's wide-bus render path.
 
 ```typescript
-engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]); // a 5.1 group bus
-engine.setTrackOutputBus(1, 1);                          // route the lane into it
+engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]);  // a 5.1 group bus
+engine.setTrackLanes([{ trackId: 1, outputBusId: 1 }]);  // route the lane into it
 engine.setTrackStripJson(1, JSON.stringify({
   strips: [{ id: 'source', surroundPan: { azimuth: -30, divergence: 0, lfe: 0 } }],
   buses: [],
@@ -257,7 +288,7 @@ engine.setTrackStripJson(1, JSON.stringify({
 
 `sourceChannelLayout` on `EngineTrackLane` is currently descriptive/serialized only: the lane render still consumes mono or stereo input and folds stereo to a point source before surround placement. Do not use it as a promise that an existing 5.1/7.1 source stays discrete.
 
-Call `setTrackOutputBus(1, 0)` (or set `outputBusId: 0` in `setTrackLanes`) to fold the lane back onto the master mix.
+Set `outputBusId: 0` in `setTrackLanes` — or call `setTrackOutputBus(1, 0)` on the `SonareEngine` worklet facade, which owns that method — to fold the lane back onto the master mix.
 
 Surround meters do not travel over the live worklet meter ring. Read them on an offline or main-thread engine with `drainMeterTelemetryWide(maxRecords?)`, which returns per-plane (wide) records; `drainMeterTelemetry()` stays the stereo fast path. The two drains pop the same single-consumer telemetry queue, so call only one per engine instance — the live AudioWorklet path already owns the queue via the stereo drain, which is why `drainMeterTelemetryWide()` is meant for an offline (non-worklet) engine; running both on one engine makes their records starve each other.
 

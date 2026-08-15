@@ -94,7 +94,7 @@ The demo above isolates just the **Retune** stage (pitch shift) so you can hear 
 |-------|---------|
 | High-pass | Removes sub-bass rumble and DC as a cleanup pre-filter (`eq.highpassHz`) |
 | Gate | Reduces low-level room or mic noise between phrases |
-| Retune | Shifts the note pitch up or down by the preset's semitone amount (e.g. for a higher or lower voice), and where the preset enables it, pulls held notes toward the nearest scale tone — the pitch-shift stage of the chain |
+| Retune | Shifts the whole signal up or down by the preset's fixed semitone amount (e.g. for a higher or lower voice) using grain overlap-add resampling — the pitch-shift stage of the chain. It does not detect pitch and does not snap notes to a scale; for that, use the offline pitch correction in [Editing DSP](./editing-dsp.md) |
 | Formant | Changes perceived vocal size or character independently of note pitch |
 | EQ | Body, presence, and air tone shaping (`eq.bodyDb`/`presenceDb`/`airDb`) |
 | Compressor | Keeps level stable across blocks |
@@ -109,11 +109,11 @@ The `eq` block configures both ends of the chain: `highpassHz` is the cleanup hi
 ::: info Voice-chain terms in one place
 - **High-pass** — a cleanup filter at the front that removes sub-bass rumble and DC before any other stage.
 - **Gate** — mutes the signal when it drops below a threshold, removing low-level mic/room noise between phrases.
-- **Retune** — moves the sung note up or down in pitch; separate from formant, which changes vocal character without moving the note.
+- **Retune** — moves the whole signal up or down by a fixed interval; separate from formant, which changes vocal character without moving the note. It is a transposer, not an auto-tuner — nothing here listens to what note you sang.
 - **Formant** — the resonances that make a voice sound large/small or male/female; shifting them changes vocal character without changing the note.
 - **Compressor** — automatically evens out loud and quiet parts so the level stays steady.
 - **De-esser** — tames harsh "s"/"sh" sounds (sibilance).
-- **Limiter** — a safety catch that stops peaks from clipping at the very end of the chain.
+- **Limiter** — a safety catch that stops peaks from clipping at the very end of the chain. The one here is a *true-peak* limiter: it also accounts for the inter-sample peaks that appear between the stored samples when the signal is reconstructed for playback.
 :::
 
 Factory preset IDs include `neutral-monitor`, `bright-idol`, `soft-whisper`, `deep-narrator`, `robot-mascot`, and `dark-villain`. Treat these as starting points, not genre or identity labels.
@@ -237,7 +237,7 @@ if (!validation.ok) {
 }
 ```
 
-Current built-in preset JSON uses schema version `1`. The native POD-config ABI is separate; check it with `voiceChangerAbiVersion()` when you are crossing FFI or native boundaries. Both JSON Schemas ship inside the npm package, so a host can validate a document offline:
+Current built-in preset JSON uses schema version `1`. The native POD-config ABI — the flat plain-old-data struct the C entry points take — is versioned separately; check it with `voiceChangerAbiVersion()` when you are crossing FFI (foreign function interface) or native boundaries. Both JSON Schemas ship inside the npm package, so a host can validate a document offline:
 
 ```typescript
 import schema from '@libraz/libsonare/schemas/realtime-voice-changer-preset.schema.json';
@@ -274,8 +274,10 @@ onto the ordinary DSP config:
 
 Macros are **input-only**. The shared parser expands them into the ordinary DSP
 config on the control thread, so they never appear in normalized output: read a
-config back and you get the expanded `dsp` section, not the macros you wrote. An
-explicit `dsp` section always wins over a macro that targets the same parameter.
+config back and you get the expanded `dsp` section, not the macros you wrote. A
+document carries exactly one of the two sections — supplying both `dsp` and
+`macros` is rejected as an invalid parameter, so there is no precedence rule
+between them.
 
 Each 0–1 macro maps onto its target's valid range rather than being written
 through raw — `macros.space` at `1.0` reaches the reverb mix ceiling of `0.45`,
@@ -290,7 +292,7 @@ Large pitch, formant, or ambience moves can be useful for sound design, but they
 ::: info What "latency" means here
 **Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds.
 
-It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field) — plus the ISP limiter's own delay when that limiter is active.
+It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active.
 :::
 
 Every live control is smoothed per sample, so adopting a new config snapshot with

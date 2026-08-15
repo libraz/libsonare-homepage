@@ -28,13 +28,13 @@ By the end of this page you should be able to:
 
 A forward feature transform is **lossy on purpose**. Two kinds of information are thrown away, and no inverse can invent them back:
 
-- **The mel filterbank is not square.** A mel spectrogram folds the STFT's frequency bins (~1025 bins for `nFft = 2048`, i.e. `nFft/2 + 1`) down to, say, 128 mel bands. Inverting it spreads each mel band's energy back across the bins it came from — a least-squares best guess, not the original detail.
+- **The mel filterbank is not square.** A mel spectrogram folds the frequency bins of the STFT (short-time Fourier transform) — ~1025 bins for `nFft = 2048`, i.e. `nFft/2 + 1` — down to, say, 128 mel bands. Inverting it spreads each mel band's energy back across the bins it came from — a least-squares best guess, not the original detail.
 - **Phase is discarded entirely.** A magnitude or power spectrogram keeps *how much* energy sits at each frequency, but not *where in the waveform cycle* it sits. Audio reconstruction has to **invent a plausible phase**, which is what Griffin-Lim does.
 
-MFCCs add a third loss on top: they keep only the first `nMfcc` cepstral coefficients (often 13–20), discarding the fine spectral envelope. Inverting MFCCs therefore reconstructs a *smoothed* mel spectrogram before any audio is recovered.
+MFCCs add a third loss on top: they keep only the first `nMfcc` cepstral coefficients (often 13–20), which hold the coarse spectral envelope and discard the fine structure inside it — the harmonic detail and the sharp edges of formants. Inverting MFCCs therefore reconstructs a *smoothed* mel spectrogram before any audio is recovered.
 
 ::: details What is a cepstral coefficient?
-A cepstrum is the result of taking a transform (a DCT) of the log spectrum. It separates the broad shape of the spectrum (timbre) from its fine detail. MFCCs keep only the first several of these coefficients, which is why they describe overall tonal color compactly but cannot reconstruct fine spectral detail.
+A cepstrum is the result of taking a transform — a DCT, or discrete cosine transform — of the log spectrum. It separates the broad shape of the spectrum (timbre) from its fine detail. MFCCs keep only the first several of these coefficients, which is why they describe overall tonal color compactly but cannot reconstruct fine spectral detail.
 :::
 
 ::: warning Reconstruction is an approximation, never a restoration
@@ -49,7 +49,7 @@ The output is meant for inspection and preview, not for getting your original re
     { id: 'audio', label: 'Audio', col: 0, row: 0 },
     { id: 'mel', label: 'Mel power', col: 1, row: 0 },
     { id: 'mfcc', label: 'MFCC coeffs', col: 1, row: 1 },
-    { id: 'stft', label: 'STFT power', col: 2, row: 0, variant: 'success' },
+    { id: 'stft', label: 'STFT magnitude', col: 2, row: 0, variant: 'success' },
     { id: 'preview', label: 'Preview audio', col: 2, row: 1, variant: 'success' }
   ]"
   :edges="[
@@ -67,7 +67,7 @@ The two forward transforms (dashed) produce the features you already know; the f
 
 | Intent | JavaScript | Python |
 |--------|------------|--------|
-| Mel power → STFT power | `melToStft(...)` returns `{ nBins, nFrames, power }` | `mel_to_stft(...)` returns `InverseResult(rows, n_frames, data)` |
+| Mel power → STFT magnitude | `melToStft(...)` returns `{ nBins, nFrames, power }` | `mel_to_stft(...)` returns `InverseResult(rows, n_frames, data)` |
 | Mel power → audio | `melToAudio(...)` returns `Float32Array` | `mel_to_audio(...)` returns `list[float]` |
 | MFCCs → mel power | `mfccToMel(...)` returns `{ nMels, nFrames, power }` | `mfcc_to_mel(...)` returns `InverseResult(rows, n_frames, data)` |
 | MFCCs → audio | `mfccToAudio(...)` returns `Float32Array` | `mfcc_to_audio(...)` returns `list[float]` |
@@ -78,7 +78,11 @@ The two `*ToStft` / `*ToMel` helpers stay in the **spectral** domain and return 
 
 ## Reconstruct a spectrum
 
-`melToStft` maps a mel **power** spectrogram back to linear-frequency STFT **power**. `mfccToMel` maps MFCCs back to a smoothed mel **power** spectrogram.
+`melToStft` maps a mel **power** spectrogram back to a linear-frequency STFT **magnitude** spectrogram. `mfccToMel` maps MFCCs back to a smoothed mel **power** spectrogram.
+
+::: warning `melToStft` returns magnitude, even though the field is called `power`
+The helper solves the non-negative least-squares problem in the power domain and then takes the square root, matching `librosa.feature.inverse.mel_to_stft` with its default `power=2.0`. The values you get back are magnitudes; only the JavaScript field name (`power`, or `data` in Python) suggests otherwise. Convert them to dB with `20·log₁₀(x)`, not `10·log₁₀(x)`, and square them before handing them to anything that expects a power spectrum.
+:::
 
 If forward MFCC used a nonzero `lifter`, pass the same value to `mfccToMel` or `mfccToAudio`. The inverse then removes it.
 
@@ -89,7 +93,7 @@ import { init, melSpectrogram, melToStft, mfcc, mfccToMel } from '@libraz/libson
 
 await init();
 
-// Mel power -> STFT power
+// Mel power -> STFT magnitude
 const mel = melSpectrogram(samples, sampleRate, 2048, 512, 128);
 const stft = melToStft(mel.power, mel.nMels, mel.nFrames, sampleRate, 2048);
 // stft: { nBins, nFrames, power }   nBins = nFft/2 + 1 = 1025
@@ -103,7 +107,7 @@ const reMel = mfccToMel(coeffs.coefficients, coeffs.nMfcc, coeffs.nFrames, 128);
 ```python [Python]
 import libsonare as sonare
 
-# Mel power -> STFT power
+# Mel power -> STFT magnitude
 mel = sonare.mel_spectrogram(samples, sample_rate, n_fft=2048, hop_length=512, n_mels=128)
 stft = sonare.mel_to_stft(mel.power, mel.n_mels, mel.n_frames, sample_rate=sample_rate, n_fft=2048)
 # stft.rows = n_fft/2 + 1 = 1025; stft.data is row-major [rows x n_frames]
@@ -127,7 +131,7 @@ Both inputs are **row-major** matrices: `melPower` is `[nMels x nFrames]`, MFCC 
 
 `melToAudio` and `mfccToAudio` produce a mono `Float32Array` you can play or write to a file. Because the features carry no phase, both run **Griffin-Lim**: start from the magnitude with random (or zero) phase, repeatedly STFT → keep the new phase → impose the known magnitude → inverse-STFT, until the phase settles into something self-consistent.
 
-`cqtToAudio` and `vqtToAudio` use the same iterative idea for the row-major magnitude matrix returned by `cqt(...)` or `vqt(...)`. Keep the forward transform's `sampleRate`, `hopLength`, `fmin`, and `binsPerOctave` (plus `gamma` for VQT) unchanged. As with mel/MFCC reconstruction, this is an approximate mono preview, not a restoration.
+`cqtToAudio` and `vqtToAudio` use the same iterative idea for the row-major magnitude matrix returned by `cqt(...)` or `vqt(...)` — the constant-Q and variable-Q transforms, which space their frequency bins logarithmically instead of linearly. Keep the forward transform's `sampleRate`, `hopLength`, `fmin`, and `binsPerOctave` (plus `gamma` for VQT) unchanged. As with mel/MFCC reconstruction, this is an approximate mono preview, not a restoration.
 
 ::: code-group
 

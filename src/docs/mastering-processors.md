@@ -34,7 +34,7 @@ By the end of this page you should be able to:
 | Analysis | A measurement that returns **JSON** instead of audio | `match.referenceLoudness`, `stereo.monoCompatCheck` |
 
 ::: info Sidechain and loudness processors
-The dynamics family includes `dynamics.duckingProcessor` (sidechain ducking), `maximizer.loudnessOptimize` (LUFS-target maximizing), and a de-esser bandpass `Q` control on `dynamics.deesser` with stereo preservation, alongside `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider`, and `dynamics.sidechainRouter`.
+The dynamics family includes `dynamics.duckingProcessor` (sidechain ducking), `maximizer.loudnessOptimize` (maximizing toward a [LUFS](./glossary/lufs.md) target — LUFS is Loudness Units relative to Full Scale, the broadcast loudness scale), and a de-esser bandpass `Q` control on `dynamics.deesser` with stereo preservation, alongside `dynamics.transientShaper`, `dynamics.upwardCompressor`, `dynamics.upwardExpander`, `dynamics.vocalRider`, and `dynamics.sidechainRouter`.
 :::
 
 ## Presets
@@ -100,7 +100,7 @@ A few capabilities sit underneath the maximizer/final and analysis APIs:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights. BS.1770-4 itself normatively defines layouts only up to 5.1 (6 channels); the 7.1/8-channel weighting (treating the side-surround pair like the rear surrounds, +1.5 dB) is a non-normative extrapolation, not part of the standard.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
-- For UI metering there are display-decimated variants: `meteringVectorscopeDecimated(...)` and `meteringPhaseScopeDecimated(...)` thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
+- For UI metering, pass `maxPoints` to `meteringVectorscope(...)` and `meteringPhaseScope(...)`: they thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. (Without `maxPoints` they emit one point per input sample. The older `meteringVectorscopeDecimated(...)` / `meteringPhaseScopeDecimated(...)` aliases are deprecated and just delegate.) `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - Every `multiband.*` solo processor — `compressor`, `dynamicEq`, `expander`, `imager`, `limiter`, and `saturation` — shares the same crossover mechanism and accepts a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three. This entry point exposes up to 8 `cutoffNHz` slots (`cutoff0Hz` … `cutoff7Hz`), so a single `multiband.*` call can address up to 9 bands.
 :::
 
@@ -174,6 +174,8 @@ Pair processors consume a source **and** a reference. Pair/stereo *analyses* ret
 | Pair analyses | `match.referenceLoudness`, `match.tonalBalance`, `match.tonalBalanceLogBands`, `match.matchEqCurve`, `match.estimateReferenceDelaySamples` |
 | Stereo analyses | `stereo.monoCompatCheck`, `stereo.monoCompatCheckLogBands` |
 
+These are registry names you pass to `masteringPairAnalyze(...)` / `masteringStereoAnalyze(...)`. Separately from the registry, the assistant helpers have their own stereo entry points that take a left/right pair directly — `masteringAudioProfileStereo`, `masteringAssistantSuggestStereo`, and `masteringStreamingPreviewStereo`. Use them instead of profiling a downmix, which under-reports integrated loudness by about 6 dB on decorrelated material; see [Stereo sources](./mastering-assistant.md#stereo-sources).
+
 ::: details What do "tonal balance" and "mono compatibility" measure?
 - **Tonal balance** (`match.tonalBalance`) describes how a track's energy is spread across frequency bands — how much sub, bass, mid, presence, and air it has. Comparing your tonal balance to a reference track shows where you are darker or brighter, which is what `match.applyMatchEq` then corrects.
 - **Mono compatibility** (`stereo.monoCompatCheck`) predicts what happens when your stereo mix is summed to mono (phone speakers, club PAs, some broadcast paths). If the left and right channels are out of phase, parts can cancel out and lose level when folded down. The check flags that risk before it surprises a listener. See [Mono Compatibility](./glossary/concepts/mono-compatibility.md) for a deeper walk-through.
@@ -185,7 +187,7 @@ The creative-FX insert catalog — reverb, modulation, and delay insert IDs, the
 
 ## How to call them
 
-Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It includes each processor's parameter bounds and defaults plus the built-in preset lists. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, id, type, unit and realtime-safety — plus the built-in preset lists. Its `min` / `max` / `default` fields are always `null`, so it can populate a picker but not size a control; take value ranges from the per-processor tables on this page. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
 
 ::: code-group
 
@@ -287,9 +289,13 @@ When you assemble a *chain* rather than a single processor, the config style dep
 
 | Entry point | Config style |
 |-------------|--------------|
-| WASM `masteringChain(...)` | Nested config objects |
+| WASM `masteringChain(...)` | Nested config objects; dot-notation leaf keys are also accepted in the same object |
 | `masterAudio(...)` and Python/Node equivalents | Flat dot-notation overrides such as `'loudness.targetLufs'` |
 | [Mastering Assistant](./mastering-assistant.md) `chainConfig.params` | Flat form, ready for `masterAudio`. `params["dynamics.multibandComp"]` can also carry the nested, arbitrary-band v2 object described below — see [The chain-config JSON schema](#the-chain-config-json-schema) |
+
+`MasteringChainConfig` accepts both spellings. A dot-notation leaf such as `'loudness.targetLufs': -20` can sit beside — or replace — the nested `loudness: { targetLufs: -20 }`, and the core validates the key and rejects an unknown one. Dot notation is the form the C ABI carries parameters in, which is what makes it the convenient shape when you are assembling overrides dynamically rather than writing them out.
+
+The nested spelling is the canonical one, so prefer it in hand-written code: TypeScript checks a nested config field by field, while a dotted key is only checked at run time.
 
 Repair chain keys follow the chain slots, not the one-shot registry names: use `repair.denoise.*` / `repair.dereverb.*` in flat overrides or the nested `repair: { denoise: ..., dereverb: ... }` shape in `masteringChain(...)`.
 ::::

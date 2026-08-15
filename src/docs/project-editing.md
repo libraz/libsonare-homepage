@@ -107,7 +107,7 @@ By the end of this page you should be able to:
 - choose a clip overlap policy and a warp mode (`off` / `repitch` / `tempo-sync`) with warp anchors;
 - write key/chord annotations and automation lanes onto the project;
 - compile to a renderable timeline and read its structured diagnostics and non-fatal warnings;
-- save and load with deterministic JSON, and exchange MIDI through SMF and the MIDI 2.0 Clip File format.
+- save and load with deterministic JSON, and exchange MIDI through SMF (Standard MIDI File) and the MIDI 2.0 Clip File format.
 
 ## Create a project and add content
 
@@ -198,7 +198,7 @@ project.setClipLoop(tailId, 'loop', 2, 0.05); // loop the tail every two beats w
 const copyId = project.duplicateClip(tailId, 8);
 ```
 
-Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length (negative lengths become zero), so an oversized fade cannot start before the clip. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
+Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length, so an oversized fade cannot start before the clip; a negative length is rejected outright. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
 
 ::: warning `setClipGain` / `setClipFade` apply to audio clips only
 `setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades do not affect the sound. To control the volume of an instrument playing MIDI, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
@@ -408,11 +408,11 @@ project.setOverlapPolicy(1); // allow overlap (e.g. crossfades, layered takes)
 project.getOverlapPolicy();  // read it back
 ```
 
-`0` disallows overlaps; `1` allows them. Allow overlaps when you intend layered clips or crossfades; disallow to keep a track strictly sequential. The policy is a plain integer because it mirrors the native enum directly: only `0` (disallow) and `1` (allow) are defined, and any other value is treated as disallow.
+`0` disallows overlaps; `1` allows them. Allow overlaps when you intend layered clips or crossfades; disallow to keep a track strictly sequential. The policy is a plain integer because it mirrors the native enum directly: only `0` (disallow) and `1` (allow) are defined, and any other value is rejected as an invalid parameter.
 
 ## Warp: stretching clips to the grid
 
-**Warp** lets a recorded audio clip follow the project's tempo instead of playing back at its fixed original speed — think of nudging and stretching a recording so its beats land on the grid. Internally, the clip keeps its own recorded timeline; warp maps positions on that recorded timeline onto positions in project time, so changing the project tempo restretches the clip. Each clip has a warp **mode** and an optional **warp map** of anchors.
+**Warp** lets a recorded audio clip follow the project's grid instead of playing back at its fixed original speed — think of nudging and stretching a recording so its beats land where you want them. Internally, the clip keeps its own recorded timeline; a warp map pins positions on that recorded timeline to positions in project time. Each clip has a warp **mode**, and every mode except `'off'` needs a **warp map** of anchors to do anything.
 
 | Warp mode | Meaning |
 |-----------|---------|
@@ -473,6 +473,12 @@ project.setClipWarpMode(clipId, 'tempo-sync');
 
 A warp map is a first-class, id-keyed object: `setWarpMap({ id, name, anchors })` adds or replaces one, `setClipWarpRef(clipId, id)` assigns it to a clip (`0` clears the reference), and `project.removeWarpMap(id)` deletes it by id. Removing a map that a clip still references leaves that clip with a dangling warp ref, so clear those clips first with `setClipWarpRef(clipId, 0)`.
 
+::: warning Anchors are yours to maintain, and two of them are the minimum
+Anchors are absolute sample-to-sample pairs, and the engine never re-derives them from the tempo map. Editing the tempo with `setTempoSegments(...)` therefore does **not** restretch a warped clip — it moves the clip's start and length on the timeline, so a different amount of the same fixed warp curve gets played. When the tempo changes and the audio should follow it, recompute the anchors in your app and push a new map with `setWarpMap(...)`.
+
+A map also needs at least two anchors before it describes a stretch at all. A `'tempo-sync'` clip with no registered warp map (and no pre-baked warped audio) is a compile error — a dangling source ref, reported by `compile()`. A `'repitch'` clip with a missing or single-anchor map is not an error: it silently plays at its native rate, exactly as if the mode were `'off'`.
+:::
+
 ## Takes and comp lanes
 
 A clip can carry alternate **takes** and a **comp** (composite) that stitches the best parts of several takes into one performance. These are first-class on `Project` (`setClipTakes`, `setClipCompSegments`, `addLoopRecordingTakes`) and are covered in depth — including loop-recording capture — on the dedicated page. See [Recording & Takes](./recording-and-takes.md).
@@ -520,7 +526,7 @@ lane_param_id = project.add_automation_lane(
         (4.0, 1.0, "exponential"),
     ],
 )
-project.edit_automation_lane(track_id, lane_param_id, target_param_id=1, points=[])
+project.edit_automation_lane(track_id, lane_param_id, points=[])
 project.remove_automation_lane(track_id, lane_param_id)
 
 fader_lane_id = project.add_automation_lane(
@@ -639,13 +645,13 @@ project.set_program(midi_clip, 4)          # GM program (e.g. 4 = electric piano
 
 In Python the static packers are `Project.midi_note_on(...)` / `Project.midi_note_off(...)`, each returning a `(ppq, data0, data1)` tuple, and the events list is any sequence of those tuples.
 
-`setProgram` takes an optional third `bank` argument — `setProgram(clipId, program, bank = -1)` — that defaults to `-1` (no Bank Select emitted); pass a value `>= 0` to emit a Bank Select ahead of the program change. To change the program on a specific UMP group and channel rather than the clip default, use `setProgramOnChannel(clipId, group, channel, program, bank?)`. Both take the same optional `bank` across the WASM, Node, and Python bindings (`set_program(clip_id, program, bank=-1)`, `set_program_on_channel(clip_id, group, channel, program, bank=-1)`).
+`setProgram` takes an optional third `bank` argument — `setProgram(clipId, program, bank = -1)` — that defaults to `-1` (no Bank Select emitted); pass a value `>= 0` to emit a Bank Select ahead of the program change. To change the program on a specific UMP (Universal MIDI Packet) group and channel rather than the clip default, use `setProgramOnChannel(clipId, group, channel, program, bank?)`. Both take the same optional `bank` across the WASM, Node, and Python bindings (`set_program(clip_id, program, bank=-1)`, `set_program_on_channel(clip_id, group, channel, program, bank=-1)`).
 
 ::: warning `ppq` is in quarter notes, not ticks
 The `ppq` argument is a **position in quarter notes** (a float), *not* a MIDI tick count. `Project.midiNoteOn(1, …)` is one quarter note in; `Project.midiNoteOn(0.5, …)` is an eighth note in. Despite the name, it is **not** 480-ticks-per-quarter — `Project.midiNoteOn(480, …)` schedules the note 480 quarter notes (120 bars) away, almost always far past your render window, so it silently never sounds. If you are converting from a tick-based source (an SMF at 480 PPQ, say), divide by the source's ticks-per-quarter first. The same unit applies to `addMidiClip(startPpq, lengthPpq)` and every clip/automation position on this page.
 :::
 
-Every shipped static packer returns one or more MIDI 1.0 UMP (Universal MIDI Packet) words ready to drop into a `setMidiEvents` list:
+Every shipped static packer returns one or more MIDI 1.0 UMP words ready to drop into a `setMidiEvents` list:
 
 | Packer | Signature | Event |
 |--------|-----------|-------|

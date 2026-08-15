@@ -37,13 +37,13 @@ All fifteen share one common control layer for modulation, envelopes, filters, s
 The engine names below are different ways to *generate* a tone. You don't need them all to start — pick a preset and play — but here is the one-line version of each:
 
 - **subtractive** — start with a bright waveform and carve it with a filter (the classic analog-synth recipe).
-- **FM / phase modulation** — one oscillator's pitch modulates another, producing metallic and bell-like tones.
+- **FM / phase modulation** — one oscillator's output is added to another's phase (the DX-family way of implementing FM), producing metallic and bell-like tones.
 - **Karplus-Strong** — a short delay loop that models a plucked string.
 - **modal** — a bank of tuned resonators modeling a struck bar or bell.
 - **additive / drawbar** — sums harmonic sine partials, like the drawbars on a Hammond organ.
 - **(extended) waveguide** — a delay-line model of a vibrating string or tube.
 - **reed / brass / flute waveguide** — sustained breath-excited models for woodwinds and brass.
-- **buzzing-bridge plucked** — a plucked-string loop whose bridge sprays energy into the upper partials for the shimmer of a sitar, koto, or harp.
+- **buzzing-bridge plucked** — a plucked-string loop whose bridge can be made to graze the string and spray energy into the upper partials: cleanly terminated at `buzz` 0 (harp, koto), shimmering and buzzing as `buzz` rises (sitar, tanpura).
 - **source-filter vocal** — a glottal source (sawtooth + tilt) fed through a bank of vowel formant resonators for choir and solo-voice tones.
 - **free reed** — a driven metal-tongue oscillator (accordion, harmonica, bandoneon), optionally musette-detuned into two beating tongues.
 
@@ -124,7 +124,7 @@ All four stay stable and zipper-free under per-sample cutoff/resonance modulatio
 
 ### `fm` — frequency modulation
 
-A phase-modulation operator stack (one oscillator's pitch modulates another → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`.
+A phase-modulation operator stack (one oscillator's output is added to another's phase → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`.
 
 ### `karplus-strong` — plucked string
 
@@ -172,11 +172,11 @@ A plucked-string waveguide whose bridge model keeps grazing the string, spraying
 
 ### `vocal` — source-filter voice
 
-A two-stage voice: a glottal source (a band-limited sawtooth shaped by a spectral tilt, plus aspiration noise) feeding a bank of five resonant bandpass formants tuned to a sung vowel. The `vowel` field selects the formant table (/a/, /e/, /i/, /o/, /u/), `brightness` tilts the source and opens the upper formants, and a per-voice vibrato modulates the pitch. Good for **choir and solo-voice previews**. Presets: `choir-aah`, `choir-ooh`, `voice-eeh`.
+A two-stage voice: a glottal source (a naive sawtooth shaped by a one-pole spectral tilt, plus aspiration noise) feeding a bank of five resonant bandpass formants tuned to a sung vowel. The source oscillator is **not** band-limited; because the source-filter path is feed-forward, the raw sawtooth's aliasing is attenuated by the narrow formant bandpasses rather than prevented at the oscillator. The `vowel` field selects the formant table (/a/, /e/, /i/, /o/, /u/), `brightness` tilts the source and opens the upper formants, and a per-voice vibrato modulates the pitch. Good for **choir and solo-voice previews**. Presets: `choir-aah`, `choir-ooh`, `voice-eeh`.
 
 ### `free-reed` — driven free reed
 
-A driven metal-tongue oscillator (a phase accumulator shaped by an asymmetric saturator and a body lowpass) that models the free reed of an accordion, harmonica, or bandoneon — the tongue's own pitch sets the note, with no coupled air column. A `detune` control splits it into two slightly sharp tongues for the shimmering musette beat. Good for **accordion, harmonica, and reed-organ previews**. Presets: `accordion`, `harmonica`, `bandoneon`, `reed-organ`.
+A driven metal-tongue oscillator (a phase accumulator shaped by an asymmetric saturator and a body lowpass) that models the free reed of an accordion, harmonica, or bandoneon — the tongue's own pitch sets the note, with no coupled air column. A `detune` control adds a second tongue a few cents sharp of the first, and the beat between the pair is the shimmering musette sound; `detune` 0 collapses back to a single tongue. Good for **accordion, harmonica, and reed-organ previews**. Presets: `accordion`, `harmonica`, `bandoneon`, `reed-organ`.
 
 ## The GM fallback bank
 
@@ -216,8 +216,8 @@ synthPresetNames();
 // ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', 'sub-bass',
 //  'warm-pad', 'e-piano', 'bell', 'brass', 'pluck', 'classical-guitar',
 //  'steel-guitar', 'electric-guitar', 'harp', 'bass-acoustic', ...,
-//  'harp-plucked', 'koto', 'sitar', 'tanpura', ...,
-//  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
+//  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...,
+//  'harp-plucked', 'koto', 'sitar', 'tanpura', ...]
 
 const pad = synthPresetPatch('warm-pad');
 // { preset: 'warm-pad', engineMode: 'subtractive', waveform: 'saw',
@@ -231,8 +231,8 @@ sonare.synth_preset_names()
 # ['sine', 'saw', 'square', 'triangle', 'saw-lead', 'square-lead', 'sub-bass',
 #  'warm-pad', 'e-piano', 'bell', 'brass', 'pluck', 'classical-guitar',
 #  'steel-guitar', 'electric-guitar', 'harp', 'bass-acoustic', ...,
-#  'harp-plucked', 'koto', 'sitar', 'tanpura', ...,
-#  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...]
+#  'church-organ', 'violin', 'clarinet', 'trumpet', 'concert-flute', ...,
+#  'harp-plucked', 'koto', 'sitar', 'tanpura', ...]
 
 pad = sonare.synth_preset_patch("warm-pad")
 # SynthPatch(preset='warm-pad', engine_mode='subtractive', waveform='saw',
@@ -275,7 +275,7 @@ A preset name may carry a `va:` prefix (for example `va:saw-lead`, `va:e-piano`)
 
 ### GS / GM drum-kit variants
 
-`drum-kit` also recognizes GS-style drum-kit selection (bank-128 program numbers) and reshapes the Standard kit per variant at note-on — more shell body for Room, bigger/lower shells for Power, and so on. Two naming systems overlap at kit 25: the GS bank-128 name and the GM2 percussion-set name differ, which is a property of the two standards rather than a bug.
+`drum-kit` also recognizes GS-style drum-kit selection (GS is Roland's General MIDI extension set; kits are addressed by bank-128 program numbers) and reshapes the Standard kit per variant at note-on — more shell body for Room, bigger/lower shells for Power, and so on. Two naming systems overlap at kit 25: the GS bank-128 name and the GM2 percussion-set name differ, which is a property of the two standards rather than a bug.
 
 | Kit no. | GS (bank-128) name | GM2 percussion-set name | Voicing change vs Standard |
 |---|---|---|---|
@@ -299,12 +299,12 @@ Think of a `SynthPatch` as "a preset, plus your tweaks". It starts from a **base
 
 The most useful beginner workflow is small and reversible: choose a preset, change one or two audible fields, listen, then reset or move on. For example, start from `warm-pad`, lengthen `ampAttackMs` for a slower fade-in, lower `cutoffHz` for a darker tone, or raise `stereoSpread` for a wider pad. You do not need to fill the whole object.
 
-::: warning Zero means "keep the base", not "set to zero"
-Watch out: writing `ampSustain: 0` does **not** silence the sustain — it leaves the preset's sustain untouched. Across this object, **0 (or an omitted field) means "keep the base value"; any non-zero value overrides it** (clamped to its audible range). Enum fields use `'default'` for "keep".
+::: warning Absent and zero are different
+What decides whether a field overrides the base is **presence**, not value. Omit a numeric field and the base value stays; set one and it overrides the base, clamped to its audible range. That includes an explicit `0` — writing `ampSustain: 0` really does drop the sustain to zero, and `stereoSpread: 0` really does collapse the patch to the centre. Enum fields still use `'default'` to mean "keep".
 
-You therefore cannot force a numeric field to literally zero. (This is because the frozen C ABI has no per-field "is this set?" flag, so zero has to mean "untouched".) If you genuinely need a value at or near the bottom of a field's range, use the smallest non-zero value instead — for example `ampSustain: 0.001`, which overrides the base and is effectively silent.
+The patch carries a per-field "was this set?" record alongside a struct version, which is what keeps "absent" and "zero" apart. Earlier builds could not tell them apart and had to treat a zero as "untouched", so older code sometimes wrote a token value such as `ampSustain: 0.001` to approximate a real zero. That workaround is no longer needed — write the `0` you mean.
 
-One more rule: a non-empty `modRoutings` array **replaces** the base mod matrix entirely, rather than adding to it.
+One more rule: a non-empty `modRoutings` array **replaces** the base mod matrix entirely, rather than adding to it. An empty array clears it, while omitting the key keeps the base matrix.
 :::
 
 The patch exposes the shared controls every engine uses:
@@ -342,11 +342,11 @@ Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets en
 The `body` field is NativeSynth's body/formant resonance layer — the resonant character of an instrument's physical shell or vocal tract. Acoustic guitars, harps, violin-family strings, woodwinds, brass, and choir/voice fallbacks use this layer; solid-body electrics can leave `body` at `none`.
 
 ::: info Pitch bend, controller reset, and per-channel state
-NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set with the **CC6 / CC38** Data Entry MSB/LSB fine-byte pair — default ±2 semitones). A MIDI **Reset All Controllers** message restores the default — bend range included. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
+NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set with the **CC6 / CC38** Data Entry MSB/LSB fine-byte pair — default ±2 semitones). A MIDI **Reset All Controllers** message returns the performance controllers (mod wheel, expression, pitch-bend value, the pedals) and the RPN/NRPN selection to their defaults, but it deliberately leaves the bend range where you set it — send RPN 0 again if you want ±2 semitones back. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
 
-This state is tracked **per channel, not per note**: NativeSynth does not track polyphonic (per-note) or channel pressure at all, and MIDI 2.0 note velocity is quantized down to the ordinary 7-bit range rather than kept at full 16-bit resolution. If you need MPE-style per-note pitch-bend and pressure, or full 16-bit velocity, reach for the simpler built-in waveform synth instead — see `setBuiltinInstrument` in [MIDI Input](./midi-input.md).
+This state is tracked **per channel, not per note**: NativeSynth does not track polyphonic (per-note) or channel pressure at all, and MIDI 2.0 note velocity is quantized down to the ordinary 7-bit range rather than kept at full 16-bit resolution. If you need MPE-style (MIDI Polyphonic Expression) per-note pitch-bend and pressure, or full 16-bit velocity, reach for the simpler built-in waveform synth instead — see `setBuiltinInstrument` in [MIDI Input](./midi-input.md).
 
-Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC64** supports half-pedal damping, **CC66** acts as sostenuto, and **CC67** applies una-corda / soft-pedal voicing where the active preset uses it.
+Piano-style pedal controls are decoded as ordinary MIDI CCs. Sustain pedal **CC64** supports half-pedal damping only on the `piano` engine — there, intermediate values 64-126 damp ringing key-up notes proportionally; on every other engine CC64 is a plain on/off sustain switching at the 64 threshold, so 64 and 126 sound the same as 127. **CC66** acts as sostenuto, and **CC67** applies una-corda / soft-pedal voicing where the active preset uses it.
 :::
 
 ### Enum name tables
@@ -364,6 +364,7 @@ synthEnumTables();
 //                      'pipe-organ', 'bowed-string', 'reed', 'brass', 'flute',
 //                      'plucked-string', 'vocal', 'free-reed'],
 //   waveforms:        ['default', 'sine', 'saw', 'square', 'triangle', 'noise'],
+//   builtinWaveforms: ['sine', 'saw', 'sawtooth', 'square', 'triangle'],
 //   filterModels:     ['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key'],
 //   filterOutputs:    ['default', 'lowpass', 'bandpass', 'highpass'],
 //   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube',
@@ -374,11 +375,13 @@ synthEnumTables();
 // }
 ```
 
-The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYNTH_OSC_WAVEFORMS`, `SYNTH_FILTER_MODELS`, `SYNTH_FILTER_OUTPUTS`, `SYNTH_BODY_TYPES`, `SYNTH_MOD_SOURCES`, `SYNTH_MOD_DESTINATIONS`). Note the index 0 in most tables is `'default'` (keep the base value); `modSources` / `modDestinations` use `'none'` instead.
+The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYNTH_OSC_WAVEFORMS`, `SYNTH_FILTER_MODELS`, `SYNTH_FILTER_OUTPUTS`, `SYNTH_BODY_TYPES`, `SYNTH_MOD_SOURCES`, `SYNTH_MOD_DESTINATIONS`, plus `BUILTIN_SYNTH_WAVEFORMS`). Note the index 0 in most tables is `'default'` (keep the base value); `modSources` / `modDestinations` use `'none'` instead.
+
+`builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` is a separate list: it belongs to the minimal built-in oscillator synth (`setBuiltinInstrument`), not to NativeSynth's `waveform` field. It has no `'default'` entry, accepts `'sawtooth'` as well as `'saw'`, and does **not** accept `'noise'`.
 
 ## Render offline: `bounceWithSynthInstrument`
 
-To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either to bind several destinations at once. When you pass an array, each `SynthPatch` may set `destinationId` (default `0`) to choose which MIDI destination it binds to — for example `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` renders two destinations from one call. `destinationId` is a JS binding convenience, not part of the NativeSynth patch itself (Python takes the destination as a separate argument instead). An explicitly empty array (or `undefined` / `null`) produces zero bindings. The render is deterministic for a fixed project, options, and patch.
+To turn a MIDI arrangement into audio, bind a NativeSynth instrument to your MIDI destination and bounce. Pass a preset-name string, a `SynthPatch`, or an array of either to bind several destinations at once. When you pass an array, each `SynthPatch` may set `destinationId` (default `0`) to choose which MIDI destination it binds to — for example `[{ preset: 'saw-lead', destinationId: 0 }, { preset: 'drum-kit', destinationId: 1 }]` renders two destinations from one call. `destinationId` is a JS binding convenience, not part of the NativeSynth patch itself (Python takes the destination as a separate argument instead). An explicitly empty array `[]` (or a runtime `null`) produces zero bindings; omitting the argument — or passing `undefined` — falls back to `{}` and still creates one default binding. The render is deterministic for a fixed project, options, and patch.
 
 ### Following GM programs instead of pinning one patch
 
@@ -468,9 +471,13 @@ project.close()
 ```
 
 ```bash [CLI]
-# --synth on the CLI takes only a built-in oscillator waveform: sine | saw | square | triangle.
-# Routing MIDI through a NativeSynth preset or patch is binding-only (see Browser / Python above).
+# --synth <preset> takes any name from the NativeSynth preset catalog, not just the
+# oscillator waveforms — run `sonare project synth-presets` for the full list.
+# Bare --synth follows the project's GM program changes instead.
+# A custom SynthPatch object (rather than a preset name) is binding-only
+# (see Browser / Python above).
 sonare project bounce --in song.json -o synth.wav --synth saw
+sonare project bounce --in song.json -o pad.wav --synth warm-pad
 ```
 
 :::

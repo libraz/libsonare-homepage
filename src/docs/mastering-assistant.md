@@ -51,6 +51,14 @@ By the end of this page you should be able to:
 
 All three return a **JSON string** — call `JSON.parse` (JS) or `json.loads` (Python). The schema is identical across the C, Node, Python, and WASM bindings. The PyPI `sonare` CLI also exposes all three: `sonare mastering-profile`, `sonare mastering-suggest`, and `sonare mastering-streaming` print the same JSON to stdout.
 
+Each of the three has a stereo counterpart that takes a left/right pair instead of one buffer. They return the same JSON schema, so everything on this page applies to both — see [Stereo sources](#stereo-sources) for when the mono entry point is the wrong tool.
+
+| Step | Mono | Stereo |
+|------|------|--------|
+| Inspect the source | `masteringAudioProfile` | `masteringAudioProfileStereo` |
+| Propose a chain | `masteringAssistantSuggest` | `masteringAssistantSuggestStereo` |
+| Preview delivery | `masteringStreamingPreview` | `masteringStreamingPreviewStereo` |
+
 The three helpers answer different questions:
 
 | Helper | Main question | Measurement or suggestion? |
@@ -96,7 +104,7 @@ sonare mastering-streaming source.wav \
 :::
 
 ::: warning Short clips: profile and suggest work, but need real spectral content to be meaningful
-`masteringAudioProfile` and `masteringAssistantSuggest` run a full STFT-based analysis (default `nFft` = 2048). They only reject a **completely empty** buffer (`SonareError`, "audio input must be a non-empty buffer") — any non-empty buffer, however short, is accepted and processed. The `nFft`-sized window (default 2048 samples) is advisory, not an error condition: a buffer shorter than one full window has too little spectral content to produce a meaningful profile, so treat "shorter than `nFft`" as a quality warning to show the user, not a failure to guard against. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty audio buffer; an empty `platforms` list is also fine — it falls back to a built-in default set (Spotify, Apple Music, YouTube). When feeding short captures or file-picker selections from the UI, wrap the profile/suggest calls in `try`/`catch` using `isSonareError` to handle the empty-buffer case, and consider a soft length hint (rather than a hard block) for buffers shorter than `nFft`.
+`masteringAudioProfile` and `masteringAssistantSuggest` run a full [STFT](./glossary/analysis/spectrogram-stft.md) (short-time Fourier transform — a frequency analysis taken over short successive windows) based analysis (default `nFft` = 2048). They only reject a **completely empty** buffer (`SonareError`, "audio input must be a non-empty buffer") — any non-empty buffer, however short, is accepted and processed. The `nFft`-sized window (default 2048 samples) is advisory, not an error condition: a buffer shorter than one full window has too little spectral content to produce a meaningful profile, so treat "shorter than `nFft`" as a quality warning to show the user, not a failure to guard against. `masteringStreamingPreview` only measures loudness, so it tolerates any non-empty audio buffer; an empty `platforms` list is also fine — it falls back to a built-in default set (Spotify, Apple Music, YouTube). When feeding short captures or file-picker selections from the UI, wrap the profile/suggest calls in `try`/`catch` using `isSonareError` to handle the empty-buffer case, and consider a soft length hint (rather than a hard block) for buffers shorter than `nFft`.
 
 ```typescript [Browser]
 import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
@@ -167,7 +175,7 @@ Use this result to explain the input, not to judge it. A profile can tell you th
 | | `lraLu` | Loudness range — how much the loudness moves over time |
 | | `truePeakDb` | Inter-sample [true peak](./glossary/true-peak.md) |
 | | `crestFactorDb` | Peak-to-RMS contrast — high = punchy, low = dense ([crest factor](./glossary/concepts/crest-factor.md)) |
-| `spectral` | `subRmsDb` … `airRmsDb` | Energy per band (sub → air), for spotting a dark or bright balance |
+| `spectral` | `subRmsDb` … `airRmsDb` | Relative energy per band (sub → air) on an internal scale, not dBFS — compare against a reference, not across bands |
 | | `centroidHz` | Spectral "center of mass" — a brightness proxy |
 | | `flatness` | 0 = tonal, 1 = noise-like |
 | | `rolloffHz` | Frequency below which most energy sits |
@@ -176,7 +184,9 @@ Use this result to explain the input, not to judge it. A profile can tell you th
 | `genreCandidates` | `[{name, score}]` | Best-matching styles; the top one seeds the suggestion's base preset |
 
 ::: info Reading the spectral bands
-The `*RmsDb` fields go from low to high frequency: `sub` (deep bass) → `low`/`lowMid` (bass and warmth) → `mid` (body, vocals) → `highMid`/`high` (presence, clarity) → `air` (top-end sparkle). Comparing them tells you whether a mix leans dark (strong lows) or bright (strong air).
+The `*RmsDb` fields go from low to high frequency: `sub` (deep bass) → `low`/`lowMid` (bass and warmth) → `mid` (body, vocals) → `highMid`/`high` (presence, clarity) → `air` (top-end sparkle).
+
+They are relative band levels on an internal FFT scale, not dBFS — the example above reads `lowRmsDb: 40.35`, well above 0. And because music has a natural downward spectral tilt, `air` reads far below `low` on essentially every normal master, so comparing the bands against each other would call almost any track dark. Judge dark versus bright by comparing a band against the *same* band on a reference track or on a previous render. The genre heuristics inside the library work the same way: their dull/lo-fi test is `air` sitting more than 22 dB below `mid`, not below 0.
 :::
 
 ::: details What do loudness range, attack density, and sustain ratio mean?
@@ -214,16 +224,16 @@ Think of this helper as a preset generator with an explanation. It returns a ful
   "chainConfig": {
     "version": 1,
     "params": {
-      "eq.tilt.enabled": 1,
+      "eq.tilt.enabled": true,
       "eq.tilt.tiltDb": -0.5,
-      "dynamics.transientShaper.enabled": 1,
-      "dynamics.compressor.enabled": 1,
+      "dynamics.transientShaper.enabled": true,
+      "dynamics.compressor.enabled": true,
       "dynamics.compressor.thresholdDb": -18,
-      "saturation.tape.enabled": 1,
-      "spectral.airBand.enabled": 1,
-      "maximizer.truePeakLimiter.enabled": 1,
+      "saturation.tape.enabled": true,
+      "spectral.airBand.enabled": true,
+      "maximizer.truePeakLimiter.enabled": true,
       "maximizer.truePeakLimiter.ceilingDb": -1,
-      "loudness.enabled": 1,
+      "loudness.enabled": true,
       "loudness.targetLufs": -14,
       "loudness.ceilingDb": -1
     }
@@ -241,7 +251,7 @@ Think of this helper as a preset generator with an explanation. It returns a ful
 
 | Field | Meaning |
 |-------|---------|
-| `chainConfig.params` | The **full proposed chain** as flat dot-notation keys (`stage.processor.param`). `*.enabled` is `1`/`0`. **These are the same keys `masterAudio` overrides accept**, so the suggestion can be rendered directly. |
+| `chainConfig.params` | The **full proposed chain** as flat dot-notation keys (`stage.processor.param`). `*.enabled` is a JSON boolean (`true`/`false`). **These are the same keys `masterAudio` overrides accept**, so the suggestion can be rendered directly. |
 | `explanation` | Plain-language reasons for each decision — show these in your UI so the choice is transparent. |
 | `genreCandidates` | The same ranked styles as the profile; the top one is the base preset. |
 | `profile` | A flattened copy of the source profile, so a suggestion is self-contained. |
@@ -337,6 +347,52 @@ A master at −8 LUFS is not "louder" on YouTube — the platform applies the `n
 :::
 
 <SonareDemo id="loudness-meter" />
+
+## Stereo sources
+
+The three helpers above take a single buffer. To use them on a stereo track you have to hand them a `0.5 * (left + right)` downmix, and that downmix is not a neutral stand-in for the pair: it measures quieter than the program actually is, because content that differs between the channels partly cancels when you sum them.
+
+The size of the error depends on how correlated the two channels are. Measuring a decorrelated pair at 48 kHz, the downmix reports **−22.55 LUFS** where the stereo path reports **−16.44 LUFS** — a **6.11 dB** under-read. On a pair whose channels are identical the gap is 3.01 dB, and all of it comes from the stereo side: BS.1770 sums the two channels' mean squares, while the downmix of identical channels is not attenuated at all (`0.5 * (L + L)` is just `L`). The remaining ~3 dB on the decorrelated pair is the cancellation in the downmix itself. Wide, reverberant, or heavily stereo-imaged material sits near the larger figure.
+
+That single measurement propagates:
+
+| What reads low | Consequence |
+|----------------|-------------|
+| Integrated loudness in the profile | The source looks quieter than it is |
+| The suggested loudness stage | The proposed chain aims to add gain that is not needed |
+| `normalizationGainDb` in the delivery preview | The platform looks like it will turn you up more than it will |
+| `ceilingRisk` | Follows from that loudness, so a real ceiling risk can read as safe |
+
+On the same decorrelated pair, the Spotify row reports `normalizationGainDb` **+8.55** through the mono path against **+2.44** through the stereo path — the mono answer overstates the available headroom by the full 6 dB.
+
+So reach for the stereo entry points whenever the source is genuinely stereo. Pass `left` and `right` and the helpers measure the pair directly, with BS.1770 channel summing for integrated loudness and the larger of the two channel true peaks.
+
+```typescript
+import { init, masteringAudioProfileStereo, masteringStreamingPreviewStereo } from '@libraz/libsonare';
+
+await init();
+
+// Request form only — these entry points have no positional overload.
+const profile = JSON.parse(masteringAudioProfileStereo({ left, right, sampleRate }));
+console.log(profile.loudness.integratedLufs);
+
+// Omitting `platforms` falls back to Spotify / Apple Music / YouTube.
+const preview = JSON.parse(masteringStreamingPreviewStereo({ left, right, sampleRate }));
+```
+
+```python
+import json
+import libsonare as sonare
+
+profile = json.loads(sonare.mastering_audio_profile_stereo(left, right, sample_rate=sample_rate))
+preview = json.loads(sonare.mastering_streaming_preview_stereo(left, right, sample_rate=sample_rate))
+```
+
+::: info Only the loudness block changes
+The stereo profile measures its `loudness` block from both channels — integrated LUFS and LRA from the channel-summed program, true peak as the larger of the two. The `spectral`, `dynamics`, and tempo fields describe shape and timing rather than absolute level, so they are still measured on the downmix. That is deliberate: it keeps them directly comparable with `masteringAudioProfile` on the same material.
+:::
+
+`masteringAssistantSuggestStereo` profiles through `masteringAudioProfileStereo`, so its loudness stage is built on the channel-summed program rather than on a downmix reading 6 dB low. The rest of the suggestion — the processor selection and the rationale text — has the same shape as the mono call.
 
 ## Related
 

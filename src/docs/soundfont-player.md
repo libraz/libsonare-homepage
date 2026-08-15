@@ -343,7 +343,7 @@ A composite EFX type realises as an ordered **chain** of the same DSP inserts ru
 - **Offline (bounce)** — EFX SysEx embedded in the arrangement is applied inline during the render: an EFX change mid-bounce takes effect on the next block.
 - **Live** — `pushMidiSysex()` builds the new effect chain off the audio thread and hands it over wait-free, so a live engine hears an EFX change **without stopping** playback.
 
-The demo below toggles a GS insertion effect on and off over the same phrase, so you can hear how each one reshapes the tone.
+The demo below renders one held chord through the GS-compatible player and lets you switch the insertion effect, so you can hear how each one reshapes the tone against the dry reference.
 
 <SonareDemo id="gs-efx" />
 

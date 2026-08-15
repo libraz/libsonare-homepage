@@ -63,7 +63,7 @@ There are a few practical details to know:
 | Detail | Meaning |
 |--------|---------|
 | `effects.reverb.plate` and `effects.reverb.dattorro` | Two names for the same Dattorro processor |
-| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). `effects.reverb.convolution` clamps `decaySec` to its synthesized-tail ceiling of 12 seconds at construction time. The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
+| Reverb params | `decaySec`, `decay`, `damping` / `hfDamping`, `dryWet`, `preDelayMs`, `reverbTimeS`, `densityHz`, `enableShelf` (which apply depend on the algorithm). `effects.reverb.convolution` clamps `decaySec` to its synthesized-tail ceiling of 12 seconds at construction time. The Dattorro/plate insert also accepts `modRateHz` (figure-8 tank LFO — low-frequency oscillator — rate in Hz, default `0.5`) and `modDepthSamples` (modulation depth in samples at the reverb's reference rate, default `6.0`) for its chorused tail. |
 | `effects.modulation.chorus` params | `rateHz`, `depthMs`, `centerDelayMs`, `dryWet` |
 | `effects.modulation.flanger` params | `rateHz`, `depthMs`, `centerDelayMs`, `feedback`, `dryWet` |
 | `effects.modulation.phaser` params | `rateHz`, `minHz`, `maxHz`, `stages`, `dryWet` |
@@ -74,7 +74,7 @@ There are a few practical details to know:
 | `effects.modulation.ringModulator` params | `carrierHz`, `dryWet` |
 | `effects.modulation.pitchShifter` params | `semitones`, `dryWet` |
 | `effects.delay.stereo` params | `delayTimeLMs`, `delayTimeRMs`, `feedback`, `pingPong`, `dryWet` |
-| `effects.reverb.convolution` | Needs an impulse response supplied through native insert construction |
+| `effects.reverb.convolution` | Needs an impulse response (IR — a recording of how a real space responds to a single short burst) supplied through native insert construction |
 | Convolution insert without an IR | Effectively behaves as a passthrough |
 
 ::: details What are these reverb algorithms?

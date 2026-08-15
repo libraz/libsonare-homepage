@@ -71,7 +71,7 @@ Start at the top and only move down when your MIDI needs a richer instrument.
 | MIDI played by your own (Python) synth | `bounce_with_instruments` — **Python only** | Host-supplied [`ExternalInstrument`](#python-host-your-own-instrument) |
 
 ::: info One Project, every runtime
-The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce` — including `--synth` to route MIDI through the built-in oscillator — plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
+The same `Project` model and core bounce behavior are exposed through WASM/JS, Node native, and Python. Names follow each language's convention (`bounceWithSynthInstrument` ↔ `bounce_with_synth_instrument`). The CLI exposes the project workflow as commands (`project bounce` — including `--synth` to route MIDI through the built-in synth — plus SMF/MIDI 2.0 import-export), but not every per-destination instrument binding option is wired there. The arrangement model, the compiler, and the DSP are identical across runtimes.
 :::
 
 ## Plain bounce: audio clips
@@ -225,7 +225,7 @@ Programs the SoundFont does not cover — including bouncing with no SoundFont l
 
 ## Python: host your own instrument
 
-The Python binding can host **any** instrument you write through the `ExternalInstrument` protocol, dispatched by `bounce_with_instruments`. Only `render` is required; `prepare`, `on_event`, and the `latency_samples` / `tail_samples` attributes are optional (duck-typed).
+The Python binding can host **any** instrument you write through the `ExternalInstrument` protocol, dispatched by `bounce_with_instruments`. Only `render` is required; `prepare`, `on_event`, and the `latency_samples` / `tail_samples` attributes are optional (duck-typed). Events reach `on_event` as **UMP** (Universal MIDI Packet) words — the MIDI 2.0 packet encoding — so a note-on arrives as a tuple of packet words rather than a decoded object.
 
 ```python
 import numpy as np
@@ -336,11 +336,13 @@ The Python package ships a `project` subcommand that loads a project JSON and re
 # Plain bounce (audio clips; MIDI tracks render silently)
 sonare project bounce --in song.json -o master.wav --sample-rate 48000
 
-# Route MIDI through the built-in oscillator synth (default sine waveform)
+# Route MIDI through the built-in synth, following the project's GM programs
 sonare project bounce --in song.json -o master.wav --synth
 
-# Pick the built-in oscillator waveform: sine | saw | square | triangle
+# Or pin every destination to one preset from the NativeSynth catalog
+# (`sonare project synth-presets` lists them all)
 sonare project bounce --in song.json -o master.wav --synth saw
+sonare project bounce --in song.json -o pad.wav --synth warm-pad
 
 # Inspect first: compile diagnostics (including the no-instrument warning)
 sonare project compile --in song.json --json

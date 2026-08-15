@@ -34,7 +34,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 | 解析 | 音声ではなく **JSON** を返す測定 | `match.referenceLoudness`、`stereo.monoCompatCheck` |
 
 ::: info サイドチェイン／ラウドネス系プロセッサ
-ダイナミクス系には、`dynamics.duckingProcessor`（サイドチェインダッキング）、`maximizer.loudnessOptimize`（LUFS ターゲットのマキシマイズ）、`dynamics.deesser` の bandpass `Q` コントロール（ステレオ保持つき）があります。
+ダイナミクス系には、`dynamics.duckingProcessor`（サイドチェインダッキング）、`maximizer.loudnessOptimize`（[LUFS](./glossary/lufs.md) ターゲットへのマキシマイズ。LUFS は Loudness Units relative to Full Scale の略で、放送規格のラウドネス尺度です）、`dynamics.deesser` の bandpass `Q` コントロール（ステレオ保持つき）があります。
 
 これらは `dynamics.transientShaper`、`dynamics.upwardCompressor`、`dynamics.upwardExpander`、`dynamics.vocalRider`、`dynamics.sidechainRouter` と並ぶ名前付きプロセッサです。
 :::
@@ -55,7 +55,7 @@ description: libsonare の名前付きマスタリング API、プリセット�
 |--------------|----------|-----------|
 | レベルをそろえる／ダイナミクス制御 | `dynamics.compressor`、`dynamics.limiter`、`multiband.compressor` | [ダイナミクス](./glossary/mastering/dynamics.md) |
 | 潰さずパンチを出す | `dynamics.transientShaper`、`dynamics.parallelComp` | [ダイナミクス](./glossary/mastering/dynamics.md) |
-| 耳障りな「サ行」を抑える | `dynamics.deesser` | [ダイナミクス](./glossary/mastering/dynamics.md) |
+| 耳障りな歯擦音（サ行）を抑える | `dynamics.deesser` | [ダイナミクス](./glossary/mastering/dynamics.md) |
 | 音楽ベッドを声の下に下げる | `dynamics.duckingProcessor`、`dynamics.sidechainRouter` | [ミキシングエンジン](./mixing.md) |
 | 全体のトーン／明るさを整える | `eq.tilt`、`eq.parametric`、`spectral.airBand` | [トーンと Air](./glossary/mastering/tone-air.md) |
 | 温かみ／倍音を加える | `saturation.tape`、`saturation.tube`、`saturation.exciter` | [トーンと Air](./glossary/mastering/tone-air.md) |
@@ -101,8 +101,8 @@ description: libsonare の名前付きマスタリング API、プリセット�
 マキシマイザー／final と解析の API の下には、いくつかの機能があります。
 
 - インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けを適用します。BS.1770-4 自体が規格として定めているのは 5.1（6 チャンネル）までで、7.1／8 チャンネルの重み付け（サイドサラウンドのペアをリアサラウンドと同様に +1.5 dB として扱う）は規格に含まれない非公式の拡張です。
-- 内部のオーバーサンプラーとトゥルーピーク段はオーバーサンプリング係数として 1〜16 の 2 のべき乗（1, 2, 4, 8, 16）を受け付けます（ライブメーターも同じ係数）。CPU と引き換えにサンプル間ピークの精度を上げます。
-- UI 向けには表示用に間引いたメーターのバリアントがあります。`meteringVectorscopeDecimated(...)` と `meteringPhaseScopeDecimated(...)` は点列を最大 `maxPoints` 点まで間引くので、点数の多いスコープでも描画コストを抑えられます。`meteringSpectrumFrame(...)` は、スペクトラムアナライザーのスナップショット向けに単一フレーム（時間平均なし）のスペクトラムを読み取ります。
+- 内部のオーバーサンプラーと True Peak 段はオーバーサンプリング係数として 1〜16 の 2 のべき乗（1, 2, 4, 8, 16）を受け付けます（ライブメーターも同じ係数）。CPU と引き換えにサンプル間ピーク（ISP）の精度を上げます。
+- UI 向けには `meteringVectorscope(...)` と `meteringPhaseScope(...)` に `maxPoints` を渡します。点列を最大 `maxPoints` 点まで間引くので、点数の多いスコープでも描画コストを抑えられます（`maxPoints` を省くと入力サンプル 1 個につき 1 点を返します。旧来の `meteringVectorscopeDecimated(...)` ／ `meteringPhaseScopeDecimated(...)` は非推奨で、内部で委譲するだけです）。`meteringSpectrumFrame(...)` は、スペクトラムアナライザーのスナップショット向けに単一フレーム（時間平均なし）のスペクトラムを読み取ります。
 - `multiband.*` のソロプロセッサ（`compressor`、`dynamicEq`、`expander`、`imager`、`limiter`、`saturation` の全 6 種）は、いずれも同じクロスオーバー機構を共有し、クロスオーバー数を任意に指定できます。固定 3 バンドではなく、素材に合わせたバンド数で分割できます。この入口が公開する `cutoffNHz` スロットは最大 8 個（`cutoff0Hz` 〜 `cutoff7Hz`）なので、`multiband.*` の呼び出し 1 回で最大 9 バンドまで扱えます。
 :::
 
@@ -176,6 +176,8 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 | ペア解析 | `match.referenceLoudness`, `match.tonalBalance`, `match.tonalBalanceLogBands`, `match.matchEqCurve`, `match.estimateReferenceDelaySamples` |
 | ステレオ解析 | `stereo.monoCompatCheck`, `stereo.monoCompatCheckLogBands` |
 
+これらは `masteringPairAnalyze(...)` / `masteringStereoAnalyze(...)` に渡すレジストリ名です。レジストリとは別に、アシスタント系ヘルパーにも左右のペアを直接受け取るステレオ版があります — `masteringAudioProfileStereo`、`masteringAssistantSuggestStereo`、`masteringStreamingPreviewStereo` の 3 つです。ダウンミックスをプロファイルすると無相関素材では積分ラウドネスを約 6 dB 過小に読むため、これらを使ってください。詳細は[ステレオ素材](./mastering-assistant.md#ステレオ素材)を参照してください。
+
 ::: details 「トーナルバランス」と「モノラル互換性」は何を測る？
 - **トーナルバランス**（`match.tonalBalance`）は、トラックのエネルギーが各周波数帯（サブ・低域・中域・プレゼンス・エア）にどう分布しているかを表します。リファレンス曲と比べると、自分の音がどこで暗い／明るいかが分かり、`match.applyMatchEq` がそれを補正します。
 - **モノラル互換性**（`stereo.monoCompatCheck`）は、ステレオミックスをモノラルに合算したときに何が起きるかを予測します。スマホのスピーカー、クラブの PA、一部の放送経路では、この確認が重要です。
@@ -189,7 +191,7 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 
 ## 呼び出し方
 
-単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ範囲と既定値、組み込みプリセット一覧も取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
+単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・id・型・単位・リアルタイム安全性）と、組み込みプリセット一覧も取得できます。ただし `min` / `max` / `default` は常に `null` なので、ピッカーの生成には使えてもコントロールの範囲決めには使えません。値の範囲は本ページのプロセッサ別の表を参照してください。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
 
 ::: code-group
 
@@ -291,9 +293,13 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 
 | 入口 | 設定スタイル |
 |------|--------------|
-| WASM `masteringChain(...)` | ネストした設定オブジェクト |
+| WASM `masteringChain(...)` | ネストした設定オブジェクト。同じオブジェクト内でドット記法のリーフキーも受け付けます |
 | `masterAudio(...)` と Python/Node 相当 | `'loudness.targetLufs'` のようなフラットなドット記法 |
 | [マスタリングアシスタント](./mastering-assistant.md) の `chainConfig.params` | `masterAudio` にそのまま渡せるフラット形式。`params["dynamics.multibandComp"]` には、後述する任意バンド数のネストされた v2 オブジェクトが入ることもあります — [チェーン設定 JSON スキーマ](#チェーン設定-json-スキーマ) を参照してください |
+
+`MasteringChainConfig` は両方の書き方を受け付けます。`'loudness.targetLufs': -20` のようなドット記法のリーフキーは、ネストした `loudness: { targetLufs: -20 }` と並べても置き換えても構いません。コアがキーを検証し、未知のキーは拒否します。ドット記法は C ABI がパラメータを運ぶ形式でもあるため、上書き値を手で書き下すのではなく動的に組み立てる場面では、こちらが扱いやすい形になります。
+
+正準（canonical）な書き方はネスト形式です。手で書くコードではネスト形式を選んでください。TypeScript はネストした設定をフィールド単位で型検査できますが、ドット記法のキーは実行時にしか検査されません。
 
 repair のチェーンキーは、単発プロセッサのレジストリ名ではなくチェーン内のスロットに合わせます。フラットな上書きでは `repair.denoise.*` / `repair.dereverb.*`、`masteringChain(...)` のネスト形式では `repair: { denoise: ..., dereverb: ... }` を使ってください。
 ::::

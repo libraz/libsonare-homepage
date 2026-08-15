@@ -3,7 +3,7 @@
 This page is the beginner-friendly route through the libsonare docs. You do not need to understand DSP, MIR, WebAssembly, or mastering terminology before starting.
 
 ::: info Acronyms you will see early
-**DSP** means signal processing: measuring or changing audio as numbers. **MIR** means reading musical information such as BPM, key, and chords from audio. **WASM / WebAssembly** is the browser runtime format. **API** means the functions and classes your app calls. **CLI** means a terminal command. At this stage, you only need enough vocabulary to choose the next page.
+**DSP** (digital signal processing) means measuring or changing audio as numbers. **MIR** (Music Information Retrieval) means reading musical information such as BPM, key, and chords from audio. **WASM / WebAssembly** is the browser runtime format. **API** means the functions and classes your app calls. **CLI** means a terminal command. At this stage, you only need enough vocabulary to choose the next page.
 :::
 
 If you want to read the docs linearly, use this order:
@@ -48,7 +48,7 @@ When the same workflow can be shown safely in Browser / WASM, Python, and CLI, t
 
 For APIs that are inherently WASM / C++ oriented, such as the realtime engine or AudioWorklet bridge, the docs point to the batch alternative or runtime reference instead of implying that Python / CLI have the same live callback API.
 
-Room acoustics includes room decay, clarity, blind estimates, equivalent-room estimates, RIR synthesis, and room morphing.
+Room acoustics includes room decay, clarity, blind estimates, equivalent-room estimates, RIR (room impulse response) synthesis, and room morphing.
 :::
 
 ## Implementation Checklist

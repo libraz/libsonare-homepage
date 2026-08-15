@@ -25,7 +25,7 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 :::
 
 ::: tip このページの位置づけ
-本ページはコントローラーからエンジンを*演奏する*話です。ノートが届く楽器のバインドは [NativeSynth](./native-synth.md)（パッチ駆動のシンセサイザー）と [SoundFont プレイヤー](./soundfont-player.md)（GS/GM の `.sf2` 再生）を参照してください。演奏をタイムラインへ録音するには [録音とテイク](./recording-and-takes.md) を参照します。マイク音声の入力は別経路です。最後の節を参照してください。
+本ページはコントローラーからエンジンを*演奏する*話です。ノートが届く楽器のバインドは [内蔵シンセサイザー](./native-synth.md)（NativeSynth。パッチ駆動のシンセサイザー）と [SoundFont プレイヤー](./soundfont-player.md)（GS/GM の `.sf2` 再生）を参照してください。演奏をタイムラインへ録音するには [録音とテイク](./recording-and-takes.md) を参照します。マイク音声の入力は別経路です。最後の節を参照してください。
 :::
 
 ## ライブ MIDI の流れ
@@ -56,7 +56,7 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 
 このページを読むと、次のことができるようになります。
 
-- 組み込み・NativeSynth・SoundFont の楽器を **MIDI デスティネーション**へバインドし、ライブイベントを送れる。
+- 内蔵の波形シンセ・内蔵シンセサイザー（NativeSynth）・SoundFont の楽器を **MIDI デスティネーション**へバインドし、ライブイベントを送れる。
 - ノートオン／ノートオフ／CC のライブイベントをサンプル精度でキューイングできる。
 - `bindMidiCc` で MIDI CC をエンジンパラメータへマッピングできる。
 - デスティネーションごとの MIDI FX インサートを、ノートを残さず差し替えられる。
@@ -76,11 +76,11 @@ libsonare の `RealtimeEngine` は、トランスポート・クリップ・オ�
 | バインド方法 | 楽器 | 参照 |
 |--------------|------|------|
 | `setBuiltinInstrument(config, destinationId)` | 内蔵の波形シンセ（データ不要の最下層） | — |
-| `setSynthInstrument(patch, destinationId)` | パッチ駆動の NativeSynth | [NativeSynth](./native-synth.md) |
+| `setSynthInstrument(patch, destinationId)` | パッチ駆動の内蔵シンセサイザー（NativeSynth） | [内蔵シンセサイザー](./native-synth.md) |
 | `setSf2Instrument(config, destinationId)` | GS 互換の SoundFont プレイヤー | [SoundFont プレイヤー](./soundfont-player.md) |
 
 ::: tip MPE 表現は setBuiltinInstrument の機能
-真の MPE スタイルの per-note 表現（per-note のピッチベンドと、チャンネル／ポリフォニックプレッシャー、フル 16 ビットの MIDI 2.0 ベロシティ）を持つのは、内蔵の波形シンセ（`setBuiltinInstrument`）だけです。その MPE ベンドレンジは ±2 半音に固定されています。NativeSynth（`setSynthInstrument`）はチャンネル単位で動作します。RPN-0 で設定可能なベンドレンジと、フル解像度の RPN/NRPN・14 ビット CC を持ちますが、ベロシティは 7 ビットに量子化され、per-note プレッシャーは追跡しません。NativeSynth のチャンネル単位のベンド／CC の詳細は [NativeSynth](./native-synth.md) を参照してください。
+真の MPE（MIDI Polyphonic Expression）スタイルの per-note 表現（per-note のピッチベンドと、チャンネル／ポリフォニックプレッシャー、フル 16 ビットの MIDI 2.0 ベロシティ）を持つのは、内蔵の波形シンセ（`setBuiltinInstrument`）だけです。その MPE ベンドレンジは ±2 半音に固定されています。内蔵シンセサイザー（`setSynthInstrument`）はチャンネル単位で動作します。ベンドレンジは RPN 0 で設定できますが、それ以外の RPN には反応せず、NRPN の値も読まず、汎用の 14 ビット CC ペアリングも持ちません。ベロシティと MIDI 2.0 の CC 値はどちらも 7 ビットへ量子化され、per-note プレッシャーは追跡しません。高分解能の RPN／NRPN・14 ビット CC を扱うのは、楽器側ではなく 1 段上、後述するエンジンの `bindMidiCcBinding(...)` パラメータ層です。チャンネル単位のベンド／CC の詳細は [内蔵シンセサイザー](./native-synth.md) を参照してください。
 :::
 
 ```typescript
@@ -107,8 +107,8 @@ engine.setSf2Instrument({ destinationId: 1, gain: 1 }, 1);
 
 - **即時エンジンコマンド** — `pushMidiNoteOn` / `pushMidiNoteOff` / `pushMidiCc` はそれぞれ `destinationId` と `renderFrame`（または「できるだけ早く」を表す `-1`）を取ります。`pushMidiPanic(renderFrame)` は `renderFrame` のみを取り、すべてのデスティネーションの発音中ノートを一括で解放します。
 - **エンジン所有のライブ入力ソース** — `setMidiInputSource(destinationId)` で専用の入力レーンを開き、`pushMidiInputNoteOn` / `pushMidiInputNoteOff` / `pushMidiInputCc` で `portTimeSamples` タイムスタンプ付きのイベントを送ります。Web MIDI ブリッジはこのレーンへイベントを流します。
-- **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
-- **UMP ワード 1 つ** — `pushMidiUmp(destinationId, word0, renderFrame = -1)` は、32 ビットの UMP ワードにパックした MIDI 1.0 チャンネルボイスメッセージを 1 つキューイングし、即座にディスパッチします。トランスポートのシーク後にプログラム・ピッチベンド・プレッシャーの状態を復元するのに適した簡潔な方法です。メッセージ種別ごとに別々の `pushMidi*` を呼び分けるのではなく、それぞれをワードにパックして送ります。
+- **ライブ SysEx** — `pushMidiSysex(destinationId, data, renderFrame = -1)` は、デスティネーションへ完全な SysEx（System Exclusive。メーカー独自の自由形式メッセージ）フレームをキューイングします。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なメッセージ（1〜512 バイト）で、`renderFrame` はほかの `pushMidi*` 呼び出しと同じ即時／スケジュール規約に従います。主な用途は、再生を止めずに、ライブの SF2 バインド済みデスティネーションへ GS/GM リセットや GS インサーションエフェクト（EFX）の選択を届けることです。そのバイト列が何を選ぶかは [SoundFont プレイヤー](./soundfont-player.md) を参照してください。
+- **UMP ワード 1 つ** — `pushMidiUmp(destinationId, word0, renderFrame = -1)` は、32 ビットの UMP（Universal MIDI Packet。MIDI 2.0 のメッセージ形式）ワードにパックした MIDI 1.0 チャンネルボイスメッセージを 1 つキューイングし、即座にディスパッチします。トランスポートのシーク後にプログラム・ピッチベンド・プレッシャーの状態を復元するのに適した簡潔な方法です。メッセージ種別ごとに別々の `pushMidi*` を呼び分けるのではなく、それぞれをワードにパックして送ります。
 
 同じ SysEx 呼び出しはどのバインディングにもあり、名前の付け方だけが変わります。`data` は先頭の `0xF0` と末尾の `0xF7` を含む完全なフレーム（1〜512 バイト）で、最後の引数はほかの `pushMidi*` 呼び出しと同じく「即時」を表す `-1` のレンダーフレームです。
 
@@ -508,7 +508,7 @@ C++ ソースビルドでは、既定で無効の CMake オプション `BUILD_C
 
 ## 関連
 
-- [NativeSynth](./native-synth.md) — デスティネーションへバインドするパッチ駆動の楽器
+- [内蔵シンセサイザー](./native-synth.md) — デスティネーションへバインドするパッチ駆動の楽器
 - [SoundFont プレイヤー](./soundfont-player.md) — デスティネーションでの GS/GM `.sf2` 再生
 - [録音とテイク](./recording-and-takes.md) — 演奏（およびマイク音声入力）の取り込み
 - [プロジェクト編集](./project-editing.md) — MIDI クリップ、CC ラーン、CC からオートメーションへの変換

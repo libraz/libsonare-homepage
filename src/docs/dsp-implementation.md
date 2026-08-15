@@ -54,6 +54,8 @@ Where this page says "main use", it describes the public intent implied by the p
 
 ## Shared Building Blocks
 
+Most processors are not built from unique magic. They combine a small set of parts — filters, level detection, delay, stereo transforms, convolution — and the table below shows where each part turns up.
+
 | Building block | Implementation role | Used by |
 |----------------|---------------------|---------|
 | Biquad and filter design | Low-latency IIR EQ, shelves, cuts, presence/air shaping, detector filtering | EQ, dynamics sidechains, spectral enhancers, stereo filters |
@@ -77,7 +79,7 @@ Where this page says "main use", it describes the public intent implied by the p
 
 ## Analysis And Feature DSP
 
-The analysis side — music information retrieval (MIR): extracting tempo, key, chords, and similar musical facts from audio — is built from reusable feature stages rather than one monolithic analyzer. STFT and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, pitch trackers, and section features. Higher-level analyzers then reuse those representations where possible.
+The analysis side — music information retrieval (MIR): extracting tempo, key, chords, and similar musical facts from audio — is built from reusable feature stages rather than one monolithic analyzer. The STFT (short-time Fourier transform) and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, pitch trackers, and section features. Higher-level analyzers then reuse those representations where possible.
 
 | Family | Implementation role | Main use |
 |--------|---------------------|----------|
@@ -86,7 +88,7 @@ The analysis side — music information retrieval (MIR): extracting tempo, key, 
 | Chroma / CQT / VQT / NNLS chroma | Pitch-class and log-frequency representations, including a constant-Q chromagram (`chromaCqt`) | Key, chord, harmonic similarity, and pitch-aware features |
 | Onset / tempogram / PLP | Onset envelope and local periodicity representations | BPM, beat, rhythm, and pulse analysis |
 | Pitch tracking | YIN and pYIN style F0 estimation | Melody extraction and monophonic pitch analysis |
-| Inverse features | Pseudo-inverse mel/MFCC paths and Griffin-Lim audio synthesis | Debug previews and feature round-trip checks |
+| Inverse features | NNLS (non-negative least squares) mel-filterbank inversion, inverse-DCT MFCC un-projection, and Griffin-Lim audio synthesis | Debug previews and feature round-trip checks |
 | Room acoustics | Energy decay curve metrics for IRs, blind free-decay fitting, equivalent-room estimation, image-source RIR synthesis, and creative room morphing | RT60, EDT, C50, C80, D50, band decay, volume, dimensions, absorption, DRR, generated RIRs, and confidence |
 
 Feature inversion, blind acoustic estimation, and equivalent-room estimation are useful, but they are estimates. Inverse helpers cannot restore discarded phase or mel/MFCC detail; blind acoustic and room-estimation modes report confidence because ordinary recordings may not contain a clean free-decay region.
@@ -100,6 +102,34 @@ The streaming variant, `StreamingMasteringChain`, runs the same stages in the sa
 Offline-only processors can still appear in high-level workflows. Real-time render paths are limited by each processor's contract; changes that resize buffers or rebuild FIR kernels are not audio-thread safe.
 
 Presets are not separate DSP algorithms. They are named configurations that combine repair, EQ, dynamics, stereo processing, true-peak limiting, and loudness optimization with genre/platform defaults.
+
+In practice it helps to picture the chain as a queue the audio walks through in order: clean up unwanted noise, shape the tone, tame the level swings, check the stereo spread, and finally manage peaks and loudness. Each stage is useful on its own, but the final sound comes from the order and the settings together.
+
+<FlowDiagram
+  title="Mastering Chain Stage Order"
+  :nodes="[
+    { id: 'repair', label: 'Repair', col: 0, row: 0, group: 'clean' },
+    { id: 'eq', label: 'EQ', col: 1, row: 0, group: 'tone' },
+    { id: 'dyn', label: 'Dynamics', col: 2, row: 0, group: 'tone' },
+    { id: 'stereo', label: 'Stereo Processing', col: 3, row: 0, group: 'image' },
+    { id: 'tp', label: 'True-Peak Limiting', col: 4, row: 0, group: 'output' },
+    { id: 'loud', label: 'Loudness Optimization', col: 5, row: 0, group: 'output', variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'repair', to: 'eq' },
+    { from: 'eq', to: 'dyn' },
+    { from: 'dyn', to: 'stereo' },
+    { from: 'stereo', to: 'tp' },
+    { from: 'tp', to: 'loud' }
+  ]"
+  :groups="[
+    { id: 'clean', label: 'Clean up' },
+    { id: 'tone', label: 'Tone and level' },
+    { id: 'image', label: 'Image' },
+    { id: 'output', label: 'Output' }
+  ]"
+  caption="The same configuration always produces this stage order; presets change the settings inside the stages, not their sequence."
+/>
 
 ## Dynamics
 
@@ -153,7 +183,7 @@ Presets are not separate DSP algorithms. They are named configurations that comb
 | `final.dither` | Adds shaped or unshaped low-level noise before quantization | Reduce quantization distortion | Export-stage processor |
 | `final.outputChain` | Groups output gain, ceiling, bit depth, dither, and final checks | Last-stage export preparation | Keep after tonal/dynamics stages |
 | `maximizer.adaptiveRelease` | Limiter release time adapts to signal behavior | Cleaner loudness increase with fewer pumping artifacts | Adds detector state |
-| `maximizer.loudnessOptimize` | Measures loudness and applies gain strategy toward a target | Hit LUFS targets for streaming/broadcast | Full-file optimization is offline by nature |
+| `maximizer.loudnessOptimize` | Measures loudness and applies gain strategy toward a target | Hit LUFS (loudness units relative to full scale) targets for streaming/broadcast | Full-file optimization is offline by nature |
 | `maximizer.maximizer` | Loudness-oriented limiting with ceiling management | Raise perceived loudness | Use true-peak stage after aggressive settings |
 | `maximizer.softKneeMax` | Soft-knee limiting curve before hard ceiling | Less abrupt limiting | Useful before final true-peak protection |
 | `maximizer.truePeakLimiter` | Oversampled true-peak estimation and ceiling control | Avoid inter-sample overs | Adds oversampling cost and lookahead-style latency |
@@ -262,4 +292,16 @@ Automation lanes are sample-positioned and support `linear`, `exponential`, `hol
 
 ## Real-Time Engine DSP Boundary
 
-`RealtimeEngine` owns transport, tempo synchronization, graph runtime, clip playback, metronome, capture, monitor runtime, offline bounce, and telemetry. It is not a replacement for the mastering processor registry; it is the scheduler and graph runtime that can host real-time-safe DSP blocks. File-wide analysis, heavier repair stages, and loudness optimization remain offline or latency-tolerant operations.
+`RealtimeEngine` owns transport, tempo synchronization, graph runtime, clip playback, metronome, capture, monitor runtime, offline bounce, and telemetry.
+
+It is not a replacement for the mastering processor registry. It is the scheduler and graph runtime that can host real-time-safe DSP blocks.
+
+File-wide analysis, heavier repair stages, and loudness optimization remain offline or latency-tolerant operations.
+
+Realtime processing has to finish with the current block of audio before the next one arrives. That rules out anything that:
+
+- needs to see the whole file before deciding;
+- rebuilds a large buffer;
+- requires a long lookahead.
+
+Conversely, EQ, simple gain, short delays, and stateful compressors are easy to host in realtime once they have been prepared.

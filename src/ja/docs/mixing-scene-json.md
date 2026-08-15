@@ -49,7 +49,7 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 ::: warning 未知のキーは無視されるが、insert パラメータは監査される
 パーサーは認識しないシーンフィールドを無視するため、前方互換のプロデューサは古いリーダーを壊さずにメタデータを追加できます。裏を返せば、**綴り間違いのシーンキーは黙って捨てられます** — `processorName`（誤）と `processor`（正）が典型です。設定が効かないように見えたら、以下の表と綴りを照合してください。
 
-インサートの `params` キーにはセーフティネットがあります。シーンの読み込み後、どのプロセッサも消費しなかったパラメータキーは**非致命的な警告**として `Mixer.sceneWarnings()`(Python は `scene_warnings()`)から読み出せます。シーン自体は読み込まれ、未知のキーは単に効果を持たないだけです — 「効かないつまみ」を探し回る代わりに、読み込み直後に警告を確認してタイプミスを見つけてください。インサートが実際に読むキーの一覧は `masteringInsertParamNames(name)`(Python は `mastering_insert_param_names(name)`)で列挙できます。
+インサートの `params` キーにはセーフティネットがあります。シーンの読み込み後、どのプロセッサも消費しなかったパラメータキーは**非致命的な警告**として `Mixer.sceneWarnings()`（Python は `scene_warnings()`）から読み出せます。シーン自体は読み込まれ、未知のキーは単に効果を持たないだけです — 「効かないつまみ」を探し回る代わりに、読み込み直後に警告を確認してタイプミスを見つけてください。インサートが実際に読むキーの一覧は `masteringInsertParamNames(name)`（Python は `mastering_insert_param_names(name)`）で列挙できます。
 :::
 
 ## ストリップ
@@ -83,7 +83,7 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 
 実行時にパンを編集したあとでシーンを書き出しても、ストリップの現在の `panMode` は保持されます。パン関連フィールドを手で組み直すのではなく、`Mixer.toSceneJson()` / `Mixer.to_scene_json()` を使ってください。
 
-インサートの `slot` とセンドの `timing` は**必ず文字列で指定してください**。`"timing": 1` のような文字列以外の値は、読み込み時に `InvalidParameter` エラー(`send timing must be a string ("pre" or "post")`)として拒否されます。常に `"pre"` か `"post"` と書いてください。
+インサートの `slot` とセンドの `timing` は**必ず文字列で指定してください**。`"timing": 1` のような文字列以外の値は、読み込み時に `InvalidParameter` エラー（`send timing must be a string ("pre" or "post")`）として拒否されます。常に `"pre"` か `"post"` と書いてください。
 :::
 
 ::: details フィールド用語: デュアルパン・ポラリティ反転・パンロー・PDC
@@ -136,6 +136,8 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 :::
 
 ## VCA グループ
+
+VCA グループは、複数ストリップの音声を再ルーティングせずにレベルだけをまとめて調整する 1 本のフェーダーです（VCA は voltage-controlled amplifier＝電圧制御アンプの略）。
 
 | フィールド | 型 | 意味 |
 |-----------|----|------|
@@ -225,11 +227,11 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 />
 
 ::: tip `eq.parametric` インサートはバンドインデックス指定のキーを使う
-`eq.parametric` インサートが読むのは**バンドインデックス指定のキー**です — `band{N}.type`、`band{N}.frequencyHz`、`band{N}.gainDb`、`band{N}.q`、およびバンドごとのダイナミック EQ フィールド。このプリセットでは `band0` が 80 Hz のハイパス(`"band0.type": 4` は EQ バンドタイプ enum の `HighPass`)、`band1` が 4 kHz の +2 dB プレゼンスベルで、実際に機能するハイパス＋プレゼンスブーストになっています。
+`eq.parametric` インサートが読むのは**バンドインデックス指定のキー**です — `band{N}.type`、`band{N}.frequencyHz`、`band{N}.gainDb`、`band{N}.q`、およびバンドごとのダイナミック EQ フィールド。このプリセットでは `band0` が 80 Hz のハイパス（`"band0.type": 4` は EQ バンドタイプ enum の `HighPass`）、`band1` が 4 kHz の +2 dB プレゼンスベルで、実際に機能するハイパス＋プレゼンスブーストになっています。
 
-キーの全一覧は `masteringInsertParamNames('eq.parametric')` で取得できます。一覧外のキー(たとえばフラットな `highPassHz`)も読み込みは通りますが効果を持たず、シーン読み込み後に `Mixer.sceneWarnings()` が報告します。
+キーの全一覧は `masteringInsertParamNames('eq.parametric')` で取得できます。一覧外のキー（たとえばフラットな `highPassHz`）も読み込みは通りますが効果を持たず、シーン読み込み後に `Mixer.sceneWarnings()` が報告します。
 
-つまみ 1 つのトーン調整には、より単純なインサートも使えます。明暗を広く傾けるなら `eq.tilt`(`tiltDb`、`pivotHz`)、高域シェルフの「エア」を持ち上げるなら `spectral.airBand`(`amount`、`shelfFrequencyHz`)です。
+つまみ 1 つのトーン調整には、より単純なインサートも使えます。明暗を広く傾けるなら `eq.tilt`（`tiltDb`、`pivotHz`）、高域シェルフの「エア」を持ち上げるなら `spectral.airBand`（`amount`、`shelfFrequencyHz`）です。
 :::
 
 ## 編集して保存し直す

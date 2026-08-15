@@ -40,7 +40,7 @@ By the end of this page you should be able to:
 | Bindings | `bindings/wasm/tests/*.test.ts`, `bindings/node/tests/*.test.ts`, `bindings/python/tests/*.py`, and typing smoke tests cover exported API shape, structured-clone-safe WASM returns, input-validation guards, and cross-binding behavior |
 | Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so API drift is caught before release |
 | CLI | `tests/cli/cli_test.cpp` and Python CLI parser coverage exercise terminal entry points |
-| Performance | `benchmarks/*.cpp`, `benchmarks/results.json`, and `benchmarks/results_cpp.json` cover spectrum, streaming mel/chroma, mastering support, ISP, stereo, mixing, EQ, and resampling-related hot paths |
+| Performance | `benchmarks/*.cpp`, `benchmarks/results.json`, and `benchmarks/results_cpp.json` cover spectrum, streaming mel/chroma, mastering support, ISP (inter-sample peak) detection, stereo, mixing, EQ, and resampling-related hot paths |
 
 ::: details What do "golden hashes", "property checks", and "no-allocation checks" mean?
 These are the kinds of automated test used above.

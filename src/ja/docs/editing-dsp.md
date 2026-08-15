@@ -37,7 +37,7 @@ DSP は Digital Signal Processing の略で、音声信号を数値として測�
 
 母音の響きや声の太さ・キャラクターを決めますが、ピッチ（実際に歌っている音高）とは独立しています。
 
-`voiceChange` がこの 2 つを分けて扱うのはこのためです。フォルマント係数を下げると声は大きく暗く、上げると小さく明るく聞こえます。ピッチは指定した位置のまま保たれます。
+`voiceChange` がこの 2 つを分けて扱うのはこのためです。フォルマント係数を下げると声は大きく暗く、上げると小さく明るく聞こえます。フォルマント段が動かすのはスペクトル包絡だけなので、音程は `pitchSemitones` で指定した位置に残ります。
 :::
 
 <SonareDemo id="pitch-shift" />
@@ -96,6 +96,20 @@ sonare voice-change vocal.wav --pitch-semitones 5 --formant-factor 1.1 -o charac
 
 :::
 
+::: warning `formantFactor` はピッチシフトの*後*に掛かる
+`voiceChange` は先に移調を行いますが、移調そのものがすでにフォルマントを引きずり上げます。フォルマント段はその移動済みの信号に対して動くため、`formantFactor` は既存の移動量にさらに掛け算されます。つまり `formantFactor: 1.0` は「フォルマントを保つ」ではなく「追加で動かさない」という意味です。上の `{ pitchSemitones: 5, formantFactor: 1.1 }` では、フォルマントはおよそ 2<sup>5/12</sup> × 1.1（約 1.47 倍）まで上がるので、透明な移調ではなく意図的なキャラクター変更になります。
+
+自然に聞こえる移調にしたい場合は、ピッチ比の逆数を渡して移調によるフォルマント移動を打ち消してください。
+
+```typescript
+const pitchSemitones = 5;
+const transposed = voiceChange(vocal, sampleRate, {
+  pitchSemitones,
+  formantFactor: 2 ** (-pitchSemitones / 12), // 0.749 — 声道を元の位置に保つ
+});
+```
+:::
+
 笛鳴りの減衰や短いアーティファクト補修のように、時間／周波数の矩形を直接編集したい場合は [スペクトル編集](./spectral-editing.md) を参照してください。
 
 ### `pitchCorrectToMidi(...)` の考え方
@@ -120,7 +134,13 @@ const tuned = pitchCorrectToMidi(vocal, sampleRate, currentMidi, targetMidi);
 **F0** は基本周波数、つまりピッチのことで、Hz で測ります。ピッチ検出器は短い時間区切り（**フレーム**。ここではサンプル `hopLength` 個分）ごとに F0 を 1 つ返し、ピッチの動きをたどる F0 **輪郭**を作ります。フレームが**有声**とは、歌い手が息や無音ではなく実際に音高のある音（歌われた母音など）を出している状態で、補正する価値があるのは有声フレームだけです。
 :::
 
-`pitchCorrectToMidi(...)` は、要求したトランスポーズ量をただちに全量適用し、入力の長さを保ちます。時間とともに変わるピッチ輪郭には追従しません。
+`pitchCorrectToMidi(...)` は、要求したトランスポーズ量をただちに適用し、入力の長さを保ちます。時間とともに変わるピッチ輪郭には追従しません。
+
+::: warning 補正量は ±12 半音でクランプされる
+`pitchCorrectToMidi(...)` と `pitchCorrectToMidiTimevarying(...)` は、補正上限が 1 オクターブの既定設定で内部の補正器を構築し、どちらの入口もその上限を変える手段を公開していません。これを超える音程は、エラーも診断も出さずに黙ってクランプされます。たとえば `pitchCorrectToMidi(vocal, sampleRate, 48, 72)` は +24 半音を要求しても、+12 半音だけ動いた音声を返します。
+
+1 オクターブを超えて動かしたい場合は、単純な移調なら `pitchShift(...)` を、補正として行いたいなら `maxCorrectionSemitones` を明示した `pitchCorrectTimevarying(...)` を使ってください。
+:::
 
 フレームごとに補正を変えたいときは `pitchCorrectToMidiTimevarying(...)` を使います。呼び出し側が用意した**フレームごとの F0 輪郭**に従い、有声フレームを `targetMidi` へ補正します。
 
@@ -147,9 +167,13 @@ const tuned = pitchCorrectToMidiTimevarying(
 );
 ```
 
-`voiced`（非ゼロ＝有声）と `voicedProb` は任意です。省略するとすべてのフレームを有声として扱います。F0 輪郭を生成したときと同じ `hopLength` を使い、フレーム `i` がサンプル `i * hopLength` に対応するようにしてください。
+`voiced` と `voicedProb` は任意です。省略するとすべてのフレームを有声として扱います。F0 輪郭を生成したときと同じ `hopLength` を使い、フレーム `i` がサンプル `i * hopLength` に対応するようにしてください。
 
-`f0Hz` に `NaN` を入れられるのは、対応する `voiced` が 0 のフレームだけです。
+`voiced` の型は `VoicedFlags` で、`Int32Array`、`Uint8Array`、`Float32Array`、`readonly number[]`、`readonly boolean[]` を受け付けます。各要素は大きさではなくフラグとして読まれ、真と評価される値がすべて有声を意味します。そのため `pitchPyin` が `boolean[]` として返す `pitch.voicedFlag` を、変換せずそのまま渡せます。
+
+`voiced` と `voicedProb` の長さは、どちらも `f0Hz` と一致している必要があります。一致しない場合は `SonareError` ではなく `RangeError` が投げられるため、`isSonareError` によるガードでは捕捉できません。
+
+`f0Hz` に `NaN` を入れられるのは、対応する `voiced` が未設定（`0` または `false`）のフレームだけです。
 
 ::: tip 一定補正と輪郭追従補正
 1 回のトランスポーズで十分な、安定して伸ばすノートには `pitchCorrectToMidi(...)` を使います。ビブラートやスライド、揺らぎを保ちながら音程へ寄せたいテイクには `pitchCorrectToMidiTimevarying(...)` を選んでください。
@@ -170,7 +194,6 @@ const hopLength = 256;
 const pitch = pitchPyin(vocal, sampleRate, 2048, hopLength, 65, 1000, 0.1, true);
 
 // 有声フレームを C メジャーへ、緩やかに、ビブラートを残してスナップ。
-const voiced = Int32Array.from(pitch.voicedFlag, (v) => (v ? 1 : 0));
 const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   mode: 'scale',
   scaleRoot: 0,             // 0 = C .. 11 = B
@@ -180,7 +203,7 @@ const tuned = pitchCorrectTimevarying(vocal, pitch.f0, sampleRate, hopLength, {
   retuneSpeedMs: 15,        // 大きいほど音程へ乗るグライドが遅い
   vibratoThresholdCents: 20, // これ未満の補正はビブラート保持のためスキップ
   maxCorrectionSemitones: 2, // 安全弁: 1 フレームあたりの移動量を制限（既定 12）
-  voiced,
+  voiced: pitch.voicedFlag,  // pitchPyin が返す boolean[] をそのまま渡す
 });
 ```
 
@@ -209,6 +232,8 @@ tuned = sonare.pitch_correct_timevarying(
 ```
 
 `scaleModeMask` は 12 ビットのマスクで、ビット `i` が `scaleRoot` の `i` 半音上を有効にするため、任意の音階を表現できます（C ナチュラルマイナー `{0,2,3,5,7,8,10}` は `0x5ad`）。`mode: 'midi'`（既定）では、この関数は `pitchCorrectToMidiTimevarying(...)` と同じく、音階ではなく `targetMidi` へ補正します。`retuneAmount` はスナップの強さで、低い値は自然で人間的な揺れを残し、`retuneAmount: 1` に短い `retuneSpeedMs` を合わせると硬いロボット的な効果になります。実際の動きは[ピッチ補正のデモ](./glossary/editing/pitch-correction.md)で確認できます。
+
+`vibratoThresholdCents` の単位は**セント**で、100 セントが半音 1 つ分です。上の例の `20` なら、半音の 5 分の 1 に満たない補正はそのまま残るため、自然なビブラートの揺れが保たれます。
 
 `referenceMidi`（既定 `69` = A4）は音階グリッドの基準となる音を固定し、各度数をその基準音から測ります。`maxCorrectionSemitones`（既定 `12`）は、後述の「補正量を小さく保つ」という指針を支える安全弁で、1 フレームで動かせる量を上限で抑えます。検出器が 1 フレームだけオクターブを取り違えても、そのフレームがまるまる 1 オクターブ引っ張られることはなく、上限内に収まります。検出が不安定なときや、テイクを原音に近く保ちたいときは値を下げてください。
 
@@ -294,7 +319,7 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 
 :::
 
-プリセットをバッファ全体に 1 回で適用したい — クラスを自分で管理したくない — ときは `voiceChangeRealtime(samples, sampleRate, preset, options?)` を使います。既定では `samples` をモノラルとして扱いますが、ステレオソースには `{ channels: 2 }` を渡してインターリーブされたステレオバッファ（`L0, R0, L1, R1, ...`）を入力できます。`{ blockSize }` で内部レンダリングのブロックサイズも指定できます（既定 512）。返るバッファは入力と同じ並びと長さを保ちます。
+プリセットをバッファ全体に 1 回で適用したい — クラスを自分で管理したくない — ときは `voiceChangeRealtime(samples, sampleRate, preset, options?)` を使います。既定では `samples` をモノラルとして扱いますが、ステレオソースには `{ channels: 2 }` を渡してインターリーブされたステレオバッファ（`L0, R0, L1, R1, ...`）を入力できます。内部レンダリングのブロックサイズは共有 C ABI レンダラー側で固定されており、WASM・Node・Python のいずれでも同じ結果になります。旧来の `blockSize` オプションは非推奨で、指定しても無視されます。返るバッファは入力と同じ並びと長さを保ちます。
 
 ### `Audio` メソッドから使う場合
 
@@ -305,7 +330,7 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 ピッチや時間の変換だけでなく、ミキサー／マスタリングのインサートプロセッサのうち 2 つは、声や楽器の色づけに手軽に使えるツールです。
 
 - `effects.modulation.ensemble` — BBD 方式（アナログのバケツリレー素子ディレイによるコーラス）のストリングマシン・アンサンブル。薄いソースを広がりのある、コーラスのかかったパッドに厚くします。
-- `saturation.ampSim` — プリアンプドライブ、トーンスタック、任意のパワーアンプ sag／トランス／NFB、ギター 4x12 またはベース 8x10 キャビネット音色を持つ、ギター／ベースアンプ系の色付けインサート。
+- `saturation.ampSim` — プリアンプドライブ、トーンスタック、任意のパワーアンプ sag／トランス／NFB（負帰還）、ギター 4x12 またはベース 8x10 キャビネット音色を持つ、ギター／ベースアンプ系の色付けインサート。
 
 これらは生バッファに対する単独関数ではなく、ストリップのインサートとして読み込みます（[ミキシングエンジン](./mixing.md)参照）。
 
