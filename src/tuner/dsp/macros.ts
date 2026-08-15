@@ -193,7 +193,9 @@ export const MACROS: Record<PhysicalEngineMode, MacroDef[]> = {
       ],
     },
     { id: 'breathiness', params: [{ key: 'breathNoise', at0: 0, at1: 0.4 }] },
-    { id: 'jet', params: [{ key: 'jetRatio', at0: 0.3, at1: 0.7 }] },
+    // The core clamps the jet to the first-register band, so the sweep stays
+    // inside it — outside, the slider would move nothing.
+    { id: 'jet', params: [{ key: 'jetRatio', at0: 0.38, at1: 0.62 }] },
     {
       id: 'vibrato',
       params: [

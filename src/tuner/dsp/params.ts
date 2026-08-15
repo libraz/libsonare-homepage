@@ -246,20 +246,81 @@ export interface ParamSpec {
   bool?: boolean;
 }
 
-/** Per-field range/label overrides for the generic spec builder. */
+/** One full turn, the span of the radian-valued strike angle. */
+const TWO_PI = Math.round(2 * Math.PI * 10000) / 10000;
+
+/**
+ * Per-field range/label overrides for the generic spec builder.
+ *
+ * A field belongs here whenever its C++ clamp disagrees with what
+ * {@link heuristicSpec} would derive from the name — otherwise the knob either
+ * has inert travel above/below the clamp, or its step cannot land on the
+ * engine's default value. Ranges mirror `sanitize_patch()` in
+ * `native_synth_patch.cpp` (the clamp every patch passes through), tightened to
+ * the voice core's own clamp where the core is stricter, and each step divides
+ * the field's default so a reset is representable.
+ */
 const PARAM_OVERRIDES: Record<string, Partial<ParamSpec>> = {
   strings: { label: 'Unison strings', min: 1, max: 3, step: 1 },
+  // kMaxModalModes = 8; percussion caps lower (see ENGINE_PARAM_OVERRIDES).
   numModes: { label: 'Modes', min: 0, max: 8, step: 1 },
   rankCount: { label: 'Ranks', min: 0, max: 8, step: 1 },
   shellNumModes: { label: 'Shell modes', min: 0, max: 4, step: 1 },
-  hammerExponent: { label: 'Hammer felt', min: 1, max: 5, step: 0.1 },
+  hammerExponent: { label: 'Hammer felt', min: 1.5, max: 4, step: 0.05 },
+  hammerContactMs: { min: 0.2, max: 10, step: 0.05, unit: 'ms' },
+  decaySlowS: { min: 0.05, max: 120, step: 0.1, unit: 's' },
+  // Bore purity saturates at 8 s (`purity = clamp(tone_decay_s / 8, 0, 1)`).
+  toneDecayS: { min: 0.05, max: 8, step: 0.05, unit: 's' },
+  releaseDampS: { min: 0.01, max: 10, step: 0.01, unit: 's' },
+  // Pipe-organ chiff reaches down to 0.5 ms (see ENGINE_PARAM_OVERRIDES).
+  chiffMs: { min: 1, max: 500, step: 0.5, unit: 'ms' },
   detuneCents: { label: 'Detune', min: 0, max: 30, step: 0.1, unit: '¢' },
-  jetRatio: { label: 'Jet ratio', min: 0.05, max: 0.95, step: 0.01 },
+  // The flute core clamps the jet to the first-register band; outside it the
+  // patch-level clamp of [0.1, 0.9] is never heard.
+  jetRatio: { label: 'Jet ratio', min: 0.38, max: 0.62, step: 0.005 },
   cutoffHz: { label: 'Cutoff', min: 20, max: 20000, step: 10, unit: 'Hz' },
-  baseFreqHz: { label: 'Base freq', min: 0, max: 2000, step: 1, unit: 'Hz' },
+  baseFreqHz: { label: 'Base freq', min: 0, max: 20000, step: 1, unit: 'Hz' },
+  pitchDrop: { min: 0, max: 8, step: 0.01 },
+  // Declared in radians; a full turn covers every orientation of the m>=1 modes.
+  strikeTheta: { label: 'Strike angle', min: 0, max: TWO_PI, step: 0.01, unit: 'rad' },
+  // The gain-like percussion layers are not normalized to 1: the drum seeds and
+  // the perceptual macros both write well above it.
+  toneGain: { min: 0, max: 4, step: 0.01 },
+  noiseGain: { min: 0, max: 4, step: 0.01 },
+  noiseQ: { min: 0.5, max: 30, step: 0.1 },
+  wireBuzz: { min: 0, max: 4, step: 0.01 },
+  wireThreshold: { min: 0, max: 4, step: 0.01 },
+  shimmer: { min: 0, max: 16, step: 0.05 },
+  phisemBeans: { min: 0, max: 256, step: 1 },
+  // Negative glide starts the resonance below its centre and rises to it.
+  phisemPitchGlide: { min: -0.95, max: 8, step: 0.01 },
+  phisemSoundMs: { min: 0.2, max: 200, step: 0.1, unit: 'ms' },
+  // 0 = off for both PhISEM frequencies, so neither may start at the generic
+  // 20 Hz floor. The scrape ridge rate is a collision rate rather than a pitch,
+  // so it keeps 1 Hz resolution instead of spanning the full 20 kHz clamp.
+  phisemResHz: { min: 0, max: 20000, step: 10, unit: 'Hz' },
+  phisemResQ: { min: 0.5, max: 30, step: 0.1 },
+  phisemScrapeHz: { min: 0, max: 2000, step: 1, unit: 'Hz' },
   exclusiveClass: { label: 'Excl. class', min: 0, max: 16, step: 1 },
   footageMult: { label: 'Footage', min: 0.25, max: 8, step: 0.25 },
   vowel: { label: 'Vowel', min: 0, max: 4, step: 1 },
+};
+
+/**
+ * Overrides that apply only within one engine, layered over
+ * {@link PARAM_OVERRIDES}. Needed where two engines share a field name but the
+ * cores clamp it differently, so a single name-keyed entry cannot be right for
+ * both.
+ */
+const ENGINE_PARAM_OVERRIDES: Partial<
+  Record<PhysicalEngineMode, Record<string, Partial<ParamSpec>>>
+> = {
+  // kMaxPercussionModes = 6 — modes 7-8 of the shared `numModes` entry are dead
+  // on the membrane bank.
+  percussion: { numModes: { max: 6 } },
+  // The organ's chiff ramp is clamped to [0.5, 500] ms, the other winds to
+  // [1, 500].
+  'pipe-organ': { chiffMs: { min: 0.5 } },
 };
 
 /** Humanize a camelCase key into a UI label (`bowForce` -> `Bow force`). */
@@ -274,7 +335,12 @@ function humanizeKey(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Default range/unit for a scalar field from suffix heuristics. */
+/**
+ * Default range/unit for a scalar field from suffix heuristics. These are a
+ * fallback for fields whose C++ clamp happens to match the family default —
+ * anything that disagrees goes in {@link PARAM_OVERRIDES} rather than growing a
+ * new suffix rule, since a name suffix cannot know a field's clamp.
+ */
 function heuristicSpec(key: string): Omit<ParamSpec, 'key' | 'label'> {
   if (key.endsWith('Ms')) return { min: 0, max: 2000, step: 1, unit: 'ms' };
   if (key.endsWith('Cents')) return { min: 0, max: 60, step: 0.1, unit: '¢' };
@@ -288,55 +354,32 @@ function heuristicSpec(key: string): Omit<ParamSpec, 'key' | 'label'> {
 
 /**
  * Build the tuning-UI descriptors for a params object generically: every scalar
- * number becomes a knob (range from {@link PARAM_OVERRIDES} or suffix
+ * number becomes a knob (range from {@link PARAM_OVERRIDES}, narrowed by
+ * {@link ENGINE_PARAM_OVERRIDES} when @p engine is given, else suffix
  * heuristics), every boolean a toggle. Non-scalar fields (mode/rank tables) are
  * skipped — they get dedicated editors. Iteration order follows the struct field
  * order, so the knobs read like the C++ `*PatchParams`.
+ *
+ * Pass @p engine wherever it is known: without it, a field whose clamp differs
+ * per engine falls back to its widest entry.
  */
-export function paramSpecsFor(params: Record<string, unknown>): ParamSpec[] {
+export function paramSpecsFor(
+  params: Record<string, unknown>,
+  engine?: PhysicalEngineMode,
+): ParamSpec[] {
+  const perEngine = engine ? (ENGINE_PARAM_OVERRIDES[engine] ?? {}) : {};
   const specs: ParamSpec[] = [];
   for (const [key, value] of Object.entries(params)) {
+    const o = { ...PARAM_OVERRIDES[key], ...perEngine[key] };
     if (typeof value === 'boolean') {
-      const o = PARAM_OVERRIDES[key] ?? {};
       specs.push({ key, label: o.label ?? humanizeKey(key), min: 0, max: 1, step: 1, bool: true });
     } else if (typeof value === 'number') {
       const base = heuristicSpec(key);
-      const o = PARAM_OVERRIDES[key] ?? {};
       specs.push({ key, label: o.label ?? humanizeKey(key), ...base, ...o });
     }
   }
   return specs;
 }
-
-/** UI descriptors for the KS scalar params (extensions grouped after basics). */
-export const KS_PARAM_SPECS: ParamSpec[] = [
-  { key: 'brightness', label: 'Brightness', min: 0, max: 1, step: 0.01 },
-  { key: 'decayS', label: 'Decay', min: 0.05, max: 12, step: 0.05, unit: 's' },
-  { key: 'decayStretch', label: 'Decay stretch', min: 0, max: 1, step: 0.01 },
-  { key: 'pickPosition', label: 'Pick position', min: 0, max: 0.5, step: 0.005 },
-  { key: 'excBrightness', label: 'Exc brightness', min: 0, max: 1, step: 0.01 },
-  { key: 'velToBrightness', label: 'Vel → bright', min: 0, max: 1, step: 0.01 },
-  { key: 'releaseDampS', label: 'Release damp', min: 0.01, max: 1, step: 0.01, unit: 's' },
-  { key: 'slap', label: 'Fret slap', min: 0, max: 1, step: 0.01 },
-  { key: 'polarization', label: 'Polarization', min: 0, max: 1, step: 0.01 },
-  { key: 'bodyCoupling', label: 'Bridge couple', min: 0, max: 1, step: 0.01 },
-  { key: 'pluckStyle', label: 'Pluck style', min: 0, max: 1, step: 0.01 },
-  { key: 'nail', label: 'Nail', min: 0, max: 1, step: 0.01 },
-  { key: 'pickupPos', label: 'Pickup pos', min: 0, max: 0.5, step: 0.005 },
-  { key: 'dispersion', label: 'Dispersion', min: 0, max: 1, step: 0.01 },
-  { key: 'tensionMod', label: 'Tension mod', min: 0, max: 1, step: 0.01 },
-  { key: 'octaveMix', label: "Octave 4'", min: 0, max: 1, step: 0.01 },
-  { key: 'keyoffNoise', label: 'Key-off noise', min: 0, max: 1, step: 0.01 },
-];
-
-/** UI descriptors for the modal scalar params (mode table edited separately). */
-export const MODAL_PARAM_SPECS: ParamSpec[] = [
-  { key: 'decayS', label: 'Decay', min: 0.01, max: 12, step: 0.05, unit: 's' },
-  { key: 'decayStretch', label: 'Decay stretch', min: 0, max: 1, step: 0.01 },
-  { key: 'strikeBrightness', label: 'Mallet hardness', min: 0, max: 1, step: 0.01 },
-  { key: 'velToBrightness', label: 'Vel → hardness', min: 0, max: 1, step: 0.01 },
-  { key: 'releaseDampS', label: 'Release damp', min: 0.01, max: 2, step: 0.01, unit: 's' },
-];
 
 export type {
   BodyType,

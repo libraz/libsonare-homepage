@@ -147,10 +147,11 @@ function mergeTableElement(def: unknown, incoming: unknown, key = ''): unknown {
  * throw at render). Fields absent from the defaults are ignored.
  */
 function sanitizeParams(
+  engine: PhysicalEngineMode,
   defaults: Record<string, unknown>,
   incoming: Record<string, unknown>,
 ): void {
-  const ranges = new Map(paramSpecsFor(defaults).map((s) => [s.key, s] as const));
+  const ranges = new Map(paramSpecsFor(defaults, engine).map((s) => [s.key, s] as const));
   for (const key of Object.keys(defaults)) {
     if (!(key in incoming)) continue;
     const dv = defaults[key];
@@ -184,7 +185,7 @@ export function jsonToSpec(json: unknown): ModelSpec {
   if (!engine || !(engine in ENGINE_INFO)) throw new Error(`Unknown engine: ${String(engine)}`);
   const spec = buildDefaultSpec(engine);
   if (j.params && typeof j.params === 'object') {
-    sanitizeParams(activeParams(spec), j.params as Record<string, unknown>);
+    sanitizeParams(engine, activeParams(spec), j.params as Record<string, unknown>);
   }
   if (j.wrapper && typeof j.wrapper === 'object') {
     const w = j.wrapper;

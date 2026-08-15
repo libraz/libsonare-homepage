@@ -4168,6 +4168,7 @@
       releaseDampS: 0.15
     };
   }
+  var TWO_PI14 = Math.round(2 * Math.PI * 1e4) / 1e4;
 
   // src/tuner/dsp/engine.ts
   function noteToHz13(note) {

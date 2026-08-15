@@ -139,7 +139,9 @@ const familyGroups = computed(() => {
   return order.map((fam) => ({ family: fam, modes: byFamily.get(fam) ?? [] }));
 });
 
-const paramSpecs = computed<ParamSpec[]>(() => paramSpecsFor(activeParams(spec.value)));
+const paramSpecs = computed<ParamSpec[]>(() =>
+  paramSpecsFor(activeParams(spec.value), engineMode.value),
+);
 
 /** Model params grouped by physical layer (signal-flow order), knobs and
  *  toggles split within each layer so the panel reads as a physical chain. */
@@ -1679,7 +1681,7 @@ onUnmounted(() => {
         <div class="tn-actions">
           <button
             type="button" class="tn-chip tn-chip--wide"
-            :disabled="!midiInput.supported.value || midiInput.connecting.value"
+            :disabled="!midiInput.supported || midiInput.connecting.value"
             @click="connectMidi"
           >
             {{ midiInput.connecting.value ? copy.midi.connecting : midiInput.connected.value ? copy.midi.connected : copy.midi.connect }}
@@ -1698,7 +1700,7 @@ onUnmounted(() => {
           <input ref="midiInputEl" type="file" accept=".mid,.midi,audio/midi" class="tn-file" @change="onMidiFile" />
         </div>
         <p v-if="midiInput.error.value" class="tn-error">{{ midiInput.error.value }}</p>
-        <p v-else-if="!midiInput.supported.value" class="tn-hint">{{ copy.midi.unavailable }}</p>
+        <p v-else-if="!midiInput.supported" class="tn-hint">{{ copy.midi.unavailable }}</p>
         <p v-else-if="!phrase.length" class="tn-hint">{{ copy.midi.empty }}</p>
         <TunerScore v-if="showScore" :phrase="phrase" :labels="copy.score" />
       </section>

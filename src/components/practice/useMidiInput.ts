@@ -109,5 +109,9 @@ export function useMidiInput(options: MidiInputOptions) {
 
   onBeforeUnmount(disconnect);
 
+  // `supported` is a plain boolean, not a ref: the capability never changes for
+  // the life of the page. Callers must read it directly — writing
+  // `supported.value` in a template yields `undefined`, which silently inverts
+  // any `!supported` guard into "unsupported".
   return { supported, connected, connecting, devices, error, connect, disconnect };
 }

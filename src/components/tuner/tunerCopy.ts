@@ -445,8 +445,8 @@ export const enCopy = {
       },
       bodyCoupling: {
         title: 'Bridge coupling',
-        body: 'How strongly the string couples to the bridge and body, adding resonance and shortening sustain.',
-        tip: 'Up for a woody, resonant tone; down for a longer, purer ring.',
+        body: "How strongly the string's two vibration planes trade energy through the bridge, turning the decay biexponential — a fast initial fall into a long, quiet aftersound. Has no effect unless Polarization is above 0.",
+        tip: 'Raise Polarization first, then up for a pronounced double decay; down for a single, even ring.',
       },
       pluckStyle: {
         title: 'Pluck style',
@@ -566,7 +566,7 @@ export const enCopy = {
       // ---- Modal mallet ----
       numModes: {
         title: 'Modes',
-        body: 'How many resonant partials the bar or bell rings with — more modes give a richer, more complex tone.',
+        body: 'How many resonant partials the bar or bell rings with — more modes give a richer, more complex tone. The modal bank holds up to 8, the percussion membrane up to 6.',
         tip: 'Fewer for a pure bell; more for a complex metallic timbre.',
       },
       strikeBrightness: {
@@ -603,8 +603,8 @@ export const enCopy = {
       },
       conical: {
         title: 'Conical bore',
-        body: 'A cylinder sounds hollow with odd harmonics (clarinet); a cone is fuller (sax / oboe).',
-        tip: 'Off for a clarinet-like tone; on for a saxophone-like one.',
+        body: 'A cylindrical bore is brighter and more direct; a conical one is fuller and rounder. On a reed the cone opens the full harmonic series (clarinet vs sax / oboe); on brass both bores carry it and the cone darkens the bell reflection (trumpet vs horn / tuba).',
+        tip: 'Off for a clarinet- or trumpet-like tone; on for a saxophone-, horn-, or tuba-like one.',
       },
 
       // ---- Reed ----
@@ -689,8 +689,8 @@ export const enCopy = {
       // ---- Flute ----
       jetRatio: {
         title: 'Jet ratio',
-        body: 'The air-jet vs bore delay ratio — which register (octave) the pipe speaks in.',
-        tip: 'Adjust to select the flute’s speaking register.',
+        body: 'The air-jet vs bore delay ratio. The engine holds it inside the first-register band (0.38–0.62), where the jet locks onto the fundamental, so it shades the tone rather than choosing an octave.',
+        tip: 'Nudge within the band to shade the jet; use Overblow to jump to the octave.',
       },
       jetReflection: {
         title: 'Jet drive',
@@ -700,7 +700,7 @@ export const enCopy = {
       endReflection: {
         title: 'End reflection',
         body: 'How strongly the open bore end reflects sound back — around 0.5 is stable.',
-        tip: 'Keep near 0.5 for a steady tone; adjust to detune it.',
+        tip: 'Keep near 0.5 for a steady tone; raise for a purer, more sustained resonance.',
       },
       vibratoRateHz: {
         title: 'Vibrato rate',
@@ -741,7 +741,7 @@ export const enCopy = {
       },
       toneDecayS: {
         title: 'Bore purity',
-        body: 'A longer nominal ring means a purer, more sustained pipe tone.',
+        body: 'A longer nominal ring means a purer, more sustained pipe tone. The wind holds the pipe up for as long as you hold the key, so this sets bore loss rather than a decay time, and it saturates at 8 s.',
         tip: 'Up for a pure, singing pipe; down for a breathier one.',
       },
       breath: {
@@ -828,13 +828,13 @@ export const enCopy = {
       },
       strikeR: {
         title: 'Strike radius',
-        body: 'Where the drum is hit — the center is pure and boomy, the rim brings out complex overtones.',
-        tip: 'Center for a deep tone; toward the rim for a brighter hit.',
+        body: 'Where the drum is hit, from the head center out to the rim. At exactly 0 the strike-point weighting is off and every mode keeps its base gain; just above 0 the asymmetric modes drop away into a pitchless thump, and toward the rim they come back as complex overtones.',
+        tip: 'Leave at 0 for the plain kit voice; nudge just off 0 for a deep thump, toward the rim for a brighter hit.',
       },
       strikeTheta: {
         title: 'Strike angle',
-        body: 'The angle of the strike around the head, orienting which asymmetric modes ring.',
-        tip: 'Nudge to vary the overtone color of off-center hits.',
+        body: 'The angle of the strike around the head, in radians over a full turn (0 – 6.28), orienting which asymmetric modes ring. It only does anything once Strike radius is above 0.',
+        tip: 'Sweep a full turn to vary the overtone color of off-center hits.',
       },
       noiseGain: {
         title: 'Noise level',
@@ -1386,8 +1386,8 @@ export const jaCopy: TunerCopy = {
       },
       bodyCoupling: {
         title: 'ブリッジ結合',
-        body: '弦がブリッジや胴にどれだけ結合するか。共鳴が増え、余韻は短くなります。',
-        tip: '上げると木質で共鳴する音、下げると長く純粋な余韻。',
+        body: '弦の 2 つの振動面がブリッジを介してどれだけエネルギーをやり取りするか。減衰が二重指数になり、最初に素早く落ちてから長く静かな余韻が残ります。偏波が 0 のままでは効きません。',
+        tip: 'まず偏波を上げてから、上げるとはっきりした二重減衰、下げると均一な単一の余韻。',
       },
       pluckStyle: {
         title: '弾き方',
@@ -1507,7 +1507,7 @@ export const jaCopy: TunerCopy = {
       // ---- モーダル（マレット）----
       numModes: {
         title: 'モード数',
-        body: 'バーやベルが鳴らす共鳴倍音の数。多いほど豊かで複雑な音色になります。',
+        body: 'バーやベルが鳴らす共鳴倍音の数。多いほど豊かで複雑な音色になります。モーダル側は最大 8、パーカッションの膜は最大 6 です。',
         tip: '少ないと純粋なベル、多いと複雑な金属的音色。',
       },
       strikeBrightness: {
@@ -1544,8 +1544,8 @@ export const jaCopy: TunerCopy = {
       },
       conical: {
         title: '円錐ボア',
-        body: '円筒は奇数倍音の空ろな音（クラリネット）、円錐は豊かな音（サックス／オーボエ）。',
-        tip: 'オフでクラリネット的、オンでサックス的。',
+        body: '円筒ボアは明るく直接的、円錐ボアは豊かで丸い響きです。リードでは円錐にすると全倍音が出ます（クラリネット↔サックス／オーボエ）。ブラスはどちらも全倍音で、円錐はベルの反射を暗くします（トランペット↔ホルン／チューバ）。',
+        tip: 'オフでクラリネット／トランペット的、オンでサックス／ホルン／チューバ的。',
       },
 
       // ---- リード ----
@@ -1630,8 +1630,8 @@ export const jaCopy: TunerCopy = {
       // ---- フルート ----
       jetRatio: {
         title: 'ジェット比',
-        body: '空気ジェットとボアの遅延比＝パイプがどのレジスター（オクターブ）で鳴るかです。',
-        tip: 'フルートの鳴るレジスターを選びます。',
+        body: '空気ジェットとボアの遅延比です。エンジンはこれを第1レジスター帯（0.38〜0.62）＝ジェットが基音に引き込まれる範囲に収めるので、オクターブの切り替えではなく音色の陰影を決めます。',
+        tip: '帯域内で動かしてジェットの陰影を調整します。オクターブへ飛ばすにはオーバーブローを使います。',
       },
       jetReflection: {
         title: 'ジェット駆動',
@@ -1641,7 +1641,7 @@ export const jaCopy: TunerCopy = {
       endReflection: {
         title: '端部反射',
         body: '開いたボア端が音をどれだけ跳ね返すか。0.5前後で安定します。',
-        tip: '0.5付近で安定、調整で共鳴をデチューンできます。',
+        tip: '0.5付近で安定、上げるとより澄んで長く伸びる共鳴になります。',
       },
       vibratoRateHz: {
         title: 'ビブラート速度',
@@ -1682,7 +1682,7 @@ export const jaCopy: TunerCopy = {
       },
       toneDecayS: {
         title: 'ボアの純度',
-        body: '公称の鳴りが長いほど、純粋で持続的なパイプ音になります。',
+        body: '公称の鳴りが長いほど、純粋で持続的なパイプ音になります。鍵を押している間は風がパイプを鳴らし続けるので、これは減衰時間ではなくボアの損失を決める値で、8 秒で頭打ちになります。',
         tip: '上げると純粋に歌うパイプ、下げると息っぽい音。',
       },
       breath: {
@@ -1769,13 +1769,13 @@ export const jaCopy: TunerCopy = {
       },
       strikeR: {
         title: '打点半径',
-        body: '太鼓を叩く位置。中心は純粋で低く響き、縁は複雑な倍音を引き出します。',
-        tip: '中心で深い音、縁寄りで明るくよく鳴る打音。',
+        body: 'ヘッドの中心から縁までの打点です。ちょうど 0 のときは打点の重み付けが無効で、全モードが基本ゲインのまま鳴ります。0 をわずかに超えると非対称モードが落ちて音程感のない胴鳴りになり、縁へ寄せるほど複雑な倍音が戻ってきます。',
+        tip: '0 のままなら素の音、0 をわずかに上げると深い胴鳴り、縁寄りで明るい打音。',
       },
       strikeTheta: {
         title: '打点角度',
-        body: 'ヘッド上の打点の角度。どの非対称モードが鳴るかを方向づけます。',
-        tip: '動かすと中心を外した打音の倍音の色が変わります。',
+        body: 'ヘッド上の打点の角度で、単位はラジアン（1周ぶんの 0〜6.28）。どの非対称モードが鳴るかを方向づけます。効くのは打点半径が 0 を超えてからです。',
+        tip: '1周ぶん動かすと、中心を外した打音の倍音の色が変わります。',
       },
       noiseGain: {
         title: 'ノイズ音量',

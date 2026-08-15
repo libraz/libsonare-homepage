@@ -88,7 +88,7 @@ const FROZEN_KEYS = new Set<string>([
 
 /** The scalar dimensions the optimizer varies for a spec's active engine. */
 export function fitDimensions(spec: ModelSpec): FitDim[] {
-  const specs = paramSpecsFor(activeParamsOf(spec));
+  const specs = paramSpecsFor(activeParamsOf(spec), spec.engineMode);
   const out: FitDim[] = [];
   for (const ps of specs) {
     if (ps.bool || FROZEN_KEYS.has(ps.key)) continue;
