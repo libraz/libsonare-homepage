@@ -2,13 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type DecodedMasteringAudio, useMastering } from '@/composables/useMastering';
 import { useMasteringInsights } from '@/composables/useMasteringInsights';
 
+// The composable itself only meters loudness directly; the analysis entry points
+// are reached through the worker, which is stubbed per test.
 const wasm = vi.hoisted(() => ({
   init: vi.fn(),
   lufs: vi.fn(),
   lufsInterleaved: vi.fn(),
-  masteringAudioProfile: vi.fn(),
-  masteringAssistantSuggest: vi.fn(),
-  masteringStreamingPreview: vi.fn(),
 }));
 
 vi.mock('@/wasm/index.js', () => wasm);
@@ -162,9 +161,6 @@ describe('useMastering failure paths and report parsing', () => {
 
     wasm.lufs.mockReturnValue({ integratedLufs: -16.25 });
     wasm.lufsInterleaved.mockReturnValue({ integratedLufs: -16.25 });
-    wasm.masteringAudioProfile.mockReturnValue('{"duration":12}');
-    wasm.masteringAssistantSuggest.mockReturnValue('not-json');
-    wasm.masteringStreamingPreview.mockReturnValue('{"platforms":[{"name":"A"}]}');
   });
 
   // Restore globals after the file so the AudioContext/Worker stubs don't leak

@@ -37,6 +37,28 @@ const wasmMock = vi.hoisted(() => ({
       appliedGainDb: 0,
     }),
   ),
+  // The stereo entry points measure the pair itself, so the `loudness` block
+  // already reports the delivered programme (6 dB above its own downmix here).
+  masteringAudioProfileStereo: vi.fn(
+    () =>
+      '{"durationSec":8,"loudness":{"crestFactorDb":9.4,"integratedLufs":-11.07,"lraLu":4.5,"truePeakDb":-0.6}}',
+  ),
+  masteringAssistantSuggestStereo: vi.fn(() => '{"explanation":["Trim low end"]}'),
+  masteringStreamingPreviewStereo: vi.fn(
+    (request: { platforms: Array<{ name: string; targetLufs: number; ceilingDb: number }> }) =>
+      JSON.stringify({
+        platforms: request.platforms.map((platform) => {
+          const normalizationGainDb = platform.targetLufs - -11.07;
+          return {
+            name: platform.name,
+            integratedLufs: -11.07,
+            truePeakDb: -0.6,
+            normalizationGainDb,
+            ceilingRisk: -0.6 + normalizationGainDb > platform.ceilingDb,
+          };
+        }),
+      }),
+  ),
 }));
 
 vi.mock('@/wasm/index.js', () => wasmMock);
@@ -120,7 +142,6 @@ describe('mastering worker protocol', () => {
         inputLufs: -18,
         outputLufs: -14,
         stages: ['eq.tilt'],
-        latencySamples: 32,
       },
     });
     expect(done.transfer).toEqual([left.buffer, right.buffer]);
@@ -216,6 +237,104 @@ describe('mastering worker protocol', () => {
         appliedGainDb: 4,
         stages: ['match.applyMatchEq', 'eq.tilt'],
       },
+    });
+  });
+
+  it('measures source loudness on the stereo pair, not on the mono downmix', async () => {
+    const left = new Float32Array([0.2, -0.2]);
+    const right = new Float32Array([0.1, 0.1]);
+    const stereoRequest = { left, right, sampleRate: 48_000 };
+
+    await (self as any).onmessage({
+      data: {
+        type: 'sourceAnalyze',
+        id: 21,
+        left,
+        right,
+        sampleRate: 48_000,
+        platforms: [
+          { name: 'Spotify', targetLufs: -14, ceilingDb: -1 },
+          { name: 'Apple Music', targetLufs: -16, ceilingDb: -1 },
+        ],
+      },
+    });
+
+    // Every assistant entry point receives the two channels, never a downmix —
+    // the worker must not reintroduce a mono-only path here.
+    expect(wasmMock.masteringAudioProfileStereo).toHaveBeenCalledWith(stereoRequest);
+    expect(wasmMock.masteringAssistantSuggestStereo).toHaveBeenCalledWith(stereoRequest);
+    expect(wasmMock.masteringStreamingPreviewStereo).toHaveBeenCalledWith({
+      ...stereoRequest,
+      platforms: [
+        { name: 'Spotify', targetLufs: -14, ceilingDb: -1 },
+        { name: 'Apple Music', targetLufs: -16, ceilingDb: -1 },
+      ],
+    });
+
+    const result = (posted.at(-1)!.message as any).result;
+    // The profile's loudness block is the stereo measurement, so the panel reads
+    // the delivered programme rather than a downmix ~6 dB below it.
+    expect(result.profile.loudness).toEqual({
+      crestFactorDb: 9.4,
+      integratedLufs: -11.07,
+      lraLu: 4.5,
+      truePeakDb: -0.6,
+    });
+    // gain = target - stereo integrated; risk = normalized true peak over ceiling.
+    expect(result.streamingPreview.platforms).toEqual([
+      {
+        name: 'Spotify',
+        targetLufs: -14,
+        ceilingDb: -1,
+        integratedLufs: -11.07,
+        truePeakDb: -0.6,
+        normalizationGainDb: expect.closeTo(-2.93, 6),
+        ceilingRisk: false,
+      },
+      {
+        name: 'Apple Music',
+        targetLufs: -16,
+        ceilingDb: -1,
+        integratedLufs: -11.07,
+        truePeakDb: -0.6,
+        normalizationGainDb: expect.closeTo(-4.93, 6),
+        ceilingRisk: false,
+      },
+    ]);
+  });
+
+  it('flags ceiling risk when the platform gain pushes the stereo true peak over the ceiling', async () => {
+    // A quiet programme takes a large positive normalization gain, which lifts
+    // the stereo true peak past the platform ceiling.
+    wasmMock.masteringStreamingPreviewStereo.mockReturnValueOnce(
+      JSON.stringify({
+        platforms: [
+          {
+            name: 'Spotify',
+            integratedLufs: -20,
+            truePeakDb: -0.6,
+            normalizationGainDb: 6,
+            ceilingRisk: true,
+          },
+        ],
+      }),
+    );
+
+    await (self as any).onmessage({
+      data: {
+        type: 'sourceAnalyze',
+        id: 22,
+        left: new Float32Array([0.2, -0.2]),
+        right: new Float32Array([0.1, 0.1]),
+        sampleRate: 48_000,
+        platforms: [{ name: 'Spotify', targetLufs: -14, ceilingDb: -1 }],
+      },
+    });
+
+    const result = (posted.at(-1)!.message as any).result;
+    expect(result.streamingPreview.platforms[0]).toMatchObject({
+      normalizationGainDb: 6,
+      ceilingRisk: true,
     });
   });
 

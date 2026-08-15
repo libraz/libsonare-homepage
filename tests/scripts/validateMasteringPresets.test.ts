@@ -49,7 +49,7 @@ function validOutput(
 describe('validate-mastering-presets script helpers', () => {
   it('builds mastering configs with optional repair and expected processor settings', () => {
     expect(config).toMatchObject({
-      eq: { tiltDb: 0.25, pivotHz: 1000 },
+      eq: { tilt: { tiltDb: 0.25, pivotHz: 1000 } },
       dynamics: { compressor: { ratio: 2, autoMakeup: true } },
       spectral: { airBand: { amount: 0.2 } },
       stereo: { imager: { width: 1.05, preserveEnergy: true } },
@@ -66,7 +66,7 @@ describe('validate-mastering-presets script helpers', () => {
         width: 0.9,
         denoise: true,
       }).repair,
-    ).toEqual({ denoise: true, gainFloor: 0.1 });
+    ).toEqual({ denoise: { enabled: true }, gainFloor: 0.1 });
   });
 
   it('creates deterministic stereo source and reference mixes with finite bounded samples', () => {

@@ -1,7 +1,7 @@
 import type {
   MasteringChainConfig,
+  MasteringChainStereoResult,
   MasteringResult,
-  MasteringStereoChainResult,
   StreamingPlatform,
 } from '../wasm/index';
 
@@ -52,7 +52,7 @@ type WasmModule = {
     sampleRate: number,
     config: MasteringChainConfig,
     onProgress: (progress: number, stage: string) => void,
-  ) => MasteringStereoChainResult;
+  ) => MasteringChainStereoResult;
   masteringPairProcess: (
     processorName: string,
     source: Float32Array,
@@ -74,13 +74,22 @@ type WasmModule = {
     sampleRate: number,
     params?: Record<string, number | boolean>,
   ) => string;
-  masteringAudioProfile: (samples: Float32Array, sampleRate: number) => string;
-  masteringAssistantSuggest: (samples: Float32Array, sampleRate: number) => string;
-  masteringStreamingPreview: (
-    samples: Float32Array,
-    sampleRate: number,
-    platforms: StreamingPlatform[],
-  ) => string;
+  masteringAudioProfileStereo: (request: {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate: number;
+  }) => string;
+  masteringAssistantSuggestStereo: (request: {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate: number;
+  }) => string;
+  masteringStreamingPreviewStereo: (request: {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate: number;
+    platforms: StreamingPlatform[];
+  }) => string;
 };
 
 let wasmModule: WasmModule | null = null;
@@ -104,17 +113,34 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
 
     if (request.type === 'sourceAnalyze') {
-      const samples = mixToMono(request.left, request.right);
+      // Only the profile's `loudness` block is measured from the two channels:
+      // BS.1770 channel-summed integrated LUFS and LRA, the larger of the two
+      // channel true peaks, and a crest factor across both channels. Passing a
+      // 0.5*(L+R) downmix to the mono entry points instead reads roughly 6 dB
+      // low on decorrelated material and cancels outright out of phase.
+      //
+      // The spectral, dynamics and tempo fields describe shape and timing
+      // rather than absolute level, so the engine still measures those on the
+      // downmix and they stay comparable with the mono entry point field for
+      // field.
       postProgress(request.id, 0.3, 'Profiling source');
-      const profile = parseJson(wasmModule.masteringAudioProfile(samples, request.sampleRate));
-      postProgress(request.id, 0.55, 'Building suggestions');
+      const profile = parseJson(
+        wasmModule.masteringAudioProfileStereo({
+          left: request.left,
+          right: request.right,
+          sampleRate: request.sampleRate,
+        }),
+      );
+      postProgress(request.id, 0.6, 'Building suggestions');
       const suggestions = parseJson(
-        wasmModule.masteringAssistantSuggest(samples, request.sampleRate),
+        wasmModule.masteringAssistantSuggestStereo({
+          left: request.left,
+          right: request.right,
+          sampleRate: request.sampleRate,
+        }),
       );
-      postProgress(request.id, 0.8, 'Previewing streaming delivery');
-      const streamingPreview = parseJson(
-        wasmModule.masteringStreamingPreview(samples, request.sampleRate, request.platforms),
-      );
+      postProgress(request.id, 0.85, 'Previewing streaming delivery');
+      const streamingPreview = buildStreamingPreview(request);
       self.postMessage({
         type: 'sourceAnalysisDone',
         id: request.id,
@@ -143,7 +169,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           outputLufs: result.outputLufs,
           appliedGainDb: result.appliedGainDb,
           stages: result.stages || [],
-          latencySamples: result.latencySamples,
         },
       },
       [result.left.buffer, result.right.buffer],
@@ -156,6 +181,36 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     });
   }
 };
+
+/**
+ * Per-platform delivery estimate, measured by the engine on the stereo pair.
+ *
+ * The engine returns the measured figures and the verdict (normalization gain
+ * and ceiling risk) but identifies each row only by platform name. Echo the
+ * requested platform spec back onto its row so consumers never have to look a
+ * platform's target/ceiling back up by name.
+ */
+function buildStreamingPreview(request: Extract<WorkerRequest, { type: 'sourceAnalyze' }>) {
+  if (!wasmModule) throw new Error('WASM module is not initialized');
+  const preview = parseJson(
+    wasmModule.masteringStreamingPreviewStereo({
+      left: request.left,
+      right: request.right,
+      sampleRate: request.sampleRate,
+      platforms: request.platforms,
+    }),
+  ) as { platforms?: unknown };
+
+  const specs = new Map(request.platforms.map((platform) => [platform.name, platform]));
+  const rows = Array.isArray(preview?.platforms) ? preview.platforms : [];
+  return {
+    platforms: rows.map((entry) => {
+      const row = entry as Record<string, unknown>;
+      const spec = typeof row.name === 'string' ? specs.get(row.name) : undefined;
+      return spec ? { ...row, targetLufs: spec.targetLufs, ceilingDb: spec.ceilingDb } : { ...row };
+    }),
+  };
+}
 
 function renderMasteringChain(request: Extract<WorkerRequest, { type: 'render' }>) {
   if (!wasmModule) throw new Error('WASM module is not initialized');
@@ -232,7 +287,7 @@ function ceilingFromConfig(config: MasteringChainConfig): number {
   return -1;
 }
 
-function applyOutputSafety(result: MasteringStereoChainResult, ceilingDb: number) {
+function applyOutputSafety(result: MasteringChainStereoResult, ceilingDb: number) {
   const ceiling = 10 ** (Math.min(ceilingDb, -0.1) / 20);
   let peak = 0;
 
@@ -314,7 +369,6 @@ function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'reference
     outputLufs: normalized.outputLufs,
     appliedGainDb: normalized.appliedGainDb,
     stages: ['match.applyMatchEq', ...normalized.stages],
-    latencySamples: normalized.latencySamples,
   };
 }
 
@@ -322,6 +376,7 @@ function postProgress(id: number, progress: number, stage: string) {
   self.postMessage({ type: 'progress', id, progress, stage });
 }
 
+/** The two-input `match.*` analyses are mono-only, so they take the downmix. */
 function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
   const length = Math.min(left.length, right.length);
   const mono = new Float32Array(length);

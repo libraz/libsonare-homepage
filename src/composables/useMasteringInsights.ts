@@ -43,7 +43,14 @@ export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?:
   let insightRequestId = 0;
 
   // Curated headline metrics rather than a generic flatten of the profile object,
-  // so labels read cleanly and carry units. Field paths follow masteringAudioProfile.
+  // so labels read cleanly and carry units. Field paths follow
+  // masteringAudioProfileStereo.
+  //
+  // Every figure derived from absolute level — integrated LUFS, loudness range,
+  // true peak, crest factor — comes from that profile's `loudness` block, which
+  // the engine measures from the two channels, so they describe the programme as
+  // delivered. Duration and BPM describe timing rather than level and are
+  // measured on the downmix, which is the right scope for them.
   const insightProfileItems = computed<MasteringInsightItem[]>(() => {
     const profile = insightReport.value?.profile as Record<string, unknown> | null;
     if (!profile) return [];
@@ -71,6 +78,9 @@ export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?:
   // every platform (and already shown in the profile), so the preview focuses on
   // the actionable values: the normalization gain each platform applies and
   // whether that risks the ceiling. Flattening would only surface one platform.
+  //
+  // Each row echoes the ceiling of the platform spec it was derived from, so the
+  // ceiling never has to be recovered by matching a platform name.
   const insightPreview = computed<MasteringPreviewRow[]>(() => {
     const platforms = (insightReport.value?.streamingPreview as { platforms?: unknown } | null)
       ?.platforms;
@@ -79,10 +89,7 @@ export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?:
       const row = entry as Record<string, unknown>;
       const normalizationGainDb =
         typeof row.normalizationGainDb === 'number' ? row.normalizationGainDb : Number.NaN;
-      const platformCeilingDb =
-        typeof row.ceilingDb === 'number'
-          ? row.ceilingDb
-          : STREAMING_TARGETS.find((target) => target.name === row.name)?.ceilingDb;
+      const platformCeilingDb = num(row.ceilingDb);
       const currentCeiling = currentCeilingDb?.value;
       const safeCeilingDb =
         typeof platformCeilingDb === 'number' && Number.isFinite(normalizationGainDb)

@@ -94,10 +94,14 @@ export interface RenderedMasteringAudio {
   outputLufs: number;
   appliedGainDb: number;
   stages: string[];
-  latencySamples?: number;
 }
 
 export interface MasteringInsightReport {
+  /**
+   * Stereo assistant profile. Its `loudness` block is measured from the pair
+   * itself — channel-summed integrated LUFS and LRA, the larger of the two
+   * channel true peaks, and a crest factor across both channels.
+   */
   profile: unknown;
   suggestions: unknown;
   streamingPreview: unknown;
@@ -659,8 +663,10 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
 
   const config: MasteringChainConfig = {
     eq: {
-      tiltDb: settings.tiltDb + (warm - 0.5) * (safeMode ? -1.2 : -2.5),
-      pivotHz: 1000,
+      tilt: {
+        tiltDb: settings.tiltDb + (warm - 0.5) * (safeMode ? -1.2 : -2.5),
+        pivotHz: 1000,
+      },
     },
     dynamics: {
       compressor: {
@@ -739,7 +745,9 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
 
   if (repairActive) {
     config.repair = {
-      denoise: settings.denoiseAmount > 0 || preset === 'aiMusic' || preset === 'speech',
+      denoise: {
+        enabled: settings.denoiseAmount > 0 || preset === 'aiMusic' || preset === 'speech',
+      },
       nFft: 2048,
       hopLength: 512,
       ddAlpha: preset === 'speech' ? 0.96 : 0.98,
@@ -861,8 +869,10 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
 
   if (preset === 'hiphop') {
     config.eq = {
-      tiltDb: (config.eq?.tiltDb ?? 0) - 0.5,
-      pivotHz: 850,
+      tilt: {
+        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) - 0.5,
+        pivotHz: 850,
+      },
     };
     config.dynamics!.compressor!.ratio = safeMode ? 2.2 + compressed * 0.45 : 2.6 + compressed;
   }
@@ -872,8 +882,10 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
   // master would flatten. Small = intimate club gig, Large = big-stage show.
   if (preset === 'liveSmall') {
     config.eq = {
-      tiltDb: (config.eq?.tiltDb ?? 0) + 0.2,
-      pivotHz: 900,
+      tilt: {
+        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) + 0.2,
+        pivotHz: 900,
+      },
     };
     config.dynamics!.compressor = {
       ...config.dynamics!.compressor!,
@@ -887,8 +899,10 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
 
   if (preset === 'liveLarge') {
     config.eq = {
-      tiltDb: (config.eq?.tiltDb ?? 0) + 0.1,
-      pivotHz: 700,
+      tilt: {
+        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) + 0.1,
+        pivotHz: 700,
+      },
     };
     config.dynamics!.compressor = {
       ...config.dynamics!.compressor!,
@@ -924,8 +938,10 @@ export function buildMasteringConfig(options: MasteringRenderOptions): Mastering
     // Keep the genre's tonal direction but re-center the pivot on the room and
     // add a light de-boxing tilt.
     config.eq = {
-      tiltDb: (config.eq?.tiltDb ?? 0) + room.tiltDelta,
-      pivotHz: room.pivotHz,
+      tilt: {
+        tiltDb: (config.eq?.tilt?.tiltDb ?? 0) + room.tiltDelta,
+        pivotHz: room.pivotHz,
+      },
     };
 
     // Floors only — a genre that already compresses slower keeps its setting.

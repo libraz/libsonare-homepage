@@ -161,8 +161,12 @@ export async function validateMasteringPresets({
 
 export function buildConfig({ targetLufs, tiltDb, ratio, air, width, denoise = false }) {
   return {
-    repair: denoise ? { denoise: true, gainFloor: 0.1 } : undefined,
-    eq: { tiltDb, pivotHz: 1000 },
+    // Mirror the nested forms the demo builds in `useMastering.ts`: the flat
+    // `eq.tiltDb` / `eq.pivotHz` keys and the `repair.denoise` boolean are
+    // deprecated shorthands, so validating them would stop exercising the
+    // shape the demo actually sends.
+    repair: denoise ? { denoise: { enabled: true }, gainFloor: 0.1 } : undefined,
+    eq: { tilt: { tiltDb, pivotHz: 1000 } },
     dynamics: {
       compressor: {
         thresholdDb: -18,
