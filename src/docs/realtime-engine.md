@@ -261,6 +261,8 @@ On the `SonareEngine` worklet API you can also automate a mixer fader/pan withou
 
 Insert parameters use the same automation-lane mechanism, but first need a reserved id. Call `resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`, `resolveMasterInsertAutomationId(...)`, or `resolveBusInsertAutomationId(...)`, then pass the returned id to `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. `insertIndex` addresses the strip's combined pre-then-post insert sequence, and `paramName` is the JSON key reported by `masteringInsertParamInfo`. WASM/Node return `-1` for an unknown strip, insert, or key; Python raises `SonareError`.
 
+The strip-insert processors — `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`, `maximizer.*`, and `multiband.*` — all resolve through these methods and can be driven at audio-block precision. Whole-signal mastering stages (`repair.*`, `loudness`, and match stages) have no insert form or automation id: they buffer the full signal and do not run on the realtime path.
+
 ```typescript
 const thresholdId = engine.resolveBusInsertAutomationId(1, 0, 'thresholdDb');
 if (thresholdId < 0) throw new Error('bus compressor threshold is not automatable');

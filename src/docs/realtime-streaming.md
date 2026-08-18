@@ -297,6 +297,28 @@ engineNode.pollTelemetry();
 engineNode.destroy();
 ```
 
+### Send PFL/AFL to a separate cue output
+
+PFL/AFL monitoring normally folds the cue bus into the program output. Pass `cueOutput: true` when creating the node to give it a second output carrying only the cue bus; route output `0` to the program destination and output `1` to headphones or another device. Without this option the node keeps one output and the folded mix, sample for sample.
+
+```typescript
+import { SonareEngine } from '@libraz/libsonare/worklet';
+
+const engine = await SonareEngine.create(audioCtx, {
+  moduleUrl: '/sonare-engine-worklet.js',
+  cueOutput: true,
+});
+engine.setTrackMonitorMode(trackId, 'pfl');
+engine.node.connect(audioCtx.destination, 0);
+engine.node.connect(cueDestination, 1);
+```
+
+For a custom zero-copy worklet path, call `prepareChannels(...)` and `prepareMonitorChannels(...)` from a message handler, before audio processing begins. On each render block, call `processPreparedWithMonitor(numFrames)` and read the program and cue views with `getChannelBuffer(...)` and `getMonitorChannelBuffer(...)`. The preparation calls allocate; the prepared processing path is allocation-free. `processWithMonitor(...)` remains the copy-in alternative outside that hot path.
+
+### Mastering preview in the render realm
+
+`StreamingMasteringChain` is also exported from `@libraz/libsonare/worklet`, so a live mastering preview can stay in the render realm. Construct and `prepare()` it from a message handler, never from `AudioWorkletProcessor.process()`: preparation allocates. A `loudness` stage needs an offline-measured `loudnessStaticGainDb`, because integrated LUFS cannot be measured block by block. After the final block, flush until empty and discard the leading `latencySamples()` samples when alignment matters. The chain is a host-side stage, outside the engine's delay compensation and bypass, so compensate it against other engine outputs yourself.
+
 For app code that wants a higher-level worklet API, `SonareEngine` combines two pieces:
 
 | Piece | Role |

@@ -708,6 +708,19 @@ const configJson = JSON.stringify({ transpose_semitones: 12 }); // up one octave
 project.bakeMidiFx(midiClip, configJson);                        // events are now transposed in place
 ```
 
+When an editor needs to preserve a selection or annotation through the rewrite, use the request form. `sourceIndex` has one entry per transformed event in canonical order: it names the input event the output derives from, or `-1` when no input event produced it. A chord or arpeggiator can produce several events with the same source index.
+
+```typescript
+const count = project.previewMidiFxCount({ clipId: midiClip, configJson });
+const { sourceIndex } = project.bakeMidiFx({
+  clipId: midiClip,
+  configJson,
+  withSourceIndex: true,
+});
+```
+
+`previewMidiFxCount(...)` runs the same deterministic transform without changing the project, so its result is the exact number of events the following bake produces. The positional `bakeMidiFx(clipId, configJson)` form remains available and returns no provenance. Python uses `project.preview_midi_fx_count(clip_id, config_json)` and `project.bake_midi_fx(clip_id, config_json, with_source_index=True)`.
+
 The config is a JSON object whose **stages are keyed by their parameters** — include a stage's keys to enable it, omit them to skip it. Unknown keys are ignored, so a typo silently does nothing:
 
 | Stage | Keys |
@@ -729,7 +742,7 @@ project.bakeMidiFx(midiClip, JSON.stringify({
 }));
 ```
 
-In Python this is `project.bake_midi_fx(clip_id, config_json)`. Because the rewrite is destructive, it is an undoable edit like any other — `undo()` restores the original events.
+Because the rewrite is destructive, it is an undoable edit like any other — `undo()` restores the original events.
 
 ## Auto-tempo and snap-to-grid
 

@@ -708,6 +708,19 @@ const configJson = JSON.stringify({ transpose_semitones: 12 }); // 1 オクタ�
 project.bakeMidiFx(midiClip, configJson);                        // イベントがその場でトランスポーズされる
 ```
 
+編集時の選択範囲や注釈を焼き込み後にも対応付けたいときは、リクエスト形式を使います。`sourceIndex` は正規順に並ぶ変換後の各イベントに対応する入力イベントの index です。入力に由来しないイベントは `-1` で、コードやアルペジエーターのように 1 つの入力から複数のイベントが出る場合は同じ index が複数回現れます。
+
+```typescript
+const count = project.previewMidiFxCount({ clipId: midiClip, configJson });
+const { sourceIndex } = project.bakeMidiFx({
+  clipId: midiClip,
+  configJson,
+  withSourceIndex: true,
+});
+```
+
+`previewMidiFxCount(...)` はプロジェクトを変更せず、同じ決定的な変換を実行します。返る件数は続けて焼き込むイベント数と一致するため、出力バッファを正確に確保できます。従来の `bakeMidiFx(clipId, configJson)` 形式も使えますが、由来情報は返しません。Python では `project.preview_midi_fx_count(clip_id, config_json)` と `project.bake_midi_fx(clip_id, config_json, with_source_index=True)` を使います。
+
 config は JSON オブジェクトで、**各ステージはそのパラメータをキーに**します。ステージのキーを含めれば有効になり、省けばスキップされます。未知のキーは無視されるため、打ち間違いは静かに何もしません。
 
 | ステージ | キー |
@@ -729,7 +742,7 @@ project.bakeMidiFx(midiClip, JSON.stringify({
 }));
 ```
 
-Python では `project.bake_midi_fx(clip_id, config_json)` です。書き換えは破壊的ですが、ほかの編集と同様にアンドゥ可能です。`undo()` で元のイベントに戻ります。
+書き換えは破壊的ですが、ほかの編集と同様にアンドゥ可能です。`undo()` で元のイベントに戻ります。
 
 ## 自動テンポとグリッドスナップ
 

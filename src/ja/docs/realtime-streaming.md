@@ -312,6 +312,28 @@ engineNode.pollTelemetry();
 engineNode.destroy();
 ```
 
+### PFL/AFL を独立したキュー出力へ送る
+
+通常、PFL/AFL のキューバスはプログラム出力へ折り込まれます。ノード作成時に `cueOutput: true` を渡すと、キューバスだけを流す 2 本目の出力が追加されます。出力 `0` はプログラムの出力先へ、出力 `1` はヘッドフォンや別デバイスへ接続してください。このオプションを省略すると、従来どおり出力は 1 本で、折り込み後のミックスもサンプル単位で同一です。
+
+```typescript
+import { SonareEngine } from '@libraz/libsonare/worklet';
+
+const engine = await SonareEngine.create(audioCtx, {
+  moduleUrl: '/sonare-engine-worklet.js',
+  cueOutput: true,
+});
+engine.setTrackMonitorMode(trackId, 'pfl');
+engine.node.connect(audioCtx.destination, 0);
+engine.node.connect(cueDestination, 1);
+```
+
+独自のゼロコピー Worklet 経路では、音声処理を始める前にメッセージハンドラーから `prepareChannels(...)` と `prepareMonitorChannels(...)` を呼びます。各レンダーブロックでは `processPreparedWithMonitor(numFrames)` を呼び、`getChannelBuffer(...)` と `getMonitorChannelBuffer(...)` でプログラムとキューのビューを読みます。準備メソッドは確保を行いますが、準備済みの処理経路はアロケーションしません。ホットパス外でコピーして渡す場合は、従来の `processWithMonitor(...)` も使えます。
+
+### レンダー領域でマスタリングをプレビューする
+
+`StreamingMasteringChain` は `@libraz/libsonare/worklet` からも公開されるため、ライブのマスタリングプレビューをメインスレッドへ往復させずにレンダー領域で実行できます。生成と `prepare()` はメッセージハンドラーで行い、`AudioWorkletProcessor.process()` からは呼ばないでください。準備時に確保が発生します。`loudness` 段を使うには、ブロック単位では統合 LUFS を計測できないため、オフラインで計測した `loudnessStaticGainDb` が必要です。最後のブロック後は空になるまでフラッシュし、時間を合わせる必要があれば先頭の `latencySamples()` サンプルを捨てます。このチェーンはエンジン外のホスト側ステージで、エンジンのディレイ補償やバイパスには参加しないため、ほかのエンジン出力との補償はホスト側で行います。
+
 アプリ側でより高いレベルの facade が欲しい場合は、`SonareEngine` を使えます。
 
 | 部品 | 役割 |

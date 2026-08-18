@@ -246,6 +246,8 @@ engine.setParameter(1, 0.5);
 
 インサートパラメータも同じオートメーションレーンで動かせますが、先に予約 id を取得します。`resolveTrackInsertAutomationId(trackId, insertIndex, paramName)`、`resolveMasterInsertAutomationId(...)`、`resolveBusInsertAutomationId(...)` のいずれかを呼び、その戻り値を `setAutomationLane`、`setParameter`、`setParameterSmoothed` に渡してください。`insertIndex` はストリップの pre インサート、続いて post インサートを連結した列を指し、`paramName` は `masteringInsertParamInfo` が返す JSON キーです。未知のストリップ／インサート／キーでは WASM/Node は `-1`、Python は `SonareError` を返します。
 
+ストリップインサートとして使える `eq.*`、`dynamics.*`、`saturation.*`、`spectral.*`、`stereo.*`、`maximizer.*`、`multiband.*` は、すべてこの方法で id を解決でき、音声ブロック単位で動かせます。一方、信号全体を扱う `repair.*`、`loudness`、マッチ系のマスタリング段にはインサート形式もオートメーション id もありません。これらは信号全体をバッファリングするため、リアルタイム経路では動作しません。
+
 ```typescript
 const thresholdId = engine.resolveBusInsertAutomationId(1, 0, 'thresholdDb');
 if (thresholdId < 0) throw new Error('bus compressor threshold is not automatable');
