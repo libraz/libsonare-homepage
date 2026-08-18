@@ -114,6 +114,249 @@ interface ProjectMidiCcBinding {
     maxValue: number;
 }
 
+/**
+ * Nested mastering-chain configuration. A boolean toggles a module/processor's
+ * `enabled` flag; setting any field implicitly enables its module unless
+ * `enabled: false` is also given.
+ *
+ * Exception — color stages as `masterAudio` overrides: the `saturation.tape`
+ * and `saturation.exciter` stages are engaged from an override only when you
+ * pass `enabled: true` explicitly. On a preset where they are off, adjusting a
+ * parameter alone (e.g. `saturation: { tape: { driveDb: 6 } }`) has no audible
+ * effect; use `saturation: { tape: { enabled: true, driveDb: 6 } }`.
+ */
+interface MasteringChainConfig {
+    repair?: {
+        /** `boolean` is retained as a deprecated shorthand for `{ enabled }`. */
+        denoise?: boolean | {
+            enabled?: boolean;
+            nFft?: number;
+            hopLength?: number;
+            ddAlpha?: number;
+            gainFloor?: number;
+            overSubtraction?: number;
+            spectralFloor?: number;
+            noiseEstimationQuantile?: number;
+            speechPresenceGain?: boolean;
+            gainSmoothing?: boolean;
+        };
+        nFft?: number;
+        hopLength?: number;
+        ddAlpha?: number;
+        gainFloor?: number;
+        declip?: {
+            enabled?: boolean;
+            clipThreshold?: number;
+            lpcOrder?: number;
+            iterations?: number;
+            lpcBlend?: number;
+        };
+        decrackle?: {
+            enabled?: boolean;
+            threshold?: number;
+            /** 0 = median, 1 = wavelet shrinkage. */
+            mode?: number;
+            levels?: number;
+        };
+        dehum?: {
+            enabled?: boolean;
+            fundamentalHz?: number;
+            harmonics?: number;
+            q?: number;
+            adaptive?: boolean;
+            searchRangeHz?: number;
+            adaptation?: number;
+            frameSize?: number;
+            pllBandwidth?: number;
+        };
+        declick?: {
+            enabled?: boolean;
+            threshold?: number;
+            neighborRatio?: number;
+            maxClickSamples?: number;
+            lpcOrder?: number;
+            residualRatio?: number;
+        };
+        dereverb?: {
+            enabled?: boolean;
+            threshold?: number;
+            attenuation?: number;
+            nFft?: number;
+            hopLength?: number;
+            t60Sec?: number;
+            lateDelayMs?: number;
+            overSubtraction?: number;
+            spectralFloor?: number;
+            wpeEnabled?: boolean;
+            wpeIterations?: number;
+            wpeTaps?: number;
+            wpeStrength?: number;
+        };
+    };
+    eq?: {
+        /** Canonical nested tilt stage. */
+        tilt?: {
+            enabled?: boolean;
+            tiltDb?: number;
+            pivotHz?: number;
+        };
+        /** @deprecated Use `eq.tilt.tiltDb`. */
+        tiltDb?: number;
+        /** @deprecated Use `eq.tilt.pivotHz`. */
+        pivotHz?: number;
+    };
+    dynamics?: {
+        compressor?: {
+            enabled?: boolean;
+            thresholdDb?: number;
+            ratio?: number;
+            attackMs?: number;
+            releaseMs?: number;
+            kneeDb?: number;
+            makeupGainDb?: number;
+            autoMakeup?: boolean;
+        };
+        deesser?: {
+            enabled?: boolean;
+            frequencyHz?: number;
+            thresholdDb?: number;
+            ratio?: number;
+            attackMs?: number;
+            releaseMs?: number;
+            rangeDb?: number;
+            bandpassQ?: number;
+        };
+        transientShaper?: {
+            enabled?: boolean;
+            attackGainDb?: number;
+            sustainGainDb?: number;
+            fastAttackMs?: number;
+            fastReleaseMs?: number;
+            slowAttackMs?: number;
+            slowReleaseMs?: number;
+            sensitivity?: number;
+            maxGainDb?: number;
+            gainSmoothingMs?: number;
+            lookaheadMs?: number;
+        };
+        multibandComp?: {
+            enabled?: boolean;
+            lowCutoffHz?: number;
+            highCutoffHz?: number;
+            lowThresholdDb?: number;
+            lowRatio?: number;
+            lowAttackMs?: number;
+            lowReleaseMs?: number;
+            midThresholdDb?: number;
+            midRatio?: number;
+            midAttackMs?: number;
+            midReleaseMs?: number;
+            highThresholdDb?: number;
+            highRatio?: number;
+            highAttackMs?: number;
+            highReleaseMs?: number;
+        };
+    };
+    saturation?: {
+        tape?: {
+            enabled?: boolean;
+            driveDb?: number;
+            saturation?: number;
+            hysteresis?: number;
+            outputGainDb?: number;
+            speedIps?: number;
+            headBumpDb?: number;
+            bias?: number;
+            gapLoss?: number;
+        };
+        exciter?: {
+            enabled?: boolean;
+            frequencyHz?: number;
+            driveDb?: number;
+            amount?: number;
+            q?: number;
+            evenOddMix?: number;
+        };
+    };
+    spectral?: {
+        airBand?: {
+            enabled?: boolean;
+            amount?: number;
+            shelfFrequencyHz?: number;
+            dynamicThresholdDb?: number;
+            dynamicRangeDb?: number;
+        };
+    };
+    stereo?: {
+        imager?: {
+            enabled?: boolean;
+            width?: number;
+            outputGainDb?: number;
+            decorrelationAmount?: number;
+            preserveEnergy?: boolean;
+        };
+        monoMaker?: {
+            enabled?: boolean;
+            amount?: number;
+            frequencyHz?: number;
+        };
+    };
+    maximizer?: {
+        truePeakLimiter?: {
+            enabled?: boolean;
+            ceilingDb?: number;
+            lookaheadMs?: number;
+            releaseMs?: number;
+            oversampleFactor?: number;
+            applyGainAtInputRate?: boolean;
+        };
+    };
+    loudness?: {
+        enabled?: boolean;
+        targetLufs?: number;
+        ceilingDb?: number;
+        truePeakOversample?: number;
+        releaseMs?: number;
+        applyGainAtInputRate?: boolean;
+    };
+    /**
+     * Dot-notation spelling of any leaf above, e.g. `'loudness.targetLufs': -20`
+     * beside or instead of `loudness: { targetLufs: -20 }`. It is the form the C
+     * ABI carries parameters in, so a caller assembling overrides dynamically can
+     * emit it directly; the core validates the key and rejects an unknown one.
+     * The nested spelling is canonical — prefer it in hand-written code, where it
+     * is checked field by field while a dotted key is only checked at run time.
+     */
+    [flatKey: `${string}.${string}`]: number | boolean | undefined;
+}
+/**
+ * Configuration for the block-by-block {@link StreamingMasteringChain}.
+ *
+ * Extends {@link MasteringChainConfig} with optional precomputed loudness
+ * parameters. The streaming chain cannot measure whole-signal integrated LUFS,
+ * so an enabled `loudness` stage normally throws at construction. To let a
+ * preset's streaming preview match its offline render, the caller may
+ * precompute the loudness normalization gain offline (e.g.
+ * `targetLufs - measuredIntegratedLufs`) and supply it here.
+ */
+interface StreamingMasteringChainConfig extends MasteringChainConfig {
+    /**
+     * Precomputed static loudness gain in dB. When omitted (the default), an
+     * enabled `loudness` stage still throws. When provided and `loudness.enabled`
+     * is set, the chain applies this fixed gain per block before the loudness
+     * stage's true-peak limiter instead of throwing.
+     */
+    loudnessStaticGainDb?: number;
+    /**
+     * Offline-measured true-peak (dBFS) of the source the static gain was
+     * computed for. When provided, the static gain is clamped to
+     * `loudness.ceilingDb - loudnessStaticGainPeakDb` so the streaming preview
+     * does not drive the loudness limiter harder than the offline chain. When
+     * omitted (the default) the static gain is applied verbatim.
+     */
+    loudnessStaticGainPeakDb?: number;
+}
+
 type PanMode = 'balance' | 'pan' | 'stereoPan' | 'stereo-pan' | 'dualPan' | 'dual-pan' | number;
 /**
  * Interpolation curve for scheduled automation events
@@ -543,6 +786,15 @@ declare class RealtimeEngine {
      * Returns `-1` when the track, insert, or name is unknown. (The Python binding
      * raises a `SonareError` for an unknown id where Node/WASM return the `-1`
      * sentinel.)
+     *
+     * This trio is how a mastering processor gets time-varying automation: the
+     * `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`,
+     * `maximizer.*` and `multiband.*` processors are all available as strip
+     * inserts, so placing one on a strip and resolving its parameter here drives
+     * it at audio-block precision, live and offline alike. The whole-signal
+     * stages of the offline mastering chain (`repair.*`, `loudness`, and the
+     * match stages) have no insert form and no automation id: they buffer the
+     * entire signal by construction and do not run on the realtime path.
      */
     resolveTrackInsertAutomationId(trackId: number, insertIndex: number, paramName: string): number;
     resolveMasterInsertAutomationId(insertIndex: number, paramName: string): number;
@@ -609,6 +861,27 @@ declare class RealtimeEngine {
      * `prepareChannels`.
      */
     processPrepared(numFrames: number): void;
+    /**
+     * Allocates the cue-bus counterpart of {@link prepareChannels}. Needed only
+     * when PFL/AFL monitoring must reach a separate output: `processPrepared`
+     * folds the cue bus into the program output, while
+     * {@link processPreparedWithMonitor} keeps the two apart. Call once, off the
+     * audio thread, with at least as many channels as `prepareChannels` got.
+     */
+    prepareMonitorChannels(numChannels: number, maxFrames: number): void;
+    /**
+     * Returns a Float32Array view onto the persistent cue-bus scratch for one
+     * channel (valid for up to `numFrames`). Read it after
+     * {@link processPreparedWithMonitor}. Re-acquire after WASM memory growth.
+     */
+    getMonitorChannelBuffer(channel: number, numFrames: number): Float32Array;
+    /**
+     * Runs the engine in place over the prepared scratch, writing the cue bus to
+     * the monitor scratch instead of folding it into the program output.
+     * Allocation-free: safe on the AudioWorklet render thread after
+     * `prepareChannels` and `prepareMonitorChannels`.
+     */
+    processPreparedWithMonitor(numFrames: number): void;
     processWithMonitor(channels: Float32Array[]): WasmEngineProcessWithMonitorResult;
     renderOffline(channels: Float32Array[], blockSize?: number): Float32Array[];
     bounceOffline(options: EngineBounceOptions): EngineBounceResult;
@@ -819,6 +1092,91 @@ declare function attachOpfsClipStream(streamer: ClipPageStreamer, engine: Realti
  * worklet page-miss messages.
  */
 declare function attachOpfsClipStream(engine: WorkletOpfsClipStreamHost, options: OpfsClipStreamOptions): Promise<OpfsClipStream>;
+
+/**
+ * Block-by-block streaming variant of {@link masteringChain}.
+ *
+ * Maintains processor state across {@link processMono}/{@link processStereo}
+ * calls. Only ProcessorBase-backed stages are supported. Configurations that
+ * enable `repair.denoise` throw at construction. An enabled `loudness` stage
+ * also throws unless {@link StreamingMasteringChainConfig.loudnessStaticGainDb}
+ * supplies a precomputed normalization gain.
+ *
+ * Call {@link delete} (or use a `try/finally`) to release the underlying WASM
+ * object — the embind handle is not garbage-collected automatically.
+ *
+ * Reachable from the AudioWorklet realm through the `sonare/worklet` entry, but
+ * the realtime contract is the caller's to keep:
+ *
+ * - {@link prepare} builds the processors and allocates. Call it once from a
+ *   message handler, never from `AudioWorkletProcessor.process()`.
+ * - {@link processMono}/{@link processStereo} return fresh arrays. On the render
+ *   thread, reuse the returned reference for the block rather than retaining it.
+ * - An enabled `loudness` stage needs `loudnessStaticGainDb` measured offline,
+ *   because whole-signal integrated LUFS cannot be measured block by block. Pass
+ *   `loudnessStaticGainPeakDb` too and the static gain is clamped exactly as the
+ *   offline chain clamps it, so the live preview matches the render.
+ * - {@link flush} output starts {@link latencySamples} samples early; discard
+ *   that many leading samples when time alignment matters.
+ *
+ * The chain is a host-side stage, not an engine insert: it does not participate
+ * in the engine's PDC or bypass, so latency compensation against other engine
+ * outputs is also the caller's.
+ *
+ * @example
+ * ```typescript
+ * const chain = new StreamingMasteringChain({ eq: { tiltDb: 1.0 } });
+ * try {
+ *   chain.prepare(44100, 512, 1);
+ *   const out = chain.processMono(blockSamples);
+ * } finally {
+ *   chain.delete();
+ * }
+ * ```
+ */
+declare class StreamingMasteringChain {
+    private chain;
+    constructor(config: StreamingMasteringChainConfig);
+    /**
+     * Initialize processors for the given sample rate and block layout.
+     *
+     * @param sampleRate - Sample rate in Hz
+     * @param maxBlockSize - Maximum block size per process call
+     * @param numChannels - 1 (mono) or 2 (stereo)
+     */
+    prepare(sampleRate: number, maxBlockSize: number, numChannels: number): void;
+    /**
+     * Process one mono block, returning the processed samples (same length).
+     */
+    processMono(samples: Float32Array): Float32Array;
+    /**
+     * Process one stereo block, returning the processed channels.
+     */
+    processStereo(left: Float32Array, right: Float32Array): {
+        left: Float32Array;
+        right: Float32Array;
+    };
+    /**
+     * Emit delayed audio and finite processor tails after the final mono block.
+     * Call until this returns an empty array. The initial `latencySamples()`
+     * samples of the concatenated stream are delayed and should be discarded for
+     * time-aligned output.
+     */
+    flushMono(): Float32Array;
+    /** Stereo counterpart of {@link flushMono}. */
+    flushStereo(): {
+        left: Float32Array;
+        right: Float32Array;
+    };
+    /** Reset all processor state without rebuilding. */
+    reset(): void;
+    /** Total reported latency in samples across all active processors. */
+    latencySamples(): number;
+    /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
+    stageNames(): string[];
+    /** Release the underlying WASM object. Safe to call only once. */
+    delete(): void;
+}
 
 /**
  * sonare - Audio Analysis Library
@@ -1143,6 +1501,13 @@ interface SonareRealtimeEngineWorkletProcessorOptions {
     /** Lock-free worklet-to-main-thread MIDI-1 output ring. */
     externalMidiSharedBuffer?: SharedArrayBuffer;
     externalMidiRingCapacity?: number;
+    /**
+     * Route the PFL/AFL cue bus to the processor's SECOND output instead of
+     * folding it into the program output. Off by default, so an existing
+     * single-output host keeps its current mix sample for sample. The node must
+     * be constructed with two outputs for the cue to be audible.
+     */
+    cueOutput?: boolean;
 }
 interface SonareRealtimeVoiceChangerWorkletProcessorOptions {
     preset?: RealtimeVoiceChangerConfigInput;
@@ -1172,6 +1537,11 @@ interface SonareRealtimeEngineNodeCapabilities {
     clipPageRequestsRealtimeSafe: boolean;
     /** True when external MIDI uses the SAB output ring rather than postMessage. */
     externalMidiRealtimeSafe: boolean;
+    /**
+     * True when the node carries a second output fed by the PFL/AFL cue bus. When
+     * false the cue is folded into the program output, as it always was.
+     */
+    cueOutput: boolean;
     engineAbiVersion?: number;
     expectedEngineAbiVersion?: number;
     abiCompatible?: boolean;
@@ -2024,6 +2394,8 @@ declare class SonareRealtimeEngineWorkletProcessor {
     private lastMeterFrame;
     private metronomeConfig;
     private channelBuffers;
+    private monitorBuffers;
+    private readonly cueOutput;
     private readonly liveClips;
     private readonly pagedClipProviders;
     private readonly pagedClipPageFrames;
@@ -2034,6 +2406,7 @@ declare class SonareRealtimeEngineWorkletProcessor {
     constructor(options?: SonareRealtimeEngineWorkletProcessorOptions, transport?: WorkletTransport);
     process(inputs: WorkletInput, outputs: WorkletOutput): boolean;
     private reacquireChannelBuffers;
+    private reacquireMonitorBuffers;
     receiveCommand(command: SonareEngineCommandRecord): void;
     receiveSync(message: SonareEngineSyncMessage): void;
     private applySync;
@@ -2139,4 +2512,4 @@ declare class SonareRealtimeVoiceChangerWorkletProcessor {
 }
 declare function registerSonareRealtimeVoiceChangerWorkletProcessor(name?: string): void;
 
-export { type OpfsClipStream, type OpfsClipStreamOptions, SONARE_CLIP_PAGE_REQUEST_RING_HEADER_INTS, SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S, SONARE_ENGINE_COMMAND_RECORD_BYTES, SONARE_ENGINE_RING_HEADER_INTS, SONARE_ENGINE_TELEMETRY_RECORD_BYTES, SONARE_EXTERNAL_MIDI_RING_HEADER_INTS, SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S, SONARE_METER_RING_HEADER_INTS, SONARE_METER_RING_RECORD_FLOATS, SONARE_SCOPE_RING_HEADER_INTS, SONARE_SPECTRUM_RING_HEADER_INTS, type SonareClipPageRequest, type SonareClipPageRequestRingBuffer, type SonareClipPageRequestRingReadResult, SonareEngine, type SonareEngineCaptureRequestMessage, type SonareEngineCaptureResponseMessage, type SonareEngineClipPageRequestMessage, type SonareEngineCommandRecord, type SonareEngineCommandRingBuffer, SonareEngineCommandType, type SonareEngineOptions, type SonareEngineSyncAutomationMessage, type SonareEngineSyncBuiltinInstrumentMessage, type SonareEngineSyncCaptureMessage, type SonareEngineSyncClipsDeltaMessage, type SonareEngineSyncClipsMessage, type SonareEngineSyncLoadSoundFontMessage, type SonareEngineSyncMarkersMessage, type SonareEngineSyncMasterStripEqBandMessage, type SonareEngineSyncMasterStripInsertBypassedMessage, type SonareEngineSyncMessage, type SonareEngineSyncMetronomeMessage, type SonareEngineSyncMidiCcMessage, type SonareEngineSyncMidiClipsMessage, type SonareEngineSyncMidiNoteMessage, type SonareEngineSyncMidiPanicMessage, type SonareEngineSyncMixerMessage, type SonareEngineSyncSf2InstrumentMessage, type SonareEngineSyncSynthInstrumentMessage, type SonareEngineSyncTempoMessage, type SonareEngineSyncTrackStripEqBandMessage, type SonareEngineSyncTrackStripInsertBypassedMessage, SonareEngineTelemetryError, type SonareEngineTelemetryRecord, type SonareEngineTelemetryRingBuffer, type SonareEngineTelemetryRingReadResult, SonareEngineTelemetryType, type SonareEngineTransportFacade, type SonareEngineTransportRequestMessage, type SonareEngineTransportResponseMessage, type SonareExternalMidiRingBuffer, type SonareExternalMidiRingReadResult, type SonareMeterRingBuffer, type SonareMeterRingReadResult, SonareRealtimeEngineNode, type SonareRealtimeEngineNodeCapabilities, type SonareRealtimeEngineNodeOptions, SonareRealtimeEngineWorkletProcessor, type SonareRealtimeEngineWorkletProcessorOptions, type SonareRealtimeVoiceChangerDestroyMessage, type SonareRealtimeVoiceChangerMessage, type SonareRealtimeVoiceChangerResetMessage, type SonareRealtimeVoiceChangerSetConfigMessage, SonareRealtimeVoiceChangerWorkletProcessor, type SonareRealtimeVoiceChangerWorkletProcessorOptions, type SonareScopeRingBuffer, type SonareScopeRingReadResult, type SonareSpectrumRingBuffer, type SonareSpectrumRingReadResult, type SonareWorkletDestroyMessage, type SonareWorkletMessage, type SonareWorkletMeterSnapshot, SonareWorkletProcessor, type SonareWorkletProcessorOptions, type SonareWorkletScheduleInsertAutomationMessage, type SonareWorkletScopeSnapshot, type SonareWorkletSetMeterIntervalMessage, type SonareWorkletSpectrumSnapshot, type SonareWorkletTransportMessage, attachOpfsClipStream, createSonareClipPageRequestRingBuffer, createSonareEngineCommandRingBuffer, createSonareEngineTelemetryRingBuffer, createSonareExternalMidiRingBuffer, createSonareMeterRingBuffer, createSonareScopeRingBuffer, createSonareSpectrumRingBuffer, decodeFrame, encodeFrameHi, encodeFrameLo, init, isInitialized, popSonareEngineCommandRingBuffer, pushSonareClipPageRequestRingBuffer, pushSonareEngineCommandRingBuffer, pushSonareExternalMidiRingBuffer, readSonareClipPageRequestRingBuffer, readSonareEngineTelemetryRingBuffer, readSonareExternalMidiRingBuffer, readSonareMeterRingBuffer, readSonareScopeRingBuffer, readSonareSpectrumRingBuffer, registerSonareRealtimeEngineWorkletProcessor, registerSonareRealtimeVoiceChangerWorkletProcessor, registerSonareWorkletProcessor, sonareClipPageRequestRingBufferByteLength, sonareEngineCommandRingBufferByteLength, sonareEngineTelemetryRingBufferByteLength, sonareExternalMidiRingBufferByteLength, sonareMeterRingBufferByteLength, sonareScopeRingBufferByteLength, sonareSpectrumRingBufferByteLength, writeSonareEngineTelemetryRingBuffer };
+export { type OpfsClipStream, type OpfsClipStreamOptions, SONARE_CLIP_PAGE_REQUEST_RING_HEADER_INTS, SONARE_CLIP_PAGE_REQUEST_RING_RECORD_UINT32S, SONARE_ENGINE_COMMAND_RECORD_BYTES, SONARE_ENGINE_RING_HEADER_INTS, SONARE_ENGINE_TELEMETRY_RECORD_BYTES, SONARE_EXTERNAL_MIDI_RING_HEADER_INTS, SONARE_EXTERNAL_MIDI_RING_RECORD_UINT32S, SONARE_METER_RING_HEADER_INTS, SONARE_METER_RING_RECORD_FLOATS, SONARE_SCOPE_RING_HEADER_INTS, SONARE_SPECTRUM_RING_HEADER_INTS, type SonareClipPageRequest, type SonareClipPageRequestRingBuffer, type SonareClipPageRequestRingReadResult, SonareEngine, type SonareEngineCaptureRequestMessage, type SonareEngineCaptureResponseMessage, type SonareEngineClipPageRequestMessage, type SonareEngineCommandRecord, type SonareEngineCommandRingBuffer, SonareEngineCommandType, type SonareEngineOptions, type SonareEngineSyncAutomationMessage, type SonareEngineSyncBuiltinInstrumentMessage, type SonareEngineSyncCaptureMessage, type SonareEngineSyncClipsDeltaMessage, type SonareEngineSyncClipsMessage, type SonareEngineSyncLoadSoundFontMessage, type SonareEngineSyncMarkersMessage, type SonareEngineSyncMasterStripEqBandMessage, type SonareEngineSyncMasterStripInsertBypassedMessage, type SonareEngineSyncMessage, type SonareEngineSyncMetronomeMessage, type SonareEngineSyncMidiCcMessage, type SonareEngineSyncMidiClipsMessage, type SonareEngineSyncMidiNoteMessage, type SonareEngineSyncMidiPanicMessage, type SonareEngineSyncMixerMessage, type SonareEngineSyncSf2InstrumentMessage, type SonareEngineSyncSynthInstrumentMessage, type SonareEngineSyncTempoMessage, type SonareEngineSyncTrackStripEqBandMessage, type SonareEngineSyncTrackStripInsertBypassedMessage, SonareEngineTelemetryError, type SonareEngineTelemetryRecord, type SonareEngineTelemetryRingBuffer, type SonareEngineTelemetryRingReadResult, SonareEngineTelemetryType, type SonareEngineTransportFacade, type SonareEngineTransportRequestMessage, type SonareEngineTransportResponseMessage, type SonareExternalMidiRingBuffer, type SonareExternalMidiRingReadResult, type SonareMeterRingBuffer, type SonareMeterRingReadResult, SonareRealtimeEngineNode, type SonareRealtimeEngineNodeCapabilities, type SonareRealtimeEngineNodeOptions, SonareRealtimeEngineWorkletProcessor, type SonareRealtimeEngineWorkletProcessorOptions, type SonareRealtimeVoiceChangerDestroyMessage, type SonareRealtimeVoiceChangerMessage, type SonareRealtimeVoiceChangerResetMessage, type SonareRealtimeVoiceChangerSetConfigMessage, SonareRealtimeVoiceChangerWorkletProcessor, type SonareRealtimeVoiceChangerWorkletProcessorOptions, type SonareScopeRingBuffer, type SonareScopeRingReadResult, type SonareSpectrumRingBuffer, type SonareSpectrumRingReadResult, type SonareWorkletDestroyMessage, type SonareWorkletMessage, type SonareWorkletMeterSnapshot, SonareWorkletProcessor, type SonareWorkletProcessorOptions, type SonareWorkletScheduleInsertAutomationMessage, type SonareWorkletScopeSnapshot, type SonareWorkletSetMeterIntervalMessage, type SonareWorkletSpectrumSnapshot, type SonareWorkletTransportMessage, StreamingMasteringChain, type StreamingMasteringChainConfig, attachOpfsClipStream, createSonareClipPageRequestRingBuffer, createSonareEngineCommandRingBuffer, createSonareEngineTelemetryRingBuffer, createSonareExternalMidiRingBuffer, createSonareMeterRingBuffer, createSonareScopeRingBuffer, createSonareSpectrumRingBuffer, decodeFrame, encodeFrameHi, encodeFrameLo, init, isInitialized, popSonareEngineCommandRingBuffer, pushSonareClipPageRequestRingBuffer, pushSonareEngineCommandRingBuffer, pushSonareExternalMidiRingBuffer, readSonareClipPageRequestRingBuffer, readSonareEngineTelemetryRingBuffer, readSonareExternalMidiRingBuffer, readSonareMeterRingBuffer, readSonareScopeRingBuffer, readSonareSpectrumRingBuffer, registerSonareRealtimeEngineWorkletProcessor, registerSonareRealtimeVoiceChangerWorkletProcessor, registerSonareWorkletProcessor, sonareClipPageRequestRingBufferByteLength, sonareEngineCommandRingBufferByteLength, sonareEngineTelemetryRingBufferByteLength, sonareExternalMidiRingBufferByteLength, sonareMeterRingBufferByteLength, sonareScopeRingBufferByteLength, sonareSpectrumRingBufferByteLength, writeSonareEngineTelemetryRingBuffer };

@@ -544,6 +544,25 @@ function getSonareModule() {
   return wrappedModule;
 }
 
+// src/_chain_config.ts
+function flattenChainConfig(config) {
+  const out = {};
+  const walk = (node, prefix) => {
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[path] = value;
+      } else if (value !== null && typeof value === "object") {
+        walk(value, path);
+      } else if (value !== void 0) {
+        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
+      }
+    }
+  };
+  walk(config, "");
+  return out;
+}
+
 // src/codes.ts
 function resolveOrdinalInRange(value, min, max, enumName) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
@@ -1111,6 +1130,15 @@ var RealtimeEngine = class {
    * Returns `-1` when the track, insert, or name is unknown. (The Python binding
    * raises a `SonareError` for an unknown id where Node/WASM return the `-1`
    * sentinel.)
+   *
+   * This trio is how a mastering processor gets time-varying automation: the
+   * `eq.*`, `dynamics.*`, `saturation.*`, `spectral.*`, `stereo.*`,
+   * `maximizer.*` and `multiband.*` processors are all available as strip
+   * inserts, so placing one on a strip and resolving its parameter here drives
+   * it at audio-block precision, live and offline alike. The whole-signal
+   * stages of the offline mastering chain (`repair.*`, `loudness`, and the
+   * match stages) have no insert form and no automation id: they buffer the
+   * entire signal by construction and do not run on the realtime path.
    */
   resolveTrackInsertAutomationId(trackId, insertIndex, paramName) {
     return this.native.resolveTrackInsertAutomationId(trackId, insertIndex, paramName);
@@ -1237,6 +1265,33 @@ var RealtimeEngine = class {
    */
   processPrepared(numFrames) {
     this.native.processPrepared(numFrames);
+  }
+  /**
+   * Allocates the cue-bus counterpart of {@link prepareChannels}. Needed only
+   * when PFL/AFL monitoring must reach a separate output: `processPrepared`
+   * folds the cue bus into the program output, while
+   * {@link processPreparedWithMonitor} keeps the two apart. Call once, off the
+   * audio thread, with at least as many channels as `prepareChannels` got.
+   */
+  prepareMonitorChannels(numChannels, maxFrames) {
+    this.native.prepareMonitorChannels(numChannels, maxFrames);
+  }
+  /**
+   * Returns a Float32Array view onto the persistent cue-bus scratch for one
+   * channel (valid for up to `numFrames`). Read it after
+   * {@link processPreparedWithMonitor}. Re-acquire after WASM memory growth.
+   */
+  getMonitorChannelBuffer(channel, numFrames) {
+    return this.native.getMonitorChannelBuffer(channel, numFrames);
+  }
+  /**
+   * Runs the engine in place over the prepared scratch, writing the cue bus to
+   * the monitor scratch instead of folding it into the program output.
+   * Allocation-free: safe on the AudioWorklet render thread after
+   * `prepareChannels` and `prepareMonitorChannels`.
+   */
+  processPreparedWithMonitor(numFrames) {
+    this.native.processPreparedWithMonitor(numFrames);
   }
   processWithMonitor(channels) {
     return this.native.processWithMonitor(channels);
@@ -2002,6 +2057,73 @@ var RealtimeVoiceChanger = class {
   }
   delete() {
     this.changer.delete();
+  }
+};
+
+// src/streaming_processors.ts
+var StreamingMasteringChain = class {
+  constructor(config) {
+    const module2 = getSonareModule();
+    const { loudnessStaticGainDb, loudnessStaticGainPeakDb, ...chainConfig } = config;
+    this.chain = module2.createStreamingMasteringChain({
+      __flatParams: flattenChainConfig(chainConfig),
+      loudnessStaticGainDb,
+      loudnessStaticGainPeakDb
+    });
+  }
+  /**
+   * Initialize processors for the given sample rate and block layout.
+   *
+   * @param sampleRate - Sample rate in Hz
+   * @param maxBlockSize - Maximum block size per process call
+   * @param numChannels - 1 (mono) or 2 (stereo)
+   */
+  prepare(sampleRate, maxBlockSize, numChannels) {
+    this.chain.prepare(sampleRate, maxBlockSize, numChannels);
+  }
+  /**
+   * Process one mono block, returning the processed samples (same length).
+   */
+  processMono(samples) {
+    return this.chain.processMono(samples);
+  }
+  /**
+   * Process one stereo block, returning the processed channels.
+   */
+  processStereo(left, right) {
+    if (left.length !== right.length) {
+      throw new Error("Stereo channel lengths must match.");
+    }
+    return this.chain.processStereo(left, right);
+  }
+  /**
+   * Emit delayed audio and finite processor tails after the final mono block.
+   * Call until this returns an empty array. The initial `latencySamples()`
+   * samples of the concatenated stream are delayed and should be discarded for
+   * time-aligned output.
+   */
+  flushMono() {
+    return this.chain.flushMono();
+  }
+  /** Stereo counterpart of {@link flushMono}. */
+  flushStereo() {
+    return this.chain.flushStereo();
+  }
+  /** Reset all processor state without rebuilding. */
+  reset() {
+    this.chain.reset();
+  }
+  /** Total reported latency in samples across all active processors. */
+  latencySamples() {
+    return this.chain.latencySamples();
+  }
+  /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
+  stageNames() {
+    return this.chain.stageNames();
+  }
+  /** Release the underlying WASM object. Safe to call only once. */
+  delete() {
+    this.chain.delete();
   }
 };
 
@@ -3407,10 +3529,12 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     const clipPageRequestRing = mode === "sab" ? createSonareClipPageRequestRingBuffer(options.clipPageRequestRingCapacity ?? 128) : void 0;
     const externalMidiRing = mode === "sab" ? createSonareExternalMidiRingBuffer(options.externalMidiRingCapacity ?? 256) : void 0;
     const channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
+    const cueOutput = options.cueOutput === true;
     const processorOptions = {
       sampleRate: options.sampleRate ?? context.sampleRate,
       blockSize,
       channelCount,
+      cueOutput,
       commandSharedBuffer: commandRing?.sharedBuffer,
       commandRingCapacity: commandRing?.capacity,
       telemetrySharedBuffer: telemetryRing?.sharedBuffer,
@@ -3432,8 +3556,10 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     const factory = options.nodeFactory ?? ((ctx, name, nodeOptions) => new AudioWorkletNode(ctx, name, nodeOptions));
     const node = factory(context, processorName, {
       numberOfInputs: 1,
-      numberOfOutputs: 1,
-      outputChannelCount: [channelCount],
+      // The cue bus needs its own output; a single-output node keeps the
+      // historical mix where process() folds the cue into the program.
+      numberOfOutputs: cueOutput ? 2 : 1,
+      outputChannelCount: cueOutput ? [channelCount, channelCount] : [channelCount],
       processorOptions
     });
     return new _SonareRealtimeEngineNode(
@@ -3446,6 +3572,7 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
         audioWorklet,
         clipPageRequestsRealtimeSafe: mode === "sab",
         externalMidiRealtimeSafe: mode === "sab",
+        cueOutput,
         engineAbiVersion: detectedCapabilities?.engineAbiVersion,
         expectedEngineAbiVersion: detectedCapabilities?.expectedEngineAbiVersion,
         abiCompatible: detectedCapabilities?.abiCompatible,
@@ -5093,6 +5220,20 @@ function resolveMetronomeConfig(config) {
 }
 
 // src/worklet/engine-processor.ts
+function copyPlanesToOutput(output, planes, frames) {
+  for (let ch = 0; ch < output.length; ch++) {
+    const target = output[ch];
+    const source = planes[ch] ?? planes[0];
+    if (source) {
+      target.set(source.subarray(0, Math.min(target.length, frames)));
+      if (target.length > frames) {
+        target.fill(0, frames);
+      }
+    } else {
+      target.fill(0);
+    }
+  }
+}
 function captureTransferList(channels) {
   const transfers = [];
   const seen = /* @__PURE__ */ new Set();
@@ -5115,6 +5256,10 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     // Latest metronome gains/click length pushed via 'syncMetronome'. The
     // SetMetronome command only toggles enabled state; the config arrives here.
     this.metronomeConfig = { ...DEFAULT_METRONOME_CONFIG };
+    // Cue-bus plane, allocated only when the host asked for a separate PFL/AFL
+    // output. Empty otherwise, so a single-output host pays no heap and keeps the
+    // historical behaviour where process() folds the cue into the program mix.
+    this.monitorBuffers = [];
     this.liveClips = /* @__PURE__ */ new Map();
     this.pagedClipProviders = /* @__PURE__ */ new Map();
     this.pagedClipPageFrames = /* @__PURE__ */ new Map();
@@ -5162,6 +5307,14 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     for (let ch = 0; ch < this.channelCount; ch++) {
       this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
     }
+    this.cueOutput = options.cueOutput === true;
+    if (this.cueOutput) {
+      this.engine.prepareMonitorChannels(this.channelCount, this.blockSize);
+      this.monitorBuffers = new Array(this.channelCount);
+      for (let ch = 0; ch < this.channelCount; ch++) {
+        this.monitorBuffers[ch] = this.engine.getMonitorChannelBuffer(ch, this.blockSize);
+      }
+    }
     if (this.scopeRing) {
       const interval = Math.max(1, Math.floor(options.scopeIntervalFrames ?? this.blockSize));
       this.engine.configureScopeTelemetry(interval, this.scopeRing.bands);
@@ -5198,6 +5351,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     if ((this.channelBuffers[0]?.byteLength ?? 0) === 0) {
       this.reacquireChannelBuffers();
     }
+    if (this.cueOutput && (this.monitorBuffers[0]?.byteLength ?? 0) === 0) {
+      this.reacquireMonitorBuffers();
+    }
     const input = inputs[0];
     for (let ch = 0; ch < this.channelCount; ch++) {
       const dst = this.channelBuffers[ch];
@@ -5208,17 +5364,16 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         dst.fill(0, 0, usableFrames);
       }
     }
-    this.engine.processPrepared(usableFrames);
-    for (let ch = 0; ch < output.length; ch++) {
-      const target = output[ch];
-      const source = this.channelBuffers[ch] ?? this.channelBuffers[0];
-      if (source) {
-        target.set(source.subarray(0, Math.min(target.length, usableFrames)));
-        if (target.length > usableFrames) {
-          target.fill(0, usableFrames);
-        }
-      } else {
-        target.fill(0);
+    if (this.cueOutput) {
+      this.engine.processPreparedWithMonitor(usableFrames);
+    } else {
+      this.engine.processPrepared(usableFrames);
+    }
+    copyPlanesToOutput(output, this.channelBuffers, usableFrames);
+    if (this.cueOutput) {
+      const cue = outputs[1];
+      if (cue) {
+        copyPlanesToOutput(cue, this.monitorBuffers, usableFrames);
       }
     }
     this.publishClipPageRequests();
@@ -5231,6 +5386,11 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
   reacquireChannelBuffers() {
     for (let ch = 0; ch < this.channelCount; ch++) {
       this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, this.blockSize);
+    }
+  }
+  reacquireMonitorBuffers() {
+    for (let ch = 0; ch < this.channelCount; ch++) {
+      this.monitorBuffers[ch] = this.engine.getMonitorChannelBuffer(ch, this.blockSize);
     }
   }
   receiveCommand(command) {
@@ -6645,6 +6805,7 @@ export {
   SonareRealtimeEngineWorkletProcessor,
   SonareRealtimeVoiceChangerWorkletProcessor,
   SonareWorkletProcessor,
+  StreamingMasteringChain,
   attachOpfsClipStream,
   createSonareClipPageRequestRingBuffer,
   createSonareEngineCommandRingBuffer,
