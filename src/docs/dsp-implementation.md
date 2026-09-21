@@ -276,7 +276,7 @@ In practice it helps to picture the chain as a queue the audio walks through in 
 
 | DSP | Implementation | Main use | Real-time notes |
 |-----|----------------|----------|-----------------|
-| HPSS / harmonic / percussive | Median filtering on spectral representation separates horizontal harmonic energy and vertical percussive energy | Remixing, preprocessing, analysis cleanup | Offline-oriented for full files |
+| HPSS / harmonic / percussive | Median filtering on spectral representation separates horizontal harmonic energy and vertical percussive energy | Remixing, pre-processing, analysis cleanup | Offline-oriented for full files |
 | Time stretch | Phase-vocoder style processing | Change duration without changing pitch | Streaming requires overlap/state discipline |
 | Pitch shift | Resampling combined with time stretching | Transpose pitch while preserving approximate duration | Formants are not preserved unless using the voice-change path |
 | Pitch correction | Pitch estimation and correction toward a target MIDI note | Vocal or monophonic note tuning | Best on monophonic material |

@@ -46,7 +46,7 @@ in examples; substitute `sonare-cli` when running a native-only command.
 
 Corresponding commands in both CLIs use the same `snake_case` keys and payload
 shapes, so a script can read either one. Do not depend on byte-identical output:
-each frontend serializes independently. JSON values retain native precision;
+each front-end serializes independently. JSON values retain native precision;
 some focused human-readable summaries may still round.
 
 Unless this page explicitly says "native CLI", assume the command is available

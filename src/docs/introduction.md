@@ -217,7 +217,7 @@ libsonare also exposes inverse helpers for debugging and ML workflows: once you 
 
 libsonare also provides audio processing capabilities that operate on the spectral representation:
 
-- **HPSS** (Harmonic-Percussive Source Separation) — Separates audio into harmonic (tonal) and percussive (rhythmic) components using median filtering on the spectrogram. Often used as a preprocessing step to improve analysis accuracy.
+- **HPSS** (Harmonic-Percussive Source Separation) — Separates audio into harmonic (tonal) and percussive (rhythmic) components using median filtering on the spectrogram. Often used as a pre-processing step to improve analysis accuracy.
 
 ::: details What are harmonic and percussive components?
 In a spectrogram, harmonic sounds such as vocals, strings, and sustained notes appear as horizontal lines. They maintain a stable frequency over time.

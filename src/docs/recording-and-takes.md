@@ -157,7 +157,7 @@ try {
 
 ## Browser microphone input
 
-In the browser, `bindMicrophoneInput(audioContext, engine, options?)` wires a `getUserMedia` microphone stream into a realtime engine node and returns a binding you can close. It is **browser-only** — it needs a live `AudioContext` and the WebAudio graph — and runs without `SharedArrayBuffer` (no COOP/COEP headers required).
+In the browser, `bindMicrophoneInput(audioContext, engine, options?)` wires a `getUserMedia` microphone stream into a realtime engine node and returns a binding you can close. It is **browser-only** — it needs a live `AudioContext` and the Web Audio graph — and runs without `SharedArrayBuffer` (no COOP/COEP headers required).
 
 ```typescript
 // Browser only — runs inside a page with a live AudioContext.
