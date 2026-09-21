@@ -450,3 +450,79 @@ YIN returns a finite estimate for every frame, including frames marked unvoiced 
 
 pYIN keeps `NaN` for unvoiced frames by default. Set its `fillNa: true` when a downstream numeric pipeline should use `0` instead.
 
+
+## Notes and struck sounds
+
+These four sit between analysis and editing: each measures something the audio
+does not state, and hands back an object a host edits and renders.
+
+### `analyzePolyphonic(request)` <Badge type="warning" text="Heavy" />
+
+```typescript
+function analyzePolyphonic(request: AnalyzePolyphonicRequest): PolyphonicAnalysis
+```
+
+Separates the notes of a chord so one of them can be edited and the rest left
+alone. It returns a **handle, not a result**: the analysis owns the source's
+complex spectrogram plus the bins each note claimed, which is the input again
+plus the claims, and keeping it is what makes re-rendering an edit free.
+
+`destroy()` it as soon as you are done. Using it afterwards throws
+`InvalidState` rather than reaching a freed object. What crosses into JavaScript
+is only what a host acts on — the notes, each note's pending edit, the per-frame
+voice count, and per note a pitch, a level and a salience curve. The
+spectrogram, the masks and the per-bin weights never do, and no method reports a
+per-bin figure.
+
+`sampleRate` is required rather than defaulted: every duration in the chain is
+converted to samples with it, so a wrong value analyses differently without
+failing.
+
+### `decomposeNotePitch(request)`
+
+```typescript
+function decomposeNotePitch(request: DecomposeNotePitchRequest): PitchDecompositionResult
+```
+
+Splits one note's pitch curve into the three things it carries at once: the
+centre that was aimed at, the slow wander around it, and the periodic
+oscillation on top. Editing any one of them needs them separated first.
+
+`vibratoCutoffHz` is the only thing deciding where drift ends and vibrato
+begins. **Hand the same cutoff to `renderNotes`**, or it edits a curve nobody was
+shown.
+
+Frames whose F0 is unusable carry no measurement, so the curve is held at the
+nearest usable neighbour across them; both curves therefore have an entry
+everywhere, and a host marking the held ones reads them off `f0Hz`. A note with
+no usable pitch comes back as a zero `centreHz` and two empty curves — that is a
+measurement that came up empty, not a bad argument.
+
+### `extractPercussiveEvents(request)` and `renderPercussiveEvents(request)`
+
+```typescript
+function extractPercussiveEvents(request: ExtractPercussiveEventsRequest): PercussiveEvent[]
+function renderPercussiveEvents(request: RenderPercussiveEventsRequest): Float32Array
+```
+
+A pair. The first locates struck sounds in audio alone — each event is a span in
+source samples, its detector strength, the percussive peak over the span, the
+share of the span's energy the separation called percussive, and an identity
+edit. Edit the events, hand them to the second, and get the audio back. **The
+source is never mutated, and a set whose edits are all identity renders back to
+the input.**
+
+Both take the same separation options, and both need `sampleRate` for the same
+reason: it converts `maxEventMs` and `fadeMs` into samples.
+
+Two defaults are worth knowing. `minPercussiveRatio` defaults to `0`, which
+means keep everything; raising it helps on material that is mostly drums and
+hurts on a dense mix, where it also drops real hits sitting over a loud sustain.
+`fadeMs` defaults to 5 ms and shapes the signal being **subtracted**, so there is
+no way to ask for a hard cut — squaring it off would leave a step. There is
+deliberately no matching fade-in: a span opens in front of its transient where
+the percussive component is near-silent.
+
+The separation's median kernels must be odd and positive; an even one is
+rejected rather than rounded. `1` is legal and degenerate — a length-1 median is
+the identity, so both components come back as the source.
