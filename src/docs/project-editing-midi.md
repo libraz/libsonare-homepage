@@ -375,6 +375,48 @@ const firstClip = otherProject.importClipFile(clipFile);
 
 In Python these are `export_smf` / `import_smf` and `export_clip_file` / `import_clip_file`, returning and accepting `bytes`.
 
+### An SMF as a reference melody: note targets
+
+Besides round-tripping clips, an SMF can serve as the *written melody* a recorded take is corrected against. Two module-level functions (not `Project` methods) form that workflow: `noteTargetsFromSmf` reads the reference out of the file, and `assignNoteTargets` applies it to the notes `extractNotes` segmented from the take. Where `pitchCorrectToMidi` on [Editing DSP](./editing-dsp.md) moves a whole buffer by one stated interval, this pair gives every note its own target.
+
+A **note** (`NoteObject`) is what was sung: a span in samples plus its measured `medianHz`. A **note target** (`NoteTarget`) is what that stretch of the part is supposed to be: `{ startSec, endSec, targetMidi }`. They are separate types because they are lined up by the clock, not by index — the reference may have one note where the take has two, or none — and a target carries no measurement of its own. Target times are **seconds from the start of the audio the notes were extracted from**, not PPQ: an SMF times its events in quarter notes, and `noteTargetsFromSmf` converts each boundary through the file's own tempo map, so a tempo change or a ramp inside the file is followed rather than the initial tempo being scaled.
+
+`noteTargetsFromSmf({ data, trackIndex? })` reads one track of an in-memory SMF and returns `NoteTarget[]` sorted by `startSec`. Each note-on is paired with the next note-off of the same note number on the same channel (a note retriggered before its first note-off closes the newer sounding) and the pair becomes one target at the note's own pitch. Material that does not map cleanly is dropped rather than guessed at: a note-on the track never closes has no end — substituting the track's end would let one stuck note-on span the rest of the file and, as the longest overlap, win every assignment after it — and a zero-length note can overlap nothing. A track with no closed note returns an empty array, not an error. `trackIndex` (default `0`) counts **MIDI-bearing tracks only**, not the file's own track numbering: a track holding only meta events — the conductor track `exportSmf` writes as track 0 — produces no clip and is not counted, so a project's own export has its first clip at index `0`. Unreadable bytes throw `InvalidFormat`; an index with no MIDI-bearing track throws `InvalidParameter`.
+
+`assignNoteTargets({ notes, sampleRate, targets, unmatchedPolicy?, minOverlapRatio?, maxCorrectionSemitones? })` matches each note to the target it overlaps longest, provided that overlap covers at least `minOverlapRatio` (default `0.5`) of the note's own span; an exact tie goes to the target that starts first. A matched note gets `edit.pitchShiftSemitones` = `targetMidi` minus its `medianHz` as a MIDI number, saturated at `maxCorrectionSemitones` (default `12`) rather than refused — a reference an octave out is a wrong reference, and a bounded correction tells you more than a rejected call. `sampleRate` converts each note's `onsetSample` / `offsetSample` to seconds, so it must be the take's own rate. A note with a measured pitch and no target goes through `unmatchedPolicy`:
+
+| `unmatchedPolicy` | A pitched note with no target |
+|-------------------|-------------------------------|
+| `'leave'` (default) | Edit untouched; the note renders as recorded |
+| `'mute'` | `edit.muted` is set |
+| `'nearest'` | Takes the target nearest in time, however far away it is |
+
+A note whose `medianHz` is not finite and positive is never assigned and never edited, whatever the policy says: it has no measured pitch to correct from. The input notes are not modified. The result is `{ notes, assignedCount }` — a new array in which only `edit.pitchShiftSemitones` and `edit.muted` are rewritten, and the number of notes that received a target. Zero is a legitimate answer (a reference that does not line up with the take), which is why it is reported rather than left for you to infer from the edits.
+
+```typescript
+import { assignNoteTargets, extractNotes, noteTargetsFromSmf, pitchPyin, renderNotes } from '@libraz/libsonare';
+
+// 1. The reference: a project's own export, or any .mid file read into a Uint8Array.
+const targets = noteTargetsFromSmf({ data: project.exportSmf() }); // melody is at trackIndex 0
+
+// 2. The take: segment it into notes over an F0 track.
+const pitch = pitchPyin({ samples, sampleRate });
+const notes = extractNotes({
+  samples, sampleRate, f0Hz: pitch.f0, voiced: pitch.voicedFlag, frameRate: sampleRate / 512,
+});
+
+// 3. Line the two up; each matched note receives its pitch shift.
+const { notes: retuned, assignedCount } = assignNoteTargets({
+  notes, sampleRate, targets, unmatchedPolicy: 'mute',
+});
+if (assignedCount === 0) console.warn('the reference does not line up with the take');
+
+// 4. Render the edited set back over the take.
+const corrected = renderNotes({ samples, sampleRate, notes: retuned });
+```
+
+Node takes the same request objects. Python uses `note_targets_from_smf(data, *, track_index=0)`, returning `NoteTarget` dataclasses (`start_sec`, `end_sec`, `target_midi`), and `assign_note_targets(notes, sample_rate, targets, *, unmatched_policy="leave", min_overlap_ratio=None, max_correction_semitones=None)`, which returns a `(notes, assigned_count)` tuple. The C ABI is `sonare_note_targets_from_smf` / `sonare_assign_note_targets`. The SMF reader lives in the arrangement library, so a build without it reports `NotSupported` (in WASM, an `Error` from the wrapper) while `assignNoteTargets` stays available for targets built by hand.
+
 ## Rendering audio
 
 Editing produces a timeline; **rendering** turns it into samples. `Project` bounces offline through `bounce(...)` (audio tracks only) or one of the instrument-bound bounces (`bounceWithBuiltinInstrument`, `bounceWithSynthInstrument`, `bounceWithSf2Instrument`) that make MIDI tracks audible. The full set of render options, instrument binding, SoundFont loading, and the diagnostics reported by a bounce are covered on [Project Bounce & Rendering](./project-bounce.md).

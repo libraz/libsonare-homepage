@@ -31,6 +31,8 @@ A project nests a few simple parts, each one a container for the next:
 - A MIDI track points at an instrument **destination** — the synth or sampler that will actually make its notes audible (defined just below).
 - Every track routes through a strip in the **mixer scene** — its channel of EQ, fader, pan, and sends — on its way to the master.
 
+<ProjectModelFigure title="The project model on the timeline" />
+
 ::: info What is a MIDI "destination"?
 MIDI notes are just instructions (play note 60 now), not sound. A **destination** is the instrument those instructions are sent to — the synth or sampler that turns them into audio. A MIDI track names a destination; you bind an actual instrument to it when you render. See [Project Bounce](./project-bounce.md).
 :::

@@ -27,6 +27,7 @@ By the end of this page you should be able to:
 - follow the signal flow through trim, polarity, delay, EQ, inserts, fader, pan, width, sends, and meters;
 - understand pre-fader vs post-fader sends well enough to avoid the common routing mistake;
 - schedule automation and read meters without breaking realtime constraints;
+- add a strip to a running mixer, and settle its smoothers before an offline render so the first block opens at the configured values;
 - decide when to move from the guide to the field-by-field [Mixing Scene JSON](./mixing-scene-json.md) reference.
 
 ## Pick the right entry point
@@ -260,7 +261,11 @@ A reverb you want on one vocal can be an insert. A reverb you want *shared* acro
 
 ### Buses, roles, and the routing graph
 
-A **bus** is a shared destination. Strips connect to buses, buses connect to other buses, and one bus is the `master`. Each bus carries a `role`:
+A **bus** is a shared destination. Strips connect to buses, buses connect to other buses, and one bus is the `master`.
+
+<MixerRoutingFigure title="Strips, buses, sends, and the master" />
+
+Each strip's own path runs through its pre-fader inserts, the fader, and its post-fader inserts before it reaches a bus; the two tap dots on every lane are where a pre-fader or post-fader send copies the signal off toward an aux bus, and each bus runs its own insert chain once on the summed signal. Each bus carries a `role`:
 
 | Role | Meaning |
 |------|---------|
@@ -284,6 +289,7 @@ Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph w
 
 Call `compile()` after a **topology** change, before the next timing-critical block. Topology changes include:
 
+- adding a strip
 - adding or removing a bus
 - adding or removing a send
 
@@ -295,6 +301,40 @@ Strip addressing differs by runtime:
 |---------|-----------------------|
 | WASM | Mixer control methods use numeric strip indexes. Use `stripById(id)` first when you have a scene id. |
 | Node native / Python | Most control methods accept either a numeric index or a strip id string. |
+
+### Adding a strip: `addStrip`
+
+Every binding builds a `Mixer` from a scene — there is no empty-mixer constructor — so `mixer.addStrip(id, metering?)` (Python `mixer.add_strip(strip_id, ...)`) is how a mixer grows after construction: a track that arrives mid-session, or a scene loaded as a template and filled in from code. The binding-level signature is on the [JS API page](./js-api-audio.md).
+
+You supply the **id**, which must be unused (a duplicate throws). Nothing is returned: the strip belongs to the mixer and is addressed afterwards by index — it is appended, so it is `stripCount() - 1` — or through `stripById(id)`. Everything else starts at the strip defaults: 0 dB trim and fader, centre pan, width 1, no inserts, no sends, and its output routed straight to `master`. The bindings expose no connection call, so a strip that should feed a `submix` bus instead is declared in scene JSON — `toSceneJson()`, add the [connection](./mixing-scene-json.md#connection), `fromSceneJson()` — rather than added here. A VCA group whose member list already names the id picks the strip up as soon as it exists.
+
+The one decision that can *only* be made here is **metering**, because a strip's meter buffers are sized when it is built. The default keeps both meters in full — LUFS plus true peak at 4x, about 1.4 MB per strip at 48 kHz. `{ lufs: false }` shrinks each meter to about 83 KB, and `{ enabled: false }` drops both (about 145 KB) for a strip whose snapshots you never read. The object is the scene's `strips[].metering` under the same names; a `truePeakOversample` outside `0`–`16` throws, and `0` means the library default of 4x.
+
+```typescript
+mixer.addStrip('room-mic', { lufs: false });
+const roomMic = mixer.stripCount() - 1;      // appended; stripById('room-mic') resolves the same index
+mixer.setFaderDb(roomMic, -8);
+mixer.setPan(roomMic, 0.4, 'stereoPan');
+mixer.compile();                             // a new strip is a topology change
+mixer.settle(roomMic);                       // see the next section
+```
+
+`processStereo` takes one stereo pair per strip in strip order, so the new strip is one more input on the end — WASM rejects a call whose input count differs from `stripCount()`.
+
+### Settle before an offline render: `settle`
+
+Input trim, the fader (with its VCA offset), pan, and width are **smoothed**: each glides to a new value over about 5 ms so a live fader move never clicks. Those smoothers are seeded when the strip is built — at 0 dB, centre, and width 1 — and the values from the scene are applied afterwards. So even a mixer fresh from `fromSceneJson` opens its first block at the defaults and slides to the scene's values: a strip whose fader reads −12 dB starts at 0 dB and fades down, a hard-left strip starts in the centre and moves out, across the first few milliseconds of output.
+
+`mixer.settle(strip)` snaps those four stages to the values already set, so the next block opens exactly there. It clears nothing else — queued automation, meters, insert state, and the scene JSON are untouched, since the smoothers only move to values the scene already records.
+
+Call it **once per strip, after the last trim/fader/pan/width change and before the first `processStereo` of any render whose opening you keep** — an offline bounce, a test fixture, a file rendered in one pass. A later change re-arms the glide from the current value, so settle again before the next render. In a live session leave it out: the glide *is* the click-free fader.
+
+```typescript
+for (let i = 0; i < mixer.stripCount(); i++) mixer.settle(i);   // WASM addresses strips by index
+const out = mixer.processStereo(lefts, rights);                  // the first sample is at the configured values
+```
+
+Node and Python `settle` also accept the strip id. The engine's [project bounce](./project-bounce.md) settles every strip for you; a `Mixer` you drive block by block does not.
 
 ### Removing sends and buses
 

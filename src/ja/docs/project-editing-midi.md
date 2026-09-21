@@ -372,6 +372,48 @@ const firstClip = otherProject.importClipFile(clipFile);
 
 Python ではこれらが `export_smf` / `import_smf` と `export_clip_file` / `import_clip_file` で、`bytes` を返し受け取ります。
 
+### SMF を参照メロディにする: ノートターゲット
+
+SMF にはクリップの往復以外にもう 1 つの使い道があります。録音したテイクを合わせにいく *譜面上のメロディ* として使うことです。このワークフローは（`Project` のメソッドではなく）モジュールレベルの 2 つの関数で成り立ちます。`noteTargetsFromSmf` がファイルから参照を読み出し、`assignNoteTargets` がそれを `extractNotes` でテイクから切り出したノートに適用します。[編集 DSP](./editing-dsp.md) の `pitchCorrectToMidi` がバッファ全体を 1 つの指定した音程差で動かすのに対し、このペアはノート 1 つ 1 つに固有のターゲットを与えます。
+
+**ノート**（`NoteObject`）は実際に歌われたもので、サンプル単位の区間と計測された `medianHz` を持ちます。**ノートターゲット**（`NoteTarget`）はその区間が本来あるべき音で、`{ startSec, endSec, targetMidi }` の 3 つだけです。両者を別の型にしているのは、対応づけがインデックスではなく時刻で行われるからです。参照側が 1 音のところでテイク側は 2 音だったり 0 音だったりしますし、ターゲットは計測値を一切持ちません。ターゲットの時刻は PPQ ではなく **ノートを切り出した音声の先頭からの秒数** です。SMF はイベントを 4 分音符単位で記録しますが、`noteTargetsFromSmf` は各境界をファイル自身のテンポマップで変換するため、ファイル内のテンポ変更やテンポの傾斜（ランプ）は初期テンポで一律に換算されるのではなく、そのまま追従されます。
+
+`noteTargetsFromSmf({ data, trackIndex? })` はメモリ上の SMF から 1 トラックを読み、`startSec` 順に並んだ `NoteTarget[]` を返します。各ノートオンは同じチャンネル・同じノート番号の次のノートオフと対にされ（最初のノートオフより前に再トリガーされた場合は新しい方の発音が閉じられます）、その対がノート自身のピッチを持つ 1 つのターゲットになります。きれいに対応づかない素材は推測せずに捨てられます。閉じられないままのノートオンには終端がなく、トラック末尾を代用すると、スタックした 1 つのノートオンがファイルの残り全体にまたがり、最長のオーバーラップとして以降の割り当てをすべて奪ってしまうためです。長さ 0 のノートも、何とも重ならないため捨てられます。閉じたノートが 1 つもないトラックはエラーではなく空配列を返します。`trackIndex`（既定 `0`）はファイル自身のトラック番号ではなく、**MIDI イベントを含むトラックだけ** を数えます。メタイベントしか持たないトラック（`exportSmf` がトラック 0 に書き出すコンダクタートラックがその典型です）はクリップを生まず数えられないので、プロジェクト自身の書き出しなら最初のクリップがインデックス `0` になります。読めないバイト列は `InvalidFormat`、MIDI を含むトラックが存在しないインデックスは `InvalidParameter` を送出します。
+
+`assignNoteTargets({ notes, sampleRate, targets, unmatchedPolicy?, minOverlapRatio?, maxCorrectionSemitones? })` は各ノートを、最も長く重なるターゲットに対応づけます。ただしその重なりがノート自身の長さの `minOverlapRatio`（既定 `0.5`）以上であることが条件で、完全に同じ長さなら開始の早いターゲットが選ばれます。対応づいたノートの `edit.pitchShiftSemitones` には、`targetMidi` からノートの `medianHz` を MIDI ノート番号に換算した値を引いた差が書き込まれ、`maxCorrectionSemitones`（既定 `12`）で拒否ではなく飽和します。1 オクターブずれた参照は参照の側が間違っていて、呼び出しを拒否するより上限で抑えた補正のほうが多くを伝えるからです。`sampleRate` は各ノートの `onsetSample` / `offsetSample` を秒へ換算するのに使われるため、テイク自身のレートを渡してください。ピッチはあるのにターゲットのないノートは `unmatchedPolicy` に従います。
+
+| `unmatchedPolicy` | ターゲットのない有音ノートの扱い |
+|-------------------|----------------------------------|
+| `'leave'`（既定） | 編集に触れず、録音どおりにレンダリングする |
+| `'mute'` | `edit.muted` を立てる |
+| `'nearest'` | どれだけ離れていても、時間的に最も近いターゲットを採る |
+
+`medianHz` が有限の正の値でないノートは、ポリシーに関わらず割り当ても編集もされません。補正の起点となる計測ピッチがないからです。入力のノートは変更されません。結果は `{ notes, assignedCount }` で、`edit.pitchShiftSemitones` と `edit.muted` だけが書き換えられた新しい配列と、ターゲットを受け取ったノートの数です。0 も正当な答え（参照がテイクと噛み合っていない）なので、編集内容から推測させるのではなく数として返します。
+
+```typescript
+import { assignNoteTargets, extractNotes, noteTargetsFromSmf, pitchPyin, renderNotes } from '@libraz/libsonare';
+
+// 1. 参照: プロジェクト自身の書き出し、または Uint8Array に読み込んだ任意の .mid ファイル。
+const targets = noteTargetsFromSmf({ data: project.exportSmf() }); // メロディは trackIndex 0
+
+// 2. テイク: F0 トラックの上でノートに切り出す。
+const pitch = pitchPyin({ samples, sampleRate });
+const notes = extractNotes({
+  samples, sampleRate, f0Hz: pitch.f0, voiced: pitch.voicedFlag, frameRate: sampleRate / 512,
+});
+
+// 3. 両者を突き合わせ、対応づいた各ノートにピッチシフトを書き込む。
+const { notes: retuned, assignedCount } = assignNoteTargets({
+  notes, sampleRate, targets, unmatchedPolicy: 'mute',
+});
+if (assignedCount === 0) console.warn('参照がテイクと噛み合っていません');
+
+// 4. 編集済みのノート集合をテイクの上にレンダリングし直す。
+const corrected = renderNotes({ samples, sampleRate, notes: retuned });
+```
+
+Node も同じリクエストオブジェクトを受け取ります。Python は `note_targets_from_smf(data, *, track_index=0)` が `NoteTarget` データクラス（`start_sec`・`end_sec`・`target_midi`）のリストを返し、`assign_note_targets(notes, sample_rate, targets, *, unmatched_policy="leave", min_overlap_ratio=None, max_correction_semitones=None)` が `(notes, assigned_count)` のタプルを返します。C ABI は `sonare_note_targets_from_smf` / `sonare_assign_note_targets` です。SMF リーダーはアレンジメントライブラリ側にあるため、それを含まないビルドでは `NotSupported`（WASM ではラッパーの `Error`）となりますが、手で組んだターゲットに対する `assignNoteTargets` はそのまま使えます。
+
 ## 音声をレンダリングする
 
 編集はタイムラインを生み、**レンダリング**はそれをサンプルへ変換します。`Project` は `bounce(...)`（オーディオトラックのみ）か、MIDI トラックを鳴らす楽器バインド付きバウンス（`bounceWithBuiltinInstrument`・`bounceWithSynthInstrument`・`bounceWithSf2Instrument`）でオフラインバウンスします。レンダーオプション一式、楽器バインド、SoundFont 読み込み、バウンスが報告する診断は [プロジェクトバウンス & レンダリング](./project-bounce.md) で扱います。
