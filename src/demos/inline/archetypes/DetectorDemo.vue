@@ -9,6 +9,10 @@
  * dense and uneven, beats are sparse and regular. Press play and each marker lights
  * up the instant the playhead crosses it, so you watch the detection happen in time
  * with the sound.
+ *
+ * A fourth mode, *meter-estimate*, does not report a time list at all: it scores
+ * candidate time signatures over the detected beats and renders them as a ranked,
+ * confidence-weighted readout instead of markers.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { peakEnvelope } from '@/demos/inline/audio/processors';
@@ -42,7 +46,7 @@ const { values, updateParams } = useDemoParams(props.def);
 const view = computed<string>(() => String(values.view ?? 'onset'));
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
 
-/** Eyebrow reflects the detectors this demo actually offers (onset/beat/downbeat). */
+/** Eyebrow reflects the detectors this demo actually offers (onset/beat/downbeat/meter). */
 const eyebrow = computed(() => {
   const opts = props.def.params?.find((p) => p.key === 'view')?.options ?? [];
   const labels = opts.map((o) => o.value.toUpperCase());
@@ -53,6 +57,13 @@ const eyebrow = computed(() => {
 const markerCount = ref(0);
 const bpm = ref(0);
 
+type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
+/** One scored hypothesis from {@link WasmModule.estimateMeter}'s `candidates` list. */
+type MeterCandidate = ReturnType<WasmModule['estimateMeter']>['candidates'][number];
+const meterCandidates = ref<MeterCandidate[]>([]);
+/** Whether the meter search actually ran, or the beat series was too short to score. */
+const meterSearched = ref(true);
+
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'ANALYZING';
   if (status.value === 'error') return 'ERROR';
@@ -60,6 +71,11 @@ const stateLabel = computed(() => {
   if (status.value !== 'ready') return 'IDLE';
   if (view.value === 'beat') return bpm.value > 0 ? `≈ ${Math.round(bpm.value)} BPM` : 'BEATS';
   if (view.value === 'downbeat') return `${markerCount.value} BARS`;
+  if (view.value === 'meter-estimate') {
+    if (!meterSearched.value) return 'TOO FEW BEATS';
+    const top = meterCandidates.value[0];
+    return top ? `${top.numerator}/${top.denominator}` : 'NO METER';
+  }
   return `${markerCount.value} ONSETS`;
 });
 
@@ -71,14 +87,39 @@ let duration = 0;
 let clip: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0); // 0..1 waveform fade-in
 
-type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
+/**
+ * Per-beat accent for {@link WasmModule.estimateMeter}'s `beatStrengths`: a single
+ * onset-envelope frame sampled at each beat time — the same value `Beat.strength`
+ * carries in a full `analyze()` result, without paying for the full analysis.
+ */
+function beatStrengthsAt(
+  wasm: WasmModule,
+  envelope: Float32Array,
+  beatTimes: Float32Array,
+  sr: number,
+): Float32Array {
+  const strengths = new Float32Array(beatTimes.length);
+  for (let i = 0; i < beatTimes.length; i++) {
+    const frame = wasm.timeToFrames(beatTimes[i], sr);
+    strengths[i] = envelope[Math.min(Math.max(frame, 0), envelope.length - 1)] ?? 0;
+  }
+  return strengths;
+}
 
 /** Run the selected detector and store the marker times + a tempo readout. */
 function detect(wasm: WasmModule, samples: Float32Array, sr: number): void {
   let times: Float32Array;
   if (view.value === 'beat') times = wasm.detectBeats(samples, sr);
   else if (view.value === 'downbeat') times = wasm.detectDownbeats(samples, sr);
-  else times = wasm.detectOnsets(samples, sr);
+  else if (view.value === 'meter-estimate') {
+    const beatTimes = wasm.detectBeats(samples, sr);
+    const envelope = wasm.onsetEnvelope(samples, sr);
+    const beatStrengths = beatStrengthsAt(wasm, envelope, beatTimes, sr);
+    const meter = wasm.estimateMeter({ beatTimes, beatStrengths });
+    meterCandidates.value = meter.candidates;
+    meterSearched.value = meter.searched;
+    times = beatTimes;
+  } else times = wasm.detectOnsets(samples, sr);
   markers = Array.from(times).filter((t) => t >= 0 && t <= duration);
   markerCount.value = markers.length;
 
@@ -140,12 +181,12 @@ watch(isPlaying, (on) => {
   else paint(); // settle to the resting overlay
 });
 
-/** Distinct colour families: violet onsets, teal beats, amber downbeats. */
+/** Distinct colour families: violet onsets, teal beats (and the beats meter scores), amber downbeats. */
 function markerColor(): { core: string; glow: string } {
   if (view.value === 'downbeat') {
     return { core: '#fbbf24', glow: 'rgba(251, 191, 36, 0.9)' };
   }
-  if (view.value === 'beat') {
+  if (view.value === 'beat' || view.value === 'meter-estimate') {
     return { core: '#2dd4bf', glow: 'rgba(45, 212, 191, 0.9)' };
   }
   return { core: '#a78bfa', glow: 'rgba(167, 139, 250, 0.9)' };
@@ -213,6 +254,60 @@ function paint(): void {
   }
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
+
+  if (view.value === 'meter-estimate') paintMeterCandidates(ctx, w);
+}
+
+/**
+ * Ranked meter-candidate readout: one row per hypothesis, confidence drawn as a
+ * bar plus a percentage — `candidates[].confidence` is each entry's share of the
+ * total scored support, so the bars read as a breakdown rather than an absolute
+ * score. Reuses only the aqua/grey/violet tokens already used elsewhere in this
+ * file, at varying alpha.
+ */
+function paintMeterCandidates(ctx: CanvasRenderingContext2D, w: number): void {
+  const rows = meterCandidates.value.slice(0, 4);
+  const panelW = 130;
+  const panelX = w - panelW - 10;
+  const rowH = 14;
+  const panelTop = 10;
+  const panelH = 12 + Math.max(rows.length, 1) * rowH;
+
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+  ctx.fillRect(panelX, panelTop, panelW, panelH);
+
+  ctx.font = '8px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+
+  if (!meterSearched.value || rows.length === 0) {
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.75)';
+    ctx.textAlign = 'center';
+    ctx.fillText('TOO FEW BEATS', panelX + panelW / 2, panelTop + panelH / 2);
+    ctx.textAlign = 'left';
+    return;
+  }
+
+  const labelW = 30;
+  const barX = panelX + labelW + 4;
+  const barMaxW = panelW - labelW - 34;
+  rows.forEach((candidate, i) => {
+    const y = panelTop + 9 + i * rowH;
+    const alpha = Math.max(0.4, 0.95 - i * 0.2);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = `rgba(186, 230, 224, ${alpha})`;
+    ctx.fillText(`${candidate.numerator}/${candidate.denominator}`, panelX + 4, y);
+
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.fillRect(barX, y - 3, barMaxW, 6);
+    ctx.fillStyle = `rgba(167, 139, 250, ${alpha})`;
+    ctx.fillRect(barX, y - 3, barMaxW * Math.max(0, Math.min(1, candidate.confidence)), 6);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = `rgba(186, 230, 224, ${alpha})`;
+    ctx.fillText(`${Math.round(candidate.confidence * 100)}%`, panelX + panelW - 4, y);
+  });
+  ctx.textAlign = 'left';
 }
 
 /** Re-paint when the screen is first laid out and on every later resize. */
