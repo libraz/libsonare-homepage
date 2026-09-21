@@ -195,8 +195,12 @@ const MID_GAP = 6;
 const MID_COLS = 4;
 const BYTE_COL = 30;
 const LO_NOTE_Y = 288;
-const LEVEL_HEAD_Y = 312;
-const LEVEL_TOP = 326;
+// The section header is left-anchored and the station names are centred over
+// the tracks, so they need separate baselines — sharing one collides as soon as
+// the header is longer than the gap to the first station.
+const LEVEL_HEAD_Y = 304;
+const STATION_Y = 322;
+const LEVEL_TOP = 340;
 const ROW = 26;
 const NAME_X = MARGIN;
 const PATH_X0 = 96;
@@ -371,7 +375,7 @@ const H = LEVEL_TOP + (LEVEL_KEYS.length - 1) * ROW + 20;
       :key="`st-${s.key}`"
       class="fx-axis-label"
       :x="s.x"
-      :y="LEVEL_HEAD_Y"
+      :y="STATION_Y"
       text-anchor="middle"
     >
       {{ label(s.key) }}

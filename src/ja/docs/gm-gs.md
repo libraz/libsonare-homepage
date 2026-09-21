@@ -327,7 +327,7 @@ const audio = project.bounceWithSynthInstrument(
     m4xName: 'パート x ルート',
     m4xSub: 'EQ スイッチ・EFX アサイン',
     loNote: 'lo バイト — ブロック内のパラメーター。41 の下ではドラムのノート番号',
-    levelHead: 'レベル',
+    levelHead: 'レベル — 書き込みがどこまで届くか',
     stDecoded: 'デコード',
     stHeld: '保持',
     stHeard: '発音',
