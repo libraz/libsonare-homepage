@@ -33,11 +33,14 @@ const FIGURES = [
   'DistanceBalanceFigure',
   'GainLadderFigure',
   'LoudnessGateFigure',
+  'MasteringChainFigure',
   'MelBankFigure',
+  'ProjectModelFigure',
   'RoomDecayFigure',
   'RoomEquivalenceFigure',
   'SectionMatrixFigure',
   'StftFramingFigure',
+  'SynthSignalPathFigure',
   'WarpMapFigure',
 ] as const;
 
