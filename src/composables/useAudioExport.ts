@@ -79,9 +79,8 @@ export function useAudioExport() {
   }
 
   /** Wrap Standard MIDI File bytes (e.g. `Project.exportSmf()`) as a blob. */
-  function exportMidi(smf: Uint8Array): Blob {
-    // A fresh copy is ArrayBuffer-backed, which is what BlobPart requires.
-    return new Blob([new Uint8Array(smf)], { type: 'audio/midi' });
+  function exportMidi(smf: Uint8Array<ArrayBuffer>): Blob {
+    return new Blob([smf], { type: 'audio/midi' });
   }
 
   return { mixStems, encodeWav, exportWav, exportMidi };
