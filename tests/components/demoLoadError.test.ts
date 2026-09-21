@@ -8,7 +8,7 @@ vi.mock('vitepress', () => ({
   useData: () => ({ lang }),
 }));
 
-import DemoLoadError from '@/components/demos/DemoLoadError.vue';
+import DemoLoadError from '@/components/DemoLoadError.vue';
 
 describe('DemoLoadError', () => {
   it('resolves recovery copy through the shared i18n catalog', async () => {

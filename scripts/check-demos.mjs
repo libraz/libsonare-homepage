@@ -170,7 +170,7 @@ export function checkDemos({ root = process.cwd(), defaultLocale = 'en' } = {}) 
   const srcDir = path.join(root, 'src');
   const localesDir = path.join(root, 'src/locales');
   const defaultDocsDir = docsDirFor(root, defaultLocale, defaultLocale);
-  const registryDir = path.join(root, 'src/demos/registry');
+  const registryDir = path.join(root, 'src/demos/inline/registry');
   const clipsDir = path.join(root, 'src/public/demo-clips');
   const locales = listLocaleNames(localesDir, defaultLocale);
 

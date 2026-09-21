@@ -4,21 +4,12 @@ import DemoDisclaimer from '@/components/DemoDisclaimer.vue';
 import { CornerBrackets, GridOverlay, StatusIndicator } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useTheme } from '@/composables/useTheme';
+import { type DemoId, demoSourceUrl, LISTED_DEMOS } from '@/demos/manifest';
 
 const props = withDefaults(
   defineProps<{
-    /** Active demo, used to highlight its tab. */
-    demoId:
-      | 'analyzer'
-      | 'mastering'
-      | 'analysis'
-      | 'mixing'
-      | 'fx'
-      | 'spatial'
-      | 'synth'
-      | 'studio'
-      | 'practice'
-      | 'tuner';
+    /** Active demo, used to highlight its tab and to link its source directory. */
+    demoId: DemoId;
     title: string;
     subtitle?: string;
     version?: string;
@@ -45,6 +36,8 @@ const copy = computed(() =>
   localizedValue({
     en: {
       docsLabel: 'Docs',
+      sourceLabel: 'Source',
+      sourceTitle: "Read this demo's source on GitHub",
       ctaLabel: 'Get Started',
       tabListLabel: 'Demo switcher',
       guideLinkLabel: 'Open docs',
@@ -63,6 +56,8 @@ const copy = computed(() =>
     },
     ja: {
       docsLabel: 'ドキュメント',
+      sourceLabel: 'ソース',
+      sourceTitle: 'このデモのソースを GitHub で読む',
       ctaLabel: 'はじめる',
       tabListLabel: 'デモ切り替え',
       guideLinkLabel: 'ドキュメント',
@@ -91,54 +86,17 @@ const otherLocalePath = computed(
   () => props.oppositeLocalePath || alternateLocalePath('/music-analysis'),
 );
 const otherLocaleLabel = computed(() => copy.value.otherLocaleLabel);
+const sourceUrl = computed(() => demoSourceUrl(props.demoId));
 
-const demoTabs = computed(() => [
-  {
-    id: 'analyzer',
-    label: copy.value.tabs.analyzer,
-    path: localizedPath('/analyzer'),
-  },
-  {
-    id: 'mastering',
-    label: copy.value.tabs.mastering,
-    path: localizedPath('/mastering'),
-  },
-  {
-    id: 'analysis',
-    label: copy.value.tabs.analysis,
-    path: localizedPath('/music-analysis'),
-  },
-  {
-    id: 'mixing',
-    label: copy.value.tabs.mixing,
-    path: localizedPath('/mixing'),
-  },
-  {
-    id: 'fx',
-    label: copy.value.tabs.fx,
-    path: localizedPath('/realtime-fx'),
-  },
-  {
-    id: 'spatial',
-    label: copy.value.tabs.spatial,
-    path: localizedPath('/spatial'),
-  },
-  {
-    id: 'synth',
-    label: copy.value.tabs.synth,
-    path: localizedPath('/synth'),
-  },
-  {
-    id: 'studio',
-    label: copy.value.tabs.studio,
-    path: localizedPath('/studio'),
-  },
-  {
-    id: 'practice',
-    label: copy.value.tabs.practice,
-    path: localizedPath('/practice'),
-  },
-]);
+// Routes come from the demo manifest so the switcher cannot drift from the
+// directory layout; this file only owns the labels.
+const demoTabs = computed(() =>
+  LISTED_DEMOS.map((demo) => ({
+    id: demo.id,
+    label: copy.value.tabs[demo.id],
+    path: localizedPath(demo.route),
+  })),
+);
 
 const tabsRef = ref<HTMLElement | null>(null);
 const tabsCanScrollLeft = ref(false);
@@ -198,6 +156,18 @@ function switchLocale(event: Event) {
       <div class="tool-page__header-right">
         <span class="tool-page__version">v{{ version || '-.-.--' }}</span>
         <a :href="docsPath" class="tool-page__docs-link">{{ docsLabel }}</a>
+        <a
+          :href="sourceUrl"
+          class="tool-page__docs-link tool-page__source-link"
+          target="_blank"
+          rel="noopener"
+          :title="copy.sourceTitle"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m9 18-6-6 6-6M15 6l6 6-6 6" />
+          </svg>
+          {{ copy.sourceLabel }}
+        </a>
         <a
           :href="otherLocalePath"
           class="tool-page__lang-switch"
@@ -444,6 +414,23 @@ html:not(.dark) .tool-page .tool-page__header {
   background: var(--demo-accent-subtle);
 }
 
+/* Source link — same weight as Docs, marked by the code glyph rather than by a
+   louder colour, so the header keeps one level of emphasis. */
+.tool-page__source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--demo-text-muted);
+}
+
+.tool-page__source-link svg {
+  opacity: 0.75;
+}
+
+.tool-page__source-link:hover svg {
+  opacity: 1;
+}
+
 .tool-page__lang-switch {
   display: inline-flex;
   align-items: center;
@@ -667,7 +654,8 @@ html:not(.dark) .tool-page .tool-page__header {
     max-width: 160px;
   }
 
-  .tool-page__cta {
+  .tool-page__cta,
+  .tool-page__source-link {
     display: none;
   }
 

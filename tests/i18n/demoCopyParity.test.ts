@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { enCopy as mixingEn, jaCopy as mixingJa } from '@/demos/mixing/mixingCopy';
+import { MIXING_TERM_SLUGS } from '@/demos/mixing/mixingTerms';
 import {
   enCopy as analysisEn,
   jaCopy as analysisJa,
-} from '@/components/analysis/musicAnalysisCopy';
-import { enCopy as mixingEn, jaCopy as mixingJa } from '@/components/mixing/mixingCopy';
-import { MIXING_TERM_SLUGS } from '@/components/mixing/mixingTerms';
-import { enCopy as fxEn, jaCopy as fxJa } from '@/components/realtime-fx/realtimeFxCopy';
+} from '@/demos/music-analysis/musicAnalysisCopy';
+import { enCopy as fxEn, jaCopy as fxJa } from '@/demos/realtime-fx/realtimeFxCopy';
 
 function keyPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [prefix];

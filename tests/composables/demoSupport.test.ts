@@ -1,12 +1,12 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, nextTick, ref } from 'vue';
-import { useAudioPlayer } from '@/composables/useAudioPlayer';
-import { useMasteringInsights } from '@/composables/useMasteringInsights';
-import { useMasteringModeUrlSync } from '@/composables/useMasteringModeUrlSync';
-import { useRealtimeFx } from '@/composables/useRealtimeFx';
-import { useRealtimeMixer } from '@/composables/useRealtimeMixer';
-import { useWaveform } from '@/composables/useWaveform';
+import { useAudioPlayer } from '@/demos/analyzer/useAudioPlayer';
+import { useWaveform } from '@/demos/analyzer/useWaveform';
+import { useMasteringInsights } from '@/demos/mastering/useMasteringInsights';
+import { useMasteringModeUrlSync } from '@/demos/mastering/useMasteringModeUrlSync';
+import { useRealtimeMixer } from '@/demos/mixing/useRealtimeMixer';
+import { useRealtimeFx } from '@/demos/realtime-fx/useRealtimeFx';
 
 function audioBuffer(channels: Float32Array[], sampleRate = 48_000): AudioBuffer {
   return {

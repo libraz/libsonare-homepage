@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { defineComponent } from 'vue';
-import { useAudioAnalysis } from '@/composables/useAudioAnalysis';
-import { defaultModuleSettings, useMastering } from '@/composables/useMastering';
-import { useStreamAnalyzer } from '@/composables/useStreamAnalyzer';
+import { useAudioAnalysis } from '@/demos/analyzer/useAudioAnalysis';
+import { useStreamAnalyzer } from '@/demos/analyzer/useStreamAnalyzer';
+import { defaultModuleSettings, useMastering } from '@/demos/mastering/useMastering';
 import * as wasm from '@/wasm/index.js';
 
 const SAMPLE_RATE = 22_050;

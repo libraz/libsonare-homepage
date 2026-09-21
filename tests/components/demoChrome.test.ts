@@ -1,8 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
-import DemoCardGrid from '@/components/DemoCardGrid.vue';
 import DemoDisclaimer from '@/components/DemoDisclaimer.vue';
+import DemoCardGrid from '@/components/demo-cards/DemoCardGrid.vue';
 
 const lang = ref('en');
 

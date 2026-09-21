@@ -5,9 +5,9 @@ import { ref } from 'vue';
 const lang = ref('en');
 vi.mock('vitepress', () => ({ useData: () => ({ lang }) }));
 
-import DropZone from '@/components/DropZone.vue';
-import MasterKnob from '@/components/MasterKnob.vue';
 import TransportButton from '@/components/ui/TransportButton.vue';
+import DropZone from '@/demos/analyzer/DropZone.vue';
+import MasterKnob from '@/demos/mastering/MasterKnob.vue';
 
 function fileList(files: File[]): FileList {
   return {

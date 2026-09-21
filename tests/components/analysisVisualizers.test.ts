@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MatrixHeatmap from '@/components/MatrixHeatmap.vue';
-import WaveformVisualizer from '@/components/WaveformVisualizer.vue';
+import WaveformVisualizer from '@/demos/analyzer/WaveformVisualizer.vue';
+import MatrixHeatmap from '@/demos/music-analysis/MatrixHeatmap.vue';
 
 function audioBuffer(channels: Float32Array[]): AudioBuffer {
   return {

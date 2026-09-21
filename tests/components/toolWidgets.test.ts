@@ -1,8 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import DataConsole from '@/components/DataConsole.vue';
 import ToolModeTabs from '@/components/ToolModeTabs.vue';
 import ToolStatusBar from '@/components/ToolStatusBar.vue';
+import DataConsole from '@/demos/analyzer/DataConsole.vue';
 
 afterEach(() => {
   vi.useRealTimers();

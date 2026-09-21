@@ -2,7 +2,7 @@
  * Bundle the physical-model tuner's AudioWorklet processor into a self-contained
  * ES module under src/public/.
  *
- * The processor (src/tuner/worklet/tuner-processor.ts) imports the pure-TS DSP
+ * The processor (src/demos/tuner/worklet/tuner-processor.ts) imports the pure-TS DSP
  * cores. It cannot be loaded through Vite because Vite injects its dev client
  * into bundled modules, which breaks in AudioWorkletGlobalScope (the same reason
  * src/public/sonare-worklet.js is a hand-placed artifact). esbuild produces a
@@ -20,9 +20,9 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ENTRY = path.join(ROOT, 'src/tuner/worklet/tuner-processor.ts');
+const ENTRY = path.join(ROOT, 'src/demos/tuner/worklet/tuner-processor.ts');
 const OUT = path.join(ROOT, 'src/public/tuner-worklet.js');
-const VERSION_OUT = path.join(ROOT, 'src/tuner/worklet/worklet-version.ts');
+const VERSION_OUT = path.join(ROOT, 'src/demos/tuner/worklet/worklet-version.ts');
 
 await build({
   entryPoints: [ENTRY],
@@ -33,7 +33,7 @@ await build({
   platform: 'browser',
   legalComments: 'none',
   banner: {
-    js: '// Generated from src/tuner/worklet/tuner-processor.ts by scripts/build-tuner-worklet.mjs. Do not edit.',
+    js: '// Generated from src/demos/tuner/worklet/tuner-processor.ts by scripts/build-tuner-worklet.mjs. Do not edit.',
   },
   logLevel: 'info',
 });

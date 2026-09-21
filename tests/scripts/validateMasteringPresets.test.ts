@@ -3,7 +3,7 @@
 // TextEncoder invariant fails under jsdom; run it in the node environment (also a
 // closer match to how `node scripts/validate-mastering-presets.mjs` runs in CI).
 import { describe, expect, it, vi } from 'vitest';
-import { MASTERING_PRESETS, MASTERING_VENUES } from '@/utils/masteringUi';
+import { MASTERING_PRESETS, MASTERING_VENUES } from '@/demos/mastering/masteringUi';
 import {
   assertFinite,
   buildConfig,

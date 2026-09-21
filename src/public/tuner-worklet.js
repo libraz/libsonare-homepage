@@ -1,7 +1,7 @@
-// Generated from src/tuner/worklet/tuner-processor.ts by scripts/build-tuner-worklet.mjs. Do not edit.
+// Generated from src/demos/tuner/worklet/tuner-processor.ts by scripts/build-tuner-worklet.mjs. Do not edit.
 "use strict";
 (() => {
-  // src/tuner/dsp/body-resonator.ts
+  // src/demos/tuner/dsp/body-resonator.ts
   var MAX_MODES = 16;
   var TWO_PI = 6.28318530718;
   var T60_SEC_PER_Q_HZ = 2.19848;
@@ -144,7 +144,7 @@
     return x < lo ? lo : x > hi ? hi : x;
   }
 
-  // src/tuner/dsp/frac-delay.ts
+  // src/demos/tuner/dsp/frac-delay.ts
   var DelayLine = class _DelayLine {
     buf;
     /** Circular span actually in use (<= buffer capacity), matching `size_`. */
@@ -268,7 +268,7 @@
     }
   };
 
-  // src/tuner/dsp/voice-random.ts
+  // src/demos/tuner/dsp/voice-random.ts
   var MASK64 = (1n << 64n) - 1n;
   var GAMMA = 0x9e3779b97f4a7c15n;
   var M1 = 0xbf58476d1ce4e5b9n;
@@ -314,7 +314,7 @@
     }
   };
 
-  // src/tuner/dsp/bowed-voice.ts
+  // src/demos/tuner/dsp/bowed-voice.ts
   var PI = Math.PI;
   var TWO_PI2 = 2 * Math.PI;
   var BOWED_MIN_FUNDAMENTAL_HZ = 20;
@@ -629,7 +629,7 @@
     }
   };
 
-  // src/tuner/dsp/brass-voice.ts
+  // src/demos/tuner/dsp/brass-voice.ts
   var TWO_PI3 = 2 * Math.PI;
   var BRASS_MIN_FUNDAMENTAL_HZ = 20;
   var MOUTH_SCALE = 1;
@@ -1036,7 +1036,7 @@
     }
   };
 
-  // src/tuner/dsp/flute-voice.ts
+  // src/demos/tuner/dsp/flute-voice.ts
   var TWO_PI4 = 2 * Math.PI;
   var FLUTE_MIN_FUNDAMENTAL_HZ = 40;
   var FLUTE_BORE_LENGTH_PERIODS = 1;
@@ -1309,7 +1309,7 @@
     }
   };
 
-  // src/tuner/dsp/free-reed-voice.ts
+  // src/demos/tuner/dsp/free-reed-voice.ts
   var TWO_PI5 = 2 * Math.PI;
   var DETUNE_MIN_CENTS = 3;
   var DETUNE_SPAN_CENTS = 12;
@@ -1439,7 +1439,7 @@
     }
   };
 
-  // src/tuner/dsp/dispersion.ts
+  // src/demos/tuner/dsp/dispersion.ts
   var DISP_PI = Math.PI;
   var DISP_TWO_PI = 2 * Math.PI;
   function allpassPhaseDelay(a, w) {
@@ -1502,8 +1502,153 @@
     }
   };
 
-  // src/tuner/dsp/ks-voice.ts
+  // src/demos/tuner/dsp/string-loop.ts
   var TWO_PI6 = 2 * Math.PI;
+  var MAX_POLE = 0.995;
+  function stringLoopGainFor(periodSamples, sampleRate2, t60S) {
+    const loopsToT60 = sampleRate2 * Math.max(0.01, t60S) / Math.max(1, periodSamples);
+    return Math.exp(-6.907755279 / loopsToT60);
+  }
+  function stablePole(beta) {
+    const disc = beta * beta - 4;
+    if (disc <= 0) {
+      const collapsed = -0.5 * beta;
+      return collapsed < -MAX_POLE ? -MAX_POLE : collapsed > MAX_POLE ? MAX_POLE : collapsed;
+    }
+    const root = Math.sqrt(disc);
+    const hi = 0.5 * (-beta + root);
+    const lo = 0.5 * (-beta - root);
+    const pick = Math.abs(hi) < Math.abs(lo) ? hi : lo;
+    return pick < -MAX_POLE ? -MAX_POLE : pick > MAX_POLE ? MAX_POLE : pick;
+  }
+  function onepoleMagnitude(a, omega) {
+    const halfSin = Math.sin(0.5 * omega);
+    const poleGap = 1 - a;
+    return poleGap / Math.sqrt(Math.max(1e-12, poleGap * poleGap + 4 * a * halfSin * halfSin));
+  }
+  function onepoleGroupDelaySamples(a, omega) {
+    return Math.atan2(a * Math.sin(omega), 1 - a * Math.cos(omega)) / Math.max(omega, 1e-6);
+  }
+  function solveStringLoopFilter(omega0, omegaRef, gFundamental, gReference) {
+    const MAX_LOOP_GAIN = 0.9999;
+    const MAX_SUB_FUNDAMENTAL_RING = 8;
+    const g0 = gFundamental < 0 ? 0 : gFundamental > MAX_LOOP_GAIN ? MAX_LOOP_GAIN : gFundamental;
+    const ratio = gReference > 0 ? g0 / gReference : 1;
+    const c1 = Math.cos(omega0);
+    if (!(ratio > 1.000001)) {
+      return { a: 0, g: g0 };
+    }
+    const r2 = ratio * ratio;
+    let a = stablePole(-2 * (Math.cos(omegaRef) - r2 * c1) / (1 - r2));
+    const gMax = Math.min(MAX_LOOP_GAIN, g0 ** (1 / MAX_SUB_FUNDAMENTAL_RING));
+    const magFloor = gMax > 0 ? g0 / gMax : 1;
+    if (magFloor < 0.999999) {
+      const m2 = magFloor * magFloor;
+      a = Math.min(a, stablePole(-2 * (1 - m2 * c1) / (1 - m2)));
+    } else {
+      a = Math.min(a, 0);
+    }
+    const g = Math.min(MAX_LOOP_GAIN, g0 / Math.max(1e-6, onepoleMagnitude(a, omega0)));
+    return { a, g };
+  }
+  var StringLoop = class {
+    /** Delay line. The C++ core carves a span out of a per-voice slab instead. */
+    line;
+    /** Ideal loop period in samples at `ratio == 1`. */
+    period = 0;
+    /**
+     * Loop delay NOT in the delay line: the one-sample feedback path plus the loss
+     * filter's phase delay at the fundamental. A call site with an in-loop allpass
+     * adds its phase delay here after `configureFilter()`.
+     */
+    loopComp = 1;
+    /** Loss lowpass `y += alpha * (x - y)`, and its state. */
+    alpha = 1;
+    lpState = 0;
+    /**
+     * Per-traversal amplitude factor for the sounding t60, and the one `release()`
+     * re-targets it to (the damper).
+     */
+    gain = 0;
+    releaseGain = 0;
+    /** Whether the loop is engaged for the current note. */
+    engaged = false;
+    constructor(capacity) {
+      this.line = new DelayLine(capacity);
+    }
+    /** Active circular span in samples, or 0 while the loop is disengaged. */
+    get size() {
+      return this.engaged ? this.line.size : 0;
+    }
+    /**
+     * Sets the loop up from an already-solved loss filter: `a` is the one-pole's
+     * feedback coefficient (the filter is `y += (1-a)(x-y)`, so `a == 0` is
+     * transparent and larger `a` is darker) and `g` the per-traversal gain in
+     * front of it.
+     */
+    configureFilter(periodSamples, a, g, releaseG) {
+      this.period = periodSamples;
+      this.alpha = 1 - a;
+      this.lpState = 0;
+      this.loopComp = 1 + onepoleGroupDelaySamples(a, TWO_PI6 / periodSamples);
+      this.gain = g;
+      this.releaseGain = releaseG;
+      this.engaged = true;
+      this.line.prime(Math.trunc(periodSamples * 1.3) + 8);
+    }
+    /**
+     * Leaves the loop silent and skipped: a call site gates on its own mix level,
+     * and a disengaged loop must not carry state from the last note.
+     */
+    disable() {
+      this.engaged = false;
+      this.lpState = 0;
+      this.gain = 0;
+    }
+    /**
+     * Writes `input` into the line and reads the delayed sample back. `ratio` is
+     * the per-sample pitch factor (bend / vibrato / tension), 1 = on pitch; it
+     * scales the frequency, so it divides the delay. The returned value is the
+     * string's output BEFORE the loss filter — shape it if the instrument shapes
+     * it, then hand it to `commit()`.
+     */
+    advance(input, ratio) {
+      const span = this.line.size;
+      const raw = this.period / ratio - this.loopComp;
+      const hi = span - 4;
+      const delay = raw < 1 ? 1 : raw > hi ? hi : raw;
+      return this.line.processFractional(Math.trunc(delay * 256), input);
+    }
+    /** Closes the loop: the (possibly shaped) delayed sample enters the loss filter. */
+    commit(shaped) {
+      this.lpState += this.alpha * (shaped - this.lpState);
+    }
+    /** `advance()` then `commit()`, for a loop with nothing shaped inside it. */
+    process(input, ratio) {
+      const out = this.advance(input, ratio);
+      this.commit(out);
+      return out;
+    }
+    /** The feedback term to add into the next sample's loop input. */
+    feedback() {
+      return this.gain * this.lpState;
+    }
+    /**
+     * Note-off: re-target the decay to the damped t60. Never lengthens a decay
+     * that is already shorter than the damper's.
+     */
+    release() {
+      this.gain = Math.min(this.gain, this.releaseGain);
+    }
+    /** Immediate silence. */
+    kill() {
+      this.gain = 0;
+      this.lpState = 0;
+    }
+  };
+
+  // src/demos/tuner/dsp/ks-voice.ts
+  var TWO_PI7 = 2 * Math.PI;
   var KS_MIN_FUNDAMENTAL_HZ = 20;
   var KS_DISPERSION_STAGES = 2;
   var KS_TENSION_CENTS_AT_FULL = 55;
@@ -1513,16 +1658,19 @@
   var KEYOFF_NOISE_INDEX_BASE = 1 << 20;
   var KS_KEYOFF_MS = 18;
   var KS_KEYOFF_CUTOFF_HZ = 2200;
+  var KS_POL_DETUNE_CENTS = 11;
+  var KS_REFLECT = 0.06;
+  var KS_POL_T60_FRACTION = 0.55;
+  var KS_POL_TONE_DARKEN = 0.12;
+  var KS_HF_T60_S = 0.07;
+  var KS_HF_QUOTE_HZ = 4e3;
+  var KS_MUTE_DECAY_RATIO = 3.8;
   function ksBufferCapacity(sampleRate2) {
     const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
     return Math.trunc(sr / KS_MIN_FUNDAMENTAL_HZ) + 8;
   }
   function noteToHz5(note) {
     return 440 * 2 ** (((note & 127) - 69) / 12);
-  }
-  function loopGainFor(periodSamples, sampleRate2, t60S) {
-    const loopsToT60 = sampleRate2 * Math.max(0.01, t60S) / Math.max(1, periodSamples);
-    return Math.exp(-6.907755279 / loopsToT60);
   }
   function ksSteelInharmonicityB(note) {
     const n = note & 127;
@@ -1534,26 +1682,15 @@
     return x < lo ? lo : x > hi ? hi : x;
   }
   var KsVoiceCore = class {
-    buffer;
-    polLine;
-    octLine;
-    basePeriod = 0;
-    loopComp = 1;
-    loopAlpha = 1;
-    lpState = 0;
+    /** The played string (the vertical plane the pluck grips). */
+    string;
+    /** Second (horizontal) polarization: a detuned loop sharing the pluck. */
+    pol;
+    /** Octave-up 4' companion line (the harpsichord 4' register). */
+    oct;
     dispA = 0;
     dispStages = [new AllpassStage(), new AllpassStage()];
-    loopGain = 0;
-    releaseGain = 0;
     slapThreshold = 0;
-    // Second (horizontal) polarization.
-    polSize = 0;
-    polPeriod = 0;
-    polLoopComp = 1;
-    polLoopAlpha = 1;
-    polLpState = 0;
-    polLoopGain = 0;
-    polReleaseGain = 0;
     polCouple = 0;
     polExc = 0;
     coupleGain = 0;
@@ -1575,14 +1712,6 @@
     tensionRatioPeak = 0;
     tensionEnv = 0;
     tensionDecayCoeff = 0;
-    // Octave-up 4' companion line.
-    octSize = 0;
-    octPeriod = 0;
-    octLoopComp = 1;
-    octLoopAlpha = 1;
-    octLpState = 0;
-    octLoopGain = 0;
-    octReleaseGain = 0;
     octCouple = 0;
     octExc = 0;
     // Key-off / damper noise burst.
@@ -1595,43 +1724,65 @@
     keyoffEnv = 0;
     constructor(sampleRate2) {
       const cap = ksBufferCapacity(sampleRate2);
-      this.buffer = new DelayLine(cap);
-      this.polLine = new DelayLine(cap);
-      this.octLine = new DelayLine(cap);
+      this.string = new StringLoop(cap);
+      this.pol = new StringLoop(cap);
+      this.oct = new StringLoop(cap);
     }
     start(params, sampleRate2, note, velocity, seed) {
       const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
       this.noise = new VoiceRandomSequence(seed);
       const f0 = noteToHz5(note);
-      this.basePeriod = sr / f0;
-      const a = (1 - clamp6(params.brightness, 0, 1)) * 0.7;
-      this.loopAlpha = 1 - a;
-      this.lpState = 0;
-      const omega = TWO_PI6 / this.basePeriod;
-      const tauLp = Math.atan2(a * Math.sin(omega), 1 - a * Math.cos(omega)) / Math.max(omega, 1e-6);
-      this.loopComp = 1 + tauLp;
+      const basePeriod = sr / f0;
+      const node = Math.floor(clamp6(params.harmonicNode, 0, 8));
+      const loopPeriod = node >= 2 ? basePeriod / node : basePeriod;
+      const stretch = clamp6(params.decayStretch, 0, 1);
+      const octavesBelowA4 = (69 - (note & 127)) / 12;
+      const t60 = Math.max(0.05, params.decayS) * 2 ** (stretch * octavesBelowA4);
+      const dampedT60 = Math.max(0.01, params.releaseDampS);
+      const toneA = (1 - clamp6(params.brightness, 0, 1)) * 0.7;
+      const fixedQuoteW = TWO_PI7 * KS_HF_QUOTE_HZ / sr;
+      const mute = clamp6(params.muteHarmonic, 0, 16);
+      const voiceLoop = (loop, period, t60S, hfT60S, toneAOffset = 0) => {
+        let a2 = Math.min(0.97, toneA + toneAOffset);
+        let g = stringLoopGainFor(period, sr, t60S);
+        let releaseG = stringLoopGainFor(period, sr, dampedT60);
+        const w0 = TWO_PI7 / period;
+        const quoteW = mute > 0 ? Math.min(mute * w0, 0.9 * Math.PI) : fixedQuoteW;
+        const quoteT60 = mute > 0 ? t60S / KS_MUTE_DECAY_RATIO : hfT60S;
+        if (KS_HF_T60_S > 0 && quoteW > w0 * 1.5) {
+          const solved = solveStringLoopFilter(
+            w0,
+            quoteW,
+            g,
+            stringLoopGainFor(period, sr, quoteT60)
+          );
+          releaseG = Math.min(0.9999, releaseG * (g > 0 ? solved.g / g : 1));
+          a2 = solved.a;
+          g = solved.g;
+        }
+        loop.configureFilter(period, a2, g, releaseG);
+        return a2;
+      };
+      const a = voiceLoop(this.string, loopPeriod, t60, KS_HF_T60_S);
+      const omega = TWO_PI7 / loopPeriod;
+      const tauLp = onepoleGroupDelaySamples(a, omega);
       this.dispA = 0;
       for (const s of this.dispStages) s.reset();
       const dispersion = clamp6(params.dispersion, 0, 1);
       if (dispersion > 0) {
         const bCoeff = dispersion * ksSteelInharmonicityB(note);
-        const phaseBudget = this.basePeriod - 4 - tauLp;
+        const phaseBudget = loopPeriod - 4 - tauLp;
         this.dispA = dispersionAllpassA(bCoeff, omega, a, KS_DISPERSION_STAGES, phaseBudget);
         if (this.dispA !== 0) {
-          this.loopComp += KS_DISPERSION_STAGES * allpassPhaseDelay(this.dispA, omega);
+          this.string.loopComp += KS_DISPERSION_STAGES * allpassPhaseDelay(this.dispA, omega);
           for (const s of this.dispStages) s.a = this.dispA;
         }
       }
-      const stretch = clamp6(params.decayStretch, 0, 1);
-      const octavesBelowA4 = (69 - (note & 127)) / 12;
-      const t60 = Math.max(0.05, params.decayS) * 2 ** (stretch * octavesBelowA4);
-      this.loopGain = loopGainFor(this.basePeriod, sr, t60);
-      this.releaseGain = loopGainFor(this.basePeriod, sr, Math.max(0.01, params.releaseDampS));
       const slap = clamp6(params.slap, 0, 1);
       this.slapThreshold = slap > 0 ? 0.55 - 0.35 * slap : 0;
-      this.excTotal = Math.max(8, Math.trunc(this.basePeriod));
+      this.excTotal = Math.max(8, Math.trunc(basePeriod));
       this.excPos = 0;
-      this.pickDelay = Math.trunc(clamp6(params.pickPosition, 0, 0.5) * this.basePeriod + 0.5);
+      this.pickDelay = Math.trunc(clamp6(params.pickPosition, 0, 0.5) * basePeriod + 0.5);
       const vel01 = (velocity & 127) / 127;
       const velAmount = clamp6(params.velToBrightness, 0, 1);
       const bright = clamp6(params.excBrightness, 0, 1) * (1 - velAmount + velAmount * vel01);
@@ -1649,7 +1800,7 @@
       }
       const pickup = clamp6(params.pickupPos, 0, 0.5);
       if (pickup > 0) {
-        const offset = clamp6((1 - pickup) * this.basePeriod, 4, this.basePeriod);
+        const offset = clamp6((1 - pickup) * loopPeriod, 4, loopPeriod);
         this.pickupDelayQ8 = Math.trunc(offset * 256);
         this.pickupDepth = 0.85;
         this.pickupMag = 0.18;
@@ -1669,29 +1820,26 @@
         this.tensionEnv = 0;
         this.tensionDecayCoeff = 0;
       }
-      const size = Math.min(this.buffer.capacity, Math.trunc(this.basePeriod * 1.3) + 8);
-      this.buffer.prime(size);
       const polarization = clamp6(params.polarization, 0, 1);
-      this.polLpState = 0;
       if (polarization > 0) {
-        const kPolDetuneCents = 11;
-        this.polPeriod = this.basePeriod / 2 ** (kPolDetuneCents / 1200);
-        const a2 = Math.min(0.97, a + 0.12);
-        this.polLoopAlpha = 1 - a2;
-        const omega2 = TWO_PI6 / this.polPeriod;
-        const tau2 = Math.atan2(a2 * Math.sin(omega2), 1 - a2 * Math.cos(omega2)) / Math.max(omega2, 1e-6);
-        this.polLoopComp = 1 + tau2;
-        this.polLoopGain = loopGainFor(this.polPeriod, sr, 0.55 * t60);
-        this.polReleaseGain = this.releaseGain;
+        const polPeriod = loopPeriod / 2 ** (KS_POL_DETUNE_CENTS / 1200);
+        voiceLoop(
+          this.pol,
+          polPeriod,
+          KS_POL_T60_FRACTION * t60,
+          KS_POL_T60_FRACTION * KS_HF_T60_S,
+          KS_POL_TONE_DARKEN
+        );
+        this.pol.releaseGain = this.string.releaseGain;
         this.polExc = 0.6;
         this.polCouple = polarization;
-        this.polSize = Math.min(this.polLine.capacity, Math.trunc(this.polPeriod * 1.3) + 8);
-        this.polLine.prime(this.polSize);
         const bc = clamp6(params.bodyCoupling, 0, 1);
         if (bc > 0) {
           const kLambdaMax = 0.999;
-          const mean = 0.5 * (this.loopGain + this.polLoopGain);
-          const halfDiff = 0.5 * (this.loopGain - this.polLoopGain);
+          const g1 = stringLoopGainFor(loopPeriod, sr, t60);
+          const g2 = stringLoopGainFor(polPeriod, sr, KS_POL_T60_FRACTION * t60);
+          const mean = 0.5 * (g1 + g2);
+          const halfDiff = 0.5 * (g1 - g2);
           const room = kLambdaMax - mean;
           let epsMax = 0;
           if (room > 0) {
@@ -1703,35 +1851,25 @@
           this.coupleGain = 0;
         }
       } else {
+        this.pol.disable();
         this.polCouple = 0;
-        this.polLoopGain = 0;
         this.coupleGain = 0;
       }
       const octaveMix = clamp6(params.octaveMix, 0, 1);
-      this.octLpState = 0;
       if (octaveMix > 0) {
-        this.octPeriod = 0.5 * this.basePeriod;
-        this.octLoopAlpha = this.loopAlpha;
-        const omegaO = TWO_PI6 / this.octPeriod;
-        const tauO = Math.atan2(a * Math.sin(omegaO), 1 - a * Math.cos(omegaO)) / Math.max(omegaO, 1e-6);
-        this.octLoopComp = 1 + tauO;
-        this.octLoopGain = loopGainFor(this.octPeriod, sr, t60);
-        this.octReleaseGain = loopGainFor(this.octPeriod, sr, Math.max(0.01, params.releaseDampS));
+        voiceLoop(this.oct, 0.5 * loopPeriod, t60, KS_HF_T60_S);
         this.octExc = 0.7;
         this.octCouple = octaveMix;
-        this.octSize = Math.min(this.octLine.capacity, Math.trunc(this.octPeriod * 1.3) + 8);
-        this.octLine.prime(this.octSize);
       } else {
+        this.oct.disable();
         this.octCouple = 0;
-        this.octLoopGain = 0;
-        this.octSize = 0;
       }
       this.keyoffAmount = clamp6(params.keyoffNoise, 0, 1);
       this.keyoffLen = Math.max(1, Math.trunc(KS_KEYOFF_MS * 1e-3 * sr));
       this.keyoffPos = this.keyoffLen;
       this.keyoffLp = 0;
       this.keyoffEnv = 0;
-      this.keyoffAlpha = clamp6(1 - Math.exp(-TWO_PI6 * KS_KEYOFF_CUTOFF_HZ / sr), 0.01, 1);
+      this.keyoffAlpha = clamp6(1 - Math.exp(-TWO_PI7 * KS_KEYOFF_CUTOFF_HZ / sr), 0.01, 1);
       this.keyoffDecay = Math.exp(-4 / this.keyoffLen);
     }
     sourceAt(k) {
@@ -1739,13 +1877,13 @@
       if (this.pluckStyle <= 0) return nz;
       let pluck = 0;
       if (k < this.pluckContact) {
-        const win = 0.5 * (1 - Math.cos(TWO_PI6 * (k + 1) / (this.pluckContact + 1)));
+        const win = 0.5 * (1 - Math.cos(TWO_PI7 * (k + 1) / (this.pluckContact + 1)));
         pluck = k < this.pluckContact >> 1 ? win : -win;
       }
       return nz + this.pluckStyle * (pluck - nz);
     }
     render(pitchRatio) {
-      if (this.buffer.size < 8) return 0;
+      if (this.string.size < 8) return 0;
       let exc = 0;
       if (this.excPos < this.excTotal + this.pickDelay) {
         let burst = this.excPos < this.excTotal ? this.sourceAt(this.excPos) : 0;
@@ -1762,46 +1900,35 @@
         ratio *= 1 + this.tensionRatioPeak * this.tensionEnv;
         this.tensionEnv *= this.tensionDecayCoeff;
       }
-      const delay = clamp6(this.basePeriod / ratio - this.loopComp, 1, this.buffer.size - 4);
-      const delayQ8 = Math.trunc(delay * 256);
-      let fb = this.loopGain * this.lpState;
-      if (this.coupleGain !== 0) fb += this.coupleGain * this.polLpState;
+      let fb = this.string.feedback();
+      if (this.coupleGain !== 0) fb += this.coupleGain * this.pol.lpState;
       let loopIn = exc + fb;
       if (this.slapThreshold > 0) {
-        const kReflect = 0.06;
         const th = this.slapThreshold;
-        if (loopIn > th) loopIn = th + (loopIn - th) * kReflect;
-        else if (loopIn < -th) loopIn = -th + (loopIn + th) * kReflect;
+        if (loopIn > th) loopIn = th + (loopIn - th) * KS_REFLECT;
+        else if (loopIn < -th) loopIn = -th + (loopIn + th) * KS_REFLECT;
       }
       let pickupTap = 0;
       if (this.pickupDepth !== 0) {
-        pickupTap = this.buffer.readFractional(this.pickupDelayQ8);
+        pickupTap = this.string.line.readFractional(this.pickupDelayQ8);
       }
-      const out = this.buffer.processFractional(delayQ8, loopIn);
+      const out = this.string.advance(loopIn, ratio);
       let shaped = out;
       if (this.dispA !== 0) {
         for (const stage of this.dispStages) shaped = stage.process(shaped);
       }
-      this.lpState += this.loopAlpha * (shaped - this.lpState);
+      this.string.commit(shaped);
       let result;
       if (this.polCouple > 0) {
-        const polDelay = clamp6(this.polPeriod / ratio - this.polLoopComp, 1, this.polSize - 4);
-        const polDelayQ8 = Math.trunc(polDelay * 256);
-        let polIn = this.polExc * exc + this.polLoopGain * this.polLpState;
-        if (this.coupleGain !== 0) polIn += this.coupleGain * this.lpState;
-        const polOut = this.polLine.processFractional(polDelayQ8, polIn);
-        this.polLpState += this.polLoopAlpha * (polOut - this.polLpState);
-        result = out + this.polCouple * polOut;
+        let polIn = this.polExc * exc + this.pol.feedback();
+        if (this.coupleGain !== 0) polIn += this.coupleGain * this.string.lpState;
+        result = out + this.polCouple * this.pol.process(polIn, ratio);
       } else {
         result = out;
       }
       if (this.octCouple > 0) {
-        const octDelay = clamp6(this.octPeriod / ratio - this.octLoopComp, 1, this.octSize - 4);
-        const octDelayQ8 = Math.trunc(octDelay * 256);
-        const octIn = this.octExc * exc + this.octLoopGain * this.octLpState;
-        const octOut = this.octLine.processFractional(octDelayQ8, octIn);
-        this.octLpState += this.octLoopAlpha * (octOut - this.octLpState);
-        result += this.octCouple * octOut;
+        const octIn = this.octExc * exc + this.oct.feedback();
+        result += this.octCouple * this.oct.process(octIn, ratio);
       }
       if (this.keyoffPos < this.keyoffLen) {
         const nz = this.noise.bipolarAt(KEYOFF_NOISE_INDEX_BASE + this.keyoffPos);
@@ -1818,9 +1945,9 @@
       return result;
     }
     release() {
-      this.loopGain = Math.min(this.loopGain, this.releaseGain);
-      if (this.polCouple > 0) this.polLoopGain = Math.min(this.polLoopGain, this.polReleaseGain);
-      if (this.octCouple > 0) this.octLoopGain = Math.min(this.octLoopGain, this.octReleaseGain);
+      this.string.release();
+      if (this.polCouple > 0) this.pol.release();
+      if (this.octCouple > 0) this.oct.release();
       if (this.keyoffAmount > 0) {
         this.keyoffPos = 0;
         this.keyoffLp = 0;
@@ -1829,19 +1956,16 @@
     }
     kill() {
       this.excPos = this.excTotal;
-      this.loopGain = 0;
-      this.lpState = 0;
-      this.polLoopGain = 0;
-      this.polLpState = 0;
-      this.octLoopGain = 0;
-      this.octLpState = 0;
+      this.string.kill();
+      this.pol.kill();
+      this.oct.kill();
       this.keyoffPos = this.keyoffLen;
     }
   };
 
-  // src/tuner/dsp/modal-voice.ts
+  // src/demos/tuner/dsp/modal-voice.ts
   var MAX_MODAL_MODES = 8;
-  var TWO_PI7 = 2 * Math.PI;
+  var TWO_PI8 = 2 * Math.PI;
   function noteToHz6(note) {
     return 440 * 2 ** (((note & 127) - 69) / 12);
   }
@@ -1882,7 +2006,7 @@
           mode.gain = 0;
           continue;
         }
-        mode.omega = TWO_PI7 * freq / this.sampleRate;
+        mode.omega = TWO_PI8 * freq / this.sampleRate;
         mode.r = radiusFor(this.sampleRate, t60 * Math.max(0.01, src.decayScale));
         const mallet = Math.exp(-(1 - hardness) * 1.5 * k);
         const jitter = 1 + 0.1 * scatter.bipolarAt(k);
@@ -1939,16 +2063,150 @@
     return x < lo ? lo : x > hi ? hi : x;
   }
 
-  // src/tuner/dsp/percussion-voice.ts
+  // src/demos/tuner/dsp/fdn-plate.ts
+  var TWO_PI9 = 2 * Math.PI;
+  var FDN_LINES = 8;
+  var FDN_MAX_DELAY = 1024;
+  function nextPrimeAtLeast(n) {
+    if (n <= 2) return 2;
+    for (let c = n | 1; ; c += 2) {
+      let prime = true;
+      for (let d = 3; d * d <= c; d += 2) {
+        if (c % d === 0) {
+          prime = false;
+          break;
+        }
+      }
+      if (prime) return c;
+    }
+  }
+  var SPREAD = [1, 1.055, 1.11, 1.17, 1.23, 1.3, 1.37, 1.45];
+  var INPUT_SIGN = [1, -1, 1, -1, 1, -1, 1, -1];
+  var OUTPUT_SIGN = [1, 1, -1, -1, 1, 1, -1, -1];
+  var FdnPlate = class {
+    lines = Array.from(
+      { length: FDN_LINES },
+      () => new Float32Array(FDN_MAX_DELAY)
+    );
+    len = new Int32Array(FDN_LINES);
+    pos = new Int32Array(FDN_LINES);
+    gain = new Float64Array(FDN_LINES);
+    damp = new Float64Array(FDN_LINES);
+    lp = new Float64Array(FDN_LINES);
+    tap = new Float64Array(FDN_LINES);
+    airA = 0;
+    air1 = 0;
+    air2 = 0;
+    loA = 0;
+    lo1 = 0;
+    lo2 = 0;
+    bound = false;
+    isActive = false;
+    /**
+     * Configures the network. `lowHz` is the lowest partial (it scales every
+     * line), `t60S` the reverberation time at the bottom of the band,
+     * `hfRatio` the reverberation time at Nyquist as a fraction of it (1 leaves
+     * the top of the band undamped), and `airHz` the top of the band the plate
+     * responds in at all (0 = up to Nyquist). A `t60S` at or below zero leaves
+     * the plate inactive.
+     */
+    start(sampleRate2, lowHz, t60S, hfRatio, airHz) {
+      const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
+      this.isActive = t60S > 0;
+      if (!this.isActive) {
+        this.pos.fill(0);
+        return;
+      }
+      const t60Dc = Math.max(0.01, t60S);
+      const hf = clamp8(hfRatio, 0.01, 1);
+      const t60Hf = t60Dc * hf;
+      this.loA = 1 - Math.exp(-TWO_PI9 * Math.min(lowHz, 0.45 * sr) / sr);
+      this.lo1 = 0;
+      this.lo2 = 0;
+      this.bound = airHz > 0;
+      if (this.bound) {
+        const f = Math.min(airHz, 0.45 * sr);
+        this.airA = 1 - Math.exp(-TWO_PI9 * f / sr);
+        this.air1 = 0;
+        this.air2 = 0;
+      }
+      const headroom = (FDN_MAX_DELAY - 32) / SPREAD[FDN_LINES - 1];
+      const base = Math.min(sr / Math.max(20, lowHz), headroom);
+      for (let i = 0; i < FDN_LINES; ++i) {
+        const want = clampInt(Math.trunc(base * SPREAD[i]), 8, FDN_MAX_DELAY - 32);
+        const len = Math.min(nextPrimeAtLeast(want), FDN_MAX_DELAY);
+        this.len[i] = len;
+        const exponent = -3 * len / sr;
+        this.gain[i] = 10 ** (exponent / t60Dc);
+        const nyquistGain = Math.min(1, 10 ** (exponent / t60Hf) / Math.max(1e-12, this.gain[i]));
+        this.damp[i] = (1 - nyquistGain) / (1 + nyquistGain);
+        this.lp[i] = 0;
+        this.lines[i].fill(0, 0, len);
+        this.pos[i] = 0;
+      }
+    }
+    /** Feeds one sample of excitation in and returns one sample of plate. */
+    process(input) {
+      if (!this.isActive) return 0;
+      this.lo1 += (input - this.lo1) * this.loA;
+      let x = input - this.lo1;
+      this.lo2 += (x - this.lo2) * this.loA;
+      x -= this.lo2;
+      if (this.bound) {
+        this.air1 += (x - this.air1) * this.airA;
+        this.air2 += (this.air1 - this.air2) * this.airA;
+        x = this.air2;
+      }
+      let sum = 0;
+      for (let i = 0; i < FDN_LINES; ++i) {
+        this.tap[i] = this.lines[i][this.pos[i]];
+        sum += this.tap[i];
+      }
+      const shared = sum * (2 / FDN_LINES);
+      let out = 0;
+      for (let i = 0; i < FDN_LINES; ++i) {
+        let v = (this.tap[i] - shared) * this.gain[i];
+        this.lp[i] = v * (1 - this.damp[i]) + this.lp[i] * this.damp[i];
+        v = this.lp[i];
+        this.lines[i][this.pos[i]] = v + x * INPUT_SIGN[i];
+        if (++this.pos[i] >= this.len[i]) this.pos[i] = 0;
+        out += this.tap[i] * OUTPUT_SIGN[i];
+      }
+      return out * (1 / Math.sqrt(FDN_LINES));
+    }
+    reset() {
+      this.isActive = false;
+      this.bound = false;
+      this.air1 = 0;
+      this.air2 = 0;
+      this.lo1 = 0;
+      this.lo2 = 0;
+      this.pos.fill(0);
+      this.lp.fill(0);
+    }
+    active() {
+      return this.isActive;
+    }
+  };
+  function clamp8(x, lo, hi) {
+    return x < lo ? lo : x > hi ? hi : x;
+  }
+  function clampInt(x, lo, hi) {
+    return x < lo ? lo : x > hi ? hi : x;
+  }
+
+  // src/demos/tuner/dsp/percussion-voice.ts
   var MAX_PERCUSSION_MODES = 6;
   var MAX_SHELL_MODES = 4;
-  var TWO_PI8 = 2 * Math.PI;
+  var TWO_PI10 = 2 * Math.PI;
   var NOISE_INDEX_BASE2 = 2 ** 20;
   var WIRE_INDEX_BASE = 2 ** 24;
   var SHIMMER_INDEX_BASE = 2 ** 28;
   var PHISEM_PROB_INDEX_BASE = 2 ** 30;
   var PHISEM_NOISE_INDEX_BASE = 2 ** 31;
   var PHISEM_COLLISION_RATE = 100;
+  var PHISEM_VELOCITY_FLOOR = 0.9;
+  var INV_SQRT2 = Math.SQRT1_2;
   function defaultPercussionParams() {
     return {
       gmKit: false,
@@ -1957,6 +2215,7 @@
       modeRatios: [1, 1.59, 2.14, 2.3, 2.65, 0],
       modeDecayS: 0.3,
       toneGain: 1,
+      toneDirect: 1,
       baseFreqHz: 0,
       pitchDrop: 0,
       pitchDropMs: 40,
@@ -1969,6 +2228,10 @@
       noiseCutoffHz: 2500,
       noiseQ: 1,
       noiseOutput: "bandpass",
+      noiseBurstCount: 0,
+      noiseBurstIntervalMs: 10,
+      noiseBurstDecayMs: 6,
+      noiseAirHz: 0,
       shellMix: 0,
       shellNumModes: 0,
       shellFreqHz: [0, 0, 0, 0],
@@ -1980,11 +2243,21 @@
       shimmer: 0,
       shimmerAttackMs: 40,
       shimmerCutoffHz: 8e3,
+      contact: 0,
+      contactMs: 0.3,
+      plateGain: 0,
+      plateT60S: 2,
+      plateHfRatio: 0.6,
+      plateLowHz: 180,
+      plateAirHz: 0,
       phisemBeans: 0,
       phisemEnergyMs: 100,
       phisemSoundMs: 3,
       phisemResHz: 0,
       phisemResQ: 1,
+      phisemBodyHz: 0,
+      phisemBodyQ: 4,
+      phisemBodyGain: 0,
       phisemScrapeHz: 0,
       phisemPitchGlide: 0
     };
@@ -2026,8 +2299,8 @@
     }
     /** Set cutoff (Hz, clamped to [10, 0.49 * sr]) and Q (clamped to [0.5, 100]). */
     set(cutoffHz, q) {
-      this.cutoffHz = clamp8(cutoffHz, 10, 0.49 * this.sampleRate);
-      this.qValue = clamp8(q, 0.5, 100);
+      this.cutoffHz = clamp9(cutoffHz, 10, 0.49 * this.sampleRate);
+      this.qValue = clamp9(q, 0.5, 100);
       const g = Math.tan(Math.PI * this.cutoffHz / this.sampleRate);
       this.k = 1 / this.qValue;
       this.a1 = 1 / (1 + g * (g + this.k));
@@ -2055,6 +2328,7 @@
     modes = Array.from({ length: MAX_PERCUSSION_MODES }, emptyMode2);
     numModes = 0;
     toneGain = 1;
+    toneDirect = 1;
     // Descending pitch envelope: ratio = 1 + dropState (one-pole decay).
     dropState = 0;
     dropCoeff = 0;
@@ -2066,7 +2340,35 @@
     noiseCoeff = 0;
     noiseFilter = new TptSvf();
     noiseOutput = "bandpass";
+    // Burst train: a second envelope over the SAME noise source and the same
+    // band, summed with the tail before the filter — one source and one filter,
+    // as the circuit has. Retriggering the tail envelope instead would restart
+    // the tail as well and lose what runs on under the train.
+    noisePeak = 0;
+    burstLevel = 0;
+    burstCoeff = 0;
+    burstRemaining = 0;
+    burstPeriod = 0;
+    burstCountdown = 0;
+    // Radiated upper bound (noiseAirHz). One low-pass per stream rather than one
+    // over their sum: the filter is linear, so the two are the same signal, but
+    // bounding each stream where it is summed leaves the accumulation order
+    // untouched and makes the disabled state bit-identical to the voicing that
+    // predates the field.
+    noiseAirHz = 0;
+    noiseAir = new TptSvf();
+    wireAir = new TptSvf();
+    shimmerAir = new TptSvf();
     shell = new BodyResonator();
+    // Direct contact radiation: one period of a sine over the contact time,
+    // counted out in samples so the shape costs a sine per sample for a few dozen
+    // samples and nothing at all thereafter.
+    contact = 0;
+    contactI = 0;
+    contactLen = 0;
+    // Dense inharmonic plate, driven by the summed strike.
+    plateGain = 0;
+    plate = new FdnPlate();
     // Snare wire rattle: gated, velocity-scaled high-passed noise driven by the
     // membrane displacement crossing wireThreshold.
     wireBuzz = 0;
@@ -2096,12 +2398,15 @@
     phisemScrapeInc = 0;
     phisemResHz = 0;
     phisemResQ = 1;
+    phisemBodyGain = 0;
     phisemGlideState = 0;
     phisemGlideCoeff = 0;
     phisemSr = 48e3;
     phisemProbIndex = 0;
     phisemNoiseIndex = 0;
     phisemFilter = new TptSvf();
+    phisemBody = new TptSvf();
+    phisemBody2 = new TptSvf();
     constructor(sampleRate2) {
       this.phisemSr = sampleRate2 > 0 ? sampleRate2 : 48e3;
     }
@@ -2111,7 +2416,7 @@
       this.noiseIndex = 0;
       const baseHz = params.baseFreqHz > 0 ? params.baseFreqHz : noteToHz7(note);
       const vel01 = (velocity & 127) / 127;
-      this.numModes = clampInt(params.numModes, 0, MAX_PERCUSSION_MODES);
+      this.numModes = clampInt2(params.numModes, 0, MAX_PERCUSSION_MODES);
       this.toneGain = Math.max(0, params.toneGain);
       const nyquistLimit = 0.45 * sr;
       for (let k = 0; k < this.numModes; ++k) {
@@ -2124,7 +2429,7 @@
         const mode = this.modes[k];
         mode.y1 = 0;
         mode.y2 = 0;
-        mode.omega = TWO_PI8 * freq / sr;
+        mode.omega = TWO_PI10 * freq / sr;
         mode.r = radiusFor2(sr, Math.max(5e-3, params.modeDecayS) / Math.max(1, ratio));
         const strike = k === 0 ? 1 : (0.4 + 0.4 * vel01) / (k + 1);
         let strikePos = 1;
@@ -2146,7 +2451,24 @@
       this.noiseFilter.prepare(sr);
       this.noiseFilter.set(params.noiseCutoffHz, Math.max(0.5, params.noiseQ));
       this.noiseFilter.reset();
-      const shellCount = clampInt(params.shellNumModes, 0, MAX_SHELL_MODES);
+      this.noisePeak = this.noiseLevel;
+      this.burstLevel = 0;
+      this.burstRemaining = this.noisePeak > 0 ? Math.max(0, Math.trunc(params.noiseBurstCount)) : 0;
+      this.burstPeriod = Math.max(
+        1,
+        Math.round(Math.max(0.1, params.noiseBurstIntervalMs) * 1e-3 * sr)
+      );
+      this.burstCountdown = this.burstPeriod;
+      this.burstCoeff = Math.exp(-1 / (Math.max(1, params.noiseBurstDecayMs) * 1e-3 * sr));
+      this.noiseAirHz = params.noiseAirHz > 0 ? Math.min(params.noiseAirHz, 0.45 * sr) : 0;
+      if (this.noiseAirHz > 0) {
+        for (const air of [this.noiseAir, this.wireAir, this.shimmerAir]) {
+          air.prepare(sr);
+          air.set(this.noiseAirHz, INV_SQRT2);
+          air.reset();
+        }
+      }
+      const shellCount = clampInt2(params.shellNumModes, 0, MAX_SHELL_MODES);
       const shellSpecs = [];
       for (let k = 0; k < shellCount; ++k) {
         const specHz = params.shellFreqHz[k];
@@ -2157,6 +2479,26 @@
         });
       }
       this.shell.startSpecs(shellSpecs, sr, params.shellMix);
+      this.plateGain = Math.max(0, params.plateGain);
+      this.toneDirect = this.plateGain > 0 ? params.toneDirect : 1;
+      if (this.plateGain > 0) {
+        this.plate.start(
+          sr,
+          params.plateLowHz,
+          params.plateT60S,
+          params.plateHfRatio,
+          params.plateAirHz
+        );
+      } else {
+        this.plate.reset();
+      }
+      this.contact = Math.max(0, params.contact) * vel01;
+      this.contactI = 0;
+      this.contactLen = 0;
+      if (this.contact > 0) {
+        const period = Math.max(1e-3, params.contactMs) * 1e-3 * sr;
+        this.contactLen = Math.max(2, 1 + Math.round(period));
+      }
       this.wireBuzz = Math.max(0, params.wireBuzz);
       this.wireThreshold = Math.max(0, params.wireThreshold);
       this.wireVel01 = vel01;
@@ -2179,7 +2521,7 @@
       this.phisemScrapePhase = 0;
       this.phisemGlideState = 0;
       if (this.phisemBeans > 0) {
-        this.phisemShakeEnergy = 0.3 + 0.7 * vel01;
+        this.phisemShakeEnergy = PHISEM_VELOCITY_FLOOR + (1 - PHISEM_VELOCITY_FLOOR) * vel01;
         this.phisemSysDecay = Math.exp(-1 / (Math.max(1, params.phisemEnergyMs) * 1e-3 * sr));
         this.phisemSoundDecay = Math.exp(-1 / (Math.max(0.2, params.phisemSoundMs) * 1e-3 * sr));
         this.phisemRate = PHISEM_COLLISION_RATE / sr;
@@ -2191,9 +2533,19 @@
         this.phisemFilter.prepare(sr);
         if (this.phisemResHz > 0) {
           const c = this.phisemResHz * (1 + this.phisemGlideState);
-          this.phisemFilter.set(clamp8(c, 20, 0.45 * sr), this.phisemResQ);
+          this.phisemFilter.set(clamp9(c, 20, 0.45 * sr), this.phisemResQ);
         }
         this.phisemFilter.reset();
+        this.phisemBodyGain = params.phisemBodyHz > 0 ? Math.max(0, params.phisemBodyGain) : 0;
+        if (this.phisemBodyGain > 0) {
+          const c = clamp9(params.phisemBodyHz, 20, 0.45 * sr);
+          const q = Math.max(0.5, params.phisemBodyQ);
+          for (const pair of [this.phisemBody, this.phisemBody2]) {
+            pair.prepare(sr);
+            pair.set(c, q);
+            pair.reset();
+          }
+        }
       }
     }
     /**
@@ -2202,6 +2554,7 @@
      */
     render(pitchRatio) {
       let mix = 0;
+      let plateDrive = 0;
       if (this.numModes > 0) {
         const ratio = pitchRatio * (1 + this.dropState);
         if (this.dropState > 0) {
@@ -2228,26 +2581,39 @@
           mode.y1 = y;
           tone += y;
         }
-        mix += this.toneGain * tone;
+        const voicedTone = this.toneGain * tone;
+        mix += voicedTone * this.toneDirect;
+        plateDrive = voicedTone * (1 - this.toneDirect);
         if (this.wireBuzz > 0) {
           const contact = Math.abs(tone) - this.wireThreshold;
           const gate = contact > 0 ? Math.min(contact * 8, 1) : 0;
           const n = this.noise.bipolarAt(WIRE_INDEX_BASE + this.wireIndex++) * gate * this.wireVel01 * this.wireBuzz;
-          mix += this.wireFilter.process(n).hp;
+          const wire = this.wireFilter.process(n).hp;
+          mix += this.noiseAirHz > 0 ? this.wireAir.process(wire).lp : wire;
         }
         if (this.shimmer > 0) {
           this.shimmerEnv += (tone * tone - this.shimmerEnv) * this.shimmerAttackCoeff;
           const n = this.noise.bipolarAt(SHIMMER_INDEX_BASE + this.shimmerIndex++);
-          mix += this.shimmerFilter.process(n * this.shimmerEnv * this.shimmer).hp;
+          const wash = this.shimmerFilter.process(n * this.shimmerEnv * this.shimmer).hp;
+          mix += this.noiseAirHz > 0 ? this.shimmerAir.process(wash).lp : wash;
         }
       }
-      if (this.noiseLevel > 1e-5) {
-        const burst = this.noise.bipolarAt(NOISE_INDEX_BASE2 + this.noiseIndex++) * this.noiseLevel;
+      if (this.burstRemaining > 0 && --this.burstCountdown <= 0) {
+        this.burstLevel = this.noisePeak;
+        this.burstCountdown = this.burstPeriod;
+        --this.burstRemaining;
+      }
+      const noiseEnv = this.noiseLevel + this.burstLevel;
+      if (noiseEnv > 1e-5) {
+        const burst = this.noise.bipolarAt(NOISE_INDEX_BASE2 + this.noiseIndex++) * noiseEnv;
         this.noiseLevel *= this.noiseCoeff;
+        this.burstLevel *= this.burstCoeff;
         const out = this.noiseFilter.process(burst);
-        if (this.noiseOutput === "highpass") mix += out.hp;
-        else if (this.noiseOutput === "lowpass") mix += out.lp;
-        else mix += out.bp;
+        let voiced = 0;
+        if (this.noiseOutput === "highpass") voiced = out.hp;
+        else if (this.noiseOutput === "lowpass") voiced = out.lp;
+        else voiced = out.bp;
+        mix += this.noiseAirHz > 0 ? this.noiseAir.process(voiced).lp : voiced;
       }
       if (this.phisemBeans > 0) {
         this.phisemShakeEnergy *= this.phisemSysDecay;
@@ -2266,21 +2632,41 @@
         if (collide) {
           this.phisemSoundLevel = Math.min(this.phisemSoundLevel + this.phisemShakeEnergy * 0.6, 4);
         }
-        let particle = this.noise.bipolarAt(PHISEM_NOISE_INDEX_BASE + this.phisemNoiseIndex++) * this.phisemSoundLevel;
+        const raw = this.noise.bipolarAt(PHISEM_NOISE_INDEX_BASE + this.phisemNoiseIndex++) * this.phisemSoundLevel;
         this.phisemSoundLevel *= this.phisemSoundDecay;
+        let particle = raw;
         if (this.phisemResHz > 0) {
           if (this.phisemGlideState !== 0) {
             this.phisemGlideState *= this.phisemGlideCoeff;
             if (Math.abs(this.phisemGlideState) < 1e-3) this.phisemGlideState = 0;
             const c = this.phisemResHz * (1 + this.phisemGlideState);
-            this.phisemFilter.set(clamp8(c, 20, 0.45 * this.phisemSr), this.phisemResQ);
+            this.phisemFilter.set(clamp9(c, 20, 0.45 * this.phisemSr), this.phisemResQ);
           }
           particle = this.phisemFilter.process(particle).bp;
         }
         mix += particle;
+        if (this.phisemBodyGain > 0) {
+          const b = this.phisemBody.process(raw).bp;
+          mix += this.phisemBody2.process(b).bp * this.phisemBodyGain;
+        }
+      }
+      if (this.plateGain > 0) {
+        const strike = mix + plateDrive;
+        mix += this.plateGain * this.plate.process(strike);
       }
       if (this.shell.active()) mix = this.shell.process(mix);
       return mix;
+    }
+    /**
+     * The direct contact radiation for this sample, taken out of `render()`
+     * rather than summed into it: it reaches the listener without passing through
+     * the voice's drive, filter or amplitude envelope, and each of those three
+     * swallows it. Call once per sample, alongside `render()`.
+     */
+    nextContact() {
+      if (this.contactI >= this.contactLen) return 0;
+      const p = this.contactI++ / (this.contactLen - 1);
+      return this.contact * Math.sin(TWO_PI10 * p);
     }
     /**
      * Kit pieces play one-shot in the host (the patch's one_shot flag), so
@@ -2297,8 +2683,21 @@
       }
       this.numModes = 0;
       this.noiseLevel = 0;
+      this.noisePeak = 0;
+      this.burstLevel = 0;
+      this.burstRemaining = 0;
       this.excite = false;
+      this.noiseAirHz = 0;
+      this.noiseAir.reset();
+      this.wireAir.reset();
+      this.shimmerAir.reset();
       this.shell.reset();
+      this.plateGain = 0;
+      this.plate.reset();
+      this.toneDirect = 1;
+      this.contact = 0;
+      this.contactLen = 0;
+      this.contactI = 0;
       this.wireBuzz = 0;
       this.wireFilter.reset();
       this.shimmer = 0;
@@ -2308,64 +2707,115 @@
       this.phisemShakeEnergy = 0;
       this.phisemSoundLevel = 0;
       this.phisemFilter.reset();
+      this.phisemBodyGain = 0;
+      this.phisemBody.reset();
+      this.phisemBody2.reset();
     }
   };
-  function clamp8(x, lo, hi) {
+  function clamp9(x, lo, hi) {
     return x < lo ? lo : x > hi ? hi : x;
   }
-  function clampInt(x, lo, hi) {
+  function clampInt2(x, lo, hi) {
     const t = Math.trunc(x);
     return t < lo ? lo : t > hi ? hi : t;
   }
 
-  // src/tuner/dsp/piano-voice.ts
-  var TWO_PI9 = 2 * Math.PI;
+  // src/demos/tuner/dsp/piano-voice.ts
+  var TWO_PI11 = 2 * Math.PI;
+  var LN_1000 = 6.907755279;
   var MAX_PIANO_STRINGS = 3;
   var PIANO_DIRECT_GAIN = 0.3;
   var PIANO_DISPERSION_STAGES = 4;
   var PIANO_MIN_FUNDAMENTAL_HZ = 26;
   var HAMMER_MF_VEL = 0.6;
+  var HAMMER_HYSTERESIS = 0.229431;
   var HAMMER_DYN_BRIGHT_OCT = 1.5;
-  var CONTACT_PERIODS_AT_C4 = 0.503038;
-  var CONTACT_PERIODS_PER_OCT = 0.613525;
+  var FELT_CUTOFF_CONTACT_CYCLES = 4.615;
+  var FELT_CUTOFF_VEL_OCT = 0;
+  var CONTACT_KEYTRACK_SEMIS = 42;
+  var CONTACT_PERIODS_AT_C4 = 0.18;
+  var CONTACT_PERIODS_PER_OCT = 0.5;
   var CONTACT_PERIODS_MAX = 2;
-  var TREBLE_DECAY_OCT = 1.94164;
-  var TWO_STAGE_WIDTH_OCT = 0.616718;
+  var CONTACT_PERIODS_PER_BLOW_MAX = 1;
+  var OUTPUT_LEVEL = 5.7;
+  var TREBLE_DECAY_KNEE_OCT = 1.25;
+  var TREBLE_DECAY_FLOOR_OCT = 3;
+  var TREBLE_DECAY_OCT = 1.4;
+  var TWO_STAGE_WIDTH_OCT = 2;
+  var TWO_STAGE_CENTER_OCT = 2.4;
   var TREBLE_TAPER_OCT_CAP = 1.5;
   var TREBLE_BRIGHT_PER_OCT = 0.06;
-  var BASS_DARK_PER_OCT = 0.15;
-  var UNISON_STIFF_JITTER = 0.05;
+  var BASS_DARK_PER_OCT = 0.06;
+  var UNISON_STIFF_JITTER = 0.02;
   var UNISON_STRIKE_UNEVEN = 0.15;
-  var UNISON_RAD_SPREAD = 0.6;
-  var STRIKE_NOISE_GAIN = 0.6;
+  var UNISON_RAD_SPREAD = 0.5;
+  var STRIKE_NOISE_GAIN = 0.75;
   var STRIKE_NOISE_TAU_MS = 8;
   var STRIKE_NOISE_MAX_MS = 30;
   var STRIKE_NOISE_CUTOFF_SCALE = 0.487539;
-  var NOISE_CUTOFF_BASS_OCT = 0.5;
+  var NOISE_CUTOFF_BASS_OCT = 0;
   var NOISE_STEEP_RATIO = 4;
+  var ONE_POLE_ALPHA_FLOOR = 1e-5;
   var HAMMER_WIDTH_HARMONICS = 2.69125;
   var STRIKE_NOISE_INJECT = 0.298027;
+  var STRIKE_NOISE_DIRECT = 0.6;
   var INJECT_TREBLE_TAPER_OCT = 0.654102;
   var INJECT_BASS_BOOST_OCT = 1.23607;
-  var NOISE_TREBLE_TAPER_OCT = 1.08754;
-  var KNOCK_GAIN = 2.6;
-  var KNOCK_THUD_HZ = 350;
-  var KNOCK_THUD_BASS_OCT = 0.7;
+  var NOISE_TREBLE_TAPER_OCT = 0.435016;
+  var KNOCK_GAIN = 1.6;
+  var KNOCK_VEL_EXP = 0.4;
+  var KNOCK_THUD_HZ = 1400;
+  var KNOCK_THUD_BASS_OCT = 0;
+  var KNOCK_UNCOMBED = 1;
   var BLOOM_TAU_MS_C4 = 4.6604;
   var BLOOM_TAU_OCT = 0.9;
-  var STRING_YIELD = 0.8;
-  var INJ_TILT_DB_OCT = 3.5;
+  var STRING_YIELD = 1.28;
+  var YIELD_EXCURSION_CAP = 0.7;
+  var INJ_TILT_DB_OCT = 1.5;
+  var INJ_TILT_OCT_SPAN = 1.25;
   var YIELD_TREBLE_OCT = 2;
-  var KNOCK_BASS_BOOST_OCT = 1.3;
-  var KNOCK_TREBLE_TAPER_OCT = 2;
-  var WIDTH_BASS_OCT = -1.96668;
+  var KNOCK_BASS_BOOST_OCT = 0.3;
+  var KNOCK_TREBLE_TAPER_OCT = 1.4;
+  var CASE_STRIKE_GAIN = 0.02;
+  var BOARD_STRIKE_GAIN = 0.12;
+  var BOARD_STRIKE_TREBLE_OCT = 1;
+  var WIDTH_BASS_OCT = 0.3;
   var WIDTH_TREBLE_OCT = 0.81966;
-  var STRIKE_POS_BASS_OCT = 0.556;
-  var RADIATION_HP_HZ = 95;
-  var RADIATION_HP_Q = 0.6;
-  var BRIDGE_HILL_HZ = 1485.15;
-  var BRIDGE_HILL_GAIN_DB = 9.91486;
+  var STRIKE_POS_BASS_OCT = 0.18;
+  var LONGITUDINAL_MODES = 5;
+  var LONG_FIRST_HZ_C4 = 4900;
+  var LONG_FIRST_OCT = 0.6;
+  var LONG_LEVEL = 500;
+  var LONG_TREBLE_TAPER_OCT = 1.5;
+  var LONG_T60_S = 0.35;
+  var LONG_DRIVE_HP_HZ = 4e3;
+  var RADIATION_HP_HZ = 60.8;
+  var RADIATION_HP_SECTION_Q = [0.5411961, 1.30656296];
+  var BRIDGE_HILL_HZ = 1856.4375;
+  var BRIDGE_HILL_GAIN_DB = 15.863776;
   var BRIDGE_HILL_Q = 2.40983;
+  var TWO_STAGE_DRAIN_PARTIALS = 4;
+  var BRIDGE_HF_DRAIN = 6;
+  var BRIDGE_HF_HZ = 1600;
+  var BRIDGE_HF_REF_HZ = 261.6256;
+  var BRIDGE_HF_DRAIN_MAX = 0.5;
+  var LOOP_DAMP_RATE_NORM = 1;
+  var LOOP_DAMP_REF_HZ = 27.5;
+  var DAMPER_VEL_SLOPE = 83e-4;
+  var DAMPER_VEL_ANCHOR = 120;
+  var DAMPER_VEL_SCALE_MAX = 4;
+  var DISPERSION_FADE_NOTE_LO = 98;
+  var DISPERSION_FADE_NOTE_HI = 108;
+  var INHARM_BREAK_NOTE = 36;
+  var INHARM_B_AT_A4 = 7718e-7;
+  var INHARM_TREBLE_BETA = 0.086636;
+  var INHARM_BASS_BETA = 0.064666;
+  var STRETCH_BASS_CENTS = 2.1333;
+  var STRETCH_BASS_POWER = 1.0756;
+  var STRETCH_TREBLE_CENTS = 0.501;
+  var STRETCH_TREBLE_POWER = 4.0427;
+  var LOWEST_PIANO_NOTE = 12;
+  var HIGHEST_PIANO_NOTE = 108;
   var HAMMER_COMB_CAPACITY = 2048;
   function defaultPianoParams() {
     return {
@@ -2389,10 +2839,11 @@
     return Math.trunc(sr / PIANO_MIN_FUNDAMENTAL_HZ) + 8;
   }
   function pianoInharmonicityB(note) {
-    const n = note & 127;
-    const bAtA4 = 7e-4;
-    const betaPerSemitone = 0.091575;
-    return Math.max(bAtA4 * Math.exp(betaPerSemitone * (n - 69)), 2e-5);
+    const n = clamp10(note & 127, LOWEST_PIANO_NOTE, HIGHEST_PIANO_NOTE);
+    const treble = INHARM_B_AT_A4 * Math.exp(INHARM_TREBLE_BETA * (n - 69));
+    if (n >= INHARM_BREAK_NOTE) return treble;
+    const atBreak = INHARM_B_AT_A4 * Math.exp(INHARM_TREBLE_BETA * (INHARM_BREAK_NOTE - 69));
+    return atBreak * Math.exp(INHARM_BASS_BETA * (INHARM_BREAK_NOTE - n));
   }
   function pianoUnisonStrings(note) {
     const n = note & 127;
@@ -2401,17 +2852,20 @@
     return 3;
   }
   function pianoStretchCents(note) {
-    const x = ((note & 127) - 69) / 39;
-    return clamp9(14 * x * x * x, -22, 22);
+    const n = clamp10(note & 127, LOWEST_PIANO_NOTE, HIGHEST_PIANO_NOTE);
+    const octaves = (n - 69) / 12;
+    if (octaves > 0) return STRETCH_TREBLE_CENTS * octaves ** STRETCH_TREBLE_POWER;
+    if (octaves < 0) return -STRETCH_BASS_CENTS * (-octaves) ** STRETCH_BASS_POWER;
+    return 0;
   }
   function noteToHz8(note) {
     return 440 * 2 ** (((note & 127) - 69) / 12);
   }
-  function loopGainFor2(periodSamples, sampleRate2, t60S) {
+  function loopGainFor(periodSamples, sampleRate2, t60S) {
     const loopsToT60 = sampleRate2 * Math.max(0.01, t60S) / Math.max(1, periodSamples);
-    return Math.exp(-6.907755279 / loopsToT60);
+    return Math.exp(-LN_1000 / loopsToT60);
   }
-  function clamp9(x, lo, hi) {
+  function clamp10(x, lo, hi) {
     return x < lo ? lo : x > hi ? hi : x;
   }
   var PianoVoiceCore = class {
@@ -2419,6 +2873,16 @@
     numStrings = 0;
     loopAlpha = 1;
     bridge = 0;
+    /**
+     * The bridge signal the prompt-decay drain actually subtracts, the one-pole
+     * that band-limits it, and the fixed-corner upper band added back on top.
+     */
+    bridgeDrain = 0;
+    drainLpA = 1;
+    bridgeHfLp = 0;
+    drainHfA = 0;
+    drainHiW = 0;
+    drainOut = 0;
     /** Damper loop-gain cap installed by release(). */
     releaseGain = 0;
     // Dynamic felt hammer: a unit mass on a nonlinear spring (F = k*x^p with a
@@ -2436,6 +2900,7 @@
     hamExit = -1;
     ys = 0;
     ysAdm = 0;
+    ysLimit = 0;
     lastForce = 0;
     combDelay = 0;
     combIdx = 0;
@@ -2444,6 +2909,8 @@
     /** Strike-position comb history for the injected scrub noise. */
     noiseHist = new Float32Array(HAMMER_COMB_CAPACITY);
     knockGain = 0.6;
+    caseStrikeAmount = 0;
+    boardStrikeAmount = 0;
     knockLp = 0;
     knockLp2 = 0;
     knockLp3 = 0;
@@ -2454,15 +2921,31 @@
     excAlpha = 1;
     excLp = 0;
     excLp2 = 0;
-    // Soundboard radiation highpass (biquad, b2 == b0).
-    hpB0 = 1;
-    hpB1 = 0;
-    hpA1 = 0;
-    hpA2 = 0;
-    hpX1 = 0;
-    hpX2 = 0;
-    hpY1 = 0;
-    hpY2 = 0;
+    /** The blow as the body feels it: the same felt-softened force, never combed. */
+    bodyLp = 0;
+    bodyLp2 = 0;
+    // Longitudinal string modes ("phantom partials"): transverse motion stretches
+    // the string, and the tension change it makes — quadratic in the transverse
+    // displacement — launches waves at the longitudinal speed. They are the
+    // metallic growl that tells the ear a low note came from a piano.
+    longModes = makeModes(LONGITUDINAL_MODES);
+    longLevel = 0;
+    longPrev = 0;
+    longHpA = 1;
+    longX1 = 0;
+    longX2 = 0;
+    // Soundboard radiation highpass: two biquad sections (b2 == b0 in each)
+    // forming a fourth-order Butterworth.
+    hp = Array.from({ length: RADIATION_HP_SECTION_Q.length }, () => ({
+      b0: 1,
+      b1: 0,
+      a1: 0,
+      a2: 0,
+      x1: 0,
+      x2: 0,
+      y1: 0,
+      y2: 0
+    }));
     // Bridge-hill radiation emphasis (peaking biquad).
     bhB0 = 1;
     bhB1 = 0;
@@ -2505,30 +2988,39 @@
       const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
       const f0 = noteToHz8(note) * 2 ** (pianoStretchCents(note) / 1200);
       const period = sr / f0;
-      const w0 = TWO_PI9 / period;
+      const w0 = TWO_PI11 / period;
       const jitter = new VoiceRandomSequence(seed);
-      const octavesAboveC4 = Math.min(Math.max(0, ((note & 127) - 60) / 12), TREBLE_TAPER_OCT_CAP);
-      const octavesBelowC4 = Math.max(0, -((note & 127) - 60) / 12);
-      const brightEff = clamp9(
-        clamp9(params.brightness, 0, 1) - TREBLE_BRIGHT_PER_OCT * octavesAboveC4 - BASS_DARK_PER_OCT * octavesBelowC4,
+      const noteF = note & 127;
+      const stretch = clamp10(params.decayStretch, 0, 1);
+      const octavesBelowA4 = Math.max(0, (69 - noteF) / 12);
+      const bassScale = 2 ** (stretch * octavesBelowA4);
+      const decayKneeOct = TREBLE_DECAY_KNEE_OCT;
+      const decayFloorOct = Math.max(decayKneeOct, TREBLE_DECAY_FLOOR_OCT);
+      const decayTaperOct = clamp10((noteF - 60) / 12, decayKneeOct, decayFloorOct) - decayKneeOct;
+      const slowScale = bassScale * 2 ** (-TREBLE_DECAY_OCT * decayTaperOct);
+      const t60Slow = Math.max(0.05, Math.max(params.decayFastS, params.decaySlowS) * slowScale);
+      const octavesAboveC4 = Math.min(Math.max(0, (noteF - 60) / 12), TREBLE_TAPER_OCT_CAP);
+      const octavesBelowC4 = Math.max(0, -(noteF - 60) / 12);
+      const brightEff = clamp10(
+        clamp10(params.brightness, 0, 1) - TREBLE_BRIGHT_PER_OCT * octavesAboveC4 - BASS_DARK_PER_OCT * octavesBelowC4,
         0.05,
         1
       );
-      const lpA = (1 - brightEff) * 0.6;
+      const rateNorm = (LOOP_DAMP_REF_HZ / Math.max(f0, 1)) ** clamp10(LOOP_DAMP_RATE_NORM, 0, 1);
+      const lpA = clamp10((1 - brightEff) * 0.6 * rateNorm, 0, 0.95);
       this.loopAlpha = 1 - lpA;
       const tauLp = onepolePhaseDelay(lpA, w0);
-      const dispersion = clamp9(params.dispersion, 0, 1);
+      const fadeLo = DISPERSION_FADE_NOTE_LO;
+      const fadeHi = Math.max(fadeLo + 1, DISPERSION_FADE_NOTE_HI);
+      const fadeX = clamp10((noteF - fadeLo) / (fadeHi - fadeLo), 0, 1);
+      const dispersion = clamp10(params.dispersion, 0, 1) * (1 - fadeX * fadeX * (3 - 2 * fadeX));
       const bCoeff = pianoInharmonicityB(note) * dispersion;
       const phaseBudget = period - 4 - tauLp;
       const apA = dispersionAllpassA(bCoeff, w0, lpA, PIANO_DISPERSION_STAGES, phaseBudget);
-      const stretch = clamp9(params.decayStretch, 0, 1);
-      const octavesBelowA4 = (69 - (note & 127)) / 12;
-      const bassScale = 2 ** (stretch * octavesBelowA4);
-      const slowScale = bassScale * 2 ** (-TREBLE_DECAY_OCT * octavesAboveC4);
-      const t60Slow = Math.max(0.05, Math.max(params.decayFastS, params.decaySlowS) * slowScale);
-      const octFromC4Signed = ((note & 127) - 60) / 12;
+      const octFromC4Signed = (noteF - 60) / 12;
+      const contrastX = octFromC4Signed - TWO_STAGE_CENTER_OCT;
       const contrast = Math.exp(
-        -(octFromC4Signed * octFromC4Signed) / (TWO_STAGE_WIDTH_OCT * TWO_STAGE_WIDTH_OCT)
+        -(contrastX * contrastX) / (TWO_STAGE_WIDTH_OCT * TWO_STAGE_WIDTH_OCT)
       );
       const invFastFull = 1 / Math.max(0.05, params.decayFastS * bassScale);
       const invSlow = 1 / t60Slow;
@@ -2536,7 +3028,7 @@
         t60Slow,
         1 / (invSlow + contrast * Math.max(0, invFastFull - invSlow))
       );
-      this.numStrings = clamp9(
+      this.numStrings = clamp10(
         Math.min(params.strings, pianoUnisonStrings(note)),
         1,
         MAX_PIANO_STRINGS
@@ -2568,7 +3060,7 @@
         if (this.numStrings > 1) {
           s.radiateWeight += UNISON_RAD_SPREAD * (i / (this.numStrings - 1) - 0.5) * (1 + 0.3 * jitter.bipolarAt(40 + i));
         }
-        const apAJit = clamp9(apA * (1 + UNISON_STIFF_JITTER * jitter.bipolarAt(24 + i)), -0.998, 0);
+        const apAJit = clamp10(apA * (1 + UNISON_STIFF_JITTER * jitter.bipolarAt(24 + i)), -0.998, 0);
         for (const stage of s.ap) {
           stage.a = apAJit;
           stage.reset();
@@ -2578,38 +3070,59 @@
         s.comp = 1 + tauLp + PIANO_DISPERSION_STAGES * tauAp;
         const lpH1Gain = (1 - lpA) / Math.sqrt(Math.max(1e-9, 1 - 2 * lpA * Math.cos(w0) + lpA * lpA));
         const lpComp = Math.min(1 / Math.max(1e-3, lpH1Gain), 1 / 0.9);
-        s.gSlow = Math.min(0.99997, loopGainFor2(s.basePeriod, sr, t60Slow) * lpComp);
-        s.gFast = Math.min(s.gSlow, loopGainFor2(s.basePeriod, sr, t60Fast) * lpComp);
+        s.gSlow = Math.min(0.99997, loopGainFor(s.basePeriod, sr, t60Slow) * lpComp);
+        s.gFast = Math.min(s.gSlow, loopGainFor(s.basePeriod, sr, t60Fast) * lpComp);
         s.line.prime(Math.min(s.line.capacity, Math.trunc(s.basePeriod * 1.3) + 8));
       }
       this.bridge = 0;
+      this.bridgeDrain = 0;
+      const drainPartials = Math.max(0, TWO_STAGE_DRAIN_PARTIALS);
+      const drainCorner = drainPartials * f0;
+      this.drainLpA = drainPartials <= 0 || drainCorner >= 0.5 * sr ? 1 : 1 - Math.exp(-TWO_PI11 * drainCorner / sr);
+      const hfCorner = clamp10(BRIDGE_HF_HZ, 20, 0.45 * sr);
+      this.drainHfA = 1 - Math.exp(-TWO_PI11 * hfCorner / sr);
+      this.drainHiW = Math.max(0, BRIDGE_HF_DRAIN) * Math.max(BRIDGE_HF_REF_HZ, 1) / Math.max(f0, 1);
+      if (this.drainHiW > 0) {
+        let widest = 0;
+        for (let i = 0; i < this.numStrings; ++i) {
+          widest = Math.max(widest, this.strings[i].gSlow - this.strings[i].gFast);
+        }
+        if (widest > 1e-9) {
+          this.drainHiW = Math.min(
+            this.drainHiW,
+            Math.max(0, BRIDGE_HF_DRAIN_MAX) * this.strings[0].gSlow / widest
+          );
+        }
+      }
+      this.bridgeHfLp = 0;
+      this.drainOut = 0;
       const anchorLowNote = 48;
       const anchorHighNote = 60;
       const bassSpan = 20;
       const trebleSpan = 10;
       const bassGain = 0.4;
       const trebleGain = -0.45;
-      const noteF = note & 127;
       let damperKeytrack = 1;
       if (noteF < anchorLowNote) {
-        const x = clamp9((anchorLowNote - noteF) / bassSpan, 0, 1);
+        const x = clamp10((anchorLowNote - noteF) / bassSpan, 0, 1);
         damperKeytrack += bassGain * x * x * (3 - 2 * x);
       } else if (noteF > anchorHighNote) {
-        const x = clamp9((noteF - anchorHighNote) / trebleSpan, 0, 1);
+        const x = clamp10((noteF - anchorHighNote) / trebleSpan, 0, 1);
         damperKeytrack += trebleGain * x * x * (3 - 2 * x);
       }
-      this.releaseGain = loopGainFor2(
-        period,
-        sr,
-        Math.max(0.01, params.releaseDampS * damperKeytrack)
+      const damperVelScale = Math.min(
+        DAMPER_VEL_SCALE_MAX,
+        Math.exp(DAMPER_VEL_SLOPE * (DAMPER_VEL_ANCHOR - (velocity & 127)))
       );
+      const releaseT60 = Math.max(0.01, params.releaseDampS * damperKeytrack * damperVelScale);
+      this.releaseGain = loopGainFor(period, sr, releaseT60);
       const vel01 = Math.max((velocity & 127) / 127, 0.02);
-      const p = clamp9(params.hammerExponent, 1.5, 4);
+      const p = clamp10(params.hammerExponent, 1.5, 4);
       const ampExp = 2 * p / (p + 1);
-      const dyn = clamp9(params.hammerDynamics, 0, 1);
-      let contactMs = clamp9(params.hammerContactMs, 0.2, 10) * 2 ** (-((note & 127) - 69) / 13.1212);
-      const octavesFromC4 = ((note & 127) - 60) / 12;
-      const contactFloorPeriods = clamp9(
+      const dyn = clamp10(params.hammerDynamics, 0, 1);
+      let contactMs = clamp10(params.hammerContactMs, 0.2, 10) * 2 ** (-(noteF - 69) / Math.max(1, CONTACT_KEYTRACK_SEMIS));
+      const octavesFromC4 = (noteF - 60) / 12;
+      const contactFloorPeriods = clamp10(
         CONTACT_PERIODS_AT_C4 + CONTACT_PERIODS_PER_OCT * octavesFromC4,
         0,
         CONTACT_PERIODS_MAX
@@ -2618,24 +3131,31 @@
       const tauMf = Math.max(8, contactMs * 1e-3 * sr);
       const cP = 3.28 - 0.066 * p;
       this.hamP = p;
-      this.hamK = (cP / tauMf) ** (p + 1);
-      this.hamMu = 0.229431;
+      this.hamMu = HAMMER_HYSTERESIS;
       this.hamY = 0;
       this.hamV = (vel01 / HAMMER_MF_VEL) ** (1 + 0.6 * dyn);
       this.hamOn = true;
       this.hamTtl = Math.trunc(3 * tauMf);
+      this.hamK = (cP / tauMf) ** (p + 1);
       const xMaxMf = (0.5 * (p + 1) / this.hamK) ** (1 / (p + 1));
       const fPeakMf = this.hamK * xMaxMf ** p;
-      this.hammerAmp = 0.9 * vel01 ** ampExp;
-      const mfLevel = 0.9 * HAMMER_MF_VEL ** ampExp;
+      const tauBlow = tauMf * Math.max(this.hamV, 1e-4) ** (-(p - 1) / (p + 1));
+      const dwellCap = Math.max(CONTACT_PERIODS_PER_BLOW_MAX, contactFloorPeriods) * period;
+      this.hamK *= Math.max(1, tauBlow / Math.max(dwellCap, 1e-6)) ** (p + 1);
+      this.hammerAmp = OUTPUT_LEVEL * vel01 ** ampExp;
+      const mfLevel = OUTPUT_LEVEL * HAMMER_MF_VEL ** ampExp;
       this.hamForceNorm = fPeakMf > 1e-12 ? mfLevel / fPeakMf : 0;
-      this.hamForceNorm *= 2 ** (INJ_TILT_DB_OCT * clamp9(octavesFromC4, -1.25, 1.25) / 6.0206);
+      const tiltSpan = Math.max(0, INJ_TILT_OCT_SPAN);
+      this.hamForceNorm *= 2 ** (INJ_TILT_DB_OCT * clamp10(octavesFromC4, -tiltSpan, tiltSpan) / 6.0206);
       const yieldKt = STRING_YIELD * 2 ** (-YIELD_TREBLE_OCT * Math.max(0, octavesFromC4));
+      const xMaxUnit = (0.5 * (p + 1) / this.hamK) ** (1 / (p + 1));
+      const xMaxV = xMaxUnit * Math.max(this.hamV, 1e-4) ** (2 / (p + 1));
       this.ysAdm = 0.5 * yieldKt * xMaxMf;
+      this.ysLimit = YIELD_EXCURSION_CAP * xMaxV;
       this.ys = 0;
       this.lastForce = 0;
-      this.hamExit = -xMaxMf;
-      const strikePos = clamp9(params.strikePosition, 0, 0.5) * 2 ** (STRIKE_POS_BASS_OCT * Math.max(0, -octavesFromC4));
+      this.hamExit = -xMaxV;
+      const strikePos = clamp10(params.strikePosition, 0, 0.5) * 2 ** (STRIKE_POS_BASS_OCT * Math.max(0, -octavesFromC4));
       this.combDelay = Math.trunc(Math.min(strikePos, 0.5) * period + 0.5);
       this.combDelay = Math.min(this.combDelay, HAMMER_COMB_CAPACITY - 1);
       this.combIdx = 0;
@@ -2643,30 +3163,61 @@
       this.combHist.fill(0);
       this.noiseHist.fill(0);
       const dynBright = 2 ** (HAMMER_DYN_BRIGHT_OCT * dyn * (vel01 - HAMMER_MF_VEL));
-      const excCutoff = 800 * 2 ** (3 * vel01) * dynBright;
+      const excCutoff = FELT_CUTOFF_CONTACT_CYCLES / Math.max(1e-4, contactMs * 1e-3) * 2 ** (FELT_CUTOFF_VEL_OCT * vel01) * dynBright;
       const widthHarm = HAMMER_WIDTH_HARMONICS * 2 ** (WIDTH_BASS_OCT * Math.max(0, -octavesFromC4) + WIDTH_TREBLE_OCT * Math.max(0, octavesFromC4));
       const widthCutoff = Math.min(excCutoff, widthHarm * f0 * dynBright);
-      this.excAlpha = clamp9(1 - Math.exp(-TWO_PI9 * widthCutoff / sr), 0.01, 1);
+      this.excAlpha = clamp10(1 - Math.exp(-TWO_PI11 * widthCutoff / sr), ONE_POLE_ALPHA_FLOOR, 1);
       const noiseCutoff = STRIKE_NOISE_CUTOFF_SCALE * excCutoff * 2 ** (-NOISE_CUTOFF_BASS_OCT * Math.max(0, -octavesFromC4));
-      this.noiseAlpha = clamp9(1 - Math.exp(-TWO_PI9 * noiseCutoff / sr), 0.01, 1);
-      this.noiseAlpha3 = clamp9(
-        1 - Math.exp(-TWO_PI9 * NOISE_STEEP_RATIO * noiseCutoff / sr),
-        0.01,
+      this.noiseAlpha = clamp10(1 - Math.exp(-TWO_PI11 * noiseCutoff / sr), ONE_POLE_ALPHA_FLOOR, 1);
+      this.noiseAlpha3 = clamp10(
+        1 - Math.exp(-TWO_PI11 * NOISE_STEEP_RATIO * noiseCutoff / sr),
+        ONE_POLE_ALPHA_FLOOR,
         1
       );
       this.excLp = 0;
       this.excLp2 = 0;
-      this.noiseEnv = STRIKE_NOISE_GAIN * this.hammerAmp * dynBright * 2 ** (-NOISE_TREBLE_TAPER_OCT * Math.max(0, octavesFromC4) + INJ_TILT_DB_OCT * clamp9(octavesFromC4, -1.25, 1.25) / 6.0206);
-      this.knockGain = KNOCK_GAIN * 2 ** (KNOCK_BASS_BOOST_OCT * Math.max(0, -octavesFromC4) - KNOCK_TREBLE_TAPER_OCT * Math.max(0, octavesFromC4));
+      this.bodyLp = 0;
+      this.bodyLp2 = 0;
+      this.noiseEnv = STRIKE_NOISE_GAIN * this.hammerAmp * dynBright * 2 ** (-NOISE_TREBLE_TAPER_OCT * Math.max(0, octavesFromC4) + INJ_TILT_DB_OCT * clamp10(octavesFromC4, -1.25, 1.25) / 6.0206);
+      this.knockGain = KNOCK_GAIN * Math.max(vel01, 1e-4) ** KNOCK_VEL_EXP * 2 ** (KNOCK_BASS_BOOST_OCT * Math.max(0, -octavesFromC4) - KNOCK_TREBLE_TAPER_OCT * Math.max(0, octavesFromC4));
+      const blowNorm = mfLevel > 0 ? this.hammerAmp / mfLevel : 0;
+      const blowVel = Math.max(vel01, 1e-4) ** KNOCK_VEL_EXP;
+      this.caseStrikeAmount = CASE_STRIKE_GAIN * blowNorm * blowVel;
+      this.boardStrikeAmount = BOARD_STRIKE_GAIN * blowNorm * blowVel * 2 ** (BOARD_STRIKE_TREBLE_OCT * Math.max(0, octavesFromC4));
       this.knockLp = 0;
       this.knockLp2 = 0;
       this.knockLp3 = 0;
       const thudHz = KNOCK_THUD_HZ * 2 ** (-KNOCK_THUD_BASS_OCT * Math.max(0, -octavesFromC4));
-      this.knockLpA = clamp9(1 - Math.exp(-TWO_PI9 * thudHz / sr), 0, 1);
-      this.knockLp3A = clamp9(1 - Math.exp(-TWO_PI9 * NOISE_STEEP_RATIO * thudHz / sr), 0, 1);
+      this.knockLpA = clamp10(1 - Math.exp(-TWO_PI11 * thudHz / sr), 0, 1);
+      this.knockLp3A = clamp10(1 - Math.exp(-TWO_PI11 * NOISE_STEEP_RATIO * thudHz / sr), 0, 1);
       this.bloom = 0;
       const bloomTauS = BLOOM_TAU_MS_C4 * 1e-3 * 2 ** (-BLOOM_TAU_OCT * octavesFromC4);
-      this.bloomA = clamp9(1 - Math.exp(-1 / (bloomTauS * sr)), 1e-4, 1);
+      this.bloomA = clamp10(1 - Math.exp(-1 / (bloomTauS * sr)), 1e-4, 1);
+      this.longLevel = LONG_LEVEL * 2 ** (-LONG_TREBLE_TAPER_OCT * Math.max(0, octavesFromC4));
+      const longF1 = LONG_FIRST_HZ_C4 * 2 ** (LONG_FIRST_OCT * octavesFromC4);
+      this.longPrev = 0;
+      this.longHpA = clamp10(1 - Math.exp(-TWO_PI11 * LONG_DRIVE_HP_HZ / sr), 0, 1);
+      this.longX1 = 0;
+      this.longX2 = 0;
+      for (let i = 0; i < LONGITUDINAL_MODES; ++i) {
+        const m = this.longModes[i];
+        m.a1 = 0;
+        m.a2 = 0;
+        m.gain = 0;
+        m.y1 = 0;
+        m.y2 = 0;
+        const f = longF1 * (i + 1);
+        if (this.longLevel <= 0 || f >= 0.45 * sr) continue;
+        const w = TWO_PI11 * f / sr;
+        const t60 = Math.max(0.01, LONG_T60_S / (i + 1));
+        const r = Math.exp(-LN_1000 / (sr * t60));
+        m.a1 = 2 * r * Math.cos(w);
+        m.a2 = -r * r;
+        const dRe = 1 - m.a1 * Math.cos(w) - m.a2 * Math.cos(2 * w);
+        const dIm = m.a1 * Math.sin(w) + m.a2 * Math.sin(2 * w);
+        const dMag = Math.sqrt(dRe * dRe + dIm * dIm);
+        m.gain = dMag / Math.max(2 * Math.sin(w), 1e-6) / (i + 1);
+      }
       this.noiseDecay = Math.exp(-1e3 / (STRIKE_NOISE_TAU_MS * sr));
       this.noiseSamples = Math.trunc(STRIKE_NOISE_MAX_MS * 1e-3 * sr);
       this.noisePos = 0;
@@ -2674,26 +3225,30 @@
       this.noiseLp2 = 0;
       this.noiseLp3 = 0;
       this.noiseLow = 0;
-      this.noiseHpA = clamp9(1 - Math.exp(-TWO_PI9 * 1.2 * f0 / sr), 0, 1);
+      this.noiseHpA = clamp10(1 - Math.exp(-TWO_PI11 * 1.2 * f0 / sr), 0, 1);
       this.noiseRng = (Number((seed ^ seed >> 32n ^ 0x9e3779b9n) & 0xffffffffn) | 1) >>> 0;
       this.noiseInject = STRIKE_NOISE_INJECT * 2 ** (-INJECT_TREBLE_TAPER_OCT * Math.max(0, octavesFromC4) + INJECT_BASS_BOOST_OCT * Math.max(0, -octavesFromC4));
       {
-        const w = TWO_PI9 * RADIATION_HP_HZ / sr;
+        const w = TWO_PI11 * RADIATION_HP_HZ / sr;
         const cw = Math.cos(w);
-        const alpha = Math.sin(w) / (2 * RADIATION_HP_Q);
-        const a0 = 1 + alpha;
-        this.hpB0 = (1 + cw) * 0.5 / a0;
-        this.hpB1 = -(1 + cw) / a0;
-        this.hpA1 = -2 * cw / a0;
-        this.hpA2 = (1 - alpha) / a0;
-        this.hpX1 = 0;
-        this.hpX2 = 0;
-        this.hpY1 = 0;
-        this.hpY2 = 0;
+        const sw = Math.sin(w);
+        for (let i = 0; i < this.hp.length; ++i) {
+          const s = this.hp[i];
+          const alpha = sw / (2 * RADIATION_HP_SECTION_Q[i]);
+          const a0 = 1 + alpha;
+          s.b0 = (1 + cw) * 0.5 / a0;
+          s.b1 = -(1 + cw) / a0;
+          s.a1 = -2 * cw / a0;
+          s.a2 = (1 - alpha) / a0;
+          s.x1 = 0;
+          s.x2 = 0;
+          s.y1 = 0;
+          s.y2 = 0;
+        }
       }
       {
         const bigA = 10 ** (BRIDGE_HILL_GAIN_DB / 40);
-        const w = TWO_PI9 * BRIDGE_HILL_HZ / sr;
+        const w = TWO_PI11 * BRIDGE_HILL_HZ / sr;
         const cw = Math.cos(w);
         const alpha = Math.sin(w) / (2 * BRIDGE_HILL_Q);
         const a0 = 1 + alpha / bigA;
@@ -2708,17 +3263,33 @@
         this.bhY2 = 0;
       }
     }
+    /**
+     * What this note's blow puts into the instrument's structure, as set by the
+     * last start(). The host hands it to the shared `PianoSoundboard` rather than
+     * mixing it into this voice's output, because a case network is struck once
+     * per blow and not driven by the note.
+     */
+    caseStrike() {
+      return this.caseStrikeAmount;
+    }
+    /**
+     * The same blow into the board bank instead, which answers it over a fraction
+     * of a second where the case network answers over four.
+     */
+    boardStrike() {
+      return this.boardStrikeAmount;
+    }
     render(pitchRatio) {
       if (this.numStrings <= 0) return 0;
       let exc = 0;
       let knock = 0;
       let thudIn = 0;
+      let noiseDirect = 0;
       let force = 0;
-      let x = 0;
       if (this.hamOn) {
         const ysVel = this.ysAdm * this.lastForce;
-        this.ys = Math.min(this.ys + ysVel, this.hamExit * -0.7);
-        x = this.hamY - this.ys;
+        this.ys = Math.min(this.ys + ysVel, this.ysLimit);
+        const x = this.hamY - this.ys;
         if (x > 0) {
           const xdot = this.hamV - ysVel;
           force = this.hamK * x ** this.hamP * (1 + this.hamMu * xdot);
@@ -2740,7 +3311,10 @@
         this.excLp += this.excAlpha * (combed - this.excLp);
         this.excLp2 += this.excAlpha * (this.excLp - this.excLp2);
         exc = this.excLp2 / this.numStrings;
-        thudIn = this.excLp2;
+        const raw = this.hamForceNorm * force;
+        this.bodyLp += this.excAlpha * (raw - this.bodyLp);
+        this.bodyLp2 += this.excAlpha * (this.bodyLp - this.bodyLp2);
+        thudIn = this.excLp2 + KNOCK_UNCOMBED * (this.bodyLp2 - this.excLp2);
         this.lastForce = force;
       }
       if (this.noisePos < this.noiseSamples) {
@@ -2753,6 +3327,7 @@
         const noise = this.noiseEnv * this.noiseLp3;
         this.noiseEnv *= this.noiseDecay;
         thudIn += noise;
+        noiseDirect = this.noiseEnv * this.noiseLp2;
         this.noiseLow += this.noiseHpA * (noise - this.noiseLow);
         const scrub = this.noiseInject * (noise - this.noiseLow);
         const widx = (this.noisePos - 1) % HAMMER_COMB_CAPACITY;
@@ -2764,15 +3339,15 @@
       this.knockLp += this.knockLpA * (thudIn - this.knockLp);
       this.knockLp2 += this.knockLpA * (this.knockLp - this.knockLp2);
       this.knockLp3 += this.knockLp3A * (this.knockLp2 - this.knockLp3);
-      knock += this.knockGain * this.knockLp3;
+      knock += this.knockGain * this.knockLp3 + STRIKE_NOISE_DIRECT * noiseDirect;
       const ratio = pitchRatio > 0.01 ? pitchRatio : 0.01;
       let sum = 0;
       let lpSum = 0;
       for (let i = 0; i < this.numStrings; ++i) {
         const s = this.strings[i];
         if (s.line.size < 8) continue;
-        const fb = s.gSlow * s.lpState - (s.gSlow - s.gFast) * this.bridge;
-        const delay = clamp9(s.basePeriod / ratio - s.comp, 1, s.line.size - 4);
+        const fb = s.gSlow * s.lpState - (s.gSlow - s.gFast) * this.drainOut;
+        const delay = clamp10(s.basePeriod / ratio - s.comp, 1, s.line.size - 4);
         const out = s.line.processFractional(Math.trunc(delay * 256), exc * s.strikeWeight + fb);
         let v = out;
         for (const stage of s.ap) v = stage.process(v);
@@ -2781,13 +3356,36 @@
         sum += out * s.radiateWeight;
       }
       this.bridge = lpSum / this.numStrings;
+      this.bridgeDrain = this.bridge - (1 - this.drainLpA) * (this.bridge - this.bridgeDrain);
+      this.bridgeHfLp += this.drainHfA * (this.bridge - this.bridgeHfLp);
+      this.drainOut = this.bridgeDrain + this.drainHiW * (this.bridge - this.bridgeHfLp);
       this.bloom += this.bloomA * (1 - this.bloom);
-      sum = sum * this.bloom + knock;
-      const y = this.hpB0 * sum + this.hpB1 * this.hpX1 + this.hpB0 * this.hpX2 - this.hpA1 * this.hpY1 - this.hpA2 * this.hpY2;
-      this.hpX2 = this.hpX1;
-      this.hpX1 = sum;
-      this.hpY2 = this.hpY1;
-      this.hpY1 = y;
+      let longitudinal = 0;
+      if (this.longLevel > 0) {
+        this.longPrev += this.longHpA * (sum - this.longPrev);
+        const d = sum - this.longPrev;
+        const t = d * d;
+        const bp = t - this.longX2;
+        this.longX2 = this.longX1;
+        this.longX1 = t;
+        for (const m of this.longModes) {
+          const y2 = m.gain * bp + m.a1 * m.y1 + m.a2 * m.y2;
+          m.y2 = m.y1;
+          m.y1 = y2;
+          longitudinal += y2;
+        }
+        longitudinal *= this.longLevel;
+      }
+      sum = sum * this.bloom + knock + longitudinal;
+      let y = sum;
+      for (const s of this.hp) {
+        const input = y;
+        y = s.b0 * input + s.b1 * s.x1 + s.b0 * s.x2 - s.a1 * s.y1 - s.a2 * s.y2;
+        s.x2 = s.x1;
+        s.x1 = input;
+        s.y2 = s.y1;
+        s.y1 = y;
+      }
       const z = this.bhB0 * y + this.bhB1 * this.bhX1 + this.bhB2 * this.bhX2 - this.bhA1 * this.bhY1 - this.bhA2 * this.bhY2;
       this.bhX2 = this.bhX1;
       this.bhX1 = y;
@@ -2814,6 +3412,19 @@
       this.noiseLp = 0;
       this.noiseLp2 = 0;
       this.noiseLp3 = 0;
+      this.bodyLp = 0;
+      this.bodyLp2 = 0;
+      this.longLevel = 0;
+      this.longPrev = 0;
+      this.longX1 = 0;
+      this.longX2 = 0;
+      for (const m of this.longModes) {
+        m.a1 = 0;
+        m.a2 = 0;
+        m.gain = 0;
+        m.y1 = 0;
+        m.y2 = 0;
+      }
       for (const s of this.strings) {
         s.lpState = 0;
         s.gSlow = 0;
@@ -2822,7 +3433,16 @@
       this.bridge = 0;
     }
   };
-  var RESONANCE_MODES = 16;
+  var RESONANCE_MODES = 44;
+  var SYMP_FUNDAMENTALS = 16;
+  var SYMP_PARTIALS = 3;
+  var SYMP_RING_T60_S = 0.6;
+  var SYMP_PARTIAL_DAMP = 0.5;
+  var SYMP_PARTIAL_TILT = 0.7;
+  var SYMP_COUPLING = 0.06;
+  var SYMP_BASS_TAPER_OCT = 1;
+  var SYMP_TAPER_ANCHOR_HZ = 261.6256;
+  var DUPLEX_FLOOR = 0.3;
   function makeModes(count) {
     return Array.from({ length: count }, () => ({ a1: 0, a2: 0, gain: 0, y1: 0, y2: 0 }));
   }
@@ -2836,31 +3456,40 @@
     /** Tunes the mode bank for `sampleRate` and clears the state. */
     prepare(sampleRate2) {
       const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
-      for (let i = 0; i < RESONANCE_MODES; ++i) {
-        const m = this.modes[i];
-        const note = 28 + 4 * i;
-        const f = noteToHz8(note);
-        if (f >= 0.45 * sr) {
-          m.a1 = 0;
-          m.a2 = 0;
-          m.gain = 0;
-          m.y1 = 0;
-          m.y2 = 0;
-          continue;
-        }
-        const w = TWO_PI9 * f / sr;
-        const r = Math.exp(-6.907755279 / (sr * 0.6));
-        m.a1 = 2 * r * Math.cos(w);
-        m.a2 = -r * r;
-        m.gain = 1 - r;
+      for (const m of this.modes) {
+        m.a1 = 0;
+        m.a2 = 0;
+        m.gain = 0;
         m.y1 = 0;
         m.y2 = 0;
+      }
+      const ring = Math.max(0.05, SYMP_RING_T60_S);
+      const tilt = Math.max(0, SYMP_PARTIAL_TILT);
+      const pdamp = Math.max(0, SYMP_PARTIAL_DAMP);
+      let n = 0;
+      for (let k = 1; k <= SYMP_PARTIALS && n < RESONANCE_MODES; ++k) {
+        for (let i = 0; i < SYMP_FUNDAMENTALS && n < RESONANCE_MODES; ++i) {
+          const note = 28 + 4 * i;
+          const b = pianoInharmonicityB(note);
+          const base = noteToHz8(note) * 2 ** (pianoStretchCents(note) / 1200);
+          const f = base * k * Math.sqrt(1 + b * k * k);
+          if (f >= 0.45 * sr) continue;
+          const t60 = Math.max(0.02, ring * k ** -pdamp);
+          const w = TWO_PI11 * f / sr;
+          const r = Math.exp(-LN_1000 / (sr * t60));
+          const m = this.modes[n++];
+          m.a1 = 2 * r * Math.cos(w);
+          m.a2 = -r * r;
+          m.gain = (1 - r) * k ** -tilt;
+          const octavesBelow = Math.max(0, Math.log2(Math.max(SYMP_TAPER_ANCHOR_HZ, 1) / f));
+          m.gain *= 2 ** (-SYMP_BASS_TAPER_OCT * octavesBelow);
+        }
       }
       this.gate = 0;
       this.gateOpenCoeff = 1 - Math.exp(-1 / (0.01 * sr));
       this.gateCloseCoeff = 1 - Math.exp(-1 / (0.06 * sr));
-      this.ringout = Math.exp(-6.907755279 / (sr * 0.15));
-      this.outGain = 0.06;
+      this.ringout = Math.exp(-LN_1000 / (sr * 0.15));
+      this.outGain = Math.max(0, SYMP_COUPLING);
     }
     /** Clears the resonator state and the damper gate. */
     reset() {
@@ -2875,8 +3504,7 @@
      * (sustain pedal down) gates the excitation through a smoothed envelope.
      */
     process(bridgeIn, damperOpen) {
-      const duplexFloor = 0.3;
-      const target = damperOpen ? 1 : duplexFloor;
+      const target = damperOpen ? 1 : DUPLEX_FLOOR;
       this.gate += (damperOpen ? this.gateOpenCoeff : this.gateCloseCoeff) * (target - this.gate);
       const x = this.gate * bridgeIn;
       let sum = 0;
@@ -2886,7 +3514,7 @@
         m.y1 = y;
         sum += y;
       }
-      if (!damperOpen && this.gate < 0.5 && this.gate > 1.2 * duplexFloor) {
+      if (!damperOpen && this.gate < 0.5 && this.gate > 1.2 * DUPLEX_FLOOR) {
         for (const m of this.modes) {
           m.y1 *= this.ringout;
           m.y2 *= this.ringout;
@@ -2896,7 +3524,28 @@
     }
   };
   var SOUNDBOARD_MODES = 40;
+  var BOARD_F_LOW = 92;
+  var BOARD_F_HIGH = 5400;
+  var BOARD_T60_BASE = 0.4;
+  var BOARD_T60_SLOPE = 2;
+  var BOARD_T60_MAX = 1;
   var DIFFUSER_CAPACITY = 2048;
+  var DIFFUSER_G = 0.22;
+  var BOARD_STRIKE_SPREAD_MS = 10;
+  var CASE_LINES = 8;
+  var CASE_DECIM = 8;
+  var CASE_CAPACITY = 2048;
+  var CASE_LEVEL = 2.857143;
+  var CASE_T60_S = 4.2;
+  var CASE_DAMP_HZ = 2200;
+  var CASE_IN_HZ = 80;
+  var CASE_DELAYS_6K = [131, 149, 173, 197, 223, 241, 269, 293];
+  var CASE_IN_SIGN = [1, -1, 1, 1, -1, -1, 1, -1];
+  var AIR_GAIN = 0.01;
+  var AIR_ATTACK_MS = 30;
+  var AIR_RELEASE_MS = 200;
+  var AIR_HP_HZ = 500;
+  var AIR_LP_HZ = 2800;
   var PianoSoundboard = class {
     modes = makeModes(SOUNDBOARD_MODES);
     diffBuf = [
@@ -2908,24 +3557,53 @@
     in1 = 0;
     in2 = 0;
     outGain = 0;
+    /** A blow waiting to be handed to the board bank, and the one-pole spreading it. */
+    boardStrikePending = 0;
+    boardStrikeLp = 0;
+    boardStrikeA = 1;
+    // Case network state (delay pool, per-line damping/feedback, decimation).
+    caseBuf = new Float32Array(CASE_CAPACITY);
+    caseOff = new Int32Array(CASE_LINES);
+    caseLen = new Int32Array(CASE_LINES);
+    caseIdx = new Int32Array(CASE_LINES);
+    caseG = new Float32Array(CASE_LINES);
+    caseLp = new Float32Array(CASE_LINES);
+    caseScaled = new Float32Array(CASE_LINES);
+    caseLpA = 1;
+    caseInA = 1;
+    caseIn1 = 0;
+    caseIn2 = 0;
+    caseStrikePending = 0;
+    casePhase = 0;
+    caseHold = 0;
+    caseOutLp = 0;
+    caseOutA = 1;
+    // Sustain-air state (level follower, noise generator, band filters).
+    airEnv = 0;
+    airLp = 0;
+    airLp2 = 0;
+    airHp = 0;
+    airAttack = 0;
+    airRelease = 0;
+    airLpA = 0;
+    airHpA = 0;
+    airRng = 2654435769;
     /** Tunes the mode bank for `sampleRate` at the patch soundboard `mix`. */
     prepare(sampleRate2, mix) {
       const sr = sampleRate2 > 0 ? sampleRate2 : 48e3;
-      this.outGain = clamp9(mix, 0, 1);
+      this.outGain = clamp10(mix, 0, 1);
       const diffuserMs = [4.1, 9.7];
       for (let d = 0; d < 2; ++d) {
-        this.diffLen[d] = clamp9(Math.trunc(diffuserMs[d] * 1e-3 * sr), 4, DIFFUSER_CAPACITY);
+        this.diffLen[d] = clamp10(Math.trunc(diffuserMs[d] * 1e-3 * sr), 4, DIFFUSER_CAPACITY);
         this.diffBuf[d].fill(0);
         this.diffIdx[d] = 0;
       }
-      const fLow = 92;
-      const fHigh = 5400;
       for (let i = 0; i < SOUNDBOARD_MODES; ++i) {
         const m = this.modes[i];
         const u = i / (SOUNDBOARD_MODES - 1);
         const h = Math.imul(i + 1, 2654435761) >>> 0;
         const jit = ((h >>> 9 & 65535) / 65535 - 0.5) * 0.08;
-        const f = fLow * (fHigh / fLow) ** u * (1 + jit);
+        const f = BOARD_F_LOW * (BOARD_F_HIGH / BOARD_F_LOW) ** u * (1 + jit);
         if (f >= 0.45 * sr) {
           m.a1 = 0;
           m.a2 = 0;
@@ -2934,9 +3612,9 @@
           m.y2 = 0;
           continue;
         }
-        const w = TWO_PI9 * f / sr;
-        const t60 = clamp9(0.6 * (fLow / f) ** 0.55, 0.04, 0.6);
-        const r = Math.exp(-6.907755279 / (sr * t60));
+        const w = TWO_PI11 * f / sr;
+        const t60 = clamp10(BOARD_T60_BASE * (BOARD_F_LOW / f) ** BOARD_T60_SLOPE, 0.04, BOARD_T60_MAX);
+        const r = Math.exp(-LN_1000 / (sr * t60));
         m.a1 = 2 * r * Math.cos(w);
         m.a2 = -r * r;
         const tilt = (320 / f) ** 0.35;
@@ -2949,10 +3627,54 @@
         m.y1 = 0;
         m.y2 = 0;
       }
+      const srCase = sr / CASE_DECIM;
+      const rate = srCase / 6e3;
+      let total = 0;
+      for (const d6 of CASE_DELAYS_6K) total += Math.max(2, Math.round(d6 * rate));
+      const fit = total > CASE_CAPACITY ? CASE_CAPACITY / total : 1;
+      let off = 0;
+      for (let i = 0; i < CASE_LINES; ++i) {
+        const len = Math.max(2, Math.round(CASE_DELAYS_6K[i] * fit * rate));
+        this.caseOff[i] = off;
+        this.caseLen[i] = len;
+        this.caseIdx[i] = 0;
+        off += len;
+        this.caseG[i] = Math.min(
+          0.9999,
+          Math.exp(-LN_1000 * len / (srCase * Math.max(0.05, CASE_T60_S)))
+        );
+        this.caseLp[i] = 0;
+      }
+      this.caseBuf.fill(0);
+      this.caseLpA = 1 - Math.exp(-TWO_PI11 * clamp10(CASE_DAMP_HZ, 100, 0.45 * srCase) / srCase);
+      this.caseInA = 1 - Math.exp(-TWO_PI11 * clamp10(CASE_IN_HZ, 20, 0.1 * srCase) / sr);
+      this.caseIn1 = 0;
+      this.caseIn2 = 0;
+      this.caseStrikePending = 0;
+      this.casePhase = 0;
+      this.caseHold = 0;
+      this.caseOutLp = 0;
+      this.caseOutA = 1 - Math.exp(-TWO_PI11 * Math.min(800, 0.45 * sr) / sr);
+      this.boardStrikePending = 0;
+      this.boardStrikeLp = 0;
+      this.boardStrikeA = clamp10(
+        1 - Math.exp(-1e3 / (Math.max(0.01, BOARD_STRIKE_SPREAD_MS) * sr)),
+        0,
+        1
+      );
       this.in1 = 0;
       this.in2 = 0;
+      this.airEnv = 0;
+      this.airLp = 0;
+      this.airLp2 = 0;
+      this.airHp = 0;
+      this.airRng = 2654435769;
+      this.airAttack = 1 - Math.exp(-1 / (Math.max(AIR_ATTACK_MS, 0.1) * 1e-3 * sr));
+      this.airRelease = 1 - Math.exp(-1 / (Math.max(AIR_RELEASE_MS, 0.1) * 1e-3 * sr));
+      this.airLpA = 1 - Math.exp(-TWO_PI11 * Math.min(AIR_LP_HZ, 0.45 * sr) / sr);
+      this.airHpA = 1 - Math.exp(-TWO_PI11 * AIR_HP_HZ / sr);
     }
-    /** Clears the resonator and diffuser state. */
+    /** Clears the resonator, diffuser, case-network and air state. */
     reset() {
       for (const m of this.modes) {
         m.y1 = 0;
@@ -2962,24 +3684,56 @@
         this.diffBuf[d].fill(0);
         this.diffIdx[d] = 0;
       }
+      this.boardStrikePending = 0;
+      this.boardStrikeLp = 0;
+      this.caseStrikePending = 0;
+      this.caseBuf.fill(0);
+      this.caseIdx.fill(0);
+      this.caseLp.fill(0);
+      this.caseIn1 = 0;
+      this.caseIn2 = 0;
+      this.casePhase = 0;
+      this.caseHold = 0;
+      this.caseOutLp = 0;
       this.in1 = 0;
       this.in2 = 0;
+      this.airEnv = 0;
+      this.airLp = 0;
+      this.airLp2 = 0;
+      this.airHp = 0;
+      this.airRng = 2654435769;
+    }
+    /**
+     * A blow's worth of energy into the case network, from a note that has just
+     * started. Accumulated and spent at the network's own decimated rate, so
+     * several notes struck in one host block each contribute.
+     */
+    strike(amount) {
+      this.caseStrikePending += amount;
+    }
+    /**
+     * The same blow into the board bank instead of the case network, spent on the
+     * next sample rather than at the decimated tick: the rim rings out in a
+     * fraction of a second and the low field it feeds rings for four, and one
+     * injection point cannot be both.
+     */
+    strikeBoard(amount) {
+      this.boardStrikePending += amount;
     }
     /**
      * Radiates one summed input sample: the phase-diffused complement of the
-     * host's direct share plus the (mix-scaled) modal colour. The reference
-     * core's sustain-air texture ships with a zero gain, so it is omitted here.
+     * host's direct share plus the (mix-scaled) modal colour and late field, plus
+     * the sustain-air texture.
      */
     process(input) {
-      const diffuserG = 0.55;
       let d = input;
       for (let st = 0; st < 2; ++st) {
         const len = this.diffLen[st];
         if (len === 0) break;
         const buf = this.diffBuf[st];
         const idx = this.diffIdx[st];
-        const v = d + diffuserG * buf[idx];
-        const y = buf[idx] - diffuserG * v;
+        const v = d + DIFFUSER_G * buf[idx];
+        const y = buf[idx] - DIFFUSER_G * v;
         buf[idx] = v;
         this.diffIdx[st] = idx + 1 < len ? idx + 1 : 0;
         d = y;
@@ -2988,13 +3742,54 @@
       this.in2 = this.in1;
       this.in1 = d;
       let sum = 0;
+      let boardIn = bp;
+      if (this.boardStrikePending !== 0 || this.boardStrikeLp !== 0) {
+        this.boardStrikeLp += this.boardStrikeA * (this.boardStrikePending - this.boardStrikeLp);
+        this.boardStrikePending = 0;
+        boardIn += this.boardStrikeLp;
+      }
       for (const m of this.modes) {
-        const y = m.a1 * m.y1 + m.a2 * m.y2 + m.gain * bp;
+        const y = m.a1 * m.y1 + m.a2 * m.y2 + m.gain * boardIn;
         m.y2 = m.y1;
         m.y1 = y;
         sum += y;
       }
-      return (1 - PIANO_DIRECT_GAIN) * d + this.outGain * sum;
+      this.caseIn1 += this.caseInA * (bp - this.caseIn1);
+      this.caseIn2 += this.caseInA * (this.caseIn1 - this.caseIn2);
+      if (this.casePhase === 0) {
+        let drive = this.caseIn2;
+        if (this.caseStrikePending !== 0) {
+          drive += this.caseStrikePending;
+          this.caseStrikePending = 0;
+        }
+        let outSum = 0;
+        let mixSum = 0;
+        for (let i = 0; i < CASE_LINES; ++i) {
+          const tap = this.caseBuf[this.caseOff[i] + this.caseIdx[i]];
+          outSum += CASE_IN_SIGN[i] * tap;
+          this.caseLp[i] += this.caseLpA * (tap - this.caseLp[i]);
+          this.caseScaled[i] = this.caseG[i] * this.caseLp[i];
+          mixSum += this.caseScaled[i];
+        }
+        const mix = 2 / CASE_LINES * mixSum;
+        for (let i = 0; i < CASE_LINES; ++i) {
+          this.caseBuf[this.caseOff[i] + this.caseIdx[i]] = this.caseScaled[i] - mix + CASE_IN_SIGN[i] * drive;
+          this.caseIdx[i] = this.caseIdx[i] + 1 < this.caseLen[i] ? this.caseIdx[i] + 1 : 0;
+        }
+        this.caseHold = outSum;
+      }
+      this.casePhase = this.casePhase + 1 < CASE_DECIM ? this.casePhase + 1 : 0;
+      this.caseOutLp += this.caseOutA * (this.caseHold - this.caseOutLp);
+      const late = this.caseOutLp * CASE_LEVEL;
+      const mag = d >= 0 ? d : -d;
+      this.airEnv += (mag > this.airEnv ? this.airAttack : this.airRelease) * (mag - this.airEnv);
+      this.airRng = Math.imul(this.airRng, 1664525) + 1013904223 >>> 0;
+      const white = (this.airRng >>> 8) * (1 / 8388608) - 1;
+      this.airLp += this.airLpA * (white - this.airLp);
+      this.airLp2 += this.airLpA * (this.airLp - this.airLp2);
+      this.airHp += this.airHpA * (this.airLp2 - this.airHp);
+      const air = AIR_GAIN * this.airEnv * (this.airLp2 - this.airHp);
+      return (1 - PIANO_DIRECT_GAIN) * d + this.outGain * (sum + late) + air;
     }
     /**
      * The phase-diffused sample computed by the last process() call. Feed
@@ -3006,8 +3801,8 @@
     }
   };
 
-  // src/tuner/dsp/pipe-organ-voice.ts
-  var TWO_PI10 = 2 * Math.PI;
+  // src/demos/tuner/dsp/pipe-organ-voice.ts
+  var TWO_PI12 = 2 * Math.PI;
   var MAX_PIPE_RANKS = 8;
   var PIPE_MIN_FUNDAMENTAL_HZ = 16;
   var BREATH_BASE3 = 0.8;
@@ -3084,7 +3879,7 @@
   function noteToHz9(note) {
     return 440 * 2 ** (((note & 127) - 69) / 12);
   }
-  function clamp10(x, lo, hi) {
+  function clamp11(x, lo, hi) {
     return x < lo ? lo : x > hi ? hi : x;
   }
   function pipeTuningError(note, rank) {
@@ -3184,27 +3979,27 @@
       this.rankCount = count;
       let power = 0;
       for (let r = 0; r < count; ++r) {
-        const lvl = clamp10(ranks[r].level, 0, 1);
+        const lvl = clamp11(ranks[r].level, 0, 1);
         power += lvl * lvl;
       }
       const norm = 1 / Math.sqrt(Math.max(1e-6, power));
       const baseF0 = noteToHz9(note);
-      const keytrack = clamp10(params.keytrack, 0, 1);
+      const keytrack = clamp11(params.keytrack, 0, 1);
       const octavesAbove = Math.max(0, ((note & 127) - KEYTRACK_REF_NOTE) / 12);
       const octavesBelow = Math.max(0, (KEYTRACK_REF_NOTE - (note & 127)) / 12);
       const vel01 = (velocity & 127) / 127;
-      const level = clamp10(0.7 * clamp10(params.breath, 0, 1) + 0.3 * vel01, 0, 1);
+      const level = clamp11(0.7 * clamp11(params.breath, 0, 1) + 0.3 * vel01, 0, 1);
       const mouth = BREATH_BASE3 + BREATH_SPAN3 * level;
       this.attackCoeff = rampCoeff5(8, sr);
       this.releaseCoeff = rampCoeff5(Math.max(0.01, params.releaseDampS) * 1e3, sr);
-      const purity = clamp10(params.toneDecayS / 8, 0, 1);
-      const lossGain = clamp10(0.945 + 0.05 * purity, 0.5, 0.998);
-      const dcR = 1 - TWO_PI10 * DC_CORNER_HZ3 / sr;
-      const evenHp = clamp10(1 - Math.exp(-TWO_PI10 * EVEN_PUMP_DC_HZ2 / sr), 0, 1);
+      const purity = clamp11(params.toneDecayS / 8, 0, 1);
+      const lossGain = clamp11(0.945 + 0.05 * purity, 0.5, 0.998);
+      const dcR = 1 - TWO_PI12 * DC_CORNER_HZ3 / sr;
+      const evenHp = clamp11(1 - Math.exp(-TWO_PI12 * EVEN_PUMP_DC_HZ2 / sr), 0, 1);
       for (let r = 0; r < count; ++r) {
         const pipe = this.ranks[r];
         pipe.noiseOffset = BigInt(r) << RANK_NOISE_SHIFT;
-        pipe.mix = clamp10(ranks[r].level, 0, 1) * norm;
+        pipe.mix = clamp11(ranks[r].level, 0, 1) * norm;
         const stopped = ranks[r].stopped;
         const footage = ranks[r].footageMult > 0.01 ? ranks[r].footageMult : 1;
         const f0 = baseF0 * footage;
@@ -3221,7 +4016,7 @@
         pipe.borePeriod = period * PITCH_CORRECT_OPEN / detune;
         pipe.sign = 1;
         pipe.jetRatio = JET_RATIO_OPEN;
-        const reed = clamp10(ranks[r].reed, 0, 1);
+        const reed = clamp11(ranks[r].reed, 0, 1);
         pipe.jetAsym = 0.5 + REED_ASYM * reed;
         pipe.jetDrive = 1 + REED_DRIVE * reed;
         pipe.jetReflection = Math.min(0.5 + 0.12 * reed, REFLECT_MAX2);
@@ -3230,10 +4025,10 @@
         const relT60 = Math.max(0.02, params.releaseDampS);
         const loopsToT60 = sr * relT60 / Math.max(1, period);
         pipe.releaseLoss = Math.min(lossGain, Math.exp(-6.907755279 / Math.max(1, loopsToT60)));
-        let bright = clamp10(ranks[r].brightness + 0.3 * reed, 0, 1);
+        let bright = clamp11(ranks[r].brightness + 0.3 * reed, 0, 1);
         if (stopped) bright = Math.min(bright, 0.35);
         const corner = (REFLECT_CORNER_BASE + REFLECT_CORNER_SPAN * bright) * f0;
-        const alpha = clamp10(1 - Math.exp(-TWO_PI10 * corner / sr), 0.05, 1);
+        const alpha = clamp11(1 - Math.exp(-TWO_PI12 * corner / sr), 0.05, 1);
         const a = 1 - alpha;
         pipe.lpAlpha = alpha;
         pipe.lpState = 0;
@@ -3244,23 +4039,23 @@
         pipe.evenGain = stopped ? EVEN_PUMP_STOPPED : EVEN_PUMP_GAIN2;
         pipe.evenState = 0;
         pipe.evenHpAlpha = evenHp;
-        const omega = TWO_PI10 * f0 / sr;
+        const omega = TWO_PI12 * f0 / sr;
         const tauLp = Math.atan2(a * Math.sin(omega), 1 - a * Math.cos(omega)) / Math.max(omega, 1e-6);
         const phaseDc = Math.atan2(Math.sin(omega), 1 - Math.cos(omega)) - Math.atan2(dcR * Math.sin(omega), 1 - dcR * Math.cos(omega));
         const tauDc = phaseDc / Math.max(omega, 1e-6);
         pipe.comp = 1 + tauLp - tauDc;
         pipe.breath = mouth;
-        pipe.chiffLevel = clamp10(params.chiff, 0, 1) * CHIFF_GAIN;
+        pipe.chiffLevel = clamp11(params.chiff, 0, 1) * CHIFF_GAIN;
         pipe.chiffCoeff = Math.exp(-1 / Math.max(1, Math.max(0.5, params.chiffMs) * 1e-3 * sr));
         const chiffCorner = Math.min(CHIFF_CORNER_MULT * baseF0, CHIFF_CORNER_MAX_HZ);
-        pipe.chiffLpAlpha = clamp10(1 - Math.exp(-TWO_PI10 * chiffCorner / sr), 0.01, 1);
+        pipe.chiffLpAlpha = clamp11(1 - Math.exp(-TWO_PI12 * chiffCorner / sr), 0.01, 1);
         pipe.chiffLpState = 0;
         pipe.chiffLevel *= Math.sqrt((2 - pipe.chiffLpAlpha) / pipe.chiffLpAlpha);
-        const radiation = clamp10(ranks[r].radiation, 0, 1);
+        const radiation = clamp11(ranks[r].radiation, 0, 1);
         pipe.radGain = radiation * RADIATION_LIFT;
-        pipe.radAlpha = clamp10(1 - Math.exp(-TWO_PI10 * RADIATION_CORNER_HZ / sr), 0, 1);
+        pipe.radAlpha = clamp11(1 - Math.exp(-TWO_PI12 * RADIATION_CORNER_HZ / sr), 0, 1);
         pipe.radState = 0;
-        const peakEst = clamp10(
+        const peakEst = clamp11(
           PEAK_BASE3 + PEAK_TILT3 * Math.log2(Math.max(1, f0) / PEAK_REF_HZ3),
           0.8,
           6
@@ -3271,11 +4066,11 @@
         pipe.bore.prime(span);
         pipe.jet.prime(span);
         const turbCorner = Math.min(TURB_CORNER_MULT * f0, TURB_CORNER_MAX_HZ);
-        pipe.turbAlpha = clamp10(1 - Math.exp(-TWO_PI10 * turbCorner / sr), 0.01, 1);
+        pipe.turbAlpha = clamp11(1 - Math.exp(-TWO_PI12 * turbCorner / sr), 0.01, 1);
         pipe.turbState = 0;
         const toneMult = TONE_CORNER_MULT / (1 + TONE_TREBLE_TAPER * octavesAbove);
-        pipe.toneAlpha = clamp10(
-          1 - Math.exp(-TWO_PI10 * toneMult * (1 + RAD_TONE_SPAN * radiation) * f0 / sr),
+        pipe.toneAlpha = clamp11(
+          1 - Math.exp(-TWO_PI12 * toneMult * (1 + RAD_TONE_SPAN * radiation) * f0 / sr),
           0.01,
           1
         );
@@ -3284,19 +4079,19 @@
         const periodMs = 1e3 * period / sr;
         const rankPeriods = SPEAK_PERIODS * (1 + SPEAK_BASS_PER_OCT * Math.max(0, Math.log2(SPEAK_REF_HZ / Math.max(1, f0))));
         const notePeriods = SPEAK_PERIODS * (1 + SPEAK_BASS_PER_OCT * Math.max(0, Math.log2(SPEAK_REF_HZ / Math.max(1, baseF0))));
-        const noteSpeakMs = clamp10(
+        const noteSpeakMs = clamp11(
           notePeriods * 1e3 / Math.max(1, baseF0),
           SPEAK_MIN_MS,
           SPEAK_MAX_MS
         );
         const speakMs = Math.max(
-          clamp10(rankPeriods * periodMs, SPEAK_MIN_MS, SPEAK_MAX_MS),
+          clamp11(rankPeriods * periodMs, SPEAK_MIN_MS, SPEAK_MAX_MS),
           SPEAK_UPPERWORK_FLOOR * noteSpeakMs
         );
         pipe.speakCoeff = rampCoeff5(speakMs, sr);
         pipe.wind = 0;
         const pf = BORE_PREFILL3 * mouth;
-        const w = TWO_PI10 / Math.max(2, pipe.borePeriod);
+        const w = TWO_PI12 / Math.max(2, pipe.borePeriod);
         const phase = Math.PI * pipeTuningError(note, r + 8);
         for (let i = 0; i < span; ++i) {
           pipe.bore.processFractional(256, pf * Math.sin(w * i + phase));
@@ -3321,8 +4116,8 @@
         const temp = pipe.sign * pipe.lossGain * pipe.lpState;
         pipe.turbState += pipe.turbAlpha * (this.noise.bipolarAt(TURB_INDEX_BASE + pipe.noiseOffset + idx) - pipe.turbState);
         const pd = breath - pipe.jetReflection * temp + JET_TURBULENCE * breath * pipe.turbState;
-        const boreDelay = clamp10(pipe.borePeriod / ratio - pipe.comp, 1, pipe.bore.size - 4);
-        const jetDelay = clamp10(pipe.jetRatio * boreDelay, 1, pipe.jet.size - 4);
+        const boreDelay = clamp11(pipe.borePeriod / ratio - pipe.comp, 1, pipe.bore.size - 4);
+        const jetDelay = clamp11(pipe.jetRatio * boreDelay, 1, pipe.jet.size - 4);
         const pdJ = pipe.jet.processFractional(Math.trunc(jetDelay * 256), pd);
         const jetOut = jetTable2(pipe.jetDrive * pdJ, pipe.jetAsym);
         const jetDc = jetOut - pipe.dcX1 + pipe.dcR * pipe.dcY1;
@@ -3378,8 +4173,8 @@
     }
   };
 
-  // src/tuner/dsp/plucked-string-voice.ts
-  var TWO_PI11 = 2 * Math.PI;
+  // src/demos/tuner/dsp/plucked-string-voice.ts
+  var TWO_PI13 = 2 * Math.PI;
   var PLUCKED_MIN_FUNDAMENTAL_HZ = 20;
   var NOISE_INDEX_BASE3 = 1 << 16;
   var BUZZ_SPAN_BASE = 0.35;
@@ -3403,10 +4198,10 @@
   function noteToHz10(note) {
     return 440 * 2 ** (((note & 127) - 69) / 12);
   }
-  function clamp11(x, lo, hi) {
+  function clamp12(x, lo, hi) {
     return x < lo ? lo : x > hi ? hi : x;
   }
-  function loopGainFor3(periodSamples, sampleRate2, t60S) {
+  function loopGainFor2(periodSamples, sampleRate2, t60S) {
     const loopsToT60 = sampleRate2 * Math.max(0.01, t60S) / Math.max(1, periodSamples);
     return Math.exp(-6.907755279 / loopsToT60);
   }
@@ -3436,27 +4231,27 @@
       this.noise = new VoiceRandomSequence(seed);
       const f0 = noteToHz10(note);
       this.basePeriod = sr / f0;
-      const a = (1 - clamp11(params.brightness, 0, 1)) * 0.7;
+      const a = (1 - clamp12(params.brightness, 0, 1)) * 0.7;
       this.loopAlpha = 1 - a;
       this.lpState = 0;
-      const omega = TWO_PI11 / this.basePeriod;
+      const omega = TWO_PI13 / this.basePeriod;
       const tauLp = Math.atan2(a * Math.sin(omega), 1 - a * Math.cos(omega)) / Math.max(omega, 1e-6);
       this.loopComp = 1 + tauLp;
-      const stretch = clamp11(params.decayStretch, 0, 1);
+      const stretch = clamp12(params.decayStretch, 0, 1);
       const octavesBelowA4 = (69 - (note & 127)) / 12;
       const t60 = Math.max(0.05, params.decayS) * 2 ** (stretch * octavesBelowA4);
-      this.loopGain = loopGainFor3(this.basePeriod, sr, t60);
-      this.releaseGain = loopGainFor3(this.basePeriod, sr, Math.max(0.01, params.releaseDampS));
-      this.buzzAmount = clamp11(params.buzz, 0, 1);
+      this.loopGain = loopGainFor2(this.basePeriod, sr, t60);
+      this.releaseGain = loopGainFor2(this.basePeriod, sr, Math.max(0.01, params.releaseDampS));
+      this.buzzAmount = clamp12(params.buzz, 0, 1);
       this.buzzThreshold = this.buzzAmount > 0 ? 0.6 - 0.4 * this.buzzAmount : 0;
       this.excTotal = Math.max(8, Math.trunc(this.basePeriod));
       this.excPos = 0;
-      this.pickDelay = Math.trunc(clamp11(params.pickPosition, 0, 0.5) * this.basePeriod + 0.5);
+      this.pickDelay = Math.trunc(clamp12(params.pickPosition, 0, 0.5) * this.basePeriod + 0.5);
       const vel01 = (velocity & 127) / 127;
-      const velAmount = clamp11(params.velToBrightness, 0, 1);
-      const bright = clamp11(params.excBrightness, 0, 1) * (1 - velAmount + velAmount * vel01);
+      const velAmount = clamp12(params.velToBrightness, 0, 1);
+      const bright = clamp12(params.excBrightness, 0, 1) * (1 - velAmount + velAmount * vel01);
       const excCutoff = 300 * 2 ** (5.3 * bright);
-      this.excAlpha = clamp11(1 - Math.exp(-TWO_PI11 * excCutoff / sr), 0.01, 1);
+      this.excAlpha = clamp12(1 - Math.exp(-TWO_PI13 * excCutoff / sr), 0.01, 1);
       this.excLp = 0;
       this.outputScale = PLUCKED_OUTPUT_SCALE;
       const size = Math.min(this.buffer.capacity, Math.trunc(this.basePeriod * 1.3) + 8);
@@ -3475,7 +4270,7 @@
         exc = 0.7 * this.excLp;
       }
       const ratio = pitchRatio > 0.01 ? pitchRatio : 0.01;
-      const delay = clamp11(this.basePeriod / ratio - this.loopComp, 1, this.buffer.size - 4);
+      const delay = clamp12(this.basePeriod / ratio - this.loopComp, 1, this.buffer.size - 4);
       const delayQ8 = Math.trunc(delay * 256);
       let loopIn = exc + this.loopGain * this.lpState;
       if (this.buzzThreshold > 0 && loopIn > this.buzzThreshold) {
@@ -3498,8 +4293,8 @@
     }
   };
 
-  // src/tuner/dsp/reed-voice.ts
-  var TWO_PI12 = 2 * Math.PI;
+  // src/demos/tuner/dsp/reed-voice.ts
+  var TWO_PI14 = 2 * Math.PI;
   var REED_MIN_FUNDAMENTAL_HZ = 20;
   var BREATH_BASE4 = 0.82;
   var BREATH_SPAN4 = 0.08;
@@ -3566,7 +4361,7 @@
     const t = Math.max(0.5, ms) * 1e-3 * sampleRate2;
     return 1 - Math.exp(-3 / Math.max(1, t));
   }
-  function clamp12(x, lo, hi) {
+  function clamp13(x, lo, hi) {
     return x < lo ? lo : x > hi ? hi : x;
   }
   var ReedVoiceCore = class {
@@ -3654,26 +4449,26 @@
         this.sign = -1;
       }
       const vel01 = (velocity & 127) / 127;
-      const velToBreath = clamp12(params.velToBreath, 0, 1);
-      const level = clamp12((1 - velToBreath) * params.breathPressure + velToBreath * vel01, 0, 1);
+      const velToBreath = clamp13(params.velToBreath, 0, 1);
+      const level = clamp13((1 - velToBreath) * params.breathPressure + velToBreath * vel01, 0, 1);
       this.breathTarget = BREATH_BASE4 + BREATH_SPAN4 * level;
       this.breathCtrlTarget = this.breathTarget;
       this.ctrlCoeff = rampCoeff6(CONTROL_SMOOTH_MS4, sr);
-      const stiffness = clamp12(params.reedStiffness, 0, 1);
-      const opening = clamp12(params.reedOpening, 0, 1);
+      const stiffness = clamp13(params.reedStiffness, 0, 1);
+      const opening = clamp13(params.reedOpening, 0, 1);
       this.reedOffset = REED_OFFSET_MIN + REED_OFFSET_SPAN * (1 - opening);
       this.reedSlope = -(REED_SLOPE_BASE + REED_SLOPE_SPAN * stiffness);
-      const a = (1 - clamp12(params.brightness, 0, 1)) * BELL_POLE_SPAN3;
+      const a = (1 - clamp13(params.brightness, 0, 1)) * BELL_POLE_SPAN3;
       this.lpAlpha = 1 - a;
       this.lpAlphaTarget = this.lpAlpha;
-      this.lossGain = clamp12(
-        LOSS_BASE2 - LOSS_SPAN3 * clamp12(params.damping, 0, 1),
+      this.lossGain = clamp13(
+        LOSS_BASE2 - LOSS_SPAN3 * clamp13(params.damping, 0, 1),
         LOSS_FLOOR2,
         LOSS_CEIL2
       );
       const hpCorner = params.conical ? Math.max(HP_CORNER_FLOOR_HZ, HP_CORNER_FRAC_F0 * f0) : HP_CORNER_FLOOR_HZ;
-      this.dcR = 1 - TWO_PI12 * hpCorner / sr;
-      const omega = TWO_PI12 / Math.max(1, this.borePeriod);
+      this.dcR = 1 - TWO_PI14 * hpCorner / sr;
+      const omega = TWO_PI14 / Math.max(1, this.borePeriod);
       const tauLp = Math.atan2(a * Math.sin(omega), 1 - a * Math.cos(omega)) / Math.max(omega, 1e-6);
       const sw = Math.sin(omega);
       const cw = Math.cos(omega);
@@ -3686,8 +4481,8 @@
       this.bore.prime(boreSize);
       this.attackCoeff = rampCoeff6(params.attackMs, sr);
       this.releaseCoeff = rampCoeff6(params.releaseMs, sr);
-      this.breathNoise = clamp12(params.breathNoise, 0, 1) * BREATH_NOISE_DEPTH4;
-      this.chiffLevel = clamp12(params.chiff, 0, 1) * CHIFF_DEPTH3;
+      this.breathNoise = clamp13(params.breathNoise, 0, 1) * BREATH_NOISE_DEPTH4;
+      this.chiffLevel = clamp13(params.chiff, 0, 1) * CHIFF_DEPTH3;
       this.chiffCoeff = rampCoeff6(params.chiffMs, sr);
       this.outputScale = OUTPUT_SCALE;
       const prefill = BORE_PREFILL4 * this.breathTarget;
@@ -3699,44 +4494,44 @@
       this.reedZ1 = 0;
       this.reedZ2 = 0;
       if (this.reedDyn) {
-        const res01 = clamp12(params.reedResonance, 0, 1);
+        const res01 = clamp13(params.reedResonance, 0, 1);
         let fReed = REED_RES_BASE_HZ + REED_RES_SPAN_HZ * res01;
         fReed = Math.min(fReed, 0.45 * sr);
-        const w = TWO_PI12 * fReed / sr;
+        const w = TWO_PI14 * fReed / sr;
         this.reedA1 = 2 * REED_RES_R * Math.cos(w);
         this.reedA2 = -REED_RES_R * REED_RES_R;
         this.reedB0 = 1 - REED_RES_R;
         this.reedCouple = REED_COUPLE;
       }
-      this.regVent = clamp12(params.registerVent, 0, 1) * REG_VENT_MAX;
+      this.regVent = clamp13(params.registerVent, 0, 1) * REG_VENT_MAX;
       this.regLpState = 0;
       if (this.regVent > 0) {
-        this.regLpAlpha = 1 - Math.exp(-TWO_PI12 * REG_VENT_CORNER_HZ / sr);
+        this.regLpAlpha = 1 - Math.exp(-TWO_PI14 * REG_VENT_CORNER_HZ / sr);
       }
-      this.growlDepth = clamp12(params.growl, 0, 1) * GROWL_DEPTH_MAX;
+      this.growlDepth = clamp13(params.growl, 0, 1) * GROWL_DEPTH_MAX;
       this.growlPhase = 0;
       if (this.growlDepth > 0) {
-        this.growlInc = TWO_PI12 * GROWL_RATE_HZ / sr;
+        this.growlInc = TWO_PI14 * GROWL_RATE_HZ / sr;
       }
       this.throatGain = 0;
       this.throatState = 0;
       if (params.conical) {
-        const grow = clamp12(params.coneGrowth, 0, 1);
+        const grow = clamp13(params.coneGrowth, 0, 1);
         if (grow > 0) {
           this.throatGain = CONE_GROWTH_GAIN * grow;
           const corner = Math.min(CONE_THROAT_MULT * f0, 0.45 * sr);
-          this.throatPole = Math.exp(-TWO_PI12 * corner / sr);
+          this.throatPole = Math.exp(-TWO_PI14 * corner / sr);
         }
       }
       this.holeGain = 0;
       this.holeDelaySamples = 0;
       this.holeRefl = 0;
-      const hole = clamp12(params.tonehole, 0, 1);
+      const hole = clamp13(params.tonehole, 0, 1);
       if (hole > 0) {
         this.holeGain = TONEHOLE_GAIN_MAX * hole;
         const frac = params.conical ? TONEHOLE_FRAC_CONE : TONEHOLE_FRAC_CYLINDER;
         const roundTrip = Math.trunc(2 * frac * this.borePeriod);
-        this.holeDelaySamples = clamp12(roundTrip, 1, boreSize - 1);
+        this.holeDelaySamples = clamp13(roundTrip, 1, boreSize - 1);
       }
     }
     /**
@@ -3769,7 +4564,7 @@
       if (this.growlDepth > 0) {
         breath *= 1 + this.growlDepth * Math.sin(this.growlPhase);
         this.growlPhase += this.growlInc;
-        if (this.growlPhase >= TWO_PI12) this.growlPhase -= TWO_PI12;
+        if (this.growlPhase >= TWO_PI14) this.growlPhase -= TWO_PI14;
       }
       this.lpState += this.lpAlpha * (this.boreOut - this.lpState);
       let reflRaw = this.sign * this.lossGain * this.lpState;
@@ -3788,7 +4583,7 @@
       if (reed > 1) reed = 1;
       if (reed < -1) reed = -1;
       const inj = breath + dp * reed;
-      const delay = clamp12(this.borePeriod / ratio - this.comp, 1, this.bore.size - 4);
+      const delay = clamp13(this.borePeriod / ratio - this.comp, 1, this.bore.size - 4);
       const delayQ8 = Math.trunc(delay * 256);
       this.boreOut = this.bore.processFractional(delayQ8, inj);
       ++this.driveIndex;
@@ -3822,8 +4617,8 @@
     }
   };
 
-  // src/tuner/dsp/vocal-voice.ts
-  var TWO_PI13 = 2 * Math.PI;
+  // src/demos/tuner/dsp/vocal-voice.ts
+  var TWO_PI15 = 2 * Math.PI;
   var VOCAL_FORMANTS = 5;
   var VOWEL_TABLE = [
     // /a/
@@ -3888,7 +4683,7 @@
   function noteToHz12(note) {
     return 440 * 2 ** (((note & 127) - 69) / 12);
   }
-  function clamp13(x, lo, hi) {
+  function clamp14(x, lo, hi) {
     return x < lo ? lo : x > hi ? hi : x;
   }
   function rampCoeff7(ms, sampleRate2) {
@@ -3932,9 +4727,9 @@
       const baseFreq = noteToHz12(note);
       this.phase = 0;
       this.phaseInc = baseFreq / sr;
-      const bright = clamp13(params.brightness, 0, 1);
+      const bright = clamp14(params.brightness, 0, 1);
       const corner = Math.min(TILT_CORNER_BASE_HZ * 2 ** (TILT_CORNER_OCT_SPAN * bright), 0.45 * sr);
-      this.tiltAlpha = 1 - Math.exp(-TWO_PI13 * corner / sr);
+      this.tiltAlpha = 1 - Math.exp(-TWO_PI15 * corner / sr);
       this.tiltState = 0;
       const vowel = params.vowel >= 0 && params.vowel < 5 ? params.vowel : 0;
       this.numFormants = VOCAL_FORMANTS;
@@ -3942,7 +4737,7 @@
         const fm = VOWEL_TABLE[vowel][i];
         const f = Math.min(fm.freqHz, 0.45 * sr);
         const q = f / Math.max(1, fm.bwHz);
-        const w = TWO_PI13 * f / sr;
+        const w = TWO_PI15 * f / sr;
         const alpha = Math.sin(w) / (2 * q);
         const a0 = 1 + alpha;
         this.b0[i] = alpha / a0;
@@ -3954,10 +4749,10 @@
         this.z1[i] = 0;
         this.z2[i] = 0;
       }
-      this.breath = clamp13(params.breathNoise, 0, 1) * BREATH_DEPTH;
-      this.vibDepth = clamp13(params.vibratoDepth, 0, 1) * VIBRATO_MAX_FRAC;
+      this.breath = clamp14(params.breathNoise, 0, 1) * BREATH_DEPTH;
+      this.vibDepth = clamp14(params.vibratoDepth, 0, 1) * VIBRATO_MAX_FRAC;
       this.vibPhase = 0;
-      this.vibInc = this.vibDepth > 0 ? TWO_PI13 * Math.max(0.1, params.vibratoRateHz) / sr : 0;
+      this.vibInc = this.vibDepth > 0 ? TWO_PI15 * Math.max(0.1, params.vibratoRateHz) / sr : 0;
       this.level = 0;
       this.levelTarget = 1;
       this.releasing = false;
@@ -3974,7 +4769,7 @@
       if (this.vibDepth > 0) {
         vib = 1 + this.vibDepth * Math.sin(this.vibPhase);
         this.vibPhase += this.vibInc;
-        if (this.vibPhase >= TWO_PI13) this.vibPhase -= TWO_PI13;
+        if (this.vibPhase >= TWO_PI15) this.vibPhase -= TWO_PI15;
       }
       let inc = this.phaseInc * ratio * vib;
       if (inc > 0.45) inc = 0.45;
@@ -4012,7 +4807,7 @@
     }
   };
 
-  // src/tuner/dsp/params.ts
+  // src/demos/tuner/dsp/params.ts
   var ENGINE_INFO = {
     "karplus-strong": {
       mode: "karplus-strong",
@@ -4132,6 +4927,7 @@
       excBrightness: 0.85,
       velToBrightness: 0.6,
       releaseDampS: 0.08,
+      muteHarmonic: 0,
       slap: 0,
       polarization: 0,
       bodyCoupling: 0,
@@ -4142,6 +4938,7 @@
       dispersion: 0,
       tensionMod: 0,
       octaveMix: 0,
+      harmonicNode: 0,
       keyoffNoise: 0
     };
   }
@@ -4168,9 +4965,9 @@
       releaseDampS: 0.15
     };
   }
-  var TWO_PI14 = Math.round(2 * Math.PI * 1e4) / 1e4;
+  var TWO_PI16 = Math.round(2 * Math.PI * 1e4) / 1e4;
 
-  // src/tuner/dsp/engine.ts
+  // src/demos/tuner/dsp/engine.ts
   function noteToHz13(note) {
     return 440 * 2 ** ((note - 69) / 12);
   }
@@ -4466,7 +5263,7 @@
     return spec;
   }
 
-  // src/tuner/worklet/tuner-processor.ts
+  // src/demos/tuner/worklet/tuner-processor.ts
   var MAX_VOICES = 8;
   var SILENCE_THRESH = 1e-4;
   var SILENCE_HOLD_S = 0.3;

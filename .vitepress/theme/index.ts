@@ -1,12 +1,12 @@
 import type { Theme } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
 import { defineAsyncComponent } from 'vue';
-import { defineDemoAsync } from '@/components/demos/defineDemoAsync';
+import { defineDemoAsync } from '@/components/defineDemoAsync';
 import './custom.css';
 import Layout from './Layout.vue';
 
-const AudioAnalyzer = defineDemoAsync(() => import('@/components/AudioAnalyzer.vue'));
-const SonareDemo = defineDemoAsync(() => import('@/components/demos/SonareDemo.vue'));
+const AudioAnalyzer = defineDemoAsync(() => import('@/demos/analyzer/AudioAnalyzer.vue'));
+const SonareDemo = defineDemoAsync(() => import('@/demos/inline/SonareDemo.vue'));
 const BenchChart = defineAsyncComponent(() => import('./components/BenchChart.vue'));
 const FlowDiagram = defineAsyncComponent(() => import('./components/diagrams/FlowDiagram.vue'));
 const SequenceDiagram = defineAsyncComponent(

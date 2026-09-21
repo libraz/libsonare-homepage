@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDemoCards, demoCardsCopy } from '@/components/demos/demoCards';
+import { buildDemoCards, demoCardsCopy } from '@/components/demo-cards/demoCards';
 
 describe('demo card data helpers', () => {
   it('builds localized routes and copy for every demo card', () => {

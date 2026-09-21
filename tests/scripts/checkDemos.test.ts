@@ -29,7 +29,11 @@ function seedRegistry(root: string, ids: string[], clips: string[] = []) {
     ...ids.map((id) => `{ id: '${id}', archetype: 'transform' }`),
     ...clips.map((c) => `{ id: 'clip-${c}', clip: '${c}' }`),
   ].join(',\n');
-  write(root, 'src/demos/registry/analysis.ts', `export const analysisDemos = [\n${defs}\n];\n`);
+  write(
+    root,
+    'src/demos/inline/registry/analysis.ts',
+    `export const analysisDemos = [\n${defs}\n];\n`,
+  );
 }
 
 afterEach(() => {
@@ -162,7 +166,7 @@ describe('checkDemos', () => {
     const root = createWorkspace();
     write(
       root,
-      'src/demos/registry/instruments.ts',
+      'src/demos/inline/registry/instruments.ts',
       [
         'export const instrumentDemos = [',
         "  { id: 'comping', archetype: 'comping', source: { kind: 'clip', clip: 'take-a' },",

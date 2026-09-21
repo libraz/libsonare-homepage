@@ -9,9 +9,9 @@ vi.mock('@/wasm/index.js', () => ({
   version: vi.fn(() => 'test-wasm'),
 }));
 
-import MixingStudio from '@/components/MixingStudio.vue';
-import MusicAnalysisStudio from '@/components/MusicAnalysisStudio.vue';
-import RealtimeFxLab from '@/components/RealtimeFxLab.vue';
+import MixingStudio from '@/demos/mixing/MixingStudio.vue';
+import MusicAnalysisStudio from '@/demos/music-analysis/MusicAnalysisStudio.vue';
+import RealtimeFxLab from '@/demos/realtime-fx/RealtimeFxLab.vue';
 
 // These mounts exercise the empty/initial render only: workers, AudioContext and
 // WASM are created lazily on user action, so an empty-state mount stays headless.

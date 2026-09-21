@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useData } from 'vitepress';
 import { computed, onMounted, ref } from 'vue';
-import DemoCardGrid from '@/components/DemoCardGrid.vue';
+import DemoCardGrid from '@/components/demo-cards/DemoCardGrid.vue';
 import StudioShowcase from '@/components/StudioShowcase.vue';
 import { CornerBrackets, GridOverlay } from '@/components/ui';
 import { createTheme } from '@/composables/useTheme';

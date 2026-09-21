@@ -25,7 +25,7 @@ const copyByLocale = {
       },
     ],
     dismiss: 'Got it',
-    source: 'View source',
+    source: 'libsonare on GitHub',
     bannerLabel: 'OSS DEMO',
     bannerText:
       'Everything runs locally on your device and nothing is sent anywhere. This is an open-source demo, not a service.',
@@ -48,7 +48,7 @@ const copyByLocale = {
       { key: 'NO ACCOUNT', text: 'ログイン不要・登録不要。気軽に試してそのまま閉じられます。' },
     ],
     dismiss: '理解しました',
-    source: 'ソースを見る',
+    source: 'libsonare を GitHub で見る',
     bannerLabel: 'OSS デモ',
     bannerText:
       'すべての処理はあなたの端末内だけで行われ、データはどこにも送信されません。これは有料サービスではなくオープンソースのデモです。',

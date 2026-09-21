@@ -40,8 +40,8 @@ async function bundleMasteringModule() {
   const result = await esbuild.build({
     stdin: {
       contents: [
-        "export { buildMasteringConfig } from './src/composables/useMastering.ts';",
-        "export { MASTERING_PRESETS, MASTERING_VENUES, MASTERING_PRESET_TARGETS } from './src/utils/masteringUi.ts';",
+        "export { buildMasteringConfig } from './src/demos/mastering/useMastering.ts';",
+        "export { MASTERING_PRESETS, MASTERING_VENUES, MASTERING_PRESET_TARGETS } from './src/demos/mastering/masteringUi.ts';",
       ].join('\n'),
       resolveDir: rootDir,
       sourcefile: 'validator-entry.ts',

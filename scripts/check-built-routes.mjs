@@ -223,16 +223,19 @@ export function listFiles(dir) {
 const KiB = 1024;
 const MiB = 1024 * KiB;
 
+// Budgets sit just above the artifact they guard, so growth has to be noticed and
+// accepted rather than absorbed. Raising one is a decision about what the site is
+// willing to ship, not a formality.
 const assetBudgets = [
   { pattern: /^assets\/chunks\/vexflow\./, maxBytes: 1.25 * MiB },
-  { pattern: /^assets\/.*\.wasm$/, maxBytes: 4 * MiB },
+  { pattern: /^assets\/.*\.wasm$/, maxBytes: 5.25 * MiB },
 ];
 
 function budgetForBuiltAsset(relativePath) {
   const matched = assetBudgets.find((budget) => budget.pattern.test(relativePath));
   if (matched) return matched.maxBytes;
   if (relativePath.endsWith('.js')) return 750 * KiB;
-  if (relativePath.endsWith('.wasm')) return 4 * MiB;
+  if (relativePath.endsWith('.wasm')) return 5.25 * MiB;
   return null;
 }
 

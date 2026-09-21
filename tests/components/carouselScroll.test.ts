@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { computed, defineComponent, h, nextTick } from 'vue';
-import { useCarouselScroll } from '@/components/demos/useCarouselScroll';
+import { useCarouselScroll } from '@/components/demo-cards/useCarouselScroll';
 
 function setElementMetrics(
   el: HTMLElement,

@@ -32,6 +32,16 @@ describe('ToolShell', () => {
     );
   });
 
+  it('links the active demo source directory', () => {
+    lang.value = 'en';
+    const link = mountShell({ demoId: 'spatial' }).find('.tool-page__source-link');
+    expect(link.text()).toBe('Source');
+    expect(link.attributes('href')).toBe(
+      'https://github.com/libraz/libsonare-homepage/tree/main/src/demos/spatial',
+    );
+    expect(link.attributes('target')).toBe('_blank');
+  });
+
   it('shows the version with a v prefix and a fallback when absent', () => {
     lang.value = 'en';
     expect(mountShell({ version: '1.2.0' }).find('.tool-page__version').text()).toBe('v1.2.0');

@@ -320,7 +320,7 @@ describe('check-built-routes script helpers', () => {
     const { dist } = createWorkspace();
     writeBytes(dist, 'assets/app.js', 760 * 1024);
     writeBytes(dist, 'assets/chunks/vexflow.hash.js', 2 * 1024 * 1024);
-    writeBytes(dist, 'assets/sonare.hash.wasm', 4.25 * 1024 * 1024);
+    writeBytes(dist, 'assets/sonare.hash.wasm', 5.5 * 1024 * 1024);
 
     const failures: string[] = [];
     checkBuiltAssetBudgets(dist, failures);
@@ -328,7 +328,7 @@ describe('check-built-routes script helpers', () => {
     expect(failures).toEqual([
       'assets/app.js: built asset 760.0 KiB exceeds budget 750.0 KiB',
       'assets/chunks/vexflow.hash.js: built asset 2.00 MiB exceeds budget 1.25 MiB',
-      'assets/sonare.hash.wasm: built asset 4.25 MiB exceeds budget 4.00 MiB',
+      'assets/sonare.hash.wasm: built asset 5.50 MiB exceeds budget 5.25 MiB',
     ]);
   });
 
