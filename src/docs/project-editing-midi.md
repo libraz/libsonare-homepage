@@ -77,6 +77,10 @@ The descriptor form above is the canonical **WASM and Node** JavaScript API; WAS
 
 A MIDI clip holds a flat event list. Build events with the `Project.midi*` static packers (which produce the canonical MIDI 1.0 words) and replace the clip's list with `setMidiEvents`.
 
+::: warning `setMidiEvents` discards the clip's SysEx
+A clip's SysEx payloads (a GS Reset, a Roland DT1 setup block) live beside its event list, reached through a handle that `ProjectMidiEvent` does not carry. `importSmf()` keeps them, `exportSmf()` writes them back byte for byte, `toJson()` carries them, and an offline bounce realizes them: a GS insertion-effect type-select embedded in an imported SMF changes the rendered audio. `setMidiEvents()` replaces the list and leaves nothing referring to the payloads, so one call drops every frame, and there is no read-back entry point to save them through first. A caller that must preserve a GS setup block edits the exported file rather than the clip's event list.
+:::
+
 ::: code-group
 
 ```typescript [Browser / WASM]
@@ -347,7 +351,7 @@ The project's tempo map and MIDI clips round-trip through two formats.
 `exportSmf` always writes a format-1 (multi-track) file: track 0 carries the tempo + time-signature map, then one MTrk per clip, quantized to 480 ticks per quarter note.
 
 ```typescript
-const smf = project.exportSmf();        // Uint8Array — SMF format-1, 480 PPQN
+const smf = project.exportSmf();        // Uint8Array<ArrayBuffer> — SMF format-1, 480 PPQN
 // … write `smf` to a .mid file …
 
 const fresh = new Project();
@@ -357,6 +361,8 @@ try {
   fresh.delete();
 }
 ```
+
+`exportSmf()` and `exportClipFile()` are declared `Uint8Array<ArrayBuffer>`, the type the `Blob` and `File` constructors accept, so `new Blob([project.exportSmf()])` compiles with no intermediate `new Uint8Array(...)` copy.
 
 The importer contains damage locally: if one SMF track has an overlong variable-length quantity or payload, parsing resynchronizes at that track's declared boundary so later valid tracks can still import instead of the whole file failing.
 
@@ -369,7 +375,7 @@ What an SMF round-trips is a *performance* — and engraved, that same note list
 SMF predates MIDI 2.0, so it cannot carry 16-bit velocity, 32-bit CC, per-note controllers, or bank-valid Program Change without loss. The **MIDI 2.0 Clip File** (`SMF2CLIP`) preserves all of that. Prefer it when MIDI 2.0 fidelity matters.
 
 ```typescript
-const clipFile = project.exportClipFile();   // Uint8Array, "SMF2CLIP" header
+const clipFile = project.exportClipFile();   // Uint8Array<ArrayBuffer>, "SMF2CLIP" header
 const firstClip = otherProject.importClipFile(clipFile);
 ```
 

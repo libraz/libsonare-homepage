@@ -77,6 +77,10 @@ project.getAssistSidecar(0);  // { moduleId, schemaVersion, targetTrackId,
 
 MIDI クリップはフラットなイベントリストを保持します。`Project.midi*` 静的パッカー（正規の MIDI 1.0 ワードを生成します）でイベントを作り、`setMidiEvents` でクリップのリストを置き換えます。
 
+::: warning `setMidiEvents` はクリップの SysEx を捨てる
+クリップの SysEx ペイロード（GS リセットや Roland の DT1 セットアップブロック）はイベントリストの脇に置かれ、`ProjectMidiEvent` が持たないハンドルで参照されています。`importSmf()` は保持し、`exportSmf()` はバイト単位でそのまま書き戻し、`toJson()` も運びます。オフラインバウンスでも実際に反映され、インポートした SMF に埋め込まれた GS インサーションエフェクトのタイプ選択はレンダリング結果の音を変えます。`setMidiEvents()` はリストを置き換えるためペイロードを参照するものが何も残らず、1 回の呼び出しで全フレームが消えます。読み戻す入口もないので、先に退避して復元することもできません。GS のセットアップブロックを残す必要があるなら、クリップのイベントリストではなく書き出したファイルの側を編集してください。
+:::
+
 ::: code-group
 
 ```typescript [ブラウザ / WASM]
@@ -344,7 +348,7 @@ const { trackIds, clipIds } = project.importExternalStems({
 `exportSmf` は常にフォーマット 1（マルチトラック）で書き出します。トラック 0 がテンポ／拍子マップを、以降は各クリップが 1 つの MTrk となり、4 分音符あたり 480 ティックに量子化されます。
 
 ```typescript
-const smf = project.exportSmf();        // Uint8Array — SMF フォーマット1、480 PPQN
+const smf = project.exportSmf();        // Uint8Array<ArrayBuffer> — SMF フォーマット1、480 PPQN
 // … `smf` を .mid ファイルへ書き出す …
 
 const fresh = new Project();
@@ -354,6 +358,8 @@ try {
   fresh.delete();
 }
 ```
+
+`exportSmf()` と `exportClipFile()` の返り値は `Uint8Array<ArrayBuffer>` で、`Blob` / `File` コンストラクタがそのまま受け取る型です。`new Blob([project.exportSmf()])` は `new Uint8Array(...)` で複製を挟まずにコンパイルが通ります。
 
 インポーターは破損をトラック内に封じ込めます。ある SMF トラックの可変長数値やペイロードが宣言境界を越えていても、そのトラック末尾へ再同期するため、ファイル全体を失敗させず後続の正常なトラックを引き続き取り込めます。
 
@@ -366,7 +372,7 @@ SMF が往復させているのは *演奏* です。それを記譜すれば、
 SMF は MIDI 2.0 より前の形式なので、16 ビットベロシティ・32 ビット CC・パーノートコントローラ・バンク有効なプログラムチェンジを欠落なく運べません。**MIDI 2.0 クリップファイル**（`SMF2CLIP`）はこれらすべてを保持します。MIDI 2.0 の忠実度が重要なときはこちらを選んでください。
 
 ```typescript
-const clipFile = project.exportClipFile();   // Uint8Array、"SMF2CLIP" ヘッダ
+const clipFile = project.exportClipFile();   // Uint8Array<ArrayBuffer>、"SMF2CLIP" ヘッダ
 const firstClip = otherProject.importClipFile(clipFile);
 ```
 
