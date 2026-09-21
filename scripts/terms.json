@@ -1,0 +1,85 @@
+[
+  {
+    "correct": "既定値",
+    "forbidden": ["デフォルト"],
+    "reason": "Same concept (a parameter's default value) spelled two ways inside single documents (js-api.md, cli.md, cpp-api.md, and others). 既定値 is the majority spelling in prose (130 lines / 40 files) and the more formal rendering.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "既定値",
+    "forbidden": ["初期値"],
+    "reason": "Names the same parameter-default concept as 既定値/デフォルト in most files (e.g. glossary/analysis/tempo-bpm.md). js-api-analysis.md uses it exclusively for the starting value of an iterative NMF computation, a distinct concept, and is exempted.",
+    "locale": "ja",
+    "exceptions": ["src/ja/docs/js-api-analysis.md"]
+  },
+  {
+    "correct": "True Peak",
+    "forbidden": ["トゥルーピーク"],
+    "reason": "The English form, optionally glossed with the katakana reading on first use, is dominant (133 lines / 42 files) and matches the glossary page title. Several use-cases pages use only the katakana form and never introduce the English term.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": null,
+    "forbidden": ["サンプルレート", "サンプリングレート"],
+    "reason": "Real two-way split (69/34 lines/files vs 6/4) for one referent; both are standard renderings and corpus majority alone does not settle which is canonical. Reported as unresolved until a spelling is chosen.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "パラメータ",
+    "forbidden": ["パラメーター"],
+    "reason": "192 lines vs 5 for the same referent, with native-synth.md and mixing.md carrying both spellings. Matches the engineering-documentation convention of dropping the terminal long vowel.",
+    "locale": "ja",
+    "exceptions": []
+  },
+  {
+    "correct": "Realtime",
+    "forbidden": ["real-time"],
+    "reason": "The closed compound is the site's own house style: every sidebar label and page H1 uses it, while the hyphenated adjective names the identical sense in files that also use the closed form alongside it.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "Web Audio",
+    "forbidden": ["WebAudio"],
+    "reason": "Matches the W3C/MDN name and is the form used everywhere else in the corpus (15 lines / 11 files); the closed form appears exactly once.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "front-end",
+    "forbidden": ["frontend"],
+    "reason": "cli.md uses both spellings for the same referent (the two CLI binaries). Hyphenated is the site's majority form elsewhere in the corpus.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "pre-processing",
+    "forbidden": ["preprocessing"],
+    "reason": "Both forms name the same pipeline stage across files (wasm.md vs introduction.md). Hyphenated matches the sibling term post-processing, which has no closed competitor in this corpus.",
+    "locale": "en",
+    "exceptions": []
+  },
+  {
+    "correct": "insertion effect",
+    "forbidden": [],
+    "reason": "Guard entry, not a ban: insertion effect is the correct Roland GS spec term inside GS/EFX documentation. Recorded so a future rule banning it as a variant of the general term insert does not fire on these pages.",
+    "locale": "en",
+    "exceptions": [
+      "src/docs/soundfont-player.md",
+      "src/docs/algorithm-references.md",
+      "src/docs/api-surface.md",
+      "src/ja/docs/soundfont-player.md",
+      "src/ja/docs/algorithm-references.md"
+    ]
+  },
+  {
+    "correct": null,
+    "forbidden": [],
+    "reason": "Sidebar group names (Build By Task, 作りたいもの別, API By Runtime, 利用環境別 API, and the other renamed labels) are cited verbatim in prose on several pages. The forbidden list is filled in once the group names are finalized, so this rule can catch every stale prose citation in one place.",
+    "locale": "both",
+    "exceptions": []
+  }
+]
