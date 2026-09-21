@@ -7,12 +7,18 @@ import { fileURLToPath } from 'node:url';
 export const PAGE_LINE_LIMIT = 600;
 
 // Sidebar groups whose pages are task guides and must carry a visual. Each entry
-// pairs the English label with its hand-written ja sidebar label. These two groups
-// are about to be restructured into eight domain tracks; replace this list when
-// the groups are renamed.
+// pairs the English label with its hand-written ja sidebar label; the two trees
+// are written separately in config.ts, so the pair is also what the en/ja parity
+// check compares. Renaming a group means renaming it here too.
 export const DOMAIN_SIDEBAR_GROUPS = [
-  { en: 'Build By Task', ja: '作りたいもの別' },
-  { en: 'Compose & Arrange', ja: '作曲・アレンジ' },
+  { en: 'Analysis', ja: '解析' },
+  { en: 'Instruments & MIDI', ja: '楽器と MIDI' },
+  { en: 'Mixing', ja: 'ミキシング' },
+  { en: 'Mastering', ja: 'マスタリング' },
+  { en: 'Editing', ja: '編集' },
+  { en: 'Arrangement & Projects', ja: 'アレンジとプロジェクト' },
+  { en: 'Realtime', ja: 'リアルタイム' },
+  { en: 'Room Acoustics', ja: '室内音響' },
 ];
 
 // Index sections a split page keeps. Links inside them do not count as inbound
@@ -122,8 +128,11 @@ function checkDomainPageVisuals({ root, configPath, themePath, failures }) {
   const config = fs.readFileSync(configPath, 'utf8');
   const pages = new Set();
   for (const group of DOMAIN_SIDEBAR_GROUPS) {
-    for (const label of [group.en, group.ja]) {
-      const links = extractSidebarGroupLinks(config, label);
+    for (const [locale, label] of [
+      ['en', group.en],
+      ['ja', group.ja],
+    ]) {
+      const links = extractSidebarGroupLinks(docsSidebarSource(config, locale), label);
       if (!links) {
         failures.push(`${relative(root, configPath)} has no sidebar group "${label}"`);
         continue;
@@ -157,8 +166,8 @@ function checkDomainSidebarParity({ configPath, failures }) {
 
   const config = fs.readFileSync(configPath, 'utf8');
   for (const group of DOMAIN_SIDEBAR_GROUPS) {
-    const en = extractSidebarGroupLinks(config, group.en);
-    const ja = extractSidebarGroupLinks(config, group.ja);
+    const en = extractSidebarGroupLinks(docsSidebarSource(config, 'en'), group.en);
+    const ja = extractSidebarGroupLinks(docsSidebarSource(config, 'ja'), group.ja);
     // A missing group is already reported by the visuals check.
     if (!en || !ja) continue;
 
@@ -202,22 +211,52 @@ export function stripSplitIndexSections(content) {
   return kept.join('\n');
 }
 
-// Links inside the sidebar group object whose `text:` equals `label`, scanned by
-// brace depth from the label to the group's closing brace. Null when no such group.
-export function extractSidebarGroupLinks(content, label) {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = content.match(new RegExp(`\\btext:\\s*(['"])${escaped}\\1`));
+// The source of one locale's docs sidebar array literal. The two trees are
+// separate literals, and a group label such as "Analysis" also names a demo-menu
+// entry and a glossary category, so searching the whole config matches the wrong
+// one. Null when the literal is absent.
+export function docsSidebarSource(content, locale) {
+  const marker = locale === 'en' ? /\bconst enDocsSidebar\s*=\s*\[/ : /'\/ja\/docs\/':\s*\[/;
+  const match = content.match(marker);
   if (!match) return null;
+  return bracketedSlice(content, match.index + match[0].length - 1, '[', ']');
+}
 
-  const start = match.index + match[0].length;
+// Links under the TOP-LEVEL sidebar group whose `text:` equals `label`. Only the
+// array's own groups count: the same label occurs again on nested reference
+// entries, and taking the first textual match would read those instead.
+export function extractSidebarGroupLinks(arraySource, label) {
+  if (!arraySource) return null;
+  for (const group of topLevelObjects(arraySource)) {
+    const text = group.match(/\btext:\s*(['"])(.*?)\1/);
+    if (text?.[2] !== label) continue;
+    return extractConfigLinks(group).map((link) => link.href);
+  }
+  return null;
+}
+
+// Each `{...}` directly inside an array literal's source, ignoring nested ones.
+function topLevelObjects(arraySource) {
+  const out = [];
+  for (let i = 0; i < arraySource.length; i++) {
+    if (arraySource[i] !== '{') continue;
+    const block = bracketedSlice(arraySource, i, '{', '}');
+    out.push(block);
+    i += block.length + 1;
+  }
+  return out;
+}
+
+// The text between the delimiter at `openIndex` and its match, exclusive.
+function bracketedSlice(content, openIndex, open, close) {
   let depth = 1;
-  let end = start;
+  let end = openIndex + 1;
   while (end < content.length && depth > 0) {
-    if (content[end] === '{') depth++;
-    else if (content[end] === '}') depth--;
+    if (content[end] === open) depth++;
+    else if (content[end] === close) depth--;
     end++;
   }
-  return extractConfigLinks(content.slice(start, end)).map((link) => link.href);
+  return content.slice(openIndex + 1, end - 1);
 }
 
 export function extractFigureNames(themeContent) {

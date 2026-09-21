@@ -64,12 +64,26 @@ function writeSiteConfig(
     enGroups[group.en] = en[group.en] ?? [];
     jaGroups[group.ja] = ja[group.ja] ?? [];
   }
+  // Mirrors the real config's shape: the English tree is a named const the
+  // sidebar key refers to, the ja tree is written inline under its own key, and
+  // a demo menu above both reuses some of the same group labels. That decoy is
+  // deliberate — a group label is not unique in the file, so a fixture without
+  // one lets a whole-file label search pass here and read the wrong group live.
+  // The decoy points at a real page carrying no visual, so scoping that breaks
+  // shows up as a failure rather than as a silently wider page set.
+  writeFile(root, 'src/decoy.md', '# Decoy');
+  const decoy = DOMAIN_SIDEBAR_GROUPS.map(
+    (group) => `{ text: '${group.en}', items: [{ link: '/decoy' }] }`,
+  ).join(', ');
   writeFile(
     root,
     '.vitepress/config.ts',
     [
+      `const enDemoMenu = [${decoy}];`,
+      `const enDocsSidebar = [${sidebarGroups(enGroups)}];`,
       'export default {',
-      `  themeConfig: { sidebar: { '/docs/': [${sidebarGroups(enGroups)}] } },`,
+      '  nav: [{ text: "Demos", items: enDemoMenu }],',
+      "  themeConfig: { sidebar: { '/docs/': enDocsSidebar } },",
       `  locales: { ja: { themeConfig: { sidebar: { '/ja/docs/': [${sidebarGroups(jaGroups)}] } } } },`,
       `  ${extra}`,
       '}',

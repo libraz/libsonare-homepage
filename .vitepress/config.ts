@@ -545,13 +545,18 @@ const enDemoMenu = [
 // English docs sidebar — shared between the `/docs/` sidebar and the llms.txt index.
 const enDocsSidebar = [
   {
-    text: 'Learn First',
+    text: 'Start Here',
     items: [
       { text: 'Introduction', link: '/docs/introduction' },
       { text: 'Learning Path', link: '/docs/learning-path' },
       { text: 'Getting Started', link: '/docs/getting-started' },
       { text: 'Installation', link: '/docs/installation' },
-      { text: 'Examples', link: '/docs/examples' },
+      {
+        text: 'Examples',
+        link: '/docs/examples',
+        collapsed: true,
+        items: [{ text: 'Feature Recipes', link: '/docs/examples-recipes' }],
+      },
       { text: 'Feature Map', link: '/docs/api-surface' },
     ],
   },
@@ -568,56 +573,133 @@ const enDocsSidebar = [
     ],
   },
   {
-    text: 'Build By Task',
+    text: 'Analysis',
+    items: [{ text: 'librosa Compatibility', link: '/docs/librosa-compatibility' }],
+  },
+  {
+    text: 'Instruments & MIDI',
     items: [
-      { text: 'Editing DSP', link: '/docs/editing-dsp' },
-      { text: 'Spectral Editing', link: '/docs/spectral-editing' },
-      { text: 'Mixing Engine', link: '/docs/mixing' },
-      { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
-      { text: 'Mixing Demo Project JSON', link: '/docs/mixing-demo-project-json' },
-      { text: 'Effects Inserts', link: '/docs/effects-inserts' },
-      { text: 'Mixing Assistant', link: '/docs/mixing-assistant' },
-      { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
-      { text: 'Mastering Processors', link: '/docs/mastering-processors' },
-      { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
-      { text: 'Realtime Engine', link: '/docs/realtime-engine' },
-      { text: 'Realtime Voice Changer', link: '/docs/realtime-voice-changer' },
-      { text: 'Room Acoustics', link: '/docs/acoustic-analysis' },
-      { text: 'Inverse Features', link: '/docs/inverse-features' },
+      { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
+      { text: 'GM and GS', link: '/docs/gm-gs' },
+      { text: 'SoundFont Player', link: '/docs/soundfont-player' },
+      { text: 'MIDI Input', link: '/docs/midi-input' },
     ],
   },
   {
-    text: 'Compose & Arrange',
+    text: 'Mixing',
+    items: [
+      { text: 'Mixing Engine', link: '/docs/mixing' },
+      { text: 'Effects Inserts', link: '/docs/effects-inserts' },
+      { text: 'Mixing Assistant', link: '/docs/mixing-assistant' },
+      { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
+      { text: 'Mixing Demo Project JSON', link: '/docs/mixing-demo-project-json' },
+    ],
+  },
+  {
+    text: 'Mastering',
+    items: [
+      { text: 'Mastering Processors', link: '/docs/mastering-processors' },
+      { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
+      { text: 'Mastering Implementation', link: '/docs/mastering-implementation' },
+    ],
+  },
+  {
+    text: 'Editing',
+    items: [
+      { text: 'Editing DSP', link: '/docs/editing-dsp' },
+      { text: 'Spectral Editing', link: '/docs/spectral-editing' },
+    ],
+  },
+  {
+    text: 'Arrangement & Projects',
     items: [
       { text: 'Project Editing', link: '/docs/project-editing' },
-      { text: 'MIDI Input', link: '/docs/midi-input' },
-      { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
-      { text: 'SoundFont Player', link: '/docs/soundfont-player' },
+      { text: 'Project MIDI', link: '/docs/project-editing-midi' },
       { text: 'Recording & Takes', link: '/docs/recording-and-takes' },
       { text: 'Bouncing Projects', link: '/docs/project-bounce' },
     ],
   },
   {
+    text: 'Realtime',
+    items: [
+      { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
+      { text: 'Realtime Engine', link: '/docs/realtime-engine' },
+      { text: 'Realtime Voice Changer', link: '/docs/realtime-voice-changer' },
+    ],
+  },
+  {
+    text: 'Room Acoustics',
+    items: [
+      { text: 'Acoustic Analysis', link: '/docs/acoustic-analysis' },
+      { text: 'Inverse Features', link: '/docs/inverse-features' },
+    ],
+  },
+  {
     text: 'API By Runtime',
     items: [
-      { text: 'Browser / WASM', link: '/docs/wasm' },
+      {
+        text: 'Browser / WASM',
+        link: '/docs/wasm',
+        collapsed: true,
+        items: [
+          { text: 'Advanced Topics', link: '/docs/wasm-advanced' },
+          { text: 'Streaming', link: '/docs/wasm-streaming' },
+        ],
+      },
       {
         text: 'JavaScript API',
         link: '/docs/js-api',
         collapsed: true,
         items: [
           { text: 'Analysis', link: '/docs/js-api-analysis' },
+          { text: 'Feature Extraction', link: '/docs/js-api-features' },
+          { text: 'librosa Helpers', link: '/docs/js-api-helpers' },
           { text: 'Effects', link: '/docs/js-api-effects' },
           { text: 'Mastering', link: '/docs/js-api-mastering' },
+          { text: 'Streaming & Realtime', link: '/docs/js-api-streaming' },
           { text: 'Audio & Streaming', link: '/docs/js-api-audio' },
           { text: 'Types & Errors', link: '/docs/js-api-types' },
         ],
       },
-      { text: 'Python API', link: '/docs/python-api' },
-      { text: 'CLI Reference', link: '/docs/cli' },
+      {
+        text: 'Python API',
+        link: '/docs/python-api',
+        collapsed: true,
+        items: [
+          { text: 'Analysis', link: '/docs/python-api-analysis' },
+          { text: 'Effects & Acoustics', link: '/docs/python-api-effects' },
+          { text: 'Types', link: '/docs/python-api-types' },
+        ],
+      },
+      {
+        text: 'CLI Reference',
+        link: '/docs/cli',
+        collapsed: true,
+        items: [
+          { text: 'Commands', link: '/docs/cli-commands' },
+          { text: 'Examples', link: '/docs/cli-examples' },
+        ],
+      },
       { text: 'Node.js Native', link: '/docs/native-bindings' },
-      { text: 'Node.js Native API', link: '/docs/node-api' },
-      { text: 'C++ API', link: '/docs/cpp-api' },
+      {
+        text: 'Node.js Native API',
+        link: '/docs/node-api',
+        collapsed: true,
+        items: [
+          { text: 'Analysis', link: '/docs/node-api-analysis' },
+          { text: 'Types', link: '/docs/node-api-types' },
+        ],
+      },
+      {
+        text: 'C++ API',
+        link: '/docs/cpp-api',
+        collapsed: true,
+        items: [
+          { text: 'Streaming', link: '/docs/cpp-api-streaming' },
+          { text: 'Analysis', link: '/docs/cpp-api-analysis' },
+          { text: 'Effects', link: '/docs/cpp-api-effects' },
+        ],
+      },
       { text: 'Binding Parity', link: '/docs/binding-parity' },
     ],
   },
@@ -627,9 +709,7 @@ const enDocsSidebar = [
       { text: 'DSP Implementation Notes', link: '/docs/dsp-implementation' },
       { text: 'Algorithm References', link: '/docs/algorithm-references' },
       { text: 'Implementation Validation', link: '/docs/implementation-validation' },
-      { text: 'Mastering Implementation', link: '/docs/mastering-implementation' },
       { text: 'Architecture', link: '/docs/architecture' },
-      { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
       { text: 'Benchmarks', link: '/docs/benchmarks' },
       { text: 'FAQ', link: '/docs/faq' },
       ...glossarySidebar,
@@ -945,13 +1025,18 @@ export default defineConfig({
         sidebar: {
           '/ja/docs/': [
             {
-              text: 'まず読む',
+              text: '最初に読む',
               items: [
                 { text: 'イントロダクション', link: '/ja/docs/introduction' },
                 { text: '学習順ガイド', link: '/ja/docs/learning-path' },
                 { text: 'はじめに', link: '/ja/docs/getting-started' },
                 { text: 'インストール', link: '/ja/docs/installation' },
-                { text: '使用例', link: '/ja/docs/examples' },
+                {
+                  text: '使用例',
+                  link: '/ja/docs/examples',
+                  collapsed: true,
+                  items: [{ text: '機能別レシピ', link: '/ja/docs/examples-recipes' }],
+                },
                 { text: '機能マップ', link: '/ja/docs/api-surface' },
               ],
             },
@@ -974,53 +1059,99 @@ export default defineConfig({
               ],
             },
             {
-              text: '作りたいもの別',
+              text: '解析',
+              items: [{ text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' }],
+            },
+            {
+              text: '楽器と MIDI',
               items: [
-                { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
-                { text: 'スペクトル編集', link: '/ja/docs/spectral-editing' },
+                { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
+                { text: 'GM と GS', link: '/ja/docs/gm-gs' },
+                { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
+                { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
+              ],
+            },
+            {
+              text: 'ミキシング',
+              items: [
                 { text: 'ミキシングエンジン', link: '/ja/docs/mixing' },
+                { text: 'エフェクトインサート', link: '/ja/docs/effects-inserts' },
+                { text: 'ミキシングアシスタント', link: '/ja/docs/mixing-assistant' },
                 { text: 'ミキシングシーン JSON', link: '/ja/docs/mixing-scene-json' },
                 {
                   text: 'ミキシングデモのプロジェクト JSON',
                   link: '/ja/docs/mixing-demo-project-json',
                 },
-                { text: 'エフェクトインサート', link: '/ja/docs/effects-inserts' },
-                { text: 'ミキシングアシスタント', link: '/ja/docs/mixing-assistant' },
-                { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
+              ],
+            },
+            {
+              text: 'マスタリング',
+              items: [
                 { text: 'マスタリングプロセッサ', link: '/ja/docs/mastering-processors' },
+                { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
+                { text: 'マスタリング実装', link: '/ja/docs/mastering-implementation' },
+              ],
+            },
+            {
+              text: '編集',
+              items: [
+                { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
+                { text: 'スペクトル編集', link: '/ja/docs/spectral-editing' },
+              ],
+            },
+            {
+              text: 'アレンジとプロジェクト',
+              items: [
+                { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
+                { text: 'プロジェクトの MIDI', link: '/ja/docs/project-editing-midi' },
+                { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },
+                { text: 'プロジェクトのバウンス', link: '/ja/docs/project-bounce' },
+              ],
+            },
+            {
+              text: 'リアルタイム',
+              items: [
                 { text: 'リアルタイムとストリーミング', link: '/ja/docs/realtime-streaming' },
                 { text: 'リアルタイムエンジン', link: '/ja/docs/realtime-engine' },
                 {
                   text: 'リアルタイムボイスチェンジャー',
                   link: '/ja/docs/realtime-voice-changer',
                 },
-                { text: 'ルーム音響解析', link: '/ja/docs/acoustic-analysis' },
-                { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
               ],
             },
             {
-              text: '作曲・アレンジ',
+              text: '室内音響',
               items: [
-                { text: 'プロジェクト編集', link: '/ja/docs/project-editing' },
-                { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
-                { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
-                { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
-                { text: '録音とテイク', link: '/ja/docs/recording-and-takes' },
-                { text: 'プロジェクトのバウンス', link: '/ja/docs/project-bounce' },
+                { text: '音響解析', link: '/ja/docs/acoustic-analysis' },
+                { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
               ],
             },
             {
               text: '利用環境別 API',
               items: [
-                { text: 'ブラウザ / WASM', link: '/ja/docs/wasm' },
+                {
+                  text: 'ブラウザ / WASM',
+                  link: '/ja/docs/wasm',
+                  collapsed: true,
+                  items: [
+                    { text: '応用トピック', link: '/ja/docs/wasm-advanced' },
+                    { text: 'ストリーミング', link: '/ja/docs/wasm-streaming' },
+                  ],
+                },
                 {
                   text: 'JavaScript API',
                   link: '/ja/docs/js-api',
                   collapsed: true,
                   items: [
                     { text: '解析', link: '/ja/docs/js-api-analysis' },
+                    { text: '特徴抽出', link: '/ja/docs/js-api-features' },
+                    { text: 'librosa 互換ヘルパー', link: '/ja/docs/js-api-helpers' },
                     { text: 'エフェクト', link: '/ja/docs/js-api-effects' },
                     { text: 'マスタリング', link: '/ja/docs/js-api-mastering' },
+                    {
+                      text: 'ストリーミングとリアルタイム',
+                      link: '/ja/docs/js-api-streaming',
+                    },
                     {
                       text: 'オーディオとストリーミング',
                       link: '/ja/docs/js-api-audio',
@@ -1028,11 +1159,45 @@ export default defineConfig({
                     { text: '型とエラー', link: '/ja/docs/js-api-types' },
                   ],
                 },
-                { text: 'Python API', link: '/ja/docs/python-api' },
-                { text: 'CLIリファレンス', link: '/ja/docs/cli' },
+                {
+                  text: 'Python API',
+                  link: '/ja/docs/python-api',
+                  collapsed: true,
+                  items: [
+                    { text: '解析', link: '/ja/docs/python-api-analysis' },
+                    { text: 'エフェクトと音響', link: '/ja/docs/python-api-effects' },
+                    { text: '型定義', link: '/ja/docs/python-api-types' },
+                  ],
+                },
+                {
+                  text: 'CLIリファレンス',
+                  link: '/ja/docs/cli',
+                  collapsed: true,
+                  items: [
+                    { text: 'コマンド', link: '/ja/docs/cli-commands' },
+                    { text: '使用例', link: '/ja/docs/cli-examples' },
+                  ],
+                },
                 { text: 'Node.js ネイティブ', link: '/ja/docs/native-bindings' },
-                { text: 'Node.js ネイティブ API', link: '/ja/docs/node-api' },
-                { text: 'C++ API', link: '/ja/docs/cpp-api' },
+                {
+                  text: 'Node.js ネイティブ API',
+                  link: '/ja/docs/node-api',
+                  collapsed: true,
+                  items: [
+                    { text: '解析', link: '/ja/docs/node-api-analysis' },
+                    { text: '型定義', link: '/ja/docs/node-api-types' },
+                  ],
+                },
+                {
+                  text: 'C++ API',
+                  link: '/ja/docs/cpp-api',
+                  collapsed: true,
+                  items: [
+                    { text: 'ストリーミング', link: '/ja/docs/cpp-api-streaming' },
+                    { text: '解析', link: '/ja/docs/cpp-api-analysis' },
+                    { text: 'エフェクト', link: '/ja/docs/cpp-api-effects' },
+                  ],
+                },
                 { text: 'バインディング対応表', link: '/ja/docs/binding-parity' },
               ],
             },
@@ -1042,9 +1207,7 @@ export default defineConfig({
                 { text: 'DSP 実装解説', link: '/ja/docs/dsp-implementation' },
                 { text: 'アルゴリズム根拠', link: '/ja/docs/algorithm-references' },
                 { text: '実装検証', link: '/ja/docs/implementation-validation' },
-                { text: 'マスタリング実装', link: '/ja/docs/mastering-implementation' },
                 { text: 'アーキテクチャ', link: '/ja/docs/architecture' },
-                { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
                 { text: 'ベンチマーク', link: '/ja/docs/benchmarks' },
                 { text: 'FAQ', link: '/ja/docs/faq' },
                 ...jaGlossarySidebar,
