@@ -206,7 +206,7 @@ console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 
 #### 短い区間ではそもそも探索されない
 
-検出ビートが **8 個未満**だと、推定器は探索を行いません。それでもフィールドの埋まった結果は返ります。4/4、`confidence` 0.5、分割されていない `grouping`、候補 1 件、スコアは全部 0 です。そしてそれを教えてくれるのは `searched` だけです。
+検出ビートが **8 個未満**だと、推定器は探索を行いません。それでもフィールドの埋まった結果は返ります。4/4、プレースホルダの `confidence`、分割されていない `grouping`、候補 1 件、スコアは全部 0 です。そしてそれを教えてくれるのは `searched` だけです。
 
 ```typescript
 const meter = estimateMeter({

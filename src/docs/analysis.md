@@ -173,7 +173,7 @@ Two more ordering facts, both easy to trip over:
 
 #### A short span is not searched at all
 
-Below **eight detected beats** the estimator does not search. It returns a fully populated result anyway — 4/4, `confidence` 0.5, an undivided `grouping`, one candidate and all-zero scores — and the only field that tells you so is `searched`.
+Below **eight detected beats** the estimator does not search. It returns a fully populated result anyway — 4/4, a placeholder `confidence`, an undivided `grouping`, one candidate and all-zero scores — and the only field that tells you so is `searched`.
 
 ```typescript
 const meter = estimateMeter({
