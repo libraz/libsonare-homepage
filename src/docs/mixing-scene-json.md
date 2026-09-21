@@ -291,7 +291,7 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 :::
 
 ::: info `mix --scene` with per-strip inputs is Python-CLI only
-Rendering a whole scene from a JSON file with one `--input` per strip is implemented by the Python CLI. The native CLI has no `mix` command at all: its strip command answers to `sonare-cli mix-strip` and nothing else, so a script that still calls `sonare-cli mix` fails as an unknown command. `mix-strip` itself is on both CLIs, but it is a single-strip, single-input processor with no `--scene` — use it for quick per-strip checks, not full scene renders. See [the channel strip](./cli.md#the-channel-strip).
+Rendering a whole scene from a JSON file with one `--input` per strip is implemented by the Python CLI. The native CLI has no `mix` command at all: its strip command answers to `sonare-cli mix-strip` and nothing else, so a script that still calls `sonare-cli mix` fails as an unknown command. `mix-strip` itself is on both CLIs, but it is a single-strip, single-input processor with no `--scene` — use it for quick per-strip checks, not full scene renders. See [the channel strip](./cli-examples.md#the-channel-strip).
 :::
 
 ::: tip When to recompile

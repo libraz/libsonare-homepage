@@ -22,7 +22,7 @@ If you want to read the docs linearly, use this order:
 | I want to build... | Read first | Then read |
 |--------------------|------------|-----------|
 | A browser app that shows BPM, key, chords, or sections | [Getting Started](./getting-started.md) | [WebAssembly Guide](./wasm.md), [JavaScript API](./js-api.md) |
-| Song-structure, self-similarity, or note-segmentation analysis | [Feature Map](./api-surface.md) | [JavaScript API](./js-api-analysis.md#librosa-compatible-helpers), [Python API](./python-api.md#feature-extraction) |
+| Song-structure, self-similarity, or note-segmentation analysis | [Feature Map](./api-surface.md) | [JavaScript API](./js-api-helpers.md#librosa-compatible-helpers), [Python API](./python-api-analysis.md#feature-extraction) |
 | Bars and time signatures scored over a beat series you already have | [Meter and Grouping](./glossary/analysis/meter-and-grouping.md) | [Node API](./node-api.md), [Python API](./python-api.md) |
 | A Python script or notebook for audio analysis | [Getting Started](./getting-started.md#python) | [Python API](./python-api.md) |
 | A terminal workflow for quick checks or batch analysis | [Getting Started](./getting-started.md#cli) | [CLI Reference](./cli.md) |
@@ -36,9 +36,9 @@ If you want to read the docs linearly, use this order:
 | A C++ app that needs the instruments only, without analysis or mastering | [Link targets](./cpp-api.md#link-targets) | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md) |
 | A DAW, arrangement, or MIDI-sequencing tool | [Project Editing](./project-editing.md) | [MIDI Input](./midi-input.md), [Project Bounce](./project-bounce.md) |
 | SoundFont (SF2) playback through a built-in player | [SoundFont 2 Player](./soundfont-player.md) | [Built-in Instruments](./native-synth.md), [MIDI Input](./midi-input.md) |
-| A live visualizer, rhythm game helper, or AudioWorklet tool | [Realtime and Streaming](./realtime-streaming.md) | [WebAssembly Guide](./wasm.md#streaming-analysis) |
-| A realtime microphone voice changer | [Realtime Voice Changer](./realtime-voice-changer.md) | [WebAssembly Guide](./wasm.md#realtime-voice-changer) |
-| Room sound, estimates, or generated room character | [Room Acoustics](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
+| A live visualizer, rhythm game helper, or AudioWorklet tool | [Realtime and Streaming](./realtime-streaming.md) | [WebAssembly Guide](./wasm-streaming.md#streaming-analysis) |
+| A realtime microphone voice changer | [Realtime Voice Changer](./realtime-voice-changer.md) | [WebAssembly Guide](./wasm-streaming.md#realtime-voice-changer) |
+| Room sound, estimates, or generated room character | [Room Acoustics](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#room-acoustics), [Python API](./python-api-effects.md#room-acoustics) |
 | Inverting mel/MFCC features for previews or debugging | [Inverse Features](./inverse-features.md) | [librosa Compatibility](./librosa-compatibility.md) |
 | A migration from librosa | [librosa Compatibility](./librosa-compatibility.md) | [Feature Map](./api-surface.md) |
 

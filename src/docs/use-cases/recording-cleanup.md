@@ -185,7 +185,7 @@ The take was 7.9 seconds with padding on both ends; the trimmed file is 7.303 se
 
 Sometimes the problem is not one bad take but several decent ones: three attempts at the same phrase, each entering and trailing off at a slightly different point, and you want to compare them slice by slice. Running `trim-silence` from Step 3 on each take separately does not help here — every take gets its own cut points, so the boundaries land in a different place on each file, and the "same" slice from three takes is really three different slices.
 
-[`split-silence`](../cli.md#split-silence) takes more than one file at once for exactly this job. The first take is the positional argument; every other take of the same part is added with a repeatable `--input`:
+[`split-silence`](../cli-commands.md#split-silence) takes more than one file at once for exactly this job. The first take is the positional argument; every other take of the same part is added with a repeatable `--input`:
 
 ```bash
 sonare split-silence take1.wav --json

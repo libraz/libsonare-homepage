@@ -223,7 +223,7 @@ sonare_engine_clear_midi_fx(engine, /* destination_id */ 0);
 
 :::
 
-The JSON schema is the same one [`bakeMidiFx`](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
+The JSON schema is the same one [`bakeMidiFx`](./project-editing-midi.md#bake-a-midi-fx-chain-into-a-clip) accepts — stages are keyed by their parameters, so include a stage's keys to enable it and omit them to skip it. Valid keys include `transpose_semitones`, `velocity_scale` / `velocity_offset` / `velocity_gamma`, `quantize_ppq` / `quantize_strength`, `chord_intervals`, and `arpeggiator_intervals` / `arpeggiator_step_ppq` / `arpeggiator_gate_ppq`. See [Project Editing](./project-editing-midi.md#bake-a-midi-fx-chain-into-a-clip) for the full key table.
 
 `setMidiFx` *replaces* the insert in place without resetting the instrument's voices — but a swap onto an already-active destination releases that destination's sounding notes: each call bumps a generation counter, and the audio thread flushes (all-notes-off) any destination whose live generation no longer matches on the next block. Two safety notes for changing FX while keys are held:
 

@@ -202,7 +202,7 @@ sonare voice-change vocal.wav --preset soft-whisper -o rendered.wav
 - **Python** — `with` ブロックを抜けるとハンドルを解放します。`with` を使わない場合は `close()` を呼びます。
 :::
 
-AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー) で説明している WASM ヒープ上のリアルタイムバッファを使います。ブラウザ例の素の `processMono(...)` と違い、レンダークォンタムごとに新しい出力配列を確保せずに済みます。
+AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm-streaming.md#リアルタイムボイスチェンジャー) で説明している WASM ヒープ上のリアルタイムバッファを使います。ブラウザ例の素の `processMono(...)` と違い、レンダークォンタムごとに新しい出力配列を確保せずに済みます。
 
 ## CLI のモード
 
@@ -213,7 +213,7 @@ AudioWorklet 形式のループでは、[ブラウザ / WASM](./wasm.md#リア�
 | 単純なピッチ／フォルマント変換 | `--pitch-semitones`、`--formant-factor` |
 | リアルタイムプリセットチェーンでのレンダリング | `--preset`、`--preset-json`、`--preset-pack`、`--set PATH=VALUE` |
 
-リアルタイムプリセット系のオプションを渡した場合、コマンドはプリセットチェーンを使います。単純なピッチ／フォルマント指定との併用は無効パラメータとして拒否されます。`--preset-pack FILE` にはエントリ選択用の `--preset ID` が必須で、先頭エントリへのフォールバックはありません。selector の規則とコマンド表は [CLI リファレンス](./cli.md#リアルタイムボイスプリセット) を参照してください。
+リアルタイムプリセット系のオプションを渡した場合、コマンドはプリセットチェーンを使います。単純なピッチ／フォルマント指定との併用は無効パラメータとして拒否されます。`--preset-pack FILE` にはエントリ選択用の `--preset ID` が必須で、先頭エントリへのフォールバックはありません。selector の規則とコマンド表は [CLI リファレンス](./cli-commands.md#リアルタイムボイスプリセット) を参照してください。
 
 ## プリセット JSON
 
@@ -288,7 +288,7 @@ prepare 済みのチェーンでは値は**固定**です。リチューン経�
 動かしても報告値は変わりません。したがってコントロールを動かすたびに読み直す必要はなく、
 `prepare(...)` の後に一度読んで補正すれば済みます。支配的な項はリチューン段がピッチシフトの
 ために解析する窓の大きさで、グレインが大きいほど 1 ステップで解析する音が増え遅延も増えます
-（[StreamingRetune](./js-api-mastering.md#streamingretune) の `grainSize` フィールドを参照）。
+（[StreamingRetune](./js-api-streaming.md#streamingretune) の `grainSize` フィールドを参照）。
 True Peak（サンプル間ピーク、ISP）リミッターが有効な場合は、その遅延が加わります。
 :::
 
@@ -299,7 +299,7 @@ True Peak（サンプル間ピーク、ISP）リミッターが有効な場合�
 ## 関連ページ
 
 - [編集 DSP](./editing-dsp.md)
-- [ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー)
-- [JavaScript API](./js-api-mastering.md#realtimevoicechanger)
-- [Python API](./python-api.md#リアルタイムボイスチェンジャー)
+- [ブラウザ / WASM](./wasm-streaming.md#リアルタイムボイスチェンジャー)
+- [JavaScript API](./js-api-streaming.md#realtimevoicechanger)
+- [Python API](./python-api-effects.md#リアルタイムボイスチェンジャー)
 - [Node.js ネイティブ API](./node-api.md#ストリーミング-リアルタイムクラス)

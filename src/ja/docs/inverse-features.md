@@ -12,7 +12,7 @@ libsonare の大半は、音声を特徴量へ変換します。たとえばメ�
 これらのヘルパーは、特徴量パイプラインのデバッグ、モデルが「聴いている」ものの可聴プレビュー作成、往復テスト、librosa 風ノートブックのネイティブ／ブラウザ移行に使えます。
 
 ::: tip 解析が初めてなら、ここから始めない
-これらのヘルパーは、すでにメルスペクトログラムや MFCC を生成していることを前提にします。始めたばかりなら、先に [はじめに](./getting-started.md) と [JavaScript API](./js-api-analysis.md#特徴抽出) または [Python API](./python-api.md#特徴抽出) の特徴抽出を読み、計算したものを逆変換したくなったら戻ってきてください。
+これらのヘルパーは、すでにメルスペクトログラムや MFCC を生成していることを前提にします。始めたばかりなら、先に [はじめに](./getting-started.md) と [JavaScript API](./js-api-features.md#特徴抽出) または [Python API](./python-api-analysis.md#特徴抽出) の特徴抽出を読み、計算したものを逆変換したくなったら戻ってきてください。
 :::
 
 ## このページで身につくこと
@@ -265,5 +265,5 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 ## 関連
 
 - [librosa 互換性](./librosa-compatibility.md) — `librosa.feature.inverse.*` との対応
-- [JavaScript API](./js-api-analysis.md#特徴抽出) · [Python API](./python-api.md#特徴抽出) — 順変換側
+- [JavaScript API](./js-api-features.md#特徴抽出) · [Python API](./python-api-analysis.md#特徴抽出) — 順変換側
 - [DSP 実装解説](./dsp-implementation.md) — メルフィルタバンクと STFT の構築方法

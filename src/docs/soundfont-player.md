@@ -291,7 +291,7 @@ This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the
 :::
 
 ::: warning The SFX kit and GM Sound-Effects programs are not yet individually synthesized
-The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback. The one-shot GS rhythm sets — SFX, Rhythm FX, Cymbal & Claps, and Rhythm FX 2 — currently play the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [NativeSynth](./native-synth.md#the-gm-fallback-bank) for the built-in fallback voicing.
+The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback. The one-shot GS rhythm sets — SFX, Rhythm FX, Cymbal & Claps, and Rhythm FX 2 — currently play the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [NativeSynth](./gm-gs.md#the-gm-fallback-bank) for the built-in fallback voicing.
 :::
 
 ### GS insertion effects (EFX)

@@ -191,7 +191,7 @@ const c = project.bounceWithSynthInstrument(
 有効な名前はマジック文字列をハードコードせず [`synthPresetNames()`](./native-synth.md) で取得してください。未知の名前は例外を投げます。パッチオブジェクトは `preset` ベース（`preset` 省略時は既定の減算パッチ）から始まり、共通設定を上書きします。フィールドの一覧は [NativeSynth](./native-synth.md) を参照してください。複数のデスティネーションをバインドするには配列を渡します。空配列は何もバインドしません。
 
 ::: tip 1 つのパッチに固定する代わりに GM プログラムへ追従する
-`bounceWithSynthInstrument` に渡す各エントリは、プリセット名の文字列ではなく `SynthPatch` オブジェクトで渡した場合にかぎり、`destinationId`（既定 `0`）と `useGmPrograms`（既定 `false`）も持てます。`useGmPrograms` を有効にすると、MIDI のプログラムチェンジがデスティネーションごとに対応する General MIDI ボイスを選び、バインドしたパッチはそのマップがカバーしないものへのフォールバックとして残ります。姉妹スペルは C ABI の `use_gm_programs` と Python の `auto_select_gm` です。詳しい説明と例は [パッチを固定せず GM プログラムに追従させる](./native-synth.md#パッチを固定せず-gm-プログラムに追従させる) を参照してください。
+`bounceWithSynthInstrument` に渡す各エントリは、プリセット名の文字列ではなく `SynthPatch` オブジェクトで渡した場合にかぎり、`destinationId`（既定 `0`）と `useGmPrograms`（既定 `false`）も持てます。`useGmPrograms` を有効にすると、MIDI のプログラムチェンジがデスティネーションごとに対応する General MIDI ボイスを選び、バインドしたパッチはそのマップがカバーしないものへのフォールバックとして残ります。姉妹スペルは C ABI の `use_gm_programs` と Python の `auto_select_gm` です。詳しい説明と例は [パッチを固定せず GM プログラムに追従させる](./gm-gs.md#パッチを固定せず-gm-プログラムに追従させる) を参照してください。
 :::
 
 下のピアノロールはまさにこの呼び出しです。1 つの MIDI フレーズを `bounceWithSynthInstrument` に通し、プリセットを切り替えるたびに同じ音符が別の音色で鳴り直します。再生ヘッドはバウンスした音声に追従します。

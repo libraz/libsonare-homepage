@@ -26,7 +26,7 @@
 | 作りたいもの | 最初に読むページ | 次に読むページ |
 |--------------|------------------|----------------|
 | BPM、キー、コード、セクションを表示するブラウザアプリ | [はじめに](./getting-started.md) | [WebAssembly ガイド](./wasm.md)、[JavaScript API](./js-api.md) |
-| 曲構造、自己類似度、ノート区間を解析するツール | [機能マップ](./api-surface.md) | [JavaScript API](./js-api-analysis.md#librosa-互換ヘルパー)、[Python API](./python-api.md#特徴抽出) |
+| 曲構造、自己類似度、ノート区間を解析するツール | [機能マップ](./api-surface.md) | [JavaScript API](./js-api-helpers.md#librosa-互換ヘルパー)、[Python API](./python-api-analysis.md#特徴抽出) |
 | すでに手元にあるビート列から小節と拍子記号を求める | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) | [Node API](./node-api.md)、[Python API](./python-api.md) |
 | 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
 | ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md#cli-コマンドライン) | [CLI リファレンス](./cli.md) |
@@ -40,9 +40,9 @@
 | 解析やマスタリングは使わず、インストゥルメントだけが必要な C++ アプリ | [リンクターゲット](./cpp-api.md#リンクターゲット) | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md) |
 | DAW、アレンジ、MIDI シーケンスツール | [プロジェクト編集](./project-editing.md) | [MIDI 入力](./midi-input.md)、[プロジェクトバウンス](./project-bounce.md) |
 | 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [内蔵シンセサイザー](./native-synth.md)、[MIDI 入力](./midi-input.md) |
-| ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
-| マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm.md#リアルタイムボイスチェンジャー) |
-| ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
+| ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm-streaming.md#ストリーミング解析) |
+| マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm-streaming.md#リアルタイムボイスチェンジャー) |
+| ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api-effects.md#ルーム音響解析) |
 | メル／MFCC 特徴量をプレビューやデバッグ用に逆変換する | [逆変換特徴量](./inverse-features.md) | [librosa 互換性](./librosa-compatibility.md) |
 | librosa からの移行 | [librosa 互換性](./librosa-compatibility.md) | [機能マップ](./api-surface.md) |
 

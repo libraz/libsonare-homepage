@@ -563,7 +563,7 @@ Every numeric `SynthPatch` field defaults to `None`, meaning "keep the base pres
 
 ### Opaque assist sidecars
 
-`Project` can carry per-project, undoable, module-owned opaque byte blobs (assist sidecars), scoped by module ID, target track, and a region. Set one with `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`; read them back with `project.assist_sidecar_count()`, `project.get_assist_sidecar(index) -> AssistSidecar`, and `project.assist_sidecars()`. See [Project Editing](./project-editing.md#assist-sidecars) for the cross-binding details.
+`Project` can carry per-project, undoable, module-owned opaque byte blobs (assist sidecars), scoped by module ID, target track, and a region. Set one with `project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)`; read them back with `project.assist_sidecar_count()`, `project.get_assist_sidecar(index) -> AssistSidecar`, and `project.assist_sidecars()`. See [Project Editing](./project-editing-midi.md#assist-sidecars) for the cross-binding details.
 
 ## Where the sections went
 

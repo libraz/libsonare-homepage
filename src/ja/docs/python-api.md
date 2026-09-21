@@ -573,7 +573,7 @@ with sonare.Project() as project:
 
 ### 不透明なアシストサイドカー
 
-`Project` は、プロジェクトごとでアンドゥ可能、モジュールが所有する不透明なバイト列（アシストサイドカー）を保持できます。スコープはモジュール ID・ターゲットトラック・領域です。`project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)` で設定し、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index) -> AssistSidecar`、`project.assist_sidecars()` で読み出します。バインディング間の詳細は [プロジェクト編集](./project-editing.md#アシストサイドカー) を参照してください。
+`Project` は、プロジェクトごとでアンドゥ可能、モジュールが所有する不透明なバイト列（アシストサイドカー）を保持できます。スコープはモジュール ID・ターゲットトラック・領域です。`project.set_assist_sidecar(module_id, payload, *, schema_version=0, target_track_id=0, region_start_ppq=0.0, region_end_ppq=0.0)` で設定し、`project.assist_sidecar_count()`、`project.get_assist_sidecar(index) -> AssistSidecar`、`project.assist_sidecars()` で読み出します。バインディング間の詳細は [プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照してください。
 
 ## 各節の移動先
 

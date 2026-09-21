@@ -10,7 +10,7 @@ MIR means **Music Information Retrieval**: the part of audio analysis that turns
 These terms are grouped on purpose. They are not isolated functions — almost every MIR task is built on the same **time–frequency foundation**. Understanding that shared foundation once means the individual features stop looking like a long, unrelated list.
 
 ::: tip New here? Read this as orientation, not reference
-This page explains *how the pieces relate*. For call signatures, go to the [JavaScript API](../../js-api-analysis.md#feature-extraction) or [Python API](../../python-api.md#feature-extraction); for *how each one is computed*, see [DSP Implementation Notes](../../dsp-implementation.md).
+This page explains *how the pieces relate*. For call signatures, go to the [JavaScript API](../../js-api-features.md#feature-extraction) or [Python API](../../python-api-analysis.md#feature-extraction); for *how each one is computed*, see [DSP Implementation Notes](../../dsp-implementation.md).
 :::
 
 ## The shared pipeline
@@ -160,4 +160,4 @@ Seeing those demos side by side shows which pieces are reusable across analysis 
 
 ::::
 
-Related: [Introduction](../../introduction.md), [Audio Basics](./audio-basics.md), [JavaScript API](../../js-api-analysis.md#feature-extraction), [Room Acoustics](../../acoustic-analysis.md), [DSP Implementation Notes](../../dsp-implementation.md), [librosa Compatibility](../../librosa-compatibility.md)
+Related: [Introduction](../../introduction.md), [Audio Basics](./audio-basics.md), [JavaScript API](../../js-api-features.md#feature-extraction), [Room Acoustics](../../acoustic-analysis.md), [DSP Implementation Notes](../../dsp-implementation.md), [librosa Compatibility](../../librosa-compatibility.md)

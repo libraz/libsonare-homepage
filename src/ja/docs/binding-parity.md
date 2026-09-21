@@ -60,7 +60,7 @@ libsonare リポジトリは、その差を主張ではなく計測で示しま�
 | サラウンド・マルチチャンネルミキシング | リアルタイムエンジンでは、ストリップの `surroundPan` 位置に従ってレーンを 5.1/7.1 グループバスへパンし、ワイドメーターも取得できます。単体のオフライン `Mixer` はステレオのままで、`sourceChannelLayout` は保存されますが、レーン入力のマルチチャンネル保持にはまだ使われません。[サラウンドとマルチチャンネル](./mixing.md#サラウンドとマルチチャンネル)を参照してください。 | 非対応 |
 | プロジェクト・アレンジ編集（ヘッドレス DAW） | 対応 — [プロジェクト編集](./project-editing.md)を参照 | 対応 |
 | 型付きオートメーションターゲット（トラックフェーダー／パン） | 対応 — [プロジェクト編集](./project-editing.md#オートメーションレーン)を参照 | 非対応 |
-| オーディオソースの所有メタデータ（`contentHash` / `externalStemRole`） | 対応 — [プロジェクト編集](./project-editing.md#モデルを読み戻し、読み込み後に音声を再バインドする)を参照 | 非対応 |
+| オーディオソースの所有メタデータ（`contentHash` / `externalStemRole`） | 対応 — [プロジェクト編集](./project-editing-midi.md#モデルを読み戻し、読み込み後に音声を再バインドする)を参照 | 非対応 |
 | 内蔵シンセサイザー（NativeSynth）のプリセット／パッチ | 対応 — [内蔵シンセサイザー](./native-synth.md)を参照 | 対応 — `project bounce --synth <preset>` で NativeSynth プリセットを固定でき（一覧は `project synth-presets`）、値なしの `--synth` は GM プログラムに追従する |
 | シンセバウンスでの GM プログラム追従 | C ABI（`use_gm_programs`）、Python（`auto_select_gm=`）、WASM／Node のシンセバウンスバインディング（`useGmPrograms`）で、入力された GM バンク／プログラム変更に追従できる。明示したパッチはフォールバックになる | 対応 — 値なしの `--synth` フラグ |
 | 機能カタログとビルド診断 | 対応 — すべてのサーフェスで `capabilityCatalog()` / `capability_catalog()` と `capabilities()`。正規 JSON は C ABI 経由 | 対応 — `doctor` |

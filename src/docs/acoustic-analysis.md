@@ -349,7 +349,7 @@ For reliable numbers, record a clean impulse response:
 
 A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
 
-If you need live visual frames or BPM/key/chord estimates that update as audio arrives, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api-analysis.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).
+If you need live visual frames or BPM/key/chord estimates that update as audio arrives, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api-analysis.md#analysis-functions) or [Python API](./python-api-analysis.md#analysis-functions).
 
 ## Related
 

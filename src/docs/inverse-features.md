@@ -12,7 +12,7 @@ The **inverse** helpers go the other way. They take those features and reconstru
 These helpers are useful when you need to debug a feature pipeline, build an audible preview of what a model "hears", test round trips, or port librosa-style notebooks to native or browser code.
 
 ::: tip New to analysis? This is not the first page
-These helpers assume you already produce mel spectrograms or MFCCs. If you are just getting started, read [Getting Started](./getting-started.md) and the feature-extraction sections of the [JavaScript API](./js-api-analysis.md#feature-extraction) or [Python API](./python-api.md#feature-extraction) first, then come back when you need to invert what you computed.
+These helpers assume you already produce mel spectrograms or MFCCs. If you are just getting started, read [Getting Started](./getting-started.md) and the feature-extraction sections of the [JavaScript API](./js-api-features.md#feature-extraction) or [Python API](./python-api-analysis.md#feature-extraction) first, then come back when you need to invert what you computed.
 :::
 
 ## What You Will Learn
@@ -257,5 +257,5 @@ Inverse helpers are only meaningful with the **same** `sampleRate`, `nFft`, `hop
 ## Related
 
 - [librosa Compatibility](./librosa-compatibility.md) — how these map to `librosa.feature.inverse.*`
-- [JavaScript API](./js-api-analysis.md#feature-extraction) · [Python API](./python-api.md#feature-extraction) — the forward transforms
+- [JavaScript API](./js-api-features.md#feature-extraction) · [Python API](./python-api-analysis.md#feature-extraction) — the forward transforms
 - [DSP Implementation Notes](./dsp-implementation.md) — how the mel filterbank and STFT are built

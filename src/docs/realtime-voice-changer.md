@@ -202,7 +202,7 @@ The construct/process flow is shared, but each runtime releases its native handl
 - **Python** — the `with` block releases the handle; outside a `with`, call `close()`.
 :::
 
-For AudioWorklet-style loops, use the heap-backed realtime buffers documented in [Browser / WASM](./wasm.md#realtime-voice-changer). They avoid allocating a new output array on every render quantum, which the browser example's plain `processMono(...)` does.
+For AudioWorklet-style loops, use the heap-backed realtime buffers documented in [Browser / WASM](./wasm-streaming.md#realtime-voice-changer). They avoid allocating a new output array on every render quantum, which the browser example's plain `processMono(...)` does.
 
 ## CLI Modes
 
@@ -216,7 +216,7 @@ The `sonare voice-change` command has two modes:
 If you pass realtime preset options, the command uses the preset chain; combining
 them with the simple pitch/formant options is rejected as an invalid-parameter
 error. `--preset-pack FILE` must be paired with `--preset ID` to select an entry;
-there is no first-entry fallback. See [CLI Reference](./cli.md#realtime-voice-presets)
+there is no first-entry fallback. See [CLI Reference](./cli-commands.md#realtime-voice-presets)
 for the full selector rules and command table.
 
 ## Preset JSON
@@ -292,7 +292,7 @@ Large pitch, formant, or ambience moves can be useful for sound design, but they
 ::: info What "latency" means here
 **Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds.
 
-It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api-mastering.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active.
+It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api-streaming.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active.
 :::
 
 Every live control is smoothed per sample, so adopting a new config snapshot with
@@ -303,7 +303,7 @@ nasal still act at amount zero.
 ## Related Pages
 
 - [Editing DSP](./editing-dsp.md)
-- [Browser / WASM](./wasm.md#realtime-voice-changer)
-- [JavaScript API](./js-api-mastering.md#realtimevoicechanger)
-- [Python API](./python-api.md#realtime-voice-changer)
+- [Browser / WASM](./wasm-streaming.md#realtime-voice-changer)
+- [JavaScript API](./js-api-streaming.md#realtimevoicechanger)
+- [Python API](./python-api-effects.md#realtime-voice-changer)
 - [Node.js Native API](./node-api.md#streaming-and-realtime-classes)
