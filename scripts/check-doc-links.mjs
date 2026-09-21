@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { slugifyHeading } from './slugify-heading.mjs';
 
 export const PAGE_LINE_LIMIT = 600;
 
@@ -373,35 +374,7 @@ export function extractHeadingAnchors(content) {
   return anchors;
 }
 
-// Mirrors the slugifier VitePress actually uses (@mdit-vue/shared). The NFKD
-// normalization is what makes fullwidth CJK punctuation behave like its ASCII
-// counterpart, so a Japanese heading such as `CLI（コマンドライン）` anchors as
-// `cli-コマンドライン`. Diverging from it here would let dead anchors pass.
-// The upstream slugifier also strips C0 control characters; heading text read
-// line by line can never carry them, so that pass is omitted here.
-const RE_SPECIAL = /[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”<>,.?/]+/g;
-const RE_COMBINING = /[\u0300-\u036f]/g;
-
-export function slugifyHeading(value) {
-  return (
-    value
-      .replace(/<[^>]*>/g, '')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-      .trim()
-      .normalize('NFKD')
-      .replace(RE_COMBINING, '')
-      .replace(RE_SPECIAL, '-')
-      .replace(/-{2,}/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/^(\d)/, '_$1')
-      .toLowerCase()
-      // Recompose: the NFKD pass above splits dakuten off its kana, so a link
-      // written the normal way would never match a Japanese heading otherwise.
-      .normalize('NFC')
-  );
-}
+export { slugifyHeading };
 
 export function listMarkdownFiles(dir) {
   if (!fs.existsSync(dir)) return [];

@@ -123,6 +123,16 @@ describe('check-doc-links script helpers', () => {
     ).toEqual([{ href: './guide.md' }, { href: './target' }, { href: 'https://example.test' }]);
   });
 
+  it('leaves a Japanese anchor composed so a hand-written link can match it', () => {
+    // NFKD splits dakuten off its kana and the combining-mark strip only covers
+    // the Latin range, so without the recomposition the slug would carry
+    // U+3099 and no link an author types would ever resolve in the browser.
+    const slug = slugifyHeading('経路上の空気吸収');
+    expect(slug).toBe('経路上の空気吸収');
+    expect(slug.normalize('NFC')).toBe(slug);
+    expect([...slug].some((c) => c === '゙' || c === '゚')).toBe(false);
+  });
+
   it('matches VitePress-style heading anchors including duplicates and inline code', () => {
     expect(slugifyHeading('Using `Audio` <span>API</span>!')).toBe('using-audio-api');
     expect([
