@@ -232,6 +232,7 @@ const glossarySidebar = [
           { text: 'Onset Detection', link: '/docs/glossary/analysis/onset-detection' },
           { text: 'Tempo and BPM', link: '/docs/glossary/analysis/tempo-bpm' },
           { text: 'Beats and Downbeats', link: '/docs/glossary/analysis/beats-downbeats' },
+          { text: 'Meter and Grouping', link: '/docs/glossary/analysis/meter-and-grouping' },
           { text: 'Chroma Features', link: '/docs/glossary/analysis/chroma-features' },
           { text: 'Key Detection', link: '/docs/glossary/analysis/key-detection' },
           { text: 'Chord Recognition', link: '/docs/glossary/analysis/chord-recognition' },
@@ -394,6 +395,7 @@ const jaGlossarySidebar = [
           { text: 'オンセット検出', link: '/ja/docs/glossary/analysis/onset-detection' },
           { text: 'テンポと BPM', link: '/ja/docs/glossary/analysis/tempo-bpm' },
           { text: 'ビートとダウンビート', link: '/ja/docs/glossary/analysis/beats-downbeats' },
+          { text: '拍子とグルーピング', link: '/ja/docs/glossary/analysis/meter-and-grouping' },
           { text: 'クロマ特徴量', link: '/ja/docs/glossary/analysis/chroma-features' },
           { text: 'キー検出', link: '/ja/docs/glossary/analysis/key-detection' },
           { text: 'コード認識', link: '/ja/docs/glossary/analysis/chord-recognition' },
@@ -558,6 +560,18 @@ const enDocsSidebar = [
     ],
   },
   {
+    text: 'Use Cases',
+    items: [
+      { text: 'Overview', link: '/docs/use-cases' },
+      { text: 'Mix and Master in the CLI', link: '/docs/use-cases/cli-mix-and-master' },
+      { text: 'Match a Reference Track', link: '/docs/use-cases/reference-master' },
+      { text: 'Gate a Delivery in CI', link: '/docs/use-cases/delivery-check' },
+      { text: 'Clean Up Recordings', link: '/docs/use-cases/recording-cleanup' },
+      { text: 'Produce a Spoken-Word Show', link: '/docs/use-cases/spoken-word-show' },
+      { text: 'Build Practice Tracks', link: '/docs/use-cases/practice-tracks' },
+    ],
+  },
+  {
     text: 'Build By Task',
     items: [
       { text: 'Editing DSP', link: '/docs/editing-dsp' },
@@ -566,6 +580,7 @@ const enDocsSidebar = [
       { text: 'Mixing Scene JSON', link: '/docs/mixing-scene-json' },
       { text: 'Mixing Demo Project JSON', link: '/docs/mixing-demo-project-json' },
       { text: 'Effects Inserts', link: '/docs/effects-inserts' },
+      { text: 'Mixing Assistant', link: '/docs/mixing-assistant' },
       { text: 'Mastering Assistant', link: '/docs/mastering-assistant' },
       { text: 'Mastering Processors', link: '/docs/mastering-processors' },
       { text: 'Realtime and Streaming', link: '/docs/realtime-streaming' },
@@ -590,7 +605,18 @@ const enDocsSidebar = [
     text: 'API By Runtime',
     items: [
       { text: 'Browser / WASM', link: '/docs/wasm' },
-      { text: 'JavaScript API', link: '/docs/js-api' },
+      {
+        text: 'JavaScript API',
+        link: '/docs/js-api',
+        collapsed: true,
+        items: [
+          { text: 'Analysis', link: '/docs/js-api-analysis' },
+          { text: 'Effects', link: '/docs/js-api-effects' },
+          { text: 'Mastering', link: '/docs/js-api-mastering' },
+          { text: 'Audio & Streaming', link: '/docs/js-api-audio' },
+          { text: 'Types & Errors', link: '/docs/js-api-types' },
+        ],
+      },
       { text: 'Python API', link: '/docs/python-api' },
       { text: 'CLI Reference', link: '/docs/cli' },
       { text: 'Node.js Native', link: '/docs/native-bindings' },
@@ -609,6 +635,7 @@ const enDocsSidebar = [
       { text: 'Architecture', link: '/docs/architecture' },
       { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
       { text: 'Benchmarks', link: '/docs/benchmarks' },
+      { text: 'FAQ', link: '/docs/faq' },
       ...glossarySidebar,
     ],
   },
@@ -939,6 +966,24 @@ export default defineConfig({
               ],
             },
             {
+              text: '実践ユースケース',
+              items: [
+                { text: '概要', link: '/ja/docs/use-cases' },
+                {
+                  text: 'CLI でミックスからマスタリング',
+                  link: '/ja/docs/use-cases/cli-mix-and-master',
+                },
+                { text: 'リファレンス曲に寄せる', link: '/ja/docs/use-cases/reference-master' },
+                { text: '納品前チェックを CI で回す', link: '/ja/docs/use-cases/delivery-check' },
+                {
+                  text: '録音素材をまとめて整音する',
+                  link: '/ja/docs/use-cases/recording-cleanup',
+                },
+                { text: 'トーク番組を仕上げる', link: '/ja/docs/use-cases/spoken-word-show' },
+                { text: '練習用トラックを作る', link: '/ja/docs/use-cases/practice-tracks' },
+              ],
+            },
+            {
               text: '作りたいもの別',
               items: [
                 { text: '編集 DSP', link: '/ja/docs/editing-dsp' },
@@ -950,6 +995,7 @@ export default defineConfig({
                   link: '/ja/docs/mixing-demo-project-json',
                 },
                 { text: 'エフェクトインサート', link: '/ja/docs/effects-inserts' },
+                { text: 'ミキシングアシスタント', link: '/ja/docs/mixing-assistant' },
                 { text: 'マスタリングアシスタント', link: '/ja/docs/mastering-assistant' },
                 { text: 'マスタリングプロセッサ', link: '/ja/docs/mastering-processors' },
                 { text: 'リアルタイムとストリーミング', link: '/ja/docs/realtime-streaming' },
@@ -977,7 +1023,21 @@ export default defineConfig({
               text: '利用環境別 API',
               items: [
                 { text: 'ブラウザ / WASM', link: '/ja/docs/wasm' },
-                { text: 'JavaScript API', link: '/ja/docs/js-api' },
+                {
+                  text: 'JavaScript API',
+                  link: '/ja/docs/js-api',
+                  collapsed: true,
+                  items: [
+                    { text: '解析', link: '/ja/docs/js-api-analysis' },
+                    { text: 'エフェクト', link: '/ja/docs/js-api-effects' },
+                    { text: 'マスタリング', link: '/ja/docs/js-api-mastering' },
+                    {
+                      text: 'オーディオとストリーミング',
+                      link: '/ja/docs/js-api-audio',
+                    },
+                    { text: '型とエラー', link: '/ja/docs/js-api-types' },
+                  ],
+                },
                 { text: 'Python API', link: '/ja/docs/python-api' },
                 { text: 'CLIリファレンス', link: '/ja/docs/cli' },
                 { text: 'Node.js ネイティブ', link: '/ja/docs/native-bindings' },
@@ -996,6 +1056,7 @@ export default defineConfig({
                 { text: 'アーキテクチャ', link: '/ja/docs/architecture' },
                 { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
                 { text: 'ベンチマーク', link: '/ja/docs/benchmarks' },
+                { text: 'FAQ', link: '/ja/docs/faq' },
                 ...jaGlossarySidebar,
               ],
             },

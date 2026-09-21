@@ -177,6 +177,11 @@
           "title": { "en": "Beats and Downbeats", "ja": "ビートとダウンビート" }
         },
         {
+          "id": "meter-and-grouping",
+          "status": "published",
+          "title": { "en": "Meter and Grouping", "ja": "拍子とグルーピング" }
+        },
+        {
           "id": "chroma-features",
           "status": "published",
           "title": { "en": "Chroma Features", "ja": "クロマ特徴量" }

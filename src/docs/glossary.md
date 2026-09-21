@@ -33,6 +33,7 @@ These pages expand the MIR (Music Information Retrieval) terms used by the analy
 | [Onset Detection](./glossary/analysis/onset-detection.md) | Onsets, transients, onset-strength envelopes, and why tempo starts there. |
 | [Tempo and BPM](./glossary/analysis/tempo-bpm.md) | BPM estimation, tempograms, autocorrelation, confidence, and half/double-tempo ambiguity. |
 | [Beats and Downbeats](./glossary/analysis/beats-downbeats.md) | Beat tracking, dynamic programming, meter phase, and downbeat estimation. |
+| [Meter and Grouping](./glossary/analysis/meter-and-grouping.md) | Time signatures, beat units, accent grouping, and scoring a meter over a beat series. |
 | [Chroma Features](./glossary/analysis/chroma-features.md) | Pitch classes, chromagrams, and why chroma powers key/chord analysis. |
 | [Key Detection](./glossary/analysis/key-detection.md) | Chroma-profile key estimation, candidate keys, profile families, and confidence. |
 | [Chord Recognition](./glossary/analysis/chord-recognition.md) | Chord templates, beat-synchronous chroma, smoothing, HMM options, and segment confidence. |

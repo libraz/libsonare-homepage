@@ -27,6 +27,21 @@ export const cliCommands = [
   'mastering-stereo-analyze',
 ];
 
+// The JavaScript/WASM reference is one page family: a hub page carrying setup
+// and a map, plus one sibling per subject. Anything that used to be required
+// "somewhere in the JS API reference" is required somewhere in this list.
+export const jsReferenceDocNames = [
+  'js-api.md',
+  'js-api-analysis.md',
+  'js-api-effects.md',
+  'js-api-mastering.md',
+  'js-api-audio.md',
+  'js-api-types.md',
+];
+
+// The sibling that owns the Mastering API section.
+export const jsMasteringDocName = 'js-api-mastering.md';
+
 export const glossaryLinks = [
   'glossary/mastering.md',
   'glossary/mastering/tone-air.md',
@@ -55,21 +70,70 @@ export function checkMasteringDocs({ root = process.cwd(), defaultLocale = 'en' 
 }
 
 function checkWasmExports({ root, failures, jsApis }) {
-  // Function declarations and the public export list live in index.d.ts.
   // The worklet entry is now a narrower AudioWorklet bridge and does not carry
-  // the full high-level mastering API surface.
+  // the full high-level mastering API surface, so this only checks index.d.ts.
+  // Old bundles declared each function locally (`declare function foo(`); new
+  // bundles re-export it as a value from a per-module chunk
+  // (`export { foo } from './effects_mastering';`). Either counts as "exported".
   const indexDts = read(root, 'src/wasm/index.d.ts');
-  const exportLine = (indexDts.match(/^export \{.*\}(?: from '[^']+')?;$/gm) ?? []).join('\n');
+  const exportedNames = extractValueExportNames(indexDts);
+  const declaredNames = new Set(
+    [...indexDts.matchAll(/(?:^|\n)\s*(?:export\s+)?declare function ([A-Za-z0-9_]+)\(/g)].map(
+      (match) => match[1],
+    ),
+  );
   for (const api of jsApis) {
-    requireText(failures, 'src/wasm/index.d.ts', indexDts, `declare function ${api}(`);
-    requireText(failures, 'src/wasm/index.d.ts export list', exportLine, api);
+    if (!exportedNames.has(api) && !declaredNames.has(api)) {
+      failures.push(`src/wasm/index.d.ts: missing exported API ${api}`);
+    }
   }
+}
+
+// Splits every `export { ... }` / `export type { ... }` block in a generated
+// .d.ts bundle into its comma-separated entries. Multi-line-safe (an entry
+// list may wrap across lines) and tolerant of an optional trailing `from
+// '...'` clause, so it covers both the old flat-declaration bundle shape and
+// the new re-export-barrel shape.
+function parseExportBlocks(dts) {
+  return [...dts.matchAll(/export\s+(type\s+)?\{([\s\S]*?)\}(?:\s*from\s*'[^']+')?;/g)].map(
+    ([, typeOnlyBlock, body]) => ({
+      typeOnlyBlock: Boolean(typeOnlyBlock),
+      entries: body
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    }),
+  );
+}
+
+// The set of runtime (value) export names visible on the imported module.
+// Entries from an `export type { ... }` block are excluded entirely; an
+// inline `type X` / `type X as Y` entry is excluded from an otherwise mixed
+// value block. An aliased entry (`X as Y`) resolves to the exported name `Y`.
+function extractValueExportNames(dts) {
+  const names = new Set();
+  for (const { typeOnlyBlock, entries } of parseExportBlocks(dts)) {
+    if (typeOnlyBlock) continue;
+    for (const entry of entries) {
+      if (entry.startsWith('type ')) continue;
+      const aliasMatch = entry.match(/^(\S+)\s+as\s+(\S+)$/);
+      names.add(aliasMatch ? aliasMatch[2] : entry);
+    }
+  }
+  return names;
 }
 
 export function extractMasteringJsApis({ root, failures = [] }) {
   const dts = read(root, 'src/wasm/index.d.ts');
-  const apis = [...dts.matchAll(/^declare function ((?:mastering|masterAudio)[A-Za-z0-9]*)\(/gm)]
-    .map((match) => match[1])
+  const apiPattern = /^(?:mastering|masterAudio)[A-Za-z0-9]*$/;
+  const barrelNames = [...extractValueExportNames(dts)];
+  const declaredNames = [
+    ...dts.matchAll(
+      /(?:^|\n)\s*(?:export\s+)?declare function ((?:mastering|masterAudio)[A-Za-z0-9]*)\(/g,
+    ),
+  ].map((match) => match[1]);
+  const apis = [...new Set([...barrelNames, ...declaredNames])]
+    .filter((name) => apiPattern.test(name))
     .sort();
   if (apis.length === 0) failures.push('src/wasm/index.d.ts: no mastering JS APIs found');
   return apis;
@@ -79,11 +143,22 @@ function checkDocs({ root, failures, jsApis, locales, defaultLocale }) {
   for (const locale of locales) {
     const prefix = docsPrefix(locale, defaultLocale);
 
-    const jsDoc = read(root, `${prefix}/js-api.md`);
-    for (const api of jsApis) requireText(failures, `${prefix}/js-api.md`, jsDoc, api);
-    requireText(failures, `${prefix}/js-api.md`, jsDoc, 'progress * 100');
-    requireText(failures, `${prefix}/js-api.md`, jsDoc, 'stage');
-    checkRelatedGuideLine(failures, `${prefix}/js-api.md`, jsDoc, locale, defaultLocale);
+    // Mastering API names and the related-guide line are required on the page
+    // that owns the Mastering API section, not merely somewhere in the family.
+    const jsMasteringLabel = `${prefix}/${jsMasteringDocName}`;
+    const jsMasteringDoc = read(root, jsMasteringLabel);
+    for (const api of jsApis) requireText(failures, jsMasteringLabel, jsMasteringDoc, api);
+    checkRelatedGuideLine(failures, jsMasteringLabel, jsMasteringDoc, locale, defaultLocale);
+
+    // The progress-callback example lives on whichever sibling documents the
+    // call it demonstrates, so it is required across the reference family —
+    // the same text the reference carried while it was a single page.
+    const jsReferenceLabel = `${prefix}/{${jsReferenceDocNames.join(',')}}`;
+    const jsReference = jsReferenceDocNames
+      .map((file) => read(root, `${prefix}/${file}`))
+      .join('\n');
+    requireText(failures, jsReferenceLabel, jsReference, 'progress * 100');
+    requireText(failures, jsReferenceLabel, jsReference, 'stage');
 
     const nativeDoc = read(root, `${prefix}/native-bindings.md`);
     for (const api of jsApis) requireText(failures, `${prefix}/native-bindings.md`, nativeDoc, api);
@@ -124,7 +199,13 @@ function checkDocs({ root, failures, jsApis, locales, defaultLocale }) {
     requireText(failures, `${prefix}/benchmarks.md`, benchmarks, 'mastering_isp_4x_stereo_1ms');
   }
 
-  const runtimeDocNames = ['js-api.md', 'python-api.md', 'cli.md', 'native-bindings.md', 'wasm.md'];
+  const runtimeDocNames = [
+    ...jsReferenceDocNames,
+    'python-api.md',
+    'cli.md',
+    'native-bindings.md',
+    'wasm.md',
+  ];
   const allDocs = locales.flatMap((locale) =>
     runtimeDocNames.map((file) => {
       const docsFile = `${docsPrefix(locale, defaultLocale)}/${file}`;
@@ -207,7 +288,7 @@ function checkRouteFiles({ root, failures, locales, defaultLocale }) {
 }
 
 function checkHelpPanelUsesDocsAsSource({ root, failures }) {
-  const demoFile = 'src/components/MasteringDemo.vue';
+  const demoFile = 'src/demos/mastering/MasteringDemo.vue';
   const demoContent = read(root, demoFile);
   requireText(failures, demoFile, demoContent, "localizedPath('/docs/glossary/mastering')");
 

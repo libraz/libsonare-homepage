@@ -9,6 +9,7 @@ import {
   cliCommands,
   extractMasteringJsApis,
   glossaryLinks,
+  jsReferenceDocNames,
   listFiles,
   pythonApis,
   requireMinimumGuideLinks,
@@ -93,7 +94,9 @@ function writeValidProject(root: string) {
   for (const locale of ['en', 'ja'] as const) {
     const prefix = locale === 'ja' ? 'src/ja/docs' : 'src/docs';
     for (const file of [
-      'js-api.md',
+      // Driven by the script's own list, so splitting the reference again cannot
+      // leave the fixture describing a page family that no longer exists.
+      ...jsReferenceDocNames,
       'native-bindings.md',
       'python-api.md',
       'cli.md',
@@ -119,7 +122,7 @@ function writeValidProject(root: string) {
   );
   writeFile(
     root,
-    'src/components/MasteringDemo.vue',
+    'src/demos/mastering/MasteringDemo.vue',
     [
       "<script setup>const docsPath = computed(() => localizedPath('/docs/glossary/mastering'));</script>",
     ].join('\n'),
@@ -167,7 +170,7 @@ describe('check-mastering-docs script helpers', () => {
     writeFile(root, 'src/locales/fr.json', '{}');
 
     for (const file of [
-      'js-api.md',
+      ...jsReferenceDocNames,
       'native-bindings.md',
       'python-api.md',
       'cli.md',
@@ -198,7 +201,12 @@ describe('check-mastering-docs script helpers', () => {
   it('reports missing API docs, route files, stale old routes and long-form help drift', () => {
     const root = createWorkspace();
     writeValidProject(root);
-    writeFile(root, 'src/docs/js-api.md', docsBody('en').replace('masterAudioBuffer', ''));
+    // The mastering API names are required on the page that owns that section.
+    writeFile(
+      root,
+      'src/docs/js-api-mastering.md',
+      docsBody('en').replace('masterAudioBuffer', ''),
+    );
     writeFile(root, 'src/somewhere.ts', 'export const old = "/master"');
     writeFile(root, 'src/master.md', '# Old route');
     rmSync(path.join(root, 'src/ja/mastering.md'), { force: true });
@@ -213,7 +221,7 @@ describe('check-mastering-docs script helpers', () => {
 
     expect(checkMasteringDocs({ root })).toEqual(
       expect.arrayContaining([
-        'src/docs/js-api.md: missing masterAudioBuffer',
+        'src/docs/js-api-mastering.md: missing masterAudioBuffer',
         'src/data/masteringHelp.ts: missing VitePress docs page is the source of truth',
         'src/data/masteringHelp.ts: in-app help appears to contain long-form docs prose: Mastering works on the finished stereo mix',
         'src/data/masteringHelp.ts: sectionText.en does not point to docs',

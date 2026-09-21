@@ -33,6 +33,7 @@ API、CLI、WASM、ブラウザデモで共通して出てくる信号処理と�
 | [オンセット検出](./glossary/analysis/onset-detection.md) | オンセット、トランジェント、オンセット強度の包絡線、テンポ推定との関係。 |
 | [テンポと BPM](./glossary/analysis/tempo-bpm.md) | BPM 推定、テンポグラム、自己相関、信頼度、半分／2 倍テンポの曖昧さ。 |
 | [ビートとダウンビート](./glossary/analysis/beats-downbeats.md) | ビート追跡、動的計画法、拍子位相、ダウンビート推定。 |
+| [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) | 拍子記号、拍の単位、アクセントのグルーピング、ビート列に対する拍子の採点。 |
 | [クロマ特徴量](./glossary/analysis/chroma-features.md) | ピッチクラス、クロマグラム、キー／コード解析でクロマが使われる理由。 |
 | [キー検出](./glossary/analysis/key-detection.md) | クロマプロファイルによるキー推定、候補キー、プロファイルファミリー、信頼度。 |
 | [コード認識](./glossary/analysis/chord-recognition.md) | コードテンプレート、ビート同期クロマ、スムージング、HMM オプション、区間信頼度。 |
