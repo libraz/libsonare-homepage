@@ -39,6 +39,12 @@ Lookahead lets the limiter see fast peaks before they reach the output. A few mi
 
 The Loudness Target is the integrated [LUFS](../lufs.md) (Loudness Units relative to Full Scale) goal for the rendered file — a *gated* average across the whole track, so silence and the quietest passages are excluded before the mean is taken. The demo uses common platform-style targets such as `-14 LUFS` and `-16 LUFS`, plus a custom target.
 
+The loudness stage is not a gain trim that stops when the peaks touch the ceiling. It measures its input, computes the static gain `target − current`, applies it, and then runs the true-peak limiter at the ceiling. On peak-normalized material — the ordinary case for a finished mix — the headroom below the ceiling is close to 0 dB, so a stage that only trimmed within that headroom could never move the loudness at all, however far away the target was. The limiter is what makes the target reachable: the static gain is allowed to push the signal over the ceiling, and the limiter brings it back under.
+
+`maxLimiterGainReductionDb` bounds that push. It is a depth in dB, `12` by default, and must be finite and non-negative. The static gain may exceed the peak headroom toward the ceiling by at most this much, so the stage never asks the limiter for more than roughly 12 dB of reduction on the way to the target. It only ever bounds gain up to `target − current`, so it cannot make a master louder than the target asks for; what it decides is how peaky an input the stage will still try to normalize. `0` restores a strict headroom clamp, under which peak-normalized input keeps its input loudness whatever target is set.
+
+When the bound is reached, the caller does not get the target. The static gain stops at `headroom + maxLimiterGainReductionDb`, the ceiling still holds — it holds at every setting — and the rendered file lands below the requested LUFS. The result says so rather than implying it: `loudnessTargetLimited` is true, `outputLufs` is the loudness actually achieved, and `appliedGainDb` is the static gain alone, without the limiter's reduction. Even inside the bound the stage does not iterate: one pass computes the gain, the limiter takes some of it back, and that shortfall is reported the same way. The full parameter table for the stage is in [Mastering Processors](../../mastering-processors.md).
+
 ## Output Render
 
 The browser demo renders locally and exports stereo 16-bit PCM WAV plus a JSON report. Audio is not uploaded.
@@ -51,13 +57,13 @@ Energy compensation, when enabled, multiplies both mid and side by `sqrt(2 / (1 
 
 The true-peak limiter uses lookahead, linked peak detection, and an oversampled true-peak path.
 
-The loudness optimizer measures the rendered signal, computes the gain needed to reach the LUFS target, and caps that gain against the true-peak ceiling.
+The loudness stage measures its input, computes the gain needed to reach the LUFS target, and caps that gain at the ceiling headroom plus `maxLimiterGainReductionDb`. The true-peak limiter it then runs is built from one shared configuration that the standalone `maximizer.loudnessOptimize` processor and the in-chain `loudness` stage both use, so every loudness path limits alike. The limiter's own reduction is reported as the `loudness.optimize` stage gain reduction, separately from `appliedGainDb`.
 
 The demo defaults to 4x true-peak handling and reports the executed stage names in the JSON export, so the final chain is auditable.
 
 When the ceiling and the LUFS target conflict, the design favors peak safety. A state like "the LUFS target was missed but the true-peak limit was reached" is possible.
 
-That state is identifiable from the report's applied gain and output LUFS values.
+That state is identifiable from the report's applied gain and output LUFS values, and the chain result flags it directly as `loudnessTargetLimited`.
 
 ::::
 

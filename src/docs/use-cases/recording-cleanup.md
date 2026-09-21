@@ -15,7 +15,7 @@ By the end of this page you should be able to:
 
 - measure exactly what is wrong with a take before touching it, and read the reason behind every repair stage the assistant chooses — or declines to run;
 - script `repair`, `trim-silence`, and `declip` into a per-file batch that writes both a clean take and a JSON record of what was found and what was done;
-- tell apart three ways of driving `repair` — measure-and-choose, a named preset, a field override — and know which situation each one is for;
+- tell apart three ways of driving `repair` — measure-and-choose, a named preset, a field override — and know which situation each one is for, including which of the five restoration presets to reach for first;
 - treat a repair as the lossy trade it is, and recognize when chasing a measurement to zero costs more than it is worth.
 
 ## The whole job
@@ -169,6 +169,10 @@ Every stage names the exact evidence that triggered it, in the same vocabulary t
 `--detect` runs no repair stage, so there is nothing to explain; passing both is rejected as an invalid parameter. Drop `--detect` to see the reasoning, or drop `--explain` to just get the numbers.
 :::
 
+`denoise` did not run on this take, so nothing above shows what it does. The demo below does: a clean sustained chord is given a layer of broadband hiss, and the repair stage removes it. Flip Compare to hear each side — the gain is untouched, so the hiss is the only thing that moves — and switch the algorithm to see how much of the raised high-frequency floor each one pulls down.
+
+<SonareDemo id="repair-denoise" />
+
 ## Step 3 — Trim the dead air
 
 ```bash
@@ -257,7 +261,19 @@ There is no separate "did it work" command. The same `--detect` that decided wha
 
 Two escapes exist for when you do not want the assistant deciding.
 
-**A named preset** skips measurement and takes the repair stages straight from a mastering preset's own configuration — `sonare mastering-presets --json` lists all thirty names, including several tuned for damaged, non-musical sources: `voiceMemo`, `fieldRecording`, `broadcast`, `podcast`. `--preset` and `--explain` do not combine either, for the same reason as `--detect`: a preset's stages are named directly, not chosen by measurement, so there is nothing for `--explain` to report.
+**A named preset** skips measurement and takes the repair stages straight from a mastering preset's own configuration. `sonare mastering-presets --json` lists all thirty names; five of them are restoration presets, carrying repair stages and nothing else, and each is a routing decision made from what you already know about the source rather than from what the file measures:
+
+| You are holding | Reach for first | Stages it runs, in chain order |
+|---|---|---|
+| An LP transfer — clicks and pops from groove wear, surface crackle, a noise floor under everything | `vinyl` | declick, decrackle, denoise |
+| A 78 rpm shellac transfer — wider pops and a denser, higher surface noise than an LP | `shellac78` | the same three as `vinyl`, each pushed harder: longer click runs, a lower crackle threshold, deeper noise reduction |
+| A cassette or reel transfer — steady broadband hiss and nothing else | `tapeHiss` | denoise |
+| A location or outdoor capture — hiss, mains hum that drifts off exactly 50 or 60 Hz, the space around it | `fieldRecording` | dehum (adaptive tracking), denoise, dereverb |
+| A phone or laptop voice memo — clipped against its own AGC, a high mic floor, whatever room the speaker was in | `voiceMemo` | declip, denoise, dereverb |
+
+When none of the five fits — a take with hum and clicks but no hiss, say — do not pick the nearest one: drop `--preset` and let the measure-and-choose path above decide from the evidence, then lean on a field override (below) if a single stage needs more. The parameters each preset sets, with their defaults, are cataloged on [Mastering Processors](../mastering-processors.md#presets); the reasoning for choosing one preset over another is on [Choosing a Mastering Preset](../glossary/mastering/preset-selection.md).
+
+`--preset` and `--explain` do not combine either, for the same reason as `--detect`: a preset's stages are named directly, not chosen by measurement, so there is nothing for `--explain` to report.
 
 ```bash
 sonare repair take-raw.wav --preset voiceMemo -o take-voicememo.wav --json
@@ -268,6 +284,10 @@ sonare repair take-raw.wav --preset voiceMemo -o take-voicememo.wav --json
 ```
 
 `voiceMemo` runs declip, denoise, and dereverb on this take — never dehum, because that is simply not a stage the preset carries, regardless of what the file measures. Re-detecting the result confirms it: `hum_fundamental_prominence` comes back at 20.5, essentially unchanged from the original 18.6. A preset is the right tool when you already know the source (a phone voice memo, a field recording) and want the same fixed treatment every time; it is the wrong tool when you want the file's own evidence to decide, which is what `--explain` on the measure-and-choose path is for.
+
+What a record-style restoration removes — and what it leaves for other stages — is audible below. The clip is a piano turnaround carrying the damage the restoration presets are routed at: mains hum, surface noise and hiss, sparse clicks and crackle. The stage applied here is the classical dereverberator alone, so what drops out is the noise bed and the smeared tails; the clicks and the hum stay, because they belong to declick and dehum.
+
+<SonareDemo id="mastering-restoration" />
 
 **A field override** changes one parameter of whichever path you took, via `--params repair.<stage>.<field>=value,...`. Pushing the assistant's own dehum stage harder illustrates the trade-off from Step 5 directly:
 

@@ -41,9 +41,25 @@ The dynamics family includes `dynamics.duckingProcessor` (sidechain ducking), `m
 
 Presets are named chain configurations, not separate algorithms. Apply one with `masterAudio(samples, sr, preset, overrides?)`.
 
-`pop`, `edm`, `acoustic`, `hipHop`, `aiMusic`, `speech`, `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `jpop`, `ambient`, `lofi`, `classical`, `drumAndBass`, `techno`, `metal`, `trap`, `rnb`, `jazz`, `kpop`, `trance`, `gameOst`
+`pop`, `edm`, `acoustic`, `hipHop`, `aiMusic`, `speech`, `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `jpop`, `ambient`, `lofi`, `classical`, `drumAndBass`, `techno`, `metal`, `trap`, `rnb`, `jazz`, `kpop`, `trance`, `gameOst`, `vinyl`, `tapeHiss`, `fieldRecording`, `voiceMemo`, `shellac78`
 
 See [Choosing a Mastering Preset](./glossary/mastering/preset-selection.md) for how to pick one without treating a preset as a finished master.
+
+### Restoration presets
+
+The last five names are restoration presets. They enable repair stages only and leave level alone: no loudness target, no ceiling, no tone or dynamics stage. Each one turns on the subset of the [repair chain](#the-repair-stages) its source material needs, and every stage it does not mention stays off.
+
+| Preset | For | Stages it enables |
+|--------|-----|-------------------|
+| `vinyl` | An LP transfer: clicks and pops from groove damage, crackle from the surface, a noise floor under everything | `declick`, `decrackle`, `denoise`, all at their defaults |
+| `tapeHiss` | A tape transfer whose whole defect is broadband hiss; machine hum is not universal enough across tape sources to turn `dehum` on by default | `denoise` |
+| `fieldRecording` | Location audio: a mic floor, mains hum from whatever circuit the gear ran off, and the space it was captured in | `denoise`, `dehum` with `adaptive` on so it follows a grid frequency that drifts within tolerance rather than sitting on the configured 50 Hz, `dereverb` |
+| `voiceMemo` | Phone or laptop capture: clipped against its own AGC, a high mic floor, recorded in whatever room the speaker was in | `declip`, `denoise`, `dereverb` |
+| `shellac78` | A 78 rpm shellac transfer, whose coarser groove wears into wider pops and denser surface noise than an LP, over a higher noise floor | `declick` with `maxClickSamples` raised to 16 so a 78-length click still reaches the LPC reconstruction instead of the interpolation fallback; `decrackle` with `threshold` lowered to 0.25 so more of the surface counts as crackle; `denoise` with `reductionDb` deepened to 32 |
+
+Hear what one repair stage does on the kind of material these presets exist for. The clip is a piano turnaround carrying mains hum, surface noise, and sparse clicks; the stage applied is the classical dereverberator, so what comes out is the noise bed and the smeared tails, while the clicks and the hum stay for the declick and dehum stages to handle:
+
+<SonareDemo id="mastering-restoration" />
 
 ## Which processor for which job
 
@@ -100,7 +116,8 @@ A few capabilities sit underneath the maximizer/final and analysis APIs:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights. BS.1770-4 itself normatively defines layouts only up to 5.1 (6 channels); the 7.1/8-channel weighting (treating the side-surround pair like the rear surrounds, +1.5 dB) is a non-normative extrapolation, not part of the standard.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
-- `loudness.maxLimiterGainReductionDb` (12 dB) bounds how far the loudness stage will drive the true-peak limiter to reach its target. It decides how peaky an input the stage will still try to normalize, not how loud a master can get: the allowance never permits more gain than `target - current` asks for. Every loudness path shares the same default, so the chain, the standalone helper and the named processor normalize alike. Setting it to `0` restores a strict headroom clamp, which on peak-normalized material leaves the loudest targets short — `sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` lands at -16.19 LUFS against -14.06 at the default. Whatever shortfall remains is the limiter's own gain reduction, which one non-iterating pass does not re-measure, and is reported through `loudnessTargetLimited`.
+- The loudness stage is not a gain trim followed by a separate limiter: it applies one static gain of `target - current` and then drives its own post-gain true-peak limiter to take back whatever that gain pushed over the ceiling. `loudness.maxLimiterGainReductionDb` (12 dB; must be finite and at least 0) bounds how far it will drive that limiter — the static gain may exceed the peak headroom toward the ceiling by at most this much. It decides how peaky an input the stage will still try to normalize, not how loud a master can get: the allowance never permits more gain than `target - current` asks for, and the ceiling itself is never exceeded. Every loudness path shares the same default, so the chain, the standalone helper and the named processor (`maximizer.loudnessOptimize` reads the same key as `maxLimiterGainReductionDb`) normalize alike. Setting it to `0` restores a strict headroom clamp, which on peak-normalized material leaves the loudest targets short — `sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` lands at -16.19 LUFS against -14.06 at the default. Whatever shortfall remains is the limiter's own gain reduction, which one non-iterating pass does not re-measure, and is reported through `loudnessTargetLimited`.
+- `maximizer.truePeakLimiter` enforces its ceiling sample by sample, never as a whole-block rescale, and every stage inside it carries its state across calls. Its output therefore does not depend on how the caller chunks the stream: the same material rendered in one block, in uniform blocks from 256 to 16384 samples, or in a ragged split that lands mid-transient comes out identical, so a streaming render and an offline render agree. What is left is a small inter-sample residue that is a property of measuring finer than the limiter runs, not of the block size — a meter at 8x oversampling reads about +0.02 dB above the ceiling set by the default 4x limiter, flat from 0 to +36 dB of drive. Meter at the limiter's own oversampling to see the ceiling held exactly, or raise its `oversampleFactor` to push the residue down.
 - For UI metering, pass `maxPoints` to `meteringVectorscope(...)` and `meteringPhaseScope(...)`: they thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. (Without `maxPoints` they emit one point per input sample. The older `meteringVectorscopeDecimated(...)` / `meteringPhaseScopeDecimated(...)` aliases are deprecated and just delegate.) `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - Every `multiband.*` solo processor — `compressor`, `dynamicEq`, `expander`, `imager`, `limiter`, and `saturation` — shares the same crossover mechanism and accepts a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three. This entry point exposes up to 8 `cutoffNHz` slots (`cutoff0Hz` … `cutoff7Hz`), so a single `multiband.*` call can address up to 9 bands.
 :::
@@ -116,11 +133,37 @@ Five processors shape the waveform hard enough to fold energy back down the spec
 
 A mode a processor does not implement is refused rather than silently ignored, and the message names the set that would have worked — `soft clipper ADAA2 anti-aliasing is not supported; use None, Adaa1, or Oversample4x`. Asking a processor outside this set of five for the parameter at all is refused by key: `unknown --params key for saturation.tube: aliasing`.
 
-The oversampled path aligns its dry signal and reports the delay it introduces, so `latency_samples` is `24` on the 4x path where the other modes report `0`. Compensate for it the same way you would for any other latency the chain reports.
+The oversampled path aligns its dry signal and reports the delay it introduces: the up-and-down round trip through a 24-tap-per-phase polyphase filter costs 24 samples at the base rate, so the latency is `24` on the 4x path where the other modes report `0`. It reaches you wherever the processor's result does — `latencySamples` on the `MasteringResult` that `masteringProcess()` returns in the browser and in Node, `latency_samples` on the Python `MasteringResult` and on the C `SonareMasteringResult`, and `latency_samples()` on the processor itself when it is hosted as an insert. Compensate for it the same way you would for any other latency the chain reports.
 :::
 
 ::: info What is a crossover?
 A crossover splits the signal into frequency bands (e.g. lows / mids / highs) so each band can be processed separately. The "crossover cutoffs" are the frequencies where one band ends and the next begins; more cutoffs means more bands and finer control.
+:::
+
+## Chain order
+
+A full chain — `masterAudio`, `masteringChain`, and every preset — runs its slots in one fixed order: repair → eq → dynamics → saturation → spectral → stereo (on the stereo path only) → maximizer → loudness. A configuration chooses which slots run, never where. The figure shows every slot the engine has, in run order, with the ones the `pop` preset enables filled in; the empty ones are still there in place, waiting for a configuration that turns them on.
+
+<MasteringChainFigure
+  title="Every chain slot, in the order the engine runs them"
+  :enabled="['eq.tilt', 'dynamics.compressor', 'dynamics.transientShaper', 'saturation.exciter', 'stereo.imager', 'loudness.optimize']"
+/>
+
+### The repair stages
+
+The repair family is the one people ask about, because six stages share one slot and their order matters. Whatever subset a configuration enables runs widest-damage-first, so each stage sees material the previous one has already made well-formed:
+
+1. `declip` — before `declick`, because a flat-topped region has no transient for a click detector to measure.
+2. `declick`
+3. `decrackle`
+4. `dehum`
+5. `denoise`
+6. `dereverb` — last, because a broadband noise floor reads as a stationary late tail and would bias the reverb estimate toward it.
+
+::: details `repair.denoise.reductionDb` — depth, not floor
+The denoise stage's depth is `repair.denoise.reductionDb`: the deepest attenuation the gain mask may apply to any bin, in dB. It must be finite and non-negative and has no upper bound; the default is `26`, and a larger number removes more. It acts as a residual-noise floor rather than a gate — at 26 dB the noise is left 26 dB down instead of removed, which is what keeps a denoised result from sounding gated. The report the standalone `masteringRepairDenoiseClassical` entry point returns says how often that floor bound: `maxReductionDb` saturating at `reductionDb` means the floor, not the estimator, set the depth, and `floorLimitedFraction` is the share of mask cells sitting on it.
+
+The same knob is also accepted as a linear floor. A `repair.denoise.gainFloor` key is converted on read, `reductionDb = -20 * log10(gainFloor)`, and the conversion carries the old validity range with it: a floor above 1 becomes a negative depth and is refused. The shorthand keys `repair.reductionDb` and `repair.gainFloor` map to the same denoise slot. Flat overrides, the JSON chain document, and the nested `MasteringChainConfig` types in the browser and Node bindings all accept `gainFloor` this way, and the TypeScript types mark it deprecated in favour of `reductionDb`.
 :::
 
 ## Solo processors

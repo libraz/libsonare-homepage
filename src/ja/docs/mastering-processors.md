@@ -43,9 +43,25 @@ description: libsonare の名前付きマスタリング API、プリセット�
 
 プリセットは別アルゴリズムではなく、名前付きのチェーン設定です。`masterAudio(samples, sr, preset, overrides?)` の `overrides?`（上書き値）で必要な項目だけ調整できます。
 
-`pop`, `edm`, `acoustic`, `hipHop`, `aiMusic`, `speech`, `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `jpop`, `ambient`, `lofi`, `classical`, `drumAndBass`, `techno`, `metal`, `trap`, `rnb`, `jazz`, `kpop`, `trance`, `gameOst`
+`pop`, `edm`, `acoustic`, `hipHop`, `aiMusic`, `speech`, `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `jpop`, `ambient`, `lofi`, `classical`, `drumAndBass`, `techno`, `metal`, `trap`, `rnb`, `jazz`, `kpop`, `trance`, `gameOst`, `vinyl`, `tapeHiss`, `fieldRecording`, `voiceMemo`, `shellac78`
 
 プリセットを完成マスターと見なさずに選ぶ方法は [プリセットの選び方](./glossary/mastering/preset-selection.md) を参照してください。
+
+### レストレーション用プリセット
+
+末尾の 5 つはレストレーション用のプリセットです。有効にするのはリペア段だけで、レベルには手を触れません。ラウドネス目標もシーリングもなく、トーン段やダイナミクス段も動きません。それぞれが素材に必要な [リペアチェーン](#リペア段) の部分集合を有効にし、名前の挙がらない段はすべて無効のままです。
+
+| プリセット | 対象 | 有効にする段 |
+|------------|------|--------------|
+| `vinyl` | LP の取り込み。溝の傷によるクリックとポップ、盤面のクラックル、その下に敷かれたノイズフロア | `declick`、`decrackle`、`denoise`。いずれも既定値のまま |
+| `tapeHiss` | テープの取り込みで、欠陥が広帯域のヒスノイズだけのもの。機器のハムはテープ音源全般に共通するほど普遍的ではないため、`dehum` は既定では有効にしない | `denoise` |
+| `fieldRecording` | ロケーション録音。マイクのノイズフロア、機材をつないだ回路の電源ハム、収録場所の響き | `denoise`、`adaptive` を有効にした `dehum`（設定した 50 Hz にぴったり乗るとは限らず許容範囲内でずれる電源周波数を追従する）、`dereverb` |
+| `voiceMemo` | スマートフォンやノート PC での収録。自身の AGC に対してクリップし、マイクのノイズフロアが高く、話者がいた部屋の響きをそのまま含む | `declip`、`denoise`、`dereverb` |
+| `shellac78` | 78 回転の SP 盤の取り込み。LP より粗い溝は幅の広いポップとより密な表面ノイズに摩耗し、ノイズフロアも高い | `maxClickSamples` を 16 に広げた `declick`（78 回転盤のクリック長でも補間フォールバックではなく LPC 再構成に届くようにする）、`threshold` を 0.25 に下げた `decrackle`（表面ノイズのより多くをクラックルとして扱う）、`reductionDb` を 32 に深めた `denoise` |
+
+これらのプリセットが対象とする素材に、リペア段の 1 つがどう効くかを聴いてみてください。クリップは電源ハム、表面ノイズ、まばらなクリックを乗せたピアノのターンアラウンドで、適用している段は古典的なデリバーブです。取り除かれるのはノイズの土台と滲んだ余韻で、クリックとハムはデクリック段とハム除去段の担当としてそのまま残ります。
+
+<SonareDemo id="mastering-restoration" />
 
 ## 目的別プロセッサ早見表
 
@@ -102,7 +118,8 @@ description: libsonare の名前付きマスタリング API、プリセット�
 
 - インテグレーテッド LUFS 測定は最大 8 チャンネルのサラウンド構成に対応し、[BS.1770](./algorithm-references.md) のチャンネル重み付けを適用します。BS.1770-4 自体が規格として定めているのは 5.1（6 チャンネル）までで、7.1／8 チャンネルの重み付け（サイドサラウンドのペアをリアサラウンドと同様に +1.5 dB として扱う）は規格に含まれない非公式の拡張です。
 - 内部のオーバーサンプラーと True Peak 段はオーバーサンプリング係数として 1〜16 の 2 のべき乗（1, 2, 4, 8, 16）を受け付けます（ライブメーターも同じ係数）。CPU と引き換えにサンプル間ピーク（ISP）の精度を上げます。
-- `loudness.maxLimiterGainReductionDb`（既定 12 dB）は、ラウドネス段が目標へ到達するために True Peak リミッターをどこまで駆動してよいかの上限です。決めているのはマスターの最大音量ではなく、どれだけピークの立った入力までノーマライズを試みるかで、許容量が `target - current` 以上のゲインを与えることはありません。この既定値はすべてのラウドネス経路で共有されるため、チェーン・単体ヘルパー・名前付きプロセッサのいずれでも同じようにノーマライズされます。`0` にすると従来どおりヘッドルームで厳密に頭打ちになり、ピークノーマライズ済みの素材では大きな目標値に届かなくなります。`sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` は -16.19 LUFS に着地し、既定の -14.06 LUFS と差が出ます。残る不足分はリミッター自身のゲインリダクションで、1 回で反復しないパスでは測り直されないため、`loudnessTargetLimited` で報告されます。
+- ラウドネス段は「ゲイントリムの後ろに別のリミッターを置いたもの」ではありません。`target - current` の静的ゲインを 1 回かけ、そのゲインでシーリングを超えた分を、段が自前で持つポストゲインの True Peak リミッターに引き戻させます。`loudness.maxLimiterGainReductionDb`（既定 12 dB。有限かつ 0 以上）は、そのリミッターをどこまで駆動してよいかの上限で、静的ゲインがシーリングまでのピークヘッドルームを超えられるのは最大でこの量までです。決めているのはマスターの最大音量ではなく、どれだけピークの立った入力までノーマライズを試みるかで、許容量が `target - current` 以上のゲインを与えることはなく、シーリング自体を超えることもありません。この既定値はすべてのラウドネス経路で共有されるため、チェーン・単体ヘルパー・名前付きプロセッサ（`maximizer.loudnessOptimize` は同じキーを `maxLimiterGainReductionDb` として読む）のいずれでも同じようにノーマライズされます。`0` にするとヘッドルームで厳密に頭打ちになり、ピークノーマライズ済みの素材では大きな目標値に届かなくなります。`sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` は -16.19 LUFS に着地し、既定の -14.06 LUFS と差が出ます。残る不足分はリミッター自身のゲインリダクションで、1 回で反復しないパスでは測り直されないため、`loudnessTargetLimited` で報告されます。
+- `maximizer.truePeakLimiter` はシーリングをサンプル単位で守り、ブロック全体を一括でスケーリングすることはありません。内部のすべての段が呼び出しをまたいで状態を持ち越すため、出力は呼び出し側がストリームをどう区切るかに依存しません。同じ素材を 1 ブロックで処理しても、256〜16384 サンプルの均等なブロックで処理しても、トランジェントの途中で切れる不揃いな分割で処理しても、結果は同一で、ストリーミングのレンダリングとオフラインのレンダリングは一致します。残るのはサンプル間のわずかな残差で、これはブロックサイズではなく「リミッターより細かく測る」ことに由来する性質です。既定の 4 倍リミッターが決めたシーリングを 8 倍オーバーサンプリングのメーターで読むと約 +0.02 dB 上に出ますが、ドライブ 0〜+36 dB の範囲で一定です。リミッターと同じオーバーサンプリングで測ればシーリングは正確に守られていることが確認でき、`oversampleFactor` を上げれば残差そのものを小さくできます。
 - UI 向けには `meteringVectorscope(...)` と `meteringPhaseScope(...)` に `maxPoints` を渡します。点列を最大 `maxPoints` 点まで間引くので、点数の多いスコープでも描画コストを抑えられます（`maxPoints` を省くと入力サンプル 1 個につき 1 点を返します。旧来の `meteringVectorscopeDecimated(...)` ／ `meteringPhaseScopeDecimated(...)` は非推奨で、内部で委譲するだけです）。`meteringSpectrumFrame(...)` は、スペクトラムアナライザーのスナップショット向けに単一フレーム（時間平均なし）のスペクトラムを読み取ります。
 - `multiband.*` のソロプロセッサ（`compressor`、`dynamicEq`、`expander`、`imager`、`limiter`、`saturation` の全 6 種）は、いずれも同じクロスオーバー機構を共有し、クロスオーバー数を任意に指定できます。固定 3 バンドではなく、素材に合わせたバンド数で分割できます。この入口が公開する `cutoffNHz` スロットは最大 8 個（`cutoff0Hz` 〜 `cutoff7Hz`）なので、`multiband.*` の呼び出し 1 回で最大 9 バンドまで扱えます。
 :::
@@ -118,11 +135,51 @@ description: libsonare の名前付きマスタリング API、プリセット�
 
 実装していないモードは黙って無視されるのではなく拒否され、メッセージが使えるモードの集合を示します。`soft clipper ADAA2 anti-aliasing is not supported; use None, Adaa1, or Oversample4x` のような形です。この 5 つ以外のプロセッサにこのパラメータを渡した場合は、キー自体が拒否されます。`unknown --params key for saturation.tube: aliasing` となります。
 
-オーバーサンプリング経路はドライ信号の時間を揃え、発生した遅延を報告します。そのため 4 倍経路では `latency_samples` が `24` になり、他のモードでは `0` です。チェーンが報告する他の遅延と同じように補正してください。
+オーバーサンプリング経路はドライ信号の時間を揃え、発生した遅延を報告します。1 フェーズあたり 24 タップのポリフェーズフィルターを上りと下りで往復するため、基本レートで 24 サンプルの遅延が生じ、4 倍経路ではレイテンシが `24`、他のモードでは `0` になります。この値はプロセッサの結果が届く場所にそのまま乗ります。ブラウザと Node では `masteringProcess()` が返す `MasteringResult` の `latencySamples`、Python では `MasteringResult` の `latency_samples`、C では `SonareMasteringResult` の `latency_samples`、インサートとして組み込んだ場合はプロセッサ自身の `latency_samples()` です。チェーンが報告する他の遅延と同じように補正してください。
 :::
 
 ::: info クロスオーバーとは？
 クロスオーバーは、信号を周波数帯（たとえば低域／中域／高域）に分割し、各帯域を別々に処理できるようにします。「クロスオーバー周波数」は、ある帯域が終わり次の帯域が始まる境界の周波数です。クロスオーバーが多いほど帯域が増え、より細かく制御できます。
+:::
+
+## チェーンの順序
+
+フルチェーン（`masterAudio`、`masteringChain`、そしてすべてのプリセット）は、スロットを 1 つの固定順で実行します。repair → eq → dynamics → saturation → spectral → stereo（ステレオ経路のみ）→ maximizer → loudness です。設定が選ぶのはどのスロットを動かすかであって、位置ではありません。図はエンジンが持つすべてのスロットを実行順に並べたもので、`pop` プリセットが有効にするものを塗りつぶしています。空のスロットもその位置に存在していて、有効にする設定を待っています。
+
+<MasteringChainFigure
+  title="すべてのチェーンスロットを、エンジンの実行順に"
+  :enabled="['eq.tilt', 'dynamics.compressor', 'dynamics.transientShaper', 'saturation.exciter', 'stereo.imager', 'loudness.optimize']"
+  :labels="{
+    repair: 'リペア',
+    eq: 'EQ',
+    dynamics: 'ダイナミクス',
+    saturation: 'サチュレーション',
+    spectral: 'スペクトル',
+    stereo: 'ステレオ',
+    maximizer: 'マキシマイザー',
+    loudness: 'ラウドネス',
+    output: '出力',
+    enabled: 'この設定で有効',
+    available: '存在するが無効',
+    fixedOrder: '順序は固定です。設定が選ぶのはどのスロットを動かすかであって、位置ではありません。',
+  }"
+/>
+
+### リペア段
+
+リペア系は 6 つの段が 1 つのスロットを共有し、その順序が結果を左右するため、最もよく質問されるファミリーです。設定がどの部分集合を有効にしても、損傷の大きいものから順に実行され、各段は前の段が整えた後の素材を受け取ります。
+
+1. `declip` — `declick` より前。平坦に潰れた領域にはクリック検出器が測るべきトランジェントがないためです。
+2. `declick`
+3. `decrackle`
+4. `dehum`
+5. `denoise`
+6. `dereverb` — 最後。広帯域のノイズフロアは定常的な残響の後部として読まれ、残響の推定をそちらへ引きずるためです。
+
+::: details `repair.denoise.reductionDb` — フロアではなく深さ
+デノイズ段の深さは `repair.denoise.reductionDb` で決めます。ゲインマスクがどのビンにも適用できる最も深い減衰量を dB で表したもので、有限かつ 0 以上でなければならず、上限はありません。既定は `26` で、大きいほど多く取り除きます。ゲートではなく残留ノイズのフロアとして働き、26 dB ならノイズは消えるのではなく 26 dB 下がった状態で残ります。デノイズ結果がゲートをかけたような音にならないのはこのためです。単体の `masteringRepairDenoiseClassical` が返すレポートは、このフロアがどれだけ効いたかを示します。`maxReductionDb` が `reductionDb` で飽和していれば深さを決めたのは推定器ではなくフロアであり、`floorLimitedFraction` はフロアに張り付いたマスクセルの割合です。
+
+同じつまみは線形のフロアとしても受け付けます。`repair.denoise.gainFloor` キーは読み込み時に `reductionDb = -20 * log10(gainFloor)` で変換され、変換は元の有効範囲も引き継ぎます。1 を超えるフロアは負の深さになり拒否されます。短縮キーの `repair.reductionDb` と `repair.gainFloor` も同じデノイズスロットへ対応づけられます。フラットな上書き、JSON のチェーン設定ドキュメント、ブラウザと Node のネストした `MasteringChainConfig` 型のいずれも `gainFloor` をこの形で受け付け、TypeScript の型は `reductionDb` を優先するよう非推奨とマークしています。
 :::
 
 ## ソロプロセッサ
