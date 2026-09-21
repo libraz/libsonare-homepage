@@ -55,41 +55,45 @@ description: libsonare のデータ不要なパッチ駆動シンセ NativeSynth
 :::
 
 ::: info MIDI は決して無音にならない
-NativeSynth は [SoundFont プレイヤー](./soundfont-player.md)の**データ不要な土台**でもあります。SF2 経由でプロジェクトをバウンスしたとき、あるプログラム（または SoundFont 全体）が欠けていると、その音は NativeSynth の **GM フォールバックバンク**へ落ちます。128 種すべての General MIDI プログラムとドラムマップを備えているため、いずれにせよ音は出ます。バンクそのもの — GS バリエーション音色、ドラムキットバリエーション、GM プログラム追従、全128プログラムの音色マップ — は専用ページ [GM／GS フォールバックバンク](./gm-gs.md) で解説します。
+NativeSynth は [SoundFont プレイヤー](./soundfont-player.md)の**データ不要な土台**でもあります。SF2 経由でプロジェクトをバウンスしたとき、あるプログラム（または SoundFont 全体）が欠けていると、その音は NativeSynth の **GM フォールバックバンク**へ落ちます。128 種すべての General MIDI プログラムとドラムマップを備えているため、いずれにせよ音は出ます。バンクそのもの — GS バリエーション音色、ドラムキットバリエーション、GM プログラム追従 — は専用ページ [GM／GS フォールバックバンク](./gm-gs.md) で解説し、全 128 プログラムの音色は [GM 音色マップ](./gm-tone-map.md) にまとめています。
 :::
 
 ::: tip NativeSynth の位置づけ
 NativeSynth パッチは**インストゥルメント**です。MIDI デスティネーションへバインドすると、そのデスティネーションへルーティングされたトラックの MIDI が内蔵シンセサイザーで鳴ります。オフラインでは [`bounceWithSynthInstrument`](./project-bounce.md) でバインドし、ライブでは `engine.setSynthInstrument` でバインドして [MIDI 入力](./midi-input.md)を送ります。サンプルベースのマルチサンプル音色が必要なら、代わりに [SoundFont プレイヤー](./soundfont-player.md) を使ってください。
 :::
 
-どのノートにも、NativeSynth の中を 1 本のシグナルパスが流れます。MIDI ノートが 17 個のうち 1 つのエンジンを選び、そのエンジンの素の音色が共通の制御層を通ってからステレオ出力へ届きます。
+どのノートにも、NativeSynth の中を 1 本のシグナルパスが流れます。MIDI ノートが 17 個のうち 1 つのエンジンを選び、そのエンジンがチェーン先頭のオシレーターの位置に入ります。その後ろのフィルター、アンプエンベロープ、ボディ共鳴は全エンジン共通で、モッドマトリクスは送り先が名指しする段へ直接届きます。図は、先頭のブロックに減算合成のオシレーターを置いた 1 つのボイスです。
 
-<FlowDiagram
-  title="NativeSynth のシグナルパス"
-  :nodes="[
-    { id: 'note', label: 'MIDI ノート', col: 0, row: 0 },
-    { id: 'engine', label: 'エンジン選択', col: 1, row: 0, variant: 'decision', group: 'engines' },
-    { id: 'filter', label: 'フィルター', col: 2, row: 0, group: 'control' },
-    { id: 'env', label: 'アンプ／フィルターの ADSR', col: 3, row: 0, group: 'control' },
-    { id: 'lfo', label: 'LFO／モッドマトリクス', col: 4, row: 0, group: 'control' },
-    { id: 'body', label: 'ボディ共鳴', col: 5, row: 0, group: 'control' },
-    { id: 'spread', label: 'ステレオスプレッド', col: 6, row: 0, group: 'control' },
-    { id: 'out', label: 'ステレオ音声出力', col: 7, row: 0, variant: 'success' }
-  ]"
-  :edges="[
-    { from: 'note', to: 'engine' },
-    { from: 'engine', to: 'filter' },
-    { from: 'filter', to: 'env' },
-    { from: 'env', to: 'lfo' },
-    { from: 'lfo', to: 'body' },
-    { from: 'body', to: 'spread' },
-    { from: 'spread', to: 'out' }
-  ]"
-  :groups="[
-    { id: 'engines', label: '17 個のうち 1 つ' },
-    { id: 'control', label: '共通の制御層' }
-  ]"
-  caption="どのエンジンが選ばれても、その後は同じ共通の制御層とパッチ項目が適用されます。"
+<SynthSignalPathFigure
+  title="1 つのボイスと、モッドマトリクスが届く先"
+  :labels="{
+    osc: 'オシレーター',
+    oscSub1: '波形を 1 つ選ぶ:',
+    oscSub2: 'sine saw square',
+    oscSub3: 'triangle noise',
+    oscSub4: 'unison 1–7 · detune',
+    filter: 'フィルター',
+    filterSub1: '4 モデルから 1 つ:',
+    filterSub2: 'svf · moog-ladder',
+    filterSub3: 'diode-ladder',
+    filterSub4: 'sallen-key',
+    amp: 'アンプ',
+    ampSub1: 'ADSR エンベロープ',
+    body: 'ボディ共鳴',
+    bodySub1: 'guitar violin',
+    bodySub2: 'wood-tube brass-bell',
+    bodySub3: 'vocal · none',
+    bodySub4: 'bodyMix 0–1',
+    out: '出力',
+    matrix: 'モッドマトリクス',
+    matrixSub: '12 のソース × 12 の送り先・同時に有効なルーティングは最大 8 本',
+    sources: 'ソース',
+    noDest: '送り先ではない',
+    loopNote: 'ソースへ戻る',
+    legendChain: 'ボイスチェーン',
+    legendBody: 'アンプ後段のボディ共鳴',
+    legendRoute: 'モッドルーティング（同時に最大 8 本）',
+  }"
 />
 
 ## このページで身につくこと
@@ -110,6 +114,10 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 ## 17 個の音作りエンジン
 
 各プリセットは 1 つの `engineMode` を選びます。共通部分（フィルター、エンベロープ、LFO、モッドマトリクス、ボディ共鳴、ポリフォニー）は、選択中のどのエンジンの上にも適用されます。エンジン固有の深いパラメータ（FM オペレータスタック、モーダルのモードテーブル、ドローバー設定、キットの各パーツ、ピアノの弦、パイプランク、ボウイング摩擦、リード／金管の管体、フルートのジェット形状）は、パッチではなく**名前付きプリセットの中**に収まっています。
+
+::: warning プリセット経由でしか鳴らないエンジンが 4 つある
+`fm`、`modal`、`percussion`、`sample` は、`engineMode` を指定しただけのパッチからは**無音**をレンダリングします。音を決めるのはパッチが持たないテーブル — FM オペレータのレベル、モーダルのモード一覧、キットと膜のモード、サンプルバンク — で、モードだけを名指ししたパッチにはそれがありません。代わりにプリセットから始めてください。`{ preset: 'e-piano' }`、`'marimba'`、`'drum-kit'`、あるいは `SampleBank` をバインドした `'sample'` パッチです。残り 13 個のエンジンはモード指定だけでも鳴りますが、音量はそろっていません。既定パッチに `engineMode: 'harpsichord'` を指定するとピークが他のエンジンの数倍になる一方、`harpsichord` プリセットは隣の音色と同じ高さに収まります。レベルのトリムもプリセット側にあるからです。
+:::
 
 ### `subtractive` — バーチャルアナログ
 
@@ -132,7 +140,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 
 ### `fm` — 周波数変調
 
-小さなアルゴリズムテーブルを持つ位相変調オペレータスタック（1 つのオシレーターの出力をもう 1 つの位相に加える → 金属的・鐘的な音色）で、指数エンベロープ、フィードバックオペレータ、ベロシティ → インデックス（明るさ）スケーリングを備えます。**エレクトリックピアノ・ベル・マレット・クラビネット・ブラス**、つまり減算合成が苦手な金属的・鐘的・非整数次倍音の音に向きます。プリセット: `e-piano`。
+小さなアルゴリズムテーブルを持つ位相変調オペレータスタック（1 つのオシレーターの出力をもう 1 つの位相に加える → 金属的・鐘的な音色）で、指数エンベロープ、フィードバックオペレータ、ベロシティ → インデックス（明るさ）スケーリングを備えます。**エレクトリックピアノ・ベル・マレット・クラビネット・ブラス**、つまり減算合成が苦手な金属的・鐘的・非整数次倍音の音に向きます。**プリセット専用です。** `engineMode: 'fm'` だけを指定したパッチにはオペレータのレベルがなく、無音になります。`e-piano` から始めてください。
 
 ### `karplus-strong` — 撥弦
 
@@ -140,7 +148,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 
 ### `modal` — マレット打楽器
 
-物理的なモード比（一様バーのグロッケン、深いアーチのマリンバ／ビブラフォン）に合わせたモーダル共鳴バンク（叩いたバーや鐘をモデル化する、チューニングされた共鳴器のバンク）で、マレット硬さのベロシティ重みづけとモードごとのディケイを持ちます。**音程のあるマレット楽器**、グロッケン・ビブラフォン・マリンバ・シロフォンに向きます。プリセット: `marimba`、`glass`、`bell`。
+物理的なモード比（一様バーのグロッケン、深いアーチのマリンバ／ビブラフォン）に合わせたモーダル共鳴バンク（叩いたバーや鐘をモデル化する、チューニングされた共鳴器のバンク）で、マレット硬さのベロシティ重みづけとモードごとのディケイを持ちます。**音程のあるマレット楽器**、グロッケン・ビブラフォン・マリンバ・シロフォンに向きます。**プリセット専用です。** `engineMode: 'modal'` だけを指定したパッチはモード一覧が空で、無音になります。`marimba`、`glass`、`bell` のいずれかから始めてください。
 
 ### `additive` — ドローバーオルガン
 
@@ -148,7 +156,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 
 ### `percussion` — 膜打楽器
 
-レイリーの円形膜モードに、下降するストライクピッチのエンベロープとフィルタードノイズを重ねたものです。このエンジンが **GM ドラムキット**（キック、スネアの胴とスナッピー、タム、ハット、非整数次倍音のリングモードを持つシンバル）を支えます。ワンショットで決定論的です。プリセット: `drum-kit`。
+レイリーの円形膜モードに、下降するストライクピッチのエンベロープとフィルタードノイズを重ねたものです。このエンジンが **GM ドラムキット**（キック、スネアの胴とスナッピー、タム、ハット、非整数次倍音のリングモードを持つシンバル）を支えます。ワンショットで決定論的です。**プリセット専用です。** `engineMode: 'percussion'` だけを指定したパッチにはキットも膜のモードもなく、無音になります。`drum-kit` から始めてください。
 
 ### `piano` — 拡張導波路アコースティックピアノ
 
@@ -202,7 +210,7 @@ NativeSynth パッチは**インストゥルメント**です。MIDI デステ�
 
 ### `sample` — ホストが用意した PCM
 
-唯一、何も合成しないエンジンです。モノラルの float フレームと鍵盤／ベロシティのゾーンからなる `SampleBank` を自分で構築し、パッチと一緒にバインドすると、エンジンがノートオン時にゾーンを解決して読み進めます。このエンジンは減算合成チェーンの*オシレーターの位置*に座るため、自前の音声が合成音とまったく同じ共鳴マルチモードフィルター、エンベロープ、LFO、モッドマトリクスの手前に届きます。これが [SoundFont プレイヤー](./soundfont-player.md) との違いです。あちらはコンテナを解析し、独自のジェネレーターモデルを持ち込む別のインストゥルメントです。**自前の録音やワンショットのドラム素材**に向きます。プリセットはありません。バンクをバインドしない `sample` パッチは無音をレンダリングします。パッチのフィールドは [ホストの PCM: `sample` エンジン](#ホストの-pcm-sample-エンジン)を参照してください。
+唯一、何も合成しないエンジンです。モノラルの float フレームと鍵盤／ベロシティのゾーンからなる `SampleBank` を自分で構築し、パッチと一緒にバインドすると、エンジンがノートオン時にゾーンを解決して読み進めます。このエンジンは減算合成チェーンの*オシレーターの位置*に座るため、自前の音声が合成音とまったく同じ共鳴マルチモードフィルター、エンベロープ、LFO、モッドマトリクスの手前に届きます。これが [SoundFont プレイヤー](./soundfont-player.md) との違いです。あちらはコンテナを解析し、独自のジェネレーターモデルを持ち込む別のインストゥルメントです。**自前の録音やワンショットのドラム素材**に向きます。**バンク専用です。** プリセットはなく、`SampleBank` をバインドせずに `engineMode: 'sample'` だけを指定したパッチは無音をレンダリングします。パッチのフィールドは [ホストの PCM: `sample` エンジン](#ホストの-pcm-sample-エンジン)を参照してください。
 
 ## 名前付きプリセットカタログ
 
@@ -317,7 +325,7 @@ pad = sonare.synth_preset_patch("warm-pad")
 2 つの LFO は挙動が異なります。LFO 1（`lfoRateHz` + `lfoToPitchCents`）はピッチへ固定配線されており、単独でビブラートを生みます。LFO 2 はマトリクス経由専用で、`modRoutings` のエントリが `source: 'lfo2'` で送り先を指定するまで、`lfo2RateHz` を設定しても何も起きません。
 :::
 
-各**モッドルーティング**は `{ source, destination, depth }` です。モッドマトリクスにより、エンベロープ・LFO・ベロシティ・キートラッキング・モッドホイール・シード付きのボイスごとランダムソースが、ピッチ・フィルターカットオフ・音量・パンを変調できます。`depth` はソースが最大振れたときの destination 単位です。
+各**モッドルーティング**は `{ source, destination, depth }` です。マトリクスは 12 のソース — 2 つのエンベロープ、2 つの LFO、ベロシティ、キートラッキング、モッドホイール、シード付きのボイスごとランダムソース、ブレス、アフタータッチ、エクスプレッション、ピッチベンド — を 12 の送り先へつなぎます。送り先はピッチ、ビブラート深さ、カットオフ、レゾナンス、フィルターエンベロープ深さ、音量、パン、LFO 1 のレート、そして物理モデル系エンジンが持つ 4 つの励振軸です。`depth` はソースが最大振れたときの destination 単位です。
 
 <SonareDemo id="synth-tremolo" />
 
@@ -355,8 +363,12 @@ synthEnumTables();
 //   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube',
 //                      'brass-bell', 'vocal'],
 //   modSources:       ['none', 'amp-env', 'filter-env', 'lfo1', 'lfo2',
-//                      'velocity', 'key-track', 'mod-wheel', 'random'],
-//   modDestinations:  ['none', 'pitch-cents', 'cutoff-cents', 'amp-gain', 'pan-units'],
+//                      'velocity', 'key-track', 'mod-wheel', 'random', 'breath',
+//                      'aftertouch', 'expression-cc', 'pitch-bend'],
+//   modDestinations:  ['none', 'pitch-cents', 'cutoff-cents', 'amp-gain', 'pan-units',
+//                      'resonance-q', 'vibrato-depth-cents', 'filter-env-depth',
+//                      'lfo1-rate-scale', 'excitation-force', 'excitation-position',
+//                      'excitation-brightness', 'spectrum-morph'],
 // }
 ```
 
@@ -529,4 +541,4 @@ const audio = project.bounceWithSynthInstrument(
 | GS / GM ドラムキットバリエーション | [GM／GS フォールバックバンク](./gm-gs.md) |
 | パッチを固定せず GM プログラムに追従させる | [GM／GS フォールバックバンク](./gm-gs.md) |
 | NativeSynth と SoundFont フォールバック（GM フォールバックのプログラムルーティングを含む） | [GM／GS フォールバックバンク](./gm-gs.md) |
-| GM 音色マップ — 全128プログラム | [GM／GS フォールバックバンク](./gm-gs.md) |
+| GM 音色マップ — 全128プログラム | [GM 音色マップ](./gm-tone-map.md) |

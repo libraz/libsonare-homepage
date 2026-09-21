@@ -55,42 +55,16 @@ Two terms appear throughout the patch controls: an **ADSR envelope** (attack/dec
 :::
 
 ::: info MIDI never renders silent
-NativeSynth is also the **data-free floor** of the [SoundFont player](./soundfont-player.md). When you bounce a project through an SF2 and a program (or the whole SoundFont) is missing, those notes fall back to the NativeSynth **GM fallback bank** — all 128 General MIDI programs plus the drum map. You get audio either way. The bank itself — its GS variation tones, drum-kit variants, GM program following, and the full 128-program tone map — has its own page: [GM and GS Fallback Bank](./gm-gs.md).
+NativeSynth is also the **data-free floor** of the [SoundFont player](./soundfont-player.md). When you bounce a project through an SF2 and a program (or the whole SoundFont) is missing, those notes fall back to the NativeSynth **GM fallback bank** — all 128 General MIDI programs plus the drum map. You get audio either way. The bank itself — its GS variation tones, drum-kit variants, and GM program following — has its own page, [GM and GS Fallback Bank](./gm-gs.md), and the voicing of all 128 programs is on [GM Tone Map](./gm-tone-map.md).
 :::
 
 ::: tip Where NativeSynth sits
 A NativeSynth patch is an **instrument**: you bind it to a MIDI destination, and the MIDI on tracks routed to that destination plays through it. Offline you bind it in [`bounceWithSynthInstrument`](./project-bounce.md); live you bind it with `engine.setSynthInstrument` and feed [MIDI input](./midi-input.md). For sampled, multisampled instruments instead, use the [SoundFont player](./soundfont-player.md).
 :::
 
-A single signal path runs through NativeSynth on every note: a MIDI note picks one of the seventeen engines, and the engine's raw tone then flows through the shared control layer before reaching the stereo output.
+A single signal path runs through NativeSynth on every note. A MIDI note picks one of the seventeen engines, and that engine takes the oscillator's place at the head of the chain; the filter, the amplifier envelope, and the body resonance stage behind it are shared by all of them, and the modulation matrix reaches into whichever stage its destination names. The figure draws one voice with the subtractive oscillator in the first block.
 
-<FlowDiagram
-  title="NativeSynth signal path"
-  :nodes="[
-    { id: 'note', label: 'MIDI note', col: 0, row: 0 },
-    { id: 'engine', label: 'Engine select', col: 1, row: 0, variant: 'decision', group: 'engines' },
-    { id: 'filter', label: 'Filter', col: 2, row: 0, group: 'control' },
-    { id: 'env', label: 'Amp & filter ADSR', col: 3, row: 0, group: 'control' },
-    { id: 'lfo', label: 'LFOs / mod matrix', col: 4, row: 0, group: 'control' },
-    { id: 'body', label: 'Body resonance', col: 5, row: 0, group: 'control' },
-    { id: 'spread', label: 'Stereo spread', col: 6, row: 0, group: 'control' },
-    { id: 'out', label: 'Stereo audio out', col: 7, row: 0, variant: 'success' }
-  ]"
-  :edges="[
-    { from: 'note', to: 'engine' },
-    { from: 'engine', to: 'filter' },
-    { from: 'filter', to: 'env' },
-    { from: 'env', to: 'lfo' },
-    { from: 'lfo', to: 'body' },
-    { from: 'body', to: 'spread' },
-    { from: 'spread', to: 'out' }
-  ]"
-  :groups="[
-    { id: 'engines', label: '1 of 17 engines' },
-    { id: 'control', label: 'Shared control layer' }
-  ]"
-  caption="Whichever engine is selected, the same shared control layer and patch fields apply afterward."
-/>
+<SynthSignalPathFigure title="One voice, and where the mod matrix reaches into it" />
 
 ## What You Will Learn
 
@@ -110,6 +84,10 @@ The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboa
 ## The seventeen synthesis engines
 
 Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — live **inside the named presets**, not in the patch.
+
+::: warning Four engines sound only through a preset
+`fm`, `modal`, `percussion`, and `sample` render **silence** from a bare `engineMode`. Their sound is a table the patch does not carry — the FM operator levels, the modal mode list, the kit and its membrane modes, the sample bank — and a patch that only names the mode has none of it. Start from the preset instead: `{ preset: 'e-piano' }`, `'marimba'`, `'drum-kit'`, or a `'sample'` patch with a bound `SampleBank`. The other thirteen engines do sound from a bare mode, but not at a matched level: `engineMode: 'harpsichord'` on a default patch peaks several times above the rest, while the `harpsichord` preset sits level with its neighbours, because the level trim lives in the preset too.
+:::
 
 ### `subtractive` — virtual-analog
 
@@ -132,7 +110,7 @@ All four stay stable and zipper-free under per-sample cutoff/resonance modulatio
 
 ### `fm` — frequency modulation
 
-A phase-modulation operator stack (one oscillator's output is added to another's phase → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. Presets: `e-piano`.
+A phase-modulation operator stack (one oscillator's output is added to another's phase → metallic/bell tones) with a small algorithm table, exponential operator envelopes, a feedback operator, and velocity-to-index (brightness) scaling. Good for **electric pianos, bells, mallets, clavinet, and brass** — the metallic, bell-like, and inharmonic sounds subtractive struggles with. **Preset-only.** A bare `engineMode: 'fm'` carries no operator levels and renders silence; start from `e-piano`.
 
 ### `karplus-strong` — plucked string
 
@@ -140,7 +118,7 @@ A fractional-delay waveguide loop (a short delay loop that models a plucked stri
 
 ### `modal` — mallet percussion
 
-A modal resonator bank (a bank of tuned resonators modeling a struck bar or bell) tuned to physical mode ratios (uniform-bar glockenspiel, deep-arch marimba/vibraphone), with mallet-hardness velocity weighting and per-mode decay. Good for **tuned mallet instruments** — glockenspiel, vibraphone, marimba, xylophone. Presets: `marimba`, `glass`, `bell`.
+A modal resonator bank (a bank of tuned resonators modeling a struck bar or bell) tuned to physical mode ratios (uniform-bar glockenspiel, deep-arch marimba/vibraphone), with mallet-hardness velocity weighting and per-mode decay. Good for **tuned mallet instruments** — glockenspiel, vibraphone, marimba, xylophone. **Preset-only.** A bare `engineMode: 'modal'` has an empty mode list and renders silence; start from `marimba`, `glass`, or `bell`.
 
 ### `additive` — drawbar organ
 
@@ -148,7 +126,7 @@ The nine Hammond drawbar pitches (summing harmonic sine partials, one drawbar pe
 
 ### `percussion` — membrane percussion
 
-Rayleigh circular-membrane modes with a descending strike-pitch envelope under filtered noise. This engine backs the **GM drum kit** — kick, snare shell + wires, toms, hats, and cymbals with inharmonic ring modes, one-shot and deterministic. Preset: `drum-kit`.
+Rayleigh circular-membrane modes with a descending strike-pitch envelope under filtered noise. This engine backs the **GM drum kit** — kick, snare shell + wires, toms, hats, and cymbals with inharmonic ring modes, one-shot and deterministic. **Preset-only.** A bare `engineMode: 'percussion'` has no kit and no membrane modes and renders silence; start from `drum-kit`.
 
 ### `piano` — extended-waveguide acoustic piano
 
@@ -202,7 +180,7 @@ A quill-plucked string model built around the mechanism rather than around a ton
 
 ### `sample` — host-supplied PCM
 
-The one engine that synthesizes nothing. You build a `SampleBank` of mono float frames with key/velocity zones, bind it alongside the patch, and the engine resolves a zone at note-on and steps it. It sits in the *oscillator's* place in the subtractive chain, so your own audio arrives behind the same resonant multi-mode filter, envelopes, LFOs, and mod matrix as a synthesized tone — which is what separates it from the [SoundFont player](./soundfont-player.md), a separate instrument that parses a container and brings its own generator model. Good for **your own recordings and one-shot drum material**. It has no preset: a `sample` patch with no bank bound renders silence. See [Host PCM: the `sample` engine](#host-pcm-the-sample-engine) for the patch fields.
+The one engine that synthesizes nothing. You build a `SampleBank` of mono float frames with key/velocity zones, bind it alongside the patch, and the engine resolves a zone at note-on and steps it. It sits in the *oscillator's* place in the subtractive chain, so your own audio arrives behind the same resonant multi-mode filter, envelopes, LFOs, and mod matrix as a synthesized tone — which is what separates it from the [SoundFont player](./soundfont-player.md), a separate instrument that parses a container and brings its own generator model. Good for **your own recordings and one-shot drum material**. **Bank-only.** It has no preset, and a bare `engineMode: 'sample'` with no `SampleBank` bound renders silence. See [Host PCM: the `sample` engine](#host-pcm-the-sample-engine) for the patch fields.
 
 ## The named preset catalog
 
@@ -317,7 +295,7 @@ The patch exposes the shared controls every engine uses:
 The two LFOs behave differently. LFO 1 (`lfoRateHz` + `lfoToPitchCents`) is hardwired to pitch and produces vibrato on its own. LFO 2 is matrix-only: setting `lfo2RateHz` does nothing until a `modRoutings` entry uses `source: 'lfo2'` to send it to a destination.
 :::
 
-Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets envelopes, LFOs, velocity, key tracking, the mod wheel, and a seeded per-voice random source modulate pitch, filter cutoff, amplitude, and pan. `depth` is in destination units at full source deflection.
+Each **mod routing** is `{ source, destination, depth }`. The matrix routes twelve sources — the two envelopes, both LFOs, velocity, key tracking, the mod wheel, a seeded per-voice random source, breath, aftertouch, expression, and pitch bend — to twelve destinations: pitch, vibrato depth, cutoff, resonance, filter-envelope depth, amplitude, pan, the LFO 1 rate, and the four excitation axes of the physical engines. `depth` is in destination units at full source deflection.
 
 <SonareDemo id="synth-tremolo" />
 
@@ -355,8 +333,12 @@ synthEnumTables();
 //   bodyTypes:        ['default', 'none', 'guitar', 'violin', 'wood-tube',
 //                      'brass-bell', 'vocal'],
 //   modSources:       ['none', 'amp-env', 'filter-env', 'lfo1', 'lfo2',
-//                      'velocity', 'key-track', 'mod-wheel', 'random'],
-//   modDestinations:  ['none', 'pitch-cents', 'cutoff-cents', 'amp-gain', 'pan-units'],
+//                      'velocity', 'key-track', 'mod-wheel', 'random', 'breath',
+//                      'aftertouch', 'expression-cc', 'pitch-bend'],
+//   modDestinations:  ['none', 'pitch-cents', 'cutoff-cents', 'amp-gain', 'pan-units',
+//                      'resonance-q', 'vibrato-depth-cents', 'filter-env-depth',
+//                      'lfo1-rate-scale', 'excitation-force', 'excitation-position',
+//                      'excitation-brightness', 'spectrum-morph'],
 // }
 ```
 
@@ -529,4 +511,4 @@ A non-empty `modRoutings` replaces the preset's mod matrix entirely.
 | GS / GM drum-kit variants | [GM and GS Fallback Bank](./gm-gs.md) |
 | Following GM programs instead of pinning one patch | [GM and GS Fallback Bank](./gm-gs.md) |
 | NativeSynth and the SoundFont fallback (with GM fallback program routing) | [GM and GS Fallback Bank](./gm-gs.md) |
-| GM tone map — all 128 programs | [GM and GS Fallback Bank](./gm-gs.md) |
+| GM tone map — all 128 programs | [GM Tone Map](./gm-tone-map.md) |
