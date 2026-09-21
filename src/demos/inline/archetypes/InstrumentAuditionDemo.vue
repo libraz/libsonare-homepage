@@ -3,16 +3,27 @@
  * `instrument-audition` archetype: audition the data-free fallback for a chosen
  * variant, offline, and draw it as an amplitude envelope plus a zoomed scope.
  *
- * Two modes, selected by `def.config.mode`:
+ * Four modes, selected by `def.config.mode`:
  * - `gm-program` — bounce one note through a GM program with NO SoundFont loaded,
  *   so the note plays the NativeSynth GM fallback voice for that program. Used to
  *   audition the General MIDI Sound-Effects family (programs 120-127), which the
  *   current build renders as one shared generic placeholder voice.
+ * - `gs-variation` — bounce one note through a GS variation of the capital tone
+ *   `def.config.program`. The variant is the Bank Select MSB (CC#0); the LSB
+ *   (CC#32) is left at 0 because in GS it selects the tone map, not the
+ *   variation. A variation the fallback does not voice apart sounds its capital.
+ * - `gs-drum-kit` — bounce a fixed one-bar drum pattern on MIDI channel 10, with
+ *   the variant sent as the rhythm part's Program Change to select a GS drum kit.
+ *   Kits the fallback leaves unvoiced (SFX, program 56) play the Standard kit.
  * - `gs-efx` — render a short held chord through the GS-compatible SF2 player
  *   (again with no SoundFont, so the fallback synth sounds), pushing a raw GS
  *   insertion-effect (EFX) SysEx so the reader can A/B the dry tone against each
  *   effect. The effects are libsonare's own DSP, selected via the GS EFX
  *   type-numbering model.
+ *
+ * Only `gs-efx` needs the live engine: EFX state is reachable solely through
+ * SysEx, which the offline project bounce cannot carry. The other three are plain
+ * channel messages and bounce offline.
  *
  * Every rendered buffer is peak-normalized so the A/B is about timbral character,
  * not loudness. Pressing play auditions the exact buffer on screen.
@@ -43,9 +54,12 @@ const {
 
 // ---- mode + reader-adjustable parameter -------------------------------------
 const mode = computed<string>(() => String((props.def.config?.mode as string) ?? 'gm-program'));
+// gs-variation only: the capital tone (GM program) the variation hangs under.
+const program = computed<number>(() => Number(props.def.config?.program ?? 0));
 const { values, updateParams } = useDemoParams(props.def);
-// Both modes expose a single `variant` select. gm-program: a GM program number.
-// gs-efx: a GS EFX type number (0 = dry / Thru).
+// Every mode exposes a single `variant` select. gm-program: a GM program number.
+// gs-variation: a Bank Select MSB (0 = capital tone). gs-drum-kit: the rhythm
+// part's program number. gs-efx: a GS EFX type number (0 = dry / Thru).
 const variant = computed<number>(() => Number(values.variant ?? 0));
 const variantLabel = computed<string>(() => {
   const opt = (props.def.params?.[0]?.options ?? []).find((o) => Number(o.value) === variant.value);
@@ -54,7 +68,13 @@ const variantLabel = computed<string>(() => {
   return (text[loc.value] ?? text.en ?? String(variant.value)).toUpperCase();
 });
 
-const eyebrow = computed(() => (mode.value === 'gs-efx' ? 'GS · EFX' : 'GM · FALLBACK'));
+const EYEBROWS: Record<string, string> = {
+  'gm-program': 'GM · FALLBACK',
+  'gs-variation': 'GS · VARIATION',
+  'gs-drum-kit': 'GS · DRUM KIT',
+  'gs-efx': 'GS · EFX',
+};
+const eyebrow = computed(() => EYEBROWS[mode.value] ?? EYEBROWS['gm-program']);
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'RENDERING';
   if (status.value === 'error') return 'ERROR';
@@ -97,6 +117,14 @@ interface ProjectLike {
 interface ProjectCtor {
   new (): ProjectLike;
   midiProgram(ppq: number, group: number, channel: number, program: number): MidiEvent;
+  midiBankProgram(
+    ppq: number,
+    group: number,
+    channel: number,
+    bankMsb: number,
+    bankLsb: number,
+    program: number,
+  ): MidiEvent[];
   midiNoteOn(
     ppq: number,
     group: number,
@@ -157,30 +185,106 @@ function efxPartOnSysex(channel: number): Uint8Array {
 
 // ---- renderers -------------------------------------------------------------
 /**
- * gm-program mode: bounce one note through a GM program, no SoundFont loaded.
+ * Bounce one MIDI clip offline with no SoundFont loaded, so every note plays
+ * the fallback synth.
  *
- * Project MIDI positions are QUARTER NOTES (floats), not PPQ ticks, so the clip
- * is two beats long and the note is released after one and a half — at the
- * default 120 BPM that is a 0.75 s note whose release tail fits the render below.
+ * Project MIDI positions are QUARTER NOTES (floats), not PPQ ticks, so `beats`
+ * is the clip length in quarter notes at the default 120 BPM (0.5 s each) and
+ * `seconds` sizes the render including the release tail.
  */
-function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
+function bounceProject(
+  wasm: WasmModule,
+  events: (Project: ProjectCtor) => MidiEvent[],
+  beats: number,
+  seconds: number,
+): Float32Array {
   const Project = (wasm as unknown as { Project: ProjectCtor }).Project;
   const project = new Project();
   try {
     project.setSampleRate(SR);
-    const { clipId } = project.addMidiClip(0, 2);
-    project.setMidiEvents(clipId, [
-      Project.midiProgram(0, 0, 0, program),
-      Project.midiNoteOn(0, 0, 0, 60, 112),
-      Project.midiNoteOff(1.5, 0, 0, 60, 0),
-    ]);
+    const { clipId } = project.addMidiClip(0, beats);
+    project.setMidiEvents(clipId, events(Project));
     return project.bounceWithSf2Instrument(
       {},
-      { numChannels: 1, sampleRate: SR, totalFrames: Math.round(SR * 1.4) },
+      { numChannels: 1, sampleRate: SR, totalFrames: Math.round(SR * seconds) },
     );
   } finally {
     project.delete();
   }
+}
+
+/**
+ * gm-program mode: bounce one note through a GM program. The clip is two beats
+ * long and the note is released after one and a half — a 0.75 s note whose
+ * release tail fits the 1.4 s render.
+ */
+function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
+  return bounceProject(
+    wasm,
+    (Project) => [
+      Project.midiProgram(0, 0, 0, program),
+      Project.midiNoteOn(0, 0, 0, 60, 112),
+      Project.midiNoteOff(1.5, 0, 0, 60, 0),
+    ],
+    2,
+    1.4,
+  );
+}
+
+/**
+ * gs-variation mode: the gm-program note, with the variation selected by Bank
+ * Select MSB ahead of the capital tone's program. The LSB stays 0 — in GS it
+ * picks the tone map (SC-55 / SC-88 / SC-88Pro), never the variation.
+ */
+function renderGsVariation(wasm: WasmModule, bankMsb: number, capital: number): Float32Array {
+  return bounceProject(
+    wasm,
+    (Project) => [
+      ...Project.midiBankProgram(0, 0, 0, bankMsb, 0, capital),
+      Project.midiNoteOn(0, 0, 0, 60, 112),
+      Project.midiNoteOff(1.5, 0, 0, 60, 0),
+    ],
+    2,
+    1.4,
+  );
+}
+
+/** One bar of eighth-note rock beat as [beat, GM drum note, velocity]. */
+const DRUM_PATTERN: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 36, 112], // kick
+  [0, 42, 90], // closed hat
+  [0.5, 42, 70],
+  [1, 38, 112], // snare
+  [1, 42, 90],
+  [1.5, 42, 70],
+  [2, 36, 112],
+  [2, 42, 90],
+  [2.5, 36, 100],
+  [2.5, 42, 70],
+  [3, 38, 112],
+  [3, 42, 90],
+  [3.5, 46, 90], // open hat
+];
+const DRUM_CHANNEL = 9; // MIDI channel 10, the GS rhythm part
+
+/**
+ * gs-drum-kit mode: play DRUM_PATTERN on the rhythm part, with the kit selected
+ * by that part's Program Change. One bar is four beats (2 s); the render adds
+ * the last hit's tail. Each strike gets a matching note-off a sixteenth later.
+ */
+function renderGsDrumKit(wasm: WasmModule, kitProgram: number): Float32Array {
+  return bounceProject(
+    wasm,
+    (Project) => [
+      Project.midiProgram(0, 0, DRUM_CHANNEL, kitProgram),
+      ...DRUM_PATTERN.flatMap(([beat, note, velocity]) => [
+        Project.midiNoteOn(beat, 0, DRUM_CHANNEL, note, velocity),
+        Project.midiNoteOff(beat + 0.25, 0, DRUM_CHANNEL, note, 0),
+      ]),
+    ],
+    4,
+    2.3,
+  );
 }
 
 /** gs-efx mode: render a held triad live, optionally through a GS EFX. */
@@ -231,10 +335,20 @@ function normalize(pcm: Float32Array): Float32Array {
 }
 
 function renderVariant(wasm: WasmModule): Float32Array {
-  const pcm =
-    mode.value === 'gs-efx'
-      ? renderGsEfx(wasm, variant.value)
-      : renderGmProgram(wasm, variant.value);
+  let pcm: Float32Array;
+  switch (mode.value) {
+    case 'gs-efx':
+      pcm = renderGsEfx(wasm, variant.value);
+      break;
+    case 'gs-variation':
+      pcm = renderGsVariation(wasm, variant.value, program.value);
+      break;
+    case 'gs-drum-kit':
+      pcm = renderGsDrumKit(wasm, variant.value);
+      break;
+    default:
+      pcm = renderGmProgram(wasm, variant.value);
+  }
   return normalize(pcm);
 }
 
