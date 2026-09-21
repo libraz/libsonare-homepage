@@ -62,6 +62,7 @@ By the end of this page you should be able to:
 - punch in and out so only a chosen region is recorded;
 - open a browser microphone with `bindMicrophoneInput` and clean it up correctly;
 - split a captured loop into takes with `addLoopRecordingTakes`, then comp across takes with `setClipTakes` / `setClipCompSegments`;
+- find the cut points several free takes share with `splitSilenceCommonWithReport`, slice every channel on the same frames with `remixAlignedIntervals`, and warp a take that drifts under its reference with `alignTakeToReference`;
 - draw the recorded waveform with `waveformPeaks` and `waveformPeakPyramid`.
 
 ## The capture path
@@ -300,6 +301,105 @@ restored.delete();
 ```
 ::::
 
+## Comping free takes: shared cut points and alignment
+
+Loop takes arrive on the grid: every pass covers the same PPQ range, so `addLoopRecordingTakes` can split them by length alone. Takes recorded as separate passes — each a fresh run through the part against a guide vocal or a backing track — do not. Comping them means cutting every take at the same places, which only works while the takes share a timeline; a take sung live drifts against its reference throughout, a little ahead here and a little behind there, so no single offset places it. Three calls cover this ground: `splitSilenceCommonWithReport` finds the cut points every take agrees on and says whether the takes line up well enough to have any; `remixAlignedIntervals` turns those cut points into one frame set for all channels of a stereo take; `alignTakeToReference` handles the take that does not line up, returning the warp map that puts it under the reference. Signatures are on the [JavaScript API](./js-api-audio.md) page; this section is the order they go in and how to read what they return.
+
+### Cut points the takes share
+
+What takes of one part share is their silence, not their sound: a take that happens to go quiet where another is still singing must not be cut there. `splitSilenceCommon({ signals })` takes all the takes at once and returns the **union** of each take's sounding intervals — the same flat `[start0, end0, start1, end1, …]` `Int32Array` that `splitSilence` returns for one signal — merged where they touch, so every gap between the returned intervals is silent in all takes at once and a cut placed in a gap lands mid-phrase in none of them. Takes of unequal length need no padding: a shorter take contributes nothing past its own end, which is the same as being silent there. A single signal answers exactly as `splitSilence` does. Cutting is left to you, and it is an array slice.
+
+`splitSilenceCommonWithReport` returns the identical intervals plus a `report`. The report exists because one interval covering everything is the answer to three different situations, and the interval list cannot separate them:
+
+```typescript
+import { splitSilenceCommonWithReport } from '@libraz/libsonare';
+
+const topDb = 60; // the default: a frame is silent when it sits this far under its own take's peak
+const { intervals, report } = splitSilenceCommonWithReport({
+  signals: [takeA, takeB, takeC],   // one Float32Array per take, one channel each
+  topDb,
+});
+// intervals -> Int32Array [start0, end0, start1, end1, ...], valid for every take
+// report    -> { silenceCeilingDb, maxSignalIntervals, minSignalIntervals }
+```
+
+Read `silenceCeilingDb` — the largest `topDb` at which **every** take still shows silence — against the `topDb` you passed:
+
+| `silenceCeilingDb` | What it says | What to do |
+|--------------------|--------------|------------|
+| Near `0` | A take never stops sounding; no threshold can open a gap in it | Take the cut points from something other than silence — a marker, a beat |
+| Below `topDb` | The threshold was too loose to see the quiet these takes do have | Re-run with a `topDb` under the reported ceiling; that figure cuts |
+| At or above `topDb`, and still one interval | Every take goes quiet at this setting, but never in the same place | The takes are out of time with each other — align them first (below) |
+
+The two interval counts describe shape, not cause: a take that sounds once and stops counts `1` exactly as a take with no silence does, so use them to see whether any take has an interior gap at all (`maxSignalIntervals >= 2`) and whether the takes differ in how broken up they are — the ceiling carries the verdict. `silenceCeilingDb` is `0` for an all-silent take, where the peak is zero and the ratio has no value. All three figures come from the same RMS pass as the intervals, so they never describe a different measurement. The plain `splitSilenceCommon` stays for a caller who is only cutting; both entry points share their defaults (`topDb` 60, `frameLength` 2048, `hopLength` 512) and their refusals — an empty `signals` list or an empty take throws from either.
+
+### Slice every channel on the same frames
+
+For a mono take, `take.subarray(start, end)` over each interval is the whole job. A stereo take has one more step. `remix` can snap a cut point to a zero crossing so a slice does not start on a click, but snapping is a per-signal decision: run it channel by channel and each channel snaps to a different frame, and the stereo image drifts apart at every cut. `remixAlignedIntervals` resolves the snapped cut set from **one** channel, without cutting, and returns one clamped `(start, end)` pair per input interval so the same frames can be applied to every channel:
+
+```typescript
+import { remixAlignedIntervals } from '@libraz/libsonare';
+
+const cuts = remixAlignedIntervals({
+  samples: takeLeft,    // resolve from one channel only
+  intervals,            // the shared intervals from the split above
+  sampleRate,           // validated, so pass the real rate
+  alignZeros: true,     // the default here; remix itself defaults to false
+});
+for (let i = 0; i < cuts.length; i += 2) {
+  const left = takeLeft.subarray(cuts[i], cuts[i + 1]);
+  const right = takeRight.subarray(cuts[i], cuts[i + 1]);   // identical frames
+}
+```
+
+Two guards keep a slice from vanishing: a channel with no sign change at all (silence, a DC offset, any constant) is not snapped, and a slice that had content but would collapse to empty after snapping keeps its unsnapped boundaries. With `alignZeros: false` the pairs are simply the inputs clamped to the buffer. Note what this call consumes: the intervals from the silence split, in sample positions of the take's own buffer — not the anchors from the alignment below, which describe the project timeline.
+
+### Aligning a take that drifts
+
+When the report puts the ceiling at or above `topDb` and still returns one interval, the takes each go quiet but never together: they are out of time with each other, and no threshold fixes that. `alignTakeToReference` measures a chromagram (the twelve pitch classes over time) for the reference and for the take, aligns the two with dynamic time warping, and returns the alignment as project **warp anchors** — the `{ warpSample, sourceSample }` pairs [`setWarpMap`](./project-editing.md#warp-stretching-clips-to-the-grid) accepts, already oriented for a clip whose source is the take: `warpSample` is a position on the **reference** timeline and `sourceSample` the matching position in the **take**. The recording itself is untouched; the clip plays it stretched under the reference.
+
+```typescript
+import { alignTakeToReference, Project } from '@libraz/libsonare';
+
+const { anchors, alignment } = alignTakeToReference({
+  reference,     // Float32Array: the guide take, or the backing track the takes were sung against
+  take,          // Float32Array: the take to place under it
+  sampleRate,    // the rate of BOTH buffers — nothing here resamples
+  // hopLength: 512,      // chroma hop: a smaller hop measures more frames and yields more anchors
+  // binsPerOctave: 12,   // must be a positive multiple of 12; leave it unless checked against the rate
+});
+// alignment -> { meanResidualFrames, referenceFrames, takeFrames } — descriptive, never a failure
+
+const project = new Project();
+try {
+  project.setSampleRate(sampleRate);
+  const trackId = project.addTrack({ kind: 'audio', name: 'take 2' });
+  const clipId = project.addClip({ trackId, lengthPpq: 8, audio: take, audioSampleRate: sampleRate });
+  project.setWarpMap({ id: 1, name: 'take 2 under guide', anchors });
+  project.setClipWarpRef(clipId, 1);
+  project.setClipWarpMode(clipId, 'time-stretch');   // follow the anchors, keep the pitch
+} finally {
+  project.delete();
+}
+```
+
+A warp map belongs to a clip, so each aligned take gets its own clip and its own map; once they all play in time under the reference, the comp is cut on that shared timeline with `splitClip` and trims, and a `'time-stretch'` clip takes the new map from the next audio block with no re-bake. The anchors are already reduced to the strictly increasing form a warp map requires — a DTW path holds one axis still wherever the two recordings differ in speed, and a run of tied coordinates is represented by its middle anchor — so the result goes into `setWarpMap` as it is. `alignment` says how well the pair was conditioned: `takeFrames / referenceFrames` is the overall rate difference the anchors encode, and `meanResidualFrames` is the mean absolute departure of the path from its own diagonal trend — a coarse indication of how much the take disagrees with the reference, not an error bound. None of these figures fails the call; a caller deciding what is acceptable supplies its own threshold.
+
+::: warning What is refused, and how
+A take that cannot be aligned is reported, never answered with a map you cannot use. Two layers refuse, and which one answers decides what you are told:
+
+- **Named by field, before the measurement.** An empty buffer (`reference must not be empty`, `take must not be empty`), a non-finite sample (`reference contains NaN or Inf`, `take contains NaN or Inf`), a `sampleRate` that is not an integer in `[8000, 384000]`, and a `hopLength` or `binsPerOctave` of the wrong shape (a string, a fraction) all throw a `RangeError` that names the offending field.
+- **`SonareError` `InvalidParameter`, from the measurement.** A negative `hopLength`; a `binsPerOctave` that is negative or not a multiple of 12 (each pitch class is the mean of a whole number of CQT bins, so 13 and 18 have no fold); and a pair that yields no two distinct anchors — either recording shorter than one chroma frame is what that looks like. The core reports the condition without naming an argument.
+
+A multiple of 12 is necessary, not sufficient: the finest usable `binsPerOctave` depends on the sample rate and does not rise with it, so leave the field at its default unless a finer grid has been checked at the rate it will run at. Omitting either field, or writing `0`, selects the library value.
+
+**Sample rates are not converted.** The call takes one `sampleRate` for both buffers; resample first if they differ, or the chromagrams are measured on two different grids and the anchors are wrong without anything reporting it. The CLI counterpart, `sonare project align-takes`, reads the reference and each take from their files and refuses a mismatch by name before calling the core — `align-takes reads both at one rate and does not resample` — rather than resampling either side.
+:::
+
+::: tip Which path, decided by the report
+Takes that already line up — loop passes, or takes tracked to a click — go straight from `splitSilenceCommonWithReport` to `remixAlignedIntervals` and the comp. `alignTakeToReference` is for the take the report flags as out of time: warp it under the reference first, and cut the comp on the project timeline rather than on shared silence.
+:::
+
 ## Drawing the recorded waveform
 
 To draw a take you do not plot every sample — you reduce the audio to per-bucket **min/max** pairs and draw those as a filled envelope. `waveformPeaks(samples, channels, options?)` does the reduction from *interleaved* audio.
@@ -399,6 +499,7 @@ Once a take is captured and comped, it lives on a clip in your project like any 
 
 - [Realtime Streaming](./realtime-streaming.md) — the engine node, AudioWorklet bridge, and SAB-free realtime path
 - [Project Editing](./project-editing.md) — clips, PPQ, fades, warping, and the edit compiler that renders comps
+- [JavaScript API](./js-api-audio.md) — signatures for `alignTakeToReference`, `remixAlignedIntervals`, and `splitSilenceCommonWithReport`
 - [MIDI Input](./midi-input.md) — drive instruments live while you record
 - [Native Synth](./native-synth.md) · [SoundFont Player](./soundfont-player.md) — sources to record into the engine
 - [Bouncing Projects](./project-bounce.md) — render the comped arrangement offline once recording is done

@@ -202,6 +202,33 @@ interface LoudnessMatchResult {
 
 `masteringStreamingPreviewStereo` の `platforms` の扱いはモノラル版と同じです。省略するか空配列を渡すと、組み込みの Spotify / Apple Music / YouTube のセットにフォールバックし、例外ではなく 3 行分の結果を返します。
 
+#### `lufsSeriesInterleaved(...)`
+
+マルチチャンネルのプログラムに対するモーメンタリー（400 ms）とショートターム（3 s）の LUFS 系列を、BS.1770-4 のチャンネル合算で求めます。[特徴抽出](./js-api-features.md)のモノラル版 `momentaryLufs`／`shortTermLufs` は 1 チャンネルずつを計測するもので、これはそのマルチチャンネル版です。
+
+```typescript
+function lufsSeriesInterleaved(request: LufsSeriesInterleavedRequest): LufsSeriesResult
+function lufsSeriesInterleaved(samples: Float32Array, channels: number, sampleRate?: number, options?: ValidateOptions): LufsSeriesResult
+
+interface LufsSeriesInterleavedRequest {
+  samples: Float32Array;   // インターリーブ: frames * channels 個の値
+  channels: number;        // 正の整数
+  sampleRate?: number;     // 既定 22050 — バッファの実際のレートを渡すこと
+  validate?: boolean;
+}
+
+interface LufsSeriesResult {
+  momentary: Float32Array;  // 400 ms の系列
+  shortTerm: Float32Array;  // 3 s の系列
+}
+```
+
+バッファは `lufsInterleaved` と同じインターリーブ配置（`L0, R0, L1, R1, …`）で、デコーダが渡してくるものそのままなので、計測前にチャンネルごとへ分ける必要はありません。フレーム数はそこから `samples.length / channels` として導かれます。長さが `channels` の倍数でなければ `RangeError` になります。一方、長さを割り切れてしまう *誤った* `channels` は例外にならず、間違った配置でバッファを読んでしまうため、ステレオと決めつけずデコーダからチャンネル数を取ってください。
+
+この関数があるのは、マルチチャンネルの系列はモノラルの系列から組み立てられないからです。BS.1770 は K 特性で重み付けしたチャンネルごとのブロックエネルギーを合算してから LUFS に変換するため、`momentaryLufs` をチャンネルごとに走らせて dB で合成すると別の数値になります。`0.5 * (left + right)` のダウンミックスも、相関の低い素材では低く出ます。これは上のステレオ版ヘルパーが避けようとしているのと同じ罠です。2 つの系列は 1 回の K 特性処理からまとめて得られるため、結果は常に両方を持ちます。片方だけを求めても節約にはなりません。`channels: 1` なら 2 つの系列はモノラルのメーターと要素ごとに一致します。
+
+`sampleRate` はバッファの実際のレートでなければなりません。K 特性はサンプルレートに依存するため、既定値の `22050` のままだと実際の音声に対してはエラーではなく誤った答えが返ります。ウィンドウより短い信号では、その系列はエラーではなく空配列になります。したがって `momentary` が空でなくても `shortTerm` は空になり得ます。
+
 名前付きマスタリング API は次の系統に分かれます。
 
 | 目的 | 関数 |

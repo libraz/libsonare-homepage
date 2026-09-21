@@ -17,8 +17,7 @@ Create an Audio instance from raw sample data.
 const audio = Audio.fromBuffer(samples, 44100);
 ```
 
-`sampleRate` is optional and defaults to `48000`. Always pass the buffer's
-actual sample rate, since the stored value feeds every instance method.
+`sampleRate` is optional and defaults to `48000`. Always pass the buffer's actual sample rate, since the stored value feeds every instance method.
 
 ### `Audio.fromMemory(bytes)`
 

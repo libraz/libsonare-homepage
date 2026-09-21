@@ -206,6 +206,33 @@ When either take is silent or sits below the measurement gate, its LUFS field is
 
 `masteringStreamingPreviewStereo` treats `platforms` exactly as the mono helper does: omit it or pass an empty array and the preview falls back to the built-in Spotify / Apple Music / YouTube set, returning three rows rather than throwing.
 
+#### `lufsSeriesInterleaved(...)`
+
+Momentary (400 ms) and short-term (3 s) LUFS series over a multichannel program, with the BS.1770-4 channel sum. The mono `momentaryLufs` / `shortTermLufs` on [Features](./js-api-features.md) measure one channel each; this is their multichannel counterpart.
+
+```typescript
+function lufsSeriesInterleaved(request: LufsSeriesInterleavedRequest): LufsSeriesResult
+function lufsSeriesInterleaved(samples: Float32Array, channels: number, sampleRate?: number, options?: ValidateOptions): LufsSeriesResult
+
+interface LufsSeriesInterleavedRequest {
+  samples: Float32Array;   // interleaved: frames * channels values
+  channels: number;        // positive integer
+  sampleRate?: number;     // default 22050 — pass the buffer's real rate
+  validate?: boolean;
+}
+
+interface LufsSeriesResult {
+  momentary: Float32Array;  // 400 ms series
+  shortTerm: Float32Array;  // 3 s series
+}
+```
+
+The buffer is the same interleaved layout `lufsInterleaved` takes (`L0, R0, L1, R1, …`), which is also what a decoder hands you, so nothing has to be split per channel before measuring. The frame count is derived from it: `samples.length / channels`. A length that is not a multiple of `channels` throws a `RangeError`; a *wrong* `channels` that still divides the length does not throw and reads the buffer under the wrong layout, so take the count from the decoder rather than assuming stereo.
+
+It exists because a multichannel series cannot be assembled from mono ones. BS.1770 sums the K-weighted per-channel block energies and only then converts to LUFS, so running `momentaryLufs` per channel and combining in dB gives a different number, and a `0.5 * (left + right)` downmix reads low on decorrelated material, the same trap the stereo helpers above exist to avoid. Both series fall out of one K-weighting pass, which is why the result always carries both; there is nothing to save by asking for one. With `channels: 1` the two series match the mono meters element for element.
+
+`sampleRate` has to be the buffer's actual rate: K-weighting is sample-rate dependent, so the `22050` default gives a wrong answer for real audio rather than an error. A signal shorter than a window yields an empty array for that series, not an error, so `shortTerm` can be empty while `momentary` is not.
+
 The named mastering API families are:
 
 | Purpose | Function |

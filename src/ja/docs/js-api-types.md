@@ -222,10 +222,30 @@ interface MelodyPoint {
 }
 ```
 
+### RoomMorphResult
+
+`roomMorph(...)` は、モーフ後の音声と、目標ルームの合成がそれを作るために何を変更したかをあわせて返します。
+
+```typescript
+interface RoomMorphResult {
+  audio: Float32Array;           // 入力の長さ + 目標ルームの残響テイル
+  sampleRate: number;
+  diagnostics: RirDiagnostic[];  // 合成が報告した診断情報すべて、報告順
+}
+
+interface RirDiagnostic {
+  code: string;       // 安定した ID。例: 'acoustic.rir_length_clamped'
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+}
+```
+
+生成できないモーフは例外になるため、ここに `hasError`／`errorMessage` の組はなく、`diagnostics` に入るのはすべて「結果は得られたが注意が要る」警告です。分岐は `code` で行ってください。`acoustic.ism_order_clamped`（鏡像音源の次数が安全上限まで下げられた）、`acoustic.rir_length_clamped`（テイルが `maxSeconds` で切られた）、`acoustic.no_late_tail`（拡散テイルが生成されなかった）はいずれも「指定したのとは別の部屋を通った」ことを意味しますが、音声そのものからは分かりません。`synthesizeRir(...)` も同じ形を `RirResult.diagnostics` で報告します。C ABI も同じ項目を構造化して公開しており — `sonare_last_diagnostic_count()`、`sonare_last_diagnostic_code(i)`、`sonare_last_diagnostic_message(i)`、`sonare_last_diagnostic_severity(i)` — そちらでも、連結済みの `sonare_last_warning_message()` 文字列を解析するのではなくコードで分岐できます。
+
 ### MasteringChainConfig
 
 `masteringChain*` と `StreamingMasteringChain` は下のネスト構造の設定スキーマを使います。
-各キーは任意で、指定されたステージだけが下の固定順で有効になります。
+各キーは任意で、指定されたステージだけが下の固定順で有効になります。加えて、下に挙げる各ステージオブジェクト（`denoise` のオブジェクト形式、`tilt`、`compressor`、`loudness` など）はいずれも `enabled?: boolean` を受け付け、そのステージを明示的に切り替えられます。一覧では繰り返しを避けるため省いています。`"dynamics.compressor.thresholdDb"` のようなフラットなドット記法のキーも同じオブジェクトで受け付けられ、そのままコアへ渡されます。
 
 <FlowDiagram
   title="マスタリングチェーンの順序"
@@ -264,46 +284,45 @@ interface MelodyPoint {
 ```typescript
 interface MasteringChainConfig {
   repair?: {
-    denoise?: boolean;
+    denoise?: boolean | { mode?: number; noiseEstimator?: number; nFft?: number;
+                          hopLength?: number; ddAlpha?: number; reductionDb?: number;
+                          gainFloor?: number; overSubtraction?: number;
+                          spectralFloor?: number; noiseEstimationQuantile?: number;
+                          speechPresenceGain?: boolean; gainSmoothing?: boolean; };
     nFft?: number; hopLength?: number; ddAlpha?: number; reductionDb?: number;
-    /** @deprecated `reductionDb` を使用してください（`dB = -20*log10(gainFloor)` で変換） */
+    /** @deprecated `denoise.reductionDb` を使用してください（`dB = -20*log10(gainFloor)` で変換） */
     gainFloor?: number;
-    declip?: { enabled?: boolean; clipThreshold?: number; lpcOrder?: number;
-               iterations?: number; lpcBlend?: number; };
-    decrackle?: { enabled?: boolean; threshold?: number;
+    declip?: { clipThreshold?: number; lpcOrder?: number; iterations?: number; lpcBlend?: number; };
+    decrackle?: { threshold?: number; levels?: number;
                   /** 0 = メディアン、1 = ウェーブレット縮小 */
-                  mode?: number; levels?: number; };
-    dehum?: { enabled?: boolean; fundamentalHz?: number; harmonics?: number;
-              q?: number; adaptive?: boolean; searchRangeHz?: number;
-              adaptation?: number; frameSize?: number; pllBandwidth?: number; };
+                  mode?: number; };
+    dehum?: { fundamentalHz?: number; harmonics?: number; q?: number; adaptive?: boolean;
+              searchRangeHz?: number; adaptation?: number; frameSize?: number;
+              pllBandwidth?: number; mode?: number; };
     declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
                 lpcOrder?: number; residualRatio?: number; };
-    dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
-                 hopLength?: number; t60Sec?: number; lateDelayMs?: number;
-                 overSubtraction?: number; spectralFloor?: number;
-                 wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
-                 wpeStrength?: number; };
+    dereverb?: { threshold?: number; attenuation?: number; nFft?: number; hopLength?: number;
+                 t60Sec?: number; lateDelayMs?: number; overSubtraction?: number;
+                 spectralFloor?: number; wpeEnabled?: boolean; wpeIterations?: number;
+                 wpeTaps?: number; wpeStrength?: number; };
   };
   eq?: {
     /** 正規のネストされた tilt ステージ */
-    tilt?: { enabled?: boolean; tiltDb?: number; pivotHz?: number };
+    tilt?: { tiltDb?: number; pivotHz?: number };
     /** @deprecated `eq.tilt.tiltDb` を使用してください */
     tiltDb?: number;
     /** @deprecated `eq.tilt.pivotHz` を使用してください */
     pivotHz?: number;
   };
   dynamics?: {
-    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
-                   releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
-                   autoMakeup?: boolean; };
-    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
-                attackMs?: number; releaseMs?: number; rangeDb?: number;
-                bandpassQ?: number; };
-    transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
-                        fastAttackMs?: number; fastReleaseMs?: number;
-                        slowAttackMs?: number; slowReleaseMs?: number;
-                        sensitivity?: number; maxGainDb?: number;
-                        gainSmoothingMs?: number; lookaheadMs?: number; };
+    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number; releaseMs?: number;
+                   kneeDb?: number; makeupGainDb?: number; autoMakeup?: boolean; };
+    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number; attackMs?: number;
+                releaseMs?: number; rangeDb?: number; bandpassQ?: number; };
+    transientShaper?: { attackGainDb?: number; sustainGainDb?: number; fastAttackMs?: number;
+                        fastReleaseMs?: number; slowAttackMs?: number; slowReleaseMs?: number;
+                        sensitivity?: number; maxGainDb?: number; gainSmoothingMs?: number;
+                        lookaheadMs?: number; };
     multibandComp?: { lowCutoffHz?: number; highCutoffHz?: number;
                       lowThresholdDb?: number;  lowRatio?: number;
                       lowAttackMs?: number;     lowReleaseMs?: number;
@@ -313,31 +332,33 @@ interface MasteringChainConfig {
                       highAttackMs?: number;    highReleaseMs?: number; };
   };
   saturation?: {
-    tape?: { driveDb?: number; saturation?: number; hysteresis?: number;
-             outputGainDb?: number; speedIps?: number; headBumpDb?: number;
-             bias?: number; gapLoss?: number; };
-    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number;
-                q?: number; evenOddMix?: number; };
+    tape?: { driveDb?: number; saturation?: number; hysteresis?: number; outputGainDb?: number;
+             speedIps?: number; headBumpDb?: number; bias?: number; gapLoss?: number;
+             oversampleFactor?: number; };
+    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number; q?: number;
+                evenOddMix?: number; aliasing?: number; };
   };
   spectral?: {
     airBand?: { amount?: number; shelfFrequencyHz?: number;
                 dynamicThresholdDb?: number; dynamicRangeDb?: number; };
   };
   stereo?: {
-    imager?: { width?: number; outputGainDb?: number;
-               decorrelationAmount?: number; preserveEnergy?: boolean; };
+    imager?: { width?: number; outputGainDb?: number; decorrelationAmount?: number;
+               preserveEnergy?: boolean; };
     monoMaker?: { amount?: number; frequencyHz?: number };
   };
   maximizer?: {
-    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
-                        releaseMs?: number; oversampleFactor?: number;
-                        applyGainAtInputRate?: boolean; };
+    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number; releaseMs?: number;
+                        oversampleFactor?: number; applyGainAtInputRate?: boolean; };
   };
-  loudness?: { targetLufs?: number; ceilingDb?: number;
-               truePeakOversample?: number; };
+  loudness?: { targetLufs?: number; ceilingDb?: number; truePeakOversample?: number;
+               releaseMs?: number; applyGainAtInputRate?: boolean;
+               maxLimiterGainReductionDb?: number; };
+  /** ネスト形式と並行して、フラットなドット記法のキーも受け付ける */
+  [flatKey: `${string}.${string}`]: number | boolean | undefined;
 }
 
-interface MasteringResult {
+interface MasteringResult {              // masteringProcess、masteringPairProcess
   samples: Float32Array;
   sampleRate: number;
   inputLufs: number;
@@ -345,16 +366,23 @@ interface MasteringResult {
   appliedGainDb: number;
   loudnessTargetLimited?: boolean;
   latencySamples?: number;
+  nonFiniteSubstitutionCount: number;    // リミッターが有限値に置き換えたサンプル数
 }
-interface MasteringChainResult extends MasteringResult {
+interface MasteringChainResult {         // masteringChain / masterAudio（および WithProgress）
+  samples: Float32Array;                 // レイテンシ補正済み。latencySamples はない
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
   stages: string[];
   outputTruePeakDbtp: number;
   outputLra: number;
   loudnessTargetLimited: boolean;
+  nonFiniteSubstitutionCount: number;
   stageGainReductions: StageGainReduction[];
   report: MasteringReport;
 }
-interface MasteringStereoResult {
+interface MasteringStereoResult {        // masteringProcessStereo
   left: Float32Array;
   right: Float32Array;
   sampleRate: number;
@@ -362,11 +390,12 @@ interface MasteringStereoResult {
   outputLufs: number;
   appliedGainDb: number;
   latencySamples: number;
+  loudnessTargetLimited: boolean;
+  nonFiniteSubstitutionCount: number;
 }
-// masteringChainStereo / masterAudioStereo（および WithProgress 変種）の
-// 戻り値。MasteringStereoResult は masteringProcessStereo の戻り値。
-// latencySamples フィールドはない — オフラインチェーンの出力はすでに
-// レイテンシ補正済み。
+// masteringChainStereo / masterAudioStereo（および WithProgress）の戻り値。
+// MasteringChainResult の samples を left/right に置き換えた形。MasteringStereoChainResult は
+// Node/Python バインディングとのソース互換性のために残された @deprecated エイリアス。
 interface MasteringChainStereoResult {
   left: Float32Array;
   right: Float32Array;
@@ -378,12 +407,10 @@ interface MasteringChainStereoResult {
   outputTruePeakDbtp: number;
   outputLra: number;
   loudnessTargetLimited: boolean;
+  nonFiniteSubstitutionCount: number;
   stageGainReductions: StageGainReduction[];
   report: MasteringReport;
 }
-// MasteringStereoChainResult は MasteringChainStereoResult の
-// @deprecated エイリアス。Node/Python バインディングとのソース互換性のために
-// 維持されている。
 ```
 
 :::
@@ -522,3 +549,37 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | パン則の入力 | `PanLaw`, `PanLawName`, `PanLawInput` |
 
 `SurroundPan`（`Mixer.setSurroundPan` のパラメータ型）はパッケージの公開エクスポート一覧に含まれていません。インポートせず、インラインまたはローカルなエイリアスとして型付けしてください。
+
+### リテラルユニオン型と enum 相当のテーブル
+
+以下のエクスポートされた文字列リテラルのユニオン型は、フィールドや呼び出しが受け付ける値を列挙したものです。シンセ系の語彙はいずれも値の序数も受け付け、`synthEnumTables()` はランタイムからシンセの全テーブルを `string[]` として返します（`SynthEnumTables`）。
+
+| 型 | 値 | 現れる場所 |
+|----|----|-----------|
+| `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`。`'fm'`・`'modal'`・`'percussion'`・`'sample'` は対応するセクションを渡すまで無音 |
+| `SynthOscWaveform` | `'default'`, `'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'` | `SynthPatch.waveform` |
+| `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
+| `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput`（SVF のみ） |
+| `SynthBodyType` | `'default'`, `'none'`, `'guitar'`, `'violin'`, `'wood-tube'`, `'brass-bell'`, `'vocal'` | `SynthPatch.body` |
+| `SynthModSource` | `'none'`, `'amp-env'`, `'filter-env'`, `'lfo1'`, `'lfo2'`, `'velocity'`, `'key-track'`, `'mod-wheel'`, `'random'`, `'breath'`, `'aftertouch'`, `'expression-cc'`, `'pitch-bend'` | `SynthModRouting.source` |
+| `SynthModDestination` | `'none'`, `'pitch-cents'`, `'cutoff-cents'`, `'amp-gain'`, `'pan-units'`, `'resonance-q'`, `'vibrato-depth-cents'`, `'filter-env-depth'`, `'lfo1-rate-scale'`, `'excitation-force'`, `'excitation-position'`, `'excitation-brightness'`, `'spectrum-morph'` | `SynthModRouting.destination` |
+| `SampleLoopMode` / `SampleKeyTrack` | `'default'`, `'none'`, `'continuous'`, `'key-down'` / `'default'`, `'on'`, `'off'` | `SynthPatch.sampleLoop` / `SynthPatch.sampleKeyTrack` |
+| `SampleDescLoopMode` | `'none'`, `'continuous'`, `'key-down'` | `SampleDesc.loopMode` — 録音自体のループモードで、`SampleLoopMode` とは別の集合 |
+| `BuiltinSynthWaveform` | `'sine'`, `'saw'`, `'sawtooth'`, `'square'`, `'triangle'`, または `0`〜`3` | `BuiltinSynthConfig.waveform` |
+| `ControllerInput` / `ControllerAxis` | `'control-change'`, `'channel-pressure'`, `'poly-pressure'`, `'pitch-bend'`, `'velocity'` / `'none'`, `'excitation'`, `'position'`, `'brightness'`, `'morph'`, `'loudness'`, `'pitch-cents'`, `'vibrato-depth'` | `RealtimeEngine.bindController` に渡す `ControllerBinding.input` / `.axis` |
+| `Articulation` | `'poly'`, `'mono-retrigger'`, `'mono-legato'` | `RealtimeEngine.setArticulation` |
+| `MpeDimension` / `NoteTracking` | `'bend'`, `'pressure'`, `'timbre'` / `'last'`, `'lowest'`, `'highest'`, `'all'` | `RealtimeEngine.setControllerNoteTracking` |
+| `SourceBackend` | `'sf2'`, `'synth'` | `Project.soundFontManifest` が返す `Sf2ProgramStatus.backend` |
+| `EngineCaptureSource` | `'output'`, `'input'`, または序数 | `RealtimeEngine.setCaptureSource` |
+| `ProjectTrackKind` | `'audio'`, `'midi'`, `'aux'`, または `0`〜`2` | `Project.addTrack`、`Project.setTrackKind` |
+| `ProjectLoopMode` | `'off'`, `'loop'`, または `0`〜`1` | `Project.setClipLoop` |
+| `ProjectFadeCurve` | `'linear'`, `'equal-power'`（`'equal_power'`・`'equalPower'`・`'equalpower'` も可）, `'exponential'`/`'exp'`, `'logarithmic'`/`'log'`, または `0`〜`2` | `Project.setClipFade` に渡す `ProjectClipFade.curve` |
+| `MasteringProcessorCategory` | `'dynamics'`, `'effects'`, `'eq'`, `'final'`, `'maximizer'`, `'multiband'`, `'other'`, `'reference'`, `'repair'`, `'saturation'`, `'spectral'`, `'stereo'` | `masteringProcessorCatalog()` が返す `MasteringProcessorCatalogEntry.category` |
+| `MasteringRealtimeCost` | `'low'`, `'moderate'`, `'high'` | `MasteringProcessorCatalogEntry.realtimeCost`（未評価のときは `null`） |
+| `PairProcessor` | `'match.applyMatchEq'`, `'match.alignReferenceToSource'`, `'match.abSwitch'`, `'match.abCrossfade'` | `masteringPairProcess` の `processorName`。`masteringPairProcessorNames()` で一覧できる |
+| `PairAnalysis` | `'match.referenceLoudness'`, `'match.tonalBalance'`, `'match.tonalBalanceLogBands'`, `'match.matchEqCurve'`, `'match.estimateReferenceDelaySamples'` | `masteringPairAnalyze` の `analysisName`。`masteringPairAnalysisNames()` で一覧できる |
+| `StereoAnalysis` | `'stereo.monoCompatCheck'`, `'stereo.monoCompatCheckLogBands'` | `masteringStereoAnalyze` の `analysisName`。`masteringStereoAnalysisNames()` で一覧できる |
+| `DehumMode` | `'subtract'`, `'notch'` | `masteringRepairDehum` の `mode` |
+| `MixAnalysisBand` | `'sub'`, `'low'`, `'lowMid'`, `'mid'`, `'highMid'`, `'high'`, `'air'` | `MixBandOccupancy` のキー。ミックスアシスタントの解析における `MixCrowdedBand.band` |
+| `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `spectralEdit` に渡す `SpectralRegionOp.mode` / `SpectralEditOptions.window` |
+| `NoteTargetUnmatchedPolicy` | `'leave'`（既定）, `'mute'`, `'nearest'` | `assignNoteTargets` の `unmatchedPolicy` |

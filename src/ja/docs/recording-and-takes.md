@@ -62,6 +62,7 @@ libsonare はこれを協調する 2 つの層に分けています。[リアル
 - パンチイン／アウトで選んだ範囲だけを録音する。
 - `bindMicrophoneInput` でブラウザのマイクを開き、正しく後始末する。
 - `addLoopRecordingTakes` でキャプチャしたループをテイクに分割し、`setClipTakes` / `setClipCompSegments` でテイクをまたいでコンピングする。
+- `splitSilenceCommonWithReport` で複数の自由テイクに共通するカット位置を見つけ、`remixAlignedIntervals` で全チャンネルを同じフレームで切り、リファレンスに対してずれるテイクを `alignTakeToReference` でワープして合わせる。
 - `waveformPeaks` と `waveformPeakPyramid` で録音波形を描画する。
 
 ## キャプチャ経路
@@ -300,6 +301,105 @@ restored.delete();
 ```
 ::::
 
+## 自由テイクのコンピング: 共通のカット位置と位置合わせ
+
+ループテイクはグリッドに乗って届きます。どの周回も同じ PPQ 範囲を覆うので、`addLoopRecordingTakes` は長さだけで分割できます。別々のパスとして録ったテイク — ガイドボーカルや伴奏に合わせて、そのつど頭からパートを通したもの — はそうなりません。それらをコンピングするにはどのテイクも同じ位置で切る必要があり、それはテイクどうしがタイムラインを共有している間しか成り立ちません。ライブで歌ったテイクはリファレンスに対して全体にわたってずれ、ここでは少し前に、あそこでは少し後ろに行くので、1 つのオフセットでは合わせられません。この領域を 3 つの呼び出しが受け持ちます。`splitSilenceCommonWithReport` は全テイクが一致するカット位置を見つけ、そもそもカット位置が持てるほどテイクが揃っているかを告げます。`remixAlignedIntervals` はそのカット位置を、ステレオテイクの全チャンネルで共通の 1 組のフレームにします。`alignTakeToReference` は揃っていないテイクを受け持ち、リファレンスの下へ収めるワープマップを返します。シグネチャは [JavaScript API](./js-api-audio.md) のページにあります。この節が扱うのは、それらを呼ぶ順序と、戻り値の読み方です。
+
+### テイクが共有するカット位置
+
+同じパートのテイクどうしが共有するのは音ではなく無音です。あるテイクがたまたま静かになる場所で別のテイクがまだ歌っているなら、そこで切ってはいけません。`splitSilenceCommon({ signals })` は全テイクをまとめて受け取り、各テイクの鳴っている区間の**和集合**を返します。形は `splitSilence` が 1 本の信号に対して返すのと同じフラットな `[start0, end0, start1, end1, …]` の `Int32Array` で、接する区間は結合されます。したがって、返された区間どうしの隙間はすべてのテイクで同時に無音であり、隙間に置いたカットはどのテイクでもフレーズの途中には落ちません。長さの違うテイクにパディングは要りません。短いテイクは自分の終端より先には何も寄与せず、それはそこで無音であるのと同じです。信号が 1 本なら答えは `splitSilence` とまったく同じです。切ること自体はあなたに任され、それは配列のスライスです。
+
+`splitSilenceCommonWithReport` は同一の区間に加えて `report` を返します。レポートがあるのは、全体を覆う区間 1 つという答えが 3 つの異なる状況に対応し、区間リストではそれらを区別できないからです。
+
+```typescript
+import { splitSilenceCommonWithReport } from '@libraz/libsonare';
+
+const topDb = 60; // 既定値。フレームは、そのテイク自身のピークからこれだけ下にあるとき無音とみなす
+const { intervals, report } = splitSilenceCommonWithReport({
+  signals: [takeA, takeB, takeC],   // テイクごとに 1 本の Float32Array、各 1 チャンネル
+  topDb,
+});
+// intervals -> Int32Array [start0, end0, start1, end1, ...]。すべてのテイクで有効
+// report    -> { silenceCeilingDb, maxSignalIntervals, minSignalIntervals }
+```
+
+`silenceCeilingDb` — **すべての**テイクにまだ無音が残る最大の `topDb` — を、渡した `topDb` と見比べてください。
+
+| `silenceCeilingDb` | 意味 | 対処 |
+|--------------------|------|------|
+| `0` に近い | 鳴りやまないテイクがあり、どのしきい値でもそこに隙間は開かない | 無音以外のものからカット位置を取る — マーカーや拍 |
+| `topDb` より低い | しきい値が緩すぎて、これらのテイクにある静けさが見えていない | 報告された ceiling を下回る `topDb` で再実行する。その値なら切れる |
+| `topDb` 以上で、なお区間が 1 つ | この設定ではどのテイクも静かになるが、同じ場所では決してならない | テイクどうしのタイミングが合っていない — 先に位置合わせする（下記） |
+
+2 つの区間数が表すのは形であって原因ではありません。一度鳴って止まるテイクは、無音のないテイクとまったく同じく `1` と数えられます。そのため、どれかのテイクに内部の隙間があるか（`maxSignalIntervals >= 2`）と、テイクどうしで分かれ方がどれほど違うかを見るのに使い、判定は ceiling に委ねてください。全体が無音のテイクではピークがゼロで比が定まらないため、`silenceCeilingDb` は `0` です。3 つの数値はすべて区間と同じ RMS パスから得られるので、別の測定を記述することはありません。素の `splitSilenceCommon` は切るだけの呼び出し側のために残っています。両エントリポイントは既定値（`topDb` 60、`frameLength` 2048、`hopLength` 512）と拒否条件を共有し、空の `signals` リストや空のテイクはどちらからも例外になります。
+
+### 全チャンネルを同じフレームで切る
+
+モノラルテイクなら、各区間について `take.subarray(start, end)` するだけで仕事は終わりです。ステレオテイクには手順がもう 1 つあります。`remix` はスライスがクリックで始まらないようにカット位置をゼロクロスへ吸着させられますが、吸着は信号ごとの判断です。チャンネルごとに実行すると各チャンネルが別のフレームへ吸着し、カットのたびにステレオ像が離れていきます。`remixAlignedIntervals` は吸着後のカット集合を**1 つ**のチャンネルから、切らずに解決し、入力区間ごとにクランプ済みの `(start, end)` 対を 1 つ返すので、同じフレームを全チャンネルに適用できます。
+
+```typescript
+import { remixAlignedIntervals } from '@libraz/libsonare';
+
+const cuts = remixAlignedIntervals({
+  samples: takeLeft,    // 1 チャンネルだけから解決する
+  intervals,            // 上の分割で得た共通区間
+  sampleRate,           // 検証されるので、実際のレートを渡す
+  alignZeros: true,     // ここでは既定。remix 自体の既定は false
+});
+for (let i = 0; i < cuts.length; i += 2) {
+  const left = takeLeft.subarray(cuts[i], cuts[i + 1]);
+  const right = takeRight.subarray(cuts[i], cuts[i + 1]);   // 同一のフレーム
+}
+```
+
+スライスが消えないよう 2 つのガードがあります。符号の変化がまったくないチャンネル（無音、DC オフセット、あらゆる定数）は吸着させず、内容はあったのに吸着で空になってしまうスライスは吸着前の境界を保ちます。`alignZeros: false` なら、対は単に入力をバッファへクランプしたものです。この呼び出しが消費するものに注意してください。無音分割で得た、テイク自身のバッファ内のサンプル位置で表した区間であって、下の位置合わせで得るアンカーではありません。あれはプロジェクトのタイムラインを記述するものです。
+
+### ずれるテイクを位置合わせする
+
+レポートが ceiling を `topDb` 以上と告げ、なお区間が 1 つしか返らないとき、各テイクは静かになるものの一緒には静かにならず、テイクどうしのタイミングが合っていません。それはしきい値では直せません。`alignTakeToReference` はリファレンスとテイクそれぞれのクロマグラム（12 の音高クラスの時間変化）を測定し、両者を動的時間伸縮（DTW）で位置合わせして、その結果をプロジェクトの**ワープアンカー** — [`setWarpMap`](./project-editing.md#ワープ-クリップをグリッドに合わせて伸縮する) が受け取る `{ warpSample, sourceSample }` の対 — として返します。向きは、ソースがそのテイクであるクリップ向けにすでに整っています。`warpSample` は**リファレンス**のタイムライン上の位置、`sourceSample` はそれに対応する**テイク**内の位置です。録音そのものには触れず、クリップがそれをリファレンスの下で伸縮して再生します。
+
+```typescript
+import { alignTakeToReference, Project } from '@libraz/libsonare';
+
+const { anchors, alignment } = alignTakeToReference({
+  reference,     // Float32Array: ガイドテイク、またはテイクを歌ったときの伴奏
+  take,          // Float32Array: その下へ収めるテイク
+  sampleRate,    // 両バッファ共通のレート — ここでは何もリサンプルしない
+  // hopLength: 512,      // クロマのホップ。小さいほど多くのフレームを測定し、アンカーが増える
+  // binsPerOctave: 12,   // 正の 12 の倍数。レートに対して確認済みでなければ触らない
+});
+// alignment -> { meanResidualFrames, referenceFrames, takeFrames } — 記述的な値で、失敗を表すことはない
+
+const project = new Project();
+try {
+  project.setSampleRate(sampleRate);
+  const trackId = project.addTrack({ kind: 'audio', name: 'take 2' });
+  const clipId = project.addClip({ trackId, lengthPpq: 8, audio: take, audioSampleRate: sampleRate });
+  project.setWarpMap({ id: 1, name: 'take 2 under guide', anchors });
+  project.setClipWarpRef(clipId, 1);
+  project.setClipWarpMode(clipId, 'time-stretch');   // アンカーに従い、ピッチは保つ
+} finally {
+  project.delete();
+}
+```
+
+ワープマップはクリップに属するので、位置合わせしたテイクはそれぞれ自分のクリップと自分のマップを持ちます。全部がリファレンスの下で同じタイミングで再生されるようになったら、その共有タイムライン上で `splitClip` とトリムでコンプを切ります。`'time-stretch'` のクリップは次の音声ブロックから新しいマップを反映し、焼き直しは要りません。アンカーはワープマップが求める狭義単調増加の形へすでに縮約されています。DTW の経路は 2 つの録音の速度が違う箇所で片方の軸を止めたままにするので、座標が並ぶ区間はその中央のアンカーで代表されます。したがって結果はそのまま `setWarpMap` へ渡せます。`alignment` はその組み合わせがどれほど整っていたかを表します。`takeFrames / referenceFrames` はアンカーが表す全体のレート差、`meanResidualFrames` は経路が自身の対角トレンドからどれだけ絶対値で外れたかの平均で、テイクがリファレンスとどれほど食い違うかの粗い目安であって誤差の上界ではありません。これらの値が呼び出しを失敗させることはなく、何を許容するかは呼び出し側が自分のしきい値で決めます。
+
+::: warning 何がどう拒否されるか
+位置合わせできないテイクは報告され、使えないマップで答えられることはありません。拒否する層は 2 つあり、どちらが答えるかで何を告げられるかが決まります。
+
+- **測定の前に、フィールド名つきで。** 空のバッファ（`reference must not be empty`、`take must not be empty`）、非有限のサンプル（`reference contains NaN or Inf`、`take contains NaN or Inf`）、`[8000, 384000]` の整数でない `sampleRate`、形の合わない `hopLength` や `binsPerOctave`（文字列、小数）は、いずれも問題のフィールドを名指しする `RangeError` を投げます。
+- **測定から、`SonareError` の `InvalidParameter` として。** 負の `hopLength`、負か 12 の倍数でない `binsPerOctave`（各音高クラスは整数個の CQT ビンの平均なので、13 や 18 には畳み込み先がありません）、相異なるアンカーが 2 個得られない組み合わせ — どちらかの録音がクロマ 1 フレームに満たないとそうなります。コアは引数を名指しせずに条件を報告します。
+
+12 の倍数であることは必要条件であって十分条件ではありません。使える最も細かい `binsPerOctave` はサンプルレートに依存し、レートが上がっても細かくはならないので、実行するレートでより細かいグリッドを確認済みでなければ既定のままにしてください。どちらのフィールドも、省略するか `0` を書くとライブラリの値が選ばれます。
+
+**サンプルレートは変換されません。** この呼び出しは両バッファに 1 つの `sampleRate` を取ります。レートが異なるなら先にリサンプルしてください。さもないとクロマグラムが 2 つの異なるグリッドで測定され、何も報告されないままアンカーが間違います。CLI 版の `sonare project align-takes` はリファレンスと各テイクをファイルから読み、不一致をコアの呼び出し前に名指しで拒否します — `align-takes reads both at one rate and does not resample` — どちらの側もリサンプルしません。
+:::
+
+::: tip どちらの経路かはレポートが決める
+すでに揃っているテイク — ループの周回や、クリックに合わせて録ったテイク — は、`splitSilenceCommonWithReport` から `remixAlignedIntervals` を経てそのままコンプへ進みます。`alignTakeToReference` は、レポートがタイミングの不一致を示したテイクのためのものです。先にリファレンスの下へワープし、コンプは共通の無音ではなくプロジェクトのタイムライン上で切ってください。
+:::
+
 ## 録音波形を描く
 
 テイクを描くとき、全サンプルをプロットはしません。音声をバケットごとの **min/max** 対へ縮約し、それを塗りつぶしのエンベロープとして描きます。`waveformPeaks(samples, channels, options?)` が*インターリーブ*音声からこの縮約を行います。
@@ -399,6 +499,7 @@ project.setClipCompSegments(result.clipId, [
 
 - [リアルタイムストリーミング](./realtime-streaming.md) — エンジンノード、AudioWorklet ブリッジ、SAB なしのリアルタイム経路
 - [プロジェクト編集](./project-editing.md) — クリップ、PPQ、フェード、ワープ、コンプをレンダリングする編集コンパイラ
+- [JavaScript API](./js-api-audio.md) — `alignTakeToReference`、`remixAlignedIntervals`、`splitSilenceCommonWithReport` のシグネチャ
 - [MIDI 入力](./midi-input.md) — 録音しながら楽器をライブで鳴らす
 - [内蔵シンセサイザー](./native-synth.md) · [SoundFont プレイヤー](./soundfont-player.md) — エンジンへ録音するソース
 - [プロジェクトのバウンス](./project-bounce.md) — 録音し終えたアレンジをオフラインでレンダリングする

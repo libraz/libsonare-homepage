@@ -227,9 +227,29 @@ interface MelodyPoint {
 }
 ```
 
+### RoomMorphResult
+
+`roomMorph(...)` returns the morphed audio together with what the target-room synthesis had to change to produce it:
+
+```typescript
+interface RoomMorphResult {
+  audio: Float32Array;           // input length plus the target room's reverb tail
+  sampleRate: number;
+  diagnostics: RirDiagnostic[];  // every diagnostic the synthesis reported, in order
+}
+
+interface RirDiagnostic {
+  code: string;       // stable id, e.g. 'acoustic.rir_length_clamped'
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+}
+```
+
+An unusable morph throws, so there is no `hasError`/`errorMessage` pair here and every entry in `diagnostics` is recoverable. Branch on `code`: `acoustic.ism_order_clamped` (image-source order reduced to the safe maximum), `acoustic.rir_length_clamped` (tail cut against `maxSeconds`) and `acoustic.no_late_tail` (no diffuse tail produced) each mean the morph went through a room other than the one requested, and none is visible in the audio itself. `synthesizeRir(...)` reports the same shape on `RirResult.diagnostics`. The C ABI publishes the same entries structurally — `sonare_last_diagnostic_count()`, `sonare_last_diagnostic_code(i)`, `sonare_last_diagnostic_message(i)`, `sonare_last_diagnostic_severity(i)` — so a caller there branches on the code too rather than parsing the joined `sonare_last_warning_message()` string.
+
 ### MasteringChainConfig
 
-`masteringChain*` and `StreamingMasteringChain` use the nested config schema below. Every key is optional. Only the stages you set are activated.
+`masteringChain*` and `StreamingMasteringChain` use the nested config schema below. Every key is optional. Only the stages you set are activated; every stage object below (the `denoise` object form, `tilt`, `compressor`, `loudness` and the rest) also accepts `enabled?: boolean` to switch that stage explicitly — the listing omits it rather than repeat it — and flat dot-notation keys such as `"dynamics.compressor.thresholdDb"` are accepted on the same object and reach the core unchanged.
 
 Stages always run in a fixed order:
 
@@ -268,46 +288,45 @@ Stages always run in a fixed order:
 ```typescript
 interface MasteringChainConfig {
   repair?: {
-    denoise?: boolean;
+    denoise?: boolean | { mode?: number; noiseEstimator?: number; nFft?: number;
+                          hopLength?: number; ddAlpha?: number; reductionDb?: number;
+                          gainFloor?: number; overSubtraction?: number;
+                          spectralFloor?: number; noiseEstimationQuantile?: number;
+                          speechPresenceGain?: boolean; gainSmoothing?: boolean; };
     nFft?: number; hopLength?: number; ddAlpha?: number; reductionDb?: number;
-    /** @deprecated Use `reductionDb`; converted to it (dB = -20*log10(gainFloor)). */
+    /** @deprecated Use `denoise.reductionDb`; converted to it (dB = -20*log10(gainFloor)). */
     gainFloor?: number;
-    declip?: { enabled?: boolean; clipThreshold?: number; lpcOrder?: number;
-               iterations?: number; lpcBlend?: number; };
-    decrackle?: { enabled?: boolean; threshold?: number;
+    declip?: { clipThreshold?: number; lpcOrder?: number; iterations?: number; lpcBlend?: number; };
+    decrackle?: { threshold?: number; levels?: number;
                   /** 0 = median, 1 = wavelet shrinkage. */
-                  mode?: number; levels?: number; };
-    dehum?: { enabled?: boolean; fundamentalHz?: number; harmonics?: number;
-              q?: number; adaptive?: boolean; searchRangeHz?: number;
-              adaptation?: number; frameSize?: number; pllBandwidth?: number; };
+                  mode?: number; };
+    dehum?: { fundamentalHz?: number; harmonics?: number; q?: number; adaptive?: boolean;
+              searchRangeHz?: number; adaptation?: number; frameSize?: number;
+              pllBandwidth?: number; mode?: number; };
     declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
                 lpcOrder?: number; residualRatio?: number; };
-    dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
-                 hopLength?: number; t60Sec?: number; lateDelayMs?: number;
-                 overSubtraction?: number; spectralFloor?: number;
-                 wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
-                 wpeStrength?: number; };
+    dereverb?: { threshold?: number; attenuation?: number; nFft?: number; hopLength?: number;
+                 t60Sec?: number; lateDelayMs?: number; overSubtraction?: number;
+                 spectralFloor?: number; wpeEnabled?: boolean; wpeIterations?: number;
+                 wpeTaps?: number; wpeStrength?: number; };
   };
   eq?: {
     /** Canonical nested tilt stage. */
-    tilt?: { enabled?: boolean; tiltDb?: number; pivotHz?: number };
+    tilt?: { tiltDb?: number; pivotHz?: number };
     /** @deprecated Use `eq.tilt.tiltDb`. */
     tiltDb?: number;
     /** @deprecated Use `eq.tilt.pivotHz`. */
     pivotHz?: number;
   };
   dynamics?: {
-    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
-                   releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
-                   autoMakeup?: boolean; };
-    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
-                attackMs?: number; releaseMs?: number; rangeDb?: number;
-                bandpassQ?: number; };
-    transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
-                        fastAttackMs?: number; fastReleaseMs?: number;
-                        slowAttackMs?: number; slowReleaseMs?: number;
-                        sensitivity?: number; maxGainDb?: number;
-                        gainSmoothingMs?: number; lookaheadMs?: number; };
+    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number; releaseMs?: number;
+                   kneeDb?: number; makeupGainDb?: number; autoMakeup?: boolean; };
+    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number; attackMs?: number;
+                releaseMs?: number; rangeDb?: number; bandpassQ?: number; };
+    transientShaper?: { attackGainDb?: number; sustainGainDb?: number; fastAttackMs?: number;
+                        fastReleaseMs?: number; slowAttackMs?: number; slowReleaseMs?: number;
+                        sensitivity?: number; maxGainDb?: number; gainSmoothingMs?: number;
+                        lookaheadMs?: number; };
     multibandComp?: { lowCutoffHz?: number; highCutoffHz?: number;
                       lowThresholdDb?: number;  lowRatio?: number;
                       lowAttackMs?: number;     lowReleaseMs?: number;
@@ -317,31 +336,33 @@ interface MasteringChainConfig {
                       highAttackMs?: number;    highReleaseMs?: number; };
   };
   saturation?: {
-    tape?: { driveDb?: number; saturation?: number; hysteresis?: number;
-             outputGainDb?: number; speedIps?: number; headBumpDb?: number;
-             bias?: number; gapLoss?: number; };
-    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number;
-                q?: number; evenOddMix?: number; };
+    tape?: { driveDb?: number; saturation?: number; hysteresis?: number; outputGainDb?: number;
+             speedIps?: number; headBumpDb?: number; bias?: number; gapLoss?: number;
+             oversampleFactor?: number; };
+    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number; q?: number;
+                evenOddMix?: number; aliasing?: number; };
   };
   spectral?: {
     airBand?: { amount?: number; shelfFrequencyHz?: number;
                 dynamicThresholdDb?: number; dynamicRangeDb?: number; };
   };
   stereo?: {
-    imager?: { width?: number; outputGainDb?: number;
-               decorrelationAmount?: number; preserveEnergy?: boolean; };
+    imager?: { width?: number; outputGainDb?: number; decorrelationAmount?: number;
+               preserveEnergy?: boolean; };
     monoMaker?: { amount?: number; frequencyHz?: number };
   };
   maximizer?: {
-    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
-                        releaseMs?: number; oversampleFactor?: number;
-                        applyGainAtInputRate?: boolean; };
+    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number; releaseMs?: number;
+                        oversampleFactor?: number; applyGainAtInputRate?: boolean; };
   };
-  loudness?: { targetLufs?: number; ceilingDb?: number;
-               truePeakOversample?: number; };
+  loudness?: { targetLufs?: number; ceilingDb?: number; truePeakOversample?: number;
+               releaseMs?: number; applyGainAtInputRate?: boolean;
+               maxLimiterGainReductionDb?: number; };
+  /** Flat dot-notation keys are accepted alongside the nested form. */
+  [flatKey: `${string}.${string}`]: number | boolean | undefined;
 }
 
-interface MasteringResult {
+interface MasteringResult {              // masteringProcess, masteringPairProcess
   samples: Float32Array;
   sampleRate: number;
   inputLufs: number;
@@ -349,16 +370,23 @@ interface MasteringResult {
   appliedGainDb: number;
   loudnessTargetLimited?: boolean;
   latencySamples?: number;
+  nonFiniteSubstitutionCount: number;    // samples a limiter replaced with a finite value
 }
-interface MasteringChainResult extends MasteringResult {
+interface MasteringChainResult {         // masteringChain / masterAudio (and WithProgress)
+  samples: Float32Array;                 // latency-compensated; there is no latencySamples
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
   stages: string[];
   outputTruePeakDbtp: number;
   outputLra: number;
   loudnessTargetLimited: boolean;
+  nonFiniteSubstitutionCount: number;
   stageGainReductions: StageGainReduction[];
   report: MasteringReport;
 }
-interface MasteringStereoResult {
+interface MasteringStereoResult {        // masteringProcessStereo
   left: Float32Array;
   right: Float32Array;
   sampleRate: number;
@@ -366,11 +394,12 @@ interface MasteringStereoResult {
   outputLufs: number;
   appliedGainDb: number;
   latencySamples: number;
+  loudnessTargetLimited: boolean;
+  nonFiniteSubstitutionCount: number;
 }
-// Returned by masteringChainStereo / masterAudioStereo (and their
-// WithProgress variants); MasteringStereoResult is the return type of
-// masteringProcessStereo. There is no latencySamples field — the offline
-// chain output is already latency-compensated.
+// masteringChainStereo / masterAudioStereo (and WithProgress): MasteringChainResult
+// with left/right in place of samples. MasteringStereoChainResult is a @deprecated
+// alias kept for source compatibility with the Node and Python bindings.
 interface MasteringChainStereoResult {
   left: Float32Array;
   right: Float32Array;
@@ -382,12 +411,10 @@ interface MasteringChainStereoResult {
   outputTruePeakDbtp: number;
   outputLra: number;
   loudnessTargetLimited: boolean;
+  nonFiniteSubstitutionCount: number;
   stageGainReductions: StageGainReduction[];
   report: MasteringReport;
 }
-// MasteringStereoChainResult is a @deprecated alias for
-// MasteringChainStereoResult, retained for source compatibility with the
-// Node and Python bindings.
 ```
 
 :::
@@ -527,3 +554,37 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Pan-law inputs | `PanLaw`, `PanLawName`, `PanLawInput` |
 
 `SurroundPan` (the parameter type of `Mixer.setSurroundPan`) is not part of the package's public export list — type it inline or with a local alias rather than importing it.
+
+### Literal unions and enum-like tables
+
+These exported string-literal unions name the values a field or call accepts. Each synth vocabulary also accepts the value's ordinal, and `synthEnumTables()` returns every synth table as `string[]` at runtime (`SynthEnumTables`).
+
+| Type | Values | Where it appears |
+|------|--------|------------------|
+| `SynthEngineMode` | `'default'`, `'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'` | `SynthPatch.engineMode`; `'fm'`, `'modal'`, `'percussion'` and `'sample'` are silent until their section is supplied |
+| `SynthOscWaveform` | `'default'`, `'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'` | `SynthPatch.waveform` |
+| `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
+| `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput` (SVF only) |
+| `SynthBodyType` | `'default'`, `'none'`, `'guitar'`, `'violin'`, `'wood-tube'`, `'brass-bell'`, `'vocal'` | `SynthPatch.body` |
+| `SynthModSource` | `'none'`, `'amp-env'`, `'filter-env'`, `'lfo1'`, `'lfo2'`, `'velocity'`, `'key-track'`, `'mod-wheel'`, `'random'`, `'breath'`, `'aftertouch'`, `'expression-cc'`, `'pitch-bend'` | `SynthModRouting.source` |
+| `SynthModDestination` | `'none'`, `'pitch-cents'`, `'cutoff-cents'`, `'amp-gain'`, `'pan-units'`, `'resonance-q'`, `'vibrato-depth-cents'`, `'filter-env-depth'`, `'lfo1-rate-scale'`, `'excitation-force'`, `'excitation-position'`, `'excitation-brightness'`, `'spectrum-morph'` | `SynthModRouting.destination` |
+| `SampleLoopMode` / `SampleKeyTrack` | `'default'`, `'none'`, `'continuous'`, `'key-down'` / `'default'`, `'on'`, `'off'` | `SynthPatch.sampleLoop` / `SynthPatch.sampleKeyTrack` |
+| `SampleDescLoopMode` | `'none'`, `'continuous'`, `'key-down'` | `SampleDesc.loopMode` — the recording's own loop mode, a different set from `SampleLoopMode` |
+| `BuiltinSynthWaveform` | `'sine'`, `'saw'`, `'sawtooth'`, `'square'`, `'triangle'`, or `0`–`3` | `BuiltinSynthConfig.waveform` |
+| `ControllerInput` / `ControllerAxis` | `'control-change'`, `'channel-pressure'`, `'poly-pressure'`, `'pitch-bend'`, `'velocity'` / `'none'`, `'excitation'`, `'position'`, `'brightness'`, `'morph'`, `'loudness'`, `'pitch-cents'`, `'vibrato-depth'` | `ControllerBinding.input` / `.axis` for `RealtimeEngine.bindController` |
+| `Articulation` | `'poly'`, `'mono-retrigger'`, `'mono-legato'` | `RealtimeEngine.setArticulation` |
+| `MpeDimension` / `NoteTracking` | `'bend'`, `'pressure'`, `'timbre'` / `'last'`, `'lowest'`, `'highest'`, `'all'` | `RealtimeEngine.setControllerNoteTracking` |
+| `SourceBackend` | `'sf2'`, `'synth'` | `Sf2ProgramStatus.backend` from `Project.soundFontManifest` |
+| `EngineCaptureSource` | `'output'`, `'input'`, or the ordinal | `RealtimeEngine.setCaptureSource` |
+| `ProjectTrackKind` | `'audio'`, `'midi'`, `'aux'`, or `0`–`2` | `Project.addTrack`, `Project.setTrackKind` |
+| `ProjectLoopMode` | `'off'`, `'loop'`, or `0`–`1` | `Project.setClipLoop` |
+| `ProjectFadeCurve` | `'linear'`, `'equal-power'` (also `'equal_power'`, `'equalPower'`, `'equalpower'`), `'exponential'`/`'exp'`, `'logarithmic'`/`'log'`, or `0`–`2` | `ProjectClipFade.curve` for `Project.setClipFade` |
+| `MasteringProcessorCategory` | `'dynamics'`, `'effects'`, `'eq'`, `'final'`, `'maximizer'`, `'multiband'`, `'other'`, `'reference'`, `'repair'`, `'saturation'`, `'spectral'`, `'stereo'` | `MasteringProcessorCatalogEntry.category` from `masteringProcessorCatalog()` |
+| `MasteringRealtimeCost` | `'low'`, `'moderate'`, `'high'` | `MasteringProcessorCatalogEntry.realtimeCost` (`null` when unrated) |
+| `PairProcessor` | `'match.applyMatchEq'`, `'match.alignReferenceToSource'`, `'match.abSwitch'`, `'match.abCrossfade'` | `processorName` of `masteringPairProcess`; listed by `masteringPairProcessorNames()` |
+| `PairAnalysis` | `'match.referenceLoudness'`, `'match.tonalBalance'`, `'match.tonalBalanceLogBands'`, `'match.matchEqCurve'`, `'match.estimateReferenceDelaySamples'` | `analysisName` of `masteringPairAnalyze`; listed by `masteringPairAnalysisNames()` |
+| `StereoAnalysis` | `'stereo.monoCompatCheck'`, `'stereo.monoCompatCheckLogBands'` | `analysisName` of `masteringStereoAnalyze`; listed by `masteringStereoAnalysisNames()` |
+| `DehumMode` | `'subtract'`, `'notch'` | `mode` of `masteringRepairDehum` |
+| `MixAnalysisBand` | `'sub'`, `'low'`, `'lowMid'`, `'mid'`, `'highMid'`, `'high'`, `'air'` | keys of `MixBandOccupancy`; `MixCrowdedBand.band` in the mix assistant's analysis |
+| `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `SpectralRegionOp.mode` / `SpectralEditOptions.window` for `spectralEdit` |
+| `NoteTargetUnmatchedPolicy` | `'leave'` (default), `'mute'`, `'nearest'` | `unmatchedPolicy` of `assignNoteTargets` |
