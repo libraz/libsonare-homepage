@@ -169,6 +169,34 @@ export const analysisDemos: SonareDemoDef[] = [
     ],
   },
   {
+    id: 'meter-estimate',
+    archetype: 'detector',
+    // The four-bar lead line is the only clip long enough for the meter search to
+    // run (it needs at least eight detected beats; the two-bar grooves yield seven).
+    source: { kind: 'clip', clip: 'lead' },
+    viz: 'overlay',
+    title: {
+      en: 'Meter estimation — ranking time signatures by confidence',
+      ja: '拍子の推定 — 拍子記号を信頼度で並べる',
+    },
+    caption: {
+      en: "Meter estimation scores candidate time signatures over the detected beats: each beat's accent is read from the onset envelope, and 3, 4 and 6 are tried as bar lengths. The result is a ranked list with a confidence for each, not a single verdict — the confidences are shares of the total support, so they read as a breakdown. This four-bar melody is a single voice with only gentle accents, so the candidates sit close together: a reminder to read the confidence, not just the winner. Switch to Beats to see the pulse the estimate was scored on. A clip with fewer than eight beats reports that no search ran.",
+      ja: '拍子の推定は、検出したビートの上で候補となる拍子記号を採点します。各ビートのアクセントはオンセットエンベロープから読み取り、小節の長さとして 3・4・6 拍を試します。結果は一つの断定ではなく、候補ごとに信頼度を付けた順位表です。信頼度は全体の支持の割合なので、内訳として読めます。この 4 小節の旋律は単声でアクセントが穏やかなため、候補同士が接近します。勝者だけでなく信頼度を読むべき理由がここにあります。「ビート」に切り替えると、採点の土台になった拍が見えます。ビートが 8 つに満たないクリップでは、探索が行われなかったことが表示されます。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'meter-estimate',
+        label: { en: 'Detect', ja: '検出' },
+        options: [
+          { value: 'beat', label: { en: 'Beats', ja: 'ビート' } },
+          { value: 'meter-estimate', label: { en: 'Meter', ja: '拍子' } },
+        ],
+      },
+    ],
+  },
+  {
     id: 'melody-contour',
     archetype: 'contour',
     // A monophonic lead line: one note at a time, so YIN tracks one clear fundamental.
@@ -245,6 +273,35 @@ export const analysisDemos: SonareDemoDef[] = [
           { value: 'full', label: { en: 'Full mix', ja: 'フルミックス' } },
           { value: 'harmonic', label: { en: 'Harmonic', ja: '倍音成分' } },
           { value: 'percussive', label: { en: 'Percussive', ja: '打撃成分' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'stem-decompose',
+    archetype: 'ab-process',
+    // A pad bed under broadband hits on every beat: the two layers are built to
+    // separate cleanly, so the percussive stem comes out on its own.
+    source: { kind: 'clip', clip: 'mixed-stems' },
+    viz: 'spectrogram',
+    config: { processor: 'hpss-decompose' },
+    title: {
+      en: 'Stem decomposition — pulling the percussive part out of a mix',
+      ja: 'ステム分解 — ミックスから打撃成分を取り出す',
+    },
+    caption: {
+      en: "A sustained pad chord bed with sharp broadband hits on every beat (Full mix). The stage applied here is HPSS decomposition, and the B side is its percussive component alone: the hits survive as short vertical events while the pad's steady spectral lines are pushed out. That is one stem of a two-way split, not a full multi-stem separation (Percussive). Both averaged spectra are drawn together so you can see what the split kept. Flip Compare to audition the mix against the stem it was decomposed into.",
+      ja: '持続するパッドの和音の上に、拍ごとに鋭い広帯域の打点を重ねたクリップです（フルミックス）。ここで適用しているのは HPSS による分解で、B 側はその打撃成分だけです。打点は短い縦方向のイベントとして残り、パッドの安定したスペクトル線は押し出されます。つまり 2 分割のうち片方のステムであって、複数ステムへの完全な分離ではありません（打撃成分）。平均スペクトルを重ねて表示するので、分割で何が残ったかが分かります。Compare を切り替えて、ミックスと取り出したステムを聴き比べてください。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'damaged',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Full mix', ja: 'フルミックス' } },
+          { value: 'repaired', label: { en: 'Percussive', ja: '打撃成分' } },
         ],
       },
     ],

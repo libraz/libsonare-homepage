@@ -75,6 +75,35 @@ export const masteringDemos: SonareDemoDef[] = [
     ],
   },
   {
+    id: 'mastering-restoration',
+    archetype: 'ab-process',
+    // A piano bed already carrying hum, surface noise and crackle, so the repair
+    // stage has real record damage to work on rather than injected hiss alone.
+    source: { kind: 'clip', clip: 'damaged-vinyl' },
+    viz: 'spectrogram',
+    config: { processor: 'dereverb-classical' },
+    title: {
+      en: 'Restoration — a worn record, before and after',
+      ja: 'レストレーション — 傷んだレコードの修復前と修復後',
+    },
+    caption: {
+      en: 'A piano turnaround carrying the damage a restoration chain targets: mains hum, surface noise and hiss, and sparse clicks and crackle (Damaged). The repair stage applied here is the classical dereverberator — spectral subtraction of the diffuse, sustained energy — so what it strips is the noise bed and the smeared tails, not the clicks or the hum; those belong to the declick and hum-removal stages (Repaired). Both averaged spectra are drawn together, and FLOOR is how far the high band came down. Flip Compare to audition each side — the level is untouched, so only the bed moves.',
+      ja: 'レストレーションの処理対象となる傷みを乗せたピアノのターンアラウンドです。電源ハム、表面ノイズとヒスノイズ、まばらなクリックとクラックルが入っています（修復前）。ここで適用しているリペアステージは古典的なデリバーブで、拡散した持続成分をスペクトル減算します。取り除かれるのはノイズの土台と滲んだ余韻で、クリックやハムはデクリックやハム除去といった別のステージの担当です（修復後）。平均スペクトルは重ねて表示し、FLOOR は高域がどれだけ下がったかを示します。Compare を切り替えると両者を聴き比べできます。レベルは変えていないので、動くのは土台のノイズだけです。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'damaged',
+        label: { en: 'Compare', ja: '比較' },
+        options: [
+          { value: 'damaged', label: { en: 'Damaged', ja: '修復前' } },
+          { value: 'repaired', label: { en: 'Repaired', ja: '修復後' } },
+        ],
+      },
+    ],
+  },
+  {
     id: 'compressor-curve',
     archetype: 'compressor',
     // No clip: the transfer curve and the gain-reduction envelope are computed from

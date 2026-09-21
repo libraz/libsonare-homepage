@@ -472,4 +472,76 @@ export const instrumentsDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'gs-drum-kits',
+    archetype: 'instrument-audition',
+    config: { mode: 'gs-drum-kit' },
+    // Source is unused (the engine bounces a drum pattern on the rhythm part); the
+    // schema requires one, and noise matches the percussive character.
+    source: { kind: 'generate', signal: 'noise' },
+    viz: 'waveform',
+    title: {
+      en: 'GS drum kits — one groove, eight sets',
+      ja: 'GS ドラムキット — 同じグルーヴを 8 つのセットで',
+    },
+    caption: {
+      en: "The same one-bar rock beat on the rhythm part (MIDI channel 10), with the kit chosen by that part's Program Change — exactly how a GS file switches drum sets. No SoundFont is loaded, so each kit is the built-in fallback's own re-voicing of the standard pieces: Power drops and lengthens the shells, TR-808 and TR-909 swap them for decaying sines with a click on top, Jazz tightens and lifts them, Orchestra rings like concert bass drum and timpani, Asia turns them into gongs and taiko. Sets the fallback leaves unvoiced (the one-shot SFX and Rhythm FX banks) sound identical to Standard and are left out here. Each render is level-matched; press play to compare.",
+      ja: 'リズムパート（MIDI チャンネル 10）で同じ 1 小節のロックビートを鳴らし、そのパートのプログラムチェンジでキットを選びます。GS ファイルがドラムセットを切り替えるのと同じ手順です。SoundFont は読み込まないので、各キットは内蔵フォールバックが標準セットの各パーツを鳴らし分けたものです。Power は胴を低く長く、TR-808 と TR-909 はクリックの乗った減衰する正弦波に、Jazz は締まって高めに、Orchestra はコンサートバスドラムとティンパニのように響き、Asia はゴングと太鼓になります。フォールバックが鳴らし分けていないセット（ワンショットの SFX や Rhythm FX バンク）は Standard とまったく同じ音になるため、ここには含めていません。各レンダーは音量を揃えてあります。再生して聴き比べてください。',
+    },
+    params: [
+      {
+        key: 'variant',
+        kind: 'select',
+        default: '0',
+        label: { en: 'Kit', ja: 'キット' },
+        options: [
+          { value: '0', label: { en: '0 Standard', ja: '0 スタンダード' } },
+          { value: '16', label: { en: '16 Power', ja: '16 パワー' } },
+          { value: '24', label: { en: '24 Electronic', ja: '24 エレクトロニック' } },
+          { value: '25', label: { en: '25 TR-808', ja: '25 TR-808' } },
+          { value: '30', label: { en: '30 TR-909', ja: '30 TR-909' } },
+          { value: '32', label: { en: '32 Jazz', ja: '32 ジャズ' } },
+          { value: '48', label: { en: '48 Orchestra', ja: '48 オーケストラ' } },
+          { value: '52', label: { en: '52 Asia', ja: '52 アジア' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'gs-variation-tones',
+    archetype: 'instrument-audition',
+    config: { mode: 'gs-variation', program: 16 },
+    // Source is unused (the engine renders the organ note); the schema requires one,
+    // and a square at the rendered C4 keeps the intent readable.
+    source: { kind: 'generate', signal: 'square', freq: 262 },
+    viz: 'waveform',
+    title: {
+      en: 'GS variation tones — one organ, four registrations',
+      ja: 'GS バリエーション音色 — 1 台のオルガン、4 つのレジストレーション',
+    },
+    caption: {
+      en: "GS files a capital tone's variations behind Bank Select MSB: the same Program Change with a different MSB plays a sibling voice. Here the capital is program 16, Drawbar Organ, and the three variations the fallback voices apart are offered — Detuned Organ 1 (MSB 8) adds the chorus scanner's slow beating, 60's Organ 1 (MSB 16) pulls only the first three drawbars with a hard key click, Organ 4 (MSB 32) draws every bar for the full tutti. An MSB the fallback does not voice falls back to the capital, as GS specifies, so only the ones that actually change are listed. Level-matched; press play to compare the registrations.",
+      ja: "GS はキャピタル音色のバリエーションをバンクセレクト MSB の後ろに置きます。同じプログラムチェンジでも MSB を変えると兄弟音色が鳴ります。ここではキャピタルをプログラム 16 のドローバーオルガンにし、フォールバックが鳴らし分けている 3 つのバリエーションを並べました。Detuned Organ 1（MSB 8）はコーラススキャナーのゆっくりしたうねりを加え、60's Organ 1（MSB 16）は最初の 3 本のドローバーだけを引き出して強いキークリックを乗せ、Organ 4（MSB 32）は全バーを引き出した総奏になります。フォールバックが鳴らし分けていない MSB は GS の仕様どおりキャピタルに戻るため、実際に音が変わるものだけを載せています。音量は揃えてあります。再生してレジストレーションを聴き比べてください。",
+    },
+    params: [
+      {
+        key: 'variant',
+        kind: 'select',
+        default: '0',
+        label: { en: 'Variation', ja: 'バリエーション' },
+        options: [
+          {
+            value: '0',
+            label: {
+              en: 'MSB 0 Drawbar Organ (capital)',
+              ja: 'MSB 0 ドローバーオルガン（キャピタル）',
+            },
+          },
+          { value: '8', label: { en: 'MSB 8 Detuned Organ 1', ja: 'MSB 8 デチューンオルガン 1' } },
+          { value: '16', label: { en: "MSB 16 60's Organ 1", ja: 'MSB 16 60 年代オルガン 1' } },
+          { value: '32', label: { en: 'MSB 32 Organ 4', ja: 'MSB 32 オルガン 4' } },
+        ],
+      },
+    ],
+  },
 ];
