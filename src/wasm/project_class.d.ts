@@ -179,7 +179,18 @@ export declare class Project {
     setMaxUndoDepth(depth: number): void;
     /** Set the combined undo/redo history byte cap. Zero disables retention. */
     setMaxHistoryBytes(bytes: number): void;
-    /** Replace a MIDI clip's entire event list. */
+    /**
+     * Replace a MIDI clip's entire event list.
+     *
+     * @remarks
+     * Drops the clip's SysEx, which {@link importSmf} and {@link exportSmf} both
+     * keep. A clip's SysEx payloads sit beside the event list and are reached by
+     * a handle {@link ProjectMidiEvent} does not carry, so replacing the list
+     * leaves nothing referring to them: a GS setup block that survives an import
+     * and an export byte for byte is gone after one call here. Nothing reads the
+     * handles back either, so a caller that must keep the setup edits the
+     * exported file rather than the event list.
+     */
     setMidiEvents(clipId: number, events: ReadonlyArray<ProjectMidiEvent | readonly [number, number, number]>): void;
     /**
      * Import an in-memory SMF buffer; returns the first added clip id.
@@ -187,8 +198,15 @@ export declare class Project {
      * a silently shortened clip.
      */
     importSmf(data: Uint8Array): number;
-    /** Export the project's tempo map + MIDI clips to an SMF byte buffer. */
-    exportSmf(): Uint8Array;
+    /**
+     * Export the project's tempo map + MIDI clips to an SMF byte buffer.
+     *
+     * @remarks
+     * The buffer owns a plain `ArrayBuffer`, which is what the `Blob` / `File`
+     * constructors accept — so `new Blob([project.exportSmf()])` compiles without
+     * a copy through `new Uint8Array(...)` first.
+     */
+    exportSmf(): Uint8Array<ArrayBuffer>;
     /**
      * Import a MIDI 2.0 Clip File (`SMF2CLIP`); returns the first added clip id.
      * Unlike {@link importSmf}, MIDI 2.0 channel-voice messages (16-bit velocity,
@@ -200,8 +218,12 @@ export declare class Project {
      * Export the project's tempo map + MIDI clips to a MIDI 2.0 Clip File
      * (`SMF2CLIP`) byte buffer. MIDI 2.0-only events are written without loss —
      * prefer this over {@link exportSmf} when MIDI 2.0 fidelity matters.
+     *
+     * @remarks
+     * As with {@link exportSmf}, the buffer owns a plain `ArrayBuffer` and goes
+     * straight into a `Blob`.
      */
-    exportClipFile(): Uint8Array;
+    exportClipFile(): Uint8Array<ArrayBuffer>;
     /**
      * Set a MIDI clip's channel-0 program / bank at source PPQ 0. `bank` defaults
      * to `-1` (no Bank Select emitted), matching `setProgramOnChannel` and the

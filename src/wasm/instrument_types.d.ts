@@ -84,6 +84,19 @@ export interface Sf2ProgramStatus {
     /** Resolved SF2 preset name (GS fallback included); empty for `'synth'`. */
     presetName: string;
 }
+/**
+ * Every NativeSynth engine selector, by ordinal.
+ *
+ * @remarks
+ * Not seventeen interchangeable choices. Selecting a mode blanks every engine
+ * section but its own, and four engines have nothing to voice until a section
+ * is supplied: `'fm'` needs operators, `'modal'` a mode table, `'percussion'` a
+ * kit and `'sample'` a {@link SampleBank}. Each renders exact silence from an
+ * otherwise default patch (measured: peak 0), while the other thirteen sound
+ * and differ from one another. A host offering this array as a control offers
+ * those four as dead entries unless it also supplies the section, which a
+ * preset does.
+ */
 export declare const SYNTH_ENGINE_MODES: readonly ["default", "subtractive", "fm", "karplus-strong", "modal", "additive", "percussion", "piano", "pipe-organ", "bowed-string", "reed", "brass", "flute", "plucked-string", "vocal", "free-reed", "harpsichord", "sample"];
 export declare const SAMPLE_LOOP_MODES: readonly ["default", "none", "continuous", "key-down"];
 export declare const SAMPLE_KEY_TRACKS: readonly ["default", "on", "off"];

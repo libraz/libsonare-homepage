@@ -66,9 +66,9 @@ export interface WasmProject {
     setMaxHistoryBytes: (bytes: number) => void;
     setMidiEvents: (clipId: number, events: ReadonlyArray<ProjectMidiEvent | readonly [number, number, number]>) => void;
     importSmf: (data: Uint8Array) => number;
-    exportSmf: () => Uint8Array;
+    exportSmf: () => Uint8Array<ArrayBuffer>;
     importClipFile: (data: Uint8Array) => number;
-    exportClipFile: () => Uint8Array;
+    exportClipFile: () => Uint8Array<ArrayBuffer>;
     setProgram: (clipId: number, program: number, bank: number) => void;
     setProgramOnChannel: (clipId: number, group: number, channel: number, program: number, bank: number) => void;
     bakeMidiFx: (clipId: number, configJson: string) => void;
@@ -149,6 +149,9 @@ export interface ProjectModule {
     projectAbiVersion: () => number;
     synthPresetNames: () => string[];
     synthPresetPatch: (name: string) => SynthPatch;
+    synthGsDrumKitName: (program: number) => string | null;
+    synthGsDrumKitIsVoicedApart: (program: number) => number;
+    synthGsVariationIsVoicedApart: (bank: number, program: number) => number;
     controllerProfileNames: () => string[];
     _synthEnumTables: () => SynthEnumTables;
     _synthPatchRoundTrip: (patch: SynthPatch) => SynthPatch;
