@@ -430,6 +430,95 @@ function buildMix(wasm) {
   return finalize(out, 0.89);
 }
 
+/**
+ * `damaged-vinyl`: the same piano turnaround as {@link buildBand}'s chords, overlaid
+ * with the damage a restoration chain targets — mains hum, low-pass-shaped surface
+ * noise, and sparse clicks/crackle — for the restoration A/B demo. The clean piano
+ * bed alone has no such artifacts; declick/denoise/hum-removal is what strips them.
+ */
+function buildDamagedVinyl(wasm) {
+  const totalSec = 2 * BAR * SEC_PER_PPQ + 0.6;
+  const len = Math.round(SR * totalSec);
+
+  const chordNotes = CHORDS.flatMap(({ at, midis }) =>
+    midis.map((m) => /** @type {[number,number,number,number]} */ ([at, H - 20, m, 78])),
+  );
+  const clean = renderPart(wasm, 'acoustic-piano', chordNotes, totalSec);
+
+  // Mains hum: fundamental plus its first harmonic, well under the musical content.
+  const hum = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const t = i / SR;
+    hum[i] = 0.05 * Math.sin(TAU * 60 * t) + 0.02 * Math.sin(TAU * 120 * t);
+  }
+
+  // Broadband surface noise: white noise through a one-pole low-pass, like worn vinyl.
+  const rngNoise = mulberry32(0x9c37a1f0);
+  const noise = new Float32Array(len);
+  let lp = 0;
+  for (let i = 0; i < len; i++) {
+    lp += (rngNoise() * 2 - 1 - lp) * 0.35;
+    noise[i] = lp * 0.045;
+  }
+
+  // Sparse crackle: short unit impulses at deterministic, irregularly spaced times.
+  const rngClicks = mulberry32(0xc1ccdec1);
+  const clicks = new Float32Array(len);
+  for (let t = 0.08; t < totalSec - 0.05; t += 0.06 + rngClicks() * 0.22) {
+    const idx = Math.round(t * SR);
+    const amp = 0.25 + rngClicks() * 0.35;
+    clicks[idx] += rngClicks() < 0.5 ? amp : -amp;
+  }
+
+  return finalize(
+    mix(len, [
+      { buf: clean, gain: 0.85 },
+      { buf: hum, gain: 1.0 },
+      { buf: noise, gain: 1.0 },
+      { buf: clicks, gain: 1.0 },
+    ]),
+    0.9,
+  );
+}
+
+/**
+ * `mixed-stems`: a sustained pad chord bed (steady spectral lines) mixed with sharp
+ * broadband percussive hits on the beat (short vertical transients), for the
+ * stem/HPSS decomposition demo — harmonic and percussive content chosen to be
+ * cleanly separable by a median-filtering split.
+ */
+function buildMixedStems(wasm) {
+  const totalSec = 2 * BAR * SEC_PER_PPQ + 1.0;
+  const len = Math.round(SR * totalSec);
+
+  const padNotes = CHORDS.flatMap(({ at, midis }) =>
+    midis.map((m) => /** @type {[number,number,number,number]} */ ([at, H, m, 72])),
+  );
+  const pad = renderPart(wasm, 'warm-pad', padNotes, totalSec);
+
+  // Percussive layer: broadband noise transients on every beat, with no tonal body,
+  // so the percussive component stays purely wideband/short-time.
+  const rng = mulberry32(0x5a1d9f02);
+  const hitLen = Math.round(SR * 0.03);
+  const perc = new Float32Array(len);
+  for (let bar = 0; bar < 2; bar++) {
+    for (let beat = 0; beat < 4; beat++) {
+      const start = Math.round((bar * BAR + beat * Q) * SEC_PER_PPQ * SR);
+      for (let j = 0; j < hitLen && start + j < len; j++) {
+        perc[start + j] += Math.exp(-j / (hitLen * 0.3)) * (rng() * 2 - 1);
+      }
+    }
+  }
+
+  return finalize(
+    mix(len, [
+      { buf: pad, gain: 0.8 },
+      { buf: perc, gain: 0.9 },
+    ]),
+    0.88,
+  );
+}
+
 // ---- WAV encoding ---------------------------------------------------------
 
 /**
@@ -477,6 +566,8 @@ const CLIPS = {
   'comp-take-b': buildCompTakeB,
   'comp-take-c': buildCompTakeC,
   mix: buildMix,
+  'damaged-vinyl': buildDamagedVinyl,
+  'mixed-stems': buildMixedStems,
 };
 
 /**
@@ -535,9 +626,20 @@ async function main() {
     'comp-take-b': 3,
     'comp-take-c': 3,
     mix: 3,
+    'damaged-vinyl': 3,
+    'mixed-stems': 3,
   };
 
-  for (const [name, build] of Object.entries(CLIPS)) {
+  // Command-line args select a subset of clips to (re)generate, so adding one new
+  // clip doesn't force a re-render — and a byte change — of every existing one.
+  // With no args, every clip is generated (the original, full-run behavior).
+  const requested = process.argv.slice(2);
+  const names = requested.length > 0 ? requested : Object.keys(CLIPS);
+  for (const name of names) {
+    const build = CLIPS[name];
+    if (!build) {
+      throw new Error(`unknown clip "${name}" (known: ${Object.keys(CLIPS).join(', ')})`);
+    }
     const samples = build(wasm);
     if (movementFloor[name] !== undefined) {
       assertHarmonicMovement(wasm, name, samples, movementFloor[name]);
