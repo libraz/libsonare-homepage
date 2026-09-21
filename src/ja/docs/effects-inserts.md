@@ -17,7 +17,7 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 
 ## インサート集合を調べる
 
-ミキサーシーンのインサートはマスタリングインサートと同じファクトリを使いますが、有効なインサート集合は `masteringProcessorNames()` より少し広いです。何が使えてどう設定するかは、次の 4 つの実行時 API で把握できます。
+ミキサーシーンのインサートはマスタリングインサートと同じファクトリを使いますが、有効なインサート集合は `masteringProcessorNames()` より少し広いです。何が使えてどう設定するかは、次の 5 つの実行時 API で把握できます。
 
 | API | 返すもの |
 |-----|----------|
@@ -25,8 +25,9 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 | `masteringInsertParamNames(name)` | 1 つのインサートが受け付ける構築用キー（バンド／サブバンド型はインデックス付きの `band{i}.*` キーを列挙し、未知の名前には空配列を返す） |
 | `masteringInsertParamInfo(name)` | リアルタイムオートメーション可能なパラメータごとの完全な記述子。[パラメータ記述子](#パラメータ記述子)を参照 |
 | `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`tailSamples`、`channelPolicy` を持つ機械処理しやすいエントリ。代表的な既定構成（48 kHz／512 サンプル）のプローブでレイテンシと可聴な減衰テールを返し（オフライン専用はどちらも 0）、構成依存の正確なレイテンシは実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
+| `capabilityCatalog()` | ビルド全体のドキュメント。全プロセッサを `masteringInsertParamInfo` と同じ記述子付きで、プリセット一覧とともに 1 回で読めます。[カタログからインサートの操作面へ](#カタログからインサートの操作面へ) を参照 |
 
-Python の対応関数は `mastering_insert_param_names(name)`、`mastering_insert_param_info(name)`、`mastering_processor_catalog()` です。
+Python の対応関数は `mastering_insert_names()`、`mastering_insert_param_names(name)`、`mastering_insert_param_info(name)`、`mastering_processor_catalog()`、`capability_catalog()` です。
 
 一覧外のキーはプロセッサに無視され、そのキーを含むシーンを読み込むと [`Mixer.sceneWarnings()`](./mixing-scene-json.md) が報告します。
 
@@ -43,13 +44,47 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `min` | `number` \| `null` | 受理される最小値。カタログが制限を把握していない場合は `null` |
 | `max` | `number` \| `null` | 受理される最大値。カタログが制限を把握していない場合は `null` |
 | `default` | `number` \| `boolean` \| `null` | キーを省略したときに使われる値 |
-| `unit` | `string` \| `null` | 物理単位（`dB`、`Hz`、`ms`、`samples`）。無次元のパラメータは `null` |
+| `unit` | `string` \| `null` | 物理単位（`dB`、`Hz`、`ms`、`samples`。プレートと Dattorro の `modDepthSamples` だけは `referenceSamples@29761Hz`）。無次元のパラメータは `null` |
 
-`unit` は省略可能フィールドではなく `string | null` です。無次元のパラメータはキーを省くのではなく `null` を返すため、ホストは存在チェックなしにすべての記述子から 8 フィールドを読めます。`min` / `max` / `default` は `capabilityCatalog()` に載る値と同じで、その出どころとどこまで信頼できるかは[カタログの値域の読み方](./mastering-processors.md#カタログの値域の読み方)で説明しています。
+`unit` は省略可能フィールドではなく `string | null` です。無次元のパラメータはキーを省くのではなく `null` を返すため、ホストは存在チェックなしにすべての記述子から 8 フィールドを読めます。単位はキーの接尾辞（`…Db`、`…Hz`、`…Ms`、`…Samples`）から読み取るので、値域と違って実測ではなく宣言です。唯一の例外を綴りで明示しているのは、その深さがセッションレートではなくリバーブ内部の基準レートで数えられるからです。`min` / `max` / `default` は `capabilityCatalog()` に載る値と同じで、その出どころとどこまで信頼できるかは[カタログの値域の読み方](./mastering-processors.md#カタログの値域の読み方)で説明しています。
 
 ::: info 記述子の一覧は構築用キーの一覧より狭い
 `masteringInsertParamNames(name)` はインサートが構築時に受け付けるキーをすべて列挙します。`masteringInsertParamInfo(name)` が扱うのは、その後オートメーションできるサブセットだけです。そのため、インサート構築時に決めるしかないキー — トポロジーの選択、渡すインパルス応答、その IR を収録したサンプリングレート — には記述子がありません。差が最も大きいのは `saturation.ampSim` で、キャビネットとマイク関連のキーはほとんどが構築時専用です。ピッカーはパラメータ名から、オートメーション面は記述子から組んでください。両者は同じ一覧ではありません。
 :::
+
+## カタログからインサートの操作面へ
+
+ドキュメントそのもの — どのサーフェスが返すか、8 つのフィールド、値域の実測方法 — は [機能カタログが返すもの](./api-surface.md#機能カタログが返すもの) が扱っています。この節はインサートに固有の部分です。ホストが自前の表を持たずに、プロセッサ id から並べ終えた操作面へどう辿り着くかを説明します。
+
+経路はプロセッサごとの呼び出しではなく、1 つのドキュメントに対する 3 回の参照です。
+
+1. **インサート集合を選ぶ。** `processors` を `realtimeInsertable` で絞ります。88 エントリ中 73 で、`masteringInsertNames()` が返す集合と同一です。残る 15（オフラインプロセッサ 11 とペアプロセッサ 4）は空の `params` 配列を持つので、カタログの 1,147 パラメータはすべてインサートのものです。`category` はピッカーと同じ切り方で集合を分けます（`effects` がこのページの 17 個のクリエイティブ FX id、その他のカテゴリがマスタリングの各ファミリー）。`channelPolicy` は、ステレオより広いバスでミキサーがそのインサートをどう包むかを示します。リバーブ、モジュレーション、ディレイのインサートはすべて `stereoPairOnly` で、前方の 2 チャンネルだけを処理し、それ以外のチャンネルには触れません。
+2. **記述子を読む。** エントリの `params` は、その id に対して `masteringInsertParamInfo(id)` が返すリストと同一で、順序も同じです。カタログを持っているホストは、プロセッサごとの呼び出しを必要としません。id はその順序で `0..n-1` を取り（`dryWet` は `effects.modulation.chorus` では id 3、`effects.delay.stereo` では id 4）、この整数がミキサーのオートメーションスケジューラの引数です。Node と WASM では `Mixer.scheduleInsertAutomation(strip, insertIndex, paramId, samplePos, value)`、Python では `Mixer.schedule_insert_automation(...)`、C ABI では `sonare_strip_schedule_insert_automation` です。リアルタイムエンジンのセッターは代わりに `name` を取ります（`setTrackStripInsertParamByName` とそのマスター版、バス版）。
+3. **各コントロールを配置する。** `type`、`default`、`min`、`max`、`unit` から組みます。`masteringInsertParamNames(id)` には載るがカタログには載らない構築時専用キー — フェイザーの `stages`、オートワウの `attackMs` / `releaseMs`、ロータリーの `stereoSpread`、ルームのジオメトリ — は、大きさを決める記述子がないので、ライブのコントロールではなく構築時のフィールドにします。
+
+```typescript
+const catalog = capabilityCatalog();
+const inserts = catalog.processors.filter((p) => p.realtimeInsertable);   // 88 中 73
+const fx = inserts.filter((p) => p.category === 'effects');               // 下の 17 id
+const chorus = fx.find((p) => p.id === 'effects.modulation.chorus')!;
+for (const param of chorus.params) {
+  // param.id がオートメーション id、param.name がシーン JSON のキー
+  addControl(param.name, param.default, param.min, param.max, param.unit, param.rtSafe);
+}
+```
+
+エフェクト系のエントリが報告する内容のうち、ドキュメントの一般的な読み方からは予想しにくいものが 4 つあります。
+
+- **`rtSafe: false` はオートメーションを止める。** ヒントではありません。そのパラメータにオートメーションをスケジュールすると `NotSupported`（コード 6）が返り、値は構築時に決めるしかありません。これを報告する 81 パラメータのうち 5 つがこのページにあります。`effects.reverb.velvet` の `decay`、`reverbTimeS`、`densityHz` と、`effects.reverb.plate` および `effects.reverb.dattorro` の `modDepthSamples` です。残りのうち 72 は `eq.linearPhase` のバンドです。記述子ごとにオートメーションレーンを描く UI は、これらを無効化する必要があります。
+- **カタログ全体で `boolean` のパラメータは 2 つだけ** で、どちらも `dynamics.compressor` にあります（`autoMakeup`、`sidechainHpfEnabled`）。ディレイの `pingPong` は既定値 `0` の `number` で、このページの真偽値らしく読めるスイッチ — `enableShelf`、`airAbsorptionEnabled` — は記述子を持たない構築用キーです。名前からトグルを推測しないでください。
+- **レイテンシとテールはインサートごとで、リバーブでは 0 ではない。** `effects.reverb.convolution`、`effects.reverb.room`、`effects.acoustic.roomMorph` は 256 サンプルのレイテンシを報告します。リバーブのテールは 51,217 サンプル（`room`、`roomMorph`）から 264,000（`fdn`）まで、ステレオディレイは 59,795 で、いずれも代表構成の 48 kHz プローブでの値です。`realtimeCost` はリバーブでは `moderate`、`velvet` だけが `high`、モジュレーションとディレイはすべて `low` で、`null` になるのは非インサートの 15 個だけです。
+- **エフェクト系はパラメータ数が少ない。** 17 プロセッサ合わせて 64 記述子です。1,147 の大半はバンド単位の EQ プロセッサが占めます（`multiband.dynamicEq` だけで 264）。記述子の数で自身の大きさを決めるインサート UI は、2 つのファミリーが 1 桁違うことを前提にしてください。
+
+### null と既定値が教えてくれないこと
+
+**`null` の境界は、構築が拒否しなかったことを意味し、どんな値でも意味を持つことを意味しません。** 境界がないことは JSON では文字通り `null`（Python では `None`）です。スキーマは `min` と `max` を `number | null` と定め、すべての記述子が両方のキーを持ちます。エフェクト系の 64 記述子のうち境界を公開するのは `effects.acoustic.roomMorph` だけで（`dryWet` と `sourceTailSuppression`、どちらも `[0, 1]`）、残る 62 は両側とも `null` です。何でも受け入れるからではありません。`effects.modulation.chorus` は `dryWet` に境界を公開せず、構築は `5` を受け入れ、プロセッサは内部でウェット比を `[0, 1]` にクランプするので、`dryWet: 5` は `dryWet: 1` と同じ音になります。カタログが測るのは構築が拒否する値であり、拒否せず折り畳むプロセッサは `null` を報告します。`null` に対する範囲チェックは、1 種類の誤りしか除外できません。`null` の境界は「頼れる検証がない」と読み、妥当な範囲はパラメータの意味と単位から決めてください。
+
+**既定値は設定構造体の初期化子であって、プリセットがそれを渡してくる保証はありません。** 組み込みの `vocalReverbSend` シーンは `effects.reverb.plate` に `decaySec: 1.8` と `preDelayMs: 25` を渡します。どちらも記述子を持たない構築時専用キーなので、カタログの既定値そのものが存在しません。`drumBusSubgroup` は `dynamics.parallelComp` に `thresholdDb: -20` と `mix: 0.35` を設定し（カタログの既定値は `-18` と `0.5`）、`saturation.tape` に `driveDb: 1.5` を設定します（既定値は `3`）。`default` から初期化する操作面は、読み込んだシーンに対して誤った値を表示します。シーン自身の `params` から初期化し、シーンが持たないキーだけカタログの既定値に戻し、シーンが設定するキーには戻り先の記述子がない場合があることを織り込んでください。
 
 ## クリエイティブ FX インサートのカタログ
 
@@ -61,7 +96,7 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `effects.reverb.dattorro` | Dattorro リバーブ |
 | `effects.reverb.fdn` | フィードバックディレイネットワークリバーブ |
 | `effects.reverb.velvet` | Velvet-noise 系リバーブ |
-| `effects.reverb.convolution` | Convolution リバーブ。ネイティブ insert 作成経路ではインパルス応答（IR。実際の空間が短い衝撃音にどう応答するかを記録したもの）を使えます |
+| `effects.reverb.convolution` | Convolution リバーブ。params の `irF32Base64` でインパルス応答を受け取るか、`decaySec` と `seed` から合成します |
 | `effects.reverb.room` | ルームパラメータから合成する幾何ベースのルームリバーブ |
 | `effects.acoustic.roomMorph` | 目標の幾何ベースルームへ寄せるルームモーフィング |
 | `effects.modulation.ensemble` | Solina 系 BBD ストリングマシンアンサンブル |
@@ -95,8 +130,8 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `effects.modulation.ringModulator` の params | `carrierHz`、`dryWet` |
 | `effects.modulation.pitchShifter` の params | `semitones`、`dryWet` |
 | `effects.delay.stereo` の params | `delayTimeLMs`、`delayTimeRMs`、`feedback`、`pingPong`、`dryWet` |
-| `effects.reverb.convolution` | ネイティブの insert 構築時にインパルス応答を渡す必要がある |
-| IR のない convolution insert | 実質的にパススルーとして動作する |
+| `effects.reverb.convolution` の IR | インパルス応答（IR。実際の空間が短い衝撃音にどう応答するかを記録したもの）は、insert params の `irF32Base64` キーに base64 の float32 として渡す。シーン JSON でも他の経路でも同じ。ネイティブホストは構築時に直接注入することもできる |
+| IR のない convolution insert | prepare 時に `decaySec`（RT60 相当の長さ。12 秒にクランプ）と `seed` から減衰ノイズの IR を合成するので、パススルーにはならず、アルゴリズミックな兄弟と同様にテールを生成する |
 
 ::: warning 幾何ベースのルーム系インサートは `absorption` をクランプせず検証する
 `effects.reverb.room` と `effects.acoustic.roomMorph` は、`[0, 1]` に正規化した吸音係数 `absorption` を受け取ります。この区間から外れた値は**拒否**され、最も近い有効な値に丸めて構築されることはありません。

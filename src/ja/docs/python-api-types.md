@@ -272,3 +272,47 @@ class StreamStats:
 | ミキシング | `MixerStereoResult` |
 | プロジェクト | `AssistSidecar`（`project.get_assist_sidecar(index)` / `project.assist_sidecars()` の戻り値 — [プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照）、`NotePairValidation` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
+| ビルド情報 | `Capabilities`, `CapabilityCatalog`, `MasteringInsertParamInfo`, `MasteringProcessorCatalogEntry`（[API サーフェス](./api-surface.md#機能カタログが返すもの) で説明している JSON ドキュメントに対応する `TypedDict`） |
+
+### 例外
+
+失敗はすべて 2 つのクラスで表します。後者は前者を継承しているので、2 本ではなく 1 本の階層です。
+
+```python
+class SonareError(RuntimeError):
+    code: int          # C ABI のエラーコード（ErrorCode の値）
+    code_name: str     # プロパティ -> "InvalidParameter"、"FileNotFound" など
+    # str(e) -> "[4] Invalid parameter": メッセージの先頭にコードが付く
+
+class SonareValueError(SonareError, ValueError):
+    code: int          # 送出側が別のコードを渡さないかぎり ErrorCode.INVALID_PARAMETER
+    # str(e) -> "spectral_centroid: samples contains NaN or Inf at index 0": 接頭辞なし
+```
+
+`SonareValueError` は、呼び出しがネイティブコードへ渡る前にバインディングが引数を拒否したときに送出されます。基底クラスの組み合わせが、既存のハンドラに何が見えるかを決めます。
+
+| ハンドラ | バインディングの拒否（`SonareValueError`） | コアの拒否（`SonareError`、コード 4） |
+|---------|---|---|
+| `except ValueError` | 捕捉する | 捕捉しない |
+| `except SonareError` または `except RuntimeError` | 捕捉する | 捕捉する |
+| `except SonareValueError` | 捕捉する | 捕捉しない |
+| `.code == ErrorCode.INVALID_PARAMETER` で分岐 | 一致する | 一致する |
+
+インスタンスが持つのはメッセージだけです。問題のパラメータ名を持つ属性も、受理範囲を持つ属性もありません。構造化されたフィールドは `.code` のみで、どの拒否でも `INVALID_PARAMETER` を返します。パラメータ名と、あるなら範囲は本文に含まれます。バッファの拒否はエントリポイントと引数を名指しし（`master_audio_stereo: right must not be empty`）、スカラーの拒否はフィールド名と C 型が表現できる区間を示します（`sample_rate must be an integer within [-2147483648, 2147483647]`）。名前が必要なコードは `str(e)` から読み取るしかありません。文言と、文言でのマッチが壊れやすい理由は [Python API](./python-api.md#エラーハンドリング) を参照してください。
+
+#### 検証層はどこで止まるか
+
+バインディングの検証は 2 層で、それぞれの形を知っていれば、呼び出し側で `SonareValueError` が出たときに何が除外できたかが分かります。
+
+**サンプルバッファは 169 の公開エントリポイントで事前検査されます。** 126 は共通の事前検査ガードを通り、43 は同じ検査を本体に直接書いています。検査対象のバッファは連続した 1 次元 `float32` 配列へ変換され、空なら拒否され、NaN と Inf を走査されます。走査を省くのは、エントリポイントが `validate` を公開していて呼び出しが `validate=False` を渡したときだけです（空チェックは省かれません）。ノート系関数に渡す F0 トラックは形だけを検査します。pYIN は無声フレームを `nan` で表すからです。この集合は手で管理せず導出しています。バインディングのテストが、先頭パラメータにバッファの型注釈を持つ公開関数をすべて列挙し、ガードのないものがあれば失敗します。
+
+**スカラーは関数ごとではなく、変換の時点で絞り込まれます。** バインディングの ctypes 読み取りや設定構造体のフィールドを通る整数・浮動小数は、C 型が値を黙って変えてしまう場合に拒否されます。数値を期待する箇所への `bool`、ラップする整数（`c_int` のサンプルレートに渡した `2**32 + 8000`）、`c_float` で飽和する倍精度値、NaN や無限大がそれです。メッセージにはフィールド名と区間が入ります。検査が変換の位置にあるため、その値を渡すエントリポイントすべてに効き、関数ごとの数を管理する必要がありません。
+
+**5 つのエントリポイントは、答えを返さず拒否します。** 拒否は「検査して続行する」とは別の契約です。以下は、定義済みの空の結果を返す代わりに入力をそのまま拒否するものです。`trim_silence`、`split_silence`、`fix_frames` は空のバッファで送出します。`tempogram_ratio` は空の行列と、有限の正数でない `factors` の要素で送出します。`mix_stereo` はストリップがすべて空か、非有限のサンプルを含むシーンで送出します。それぞれの理由は [受け付けなくなった入力](./python-api.md#受け付けなくなった入力) にあります。
+
+この層が **しない** ことは次の通りです。
+
+- **値の意味を判断すること。** 絞り込みは数値が表現可能かを確かめるだけで、プロセッサが受け入れるかは見ません。`dynamics.compressor` の `ratio=0.5` はコアまで届き、`SonareError` コード 4 とメッセージ `compressor ratio must be at least 1` で返ってきます。`effects.modulation.chorus` の `dryWet=5` のようにプロセッサ側がクランプする値は、何も言われずに受理されます。一部のエントリポイントは Python 側でドメイン規則も検査します。古典的リペア関数の `n_fft` が 2 の冪であること、`hpss` のカーネルが奇数であること、`time_stretch` と `pitch_shift` の FFT ジオメトリがそれで、メッセージの読み方は同じです。それ以外の値の意味は、コアが判断します。
+- **`params` 辞書を読むこと。** `mastering_process`、チェーン、インサートに渡すパラメータ辞書は、そのまま直列化されます。未知のキーはプロセッサに無視され、非有限の値はバインディングではなくコアが拒否します（`mastering parameters must be finite and representable`）。呼び出し側で拒否したいなら、事前に [機能カタログ](./api-surface.md#機能カタログが返すもの) と照合してください。
+- **免除対象を事前検査すること。** 空のバッファが定義済みの結果になるエントリポイント（要素ごとの変換、パディング補助、テンポグラム系）は空を受け取って空を返します。一覧は [検査されないもの](./python-api.md#検査されないもの) にあります。
+- **CLI 自身の引数を扱うこと。** コマンドラインの使い方の誤りは通常の `ValueError` です。API の引数ではなくコマンドの誤りを報告するものだからです。

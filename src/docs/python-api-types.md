@@ -272,3 +272,47 @@ Additional Python result classes used by focused APIs:
 | Mixing | `MixerStereoResult` |
 | Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing-midi.md#assist-sidecars)), `NotePairValidation` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
+| Build introspection | `Capabilities`, `CapabilityCatalog`, `MasteringInsertParamInfo`, `MasteringProcessorCatalogEntry` (`TypedDict`s over the JSON documents described on [API Surface](./api-surface.md#what-the-capability-catalog-reports)) |
+
+### Exceptions
+
+Two classes cover every failure, and the second derives from the first, so they form one hierarchy rather than two:
+
+```python
+class SonareError(RuntimeError):
+    code: int          # the C-ABI error code, an ErrorCode value
+    code_name: str     # property -> "InvalidParameter", "FileNotFound", ...
+    # str(e) -> "[4] Invalid parameter": the code is prefixed to the message
+
+class SonareValueError(SonareError, ValueError):
+    code: int          # ErrorCode.INVALID_PARAMETER unless the raiser passes another
+    # str(e) -> "spectral_centroid: samples contains NaN or Inf at index 0": no prefix
+```
+
+`SonareValueError` is what the binding raises when it refuses an argument before the call crosses into native code. Its bases decide what an existing handler sees:
+
+| Handler | A binding refusal (`SonareValueError`) | A core rejection (`SonareError`, code 4) |
+|---------|---|---|
+| `except ValueError` | Caught | Not caught |
+| `except SonareError` or `except RuntimeError` | Caught | Caught |
+| `except SonareValueError` | Caught | Not caught |
+| Branching on `.code == ErrorCode.INVALID_PARAMETER` | Matches | Matches |
+
+An instance is message-only. There is no attribute naming the offending parameter and none carrying the accepted range: `.code` is the only structured field, and it reads `INVALID_PARAMETER` for every refusal. The parameter name and, where one applies, the range are in the text — a buffer refusal names the entry point and the argument (`master_audio_stereo: right must not be empty`), a scalar refusal names the field and the interval the C type can hold (`sample_rate must be an integer within [-2147483648, 2147483647]`). Code that needs the name has to read it from `str(e)`; [Python API](./python-api.md#error-handling) covers the wording and why matching on it is fragile.
+
+#### Where the validation layer stops
+
+The binding validates in two layers, and the shape of each says what a `SonareValueError` at the call site rules out.
+
+**Sample buffers are preflighted on 169 public entry points** — 126 through the shared preflight guard and 43 with the same check written into the body. Each preflighted buffer is coerced to a contiguous one-dimensional `float32` array, refused when empty, and scanned for NaN and Inf unless the entry point exposes `validate` and the call passes `validate=False` (the scan is skipped; the emptiness check is not). An F0 track handed to the note functions is checked for shape only, because pYIN spells an unvoiced frame as `nan`. The set is derived rather than maintained: a test in the binding discovers every public callable whose leading parameter is annotated as a buffer and fails when one ships without the guard.
+
+**Scalars are narrowed at the conversion, not per function.** Every integer or float that passes through the binding's ctypes readers or a config-struct field is refused when the C type would silently change it: a `bool` where a number is expected, an integer that would wrap (`2**32 + 8000` handed to a `c_int` sample rate), a double that would saturate a `c_float`, or a NaN or infinity. The message names the field and the interval. Because the check sits at the conversion, it covers every entry point that hands the value on, and there is no per-function count to keep.
+
+**Five entry points refuse rather than answer.** Refusing is a different contract from checking and continuing, and these are the ones whose input is refused outright instead of producing a defined empty result: `trim_silence`, `split_silence` and `fix_frames` raise on an empty buffer; `tempogram_ratio` raises on an empty matrix and on a `factors` entry that is not finite and positive; `mix_stereo` raises on a scene whose strips are all empty or carry a non-finite sample. [Input some entry points refuse](./python-api.md#input-some-entry-points-refuse) gives the reason for each.
+
+What the layer does **not** do:
+
+- **Judge a value's meaning.** Narrowing checks that a number is representable, not that the processor accepts it. `ratio=0.5` on `dynamics.compressor` reaches the core and comes back as `SonareError` code 4 with the message `compressor ratio must be at least 1`; a value the processor clamps instead, such as `dryWet=5` on `effects.modulation.chorus`, is accepted without a word. A handful of entry points do check a domain rule Python-side — the power-of-two `n_fft` of the classical repair functions, the odd kernel of `hpss`, the FFT geometry of `time_stretch` and `pitch_shift` — and their messages read the same way; everything else about a value's meaning is the core's to judge.
+- **Read a `params` dict.** The parameter dictionaries handed to `mastering_process`, the chain and the inserts are serialised as given: an unknown key is ignored by the processor, and a non-finite value is rejected by the core (`mastering parameters must be finite and representable`), not by the binding. Check values against the [capability catalog](./api-surface.md#what-the-capability-catalog-reports) before the call if you want the refusal at the call site.
+- **Preflight the exemptions.** The entry points for which an empty buffer is a defined result — the element-wise conversions, the padding helpers, the tempogram family — accept one and return one; they are listed under [What is not checked](./python-api.md#what-is-not-checked).
+- **Cover the CLI's own arguments.** A command-line usage error is a plain `ValueError`, since it reports a mistake in the command rather than an API argument.
