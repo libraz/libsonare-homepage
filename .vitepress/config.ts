@@ -542,10 +542,6 @@ const enDemoMenu = [
   },
 ];
 
-// Community / OSS-contribution tools. Not demos: these let contributors shape
-// libsonare itself (e.g. tune the physical-model engines and feed patches back).
-const enContributeMenu = [{ items: [{ text: 'Physical Model Tuner', link: '/tuner' }] }];
-
 // English docs sidebar — shared between the `/docs/` sidebar and the llms.txt index.
 const enDocsSidebar = [
   {
@@ -670,7 +666,6 @@ const generatedLocaleConfigs = Object.fromEntries(
         themeConfig: {
           nav: [
             { text: 'Demos', items: prefixLocaleLinks(enDemoMenu, locale) },
-            { text: 'Contribute', items: prefixLocaleLinks(enContributeMenu, locale) },
             { text: 'Docs', link: `/${locale}/docs/introduction` },
             { text: 'GitHub', link: githubUrl },
           ],
@@ -903,7 +898,6 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Demos', items: enDemoMenu },
-          { text: 'Contribute', items: enContributeMenu },
           { text: 'Docs', link: '/docs/introduction' },
           { text: 'GitHub', link: githubUrl },
         ],
@@ -944,10 +938,6 @@ export default defineConfig({
                 ],
               },
             ],
-          },
-          {
-            text: '貢献',
-            items: [{ items: [{ text: '物理モデルチューナー', link: '/ja/tuner' }] }],
           },
           { text: 'ドキュメント', link: '/ja/docs/introduction' },
           { text: 'GitHub', link: githubUrl },

@@ -133,7 +133,7 @@ const localeCopy = {
           title: 'Seventeen synthesis engines, eleven of them physical models.',
           body: 'Waveguide piano, bowed strings and reeds among them. The data-free GM/GS fallback voices all 128 programs, and its behaviour follows an open archive of hardware tone-generator measurements.',
           links: [
-            { label: 'Hear the models', path: '/tuner' },
+            { label: 'Hear the models', path: '/synth' },
             { label: 'Built-in instruments', path: '/docs/native-synth' },
             {
               label: 'Measurement archive',
@@ -259,7 +259,7 @@ const localeCopy = {
           title: '17 の合成エンジン、うち 11 が物理モデル。',
           body: '導波管によるピアノ、擦弦、リードなどを内蔵しています。データ不要の GM/GS フォールバックは 128 プログラムすべてを鳴らし、その挙動は実機音源の公開測定アーカイブに沿っています。',
           links: [
-            { label: '物理モデルを聴く', path: '/tuner' },
+            { label: '物理モデルを聴く', path: '/synth' },
             { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
             {
               label: '測定アーカイブ',

@@ -10,5 +10,5 @@ synthesis engine, a computer keyboard and Web MIDI, rendered locally.
 
 Voices render in a SharedArrayBuffer-free AudioWorklet (`useSynthEngine.ts` boots
 the module there through the `sonare-worklet.js` bridge). The piano keyboard and
-the computer-key mapping are shared with the tuner and live in
+the computer-key mapping are shared components and live in
 `src/components/keyboard/`.

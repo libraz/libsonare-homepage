@@ -17,7 +17,6 @@ export const DEMO_MANIFEST = [
   { id: 'synth', route: '/synth', dir: 'src/demos/synth', listed: true },
   { id: 'studio', route: '/studio', dir: 'src/demos/studio', listed: true },
   { id: 'practice', route: '/practice', dir: 'src/demos/practice', listed: true },
-  { id: 'tuner', route: '/tuner', dir: 'src/demos/tuner', listed: false },
 ] as const;
 
 export type DemoManifestEntry = (typeof DEMO_MANIFEST)[number];

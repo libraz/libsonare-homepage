@@ -15,7 +15,6 @@ const MixingStudio = defineDemoAsync(() => import('@/demos/mixing/MixingStudio.v
 const MusicAnalysisStudio = defineDemoAsync(
   () => import('@/demos/music-analysis/MusicAnalysisStudio.vue'),
 );
-const PhysicalModelTuner = defineDemoAsync(() => import('@/demos/tuner/PhysicalModelTuner.vue'));
 const PianoPracticeDemo = defineDemoAsync(() => import('@/demos/practice/PianoPracticeDemo.vue'));
 const RealtimeFxLab = defineDemoAsync(() => import('@/demos/realtime-fx/RealtimeFxLab.vue'));
 const SpatialScanner = defineDemoAsync(() => import('@/demos/spatial/SpatialScanner.vue'));
@@ -42,7 +41,6 @@ const isSpatial = computed(() => frontmatter.value.layout === 'spatial');
 const isSynth = computed(() => frontmatter.value.layout === 'synth');
 const isStudio = computed(() => frontmatter.value.layout === 'studio');
 const isPractice = computed(() => frontmatter.value.layout === 'practice');
-const isTuner = computed(() => frontmatter.value.layout === 'tuner');
 </script>
 
 <template>
@@ -57,6 +55,5 @@ const isTuner = computed(() => frontmatter.value.layout === 'tuner');
   <SynthDemo v-else-if="isSynth" />
   <StudioDemo v-else-if="isStudio" />
   <PianoPracticeDemo v-else-if="isPractice" />
-  <PhysicalModelTuner v-else-if="isTuner" />
   <DefaultLayout v-else />
 </template>
