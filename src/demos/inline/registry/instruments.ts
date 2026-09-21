@@ -544,4 +544,50 @@ export const instrumentsDemos: SonareDemoDef[] = [
       },
     ],
   },
+  {
+    id: 'physical-voice-audition',
+    archetype: 'synth',
+    // Source is unused for `synth`; a matching tone keeps the intent readable.
+    source: { kind: 'generate', signal: 'saw', freq: 220 },
+    viz: 'waveform',
+    title: {
+      en: 'One note, eight engines — waveform against physical model',
+      ja: '同じ音を 8 つのエンジンで — 波形と物理モデル',
+    },
+    caption: {
+      en: 'The same A3 through eight of the synth engines. Subtractive starts from an oscillator and carves it with a filter; the rest solve a model of a vibrating thing — a plucked string decaying into its own losses, a bow gripping and slipping, a column of air driven by breath. There is no oscillator to choose on a model, so that control disappears when you leave subtractive. Levels differ between engines on purpose: how loudly a body radiates is part of what the model computes, not a mixing decision. Press play and listen for how each one begins, which is where the models and the waveform part company most.',
+      ja: '同じ A3 を 8 つのシンセエンジンで鳴らします。減算方式はオシレーターから出発してフィルターで削りますが、残りは振動する物体のモデルを解いています — 自らの損失で減衰する撥弦、食いついては滑る弓、息で駆動される気柱。モデルには選ぶべきオシレーターが無いので、減算方式から離れるとその操作子は消えます。エンジンによって音量が違うのは意図したもので、ボディがどれだけ大きく響くかはモデルが計算している内容そのものであり、ミックスの都合ではありません。再生して、それぞれの「鳴りはじめ」を聴いてください。モデルと波形の差が最も出るところです。',
+    },
+    params: [
+      {
+        key: 'engineMode',
+        kind: 'select',
+        default: 'subtractive',
+        label: { en: 'Engine', ja: 'エンジン' },
+        options: [
+          { value: 'subtractive', label: { en: 'Subtractive', ja: '減算' } },
+          {
+            value: 'karplus-strong',
+            label: { en: 'Karplus-Strong', ja: 'カープラス・ストロング' },
+          },
+          { value: 'plucked-string', label: { en: 'Plucked string', ja: '撥弦' } },
+          { value: 'bowed-string', label: { en: 'Bowed string', ja: '擦弦' } },
+          { value: 'reed', label: { en: 'Reed', ja: 'リード' } },
+          { value: 'brass', label: { en: 'Brass', ja: '金管' } },
+          { value: 'flute', label: { en: 'Flute', ja: 'フルート' } },
+          { value: 'vocal', label: { en: 'Vocal tract', ja: '声道' } },
+        ],
+      },
+      {
+        key: 'cutoff',
+        kind: 'range',
+        default: 2200,
+        min: 200,
+        max: 8000,
+        step: 50,
+        unit: 'Hz',
+        label: { en: 'Cutoff', ja: 'カットオフ' },
+      },
+    ],
+  },
 ];
