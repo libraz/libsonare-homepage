@@ -9,21 +9,27 @@
   {
     "correct": "既定値",
     "forbidden": ["初期値"],
-    "reason": "Names the same parameter-default concept as 既定値/デフォルト in most files (e.g. glossary/analysis/tempo-bpm.md). js-api-analysis.md uses it exclusively for the starting value of an iterative NMF computation, a distinct concept, and is exempted.",
+    "reason": "初期値 names a parameter's default on most pages, where 既定値 is canonical. It also correctly names the starting value of an iterative computation, which is a different concept the canonical spelling would be wrong for: the NNDSVD warm start of the NMF, the level smoother's starting point, an early estimate before the stream settles, the tempo tracker's start_bpm prior, and the chain's starting values. Those pages are exempt in full, so a default-sense 初期値 added to one of them will not be caught.",
     "locale": "ja",
-    "exceptions": ["src/ja/docs/js-api-analysis.md"]
+    "exceptions": [
+      "src/ja/docs/js-api-features.md",
+      "src/ja/docs/js-api-audio.md",
+      "src/ja/docs/realtime-streaming.md",
+      "src/ja/docs/glossary/analysis/tempo-bpm.md",
+      "src/ja/docs/glossary/concepts/what-is-mastering.md"
+    ]
   },
   {
     "correct": "True Peak",
     "forbidden": ["トゥルーピーク"],
-    "reason": "The English form, optionally glossed with the katakana reading on first use, is dominant (133 lines / 42 files) and matches the glossary page title. Several use-cases pages use only the katakana form and never introduce the English term.",
+    "reason": "The English form, optionally glossed with the katakana reading on first use, is dominant (133 lines / 42 files) and matches the glossary page title. Several use-cases pages use only the katakana form and never introduce the English term. A first-use reading gloss in the form True Peak（トゥルーピーク）is not a competing spelling and the checker masks it, so a page may introduce the term to a reader meeting it for the first time and use the English form thereafter.",
     "locale": "ja",
     "exceptions": []
   },
   {
-    "correct": null,
-    "forbidden": ["サンプルレート", "サンプリングレート"],
-    "reason": "Real two-way split (69/34 lines/files vs 6/4) for one referent; both are standard renderings and corpus majority alone does not settle which is canonical. Reported as unresolved until a spelling is chosen.",
+    "correct": "サンプルレート",
+    "forbidden": ["サンプリングレート"],
+    "reason": "Both render the same referent, and the corpus is not actually split evenly: サンプルレート carries it on 69 lines across 34 files against 6 lines in 4 files. It also matches the katakana reading of the sampleRate field every binding exposes.",
     "locale": "ja",
     "exceptions": []
   },
@@ -36,8 +42,8 @@
   },
   {
     "correct": "Realtime",
-    "forbidden": ["real-time"],
-    "reason": "The closed compound is the site's own house style: every sidebar label and page H1 uses it, while the hyphenated adjective names the identical sense in files that also use the closed form alongside it.",
+    "forbidden": [],
+    "reason": "Guard entry, not a ban: the two forms name different things and both are correct. Realtime is the proper noun - the subject area's own name in sidebar labels, page titles and the engine and voice-changer features, matching the identifiers. real-time is the ordinary English adjective in front of a common noun (real-time safe, a real-time deadline), and closing it up there is a misspelling rather than a house style. Recorded so the closed form is not banned back onto adjective positions, which is what a substring rule does if it treats them as one term.",
     "locale": "en",
     "exceptions": []
   },

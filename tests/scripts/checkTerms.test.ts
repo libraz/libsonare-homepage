@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   checkTerms,
   collectDocFiles,
+  maskGloss,
   maskNonProse,
   pathMatchesException,
   validateReason,
@@ -116,6 +117,35 @@ describe('check-terms script', () => {
     expect(masked.split('\n').filter((line) => line.includes('hideme'))).toEqual([
       'hideme in prose.',
     ]);
+  });
+
+  it('masks a first-use reading gloss but still flags the bare variant beside it', () => {
+    expect(
+      maskGloss('True Peak（トゥルーピーク）はサンプル間ピーク', 'True Peak', 'トゥルーピーク'),
+    ).not.toContain('トゥルーピーク');
+    expect(maskGloss('True Peak (トゥルーピーク) は', 'True Peak', 'トゥルーピーク')).not.toContain(
+      'トゥルーピーク',
+    );
+    // The gloss is masked; a second, bare mention on the same line is not.
+    expect(
+      maskGloss(
+        'True Peak（トゥルーピーク）と、後半のトゥルーピーク',
+        'True Peak',
+        'トゥルーピーク',
+      ),
+    ).toContain('トゥルーピーク');
+    // A parenthetical that is not preceded by the canonical form is a variant.
+    expect(maskGloss('ラウドネス（トゥルーピーク）', 'True Peak', 'トゥルーピーク')).toContain(
+      'トゥルーピーク',
+    );
+    // Line length is preserved so reported columns and lengths stay meaningful.
+    const line = 'True Peak（トゥルーピーク）は';
+    expect(maskGloss(line, 'True Peak', 'トゥルーピーク')).toHaveLength(line.length);
+  });
+
+  it('leaves a line untouched when the entry has no canonical spelling', () => {
+    const line = 'サンプリングレート（トゥルーピーク）';
+    expect(maskGloss(line, null, 'トゥルーピーク')).toBe(line);
   });
 
   it('matches an exact exception path but not an unrelated file', () => {

@@ -19,7 +19,9 @@
  *    from every forbidden spelling in the entry.
  *
  * Matching skips fenced code blocks, inline code spans, HTML comments, and
- * link/image URLs, so an identifier or a path never trips a prose rule.
+ * link/image URLs, so an identifier or a path never trips a prose rule. It
+ * also skips a reading gloss — the canonical spelling followed by the variant
+ * in parentheses — which introduces a term rather than competing with it.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,6 +55,30 @@ export function maskNonProse(content) {
     .replace(LINK_URL, (_match, url) => `](${blank(url)})`)
     .replace(AUTOLINK, blank)
     .replace(REFERENCE_LINK_DEFINITION, (_match, prefix, url) => prefix + blank(url));
+}
+
+/** Escapes a literal for embedding in a RegExp source. */
+function escapeRegExp(literal) {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Masks a reading gloss: the canonical spelling immediately followed by the
+ * variant in parentheses, as in `True Peak（トゥルーピーク）`.
+ *
+ * A gloss is not a competing spelling — it introduces the canonical term to a
+ * reader meeting it for the first time, and the page then uses the canonical
+ * form throughout. Flagging it would leave a page no way to introduce an
+ * English term to a Japanese reader except by dropping the reading, which is
+ * the opposite of what the rule is for.
+ */
+export function maskGloss(line, correct, term) {
+  if (typeof correct !== 'string' || correct.length === 0) return line;
+  const pattern = new RegExp(
+    `${escapeRegExp(correct)}\\s*[（(]\\s*${escapeRegExp(term)}\\s*[）)]`,
+    'g',
+  );
+  return line.replace(pattern, blank);
 }
 
 /** True when `relPath` exactly matches, or falls under, one of `exceptions`. */
@@ -152,8 +178,9 @@ export function checkTerms({
       if (pathMatchesException(file.relPath, exceptions)) continue;
 
       const lines = maskedLinesFor(file.relPath);
-      lines.forEach((line, lineIndex) => {
+      lines.forEach((rawLine, lineIndex) => {
         for (const term of forbidden) {
+          const line = maskGloss(rawLine, entry.correct, term);
           if (!line.includes(term)) continue;
           const message = `${file.relPath}:${lineIndex + 1} uses "${term}", expected "${expected}"`;
           if (entry.correct === null) unresolved.push(message);
