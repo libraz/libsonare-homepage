@@ -3,6 +3,7 @@
 This document describes how libsonare functions correspond to Python's librosa library.
 
 ::: tip How to read this page
+- **Not coming from librosa at all**: this page is a mapping between two libraries. [Music Analysis](./analysis.md) is the one to read instead — it covers the same ground as a task guide.
 - **New to librosa**: start with [Introduction](/docs/introduction) and [MIR Overview](/docs/glossary/concepts/mir-overview), then come back.
 - **Migrating from librosa**: jump to the [Migration Guide](#migration-guide) and [Known Differences](#known-differences) at the bottom.
 - **Just need a mapping**: scan the [Feature Comparison](#feature-comparison) tables.
