@@ -34,7 +34,7 @@ function detectBpm(samples: Float32Array, sampleRate?: number): number
 | パラメータ | 型 | 説明 |
 |-----------|------|-------------|
 | `samples` | `Float32Array` | モノラルオーディオサンプル (範囲 -1.0 〜 1.0) |
-| `sampleRate?` | `number` | サンプルレート (Hz)（デフォルト: 22050。例: 44100） |
+| `sampleRate?` | `number` | サンプルレート (Hz)（既定値: 22050。例: 44100） |
 
 ::: warning 実際のサンプルレートを必ず渡す
 ここでは `sampleRate` は任意（既定は 22050 Hz）ですが、ブラウザでデコードした音声はほぼ常に 44100 または 48000 Hz です。バッファの実際の `audioBuffer.sampleRate` を渡してください。さもないと検出される BPM が狂います。同じことは `detectKey`・`detectBeats`・`analyze` にも当てはまります。これらも `sampleRate` は任意で既定は同じ 22050 Hz なので、実際のレートを渡してください。
@@ -315,7 +315,7 @@ for (const { time, strength } of boundaries) {
 }
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |------------|------------|------|
 | `sampleRate` | 22050 | `samples` のサンプルレート |
 | `nFft` | 2048 | 構造特徴量に使う FFT サイズ |

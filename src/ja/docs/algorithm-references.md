@@ -27,7 +27,7 @@
 
 | 領域 | 根拠 | 根拠箇所 |
 |------|------|----------|
-| ラウドネスと True Peak（トゥルーピーク） | ITU-R BS.1770-4/5、EBU R128、EBU Tech 3342 loudness range | `README.md`、`src/rt/biquad_design.h`、`src/rt/true_peak_filter.h`、`src/metering/lufs.cpp`、`tests/rt/true_peak_filter_test.cpp` |
+| ラウドネスと True Peak | ITU-R BS.1770-4/5、EBU R128、EBU Tech 3342 loudness range | `README.md`、`src/rt/biquad_design.h`、`src/rt/true_peak_filter.h`、`src/metering/lufs.cpp`、`tests/rt/true_peak_filter_test.cpp` |
 | K-weighting | 48 kHz の BS.1770 参照係数と、他サンプルレート向けの解析式設計 | `src/rt/biquad_design.h`、`src/rt/biquad_design.cpp` |
 | True Peak 補間 | BS.1770 の目標周波数応答に合わせた 2x/4x/8x/16x polyphase FIR。規格準拠の測定には 4x 以上を使う。2x は BS.1770 の最小要件である 4x を下回る、意図的に非準拠の高速近似。 | `src/rt/true_peak_filter.h`、`src/rt/true_peak_filter.cpp` |
 | 古典的デノイズ | Ephraim-Malah MMSE-STSA (1984)、Ephraim-Malah LogMMSE (1985)、Berouti spectral subtraction with over-subtraction (1979)、MCRA、IMCRA | `src/mastering/repair/denoise_classical.h` |
@@ -80,7 +80,7 @@ Tonnetz（「音のネットワーク」）は、和声を幾何空間へ写像�
 
 ### General MIDI と GS の互換
 
-libsonare は、公開されている General MIDI・General MIDI 2 の楽器／打楽器マップ（MIDI Association）と、Roland が定義した GS 拡張（追加バンク・NRPN（非登録パラメーター番号）・ドラムキットの変種・挿入エフェクト（EFX））に、アドレスのレベルで準拠します。その際に用いるのは、公開されている MIDI／SysEx の実装仕様とエフェクトのタイプ番号体系です。この互換ターゲットにより、GM/GS 準拠で作られた MIDI が、作者の意図したバンク・キット・エフェクトを選べます。
+libsonare は、公開されている General MIDI・General MIDI 2 の楽器／打楽器マップ（MIDI Association）と、Roland が定義した GS 拡張（追加バンク・NRPN（非登録パラメータ番号）・ドラムキットの変種・挿入エフェクト（EFX））に、アドレスのレベルで準拠します。その際に用いるのは、公開されている MIDI／SysEx の実装仕様とエフェクトのタイプ番号体系です。この互換ターゲットにより、GM/GS 準拠で作られた MIDI が、作者の意図したバンク・キット・エフェクトを選べます。
 
 これらのアドレスに割り当てられる音自体は、公開資料と上記の文献をもとに再構成した libsonare 独自のプロシージャル合成および DSP です。libsonare は、いかなるハードウェアモジュールのサンプル・ROM データ・ファームウェアも同梱しておらず、各エフェクトは独自のアルゴリズムです。したがってこれは**独立した再構成**であり、GS のアドレス指定とエフェクト構成には従いますが、特定機器の音そのものを再現するものでは**ありません**。以下の librosa フィクスチャと同様、これは互換ターゲットであって実装コードの複製ではなく、出力が同一であるという主張でもありません。
 

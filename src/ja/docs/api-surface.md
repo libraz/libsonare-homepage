@@ -78,7 +78,7 @@
 | 解析 | BPM、キー、キー候補、ビート、ダウンビート、オンセット、コード、セクション、メロディ、音色、ダイナミクス、リズム、音響解析 | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md)、[C++ API](./cpp-api.md) |
 | 拍子推定 | すでに手元にあるビート列に対して、拍子記号・ダウンビート位相・アクセントのグルーピングを採点します：`estimateMeter` / `estimate_meter` / `sonare_estimate_meter_json`。音声は受け取らず、どちらの CLI にも専用サブコマンドはありません | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) |
 | 特徴量 | STFT、メル、MFCC、クロマ、定Qクロマ（`chromaCqt`）、spectral contrast/poly features、zero crossings、ピッチとチューニング、CQT/VQT、NNLS クロマ、NMF 分解、近傍フィルタリング、テンポグラム、Fourier tempogram、cyclic tempogram、PLP、LUFS/LRA | [JavaScript API](./js-api-features.md#特徴抽出)、[librosa 互換性](./librosa-compatibility.md) |
-| メータリング | レベル、ラウドネス、クレストファクター（モノラルとステレオペアの両方）、True Peak（トゥルーピーク）、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api-audio.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
+| メータリング | レベル、ラウドネス、クレストファクター（モノラルとステレオペアの両方）、True Peak、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api-audio.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
 | スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api-analysis.md#スケール量子化)、[Python API](./python-api.md) |
 | エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api-effects.md#オーディオエフェクト) |
 | ステム分解 | ソフトマスクによる分離。各成分がソース自身の位相を保ち、足し合わせると入力に戻ります：`decomposeStems` / `decompose_stems` / `sonare_decompose_stems`、および両方の CLI の `decompose-stems` | [逆変換特徴量](./inverse-features.md)、[JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md) |
@@ -114,7 +114,7 @@
 | `id` | リアルタイムエンジンのインサートパラメータ設定 API が使う整数 id。カタログ順に `0..n-1` を振るので、帯域分割型のプロセッサでは `band0.*` が `band1.*` より先に番号を持つ |
 | `rtSafe` | オーディオスレッドから稼働中に値を変えられるか |
 | `type` | `number` か `boolean`。設定ビルダーがそのキーを読む C++ の型から決まる |
-| `default` | 設定構造体自身のフィールド初期値。ビルダーがそこへフォールバックする瞬間に記録され、`null` になることはない |
+| `default` | 設定構造体自身のフィールドの既定値。ビルダーがそこへフォールバックする瞬間に記録され、`null` になることはない |
 | `min`、`max` | 探索時に構築が受け入れた区間。その側の制限をカタログが知らなければ `null` |
 | `unit` | `dB`、`Hz`、`ms`、`samples`、または無次元の制御なら `null` |
 

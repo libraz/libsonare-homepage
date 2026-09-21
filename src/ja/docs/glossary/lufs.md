@@ -16,7 +16,7 @@ LUFS（Loudness Units relative to Full Scale）は体感上の音量、つまり
 
 ## なぜ重要か
 
-処理前後を音量差のまま比較すると、大きい方が良く聞こえやすくなります。そのため `/ja/mastering` デモではラウドネスマッチした A/B をデフォルトにしています。
+処理前後を音量差のまま比較すると、大きい方が良く聞こえやすくなります。そのため `/ja/mastering` デモではラウドネスマッチした A/B を既定にしています。
 
 ラウドネスは配信上の制約の 1 つにすぎません。マスターには十分な [True Peak 安全性](./concepts/true-peak-safety.md) も必要で、[ダイナミックレンジ](./concepts/dynamic-range.md) は音楽的な意図に合っている必要があります。
 

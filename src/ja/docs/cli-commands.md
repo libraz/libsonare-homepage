@@ -18,7 +18,7 @@ sonare analyze music.mp3
 sonare analyze music.mp3 --json
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |--------|---------|-------------|
 | `--with-seventh` | 無効 | トライアドだけでなく、コードテンプレート全体を探索する |
 | `--no-hpss` | 無効 | 倍音／打撃成分分離を無効化する |
@@ -31,7 +31,7 @@ sonare analyze music.mp3 --json
 コードクオリティすべてが対象になります。セブンスやナインスに加えて、シックスス、
 `7sus4`、イレブンス、サーティーンス、オルタードドミナントが含まれます。
 
-拍子の探索は、指定された分子しか報告しません。デフォルトの候補は `3,4,6` なので、
+拍子の探索は、指定された分子しか報告しません。既定の候補は `3,4,6` なので、
 5/4 や 7/8、11/8 の曲もこの 3 つのいずれかとして返ってきます。`--meter-candidates
 3,4,5,7` のように候補を広げて初めて検出できます。候補リストは 1〜16 個で、各値は
 2〜32 の範囲です。`--meter-denominator` は結果を報告するときの音符単位を決めるだけ
@@ -193,7 +193,7 @@ sonare mel music.mp3 --n-mels 80
 sonare mel music.mp3 --fmin 40 --fmax 16000 --htk
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |------------|------------|------|
 | `--fmin FREQ` | 0 | メルバンドの最低周波数（Hz） |
 | `--fmax FREQ` | 0 | メルバンドの最高周波数（Hz）。0 ならナイキスト周波数を使う |
@@ -254,7 +254,7 @@ sonare pitch music.mp3
 sonare pitch music.mp3 --algorithm yin
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |--------|---------|-------------|
 | `--algorithm` | pyin | ピッチアルゴリズム: "yin" または "pyin" |
 | `--threshold` | 0.1 | YIN のしきい値（0 より大きく 1 以下） |
@@ -279,14 +279,14 @@ sonare hpss music.mp3 -o separated
 sonare hpss music.mp3 -o separated --json
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |--------|---------|-------------|
 | `--kernel-harmonic <int>` | 31 | 倍音成分側のメディアンフィルターカーネルサイズ |
 | `--kernel-percussive <int>` | 31 | 打撃成分側のメディアンフィルターカーネルサイズ |
 | `--harmonic-only` | 無効 | 倍音成分のみを書き出す |
 | `--percussive-only` | 無効 | 打撃成分のみを書き出す |
 | `--with-residual` | 無効 | 残差成分も分離して書き出す |
-| `--hard-mask` | 無効 | デフォルトのソフトマスクの代わりにハードマスクを使う |
+| `--hard-mask` | 無効 | 既定のソフトマスクの代わりにハードマスクを使う |
 
 `--harmonic-only`、`--percussive-only`、`--with-residual` は同時に指定できません。
 
@@ -307,7 +307,7 @@ sonare decompose-stems band.wav -o stems.wav
 sonare decompose-stems band.wav -o stems.wav --n-components 6 --init nndsvd --json
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |--------|---------|-------------|
 | `--n-components <int>` | 4 | 分解する成分の数 |
 | `--n-iter <int>` | 100 | NMF の更新反復回数 |
@@ -361,7 +361,7 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
 | `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。`--threshold`（0.3）, `--absolute-threshold`（0.005）, `--kernel-size`（64）, `--n-mfcc`（13）, `--n-chroma`（12）, `--peak-distance`（2.0）, `--no-mfcc`, `--no-chroma`, `--n-fft`（2048）, `--hop-length`（512） |
 | `sonare melody music.mp3` | メロディ輪郭の要約。メロディの有無、音域（オクターブ）、平均周波数、ピッチの安定度、ビブラート速度、ピッチ点の数 | ネイティブ CLI のみ。`--threshold`（0.1）, `--hop-length`（512）, `--fmin`（80.0）, `--fmax`（1000.0） |
-| `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak（トゥルーピーク）、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
+| `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ネイティブ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
 | `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ネイティブ CLI のみ |
@@ -428,8 +428,8 @@ sonare polyphonic-render chord.wav -o out.wav \
 
 `--edit` は 1 回につき 1 つの `NOTE.FIELD=VALUE` を指定し、繰り返し渡せます。指定できるフィールドは `pitch_shift_semitones`、`gain_db`、`time_offset_samples`、`time_stretch_ratio`、`formant_shift_semitones`、`vibrato_depth_change`、`drift_change`、`muted` です。未知のフィールドは無視されるのではなくエラーになります。`polyphonic-render` は `-o` が必須で、`polyphonic-notes` は標準出力に表示するだけなので出力ファイルを取りません。
 
-::: warning 何もしないデフォルトはエラーになりました
-`--semitones` と `--rate` には以前デフォルト値があり、省略するとコマンドが何もしない
+::: warning 何もしない既定値はエラーになりました
+`--semitones` と `--rate` には以前既定値があり、省略するとコマンドが何もしない
 状態になっていました。現在はどちらも必須です。また、ピッチシフトの未知の
 `--algorithm` やピッチ補正の未知の `--mode` も、既定値へフォールバックせずエラーになります。
 :::
@@ -467,7 +467,7 @@ Non-silent intervals: 3
 [{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 394752}]
 ```
 
-| オプション | デフォルト | 説明 |
+| オプション | 既定値 | 説明 |
 |------------|------------|------|
 | `--input WAV` | — | 同じパートの別テイク。繰り返し指定可 |
 | `--top-db` | 60.0 | ピークからの無音しきい値（dB） |

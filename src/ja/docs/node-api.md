@@ -162,7 +162,7 @@ try {
 | `audio.getLength()` | サンプル数 |
 | `audio.destroy()` | ネイティブハンドルを解放。GC でも回収されますが、長時間動くプロセスで確実に解放したい場合に呼び出します |
 
-`Audio` インスタンスは、以下の解析・エフェクト・特徴量関数を同じデフォルト値で
+`Audio` インスタンスは、以下の解析・エフェクト・特徴量関数を同じ既定値で
 メソッドとしても呼び出せます（例: `audio.detectBpm()`、`audio.masteringChain(config)`）。
 
 `analyzeSections(...)`、`analyzeMelody(...)`、`cqt(...)`、`vqt(...)` などの一部の詳細ヘルパーは

@@ -204,7 +204,7 @@ console.log(stereoProfile, stereoSuggestions, stereoPreview)
 
 相関の低いペアでは、この差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。
 
-ステレオプロファイルのうち両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA（ラウドネスレンジ。曲中の静かな部分と大きな部分の開き）はチャンネルを合算したプログラムから求め、True Peak（トゥルーピーク）は左右のうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
+ステレオプロファイルのうち両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA（ラウドネスレンジ。曲中の静かな部分と大きな部分の開き）はチャンネルを合算したプログラムから求め、True Peak は左右のうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
 
 呼び出し規約の違いに注意してください。上のマスタリング例が位置引数なのに対し、この 4 つはリクエストオブジェクト 1 つだけを取ります。メータリング側の `meteringCrestFactorDbStereo({ left, right, sampleRate })` も同じリクエストオブジェクト形式で、`number` を返します。リクエスト型の名前は Node ネイティブと WASM で異なります。Node は `MasteringAssistantSuggestStereoRequest` と `MasteringAudioProfileStereoRequest` を宣言し（後者は前者を継承するだけで何も追加しません）、WASM は共通の `MasteringStereoParamsRequest` 1 つを使います。
 

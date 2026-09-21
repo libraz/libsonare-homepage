@@ -100,9 +100,9 @@ sonare <command> [options] <audio_file>
 | `--json` | JSON 形式で結果を出力 |
 | `--help`, `-h` | コマンドのヘルプを表示 |
 | `-o`, `--output` | 出力 WAV パス。編集・マスタリング・`eq`・`mix` コマンドはここに WAV を書き出します。解析・特徴抽出コマンドは stdout に出力し、このオプションを受け付けません |
-| `--n-fft <int>` | FFT サイズ（デフォルト: 2048） |
-| `--hop-length <int>` | ホップ長（デフォルト: 512） |
-| `--n-mels <int>` | Mel バンド数（デフォルト: 128） |
+| `--n-fft <int>` | FFT サイズ（既定値: 2048） |
+| `--hop-length <int>` | ホップ長（既定値: 512） |
+| `--n-mels <int>` | Mel バンド数（既定値: 128） |
 | `--quiet`, `-q` | ネイティブ CLI のみ。進捗出力を抑制する |
 
 `sonare <command> --help` は、そのコマンドが実際に受け付けるオプションだけを
@@ -272,7 +272,7 @@ reference.wav --target-sr <sr> -o reference-matched.wav`）、比較前のリサ
 
 | コマンド | 主なオプション | 備考 |
 |---------|--------------|------|
-| `sonare master track.wav -o out.wav` | `--preset NAME`（デフォルト `pop`）, `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | 名前付きマスタリングプリセットを適用する。`--config`／`--config-file`／`--params` でプリセット値を上書きできる。`--report` はマスタリングレポート JSON ファイルを書き出す |
+| `sonare master track.wav -o out.wav` | `--preset NAME`（既定値 `pop`）, `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | 名前付きマスタリングプリセットを適用する。`--config`／`--config-file`／`--params` でプリセット値を上書きできる。`--report` はマスタリングレポート JSON ファイルを書き出す |
 | `sonare mastering-chain track.wav -o out.wav` | `--config '{...}'`, `--config-file f.json`, `--params k=v,...`, `--report FILE` | JSON 設定から構成可能なマスタリングチェーンを実行する |
 | `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |

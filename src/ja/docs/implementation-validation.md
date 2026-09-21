@@ -35,7 +35,7 @@
 | 領域 | リポジトリ内の根拠 |
 |------|--------------------|
 | librosa 互換特徴量 | `tests/librosa/*_test.cpp` と `tests/librosa/reference/` の JSON 参照値で、STFT、メル、MFCC、クロマ/CQT、オンセット、ビート／テンポ、PCEN、tonnetz、無音処理、frame/pad/fix、peak pick、変換ヘルパーを検証 |
-| コア DSP の基礎部品 | `tests/core/*_test.cpp`、`tests/util/*_test.cpp`、`tests/filters/*_test.cpp`、`tests/rt/*_test.cpp` で FFT、窓関数、リサンプリング、padding、sequence、filter、oversampling、True Peak（トゥルーピーク）フィルター、queue、リアルタイム用の基礎部品を検証 |
+| コア DSP の基礎部品 | `tests/core/*_test.cpp`、`tests/util/*_test.cpp`、`tests/filters/*_test.cpp`、`tests/rt/*_test.cpp` で FFT、窓関数、リサンプリング、padding、sequence、filter、oversampling、True Peak フィルター、queue、リアルタイム用の基礎部品を検証 |
 | 解析 | `tests/analysis/*_test.cpp`、`tests/fixtures/music_eval/` の任意 music fixture manifest、合成 key/chord matrix で BPM、キー、コード、ビート、ダウンビート、拍子、メロディ、音色、リズム、セクション、境界、長尺境界のプーリング、音響解析を検証 |
 | 幾何ベースのルーム音響 | `tests/acoustic/*_test.cpp`、`tests/effects/room_morph_test.cpp`、`tests/api/sonare_c_acoustic_test.cpp`、`tests/fixtures/acoustic/` の任意 fixture、バインディングテストでルームモデル／マテリアル、鏡像音源法、後期残響、RIR 合成、等価ルーム推定、ルームモーフィング、C ABI 挙動を検証 |
 | マスタリング | `tests/mastering/*_test.cpp` でチェーン設定、レイテンシ、EQ、ダイナミクス、マルチバンド、サチュレーション、リペア、スペクトラル、ステレオ、マッチ、マキシマイザー、EBU R128、ラウドネス上限、プリセット、ゴールデンハッシュ、性質ベースの確認、アシスタント出力を検証 |

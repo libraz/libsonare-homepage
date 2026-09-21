@@ -11,7 +11,7 @@ libsonare の関数が Python の librosa ライブラリにどのように対�
 
 ## 概要
 
-libsonare は、[librosa](https://librosa.org/) と同じような MIR（music information retrieval：音声からテンポ・キー・ピッチなどの音楽的特徴を抽出する分野）の基本部品を提供しつつ、C++、Python バインディング、Node.js ネイティブバインディング、WebAssembly での利用を想定しています。librosa の完全なドロップイン置き換えではありません。API、デフォルト値、数値計算の細部は異なる場合があります。libsonare のテストスイートでは、一部の機能について librosa 0.11 の参照値と比較しています。
+libsonare は、[librosa](https://librosa.org/) と同じような MIR（music information retrieval：音声からテンポ・キー・ピッチなどの音楽的特徴を抽出する分野）の基本部品を提供しつつ、C++、Python バインディング、Node.js ネイティブバインディング、WebAssembly での利用を想定しています。librosa の完全なドロップイン置き換えではありません。API、既定値、数値計算の細部は異なる場合があります。libsonare のテストスイートでは、一部の機能について librosa 0.11 の参照値と比較しています。
 
 ## 目的別マップ
 
@@ -51,7 +51,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 |---------|-----------|-------|
 | `librosa.load()` | `Audio::from_file()` | 標準は WAV/MP3。FFmpeg 有効ビルドでは FFmpeg 対応形式 |
 | `librosa.resample()` | `resample()` | librosa 0.11 は標準で soxr、libsonare は r8brain を使用 |
-| `librosa.stft()` | `Spectrogram::compute()` / `stft()` | デフォルト値は互換。小さな数値差は発生します |
+| `librosa.stft()` | `Spectrogram::compute()` / `stft()` | 既定値は互換。小さな数値差は発生します |
 | `librosa.istft()` | `Spectrogram::to_audio()` | OLA 再構成 |
 | `librosa.power_to_db()` | `powerToDb()` / `power_to_db()` | `ref`／`amin`／`top_db` 対応 |
 | `librosa.amplitude_to_db()` | `amplitudeToDb()` / `amplitude_to_db()` | 同上 |
@@ -338,7 +338,7 @@ sonare beats song.wav --json
 ```
 :::
 
-## デフォルトパラメータ
+## 既定のパラメータ
 
 | パラメータ | librosa | libsonare |
 |-----------|---------|-----------|
@@ -354,11 +354,11 @@ sonare beats song.wav --json
 | `n_mfcc` | 20 | 全バインディングの単体 `mfcc()` / `Audio.mfcc()` は 20。analyzer／音色抽出の経路は 13 |
 | `n_chroma` | 12 | 12 |
 
-librosa の出力と比較する場合は、実行環境ごとのデフォルトに頼らず、パラメータを明示してください。
+librosa の出力と比較する場合は、実行環境ごとの既定値に頼らず、パラメータを明示してください。
 
 ## Mel スケール式
 
-### Slaney（librosa デフォルト、libsonare デフォルト）
+### Slaney（librosa 既定、libsonare 既定）
 
 ```
 f < 1000 Hz の場合:  mel = 3 * f / 200

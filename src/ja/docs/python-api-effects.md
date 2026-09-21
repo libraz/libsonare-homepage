@@ -45,8 +45,8 @@ resampled = audio.resample(target_sr=44100)
 | 寸法からモノラルのルームインパルス応答（RIR）を作る | `synthesize_rir(...)` |
 | 目標ルームの響きを音作り効果として足す | `room_morph(...)` |
 
-::: info デフォルト値と用語
-`analyze_impulse_response(...)` と `detect_acoustic(...)` は `AcousticResult` を返し、RT60、EDT、C50、C80、D50、バンド別配列、信頼度、`is_blind` を含みます。これらの `sample_rate` デフォルトは `48000` で、多くの楽曲解析ヘルパーの `22050` とは異なります。RIR は room impulse response（ルームインパルス応答）の略です。RT60 は残響時間で、残響が 60 dB 減衰するまでの長さを指します。C50 と C80 は、初期エネルギーと後期エネルギーの比で明瞭度を表します。
+::: info 既定値と用語
+`analyze_impulse_response(...)` と `detect_acoustic(...)` は `AcousticResult` を返し、RT60、EDT、C50、C80、D50、バンド別配列、信頼度、`is_blind` を含みます。これらの `sample_rate` の既定値は `48000` で、多くの楽曲解析ヘルパーの `22050` とは異なります。RIR は room impulse response（ルームインパルス応答）の略です。RT60 は残響時間で、残響が 60 dB 減衰するまでの長さを指します。C50 と C80 は、初期エネルギーと後期エネルギーの比で明瞭度を表します。
 :::
 
 ```python
@@ -97,8 +97,8 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 | `note_move(samples, sample_rate, onset_sample?, offset_sample?, target_onset_sample?)` | `list[float]` | ノート区間の長さを変えずに、新しいオンセット位置へ移動 |
 | `voice_change(samples, sample_rate, pitch_semitones?, formant_factor?)` | `list[float]` | ピッチとフォルマントを独立にシフト |
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
-| `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（デフォルト: 0.0） |
-| `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB にノーマライズ（デフォルト: -20.0） |
+| `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（既定値: 0.0） |
+| `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB にノーマライズ（既定値: -20.0） |
 | `normalize_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインでピークノーマライズ（`target_db` 既定 `0.0`） |
 | `normalize_rms_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインで RMS ノーマライズ（`target_db` 既定 `-20.0`） |
 | `remix(samples, intervals, sample_rate?, align_zeros?)` | `np.ndarray` | 区間スライスで並べ替え／連結。`align_zeros` は既定 `False` |

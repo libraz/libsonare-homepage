@@ -44,9 +44,9 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `realtimeVoiceChangerPresetConfig(preset)` | `RealtimeVoiceChangerConfig` | JSON 解析なしで、組み込みボイスプリセットの解決済みフラット POD 設定を返す。未知のプリセット名や範囲外の序数では例外を投げる |
 | `hasFfmpegSupport()` | `boolean` | 読み込まれたネイティブアドオンが FFmpeg デコードに対応しているか |
 
-デフォルトの `sampleRate` は、ヘルパーの種類によって異なります。
+既定の `sampleRate` は、ヘルパーの種類によって異なります。
 
-| ヘルパー | デフォルト `sampleRate` |
+| ヘルパー | 既定の `sampleRate` |
 |----------|-------------------------|
 | 楽曲解析、エフェクト、特徴量、ラウドネス系ヘルパー | `22050` |
 | ネイティブ版の `analyzeImpulseResponse`、`detectAcoustic`、`estimateRoom`、`synthesizeRir` | `48000` |

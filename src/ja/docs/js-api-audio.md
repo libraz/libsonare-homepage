@@ -112,7 +112,7 @@ const pitch = audio.pitchPyin();
 const resampled = audio.resample(22050);
 ```
 
-引数のデフォルト値（`nFft`、`hopLength`、`nMels` など）はスタンドアロン関数と同じです。
+引数の既定値（`nFft`、`hopLength`、`nMels` など）はスタンドアロン関数と同じです。
 
 ## メータリング
 
@@ -410,7 +410,7 @@ interface StreamConfig {
 
 旧来の `computeMagnitude` フラグはサポートされなくなり、指定するとコンストラクタが例外を投げます。マグニチュードのフレームは StreamAnalyzer の読み出し経路では公開されないため、このフラグは削除されました。マグニチュードのデータが必要な場合は、オフラインで `stft`／`stftDb` を使うか、スペクトラムメータリングのヘルパーを使ってください。
 
-`streamAnalyzerConfigDefaults()` は、上記の各フィールドについてライブラリの既定値を保持した、すべての項目が入った `StreamConfigDefaults` オブジェクト（`Required<StreamConfig>`）を返します。設定 UI の初期値として使ったり、ユーザー指定の設定との差分計算に使えます。`StreamAnalyzer` 自身も、省略されたフィールドにはこの同じ既定値を適用します。
+`streamAnalyzerConfigDefaults()` は、上記の各フィールドについてライブラリの既定値を保持した、すべての項目が入った `StreamConfigDefaults` オブジェクト（`Required<StreamConfig>`）を返します。設定 UI の既定値として使ったり、ユーザー指定の設定との差分計算に使えます。`StreamAnalyzer` 自身も、省略されたフィールドにはこの同じ既定値を適用します。
 
 ### StreamAnalyzer クラス
 

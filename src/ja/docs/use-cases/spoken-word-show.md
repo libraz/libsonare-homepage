@@ -230,7 +230,7 @@ podcast をターゲットにしたアシスタント実行の `--report show-re
 }
 ```
 
--16 LUFS は `--target-platform podcast` が求めている値で、`output_lufs` はそこへ到達しています。`loudness_target_limited: false` は、トゥルーピークの天井に押し戻されることなく、ゲインだけで目標に到達したことを意味します。数値そのものの意味は [LUFS](../glossary/lufs.md) に、他のプラットフォームが -16 の代わりに何を求めているかは [配信ターゲット](../glossary/mastering/delivery-targets.md) にまとまっています。
+-16 LUFS は `--target-platform podcast` が求めている値で、`output_lufs` はそこへ到達しています。`loudness_target_limited: false` は、True Peak の天井に押し戻されることなく、ゲインだけで目標に到達したことを意味します。数値そのものの意味は [LUFS](../glossary/lufs.md) に、他のプラットフォームが -16 の代わりに何を求めているかは [配信ターゲット](../glossary/mastering/delivery-targets.md) にまとまっています。
 
 [CLI だけでミックスからマスタリングまで](./cli-mix-and-master.md) の 4 ステムの例と同じく、別途 `sonare lufs show-master.wav` を呼ぶとこの値とは食い違います。先にモノラルへダウンミックスしたうえで標準エラー出力に警告を出すからです。ステレオの納品物では、マスタリングレポートの数値を信じてください。
 
