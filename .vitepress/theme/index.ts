@@ -12,6 +12,7 @@ const FlowDiagram = defineAsyncComponent(() => import('./components/diagrams/Flo
 const SequenceDiagram = defineAsyncComponent(
   () => import('./components/diagrams/SequenceDiagram.vue'),
 );
+const MaturityNote = defineAsyncComponent(() => import('./components/MaturityNote.vue'));
 
 /**
  * Hand-authored SVG concept figures. Unlike FlowDiagram/SequenceDiagram these
@@ -47,6 +48,7 @@ export default {
     app.component('AudioAnalyzer', AudioAnalyzer);
     app.component('BenchChart', BenchChart);
     app.component('FlowDiagram', FlowDiagram);
+    app.component('MaturityNote', MaturityNote);
     app.component('SequenceDiagram', SequenceDiagram);
     app.component('SonareDemo', SonareDemo);
     for (const name of FIGURES) app.component(name, figure(name));
