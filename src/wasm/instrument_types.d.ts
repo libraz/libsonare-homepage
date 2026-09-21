@@ -91,8 +91,31 @@ export declare const SYNTH_OSC_WAVEFORMS: readonly ["default", "sine", "saw", "s
 export declare const SYNTH_FILTER_MODELS: readonly ["default", "svf", "moog-ladder", "diode-ladder", "sallen-key"];
 export declare const SYNTH_FILTER_OUTPUTS: readonly ["default", "lowpass", "bandpass", "highpass"];
 export declare const SYNTH_BODY_TYPES: readonly ["default", "none", "guitar", "violin", "wood-tube", "brass-bell", "vocal"];
-export declare const SYNTH_MOD_SOURCES: readonly ["none", "amp-env", "filter-env", "lfo1", "lfo2", "velocity", "key-track", "mod-wheel", "random"];
+export declare const SYNTH_MOD_SOURCES: readonly ["none", "amp-env", "filter-env", "lfo1", "lfo2", "velocity", "key-track", "mod-wheel", "random", "breath", "aftertouch", "expression-cc", "pitch-bend"];
 export declare const SYNTH_MOD_DESTINATIONS: readonly ["none", "pitch-cents", "cutoff-cents", "amp-gain", "pan-units", "resonance-q", "vibrato-depth-cents", "filter-env-depth", "lfo1-rate-scale", "excitation-force", "excitation-position", "excitation-brightness", "spectrum-morph"];
+/** How a device spells a gesture (see {@link ControllerBinding}). */
+export declare const CONTROLLER_INPUTS: readonly ["control-change", "channel-pressure", "poly-pressure", "pitch-bend", "velocity"];
+/** What a gesture means — the expression axis a binding drives. */
+export declare const CONTROLLER_AXES: readonly ["none", "excitation", "position", "brightness", "morph", "loudness", "pitch-cents", "vibrato-depth"];
+/**
+ * What a channel does with a note-on while another note on that channel is
+ * still held. `'mono-legato'` carries the sounding voice and only moves its
+ * pitch — a wind player's slur — and is deliberately out of reach of any MIDI
+ * message: CC126 names a monophonic mode but not this one.
+ */
+export declare const ARTICULATIONS: readonly ["poly", "mono-retrigger", "mono-legato"];
+/** The three dimensions MPE carries per note ({@link RealtimeEngine.setControllerNoteTracking}). */
+export declare const MPE_DIMENSIONS: readonly ["bend", "pressure", "timbre"];
+/**
+ * Which note a value addressed to a whole MIDI channel belongs to when several
+ * are sounding on it ({@link RealtimeEngine.setControllerNoteTracking}).
+ *
+ * MPE poses this question and declines to answer it — how a controller affects
+ * the notes when more than one is active on a member channel is left to the
+ * device — so this is a choice rather than a rule. A released note is never
+ * selected, whatever the rule and however long a pedal keeps it sounding.
+ */
+export declare const NOTE_TRACKINGS: readonly ["last", "lowest", "highest", "all"];
 export interface SynthEnumTables {
     engineModes: string[];
     waveforms: string[];
@@ -102,6 +125,11 @@ export interface SynthEnumTables {
     bodyTypes: string[];
     modSources: string[];
     modDestinations: string[];
+    controllerInputs: string[];
+    controllerAxes: string[];
+    articulations: string[];
+    mpeDimensions: string[];
+    noteTrackings: string[];
 }
 /** NativeSynth engine selector ({@link SynthPatch}; `'default'` keeps the base patch's). */
 export type SynthEngineMode = (typeof SYNTH_ENGINE_MODES)[number];
@@ -196,6 +224,60 @@ export type SynthBodyType = (typeof SYNTH_BODY_TYPES)[number];
 export type SynthModSource = (typeof SYNTH_MOD_SOURCES)[number];
 /** {@link SynthPatch} mod-matrix destination. */
 export type SynthModDestination = (typeof SYNTH_MOD_DESTINATIONS)[number];
+/** Input side of a {@link ControllerBinding}: how the device spells the gesture. */
+export type ControllerInput = (typeof CONTROLLER_INPUTS)[number];
+/** Output side of a {@link ControllerBinding}: which expression axis it means. */
+export type ControllerAxis = (typeof CONTROLLER_AXES)[number];
+/** Per-channel note-overlap rule ({@link RealtimeEngine.setArticulation}). */
+export type Articulation = (typeof ARTICULATIONS)[number];
+/** One per-note MPE dimension ({@link MPE_DIMENSIONS}). */
+export type MpeDimension = (typeof MPE_DIMENSIONS)[number];
+/** One note-attribution rule ({@link NOTE_TRACKINGS}). */
+export type NoteTracking = (typeof NOTE_TRACKINGS)[number];
+/**
+ * One device gesture bound to one expression axis
+ * ({@link RealtimeEngine.bindController}).
+ *
+ * Binding the same input twice with different axes is how a single gesture
+ * reaches two of them, which is what a breath controller driving both
+ * excitation and loudness needs. `input` and `axis` are required and are the
+ * canonical names (or their C ordinals); an unknown name throws rather than
+ * resolving to the first member.
+ *
+ * @example
+ * ```ts
+ * engine.bindController(0, { input: 'control-change', index: 2, axis: 'excitation' });
+ * ```
+ */
+export interface ControllerBinding {
+    /** How the device spells the gesture. */
+    input: ControllerInput | number;
+    /**
+     * CC number 0-127 for `'control-change'`. Every other input is identified by
+     * its message status alone and ignores this. Default `0`.
+     */
+    index?: number;
+    /**
+     * Which expression axis the gesture means. `'none'` is refused: a binding
+     * that means nothing is a caller mistake, not an empty slot.
+     */
+    axis: ControllerAxis | number;
+    /**
+     * Axis value at zero deflection, in the axis's own unit — normalized `[0,1]`
+     * for the excitation axes and loudness, cents for pitch and vibrato depth.
+     * Default `0`.
+     */
+    lo?: number;
+    /** Axis value at full deflection; `lo > hi` inverts the gesture. Default `1`. */
+    hi?: number;
+    /**
+     * Exponent applied to the normalized input before the range maps it. Default
+     * `1` (linear) and deliberately so: a wind controller has already applied the
+     * curve its player chose, and a second one on this side bends a gesture that
+     * was already shaped. Must be finite and positive.
+     */
+    curve?: number;
+}
 /** One {@link SynthPatch} mod-matrix routing (name or C ordinal per field). */
 export interface SynthModRouting {
     source: SynthModSource | number;
@@ -280,6 +362,20 @@ export interface SynthPatch {
     keyTrack?: number;
     envToCutoffCents?: number;
     velToCutoffCents?: number;
+    /**
+     * Constant transposition of the voice's own pitch, in cents, clamped to
+     * [-4800, 4800]; 0 leaves the pitch alone. Applied on top of the note, so it
+     * shifts a whole patch without rewriting the part — a detuned layer, a sample
+     * set mapped a semitone off, an instrument pitched to a reference other than
+     * A440. Carried in the per-sample pitch factor every engine's render already
+     * takes, so it applies the same amount on all of them.
+     *
+     * Also automatable under this same name through
+     * {@link RealtimeEngine.resolveInstrumentAutomationId}; it is one of the names
+     * that reaches a voice that is already sounding, rather than waiting for the
+     * next note.
+     */
+    pitchOffsetCents?: number;
     ampAttackMs?: number;
     ampDecayMs?: number;
     ampSustain?: number;

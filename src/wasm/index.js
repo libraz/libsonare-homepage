@@ -183,14 +183,156 @@ function getSonareModule() {
   return wrappedModule;
 }
 
-// src/_effects_common.ts
-function toVoicedFloat32(voiced) {
-  const out = new Float32Array(voiced.length);
-  for (let index = 0; index < voiced.length; index += 1) {
-    out[index] = voiced[index] ? 1 : 0;
+// src/codes.ts
+function resolveOrdinalInRange(value, min, max, enumName) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
   }
-  return out;
+  return value;
 }
+function resolveEnumOrdinal(value, values, enumName) {
+  if (typeof value === "number") {
+    const ordinals = Object.values(values);
+    const ordinal = resolveOrdinalInRange(
+      value,
+      Math.min(...ordinals),
+      Math.max(...ordinals),
+      enumName
+    );
+    if (!ordinals.includes(ordinal)) {
+      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+    }
+    return ordinal;
+  }
+  if (typeof value === "string") {
+    const ordinal = values[value];
+    if (ordinal !== void 0) {
+      return ordinal;
+    }
+  }
+  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+}
+var AUTOMATION_CURVE_VALUES = {
+  linear: 0,
+  exponential: 1,
+  hold: 2,
+  "s-curve": 3
+};
+var PROJECT_AUTOMATION_CURVE_VALUES = {
+  ...AUTOMATION_CURVE_VALUES,
+  scurve: 3
+};
+var PAN_LAW_VALUES = {
+  const3db: 0,
+  "const-3db": 0,
+  "-3db": 0,
+  "const4.5db": 1,
+  "const-4.5db": 1,
+  "-4.5db": 1,
+  const6db: 2,
+  "const-6db": 2,
+  "-6db": 2,
+  linear0db: 3,
+  "linear-0db": 3,
+  linear: 3,
+  "0db": 3
+};
+var PAN_MODE_VALUES = {
+  balance: 0,
+  pan: 1,
+  stereopan: 1,
+  "stereo-pan": 1,
+  dualpan: 2,
+  "dual-pan": 2
+};
+var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
+var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
+function automationCurveCode(curve) {
+  return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
+}
+function projectAutomationCurveCode(curve) {
+  return resolveEnumOrdinal(curve ?? "linear", PROJECT_AUTOMATION_CURVE_VALUES, "automation curve");
+}
+function panLawCode(panLaw) {
+  const normalized = typeof panLaw === "string" ? panLaw.toLowerCase().replace(/_/g, "-") : panLaw;
+  return resolveEnumOrdinal(normalized, PAN_LAW_VALUES, "pan law");
+}
+function panModeCode(panMode) {
+  const normalized = typeof panMode === "string" ? panMode.replace(/_/g, "-").toLowerCase() : panMode;
+  return resolveEnumOrdinal(normalized, PAN_MODE_VALUES, "pan mode");
+}
+function meterTapCode(tap) {
+  return resolveEnumOrdinal(tap, METER_TAP_VALUES, "meter tap");
+}
+function sendTimingCode(timing) {
+  return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
+}
+function trackMonitorModeCode(mode) {
+  return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
+}
+
+// src/sample_bank.ts
+var SampleBank = class {
+  /** Create an empty bank. */
+  constructor() {
+    this.released = false;
+    this.native = new (projectModule()).SampleBank();
+    this.nativeId = this.native.id;
+  }
+  /**
+   * Copy mono float frames into the bank and return the new sample's index,
+   * which {@link SampleZoneDesc.sampleIndex} names. The frames are copied, so
+   * the array may be reused afterwards.
+   *
+   * Loop points are clamped inside the sample and a loop mode whose loop
+   * survives the clamp empty is dropped, so a malformed loop plays as an
+   * unlooped sample rather than as a wrap over nothing. An empty array, and a
+   * bank that would exceed 67,108,864 sample points, throw.
+   *
+   * A NaN or Inf frame, `fineTuneCents` or `sourceRate` throws too, and the
+   * bank is left unchanged. Such a value is unattributable once stored: the
+   * reader's interpolation spreads one bad frame across the whole sustain, and
+   * a bad tuning offset renders the voice silent with no error raised.
+   */
+  addSample(data, desc = {}) {
+    return this.native.addSample(data, desc);
+  }
+  /**
+   * Append a key/velocity rectangle to a keymap set, creating any sets below
+   * it. A patch names a set; the first zone in it covering a note is the one
+   * that sounds.
+   *
+   * Every bound defaults on its own (see {@link SampleZoneDesc}), so an empty
+   * rectangle is the whole keyboard at every velocity and narrowing one axis
+   * leaves the other whole. A `sampleIndex` the bank does not have, an inverted
+   * key or velocity range, and a `setIndex` at or above 4096 all throw.
+   */
+  addZone(zone = {}) {
+    const { setIndex, ...rest } = zone;
+    this.native.addZone(setIndex ?? 0, rest);
+  }
+  /** Samples added so far. */
+  sampleCount() {
+    return this.native.sampleCount();
+  }
+  /** Keymap sets the bank has (one past the highest index used). */
+  setCount() {
+    return this.native.setCount();
+  }
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link SampleBank.delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
 
 // src/validation.ts
 var MIN_AUDIO_SAMPLE_RATE = 8e3;
@@ -367,6 +509,121 @@ function assertInterleavedSamples(fnName, samples, channels, validate) {
   }
 }
 
+// src/project_internal.ts
+function normalizeSynthInstrument(patch) {
+  if (patch === null || typeof patch !== "object") {
+    return patch;
+  }
+  const { sampleBank, ...rest } = patch;
+  if (!sampleBank) {
+    return rest;
+  }
+  if (!(sampleBank instanceof SampleBank)) {
+    throw new TypeError("sampleBank must be a SampleBank instance");
+  }
+  if (sampleBank.released) {
+    throw new TypeError("sampleBank is destroyed");
+  }
+  return { ...rest, sampleBankId: sampleBank.nativeId };
+}
+function projectModule() {
+  const candidate = getSonareModule();
+  if (typeof candidate.projectAbiVersion !== "function" || candidate.Project === void 0) {
+    throw new Error("libsonare was built without arrangement (headless DAW) support");
+  }
+  return candidate;
+}
+function projectMidi1Event(fnName, ppq, group, status, channel, data1, data2 = 0) {
+  if (!Number.isFinite(ppq) || ppq < 0) {
+    throw new RangeError(`${fnName}: ppq must be a non-negative finite number`);
+  }
+  const g = assertNibble(fnName, group, "group");
+  const ch = assertNibble(fnName, channel, "channel");
+  const d1 = assertU7(fnName, data1, "data1");
+  const d2 = assertU7(fnName, data2, "data2");
+  const word = (2 << 28 | g << 24 | status << 20 | ch << 16 | d1 << 8 | d2) >>> 0;
+  return { ppq, data0: word, data1: 0 };
+}
+function assertProjectMidiEvents(fnName, events) {
+  if (!Array.isArray(events)) {
+    throw new TypeError(`${fnName}: events must be an array`);
+  }
+  events.forEach((event, index) => {
+    const prefix = `events[${index}]`;
+    if (Array.isArray(event)) {
+      if (event.length < 3) {
+        throw new TypeError(`${fnName}: ${prefix} must contain [ppq, data0, data1]`);
+      }
+      if (!Number.isFinite(event[0]) || event[0] < 0) {
+        throw new RangeError(`${fnName}: ${prefix}.ppq must be a non-negative finite number`);
+      }
+      assertU32(fnName, event[1], `${prefix}.data0`);
+      assertU32(fnName, event[2], `${prefix}.data1`);
+      return;
+    }
+    if (event === null || typeof event !== "object") {
+      throw new TypeError(`${fnName}: ${prefix} must be a MIDI event object or tuple`);
+    }
+    if (!Number.isFinite(event.ppq) || event.ppq < 0) {
+      throw new RangeError(`${fnName}: ${prefix}.ppq must be a non-negative finite number`);
+    }
+    assertU32(fnName, event.data0, `${prefix}.data0`);
+    if (event.data1 !== void 0) {
+      assertU32(fnName, event.data1, `${prefix}.data1`);
+    }
+  });
+}
+function projectTrackKindValue(kind) {
+  return resolveEnumOrdinal(kind ?? "audio", { audio: 0, midi: 1, aux: 2 }, "project track kind");
+}
+function projectAutomationPointValue(point) {
+  const curve = projectAutomationCurveCode(point.curve ?? point.curveToNext);
+  return {
+    ...point,
+    curve,
+    curveToNext: curve
+  };
+}
+function projectAutomationTargetKindValue(kind) {
+  return resolveEnumOrdinal(
+    kind,
+    { opaque: 0, "track-fader-db": 1, "track-pan": 2 },
+    "project automation target kind"
+  );
+}
+function projectWarpModeValue(mode) {
+  return resolveEnumOrdinal(
+    mode ?? "off",
+    { off: 0, repitch: 1, "tempo-sync": 2, "time-stretch": 3 },
+    "project warp mode"
+  );
+}
+function projectLoopModeValue(mode) {
+  return resolveEnumOrdinal(mode ?? "off", { off: 0, loop: 1 }, "project loop mode");
+}
+
+// src/align_take.ts
+function alignTakeToReference(request) {
+  assertSamples("alignTakeToReference", request.reference, true, "reference");
+  assertSamples("alignTakeToReference", request.take, true, "take");
+  assertSampleRate("alignTakeToReference", request.sampleRate);
+  return projectModule().alignTakeToReference(
+    request.reference,
+    request.take,
+    request.sampleRate,
+    request
+  );
+}
+
+// src/_effects_common.ts
+function toVoicedFloat32(voiced) {
+  const out = new Float32Array(voiced.length);
+  for (let index = 0; index < voiced.length; index += 1) {
+    out[index] = voiced[index] ? 1 : 0;
+  }
+  return out;
+}
+
 // src/effects_note_ops.ts
 function requireModule() {
   return getSonareModule();
@@ -456,6 +713,21 @@ function mergeNotes(request) {
     request.notes,
     request.first,
     request.last,
+    request
+  );
+}
+function noteTargetsFromSmf(request) {
+  const module2 = requireModule();
+  if (typeof module2.noteTargetsFromSmf !== "function") {
+    throw new Error("libsonare was built without arrangement support");
+  }
+  return module2.noteTargetsFromSmf(request.data, request.trackIndex ?? 0);
+}
+function assignNoteTargets(request) {
+  return requireModule().assignNoteTargets(
+    request.notes,
+    request.sampleRate,
+    request.targets,
     request
   );
 }
@@ -1528,6 +1800,14 @@ function splitSilence(samples, topDb = 60, frameLength = 2048, hopLength = 512) 
 }
 function splitSilenceCommon(request) {
   return requireModule15().splitSilenceCommon(
+    request.signals,
+    request.topDb ?? 60,
+    request.frameLength ?? 2048,
+    request.hopLength ?? 512
+  );
+}
+function splitSilenceCommonWithReport(request) {
+  return requireModule15().splitSilenceCommonWithReport(
     request.signals,
     request.topDb ?? 60,
     request.frameLength ?? 2048,
@@ -3193,95 +3473,6 @@ function waveformPeakPyramid(samples, channels, options = {}) {
   return requireModule24().waveformPeakPyramid(request.samples, request.channels, levels);
 }
 
-// src/codes.ts
-function resolveOrdinalInRange(value, min, max, enumName) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
-    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-  }
-  return value;
-}
-function resolveEnumOrdinal(value, values, enumName) {
-  if (typeof value === "number") {
-    const ordinals = Object.values(values);
-    const ordinal = resolveOrdinalInRange(
-      value,
-      Math.min(...ordinals),
-      Math.max(...ordinals),
-      enumName
-    );
-    if (!ordinals.includes(ordinal)) {
-      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-    }
-    return ordinal;
-  }
-  if (typeof value === "string") {
-    const ordinal = values[value];
-    if (ordinal !== void 0) {
-      return ordinal;
-    }
-  }
-  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-}
-var AUTOMATION_CURVE_VALUES = {
-  linear: 0,
-  exponential: 1,
-  hold: 2,
-  "s-curve": 3
-};
-var PROJECT_AUTOMATION_CURVE_VALUES = {
-  ...AUTOMATION_CURVE_VALUES,
-  scurve: 3
-};
-var PAN_LAW_VALUES = {
-  const3db: 0,
-  "const-3db": 0,
-  "-3db": 0,
-  "const4.5db": 1,
-  "const-4.5db": 1,
-  "-4.5db": 1,
-  const6db: 2,
-  "const-6db": 2,
-  "-6db": 2,
-  linear0db: 3,
-  "linear-0db": 3,
-  linear: 3,
-  "0db": 3
-};
-var PAN_MODE_VALUES = {
-  balance: 0,
-  pan: 1,
-  stereopan: 1,
-  "stereo-pan": 1,
-  dualpan: 2,
-  "dual-pan": 2
-};
-var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
-var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
-var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
-function automationCurveCode(curve) {
-  return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
-}
-function projectAutomationCurveCode(curve) {
-  return resolveEnumOrdinal(curve ?? "linear", PROJECT_AUTOMATION_CURVE_VALUES, "automation curve");
-}
-function panLawCode(panLaw) {
-  const normalized = typeof panLaw === "string" ? panLaw.toLowerCase().replace(/_/g, "-") : panLaw;
-  return resolveEnumOrdinal(normalized, PAN_LAW_VALUES, "pan law");
-}
-function panModeCode(panMode) {
-  const normalized = typeof panMode === "string" ? panMode.replace(/_/g, "-").toLowerCase() : panMode;
-  return resolveEnumOrdinal(normalized, PAN_MODE_VALUES, "pan mode");
-}
-function meterTapCode(tap) {
-  return resolveEnumOrdinal(tap, METER_TAP_VALUES, "meter tap");
-}
-function sendTimingCode(timing) {
-  return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
-}
-function trackMonitorModeCode(mode) {
-  return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
-}
-
 // src/public_types_music.ts
 var PitchClass = {
   C: 0,
@@ -4840,7 +5031,11 @@ var SYNTH_MOD_SOURCES = [
   "velocity",
   "key-track",
   "mod-wheel",
-  "random"
+  "random",
+  "breath",
+  "aftertouch",
+  "expression-cc",
+  "pitch-bend"
 ];
 var SYNTH_MOD_DESTINATIONS = [
   "none",
@@ -4857,161 +5052,26 @@ var SYNTH_MOD_DESTINATIONS = [
   "excitation-brightness",
   "spectrum-morph"
 ];
-
-// src/sample_bank.ts
-var SampleBank = class {
-  /** Create an empty bank. */
-  constructor() {
-    this.released = false;
-    this.native = new (projectModule()).SampleBank();
-    this.nativeId = this.native.id;
-  }
-  /**
-   * Copy mono float frames into the bank and return the new sample's index,
-   * which {@link SampleZoneDesc.sampleIndex} names. The frames are copied, so
-   * the array may be reused afterwards.
-   *
-   * Loop points are clamped inside the sample and a loop mode whose loop
-   * survives the clamp empty is dropped, so a malformed loop plays as an
-   * unlooped sample rather than as a wrap over nothing. An empty array, and a
-   * bank that would exceed 67,108,864 sample points, throw.
-   *
-   * A NaN or Inf frame, `fineTuneCents` or `sourceRate` throws too, and the
-   * bank is left unchanged. Such a value is unattributable once stored: the
-   * reader's interpolation spreads one bad frame across the whole sustain, and
-   * a bad tuning offset renders the voice silent with no error raised.
-   */
-  addSample(data, desc = {}) {
-    return this.native.addSample(data, desc);
-  }
-  /**
-   * Append a key/velocity rectangle to a keymap set, creating any sets below
-   * it. A patch names a set; the first zone in it covering a note is the one
-   * that sounds.
-   *
-   * Every bound defaults on its own (see {@link SampleZoneDesc}), so an empty
-   * rectangle is the whole keyboard at every velocity and narrowing one axis
-   * leaves the other whole. A `sampleIndex` the bank does not have, an inverted
-   * key or velocity range, and a `setIndex` at or above 4096 all throw.
-   */
-  addZone(zone = {}) {
-    const { setIndex, ...rest } = zone;
-    this.native.addZone(setIndex ?? 0, rest);
-  }
-  /** Samples added so far. */
-  sampleCount() {
-    return this.native.sampleCount();
-  }
-  /** Keymap sets the bank has (one past the highest index used). */
-  setCount() {
-    return this.native.setCount();
-  }
-  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
-  delete() {
-    if (this.released) {
-      return;
-    }
-    this.released = true;
-    this.native.delete();
-  }
-  /** Alias for {@link SampleBank.delete}, provided for cross-binding (Node) compatibility. */
-  destroy() {
-    this.delete();
-  }
-};
-
-// src/project_internal.ts
-function normalizeSynthInstrument(patch) {
-  if (patch === null || typeof patch !== "object") {
-    return patch;
-  }
-  const { sampleBank, ...rest } = patch;
-  if (!sampleBank) {
-    return rest;
-  }
-  if (!(sampleBank instanceof SampleBank)) {
-    throw new TypeError("sampleBank must be a SampleBank instance");
-  }
-  if (sampleBank.released) {
-    throw new TypeError("sampleBank is destroyed");
-  }
-  return { ...rest, sampleBankId: sampleBank.nativeId };
-}
-function projectModule() {
-  const candidate = getSonareModule();
-  if (typeof candidate.projectAbiVersion !== "function" || candidate.Project === void 0) {
-    throw new Error("libsonare was built without arrangement (headless DAW) support");
-  }
-  return candidate;
-}
-function projectMidi1Event(fnName, ppq, group, status, channel, data1, data2 = 0) {
-  if (!Number.isFinite(ppq) || ppq < 0) {
-    throw new RangeError(`${fnName}: ppq must be a non-negative finite number`);
-  }
-  const g = assertNibble(fnName, group, "group");
-  const ch = assertNibble(fnName, channel, "channel");
-  const d1 = assertU7(fnName, data1, "data1");
-  const d2 = assertU7(fnName, data2, "data2");
-  const word = (2 << 28 | g << 24 | status << 20 | ch << 16 | d1 << 8 | d2) >>> 0;
-  return { ppq, data0: word, data1: 0 };
-}
-function assertProjectMidiEvents(fnName, events) {
-  if (!Array.isArray(events)) {
-    throw new TypeError(`${fnName}: events must be an array`);
-  }
-  events.forEach((event, index) => {
-    const prefix = `events[${index}]`;
-    if (Array.isArray(event)) {
-      if (event.length < 3) {
-        throw new TypeError(`${fnName}: ${prefix} must contain [ppq, data0, data1]`);
-      }
-      if (!Number.isFinite(event[0]) || event[0] < 0) {
-        throw new RangeError(`${fnName}: ${prefix}.ppq must be a non-negative finite number`);
-      }
-      assertU32(fnName, event[1], `${prefix}.data0`);
-      assertU32(fnName, event[2], `${prefix}.data1`);
-      return;
-    }
-    if (event === null || typeof event !== "object") {
-      throw new TypeError(`${fnName}: ${prefix} must be a MIDI event object or tuple`);
-    }
-    if (!Number.isFinite(event.ppq) || event.ppq < 0) {
-      throw new RangeError(`${fnName}: ${prefix}.ppq must be a non-negative finite number`);
-    }
-    assertU32(fnName, event.data0, `${prefix}.data0`);
-    if (event.data1 !== void 0) {
-      assertU32(fnName, event.data1, `${prefix}.data1`);
-    }
-  });
-}
-function projectTrackKindValue(kind) {
-  return resolveEnumOrdinal(kind ?? "audio", { audio: 0, midi: 1, aux: 2 }, "project track kind");
-}
-function projectAutomationPointValue(point) {
-  const curve = projectAutomationCurveCode(point.curve ?? point.curveToNext);
-  return {
-    ...point,
-    curve,
-    curveToNext: curve
-  };
-}
-function projectAutomationTargetKindValue(kind) {
-  return resolveEnumOrdinal(
-    kind,
-    { opaque: 0, "track-fader-db": 1, "track-pan": 2 },
-    "project automation target kind"
-  );
-}
-function projectWarpModeValue(mode) {
-  return resolveEnumOrdinal(
-    mode ?? "off",
-    { off: 0, repitch: 1, "tempo-sync": 2, "time-stretch": 3 },
-    "project warp mode"
-  );
-}
-function projectLoopModeValue(mode) {
-  return resolveEnumOrdinal(mode ?? "off", { off: 0, loop: 1 }, "project loop mode");
-}
+var CONTROLLER_INPUTS = [
+  "control-change",
+  "channel-pressure",
+  "poly-pressure",
+  "pitch-bend",
+  "velocity"
+];
+var CONTROLLER_AXES = [
+  "none",
+  "excitation",
+  "position",
+  "brightness",
+  "morph",
+  "loudness",
+  "pitch-cents",
+  "vibrato-depth"
+];
+var ARTICULATIONS = ["poly", "mono-retrigger", "mono-legato"];
+var MPE_DIMENSIONS = ["bend", "pressure", "timbre"];
+var NOTE_TRACKINGS = ["last", "lowest", "highest", "all"];
 
 // src/project_class.ts
 function normalizeMidiFxBakeRequest(clipIdOrRequest, configJson) {
@@ -5885,6 +5945,9 @@ function projectAbiVersion() {
 function synthPresetNames() {
   return Array.from(projectModule().synthPresetNames());
 }
+function controllerProfileNames() {
+  return Array.from(projectModule().controllerProfileNames());
+}
 function synthPresetPatch(name) {
   return { ...projectModule().synthPresetPatch(name) };
 }
@@ -6066,6 +6129,113 @@ var RealtimeEngine = class {
   midiCcBindingCount() {
     return this.native.midiCcBindingCount();
   }
+  /**
+   * Replace a destination instrument's controller profile with a named preset
+   * (see {@link controllerProfileNames}). Installing a profile drops every
+   * channel's accumulated axis values: the new bindings say nothing about what
+   * the old ones had reached. An unknown name throws, and so does a destination
+   * with no instrument or one whose instrument holds no profile.
+   */
+  setControllerProfile(destinationId, presetName) {
+    this.native.setControllerProfile(destinationId, presetName);
+  }
+  /** Add one {@link ControllerBinding} on top of the destination's current profile. */
+  bindController(destinationId, binding) {
+    this.native.bindController(destinationId, binding);
+  }
+  /**
+   * Drop every binding of the destination's controller profile. The instrument
+   * keeps a profile; it resolves nothing until something is bound again.
+   */
+  clearControllerBindings(destinationId) {
+    this.native.clearControllerBindings(destinationId);
+  }
+  controllerBindingCount(destinationId) {
+    return this.native.controllerBindingCount(destinationId);
+  }
+  /**
+   * Whether note-on velocity is expression for this instrument. No fixed
+   * default is possible — a wind controller ships sending breath-derived
+   * velocity on one model and a constant on the next — so each preset states it
+   * and a host building its own profile sets it. When false the synth takes
+   * every note at full scale and the bound axes carry the dynamics alone.
+   */
+  setControllerVelocityMeaningful(destinationId, meaningful) {
+    this.native.setControllerVelocityMeaningful(destinationId, meaningful);
+  }
+  controllerVelocityMeaningful(destinationId) {
+    return this.native.controllerVelocityMeaningful(destinationId);
+  }
+  /**
+   * Say which note a value addressed to a whole MIDI channel belongs to when
+   * several are sounding on it, for one per-note dimension
+   * ({@link MPE_DIMENSIONS}, {@link NOTE_TRACKINGS}).
+   *
+   * Set per dimension because the useful answers differ: pressure following the
+   * newest note while bend reaches every one is a real configuration, not a
+   * mistake. MPE poses this question and declines to answer it, so this is a
+   * choice rather than a rule — and it is read only inside an MPE zone, and
+   * only while more than one note is sounding on the channel, which an MPE
+   * sender avoids by giving each note its own member channel.
+   *
+   * Both arguments are required and are a name or its ordinal; an unknown
+   * spelling is refused rather than resolved to a default, as are a destination
+   * with no instrument and one whose instrument holds no controller profile.
+   */
+  setControllerNoteTracking(destinationId, dimension, tracking) {
+    this.native.setControllerNoteTracking(destinationId, dimension, tracking);
+  }
+  /**
+   * Read back {@link setControllerNoteTracking} for one dimension, as the
+   * canonical name.
+   */
+  controllerNoteTracking(destinationId, dimension) {
+    return this.native.controllerNoteTracking(destinationId, dimension);
+  }
+  /**
+   * Set how one MIDI channel (0–15) of a destination's instrument treats a
+   * note-on while another note on that channel is still held: `'poly'` takes a
+   * new voice each time, `'mono-retrigger'` stops and restarts the note (what
+   * GS MONO MODE and CC126 mean), `'mono-legato'` carries the sounding voice
+   * and only moves its pitch — a wind player's slur, which no MIDI message can
+   * reach by design.
+   *
+   * `'mono-legato'` is a request, not a guarantee: an engine whose exciter is
+   * spent at the onset — anything struck or plucked — and a target pitch below
+   * what the engine's delay line can hold both fall back to an ordinary note,
+   * which {@link legatoFallbackCount} counts. A channel outside [0,15] and an
+   * articulation outside the enum are refused rather than clamped, and so is a
+   * destination with no instrument or one whose instrument has no articulation
+   * of its own.
+   */
+  setArticulation(destinationId, channel, articulation) {
+    this.native.setArticulation(destinationId, channel, articulation);
+  }
+  /**
+   * Read back {@link setArticulation} as the canonical name. An ordinal this
+   * build cannot spell is handed back as the number, the way every other enum
+   * leaves this surface.
+   */
+  articulation(destinationId, channel) {
+    return this.native.articulation(destinationId, channel);
+  }
+  /**
+   * How many times a legato continuation was asked for on this destination and
+   * refused, so the note started a voice of its own instead. Counted rather
+   * than inferred: a refusal sounds like an ordinary note, so nothing in the
+   * audio separates "this engine declines legato" from "the mode was never
+   * set". Saturates at 4294967295 rather than wrapping — matching the C ABI, so
+   * the same phrase reports the same number on every surface — after which it
+   * reads as "at least this many".
+   *
+   * Throws on a destination with no instrument, and on one whose instrument has
+   * no articulation of its own — the same two refusals
+   * {@link setArticulation} keeps apart. Reporting 0 for the second would read
+   * as "every slur took", which is the reading this counter exists to prevent.
+   */
+  legatoFallbackCount(destinationId) {
+    return this.native.legatoFallbackCount(destinationId);
+  }
   /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
   setMidiFx(destinationId, configJson) {
     this.native.setMidiFx(destinationId, configJson);
@@ -6147,6 +6317,31 @@ var RealtimeEngine = class {
   pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
     this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
   }
+  /**
+   * Push a live MIDI pitch bend to the engine-owned MIDI input source.
+   *
+   * `bend14` is unsigned 14-bit with centre 8192 (0..16383) — the dimension is
+   * not 7-bit, so a value past 16383 is refused rather than narrowed. The input
+   * source must be enabled with {@link setMidiInputSource} first.
+   */
+  pushMidiInputPitchBend(group, channel, bend14, portTimeSamples = 0) {
+    this.native.pushMidiInputPitchBend(group, channel, bend14, portTimeSamples);
+  }
+  /**
+   * Push a live MIDI channel pressure to the engine-owned MIDI input source.
+   * `pressure` is 7-bit (0..127). Under MPE this is the member channel's
+   * per-note pressure.
+   */
+  pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples = 0) {
+    this.native.pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples);
+  }
+  /**
+   * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input
+   * source. `note` and `pressure` are 7-bit (0..127).
+   */
+  pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
+    this.native.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
+  }
   pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
     this.native.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
   }
@@ -6161,6 +6356,32 @@ var RealtimeEngine = class {
    */
   pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
     this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI pitch bend to a MIDI destination. `bend14`
+   * is unsigned 14-bit with centre 8192 (0..16383); `renderFrame` is the frame
+   * to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+   * `pushMidiPitchBend`.
+   */
+  pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame = -1) {
+    this.native.pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI channel pressure to a MIDI destination.
+   * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at, or -1
+   * for immediate. Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
+   */
+  pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame = -1) {
+    this.native.pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI polyphonic key pressure to a MIDI
+   * destination. `note` and `pressure` are 7-bit (0..127); `renderFrame` is the
+   * frame to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+   * `pushMidiPolyPressure`.
+   */
+  pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame = -1) {
+    this.native.pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame);
   }
   /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
   pushMidiUmp(destinationId, word0, renderFrame = -1) {
@@ -6453,7 +6674,8 @@ var RealtimeEngine = class {
    * `ampAttackMs`, `ampDecayMs`, `ampSustain`, `ampReleaseMs`,
    * `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs`,
    * `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs`, `bodyMix`,
-   * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`.
+   * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`,
+   * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`.
    *
    * Structural fields (`preset`, `engineMode`, `waveform`, `filterModel`,
    * `unison`, `polyphony`, `body`, `modRoutings`) are not automatable and
@@ -6463,7 +6685,9 @@ var RealtimeEngine = class {
    * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
    * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
    * sounding from the next block; the rest are cached into per-voice state at
-   * note-on and take effect from the next note.
+   * note-on and take effect from the next note, so a lane that moves one of
+   * them under a held note looks inert until the next one speaks — that is the
+   * behaviour, not a dropped write.
    *
    * The id survives an unbind/rebind of the same destination and applies
    * nothing while that destination is unbound.
@@ -7286,6 +7510,17 @@ var Mixer = class _Mixer {
   stripById(id) {
     const index = this.mixer.stripById(id);
     return index < 0 ? null : index;
+  }
+  /**
+   * Add a channel strip to the mixer topology. `metering` configures the strip's
+   * pre/post taps; omitting it keeps the full default (LUFS + true peak at 4x,
+   * about 1.4 MB per strip at 48 kHz). Marks the routing graph dirty; call
+   * {@link compile} (or {@link processStereo}) to rebuild.
+   *
+   * @throws If the id is already taken, or `truePeakOversample` is outside `[0, 16]`
+   */
+  addStrip(id, metering = {}) {
+    this.mixer.addStrip(id, metering);
   }
   /**
    * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
@@ -8800,9 +9035,12 @@ function realtimeVoiceChangerPresetConfig(preset) {
   return module.realtimeVoiceChangerPresetConfig(resolveVoicePresetOrdinal(preset));
 }
 export {
+  ARTICULATIONS,
   Audio,
   AutomationTargetKind,
   BUILTIN_SYNTH_WAVEFORMS,
+  CONTROLLER_AXES,
+  CONTROLLER_INPUTS,
   ChordQuality,
   ClipPageProvider,
   ClipPageStreamer,
@@ -8810,9 +9048,11 @@ export {
   EXPECTED_PROJECT_ABI_VERSION,
   ErrorCode,
   KeyProfile,
+  MPE_DIMENSIONS,
   MarkerKind,
   Mixer,
   Mode,
+  NOTE_TRACKINGS,
   OfflineWorkerClient,
   OfflineWorkerTask,
   PROJECT_AUTOMATION_TARGET_OPAQUE,
@@ -8841,6 +9081,7 @@ export {
   StreamingMasteringChain,
   StreamingRetune,
   abiVersion,
+  alignTakeToReference,
   amplitudeToDb,
   analyze,
   analyzeBpm,
@@ -8852,6 +9093,7 @@ export {
   analyzeSections,
   analyzeTimbre,
   analyzeWithProgress,
+  assignNoteTargets,
   attachOpfsClipStream,
   bassChroma,
   bindMicrophoneInput,
@@ -8864,6 +9106,7 @@ export {
   chromaCens,
   chromaCqt,
   clicks,
+  controllerProfileNames,
   cqt,
   cqtToAudio,
   createOpfsClipPageProvider,
@@ -9017,6 +9260,7 @@ export {
   noteMove,
   noteSegments,
   noteStretch,
+  noteTargetsFromSmf,
   noteToHz,
   onsetBacktrack,
   onsetEnvelope,
@@ -9074,6 +9318,7 @@ export {
   splitNote,
   splitSilence,
   splitSilenceCommon,
+  splitSilenceCommonWithReport,
   stft,
   stftDb,
   streamAnalyzerConfigDefaults,

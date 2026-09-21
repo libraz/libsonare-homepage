@@ -1,4 +1,4 @@
-export { decomposeNotePitch, extractNotes, mergeNotes, noteMove, noteStretch, renderNotes, splitNote, } from './effects_note_ops';
+export { assignNoteTargets, decomposeNotePitch, extractNotes, mergeNotes, noteMove, noteStretch, noteTargetsFromSmf, renderNotes, splitNote, } from './effects_note_ops';
 export { extractPercussiveEvents, renderPercussiveEvents } from './effects_percussive';
 export { harmonic, hpss, percussive } from './effects_separation';
 export { spectralEdit } from './effects_spectral';

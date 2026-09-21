@@ -1,4 +1,4 @@
-import type { ProjectMidiCcBinding, SynthPatch } from './project';
+import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, ProjectMidiCcBinding, SynthPatch } from './project';
 import type { EqBand, PanLawInput, PanMode, SendTiming } from './public_types';
 import type { WasmClipPageRequest, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMeterTelemetryWide, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineProcessWithMonitorResult, WasmEngineScopeTelemetry, WasmEngineTelemetry, WasmEngineTempoSegment, WasmEngineTimeSignatureSegment, WasmEngineTransportState, WasmExternalMidiEvent } from './sonare.js';
 export type ExternalMidiEvent = WasmExternalMidiEvent;
@@ -219,6 +219,91 @@ export declare class RealtimeEngine {
     bindMidiCcBinding(binding: ProjectMidiCcBinding): void;
     clearMidiCcBindings(): void;
     midiCcBindingCount(): number;
+    /**
+     * Replace a destination instrument's controller profile with a named preset
+     * (see {@link controllerProfileNames}). Installing a profile drops every
+     * channel's accumulated axis values: the new bindings say nothing about what
+     * the old ones had reached. An unknown name throws, and so does a destination
+     * with no instrument or one whose instrument holds no profile.
+     */
+    setControllerProfile(destinationId: number, presetName: string): void;
+    /** Add one {@link ControllerBinding} on top of the destination's current profile. */
+    bindController(destinationId: number, binding: ControllerBinding): void;
+    /**
+     * Drop every binding of the destination's controller profile. The instrument
+     * keeps a profile; it resolves nothing until something is bound again.
+     */
+    clearControllerBindings(destinationId: number): void;
+    controllerBindingCount(destinationId: number): number;
+    /**
+     * Whether note-on velocity is expression for this instrument. No fixed
+     * default is possible — a wind controller ships sending breath-derived
+     * velocity on one model and a constant on the next — so each preset states it
+     * and a host building its own profile sets it. When false the synth takes
+     * every note at full scale and the bound axes carry the dynamics alone.
+     */
+    setControllerVelocityMeaningful(destinationId: number, meaningful: boolean): void;
+    controllerVelocityMeaningful(destinationId: number): boolean;
+    /**
+     * Say which note a value addressed to a whole MIDI channel belongs to when
+     * several are sounding on it, for one per-note dimension
+     * ({@link MPE_DIMENSIONS}, {@link NOTE_TRACKINGS}).
+     *
+     * Set per dimension because the useful answers differ: pressure following the
+     * newest note while bend reaches every one is a real configuration, not a
+     * mistake. MPE poses this question and declines to answer it, so this is a
+     * choice rather than a rule — and it is read only inside an MPE zone, and
+     * only while more than one note is sounding on the channel, which an MPE
+     * sender avoids by giving each note its own member channel.
+     *
+     * Both arguments are required and are a name or its ordinal; an unknown
+     * spelling is refused rather than resolved to a default, as are a destination
+     * with no instrument and one whose instrument holds no controller profile.
+     */
+    setControllerNoteTracking(destinationId: number, dimension: MpeDimension | number, tracking: NoteTracking | number): void;
+    /**
+     * Read back {@link setControllerNoteTracking} for one dimension, as the
+     * canonical name.
+     */
+    controllerNoteTracking(destinationId: number, dimension: MpeDimension | number): NoteTracking | number;
+    /**
+     * Set how one MIDI channel (0–15) of a destination's instrument treats a
+     * note-on while another note on that channel is still held: `'poly'` takes a
+     * new voice each time, `'mono-retrigger'` stops and restarts the note (what
+     * GS MONO MODE and CC126 mean), `'mono-legato'` carries the sounding voice
+     * and only moves its pitch — a wind player's slur, which no MIDI message can
+     * reach by design.
+     *
+     * `'mono-legato'` is a request, not a guarantee: an engine whose exciter is
+     * spent at the onset — anything struck or plucked — and a target pitch below
+     * what the engine's delay line can hold both fall back to an ordinary note,
+     * which {@link legatoFallbackCount} counts. A channel outside [0,15] and an
+     * articulation outside the enum are refused rather than clamped, and so is a
+     * destination with no instrument or one whose instrument has no articulation
+     * of its own.
+     */
+    setArticulation(destinationId: number, channel: number, articulation: Articulation | number): void;
+    /**
+     * Read back {@link setArticulation} as the canonical name. An ordinal this
+     * build cannot spell is handed back as the number, the way every other enum
+     * leaves this surface.
+     */
+    articulation(destinationId: number, channel: number): Articulation | number;
+    /**
+     * How many times a legato continuation was asked for on this destination and
+     * refused, so the note started a voice of its own instead. Counted rather
+     * than inferred: a refusal sounds like an ordinary note, so nothing in the
+     * audio separates "this engine declines legato" from "the mode was never
+     * set". Saturates at 4294967295 rather than wrapping — matching the C ABI, so
+     * the same phrase reports the same number on every surface — after which it
+     * reads as "at least this many".
+     *
+     * Throws on a destination with no instrument, and on one whose instrument has
+     * no articulation of its own — the same two refusals
+     * {@link setArticulation} keeps apart. Reporting 0 for the second would read
+     * as "every slur took", which is the reading this counter exists to prevent.
+     */
+    legatoFallbackCount(destinationId: number): number;
     /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
     setMidiFx(destinationId: number, configJson: string): void;
     clearMidiFx(destinationId?: number): void;
@@ -262,6 +347,25 @@ export declare class RealtimeEngine {
     pushMidiInputNoteOn(group: number, channel: number, note: number, velocity: number, portTimeSamples?: number): void;
     pushMidiInputNoteOff(group: number, channel: number, note: number, velocity?: number, portTimeSamples?: number): void;
     pushMidiInputCc(group: number, channel: number, controller: number, value: number, portTimeSamples?: number): void;
+    /**
+     * Push a live MIDI pitch bend to the engine-owned MIDI input source.
+     *
+     * `bend14` is unsigned 14-bit with centre 8192 (0..16383) — the dimension is
+     * not 7-bit, so a value past 16383 is refused rather than narrowed. The input
+     * source must be enabled with {@link setMidiInputSource} first.
+     */
+    pushMidiInputPitchBend(group: number, channel: number, bend14: number, portTimeSamples?: number): void;
+    /**
+     * Push a live MIDI channel pressure to the engine-owned MIDI input source.
+     * `pressure` is 7-bit (0..127). Under MPE this is the member channel's
+     * per-note pressure.
+     */
+    pushMidiInputChannelPressure(group: number, channel: number, pressure: number, portTimeSamples?: number): void;
+    /**
+     * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input
+     * source. `note` and `pressure` are 7-bit (0..127).
+     */
+    pushMidiInputPolyPressure(group: number, channel: number, note: number, pressure: number, portTimeSamples?: number): void;
     pushMidiNoteOn(destinationId: number, group: number, channel: number, note: number, velocity: number, renderFrame?: number): void;
     pushMidiNoteOff(destinationId: number, group: number, channel: number, note: number, velocity?: number, renderFrame?: number): void;
     /**
@@ -271,6 +375,26 @@ export declare class RealtimeEngine {
      * immediate. Mirrors the Node/Python/C-ABI `pushMidiCc`.
      */
     pushMidiCc(destinationId: number, group: number, channel: number, controller: number, value: number, renderFrame?: number): void;
+    /**
+     * Queue an immediate (live) MIDI pitch bend to a MIDI destination. `bend14`
+     * is unsigned 14-bit with centre 8192 (0..16383); `renderFrame` is the frame
+     * to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+     * `pushMidiPitchBend`.
+     */
+    pushMidiPitchBend(destinationId: number, group: number, channel: number, bend14: number, renderFrame?: number): void;
+    /**
+     * Queue an immediate (live) MIDI channel pressure to a MIDI destination.
+     * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at, or -1
+     * for immediate. Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
+     */
+    pushMidiChannelPressure(destinationId: number, group: number, channel: number, pressure: number, renderFrame?: number): void;
+    /**
+     * Queue an immediate (live) MIDI polyphonic key pressure to a MIDI
+     * destination. `note` and `pressure` are 7-bit (0..127); `renderFrame` is the
+     * frame to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+     * `pushMidiPolyPressure`.
+     */
+    pushMidiPolyPressure(destinationId: number, group: number, channel: number, note: number, pressure: number, renderFrame?: number): void;
     /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
     pushMidiUmp(destinationId: number, word0: number, renderFrame?: number): void;
     /**
@@ -401,7 +525,8 @@ export declare class RealtimeEngine {
      * `ampAttackMs`, `ampDecayMs`, `ampSustain`, `ampReleaseMs`,
      * `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs`,
      * `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs`, `bodyMix`,
-     * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`.
+     * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`,
+     * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`.
      *
      * Structural fields (`preset`, `engineMode`, `waveform`, `filterModel`,
      * `unison`, `polyphony`, `body`, `modRoutings`) are not automatable and
@@ -411,7 +536,9 @@ export declare class RealtimeEngine {
      * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
      * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
      * sounding from the next block; the rest are cached into per-voice state at
-     * note-on and take effect from the next note.
+     * note-on and take effect from the next note, so a lane that moves one of
+     * them under a held note looks inert until the next one speaks — that is the
+     * behaviour, not a dropped write.
      *
      * The id survives an unbind/rebind of the same destination and applies
      * nothing while that destination is unbound.

@@ -563,25 +563,6 @@ function getSonareModule() {
   return wrappedModule;
 }
 
-// src/_chain_config.ts
-function flattenChainConfig(config) {
-  const out = {};
-  const walk = (node, prefix) => {
-    for (const [key, value] of Object.entries(node)) {
-      const path = prefix ? `${prefix}.${key}` : key;
-      if (typeof value === "number" || typeof value === "boolean") {
-        out[path] = value;
-      } else if (value !== null && typeof value === "object") {
-        walk(value, path);
-      } else if (value !== void 0) {
-        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
-      }
-    }
-  };
-  walk(config, "");
-  return out;
-}
-
 // src/codes.ts
 function resolveOrdinalInRange(value, min, max, enumName) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
@@ -755,6 +736,25 @@ function projectModule() {
   return candidate;
 }
 
+// src/_chain_config.ts
+function flattenChainConfig(config) {
+  const out = {};
+  const walk = (node, prefix) => {
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[path] = value;
+      } else if (value !== null && typeof value === "object") {
+        walk(value, path);
+      } else if (value !== void 0) {
+        throw new TypeError(`Mastering override '${path}' must be a number or boolean.`);
+      }
+    }
+  };
+  walk(config, "");
+  return out;
+}
+
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
 function normalizeRenderOfflineRequest(channelsOrRequest, blockSize) {
@@ -911,6 +911,113 @@ var RealtimeEngine = class {
   midiCcBindingCount() {
     return this.native.midiCcBindingCount();
   }
+  /**
+   * Replace a destination instrument's controller profile with a named preset
+   * (see {@link controllerProfileNames}). Installing a profile drops every
+   * channel's accumulated axis values: the new bindings say nothing about what
+   * the old ones had reached. An unknown name throws, and so does a destination
+   * with no instrument or one whose instrument holds no profile.
+   */
+  setControllerProfile(destinationId, presetName) {
+    this.native.setControllerProfile(destinationId, presetName);
+  }
+  /** Add one {@link ControllerBinding} on top of the destination's current profile. */
+  bindController(destinationId, binding) {
+    this.native.bindController(destinationId, binding);
+  }
+  /**
+   * Drop every binding of the destination's controller profile. The instrument
+   * keeps a profile; it resolves nothing until something is bound again.
+   */
+  clearControllerBindings(destinationId) {
+    this.native.clearControllerBindings(destinationId);
+  }
+  controllerBindingCount(destinationId) {
+    return this.native.controllerBindingCount(destinationId);
+  }
+  /**
+   * Whether note-on velocity is expression for this instrument. No fixed
+   * default is possible — a wind controller ships sending breath-derived
+   * velocity on one model and a constant on the next — so each preset states it
+   * and a host building its own profile sets it. When false the synth takes
+   * every note at full scale and the bound axes carry the dynamics alone.
+   */
+  setControllerVelocityMeaningful(destinationId, meaningful) {
+    this.native.setControllerVelocityMeaningful(destinationId, meaningful);
+  }
+  controllerVelocityMeaningful(destinationId) {
+    return this.native.controllerVelocityMeaningful(destinationId);
+  }
+  /**
+   * Say which note a value addressed to a whole MIDI channel belongs to when
+   * several are sounding on it, for one per-note dimension
+   * ({@link MPE_DIMENSIONS}, {@link NOTE_TRACKINGS}).
+   *
+   * Set per dimension because the useful answers differ: pressure following the
+   * newest note while bend reaches every one is a real configuration, not a
+   * mistake. MPE poses this question and declines to answer it, so this is a
+   * choice rather than a rule — and it is read only inside an MPE zone, and
+   * only while more than one note is sounding on the channel, which an MPE
+   * sender avoids by giving each note its own member channel.
+   *
+   * Both arguments are required and are a name or its ordinal; an unknown
+   * spelling is refused rather than resolved to a default, as are a destination
+   * with no instrument and one whose instrument holds no controller profile.
+   */
+  setControllerNoteTracking(destinationId, dimension, tracking) {
+    this.native.setControllerNoteTracking(destinationId, dimension, tracking);
+  }
+  /**
+   * Read back {@link setControllerNoteTracking} for one dimension, as the
+   * canonical name.
+   */
+  controllerNoteTracking(destinationId, dimension) {
+    return this.native.controllerNoteTracking(destinationId, dimension);
+  }
+  /**
+   * Set how one MIDI channel (0–15) of a destination's instrument treats a
+   * note-on while another note on that channel is still held: `'poly'` takes a
+   * new voice each time, `'mono-retrigger'` stops and restarts the note (what
+   * GS MONO MODE and CC126 mean), `'mono-legato'` carries the sounding voice
+   * and only moves its pitch — a wind player's slur, which no MIDI message can
+   * reach by design.
+   *
+   * `'mono-legato'` is a request, not a guarantee: an engine whose exciter is
+   * spent at the onset — anything struck or plucked — and a target pitch below
+   * what the engine's delay line can hold both fall back to an ordinary note,
+   * which {@link legatoFallbackCount} counts. A channel outside [0,15] and an
+   * articulation outside the enum are refused rather than clamped, and so is a
+   * destination with no instrument or one whose instrument has no articulation
+   * of its own.
+   */
+  setArticulation(destinationId, channel, articulation) {
+    this.native.setArticulation(destinationId, channel, articulation);
+  }
+  /**
+   * Read back {@link setArticulation} as the canonical name. An ordinal this
+   * build cannot spell is handed back as the number, the way every other enum
+   * leaves this surface.
+   */
+  articulation(destinationId, channel) {
+    return this.native.articulation(destinationId, channel);
+  }
+  /**
+   * How many times a legato continuation was asked for on this destination and
+   * refused, so the note started a voice of its own instead. Counted rather
+   * than inferred: a refusal sounds like an ordinary note, so nothing in the
+   * audio separates "this engine declines legato" from "the mode was never
+   * set". Saturates at 4294967295 rather than wrapping — matching the C ABI, so
+   * the same phrase reports the same number on every surface — after which it
+   * reads as "at least this many".
+   *
+   * Throws on a destination with no instrument, and on one whose instrument has
+   * no articulation of its own — the same two refusals
+   * {@link setArticulation} keeps apart. Reporting 0 for the second would read
+   * as "every slur took", which is the reading this counter exists to prevent.
+   */
+  legatoFallbackCount(destinationId) {
+    return this.native.legatoFallbackCount(destinationId);
+  }
   /** Install/replace a live non-destructive MIDI-FX insert for one destination. */
   setMidiFx(destinationId, configJson) {
     this.native.setMidiFx(destinationId, configJson);
@@ -992,6 +1099,31 @@ var RealtimeEngine = class {
   pushMidiInputCc(group, channel, controller, value, portTimeSamples = 0) {
     this.native.pushMidiInputCc(group, channel, controller, value, portTimeSamples);
   }
+  /**
+   * Push a live MIDI pitch bend to the engine-owned MIDI input source.
+   *
+   * `bend14` is unsigned 14-bit with centre 8192 (0..16383) — the dimension is
+   * not 7-bit, so a value past 16383 is refused rather than narrowed. The input
+   * source must be enabled with {@link setMidiInputSource} first.
+   */
+  pushMidiInputPitchBend(group, channel, bend14, portTimeSamples = 0) {
+    this.native.pushMidiInputPitchBend(group, channel, bend14, portTimeSamples);
+  }
+  /**
+   * Push a live MIDI channel pressure to the engine-owned MIDI input source.
+   * `pressure` is 7-bit (0..127). Under MPE this is the member channel's
+   * per-note pressure.
+   */
+  pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples = 0) {
+    this.native.pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples);
+  }
+  /**
+   * Push a live MIDI polyphonic key pressure to the engine-owned MIDI input
+   * source. `note` and `pressure` are 7-bit (0..127).
+   */
+  pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
+    this.native.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
+  }
   pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame = -1) {
     this.native.pushMidiNoteOn(destinationId, group, channel, note, velocity, renderFrame);
   }
@@ -1006,6 +1138,32 @@ var RealtimeEngine = class {
    */
   pushMidiCc(destinationId, group, channel, controller, value, renderFrame = -1) {
     this.native.pushMidiCc(destinationId, group, channel, controller, value, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI pitch bend to a MIDI destination. `bend14`
+   * is unsigned 14-bit with centre 8192 (0..16383); `renderFrame` is the frame
+   * to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+   * `pushMidiPitchBend`.
+   */
+  pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame = -1) {
+    this.native.pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI channel pressure to a MIDI destination.
+   * `pressure` is 7-bit (0..127); `renderFrame` is the frame to fire at, or -1
+   * for immediate. Mirrors the Node/Python/C-ABI `pushMidiChannelPressure`.
+   */
+  pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame = -1) {
+    this.native.pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame);
+  }
+  /**
+   * Queue an immediate (live) MIDI polyphonic key pressure to a MIDI
+   * destination. `note` and `pressure` are 7-bit (0..127); `renderFrame` is the
+   * frame to fire at, or -1 for immediate. Mirrors the Node/Python/C-ABI
+   * `pushMidiPolyPressure`.
+   */
+  pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame = -1) {
+    this.native.pushMidiPolyPressure(destinationId, group, channel, note, pressure, renderFrame);
   }
   /** Queue one immediate MIDI 1.0 channel-voice UMP word for a destination. */
   pushMidiUmp(destinationId, word0, renderFrame = -1) {
@@ -1298,7 +1456,8 @@ var RealtimeEngine = class {
    * `ampAttackMs`, `ampDecayMs`, `ampSustain`, `ampReleaseMs`,
    * `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs`,
    * `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs`, `bodyMix`,
-   * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`.
+   * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`,
+   * `hpCutoffHz`, `sampleHoldHz`, `bitDepth`.
    *
    * Structural fields (`preset`, `engineMode`, `waveform`, `filterModel`,
    * `unison`, `polyphony`, `body`, `modRoutings`) are not automatable and
@@ -1308,7 +1467,9 @@ var RealtimeEngine = class {
    * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
    * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
    * sounding from the next block; the rest are cached into per-voice state at
-   * note-on and take effect from the next note.
+   * note-on and take effect from the next note, so a lane that moves one of
+   * them under a held note looks inert until the next one speaks — that is the
+   * behaviour, not a dropped write.
    *
    * The id survives an unbind/rebind of the same destination and applies
    * nothing while that destination is unbound.
@@ -1860,6 +2021,17 @@ var Mixer = class _Mixer {
   stripById(id) {
     const index = this.mixer.stripById(id);
     return index < 0 ? null : index;
+  }
+  /**
+   * Add a channel strip to the mixer topology. `metering` configures the strip's
+   * pre/post taps; omitting it keeps the full default (LUFS + true peak at 4x,
+   * about 1.4 MB per strip at 48 kHz). Marks the routing graph dirty; call
+   * {@link compile} (or {@link processStereo}) to rebuild.
+   *
+   * @throws If the id is already taken, or `truePeakOversample` is outside `[0, 16]`
+   */
+  addStrip(id, metering = {}) {
+    this.mixer.addStrip(id, metering);
   }
   /**
    * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
@@ -3392,16 +3564,22 @@ var ENGINE_SYNC_MESSAGE_TYPES = {
   syncMetronome: true,
   syncMidiCc: true,
   syncMidiCcBinding: true,
+  syncMidiChannelPressure: true,
   syncMidiClips: true,
   syncMidiDestinationExternal: true,
   syncMidiFx: true,
+  syncMidiInputChannelPressure: true,
   syncMidiInputCc: true,
   syncMidiInputNoteOff: true,
   syncMidiInputNoteOn: true,
+  syncMidiInputPitchBend: true,
+  syncMidiInputPolyPressure: true,
   syncMidiInputSource: true,
   syncMidiNoteOff: true,
   syncMidiNoteOn: true,
   syncMidiPanic: true,
+  syncMidiPitchBend: true,
+  syncMidiPolyPressure: true,
   syncMidiSysex: true,
   syncMidiUmp: true,
   syncMixer: true,
@@ -4677,6 +4855,52 @@ function pushMidiCc(ctx, trackId, group, channel, controller, value, renderFrame
     renderFrame
   });
 }
+function pushMidiPitchBend(ctx, trackId, group, channel, bend14, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiPitchBend(destinationId, group, channel, bend14, renderFrame);
+  ctx.postSync({
+    type: "syncMidiPitchBend",
+    destinationId,
+    group,
+    channel,
+    data0: bend14,
+    data1: 0,
+    renderFrame
+  });
+}
+function pushMidiChannelPressure(ctx, trackId, group, channel, pressure, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiChannelPressure(destinationId, group, channel, pressure, renderFrame);
+  ctx.postSync({
+    type: "syncMidiChannelPressure",
+    destinationId,
+    group,
+    channel,
+    data0: pressure,
+    data1: 0,
+    renderFrame
+  });
+}
+function pushMidiPolyPressure(ctx, trackId, group, channel, note, pressure, renderFrame) {
+  const destinationId = ctx.resolveTargetId(trackId);
+  ctx.offlineEngine.pushMidiPolyPressure(
+    destinationId,
+    group,
+    channel,
+    note,
+    pressure,
+    renderFrame
+  );
+  ctx.postSync({
+    type: "syncMidiPolyPressure",
+    destinationId,
+    group,
+    channel,
+    data0: note,
+    data1: pressure,
+    renderFrame
+  });
+}
 function pushMidiUmp(ctx, trackId, word0, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
   ctx.offlineEngine.pushMidiUmp(destinationId, word0, renderFrame);
@@ -5354,6 +5578,30 @@ var SonareEngine = class _SonareEngine {
   pushMidiCc(trackId, group, channel, controller, value, renderFrame = -1) {
     pushMidiCc(this.stripContext, trackId, group, channel, controller, value, renderFrame);
   }
+  pushMidiPitchBend(trackId, group, channel, bend14, renderFrame = -1) {
+    pushMidiPitchBend(this.stripContext, trackId, group, channel, bend14, renderFrame);
+  }
+  pushMidiChannelPressure(trackId, group, channel, pressure, renderFrame = -1) {
+    pushMidiChannelPressure(
+      this.stripContext,
+      trackId,
+      group,
+      channel,
+      pressure,
+      renderFrame
+    );
+  }
+  pushMidiPolyPressure(trackId, group, channel, note, pressure, renderFrame = -1) {
+    pushMidiPolyPressure(
+      this.stripContext,
+      trackId,
+      group,
+      channel,
+      note,
+      pressure,
+      renderFrame
+    );
+  }
   pushMidiUmp(trackId, word0, renderFrame = -1) {
     pushMidiUmp(this.stripContext, trackId, word0, renderFrame);
   }
@@ -5404,6 +5652,39 @@ var SonareEngine = class _SonareEngine {
       channel,
       data0: controller,
       data1: value,
+      portTimeSamples
+    });
+  }
+  pushMidiInputPitchBend(group, channel, bend14, portTimeSamples = 0) {
+    this.offlineEngine.pushMidiInputPitchBend(group, channel, bend14, portTimeSamples);
+    this.postSync({
+      type: "syncMidiInputPitchBend",
+      group,
+      channel,
+      data0: bend14,
+      data1: 0,
+      portTimeSamples
+    });
+  }
+  pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples = 0) {
+    this.offlineEngine.pushMidiInputChannelPressure(group, channel, pressure, portTimeSamples);
+    this.postSync({
+      type: "syncMidiInputChannelPressure",
+      group,
+      channel,
+      data0: pressure,
+      data1: 0,
+      portTimeSamples
+    });
+  }
+  pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples = 0) {
+    this.offlineEngine.pushMidiInputPolyPressure(group, channel, note, pressure, portTimeSamples);
+    this.postSync({
+      type: "syncMidiInputPolyPressure",
+      group,
+      channel,
+      data0: note,
+      data1: pressure,
       portTimeSamples
     });
   }
@@ -6348,6 +6629,34 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.renderFrame
         );
         break;
+      case "syncMidiPitchBend":
+        this.engine.pushMidiPitchBend(
+          message.destinationId,
+          message.group,
+          message.channel,
+          message.data0,
+          message.renderFrame
+        );
+        break;
+      case "syncMidiChannelPressure":
+        this.engine.pushMidiChannelPressure(
+          message.destinationId,
+          message.group,
+          message.channel,
+          message.data0,
+          message.renderFrame
+        );
+        break;
+      case "syncMidiPolyPressure":
+        this.engine.pushMidiPolyPressure(
+          message.destinationId,
+          message.group,
+          message.channel,
+          message.data0,
+          message.data1,
+          message.renderFrame
+        );
+        break;
       case "syncMidiUmp":
         this.engine.pushMidiUmp(message.destinationId, message.word0, message.renderFrame);
         break;
@@ -6395,6 +6704,31 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         break;
       case "syncMidiInputCc":
         this.engine.pushMidiInputCc(
+          message.group,
+          message.channel,
+          message.data0,
+          message.data1,
+          message.portTimeSamples
+        );
+        break;
+      case "syncMidiInputPitchBend":
+        this.engine.pushMidiInputPitchBend(
+          message.group,
+          message.channel,
+          message.data0,
+          message.portTimeSamples
+        );
+        break;
+      case "syncMidiInputChannelPressure":
+        this.engine.pushMidiInputChannelPressure(
+          message.group,
+          message.channel,
+          message.data0,
+          message.portTimeSamples
+        );
+        break;
+      case "syncMidiInputPolyPressure":
+        this.engine.pushMidiInputPolyPressure(
           message.group,
           message.channel,
           message.data0,

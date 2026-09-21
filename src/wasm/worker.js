@@ -169,6 +169,46 @@ function getSonareModule() {
   return wrappedModule;
 }
 
+// src/codes.ts
+function resolveOrdinalInRange(value, min, max, enumName) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+  }
+  return value;
+}
+function resolveEnumOrdinal(value, values, enumName) {
+  if (typeof value === "number") {
+    const ordinals = Object.values(values);
+    const ordinal = resolveOrdinalInRange(
+      value,
+      Math.min(...ordinals),
+      Math.max(...ordinals),
+      enumName
+    );
+    if (!ordinals.includes(ordinal)) {
+      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+    }
+    return ordinal;
+  }
+  if (typeof value === "string") {
+    const ordinal = values[value];
+    if (ordinal !== void 0) {
+      return ordinal;
+    }
+  }
+  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
+}
+var AUTOMATION_CURVE_VALUES = {
+  linear: 0,
+  exponential: 1,
+  hold: 2,
+  "s-curve": 3
+};
+var PROJECT_AUTOMATION_CURVE_VALUES = {
+  ...AUTOMATION_CURVE_VALUES,
+  scurve: 3
+};
+
 // src/validation.ts
 var MIN_AUDIO_SAMPLE_RATE = 8e3;
 var MAX_AUDIO_SAMPLE_RATE = 384e3;
@@ -305,46 +345,6 @@ function masterAudioStereo(left, right = void 0, sampleRate = 22050, presetName 
     flat
   );
 }
-
-// src/codes.ts
-function resolveOrdinalInRange(value, min, max, enumName) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
-    throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-  }
-  return value;
-}
-function resolveEnumOrdinal(value, values, enumName) {
-  if (typeof value === "number") {
-    const ordinals = Object.values(values);
-    const ordinal = resolveOrdinalInRange(
-      value,
-      Math.min(...ordinals),
-      Math.max(...ordinals),
-      enumName
-    );
-    if (!ordinals.includes(ordinal)) {
-      throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-    }
-    return ordinal;
-  }
-  if (typeof value === "string") {
-    const ordinal = values[value];
-    if (ordinal !== void 0) {
-      return ordinal;
-    }
-  }
-  throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
-}
-var AUTOMATION_CURVE_VALUES = {
-  linear: 0,
-  exponential: 1,
-  hold: 2,
-  "s-curve": 3
-};
-var PROJECT_AUTOMATION_CURVE_VALUES = {
-  ...AUTOMATION_CURVE_VALUES,
-  scurve: 3
-};
 
 // src/public_types_music.ts
 var PitchClass = {

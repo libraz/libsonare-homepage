@@ -1,5 +1,5 @@
 import type { BuiltinSynthBinding, SampleDesc, SampleZoneDesc, Sf2InstrumentConfig, Sf2ProgramStatus, SynthEnumTables, SynthPatch } from './instrument_types';
-import type { ProjectAssistSidecar, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectAutomationTargetKind, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackKind, ProjectWarpMapDesc, ProjectWarpMode, TranscribeOptions, TranscribeResult } from './project_types';
+import type { AlignTakeToReferenceRequest, AlignTakeToReferenceResult, ProjectAssistSidecar, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectAutomationTargetKind, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackKind, ProjectWarpMapDesc, ProjectWarpMode, TranscribeOptions, TranscribeResult } from './project_types';
 /**
  * A synth binding as the embind layer takes it: the public `sampleBank` handle
  * has already been resolved to the id the native registry looks the bank up by,
@@ -149,6 +149,7 @@ export interface ProjectModule {
     projectAbiVersion: () => number;
     synthPresetNames: () => string[];
     synthPresetPatch: (name: string) => SynthPatch;
+    controllerProfileNames: () => string[];
     _synthEnumTables: () => SynthEnumTables;
     _synthPatchRoundTrip: (patch: SynthPatch) => SynthPatch;
     midiGmInstrumentName: (program: number) => string | null;
@@ -169,6 +170,7 @@ export interface ProjectModule {
     midiCcToBreakpoint: (bindings: ReadonlyArray<ProjectMidiCcBinding>, event: ProjectMidiEvent) => ProjectAutomationPoint | null;
     midiParamToCc: (bindings: ReadonlyArray<ProjectMidiCcBinding>, paramId: number, unitValue: number, group: number, ppq: number) => ProjectMidiEvent | null;
     transcribe: (samples: Float32Array, sampleRate: number, tempoBpm: number | undefined, config: TranscribeOptions) => TranscribeResult;
+    alignTakeToReference: (reference: Float32Array, take: Float32Array, sampleRate: number, config: AlignTakeToReferenceRequest) => AlignTakeToReferenceResult;
 }
 export declare function projectModule(): ProjectModule;
 export declare function projectMidi1Event(fnName: string, ppq: number, group: number, status: number, channel: number, data1: number, data2?: number): ProjectMidiEvent;

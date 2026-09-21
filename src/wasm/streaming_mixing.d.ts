@@ -1,4 +1,4 @@
-export type { MixerMeterSnapshot, MixerRealtimeBuffer } from './mixer';
+export type { MixerMeterSnapshot, MixerRealtimeBuffer, StripMeteringOptions } from './mixer';
 export { Mixer } from './mixer';
 export type { RealtimeVoiceChangerInterleavedBuffer, RealtimeVoiceChangerMonoBuffer, RealtimeVoiceChangerPlanarBuffer, } from './realtime_voice_changer';
 export { RealtimeVoiceChanger, realtimeVoiceChangerPresetJson, realtimeVoiceChangerPresetNames, validateRealtimeVoiceChangerPresetJson, } from './realtime_voice_changer';
