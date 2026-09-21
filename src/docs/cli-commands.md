@@ -363,6 +363,7 @@ The metrics these commands report are decay and clarity descriptors: **RT60** is
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | Mono RIR from shoebox geometry | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | Creative room-character morph toward a target room | `--wet`, `--suppression`, geometry and placement options, `--max-seconds` |
 | `sonare boundaries music.mp3` | Structural transitions plus the novelty curve they were picked from | Native CLI only. `--threshold` (0.3), `--absolute-threshold` (0.005), `--kernel-size` (64), `--n-mfcc` (13), `--n-chroma` (12), `--peak-distance` (2.0), `--no-mfcc`, `--no-chroma`, `--n-fft` (2048), `--hop-length` (512) |
+| `sonare melody music.mp3` | Melody contour summary: whether a melody was found, pitch range in octaves, mean frequency, pitch stability, vibrato rate, and the pitch-point count | Native CLI only. `--threshold` (0.1), `--hop-length` (512), `--fmin` (80.0), `--fmax` (1000.0) |
 | `sonare meter music.wav` | Basic level meters: peak, RMS, crest, true peak, clipping ratio, silence ratio, DC offset | Native CLI only. `--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | Clipped sample and region detection | Native CLI only. `--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | Percentile RMS dynamic range | Native CLI only. `--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
@@ -410,6 +411,7 @@ These transform audio and write a WAV with `-o`:
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | Resample | `--target-sr` |
 | `sonare polyphonic-notes chord.wav` | List the notes a polyphonic analysis found | — |
 | `sonare polyphonic-render chord.wav -o out.wav` | Re-render that analysis with per-note edits | `--edit NOTE.FIELD=VALUE` (repeatable) |
+| `sonare project align-takes --in project.json --reference-source 1 -o aligned.json` | Align every take in a project to one reference source and write the project back with a warp map per take; reads the source files, so a take whose rate differs from the reference is refused by name (see [Recording and Takes](./recording-and-takes.md)) | `--in`, `--reference-source` (**required**), `--audio SOURCE_ID=WAV` (repeatable), `--resolve-audio`, `--hop-length`, `--bins-per-octave` |
 
 `--top-db` and `--threshold-db` are mutually exclusive, alternate silence
 selectors: passing neither defaults `--threshold-db` to `-60`; passing
@@ -450,10 +452,10 @@ The native CLI includes the shared edit commands and adds lower-level processing
 
 | Native command | Required or notable option |
 |----------------|----------------------------|
-| `gain` | `-o`, `--gain-db` |
-| `fade` | `-o`, `--fade-in` and/or `--fade-out` |
-| `filter` | `-o`, `--type hp\|lp\|bp\|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch; `--order` (2), `--zero-phase` |
-| `preemphasis`, `deemphasis` | `-o` when writing a processed file; `--coef` (0.97) |
+| `sonare gain music.wav -o out.wav` | `-o`, `--gain-db` (**required**) |
+| `sonare fade music.wav -o out.wav` | `-o`, `--fade-in` and/or `--fade-out` (seconds) |
+| `sonare filter music.wav -o out.wav` | `-o`, `--type hp\|lp\|bp\|notch`; use `--cutoff` for hp/lp or `--center` + `--bandwidth` for bp/notch; `--order` (2), `--zero-phase` |
+| `sonare preemphasis speech.wav -o out.wav`, `sonare deemphasis speech.wav -o out.wav` | `-o`; `--coef` (0.97) |
 
 `filter --order` takes 2 or 4, and 4 is accepted for `hp`/`lp` only — a
 fourth-order `bp` or `notch` is rejected. `--zero-phase` runs the filter forwards
@@ -549,11 +551,12 @@ pack, and `--set PATH=VALUE` requires a preset selector.
 
 ### Synthesis
 
-The native CLI can generate simple test signals:
+The native CLI can generate simple test signals, and both CLIs can render a MIDI project through the built-in synth:
 
-| Native command | Required or notable option |
-|----------------|----------------------------|
-| `tone -o tone.wav` | `--frequency`; optional `--sr`, `--duration`, `--phase`, `--amplitude` |
-| `chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr`, `--duration` |
-| `clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr`, `--length`, `--frequency`, `--click-duration` |
+| Command | Required or notable option |
+|---------|----------------------------|
+| `sonare tone -o tone.wav` | `--frequency`; optional `--sr` (22050), `--duration` (1.0), `--phase` (0.0), `--amplitude` (1.0) |
+| `sonare chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr` (22050), `--duration` (1.0) |
+| `sonare clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr` (22050), `--length`, `--frequency` (1000.0), `--click-duration` (0.1) |
+| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET` (omitted, it follows the GM programs), `--sample-rate`, `--frames`, `--block-size`, `--channels` (2), `--instrument-latency`. Both CLIs: a `project bounce` with the synth always on, so it takes neither `--audio` nor `--resolve-audio` |
 

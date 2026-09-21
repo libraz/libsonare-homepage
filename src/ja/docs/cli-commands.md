@@ -360,6 +360,7 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
 | `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。`--threshold`（0.3）, `--absolute-threshold`（0.005）, `--kernel-size`（64）, `--n-mfcc`（13）, `--n-chroma`（12）, `--peak-distance`（2.0）, `--no-mfcc`, `--no-chroma`, `--n-fft`（2048）, `--hop-length`（512） |
+| `sonare melody music.mp3` | メロディ輪郭の要約。メロディの有無、音域（オクターブ）、平均周波数、ピッチの安定度、ビブラート速度、ピッチ点の数 | ネイティブ CLI のみ。`--threshold`（0.1）, `--hop-length`（512）, `--fmin`（80.0）, `--fmax`（1000.0） |
 | `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak（トゥルーピーク）、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ネイティブ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
@@ -407,6 +408,7 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | リサンプリング | `--target-sr` |
 | `sonare polyphonic-notes chord.wav` | ポリフォニー解析が見つけたノートを一覧表示 | — |
 | `sonare polyphonic-render chord.wav -o out.wav` | その解析結果をノート単位で編集して再レンダリング | `--edit NOTE.FIELD=VALUE`（繰り返し可） |
+| `sonare project align-takes --in project.json --reference-source 1 -o aligned.json` | プロジェクト内のすべてのテイクを 1 つの参照ソースに揃え、テイクごとのワープマップを付けてプロジェクトを書き戻す。ソースファイルを直接読むため、参照とレートが異なるテイクは名前付きで拒否される（[録音とテイク](./recording-and-takes.md) を参照） | `--in`, `--reference-source`（**必須**）, `--audio SOURCE_ID=WAV`（繰り返し可）, `--resolve-audio`, `--hop-length`, `--bins-per-octave` |
 
 `--top-db` と `--threshold-db` は同時に指定できない、択一の無音判定方式です。
 どちらも省略すると `--threshold-db` が `-60` として扱われ、`--top-db` を指定すると
@@ -436,10 +438,10 @@ sonare polyphonic-render chord.wav -o out.wav \
 
 | ネイティブコマンド | 必須または主なオプション |
 |--------------------|--------------------------|
-| `gain` | `-o`, `--gain-db` |
-| `fade` | `-o`, `--fade-in` または `--fade-out` |
-| `filter` | `-o`, `--type hp\|lp\|bp\|notch`; hp/lp は `--cutoff`、bp/notch は `--center` + `--bandwidth`; `--order`（2）, `--zero-phase` |
-| `preemphasis`, `deemphasis` | 処理後のファイルを書き出す場合は `-o`。`--coef`（0.97） |
+| `sonare gain music.wav -o out.wav` | `-o`, `--gain-db`（**必須**） |
+| `sonare fade music.wav -o out.wav` | `-o`, `--fade-in` または `--fade-out`（秒） |
+| `sonare filter music.wav -o out.wav` | `-o`, `--type hp\|lp\|bp\|notch`; hp/lp は `--cutoff`、bp/notch は `--center` + `--bandwidth`; `--order`（2）, `--zero-phase` |
+| `sonare preemphasis speech.wav -o out.wav`, `sonare deemphasis speech.wav -o out.wav` | `-o`; `--coef`（0.97） |
 
 `filter --order` は 2 か 4 を取り、4 は `hp`／`lp` でのみ使えます（`bp` や `notch` に 4 を指定するとエラーになります）。`--zero-phase` はフィルターを順方向と逆方向に 1 回ずつかけ（filtfilt）、位相のずれをなくします。その代わり実効的な傾きが 2 倍になり、ファイル全体が揃っている必要があります。
 
@@ -518,11 +520,12 @@ Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 
 
 ### 合成
 
-ネイティブ CLI では、簡単なテスト信号も生成できます。
+ネイティブ CLI では簡単なテスト信号を生成でき、MIDI プロジェクトを内蔵シンセでレンダリングするコマンドは両方の CLI にあります。
 
-| ネイティブコマンド | 必須または主なオプション |
-|--------------------|--------------------------|
-| `tone -o tone.wav` | `--frequency`; 任意で `--sr`, `--duration`, `--phase`, `--amplitude` |
-| `chirp -o sweep.wav` | `--fmax`; 任意で `--fmin`, `--exponential`, `--sr`, `--duration` |
-| `clicks -o clicks.wav` | 秒単位のカンマ区切り `--times`; 任意で `--sr`, `--length`, `--frequency`, `--click-duration` |
+| コマンド | 必須または主なオプション |
+|----------|--------------------------|
+| `sonare tone -o tone.wav` | `--frequency`; 任意で `--sr`（22050）, `--duration`（1.0）, `--phase`（0.0）, `--amplitude`（1.0） |
+| `sonare chirp -o sweep.wav` | `--fmax`; 任意で `--fmin`, `--exponential`, `--sr`（22050）, `--duration`（1.0） |
+| `sonare clicks -o clicks.wav` | 秒単位のカンマ区切り `--times`; 任意で `--sr`（22050）, `--length`, `--frequency`（1000.0）, `--click-duration`（0.1） |
+| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET`（省略時は GM プログラムに追従）, `--sample-rate`, `--frames`, `--block-size`, `--channels`（2）, `--instrument-latency`。両方の CLI にあり、常にシンセ経路を使う `project bounce` なので、`--audio` と `--resolve-audio` は受け付けない |
 

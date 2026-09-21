@@ -70,11 +70,11 @@ PyPI パッケージにない低レベルユーティリティと信号生成コ
 
 **ネイティブ CLI のみ**
 
-- 解析: `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
+- 解析: `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`
 - エフェクト／変換: `preemphasis`, `deemphasis`, `gain`, `fade`, `filter`
 - 合成: `tone`, `chirp`, `clicks`
 - 特徴量: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env`（onset-envelope の要約版。ピーク時刻・ピーク強度・平均）, `fourier-tempogram`, `tempogram-ratio`
-- librosa 互換ユーティリティ: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
+- 低レベルヘルパー: librosa 互換のためにネイティブ CLI が持つ 14 個の数値・フレーム・変換ユーティリティ（フレーム／サンプル変換、4 種のデシベル変換、フレーム分割とパディング、ピーク検出、`tune-to-midi`、`system-info`）は、専用ページ [CLI ユーティリティ](./cli-utilities.md) にまとめています。多くはオーディオファイルではなく数値や値の列を受け取るコマンドなので、上記のコマンド群とは分けて扱っています（`tune-to-midi` と `system-info` は例外です）
 - マスタリング: `mastering-stereo-analyses`
 
 **Python CLI のみ**
@@ -317,11 +317,14 @@ CLI のコマンドの多くは、性質上モノラルです。実行する解�
 | コマンド | ステレオ入力の扱い |
 |----------|--------------------|
 | `mastering` | ステレオのままマスタリングし、音像を最後まで保つ |
-| `mastering-processor` | `--stereo` フラグは無く、2 チャンネル入力は自身でステレオ経路をたどる。モノラル形式を持たないプロセッサは、入力にかかわらずステレオ経路をたどる。両チャンネルを処理し、両方を書き出す |
+| `mastering-processor` | 2 チャンネル入力はステレオのまま処理し、結果もステレオファイルとして書き出す。モノラル形式を持たないプロセッサ（`stereo.imager`、`eq.midSide`、`multiband.*` 系）は入力にかかわらずステレオ経路をたどり、モノラルファイルは左右両方に流し込んだうえでステレオとして書き出す |
 | `mix`（Python）, `mix-strip` | ステレオのまま処理する。モノラルファイルは左右両方へ、ステレオファイルは自身の 2 チャンネルをそのまま使う |
 | `suggest-mix` | 各 `--input` は、ステレオファイルをダウンミックスせずペアのまま保持する。アシスタントの中で両チャンネルを測定するのは音像解析だけだから |
-| `normalize`, `master`, `mastering-chain`, `declip`（Python CLI） | ステレオのまま扱い、ゲインは両チャンネルをまたいで 1 つだけ求める。音像が中央へ寄らない |
+| `normalize` | ステレオのまま扱う。ゲインは両チャンネルをまたいで 1 つだけ求め、両方に同じ値を掛ける。`--mode peak` では大きい方のチャンネルが `--target-db` に届き、もう一方はそれとの差を保つ。`--mode rms` も同じくペア全体で測る。チャンネルごとに別々にノーマライズすると、小さい方が持ち上がって左右の差が消える。それはレベル調整ではなくバランス変更になってしまう |
+| `master`, `mastering-chain`, `declip`（Python CLI） | ステレオのまま扱い、ゲインは両チャンネルをまたいで 1 つだけ求める。音像が中央へ寄らない |
 | 上記以外 | モノラルへダウンミックスし、警告を表示する |
+
+ステレオ経路を選ぶオプションはありません。ファイル自身のチャンネル数と、プロセッサ自身がモノラル形式を持つかどうかで決まります。`mastering-processor` に `--stereo` フラグを付けると、どちらの CLI でも未知のオプションとして拒否されます（終了コード 2）。フラグを外してください。2 チャンネルのファイルは、このフラグがかつて要求していた経路を最初からたどります。JSON レポートは `stereo` フィールドでどちらの経路を通ったかを示し、`normalize --json` の `length` はチャンネルあたりの値です。
 
 3 チャンネル以上の素材は常にダウンミックスされます。オフライン処理にはモノラル版とステレオ版しかなく、それより広いものがないためです。サラウンドファイルのチャンネル 0 だけを残して「元の音」と称するよりは、ダウンミックスしたと明示する方が正確です。
 

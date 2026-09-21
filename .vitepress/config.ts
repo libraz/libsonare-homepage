@@ -687,6 +687,7 @@ const enDocsSidebar = [
         collapsed: true,
         items: [
           { text: 'Commands', link: '/docs/cli-commands' },
+          { text: 'Utilities', link: '/docs/cli-utilities' },
           { text: 'Examples', link: '/docs/cli-examples' },
         ],
       },
@@ -1191,6 +1192,7 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: 'コマンド', link: '/ja/docs/cli-commands' },
+                    { text: 'ユーティリティ', link: '/ja/docs/cli-utilities' },
                     { text: '使用例', link: '/ja/docs/cli-examples' },
                   ],
                 },

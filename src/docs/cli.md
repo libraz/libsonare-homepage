@@ -73,11 +73,11 @@ native binary from a release archive, or see
 
 **Native CLI only**
 
-- Analysis: `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
+- Analysis: `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`
 - Effects / transforms: `preemphasis`, `deemphasis`, `gain`, `fade`, `filter`
 - Synthesis: `tone`, `chirp`, `clicks`
 - Features: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env` (onset-envelope summary: peak time, peak strength, mean), `fourier-tempogram`, `tempogram-ratio`
-- librosa utilities: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
+- Low-level helpers: the fourteen numeric, frame, and conversion utilities the native CLI carries for librosa parity — frame/sample conversion, the four decibel conversions, framing and padding, peak picking, `tune-to-midi`, and `system-info` — have their own page, [CLI Utilities](./cli-utilities.md). Most of them take numbers or value sequences rather than an audio file, which is why they are grouped apart from the commands above; `tune-to-midi` and `system-info` are the exceptions
 - Mastering: `mastering-stereo-analyses`
 
 **Python CLI only**
@@ -337,11 +337,14 @@ The commands that would deliver a worse result for it keep the pair instead:
 | Command | Stereo input |
 |---------|--------------|
 | `mastering` | Mastered as a pair; the stereo image is preserved end to end |
-| `mastering-processor` | No `--stereo` flag needed: a two-channel input takes the stereo path on its own, and a processor with no mono form takes the stereo path regardless of input. Both channels are processed, and both are written |
+| `mastering-processor` | A two-channel input is processed as a pair, and the result is written as a stereo file. A processor with no mono form (`stereo.imager`, `eq.midSide`, the `multiband.*` family) takes the stereo path from any input: a mono file is fed to both channels, and the output is stereo |
 | `mix` (Python), `mix-strip` | Processed as a pair. A mono file is carried on both sides; a stereo one keeps its own two channels |
 | `suggest-mix` | Each `--input` keeps a stereo file as a pair instead of folding it, since the image analysis is the one part of the assistant that measures both channels |
-| `normalize`, `master`, `mastering-chain`, `declip` (Python CLI) | Kept as a pair; one gain is measured across both channels so the image does not collapse toward the centre |
+| `normalize` | Kept as a pair. One gain is measured across both channels and applied to both: in `--mode peak` the louder channel lands on `--target-db` and the other keeps its level relative to it, and `--mode rms` measures the pair the same way. Normalizing each channel on its own would lift the quieter side until the two matched, which is a balance change, not a level change |
+| `master`, `mastering-chain`, `declip` (Python CLI) | Kept as a pair; one gain is measured across both channels so the image does not collapse toward the centre |
 | Everything else | Downmixed to mono, with a warning |
+
+There is no option that selects the stereo path: the file's own channel count and the processor's own mono/stereo form decide it. `mastering-processor` refuses a `--stereo` flag as an unknown option (exit code 2) on both CLIs — drop the flag; a two-channel file already goes the way that flag used to request. The JSON report says which path ran through its `stereo` field, and `normalize --json` reports `length` per channel.
 
 A source with more than two channels is always downmixed, because the offline
 operations come in a mono and a stereo form and nothing wider. Keeping channel 0
