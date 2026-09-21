@@ -280,6 +280,8 @@ const glossarySidebar = [
             text: 'SoundFont and Sampled Instruments',
             link: '/docs/glossary/instruments/soundfont',
           },
+          { text: 'GM and GS', link: '/docs/glossary/instruments/gm-gs' },
+          { text: 'Physical Modeling', link: '/docs/glossary/instruments/physical-modeling' },
         ],
       },
       {
@@ -440,6 +442,8 @@ const jaGlossarySidebar = [
           },
           { text: 'MIDI の基礎', link: '/ja/docs/glossary/instruments/midi-basics' },
           { text: 'SoundFont とサンプル音源', link: '/ja/docs/glossary/instruments/soundfont' },
+          { text: 'GM と GS', link: '/ja/docs/glossary/instruments/gm-gs' },
+          { text: '物理モデリング', link: '/ja/docs/glossary/instruments/physical-modeling' },
         ],
       },
       {
@@ -574,13 +578,19 @@ const enDocsSidebar = [
   },
   {
     text: 'Analysis',
-    items: [{ text: 'librosa Compatibility', link: '/docs/librosa-compatibility' }],
+    items: [
+      { text: 'Music Analysis', link: '/docs/analysis' },
+      { text: 'librosa Compatibility', link: '/docs/librosa-compatibility' },
+    ],
   },
   {
     text: 'Instruments & MIDI',
     items: [
+      { text: 'Sound Sources', link: '/docs/sound-sources' },
       { text: 'Built-in Synthesizer', link: '/docs/native-synth' },
+      { text: 'Physical Models', link: '/docs/physical-models' },
       { text: 'GM and GS', link: '/docs/gm-gs' },
+      { text: 'GM Tone Map', link: '/docs/gm-tone-map' },
       { text: 'SoundFont Player', link: '/docs/soundfont-player' },
       { text: 'MIDI Input', link: '/docs/midi-input' },
     ],
@@ -1060,13 +1070,19 @@ export default defineConfig({
             },
             {
               text: '解析',
-              items: [{ text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' }],
+              items: [
+                { text: '音楽解析', link: '/ja/docs/analysis' },
+                { text: 'librosa互換性', link: '/ja/docs/librosa-compatibility' },
+              ],
             },
             {
               text: '楽器と MIDI',
               items: [
+                { text: '音源方式', link: '/ja/docs/sound-sources' },
                 { text: '内蔵シンセサイザー', link: '/ja/docs/native-synth' },
+                { text: '物理モデル', link: '/ja/docs/physical-models' },
                 { text: 'GM と GS', link: '/ja/docs/gm-gs' },
+                { text: 'GM 音色マップ', link: '/ja/docs/gm-tone-map' },
                 { text: 'SoundFont プレイヤー', link: '/ja/docs/soundfont-player' },
                 { text: 'MIDI 入力', link: '/ja/docs/midi-input' },
               ],

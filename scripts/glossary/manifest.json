@@ -340,6 +340,16 @@
           "id": "soundfont",
           "status": "published",
           "title": { "en": "SoundFont and Sampled Instruments", "ja": "SoundFont とサンプル音源" }
+        },
+        {
+          "id": "gm-gs",
+          "status": "published",
+          "title": { "en": "GM and GS", "ja": "GM と GS" }
+        },
+        {
+          "id": "physical-modeling",
+          "status": "published",
+          "title": { "en": "Physical Modeling", "ja": "物理モデリング" }
         }
       ]
     },

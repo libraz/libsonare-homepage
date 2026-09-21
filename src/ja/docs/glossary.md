@@ -72,6 +72,8 @@ libsonare が MIDI を音に変える仕組み — [内蔵シンセサイザー]
 | [エンベロープとモジュレーション](./glossary/instruments/envelopes-modulation.md) | ADSR エンベロープ、LFO、ベロシティ、キートラック、モッドマトリクス。 |
 | [MIDI の基礎](./glossary/instruments/midi-basics.md) | ノート、ベロシティ、チャンネル、CC、プログラムチェンジ、バンク、General MIDI、ピッチベンド、MIDI 2.0。 |
 | [SoundFont とサンプル音源](./glossary/instruments/soundfont.md) | サンプル音源と合成音源の違い、SF2 のバンクとプログラム、General MIDI の補完。 |
+| [GM と GS](./glossary/instruments/gm-gs.md) | 楽器に番号を振る規格が保証するもの。プログラムナンバー、ドラムチャンネル、バンクセレクトとバリエーション音色、GS の追加分。 |
+| [物理モデリング](./glossary/instruments/physical-modeling.md) | 録音を再生せず楽器そのものを計算する方式。導波管ループ、連続的な表現、サンプリングとのコストの逆転。 |
 
 ## アレンジとプロジェクト
 

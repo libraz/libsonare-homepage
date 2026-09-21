@@ -72,6 +72,8 @@ These pages explain how libsonare turns MIDI into sound — the built-in [Native
 | [Envelopes and Modulation](./glossary/instruments/envelopes-modulation.md) | ADSR envelopes, LFOs, velocity, key tracking, and the mod matrix. |
 | [MIDI Basics](./glossary/instruments/midi-basics.md) | Notes, velocity, channels, CC, program change, banks, General MIDI, pitch bend, and MIDI 2.0. |
 | [SoundFont and Sampled Instruments](./glossary/instruments/soundfont.md) | Sampled vs synthesized sound, SF2 banks and programs, and the General MIDI fallback. |
+| [GM and GS](./glossary/instruments/gm-gs.md) | What a standard that numbers instruments promises: program numbers, the drum channel, Bank Select and variation tones, and what GS adds. |
+| [Physical Modeling](./glossary/instruments/physical-modeling.md) | Computing the instrument instead of replaying a recording: the waveguide loop, continuous expression, and the cost inversion against sampling. |
 
 ## Arrangement and Projects
 
