@@ -292,7 +292,7 @@ sonare mel-to-audio song.wav -o mel-preview.wav
 
 ### `decomposeStems(request)` <Badge type="warning" text="高負荷" />
 
-音源を分解し、成分を因子行列ではなく**オーディオ**として返します。
+音源を NMF で `nComponents` 個の**名前のない**成分に分解し、各成分を因子行列ではなく**オーディオ**として返します。
 
 ```typescript
 function decomposeStems(request: DecomposeStemsRequest): DecomposeStemsResult
@@ -330,6 +330,14 @@ interface DecomposeStemsResult {
 
 受け取るのはリクエストオブジェクトのみで、位置引数形式はありません。`nComponents` はここでは
 省略可能で既定値は `4` です（`decompose` では必須）。
+
+**これは HPSS ではありません。** 成分にラベルは付きません。`components[1]` は分解がたまたま
+行き着いた反復パターンであって、声やキックがどの番号に入るかは `init`、`nIter`、素材によって
+変わります。何が入っているかは聴いて確かめてください。[オーディオエフェクト](./js-api-effects.md)
+の `hpss` と `hpssWithResidual` は別の問いに答えるもので、メディアンフィルタによって
+**ラベルの付いた**倍音成分と打撃成分（および残差）のちょうど 2 つに分けます。「持続音か打撃音か」
+を知りたいときは HPSS、「この録音がどんな反復パターンでできているか」を知りたいときは
+`decomposeStems` です。
 
 ::: warning NNDSVD の初期化は倍精度で計算される
 `init: 'nndsvd'` を指定した場合、SVD によるウォームスタートは倍精度で計算されます。これが

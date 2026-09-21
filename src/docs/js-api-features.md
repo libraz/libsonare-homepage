@@ -302,7 +302,8 @@ For reconstruction limits and parameter notes, see [Inverse Features](./inverse-
 
 ### `decomposeStems(request)` <Badge type="warning" text="Heavy" />
 
-Factorize a recording and return the components as **audio**, not as factors.
+Factorize a recording with NMF into `nComponents` **unnamed** components and
+return each one as **audio**, not as factors.
 
 ```typescript
 function decomposeStems(request: DecomposeStemsRequest): DecomposeStemsResult
@@ -344,6 +345,16 @@ is not.
 
 Request-object form only — there is no positional overload. `nComponents` is
 optional here and defaults to `4`, unlike `decompose`, where it is required.
+
+**This is not HPSS.** The components carry no label: `components[1]` is whatever
+repeating spectral pattern the factorization settled on, and which index a
+voice or a kick lands in changes with `init`, `nIter` and the material, so
+audition them to learn what each holds. `hpss` and `hpssWithResidual` on
+[Audio Effects](./js-api-effects.md) answer a different question — they split by
+median filtering into exactly two **labelled** parts, harmonic and percussive
+(plus the residual). Reach for HPSS when the question is "sustained versus
+struck"; reach for `decomposeStems` when it is "which recurring patterns make up
+this recording".
 
 ::: warning NNDSVD seeding is computed in double precision
 With `init: 'nndsvd'`, the SVD warm start is computed in double precision. This

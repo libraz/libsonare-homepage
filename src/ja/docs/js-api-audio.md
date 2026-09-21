@@ -298,6 +298,75 @@ interface SpectrumReport {
 }
 ```
 
+## テイク: 位置合わせと共通の無音
+
+同じパートを複数回録ったテイクを扱う、バッファ単位のヘルパーです。録音からコンピングまでの流れの中でどこに位置するかは [録音とテイク](./recording-and-takes.md) にあります。ここではシグネチャを載せます。
+
+### `alignTakeToReference(request)`
+
+```typescript
+function alignTakeToReference(request: AlignTakeToReferenceRequest): AlignTakeToReferenceResult
+
+interface AlignTakeToReferenceRequest {
+  reference: Float32Array;  // ガイドテイクまたは伴奏。空でなく、すべて有限値
+  take: Float32Array;       // その下に合わせるテイク。条件は同じ
+  sampleRate: number;       // 両バッファ共通のレート [8000, 384000]。異なるなら先にリサンプル
+  hopLength?: number;       // クロマのホップ（サンプル）。省略で 512。正の整数。0 は既定にならず拒否
+  binsPerOctave?: number;   // オクターブあたりの CQT ビン数。省略で 12。正の 12 の倍数。0 は拒否
+}
+interface AlignTakeToReferenceResult {
+  anchors: ProjectWarpAnchor[];   // 2 個以上、有限で狭義単調増加の { warpSample, sourceSample }
+  alignment: { meanResidualFrames: number; referenceFrames: number; takeFrames: number };
+}
+```
+
+両者のクロマグラムを位置合わせし、その経路を **テイク側** のクリップに `Project.setWarpMap` で渡せるアンカーへ縮約します。`warpSample` はリファレンスのタイムライン上の位置、`sourceSample` はそれに対応するテイク内の位置です。空または非有限のバッファと範囲外の `sampleRate` は `RangeError` で拒否します。解像度フィールドの `0`、クロマ 2 フレーム分に満たない短い信号、相異なるアンカーが 2 個得られない組み合わせは `SonareError` の `InvalidParameter` になります。合わせようのない組み合わせは、使えないマップを返す代わりにエラーとして報告されます。`alignment` は呼び出しを失敗させない情報です。`takeFrames / referenceFrames` がアンカーの表す全体のレート差、`meanResidualFrames` が経路が一定レートからどれだけ外れたかで、しきい値は呼び出し側で決めます。
+
+### `splitSilenceCommonWithReport(request)`
+
+```typescript
+function splitSilenceCommonWithReport(request: SplitSilenceCommonRequest): {
+  intervals: Int32Array;       // 同じリクエストに対する splitSilenceCommon の戻り値そのもの
+  report: SilenceCommonReport;
+}
+interface SilenceCommonReport {
+  silenceCeilingDb: number;    // すべての信号に無音が残る最大の topDb
+  maxSignalIntervals: number;  // 最も細かく分かれた信号が単独で出した区間数（和集合で結合する前）
+  minSignalIntervals: number;  // 最も分かれなかった信号について同じもの
+}
+```
+
+リクエスト（`signals`、`topDb` 60、`frameLength` 2048、`hopLength` 512）、返す区間、拒否条件は [ヘルパー](./js-api-helpers.md) の `splitSilenceCommon` と同一です。名前の「共通」は、各テイクが鳴っている区間の和集合を取ることで、残った隙間がどのテイクでも無音になることを指します。レポートがあるのは、全体を覆う区間が 1 つだけ返る結果に 3 つの原因があり、区間リストではそれを区別できないからです。`silenceCeilingDb` を渡した `topDb` と見比べてください。0 に近ければ、鳴りっぱなしのテイクがあり、しきい値をどう変えても隙間は出ません。`topDb` より低ければしきい値が緩すぎたので、ceiling を下回る `topDb` で同じ入力が切れます。`topDb` 以上なのに区間が 1 つなら、どのテイクにも無音はあるが位置が揃っていないので、`alignTakeToReference` の出番です。区間数は形の情報でしかありません。一度鳴って止まるテイクは 1 で、無音がまったくないテイクと同じ値になります。
+
+### `remixAlignedIntervals(...)`
+
+1 チャンネル分のサンプルと、フラットな `(start, end)` の区間リスト（`splitSilenceCommon` の戻り値と同じ形）を受け取り、ゼロクロスに吸着させた同じリストを返します。`remix` が全チャンネルを同一のフレームで切るためのものです。`alignTakeToReference` の戻り値は受け取りません。あれはワープアンカーであってカット位置ではありません。詳細は [`remixAlignedIntervals`](./js-api-features.md#remixalignedintervals) を参照してください。
+
+## Mixer のストリップ: `addStrip` と `settle`
+
+シーンドキュメントでは表現できない `Mixer` のメソッド 2 つです。シーン、ルーティング、コンパイルのタイミングは [ミキシングエンジン](./mixing.md) にあります。
+
+```typescript
+// 構築済みのミキサーにストリップを追加する。戻り値はなく、以後はインデックスで参照する。
+// stripById(id) は呼び出し前の stripCount() と一致する。グラフは dirty になり、
+// compile() または次の processStereo() で再構築される。
+addStrip(id: string, metering?: StripMeteringOptions): void
+
+interface StripMeteringOptions {
+  enabled?: boolean;            // 両メーター。false で両方省く（48 kHz でストリップあたり約 1.4 MB → 約 145 KB）。既定 true
+  lufs?: boolean;               // LUFS 測定。既定 true
+  truePeak?: boolean;           // サンプル間ピーク測定。既定 true
+  truePeakOversample?: number;  // [0, 16]。2x / 4x / 8x に丸められる。0 / 省略で 4x
+}
+
+// ストリップの入力トリム、フェーダー、パン、幅のスムーザーを設定済みの値に揃える。
+settle(stripIndex: number): void
+```
+
+`addStrip` は id の重複、`[0, 16]` 外の `truePeakOversample`、型の違う metering フィールド、プレーンオブジェクトでない `metering` で例外を投げ、そのストリップは追加されません。メーター構成はストリップ構築時に固定され、後から変えるセッターはありません。明示的な接続のないストリップはコンパイル時にマスターへ配線されるので、シーンを編集しなくても新しいストリップは聞こえます。呼び出し側が変えなければならないのは入力の方です。`processStereo` はストリップ数と同じ数のチャンネルペアを要求するため、新しいインデックスの分だけ配列を増やすまで例外になります。
+
+`settle` が必要になるのは、**設定したばかりのストリップをオフラインでレンダリングする** ときです。レベル系の操作子はライブのフェーダー向けにスムージング（約 5 ms）されているため、`setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` の直後の最初のブロック、あるいは `fromSceneJson` 直後（フェーダーのスムーザーはユニティから始まる）の最初のブロックは、スムーザーの初期値から目標値へ滑って開きます。−3 dB の 1 ストリップのシーンでは、最初のサンプルが 5.8 dB 高く実測されました。最後の操作の後、最初のブロックの前に呼んでください。ライブのループでは滑ること自体が目的なので不要です。自動化、メーター、インサートの状態には触れず、何も消しません。範囲外のインデックスは拒否します。
+
 ## ストリーミング API
 
 ストリーミング API は、リアルタイムの音声解析とビジュアライゼーションを可能にします。バッチ解析とは異なり、ストリーミングは音声をチャンクごとに処理し、低レイテンシを実現します。

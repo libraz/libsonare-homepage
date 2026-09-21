@@ -293,6 +293,70 @@ interface SpectrumReport {
 }
 ```
 
+## Takes: alignment and shared silence
+
+### `alignTakeToReference(request)`
+
+```typescript
+function alignTakeToReference(request: AlignTakeToReferenceRequest): AlignTakeToReferenceResult
+
+interface AlignTakeToReferenceRequest {
+  reference: Float32Array;  // guide take or backing track; non-empty, all finite
+  take: Float32Array;       // the take to place under it; same constraints
+  sampleRate: number;       // of BOTH buffers, [8000, 384000]; resample first if they differ
+  hopLength?: number;       // chroma hop in samples; omit = 512. Positive integer; 0 is refused, not defaulted
+  binsPerOctave?: number;   // CQT bins per octave; omit = 12. Positive multiple of 12; 0 is refused
+}
+interface AlignTakeToReferenceResult {
+  anchors: ProjectWarpAnchor[];   // >= 2 finite, strictly increasing { warpSample, sourceSample }
+  alignment: { meanResidualFrames: number; referenceFrames: number; takeFrames: number };
+}
+```
+
+Aligns the two chromagrams and reduces the path to anchors `Project.setWarpMap` accepts for the **take's** clip: `warpSample` is a position on the reference timeline, `sourceSample` the matching position in the take. It refuses, with a `RangeError`, an empty or non-finite buffer or a `sampleRate` outside the range, and with `SonareError` `InvalidParameter` a `0` resolution field, a signal too short for two chroma frames, or a pair that yields no two distinct anchors — an unalignable pair is reported rather than answered with a map you cannot use. `alignment` never fails the call: `takeFrames / referenceFrames` is the overall rate difference the anchors encode and `meanResidualFrames` how far the path strayed from a constant rate; apply your own threshold. Where this sits in the capture-and-comp workflow is on [Recording and Takes](./recording-and-takes.md).
+
+### `splitSilenceCommonWithReport(request)`
+
+```typescript
+function splitSilenceCommonWithReport(request: SplitSilenceCommonRequest): {
+  intervals: Int32Array;       // exactly what splitSilenceCommon returns for the same request
+  report: SilenceCommonReport;
+}
+interface SilenceCommonReport {
+  silenceCeilingDb: number;    // largest topDb at which EVERY signal still shows silence
+  maxSignalIntervals: number;  // intervals the most fragmented signal produced alone, before the union merges
+  minSignalIntervals: number;  // the same for the least fragmented signal
+}
+```
+
+Same request (`signals`, `topDb` 60, `frameLength` 2048, `hopLength` 512), same intervals, same refusals as `splitSilenceCommon` on [Helpers](./js-api-helpers.md). "Common" is the union of every take's sounding intervals, so each gap is silent in all of them. The report exists because one interval covering everything has three causes the interval list cannot separate. Read `silenceCeilingDb` against the `topDb` you passed: near 0, some take never stops sounding and no threshold helps; below `topDb`, the threshold was too loose, and a `topDb` under the ceiling cuts the same input; at or above `topDb` with still one interval, every take has silence but not in the same place — the case for `alignTakeToReference`. The counts describe shape only: a take that sounds once and stops counts 1, exactly like one with no silence at all.
+
+### `remixAlignedIntervals(...)`
+
+`remixAlignedIntervals` consumes one channel's samples plus a flat `(start, end)` interval list — the shape `splitSilenceCommon` returns — and produces that list snapped to zero crossings, so `remix` can cut every channel on identical frames. It does not take `alignTakeToReference` output; those are warp anchors, not cut points. Full entry: [`remixAlignedIntervals`](./js-api-features.md#remixalignedintervals).
+
+## Mixer strips: `addStrip` and `settle`
+
+```typescript
+// Append a strip to a built mixer. Returns nothing: address it by index afterwards, and
+// stripById(id) === the stripCount() before the call. Marks the graph dirty until compile() / processStereo().
+addStrip(id: string, metering?: StripMeteringOptions): void
+
+interface StripMeteringOptions {
+  enabled?: boolean;            // both meters; false drops them (~145 KB per strip instead of ~1.4 MB at 48 kHz). Default true
+  lufs?: boolean;               // LUFS measurement. Default true
+  truePeak?: boolean;           // inter-sample peak measurement. Default true
+  truePeakOversample?: number;  // [0, 16], resolved to 2x / 4x / 8x; 0 / omit = 4x
+}
+
+// Snap the strip's input-trim, fader, pan, and width smoothers to their set values.
+settle(stripIndex: number): void
+```
+
+`addStrip` throws on a duplicate id, a `truePeakOversample` outside `[0, 16]`, a wrong-typed metering field, or a `metering` that is not a plain object, and the strip is not added. Metering is fixed when the strip is built — there is no setter. A strip with no explicit connection is routed to the master at compile, so the new strip is audible without a scene edit; what the caller must change is the input: `processStereo` requires one channel pair per strip, so it throws until the arrays grow by one at the new index. Scenes, routing, and compile timing are on [Mixing Engine](./mixing.md).
+
+`settle` is required before an **offline render from a freshly configured strip**. Every level control is smoothed for a live fader (~5 ms), so the first block after `setFaderDb` / `setPan` / `setWidth` / `setInputTrimDb` — or after `fromSceneJson` itself, whose fader smoother starts at unity — opens at the smoother's start and glides to the target: a one-strip scene at −3 dB measured 5.8 dB hot on its first sample. Call it after the last control change and before the first block; in a live loop the glide is the point and the call is unnecessary. It clears nothing — automation, meters, and insert state are untouched — and rejects an out-of-range index.
+
 ## Streaming API
 
 The Streaming API enables real-time audio analysis for visualizations and live monitoring. Unlike batch analysis, streaming processes audio chunk by chunk with minimal latency.
