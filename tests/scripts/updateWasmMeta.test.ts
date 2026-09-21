@@ -26,6 +26,24 @@ function runScript(root: string) {
   });
 }
 
+/**
+ * Write the upstream size gate the script reads the published entry sizes from.
+ * Raw/gzip are chosen so each rounds to a distinct KB figure.
+ */
+function writeSizeBaseline(libsonare: string) {
+  writeFileSync(
+    path.join(libsonare, 'bindings/wasm/wasm-size-baseline.json'),
+    JSON.stringify({
+      artifacts: {
+        'sonare.wasm': { raw: 5_203_886, gzip: 1_729_949 },
+        'sonare-analysis.wasm': { raw: 1_004_364, gzip: 373_840 },
+      },
+      format: 1,
+      toolchain: { emsdk: '5.0.2' },
+    }),
+  );
+}
+
 /** Write the realtime/worklet companion assets the script requires alongside the core trio. */
 function writeCompanionAssets(root: string) {
   writeFileSync(path.join(root, 'src/wasm/worklet.js'), Buffer.from('fake worklet entry'));
@@ -61,6 +79,7 @@ describe('update-wasm-meta shell script', () => {
         version: '9.8.7-test',
       }),
     );
+    writeSizeBaseline(libsonare);
 
     const result = runScript(root);
     const meta = JSON.parse(readFileSync(path.join(root, 'src/wasm/meta.json'), 'utf8'));
@@ -103,6 +122,12 @@ describe('update-wasm-meta shell script', () => {
         meta.assets['sonare.js'].gzipSize + meta.assets['index.js'].gzipSize + meta.gzipSize,
     });
     expect(meta.total.gzipKB).toBe(Math.floor(meta.total.gzipSize / 1024));
+    // Package entries come from the upstream gate, not from the copied artifact,
+    // so they are unrelated to the fake wasm bytes written above.
+    expect(meta.entries).toEqual({
+      full: { sizeKB: 5082, gzipKB: 1689 },
+      analysis: { sizeKB: 981, gzipKB: 365 },
+    });
     expect(Date.parse(meta.buildDate)).not.toBeNaN();
   });
 
@@ -133,6 +158,25 @@ describe('update-wasm-meta shell script', () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
       'Could not read version from ../libsonare/bindings/wasm/package.json',
+    );
+  });
+
+  it('fails when the upstream size baseline is missing', () => {
+    const { root, libsonare } = createWorkspace();
+    writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), 'wasm');
+    writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
+    writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
+    writeCompanionAssets(root);
+    writeFileSync(
+      path.join(libsonare, 'bindings/wasm/package.json'),
+      JSON.stringify({ version: '1.0.0' }),
+    );
+
+    const result = runScript(root);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Size baseline not found: ../libsonare/bindings/wasm/wasm-size-baseline.json',
     );
   });
 });

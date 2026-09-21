@@ -97,6 +97,33 @@ if [ -f "$WASM_FILE" ]; then
     exit 1
   fi
 
+  # Published package-entry sizes, taken from the upstream size gate rather than
+  # from the artifacts copied here. The gate pins its own emsdk and measures both
+  # bundle entries in one run, so `full` and `analysis` are comparable with each
+  # other; the copied `sonare.wasm` above is whatever the sibling checkout last
+  # built and is not.
+  SIZE_BASELINE="$LIBSONARE_DIR/bindings/wasm/wasm-size-baseline.json"
+  if [ ! -f "$SIZE_BASELINE" ]; then
+    echo "❌ Size baseline not found: $SIZE_BASELINE"
+    exit 1
+  fi
+  ENTRIES_JSON=$(node -e '
+    const b = require(process.argv[1]).artifacts;
+    const kb = (n) => Math.round(n / 1024);
+    const entry = (name) => {
+      const a = b[name];
+      if (!a) throw new Error(`size baseline has no ${name}`);
+      return { sizeKB: kb(a.raw), gzipKB: kb(a.gzip) };
+    };
+    process.stdout.write(
+      JSON.stringify({ full: entry("sonare.wasm"), analysis: entry("sonare-analysis.wasm") }),
+    );
+  ' "$(cd "$(dirname "$SIZE_BASELINE")" && pwd)/$(basename "$SIZE_BASELINE")") || exit 1
+  ENTRIES_FULL_SIZE_KB=$(node -pe 'JSON.parse(process.argv[1]).full.sizeKB' "$ENTRIES_JSON")
+  ENTRIES_FULL_GZIP_KB=$(node -pe 'JSON.parse(process.argv[1]).full.gzipKB' "$ENTRIES_JSON")
+  ENTRIES_ANALYSIS_SIZE_KB=$(node -pe 'JSON.parse(process.argv[1]).analysis.sizeKB' "$ENTRIES_JSON")
+  ENTRIES_ANALYSIS_GZIP_KB=$(node -pe 'JSON.parse(process.argv[1]).analysis.gzipKB' "$ENTRIES_JSON")
+
   cat > "$META_FILE" << EOF
 {
   "version": "$VERSION",
@@ -133,6 +160,16 @@ if [ -f "$WASM_FILE" ]; then
     "sizeKB": $TOTAL_SIZE_KB,
     "gzipSize": $TOTAL_GZIP_SIZE,
     "gzipKB": $TOTAL_GZIP_KB
+  },
+  "entries": {
+    "full": {
+      "sizeKB": $ENTRIES_FULL_SIZE_KB,
+      "gzipKB": $ENTRIES_FULL_GZIP_KB
+    },
+    "analysis": {
+      "sizeKB": $ENTRIES_ANALYSIS_SIZE_KB,
+      "gzipKB": $ENTRIES_ANALYSIS_GZIP_KB
+    }
   },
   "md5": "$MD5",
   "buildDate": "$BUILD_DATE",
