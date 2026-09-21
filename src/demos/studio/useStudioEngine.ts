@@ -1,4 +1,5 @@
 import { ref, shallowRef } from 'vue';
+import { useAudioExport } from '@/composables/useAudioExport';
 import { BAR_PPQ, STEP_COUNT, STUDIO_TRACKS, type StudioPattern } from '@/demos/studio/studioCopy';
 
 type WasmModule = typeof import('@/wasm/index.js');
@@ -84,6 +85,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   const masterLevel = ref(0);
   const stemViews = shallowRef<StudioStemView[]>([]);
   const libVersion = ref('');
+  const audioExport = useAudioExport();
 
   let wasm: WasmModule | null = null;
   let engine: StudioFacade | null = null;
@@ -504,33 +506,31 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     const mod = wasm;
     if (!mod) return null;
     const stems: Float32Array[] = [];
-    let maxLength = 0;
+    const stemGains: number[] = [];
     for (let i = 0; i < STUDIO_TRACKS.length; i++) {
       if (mutes[i]) continue;
       const def = STUDIO_TRACKS[i];
       const project = buildTrackProject(mod, pattern, i, bpm, 2);
       try {
         // No totalFrames: auto-derived length keeps the instrument's tail.
-        const stem = project.bounceWithSynthInstrument(
-          [{ preset: def.preset, destinationId: def.destination }],
-          { numChannels: 2, sampleRate: EXPORT_SAMPLE_RATE },
+        stems.push(
+          project.bounceWithSynthInstrument(
+            [{ preset: def.preset, destinationId: def.destination }],
+            { numChannels: 2, sampleRate: EXPORT_SAMPLE_RATE },
+          ),
         );
-        const scaled = new Float32Array(stem.length);
-        for (let f = 0; f < stem.length; f++) scaled[f] = stem[f] * gains[i];
-        stems.push(scaled);
-        if (scaled.length > maxLength) maxLength = scaled.length;
+        stemGains.push(gains[i]);
       } finally {
         project.delete();
       }
     }
-    if (maxLength === 0) return null;
-    const mix = new Float32Array(maxLength);
-    for (const stem of stems) {
-      for (let f = 0; f < stem.length; f++) mix[f] += stem[f];
-    }
     // The master fader applies to the bounce too, as the tooltip promises.
-    for (let f = 0; f < mix.length; f++) mix[f] *= masterGainValue;
-    return encodeWav(mix, EXPORT_SAMPLE_RATE, 2);
+    return audioExport.exportWav(stems, {
+      sampleRate: EXPORT_SAMPLE_RATE,
+      numChannels: 2,
+      gains: stemGains,
+      masterGain: masterGainValue,
+    });
   }
 
   /**
@@ -572,7 +572,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
         wroteNotes = true;
       }
       if (!wroteNotes) return null;
-      return new Blob([project.exportSmf()], { type: 'audio/midi' });
+      return audioExport.exportMidi(project.exportSmf());
     } finally {
       project.delete();
     }
@@ -622,35 +622,4 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     exportMidi,
     dispose,
   };
-}
-
-/** Encode interleaved float samples as a 16-bit PCM WAV blob. */
-function encodeWav(interleaved: Float32Array, sampleRate: number, numChannels: number): Blob {
-  const bytesPerSample = 2;
-  const dataBytes = interleaved.length * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataBytes);
-  const view = new DataView(buffer);
-  const writeStr = (offset: number, s: string) => {
-    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
-  };
-  writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + dataBytes, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
-  view.setUint16(32, numChannels * bytesPerSample, true);
-  view.setUint16(34, 8 * bytesPerSample, true);
-  writeStr(36, 'data');
-  view.setUint32(40, dataBytes, true);
-  let offset = 44;
-  for (let i = 0; i < interleaved.length; i++) {
-    const s = Math.max(-1, Math.min(1, interleaved[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    offset += bytesPerSample;
-  }
-  return new Blob([buffer], { type: 'audio/wav' });
 }

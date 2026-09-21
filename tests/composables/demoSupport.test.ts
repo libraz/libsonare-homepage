@@ -4,7 +4,6 @@ import { defineComponent, nextTick, ref } from 'vue';
 import { useAudioPlayer } from '@/demos/analyzer/useAudioPlayer';
 import { useWaveform } from '@/demos/analyzer/useWaveform';
 import { useMasteringInsights } from '@/demos/mastering/useMasteringInsights';
-import { useMasteringModeUrlSync } from '@/demos/mastering/useMasteringModeUrlSync';
 import { useRealtimeMixer } from '@/demos/mixing/useRealtimeMixer';
 import { useRealtimeFx } from '@/demos/realtime-fx/useRealtimeFx';
 
@@ -166,40 +165,6 @@ describe('useMasteringInsights', () => {
     await secondRun;
     expect(insights.insightProfileItems.value[0]).toEqual({ label: 'Duration', value: '-' });
     expect(insights.isAnalyzingInsights.value).toBe(false);
-  });
-});
-
-describe('useMasteringModeUrlSync', () => {
-  it('reads, writes, clears and responds to history mode changes', async () => {
-    window.history.replaceState({}, '', '/mastering?mode=studio#demo');
-    const mode = ref<'quick' | 'studio'>('quick');
-    const sync = useMasteringModeUrlSync(mode);
-
-    sync.applyModeFromUrl();
-    expect(mode.value).toBe('studio');
-
-    sync.replaceModeInUrl();
-    expect(window.location.search).toBe('?mode=studio');
-
-    sync.enableModeUrlSync();
-    await nextTick();
-    mode.value = 'quick';
-    await nextTick();
-    expect(window.location.search).toBe('');
-    expect(window.location.hash).toBe('#demo');
-
-    mode.value = 'studio';
-    await nextTick();
-    expect(window.location.search).toBe('?mode=studio');
-
-    window.history.pushState({}, '', '/mastering');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    expect(mode.value).toBe('quick');
-    sync.disableModeUrlSync();
-
-    mode.value = 'studio';
-    await nextTick();
-    expect(window.location.search).toBe('');
   });
 });
 

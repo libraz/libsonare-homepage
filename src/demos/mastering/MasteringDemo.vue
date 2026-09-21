@@ -5,6 +5,7 @@ import ToolShell from '@/components/ToolShell.vue';
 import ToolStatusBar, { type ToolStatusField } from '@/components/ToolStatusBar.vue';
 import { ScanLine, TechPanel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlState } from '@/composables/useUrlState';
 import { useWasmBoot } from '@/composables/useWasmBoot';
 import MasteringChainPanel from '@/demos/mastering/MasteringChainPanel.vue';
 import MasteringFineTune from '@/demos/mastering/MasteringFineTune.vue';
@@ -48,7 +49,6 @@ import {
 } from '@/demos/mastering/useMastering';
 import { useMasteringInsights } from '@/demos/mastering/useMasteringInsights';
 import { useMasteringMetering } from '@/demos/mastering/useMasteringMetering';
-import { useMasteringModeUrlSync } from '@/demos/mastering/useMasteringModeUrlSync';
 import { useMasteringSession } from '@/demos/mastering/useMasteringSession';
 
 const { t, locale, localizedPath, alternateLocalePath } = useI18n();
@@ -96,8 +96,15 @@ const {
   resetInsights,
 } = useMasteringInsights(mastering, currentCeilingDb);
 
-const { applyModeFromUrl, replaceModeInUrl, enableModeUrlSync, disableModeUrlSync } =
-  useMasteringModeUrlSync(mode);
+// Quick is the silent default, so only Studio spells itself out in the query.
+const modeUrl = useUrlState([
+  {
+    key: 'mode',
+    state: mode,
+    defaultValue: 'quick' as MasteringMode,
+    parse: (raw: string) => (raw === 'studio' || raw === 'quick' ? raw : null),
+  },
+]);
 
 const {
   currentSessionSettings,
@@ -425,9 +432,9 @@ watch(
 onMounted(() => {
   if (typeof window === 'undefined') return;
   restoreSession();
-  applyModeFromUrl();
-  replaceModeInUrl();
-  enableModeUrlSync();
+  modeUrl.applyFromUrl();
+  modeUrl.replaceInUrl();
+  modeUrl.enable();
   window.addEventListener('keydown', handleKeyboardShortcuts);
 });
 
@@ -635,7 +642,7 @@ function releaseUrls() {
 }
 
 onUnmounted(() => {
-  disableModeUrlSync();
+  modeUrl.disable();
   if (typeof window !== 'undefined') window.removeEventListener('keydown', handleKeyboardShortcuts);
   releaseUrls();
   mastering.dispose();
