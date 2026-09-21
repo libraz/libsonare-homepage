@@ -7,6 +7,16 @@ description: The NativeSynth GM fallback bank — GS variation tones, GM/GS drum
 
 This page covers the General MIDI and GS side of the [built-in synthesizer](./native-synth.md): the data-free GM fallback bank with its GS variation tones and drum-kit variants, how a bounce follows GM program changes, the Roland-GS architecture layer and insertion effects the [SoundFont player](./soundfont-player.md) implements, and when a note falls from a SoundFont to the bank. The per-program voicing table is on [GM Tone Map](./gm-tone-map.md).
 
+What lives here is the concrete side of GS — the addresses, the tables, the per-slot detail. *Why* a browser audio engine speaks GS at all, and how the places it parts company with the specification sort into extension, deliberate divergence and reduction, is on [Sound Sources](./sound-sources.md).
+
+<MaturityNote
+  item="gs-scope"
+  :labels="{
+    title: 'GS is a control protocol here, not a sound',
+    body: 'GS is implemented as a way to control physical-model and FM instruments, and the resemblance to a sound module stops at the wire. What the compatibility contract owes is that a file\'s messages arrive, are understood, and move the parameter they name in the direction and by the amount the specification gives. What any slot should sound like is a separate question with a separate answer: a program whose timbre differs from the hardware\'s is not a defect against that contract. The voicing tables on this page describe what the bank does, not a target it is failing to hit.'
+  }"
+/>
+
 ## The GM fallback bank
 
 The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program. Some of those voices are provisional physical models whose calibration is still underway. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism.
@@ -75,6 +85,10 @@ A Bank Select value that reaches no variation this table voices resolves to the 
 
 Each variation is voiced from **its capital's own physical model** rather than from a separate recording, so re-voicing a capital carries its variations with it instead of leaving them behind. That is also why the three piano capitals each get their own wide variation instead of sharing the grand's: sharing it would have made each one duller, quieter, or more in tune than the capital it is supposed to be a variation of.
 
+The audition takes one capital — program 16, Drawbar Organ — and offers the three variations the bank voices apart from it. It stops there because a Bank Select MSB with no variation behind it resolves to the capital and renders a bit-identical buffer: MSB 24 on this program is one such number, and an option that cannot sound different is not a comparison.
+
+<SonareDemo id="gs-variation-tones" />
+
 ### The `drum-kit` preset and the GM drum map
 
 `drum-kit` selects the `percussion` engine and maps incoming MIDI notes to the **General MIDI drum map** — note 36 is the kick, note 38 the acoustic snare, and so on — rather than treating note number as pitch. Route a drum pattern's notes to a destination bound to `drum-kit` and each note triggers its mapped piece.
@@ -85,7 +99,11 @@ Each variation is voiced from **its capital's own physical model** rather than f
 
 Two numbers appear per row and they are not interchangeable. **Program** is what a file sends; it is the rhythm part's program-change number and the address the standards define. **Index** is this bank's own slot for the set. Indices are **append-only**: a set added later takes the next free index, so adding one can never renumber a set already voiced, and nothing that already sounds right starts sounding like something else.
 
-The **tone map** column is the earliest generation that defines the set — the same map a [Bank Select LSB](#the-gs-architecture-layer) selects. A file that pins an older map does not reach the sets introduced after it, and those fall back to Standard, exactly as a module of that generation does.
+The **tone map** column is the earliest generation that defines the set, and Bank Select is what reaches it. The two halves of that message do two different jobs and never the same one: **Bank Select MSB selects the variation tone, and Bank Select LSB selects the tone map.** Writing a variation number into the LSB therefore pins a generation rather than picking a tone. (GM2 re-uses the LSB for its own variation number under its own two MSBs; [the GS architecture layer](#the-gs-architecture-layer) below has that exception.)
+
+Which generation counts as the current one is fixed by the device being targeted, and that device is the **SC-8850 — which includes the SC-88Pro rather than trading against it.** The two Parameter Address Maps agree on every address they share and part company at ten points, and at nine of the ten the SC-8850 is the superset, so an SC-88Pro file selects the SC-88Pro map (`40 4x 00` = `03`) and plays. Two consequences are worth stating because they remove work rather than add it: there is no double-module mode to implement, and the target's sixty-four parts are four ports of sixteen rather than a second address space, so a part is still named by one address nibble.
+
+A tone map is audible exactly where it fails to reach a kit. Sixteen of the twenty-six sets below were introduced by a later map, so pinning an older one drops those to Standard, exactly as a module of that generation does. The melodic side is the opposite case: every variation the bank voices is an SC-55 tone that all maps reach, which is why the LSB alone moves nothing in the variation table above and a great deal in the kit table below.
 
 Every set is a **re-voicing of the one shared percussion model**, not a second copy of it: the kick, snare, tom, hat, and cymbal parameters are reshaped at note-on. Improving the underlying model therefore improves all 26 at once, and a set can only differ in ways the model has a parameter for.
 
@@ -119,8 +137,12 @@ Every set is a **re-voicing of the one shared percussion model**, not a second c
 | 58 | 25 | Rhythm FX 2 | SC-88Pro | one-shot set — plays the Standard voicing |
 
 ::: warning One-shot sets and Sound-Effects programs are addressed, not yet modeled
-Four sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX**, **Rhythm FX**, **Cymbal & Claps**, and **Rhythm FX 2**. There is nothing for a membrane model to reshape, so they are addressed and named but play the Standard kit's voicing. The GM Sound-Effects programs (120-127, covered in the [GM tone map](./gm-tone-map.md)) are in the same position and share one generic noise voice. A SoundFont that supplies real samples for these addresses plays back normally through the SF2 player.
+Four rhythm sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX** (program 56), **Rhythm FX** (57), **Cymbal & Claps** (53), and **Rhythm FX 2** (58). There is nothing for a membrane model to reshape, so the player addresses and names them while the fallback map sends all four through to the Standard kit's voicing. The GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot, covered in the [GM tone map](./gm-tone-map.md)) are in the same position and share one generic noise-based voice. Both gaps are in the data-free fallback only: a SoundFont that supplies real samples for those addresses plays back normally through the [SF2 player](./soundfont-player.md).
 :::
+
+The audition below plays one bar of the same groove through a selection of the sets, choosing the kit the way a GS file does — a Program Change on the rhythm part. It is a selection rather than the whole table because it was built by rendering every set and dropping the ones whose output came back bit-identical to Standard, which is exactly what the four one-shot programs above do by design.
+
+<SonareDemo id="gs-drum-kits" />
 
 ### Following GM programs instead of pinning one patch
 
@@ -239,13 +261,28 @@ Leave `totalFrames` at 0 and the bounce auto-derives the length from the arrange
 
 ## The GS architecture layer
 
-On top of GM, the [SoundFont player](./soundfont-player.md) implements the Roland-GS extensions a GS-authored arrangement expects:
+On top of GM, the [SoundFont player](./soundfont-player.md) implements the Roland-GS extensions a GS-authored arrangement expects. Everything below is reached by address: a GS write is a Roland frame whose three address bytes name a map, a block inside it, and a parameter inside that.
+
+<GsAddressFigure
+  title="Where a GS write lands, and how far it travels"
+  caption="Every address in the space carries exactly one of four levels, and an address with no level at all is treated as a defect rather than as silence. STATE is the one worth reading twice: it marks a byte that is received and held faithfully but that nothing downstream reads, because the effect it would drive has no such control."
+/>
+
+The four levels are what the player promises per address. `AUDIBLE` means changing the byte changes the render; `STATE` means the value is held and readable but no engine asks for it; `ACCEPT` means it is decoded and dropped; `IGNORE` means the row deliberately declines it and says why. The **16 parts** the player carries follow from receiving a single MIDI port — the `50 ** **` and `51 ** **` blocks are the other group's parts and are declined for that reason, and the target device has no such addresses at all because the port decides which group `40` and `41` mean. It is not a WebAssembly limit; [Sound Sources](./sound-sources.md) separates the constraints that genuinely are.
+
+<MaturityNote
+  item="gs-efx-build-gated"
+  :labels="{
+    title: 'The effect blocks reach the audio only in an FX build',
+    body: 'AUDIBLE for the system-effect, master-EQ and EFX blocks is conditional on how the core was compiled. SONARE_MIDI_WITH_FX is raised only under the BUILD_FX option, and the build comment beside it is explicit: without it, &quot;the SF2 player renders dry (sends become no-ops)&quot;. An EFX chain needs one thing more — the host has to supply an insert factory — and without one the writes are still received and held while the signal stays dry. BUILD_FX defaults on, so this is a property of a stripped custom build of the core rather than of a stock one.'
+  }"
+/>
 
 - **Variation-bank fallback** — a GS variation bank that the SoundFont does not cover falls back to the capital (bank-0) tone, so a missing variation still plays the right family instead of going silent.
 - **Bank-128 drum kits on channel 10** — drum programs live in bank 128; channel 10 (index 9) is the drum part by convention.
 - **NRPN part edits** — TVF cutoff/resonance, TVA envelope, and vibrato can be edited per part via NRPN, plus **per-note drum NRPNs** for individual drum sounds.
 - **GS / GM SysEx** — **GS Reset**, **GM System On**, and "use for rhythm part" SysEx are recognized — both from the host and from SysEx events embedded inside an arrangement.
-- **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the single shared GS **insertion effect (EFX)** described below.
+- **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the GS **insertion effects (EFX)** described below.
 - **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change, and resolves the **Bank Select LSB (CC#32)** one of two ways depending on the MSB:
   - **GM2 addressing** — when the MSB is GM2's melodic bank (`0x79`) or percussion bank (`0x78`), the LSB *is* the variation number (or the percussion set), exactly as GM2 defines it.
   - **GS tone-map select** — for any other MSB the LSB instead picks **which generation's tone set** the MSB's variation number reaches: `0` the module's own (newest) map, `1` SC-55, `2` SC-88, `3` SC-88Pro, `4` SC-8850. Any other value reads as `0`, because a module that never saw the message is already playing its own map. A tone or kit that the selected map predates falls back to the capital tone or the Standard kit — the same thing a real module of that generation does.
@@ -254,9 +291,13 @@ On top of GM, the [SoundFont player](./soundfont-player.md) implements the Rolan
 This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the authoring tip below), and it is the easiest value to get wrong. Under a GM2 MSB it selects a *variation*; under a GS MSB it selects a *tone map*, and the variation number lives in the MSB instead. Writing `bankLsb: 1` next to a GS variation MSB does not pick variation 1 — it pins the part to the SC-55 tone set.
 :::
 
-::: warning The SFX kit and GM Sound-Effects programs are not yet individually synthesized
-The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback. The one-shot GS rhythm sets — SFX, Rhythm FX, Cymbal & Claps, and Rhythm FX 2 — currently play the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [the GM fallback bank](#the-gm-fallback-bank) above for the built-in fallback voicing.
-:::
+<MaturityNote
+  item="gs-rhythm-chorus-send"
+  :labels="{
+    title: 'A rhythm part hears its chorus send here, and does not on the hardware',
+    body: 'On a measured unit a rhythm part accepts its chorus send and reads it back, but nothing arrives in the recording, while the reverb send on the same part in the same run is plainly audible. It is rhythm mode rather than part 10: a melodic part hears the chorus and stops the moment it is switched to rhythm, nothing else changed. Why the send is inert was never established — ignored, the part off the bus, the return muted — so there is no mechanism to reproduce, only an outcome, and this engine\'s standing rule is that a parameter with no counterpart still has to arrive rather than take silence. So the divergence is stated and the send keeps working. It matters when reading the per-program CC93 weighting the fallback bank applies: on the hardware, that weight does nothing for a kit.'
+  }"
+/>
 
 ## GS insertion effects (EFX)
 
@@ -264,7 +305,34 @@ The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effect
 libsonare's insertion effects are an original DSP re-creation — a combination of libsonare's own algorithms, reconstructed from publicly documented information, mapped onto the GS EFX SysEx and type-numbering model so GS-authored MIDI selects the effect the composer intended. Because the algorithms are independent, they follow the same addressing and effect structure but **do not reproduce the exact sound** of any hardware module; treat them as a compatible re-creation, not a 1:1 emulation. There are no bundled samples, ROM data, or firmware, and no affiliation with or endorsement by any hardware manufacturer. For the standards and literature behind this compatibility, see [Algorithm References](./algorithm-references.md).
 :::
 
-Separate from the reverb/chorus/delay send-return bus above, GS defines one **insertion effect (EFX)**: an effect inserted directly into a part's signal path, like a guitar pedal, rather than a send-return bus. libsonare implements this the way the hardware it follows does — as a **single shared insertion unit** for the whole player, not sixteen independent per-part effects. Any of the 16 parts can be routed through that one unit via a per-part on/off switch; a part that is switched off bypasses the unit entirely and reaches the mix dry.
+Separate from the reverb/chorus/delay send-return bus above, GS defines an **insertion effect (EFX)**: an effect placed directly in a part's signal path, like a guitar pedal, rather than a send-return bus. The specification's block lives at `40 03 xx` and the hardware runs one such unit for the whole module. libsonare runs **sixteen**. Unit 0 keeps `40 03 xx` unchanged — same semantics, same defaults, same layout — and the other fifteen live at `40 3u xx`, where the unit number is the address nibble itself; `40 30 xx` is unit 0 again, a second door into the storage `40 03 xx` already writes.
+
+Routing does not add an address either. `40 4x 22` PART EFX ASSIGN keeps `00` BYPASS and `01` EFX with their exact specified meanings and **widens its own value range**: `02`–`10` select units 1–15. A value outside `00`–`10` is ignored like any other out-of-range write. Nothing collides, because `40 30`–`40 3F` carries no row in either device's parameter map — that is what makes the extension unreachable from a spec-compliant file and therefore safe without a feature flag. Real hardware ignores an unknown address, so a file that uses the extension still plays there, with one insertion effect.
+
+<GsEfxRoutingFigure
+  title="Part, insert, system effects, master EQ"
+  caption="A bypassed part sends to reverb, chorus and delay from the part itself. A part routed into a unit sends after the effect, by the unit's own three send levels, so the wet tail is made from the processed signal instead of the raw one."
+/>
+
+**Two different things wear the phrase "what the hardware does", and they must not be merged.** *One unit for the whole module* is a resource limit of the machine that was built, not a property of GS, and it is lifted. *Parts routed to the same unit sum into it* is not a limit at all — it is what an effect is, the way two guitars into one pedal intermodulate — and it is **not** lifted. A unit runs once, over the sum of every part assigned to it. So the unit count changed and the summing did not, and asking to "restore the summing" never means capping the units. [Sound Sources](./sound-sources.md) sets out why the one is a limit and the other is behaviour.
+
+Because a unit's output is one signal, what sits downstream of it belongs to the unit rather than to the parts. Its send to the system effects is the unit's own (`40 3u 17`–`19`), and the part-level CC91/CC93/CC94 send is suppressed for a routed part so the wet tail is not sent twice. Its master-EQ routing follows the parts feeding it only where those parts agree: a bypass at `40 4x 20` holds when every part on the unit asked for it, and otherwise the unit takes the EQ, which is what every part powers on with.
+
+<MaturityNote
+  item="gs-efx-state-slots"
+  :labels="{
+    title: 'Some EFX parameters are held rather than heard, and that is a fact about the effect',
+    body: 'A measurement archive of an individual unit gives 85 (type, slot) pairs a conversion from the raw byte to the quantity it names. 56 of those reach a control of the same physical kind on the insert their type maps to, and all 56 are translated and audible. The remaining 29 are received, held and readable, and nothing reads them — not because the translation is unwritten, but because the insert has no such control. Raising one means giving the insert the control first, not editing a table.'
+  }"
+/>
+
+<MaturityNote
+  item="gs-efx-incomplete-defaults"
+  :labels="{
+    title: 'Three types power up on a partly inferred default set',
+    body: 'Selecting an EFX type loads that type\'s own twenty parameter bytes, and those power-on values are measured rather than transcribed. 62 of the 65 types carry a complete measured set. On the other three the unit refused at least one slot during measurement, so that slot\'s power-on value is inferred and a file that selects the type without writing the slot may start from a different value than the hardware would.'
+  }"
+/>
 
 There is **no typed "set EFX" call** in any binding. Like real GS hardware, the EFX type and its parameters are programmed exclusively by sending raw SysEx: live, you push those bytes with `RealtimeEngine.pushMidiSysex()`; offline, SysEx embedded in the arrangement's MIDI is realised inline during the bounce.
 
@@ -284,6 +352,7 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 | 0x0122 | Rotary | dual-rotor rotary-speaker model |
 | 0x0123 | Stereo Flanger | flanger |
 | 0x0124 | Step Flanger | flanger |
+| 0x0125 | Tremolo | ring modulator driven as amplitude modulation |
 | 0x0126 | Auto Pan | auto-pan |
 | 0x0130 | Compressor | compressor |
 | 0x0131 | Limiter | limiter |
@@ -302,7 +371,7 @@ Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
 | 0x0161 | Feedback Pitch Shifter | pitch shifter (feedback loop not modelled) |
 | 0x0172 / 0x0173 | Lo-Fi 1 / 2 | bit-crusher |
 
-A few GS types (Humanizer, Tremolo, 3D Auto/Manual) have no faithful stock insert yet and pass through dry. The Overdrive/Distortion drive+level and the pitch-shifter's coarse pitch+balance are translated from their raw EFX parameters; other single-effect types run at their insert's own defaults.
+Three types pass through dry, each because nothing in the insert catalogue carries its identity. **Humanizer** (`0x0103`) *is* a vowel, and no parameter position for the vowel is transcribed, so a fixed one would be a strong resonant filter chosen at random. **3D Auto** and **3D Manual** (`0x0170`, `0x0171`) are binaural panners with no stock insert — 3D Chorus and 3D Delay map instead because there the 3D stage sits on an effect that does exist. Everywhere else, a raw EFX parameter byte is converted and applied wherever the measurement archive reaches it and the insert has a control of the same physical kind; a slot that meets neither condition leaves the insert on its own default.
 
 ### Composite EFX types (multi-stage chains)
 

@@ -273,7 +273,7 @@ The player is a faithful SF2 synthesis core with a Roland-GS architecture layer 
 - **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send), **CC93** (chorus send), and **CC94** (delay send) feed the GS system-effects sends (see [the GS architecture layer](./gm-gs.md#the-gs-architecture-layer)). (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
 - **Pitch bend** — honored, with the bend range set by **RPN 0** (entered via Data Entry / RPN), so a part can request its own semitone range.
 
-The GS side of the player — the variation-bank and drum-kit architecture, the NRPN and SysEx part edits, the send-return system effects, and the single shared insertion effect (EFX) — is documented with the rest of the GS material on [GM and GS Fallback Bank](./gm-gs.md#the-gs-architecture-layer).
+The GS side of the player — the variation-bank and drum-kit architecture, the NRPN and SysEx part edits, the send-return system effects, and the sixteen insertion-effect units (EFX) — is documented with the rest of the GS material on [GM and GS Fallback Bank](./gm-gs.md#the-gs-architecture-layer).
 
 ## Live engine playback
 
