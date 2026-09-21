@@ -150,6 +150,10 @@ The scene the run above produced has six strips — the four stems plus a `rever
 
 Changing `sendDb`, `faderDb`, or a threshold is a text edit. Removing a processor is deleting an object from `inserts`. The mixer validates the document when it loads it, so a typo surfaces as a load error rather than as a strange mix.
 
+A `faderDb` you type into a strip is the same fader the mixer exposes as a live control once the scene loads — the lanes below are three strips inside the engine, and moving a fader or mute changes that lane's output alone. That is the edit you are making blind in `scene.json`; the render in Step 3 is where you get to hear it.
+
+<SonareDemo id="engine-lane-mixer" />
+
 ## Step 3 — Render
 
 ```bash

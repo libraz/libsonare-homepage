@@ -188,6 +188,10 @@ sonare repair master.wav --detect --json
 
 Both numbers come from `after` in the `--report` the mastering step wrote — the measurement the chain itself took on the full stereo pair. `GATE_LUFS_TOLERANCE` should match how tightly the platform enforces its target; `±0.5` LU is generous for a streaming target and tight for a broadcast one. `GATE_CEILING_DBTP` should be the ceiling the mastering step itself was told to hit — the assistant already treats that value as a hard constraint, so a report that exceeds it means something upstream did not respect its own setting, which is worth failing loudly on regardless of the platform.
 
+`sonare info` reported `peak_db: -1.205` on this same file — a sample peak that would have passed the `-1.0` ceiling the true peak fails. The gap between the two is what the demo below draws: every stored sample sits under the ceiling while the waveform a converter rebuilds between them rises above it, which is why the gate reads `true_peak_dbtp` from the report and not `peak_db` from `info`.
+
+<SonareDemo id="inter-sample-peak" />
+
 If `report.json` also carries `loudness_target_limited: true` alongside a large `max_gain_reduction_db`, the mix ran out of headroom before the master reached its loudness target — that is a mix problem the gate cannot fix by adjusting a threshold. See "Believe the right number" in [Mix and Master a Song in the CLI](./cli-mix-and-master.md#step-6-—-believe-the-right-number).
 
 ::: danger Do not read loudness or true peak from `lufs` or `mastering-streaming` on a stereo file

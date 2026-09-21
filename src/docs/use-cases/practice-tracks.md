@@ -194,6 +194,10 @@ sonare downbeats song.wav --json
 
 The two downbeats are 2.996 s apart — four beats at the 80 BPM this recording measures at (`sonare bpm song.wav --json` reports `{"bpm": 80.0}`), which lines up with the ~0.75 s beat spacing above. The gap before the first downbeat is a partial bar; playing along, the first downbeat you feel lands at 1.022 s, not 0.0 s.
 
+That arithmetic is the grid below: set it to 80 BPM in 4/4 and the readout gives 0.75 s per beat and 3.0 s per bar, the spacing the beat and downbeat lists just reported. Drag it to 120 and the same six seconds hold half again as many bars — the other metrical level the tip that follows warns about, and the click you would be practising against if you took that figure.
+
+<SonareDemo id="tempo-grid" />
+
 ::: tip Check the metrical level before you set the metronome
 A tempo estimate is a choice of *which* pulse to call the beat, and a steady eighth-note pattern gives a tracker more than one defensible answer — half, double, or a dotted reading of the same groove. On this clip `sonare mastering-profile song.wav --json` reads the same audio at 119.9 BPM, a different metrical level, not a different tempo. Count a bar against the reported beat times before committing: if the number feels like it is fighting you, you are on the wrong level rather than out of time.
 :::

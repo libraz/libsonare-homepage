@@ -100,6 +100,10 @@ sonare mastering-profile reference.wav --json
 
 One call gives you tempo, a genre guess, and the loudness and spectral shape of the file you are chasing — the same fields [Mastering Assistant](../mastering-assistant.md) profiles your own mix with. Read this before the comparison: a reference at -24.56 LUFS integrated is quiet by streaming standards, which matters later when you decide whether to actually chase its loudness or just its tone.
 
+Three of those `loudness` fields are what the meter below reports on a playing clip: integrated LUFS is the single number the next step will compare against your mix, true peak is the ceiling, and LRA is how far the loudness moves over the programme. A reference with a wide LRA hides a lot of motion behind its one integrated figure — matching that figure alone will not make your mix move the same way.
+
+<SonareDemo id="loudness-meter" />
+
 ## Step 2 — Measure the loudness gap
 
 ```bash

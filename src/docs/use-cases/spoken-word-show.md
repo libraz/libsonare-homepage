@@ -147,6 +147,10 @@ Raising `rangeDb` from the preset's default 18 to 30 changes nothing: `cmp` repo
 If lowering `rangeDb` does nothing to your render either, the problem isn't the parameter — it's that your host track sits quieter than the threshold the router reacts to, so no ducking is being requested at all. Confirm the duck is engaging at the preset default before spending time tuning how deep it goes.
 :::
 
+The sidechain router is a compressor whose detector listens to the host instead of the bed, so the reduction it asks for is the shaded gain-reduction gap below: how far the key rises above the threshold, scaled by the ratio, and nothing more. Raise the threshold until the program no longer crosses it and the gap disappears — that is the state the warning above describes, and no `rangeDb` brings it back.
+
+<SonareDemo id="compressor-curve" />
+
 ## Step 3 — Render
 
 ```bash
