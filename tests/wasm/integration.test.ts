@@ -101,45 +101,53 @@ describe('wasm package integration', () => {
   });
 
   it('keeps the runtime export surface aligned with the generated type bundle', () => {
-    // Older bundles used an index.d.ts re-export barrel over worklet.js:
-    // `export { dt as lufs, ... } from './worklet.js'`. Newer bundles emit the
-    // full public declaration file in index.d.ts and use one export block.
+    // Two known bundle shapes have to be tolerated here:
+    // - a flat declaration bundle: hundreds of bare `declare function foo(...)`
+    //   lines plus a single trailing `export { a, b as c, type D, ... };` block
+    //   that decides what is actually public (and may rename via `as`).
+    // - a re-export barrel: many `export { foo, bar } from './chunk';` /
+    //   `export type { X } from './chunk';` blocks (tsup's per-module split),
+    //   plus a handful of `export declare function foo(...)` left directly in
+    //   the bundle.
+    // Either way, the set of *value* (non-type) export names visible on the
+    // imported module is collected the same way below.
     const indexDts = readFileSync(join(process.cwd(), 'src/wasm/index.d.ts'), 'utf8');
-    const workletDts = readFileSync(join(process.cwd(), 'src/wasm/worklet.d.ts'), 'utf8');
 
-    const workletExportBlock = workletDts.match(/^export \{([^}]+)\};\s*$/m)?.[1];
-    expect(workletExportBlock).toBeTruthy();
-    const typeOnly = new Set(
-      workletExportBlock!
+    // Every `export { ... }` / `export type { ... }` block, regardless of an
+    // optional trailing `from '...'` clause. Non-greedy `[\s\S]*?` between the
+    // braces keeps this multi-line-safe without spanning past the closing `}`.
+    const exportBlocks = [
+      ...indexDts.matchAll(/export\s+(type\s+)?\{([\s\S]*?)\}(?:\s*from\s*'[^']+')?;/g),
+    ];
+    expect(exportBlocks.length).toBeGreaterThan(0);
+
+    const expectedNames = new Set<string>();
+    for (const [, typeOnlyBlock, body] of exportBlocks) {
+      const entries = body
         .split(',')
         .map((entry) => entry.trim())
-        .filter((entry) => entry.startsWith('type '))
-        .map((entry) => {
-          const alias = entry.match(/\s+as\s+(\S+)$/)?.[1];
-          return alias ?? entry.replace(/^type\s+/, '');
-        }),
-    );
+        .filter(Boolean);
+      for (const entry of entries) {
+        if (typeOnlyBlock || entry.startsWith('type ')) continue;
+        const aliased = entry.match(/^(\S+)\s+as\s+(\S+)$/);
+        expectedNames.add(aliased ? aliased[2] : entry);
+      }
+    }
 
-    const barrelBlock = indexDts.match(
-      /^export \{([^}]+)\}(?: from '\.\/worklet\.js')?;\s*$/m,
-    )?.[1];
-    expect(barrelBlock).toBeTruthy();
+    // A handful of functions are left as direct `export declare function`
+    // statements in the bundle rather than routed through an export block.
+    for (const match of indexDts.matchAll(
+      /export declare (?:function|class|const) ([A-Za-z0-9_]+)/g,
+    )) {
+      expectedNames.add(match[1]);
+    }
+
+    // Sanity check that the parser above did not degenerate into a tautology:
+    // the public surface is in the hundreds, not a handful of names.
+    expect(expectedNames.size).toBeGreaterThan(250);
 
     const runtimeExports = new Set(Object.keys(wasm));
-    const missing = barrelBlock!
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .filter((entry) => !entry.startsWith('type '))
-      .map((entry) => {
-        const aliased = entry.match(/^(\S+)\s+as\s+(\S+)$/);
-        return aliased
-          ? { source: aliased[1], exported: aliased[2] }
-          : { source: entry, exported: entry };
-      })
-      .filter(({ source }) => !typeOnly.has(source))
-      .map(({ exported }) => exported)
-      .filter((name) => !runtimeExports.has(name));
+    const missing = [...expectedNames].filter((name) => !runtimeExports.has(name));
 
     expect(missing).toEqual([]);
   });

@@ -1,0 +1,431 @@
+import type { AutomationCurve, GoniometerPoint, MeterTap, MixerProcessResult, MixMeterSnapshot, PanLawInput, PanMode, SendTiming, SurroundPan } from './public_types';
+/**
+ * One master-output meter reading. All dB fields are finite and floored at
+ * -120; `truePeakDb*` is an inter-sample peak from the ITU-R BS.1770-4
+ * polyphase reconstruction at 4x, not a sample peak. That reconstruction is a
+ * streaming measurement: its centered stencil needs a few future samples a
+ * realtime path does not have, so each block's last samples read marginally low
+ * (about 0.1 dB across 64..8192-sample blocks on a near-Nyquist tone, always
+ * under-reading). Use `meteringTruePeakDb` over the whole signal for an exact
+ * dBTP number.
+ */
+export interface MixerMeterSnapshot {
+    peakDbL: number;
+    peakDbR: number;
+    rmsDbL: number;
+    rmsDbR: number;
+    correlation: number;
+    truePeakDbL: number;
+    truePeakDbR: number;
+}
+export interface MixerRealtimeBuffer {
+    leftInputs: Float32Array[];
+    rightInputs: Float32Array[];
+    outLeft: Float32Array;
+    outRight: Float32Array;
+    process: (numSamples?: number) => void;
+}
+/**
+ * Persistent, scene-based stereo mixer.
+ *
+ * Build one from a scene JSON string (e.g. {@link mixingScenePresetJson} or a
+ * hand-authored scene), then feed per-strip stereo blocks through
+ * {@link processStereo} to get the routed stereo master. Strips, sends, buses,
+ * and inserts are described entirely by the scene; the routing graph is
+ * compiled lazily on the first {@link processStereo} call (or eagerly via
+ * {@link compile}).
+ *
+ * Call {@link delete} (or use a `try/finally`) to release the underlying WASM
+ * object — the embind handle is not garbage-collected automatically.
+ *
+ * @example
+ * ```typescript
+ * const mixer = Mixer.fromSceneJson(mixingScenePresetJson('vocalReverbSend'), 48000, 512);
+ * try {
+ *   const out = mixer.processStereo([stripL], [stripR]);
+ * } finally {
+ *   mixer.delete();
+ * }
+ * ```
+ */
+export declare class Mixer {
+    private mixer;
+    private readonly blockSize;
+    private constructor();
+    /**
+     * Build a mixer from a scene JSON string.
+     *
+     * A strip's meters are sized when the strip is built, so this is where their
+     * configuration is chosen: an optional `metering` object on the strip
+     * (`enabled` / `lufs` / `truePeak` / `truePeakOversample`) selects it, and
+     * leaving it out keeps the full default (LUFS + true peak at 4x, about 1.4 MB
+     * per strip at 48 kHz). `{"enabled": false}` drops both meters for a strip
+     * whose snapshots are never read.
+     *
+     * @param json - Scene JSON (strips, buses, sends, connections, inserts)
+     * @param sampleRate - Sample rate in Hz (default: 48000)
+     * @param blockSize - Maximum block size per {@link processStereo} call (default: 512)
+     */
+    static fromSceneJson(json: string, sampleRate?: number, blockSize?: number): Mixer;
+    /**
+     * Rebuild and compile the routing graph without resetting its absolute
+     * automation sample position or queued strip automation.
+     */
+    compile(): void;
+    /**
+     * Non-fatal warnings captured when this mixer was built from scene JSON: one
+     * entry per channel-strip insert that was handed param keys it does not read
+     * (a likely typo, or a key meant for a different processor). The scene still
+     * loaded; these keys simply took no effect. Empty when every key was consumed.
+     * Use {@link masteringInsertParamNames} to discover the keys an insert accepts.
+     */
+    sceneWarnings(): string[];
+    /**
+     * Mix one block of per-strip stereo audio into the stereo master.
+     *
+     * @param leftChannels - `leftChannels[i]` is the left channel of strip `i`
+     * @param rightChannels - `rightChannels[i]` is the right channel of strip `i`
+     * @returns Mixed stereo master (`left`, `right`, `sampleRate`)
+     */
+    processStereo(leftChannels: Float32Array[], rightChannels: Float32Array[]): MixerProcessResult;
+    /**
+     * Mix one block into caller-owned output arrays.
+     *
+     * This avoids allocating the result object and result `Float32Array`s. It is
+     * intended for realtime bridges such as AudioWorklet; the input channel count
+     * must match the scene strip count and all arrays must have the same length.
+     */
+    processStereoInto(leftChannels: Float32Array[], rightChannels: Float32Array[], outLeft: Float32Array, outRight: Float32Array): void;
+    /**
+     * Create reusable WASM-heap input/output views for realtime-style processing.
+     *
+     * Fill `leftInputs[i]` / `rightInputs[i]`, call `process()`, then read
+     * `outLeft` / `outRight`. The views are owned by this mixer and become invalid
+     * after {@link delete}.
+     */
+    createRealtimeBuffer(): MixerRealtimeBuffer;
+    /**
+     * Turn the master-output meter on or off.
+     *
+     * While on, every {@link MixerRealtimeBuffer.process} call meters the stereo
+     * master it just produced, so a caller reads {@link meterSnapshot} instead of
+     * copying the output and measuring it again. `truePeakDb*` is an inter-sample
+     * peak taken after oversampling (ITU-R BS.1770-4 Annex 2 requires at least
+     * 4x), which is a different and higher quantity than the sample peak.
+     *
+     * Enabling resets the meter, so a reading never mixes in audio from a period
+     * when metering was off.
+     *
+     * @param enabled - Whether to meter the master output.
+     * @param truePeakOversample - 0 (= 4x) or a power of two in [1, 16].
+     */
+    configureMeter(enabled: boolean, truePeakOversample?: number): void;
+    /**
+     * Latest master-output meter reading, describing the most recently metered
+     * block. All dB fields are finite and floored at -120.
+     *
+     * @throws When the meter has never been enabled.
+     */
+    meterSnapshot(): MixerMeterSnapshot;
+    /**
+     * Latch the latest meter reading into the mixer's internal scratch so
+     * {@link meterScratchValue} can read it back one number at a time.
+     *
+     * This is the allocation-free form of {@link meterSnapshot}, for an audio
+     * render callback that must not create a JS object per interval. It returns
+     * `false` instead of throwing when the meter has never been enabled.
+     *
+     * @returns Whether a reading was latched.
+     */
+    latchMeterSnapshot(): boolean;
+    /**
+     * Read one field of the snapshot latched by {@link latchMeterSnapshot}.
+     *
+     * @param field - `0` peakDbL, `1` peakDbR, `2` rmsDbL, `3` rmsDbR,
+     *   `4` correlation, `5` truePeakDbL, `6` truePeakDbR. Any other index
+     *   reads `0`.
+     */
+    meterScratchValue(field: number): number;
+    /** Number of strips in the mixer (e.g. strips loaded from the scene). */
+    stripCount(): number;
+    /**
+     * Schedule sample-accurate insert-parameter automation on a strip's insert.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param insertIndex - Index into the strip's combined insert sequence
+     *   (`[pre-inserts... post-inserts...]`)
+     * @param paramId - Processor-specific parameter id
+     * @param samplePos - Absolute samples from the start of processing (the mixer
+     *   advances an internal position from 0 on the first {@link processStereo}
+     *   call; recompiling resets it to 0)
+     * @param value - Target parameter value
+     * @param curve - Interpolation curve (default: `'linear'`)
+     * @throws If the strip index is out of range or the schedule call fails
+     *   (unknown curve, out-of-range insert index, or full event lane)
+     */
+    scheduleInsertAutomation(stripIndex: number, insertIndex: number, paramId: number, samplePos: number, value: number, curve?: AutomationCurve): void;
+    /**
+     * Resolve a strip's index in `[0, stripCount())` from its scene id, or `null`
+     * when no strip with that id exists (matches the Node binding's `number | null`).
+     */
+    stripById(id: string): number | null;
+    /**
+     * Add a bus to the mixer topology. `role` is one of `'master'`, `'aux'`, or
+     * `'submix'` (defaults to `'aux'`). Marks the routing graph dirty; call
+     * {@link compile} (or {@link processStereo}) to rebuild.
+     */
+    addBus(id: string, role?: string): void;
+    /** Remove a bus by id. Marks the routing graph dirty. */
+    removeBus(id: string): void;
+    /** Number of buses in the mixer topology. */
+    busCount(): number;
+    /**
+     * Add a VCA group with the given gain offset (dB). `members` is a list of
+     * strip ids governed by the group (may be empty).
+     */
+    addVcaGroup(id: string, gainDb?: number, members?: string[]): void;
+    /** Set an existing VCA group's gain in dB. */
+    setVcaGroupGainDb(id: string, gainDb: number): void;
+    /** Replace an existing VCA group's strip membership. */
+    setVcaGroupMembers(id: string, members: string[]): void;
+    /** Remove a VCA group by id. */
+    removeVcaGroup(id: string): void;
+    /** Number of VCA groups in the mixer topology. */
+    vcaGroupCount(): number;
+    /** Set the strip's input trim in dB. */
+    setInputTrimDb(stripIndex: number, db: number): void;
+    /** Set the strip's fader level in dB. */
+    setFaderDb(stripIndex: number, db: number): void;
+    /**
+     * Set the strip's pan position.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param pan - Pan position in `[-1, 1]`
+     * @param panMode - Optional pan mode. When omitted the strip's current pan
+     *   mode is kept (passes `SONARE_PAN_MODE_KEEP`), so a plain pan nudge does
+     *   not reset a scene-defined `'stereoPan'` / `'dualPan'` mode back to
+     *   balance. Pass `'balance'` (or `0`) explicitly to force balance mode.
+     */
+    setPan(stripIndex: number, pan: number, panMode?: PanMode | number): void;
+    /** Set the strip's stereo width. */
+    setWidth(stripIndex: number, width: number): void;
+    /**
+     * Snap the strip's input-trim, fader, pan and width smoothers to the values
+     * already set on it, so the next processed block opens at those values
+     * instead of gliding to them over the smoothing window (~5 ms).
+     *
+     * Call it after configuring a strip and before rendering a finite buffer: a
+     * strip is smoothed for a live fader, and an offline render that does not
+     * settle carries that glide as a level and image sweep across the head of
+     * its output. Unlike a reset it clears nothing — automation, meters and
+     * insert state are untouched.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     *
+     * @example
+     * ```typescript
+     * mixer.setFaderDb(0, -3);
+     * mixer.setPan(0, 0.3);
+     * mixer.settle(0);
+     * const { left, right } = mixer.processStereo([dryLeft], [dryRight]);
+     * ```
+     */
+    settle(stripIndex: number): void;
+    /** Set the strip's mute state. */
+    setMuted(stripIndex: number, muted: boolean): void;
+    /**
+     * Set a strip's solo state. Takes effect on the next process without a
+     * graph recompile.
+     */
+    setSoloed(stripIndex: number, soloed: boolean): void;
+    /**
+     * Mark a strip solo-safe so it is never implied-muted by another strip's
+     * solo. Takes effect on the next process without a graph recompile.
+     */
+    setSoloSafe(stripIndex: number, soloSafe: boolean): void;
+    /** Invert the polarity of the left and/or right channel of a strip. */
+    setPolarityInvert(stripIndex: number, invertLeft: boolean, invertRight: boolean): void;
+    /** Set the strip's pan law (a {@link PanLawName} alias or raw C ABI ordinal). */
+    setPanLaw(stripIndex: number, panLaw: PanLawInput): void;
+    /**
+     * Set a per-strip channel delay in samples. This changes the strip's reported
+     * latency; recompile to re-run latency compensation.
+     */
+    setChannelDelaySamples(stripIndex: number, delaySamples: number): void;
+    /** Set the strip's live VCA gain offset in dB (not persisted to the scene). */
+    setVcaOffsetDb(stripIndex: number, offsetDb: number): void;
+    /** Set independent left/right pan positions (dual-pan mode). */
+    setDualPan(stripIndex: number, leftPan: number, rightPan: number): void;
+    /**
+     * Set the strip's surround pan position, used when it feeds a >2-channel bus.
+     *
+     * Applied when the engine's track mixer renders this strip's lane into a
+     * destination with more than two channels. This stereo-only mixer's own
+     * block entry points ignore it.
+     */
+    setSurroundPan(stripIndex: number, pan: SurroundPan): void;
+    /**
+     * Add a send to a strip after construction.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param id - Send id
+     * @param destinationBusId - Destination bus id
+     * @param sendDb - Initial send level in dB
+     * @param timing - `'preFader'` or `'postFader'` (default: `'postFader'`)
+     * @returns The new send's index
+     */
+    addSend(stripIndex: number, id: string, destinationBusId: string, sendDb?: number, timing?: SendTiming | number): number;
+    /** Set the send level (in dB) for an existing send by index. */
+    setSendDb(stripIndex: number, sendIndex: number, sendDb: number): void;
+    /**
+     * Remove an existing send from a strip by index.
+     *
+     * Sends are addressed in add order. After removal, sends with a higher index
+     * than `sendIndex` shift down by one. Recompile (or process) before reading
+     * results so the routing graph rebuilds.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param sendIndex - Send index in add order
+     */
+    removeSend(stripIndex: number, sendIndex: number): void;
+    /**
+     * Read a strip's meter snapshot at the given tap point.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param tap - `'preFader'` or `'postFader'` (default: `'postFader'`)
+     */
+    meterTap(stripIndex: number, tap?: MeterTap): MixMeterSnapshot;
+    /**
+     * Read a strip's meter snapshot.
+     *
+     * With no `tap` argument this reads the strip's own (post-fader) meter,
+     * matching the Node/Python tap-less `stripMeter` contract. Pass an optional
+     * `tap` (`'preFader'` / `'postFader'`) to read the tap-selectable snapshot
+     * instead — the same backing call as {@link meterTap}.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param tap - Optional tap point (`'preFader'` / `'postFader'`); when omitted
+     *   the tap-less post-fader strip meter is read.
+     */
+    stripMeter(stripIndex: number, tap?: MeterTap | number): MixMeterSnapshot;
+    /** Read the post-insert meter for a compiled bus, including master. */
+    busMeter(busId: string): MixMeterSnapshot;
+    /**
+     * Number of blocks in which the strip discarded recursive state because a
+     * non-finite value had reached it.
+     *
+     * Advisory telemetry, and the only thing that separates a degraded strip
+     * from a clean one. A discard returns the affected state to its
+     * post-reset value, so the strip recovers in silence and the output stays
+     * finite and in range while carrying samples unrelated to the input;
+     * nothing else reports that this happened.
+     *
+     * The count covers the strip's own state, its EQ, every insert it owns and
+     * both of its meters. None of those is separately addressable here, so a
+     * discard inside one is observable only through this number -- and a
+     * meter that loses its loudness window then reports the floor, which is
+     * exactly what a genuinely silent strip reports, so nothing else
+     * distinguishes the two.
+     *
+     * A meter's own discard lags by one block: it checks its loudness state at
+     * the top of a block, before consuming that block's samples, so the block
+     * that corrupts it is not the block the count moves on -- read this again
+     * after one more block has processed. The EQ and inserts have no such lag;
+     * they discard at the end of their own process, in the same block that
+     * carried the poison.
+     *
+     * Cumulative since the strip was created and never cleared, so two
+     * readings bracket a span of audio. The unit is one processed block, never
+     * a channel, so a stereo block that discards on both channels adds one and
+     * the number does not depend on a dimension the caller did not choose.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     */
+    stripNonFiniteDiscardCount(stripIndex: number): number;
+    /**
+     * Number of blocks in which a bus discarded recursive state because a
+     * non-finite value had reached it. Same contract as
+     * {@link stripNonFiniteDiscardCount}, for a bus: covers every insert the
+     * bus owns and its meter, neither separately addressable, so a discard
+     * inside one is observable only here. Cumulative across graph recompiles
+     * -- the count lives with the bus, not the compiled node, so an unrelated
+     * edit elsewhere in the mixer does not reset it.
+     *
+     * A bus's DSP record is created by the first {@link compile}. Throws for a
+     * bus that has been declared with {@link addBus} but never compiled --
+     * reading zero there would read as clean, and it is not. Also throws for
+     * an unknown bus id.
+     *
+     * @param busId - Bus id, as passed to {@link addBus} or declared in scene JSON
+     */
+    busNonFiniteDiscardCount(busId: string): number;
+    /**
+     * Schedule sample-accurate fader automation on a strip.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param samplePos - Absolute samples from the start of processing
+     * @param faderDb - Target fader level in dB
+     * @param curve - Interpolation curve (default: `'linear'`)
+     */
+    scheduleFaderAutomation(stripIndex: number, samplePos: number, faderDb: number, curve?: AutomationCurve): void;
+    /**
+     * Schedule sample-accurate pan automation on a strip.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param samplePos - Absolute samples from the start of processing
+     * @param pan - Target pan position
+     * @param curve - Interpolation curve (default: `'linear'`)
+     */
+    schedulePanAutomation(stripIndex: number, samplePos: number, pan: number, curve?: AutomationCurve): void;
+    /**
+     * Schedule sample-accurate width automation on a strip.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param samplePos - Absolute samples from the start of processing
+     * @param width - Target stereo width
+     * @param curve - Interpolation curve (default: `'linear'`)
+     */
+    scheduleWidthAutomation(stripIndex: number, samplePos: number, width: number, curve?: AutomationCurve): void;
+    /**
+     * Schedule sample-accurate send-level automation on a strip's send.
+     *
+     * @param stripIndex - Strip index in `[0, stripCount())`
+     * @param sendIndex - Send index in the strip's add order
+     * @param samplePos - Absolute samples from the start of processing
+     * @param db - Target send level in dB
+     * @param curve - Interpolation curve (default: `'linear'`)
+     */
+    scheduleSendAutomation(stripIndex: number, sendIndex: number, samplePos: number, db: number, curve?: AutomationCurve): void;
+    /**
+     * Read up to `maxPoints` of a strip's most recent goniometer samples
+     * (oldest to newest).
+     *
+     * `maxPoints` must be a finite non-negative integer; anything else throws an
+     * `InvalidParameter` error. It is a request rather than an allocation size —
+     * a value beyond the strip's goniometer ring simply returns every point the
+     * ring holds.
+     */
+    readGoniometerLatest(stripIndex: number, maxPoints: number): GoniometerPoint[];
+    /** Serialize the current scene (strips, buses, sends, connections) to JSON. */
+    toSceneJson(): string;
+    /**
+     * Longest audible serial processor-tail path to the master, in samples. Lazily
+     * compiles the routing graph if the topology is dirty.
+     */
+    tailSamples(): number;
+    /**
+     * Reported latency (samples) of the compiled mixer graph, for aligning
+     * dry/wet material. Lazily compiles the routing graph if the topology is dirty.
+     */
+    latencySamples(): number;
+    /**
+     * Drain delayed / tail audio by processing a zero-input block of `numSamples`
+     * frames after the host stops feeding strip inputs. Returns the mixed stereo
+     * master (`left`, `right`, `sampleRate`).
+     */
+    drainTailStereo(numSamples: number): MixerProcessResult;
+    /** Release the underlying WASM object. Safe to call only once. */
+    delete(): void;
+    /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+    destroy(): void;
+}

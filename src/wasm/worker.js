@@ -6,7 +6,21 @@ var SonareError = class extends Error {
     this.code = code;
     this.codeName = codeName;
   }
+  /**
+   * Brand-based `instanceof`: an error that carries the shape narrows here even
+   * when it is not literally an instance of this class. That is not a
+   * hypothetical — an error posted from the analysis worker arrives as a
+   * structured clone with its prototype gone, which a prototype-based
+   * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
+   * two never disagree.
+   */
+  static [Symbol.hasInstance](value) {
+    return isSonareError(value);
+  }
 };
+function isSonareError(value) {
+  return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
+}
 
 // src/module_state.ts
 var wrappedModule = null;
@@ -34,6 +48,11 @@ function makeSonareError(raw, thrown) {
       message = info.message || message;
     }
   } catch {
+  } finally {
+    try {
+      raw.sonareReleaseException(thrown);
+    } catch {
+    }
   }
   return new SonareError(code, codeName, message);
 }
@@ -173,10 +192,13 @@ function assertSamples(fnName, samples, validate, argName = "samples") {
   assertNonEmptySamples(fnName, samples, argName);
   assertFiniteSamples(fnName, samples, validate, argName);
 }
-function assertSampleRate(fnName, sampleRate) {
-  if (!Number.isInteger(sampleRate) || sampleRate < MIN_AUDIO_SAMPLE_RATE || sampleRate > MAX_AUDIO_SAMPLE_RATE) {
+function assertSampleRate(fnName, sampleRate, argName = "sampleRate") {
+  if (!Number.isInteger(sampleRate)) {
+    throw new RangeError(`${fnName}: ${argName} must be an integer`);
+  }
+  if (sampleRate < MIN_AUDIO_SAMPLE_RATE || sampleRate > MAX_AUDIO_SAMPLE_RATE) {
     throw new RangeError(
-      `${fnName}: sampleRate out of supported range [${MIN_AUDIO_SAMPLE_RATE}, ${MAX_AUDIO_SAMPLE_RATE}]`
+      `${fnName}: ${argName} out of supported range [${MIN_AUDIO_SAMPLE_RATE}, ${MAX_AUDIO_SAMPLE_RATE}]`
     );
   }
 }
@@ -313,6 +335,16 @@ function resolveEnumOrdinal(value, values, enumName) {
   }
   throw new RangeError(`Invalid ${enumName}: ${String(value)}`);
 }
+var AUTOMATION_CURVE_VALUES = {
+  linear: 0,
+  exponential: 1,
+  hold: 2,
+  "s-curve": 3
+};
+var PROJECT_AUTOMATION_CURVE_VALUES = {
+  ...AUTOMATION_CURVE_VALUES,
+  scurve: 3
+};
 
 // src/public_types_music.ts
 var PitchClass = {
@@ -426,6 +458,7 @@ function convertChordAnalysisResult(wasm) {
       quality: c.quality,
       start: c.start,
       end: c.end,
+      duration: c.end - c.start,
       confidence: c.confidence,
       name: c.name
     }))
@@ -464,6 +497,10 @@ function convertAnalysisResult(wasm) {
     timeSignatureCandidates: wasm.timeSignatureCandidates,
     beatTimes,
     beats: wasm.beats,
+    downbeatIndices: wasm.downbeatIndices,
+    downbeatPhase: wasm.downbeatPhase,
+    beatObservations: wasm.beatObservations,
+    beatLocalBpm: wasm.beatLocalBpm,
     chords: wasm.chords.map((c) => ({
       root: c.root,
       bass: c.bass,
@@ -472,6 +509,7 @@ function convertAnalysisResult(wasm) {
       quality: c.quality,
       start: c.start,
       end: c.end,
+      duration: c.end - c.start,
       confidence: c.confidence,
       name: c.name
     })),
@@ -663,7 +701,8 @@ function installOfflineWorkerEndpoint(endpoint2) {
         case "analyze":
           result = analyzeWithProgress({
             ...message.request,
-            onProgress
+            onProgress,
+            cancel: isCancelled
           });
           break;
         case "detectBpm":
@@ -678,13 +717,15 @@ function installOfflineWorkerEndpoint(endpoint2) {
         case "masterAudio":
           result = masterAudio({
             ...message.request,
-            onProgress
+            onProgress,
+            cancel: isCancelled
           });
           break;
         case "masterAudioStereo":
           result = masterAudioStereo({
             ...message.request,
-            onProgress
+            onProgress,
+            cancel: isCancelled
           });
           break;
       }

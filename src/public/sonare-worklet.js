@@ -400,7 +400,21 @@ var SonareError = class extends Error {
     this.code = code;
     this.codeName = codeName;
   }
+  /**
+   * Brand-based `instanceof`: an error that carries the shape narrows here even
+   * when it is not literally an instance of this class. That is not a
+   * hypothetical — an error posted from the analysis worker arrives as a
+   * structured clone with its prototype gone, which a prototype-based
+   * `instanceof` would silently miss. Delegates to {@link isSonareError} so the
+   * two never disagree.
+   */
+  static [Symbol.hasInstance](value) {
+    return isSonareError(value);
+  }
 };
+function isSonareError(value) {
+  return value instanceof Error && value.name === "SonareError" && typeof value.code === "number";
+}
 
 // src/module_state.ts
 var wrappedModule = null;
@@ -428,6 +442,11 @@ function makeSonareError(raw, thrown) {
       message = info.message || message;
     }
   } catch {
+  } finally {
+    try {
+      raw.sonareReleaseException(thrown);
+    } catch {
+    }
   }
   return new SonareError(code, codeName, message);
 }
@@ -598,6 +617,10 @@ var AUTOMATION_CURVE_VALUES = {
   hold: 2,
   "s-curve": 3
 };
+var PROJECT_AUTOMATION_CURVE_VALUES = {
+  ...AUTOMATION_CURVE_VALUES,
+  scurve: 3
+};
 var PAN_LAW_VALUES = {
   const3db: 0,
   "const-3db": 0,
@@ -645,8 +668,103 @@ function trackMonitorModeCode(mode) {
   return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
 }
 
+// src/sample_bank.ts
+var SampleBank = class {
+  /** Create an empty bank. */
+  constructor() {
+    this.released = false;
+    this.native = new (projectModule()).SampleBank();
+    this.nativeId = this.native.id;
+  }
+  /**
+   * Copy mono float frames into the bank and return the new sample's index,
+   * which {@link SampleZoneDesc.sampleIndex} names. The frames are copied, so
+   * the array may be reused afterwards.
+   *
+   * Loop points are clamped inside the sample and a loop mode whose loop
+   * survives the clamp empty is dropped, so a malformed loop plays as an
+   * unlooped sample rather than as a wrap over nothing. An empty array, and a
+   * bank that would exceed 67,108,864 sample points, throw.
+   *
+   * A NaN or Inf frame, `fineTuneCents` or `sourceRate` throws too, and the
+   * bank is left unchanged. Such a value is unattributable once stored: the
+   * reader's interpolation spreads one bad frame across the whole sustain, and
+   * a bad tuning offset renders the voice silent with no error raised.
+   */
+  addSample(data, desc = {}) {
+    return this.native.addSample(data, desc);
+  }
+  /**
+   * Append a key/velocity rectangle to a keymap set, creating any sets below
+   * it. A patch names a set; the first zone in it covering a note is the one
+   * that sounds.
+   *
+   * Every bound defaults on its own (see {@link SampleZoneDesc}), so an empty
+   * rectangle is the whole keyboard at every velocity and narrowing one axis
+   * leaves the other whole. A `sampleIndex` the bank does not have, an inverted
+   * key or velocity range, and a `setIndex` at or above 4096 all throw.
+   */
+  addZone(zone = {}) {
+    const { setIndex, ...rest } = zone;
+    this.native.addZone(setIndex ?? 0, rest);
+  }
+  /** Samples added so far. */
+  sampleCount() {
+    return this.native.sampleCount();
+  }
+  /** Keymap sets the bank has (one past the highest index used). */
+  setCount() {
+    return this.native.setCount();
+  }
+  /** Release the underlying WASM object. Idempotent, as the Node facade is. */
+  delete() {
+    if (this.released) {
+      return;
+    }
+    this.released = true;
+    this.native.delete();
+  }
+  /** Alias for {@link SampleBank.delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
+};
+
+// src/project_internal.ts
+function normalizeSynthInstrument(patch) {
+  if (patch === null || typeof patch !== "object") {
+    return patch;
+  }
+  const { sampleBank, ...rest } = patch;
+  if (!sampleBank) {
+    return rest;
+  }
+  if (!(sampleBank instanceof SampleBank)) {
+    throw new TypeError("sampleBank must be a SampleBank instance");
+  }
+  if (sampleBank.released) {
+    throw new TypeError("sampleBank is destroyed");
+  }
+  return { ...rest, sampleBankId: sampleBank.nativeId };
+}
+function projectModule() {
+  const candidate = getSonareModule();
+  if (typeof candidate.projectAbiVersion !== "function" || candidate.Project === void 0) {
+    throw new Error("libsonare was built without arrangement (headless DAW) support");
+  }
+  return candidate;
+}
+
 // src/realtime_engine.ts
 var EXPECTED_ENGINE_ABI_VERSION = 3;
+function normalizeRenderOfflineRequest(channelsOrRequest, blockSize) {
+  const request = Array.isArray(channelsOrRequest) ? { channels: channelsOrRequest, blockSize } : channelsOrRequest;
+  return {
+    channels: request.channels,
+    blockSize: request.blockSize ?? 128,
+    finalize: request.finalize ?? true
+  };
+}
 function engineCapabilities() {
   const abiVersion = getSonareModule().engineAbiVersion();
   const sharedArrayBuffer = typeof globalThis.SharedArrayBuffer === "function";
@@ -679,6 +797,15 @@ var RealtimeEngine = class {
       maxChannels
     );
   }
+  /**
+   * Size the engine's queues and scratch for a sample rate and block size.
+   *
+   * `commandCapacity` must not exceed 65536 and `telemetryCapacity` must not
+   * exceed 16384; a larger value throws and leaves the engine untouched. The
+   * telemetry number is not a queue depth paid for one-for-one: the engine
+   * reserves that many meter records per metered lane, so its memory cost is
+   * far larger than the number given here.
+   */
   prepare(sampleRate, maxBlockSize, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
     this.native.prepareWithChannels(
       sampleRate,
@@ -725,9 +852,13 @@ var RealtimeEngine = class {
    * scheduled MIDI clips routed to that destination render through the synth.
    * Unknown preset names throw. An object patch's `destinationId` is a JS
    * binding convenience, not part of the NativeSynth patch itself.
+   *
+   * An `engineMode: 'sample'` patch also carries the {@link SampleBank} its
+   * keymap names. The synth takes a share of the bank, so it may be released
+   * right after this call; a sample patch bound without one renders silence.
    */
   setSynthInstrument(patch = {}, destinationId = (typeof patch === "object" ? patch.destinationId : void 0) ?? 0) {
-    this.native.setSynthInstrument(destinationId, patch);
+    this.native.setSynthInstrument(destinationId, normalizeSynthInstrument(patch));
   }
   /**
    * Load (parse) SoundFont 2 bytes into the engine so SF2 instruments can be
@@ -825,6 +956,10 @@ var RealtimeEngine = class {
    * block / animation frame. `maxRecords` caps the number of output events
    * returned — the shared unit across every surface. Events past the cap stay
    * queued for the next call (lossless); call again to drain the rest.
+   *
+   * One queued record lowers to at most 3 MIDI 1.0 messages, so a positive
+   * `maxRecords` below 3 could never consume a record and is rejected with an
+   * `InvalidParameter` `SonareError` instead of returning nothing forever.
    */
   drainExternalMidi(maxRecords = 1024) {
     return this.native.drainExternalMidi(maxRecords);
@@ -837,7 +972,7 @@ var RealtimeEngine = class {
     return this.native.externalMidiScratchDestinationId();
   }
   externalMidiScratchRenderFrame() {
-    return this.native.externalMidiScratchRenderFrame();
+    return Number(this.native.externalMidiScratchRenderFrame());
   }
   externalMidiScratchByteWord() {
     return this.native.externalMidiScratchByteWord();
@@ -1149,6 +1284,38 @@ var RealtimeEngine = class {
   resolveBusInsertAutomationId(busId, insertIndex, paramName) {
     return this.native.resolveBusInsertAutomationId(busId, insertIndex, paramName);
   }
+  /**
+   * Resolves a hosted instrument's continuous parameter (by its JSON-key name)
+   * to the reserved automation id usable with `setAutomationLane` /
+   * `setParameter`, so an instrument parameter is driven at audio-block
+   * precision exactly like a strip insert. Returns `-1` when the destination
+   * has no bound instrument, the instrument exposes no automatable parameters,
+   * or the name is unknown.
+   *
+   * For the NativeSynth ({@link setSynthInstrument}) the names are the
+   * continuous {@link SynthPatch} fields: `gain`, `busDrive`, `cutoffHz`,
+   * `resonanceQ`, `drive`, `keyTrack`, `envToCutoffCents`, `velToCutoffCents`,
+   * `ampAttackMs`, `ampDecayMs`, `ampSustain`, `ampReleaseMs`,
+   * `filterAttackMs`, `filterDecayMs`, `filterSustain`, `filterReleaseMs`,
+   * `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs`, `bodyMix`,
+   * `stereoSpread`, `detuneCents`, `driftCents`, `pitchOffsetCents`.
+   *
+   * Structural fields (`preset`, `engineMode`, `waveform`, `filterModel`,
+   * `unison`, `polyphony`, `body`, `modRoutings`) are not automatable and
+   * return `-1`: they resize voice pools or swap DSP topology, which is not
+   * audio-thread safe. Rebind the instrument with a new patch instead.
+   *
+   * `gain`, `busDrive`, `cutoffHz`, `resonanceQ`, `envToCutoffCents`,
+   * `lfoToPitchCents` and `pitchOffsetCents` reach voices that are already
+   * sounding from the next block; the rest are cached into per-voice state at
+   * note-on and take effect from the next note.
+   *
+   * The id survives an unbind/rebind of the same destination and applies
+   * nothing while that destination is unbound.
+   */
+  resolveInstrumentAutomationId(destinationId, paramName) {
+    return this.native.resolveInstrumentAutomationId(destinationId, paramName);
+  }
   /** Sets a track lane strip's pan position in realtime (glitch-free). */
   setTrackStripPan(trackId, pan) {
     this.native.setTrackStripPan(trackId, pan);
@@ -1204,6 +1371,36 @@ var RealtimeEngine = class {
   /** Cumulative page misses dropped because the native bounded request queue was full. */
   clipPageRequestOverflowCount() {
     return this.native.clipPageRequestOverflowCount();
+  }
+  /** Cumulative warp-stretch requests dropped because the native queue was full. */
+  warpStretchOverflowCount() {
+    return this.native.warpStretchOverflowCount();
+  }
+  /**
+   * Sets the clip-page look-ahead window in timeline frames.
+   *
+   * The player reports the pages it is *about to* read that are not resident
+   * yet, so a streaming host can service them before the audio thread reaches
+   * them. Without look-ahead a page miss is only reported after the read
+   * already produced silence, which costs one block of silence at every page
+   * boundary the host has not primed — the reason a sliding-window streamer
+   * cannot keep a live playhead fed from miss reports alone.
+   *
+   * Look-ahead requests drain through the same `popClipPageRequest` queue and
+   * are queued *after* the block's genuine misses, so a host that keeps only
+   * the newest request per clip (as {@link ClipPageStreamer} does) tracks the
+   * look-ahead frontier.
+   *
+   * `prepare` defaults this to half a second at the engine's sample rate. `0`
+   * disables the look-ahead. A clip whose pages are all resident produces no
+   * requests at all, with or without look-ahead. Safe to call during playback.
+   */
+  setClipPagePrefetchFrames(frames) {
+    this.native.setClipPagePrefetchFrames(frames);
+  }
+  /** Current clip-page look-ahead window in timeline frames. */
+  clipPagePrefetchFrames() {
+    return this.native.clipPagePrefetchFrames();
   }
   setCaptureBuffer(numChannels, capacityFrames) {
     this.native.setCaptureBuffer(numChannels, capacityFrames);
@@ -1296,12 +1493,36 @@ var RealtimeEngine = class {
   processWithMonitor(channels) {
     return this.native.processWithMonitor(channels);
   }
-  renderOffline(channels, blockSize = 128) {
-    return this.native.renderOffline(channels, blockSize);
+  renderOffline(channelsOrRequest, blockSize = 128) {
+    const request = normalizeRenderOfflineRequest(channelsOrRequest, blockSize);
+    return this.native.renderOffline(request.channels, request.blockSize, request.finalize);
   }
+  /**
+   * End a chunked offline render: release every note the sequencer still holds
+   * and flush the PDC / alignment delay lines. Required after
+   * `renderOffline({ finalize: false })`; the finalizing form does it itself.
+   *
+   * Skipping it leaves every note still sounding at the last chunk held. On an
+   * engine-internal instrument the tail simply never releases; on a destination
+   * marked external ({@link RealtimeEngine.setMidiDestinationExternal}) the
+   * note-ons already left through the external MIDI queue, so the note-offs
+   * emitted here are the only ones the receiving device will get and the notes
+   * otherwise hang outside the engine.
+   */
+  finishOfflineRender() {
+    this.native.finishOfflineRender();
+  }
+  /**
+   * Bounce the timeline to an interleaved buffer. `numChannels` above the
+   * prepared channel count throws an `InvalidParameter` `SonareError`.
+   */
   bounceOffline(options) {
     return this.native.bounceOffline(options);
   }
+  /**
+   * Freeze the current graph to audio. `numChannels` above the prepared channel
+   * count throws an `InvalidParameter` `SonareError`.
+   */
   freezeOffline(options) {
     return this.native.freezeOffline(options);
   }
@@ -1395,8 +1616,13 @@ var RealtimeEngine = class {
   scopeScratchPointRight(index) {
     return this.native.scopeScratchPointRight(index);
   }
+  /** Release the underlying WASM object. Safe to call only once. */
   destroy() {
     this.native.delete();
+  }
+  /** Alias for {@link destroy}, matching embind's own release method name. */
+  delete() {
+    this.destroy();
   }
 };
 var ClipPageProvider = class {
@@ -1434,6 +1660,13 @@ var Mixer = class _Mixer {
   }
   /**
    * Build a mixer from a scene JSON string.
+   *
+   * A strip's meters are sized when the strip is built, so this is where their
+   * configuration is chosen: an optional `metering` object on the strip
+   * (`enabled` / `lufs` / `truePeak` / `truePeakOversample`) selects it, and
+   * leaving it out keeps the full default (LUFS + true peak at 4x, about 1.4 MB
+   * per strip at 48 kHz). `{"enabled": false}` drops both meters for a strip
+   * whose snapshots are never read.
    *
    * @param json - Scene JSON (strips, buses, sends, connections, inserts)
    * @param sampleRate - Sample rate in Hz (default: 48000)
@@ -1541,6 +1774,56 @@ var Mixer = class _Mixer {
       }
     };
   }
+  /**
+   * Turn the master-output meter on or off.
+   *
+   * While on, every {@link MixerRealtimeBuffer.process} call meters the stereo
+   * master it just produced, so a caller reads {@link meterSnapshot} instead of
+   * copying the output and measuring it again. `truePeakDb*` is an inter-sample
+   * peak taken after oversampling (ITU-R BS.1770-4 Annex 2 requires at least
+   * 4x), which is a different and higher quantity than the sample peak.
+   *
+   * Enabling resets the meter, so a reading never mixes in audio from a period
+   * when metering was off.
+   *
+   * @param enabled - Whether to meter the master output.
+   * @param truePeakOversample - 0 (= 4x) or a power of two in [1, 16].
+   */
+  configureMeter(enabled, truePeakOversample = 4) {
+    this.mixer.configureMeter(enabled, truePeakOversample);
+  }
+  /**
+   * Latest master-output meter reading, describing the most recently metered
+   * block. All dB fields are finite and floored at -120.
+   *
+   * @throws When the meter has never been enabled.
+   */
+  meterSnapshot() {
+    return this.mixer.meterSnapshot();
+  }
+  /**
+   * Latch the latest meter reading into the mixer's internal scratch so
+   * {@link meterScratchValue} can read it back one number at a time.
+   *
+   * This is the allocation-free form of {@link meterSnapshot}, for an audio
+   * render callback that must not create a JS object per interval. It returns
+   * `false` instead of throwing when the meter has never been enabled.
+   *
+   * @returns Whether a reading was latched.
+   */
+  latchMeterSnapshot() {
+    return this.mixer.latchMeterSnapshot();
+  }
+  /**
+   * Read one field of the snapshot latched by {@link latchMeterSnapshot}.
+   *
+   * @param field - `0` peakDbL, `1` peakDbR, `2` rmsDbL, `3` rmsDbR,
+   *   `4` correlation, `5` truePeakDbL, `6` truePeakDbR. Any other index
+   *   reads `0`.
+   */
+  meterScratchValue(field) {
+    return this.mixer.meterScratchValue(field);
+  }
   /** Number of strips in the mixer (e.g. strips loaded from the scene). */
   stripCount() {
     return this.mixer.stripCount();
@@ -1643,6 +1926,30 @@ var Mixer = class _Mixer {
   setWidth(stripIndex, width) {
     this.mixer.setWidth(stripIndex, width);
   }
+  /**
+   * Snap the strip's input-trim, fader, pan and width smoothers to the values
+   * already set on it, so the next processed block opens at those values
+   * instead of gliding to them over the smoothing window (~5 ms).
+   *
+   * Call it after configuring a strip and before rendering a finite buffer: a
+   * strip is smoothed for a live fader, and an offline render that does not
+   * settle carries that glide as a level and image sweep across the head of
+   * its output. Unlike a reset it clears nothing — automation, meters and
+   * insert state are untouched.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   *
+   * @example
+   * ```typescript
+   * mixer.setFaderDb(0, -3);
+   * mixer.setPan(0, 0.3);
+   * mixer.settle(0);
+   * const { left, right } = mixer.processStereo([dryLeft], [dryRight]);
+   * ```
+   */
+  settle(stripIndex) {
+    this.mixer.settle(stripIndex);
+  }
   /** Set the strip's mute state. */
   setMuted(stripIndex, muted) {
     this.mixer.setMuted(stripIndex, muted);
@@ -1686,7 +1993,10 @@ var Mixer = class _Mixer {
   }
   /**
    * Set the strip's surround pan position, used when it feeds a >2-channel bus.
-   * Stored on the scene; inert until the surround DSP path applies it.
+   *
+   * Applied when the engine's track mixer renders this strip's lane into a
+   * destination with more than two channels. This stereo-only mixer's own
+   * block entry points ignore it.
    */
   setSurroundPan(stripIndex, pan) {
     this.mixer.setSurroundPan(stripIndex, pan);
@@ -1753,6 +2063,59 @@ var Mixer = class _Mixer {
     return this.mixer.busMeter(busId);
   }
   /**
+   * Number of blocks in which the strip discarded recursive state because a
+   * non-finite value had reached it.
+   *
+   * Advisory telemetry, and the only thing that separates a degraded strip
+   * from a clean one. A discard returns the affected state to its
+   * post-reset value, so the strip recovers in silence and the output stays
+   * finite and in range while carrying samples unrelated to the input;
+   * nothing else reports that this happened.
+   *
+   * The count covers the strip's own state, its EQ, every insert it owns and
+   * both of its meters. None of those is separately addressable here, so a
+   * discard inside one is observable only through this number -- and a
+   * meter that loses its loudness window then reports the floor, which is
+   * exactly what a genuinely silent strip reports, so nothing else
+   * distinguishes the two.
+   *
+   * A meter's own discard lags by one block: it checks its loudness state at
+   * the top of a block, before consuming that block's samples, so the block
+   * that corrupts it is not the block the count moves on -- read this again
+   * after one more block has processed. The EQ and inserts have no such lag;
+   * they discard at the end of their own process, in the same block that
+   * carried the poison.
+   *
+   * Cumulative since the strip was created and never cleared, so two
+   * readings bracket a span of audio. The unit is one processed block, never
+   * a channel, so a stereo block that discards on both channels adds one and
+   * the number does not depend on a dimension the caller did not choose.
+   *
+   * @param stripIndex - Strip index in `[0, stripCount())`
+   */
+  stripNonFiniteDiscardCount(stripIndex) {
+    return this.mixer.stripNonFiniteDiscardCount(stripIndex);
+  }
+  /**
+   * Number of blocks in which a bus discarded recursive state because a
+   * non-finite value had reached it. Same contract as
+   * {@link stripNonFiniteDiscardCount}, for a bus: covers every insert the
+   * bus owns and its meter, neither separately addressable, so a discard
+   * inside one is observable only here. Cumulative across graph recompiles
+   * -- the count lives with the bus, not the compiled node, so an unrelated
+   * edit elsewhere in the mixer does not reset it.
+   *
+   * A bus's DSP record is created by the first {@link compile}. Throws for a
+   * bus that has been declared with {@link addBus} but never compiled --
+   * reading zero there would read as clean, and it is not. Also throws for
+   * an unknown bus id.
+   *
+   * @param busId - Bus id, as passed to {@link addBus} or declared in scene JSON
+   */
+  busNonFiniteDiscardCount(busId) {
+    return this.mixer.busNonFiniteDiscardCount(busId);
+  }
+  /**
    * Schedule sample-accurate fader automation on a strip.
    *
    * @param stripIndex - Strip index in `[0, stripCount())`
@@ -1806,6 +2169,11 @@ var Mixer = class _Mixer {
   /**
    * Read up to `maxPoints` of a strip's most recent goniometer samples
    * (oldest to newest).
+   *
+   * `maxPoints` must be a finite non-negative integer; anything else throws an
+   * `InvalidParameter` error. It is a request rather than an allocation size —
+   * a value beyond the strip's goniometer ring simply returns every point the
+   * ring holds.
    */
   readGoniometerLatest(stripIndex, maxPoints) {
     return this.mixer.readGoniometerLatest(stripIndex, maxPoints);
@@ -1862,7 +2230,15 @@ var RealtimeVoiceChanger = class {
     const module2 = getSonareModule();
     this.changer = module2.createRealtimeVoiceChanger(config);
     if (sampleRate !== void 0) {
-      this.changer.prepare(sampleRate, maxBlockSize, channels);
+      let prepared = false;
+      try {
+        this.changer.prepare(sampleRate, maxBlockSize, channels);
+        prepared = true;
+      } finally {
+        if (!prepared) {
+          this.changer.delete();
+        }
+      }
     }
   }
   prepare(sampleRate, maxBlockSize = 128, channels = 1) {
@@ -1887,6 +2263,34 @@ var RealtimeVoiceChanger = class {
   }
   latencySamples() {
     return this.changer.latencySamples();
+  }
+  /**
+   * Channel-blocks in which the chain discarded its own state because a
+   * non-finite value had reached it.
+   *
+   * Advisory telemetry, and the only thing that separates a degraded stream
+   * from a clean one. Every stage of this chain leaves an in-domain finite
+   * value where a non-finite one was — the input scrub and the
+   * inter-sample-peak limiter substitute silence, the sample-domain limiter
+   * folds an infinity onto its ceiling — so the output stays finite, in range
+   * and free of any error while carrying samples unrelated to the input. A
+   * non-zero count is what says the samples in between were not computed from
+   * what you supplied.
+   *
+   * Monotonic for the lifetime of the instance. The unit is one processed
+   * block, never a channel, so a stereo block that discards on both channels
+   * adds one and the number does not depend on a dimension you did not choose.
+   *
+   * @example
+   * ```ts
+   * changer.processInterleaved(block, 2);
+   * if (changer.nonFiniteDiscardCount() > 0) {
+   *   // the audio just produced is not a function of `block`
+   * }
+   * ```
+   */
+  nonFiniteDiscardCount() {
+    return this.changer.nonFiniteDiscardCount();
   }
   /**
    * Monotonically increases whenever {@link prepare} can replace the native
@@ -2058,6 +2462,10 @@ var RealtimeVoiceChanger = class {
   delete() {
     this.changer.delete();
   }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
+  }
 };
 
 // src/streaming_processors.ts
@@ -2121,9 +2529,70 @@ var StreamingMasteringChain = class {
   stageNames() {
     return this.chain.stageNames();
   }
+  /**
+   * Samples a stage replaced with a finite in-domain one, keeping the output
+   * finite and in range.
+   *
+   * A non-finite sample supplied by the caller is rejected before any stage
+   * runs, so a replacement is always of a value a stage itself produced.
+   *
+   * Only the true-peak limiters replace anything, so with the maximizer's
+   * limiter and the loudness stage both disabled a zero here means no stage was
+   * able to replace anything rather than that nothing needed replacing.
+   *
+   * Cumulative over every block since {@link prepare}, and aggregated over the
+   * stages and channels, so it identifies neither which block nor which stage.
+   * Read it per block and compare against the previous reading to localize one.
+   *
+   * {@link prepare} rebuilds the stages and so clears it; {@link reset} does
+   * not, because it drops processor state without rebuilding.
+   *
+   * @example
+   * ```typescript
+   * chain.processMono(block);
+   * if (chain.nonFiniteSubstitutionCount() > previous) {
+   *   // the block just produced is not derived from `block` everywhere
+   * }
+   * ```
+   */
+  nonFiniteSubstitutionCount() {
+    return this.chain.nonFiniteSubstitutionCount();
+  }
+  /**
+   * Processing calls in which a stage discarded its own recursive state
+   * because a non-finite value had reached it.
+   *
+   * The companion to {@link nonFiniteSubstitutionCount}, and not the same
+   * measurement -- a caller who assumes they are will read one and think
+   * they have the other. That one counts SAMPLES a stage replaced and so
+   * sums across stages; a discard is a whole stage returning to its
+   * post-reset value and is counted once per call however many stages did
+   * it. A stage may run more than once per call, which is why this is a
+   * delta over the call and never a sum.
+   *
+   * Non-finite input is rejected before any stage runs, so what a stage
+   * discards is always state it produced itself -- a finite sample large
+   * enough to overflow inside a filter, most often. Unlike the substitution
+   * count every stage can contribute, so a zero here means no stage
+   * discarded rather than that none could.
+   *
+   * Both {@link processMono}/{@link processStereo} and
+   * {@link flushMono}/{@link flushStereo} count, since a flush drives the
+   * same stages. {@link prepare} rebuilds the stages and so clears it (as it
+   * does {@link nonFiniteSubstitutionCount}, so the two counters on one
+   * handle share an epoch); {@link reset} does not, because it drops
+   * processor state without rebuilding.
+   */
+  nonFiniteDiscardCount() {
+    return this.chain.nonFiniteDiscardCount();
+  }
   /** Release the underlying WASM object. Safe to call only once. */
   delete() {
     this.chain.delete();
+  }
+  /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+  destroy() {
+    this.delete();
   }
 };
 
@@ -2175,11 +2644,11 @@ function buildTempoSync(tempoBpm, timeSignature, tempoSegments, timeSignatureSeg
   };
 }
 function resolveTargetId(target) {
-  if (typeof target === "number") {
-    return target;
+  const value = typeof target === "number" ? target : target.trim() === "" ? Number.NaN : Number(target);
+  if (!Number.isInteger(value)) {
+    throw new RangeError(`target id must be an integer, got ${JSON.stringify(target)}`);
   }
-  const parsed = Number.parseInt(target, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return value;
 }
 function resolveParamId(parameters, nodeId, param) {
   if (typeof param === "number") {
@@ -2220,101 +2689,6 @@ function setAutomationLane(ctx, paramId, points) {
   }
   ctx.offlineEngine.setAutomationLane(paramId, sorted);
   ctx.postSync({ type: "syncAutomation", paramId, points: sorted });
-}
-
-// src/worklet/engine-offline.ts
-function buildCaptureConfig(options, defaultChannels) {
-  return {
-    bufferFrames: Math.trunc(options.bufferFrames),
-    channels: Math.trunc(options.channels ?? defaultChannels),
-    source: options.source ?? "output",
-    recordOffsetSamples: Math.trunc(options.recordOffsetSamples ?? 0),
-    inputMonitor: {
-      enabled: Boolean(options.inputMonitor?.enabled),
-      gain: options.inputMonitor?.gain ?? 1
-    }
-  };
-}
-function buildTransportFacade(ctx) {
-  return {
-    play: (sampleTime = -1) => {
-      const ok = ctx.realtimeNode.play(sampleTime);
-      if (ok) {
-        ctx.setTransportPlaying(true);
-      }
-      return ok;
-    },
-    stop: (sampleTime = -1) => {
-      const ok = ctx.realtimeNode.stop(sampleTime);
-      if (ok) {
-        ctx.setTransportPlaying(false);
-        ctx.flushPendingInstrumentSync();
-      }
-      return ok;
-    },
-    seekPpq: (ppq, sampleTime = -1) => {
-      ctx.offlineEngine.seekPpq(ppq, sampleTime);
-      const ok = ctx.realtimeNode.seekPpq(ppq, sampleTime);
-      ctx.flushOfflineMirror();
-      return ok;
-    },
-    seekSeconds: (seconds, sampleTime = -1) => {
-      const timelineSample = Math.max(0, Math.round(seconds * ctx.sampleRate));
-      ctx.offlineEngine.seekSample(timelineSample, sampleTime);
-      const ok = ctx.realtimeNode.seekSample(timelineSample, sampleTime);
-      ctx.flushOfflineMirror();
-      return ok;
-    },
-    setTempo: (bpm) => ctx.setTempo(bpm),
-    setTempoSegments: (segments) => ctx.setTempoSegments(segments),
-    setLoop: (startPpq, endPpq, enabled = true) => ctx.setLoop(startPpq, endPpq, enabled)
-  };
-}
-function normalizeTrackLanes(existing, lanes) {
-  const entries = lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane);
-  const ids = [];
-  for (const entry of entries) {
-    if (!Number.isInteger(entry.trackId) || entry.trackId <= 0) {
-      throw new Error(`Invalid track id for mixer lane: ${String(entry.trackId)}`);
-    }
-    ids.push(entry.trackId);
-  }
-  if (new Set(ids).size !== ids.length) {
-    throw new Error("Duplicate track id in mixer lane list");
-  }
-  for (let index = 0; index < existing.length; index++) {
-    if (ids[index] !== existing[index]) {
-      throw new Error(
-        "Mixer lanes are append-only: keep existing lanes in order and only append new track ids"
-      );
-    }
-  }
-  return { entries, ids };
-}
-function resolveMarkerSet(markers, nextMarkerId) {
-  const resolved = [];
-  const seen = /* @__PURE__ */ new Set();
-  let counter = nextMarkerId;
-  for (const marker2 of markers) {
-    if (!Number.isFinite(marker2.ppq)) {
-      throw new Error(`Invalid marker ppq: ${String(marker2.ppq)}`);
-    }
-    if (marker2.id !== void 0) {
-      if (!Number.isInteger(marker2.id) || marker2.id <= 0) {
-        throw new Error(`Invalid marker id: ${String(marker2.id)}`);
-      }
-      if (seen.has(marker2.id)) {
-        throw new Error(`Duplicate marker id: ${marker2.id}`);
-      }
-    }
-    const id = marker2.id ?? counter++;
-    seen.add(id);
-    if (id >= counter) {
-      counter = id + 1;
-    }
-    resolved.push({ id, ppq: marker2.ppq, name: marker2.name ?? "" });
-  }
-  return { resolved, nextMarkerId: counter };
 }
 
 // src/worklet/protocol.ts
@@ -2405,9 +2779,6 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["MaxChannelsExceeded"] = 20] = "MaxChannelsExceeded";
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
-function toDb(value) {
-  return value > 0 ? 20 * Math.log10(value) : Number.NEGATIVE_INFINITY;
-}
 function isRecord(value) {
   return typeof value === "object" && value !== null;
 }
@@ -2886,6 +3257,16 @@ function clipPageRequestRingFromSharedBuffer(sharedBuffer, fallbackCapacity) {
 function recordOffset(index, capacity, recordBytes) {
   return index % capacity * recordBytes;
 }
+function isUint32Slot(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 4294967295;
+}
+function toUint32Slot(value, fallback, name) {
+  const resolved = value ?? fallback;
+  if (!isUint32Slot(resolved)) {
+    throw new RangeError(`${name} must be an integer within [0, 4294967295]`);
+  }
+  return resolved;
+}
 function toSafeInteger(value, fallback) {
   const resolved = typeof value === "bigint" ? Number(value) : value;
   if (resolved === void 0) {
@@ -2905,8 +3286,8 @@ function readInt64Words(view, offset) {
   return view.getInt32(offset + 4, true) * 4294967296 + view.getUint32(offset, true);
 }
 function writeEngineCommandRecord(view, offset, command) {
-  view.setUint32(offset, command.type, true);
-  view.setUint32(offset + 4, command.targetId ?? 0, true);
+  view.setUint32(offset, toUint32Slot(command.type, 0, "type"), true);
+  view.setUint32(offset + 4, toUint32Slot(command.targetId, 0, "targetId"), true);
   writeInt64Words(view, offset + 8, toSafeInteger(command.sampleTime, -1));
   view.setFloat64(offset + 16, command.argFloat ?? 0, true);
   writeInt64Words(view, offset + 24, toSafeInteger(command.argInt, 0));
@@ -2973,6 +3354,270 @@ function meterFromEngine(meter) {
 }
 function magnitudeToDb(value) {
   return value > 1e-12 ? 20 * Math.log10(value) : -120;
+}
+
+// src/worklet/guards.ts
+function isWorkletMessage(value) {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  return value.type === "scheduleInsertAutomation" || value.type === "setMeterInterval" || value.type === "destroy";
+}
+function isEngineCommandRecord(value) {
+  return isRecord(value) && typeof value.type === "number";
+}
+var ENGINE_SYNC_MESSAGE_TYPES = {
+  destroy: true,
+  syncAutomation: true,
+  syncBuiltinInstrument: true,
+  syncBusStripInsertBypassed: true,
+  syncBusStripInsertParamByName: true,
+  syncCapture: true,
+  syncClearMidiFx: true,
+  syncClearMidiInputSource: true,
+  syncClipPage: true,
+  syncClipPageClear: true,
+  syncClipPageCommit: true,
+  syncClipPageDestroy: true,
+  syncClipPagePrefetchFrames: true,
+  syncClipPageProvider: true,
+  syncClips: true,
+  syncClipsDelta: true,
+  syncExternalMidiClock: true,
+  syncLoadSoundFont: true,
+  syncMarkers: true,
+  syncMasterStripEqBand: true,
+  syncMasterStripInsertBypassed: true,
+  syncMasterStripInsertParamByName: true,
+  syncMetronome: true,
+  syncMidiCc: true,
+  syncMidiCcBinding: true,
+  syncMidiClips: true,
+  syncMidiDestinationExternal: true,
+  syncMidiFx: true,
+  syncMidiInputCc: true,
+  syncMidiInputNoteOff: true,
+  syncMidiInputNoteOn: true,
+  syncMidiInputSource: true,
+  syncMidiNoteOff: true,
+  syncMidiNoteOn: true,
+  syncMidiPanic: true,
+  syncMidiSysex: true,
+  syncMidiUmp: true,
+  syncMixer: true,
+  syncParameters: true,
+  syncSf2Instrument: true,
+  syncSynthInstrument: true,
+  syncTempo: true,
+  syncTrackStripChannelDelaySamples: true,
+  syncTrackStripDualPan: true,
+  syncTrackStripEqBand: true,
+  syncTrackStripInsertBypassed: true,
+  syncTrackStripInsertParamByName: true,
+  syncTrackStripPan: true,
+  syncTrackStripPanLaw: true,
+  syncTrackStripPanMode: true
+};
+var engineSyncMessageTypes = new Set(Object.keys(ENGINE_SYNC_MESSAGE_TYPES));
+function isEngineSyncMessage(value) {
+  return isRecord(value) && typeof value.type === "string" && engineSyncMessageTypes.has(value.type);
+}
+function isEngineCaptureRequestMessage(value) {
+  return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
+}
+function isCaptureStatus(value) {
+  return isRecord(value) && typeof value.capturedFrames === "number" && Number.isSafeInteger(value.capturedFrames) && value.capturedFrames >= 0 && typeof value.overflowCount === "number" && Number.isSafeInteger(value.overflowCount) && value.overflowCount >= 0 && typeof value.armed === "boolean" && typeof value.punchEnabled === "boolean" && (value.source === "input" || value.source === "output") && typeof value.recordOffsetSamples === "number" && Number.isSafeInteger(value.recordOffsetSamples);
+}
+function isCaptureChannel(value) {
+  return value instanceof Float32Array && typeof ArrayBuffer !== "undefined" && value.buffer instanceof ArrayBuffer;
+}
+function isCaptureChannels(value) {
+  return Array.isArray(value) && value.every((channel) => isCaptureChannel(channel));
+}
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+function engineCaptureResponseRequestId(value) {
+  if (!isRecord(value) || value.type !== "captureResponse" || typeof value.requestId !== "number" || !Number.isSafeInteger(value.requestId)) {
+    return void 0;
+  }
+  return value.requestId;
+}
+function isEngineCaptureResponseMessage(value) {
+  const requestId = engineCaptureResponseRequestId(value);
+  if (requestId === void 0 || !isRecord(value)) {
+    return false;
+  }
+  if (value.ok === false) {
+    return typeof value.error === "string" && !hasOwn(value, "status") && !hasOwn(value, "channels");
+  }
+  if (value.ok !== true || hasOwn(value, "error")) {
+    return false;
+  }
+  const hasStatus = hasOwn(value, "status");
+  const hasChannels = hasOwn(value, "channels");
+  if (hasStatus && hasChannels) {
+    return false;
+  }
+  if (hasStatus) {
+    return isCaptureStatus(value.status);
+  }
+  if (hasChannels) {
+    return isCaptureChannels(value.channels);
+  }
+  return true;
+}
+function isEngineCaptureResponseForOperation(response, op) {
+  if (!response.ok) {
+    return true;
+  }
+  switch (op) {
+    case "status":
+      return "status" in response;
+    case "read":
+      return "channels" in response;
+    case "reset":
+      return !("status" in response) && !("channels" in response);
+  }
+}
+function isEngineTransportRequestMessage(value) {
+  return isRecord(value) && value.type === "transportRequest" && typeof value.requestId === "number" && value.op === "state";
+}
+function isEngineTransportResponseMessage(value) {
+  return isRecord(value) && value.type === "transportResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
+}
+function isRealtimeVoiceChangerMessage(value) {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  return value.type === "setConfig" || value.type === "reset" || value.type === "destroy";
+}
+function isEngineTelemetryRecord(value) {
+  return isRecord(value) && typeof value.type === "number" && typeof value.error === "number" && typeof value.renderFrame === "number" && typeof value.timelineSample === "number" && typeof value.audibleTimelineSample === "number" && typeof value.graphLatencySamplesQ8 === "number" && typeof value.value === "number";
+}
+function isExternalMidiBatchMessage(value) {
+  return isRecord(value) && value.type === "externalMidi" && Array.isArray(value.events);
+}
+function isClipPageRequestMessage(value) {
+  return isRecord(value) && value.type === "clipPageRequest" && Array.isArray(value.requests) && value.requests.every(
+    (request) => isRecord(request) && typeof request.clipId === "number" && typeof request.pageIndex === "number"
+  );
+}
+function isMeterSnapshot(value) {
+  return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && (typeof value.targetId === "number" || value.targetId === void 0);
+}
+function requireIntegerOption(value, fallback, name, minimum) {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved < minimum) {
+    throw new RangeError(`${name} must be an integer of at least ${minimum}`);
+  }
+  return resolved;
+}
+function requireInteger(value, fallback, name) {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved)) {
+    throw new RangeError(`${name} must be an integer`);
+  }
+  return resolved;
+}
+function requireChannelCount(channelCount, fallback) {
+  return requireIntegerOption(channelCount, fallback, "channelCount", 1);
+}
+
+// src/worklet/engine-offline.ts
+function buildCaptureConfig(options, defaultChannels) {
+  return {
+    // bufferFrames has no default; NaN makes the guard refuse an absent value.
+    bufferFrames: requireIntegerOption(options.bufferFrames, Number.NaN, "bufferFrames", 1),
+    channels: requireChannelCount(options.channels, defaultChannels),
+    source: options.source ?? "output",
+    recordOffsetSamples: requireInteger(options.recordOffsetSamples, 0, "recordOffsetSamples"),
+    inputMonitor: {
+      enabled: Boolean(options.inputMonitor?.enabled),
+      gain: options.inputMonitor?.gain ?? 1
+    }
+  };
+}
+function buildTransportFacade(ctx) {
+  return {
+    play: (sampleTime = -1) => {
+      const ok = ctx.realtimeNode.play(sampleTime);
+      if (ok) {
+        ctx.setTransportPlaying(true);
+      }
+      return ok;
+    },
+    stop: (sampleTime = -1) => {
+      const ok = ctx.realtimeNode.stop(sampleTime);
+      if (ok) {
+        ctx.setTransportPlaying(false);
+        ctx.flushPendingInstrumentSync();
+      }
+      return ok;
+    },
+    seekPpq: (ppq, sampleTime = -1) => {
+      ctx.offlineEngine.seekPpq(ppq, sampleTime);
+      const ok = ctx.realtimeNode.seekPpq(ppq, sampleTime);
+      ctx.flushOfflineMirror();
+      return ok;
+    },
+    seekSeconds: (seconds, sampleTime = -1) => {
+      const timelineSample = Math.max(0, Math.round(seconds * ctx.sampleRate));
+      ctx.offlineEngine.seekSample(timelineSample, sampleTime);
+      const ok = ctx.realtimeNode.seekSample(timelineSample, sampleTime);
+      ctx.flushOfflineMirror();
+      return ok;
+    },
+    setTempo: (bpm) => ctx.setTempo(bpm),
+    setTempoSegments: (segments) => ctx.setTempoSegments(segments),
+    setLoop: (startPpq, endPpq, enabled = true) => ctx.setLoop(startPpq, endPpq, enabled)
+  };
+}
+function normalizeTrackLanes(existing, lanes) {
+  const entries = lanes.map((lane) => typeof lane === "number" ? { trackId: lane } : lane);
+  const ids = [];
+  for (const entry of entries) {
+    if (!Number.isInteger(entry.trackId) || entry.trackId <= 0) {
+      throw new RangeError(`Invalid track id for mixer lane: ${String(entry.trackId)}`);
+    }
+    ids.push(entry.trackId);
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new Error("Duplicate track id in mixer lane list");
+  }
+  for (let index = 0; index < existing.length; index++) {
+    if (ids[index] !== existing[index]) {
+      throw new Error(
+        "Mixer lanes are append-only: keep existing lanes in order and only append new track ids"
+      );
+    }
+  }
+  return { entries, ids };
+}
+function resolveMarkerSet(markers, nextMarkerId) {
+  const resolved = [];
+  const seen = /* @__PURE__ */ new Set();
+  let counter = nextMarkerId;
+  for (const marker2 of markers) {
+    if (!Number.isFinite(marker2.ppq) || marker2.ppq < 0) {
+      throw new RangeError(`Invalid marker ppq: ${String(marker2.ppq)}`);
+    }
+    if (marker2.id !== void 0) {
+      if (!Number.isInteger(marker2.id) || marker2.id <= 0) {
+        throw new RangeError(`Invalid marker id: ${String(marker2.id)}`);
+      }
+      if (seen.has(marker2.id)) {
+        throw new Error(`Duplicate marker id: ${marker2.id}`);
+      }
+    }
+    const id = marker2.id ?? counter++;
+    seen.add(id);
+    if (id >= counter) {
+      counter = id + 1;
+    }
+    resolved.push({ id, ppq: marker2.ppq, name: marker2.name ?? "" });
+  }
+  return { resolved, nextMarkerId: counter };
 }
 
 // src/worklet/engine-capture-facade.ts
@@ -3272,107 +3917,6 @@ function setBusStripJson(ctx, busId, sceneJson) {
   ctx.syncMixer();
 }
 
-// src/worklet/guards.ts
-function isWorkletMessage(value) {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return false;
-  }
-  return value.type === "scheduleInsertAutomation" || value.type === "setMeterInterval" || value.type === "destroy";
-}
-function isEngineCommandRecord(value) {
-  return isRecord(value) && typeof value.type === "number";
-}
-function isEngineSyncMessage(value) {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return false;
-  }
-  return value.type === "syncClips" || value.type === "syncClipsDelta" || value.type === "syncClipPageProvider" || value.type === "syncClipPage" || value.type === "syncClipPageClear" || value.type === "syncClipPageCommit" || value.type === "syncClipPageDestroy" || value.type === "syncMidiClips" || value.type === "syncMarkers" || value.type === "syncMetronome" || value.type === "syncAutomation" || value.type === "syncTempo" || value.type === "syncMixer" || value.type === "syncCapture" || value.type === "syncTrackStripEqBand" || value.type === "syncMasterStripEqBand" || value.type === "syncTrackStripInsertBypassed" || value.type === "syncMasterStripInsertBypassed" || value.type === "syncTrackStripInsertParamByName" || value.type === "syncMasterStripInsertParamByName" || value.type === "syncBusStripInsertParamByName" || value.type === "syncTrackStripPan" || value.type === "syncTrackStripPanLaw" || value.type === "syncTrackStripPanMode" || value.type === "syncTrackStripDualPan" || value.type === "syncTrackStripChannelDelaySamples" || value.type === "syncBuiltinInstrument" || value.type === "syncSynthInstrument" || value.type === "syncSf2Instrument" || value.type === "syncLoadSoundFont" || value.type === "syncMidiFx" || value.type === "syncClearMidiFx" || value.type === "syncMidiNoteOn" || value.type === "syncMidiNoteOff" || value.type === "syncMidiCc" || value.type === "syncMidiUmp" || value.type === "syncMidiSysex" || value.type === "syncMidiPanic" || value.type === "syncMidiDestinationExternal" || value.type === "syncExternalMidiClock" || value.type === "destroy";
-}
-function isEngineCaptureRequestMessage(value) {
-  return isRecord(value) && value.type === "captureRequest" && typeof value.requestId === "number" && (value.op === "status" || value.op === "read" || value.op === "reset");
-}
-function isCaptureStatus(value) {
-  return isRecord(value) && typeof value.capturedFrames === "number" && Number.isSafeInteger(value.capturedFrames) && value.capturedFrames >= 0 && typeof value.overflowCount === "number" && Number.isSafeInteger(value.overflowCount) && value.overflowCount >= 0 && typeof value.armed === "boolean" && typeof value.punchEnabled === "boolean" && (value.source === "input" || value.source === "output") && typeof value.recordOffsetSamples === "number" && Number.isSafeInteger(value.recordOffsetSamples);
-}
-function isCaptureChannel(value) {
-  return value instanceof Float32Array && typeof ArrayBuffer !== "undefined" && value.buffer instanceof ArrayBuffer;
-}
-function isCaptureChannels(value) {
-  return Array.isArray(value) && value.every((channel) => isCaptureChannel(channel));
-}
-function hasOwn(value, key) {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-function engineCaptureResponseRequestId(value) {
-  if (!isRecord(value) || value.type !== "captureResponse" || typeof value.requestId !== "number" || !Number.isSafeInteger(value.requestId)) {
-    return void 0;
-  }
-  return value.requestId;
-}
-function isEngineCaptureResponseMessage(value) {
-  const requestId = engineCaptureResponseRequestId(value);
-  if (requestId === void 0 || !isRecord(value)) {
-    return false;
-  }
-  if (value.ok === false) {
-    return typeof value.error === "string" && !hasOwn(value, "status") && !hasOwn(value, "channels");
-  }
-  if (value.ok !== true || hasOwn(value, "error")) {
-    return false;
-  }
-  const hasStatus = hasOwn(value, "status");
-  const hasChannels = hasOwn(value, "channels");
-  if (hasStatus && hasChannels) {
-    return false;
-  }
-  if (hasStatus) {
-    return isCaptureStatus(value.status);
-  }
-  if (hasChannels) {
-    return isCaptureChannels(value.channels);
-  }
-  return true;
-}
-function isEngineCaptureResponseForOperation(response, op) {
-  if (!response.ok) {
-    return true;
-  }
-  switch (op) {
-    case "status":
-      return "status" in response;
-    case "read":
-      return "channels" in response;
-    case "reset":
-      return !("status" in response) && !("channels" in response);
-  }
-}
-function isEngineTransportRequestMessage(value) {
-  return isRecord(value) && value.type === "transportRequest" && typeof value.requestId === "number" && value.op === "state";
-}
-function isEngineTransportResponseMessage(value) {
-  return isRecord(value) && value.type === "transportResponse" && typeof value.requestId === "number" && typeof value.ok === "boolean";
-}
-function isRealtimeVoiceChangerMessage(value) {
-  if (!isRecord(value) || typeof value.type !== "string") {
-    return false;
-  }
-  return value.type === "setConfig" || value.type === "reset" || value.type === "destroy";
-}
-function isEngineTelemetryRecord(value) {
-  return isRecord(value) && typeof value.type === "number" && typeof value.error === "number" && typeof value.renderFrame === "number" && typeof value.timelineSample === "number" && typeof value.audibleTimelineSample === "number" && typeof value.graphLatencySamplesQ8 === "number" && typeof value.value === "number";
-}
-function isExternalMidiBatchMessage(value) {
-  return isRecord(value) && value.type === "externalMidi" && Array.isArray(value.events);
-}
-function isClipPageRequestMessage(value) {
-  return isRecord(value) && value.type === "clipPageRequest" && Array.isArray(value.requests) && value.requests.every(
-    (request) => isRecord(request) && typeof request.clipId === "number" && typeof request.pageIndex === "number"
-  );
-}
-function isMeterSnapshot(value) {
-  return isRecord(value) && value.type === "meter" && typeof value.frame === "number" && typeof value.peakDbL === "number" && typeof value.peakDbR === "number" && typeof value.rmsDbL === "number" && typeof value.rmsDbR === "number" && typeof value.correlation === "number" && (typeof value.targetId === "number" || value.targetId === void 0);
-}
-
 // src/worklet/engine-node.ts
 function isFiniteInteger(value) {
   if (value === void 0) {
@@ -3387,15 +3931,17 @@ function isTrackMonitorMode(value) {
   const mode = typeof value === "bigint" ? Number(value) : value;
   return typeof mode === "number" && Number.isSafeInteger(mode) && mode >= 0 && mode <= 2;
 }
-function isTrackMonitorLaneIndex(value) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 4294967295;
-}
 function isValidCommandRecord(command) {
   const type = Number(command.type);
   if (!Number.isSafeInteger(type) || type < 0 /* SetParam */ || type > 17 /* SeekMarker */ && type !== 26 /* SetTrackMonitorMode */) {
     return false;
   }
-  return (command.targetId === void 0 || Number.isSafeInteger(command.targetId)) && (command.argFloat === void 0 || Number.isFinite(command.argFloat)) && isFiniteInteger(command.argInt) && isFiniteInteger(command.sampleTime) && (type !== 26 /* SetTrackMonitorMode */ || isTrackMonitorLaneIndex(command.targetId) && isTrackMonitorMode(command.argInt));
+  return (
+    // The record writer refuses a targetId outside the slot by throwing, and
+    // this path answers false instead, so it must reject the same domain here.
+    (command.targetId === void 0 || isUint32Slot(command.targetId)) && (command.argFloat === void 0 || Number.isFinite(command.argFloat)) && isFiniteInteger(command.argInt) && isFiniteInteger(command.sampleTime) && // A track-monitor command cannot infer a lane: its target is required.
+    (type !== 26 /* SetTrackMonitorMode */ || isUint32Slot(command.targetId) && isTrackMonitorMode(command.argInt))
+  );
 }
 var AUDIO_WORKLET_RENDER_QUANTUM = 128;
 function workletBlockSize(blockSize) {
@@ -3440,6 +3986,9 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
       this.resolveReady();
     }
     this.node.port.onmessage = (event) => {
+      if (this.destroyed) {
+        return;
+      }
       const captureRequestId = engineCaptureResponseRequestId(event.data);
       if (captureRequestId !== void 0) {
         const pending = this.captureRequests.get(captureRequestId);
@@ -3521,14 +4070,56 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
         "SharedArrayBuffer mode requested but SharedArrayBuffer/Atomics are unavailable."
       );
     }
-    const commandRing = mode === "sab" ? createSonareEngineCommandRingBuffer(options.commandRingCapacity ?? 128) : void 0;
-    const telemetryRing = mode === "sab" ? createSonareEngineTelemetryRingBuffer(options.telemetryRingCapacity ?? 128) : void 0;
-    const meterRing = mode === "sab" ? createSonareMeterRingBuffer(options.meterRingCapacity ?? 128) : void 0;
-    const scopeIntervalFrames = Math.max(0, Math.floor(options.scopeIntervalFrames ?? 0));
-    const scopeRing = mode === "sab" && scopeIntervalFrames > 0 ? createSonareScopeRingBuffer(options.scopeRingCapacity ?? 64, options.scopeBands ?? 48) : void 0;
-    const clipPageRequestRing = mode === "sab" ? createSonareClipPageRequestRingBuffer(options.clipPageRequestRingCapacity ?? 128) : void 0;
-    const externalMidiRing = mode === "sab" ? createSonareExternalMidiRingBuffer(options.externalMidiRingCapacity ?? 256) : void 0;
-    const channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
+    const commandRingCapacity = requireIntegerOption(
+      options.commandRingCapacity,
+      128,
+      "commandRingCapacity",
+      1
+    );
+    const telemetryRingCapacity = requireIntegerOption(
+      options.telemetryRingCapacity,
+      128,
+      "telemetryRingCapacity",
+      1
+    );
+    const meterRingCapacity = requireIntegerOption(
+      options.meterRingCapacity,
+      128,
+      "meterRingCapacity",
+      1
+    );
+    const scopeRingCapacity = requireIntegerOption(
+      options.scopeRingCapacity,
+      64,
+      "scopeRingCapacity",
+      1
+    );
+    const scopeBands = requireIntegerOption(options.scopeBands, 48, "scopeBands", 1);
+    const clipPageRequestRingCapacity = requireIntegerOption(
+      options.clipPageRequestRingCapacity,
+      128,
+      "clipPageRequestRingCapacity",
+      1
+    );
+    const externalMidiRingCapacity = requireIntegerOption(
+      options.externalMidiRingCapacity,
+      256,
+      "externalMidiRingCapacity",
+      1
+    );
+    const commandRing = mode === "sab" ? createSonareEngineCommandRingBuffer(commandRingCapacity) : void 0;
+    const telemetryRing = mode === "sab" ? createSonareEngineTelemetryRingBuffer(telemetryRingCapacity) : void 0;
+    const meterRing = mode === "sab" ? createSonareMeterRingBuffer(meterRingCapacity) : void 0;
+    const scopeIntervalFrames = requireIntegerOption(
+      options.scopeIntervalFrames,
+      0,
+      "scopeIntervalFrames",
+      0
+    );
+    const scopeRing = mode === "sab" && scopeIntervalFrames > 0 ? createSonareScopeRingBuffer(scopeRingCapacity, scopeBands) : void 0;
+    const clipPageRequestRing = mode === "sab" ? createSonareClipPageRequestRingBuffer(clipPageRequestRingCapacity) : void 0;
+    const externalMidiRing = mode === "sab" ? createSonareExternalMidiRingBuffer(externalMidiRingCapacity) : void 0;
+    const channelCount = requireChannelCount(options.channelCount, 2);
     const cueOutput = options.cueOutput === true;
     const processorOptions = {
       sampleRate: options.sampleRate ?? context.sampleRate,
@@ -3805,6 +4396,8 @@ var SonareRealtimeEngineNode = class _SonareRealtimeEngineNode {
     this.scopeListeners.clear();
     this.midiOutListeners.clear();
     this.clipPageRequestListeners.clear();
+    this.syncErrorListeners.clear();
+    this.node.port.onmessage = null;
   }
   emitTelemetry(telemetry) {
     for (const listener of this.telemetryListeners) {
@@ -3944,6 +4537,9 @@ function resolveBusInsertAutomationId(ctx, busId, insertIndex, paramName) {
   ctx.ensureBus(busId);
   return ctx.offlineEngine.resolveBusInsertAutomationId(busId, insertIndex, paramName);
 }
+function resolveInstrumentAutomationId(ctx, destinationId, paramName) {
+  return ctx.offlineEngine.resolveInstrumentAutomationId(destinationId, paramName);
+}
 function automationLaneCount(ctx) {
   return ctx.offlineEngine.automationLaneCount();
 }
@@ -4037,6 +4633,10 @@ function setMasterStripInsertParamByName(ctx, insertIndex, paramName, value) {
 function setBusStripInsertParamByName(ctx, busId, insertIndex, paramName, value) {
   ctx.offlineEngine.setBusStripInsertParamByName(busId, insertIndex, paramName, value);
   ctx.postSync({ type: "syncBusStripInsertParamByName", busId, insertIndex, paramName, value });
+}
+function setBusStripInsertBypassed(ctx, busId, insertIndex, bypassed, resetOnBypass) {
+  ctx.offlineEngine.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
+  ctx.postSync({ type: "syncBusStripInsertBypassed", busId, insertIndex, bypassed, resetOnBypass });
 }
 function pushMidiNoteOn(ctx, trackId, group, channel, note, velocity, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
@@ -4410,6 +5010,19 @@ var SonareEngine = class _SonareEngine {
     );
   }
   /**
+   * Resolves a hosted instrument's continuous parameter to its reserved
+   * instrument-automation id, so an instrument parameter follows a breakpoint
+   * lane at audio-block precision like a strip insert. Bind the instrument
+   * (`setSynthInstrument`) before resolving.
+   *
+   * @param destinationId MIDI destination the instrument is bound to.
+   * @param paramName Instrument JSON-key parameter name (e.g. `cutoffHz`).
+   * @returns Reserved instrument-automation id, or -1 when destination/key unknown.
+   */
+  resolveInstrumentAutomationId(destinationId, paramName) {
+    return resolveInstrumentAutomationId(this.parameterContext, destinationId, paramName);
+  }
+  /**
    * Returns the number of automation lanes installed on the engine, including
    * lanes whose breakpoint list is currently empty.
    *
@@ -4558,6 +5171,25 @@ var SonareEngine = class _SonareEngine {
     this.ensureBus(busId);
     setBusStripInsertParamByName(this.stripContext, busId, insertIndex, paramName, value);
   }
+  /**
+   * Bus-strip counterpart of {@link setStripInsertBypassed}. A bus is addressed
+   * by its numeric id, which the `target` of the track/master form cannot
+   * express, so it is its own method exactly like
+   * {@link setBusStripInsertParamByName}. Bypassing keeps the insert's internal
+   * state (reverb tail, compressor envelope) unless `resetOnBypass` is set;
+   * re-posting the bus scene JSON, the only workaround before this existed,
+   * rebuilds the chain and loses it.
+   */
+  setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass = false) {
+    this.ensureBus(busId);
+    setBusStripInsertBypassed(
+      this.stripContext,
+      busId,
+      insertIndex,
+      bypassed,
+      resetOnBypass
+    );
+  }
   setStripInsertParamByName(target, insertIndex, paramName, value) {
     if (target === "master") {
       this.setMasterStripInsertParamByName(insertIndex, paramName, value);
@@ -4637,6 +5269,29 @@ var SonareEngine = class _SonareEngine {
       throw error;
     }
     return { binding, provider: binding.provider };
+  }
+  /**
+   * Sets the clip-page look-ahead window in timeline frames on both the worklet
+   * engine and this thread's offline engine.
+   *
+   * The audio thread reports the pages it is *about to* read that are not
+   * resident yet, so the sliding-window streamer can service them before the
+   * playhead reaches them. Without look-ahead a page miss is only reported
+   * after the read already produced silence, which costs one block of silence
+   * at every page boundary that was not primed.
+   *
+   * Defaults to half a second at the engine's sample rate. `0` disables it.
+   * Safe to call during playback.
+   */
+  setClipPagePrefetchFrames(frames) {
+    if (this.destroyed) {
+      throw new Error("SonareEngine is destroyed.");
+    }
+    if (!Number.isFinite(frames) || frames < 0) {
+      throw new Error("clip page prefetch frames must be a finite value >= 0.");
+    }
+    this.offlineEngine.setClipPagePrefetchFrames(frames);
+    this.postSync({ type: "syncClipPagePrefetchFrames", frames });
   }
   addClip(trackId, buffer, startPpq, opts = {}) {
     return addClip(this.clipContext, trackId, buffer, startPpq, opts);
@@ -5174,7 +5829,7 @@ var SonareEngine = class _SonareEngine {
   ensureTrackLane(target) {
     const trackId = this.resolveTargetId(target);
     if (!Number.isInteger(trackId) || trackId <= 0) {
-      throw new Error(`Invalid track id for mixer lane: ${String(target)}`);
+      throw new RangeError(`Invalid track id for mixer lane: ${String(target)}`);
     }
     const existing = this.trackLaneIds.indexOf(trackId);
     if (existing >= 0) {
@@ -5185,19 +5840,35 @@ var SonareEngine = class _SonareEngine {
     return this.trackLaneIds.length - 1;
   }
   ensureBus(busId) {
-    const resolved = Math.trunc(busId);
-    if (!Number.isInteger(resolved) || resolved <= 0) {
-      throw new Error(`Invalid bus id for mixer bus: ${String(busId)}`);
+    if (!Number.isInteger(busId) || busId <= 0) {
+      throw new RangeError(`Invalid bus id for mixer bus: ${String(busId)}`);
     }
-    const existing = this.buses.findIndex((bus) => bus.busId === resolved);
+    const existing = this.buses.findIndex((bus) => bus.busId === busId);
     if (existing >= 0) {
       return existing;
     }
-    this.buses.push({ busId: resolved });
+    this.buses.push({ busId });
     this.syncMixer();
     return this.buses.length - 1;
   }
 };
+
+// src/worklet/audio_types.ts
+function copyPlanesToOutput(output, planes, frames) {
+  const monoFanOut = planes.length === 1;
+  for (let ch = 0; ch < output.length; ch++) {
+    const target = output[ch];
+    const source = monoFanOut ? planes[0] : planes[ch];
+    let copied = 0;
+    if (source) {
+      copied = Math.min(target.length, frames, source.length);
+      target.set(source.subarray(0, copied));
+    }
+    if (copied < target.length) {
+      target.fill(0, copied);
+    }
+  }
+}
 
 // src/worklet/messages.ts
 var DEFAULT_METRONOME_CONFIG = {
@@ -5220,20 +5891,6 @@ function resolveMetronomeConfig(config) {
 }
 
 // src/worklet/engine-processor.ts
-function copyPlanesToOutput(output, planes, frames) {
-  for (let ch = 0; ch < output.length; ch++) {
-    const target = output[ch];
-    const source = planes[ch] ?? planes[0];
-    if (source) {
-      target.set(source.subarray(0, Math.min(target.length, frames)));
-      if (target.length > frames) {
-        target.fill(0, frames);
-      }
-    } else {
-      target.fill(0);
-    }
-  }
-}
 function captureTransferList(channels) {
   const transfers = [];
   const seen = /* @__PURE__ */ new Set();
@@ -5273,9 +5930,14 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     this.clipPageRequestOverflowReported = 0;
     this.sampleRate = options.sampleRate ?? 48e3;
     this.blockSize = options.blockSize ?? 128;
-    this.channelCount = Math.max(1, Math.floor(options.channelCount ?? 2));
+    this.channelCount = requireChannelCount(options.channelCount, 2);
     this.transport = transport;
-    this.meterIntervalFrames = Math.max(0, Math.floor(options.meterIntervalFrames ?? 2048));
+    this.meterIntervalFrames = requireIntegerOption(
+      options.meterIntervalFrames,
+      2048,
+      "meterIntervalFrames",
+      0
+    );
     this.commandRing = options.commandSharedBuffer ? this.commandRingFromSharedBuffer(options.commandSharedBuffer, options.commandRingCapacity) : void 0;
     this.telemetryRing = options.telemetrySharedBuffer ? this.telemetryRingFromSharedBuffer(
       options.telemetrySharedBuffer,
@@ -5316,7 +5978,12 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       }
     }
     if (this.scopeRing) {
-      const interval = Math.max(1, Math.floor(options.scopeIntervalFrames ?? this.blockSize));
+      const interval = requireIntegerOption(
+        options.scopeIntervalFrames,
+        this.blockSize,
+        "scopeIntervalFrames",
+        0
+      );
       this.engine.configureScopeTelemetry(interval, this.scopeRing.bands);
     }
   }
@@ -5480,6 +6147,10 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         }
         break;
       }
+      case "syncClipPagePrefetchFrames": {
+        this.engine.setClipPagePrefetchFrames(message.frames);
+        break;
+      }
       case "syncClipPageCommit": {
         const providerId = this.pagedClipProviders.get(message.clipId);
         const clip = message.clip ?? this.pendingPagedClips.get(message.clipId);
@@ -5604,6 +6275,14 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
           message.insertIndex,
           message.paramName,
           message.value
+        );
+        break;
+      case "syncBusStripInsertBypassed":
+        this.engine.setBusStripInsertBypassed(
+          message.busId,
+          message.insertIndex,
+          message.bypassed,
+          message.resetOnBypass
         );
         break;
       case "syncTrackStripPan":
@@ -5994,10 +6673,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       if (meter.frame !== this.lastMeterFrame) {
         this.lastMeterFrame = meter.frame;
       }
-      if (this.meterRing) {
-        this.writeMeterRing(meter);
+      if (this.transport?.onMeter) {
+        this.transport.onMeter(meter);
       } else {
-        this.transport?.onMeter?.(meter);
         this.transport?.postMessage?.(meter);
       }
     }
@@ -6014,29 +6692,18 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
     }
     Atomics.store(ring.header, 0, writeIndex + 1);
   }
-  writeMeterRing(meter) {
-    const ring = this.meterRing;
-    if (!ring) {
-      return;
-    }
-    const writeIndex = Atomics.load(ring.header, 0);
-    const offset = writeIndex % ring.capacity * SONARE_METER_RING_RECORD_FLOATS;
-    ring.records[offset] = encodeFrameLo(meter.frame);
-    ring.records[offset + 1] = encodeFrameHi(meter.frame);
-    ring.records[offset + 2] = meter.targetId;
-    ring.records[offset + 3] = meter.peakDbL;
-    ring.records[offset + 4] = meter.peakDbR;
-    ring.records[offset + 5] = meter.rmsDbL;
-    ring.records[offset + 6] = meter.rmsDbR;
-    ring.records[offset + 7] = meter.correlation;
-    ring.records[offset + 8] = meter.truePeakDbL;
-    ring.records[offset + 9] = meter.truePeakDbR;
-    ring.records[offset + 10] = meter.momentaryLufs;
-    ring.records[offset + 11] = meter.shortTermLufs;
-    ring.records[offset + 12] = meter.integratedLufs;
-    ring.records[offset + 13] = meter.gainReductionDb;
-    Atomics.store(ring.header, 0, writeIndex + 1);
-  }
+  // A snapshot-object ring writer used to live here as well. It was
+  // unreachable: publishMeters returns after the writeMeterScratch loop
+  // whenever a ring exists, so the ring is never fed from a materialised
+  // snapshot. writeMeterScratch above is the only ring writer, and it keeps the
+  // render callback allocation-free by reading the engine's scratch registers
+  // directly.
+  //
+  // writeIndex is a free-running monotonic counter, so an overflow guard would
+  // fire on essentially every write past the first `capacity` records and store
+  // an ever-growing value, not a dropped-record count. Readers already detect
+  // silent overrun via firstReadable = max(readIndex, writeIndex - capacity),
+  // so header slot 3 is left at its initial 0.
   // Drains the engine's scope producer (FFT spectrum + goniometer points) into
   // the lock-free SAB scope ring. No allocation on the render path: records are
   // written field-by-field into the ring.
@@ -6244,15 +6911,7 @@ function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-en
           }
           return;
         }
-        if (isEngineCommandRecord(event.data)) {
-          this.bridge.receiveCommand(event.data);
-        } else if (isEngineSyncMessage(event.data)) {
-          this.bridge.receiveSync(event.data);
-        } else if (isEngineCaptureRequestMessage(event.data)) {
-          this.bridge.receiveCaptureRequest(event.data);
-        } else if (isEngineTransportRequestMessage(event.data)) {
-          this.bridge.receiveTransportRequest(event.data);
-        }
+        this.routeMessage(event.data);
       };
       if (port?.addEventListener) {
         port.addEventListener("message", onMessage);
@@ -6271,18 +6930,35 @@ function registerSonareRealtimeEngineWorkletProcessor(name = "sonare-realtime-en
       }
       return true;
     }
+    /**
+     * Single dispatch point for the port, shared with the buffered replay so
+     * the two cannot recognize different message sets.
+     */
+    routeMessage(data) {
+      const bridge = this.bridge;
+      if (!bridge) {
+        return;
+      }
+      if (isEngineCommandRecord(data)) {
+        bridge.receiveCommand(data);
+      } else if (isEngineSyncMessage(data)) {
+        bridge.receiveSync(data);
+      } else if (isEngineCaptureRequestMessage(data)) {
+        bridge.receiveCaptureRequest(data);
+      } else if (isEngineTransportRequestMessage(data)) {
+        bridge.receiveTransportRequest(data);
+      } else if (isRecord(data) && typeof data.type === "string" && data.type.startsWith("sync")) {
+        this.port?.postMessage?.({
+          type: "syncError",
+          syncType: data.type,
+          message: `Unrecognized worklet sync message: ${data.type}`
+        });
+      }
+    }
     replayPendingMessages() {
       const messages = this.pendingMessages.splice(0);
       for (const data of messages) {
-        if (isEngineCommandRecord(data)) {
-          this.bridge?.receiveCommand(data);
-        } else if (isEngineSyncMessage(data)) {
-          this.bridge?.receiveSync(data);
-        } else if (isEngineCaptureRequestMessage(data)) {
-          this.bridge?.receiveCaptureRequest(data);
-        } else if (isEngineTransportRequestMessage(data)) {
-          this.bridge?.receiveTransportRequest(data);
-        }
+        this.routeMessage(data);
       }
     }
     async initializeEmbind(options, port) {
@@ -6335,15 +7011,48 @@ var SonareWorkletProcessor = class {
     this.processedFrames = 0;
     this.lastMeterFrame = 0;
     this.lastSpectrumFrame = 0;
+    /**
+     * Reused meter record, so a publish writes fields instead of allocating one.
+     *
+     * `targetId` is always the master and the four LUFS / gain-reduction fields
+     * are always unavailable here — the mixer worklet does not run the
+     * K-weighting filters, and a floor value would read as silence — so both are
+     * set once rather than per interval.
+     */
+    this.meterScratch = {
+      type: "meter",
+      targetId: 0,
+      frame: 0,
+      peakDbL: 0,
+      peakDbR: 0,
+      rmsDbL: 0,
+      rmsDbR: 0,
+      correlation: 0,
+      truePeakDbL: 0,
+      truePeakDbR: 0,
+      momentaryLufs: Number.NaN,
+      shortTermLufs: Number.NaN,
+      integratedLufs: Number.NaN,
+      gainReductionDb: Number.NaN
+    };
     if (!options.sceneJson) {
       throw new Error("sceneJson is required.");
     }
     this.sampleRate = options.sampleRate ?? 48e3;
     this.blockSize = options.blockSize ?? 128;
-    this.meterIntervalFrames = Math.max(0, Math.floor(options.meterIntervalFrames ?? 2048));
-    this.spectrumIntervalFrames = Math.max(0, Math.floor(options.spectrumIntervalFrames ?? 0));
+    this.meterIntervalFrames = requireIntegerOption(
+      options.meterIntervalFrames,
+      2048,
+      "meterIntervalFrames",
+      0
+    );
+    this.spectrumIntervalFrames = requireIntegerOption(
+      options.spectrumIntervalFrames,
+      0,
+      "spectrumIntervalFrames",
+      0
+    );
     this.transport = transport;
-    this.meterIntervalFrames = Math.max(0, Math.floor(options.meterIntervalFrames ?? 2048));
     this.meterRing = options.meterSharedBuffer ? meterRingFromSharedBuffer(options.meterSharedBuffer, options.meterRingCapacity) : void 0;
     this.spectrumRing = options.spectrumSharedBuffer ? spectrumRingFromSharedBuffer(
       options.spectrumSharedBuffer,
@@ -6360,6 +7069,7 @@ var SonareWorkletProcessor = class {
       throw new Error("stripCount must match the scene strip count.");
     }
     this.realtime = this.mixer.createRealtimeBuffer();
+    this.mixer.configureMeter(this.meterIntervalFrames > 0, 4);
   }
   process(inputs, outputs) {
     if (this.closed) {
@@ -6406,10 +7116,7 @@ var SonareWorkletProcessor = class {
       }
     }
     this.processedFrames += usable;
-    this.publishMeter(
-      this.realtime.outLeft.subarray(0, usable),
-      this.realtime.outRight.subarray(0, usable)
-    );
+    this.publishMeter();
     this.publishSpectrum(
       this.realtime.outLeft.subarray(0, usable),
       this.realtime.outRight.subarray(0, usable)
@@ -6425,7 +7132,11 @@ var SonareWorkletProcessor = class {
       return;
     }
     if (message.type === "setMeterInterval") {
-      this.meterIntervalFrames = Math.max(0, Math.floor(message.frames));
+      const frames = Math.max(0, Math.floor(message.frames));
+      if (frames > 0 !== this.meterIntervalFrames > 0) {
+        this.mixer.configureMeter(frames > 0, 4);
+      }
+      this.meterIntervalFrames = frames;
       return;
     }
     if (message.type === "scheduleInsertAutomation") {
@@ -6445,58 +7156,52 @@ var SonareWorkletProcessor = class {
       this.closed = true;
     }
   }
-  publishMeter(left, right) {
-    if (!this.transport || this.meterIntervalFrames <= 0) {
+  publishMeter() {
+    if (!this.transport && !this.meterRing || this.meterIntervalFrames <= 0) {
       return;
     }
     if (this.processedFrames - this.lastMeterFrame < this.meterIntervalFrames) {
       return;
     }
     this.lastMeterFrame = this.processedFrames;
-    let peakL = 0;
-    let peakR = 0;
-    let sumL = 0;
-    let sumR = 0;
-    let sumLR = 0;
-    for (let i = 0; i < left.length; i++) {
-      const l = left[i] ?? 0;
-      const r = right[i] ?? 0;
-      const absL = Math.abs(l);
-      const absR = Math.abs(r);
-      if (absL > peakL) {
-        peakL = absL;
-      }
-      if (absR > peakR) {
-        peakR = absR;
-      }
-      sumL += l * l;
-      sumR += r * r;
-      sumLR += l * r;
+    if (!this.mixer.latchMeterSnapshot()) {
+      return;
     }
-    const rmsL = Math.sqrt(sumL / Math.max(1, left.length));
-    const rmsR = Math.sqrt(sumR / Math.max(1, right.length));
-    const denominator = Math.sqrt(sumL * sumR);
+    if (this.meterRing) {
+      const meter2 = this.meterScratch;
+      meter2.frame = this.processedFrames;
+      meter2.peakDbL = this.mixer.meterScratchValue(0);
+      meter2.peakDbR = this.mixer.meterScratchValue(1);
+      meter2.rmsDbL = this.mixer.meterScratchValue(2);
+      meter2.rmsDbR = this.mixer.meterScratchValue(3);
+      meter2.correlation = this.mixer.meterScratchValue(4);
+      meter2.truePeakDbL = this.mixer.meterScratchValue(5);
+      meter2.truePeakDbR = this.mixer.meterScratchValue(6);
+      this.writeMeterRing(meter2);
+      return;
+    }
     const meter = {
       type: "meter",
       targetId: 0,
       frame: this.processedFrames,
-      peakDbL: toDb(peakL),
-      peakDbR: toDb(peakR),
-      rmsDbL: toDb(rmsL),
-      rmsDbR: toDb(rmsR),
-      correlation: denominator > 0 ? sumLR / denominator : 0,
-      truePeakDbL: toDb(peakL),
-      truePeakDbR: toDb(peakR),
+      peakDbL: this.mixer.meterScratchValue(0),
+      peakDbR: this.mixer.meterScratchValue(1),
+      rmsDbL: this.mixer.meterScratchValue(2),
+      rmsDbR: this.mixer.meterScratchValue(3),
+      correlation: this.mixer.meterScratchValue(4),
+      truePeakDbL: this.mixer.meterScratchValue(5),
+      truePeakDbR: this.mixer.meterScratchValue(6),
+      // Declared unavailable rather than floored: the mixer worklet does not run
+      // the K-weighting filters, and a floor value would read as silence.
       momentaryLufs: Number.NaN,
       shortTermLufs: Number.NaN,
       integratedLufs: Number.NaN,
       gainReductionDb: Number.NaN
     };
-    this.transport.onMeter?.(meter);
-    if (this.meterRing) {
-      this.writeMeterRing(meter);
+    if (this.transport?.onMeter) {
+      this.transport.onMeter(meter);
     } else {
-      this.transport.postMessage?.(meter);
+      this.transport?.postMessage?.(meter);
     }
   }
   writeMeterRing(meter) {
@@ -6540,8 +7245,11 @@ var SonareWorkletProcessor = class {
       frame: this.processedFrames,
       bands: new Float32Array(this.spectrumBands)
     };
-    this.transport?.onSpectrum?.(spectrum);
-    this.transport?.postMessage?.(spectrum);
+    if (this.transport?.onSpectrum) {
+      this.transport.onSpectrum(spectrum);
+    } else {
+      this.transport?.postMessage?.(spectrum);
+    }
   }
   computeSpectrum(left, right) {
     const n = Math.max(1, Math.min(left.length, right.length));
@@ -6612,10 +7320,12 @@ function registerSonareWorkletProcessor(name = "sonare-worklet-processor") {
 // src/worklet/voice-changer-processor.ts
 var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChangerWorkletProcessor {
   constructor(options = {}) {
+    // Reused so the mono fan-out never builds an array on the audio thread.
+    this.monoPlane = [new Float32Array(0)];
     this.destroyed = false;
     this.sampleRate = options.sampleRate ?? 48e3;
     this.blockSize = options.blockSize ?? 128;
-    this.channelCount = Math.max(1, Math.floor(options.channelCount ?? 1));
+    this.channelCount = requireChannelCount(options.channelCount, 1);
     this.changer = new RealtimeVoiceChanger(options.preset ?? "neutral-monitor");
     this.changer.prepare(this.sampleRate, this.blockSize, this.channelCount);
     this.monoInput = this.changer.getMonoInputBuffer(this.blockSize);
@@ -6668,7 +7378,8 @@ var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChan
         this.monoInput.fill(0, 0, frames2);
       }
       this.changer.processPreparedMono(frames2);
-      output[0].set(this.monoOutput.subarray(0, frames2));
+      this.monoPlane[0] = this.monoOutput;
+      copyPlanesToOutput(output, this.monoPlane, frames2);
       return true;
     }
     const frames = this.ensureInterleavedCapacity(requestedFrames, requestedChannels);
@@ -6686,12 +7397,7 @@ var _SonareRealtimeVoiceChangerWorkletProcessor = class _SonareRealtimeVoiceChan
       }
     }
     this.changer.processPreparedPlanar(frames);
-    for (let ch = 0; ch < channels; ch++) {
-      const src = this.planarChannels[ch];
-      if (src) {
-        output[ch].set(src.subarray(0, frames));
-      }
-    }
+    copyPlanesToOutput(output, this.planarChannels, frames);
     return true;
   }
   destroy() {

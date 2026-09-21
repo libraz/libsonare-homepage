@@ -1,0 +1,188 @@
+import type { BuiltinSynthBinding, SampleDesc, SampleZoneDesc, Sf2InstrumentConfig, Sf2ProgramStatus, SynthEnumTables, SynthPatch } from './instrument_types';
+import type { ProjectAssistSidecar, ProjectAutomationLaneDesc, ProjectAutomationPoint, ProjectAutomationTargetKind, ProjectBounceOptions, ProjectChordSymbol, ProjectClip, ProjectClipCompSegment, ProjectClipDesc, ProjectClipFade, ProjectClipTake, ProjectCompileResult, ProjectKeySegment, ProjectLoopMode, ProjectLoopRecordingDesc, ProjectLoopRecordingResult, ProjectMarker, ProjectMidiCcBinding, ProjectMidiClipResult, ProjectMidiEvent, ProjectMidiRouteConfig, ProjectMidiRouteResult, ProjectNotePairValidation, ProjectSource, ProjectTempoCandidate, ProjectTempoOptions, ProjectTempoSegment, ProjectTimeSignatureSegment, ProjectTrack, ProjectTrackKind, ProjectWarpMapDesc, ProjectWarpMode, TranscribeOptions, TranscribeResult } from './project_types';
+/**
+ * A synth binding as the embind layer takes it: the public `sampleBank` handle
+ * has already been resolved to the id the native registry looks the bank up by,
+ * because an embind class instance cannot travel inside a plain JS object the
+ * C++ side reads field by field.
+ */
+export type NativeSynthBinding = Omit<SynthPatch, 'sampleBank'> & {
+    sampleBankId?: number;
+};
+export interface WasmSampleBank {
+    readonly id: number;
+    addSample: (data: Float32Array, desc: SampleDesc) => number;
+    addZone: (setIndex: number, zone: Omit<SampleZoneDesc, 'setIndex'>) => void;
+    sampleCount: () => number;
+    setCount: () => number;
+    delete: () => void;
+}
+/**
+ * Swaps a facade {@link SampleBank} in a synth patch descriptor for the id the
+ * embind layer looks the native bank up by, leaving every other field alone.
+ *
+ * Shared by the offline bounce and the realtime engine so `sampleBank` means
+ * the same thing on both. It lives in this internal module rather than beside
+ * the class because it hands out an internal identity that no caller has a use
+ * for, and the entry point must not re-export it: a facade symbol with no C
+ * counterpart is an active parity finding.
+ *
+ * The cast is the only one of its kind: `released` is private, and TypeScript's
+ * private is a compile-time rule, so reading it once here beats widening the
+ * class with a method the parity tool would then read as a facade op.
+ */
+export declare function normalizeSynthInstrument(patch: unknown): NativeSynthBinding | string;
+export interface WasmProject {
+    toJson: () => string;
+    setSampleRate: (sampleRate: number) => void;
+    addTrack: (desc: {
+        kind?: number | string;
+        name?: string;
+    }) => number;
+    addClip: (desc: ProjectClipDesc) => number;
+    importExternalStems: (request: unknown) => {
+        trackIds: number[];
+        clipIds: number[];
+    };
+    addLoopRecordingTakes: (desc: ProjectLoopRecordingDesc) => ProjectLoopRecordingResult;
+    addMidiClip: (startPpq: number, lengthPpq: number) => ProjectMidiClipResult;
+    splitClip: (clipId: number, splitPpq: number) => number;
+    trimClip: (clipId: number, newStartPpq: number, newLengthPpq: number) => void;
+    moveClip: (clipId: number, newStartPpq: number, newTrackId: number) => void;
+    setTrackKind: (trackId: number, kind: number) => void;
+    setClipWarpRef: (clipId: number, warpRefId: number) => void;
+    setClipWarpMode: (clipId: number, mode: number) => void;
+    setWarpMap: (map: ProjectWarpMapDesc) => void;
+    removeWarpMap: (warpRefId: number) => void;
+    setTrackMidiDestination: (trackId: number, destinationId: number) => void;
+    setTrackGain: (trackId: number, gain: number) => void;
+    setTrackMute: (trackId: number, mute: boolean) => void;
+    setTrackSolo: (trackId: number, solo: boolean) => void;
+    setTrackPan: (trackId: number, pan: number) => void;
+    undo: () => void;
+    redo: () => void;
+    clearHistory: () => void;
+    setMaxUndoDepth: (depth: number) => void;
+    setMaxHistoryBytes: (bytes: number) => void;
+    setMidiEvents: (clipId: number, events: ReadonlyArray<ProjectMidiEvent | readonly [number, number, number]>) => void;
+    importSmf: (data: Uint8Array) => number;
+    exportSmf: () => Uint8Array;
+    importClipFile: (data: Uint8Array) => number;
+    exportClipFile: () => Uint8Array;
+    setProgram: (clipId: number, program: number, bank: number) => void;
+    setProgramOnChannel: (clipId: number, group: number, channel: number, program: number, bank: number) => void;
+    bakeMidiFx: (clipId: number, configJson: string) => void;
+    bakeMidiFxWithSourceIndex: (clipId: number, configJson: string) => Int32Array;
+    previewMidiFxCount: (clipId: number, configJson: string) => number;
+    setMidiFx: (clipId: number, configJson: string) => void;
+    validateMidiNotes: (clipId: number) => ProjectNotePairValidation;
+    transcribeToClip: (clipId: number, samples: Float32Array, sampleRate: number, config: TranscribeOptions) => number;
+    analyzeTempo: (audio: Float32Array, sampleRate: number, options: ProjectTempoOptions | undefined) => ProjectTempoCandidate[];
+    autoTempo: (audio: Float32Array, sampleRate: number, candidateIndex: number, applyTimeSignatures: boolean, options: ProjectTempoOptions | undefined) => number;
+    snapToGrid: (ppq: number, strength: number, division: number) => number;
+    compile: () => ProjectCompileResult;
+    bounce: (options: ProjectBounceOptions) => Float32Array;
+    bounceWithBuiltinInstrument: (bindings: BuiltinSynthBinding | ReadonlyArray<BuiltinSynthBinding> | undefined, options: ProjectBounceOptions) => Float32Array;
+    bounceWithSynthInstrument: (bindings: NativeSynthBinding | string | ReadonlyArray<NativeSynthBinding | string> | undefined, options: ProjectBounceOptions) => Float32Array;
+    loadSoundFont: (data: Uint8Array) => void;
+    clearSoundFont: () => void;
+    soundFontPresetCount: () => number;
+    soundFontManifest: () => Sf2ProgramStatus[];
+    bounceWithSf2Instrument: (bindings: Sf2InstrumentConfig | ReadonlyArray<Sf2InstrumentConfig> | undefined, options: ProjectBounceOptions) => Float32Array;
+    removeClip: (clipId: number) => void;
+    setClipGain: (clipId: number, gain: number) => void;
+    setClipFade: (clipId: number, fadeIn: ProjectClipFade, fadeOut: ProjectClipFade) => void;
+    unresolvedAudioSourceIds: () => number[];
+    setSourceAudio: (sourceId: number, audio: Float32Array, channels: number, sampleRate: number) => void;
+    setAudioSourceMetadata: (sourceId: number, contentHash: string, externalStemRole: string) => void;
+    setClipTakes: (clipId: number, takes: ReadonlyArray<ProjectClipTake>, activeTakeId: number) => void;
+    setClipCompSegments: (clipId: number, segments: ReadonlyArray<ProjectClipCompSegment>) => void;
+    setClipLoop: (clipId: number, loopMode: number, loopLengthPpq: number, loopCrossfadePpq: number) => void;
+    setClipSource: (clipId: number, sourceId: number) => void;
+    duplicateClip: (clipId: number, newStartPpq: number) => number;
+    removeTrack: (trackId: number) => void;
+    renameTrack: (trackId: number, name: string) => void;
+    setTrackRoute: (trackId: number, channelStripRef: string, outputTarget: string) => void;
+    addAutomationLane: (trackId: number, desc: ProjectAutomationLaneDesc) => number;
+    editAutomationLane: (trackId: number, targetParamId: number, desc: ProjectAutomationLaneDesc) => void;
+    removeAutomationLane: (trackId: number, targetParamId: number) => void;
+    annotateKeys: (keys: ReadonlyArray<ProjectKeySegment>) => void;
+    annotateChords: (chords: ReadonlyArray<ProjectChordSymbol>) => void;
+    setAssistSidecar: (moduleId: string, schemaVersion: number, targetTrackId: number, regionStartPpq: number, regionEndPpq: number, payload: Uint8Array) => void;
+    assistSidecarCount: () => number;
+    getAssistSidecar: (index: number) => ProjectAssistSidecar;
+    setOverlapPolicy: (policy: number) => void;
+    getOverlapPolicy: () => number;
+    getSampleRate: () => number;
+    setMixerSceneJson: (sceneJson: string) => void;
+    setMarker: (markerId: number, ppq: number, name: string) => number;
+    setMarkerEx: (marker: ProjectMarker) => number;
+    markerByIndex: (index: number) => ProjectMarker;
+    trackByIndex: (index: number) => ProjectTrack;
+    clipByIndex: (index: number) => ProjectClip;
+    sourceByIndex: (index: number) => ProjectSource;
+    markerCount: () => number;
+    trackCount: () => number;
+    clipCount: () => number;
+    sourceCount: () => number;
+    tempoSegmentCount: () => number;
+    tempoSegmentByIndex: (index: number) => ProjectTempoSegment;
+    timeSignatureByIndex: (index: number) => ProjectTimeSignatureSegment;
+    timeSignatureCount: () => number;
+    setTempoSegments: (segments: ReadonlyArray<ProjectTempoSegment>) => void;
+    setTimeSignatures: (segments: ReadonlyArray<ProjectTimeSignatureSegment>) => void;
+    lastBounceCompileResult: () => ProjectCompileResult;
+    delete: () => void;
+}
+export interface ProjectModule {
+    Project: {
+        new (): WasmProject;
+        fromJson: (json: string) => WasmProject;
+        fromJsonWithDiagnostics: (json: string) => {
+            project: WasmProject;
+            diagnostics: string;
+        };
+    };
+    SampleBank: {
+        new (): WasmSampleBank;
+    };
+    projectAbiVersion: () => number;
+    synthPresetNames: () => string[];
+    synthPresetPatch: (name: string) => SynthPatch;
+    _synthEnumTables: () => SynthEnumTables;
+    _synthPatchRoundTrip: (patch: SynthPatch) => SynthPatch;
+    midiGmInstrumentName: (program: number) => string | null;
+    midiGmProgramForName: (name: string) => number;
+    midiGmFamilyName: (family: number) => string | null;
+    midiGmFamilyFirstProgram: (family: number) => number;
+    midiGm2InstrumentName: (bankLsb: number, program: number) => string | null;
+    midiGmDrumName: (note: number) => string | null;
+    midiGmDrumNoteForName: (name: string) => number;
+    midiGm2DrumSetName: (bankLsb: number) => string | null;
+    midiGm2DrumName: (bankLsb: number, note: number) => string | null;
+    midiCcName: (controller: number) => string | null;
+    midiCcIndexForName: (name: string) => number;
+    midiPerNoteControllerName: (index: number) => string | null;
+    midiBankProgram: (ppq: number, group: number, channel: number, bankMsb: number, bankLsb: number, program: number) => ProjectMidiEvent[];
+    midiRouteEvents: (events: ReadonlyArray<ProjectMidiEvent>, config: ProjectMidiRouteConfig) => ProjectMidiRouteResult;
+    midiCcLearn: (events: ReadonlyArray<ProjectMidiEvent>, paramId: number, minValue: number, maxValue: number, minMovement: number) => ProjectMidiCcBinding | null;
+    midiCcToBreakpoint: (bindings: ReadonlyArray<ProjectMidiCcBinding>, event: ProjectMidiEvent) => ProjectAutomationPoint | null;
+    midiParamToCc: (bindings: ReadonlyArray<ProjectMidiCcBinding>, paramId: number, unitValue: number, group: number, ppq: number) => ProjectMidiEvent | null;
+    transcribe: (samples: Float32Array, sampleRate: number, tempoBpm: number | undefined, config: TranscribeOptions) => TranscribeResult;
+}
+export declare function projectModule(): ProjectModule;
+export declare function projectMidi1Event(fnName: string, ppq: number, group: number, status: number, channel: number, data1: number, data2?: number): ProjectMidiEvent;
+export declare function assertProjectMidiEvents(fnName: string, events: ReadonlyArray<ProjectMidiEvent | readonly [number, number, number]>): void;
+export declare function projectTrackKindValue(kind: ProjectTrackKind | undefined): number;
+/**
+ * Resolve a breakpoint's curve spelling to its ordinal before it crosses into
+ * embind, and fold the `curveToNext` alias onto `curve`.
+ *
+ * Mirrors the Node facade's `projectAutomationPointValue`: resolving here means
+ * an unknown spelling is a `RangeError` from the same table both packages
+ * declare, rather than a curve one binding renders and the other rejects.
+ */
+export declare function projectAutomationPointValue(point: ProjectAutomationPoint): ProjectAutomationPoint;
+export declare function projectAutomationTargetKindValue(kind: ProjectAutomationTargetKind): number;
+export declare function projectWarpModeValue(mode: ProjectWarpMode | undefined): number;
+export declare function projectLoopModeValue(mode: ProjectLoopMode | undefined): number;

@@ -1,0 +1,331 @@
+import type { EqBand, EqMatchOptions, EqSpectrumSnapshot, EqStereoPlacement, StreamingEqualizerConfig, StreamingMasteringChainConfig, StreamingRetuneConfig } from './public_types';
+type EqPhaseMode = 'zero' | 'zero-latency' | 'zero_latency' | 'natural' | 'natural-phase' | 'natural_phase' | 'linear' | 'linear-phase' | 'linear_phase' | number;
+/**
+ * Block-by-block streaming variant of {@link masteringChain}.
+ *
+ * Maintains processor state across {@link processMono}/{@link processStereo}
+ * calls. Only ProcessorBase-backed stages are supported: `eq.tilt`,
+ * `dynamics.deesser`, `dynamics.transientShaper`, `dynamics.compressor`,
+ * `dynamics.multibandComp`, `saturation.tape`, `saturation.exciter`,
+ * `spectral.airBand`, `stereo.imager` (stereo only), `stereo.monoMaker`
+ * (stereo only), `maximizer.truePeakLimiter`. Configurations that enable ANY of
+ * the five whole-signal repair stages (`repair.declick`, `repair.declip`,
+ * `repair.decrackle`, `repair.dehum`, `repair.dereverb`) throw at construction.
+ *
+ * `repair.denoise` runs here, but only with a noise estimator that is recursive
+ * in time. Its default ranks every frame of the whole signal by energy, which a
+ * stream never reaches the end of, so it is refused by name rather than
+ * substituted; set `repair.denoise.noiseEstimator` to `1` (MCRA), `2` (IMCRA)
+ * or `3` (speech-presence probability). The two minimum-tracking estimators
+ * (`1` and `2`) seed their noise floor from the first frame they see and hold it
+ * for the half second their minimum window spans, so a stream opened in the
+ * middle of the programme is over-suppressed until it turns over; `3` tracks no
+ * minimum and is unaffected. Prefer `3` past that opening too: `1` and `2`
+ * over-report the floor for as long as the programme stays intermittent, and on
+ * a gated tone they leave the result below the untreated input.
+ *
+ * An enabled `loudness` stage also throws unless
+ * {@link StreamingMasteringChainConfig.loudnessStaticGainDb} supplies a
+ * precomputed normalization gain.
+ *
+ * Call {@link delete} (or use a `try/finally`) to release the underlying WASM
+ * object — the embind handle is not garbage-collected automatically.
+ *
+ * Reachable from the AudioWorklet realm through the `sonare/worklet` entry, but
+ * the realtime contract is the caller's to keep:
+ *
+ * - {@link prepare} builds the processors and allocates. Call it once from a
+ *   message handler, never from `AudioWorkletProcessor.process()`.
+ * - {@link processMono}/{@link processStereo} return fresh arrays. On the render
+ *   thread, reuse the returned reference for the block rather than retaining it.
+ * - An enabled `loudness` stage needs `loudnessStaticGainDb` measured offline,
+ *   because whole-signal integrated LUFS cannot be measured block by block. Pass
+ *   `loudnessStaticGainPeakDb` too and the static gain is clamped exactly as the
+ *   offline chain clamps it, so the live preview matches the render.
+ * - {@link flush} output starts {@link latencySamples} samples early; discard
+ *   that many leading samples when time alignment matters.
+ *
+ * The chain is a host-side stage, not an engine insert: it does not participate
+ * in the engine's PDC or bypass, so latency compensation against other engine
+ * outputs is also the caller's.
+ *
+ * @example
+ * ```typescript
+ * const chain = new StreamingMasteringChain({ eq: { tiltDb: 1.0 } });
+ * try {
+ *   chain.prepare(44100, 512, 1);
+ *   const out = chain.processMono(blockSamples);
+ * } finally {
+ *   chain.delete();
+ * }
+ * ```
+ */
+export declare class StreamingMasteringChain {
+    private chain;
+    constructor(config: StreamingMasteringChainConfig);
+    /**
+     * Initialize processors for the given sample rate and block layout.
+     *
+     * @param sampleRate - Sample rate in Hz
+     * @param maxBlockSize - Maximum block size per process call
+     * @param numChannels - 1 (mono) or 2 (stereo)
+     */
+    prepare(sampleRate: number, maxBlockSize: number, numChannels: number): void;
+    /**
+     * Process one mono block, returning the processed samples (same length).
+     */
+    processMono(samples: Float32Array): Float32Array;
+    /**
+     * Process one stereo block, returning the processed channels.
+     */
+    processStereo(left: Float32Array, right: Float32Array): {
+        left: Float32Array;
+        right: Float32Array;
+    };
+    /**
+     * Emit delayed audio and finite processor tails after the final mono block.
+     * Call until this returns an empty array. The initial `latencySamples()`
+     * samples of the concatenated stream are delayed and should be discarded for
+     * time-aligned output.
+     */
+    flushMono(): Float32Array;
+    /** Stereo counterpart of {@link flushMono}. */
+    flushStereo(): {
+        left: Float32Array;
+        right: Float32Array;
+    };
+    /** Reset all processor state without rebuilding. */
+    reset(): void;
+    /** Total reported latency in samples across all active processors. */
+    latencySamples(): number;
+    /** Ordered stage names that will run (e.g. `"eq.tilt"`). */
+    stageNames(): string[];
+    /**
+     * Samples a stage replaced with a finite in-domain one, keeping the output
+     * finite and in range.
+     *
+     * A non-finite sample supplied by the caller is rejected before any stage
+     * runs, so a replacement is always of a value a stage itself produced.
+     *
+     * Only the true-peak limiters replace anything, so with the maximizer's
+     * limiter and the loudness stage both disabled a zero here means no stage was
+     * able to replace anything rather than that nothing needed replacing.
+     *
+     * Cumulative over every block since {@link prepare}, and aggregated over the
+     * stages and channels, so it identifies neither which block nor which stage.
+     * Read it per block and compare against the previous reading to localize one.
+     *
+     * {@link prepare} rebuilds the stages and so clears it; {@link reset} does
+     * not, because it drops processor state without rebuilding.
+     *
+     * @example
+     * ```typescript
+     * chain.processMono(block);
+     * if (chain.nonFiniteSubstitutionCount() > previous) {
+     *   // the block just produced is not derived from `block` everywhere
+     * }
+     * ```
+     */
+    nonFiniteSubstitutionCount(): number;
+    /**
+     * Processing calls in which a stage discarded its own recursive state
+     * because a non-finite value had reached it.
+     *
+     * The companion to {@link nonFiniteSubstitutionCount}, and not the same
+     * measurement -- a caller who assumes they are will read one and think
+     * they have the other. That one counts SAMPLES a stage replaced and so
+     * sums across stages; a discard is a whole stage returning to its
+     * post-reset value and is counted once per call however many stages did
+     * it. A stage may run more than once per call, which is why this is a
+     * delta over the call and never a sum.
+     *
+     * Non-finite input is rejected before any stage runs, so what a stage
+     * discards is always state it produced itself -- a finite sample large
+     * enough to overflow inside a filter, most often. Unlike the substitution
+     * count every stage can contribute, so a zero here means no stage
+     * discarded rather than that none could.
+     *
+     * Both {@link processMono}/{@link processStereo} and
+     * {@link flushMono}/{@link flushStereo} count, since a flush drives the
+     * same stages. {@link prepare} rebuilds the stages and so clears it (as it
+     * does {@link nonFiniteSubstitutionCount}, so the two counters on one
+     * handle share an epoch); {@link reset} does not, because it drops
+     * processor state without rebuilding.
+     */
+    nonFiniteDiscardCount(): number;
+    /** Release the underlying WASM object. Safe to call only once. */
+    delete(): void;
+    /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+    destroy(): void;
+}
+/**
+ * Block-by-block streaming equalizer wrapping the unified C++
+ * `EqualizerProcessor` (up to 24 bands, RBJ/Vicanek biquads, dynamic EQ,
+ * linear-phase FIR, mid/side processing, and auto-gain).
+ *
+ * State is maintained across {@link processMono}/{@link processStereo} calls.
+ * Call {@link delete} (or use `try/finally`) to release the underlying WASM
+ * object — the embind handle is not garbage-collected automatically.
+ *
+ * @example
+ * ```typescript
+ * const eq = new StreamingEqualizer({ sampleRate: 48000, maxBlockSize: 512 });
+ * try {
+ *   eq.setBand(0, { type: 'HighShelf', frequencyHz: 8000, gainDb: 6, enabled: true });
+ *   const out = eq.processStereo(left, right);
+ *   const snapshot = eq.spectrum();
+ * } finally {
+ *   eq.delete();
+ * }
+ * ```
+ */
+export declare class StreamingEqualizer {
+    private eq;
+    constructor(config?: StreamingEqualizerConfig);
+    /**
+     * Configure the band at `index` (0..23). Omitted fields use C++ defaults.
+     */
+    setBand(index: number, band: EqBand): void;
+    /** Disable and reset every band. */
+    clear(): void;
+    /**
+     * Set the global phase mode: `'zero'` | `'natural'` | `'linear'` or 1/2/3.
+     */
+    setPhaseMode(mode: EqPhaseMode): void;
+    /** Enable or disable output auto-gain compensation. */
+    setAutoGain(enabled: boolean): void;
+    /** Set all-band EQ gain scale as a 0.0..2.0 multiplier. */
+    setGainScale(scale: number): void;
+    /** Set post-EQ output gain in dB. */
+    setOutputGainDb(gainDb: number): void;
+    /** Set post-EQ stereo balance in -1.0..1.0; mono input ignores pan. */
+    setOutputPan(pan: number): void;
+    /**
+     * Provide a mono external sidechain key for dynamic bands that opt into
+     * `external_sidechain`. The samples are copied into an owned buffer.
+     */
+    setSidechainMono(samples: Float32Array): void;
+    /**
+     * Provide a stereo external sidechain key. Both channels must match length.
+     */
+    setSidechainStereo(left: Float32Array, right: Float32Array): void;
+    /** Release any borrowed external sidechain buffers. */
+    clearSidechain(): void;
+    /** Auto-gain applied on the most recent block, in dB. */
+    lastAutoGainDb(): number;
+    /** Reported processing latency in samples (non-zero for linear-phase bands). */
+    latencySamples(): number;
+    /**
+     * Number of blocks in which the EQ discarded recursive state because a
+     * non-finite value had reached it.
+     *
+     * Advisory telemetry, and the only thing that separates a degraded EQ from
+     * a clean one. A discard returns the affected filter cells to their
+     * post-reset value, so the EQ recovers in silence and the output stays
+     * finite and in range while carrying samples unrelated to the input;
+     * nothing else reports that this happened.
+     *
+     * The count covers every IIR plane the band layout uses -- stereo, per
+     * channel, and mid/side -- together with the automatic output gain and the
+     * detector state the dynamic bands drive. Linear-phase bands are not
+     * included and have nothing to include: an FIR keeps no recursive state,
+     * so a non-finite sample leaves its history on its own.
+     *
+     * Unlike a mixer strip's meters, nothing here lags: this EQ has no meter of
+     * its own, so a discard is always attributed to the block that carried it.
+     *
+     * Cumulative since this handle was created and never cleared, so two
+     * readings bracket a span of audio. The unit is one processed block, never
+     * a channel or a plane.
+     */
+    nonFiniteDiscardCount(): number;
+    /**
+     * Process one mono block, returning the equalized samples (same length).
+     */
+    processMono(samples: Float32Array): Float32Array;
+    /**
+     * Process one stereo block, returning the equalized channels.
+     */
+    processStereo(left: Float32Array, right: Float32Array): {
+        left: Float32Array;
+        right: Float32Array;
+    };
+    /**
+     * The composite magnitude of the bands, in dB, at each requested frequency —
+     * the curve to draw over {@link spectrum}.
+     *
+     * Built from the same coefficient design, tilt expansion and cut-slope
+     * cascade the audio path uses, so it states what the equalizer does rather
+     * than what its settings look like, and it carries the output gain, the gain
+     * scale and whatever each dynamic band is applying at the moment of the call.
+     * Disabled, bypassed and — when anything is soloed — unsoloed bands drop out,
+     * and a soloed band is drawn as the band pass it is heard as.
+     *
+     * `placement` selects which signal path the curve is for. A band placed on
+     * `'Stereo'` is on every path; one placed elsewhere appears only on its own,
+     * a mid band having no per-channel magnitude to fold into a left or right
+     * curve. Frequencies are clamped to [0 Hz, Nyquist].
+     *
+     * @example
+     * ```ts
+     * const freqs = new Float32Array([100, 1000, 10000]);
+     * const db = eq.magnitudeResponse(freqs);
+     * ```
+     */
+    magnitudeResponse(frequenciesHz: Float32Array, placement?: EqStereoPlacement): Float32Array;
+    /**
+     * Read the latest pre/post spectrum snapshot for metering. `seq` increments
+     * each time a new snapshot is published.
+     */
+    spectrum(): EqSpectrumSnapshot;
+    /**
+     * Configure bands so the source spectrum matches the reference spectrum.
+     *
+     * @param source - Source audio (mono samples)
+     * @param reference - Reference audio (mono samples)
+     * @param options - `sampleRate` (default 48000) and `maxBands` (default 8)
+     */
+    match(source: Float32Array, reference: Float32Array, options?: EqMatchOptions): void;
+    /** Release the underlying WASM object. Safe to call only once. */
+    delete(): void;
+    /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+    destroy(): void;
+}
+/**
+ * Block-by-block mono voice retune / pitch shifter.
+ *
+ * State is maintained across {@link processMono} calls. Call {@link prepare}
+ * before processing, and call {@link delete} (or use `try/finally`) to release
+ * the underlying WASM object.
+ */
+export declare class StreamingRetune {
+    private retune;
+    constructor(config?: StreamingRetuneConfig);
+    /**
+     * Allocate and initialize native state for the given sample rate and maximum
+     * process block size.
+     */
+    prepare(sampleRate: number, maxBlockSize: number): void;
+    /** Reset delay, grain, and overlap-add state without changing config. */
+    reset(): void;
+    /**
+     * Update the live controls; omitted keys keep their current value. Changing
+     * `grainSize` takes effect after the next {@link prepare} call, and an
+     * omitted `grainSize` keeps whatever was last requested — including the `0`
+     * sentinel, so a re-{@link prepare} at another sample rate re-derives it.
+     */
+    setConfig(config: StreamingRetuneConfig): void;
+    /** The currently applied controls, with `grainSize` as the effective one. */
+    config(): Required<StreamingRetuneConfig>;
+    /** Resolved grain size in samples after {@link prepare}. */
+    grainSize(): number;
+    /** Fixed overlap-add latency in samples (one grain); 0 before prepare. */
+    latencySamples(): number;
+    /** Process one mono block, returning the shifted samples (same length). */
+    processMono(samples: Float32Array): Float32Array;
+    /** Release the underlying WASM object. Safe to call only once. */
+    delete(): void;
+    /** Alias for {@link delete}, provided for cross-binding (Node) compatibility. */
+    destroy(): void;
+}
+export {};

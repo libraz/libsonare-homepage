@@ -11,19 +11,30 @@ DEST_DIR="src/wasm"
 # runtime (sonare-rt, C-ABI-only build selectable via runtimeTarget).
 WASM_FILES=("sonare.wasm" "sonare.js" "sonare-rt.wasm" "sonare-rt.js" "sonare-rt-module.js")
 # tsup bundle: index.* is the high-level API, worklet.* is the AudioWorklet
-# entry that index.d.ts re-exports its types from, and worker.* is the offline
-# Worker entry `OfflineWorkerClient` resolves with
-# `new URL('./worker.js', import.meta.url)` — copying it keeps that specifier
-# resolvable instead of leaving a dangling runtime URL in the bundle.
+# entry, and worker.* is the offline Worker entry `OfflineWorkerClient` resolves
+# with `new URL('./worker.js', import.meta.url)` — copying it keeps that
+# specifier resolvable instead of leaving a dangling runtime URL in the bundle.
 JS_FILES=("index.js" "index.d.ts" "worklet.js" "worklet.d.ts" "worker.js" "worker.d.ts")
 JS_CHUNK_GLOB="chunk-*.js"
 
-# Obsolete sub-module files from the previous tsc-based layout — removed after
-# libsonare switched to a tsup bundle. Cleaned up from DEST_DIR if present.
+# index.d.ts is a barrel: it re-exports every public type from a sibling
+# declaration file rather than declaring them itself. Those siblings carry no
+# runtime code — the JS is bundled into index.js — so the whole set is copied as
+# declarations only. Copying just the three entry .d.ts files leaves the barrel
+# pointing at files that are not there, and `skipLibCheck` swallows that
+# silently: every type imported from `@/wasm/index` degrades to `any` and stops
+# catching anything.
+DTS_GLOB="*.d.ts"
+# A type-check probe the upstream build leaves behind; it is not part of the API.
+DTS_EXCLUDE_GLOB="__tmp_*"
+
+# Obsolete files from the previous tsc-based layout — removed after libsonare
+# switched to a tsup bundle. Only the runtime halves: the matching declarations
+# are current again under the barrel layout and are copied by DTS_GLOB.
 OBSOLETE_FILES=(
-  "public_types.js" "public_types.d.ts"
-  "stream_types.js" "stream_types.d.ts"
-  "wasm_types.js" "wasm_types.d.ts"
+  "public_types.js"
+  "stream_types.js"
+  "wasm_types.js"
 )
 
 echo "📦 Copying WASM files from libsonare..."
@@ -77,6 +88,17 @@ done
 
 shopt -s nullglob
 JS_CHUNK_FILES=("$JS_DIST_DIR"/$JS_CHUNK_GLOB)
+# The barrel's sibling declarations, minus the entry .d.ts already in JS_FILES
+# and the upstream build's leftover probe.
+DTS_FILES=()
+for source_file in "$JS_DIST_DIR"/$DTS_GLOB; do
+  name=$(basename "$source_file")
+  case "$name" in
+    $DTS_EXCLUDE_GLOB) continue ;;
+    index.d.ts|worklet.d.ts|worker.d.ts) continue ;;
+  esac
+  DTS_FILES+=("$source_file")
+done
 shopt -u nullglob
 
 if [ ${#missing_js[@]} -gt 0 ]; then
@@ -124,7 +146,7 @@ for file in "${JS_FILES[@]}"; do
   fi
 done
 
-for source_file in "${JS_CHUNK_FILES[@]}"; do
+for source_file in "${JS_CHUNK_FILES[@]}" "${DTS_FILES[@]}"; do
   file=$(basename "$source_file")
   if [ ! -f "$DEST_DIR/$file" ] || ! cmp -s "$source_file" "$DEST_DIR/$file"; then
     JS_CHANGED=true
@@ -144,14 +166,17 @@ done
 # Detect stale chunks: chunk-*.js in DEST that no longer exist in source.
 # tsup emits content-hashed chunk names, so renamed chunks would otherwise
 # accumulate in DEST_DIR on each copy.
-SOURCE_CHUNK_NAMES=()
-for source_file in "${JS_CHUNK_FILES[@]}"; do
+# The declaration set is pruned the same way: a module renamed or dropped
+# upstream must not linger in DEST_DIR and keep satisfying a barrel export that
+# no longer exists.
+SOURCE_CHUNK_NAMES=("${JS_FILES[@]}")
+for source_file in "${JS_CHUNK_FILES[@]}" "${DTS_FILES[@]}"; do
   SOURCE_CHUNK_NAMES+=("$(basename "$source_file")")
 done
 
 STALE_CHUNKS=()
 shopt -s nullglob
-for dest_file in "$DEST_DIR"/$JS_CHUNK_GLOB; do
+for dest_file in "$DEST_DIR"/$JS_CHUNK_GLOB "$DEST_DIR"/$DTS_GLOB; do
   name=$(basename "$dest_file")
   found=false
   for src_name in "${SOURCE_CHUNK_NAMES[@]}"; do
@@ -208,10 +233,14 @@ if $JS_CHANGED; then
     cp "$source_file" "$DEST_DIR/"
     echo "   ✓ $file"
   done
+  for source_file in "${DTS_FILES[@]}"; do
+    cp "$source_file" "$DEST_DIR/"
+  done
+  echo "   ✓ ${#DTS_FILES[@]} sibling declaration files (index.d.ts re-exports from these)"
 
   # Remove sourceMappingURL from copied JS/DTS files (not needed in homepage)
   JS_COPIED_FILES=("${JS_FILES[@]}")
-  for source_file in "${JS_CHUNK_FILES[@]}"; do
+  for source_file in "${JS_CHUNK_FILES[@]}" "${DTS_FILES[@]}"; do
     JS_COPIED_FILES+=("$(basename "$source_file")")
   done
   for file in "${JS_COPIED_FILES[@]}"; do

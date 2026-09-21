@@ -1,0 +1,383 @@
+import type { LoudnessMatchResult, MasteringAssistantParams, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, PairAnalysis, PairProcessor, SoloProcessor, StereoAnalysis, StreamingPlatform } from './public_types';
+/** Canonical request form for loudness/true-peak mastering. */
+export interface MasteringRequest extends MasteringOptions {
+    samples: Float32Array;
+    sampleRate?: number;
+}
+export interface MasteringProcessRequest {
+    processorName: SoloProcessor;
+    samples: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+export interface MasteringProcessStereoRequest {
+    processorName: SoloProcessor;
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+/** Canonical request form for a two-input match processor. */
+export interface MasteringPairProcessRequest {
+    processorName: PairProcessor;
+    source: Float32Array;
+    reference: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+/** Canonical request form for {@link masteringAbMatchLoudness}. */
+export interface MasteringAbMatchLoudnessRequest {
+    /** The take to gain-match. */
+    source: Float32Array;
+    /** The take whose loudness `source` is matched to; returned untouched. */
+    reference: Float32Array;
+    sampleRate?: number;
+}
+/** Canonical request form for a two-input match analysis. */
+export interface MasteringPairAnalyzeRequest {
+    analysisName: PairAnalysis;
+    source: Float32Array;
+    reference: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+/** Canonical request form for a stereo analysis. */
+export interface MasteringStereoAnalyzeRequest {
+    analysisName: StereoAnalysis;
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+/** Canonical request form for assistant/profile calls. */
+export interface MasteringSamplesParamsRequest {
+    samples: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+/** Canonical request form for the assistant, whose params carry a target platform. */
+export interface MasteringAssistantParamsRequest {
+    samples: Float32Array;
+    sampleRate?: number;
+    params?: MasteringAssistantParams;
+}
+/** Canonical request form for streaming-platform preview. */
+export interface MasteringStreamingPreviewRequest {
+    samples: Float32Array;
+    sampleRate?: number;
+    platforms?: StreamingPlatform[];
+}
+/** Canonical request form for the stereo analysis entry points. */
+export interface MasteringStereoParamsRequest {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    params?: MasteringProcessorParams;
+}
+/** Stereo counterpart of {@link MasteringAssistantParamsRequest}. */
+export interface MasteringAssistantStereoParamsRequest {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    params?: MasteringAssistantParams;
+}
+/** Canonical request form for the stereo streaming-platform preview. */
+export interface MasteringStreamingPreviewStereoRequest {
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate?: number;
+    platforms?: StreamingPlatform[];
+}
+/**
+ * Apply mastering loudness normalization with a true-peak ceiling.
+ *
+ * @param samples - Audio samples (mono, float32)
+ * @param sampleRate - Sample rate in Hz (default: 22050)
+ * @param options - Loudness/ceiling settings ({@link MasteringOptions})
+ * @returns Processed audio and loudness metadata
+ */
+export declare function mastering(request: MasteringRequest): MasteringResult;
+export declare function mastering(samples: Float32Array, sampleRate?: number, options?: MasteringOptions): MasteringResult;
+export declare function masteringProcessorNames(): SoloProcessor[];
+/**
+ * Names of the insert processors the mastering chain can instantiate by name
+ * (`mastering::api::insert_factory_names`). Mirrors the C-ABI
+ * `sonare_mastering_insert_names` (which joins this list) as a `string[]`.
+ */
+export declare function masteringInsertNames(): string[];
+/**
+ * Returns the camelCase parameter names a given insert / FX processor reads, for
+ * tooling/validation. Any key NOT in this list is silently ignored by the
+ * processor (and would be reported via {@link Mixer.sceneWarnings} when a scene
+ * carrying it is loaded). Band/sub-band processors enumerate their indexed
+ * `band{i}.<field>` keys. Returns an empty array for an unknown name (or one
+ * whose insert needs an unavailable build feature, e.g. FX).
+ *
+ * @param name - Insert processor name (see {@link masteringInsertNames}).
+ */
+export declare function masteringInsertParamNames(name: string): string[];
+/** One realtime-automatable parameter of an insert processor. */
+export interface MasteringInsertParamInfo {
+    /** JSON-key parameter name, as used in scene insert params. */
+    name: string;
+    /** Integer param id for realtime automation lanes / MIDI-CC binding. */
+    id: number;
+    /** Whether the param can be changed live from the audio thread. */
+    rtSafe: boolean;
+    /** The C++ type the processor's config builder reads the key as. */
+    type: 'boolean' | 'number';
+    /**
+     * Smallest value construction accepts, or null when the catalog states no
+     * limit. Measured, so it is a hard constraint rather than a UI range; see
+     * {@link CapabilityCatalogParameter} for what a measured bound does and does
+     * not promise.
+     */
+    min: number | null;
+    /** Largest value construction accepts, or null when the catalog states no limit. */
+    max: number | null;
+    /**
+     * Value the processor uses when the key is absent — the config struct's own
+     * field initializer. Null only for a param id with no construction key.
+     */
+    default: boolean | number | null;
+    /** Physical unit, or null when the parameter is unitless. */
+    unit: string | null;
+}
+/**
+ * Returns the realtime-automatable parameter descriptors for an insert / FX
+ * processor: each entry maps a JSON-key parameter name to the integer id used by
+ * realtime automation and reports whether it is realtime-safe. Unlike
+ * {@link masteringInsertParamNames} (every construction key), this lists only the
+ * realtime-controllable subset — the keys accepted by
+ * {@link RealtimeEngine.setTrackStripInsertParamByName}. Returns an empty array
+ * for an unknown name or a processor with no automatable parameters.
+ *
+ * @param name - Insert processor name (see {@link masteringInsertNames}).
+ */
+export declare function masteringInsertParamInfo(name: string): MasteringInsertParamInfo[];
+/**
+ * How a processor handles a buffer with more than two channels (a surround
+ * bed). "multichannel" processes every plane in one call; "stereoPairOnly"
+ * operates on the front L/R pair and passes any surround planes through dry.
+ * "perChannel"/"passthrough" are reserved and unused by the current catalog.
+ */
+export type MasteringChannelPolicy = 'multichannel' | 'stereoPairOnly' | 'perChannel' | 'passthrough';
+/** Coarse algorithmic work estimate for a realtime insert; not a benchmark. */
+export type MasteringRealtimeCost = 'low' | 'moderate' | 'high';
+/**
+ * Catalog grouping for a processor picker, derived from the id's prefix
+ * ("eq.*" -> "eq", "match.*" -> "reference"); anything unprefixed is "other".
+ */
+export type MasteringProcessorCategory = 'dynamics' | 'effects' | 'eq' | 'final' | 'maximizer' | 'multiband' | 'other' | 'reference' | 'repair' | 'saturation' | 'spectral' | 'stereo';
+/** One processor's realtime/offline/pair classification in the catalog. */
+export interface MasteringProcessorCatalogEntry {
+    /** Processor id (the name used for scene inserts / named processors). */
+    id: string;
+    /**
+     * Primary classification, by precedence pair > realtime > offline: "pair" for
+     * two-input match.* processors, "realtime" for ids that build as a realtime
+     * scene insert, "offline" for whole-file-only processors.
+     */
+    kind: 'realtime' | 'offline' | 'pair';
+    /** True exactly for ids that always succeed as a realtime scene insert. */
+    realtimeInsertable: boolean;
+    /** True for processors with no mono implementation (stereo-only). */
+    stereoOnly: boolean;
+    /**
+     * Reported latency for the default 48 kHz / 512-sample probe configuration.
+     * Zero for offline processors; configuration-dependent values are estimates.
+     */
+    latencySamples: number;
+    /**
+     * Audible decay length for the same default prepared probe. Zero for
+     * offline, dry-only, and no-tail processors.
+     */
+    tailSamples: number;
+    /** Coarse realtime work estimate, or null when the processor is not an insert. */
+    realtimeCost: MasteringRealtimeCost | null;
+    /**
+     * How the mixer wraps the processor on a >2-channel (surround) bus insert:
+     * "multichannel" (one full-buffer call) or "stereoPairOnly" (front L/R pair,
+     * surround planes passed through dry).
+     */
+    channelPolicy: MasteringChannelPolicy;
+    /** Grouping for a processor picker; see {@link MasteringProcessorCategory}. */
+    category: MasteringProcessorCategory;
+    /**
+     * The processor's automatable parameters, the same list
+     * {@link masteringInsertParamInfo} returns. Empty for entries that are not
+     * realtime-insertable.
+     */
+    params: MasteringInsertParamInfo[];
+}
+/**
+ * Returns the machine-readable classification catalog for every named processor
+ * id, merging the offline registry, the realtime insert factory, and the pair
+ * registry. Lets a host filter a processor picker by realtime insertability
+ * instead of offering ids the realtime strip would reject.
+ */
+export declare function masteringProcessorCatalog(): MasteringProcessorCatalogEntry[];
+export declare function masteringPairProcessorNames(): PairProcessor[];
+export declare function masteringPairAnalysisNames(): PairAnalysis[];
+export declare function masteringStereoAnalysisNames(): StereoAnalysis[];
+export declare function masteringProcess(request: MasteringProcessRequest): MasteringResult;
+export declare function masteringProcess(processorName: SoloProcessor, samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
+export declare function masteringProcessStereo(request: MasteringProcessStereoRequest): MasteringStereoResult;
+export declare function masteringProcessStereo(processorName: SoloProcessor, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringStereoResult;
+/**
+ * Apply a two-input `match.*` processor. `source` and `reference` may have
+ * independent lengths — the match primitives consume each buffer at its own
+ * length.
+ */
+export declare function masteringPairProcess(request: MasteringPairProcessRequest): MasteringResult;
+export declare function masteringPairProcess(processorName: PairProcessor, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): MasteringResult;
+/**
+ * Analyze a `source` against a `reference` with a two-input analysis. The two
+ * buffers may have independent lengths.
+ */
+export declare function masteringPairAnalyze(request: MasteringPairAnalyzeRequest): string;
+export declare function masteringPairAnalyze(analysisName: PairAnalysis, source: Float32Array, reference: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+/**
+ * Gain-match `source` to `reference`'s integrated loudness, so an A/B between
+ * the two is not decided by level. `source` and `reference` may have
+ * independent lengths.
+ *
+ * The gain is applied with no upper bound and `matchedTruePeakDbtp` reports
+ * where that left the peak, rather than the call capping it: a headroom clamp
+ * would return `source` at its own loudness whenever it started near full
+ * scale. Both loudness values are non-finite for a silent or below-gate take,
+ * and `appliedGainDb` is then 0.
+ *
+ * @example
+ * ```ts
+ * const { samples, appliedGainDb, matchedTruePeakDbtp } = masteringAbMatchLoudness({
+ *   source: take,
+ *   reference: master,
+ *   sampleRate: 48000,
+ * });
+ * ```
+ */
+export declare function masteringAbMatchLoudness(request: MasteringAbMatchLoudnessRequest): LoudnessMatchResult;
+export declare function masteringStereoAnalyze(request: MasteringStereoAnalyzeRequest): string;
+export declare function masteringStereoAnalyze(analysisName: StereoAnalysis, left: Float32Array, right: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+export declare function masteringAssistantSuggest(request: MasteringAssistantParamsRequest): string;
+export declare function masteringAssistantSuggest(samples: Float32Array, sampleRate?: number, params?: MasteringAssistantParams): string;
+/**
+ * Suggest a mastering chain, as the flat `{key: number|boolean}` params map
+ * {@link masteringAssistantSuggest}'s `chainConfig` carries, without needing to
+ * pull it out of the full assistant document. The returned map can be passed
+ * straight through as `overrides` to {@link mastering} / {@link masterAudio}.
+ */
+export declare function masteringAssistantSuggestChain(request: MasteringAssistantParamsRequest): Record<string, number | boolean>;
+/** One entry of {@link MasteringAudioProfile.genreCandidates}. */
+export interface MasteringGenreCandidate {
+    name: string;
+    score: number;
+}
+/**
+ * The shape {@link masteringAudioProfile}'s JSON parses to.
+ *
+ * The profile crosses as a string, so nothing type-checks it on arrival; this
+ * declaration is what a conformance check compares against the paths the C++
+ * writer publishes, so a field added on one side and not the other fails there
+ * rather than reaching a caller as `undefined`.
+ */
+export interface MasteringAudioProfile {
+    durationSec: number;
+    bpm: number;
+    bpmConfidence: number;
+    loudness: {
+        integratedLufs: number;
+        lraLu: number;
+        truePeakDb: number;
+        crestFactorDb: number;
+    };
+    spectral: {
+        subRmsDb: number;
+        lowRmsDb: number;
+        lowMidRmsDb: number;
+        midRmsDb: number;
+        highMidRmsDb: number;
+        highRmsDb: number;
+        airRmsDb: number;
+        centroidHz: number;
+        flatness: number;
+        rolloffHz: number;
+    };
+    dynamics: {
+        shortTermLufsStd: number;
+        attackDensity: number;
+        sustainRatio: number;
+    };
+    /**
+     * What the repair detectors measured. `measured` is false when nothing ran —
+     * either `detectDefects` was not asked for or the input was too short — and
+     * every other field is then at its default rather than a reading.
+     */
+    defects: {
+        measured: boolean;
+        clickCount: number;
+        clickRejected: number;
+        clickLongestRunSamples: number;
+        clickPerSecond: number;
+        crackleSampleCount: number;
+        crackleSampleFraction: number;
+        cracklePerSecond: number;
+        clipSampleCount: number;
+        clipRunCount: number;
+        clipLongestRunSamples: number;
+        clipSampleFraction: number;
+        clipFlatRunCount: number;
+        clipFlatSampleCount: number;
+        clipLongestFlatRunSamples: number;
+        clipFlatLevel: number;
+        noiseFloorDbfs: number;
+        noiseBandPeakDbfs: number;
+        noiseBandPeakIndex: number;
+        humFundamentalHz: number;
+        humFundamentalProminence: number;
+        humHarmonics: number;
+        humFundamentalDbfs: number;
+        humPeakHarmonicDbfs: number;
+        lateDecayRatioDb: number;
+    };
+    genreCandidates: MasteringGenreCandidate[];
+}
+export declare function masteringAudioProfile(request: MasteringSamplesParamsRequest): string;
+export declare function masteringAudioProfile(samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;
+export declare function masteringStreamingPreview(request: MasteringStreamingPreviewRequest): string;
+export declare function masteringStreamingPreview(samples: Float32Array, sampleRate?: number, platforms?: StreamingPlatform[]): string;
+/**
+ * Suggest a mastering chain for a stereo pair, as shared JSON.
+ *
+ * Profiles through {@link masteringAudioProfileStereo}, so the loudness stage
+ * of the suggestion is built on the channel-summed program rather than a
+ * downmix that reads roughly 6 dB low.
+ */
+export declare function masteringAssistantSuggestStereo(request: MasteringAssistantStereoParamsRequest): string;
+/**
+ * Stereo counterpart of {@link masteringAssistantSuggestChain}: the flat
+ * `{key: number|boolean}` params map without the surrounding assistant
+ * document, ready to pass through as `overrides` to {@link masterAudioStereo}.
+ */
+export declare function masteringAssistantSuggestChainStereo(request: MasteringAssistantStereoParamsRequest): Record<string, number | boolean>;
+/**
+ * Mastering assistant profile of a stereo pair, as shared JSON.
+ *
+ * Only the `loudness` block is measured from the two channels: integrated LUFS
+ * and LRA come from the channel-summed program and the true peak is the larger
+ * of the two. The spectral, dynamics and tempo fields describe shape and timing
+ * rather than absolute level and are measured on the downmix, which keeps them
+ * comparable with {@link masteringAudioProfile}.
+ */
+export declare function masteringAudioProfileStereo(request: MasteringStereoParamsRequest): string;
+/**
+ * Preview streaming-platform normalization for a stereo pair, as shared JSON.
+ *
+ * Measures the integrated loudness with BS.1770 channel summing and reports the
+ * larger of the two channel true peaks. Passing a `0.5 * (left + right)` downmix
+ * to {@link masteringStreamingPreview} instead reads roughly 6 dB low on
+ * decorrelated material, and both the normalization gain and the ceiling-risk
+ * flag follow from that measurement.
+ */
+export declare function masteringStreamingPreviewStereo(request: MasteringStreamingPreviewStereoRequest): string;
