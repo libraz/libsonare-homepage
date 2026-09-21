@@ -20,6 +20,12 @@ The source of truth is the C++ implementation in the libsonare repository.
 | Public mastering processor names | `src/mastering/api/named_processor_registry.cpp` |
 | Analysis and feature helpers | Quick APIs and language bindings |
 
+::: tip Reading this for the first time
+This page is implementation-oriented, so there is no need to absorb all of it at once. Start from the idea that DSP is the umbrella term for treating audio as a sequence of numbers and measuring, separating, or transforming it. Read the "Main use" column of each table and go deeper only on the processors you will actually use.
+
+If you only want a BPM, read [Analysis And Feature DSP](#analysis-and-feature-dsp); if you are finishing a track for loudness or delivery, read [Mastering Chain](#mastering-chain) and [Final Stage and Maximizers](#final-stage-and-maximizers).
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
@@ -80,6 +86,13 @@ Most processors are not built from unique magic. They combine a small set of par
 ## Analysis And Feature DSP
 
 The analysis side — music information retrieval (MIR): extracting tempo, key, chords, and similar musical facts from audio — is built from reusable feature stages rather than one monolithic analyzer. The STFT (short-time Fourier transform) and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, pitch trackers, and section features. Higher-level analyzers then reuse those representations where possible.
+
+For a newcomer, the analysis side runs roughly like this:
+
+1. Cut the audio into short windows.
+2. Convert each window into its frequency content.
+3. Build a purpose-specific summary: onsets for rhythm, chroma for harmony, mel or MFCC for timbre.
+4. Estimate the high-level result — BPM, key, chords — from those summaries.
 
 | Family | Implementation role | Main use |
 |--------|---------------------|----------|

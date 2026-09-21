@@ -1,10 +1,24 @@
 # DSP 実装解説
 
-このページは、各 DSP が内部で何をしているかを説明します。公開名の一覧である [マスタリングプロセッサ](./mastering-processors.md)、標準規格と互換性参照を分けてまとめた [アルゴリズム根拠](./algorithm-references.md)、テスト根拠をまとめた [実装検証](./implementation-validation.md) を補完するページです。
+このページは、各 DSP ファミリーが内部で何をしているかを説明します。
+
+次の 3 つのリファレンスページを補完します。
+
+| ページ | 役割 |
+|--------|------|
+| [マスタリングプロセッサ](./mastering-processors.md) | 公開プロセッサのレジストリ |
+| [アルゴリズム根拠](./algorithm-references.md) | 標準規格、アルゴリズム名、互換性参照 |
+| [実装検証](./implementation-validation.md) | 機能グループとテストの対応 |
 
 UI にプロセッサを出す前、リアルタイム設定を選ぶ前、レンダリングレポートを説明するときの実装レベルの資料として使います。
 
-正本は libsonare リポジトリの `src/analysis`、`src/feature`、`src/mastering`、`src/effects`、`src/mixing`、`src/engine` 以下の C++ 実装です。マスタリングプロセッサの公開名は `src/mastering/api/named_processor_registry.cpp` に登録されています。解析・特徴量ヘルパーは quick API と各言語バインディングから公開されます。
+正本は libsonare リポジトリの C++ 実装です。
+
+| 領域 | ソース |
+|------|--------|
+| DSP 実装 | `src/analysis`、`src/feature`、`src/mastering`、`src/effects`、`src/mixing`、`src/engine` |
+| マスタリングプロセッサの公開名 | `src/mastering/api/named_processor_registry.cpp` |
+| 解析・特徴量ヘルパー | quick API と各言語バインディング |
 
 ::: tip 初めて読む場合
 このページは実装寄りなので、最初から全部を理解する必要はありません。まず「DSP は音声を数値列として扱い、測る・分ける・変形する処理の総称」と捉えてください。表の「主な用途」を読み、自分が使う処理だけ詳しく見れば十分です。

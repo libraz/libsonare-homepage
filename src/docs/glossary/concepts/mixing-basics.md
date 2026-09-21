@@ -66,7 +66,18 @@ Ears tire and rooms lie, so mixers watch meters too. The ones that matter most:
 - **Correlation** — whether the left and right channels agree; strongly negative values warn that the mix may weaken or cancel in [mono](./mono-compatibility.md).
 
 :::: details How libsonare models all of this
-libsonare's mixing engine maps these concepts to concrete objects: a *strip* is a `ChannelStrip` with input trim, EQ, fader, pan, width, inserts, and sends in a fixed signal order; a *bus* carries a `master`/`aux`/`submix` role; a *send* taps pre- or post-fader; *automation* is scheduled at sample-accurate positions with `linear`/`exponential`/`s-curve`/`hold` curves; and every strip exposes a meter snapshot plus a goniometer history buffer. A whole mixer is described by a JSON *scene* you can save and reload. The engine is real-time-safe — denormal-guarded, lock-free parameter changes, pre-allocated buffers, and plugin-delay compensation across the routing graph — so the same model runs offline and inside an AudioWorklet.
+libsonare's mixing engine maps these concepts to concrete objects:
+
+| Concept | In the engine |
+|---------|---------------|
+| Strip | A `ChannelStrip` with input trim, EQ, fader, pan, width, inserts, and sends in a fixed signal order |
+| Bus | A routing destination carrying a `master`/`aux`/`submix` role |
+| Send | A tap taken pre- or post-fader |
+| Automation | Scheduled at sample-accurate positions with `linear`/`exponential`/`s-curve`/`hold` curves |
+| Meters | A meter snapshot plus a goniometer history buffer on every strip |
+| Scene | A JSON description of the whole mixer you can save and reload |
+
+The engine is real-time-safe — denormal-guarded, lock-free parameter changes, pre-allocated buffers, and plugin-delay compensation across the routing graph — so the same model runs offline and inside an AudioWorklet.
 ::::
 
 Related: [Mixing Engine](../../mixing.md), [Mixing Scene JSON](../../mixing-scene-json.md), [Gain Staging](./gain-staging.md), [Mono Compatibility](./mono-compatibility.md), [Audio Basics](./audio-basics.md)

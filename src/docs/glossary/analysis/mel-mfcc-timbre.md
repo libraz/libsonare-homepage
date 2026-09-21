@@ -19,6 +19,8 @@ The **mel scale** is a perceptual frequency scale that matches this behavior: fi
 
 A **mel spectrogram** re-maps the STFT onto that scale. Its detail is concentrated where our ears can actually discriminate, which is why it is the default front-end for many audio machine-learning systems.
 
+Put another way, a mel spectrogram is a map of the sound drawn closer to how the ear reads it, in a form machines handle easily. A plain spectrogram spaces frequency evenly; mel keeps fine steps in the low range, where hearing discriminates, and groups the high range, where it does not.
+
 <MelBankFigure
   title="Even spacing on one scale, uneven on the other"
   caption="The filters are laid out at equal steps along the mel scale. Viewed back in hertz that same layout is narrow and tightly packed at the bottom and wide and sparse at the top — so the low range, where hearing discriminates finely, gets many filters and the top gets few."
@@ -40,6 +42,8 @@ The calculation has three main steps:
 
 The result is a compact timbre "fingerprint" used to classify instruments, voices, and sound types.
 
+MFCCs are a summary for classification and comparison, not data you play back. They answer questions like "is this closer to a voice or a drum?" or "did the timbre change between the first and second half?"; to know *which note* is sounding, use chroma or pitch detection instead.
+
 <SonareDemo id="mfcc-map" />
 
 ## Single-number brightness: centroid and flatness
@@ -60,7 +64,18 @@ Gate on level first: check RMS or peak for the frame and ignore the flatness rea
 :::
 
 ::: details How libsonare computes these
-libsonare builds the mel spectrogram with a mel filterbank applied to STFT power, then derives MFCCs via log compression and a DCT-style step, following librosa conventions closely enough for reference comparison. `mfcc` accepts a trailing `lifter` parameter (cepstral liftering, default 0 = no liftering) that matches librosa's `lifter` argument. Spectral centroid and flatness are computed directly from the magnitude spectrum per frame. These features are exposed through the feature-extraction APIs and reused by higher-level timbre and section descriptors; mel and MFCC can also be inverted to approximate audio for previews (see Inverse Features).
+`MelSpectrogram` applies a mel filterbank to STFT power to build the mel spectrogram, then derives MFCCs through log compression and a DCT-style step.
+
+| Item | Detail |
+|------|--------|
+| Mel layout | `n_mels = 128`, `fmin` / `fmax` (0 = sr/2) |
+| Analysis window | `n_fft = 2048` / `hop_length = 512`, Hann window |
+| Mel scale formula | `htk = false` selects the Slaney formula, `true` the HTK formula (the choice of scale equation itself) |
+| Normalization | `norm = MelNorm::Slaney` (area-normalizes each filter). Independent of the scale formula, so HTK scale with Slaney normalization is a valid combination |
+| Liftering | The trailing `lifter` parameter of `mfcc` (cepstral liftering, default 0 = none) matches librosa's `lifter` argument |
+| Scalar descriptors | Spectral centroid and flatness are computed directly from the per-frame magnitude spectrum |
+
+These follow librosa conventions closely enough for reference comparison. The spectral descriptors are reused by higher-level descriptors such as `TimbreAnalyzer`; mel and MFCC can also be inverted to approximate audio for previews (see Inverse Features).
 :::
 
 Related: [MIR Overview](../concepts/mir-overview.md), [Spectrogram and STFT](./spectrogram-stft.md), [Section and Structure](./section-structure.md), [Chroma Features](./chroma-features.md)

@@ -41,7 +41,16 @@ A send taps either **before** the fader or **after** it, and this is the routing
 A **submix** re-routes audio: the grouped tracks actually flow through the submix bus. A **VCA group** does not — VCA (voltage-controlled amplifier) is the console circuit this borrows its name from, and here it means a single fader that trims several tracks' levels at once *without* changing where their audio goes. Use a VCA when the parts must still reach different buses but you want one hand on their combined level.
 
 ::: details How libsonare models routing
-Buses are `Bus` objects carrying a `BusRole` (`Master`/`Aux`/`Subgroup`) and run a `BusProcessor`; `FxBus` hosts shared effects. There is no `submix` role value: at scene level the `role` field is a free string in which only `master` is interpreted specially, so `submix`, `subgroup`, `group` and anything else all compile to the same generic non-master bus (the built-in drum-bus preset writes `"subgroup"`). A `SendProcessor` taps a strip at a `TapPoint` chosen by `SendTiming` (pre/post-fader) and feeds a destination bus. `VcaGroup` applies a shared gain offset across member strips without re-routing audio. The whole graph — strips, buses, sends, connections — is described by a serializable scene and runs with plugin delay compensation (PDC) so parallel paths stay time-aligned. See [Mixing Scene JSON](../../mixing-scene-json.md) for the field-level format.
+| Element | Role |
+|---------|------|
+| `Bus` | Carries a `BusRole` (`Master`/`Aux`/`Subgroup`) and runs a `BusProcessor` |
+| `FxBus` | Hosts shared effects |
+| `SendProcessor` | Taps a strip at a `TapPoint` chosen by `SendTiming` (pre/post-fader) and feeds a destination bus |
+| `VcaGroup` | Applies a shared gain offset across member strips without re-routing audio |
+
+There is no `submix` role value: at scene level the `role` field is a free string in which only `master` is interpreted specially, so `submix`, `subgroup`, `group` and anything else all compile to the same generic non-master bus (the built-in drum-bus preset writes `"subgroup"`).
+
+The whole graph — strips, buses, sends, connections — is described by a serializable scene and runs with plugin delay compensation (PDC) so parallel paths stay time-aligned. See [Mixing Scene JSON](../../mixing-scene-json.md) for the field-level format.
 :::
 
 Related: [Mixing Basics](../concepts/mixing-basics.md), [Channel Strip](./channel-strip.md), [Automation and Metering](./automation-metering.md), [Mixing Scene JSON](../../mixing-scene-json.md)

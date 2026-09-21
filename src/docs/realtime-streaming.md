@@ -93,7 +93,14 @@ The demo below shows the same "audio in, markers out" idea visually: onset detec
 :::
 
 ::: tip `nFft` and `hopLength` in one line
-The analyzer runs an STFT (short-time Fourier transform — repeated FFTs over short, overlapping windows) under the hood. `nFft` is the analysis window size in samples (bigger = finer frequency detail, coarser timing); `hopLength` is how far the window advances between frames (smaller = more frames per second, more CPU). The `2048`/`512` defaults below are the common starting point. See [MIR Overview](./glossary/concepts/mir-overview.md) if these are new.
+The analyzer runs an STFT (short-time Fourier transform — repeated FFTs over short, overlapping windows) under the hood.
+
+| Parameter | Meaning | Larger / smaller |
+|-----------|---------|------------------|
+| `nFft` | Analysis window size in samples | Bigger = finer frequency detail, coarser timing |
+| `hopLength` | How far the window advances between frames | Smaller = more frames per second, more CPU |
+
+The `2048`/`512` defaults below are the common starting point. See [MIR Overview](./glossary/concepts/mir-overview.md) if these are new.
 :::
 
 ```typescript
@@ -134,7 +141,14 @@ if (stats.estimate.updated) {
 A `FrameBuffer` is **Structure-of-Arrays**: timestamps, mel, chroma, onset strength, RMS, spectral centroid, spectral flatness, chord root, chord quality, and chord confidence each live in their own typed array. That layout is cheap to slice and cheap to hand to another thread. Check `featureFlags` before consuming optional arrays (`MEL=1`, `CHROMA=2`, `ONSET=4`, `SPECTRAL=8`); disabled features are empty, and `nChroma` is `0` when chroma is absent.
 
 ::: details What are spectral centroid and flatness?
-Both reduce the *shape* of one frame's spectrum to a single number you can plot or threshold. The **spectral centroid** is the magnitude-weighted mean frequency of the frame, Σ f·|X| / Σ|X| (magnitude, not energy — the two definitions give materially different numbers on a peaky spectrum) — a higher centroid sounds "brighter" (more high-frequency content). The **spectral flatness** measures how evenly energy is spread across frequencies: values near 1 are noise-like (energy everywhere at once), values near 0 are tonal (energy concentrated in a few strong peaks). Together they are a cheap way to describe timbre frame by frame.
+Both reduce the *shape* of one frame's spectrum to a single number you can plot or threshold.
+
+| Measure | Meaning | How to read it |
+|---------|---------|----------------|
+| Spectral centroid | The magnitude-weighted mean frequency of the frame, Σ f·\|X\| / Σ\|X\| (magnitude, not energy — the two definitions give materially different numbers on a peaky spectrum) | Higher sounds "brighter" (more high-frequency content) |
+| Spectral flatness | How evenly energy is spread across frequencies | Near 1 is noise-like (energy everywhere at once); near 0 is tonal (energy concentrated in a few strong peaks) |
+
+Together they are a cheap way to describe timbre frame by frame.
 :::
 
 For thread transfer and visualization you often do not need full float precision. `StreamAnalyzer` can quantize the feature arrays, trading precision for bandwidth:

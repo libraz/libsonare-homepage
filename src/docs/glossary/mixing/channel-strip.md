@@ -56,7 +56,15 @@ Cue monitoring is a queueable realtime command: `setTrackMonitorMode(laneIndex, 
 :::
 
 ::: details How libsonare models a strip
-A strip is a `ChannelStrip` configured by `ChannelStripConfig`, processing a block through trim, polarity, channel delay, EQ (`EqPosition` chooses pre/post-fader), pre-fader `InsertSlot`s, fader with VCA offset, `PannerProcessor` (`PanLaw`/`PanMode`), post-fader inserts, and `StereoWidthProcessor`, in that order. `TapPoint` marks where pre- and post-fader sends and the `GoniometerBuffer`/`MeterProcessor` read the signal. All gain and pan changes are parameter-smoothed and the path is real-time-safe (pre-allocated, denormal-guarded), so the same strip runs offline and inside an AudioWorklet.
+A strip is a `ChannelStrip` configured by `ChannelStripConfig`. A block is processed in this order:
+
+```text
+trim -> polarity -> channel delay -> EQ -> pre-fader InsertSlot
+  -> fader with VCA offset -> PannerProcessor
+  -> post-fader inserts -> StereoWidthProcessor
+```
+
+`EqPosition` chooses whether the EQ runs pre- or post-fader; `PannerProcessor` takes the strip's `PanLaw`/`PanMode`. `TapPoint` marks where pre- and post-fader sends and the `GoniometerBuffer`/`MeterProcessor` read the signal. All gain and pan changes are parameter-smoothed and the path is real-time-safe (pre-allocated, denormal-guarded), so the same strip runs offline and inside an AudioWorklet.
 :::
 
 Related: [Mixing Basics](../concepts/mixing-basics.md), [Buses and Sends](./buses-sends.md), [Pan and Stereo Width](./pan-width.md), [Realtime Engine](../realtime/realtime-engine.md), [Mixing Engine](../../mixing.md)

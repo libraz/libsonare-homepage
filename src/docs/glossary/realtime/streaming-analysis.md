@@ -35,7 +35,15 @@ Musical estimates — BPM, key, current chord, progression, pattern — **update
 Frames accumulate in a buffer between your `process()` calls. You drain whatever is available and render it, rather than expecting one frame per block. This **batched read** model keeps the audio callback cheap (it just buffers) and moves the variable-rate frame handling to your UI loop, where jitter is harmless. The API uses "quantized" for optional 8-bit / 16-bit output formats; that is about reducing data size, not about timing.
 
 ::: details How libsonare streams analysis
-`StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`; `readFrames(availableFrames())` drains buffered mel/chroma/onset/spectral frames, and `stats()` returns BPM/key/chord/progression/pattern estimates with an `updated` flag that is `true` on the periodic frames where the key or BPM estimate was recomputed — not only on the frames where the recomputed value differs from the previous one, so do not use it as a change detector. Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. `emitEveryNFrames` throttles frame output for UI rendering. It reuses the same STFT-derived feature stages as offline analysis.
+`StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`.
+
+| Call | Role |
+|------|------|
+| `readFrames(availableFrames())` | Drains the buffered mel/chroma/onset/spectral frames |
+| `stats()` | Returns BPM/key/chord/progression/pattern estimates. `updated` is `true` on the periodic frames where the key or BPM estimate was recomputed — not only where the recomputed value differs from the previous one — so do not use it as a change detector |
+| `emitEveryNFrames` | Throttles frame output for UI rendering |
+
+Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. It reuses the same STFT-derived feature stages as offline analysis.
 :::
 
 Related: [Realtime and Streaming](../../realtime-streaming.md), [Spectrogram and STFT](../analysis/spectrogram-stft.md), [Realtime Engine](./realtime-engine.md), [Realtime Safety](./realtime-safety.md)

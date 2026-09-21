@@ -14,6 +14,8 @@ If the music has a steady pulse, its onset envelope is **periodic**: peaks recur
 - **Autocorrelation** slides the onset envelope against a time-shifted copy of itself and measures how well they match at each lag. Lags where the curve lines up with itself reveal the repeating period — and the period converts directly to BPM.
 - **The tempogram** turns that into a picture: a time × tempo map showing the strength of every candidate tempo at each moment. A strong horizontal band is a stable tempo; a band that drifts shows a track that speeds up or slows down.
 
+Put simply, tempo estimation is looking for the spacing between peaks. Peaks every 0.5 s mean two beats a second, or 120 BPM. In real music the peaks are never perfectly even, so autocorrelation and the tempogram pick the spacing with the most support.
+
 <SonareDemo id="beat-tracking" />
 
 ## Octave errors: the classic tempo trap
@@ -24,12 +26,23 @@ The ambiguity is not limited to factors of two. Triple relations are just as com
 
 Practical handling: pick a sensible BPM range for your material (e.g. 70–180 for pop), and treat the estimate as one candidate among its metrical relatives — the triple ones included — rather than an exact truth. This matters most early in a stream, before enough audio has accumulated.
 
+In a UI, it is kinder to present the estimate as "around 120 BPM, possibly 60 / 180 / 240" than to assert a single value. For an intro-only excerpt, drum-less material, a live performance, or a track whose tempo breathes, do not treat the first few seconds' value as final.
+
 ## Confidence and stability
 
 A single number hides how *sure* the estimate is. A track with a tight, repetitive groove yields a sharp tempogram peak and high confidence; rubato (freely elastic timing), ambient, or sparse material yields a flat tempogram and low confidence. When a confidence value is available, use it to decide whether to display the BPM, hedge it, or hide it.
 
 ::: details How libsonare estimates tempo
-libsonare computes the onset-strength envelope from the STFT, then estimates tempo via tempogram and autocorrelation analysis of that envelope, selecting a dominant period and converting it to BPM. The streaming analyzer exposes a BPM value that refines as more audio arrives, so early values should be treated as provisional. Beat tracking then uses the tempo as a prior when placing individual beats, so tempo and beats are computed from the same onset information rather than independently.
+`BpmAnalyzer` computes the onset-strength envelope from the STFT, then estimates tempo from a Fourier tempogram (`TempogramConfig`) and an autocorrelation analysis of that envelope, selecting a dominant period and converting it to BPM. `TempogramMode` only selects whether the standalone `tempogram()` feature uses autocorrelation or cosine similarity; it has no effect on BPM estimation.
+
+| Item | Detail |
+|------|--------|
+| Search range | `bpm_min = 30`, `bpm_max = 300` |
+| Initial value | `start_bpm = 120`, used as the fallback |
+| Onset settings | `n_fft = 2048` / `hop_length = 512` |
+| Candidates | `BpmCandidate` carries the alternatives, so half- and double-tempo candidates remain available downstream |
+
+The streaming analyzer exposes a BPM value that refines as more audio arrives, so early values should be treated as provisional. `BeatAnalyzer` then uses the tempo as a prior when placing individual beats, so tempo and beats are computed from the same onset information rather than independently.
 :::
 
 Related: [Onset Detection](./onset-detection.md), [Beats and Downbeats](./beats-downbeats.md), [MIR Overview](../concepts/mir-overview.md), [Realtime and Streaming](../../realtime-streaming.md)

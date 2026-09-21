@@ -19,9 +19,13 @@ The octaves are not weighted equally, though. Following the librosa reference, t
 
 This deliberate forgetting is the point. Harmony is about *which notes*, not *which octave*: a C-major chord is a C-major chord whether it is voiced low or high. Folding octaves together gives a clean, 12-dimensional fingerprint of the harmony at each moment.
 
+For example, a low C, middle C, and high C sounding together all add into the C bin. Strong C, E, and G suggest C major; strong A, C, and E suggest A minor. Chroma is a tool for reading the *distribution of note names*.
+
 ## Chromagram: chroma over time
 
 Stack a chroma vector for every frame and you get a **chromagram** — a 12-row image showing how pitch-class energy moves through the song. Sustained chords appear as steady horizontal bands; a key change shifts which bins stay lit. Visualizers draw it directly; analyzers read patterns out of it.
+
+A frame is one short slice of the audio. Just as a video is a run of still images, a chromagram is the chroma of each short slice laid side by side — time runs left to right, the 12 pitch classes top to bottom.
 
 <SonareDemo id="chromagram" />
 
@@ -38,7 +42,17 @@ Stack a chroma vector for every frame and you get a **chromagram** — a 12-row 
 Matching the representation to the question is the recurring skill in MIR (music information retrieval): chroma trades octave and timbre detail *away* precisely to make harmony clear.
 
 ::: details How libsonare builds chroma
-libsonare applies a chroma filterbank to the STFT **power** spectrum — mapping each frequency bin onto its pitch class, weighted by the octave envelope described above — and then normalizes each frame so its largest of the 12 values is 1.0 (L-infinity). Working from power rather than magnitude weights strong partials more heavily than weak ones. A constant-Q variant, `chromaCqt` / `chroma_cqt`, folds a constant-Q transform into the 12 bins for a direct `librosa.feature.chroma_cqt` equivalent. A separate NNLS (non-negative least squares) chroma variant estimates per-note activation to reduce the influence of overtones, giving cleaner profiles for chord work. Chroma is used by the Krumhansl-Schmuckler key estimator and the template-matching chord recognizer, so improving the chroma stage improves both downstream features at once.
+The `Chroma` class applies a chroma filterbank to the STFT **power** spectrum — mapping each frequency bin onto its pitch class, weighted by the octave envelope described above — accumulates into 12 bins, and normalizes each frame so its largest value is 1.0 (L-infinity). Working from power rather than magnitude weights strong partials more heavily than weak ones.
+
+| Item | Detail |
+|------|--------|
+| Bin layout | `n_chroma = 12`. `fmin` and `n_octaves` are also on the config, but the STFT chroma filterbank does not read them (they are CQT-chroma concepts; setting them does not change the analysed range) |
+| Analysis window | `n_fft = 2048` / `hop_length = 512`, Hann window |
+| Tuning | `tuning` is the deviation from A440 in fractions of a bin. Default 0 (A440); never estimated from the signal |
+| Variants | STFT-based; CQT-based (`chromaCqt` / `chroma_cqt`, `ChromaCqtConfig`, the direct `librosa.feature.chroma_cqt` equivalent); CENS (`ChromaCensConfig`) |
+| Chord-oriented variant | `NnlsChromaConfig` (non-negative least squares) estimates per-note activation to reduce the influence of overtones, giving cleaner profiles for chord work |
+
+Chroma feeds `KeyAnalyzer` (Krumhansl-Schmuckler) and `ChordAnalyzer` (template matching), so improving the chroma stage improves both downstream features at once.
 :::
 
 ::: warning Tuning is not estimated for you

@@ -16,7 +16,14 @@ A **strip** is one track's processing lane. A **bus** is a shared destination fo
 :::
 
 ::: tip Where mixing sits in the pipeline
-**Analysis** tells you *what* a track is. **Editing** fixes timing and pitch of one track. **Mixing** balances *several* tracks into a stereo bus. **Mastering** polishes that finished stereo mix for delivery. Mixing is the stage that turns "a folder of stems" — the individual instrument tracks or submixes exported from a session — into "a song". You usually mix first, then master the result.
+| Stage | Role |
+|-------|------|
+| Analysis | Tells you *what* a track is |
+| Editing | Fixes timing and pitch of one track |
+| Mixing | Balances *several* tracks into a stereo bus |
+| Mastering | Polishes the finished stereo mix for delivery |
+
+Mixing is the stage that turns "a folder of stems" — the individual instrument tracks or submixes exported from a session — into "a song". You usually mix first, then master the result.
 :::
 
 ## What You Will Learn
@@ -116,7 +123,15 @@ A **post-fader** send follows the fader: pull the fader down and the reverb sent
 <SonareDemo id="pre-post-fader" />
 
 :::: details How this maps to the code
-The order above is exactly `ChannelStrip::process_segment`: `input_trim → polarity → alignment_delay → eq(pre) → pre-inserts → [pre tap] → fader(+VCA) → panner → eq(post) → post-inserts → width → [goniometer + post tap]`. The pre/post taps are pre-allocated scratch buffers, so a send never allocates on the audio thread. Each scheduled automation event (fader, pan, width, send, insert) is applied at its sample position inside this same per-segment loop, which is what makes automation sample-accurate.
+The order above is exactly `ChannelStrip::process_segment`:
+
+```text
+input_trim -> polarity -> alignment_delay -> eq(pre) -> pre-inserts
+  -> [pre tap] -> fader(+VCA) -> panner -> eq(post)
+  -> post-inserts -> width -> [goniometer + post tap]
+```
+
+The pre/post taps are pre-allocated scratch buffers, so a send never allocates on the audio thread. Each scheduled automation event (fader, pan, width, send, insert) is applied at its sample position inside this same per-segment loop, which is what makes automation sample-accurate.
 ::::
 
 ## One-shot mixing: `mixStereo`

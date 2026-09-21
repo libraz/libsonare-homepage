@@ -32,6 +32,8 @@ When a source falls off sharply around 16 kHz, a normal high-shelf EQ may not be
 
 <SonareDemo id="tilt-eq" />
 
+Generated sources often carry hiss or metallic residual noise alongside the missing top end. Check the denoise and tone decisions before raising the air band: brightening the noise can win a short A/B and still produce a master that fatigues over a full listen.
+
 ## In Studio Mode
 
 Use Air band amount together with Exciter amount. Raise it slowly and compare with loudness matching enabled.
