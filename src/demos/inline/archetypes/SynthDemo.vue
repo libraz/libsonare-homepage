@@ -3,12 +3,13 @@
  * `synth` archetype: the built-in synthesizer renders one note, offline.
  *
  * A tiny one-note MIDI project is bounced to mono PCM through the engine's
- * subtractive synth, then drawn as a DAW-style peak waveform. The outline *is*
- * the note's amplitude envelope, so the effect of the patch is immediate: raise
- * the attack and the note fades in more slowly, lower the cutoff and the inner
- * texture darkens, change the waveform and the timbre changes. An optional LFO
- * routed to amplitude makes the envelope ripple (tremolo). Pressing play auditions
- * the exact buffer on screen — no clip, no external asset.
+ * built-in synth (subtractive by default, or any engine mode the demo names),
+ * then drawn as a DAW-style peak waveform. The outline *is* the note's amplitude
+ * envelope, so the effect of the patch is immediate: raise the attack and the
+ * note fades in more slowly, lower the cutoff and the inner texture darkens,
+ * change the waveform and the timbre changes. An optional LFO routed to
+ * amplitude makes the envelope ripple (tremolo). Pressing play auditions the
+ * exact buffer on screen — no clip, no external asset.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { type GeneratedSignal, type SonareDemoDef } from '@/demos/inline/types';
@@ -54,10 +55,25 @@ const filterModel = computed<string>(() => String(values.filterModel ?? 'svf'));
 // routing, so demos that omit these params render exactly as before.
 const lfoRate = computed<number>(() => Number(values.lfoRate ?? 0));
 const lfoDepth = computed<number>(() => Number(values.lfoDepth ?? 0));
+// Optional engine selector. The filter, envelope and LFO stages run after every
+// engine's source, so the other sliders keep acting on any mode. `fm`, `modal`,
+// `percussion` and `sample` render silence from the init patch (their sound lives
+// in preset-only tables) — offer those through `preset` instead.
+const engineMode = computed<string>(() => String(values.engineMode ?? 'subtractive'));
 // Optional preset audition: when set, the patch is built from the named preset so
-// each engine's true character comes through, ignoring the subtractive-only sliders.
+// each engine's true character comes through, ignoring the engine selector and
+// the subtractive-only sliders.
 const preset = computed<string>(() => String(values.preset ?? ''));
-const eyebrow = computed(() => (preset.value ? 'SYNTH · PRESET' : 'SYNTH · SUBTRACTIVE'));
+const eyebrow = computed(() =>
+  preset.value ? 'SYNTH · PRESET' : `SYNTH · ${engineMode.value.toUpperCase()}`,
+);
+// Only the subtractive engine has an oscillator bank; every other mode starts its
+// own source from the note number and never reads `waveform`. Hide that control
+// rather than show a knob that does nothing in the selected mode.
+const hasOscillator = computed(() => engineMode.value === 'subtractive');
+const visibleParams = computed(() =>
+  (props.def.params ?? []).filter((p) => p.key !== 'waveform' || hasOscillator.value),
+);
 
 // ---- presentation state ----------------------------------------------------
 const stateLabel = computed(() => {
@@ -165,7 +181,7 @@ function renderNote(wasm: WasmModule): Float32Array {
       );
     }
     const patch: Record<string, unknown> = {
-      engineMode: 'subtractive',
+      engineMode: engineMode.value,
       waveform: waveform.value,
       filterModel: filterModel.value,
       cutoffHz: cutoff.value,
@@ -382,6 +398,7 @@ watch(
     filterModel.value,
     lfoRate.value,
     lfoDepth.value,
+    engineMode.value,
     preset.value,
   ],
   () => {
@@ -424,7 +441,7 @@ onBeforeUnmount(() => {
     <template #controls>
       <DemoControls
         :model-value="values"
-        :params="def.params ?? []"
+        :params="visibleParams"
         :locale="loc"
         :disabled="status === 'loading'"
         @update:model-value="updateParams"
