@@ -42,7 +42,7 @@ Start with the page that matches where you will run libsonare:
 | Build a mixer, routing view, or stem renderer | Mixing engine through WASM, Python, Node, or C++ | [Mixing Engine](/docs/mixing) |
 | Build a mastering UI with explainable suggestions | Mastering assistant/profile/preview APIs | [Mastering Assistant](/docs/mastering-assistant) |
 | Build live visualizations or playback tools | Streaming analyzer and realtime engine | [Realtime and Streaming](/docs/realtime-streaming) |
-| Compose, arrange, or render MIDI to audio | Built-in instruments and headless-DAW project editing | [Built-in Instruments](/docs/native-synth), [Project Editing](/docs/project-editing) |
+| Compose, arrange, or render MIDI to audio | Built-in synthesizer and headless-DAW project editing | [Built-in Synthesizer](/docs/native-synth), [Project Editing](/docs/project-editing) |
 | Estimate, synthesize, or morph room acoustics | Room-acoustic helpers | [Room Acoustics](/docs/acoustic-analysis) |
 | Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
 | Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |
@@ -156,7 +156,7 @@ console.log('Key:', result.key.name);
 
 Next: read [Node.js / Native Bindings](/docs/native-bindings).
 
-## What libsonare Can Analyze
+## What libsonare Can Do
 
 ::: info Room-acoustic terms in the list
 **RIR** means room impulse response — a recording of how a space rings. **Equivalent-room estimate** means a practical room model inferred from audio, not exact measured geometry. **Room morphing** is a creative room effect.
@@ -164,7 +164,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 
 - **BPM Detection** - Tempo estimation using tempogram and autocorrelation
 - **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles
-- **Beat Tracking** - Dynamic programming-based beat extraction
+- **Beat Tracking** - Dynamic programming-based beat extraction, with downbeats and a scored time-signature estimate
 - **Chord Recognition** - Template matching against per-root chord templates: 4 triad qualities by default, 24 qualities across 12 roots once the full template set is enabled
 - **Section Detection** - Structural segmentation such as intro, verse, and chorus
 - **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
@@ -177,6 +177,8 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **Mixing** - Channel strips, sends, buses, automation, scene presets, goniometer/true-peak metering, and offline stereo rendering
 - **Editing DSP and inserts** - Direct pitch correction, note-region stretch, and voice-change pitch/formant controls; reverb and ducking are available through named processor or mixer insert paths where enabled
 - **Inverse Feature Helpers** - Approximate STFT/audio reconstruction from mel spectrograms and MFCCs
+- **Built-in Instruments** - A seventeen-engine synthesizer with eleven physical models, a data-free GM/GS fallback bank, and a SoundFont 2 player for samples you bring; [Sound Sources](/docs/sound-sources) explains why no samples ship
+- **Projects and Realtime** - Headless-DAW project editing with MIDI sequencing and offline bounce, plus a realtime engine with transport, track lanes, and live MIDI input
 
 ::: details Acronyms in this list
 - **BPM** — beats per minute; the tempo of the song.
@@ -195,3 +197,21 @@ Visit the [Demos](/demos) to try libsonare in your browser. Simply drag and drop
 Or right here: this is a short-time Fourier transform running live in the page, computed by the same WASM build you are about to install.
 
 <SonareDemo id="stft-basics" />
+
+## Next Steps
+
+You have one example running. What comes next depends on which of two readers you are.
+
+### If you want to build something
+
+- [Examples](/docs/examples) — the working pattern closest to your task, in each runtime
+- [Learning Path](/docs/learning-path) — a route by goal through the eight subject areas, from analysis to room acoustics
+- [Use Cases](/docs/use-cases) — a whole job carried from raw files to a deliverable, as a script you can run
+- [Installation](/docs/installation) — FFmpeg decoding, source builds, and the Node native addon, once the defaults are not enough
+
+### If you want to understand the engine
+
+- [Introduction](/docs/introduction) — the analysis pipeline from waveform to chords, and the vocabulary every other page assumes
+- [Music Analysis](/docs/analysis) — what each result you just printed means, and which call to reach for when `analyze()` is too coarse
+- [Sound Sources](/docs/sound-sources) — why the engine ships no samples, and where its instruments' sound comes from instead
+- [DSP Implementation Notes](/docs/dsp-implementation) — how the processors are structured, for when you need to expose their controls or explain a render

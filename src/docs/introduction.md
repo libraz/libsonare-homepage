@@ -24,7 +24,7 @@ libsonare covers several related jobs:
 | Mastering | Run broadcast-grade mastering processors and loudness/true-peak handling |
 | Mixing | Build a real-time-safe mixer with routing, buses, sends, and meters |
 | Editing and creative FX | Change pitch, timing, voice character, reverb, and modulation-style effects |
-| Built-in instruments and MIDI | Render MIDI through a multi-engine synth with a GM fallback bank or a SoundFont 2 player ([Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md)) |
+| Built-in instruments and MIDI | Render MIDI through a seventeen-engine synthesizer — eleven of the engines are physical models — with a data-free GM/GS fallback bank, or through a SoundFont 2 player for samples you bring ([Sound Sources](./sound-sources.md) for why no samples ship, then [Built-in Synthesizer](./native-synth.md), [Physical Models](./physical-models.md), [SoundFont 2 Player](./soundfont-player.md), [MIDI Input](./midi-input.md)) |
 | Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
 
 ::: info Loudness, LUFS, and true peak
@@ -231,9 +231,9 @@ HPSS exploits this difference with median filters: a horizontal median filter ex
 - **Creative FX / inserts** — Sound-design DSP such as reverb inserts, chorus, flanger, phaser, and stereo delay.
 
 ::: details Creative FX availability
-Reverb insert processors (`effects.reverb.*`) are available through mixer/mastering insert factories when creative FX is enabled.
+Reverb, modulation, and delay inserts (`effects.reverb.*`, `effects.modulation.*`, `effects.delay.stereo`) are reached through the mixer and realtime-engine insert catalog when the build has creative FX enabled; [Effects Inserts](./effects-inserts.md) lists every insert ID and its parameters.
 
-Chorus, flanger, phaser, and stereo-delay DSP modules exist in the source tree. They are not exposed as standalone top-level JS/Python helpers today.
+There is no standalone `chorus(...)`-style helper. In the FX-enabled WASM build, chorus, flanger, phaser, stereo delay, and the reverbs are also listed by `masteringProcessorNames()` and run through the one-shot processor path; the geometric room and the newer modulation inserts are insert-only.
 
 Ducking is exposed as `dynamics.duckingProcessor` / mixer routing rather than a one-shot editing helper.
 :::
@@ -313,12 +313,18 @@ upgrading, and pin versions in production.
 
 ## Next Steps
 
-- [Learning Path](/docs/learning-path) — Choose the right route for your first project
-- [Glossary](/docs/glossary) — Plain-language deep dives on every term used here
-- [Installation](/docs/installation) — Set up libsonare in your project
-- [Getting Started](/docs/getting-started) — Your first analysis in 5 minutes
-- [Feature Map](/docs/api-surface) — See which features are exposed in each binding
-- [Examples](/docs/examples) — Common use cases with code
-- [Mixing Engine](/docs/mixing) — Channel strips, routing, automation, scenes, and metering
-- [Implementation Validation](/docs/implementation-validation) — Understand what is covered by tests and reference checks
-- [Demos](/demos) — Try the browser-local tools
+Two different readers leave this page. Take the path that matches what you want out of the next hour.
+
+### If you want to build something
+
+- [Getting Started](/docs/getting-started) — a first result in the runtime you already use, in one short program
+- [Learning Path](/docs/learning-path) — a route by goal through the eight subject areas, so you open the one guide written for what you are building
+- [Examples](/docs/examples) — small working patterns per runtime, to copy from rather than read
+- [Feature Map](/docs/api-surface) — which feature family lives where, and which binding exposes it
+
+### If you want to understand the engine
+
+- [Sound Sources](/docs/sound-sources) — why an audio engine ships no samples, what each synthesis method costs, and why GS is its control vocabulary
+- [Music Analysis](/docs/analysis) — what each analysis result means, which call produces it, and where its confidence comes from
+- [MIR Overview](/docs/glossary/concepts/mir-overview) — the map of how every feature relates, with the [Glossary](/docs/glossary) behind each term
+- [Architecture](/docs/architecture) — how the C++ core, the feature modules, and the bindings are layered, with [Implementation Validation](/docs/implementation-validation) for what is checked against references

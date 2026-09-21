@@ -1,6 +1,6 @@
 # 学習順ガイド
 
-このページは、libsonare のドキュメントを初学者向けに読むための道案内です。DSP、MIR、WebAssembly、マスタリング用語を最初から理解している必要はありません。
+このページは、「何を作りたいか」から libsonare のドキュメントを辿るための道案内です。DSP、MIR、WebAssembly、マスタリング用語を最初から理解している必要はありません。
 
 ::: info 最初に出る略語
 **DSP**（digital signal processing、デジタル信号処理）は音を数値として測定・加工する処理、**MIR**（Music Information Retrieval、音楽情報検索）は BPM・キー・コードなどを音楽から読み取る処理です。
@@ -10,44 +10,101 @@
 ここでは用語を完全に覚えるより、「どの種類のページへ進むか」を選べれば十分です。
 :::
 
+サイドバーのガイドは 8 つの分野に分かれています。解析、楽器と MIDI、ミキシング、マスタリング、編集、アレンジとプロジェクト、リアルタイム、室内音響の 8 つで、そのあとに利用環境別のリファレンスと根拠のページが続きます。以下の道案内も同じ順序で並べているので、ここで選んだ行はそのままサイドバー上の位置でもあります。
+
 ドキュメントを先頭から順に読む場合は、次の順序で読むと前提が積み上がります。
 
 1. [イントロダクション](./introduction.md) で用語と音声解析パイプラインの全体像を読む。
-2. [学習順ガイド](./learning-path.md) で、解析・ストリーミング・編集・ミキシング・マスタリング・研究用途のどれを作るか決める。
+2. [学習順ガイド](./learning-path.md)（このページ）で、目的がどの分野に属するかを見つける。
 3. [はじめに](./getting-started.md)、[インストール](./installation.md)、[使用例](./examples.md) で小さなプログラムを 1 つ動かす。
 4. [機能マップ](./api-surface.md) で必要な API ファミリーを探す。
 5. 組み込みではなく完成した成果物が目的なら、**[実践ユースケース](./use-cases.md)** から通し手順を 1 つ読む。
-6. **作りたいもの別** から該当する機能ガイドを 1 つ読む。
+6. 下の一覧から、目的に合う分野のガイドを 1 つ読む。
 7. **利用環境別 API** から実行環境に合うリファレンスを 1 つ読む。
 8. 実装詳細、アルゴリズム根拠、検証範囲、性能が必要になったときだけ、詳説ページを読む。
 
 ## 作りたいものから選ぶ
 
+作りたいものを、それが属する分野の中から探してください。**最初に読むページ** はその目的のために書かれたページ、**次に読むページ** は最初のページが腑に落ちたあとに詳細を追う場所です。
+
+### 解析
+
+この分野の結果はテンポもキーもコードもセクションも、すべて同じ最初の一歩から読み取られます。音声を短い窓に区切って少しずつずらしながら、窓ごとにスペクトルを求めると、録音全体が「どの瞬間にどの周波数が鳴っているか」の一枚の絵になります。その絵を見たことがなければ、これがそうです。
+
+<SonareDemo id="stft-basics" />
+
 | 作りたいもの | 最初に読むページ | 次に読むページ |
 |--------------|------------------|----------------|
-| BPM、キー、コード、セクションを表示するブラウザアプリ | [はじめに](./getting-started.md) | [WebAssembly ガイド](./wasm.md)、[JavaScript API](./js-api.md) |
-| 曲構造、自己類似度、ノート区間を解析するツール | [機能マップ](./api-surface.md) | [JavaScript API](./js-api-helpers.md#librosa-互換ヘルパー)、[Python API](./python-api-analysis.md#特徴抽出) |
-| すでに手元にあるビート列から小節と拍子記号を求める | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) | [Node API](./node-api.md)、[Python API](./python-api.md) |
-| 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
-| ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md#cli-コマンドライン) | [CLI リファレンス](./cli.md) |
-| ステムからマスターまで、あるいは納品前チェックまでをターミナルで完結させる | [実践ユースケース](./use-cases.md) | [CLI でミックスからマスタリングまで](./use-cases/cli-mix-and-master.md)、[CLI リファレンス](./cli.md) |
-| ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api-effects.md#オーディオエフェクト) |
-| 領域指定のスペクトル編集（時間×周波数の矩形を減衰・ミュート・ゲイン・修復） | [スペクトル編集](./spectral-editing.md) | [編集 DSP](./editing-dsp.md) |
+| BPM、キー、コード、セクションを表示するブラウザアプリ | [はじめに](./getting-started.md) | [楽曲解析](./analysis.md)、[WebAssembly ガイド](./wasm.md) |
+| 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md)、[楽曲解析](./analysis.md) |
+| ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md#cli-コマンドライン) | [CLI リファレンス](./cli.md)、[CLI コマンド](./cli-commands.md) |
+| 曲構造、自己類似度、ノート区間を解析するツール | [楽曲解析](./analysis.md) | [JavaScript API](./js-api-helpers.md#librosa-互換ヘルパー)、[Python API](./python-api-analysis.md#特徴抽出) |
+| すでに手元にあるビート列から小節と拍子記号を求める | [楽曲解析](./analysis.md#拍子-estimatemeter) | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) |
+| librosa からの移行 | [librosa 互換性](./librosa-compatibility.md) | [楽曲解析](./analysis.md#このページか、互換レイヤーか) |
+| librosa の数値（フレーム／サンプル変換、デシベル、ピーク検出）をシェルからエンジンと突き合わせる | [CLI ユーティリティ](./cli-utilities.md) | [librosa 互換性](./librosa-compatibility.md) |
+
+### 楽器と MIDI
+
+この分野では、録音を再生するものは何もありません。エンジンはサンプルデータを一切同梱せず、どの楽器も発音中に計算で音を作ります。その判断と、そこから何が導かれるかを説明するのが [音源方式](./sound-sources.md) です。合成方式を選び終えた前提で書かれているページを開く前に、まずこのページを読んでください。
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
+| 物理モデル、FM、減算合成、持ち込みの SoundFont のどれにするかを決める | [音源方式](./sound-sources.md) | [内蔵シンセサイザー](./native-synth.md)、[物理モデル](./physical-models.md) |
+| MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [内蔵シンセサイザー](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| ピアノ、擦弦、リード、金管、フルートといったアコースティック音源を聴き比べたり、コードから音作りする | [物理モデル](./physical-models.md) | [内蔵シンセサイザー](./native-synth.md#名前付きプリセットカタログ) |
+| SoundFont にないプログラムで、General MIDI の各プログラムがどのエンジンと音作りに落ちるかを調べる | [GM 音色マップ](./gm-tone-map.md) | [GM／GS フォールバックバンク](./gm-gs.md) |
+| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [GM／GS フォールバックバンク](./gm-gs.md#nativesynth-と-soundfont-フォールバック)、[MIDI 入力](./midi-input.md) |
+| 解析やマスタリングは使わず、インストゥルメントだけが必要な C++ アプリ | [リンクターゲット](./cpp-api.md#リンクターゲット) | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md) |
+
+### ミキシング
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
 | ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
 | トラックそのものを計測してミックスの出発点を提案させ、判断ごとの理由も受け取る | [ミキシングアシスタント](./mixing-assistant.md) | [ミキシングシーン JSON](./mixing-scene-json.md)、[ミキシングエンジン](./mixing.md) |
+| ストリップやバスに挿すリバーブ、モジュレーション、ディレイ | [エフェクトインサート](./effects-inserts.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
+
+### マスタリング
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
 | マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
-| MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [内蔵シンセサイザー](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
-| 解析やマスタリングは使わず、インストゥルメントだけが必要な C++ アプリ | [リンクターゲット](./cpp-api.md#リンクターゲット) | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md) |
-| DAW、アレンジ、MIDI シーケンスツール | [プロジェクト編集](./project-editing.md) | [MIDI 入力](./midi-input.md)、[プロジェクトバウンス](./project-bounce.md) |
-| 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [内蔵シンセサイザー](./native-synth.md)、[MIDI 入力](./midi-input.md) |
+| ステムからマスターまで、あるいは納品前チェックまでをターミナルで完結させる | [実践ユースケース](./use-cases.md) | [CLI でミックスからマスタリングまで](./use-cases/cli-mix-and-master.md)、[CLI リファレンス](./cli.md) |
+| マスタリングチェーン自体のパラメータを操作する UI、あるいは説明責任のあるレンダリングレポート | [マスタリング実装](./mastering-implementation.md) | [マスタリングプロセッサ](./mastering-processors.md) |
+
+### 編集
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
+| ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api-effects.md#オーディオエフェクト) |
+| 領域指定のスペクトル編集（時間×周波数の矩形を減衰・ミュート・ゲイン・修復） | [スペクトル編集](./spectral-editing.md) | [編集 DSP](./editing-dsp.md) |
+| 録音したテイクを MIDI ファイルのメロディに合わせてシェルから補正する | [CLI ユーティリティ](./cli-utilities.md#tune-to-midi) | [プロジェクトの MIDI](./project-editing-midi.md) |
+
+### アレンジとプロジェクト
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
+| DAW、アレンジ、MIDI シーケンスツール | [プロジェクト編集](./project-editing.md) | [プロジェクトの MIDI](./project-editing-midi.md)、[プロジェクトバウンス](./project-bounce.md) |
+| マイク録音、ループ録音のテイク、クリップへのコンピング | [録音とテイク](./recording-and-takes.md) | [プロジェクト編集](./project-editing.md) |
+| 内蔵シンセの有無を問わず、プロジェクトをオーディオに書き出す | [プロジェクトバウンス](./project-bounce.md) | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md) |
+
+### リアルタイム
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
 | ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm-streaming.md#ストリーミング解析) |
+| トランスポート、トラックレーン、ライブ MIDI、オートメーションを備えた再生エンジン | [リアルタイムエンジン](./realtime-engine.md) | [リアルタイムとストリーミング](./realtime-streaming.md) |
 | マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm-streaming.md#リアルタイムボイスチェンジャー) |
+
+### 室内音響
+
+| 作りたいもの | 最初に読むページ | 次に読むページ |
+|--------------|------------------|----------------|
 | ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api-effects.md#ルーム音響解析) |
 | メル／MFCC 特徴量をプレビューやデバッグ用に逆変換する | [逆変換特徴量](./inverse-features.md) | [librosa 互換性](./librosa-compatibility.md) |
-| librosa からの移行 | [librosa 互換性](./librosa-compatibility.md) | [機能マップ](./api-surface.md) |
 
 ::: tip 目的別ページの読み方
-「作りたいもの別」の各ページは、同じ順序で読めるようにしています。
+各分野の目的別ページは、同じ順序で読めるようにしています。
 
 1. 最初に判断基準を示す。
 2. 次に最小コード例を示す。
@@ -78,7 +135,7 @@ libsonare は、4 つの層に分けて読むと理解しやすくなります�
 | 層 | 内容 | ページ |
 |----|------|--------|
 | 概念 | BPM、キー、STFT、クロマ、LUFS、True Peak などの意味 | [イントロダクション](./introduction.md)、[用語集](./glossary.md) |
-| 目的 | 解析、ストリーミング、編集、ミキシング、マスタリングなど、作りたい機能 | [機能マップ](./api-surface.md)、各機能ガイド |
+| 目的 | 上の 8 分野のどれで、何を作りたいか | [機能マップ](./api-surface.md)、[楽曲解析](./analysis.md) から [ルーム音響解析](./acoustic-analysis.md) までの各分野ガイド |
 | 実行環境 | ブラウザ、Python、Node、CLI、C++ のどこで動かすか | [はじめに](./getting-started.md)、利用環境別リファレンス |
 | 根拠 | 実装の構造、アルゴリズム、検証状況 | [DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[実装検証](./implementation-validation.md) |
 
