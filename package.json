@@ -32,22 +32,22 @@
     "check:terms": "node scripts/check-terms.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.8",
+    "@biomejs/biome": "^2.5.14",
     "@vitejs/plugin-vue": "^6",
     "@vue/compiler-dom": "^3.5",
-    "@vue/test-utils": "^2.4",
+    "@vue/test-utils": "^2.5",
     "esbuild": "^0.28.2",
     "jsdom": "^30",
-    "npm-check-updates": "^23.0.2",
+    "npm-check-updates": "^23.1.0",
     "typescript": "^7.0.2",
     "vite": "^8",
     "vitepress": "^1.6.4",
-    "vitest": "^4",
-    "vue": "^3.5.41"
+    "vitest": "^5",
+    "vue": "^3.5.43"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
-    "three": "^0.185.1",
+    "three": "^0.186.0",
     "vexflow": "^5"
   }
 }

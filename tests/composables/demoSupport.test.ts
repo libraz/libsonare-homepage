@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { defineComponent, nextTick, ref } from 'vue';
+import { defineComponent, ref } from 'vue';
 import { useAudioPlayer } from '@/demos/analyzer/useAudioPlayer';
 import { useWaveform } from '@/demos/analyzer/useWaveform';
 import { useMasteringInsights } from '@/demos/mastering/useMasteringInsights';
