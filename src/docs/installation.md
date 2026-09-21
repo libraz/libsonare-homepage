@@ -9,7 +9,8 @@ By the end of this page you should be able to:
 - install the browser/WASM npm package, Python package, or source build for the right use case;
 - understand why the npm package does not install the `sonare` CLI;
 - decide when you need FFmpeg-enabled decoding instead of the default WAV/MP3 support;
-- build from source only when wheels or prebuilt packages do not cover your target.
+- build from source only when wheels or prebuilt packages do not cover your target;
+- install the C++ library under a prefix and link it from your own CMake project with `find_package(sonare)`.
 
 ## Which Install Do You Need?
 
@@ -19,7 +20,8 @@ By the end of this page you should be able to:
 | Python script or notebook | `pip install libsonare` |
 | Terminal batch workflow | `pip install libsonare` and use `sonare` |
 | Node native service or desktop tool | Build `bindings/node` as `@libraz/libsonare-native` |
-| C++ integration or custom WASM build | Build from source |
+| C++ integration | Build from source, `cmake --install`, then `find_package(sonare)` |
+| Custom WASM build | Build from source with Emscripten |
 
 ::: tip Choose by where the app runs
 For a browser UI, start with npm / WASM. For notebooks or local scripts, start with PyPI. For terminal checks, use the `sonare` CLI installed by the PyPI package. Reach for Node native or a C++ build when WASM or Python is not enough for performance, distribution, or existing-code integration.
@@ -158,25 +160,97 @@ Instead of using a published npm or PyPI package, you compile the C++ core and b
 git clone https://github.com/libraz/libsonare.git
 cd libsonare
 
-# Build native library
-mkdir build && cd build
-cmake ..                         # auto-detect FFmpeg
-# cmake .. -DSONARE_WITH_FFMPEG=ON  # require FFmpeg-backed decoding
-# cmake .. -DBUILD_ACOUSTIC_SIM=ON  # enable geometric room acoustics (default ON)
+# Configure and build the native library
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release   # auto-detect FFmpeg
+# ... -DSONARE_WITH_FFMPEG=ON   # require FFmpeg-backed decoding
+# ... -DBUILD_ACOUSTIC_SIM=ON   # geometric room acoustics (default ON)
+cmake --build build --parallel
 
-cmake --build . --parallel
-
-# Optional: install the archives, both header trees, the CMake package files
-# and the native CLI under a prefix, so other projects can find_package() it
-cmake --install . --prefix /your/prefix
-
-# Build WebAssembly (run from the repository root, not from build/)
-cd .. && make wasm
+# Build WebAssembly (from the repository root)
+make wasm
 ```
+
+The native build leaves the archives and the CLI under `build/`. Installing them under a prefix, and linking them from another project, is the [next section](#installing-the-c-library).
 
 ::: warning Rebuild the shared library and the binding together
 The Python binding refuses a shared library built from a different tree, so a locally built `.so` / `.dylib` and the binding that loads it have to come from the same checkout. After pulling a version that changes a C struct layout, rebuild the library rather than pointing the new binding at the old artifact. Installing the published wheel instead avoids the problem entirely, since it ships a matched pair.
 :::
+
+## Installing the C++ Library
+
+A source build is also the only way to obtain the C++ library — no prebuilt archives are published — but a consumer does not have to reference the build tree. `cmake --install` copies everything a downstream CMake project needs under one prefix:
+
+```bash
+cmake --install build --prefix /your/prefix
+```
+
+Omit `--prefix` and the files land under CMake's default, `/usr/local` on Linux and macOS; `-DCMAKE_INSTALL_PREFIX=/your/prefix` at configure time sets the same thing. What lands where (`lib` is `lib64` on the Linux distributions where `GNUInstallDirs` says so):
+
+| Path under the prefix | Contents |
+|-----------------------|----------|
+| `lib/` | One static archive per subsystem (`libsonare_core.a`, `libsonare_midi.a`, ...), the vendored FFTs as `libsonare_kissfft.a` and `libsonare_pffft.a`, and `libsonare.so` / `.dylib` when built with `BUILD_SHARED=ON` |
+| `include/sonare/` | The C ABI headers, included as `<sonare/sonare_c.h>` |
+| `include/sonare/cpp/` | The C++ header tree, installed whole so its relative includes resolve; reachable as `<sonare/cpp/sonare.h>` through the include root or as the in-tree `"sonare.h"` |
+| `lib/cmake/sonare/` | `sonareConfig.cmake`, `sonareConfigVersion.cmake` and `sonareTargets.cmake` — what `find_package(sonare)` loads |
+| `lib/pkgconfig/sonare.pc` | Shared build only: pkg-config describes one library, and the static configuration is a dependency-ordered set of archives |
+| `bin/sonare-cli` | The native CLI, when `BUILD_CLI` is on (the default) |
+
+The install rules exist only when libsonare is the top-level project of a native configuration. `SONARE_INSTALL` defaults to `ON` there and to `OFF` under `add_subdirectory()` or `BUILD_WASM`: a parent project decides what its own install step contains, and the WebAssembly build produces an embind module rather than a C++ library.
+
+There are no install-time components. `cmake --install --component` has nothing to select, because what an installation contains is decided at configure time by the `BUILD_*` options: an installation configured with `-DBUILD_MIXING=OFF` has no mixing archive, and its package file says so. "Component" on the consumer side means something else, covered next. See [Linking only the built-in instruments](./cpp-api.md#linking-only-the-built-in-instruments) for a trimmed configuration.
+
+### Consuming with find_package
+
+The package name is `sonare`, the namespace is `sonare::`, and the target to link is `sonare::sonare`. A complete consumer project:
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(my_app LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(sonare REQUIRED)
+
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE sonare::sonare)
+```
+
+```cpp
+// main.cpp
+#include <iostream>
+#include <sonare/cpp/sonare.h>
+
+int main(int argc, char** argv) {
+  const auto audio = sonare::Audio::from_file(argv[1]);
+  const auto result = sonare::MusicAnalyzer(audio).analyze();
+  std::cout << "BPM: " << result.bpm << "\nKey: " << result.key.to_string() << "\n";
+}
+```
+
+`sonare::sonare` is an aggregate over every static archive the installation was built with, so you do not have to work out which ones your calls need or what order they go in. Each subsystem is also exported on its own — `sonare::midi` alone is enough for an app that only renders MIDI through the built-in instruments — and naming one as a component turns a missing subsystem into a configure-time error instead of an undefined symbol at link time:
+
+```cmake
+find_package(sonare REQUIRED COMPONENTS midi)
+target_link_libraries(app PRIVATE sonare::midi)
+```
+
+Components map to the exported target names, not to the `BUILD_*` options: `BUILD_ACOUSTIC_SIM` produces `sonare::acoustic`, so the component is `acoustic`. [Link targets](./cpp-api.md#link-targets) has the full list.
+
+**Where `find_package` looks.** CMake searches the standard system prefixes, `/usr` and `/usr/local` among them, so an installation under the default prefix is found with no further setup. Anywhere else, `find_package(sonare)` stops with `Could not find a package configuration file provided by "sonare"` until the consumer is pointed at the prefix:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/your/prefix
+cmake --build build
+```
+
+`CMAKE_PREFIX_PATH` is a semicolon-separated list, so several packages in several prefixes fit in one setting; `-Dsonare_DIR=/your/prefix/lib/cmake/sonare` names this one package's directory directly instead. The version file accepts any installation whose major version matches the one requested: the archives are rebuilt from source by whoever installs them, and what breaks compatibility is a C++ API change.
+
+**Build time versus run time.** At build time a consumer needs a C++17 compiler, CMake 3.16 or later, and a threads library. Eigen is not a usage requirement, since no installed header includes it. If the installation was built with FFmpeg, the package file resolves the FFmpeg libraries through `pkg-config`, so the FFmpeg development packages have to be present on the consuming machine as well. At run time the default static installation needs nothing beyond the C++ runtime; a shared installation needs `libsonare.so` / `.dylib` on the loader path; and an FFmpeg-enabled installation of either kind needs the FFmpeg shared libraries.
+
+### Install or add_subdirectory()?
+
+`add_subdirectory()` on a checkout still works and defines the same `sonare::` target names, so a link line does not encode how libsonare was obtained. Prefer the installed package when the consumer is its own project: several projects share one installation, and rebuilding your app does not rebuild libsonare. Prefer `add_subdirectory()` when you are changing libsonare itself alongside the app, since it compiles the library from the checkout every time with no install step in between; set `BUILD_TESTING` and `BUILD_CLI` to `OFF` in the parent so the test tree and the CLI stay out of your build. The `examples/cpp` project in the libsonare repository does both, trying `find_package(sonare CONFIG QUIET)` first and falling back to the checkout when nothing is installed.
 
 ## Native Bindings (Python / Node.js)
 
@@ -284,15 +358,4 @@ For geometric room acoustics:
 - include the header for the feature you use: `acoustic/rir_synthesizer.h`, `analysis/room_estimator.h`, or `effects/acoustic/room_morph.h`;
 - build with `BUILD_ACOUSTIC_SIM=ON`.
 
-To consume an installed build from your own CMake project:
-
-```cmake
-find_package(sonare REQUIRED)
-target_link_libraries(app PRIVATE sonare::sonare)
-```
-
-`sonare::sonare` is an aggregate over every static archive the installation was built with, so you do not have to work out which ones your calls need. Each subsystem is also exported on its own — `sonare::midi` alone is enough for an app that only renders MIDI through the built-in instruments.
-
-Headers land in two places, matching how they are already written. The C ABI keeps its namespaced spelling at `<sonare/sonare_c.h>`. The C++ tree, whose headers include each other by their path relative to the source root, installs whole under `include/sonare/cpp`, so both `#include "sonare.h"` and `#include <sonare/cpp/sonare.h>` resolve — and generic paths like `core/audio.h` stay out of your include root.
-
-See [Link targets](./cpp-api.md#link-targets) for the full target list, the component-naming rule, and the build flags that decide which targets exist.
+Linking this from your own CMake project — `find_package(sonare)`, the `sonare::sonare` target, where the headers land, and `CMAKE_PREFIX_PATH` for an installation outside the system prefixes — is covered under [Installing the C++ Library](#installing-the-c-library). [Link targets](./cpp-api.md#link-targets) lists every exported target and the build flags that decide which ones exist.

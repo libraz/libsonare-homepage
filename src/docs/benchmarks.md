@@ -24,6 +24,7 @@ By the end of this page you should be able to:
 - tell a native figure from a browser figure, and know why the transform-bound ones do not carry from one to the other;
 - distinguish all-in-one pipeline speedups from per-feature comparisons;
 - understand why shared intermediates, native execution, and pipeline design matter;
+- read a before/after pair as the effect of one optimisation under stated conditions, and tell which figures grow with input length and which do not;
 - find the benchmark source and reproduce or update the measurements when hardware, inputs, or implementations change.
 
 ::: info Methodology
@@ -203,6 +204,17 @@ The answer splits by runtime, and that split is the useful part.
 Either way, libsonare is worth it when you need **HPSS** (27x native), **pitch tracking** (16x native), **chroma** (5.1x native), or **several features at once** — the last being where shared intermediates and the absence of a Python boundary dominate, and the one reason that survives the trip into a browser. For standalone beat tracking, librosa is faster on both.
 :::
 
+## What the Browser Downloads
+
+The browser pays one cost the native build never does: fetching the module. These figures are read from `src/wasm/meta.json`, the record this site keeps of the artifact it ships, rewritten every time the WebAssembly build is copied in — so they track the current build rather than a number typed into this page.
+
+| Asset | Raw | gzip |
+|-------|-----|------|
+| `sonare.wasm`, the full entry | ~{{ wasmMeta.wasm.sizeKB }} KB | ~{{ wasmMeta.wasm.gzipKB }} KB |
+| Every WebAssembly and JavaScript asset the site copies, realtime worklet module included | ~{{ wasmMeta.total.sizeKB }} KB | ~{{ wasmMeta.total.gzipKB }} KB |
+
+The gzip column is what crosses the wire; the raw column is what the engine compiles and holds in memory. Neither scales with anything you do — the module is the same size for a 10-second clip and a two-hour one, and a page that loads it once keeps it for the session. The analysis-only entry behind `@libraz/libsonare/analysis` is substantially smaller than the full one; the [WebAssembly Guide](/docs/wasm#bundle-size) has the per-file breakdown and the loader trade-offs.
+
 ## Where the Big Wins Come From (Native)
 
 ### All-in-one pipeline (72x): shared intermediates + no Python
@@ -247,13 +259,40 @@ The lattice is single-threaded. Unlike HPSS it gains nothing from extra cores, a
 
 Chroma derives a 12-pitch-class representation from the spectrogram via a constant-Q-like filterbank. libsonare's STFT and the filterbank multiplication run as Eigen3-vectorized matrix operations on a single contiguous buffer, avoiding the dispatch overhead of librosa's stack of NumPy operations.
 
+### The transform (2.3x): SIMD FFT kernels
+
+The one before/after pair in the native table is the FFT backend itself, and it is the pair that explains the shape of everything above it. One tree was built twice — with `SONARE_USE_PFFFT` on, and with `-DSONARE_USE_PFFFT=OFF` for the KissFFT-only transform — and `sonare_bench` run on both, as a native Release build over the same fixture as the rest of this page: 73 seconds at 44.1 kHz resampled to 22.05 kHz, the STFT at 2048 points with hop 512, three runs per case, the median reported, on Apple silicon.
+
+| Measurement | KissFFT only | SIMD FFT | Change |
+|-------------|--------------|----------|--------|
+| STFT (2048, hop 512) | 13.6 ms | 6.0 ms | **2.3x** |
+| Chroma | 15.0 ms | 7.5 ms | 2.0x |
+| Spectral Centroid | 19.2 ms | 10.8 ms | 1.8x |
+| Mel Spectrogram | 22.7 ms | 15.2 ms | 1.5x |
+| MFCC | 23.5 ms | 16.1 ms | 1.5x |
+| Onset Strength | 23.1 ms | 15.5 ms | 1.5x |
+| HPSS | 88.2 ms | 61.9 ms | 1.4x |
+| pYIN | 425 ms | 337 ms | 1.3x |
+| `analyze()` pipeline | 963 ms | 611 ms | 1.6x |
+
+Every row is the same transform seen through a different amount of other work: the STFT alone moves 2.3x, and each feature moves by exactly the share of its time it spent in the FFT. The measurements that reuse an already-computed spectrogram did not move at all, which is the control — nothing outside the transform changed. Results move by floating-point rounding only, well under a tenth of a decibel.
+
+Three things follow. The gain is per frame, so the ratio holds at any clip length; a longer file just has more frames. The 6.81 ms STFT in the per-feature table is this same row from the tracked `benchmarks/results_cpp.json` run, taken in a different session under a recorded load average — the gap between 6.0 and 6.8 is session noise, and the 2.3x is the effect. And none of it reaches the browser: the WebAssembly modules keep KissFFT alone, for the size reason given at the top of the page, so a tab's STFT is the KissFFT-only figure scaled by the WebAssembly penalty above.
+
 ## Wins That Do Reach the Browser
 
-The FFT backend is why most of the table above is native-only. These two are not: they are properties of how the work is organised rather than of the instruction set, so a tab gets them in full.
+The FFT backend is why most of the table above is native-only. These two are not: they are properties of how the work is organised rather than of the instruction set, so a tab gets them in full. Both are before/after pairs, and each is the effect of one change measured on one input; neither is part of the `sonare_bench` suite (`sonare_true_peak_bench` measures the realtime meter's streaming path, which is a different thing), so the inputs are stated here in full.
 
-**Offline LUFS does not scale its working set with the clip length.** Materializing the K-weighted signal whole costs one `double` per sample per channel, which for a long file is gigabytes of scratch that the measurement never needs all of at once. Instead the signal is filtered in chunks into a sliding window holding only what the earliest unfinished gating block still owes — bounded by the 3-second short-term window no matter how long the input is. Over an hour of 48 kHz mono, peak resident memory is 706 MB rather than the 2.09 GB the whole-signal form requires, and the remainder is the caller's own input buffer. The filter state carries across chunks and every block is still summed in one pass over its own window, so the reported loudness is bit-for-bit the same either way.
+| Measurement | Input | Before | After | What grows with input length |
+|-------------|-------|--------|-------|------------------------------|
+| `sonare::metering::lufs`, peak resident memory | 1 hour, 48 kHz, mono — 172.8 M samples, 691 MB of `float` input | 2.09 GB | 706 MB | Only the caller's input buffer; the measurement's own window is bounded at 3 s |
+| `sonare::metering::true_peak` at 4x oversampling, wall clock | 10 seconds, 48 kHz, material with a transient above its body | 6.1 ms | 0.6 ms | Both figures, linearly; the pruned one also depends on the crest of the material |
 
-**True peak interpolates only where a higher peak is still reachable.** Each polyphase phase bounds its output by the largest input magnitude its stencil can reach, so a group of output samples whose bound cannot exceed the peak found so far is skipped instead of computed. The measurement stays exact — only interpolations that provably cannot win are dropped. Material with a transient standing above its own body, which is most material, gets the whole benefit: a 10-second 48 kHz signal measured at 4x takes 0.6 ms where exhaustive interpolation of the same signal takes 6.1 ms. A signal sitting at full scale throughout has nothing to prune and costs what exhaustive interpolation costs.
+**Offline LUFS does not scale its working set with the clip length.** Materializing the K-weighted signal whole costs one `double` per sample per channel — 1.38 GB for the hour above, which with the 691 MB input buffer and the process's own baseline on top is the 2.09 GB. The measurement never needs all of it at once, so the signal is instead filtered in chunks into a sliding window holding only what the earliest unfinished gating block still owes, bounded by the 3-second short-term window no matter how long the input is. Peak memory is now the input buffer plus about 15 MB, baseline included. The filter state carries across chunks and every block is still summed in one pass over its own window, so the reported loudness is bit-for-bit the same either way.
+
+This is the figure that decides whether a long file fits in a tab. The shipped WebAssembly module is built with `ALLOW_MEMORY_GROWTH` and no raised `MAXIMUM_MEMORY`, so its linear memory tops out at Emscripten's 2 GB default: an hour of 48 kHz mono did not fit before and fits now with room to spare, and the remaining limit is the decoded input itself — an hour of 48 kHz stereo is 1.38 GB of `float` before the measurement touches it. Batching a long file into segments for memory's sake is no longer something the LUFS pass needs; batch for the input buffer, if at all.
+
+**True peak interpolates only where a higher peak is still reachable.** Each polyphase phase bounds its output by the largest input magnitude its stencil can reach, so a group of output samples whose bound cannot exceed the peak found so far is skipped instead of computed. The measurement stays exact — only interpolations that provably cannot win are dropped. Material with a transient standing above its own body, which is most material, gets the whole benefit; a signal sitting at full scale throughout has nothing to prune and costs what exhaustive interpolation costs, so read 0.6 ms as the common case and 6.1 ms as the ceiling. Either way it is 0.06 to 0.6 ms per second of audio — a three-minute track measures in well under a second even unpruned, so there is nothing here worth batching, and nothing that changes in a browser.
 
 ## What's Not Faster (And Where)
 

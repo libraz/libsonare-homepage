@@ -10,6 +10,7 @@
 - npm パッケージでは `sonare` CLI がインストールされない理由を理解できる。
 - 標準の WAV/MP3 対応ではなく、FFmpeg 有効デコードが必要な場面を判断できる。
 - ホイールや既存パッケージで足りないときだけ、ソースからビルドできる。
+- C++ ライブラリをプレフィックス配下にインストールし、自分の CMake プロジェクトから `find_package(sonare)` でリンクできる。
 
 ## どれをインストールするか
 
@@ -19,7 +20,8 @@
 | Python スクリプトやノートブック | `pip install libsonare` |
 | ターミナルでのバッチ処理 | `pip install libsonare` で `sonare` を使う |
 | Node ネイティブのサービスやデスクトップツール | `bindings/node` を `@libraz/libsonare-native` としてビルド |
-| C++ 組み込みや独自 WASM ビルド | ソースからビルド |
+| C++ 組み込み | ソースからビルドして `cmake --install` し、`find_package(sonare)` で利用 |
+| 独自 WASM ビルド | Emscripten でソースからビルド |
 
 ::: tip 迷ったらアプリの実行場所で選ぶ
 ブラウザ UI なら npm / WASM、ノートブックやローカル処理なら PyPI、ターミナルだけで確認するなら PyPI 同梱の `sonare` CLI から始めます。Node ネイティブや C++ ビルドは、WASM や Python では性能・配布・既存コード連携が足りないと分かった段階で選ぶと判断しやすくなります。
@@ -144,26 +146,97 @@ WebAssembly パッケージは Windows のブラウザでも問題なく動き�
 git clone https://github.com/libraz/libsonare.git
 cd libsonare
 
-# ネイティブライブラリをビルド
-mkdir build && cd build
-cmake ..                         # FFmpeg を自動検出
-# cmake .. -DSONARE_WITH_FFMPEG=ON  # FFmpeg デコードを必須にする
-# cmake .. -DBUILD_ACOUSTIC_SIM=ON  # 幾何ベースのルーム音響を有効化（既定 ON）
+# ネイティブライブラリを構成してビルド
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release   # FFmpeg を自動検出
+# ... -DSONARE_WITH_FFMPEG=ON   # FFmpeg デコードを必須にする
+# ... -DBUILD_ACOUSTIC_SIM=ON   # 幾何ベースのルーム音響（既定 ON）
+cmake --build build --parallel
 
-cmake --build . --parallel
-
-# 任意: アーカイブ、2 つのヘッダーツリー、CMake のパッケージファイル、
-# ネイティブ CLI をプレフィックス配下にインストールする
-# （他のプロジェクトから find_package() で参照できるようになる）
-cmake --install . --prefix /your/prefix
-
-# WebAssembly をビルド（build/ ではなくリポジトリルートで実行）
-cd .. && make wasm
+# WebAssembly をビルド（リポジトリルートで実行）
+make wasm
 ```
+
+ネイティブビルドの成果物（アーカイブと CLI）は `build/` 配下に残ります。これをプレフィックス配下にインストールし、別プロジェクトからリンクする手順は[次の節](#c-ライブラリのインストール)にあります。
 
 ::: warning 共有ライブラリとバインディングは一緒にビルドし直す
 Python バインディングは、別のツリーでビルドされた共有ライブラリを受け付けません。自前でビルドした `.so` / `.dylib` と、それを読み込むバインディングは、同じチェックアウトから生成する必要があります。C 構造体のレイアウトが変わるバージョンを取り込んだあとは、新しいバインディングを古い成果物へ向けるのではなく、ライブラリをビルドし直してください。公開されている wheel を使えば、対応の取れた組み合わせがそのまま入るため、この問題は起きません。
 :::
+
+## C++ ライブラリのインストール
+
+C++ ライブラリを入手する方法はソースビルドだけです（ビルド済みアーカイブは公開されていません）。ただし、利用側がビルドツリーを直接参照する必要はありません。`cmake --install` を実行すると、下流の CMake プロジェクトに必要なものが 1 つのプレフィックス配下にまとめてコピーされます。
+
+```bash
+cmake --install build --prefix /your/prefix
+```
+
+`--prefix` を省略すると CMake の既定値、Linux と macOS では `/usr/local` 配下に入ります。構成時に `-DCMAKE_INSTALL_PREFIX=/your/prefix` を渡しても同じです。プレフィックス配下の配置は次のとおりです（`GNUInstallDirs` がそう定める Linux ディストリビューションでは `lib` が `lib64` になります）。
+
+| プレフィックス配下のパス | 内容 |
+|--------------------------|------|
+| `lib/` | サブシステムごとの静的アーカイブ（`libsonare_core.a`、`libsonare_midi.a` など）、同梱 FFT の `libsonare_kissfft.a` と `libsonare_pffft.a`、`BUILD_SHARED=ON` でビルドした場合は `libsonare.so` / `.dylib` |
+| `include/sonare/` | C ABI のヘッダー。`<sonare/sonare_c.h>` としてインクルードする |
+| `include/sonare/cpp/` | C++ のヘッダーツリー。相対 include が解決できるようツリーごと入る。include ルート経由の `<sonare/cpp/sonare.h>` でも、ツリー内と同じ `"sonare.h"` でも届く |
+| `lib/cmake/sonare/` | `sonareConfig.cmake`、`sonareConfigVersion.cmake`、`sonareTargets.cmake`。`find_package(sonare)` が読み込むファイル |
+| `lib/pkgconfig/sonare.pc` | 共有ビルドのみ。pkg-config が記述できるのはライブラリ 1 つで、静的構成は依存順に並んだアーカイブの集合だから |
+| `bin/sonare-cli` | ネイティブ CLI。`BUILD_CLI` が ON（既定）の場合 |
+
+インストールルールが生成されるのは、libsonare がネイティブ構成のトップレベルプロジェクトであるときだけです。`SONARE_INSTALL` はその場合 `ON`、`add_subdirectory()` 配下や `BUILD_WASM` では `OFF` が既定になります。親プロジェクトの install ステップに何を含めるかは親が決めることであり、WebAssembly ビルドが生成するのは C++ ライブラリではなく embind モジュールだからです。
+
+インストール時のコンポーネントはありません。`cmake --install --component` で選べるものはなく、インストールに何が含まれるかは構成時の `BUILD_*` オプションで決まります。`-DBUILD_MIXING=OFF` で構成したインストールにはミキシングのアーカイブが存在せず、パッケージファイルもそう申告します。利用側で言う「コンポーネント」は別の意味で、次項で扱います。絞り込んだ構成の例は[内蔵インストゥルメントだけをリンクする](./cpp-api.md#内蔵インストゥルメントだけをリンクする)を参照してください。
+
+### find_package で利用する
+
+パッケージ名は `sonare`、名前空間は `sonare::`、リンクするターゲットは `sonare::sonare` です。利用側プロジェクトの全体は次のようになります。
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(my_app LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(sonare REQUIRED)
+
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE sonare::sonare)
+```
+
+```cpp
+// main.cpp
+#include <iostream>
+#include <sonare/cpp/sonare.h>
+
+int main(int argc, char** argv) {
+  const auto audio = sonare::Audio::from_file(argv[1]);
+  const auto result = sonare::MusicAnalyzer(audio).analyze();
+  std::cout << "BPM: " << result.bpm << "\nKey: " << result.key.to_string() << "\n";
+}
+```
+
+`sonare::sonare` は、そのインストールに含まれる静的アーカイブすべてを束ねた集約ターゲットです。どのアーカイブが必要か、どの順に並べるかを自分で見極める必要はありません。各サブシステムは単独でもエクスポートされており、内蔵インストゥルメントで MIDI をレンダリングするだけのアプリなら `sonare::midi` だけで足ります。サブシステムをコンポーネントとして指名すると、存在しないサブシステムはリンク時の未定義シンボルではなく構成時のエラーになります。
+
+```cmake
+find_package(sonare REQUIRED COMPONENTS midi)
+target_link_libraries(app PRIVATE sonare::midi)
+```
+
+コンポーネント名は `BUILD_*` オプションではなくエクスポートされたターゲット名に対応します。`BUILD_ACOUSTIC_SIM` が生成するのは `sonare::acoustic` なので、コンポーネントは `acoustic` です。一覧は[リンクターゲット](./cpp-api.md#リンクターゲット)にあります。
+
+**`find_package` が探す場所。** CMake は `/usr` や `/usr/local` を含む標準のシステムプレフィックスを探索するため、既定のプレフィックスへのインストールは追加設定なしで見つかります。それ以外の場所に入れた場合、`find_package(sonare)` は `Could not find a package configuration file provided by "sonare"` で止まります。利用側にプレフィックスを教えてください。
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/your/prefix
+cmake --build build
+```
+
+`CMAKE_PREFIX_PATH` はセミコロン区切りのリストなので、複数のパッケージが別々のプレフィックスにあっても 1 つの設定に収まります。このパッケージだけを指すなら `-Dsonare_DIR=/your/prefix/lib/cmake/sonare` でディレクトリを直接指定しても同じです。バージョンファイルは、要求したものとメジャーバージョンが一致するインストールをすべて受け入れます。アーカイブはインストールする人がソースから再ビルドするものであり、互換性を壊すのは C++ API の変更だけだからです。
+
+**ビルド時と実行時に必要なもの。** ビルド時に利用側で必要なのは、C++17 対応コンパイラ、CMake 3.16 以上、スレッドライブラリです。Eigen は不要です。インストールされるヘッダーはどれも Eigen をインクルードしません。インストールが FFmpeg 有効でビルドされている場合、パッケージファイルは FFmpeg のライブラリを `pkg-config` 経由で解決するため、利用側のマシンにも FFmpeg の開発パッケージが必要です。実行時には、既定の静的インストールなら C++ ランタイム以外に何も要りません。共有ビルドのインストールではローダーのパス上に `libsonare.so` / `.dylib` が必要で、FFmpeg 有効のインストールはどちらの形でも FFmpeg の共有ライブラリが必要です。
+
+### インストールと add_subdirectory() の使い分け
+
+チェックアウトに対する `add_subdirectory()` も引き続き使え、同じ `sonare::` のターゲット名が定義されるため、リンク行に入手方法の違いは現れません。利用側が独立したプロジェクトなら、インストール済みパッケージを使うほうが向いています。複数のプロジェクトで 1 つのインストールを共有でき、アプリを再ビルドしても libsonare は再ビルドされません。libsonare 自体をアプリと並行して変更しているなら `add_subdirectory()` のほうが向いています。チェックアウトから毎回ライブラリがコンパイルされ、途中に install ステップが要りません。テストツリーと CLI を自分のビルドから外すため、親側で `BUILD_TESTING` と `BUILD_CLI` を `OFF` にしてください。libsonare リポジトリの `examples/cpp` は両方に対応しており、まず `find_package(sonare CONFIG QUIET)` を試し、何もインストールされていなければチェックアウトにフォールバックします。
 
 ## ネイティブバインディング（Python / Node.js）
 
@@ -268,15 +341,4 @@ sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rat
 - 使う機能に応じて、`acoustic/rir_synthesizer.h`、`analysis/room_estimator.h`、`effects/acoustic/room_morph.h` のいずれかをインクルードする。
 - `BUILD_ACOUSTIC_SIM=ON` でビルドする。
 
-インストール済みのビルドを自分の CMake プロジェクトから使う場合は次のようにします。
-
-```cmake
-find_package(sonare REQUIRED)
-target_link_libraries(app PRIVATE sonare::sonare)
-```
-
-`sonare::sonare` は、そのインストールに含まれる静的アーカイブすべてを束ねた集約ターゲットです。どのアーカイブが必要かを自分で見極める必要はありません。各サブシステムは単独でもエクスポートされており、内蔵インストゥルメントで MIDI をレンダリングするだけのアプリなら `sonare::midi` だけで足ります。
-
-ヘッダーは、実際の書かれ方に合わせて 2 か所にインストールされます。C ABI は名前空間付きの綴り `<sonare/sonare_c.h>` のままです。C++ ツリーはヘッダー同士がソースルートからの相対パスで include し合う構造なので、`include/sonare/cpp` 配下にツリーごとインストールされます。その結果 `#include "sonare.h"` と `#include <sonare/cpp/sonare.h>` の両方が解決でき、`core/audio.h` のような一般的なパスが利用側の include ルートに現れることもありません。
-
-ターゲットの一覧、コンポーネント名の規則、どれが存在するかを決めるビルドフラグについては [リンクターゲット](./cpp-api.md#リンクターゲット) を参照してください。
+自分の CMake プロジェクトからのリンク方法（`find_package(sonare)`、`sonare::sonare` ターゲット、ヘッダーの配置先、システムプレフィックス外のインストールに対する `CMAKE_PREFIX_PATH`）は [C++ ライブラリのインストール](#c-ライブラリのインストール)で扱っています。エクスポートされる全ターゲットと、どれが存在するかを決めるビルドフラグは[リンクターゲット](./cpp-api.md#リンクターゲット)にあります。
