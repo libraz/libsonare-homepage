@@ -284,7 +284,15 @@ export const analysisDemos: SonareDemoDef[] = [
     // separate cleanly, so the percussive stem comes out on its own.
     source: { kind: 'clip', clip: 'mixed-stems' },
     viz: 'spectrogram',
-    config: { processor: 'hpss-decompose' },
+    // Nothing is being repaired here, so the injected hiss and the repair copy
+    // would both misdescribe the split.
+    config: {
+      processor: 'hpss-decompose',
+      injectNoise: false,
+      eyebrow: 'A/B PROCESS · HPSS',
+      legendBefore: { en: 'Full mix', ja: 'フルミックス' },
+      legendAfter: { en: 'Percussive', ja: '打撃成分' },
+    },
     title: {
       en: 'Stem decomposition — pulling the percussive part out of a mix',
       ja: 'ステム分解 — ミックスから打撃成分を取り出す',

@@ -4,14 +4,19 @@
  *
  * The processor is picked from `def.config.processor` (see PROCESSORS below); a
  * definition that omits it gets the classical denoiser, which is what `repair-denoise`
- * relies on. The current instance documented here is that denoiser. A clean sustained
- * chord is fed a deterministic layer of broadband hiss (the "Damaged" source), then the
- * repair stage removes it (the "Repaired" output). Both averaged spectra are drawn at
+ * relies on. The current instance documented here is that denoiser. Unless
+ * `def.config.injectNoise` says otherwise, a deterministic layer of broadband hiss
+ * (amount `def.config.noiseAmp`) is added to the source clip first (the "before"
+ * source), then the repair stage removes it (the "after" output) — a decomposition or
+ * dereverb definition that supplies its own already-flawed clip sets `injectNoise:
+ * false` so the archetype doesn't add damage on top. Both averaged spectra are drawn at
  * once so the raised noise floor — and the gap it leaves when removed — is the whole
- * story: the Damaged tail rides high across the highs, the Repaired tail drops back
- * onto the music. Flip Compare to audition each side (loudness is untouched, so the
- * hiss is the only thing that moves) and switch the algorithm to see how much floor
- * each one pulls down. The FLOOR readout is the high-band reduction in dB.
+ * story: the before tail rides high across the highs, the after tail drops back onto
+ * the music. Flip Compare to audition each side (loudness is untouched, so the hiss is
+ * the only thing that moves) and switch the algorithm to see how much floor each one
+ * pulls down. The FLOOR readout is the high-band reduction in dB. The eyebrow and the
+ * two legend labels are also definition-supplied (`def.config.eyebrow`,
+ * `legendBefore`, `legendAfter`), defaulting to the denoiser's own copy.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
@@ -21,7 +26,7 @@ import {
   peakEnvelope,
   SPECTRUM_COMPRESSION,
 } from '@/demos/inline/audio/processors';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -52,6 +57,23 @@ const mode = computed<string>(() => String(values.mode ?? 'logMmse'));
 const repaired = computed(() => view.value === 'repaired');
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
 
+// ---- chrome text, definition-supplied with the denoiser's own copy as fallback ----
+const DEFAULT_EYEBROW = 'A/B PROCESS · DENOISE';
+// The canvas legend was never localized before this became configurable; both
+// locale slots repeat the original English so an unchanged definition is unaffected.
+const DEFAULT_LEGEND_BEFORE: I18nText = { en: 'Damaged', ja: '修復前' };
+const DEFAULT_LEGEND_AFTER: I18nText = { en: 'Repaired', ja: '修復後' };
+const eyebrow = computed<string>(() => {
+  const v = props.def.config?.eyebrow;
+  return typeof v === 'string' ? v : DEFAULT_EYEBROW;
+});
+const legendBeforeText = computed<string>(() =>
+  localized((props.def.config?.legendBefore as I18nText) ?? DEFAULT_LEGEND_BEFORE, loc.value),
+);
+const legendAfterText = computed<string>(() =>
+  localized((props.def.config?.legendAfter as I18nText) ?? DEFAULT_LEGEND_AFTER, loc.value),
+);
+
 // ---- presentation state ----------------------------------------------------
 const floorDb = ref(0); // high-band reduction Repaired vs Damaged, in dB
 const stateLabel = computed(() => {
@@ -63,7 +85,17 @@ const stateLabel = computed(() => {
 });
 
 // ---- audio + figure data ---------------------------------------------------
-const NOISE_AMP = 0.05; // injected broadband hiss (linear)
+// Opt-out rather than opt-in: an unset config must keep injecting hiss so
+// `repair-denoise`, whose definition predates these fields, renders unchanged.
+const DEFAULT_NOISE_AMP = 0.05; // injected broadband hiss (linear)
+const injectNoise = computed<boolean>(() => {
+  const v = props.def.config?.injectNoise;
+  return typeof v === 'boolean' ? v : true;
+});
+const noiseAmp = computed<number>(() => {
+  const v = props.def.config?.noiseAmp;
+  return typeof v === 'number' ? v : DEFAULT_NOISE_AMP;
+});
 const FLOOR_HZ = 4000; // band above which we score the noise floor
 const SPEC_MAX_HZ = 8000;
 const SPEC_COLS = 320;
@@ -124,14 +156,19 @@ async function compute(): Promise<void> {
     const clip = await loadClip(clipName.value);
     const sr = clip.sampleRate;
 
-    // Damaged source: clean clip + deterministic broadband hiss. Cache once.
+    // "Before" source: the clip, plus deterministic broadband hiss unless the
+    // definition supplies its own already-flawed clip. Cache once.
     if (!damaged) {
-      const rng = mulberry32(0x4ad9c1f7);
-      const noisy = new Float32Array(clip.samples.length);
-      for (let i = 0; i < noisy.length; i++) {
-        noisy[i] = clip.samples[i] + (rng() * 2 - 1) * NOISE_AMP;
+      if (injectNoise.value) {
+        const rng = mulberry32(0x4ad9c1f7);
+        const noisy = new Float32Array(clip.samples.length);
+        for (let i = 0; i < noisy.length; i++) {
+          noisy[i] = clip.samples[i] + (rng() * 2 - 1) * noiseAmp.value;
+        }
+        damaged = { samples: noisy, sampleRate: sr };
+      } else {
+        damaged = { samples: clip.samples, sampleRate: sr };
       }
-      damaged = { samples: noisy, sampleRate: sr };
     }
 
     // Repaired output: the processor named by def.config.processor, at the selected mode.
@@ -307,10 +344,10 @@ function paint(): void {
   ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
   ctx.fillStyle = hexA(dmgCol, emph > 0.5 ? 0.5 : 0.95);
   ctx.fillRect(padX, legendY + 1, 9, 3);
-  ctx.fillText('Damaged', padX + 13, legendY);
+  ctx.fillText(legendBeforeText.value, padX + 13, legendY);
   ctx.fillStyle = hexA(repCol, emph > 0.5 ? 0.95 : 0.5);
   ctx.fillRect(padX + 72, legendY + 1, 9, 3);
-  ctx.fillText('Repaired', padX + 85, legendY);
+  ctx.fillText(legendAfterText.value, padX + 85, legendY);
 
   // Axis labels.
   ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
@@ -388,7 +425,7 @@ onBeforeUnmount(() => {
 
 <template>
   <DemoFrame
-    eyebrow="A/B PROCESS · DENOISE"
+    :eyebrow="eyebrow"
     :title="title"
     :caption="caption"
     :state="stateLabel"

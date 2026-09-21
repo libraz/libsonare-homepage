@@ -81,7 +81,12 @@ export const masteringDemos: SonareDemoDef[] = [
     // stage has real record damage to work on rather than injected hiss alone.
     source: { kind: 'clip', clip: 'damaged-vinyl' },
     viz: 'spectrogram',
-    config: { processor: 'dereverb-classical' },
+    // The clip carries its own damage, so the archetype must not add hiss on top.
+    config: {
+      processor: 'dereverb-classical',
+      injectNoise: false,
+      eyebrow: 'A/B PROCESS · DEREVERB',
+    },
     title: {
       en: 'Restoration — a worn record, before and after',
       ja: 'レストレーション — 傷んだレコードの修復前と修復後',
