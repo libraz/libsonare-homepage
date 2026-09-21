@@ -8,11 +8,13 @@ import {
   checkI18nParity,
   checkLocaleLeafValues,
   checkScaffoldedTranslationTodos,
+  compareMarkdownStructure,
   flattenKeys,
   getByPath,
   listMarkdownFiles,
   listSourceFiles,
   readLocales,
+  readMarkdownStructure,
 } from '../../scripts/check-i18n-parity.mjs';
 
 const scriptPath = path.resolve('scripts/check-i18n-parity.mjs');
@@ -282,6 +284,73 @@ describe('check-i18n-parity script helpers', () => {
     expect(
       listSourceFiles(path.join(root, 'src')).map((file) => path.relative(root, file)),
     ).toEqual(['src/App.vue', 'src/utils/demo.ts']);
+  });
+
+  it('reads a page skeleton and ignores markup that is only sample text in a fence', () => {
+    const root = createWorkspace();
+    const file = writeFile(
+      root,
+      'src/docs/page.md',
+      [
+        '# Title',
+        '',
+        '::: tip',
+        'A hint.',
+        ':::',
+        '',
+        '## Options',
+        '',
+        '| Option | Default |',
+        '|---|---|',
+        '| `gain` | 0 |',
+        '',
+        '<SonareDemo id="beat-tracking" />',
+        '',
+        '```markdown',
+        '# Not a heading',
+        '::: warning',
+        '| a | b |',
+        '|---|---|',
+        '<NotAComponent />',
+        '```',
+        '',
+        '### Notes',
+      ].join('\n'),
+    );
+
+    expect(readMarkdownStructure(file)).toEqual({
+      headings: [1, 2, 3],
+      fences: 2,
+      tables: 1,
+      components: [':tip', 'SonareDemo'],
+    });
+  });
+
+  it('reports every kind of skeleton divergence between a page and its translation', () => {
+    const failures: string[] = [];
+    const base = { headings: [1, 2], fences: 2, tables: 1, components: ['SonareDemo'] };
+
+    compareMarkdownStructure(failures, 'docs: a.md', base, { ...base, headings: [1] });
+    compareMarkdownStructure(failures, 'docs: b.md', base, { ...base, headings: [1, 3] });
+    compareMarkdownStructure(failures, 'docs: c.md', base, { ...base, fences: 4 });
+    compareMarkdownStructure(failures, 'docs: d.md', base, { ...base, tables: 0 });
+    compareMarkdownStructure(failures, 'docs: e.md', base, { ...base, components: [':tip'] });
+
+    expect(failures).toEqual([
+      'docs: a.md: heading count 2 vs 1',
+      'docs: b.md: heading levels differ',
+      'docs: c.md: code fence count 2 vs 4',
+      'docs: d.md: table count 1 vs 0',
+      'docs: e.md: components [SonareDemo] vs [:tip]',
+    ]);
+  });
+
+  it('catches a translation that silently dropped a section its source page gained', () => {
+    const root = createWorkspace();
+    writeValidProject(root);
+    writeFile(root, 'src/docs/guide.md', '# Guide\n\n## New Section\n\nAdded here first.\n');
+
+    expect(checkI18nParity({ root })).toEqual(['docs: guide.md: heading count 2 vs 1']);
   });
 
   it('keeps the CLI output and exit code stable on success and failure', () => {

@@ -122,6 +122,67 @@ function compareMirroredMarkdown(failures, label, leftName, rightName, enDir, lo
   for (const file of [...localizedFiles].sort()) {
     if (!enFiles.has(file)) failures.push(`${label}: ${leftName} missing ${file}`);
   }
+
+  for (const file of [...enFiles].sort()) {
+    if (!localizedFiles.has(file)) continue;
+    compareMarkdownStructure(
+      failures,
+      `${label}: ${file}`,
+      readMarkdownStructure(path.join(enDir, file)),
+      readMarkdownStructure(path.join(localizedDir, file)),
+    );
+  }
+}
+
+/**
+ * The structural skeleton a translation must reproduce. Prose belongs to the
+ * translator, but a heading, a fenced block, a table or a component present on one
+ * side and absent on the other means the two pages no longer say the same things.
+ */
+export function readMarkdownStructure(file) {
+  const headings = [];
+  const components = [];
+  let fences = 0;
+  let tables = 0;
+  let insideFence = false;
+
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      insideFence = !insideFence;
+      fences += 1;
+      continue;
+    }
+    if (insideFence) continue;
+
+    const heading = line.match(/^(#{1,6})\s/);
+    if (heading) headings.push(heading[1].length);
+    // A separator row is the one part of a markdown table that cannot be translated away.
+    if (/^\s*\|[-: |]+\|\s*$/.test(line)) tables += 1;
+    for (const match of line.matchAll(/<([A-Z][A-Za-z0-9]*)/g)) components.push(match[1]);
+    const container = line.match(/^:::\s*(\w+)/);
+    if (container) components.push(`:${container[1]}`);
+  }
+
+  return { headings, fences, tables, components };
+}
+
+export function compareMarkdownStructure(failures, name, left, right) {
+  if (left.headings.length !== right.headings.length) {
+    failures.push(`${name}: heading count ${left.headings.length} vs ${right.headings.length}`);
+  } else if (left.headings.join(',') !== right.headings.join(',')) {
+    failures.push(`${name}: heading levels differ`);
+  }
+  if (left.fences !== right.fences) {
+    failures.push(`${name}: code fence count ${left.fences} vs ${right.fences}`);
+  }
+  if (left.tables !== right.tables) {
+    failures.push(`${name}: table count ${left.tables} vs ${right.tables}`);
+  }
+  if (left.components.join(',') !== right.components.join(',')) {
+    failures.push(
+      `${name}: components [${left.components.join(' ')}] vs [${right.components.join(' ')}]`,
+    );
+  }
 }
 
 export function checkScaffoldedTranslationTodos({ root, failures }) {
