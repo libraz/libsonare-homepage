@@ -15,15 +15,18 @@
  * - `gs-drum-kit` — bounce a fixed one-bar drum pattern on MIDI channel 10, with
  *   the variant sent as the rhythm part's Program Change to select a GS drum kit.
  *   Kits the fallback leaves unvoiced (SFX, program 56) play the Standard kit.
- * - `gs-efx` — render a short held chord through the GS-compatible SF2 player
- *   (again with no SoundFont, so the fallback synth sounds), pushing a raw GS
- *   insertion-effect (EFX) SysEx so the reader can A/B the dry tone against each
- *   effect. The effects are libsonare's own DSP, selected via the GS EFX
- *   type-numbering model.
+ * - `gs-efx` — bounce a short held chord through the GS-compatible SF2 player
+ *   (again with no SoundFont, so the fallback synth sounds), with a raw GS
+ *   insertion-effect (EFX) SysEx selecting the effect so the reader can A/B the
+ *   dry tone against each one. The effects are libsonare's own DSP, selected via
+ *   the GS EFX type-numbering model.
  *
- * Only `gs-efx` needs the live engine: EFX state is reachable solely through
- * SysEx, which the offline project bounce cannot carry. The other three are plain
- * channel messages and bounce offline.
+ * All four bounce offline. EFX state is reachable only through SysEx, and a clip
+ * built with `setMidiEvents` cannot hold any — the payloads sit beside the event
+ * list behind a handle `ProjectMidiEvent` does not carry. `importSmf` is the way
+ * in: SysEx that arrives with the file survives, and the bounce realizes it. So
+ * `gs-efx` assembles a one-track SMF instead of an event list, and every mode
+ * shares one render path.
  *
  * Every rendered buffer is peak-normalized so the A/B is about timbral character,
  * not loudness. Pressing play auditions the exact buffer on screen.
@@ -85,6 +88,8 @@ const stateLabel = computed(() => {
 
 // ---- render targets --------------------------------------------------------
 const SR = 44100;
+/** Ticks per quarter note in the SMF the EFX mode assembles. */
+const SMF_PPQN = 480;
 const ENV_COLS = 180;
 const SCOPE_N = 480;
 const SCOPE_CYCLES = 5;
@@ -108,6 +113,7 @@ interface ProjectLike {
   setSampleRate(sr: number): void;
   addMidiClip(startPpq: number, lengthPpq: number): { trackId: number; clipId: number };
   setMidiEvents(clipId: number, events: MidiEvent[]): void;
+  importSmf(data: Uint8Array): number;
   bounceWithSf2Instrument(
     instrument: Record<string, unknown>,
     options: { numChannels: number; sampleRate: number; totalFrames: number },
@@ -140,70 +146,90 @@ interface ProjectCtor {
     velocity?: number,
   ): MidiEvent;
 }
-interface EngineLike {
-  setSf2Instrument(config: Record<string, unknown>, destinationId: number): void;
-  pushMidiSysex(destinationId: number, data: Uint8Array, renderFrame?: number): void;
-  pushMidiNoteOn(
-    destinationId: number,
-    group: number,
-    channel: number,
-    note: number,
-    velocity: number,
-    renderFrame?: number,
-  ): void;
-  pushMidiNoteOff(
-    destinationId: number,
-    group: number,
-    channel: number,
-    note: number,
-    velocity?: number,
-    renderFrame?: number,
-  ): void;
-  process(channels: Float32Array[]): Float32Array[];
-  destroy(): void;
-}
-interface EngineCtor {
-  new (sampleRate: number, maxBlockSize: number): EngineLike;
-}
-
 // ---- GS SysEx helpers (Roland DT1 frames) ----------------------------------
-/** Wrap an address+data run in a Roland DT1 SysEx frame with its checksum. */
-function dt1(addrData: number[]): Uint8Array {
+/** Wrap an address+data run in a Roland DT1 SysEx body with its checksum. */
+function dt1(addrData: number[]): number[] {
   let sum = 0;
   for (const b of addrData) sum = (sum + b) & 0x7f;
-  return Uint8Array.from([0xf0, 0x41, 0x10, 0x42, 0x12, ...addrData, (128 - sum) & 0x7f, 0xf7]);
+  return [0x41, 0x10, 0x42, 0x12, ...addrData, (128 - sum) & 0x7f, 0xf7];
 }
 /** Select the shared GS insertion-effect type (14-bit, MSB<<8|LSB) at 40 03 00. */
-function efxTypeSysex(type: number): Uint8Array {
+function efxTypeSysex(type: number): number[] {
   return dt1([0x40, 0x03, 0x00, (type >> 8) & 0x7f, type & 0x7f]);
 }
 /** Route a part (channel) through the insertion effect via the 40 4x 22 switch. */
-function efxPartOnSysex(channel: number): Uint8Array {
+function efxPartOnSysex(channel: number): number[] {
   const block = channel === 9 ? 0 : channel + 1;
   return dt1([0x40, 0x40 | block, 0x22, 1]);
 }
 
+// ---- minimal SMF writer ----------------------------------------------------
+// Only `importSmf` carries SysEx into a project, so the EFX mode needs a file
+// rather than an event list. One format-0 track is all that takes.
+/** MIDI variable-length quantity. */
+function vlq(value: number): number[] {
+  const out = [value & 0x7f];
+  let rest = value >>> 7;
+  while (rest > 0) {
+    out.unshift((rest & 0x7f) | 0x80);
+    rest >>>= 7;
+  }
+  return out;
+}
+/** Prefix a chunk body with its four-character id and big-endian length. */
+function smfChunk(id: string, body: number[]): number[] {
+  const n = body.length;
+  return [
+    ...[...id].map((c) => c.charCodeAt(0)),
+    (n >>> 24) & 0xff,
+    (n >>> 16) & 0xff,
+    (n >>> 8) & 0xff,
+    n & 0xff,
+    ...body,
+  ];
+}
+/**
+ * Build a one-track SMF from events timed in quarter notes, so the caller keeps
+ * the same beat units the `Project.midi*` packers use. `sysex` bodies exclude
+ * the leading `0xF0`, which the writer supplies with the payload length.
+ */
+function buildSmf(
+  events: ReadonlyArray<{ beat: number; bytes?: number[]; sysex?: number[] }>,
+  endBeat: number,
+): Uint8Array {
+  const track: number[] = [];
+  let lastTick = 0;
+  const ordered = [...events].sort((a, b) => a.beat - b.beat);
+  for (const ev of [...ordered, { beat: endBeat, bytes: [0xff, 0x2f, 0x00] }]) {
+    const tick = Math.round(ev.beat * SMF_PPQN);
+    const payload = ev.sysex ? [0xf0, ...vlq(ev.sysex.length), ...ev.sysex] : (ev.bytes ?? []);
+    track.push(...vlq(tick - lastTick), ...payload);
+    lastTick = tick;
+  }
+  return Uint8Array.from([
+    ...smfChunk('MThd', [0, 0, 0, 1, (SMF_PPQN >> 8) & 0xff, SMF_PPQN & 0xff]),
+    ...smfChunk('MTrk', track),
+  ]);
+}
+
 // ---- renderers -------------------------------------------------------------
 /**
- * Bounce one MIDI clip offline with no SoundFont loaded, so every note plays
- * the fallback synth.
+ * Bounce a project offline with no SoundFont loaded, so every note plays the
+ * fallback synth. `populate` fills it — an event list for the channel-message
+ * modes, an imported SMF for the one that needs SysEx.
  *
- * Project MIDI positions are QUARTER NOTES (floats), not PPQ ticks, so `beats`
- * is the clip length in quarter notes at the default 120 BPM (0.5 s each) and
  * `seconds` sizes the render including the release tail.
  */
 function bounceProject(
   wasm: WasmModule,
-  events: (Project: ProjectCtor) => MidiEvent[],
-  beats: number,
+  populate: (project: ProjectLike, Project: ProjectCtor) => void,
   seconds: number,
 ): Float32Array {
   const Project = (wasm as unknown as { Project: ProjectCtor }).Project;
   const project = new Project();
   try {
     project.setSampleRate(SR);
-    const { clipId } = project.addMidiClip(0, beats);
-    project.setMidiEvents(clipId, events(Project));
+    populate(project, Project);
     return project.bounceWithSf2Instrument(
       {},
       { numChannels: 1, sampleRate: SR, totalFrames: Math.round(SR * seconds) },
@@ -214,6 +240,21 @@ function bounceProject(
 }
 
 /**
+ * Populate from a flat event list. Project MIDI positions are QUARTER NOTES
+ * (floats), not PPQ ticks, so `beats` is the clip length in quarter notes at
+ * the default 120 BPM (0.5 s each).
+ */
+function fromEvents(
+  events: (Project: ProjectCtor) => MidiEvent[],
+  beats: number,
+): (project: ProjectLike, Project: ProjectCtor) => void {
+  return (project, Project) => {
+    const { clipId } = project.addMidiClip(0, beats);
+    project.setMidiEvents(clipId, events(Project));
+  };
+}
+
+/**
  * gm-program mode: bounce one note through a GM program. The clip is two beats
  * long and the note is released after one and a half — a 0.75 s note whose
  * release tail fits the 1.4 s render.
@@ -221,12 +262,14 @@ function bounceProject(
 function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
   return bounceProject(
     wasm,
-    (Project) => [
-      Project.midiProgram(0, 0, 0, program),
-      Project.midiNoteOn(0, 0, 0, 60, 112),
-      Project.midiNoteOff(1.5, 0, 0, 60, 0),
-    ],
-    2,
+    fromEvents(
+      (Project) => [
+        Project.midiProgram(0, 0, 0, program),
+        Project.midiNoteOn(0, 0, 0, 60, 112),
+        Project.midiNoteOff(1.5, 0, 0, 60, 0),
+      ],
+      2,
+    ),
     1.4,
   );
 }
@@ -239,12 +282,14 @@ function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
 function renderGsVariation(wasm: WasmModule, bankMsb: number, capital: number): Float32Array {
   return bounceProject(
     wasm,
-    (Project) => [
-      ...Project.midiBankProgram(0, 0, 0, bankMsb, 0, capital),
-      Project.midiNoteOn(0, 0, 0, 60, 112),
-      Project.midiNoteOff(1.5, 0, 0, 60, 0),
-    ],
-    2,
+    fromEvents(
+      (Project) => [
+        ...Project.midiBankProgram(0, 0, 0, bankMsb, 0, capital),
+        Project.midiNoteOn(0, 0, 0, 60, 112),
+        Project.midiNoteOff(1.5, 0, 0, 60, 0),
+      ],
+      2,
+    ),
     1.4,
   );
 }
@@ -275,54 +320,37 @@ const DRUM_CHANNEL = 9; // MIDI channel 10, the GS rhythm part
 function renderGsDrumKit(wasm: WasmModule, kitProgram: number): Float32Array {
   return bounceProject(
     wasm,
-    (Project) => [
-      Project.midiProgram(0, 0, DRUM_CHANNEL, kitProgram),
-      ...DRUM_PATTERN.flatMap(([beat, note, velocity]) => [
-        Project.midiNoteOn(beat, 0, DRUM_CHANNEL, note, velocity),
-        Project.midiNoteOff(beat + 0.25, 0, DRUM_CHANNEL, note, 0),
-      ]),
-    ],
-    4,
+    fromEvents(
+      (Project) => [
+        Project.midiProgram(0, 0, DRUM_CHANNEL, kitProgram),
+        ...DRUM_PATTERN.flatMap(([beat, note, velocity]) => [
+          Project.midiNoteOn(beat, 0, DRUM_CHANNEL, note, velocity),
+          Project.midiNoteOff(beat + 0.25, 0, DRUM_CHANNEL, note, 0),
+        ]),
+      ],
+      4,
+    ),
     2.3,
   );
 }
 
-/** gs-efx mode: render a held triad live, optionally through a GS EFX. */
+/**
+ * gs-efx mode: a held triad through one GS insertion effect. The effect is two
+ * SysEx frames — the shared type select, then the part's EFX switch — and SysEx
+ * only reaches a project through `importSmf`, so this mode assembles a file
+ * where the others hand over an event list.
+ */
+const EFX_CHORD = [52, 55, 59]; // a sustained triad on the default piano fallback
 function renderGsEfx(wasm: WasmModule, efxType: number): Float32Array {
-  const Engine = (wasm as unknown as { RealtimeEngine: EngineCtor }).RealtimeEngine;
-  const BLK = 128;
-  const dest = 0;
-  const chord = [52, 55, 59]; // a sustained triad on the default piano fallback
-  const engine = new Engine(SR, BLK);
-  try {
-    engine.setSf2Instrument({}, dest);
-    if (efxType > 0) {
-      engine.pushMidiSysex(dest, efxTypeSysex(efxType));
-      engine.pushMidiSysex(dest, efxPartOnSysex(0));
-    }
-    for (const n of chord) engine.pushMidiNoteOn(dest, 0, 0, n, 112);
-
-    const total = Math.round(SR * 1.7);
-    const releaseAt = Math.round(SR * 1.15);
-    const out = new Float32Array(total);
-    let w = 0;
-    let released = false;
-    while (w < total) {
-      if (!released && w >= releaseAt) {
-        for (const n of chord) engine.pushMidiNoteOff(dest, 0, 0, n, 0);
-        released = true;
-      }
-      const rendered = engine.process([new Float32Array(BLK), new Float32Array(BLK)]);
-      const l = rendered[0];
-      const r = rendered[1] ?? rendered[0];
-      const m = Math.min(BLK, total - w);
-      for (let i = 0; i < m; i++) out[w + i] = (l[i] + r[i]) * 0.5;
-      w += BLK;
-    }
-    return out;
-  } finally {
-    engine.destroy?.();
+  const events: { beat: number; bytes?: number[]; sysex?: number[] }[] = [];
+  if (efxType > 0) {
+    events.push({ beat: 0, sysex: efxTypeSysex(efxType) });
+    events.push({ beat: 0, sysex: efxPartOnSysex(0) });
   }
+  for (const n of EFX_CHORD) events.push({ beat: 0, bytes: [0x90, n, 112] });
+  for (const n of EFX_CHORD) events.push({ beat: 2.3, bytes: [0x80, n, 0] });
+  const smf = buildSmf(events, 3.4);
+  return bounceProject(wasm, (project) => void project.importSmf(smf), 1.7);
 }
 
 /** Peak-normalize so the A/B compares character, not loudness. */
