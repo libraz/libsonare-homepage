@@ -1,9 +1,9 @@
 ---
-title: Project & Arrangement Editing: MIDI, Compile & Save/Load
+title: Project MIDI, Compiling and Save/Load
 description: MIDI events and MIDI-FX baking on a Project, key/chord annotation write-back, assist sidecars, auto-tempo, compiling to a renderable timeline, deterministic JSON save/load, and SMF / MIDI 2.0 Clip File import-export.
 ---
 
-# Project & Arrangement Editing: MIDI, Compile & Save/Load
+# Project MIDI, Compiling and Save/Load
 
 This page continues [Project & Arrangement Editing](./project-editing.md): MIDI content on a `Project`, key/chord annotation write-back, assist sidecars, auto-tempo, compiling to a renderable timeline, deterministic JSON save/load, and SMF / MIDI 2.0 Clip File interchange.
 

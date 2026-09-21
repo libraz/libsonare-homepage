@@ -11,6 +11,7 @@ import {
   extractHeadingAnchors,
   extractMarkdownLinks,
   extractSidebarGroupLinks,
+  frontMatterProblems,
   hasVisualComponent,
   PAGE_LINE_LIMIT,
   resolveTargetPath,
@@ -433,5 +434,31 @@ describe('domain sidebar parity detector', () => {
       `sidebar group "${taskGroup.en}": ja is missing /docs/a`,
       `sidebar group "${taskGroup.en}": en is missing /docs/b`,
     ]);
+  });
+});
+
+describe('front matter detector', () => {
+  it('flags an unquoted colon in a front matter value', () => {
+    expect(frontMatterProblems('---\ntitle: Editing: MIDI and Save/Load\n---\n\n# X\n')).toEqual([
+      'front matter `title` holds an unquoted colon: Editing: MIDI and Save/Load',
+    ]);
+  });
+
+  it('accepts the value once it is quoted', () => {
+    expect(frontMatterProblems('---\ntitle: "Editing: MIDI"\n---\n\n# X\n')).toEqual([]);
+  });
+
+  it('accepts a colon with no space after it, which YAML reads as a scalar', () => {
+    expect(frontMatterProblems('---\ntitle: ratio 4:1 compression\n---\n\n# X\n')).toEqual([]);
+  });
+
+  it('flags an unterminated block', () => {
+    expect(frontMatterProblems('---\ntitle: X\n\n# X\n')).toEqual([
+      'has an unterminated front matter block',
+    ]);
+  });
+
+  it('ignores a page with no front matter', () => {
+    expect(frontMatterProblems('# X\n\nbody\n')).toEqual([]);
   });
 });

@@ -46,6 +46,7 @@ export function checkDocLinks({
   checkOrphanPages({ root, markdownRoot, failures });
   checkDomainPageVisuals({ root, configPath, themePath, failures });
   checkPageSizes({ root, markdownRoot, failures });
+  checkFrontMatter({ root, markdownRoot, failures });
   checkDomainSidebarParity({ configPath, failures });
 
   return failures;
@@ -161,6 +162,14 @@ function checkPageSizes({ root, markdownRoot, failures }) {
   }
 }
 
+function checkFrontMatter({ root, markdownRoot, failures }) {
+  for (const filePath of listMarkdownFiles(markdownRoot)) {
+    for (const problem of frontMatterProblems(fs.readFileSync(filePath, 'utf8'))) {
+      failures.push(`${relative(root, filePath)} ${problem}`);
+    }
+  }
+}
+
 function checkDomainSidebarParity({ configPath, failures }) {
   if (!fs.existsSync(configPath)) return;
 
@@ -257,6 +266,28 @@ function bracketedSlice(content, openIndex, open, close) {
     end++;
   }
   return content.slice(openIndex + 1, end - 1);
+}
+
+// Front matter here is a flat block of `key: value` scalars. The one way it
+// breaks is a value holding `: `, which YAML reads as a nested mapping and the
+// build then rejects outright — a title with a colon in it is the usual source.
+// Quoting the value fixes it. This runs in a second; a build takes a minute.
+export function frontMatterProblems(content) {
+  if (!content.startsWith('---\n')) return [];
+  const end = content.indexOf('\n---', 3);
+  if (end < 0) return ['has an unterminated front matter block'];
+
+  const problems = [];
+  for (const line of content.slice(4, end).split('\n')) {
+    const entry = /^([A-Za-z_][\w-]*):[ \t]+(\S.*)$/.exec(line);
+    if (!entry) continue;
+    const [, key, value] = entry;
+    if (/^["'[{|>]/.test(value)) continue;
+    if (/:[ \t]/.test(value)) {
+      problems.push(`front matter \`${key}\` holds an unquoted colon: ${value}`);
+    }
+  }
+  return problems;
 }
 
 export function extractFigureNames(themeContent) {
