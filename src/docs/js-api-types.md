@@ -149,7 +149,8 @@ interface Section {
 interface TimeSignature {
   numerator: number;    // e.g., 4
   denominator: number;  // e.g., 4
-  confidence: number;
+  confidence: number;   // MeterEstimate.timeSignature: margin over the runner-up;
+                        // MeterEstimate.candidates[]: share of summed support
 }
 ```
 

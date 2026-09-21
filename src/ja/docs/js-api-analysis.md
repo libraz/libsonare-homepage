@@ -374,19 +374,30 @@ interface EstimateMeterRequest {
 }
 
 interface MeterEstimate {
-  timeSignature: TimeSignature;   // 選ばれた拍子
+  timeSignature: TimeSignature;   // 選ばれた拍子。confidence は次点との差から導出
   downbeatPhase: number;          // 最初の小節が始まるビート番号
   searched: boolean;              // 列が短すぎてスコア付けできなかった場合は false
   grouping: number[];             // アクセント群ごとの拍数。総和は分子に一致
   candidateScores: number[];      // 要求した分子ごとのスコア（要求した順）
-  candidates: TimeSignature[];    // 支持の高い順に並んだ拍子
+  candidates: TimeSignature[];    // 支持の高い順。confidence は支持総和に占める割合
 }
 ```
 
-位置引数形式はなく、`estimateMeter` はリクエストオブジェクトのみを受け取ります。アクセント列は
-自身の最大値で正規化されるため、事前のスケーリングは不要です。想定する入力元は
-`AnalysisResult.beatObservations.onsetStrength` で、`beats[].strength` でも動きますが、これは
-[Beat](./js-api-types.md#beat) で述べる生の 1 フレーム値です。
+位置引数形式はなく、`estimateMeter` はリクエストオブジェクトのみを受け取ります。`beatStrengths`
+の入力元として想定しているのは 2 つです。本来の入力元である
+`AnalysisResult.beatObservations.onsetStrength` と、[Beat](./js-api-types.md#beat) で述べる
+生の 1 フレーム値 `beats[].strength` です。どちらも事前のスケーリングは不要です。列は採点前に
+自身の最大値で割られ、読まれるのは列内のアクセントの強弱差だけだからです。
+
+::: warning 自前で組み立てたアクセント列はサンプルレートに依存する
+各ビートについて `onsetEnvelope` を `timeToFrames(beatTime, sr, hopLength)` の位置で読む方法は、
+3 つ目の入力元にはなりません。サンプル数で数えるホップは、レートごとに異なる長さの時間を
+1 フレームに収めるためです。同じ波形を 32000 Hz・44100 Hz・48000 Hz でサンプリングし、ビート
+時刻はサンプルと同一のまま採点したところ、勝者の分子はそれぞれ 6、3、4 になりました。各ビート
+の周辺を窓で読んでもこの依存は消えません。ブラウザは出力デバイスのレートでデコードするため、
+この方法で組んだ列は同じクリップでも訪問者ごとに違う答えを返します。上記 2 つの入力元の
+いずれかを使ってください。
+:::
 
 ::: warning 変拍子は、その分子を要求したときにしか報告されない
 既定の候補集合は `{3, 4, 6}` です。集合の外にある分子は勝ちようがないため、既定のまま解析した
@@ -400,12 +411,16 @@ interface MeterEstimate {
 フォールバックを返します。`4/<要求した分母>`、`downbeatPhase` は `0`、`grouping` は `[4]`、
 `candidateScores` は全要素 0、`candidates` は 1 要素だけになります。
 
-**`timeSignature.confidence` もフォールバックの一部です。** 値は `0.5` ですが、これは測定値では
-なく定数です。信頼度を表示したり分岐に使ったりする前に `searched` を確認してください。短すぎる
-列から返ってきた `0.5` は、値だけを見てもスコアが本当に中程度だった場合と区別できません。
-なお `beatTimes` が空の場合はフォールバックではなく例外になります。1〜7 拍ならフォールバックが
-返ります。
+**`timeSignature.confidence` もフォールバックの一部です。** 値は `0` で、確認せずに読んだ場合は
+中程度の検出ではなく「判断不能」の側に倒れます。フォールバックと結果を分けるのはあくまで
+`searched` です。信頼度を表示したり分岐に使ったりする前に確認してください。なお `beatTimes`
+が空の場合はフォールバックではなく例外になります。1〜7 拍ならフォールバックが返ります。
 :::
+
+`timeSignature.confidence` と `candidates[k].confidence` は、同じフィールド名で別の量を運びます。
+`timeSignature` 側は次点との差から導かれる値で、`candidates` の各要素ではその候補が支持の総和に
+占める割合なので、要素の合計は 1 になります。両者は比較できず、同じしきい値を共有しては
+いけません。手近な方ではなく、意図したフィールドから読んでください。
 
 `grouping` は変則拍子が姿を現す場所です。`[3, 2, 2]` は 3-2-2 でグルーピングされた 7/8 を、
 `[2, 2]` はごく普通の 4 拍子を意味します。要素が **1 つ**だけのときは内部分割が解決されなかった

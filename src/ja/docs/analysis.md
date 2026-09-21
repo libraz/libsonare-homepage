@@ -180,7 +180,7 @@ const meter = estimateMeter({
 console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 ```
 
-渡すのは `beats[].strength` ではなく `beatObservations.onsetStrength` です。どちらも事前スケーリングは不要で、採点前に系列自身の最大値で割られるため、読まれるのは内部のアクセント差だけです。
+渡すのは `beats[].strength` ではなく `beatObservations.onsetStrength` です。どちらも事前スケーリングは不要で、採点前に系列自身の最大値で割られるため、読まれるのは内部のアクセント差だけです。`onsetEnvelope(...)` のフレームから自分で列を組み立てることも避けてください。その読み取り値はサンプルレートで変わり、ブラウザは出力デバイスのレートでデコードするため、同じクリップが訪問者ごとに違う答えを返します。実測は[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md#どのアクセント列を渡すか)にあります。
 
 <SonareDemo id="meter-estimate" />
 
@@ -197,7 +197,7 @@ console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 | `timeSignature.confidence` | **マージン由来**の値。勝った候補が 2 位をどれだけ引き離したかを、スコア自身のノイズ単位で測って信頼度に写したもの。 | マージンが無い状態が 0.45 で、そこから上がります。つまり 2 候補が拮抗していても約 0.45 になり、確率ではなく分離度を表します。複合拍子か単純拍子か決着しない場合は一定量が引かれます。 |
 | `candidates[k].confidence` | **正規化された割合**。各候補の正のスコアを全候補の合計で割った値。 | 支持の内訳として読め、合計は 1 になります。0.6 の候補は支持の 60 % を占めるという意味で、正解である確率が 60 % という意味ではありません。 |
 
-したがって、明確な 3 拍子では `candidates[0].confidence` がほぼすべての支持を示していても `timeSignature.confidence` は 1 よりかなり低いままになりえますし、本当に曖昧なクリップでも 2 位がたまたま大きく離れていれば `timeSignature.confidence` は高く出ます。答えている問いが別なので、自分の問いに合うほうを選び、UI ではそれに合わせて表示してください。
+したがって、明確な 3 拍子では `candidates[0].confidence` がほぼすべての支持を示していても `timeSignature.confidence` は 1 よりかなり低いままになりえますし、本当に曖昧なクリップでも 2 位がたまたま大きく離れていれば `timeSignature.confidence` は高く出ます。答えている問いが別なので、自分の問いに合うほうを選び、UI ではそれに合わせて表示し、両方を 1 つのしきい値に通すことは避けてください。それぞれの計算式は[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md#同じフィールド名を持つ-2-つの信頼度)にあります。
 
 さらに、順序に関する 2 点も間違えやすいところです。
 
@@ -206,7 +206,7 @@ console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 
 #### 短い区間ではそもそも探索されない
 
-検出ビートが **8 個未満**だと、推定器は探索を行いません。それでもフィールドの埋まった結果は返ります。4/4、プレースホルダの `confidence`、分割されていない `grouping`、候補 1 件、スコアは全部 0 です。そしてそれを教えてくれるのは `searched` だけです。
+検出ビートが **8 個未満**だと、推定器は探索を行いません。それでもフィールドの埋まった結果は返ります。4/4、`timeSignature.confidence` は **0**、分割されていない `grouping`、候補 1 件、スコアは全部 0 です。そしてそれを教えてくれるのは `searched` だけです。信頼度が 0 なので、確認せずに読んだ場合は「中程度の検出」ではなく「不明」の側へ倒れます。それでも隣に並ぶ 4/4 は、検出結果とまったく同じ見た目です。
 
 ```typescript
 const meter = estimateMeter({
@@ -215,7 +215,7 @@ const meter = estimateMeter({
 });
 
 if (!meter.searched) {
-  // 何も計測されていない。timeSignature.confidence を含め、
+  // 何も計測されていない。timeSignature.confidence は 0 で、
   // 他のフィールドはすべて固定のフォールバック値。
   console.log('too few beats to estimate a meter');
 } else {

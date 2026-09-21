@@ -21,7 +21,8 @@ interface Key {
 interface TimeSignature {
   numerator: number;
   denominator: number;
-  confidence: number;
+  confidence: number;  // MeterEstimate.timeSignature では次点との差、
+                       // MeterEstimate.candidates[] では支持総和に占める割合
 }
 
 interface BpmHypothesis {

@@ -118,9 +118,13 @@ console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
 | `denominator` | `4` | 検出された拍子として報告する分母 |
 | `downbeatWeight` / `measureWeight` / `subdivisionWeight` | `1` / `0.5` / `0.15` | 小節頭のアクセント、小節間のアクセント一致、細分化パターンに対する重み |
 
-`beatStrengths` には `beatObservations.onsetStrength` を渡してください。これは
-ライブラリ自身のダウンビート推定が採点している窓付きの値です。`beats[].strength`
-でも動きますが、こちらは同じ包絡線の窓なし 1 フレームです。
+`beatStrengths` の入力元として想定しているのは 2 つです。`beatObservations.onsetStrength`
+（ライブラリ自身のダウンビート推定が採点している窓付きの値）と、`beats[].strength`
+（同じ包絡線の窓なし 1 フレーム）です。各ビートについて `onsetEnvelope(...)` を
+`timeToFrames(...)` の位置で読む方法は 3 つ目にはなりません。サンプル数で数えるホップは
+レートごとに異なる長さの時間を 1 フレームに収めるため、同じ波形を 32000 Hz・44100 Hz・
+48000 Hz で（ビート時刻は同一のまま）採点すると、勝者の分子は 6、3、4 と変わりました。
+各ビートの周辺を窓で読んでもこの依存は消えません。
 
 結果が意味を持つかどうかは、次の 2 点で決まります。
 
@@ -128,8 +132,9 @@ console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
   報告されるため、7 拍子を検出したいなら候補に 7 を入れる必要があります。
 - **ビート列が 8 ビート未満のとき `searched` は `false` になります。** このとき
   ほかのフィールドはすべて測定結果ではなく固定のフォールバック値で、
-  `timeSignature.confidence` もフォールバック自身の値です。短い区間の答えを検出
-  結果として扱う前に `searched` を確認してください。
+  `timeSignature.confidence` は `0` です。確認せずに読んだ場合は中程度の検出ではなく
+  「判断不能」の側に倒れます。短い区間の答えを検出結果として扱う前に `searched` を
+  確認してください。
 
 `grouping` は小節がアクセントのグループへどう分かれるかを表すため、7 拍子は素の 7 では
 なく `[3, 2, 2]` のように返り、合計は必ず分子に一致します。要素が 1 つだけの場合は
@@ -138,6 +143,9 @@ console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
 分子が到達する水準が 0 なので、意味を持つのは順序と値の差だけです。またスコアは
 採点したビート数の平方根に比例して大きくなります。一方 `candidates` は支持の高い順に
 並ぶため、両者は添字ではなく `numerator` で突き合わせてください。
+`confidence` も現れる場所で意味が変わります。`timeSignature` 側は次点との差から導かれる値、
+`candidates` の各要素ではその候補が支持の総和に占める割合（要素の合計は 1）なので、
+両者に同じしきい値を使ってはいけません。
 
 ### 非同期版（Node 専用）
 

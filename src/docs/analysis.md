@@ -147,7 +147,7 @@ const meter = estimateMeter({
 console.log(meter.timeSignature, meter.grouping, meter.downbeatPhase);
 ```
 
-Pass `beatObservations.onsetStrength`, not `beats[].strength`. Neither needs pre-scaling — the series is divided by its own maximum before scoring, so only the accent contrast inside it is read.
+Pass `beatObservations.onsetStrength`, not `beats[].strength`. Neither needs pre-scaling — the series is divided by its own maximum before scoring, so only the accent contrast inside it is read. Do not assemble the series yourself from `onsetEnvelope(...)` frames either: that read changes with the sample rate, and a browser decodes at the output device's rate, so the same clip answers differently per visitor. [Meter and Grouping](./glossary/analysis/meter-and-grouping.md#which-accent-series-to-pass) has the measurement.
 
 <SonareDemo id="meter-estimate" />
 
@@ -164,7 +164,7 @@ This is the single easiest thing to get wrong here, and grabbing the wrong one p
 | `timeSignature.confidence` | **Margin-derived.** How far the winning candidate pulled ahead of the runner-up, measured in the score's own noise units and mapped onto a confidence. | Starts at 0.45 with no margin at all and rises from there, so a tie between two candidates still reports about 0.45 — it is a separation, not a probability. An unresolved compound-versus-simple reading subtracts a fixed penalty. |
 | `candidates[k].confidence` | **A normalised share.** Each candidate's positive score divided by the total across all of them. | The entries read as a breakdown of the support and sum to 1. A candidate at 0.6 holds 60 % of the support — it is not a 60 % chance of being right. |
 
-So a clear 3/4 can put nearly all of the support on 3 in `candidates[0].confidence` while `timeSignature.confidence` sits well below 1, and a genuinely ambiguous clip can show a high `timeSignature.confidence` if the runner-up happens to fall far behind. They answer different questions; pick the one that matches yours and label it accordingly in a UI.
+So a clear 3/4 can put nearly all of the support on 3 in `candidates[0].confidence` while `timeSignature.confidence` sits well below 1, and a genuinely ambiguous clip can show a high `timeSignature.confidence` if the runner-up happens to fall far behind. They answer different questions; pick the one that matches yours, label it accordingly in a UI, and never run both through one threshold. [Meter and Grouping](./glossary/analysis/meter-and-grouping.md#two-confidences-under-one-field-name) has the formulas behind each.
 
 Two more ordering facts, both easy to trip over:
 
@@ -173,7 +173,7 @@ Two more ordering facts, both easy to trip over:
 
 #### A short span is not searched at all
 
-Below **eight detected beats** the estimator does not search. It returns a fully populated result anyway — 4/4, a placeholder `confidence`, an undivided `grouping`, one candidate and all-zero scores — and the only field that tells you so is `searched`.
+Below **eight detected beats** the estimator does not search. It returns a fully populated result anyway — 4/4, a `timeSignature.confidence` of **0**, an undivided `grouping`, one candidate and all-zero scores — and the only field that tells you so is `searched`. The zero means an unchecked read degrades toward "no idea" rather than toward a middling detection; the 4/4 beside it still looks exactly like a finding.
 
 ```typescript
 const meter = estimateMeter({
@@ -182,8 +182,8 @@ const meter = estimateMeter({
 });
 
 if (!meter.searched) {
-  // Nothing was measured. Every other field is the fixed fallback,
-  // timeSignature.confidence included.
+  // Nothing was measured: timeSignature.confidence is 0 and every
+  // other field is the fixed fallback.
   console.log('too few beats to estimate a meter');
 } else {
   console.log(meter.timeSignature.numerator + '/' + meter.timeSignature.denominator);

@@ -118,9 +118,13 @@ console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
 | `denominator` | `4` | Beat unit reported for the detected meter |
 | `downbeatWeight` / `measureWeight` / `subdivisionWeight` | `1` / `0.5` / `0.15` | Scoring weights for the first beat of each measure, measure-to-measure accent agreement, and the subdivision pattern |
 
-Feed `beatStrengths` from `beatObservations.onsetStrength`, the windowed value
-the library's own downbeat pass scores. `beats[].strength` also works but is a
-single unwindowed frame of the same envelope.
+Two sources are supported for `beatStrengths`: `beatObservations.onsetStrength`,
+the windowed value the library's own downbeat pass scores, and `beats[].strength`,
+a single unwindowed frame of the same envelope. Reading `onsetEnvelope(...)` at
+`timeToFrames(...)` for each beat is not a third: a hop counted in samples frames
+a different span of time at each rate, so one waveform at 32000, 44100 and
+48000 Hz — beat times identical — produced winning numerators of 6, 3 and 4, and
+a window around each beat does not remove the dependence.
 
 Two properties decide whether the answer means anything:
 
@@ -128,7 +132,8 @@ Two properties decide whether the answer means anything:
   its numerator was asked for, so a seven needs it listed explicitly.
 - **`searched` is `false` when the beat series was under eight beats.** Every
   other field then carries a fixed fallback rather than a result — including
-  `timeSignature.confidence`, which is the fallback's own value. Read `searched`
+  `timeSignature.confidence`, which reads `0`, so an unchecked read degrades
+  toward "no idea" rather than toward a middling detection. Read `searched`
   before treating a short span's answer as a detection.
 
 `grouping` reports how the bar divides into accent groups, so a seven comes back
@@ -139,6 +144,10 @@ zero is the level a numerator reaches on beats carrying no meter, so only the
 ordering and the gaps between entries carry meaning, and a score grows with the
 square root of how many beats were scored. `candidates` is ordered by descending
 support instead, so match the two on `numerator` rather than by index.
+`confidence` also changes meaning between its two homes: on `timeSignature` it is
+derived from the margin over the runner-up, on a `candidates` entry it is that
+candidate's share of the summed support (the entries sum to one), so the two
+must not share a threshold.
 
 ### Asynchronous variants (Node only)
 

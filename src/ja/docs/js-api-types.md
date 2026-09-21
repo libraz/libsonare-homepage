@@ -144,7 +144,8 @@ interface Section {
 interface TimeSignature {
   numerator: number;    // 例: 4
   denominator: number;  // 例: 4
-  confidence: number;
+  confidence: number;   // MeterEstimate.timeSignature では次点との差、
+                        // MeterEstimate.candidates[] では支持総和に占める割合
 }
 ```
 

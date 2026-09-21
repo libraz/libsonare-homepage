@@ -389,20 +389,31 @@ interface EstimateMeterRequest {
 }
 
 interface MeterEstimate {
-  timeSignature: TimeSignature;   // The selected signature
+  timeSignature: TimeSignature;   // The selected signature; confidence is margin-derived
   downbeatPhase: number;          // Beat index the first measure starts on
   searched: boolean;              // false when the series was too short to score
   grouping: number[];             // Beats per accent group; sums to the numerator
   candidateScores: number[];      // One score per requested numerator, in order
-  candidates: TimeSignature[];    // Signatures ranked by descending support
+  candidates: TimeSignature[];    // Ranked by descending support; confidence is a share
 }
 ```
 
-There is no positional form — `estimateMeter` takes a request object only. The
-accent series is divided by its own maximum, so it needs no pre-scaling;
-`AnalysisResult.beatObservations.onsetStrength` is the intended source, and
-`beats[].strength` works but is the raw single-frame value described under
-[Beat](./js-api-types.md#beat).
+There is no positional form — `estimateMeter` takes a request object only. Two
+sources are supported for `beatStrengths`: `AnalysisResult.beatObservations.onsetStrength`,
+the intended one, and `beats[].strength`, the raw single-frame value described
+under [Beat](./js-api-types.md#beat). Neither needs pre-scaling — the series is
+divided by its own maximum before scoring, so only the accent contrast within it
+is read.
+
+::: warning A hand-assembled accent series is sample-rate dependent
+Reading `onsetEnvelope` at `timeToFrames(beatTime, sr, hopLength)` for each beat
+is not a third source. A hop counted in samples frames a different span of time
+at each rate, so one waveform sampled at 32000, 44100 and 48000 Hz — beat times
+identical to the sample — produced winning numerators of 6, 3 and 4, and widening
+the read to a window around each beat does not remove the dependence. A browser
+decodes at the output device's rate, so a series built this way gives a different
+answer per visitor for the same clip. Use one of the two sources above.
+:::
 
 ::: warning An odd meter is only reported if you asked for its numerator
 The default candidate set is `{3, 4, 6}`. A numerator outside the set cannot win,
@@ -418,12 +429,18 @@ score any candidate and the estimator returns a fixed fallback instead of a
 result: `4/<requested denominator>`, `downbeatPhase` `0`, `grouping` `[4]`,
 all-zero `candidateScores`, and a single-entry `candidates`.
 
-**`timeSignature.confidence` is part of the fallback** — it reads `0.5`, which is
-a constant and not a measurement. Check `searched` before you show a confidence
-or branch on one; a `0.5` from a too-short series is indistinguishable by value
-from a genuinely middling score. An empty `beatTimes` throws rather than falling
-back; one to seven beats returns the fallback.
+**`timeSignature.confidence` is part of the fallback** — it reads `0`, so an
+unchecked read degrades toward "no idea" rather than toward a middling detection.
+`searched` is still what separates a fallback from a result; check it before you
+show a confidence or branch on one. An empty `beatTimes` throws rather than
+falling back; one to seven beats returns the fallback.
 :::
+
+`timeSignature.confidence` and `candidates[k].confidence` share a field name but
+carry different quantities. On `timeSignature` it is derived from the margin over
+the runner-up; on a `candidates` entry it is that candidate's share of the summed
+support, so the entries sum to one. The two are not comparable and must not share
+a threshold — read the field you mean rather than whichever is to hand.
 
 `grouping` is where an aksak meter shows itself: `[3, 2, 2]` is a 7/8 grouped
 three-two-two, while `[2, 2]` is an ordinary four. A **single** entry means no

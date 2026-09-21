@@ -21,7 +21,8 @@ interface Key {
 interface TimeSignature {
   numerator: number;
   denominator: number;
-  confidence: number;
+  confidence: number;  // MeterEstimate.timeSignature: margin over the runner-up;
+                       // MeterEstimate.candidates[]: share of summed support
 }
 
 interface BpmHypothesis {
