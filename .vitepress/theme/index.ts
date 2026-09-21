@@ -33,6 +33,8 @@ const FIGURES = [
   'CrestFactorFigure',
   'DistanceBalanceFigure',
   'GainLadderFigure',
+  'GsAddressFigure',
+  'GsEfxRoutingFigure',
   'LoudnessGateFigure',
   'MasteringChainFigure',
   'MelBankFigure',
