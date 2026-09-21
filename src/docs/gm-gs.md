@@ -1,11 +1,11 @@
 ---
 title: GM and GS Fallback Bank
-description: The NativeSynth GM fallback bank — GS variation tones, GM/GS drum-kit variants, following GM program changes, SoundFont fallback routing, and the full 128-program tone map.
+description: The NativeSynth GM fallback bank — GS variation tones, GM/GS drum-kit variants, following GM program changes, the GS architecture layer and its insertion effects, and SoundFont fallback routing.
 ---
 
 # GM and GS Fallback Bank
 
-This page covers the General MIDI and GS side of the [built-in synthesizer](./native-synth.md): the data-free GM fallback bank with its GS variation tones and drum-kit variants, how a bounce follows GM program changes, when a note falls from a SoundFont to the bank, and the full 128-program tone map.
+This page covers the General MIDI and GS side of the [built-in synthesizer](./native-synth.md): the data-free GM fallback bank with its GS variation tones and drum-kit variants, how a bounce follows GM program changes, the Roland-GS architecture layer and insertion effects the [SoundFont player](./soundfont-player.md) implements, and when a note falls from a SoundFont to the bank. The per-program voicing table is on [GM Tone Map](./gm-tone-map.md).
 
 ## The GM fallback bank
 
@@ -85,7 +85,7 @@ Each variation is voiced from **its capital's own physical model** rather than f
 
 Two numbers appear per row and they are not interchangeable. **Program** is what a file sends; it is the rhythm part's program-change number and the address the standards define. **Index** is this bank's own slot for the set. Indices are **append-only**: a set added later takes the next free index, so adding one can never renumber a set already voiced, and nothing that already sounds right starts sounding like something else.
 
-The **tone map** column is the earliest generation that defines the set — the same map a [Bank Select LSB](./soundfont-player.md#the-gs-architecture-layer) selects. A file that pins an older map does not reach the sets introduced after it, and those fall back to Standard, exactly as a module of that generation does.
+The **tone map** column is the earliest generation that defines the set — the same map a [Bank Select LSB](#the-gs-architecture-layer) selects. A file that pins an older map does not reach the sets introduced after it, and those fall back to Standard, exactly as a module of that generation does.
 
 Every set is a **re-voicing of the one shared percussion model**, not a second copy of it: the kick, snare, tom, hat, and cymbal parameters are reshaped at note-on. Improving the underlying model therefore improves all 26 at once, and a set can only differ in ways the model has a parameter for.
 
@@ -119,7 +119,7 @@ Every set is a **re-voicing of the one shared percussion model**, not a second c
 | 58 | 25 | Rhythm FX 2 | SC-88Pro | one-shot set — plays the Standard voicing |
 
 ::: warning One-shot sets and Sound-Effects programs are addressed, not yet modeled
-Four sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX**, **Rhythm FX**, **Cymbal & Claps**, and **Rhythm FX 2**. There is nothing for a membrane model to reshape, so they are addressed and named but play the Standard kit's voicing. The GM Sound-Effects programs (120-127, covered in the GM tone map below) are in the same position and share one generic noise voice. A SoundFont that supplies real samples for these addresses plays back normally through the SF2 player.
+Four sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX**, **Rhythm FX**, **Cymbal & Claps**, and **Rhythm FX 2**. There is nothing for a membrane model to reshape, so they are addressed and named but play the Standard kit's voicing. The GM Sound-Effects programs (120-127, covered in the [GM tone map](./gm-tone-map.md)) are in the same position and share one generic noise voice. A SoundFont that supplies real samples for these addresses plays back normally through the SF2 player.
 :::
 
 ### Following GM programs instead of pinning one patch
@@ -237,6 +237,99 @@ const audio = project.bounceWithSynthInstrument(
 
 Leave `totalFrames` at 0 and the bounce auto-derives the length from the arrangement plus the patch's release tail. Unknown preset names throw. For everything `bounceWith*` shares — channels, sample rate, latency — see [Project Bounce](./project-bounce.md).
 
+## The GS architecture layer
+
+On top of GM, the [SoundFont player](./soundfont-player.md) implements the Roland-GS extensions a GS-authored arrangement expects:
+
+- **Variation-bank fallback** — a GS variation bank that the SoundFont does not cover falls back to the capital (bank-0) tone, so a missing variation still plays the right family instead of going silent.
+- **Bank-128 drum kits on channel 10** — drum programs live in bank 128; channel 10 (index 9) is the drum part by convention.
+- **NRPN part edits** — TVF cutoff/resonance, TVA envelope, and vibrato can be edited per part via NRPN, plus **per-note drum NRPNs** for individual drum sounds.
+- **GS / GM SysEx** — **GS Reset**, **GM System On**, and "use for rhythm part" SysEx are recognized — both from the host and from SysEx events embedded inside an arrangement.
+- **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the single shared GS **insertion effect (EFX)** described below.
+- **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change, and resolves the **Bank Select LSB (CC#32)** one of two ways depending on the MSB:
+  - **GM2 addressing** — when the MSB is GM2's melodic bank (`0x79`) or percussion bank (`0x78`), the LSB *is* the variation number (or the percussion set), exactly as GM2 defines it.
+  - **GS tone-map select** — for any other MSB the LSB instead picks **which generation's tone set** the MSB's variation number reaches: `0` the module's own (newest) map, `1` SC-55, `2` SC-88, `3` SC-88Pro, `4` SC-8850. Any other value reads as `0`, because a module that never saw the message is already playing its own map. A tone or kit that the selected map predates falls back to the capital tone or the Standard kit — the same thing a real module of that generation does.
+
+::: warning The LSB means two different things
+This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the authoring tip below), and it is the easiest value to get wrong. Under a GM2 MSB it selects a *variation*; under a GS MSB it selects a *tone map*, and the variation number lives in the MSB instead. Writing `bankLsb: 1` next to a GS variation MSB does not pick variation 1 — it pins the part to the SC-55 tone set.
+:::
+
+::: warning The SFX kit and GM Sound-Effects programs are not yet individually synthesized
+The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback. The one-shot GS rhythm sets — SFX, Rhythm FX, Cymbal & Claps, and Rhythm FX 2 — currently play the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [the GM fallback bank](#the-gm-fallback-bank) above for the built-in fallback voicing.
+:::
+
+## GS insertion effects (EFX)
+
+::: info An original DSP re-creation, not bundled hardware data
+libsonare's insertion effects are an original DSP re-creation — a combination of libsonare's own algorithms, reconstructed from publicly documented information, mapped onto the GS EFX SysEx and type-numbering model so GS-authored MIDI selects the effect the composer intended. Because the algorithms are independent, they follow the same addressing and effect structure but **do not reproduce the exact sound** of any hardware module; treat them as a compatible re-creation, not a 1:1 emulation. There are no bundled samples, ROM data, or firmware, and no affiliation with or endorsement by any hardware manufacturer. For the standards and literature behind this compatibility, see [Algorithm References](./algorithm-references.md).
+:::
+
+Separate from the reverb/chorus/delay send-return bus above, GS defines one **insertion effect (EFX)**: an effect inserted directly into a part's signal path, like a guitar pedal, rather than a send-return bus. libsonare implements this the way the hardware it follows does — as a **single shared insertion unit** for the whole player, not sixteen independent per-part effects. Any of the 16 parts can be routed through that one unit via a per-part on/off switch; a part that is switched off bypasses the unit entirely and reaches the mix dry.
+
+There is **no typed "set EFX" call** in any binding. Like real GS hardware, the EFX type and its parameters are programmed exclusively by sending raw SysEx: live, you push those bytes with `RealtimeEngine.pushMidiSysex()`; offline, SysEx embedded in the arrangement's MIDI is realised inline during the bounce.
+
+### EFX type → insertion effect
+
+Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
+
+| EFX type | GS EFX name | libsonare insertion effect |
+|---|---|---|
+| 0x0100 | Stereo EQ | parametric EQ |
+| 0x0101 | Spectrum | graphic EQ |
+| 0x0102 | Enhancer | presence enhancer |
+| 0x0110 | Overdrive | amp-sim (crunch voicing) |
+| 0x0111 | Distortion | amp-sim (high-gain voicing) |
+| 0x0120 | Phaser | phaser |
+| 0x0121 | Auto Wah | envelope-following resonant bandpass |
+| 0x0122 | Rotary | dual-rotor rotary-speaker model |
+| 0x0123 | Stereo Flanger | flanger |
+| 0x0124 | Step Flanger | flanger |
+| 0x0126 | Auto Pan | auto-pan |
+| 0x0130 | Compressor | compressor |
+| 0x0131 | Limiter | limiter |
+| 0x0140 | Hexa Chorus | six-voice ensemble |
+| 0x0141 | Tremolo Chorus | chorus |
+| 0x0142 | Stereo Chorus | chorus |
+| 0x0143 | Space-D | chorus (unmodulated) |
+| 0x0144 | 3D Chorus | chorus (widened) |
+| 0x0150 | Stereo Delay | stereo delay |
+| 0x0151 | Modulation Delay | stereo delay |
+| 0x0152–0x0154 | 3-tap / 4-tap / Time-Control Delay | stereo delay |
+| 0x0155 | Reverb | plate reverb |
+| 0x0156 | Gate Reverb | plate reverb (gated tail not yet modelled) |
+| 0x0157 | 3D Delay | stereo delay |
+| 0x0160 | 2-voice Pitch Shifter | pitch shifter |
+| 0x0161 | Feedback Pitch Shifter | pitch shifter (feedback loop not modelled) |
+| 0x0172 / 0x0173 | Lo-Fi 1 / 2 | bit-crusher |
+
+A few GS types (Humanizer, Tremolo, 3D Auto/Manual) have no faithful stock insert yet and pass through dry. The Overdrive/Distortion drive+level and the pitch-shifter's coarse pitch+balance are translated from their raw EFX parameters; other single-effect types run at their insert's own defaults.
+
+### Composite EFX types (multi-stage chains)
+
+A composite EFX type realises as an ordered **chain** of the same DSP inserts running in series, matching the hardware's block structure — a guitar multi-effect, for example, still runs through the individual amp-sim/chorus/delay inserts above, just chained together. The table below is a representative slice; the full map covers the dual-stage `0x0200`–`0x020C` matrix (Overdrive / Distortion / Enhancer feeding Chorus, Flanger, or Delay) and the guitar / bass / Rhodes / keyboard multi presets in the `0x0400`–`0x0500` range.
+
+| EFX type | GS EFX name | Chain (signal order) |
+|---|---|---|
+| 0x0200 | OD → Chorus | amp-sim → chorus |
+| 0x0202 | OD → Delay | amp-sim → stereo delay |
+| 0x0400 | Guitar Multi 1 | compressor → amp-sim → chorus → delay |
+| 0x0405 | Bass Multi | compressor → amp-sim (bass cab) → EQ → chorus |
+| 0x0406 | Rhodes Multi | enhancer → phaser → chorus → auto-pan |
+| 0x0500 | Keyboard Multi | ring-mod → EQ → pitch-shifter → phaser → delay |
+
+### Live vs. offline realisation
+
+- **Offline (bounce)** — EFX SysEx embedded in the arrangement is applied inline during the render: an EFX change mid-bounce takes effect on the next block.
+- **Live** — `pushMidiSysex()` builds the new effect chain off the audio thread and hands it over wait-free, so a live engine hears an EFX change **without stopping** playback.
+
+The demo below renders one held chord through the GS-compatible player and lets you switch the insertion effect, so you can hear how each one reshapes the tone against the dry reference.
+
+<SonareDemo id="gs-efx" />
+
+::: tip Author GS banks with the MIDI helpers
+`Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` expands a bank-select-plus-program-change into the MIDI events `setMidiEvents` accepts — the right way to select a GS variation or a drum kit. Static helpers like `Project.gmInstrumentName(program)`, `Project.gmDrumName(note)`, `Project.gm2InstrumentName(bankLsb, program)`, and `Project.midiCcName(controller)` name the slots so your authoring code reads clearly. The reverse direction is symmetric: `Project.gmProgramForName(name)`, `Project.gmDrumNoteForName(name)`, and `Project.midiCcIndexForName(name)` return the number for a canonical name (`-1` when unknown), while `Project.gmFamilyName(family)` and `Project.gmFamilyFirstProgram(family)` enumerate the 16 GM instrument families. `Project.gm2DrumSetName(bankLsb)` and `Project.gm2DrumName(bankLsb, note)` name the GM2 drum-set variations.
+:::
+
 ## NativeSynth and the SoundFont fallback
 
 NativeSynth is the safety net under the [SoundFont player](./soundfont-player.md). When you render with `bounceWithSf2Instrument` (or bind an SF2 live), libsonare resolves each `(channel, bank, program)` the arrangement actually plays:
@@ -288,222 +381,6 @@ This routing is separate from the named preset catalog: `synthPresetNames()` sti
 
 ## GM tone map — all 128 programs
 
-Every General MIDI program resolves to one of the synthesis engines. The table below is the data-free fallback voicing NativeSynth uses for each GM program number when no SoundFont covers it; the canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`. Rows marked *provisional* use one of the acoustic physical models still being calibrated.
+Every General MIDI program resolves to one of the synthesis engines, and the per-program table of all 128 — instrument name, engine, and voicing notes — is long enough to live on its own page. The canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`.
 
-::: details Show the full 128-program tone map
-**Model status** — **stable**: the subtractive, FM, modal, additive, and percussion cores are settled. **provisional**: the piano, Karplus-Strong, pipe-organ, bowed-string, reed, brass, flute, plucked-string (buzzing-bridge), vocal, and free-reed physical models are still being calibrated. The harpsichord's decay and stretch are regressed against captured references, so it is not marked provisional.
-
-#### Piano (0-7)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 0 | Acoustic Grand Piano | `piano` | provisional; shared modal soundboard |
-| 1 | Bright Acoustic Piano | `piano` | provisional |
-| 2 | Electric Grand Piano | `piano` | provisional (the acoustic waveguide, not FM) |
-| 3 | Honky-tonk Piano | `piano` | provisional |
-| 4 | Electric Piano 1 | `fm` | tine/bell FM |
-| 5 | Electric Piano 2 | `fm` | shares the EP1 voicing |
-| 6 | Harpsichord | `harpsichord` | jack and plectrum; three bank-selected registrations |
-| 7 | Clavi | `fm` | bright high-ratio FM |
-
-#### Chromatic Percussion (8-15)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 8 | Celesta | `modal` | soft felt-struck steel bar |
-| 9 | Glockenspiel | `modal` | uniform-bar mode ratios |
-| 10 | Music Box | `modal` | twin-tooth beating for tine shimmer |
-| 11 | Vibraphone | `modal` | motor tremolo (LFO → amplitude) |
-| 12 | Marimba | `modal` | deep-arch bar, wood-tube body |
-| 13 | Xylophone | `modal` | short, dry deep-arch bar |
-| 14 | Tubular Bells | `modal` | missing-fundamental strike pitch, long ring |
-| 15 | Dulcimer | `karplus-strong` | provisional; hammered (struck) string |
-
-#### Organ (16-23)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 16 | Drawbar Organ | `additive` | 9-drawbar Hammond |
-| 17 | Percussive Organ | `additive` | |
-| 18 | Rock Organ | `additive` | |
-| 19 | Church Organ | `pipe-organ` | provisional; multi-rank plenum |
-| 20 | Reed Organ | `free-reed` | provisional; harmonium — mellow plate, soft tongues |
-| 21 | Accordion | `free-reed` | provisional; shares the reed-organ voicing |
-| 22 | Harmonica | `free-reed` | provisional; small, bright, stiff tongues + hand vibrato |
-| 23 | Tango Accordion | `free-reed` | provisional; bandoneon, musette (wet-beating) detune |
-
-#### Guitar (24-31)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 24 | Acoustic Guitar (nylon) | `karplus-strong` | provisional; softer pluck, no dispersion |
-| 25 | Acoustic Guitar (steel) | `karplus-strong` | provisional; steel-string dispersion + sympathetic |
-| 26 | Electric Guitar (jazz) | `karplus-strong` | provisional; near-bridge pickup, no body |
-| 27 | Electric Guitar (clean) | `karplus-strong` | provisional; shares the jazz voicing |
-| 28 | Electric Guitar (muted) | `karplus-strong` | provisional; choked (palm-mute) decay |
-| 29 | Overdriven Guitar | `karplus-strong` | provisional; pre-filter drive |
-| 30 | Distortion Guitar | `karplus-strong` | provisional; harder drive |
-| 31 | Guitar Harmonics | `karplus-strong` | provisional |
-
-#### Bass (32-39)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 32 | Acoustic Bass | `karplus-strong` | provisional; large resonating body |
-| 33 | Electric Bass (finger) | `karplus-strong` | provisional; pickup + two-polarization beat |
-| 34 | Electric Bass (pick) | `karplus-strong` | provisional; bright near-bridge attack |
-| 35 | Fretless Bass | `karplus-strong` | provisional; rounder, glide-friendly |
-| 36 | Slap Bass 1 | `karplus-strong` | provisional; thumb slap + fret-slap buzz |
-| 37 | Slap Bass 2 | `karplus-strong` | provisional; sharper pop |
-| 38 | Synth Bass 1 | `subtractive` | synth bass by design |
-| 39 | Synth Bass 2 | `subtractive` | synth bass by design |
-
-#### Strings (40-47)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 40 | Violin | `bowed-string` | provisional |
-| 41 | Viola | `bowed-string` | provisional; darker/slower |
-| 42 | Cello | `bowed-string` | provisional |
-| 43 | Contrabass | `bowed-string` | provisional; darkest/slowest |
-| 44 | Tremolo Strings | `subtractive` | detuned-saw section with an amplitude-tremolo LFO |
-| 45 | Pizzicato Strings | `karplus-strong` | provisional; short pluck into a violin-body corpus |
-| 46 | Orchestral Harp | `karplus-strong` | provisional; long undamped ring |
-| 47 | Timpani | `percussion` | note-tracked kettledrum |
-
-#### Ensemble (48-55)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 48 | String Ensemble 1 | `subtractive` | wide supersaw pad with section vibrato |
-| 49 | String Ensemble 2 | `subtractive` | |
-| 50 | SynthStrings 1 | `subtractive` | |
-| 51 | SynthStrings 2 | `subtractive` | |
-| 52 | Choir Aahs | `vocal` | provisional; open /a/ vowel, glottal source + formants |
-| 53 | Voice Oohs | `vocal` | provisional; darker closed /u/ vowel |
-| 54 | Synth Voice | `vocal` | provisional; brighter, steadier synthetic vowel |
-| 55 | Orchestra Hit | `subtractive` | bright detuned-saw stab |
-
-#### Brass (56-63)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 56 | Trumpet | `brass` | provisional; lip-reed waveguide |
-| 57 | Trombone | `brass` | provisional |
-| 58 | Tuba | `brass` | provisional; dark, conical |
-| 59 | Muted Trumpet | `brass` | provisional; physical mute model |
-| 60 | French Horn | `brass` | provisional; rounder, conical |
-| 61 | Brass Section | `fm` | FM by design (not the brass waveguide) |
-| 62 | SynthBrass 1 | `fm` | FM by design |
-| 63 | SynthBrass 2 | `fm` | FM by design |
-
-#### Reed (64-71)
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 64 | Soprano Sax | `reed` | provisional; conical bore |
-| 65 | Alto Sax | `reed` | provisional; conical |
-| 66 | Tenor Sax | `reed` | provisional; conical |
-| 67 | Baritone Sax | `reed` | provisional; conical, darkest sax |
-| 68 | Oboe | `reed` | provisional; conical, bright/nasal |
-| 69 | English Horn | `reed` | provisional; conical |
-| 70 | Bassoon | `reed` | provisional; conical, low |
-| 71 | Clarinet | `reed` | provisional; cylindrical bore (odd harmonics) |
-
-#### Pipe (72-79) — air-jet flute engine
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 72 | Piccolo | `flute` | provisional; brightest |
-| 73 | Flute | `flute` | provisional |
-| 74 | Recorder | `flute` | provisional |
-| 75 | Pan Flute | `flute` | provisional; breathy vortex |
-| 76 | Blown Bottle | `flute` | provisional; dark, high damping |
-| 77 | Shakuhachi | `flute` | provisional; breathiest |
-| 78 | Whistle | `flute` | provisional |
-| 79 | Ocarina | `flute` | provisional; closed-vessel |
-
-#### Synth Lead (80-87) — subtractive oscillators
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 80 | Lead 1 (square) | `subtractive` | 3-osc detuned lead through a Moog-ladder filter |
-| 81 | Lead 2 (sawtooth) | `subtractive` | |
-| 82 | Lead 3 (calliope) | `subtractive` | |
-| 83 | Lead 4 (chiff) | `subtractive` | |
-| 84 | Lead 5 (charang) | `subtractive` | |
-| 85 | Lead 6 (voice) | `subtractive` | a sung lead: the oscillator runs through the **vocal formant body**, which is the model — the oscillator only has to be rich enough to feed it |
-| 86 | Lead 7 (fifths) | `subtractive` | |
-| 87 | Lead 8 (bass + lead) | `subtractive` | |
-
-#### Synth Pad (88-95) — subtractive oscillators
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 88 | Pad 1 (new age) | `subtractive` | 7-osc supersaw pad |
-| 89 | Pad 2 (warm) | `subtractive` | |
-| 90 | Pad 3 (polysynth) | `subtractive` | |
-| 91 | Pad 4 (choir) | `subtractive` | the same **vocal formant body** as Lead 6, mixed higher, over the pad's envelope instead of the lead's |
-| 92 | Pad 5 (bowed) | `subtractive` | |
-| 93 | Pad 6 (metallic) | `subtractive` | |
-| 94 | Pad 7 (halo) | `subtractive` | |
-| 95 | Pad 8 (sweep) | `subtractive` | |
-
-#### Synth Effects (96-103) — all subtractive
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 96 | FX 1 (rain) | `subtractive` | drifting detuned triangles |
-| 97 | FX 2 (soundtrack) | `subtractive` | |
-| 98 | FX 3 (crystal) | `subtractive` | |
-| 99 | FX 4 (atmosphere) | `subtractive` | |
-| 100 | FX 5 (brightness) | `subtractive` | |
-| 101 | FX 6 (goblins) | `subtractive` | |
-| 102 | FX 7 (echoes) | `subtractive` | |
-| 103 | FX 8 (sci-fi) | `subtractive` | |
-
-#### Ethnic (104-111) — buzzing-bridge plucked + karplus-strong
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 104 | Sitar | `plucked-string` | provisional; jawari bridge buzz, long shimmering ring |
-| 105 | Banjo | `karplus-strong` | provisional; shared pluck sketch |
-| 106 | Shamisen | `plucked-string` | provisional; sawari buzz, drier and harder than the sitar |
-| 107 | Koto | `plucked-string` | provisional; bridge-buzz plucked string |
-| 108 | Kalimba | `karplus-strong` | provisional; shared pluck sketch |
-| 109 | Bag pipe | `karplus-strong` | provisional; shared pluck sketch (no reed drone yet) |
-| 110 | Fiddle | `karplus-strong` | provisional; shared pluck sketch (not bowed yet) |
-| 111 | Shanai | `karplus-strong` | provisional; shared pluck sketch (no reed model yet) |
-
-#### Percussive (112-119) — all percussion
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 112 | Tinkle Bell | `percussion` | sparse inharmonic modes |
-| 113 | Agogo | `percussion` | two-tone metal bell |
-| 114 | Steel Drums | `percussion` | near-harmonic modes |
-| 115 | Woodblock | `percussion` | very short, with stick click |
-| 116 | Taiko Drum | `percussion` | strong pitch drop + shell boom |
-| 117 | Melodic Tom | `percussion` | note-tracked, with shell body |
-| 118 | Synth Drum | `percussion` | decaying-sine electronic drum |
-| 119 | Reverse Cymbal | `percussion` | long rising swell (simulated reverse) |
-
-#### Sound Effects (120-127) — generic placeholder
-
-<SonareDemo id="gm-sfx" />
-
-The demo above auditions all eight GM Sound-Effects programs directly — a quick way to hear that they currently share one voice instead of eight distinct effects.
-
-| Prog | Instrument | Engine | Notes |
-|---|---|---|---|
-| 120 | Guitar Fret Noise | `subtractive` | generic resonant-noise placeholder (see note below) |
-| 121 | Breath Noise | `subtractive` | generic resonant-noise placeholder |
-| 122 | Seashore | `subtractive` | generic resonant-noise placeholder |
-| 123 | Bird Tweet | `subtractive` | generic resonant-noise placeholder |
-| 124 | Telephone Ring | `subtractive` | generic resonant-noise placeholder |
-| 125 | Helicopter | `subtractive` | generic resonant-noise placeholder |
-| 126 | Applause | `subtractive` | generic resonant-noise placeholder |
-| 127 | Gunshot | `subtractive` | generic resonant-noise placeholder |
-
-Note on 120-127: in the data-free fallback these eight programs currently share one generic noise-through-a-resonant-bandpass voice, differentiated only by the note played — there is no per-effect procedural model yet. A SoundFont that covers these programs plays its own samples instead.
-:::
+See [GM Tone Map](./gm-tone-map.md) for the complete table.

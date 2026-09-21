@@ -1,11 +1,11 @@
 ---
 title: GM／GS フォールバックバンク
-description: NativeSynth の GM フォールバックバンクのリファレンスです。GS バリエーション音色、GM/GS ドラムキットバリエーション、GM プログラムチェンジへの追従、SoundFont フォールバックのルーティング、全128プログラムの音色マップを扱います。
+description: NativeSynth の GM フォールバックバンクのリファレンスです。GS バリエーション音色、GM/GS ドラムキットバリエーション、GM プログラムチェンジへの追従、GS アーキテクチャ層と挿入エフェクト、SoundFont フォールバックのルーティングを扱います。
 ---
 
 # GM／GS フォールバックバンク
 
-このページは[内蔵シンセサイザー](./native-synth.md)の General MIDI／GS 側を扱います。データ不要の GM フォールバックバンクとその GS バリエーション音色・ドラムキットバリエーション、バウンスが GM プログラムチェンジに追従する仕組み、SoundFont からバンクへ落ちる条件、そして全128プログラムの音色マップです。
+このページは[内蔵シンセサイザー](./native-synth.md)の General MIDI／GS 側を扱います。データ不要の GM フォールバックバンクとその GS バリエーション音色・ドラムキットバリエーション、バウンスが GM プログラムチェンジに追従する仕組み、[SoundFont プレイヤー](./soundfont-player.md)が実装する Roland-GS のアーキテクチャ層と挿入エフェクト、そして SoundFont からバンクへ落ちる条件です。プログラムごとの音色一覧は [GM 音色マップ](./gm-tone-map.md) にあります。
 
 ## GM フォールバックバンク
 
@@ -85,7 +85,7 @@ GM のプログラム番号が選ぶのは*キャピタル*音色です。GS と
 
 各行には 2 つの番号が並びますが、これらは互換ではありません。**プログラム**はファイルが送る番号で、リズムパートのプログラムチェンジ番号、つまり規格が定めるアドレスです。**インデックス**はこのバンク内部のスロット番号です。インデックスは**追加のみ**で、あとから追加されたセットは空いている次の番号を取ります。そのため、セットを追加しても既存のセットの番号が付け替わることはなく、すでに正しく鳴っていたものが別の音になることもありません。
 
-**トーンマップ**の列は、そのセットを最初に定義した世代です。これは [バンクセレクト LSB](./soundfont-player.md#gs-アーキテクチャ層) が選ぶマップと同じものです。古いマップを指定したファイルは、それより後に追加されたセットには到達せず、それらは Standard へフォールバックします。その世代のモジュールの動作そのままです。
+**トーンマップ**の列は、そのセットを最初に定義した世代です。これは [バンクセレクト LSB](#gs-アーキテクチャ層) が選ぶマップと同じものです。古いマップを指定したファイルは、それより後に追加されたセットには到達せず、それらは Standard へフォールバックします。その世代のモジュールの動作そのままです。
 
 どのセットも、**共有された 1 つのパーカッションモデルを作り直したもの**であり、モデルの複製ではありません。キック、スネア、タム、ハット、シンバルのパラメーターがノートオン時に作り変えられます。つまり、土台のモデルを良くすれば 26 セットすべてが同時に良くなり、逆にセットどうしの差はモデルがパラメーターを持つ範囲にとどまります。
 
@@ -119,7 +119,7 @@ GM のプログラム番号が選ぶのは*キャピタル*音色です。GS と
 | 58 | 25 | Rhythm FX 2 | SC-88Pro | ワンショットのセット — Standard の音色で鳴る |
 
 ::: warning ワンショットのセットとサウンドエフェクト・プログラムはアドレスのみで未モデル化
-4 つのセット（**SFX**、**Rhythm FX**、**Cymbal & Claps**、**Rhythm FX 2**）は、実機の GS では音色を作り変えたキットではなく、個別のワンショット録音を集めたバンクです。膜モデルが作り変える対象がそもそも存在しないため、アドレスと名前は認識されますが Standard キットの音色で鳴ります。GM のサウンドエフェクト・プログラム（120-127、後述の GM 音色マップを参照）も同じ立場で、共通の汎用ノイズ音色を共有します。これらのアドレスに実際のサンプルを持つ SoundFont を読み込めば、SF2 プレイヤー経由で通常どおり再生されます。
+4 つのセット（**SFX**、**Rhythm FX**、**Cymbal & Claps**、**Rhythm FX 2**）は、実機の GS では音色を作り変えたキットではなく、個別のワンショット録音を集めたバンクです。膜モデルが作り変える対象がそもそも存在しないため、アドレスと名前は認識されますが Standard キットの音色で鳴ります。GM のサウンドエフェクト・プログラム（120-127、[GM 音色マップ](./gm-tone-map.md)を参照）も同じ立場で、共通の汎用ノイズ音色を共有します。これらのアドレスに実際のサンプルを持つ SoundFont を読み込めば、SF2 プレイヤー経由で通常どおり再生されます。
 :::
 
 ### パッチを固定せず GM プログラムに追従させる
@@ -236,6 +236,99 @@ const audio = project.bounceWithSynthInstrument(
 
 `totalFrames` を 0 のままにすると、アレンジとパッチのリリーステイルから長さを自動導出します。未知のプリセット名は例外を投げます。`bounceWith*` が共有するチャンネル・サンプルレート・レイテンシなどは [プロジェクトバウンス](./project-bounce.md) を参照してください。
 
+## GS アーキテクチャ層
+
+[SoundFont プレイヤー](./soundfont-player.md)は GM の上に、GS でオーサリングされたアレンジが期待する Roland-GS 拡張を実装します。
+
+- **バリエーションバンクフォールバック** — SoundFont がカバーしない GS バリエーションバンクは、キャピタル（バンク 0）の音色へフォールバックします。欠けたバリエーションでも無音にならず、正しいファミリーを鳴らします。
+- **チャンネル 10 のバンク 128 ドラムキット** — ドラムプログラムはバンク 128 にあり、慣習でチャンネル 10（インデックス 9）がドラムパートです。
+- **NRPN パート編集** — TVF カットオフ／レゾナンス、TVA エンベロープ、ビブラートを NRPN でパートごとに編集でき、さらに個別のドラム音用の**ドラムごとの NRPN** も使えます。
+- **GS／GM SysEx** — **GS Reset**、**GM System On**、「リズムパートに使用」の SysEx を認識します。ホストからのものと、アレンジ内に埋め込まれた SysEx イベントの両方に対応します。
+- **センドリターン方式のシステムエフェクト** — 16 パート共通の 1 つのセンドリターンバスに、リバーブ・コーラス・ディレイの 3 ユニットが載っています。各パートの送信量は 2 つの経路の合算です。チャンネル CC センドでは、**CC91** がリバーブ送信、**CC93** がコーラス送信、**CC94** がディレイ送信を担い、リバーブとコーラスにはさらに SF2 ゾーンジェネレーター `reverbEffectsSend`／`chorusEffectsSend` の値が上乗せされます（GS のディレイ送信は CC 専用で、対応する SF2 ジェネレーターはありません）。パワーオン時は、音楽的に聞き取れる既定のルーム感（リバーブ送信 40、コーラス送信 8）から始まるため、リセット SysEx を送らない SMF でも空間の響きが残ります。これとは別に、パートごとの**ドライブ**インサート（ゲイン補正付きサチュレーション）もこのバスに並んで存在し、後述する GS の**挿入エフェクト**（EFX）という共有の別ユニットとは異なります。
+- **MIDI 2.0／GM2** — MIDI 2.0 のバンク付きプログラムチェンジをデコードします。**バンクセレクト LSB（CC#32）** の解釈は MSB によって 2 通りに分かれます。
+  - **GM2 のアドレッシング** — MSB が GM2 のメロディックバンク（`0x79`）またはパーカッションバンク（`0x78`）のとき、LSB はそのままバリエーション番号（またはパーカッションセット番号）で、GM2 の定義どおりです。
+  - **GS のトーンマップ選択** — それ以外の MSB では、LSB は MSB のバリエーション番号が**どの世代の音色セットに届くか**を選びます。`0` はモジュール自身の（最新の）マップ、`1` は SC-55、`2` は SC-88、`3` は SC-88Pro、`4` は SC-8850 です。これ以外の値は `0` として読まれます。このメッセージを受け取っていないモジュールは、すでに自分のマップで鳴っているからです。選ばれたマップより後に追加された音色やキットは、キャピタル音色または Standard キットへフォールバックします。これはその世代の実機がする動作と同じです。
+
+::: warning LSB は 2 つの意味を持つ
+これは `Project.midiBankProgram(...)` に `bankLsb` として渡すバイトで、最も間違えやすい値です。GM2 の MSB のもとでは**バリエーション**を選び、GS の MSB のもとでは**トーンマップ**を選びます（バリエーション番号は MSB 側にあります）。GS のバリエーション MSB と並べて `bankLsb: 1` と書いてもバリエーション 1 にはならず、そのパートが SC-55 の音色セットに固定されます。
+:::
+
+::: warning SFX キットと GM サウンドエフェクトプログラムはまだ個別合成されていません
+GS 系の **SFX ドラムキット**（リズムパートのプログラム 56）と GM の **サウンドエフェクト**プログラム（120〜127、Guitar Fret Noise から Gunshot まで）は、プレイヤー側でアドレスと名前は認識されますが、データ非依存の NativeSynth フォールバックではその音色はまだ個別に合成されていません。ワンショット系の GS リズムセット（SFX、Rhythm FX、Cymbal & Claps、Rhythm FX 2）は現状 Standard キットの音色で鳴り、プログラム120〜127は共通の汎用ノイズ系音色を共有します。これらのアドレスに実際のサンプルを持つ SoundFont を読み込めば、この SF2 プレイヤー経由で通常どおり再生されます — 制約があるのはフォールバックのみです。内蔵のフォールバック音作りは前述の [GM フォールバックバンク](#gm-フォールバックバンク) を参照してください。
+:::
+
+## GS 挿入エフェクト（EFX）
+
+::: info 独自の DSP による再現であり、ハードウェアのデータを同梱するものではありません
+libsonare の挿入エフェクトは、公開されている情報をもとに再構成した libsonare 独自のアルゴリズムの組み合わせで、GS の EFX の SysEx とタイプ番号体系に対応づけた独自の DSP による再現です。これにより GS 準拠で作られた MIDI が作曲者の意図したエフェクトを選べます。ただしアルゴリズムは独立しているため、同じアドレス指定とエフェクト構成には従いますが、特定のハードウェアモジュールの音そのものを再現するものでは**ありません**。1:1 のエミュレーションではなく、互換性のある再構成として捉えてください。サンプル・ROM データ・ファームウェアの同梱は一切なく、いかなるハードウェアメーカーとの提携や承認を意味するものでもありません。この互換性の背景にある標準や文献については、[アルゴリズム根拠](./algorithm-references.md)を参照してください。
+:::
+
+前述のリバーブ・コーラス・ディレイのセンドリターンバスとは別に、GS はもう1つ、**挿入エフェクト**（EFX）を定義しています。センドリターンバスと異なり、ギターのエフェクターのようにパートの信号経路へ直接挿入されるエフェクトです。libsonare は元のハードウェアと同じ設計で、プレイヤー全体で共有する**単一の挿入ユニット**として実装しており、16パートそれぞれに独立したエフェクトを持つわけではありません。16パートのどれでも、パートごとのオン／オフスイッチでこの1つのユニットへルーティングできます。オフのパートはこのユニットを完全にバイパスし、ドライのままミックスへ届きます。
+
+どのバインディングにも「EFX を設定する」といった専用の型付き API はありません。実際の GS ハードウェアと同じように、EFX のタイプとパラメータは生の SysEx を送ることでのみプログラムします。ライブでは `RealtimeEngine.pushMidiSysex()` でそのバイト列を送り、オフラインではアレンジの MIDI に埋め込まれた SysEx がバウンス中にインラインで実現されます。
+
+### EFX タイプ → 挿入エフェクト
+
+各 EFX タイプ番号が 1 つの挿入エフェクトを選びます。タイプ `0` は Thru（エフェクトなし）です。
+
+| EFX タイプ | GS EFX 名 | libsonare の挿入エフェクト |
+|---|---|---|
+| 0x0100 | Stereo EQ | パラメトリック EQ |
+| 0x0101 | Spectrum | グラフィック EQ |
+| 0x0102 | Enhancer | プレゼンスエンハンサー |
+| 0x0110 | Overdrive | アンプシミュレーター（クランチ系） |
+| 0x0111 | Distortion | アンプシミュレーター（ハイゲイン系） |
+| 0x0120 | Phaser | フェイザー |
+| 0x0121 | Auto Wah | エンベロープ追従型レゾナントバンドパス |
+| 0x0122 | Rotary | 2ローターのロータリースピーカーモデル |
+| 0x0123 | Stereo Flanger | フランジャー |
+| 0x0124 | Step Flanger | フランジャー |
+| 0x0126 | Auto Pan | オートパン |
+| 0x0130 | Compressor | コンプレッサー |
+| 0x0131 | Limiter | リミッター |
+| 0x0140 | Hexa Chorus | 6声アンサンブル |
+| 0x0141 | Tremolo Chorus | コーラス |
+| 0x0142 | Stereo Chorus | コーラス |
+| 0x0143 | Space-D | コーラス（変調なし） |
+| 0x0144 | 3D Chorus | コーラス（広がりを付加） |
+| 0x0150 | Stereo Delay | ステレオディレイ |
+| 0x0151 | Modulation Delay | ステレオディレイ |
+| 0x0152–0x0154 | 3-tap／4-tap／Time-Control Delay | ステレオディレイ |
+| 0x0155 | Reverb | プレートリバーブ |
+| 0x0156 | Gate Reverb | プレートリバーブ（ゲートテールは未実装） |
+| 0x0157 | 3D Delay | ステレオディレイ |
+| 0x0160 | 2-voice Pitch Shifter | ピッチシフター |
+| 0x0161 | Feedback Pitch Shifter | ピッチシフター（フィードバックループは未モデル化） |
+| 0x0172／0x0173 | Lo-Fi 1／2 | ビットクラッシャー |
+
+Humanizer・Tremolo・3D Auto／Manual など一部の GS タイプには、まだ忠実な既製インサートがなく、ドライのまま通過します。Overdrive／Distortion のドライブとレベル、ピッチシフターの粗ピッチとバランスは、生の EFX パラメータから変換されます。それ以外の単一エフェクトタイプは、各インサート自身の既定値で動作します。
+
+### 複合 EFX タイプ（多段チェーン）
+
+複合 EFX タイプは、ハードウェアのブロック構成に合わせて、上記と同じ DSP インサートを直列につないだ**チェーン**として実現されます。たとえばギター用マルチエフェクトも、個々のアンプシミュレーター／コーラス／ディレイのインサートをつないで動作します。下の表は代表例で、実際のマップは `0x0200`〜`0x020C` の 2 段マトリクス（Overdrive／Distortion／Enhancer を Chorus・Flanger・Delay に通す組み合わせ）と、`0x0400`〜`0x0500` のギター／ベース／ローズ／キーボード用マルチプリセットまでを網羅します。
+
+| EFX タイプ | GS EFX 名 | チェーン（信号順） |
+|---|---|---|
+| 0x0200 | OD → Chorus | アンプシミュレーター → コーラス |
+| 0x0202 | OD → Delay | アンプシミュレーター → ステレオディレイ |
+| 0x0400 | Guitar Multi 1 | コンプレッサー → アンプシミュレーター → コーラス → ディレイ |
+| 0x0405 | Bass Multi | コンプレッサー → アンプシミュレーター（ベースキャビネット） → EQ → コーラス |
+| 0x0406 | Rhodes Multi | エンハンサー → フェイザー → コーラス → オートパン |
+| 0x0500 | Keyboard Multi | リングモジュレーター → EQ → ピッチシフター → フェイザー → ディレイ |
+
+### ライブとオフラインでの実現方式
+
+- **オフライン**（バウンス） — アレンジに埋め込まれた EFX の SysEx はレンダー中にインラインで適用されます。バウンスの途中で EFX が変わっても、次のブロックから反映されます。
+- **ライブ** — `pushMidiSysex()` はオーディオスレッドの外で新しいエフェクトチェーンを構築し、ウェイトフリーに引き渡すため、ライブエンジンは再生を**止めずに** EFX の変化を聞き取れます。
+
+下のデモは、同じ持続和音を GS 互換プレイヤーで鳴らしながら挿入エフェクトを切り替えて、それぞれがトーンをどう変えるかをドライ音と聴き比べられます。
+
+<SonareDemo id="gs-efx" />
+
+::: tip MIDI ヘルパーで GS バンクをオーサリングする
+`Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` は、バンクセレクトとプログラムチェンジを `setMidiEvents` が受け付ける MIDI イベントへ展開します。GS バリエーションやドラムキットを選ぶ正しい方法です。`Project.gmInstrumentName(program)`、`Project.gmDrumName(note)`、`Project.gm2InstrumentName(bankLsb, program)`、`Project.midiCcName(controller)` のような静的ヘルパーがスロットに名前を付けるので、オーサリングコードが読みやすくなります。逆方向も対称です。`Project.gmProgramForName(name)`、`Project.gmDrumNoteForName(name)`、`Project.midiCcIndexForName(name)` は正規名から番号を返し（未知の名前は `-1`）、`Project.gmFamilyName(family)` と `Project.gmFamilyFirstProgram(family)` は 16 の GM 楽器ファミリーを列挙します。`Project.gm2DrumSetName(bankLsb)` と `Project.gm2DrumName(bankLsb, note)` は GM2 のドラムセットバリエーションに名前を付けます。
+:::
+
 ## NativeSynth と SoundFont フォールバック
 
 NativeSynth は [SoundFont プレイヤー](./soundfont-player.md)の下にあるセーフティネットです。`bounceWithSf2Instrument` でレンダーする（またはライブで SF2 をバインドする）と、libsonare はアレンジが実際に鳴らす各 `(channel, bank, program)` を解決します。
@@ -287,222 +380,6 @@ Bank Select は、フォールバックがバリエーションを持つキャ�
 
 ## GM 音色マップ — 全128プログラム
 
-General MIDI の各プログラムは、音作りエンジンのいずれかに解決されます。下表は、SoundFont がそのプログラムを持たないときに NativeSynth が使うデータ非依存のフォールバック音色です（各プログラムの正式名称は実行時に `Project.gmInstrumentName(program)` からも取得できます）。「暫定」と付いた行は、較正が続いているアコースティック系の物理モデルを使います。
+General MIDI の各プログラムは、音作りエンジンのいずれかに解決されます。全128プログラム分の楽器名・エンジン・備考をまとめた表は分量が大きいため、独立したページに置いています。各プログラムの正式名称は実行時に `Project.gmInstrumentName(program)` からも取得できます。
 
-::: details 全128プログラムの音色マップを表示
-**モデルの状態** — **安定**: 減算合成、FM、モーダル、加算、パーカッションの各コアは成熟しています。**暫定**: ピアノ、Karplus-Strong、パイプオルガン、擦弦、リード、金管、フルート、撥弦（バズブリッジ）、ボイス、フリーリードの各物理モデルはまだ較正が続いています。ハープシコードは減衰とストレッチをキャプチャー音源に対して回帰しているため、暫定とはしていません。
-
-#### ピアノ（0-7）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 0 | Acoustic Grand Piano | `piano` | 暫定。共有のモーダル響板 |
-| 1 | Bright Acoustic Piano | `piano` | 暫定 |
-| 2 | Electric Grand Piano | `piano` | 暫定（FM ではなくアコースティック導波路） |
-| 3 | Honky-tonk Piano | `piano` | 暫定 |
-| 4 | Electric Piano 1 | `fm` | タイン／ベルの FM |
-| 5 | Electric Piano 2 | `fm` | EP1 と同じ音作り |
-| 6 | Harpsichord | `harpsichord` | ジャック＆プレクトラム。バンクで選ぶ 3 種のレジストレーション |
-| 7 | Clavi | `fm` | 明るい高比率の FM |
-
-#### クロマチックパーカッション（8-15）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 8 | Celesta | `modal` | 柔らかいフェルト打撃のスティールバー |
-| 9 | Glockenspiel | `modal` | 一様バーのモード比 |
-| 10 | Music Box | `modal` | ツインティースのうなりでタインの揺らぎを表現 |
-| 11 | Vibraphone | `modal` | モーターによるトレモロ（LFO → 音量） |
-| 12 | Marimba | `modal` | 深いアーチのバー、木管ボディ |
-| 13 | Xylophone | `modal` | 短く乾いた深いアーチのバー |
-| 14 | Tubular Bells | `modal` | 基音を持たない打撃ピッチ、長い残響 |
-| 15 | Dulcimer | `karplus-strong` | 暫定。撥弦ではなく打弦 |
-
-#### オルガン（16-23）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 16 | Drawbar Organ | `additive` | 9ドローバーのハモンド |
-| 17 | Percussive Organ | `additive` | |
-| 18 | Rock Organ | `additive` | |
-| 19 | Church Organ | `pipe-organ` | 暫定。マルチランクのプレナム |
-| 20 | Reed Organ | `free-reed` | 暫定。ハルモニウム — 柔らかなプレート、柔らかいリード |
-| 21 | Accordion | `free-reed` | 暫定。リードオルガンの音作りを共有 |
-| 22 | Harmonica | `free-reed` | 暫定。小さく明るい硬いリード＋ハンドビブラート |
-| 23 | Tango Accordion | `free-reed` | 暫定。バンドネオン、ミュゼット（うなりのある）デチューン |
-
-#### ギター（24-31）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 24 | Acoustic Guitar (nylon) | `karplus-strong` | 暫定。柔らかい撥弦、分散なし |
-| 25 | Acoustic Guitar (steel) | `karplus-strong` | 暫定。スチール弦の分散＋共鳴弦 |
-| 26 | Electric Guitar (jazz) | `karplus-strong` | 暫定。ブリッジ寄りピックアップ、ボディなし |
-| 27 | Electric Guitar (clean) | `karplus-strong` | 暫定。jazz と同じ音作り |
-| 28 | Electric Guitar (muted) | `karplus-strong` | 暫定。ミュート（パームミュート）による減衰 |
-| 29 | Overdriven Guitar | `karplus-strong` | 暫定。フィルター前段のドライブ |
-| 30 | Distortion Guitar | `karplus-strong` | 暫定。より強いドライブ |
-| 31 | Guitar Harmonics | `karplus-strong` | 暫定 |
-
-#### ベース（32-39）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 32 | Acoustic Bass | `karplus-strong` | 暫定。大きく共鳴するボディ |
-| 33 | Electric Bass (finger) | `karplus-strong` | 暫定。ピックアップ＋2偏波のうなり |
-| 34 | Electric Bass (pick) | `karplus-strong` | 暫定。ブリッジ寄りの明るいアタック |
-| 35 | Fretless Bass | `karplus-strong` | 暫定。丸くグライドしやすい |
-| 36 | Slap Bass 1 | `karplus-strong` | 暫定。サムスラップ＋フレットスラップのバズ |
-| 37 | Slap Bass 2 | `karplus-strong` | 暫定。より鋭いポップ |
-| 38 | Synth Bass 1 | `subtractive` | 設計上のシンセベース |
-| 39 | Synth Bass 2 | `subtractive` | 設計上のシンセベース |
-
-#### 弦（40-47）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 40 | Violin | `bowed-string` | 暫定 |
-| 41 | Viola | `bowed-string` | 暫定。より暗く遅い |
-| 42 | Cello | `bowed-string` | 暫定 |
-| 43 | Contrabass | `bowed-string` | 暫定。最も暗く遅い |
-| 44 | Tremolo Strings | `subtractive` | デチューンしたのこぎり波セクション＋アンプトレモロ LFO |
-| 45 | Pizzicato Strings | `karplus-strong` | 暫定。ヴァイオリンボディへの短い撥弦 |
-| 46 | Orchestral Harp | `karplus-strong` | 暫定。長く減衰しにくい響き |
-| 47 | Timpani | `percussion` | ノートトラッキングするケトルドラム |
-
-#### アンサンブル（48-55）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 48 | String Ensemble 1 | `subtractive` | セクションビブラートを持つ幅広のスーパーソウパッド |
-| 49 | String Ensemble 2 | `subtractive` | |
-| 50 | SynthStrings 1 | `subtractive` | |
-| 51 | SynthStrings 2 | `subtractive` | |
-| 52 | Choir Aahs | `vocal` | 暫定。開いた /a/ 母音、声門音源＋フォルマント |
-| 53 | Voice Oohs | `vocal` | 暫定。より暗く口を閉じた /u/ 母音 |
-| 54 | Synth Voice | `vocal` | 暫定。より明るく安定した合成母音 |
-| 55 | Orchestra Hit | `subtractive` | 明るいデチューンのこぎり波のスタブ |
-
-#### 金管（56-63）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 56 | Trumpet | `brass` | 暫定。リップリード導波路 |
-| 57 | Trombone | `brass` | 暫定 |
-| 58 | Tuba | `brass` | 暫定。暗く円錐管 |
-| 59 | Muted Trumpet | `brass` | 暫定。物理的なミュートモデル |
-| 60 | French Horn | `brass` | 暫定。より丸い円錐管 |
-| 61 | Brass Section | `fm` | 設計上 FM（金管導波路ではない） |
-| 62 | SynthBrass 1 | `fm` | 設計上 FM |
-| 63 | SynthBrass 2 | `fm` | 設計上 FM |
-
-#### リード（64-71）
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 64 | Soprano Sax | `reed` | 暫定。円錐管 |
-| 65 | Alto Sax | `reed` | 暫定。円錐管 |
-| 66 | Tenor Sax | `reed` | 暫定。円錐管 |
-| 67 | Baritone Sax | `reed` | 暫定。円錐管、サックスの中で最も暗い |
-| 68 | Oboe | `reed` | 暫定。円錐管、明るく鼻にかかった音 |
-| 69 | English Horn | `reed` | 暫定。円錐管 |
-| 70 | Bassoon | `reed` | 暫定。円錐管、低音 |
-| 71 | Clarinet | `reed` | 暫定。円筒管（奇数次倍音） |
-
-#### パイプ（72-79）— エアジェットフルートエンジン
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 72 | Piccolo | `flute` | 暫定。最も明るい |
-| 73 | Flute | `flute` | 暫定 |
-| 74 | Recorder | `flute` | 暫定 |
-| 75 | Pan Flute | `flute` | 暫定。息っぽい渦流 |
-| 76 | Blown Bottle | `flute` | 暫定。暗く高いダンピング |
-| 77 | Shakuhachi | `flute` | 暫定。最も息っぽい |
-| 78 | Whistle | `flute` | 暫定 |
-| 79 | Ocarina | `flute` | 暫定。閉じた容器の質感 |
-
-#### シンセリード（80-87）— 減算合成のオシレーター
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 80 | Lead 1 (square) | `subtractive` | Moog ラダーフィルターを通す3オシレーターのデチューンリード |
-| 81 | Lead 2 (sawtooth) | `subtractive` | |
-| 82 | Lead 3 (calliope) | `subtractive` | |
-| 83 | Lead 4 (chiff) | `subtractive` | |
-| 84 | Lead 5 (charang) | `subtractive` | |
-| 85 | Lead 6 (voice) | `subtractive` | 歌うリード。オシレーターを**母音フォルマントのボディ**に通す。モデルの本体はフォルマント側で、オシレーターはそれを駆動できる倍音成分があれば足りる |
-| 86 | Lead 7 (fifths) | `subtractive` | |
-| 87 | Lead 8 (bass + lead) | `subtractive` | |
-
-#### シンセパッド（88-95）— 減算合成のオシレーター
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 88 | Pad 1 (new age) | `subtractive` | 7オシレーターのスーパーソウパッド |
-| 89 | Pad 2 (warm) | `subtractive` | |
-| 90 | Pad 3 (polysynth) | `subtractive` | |
-| 91 | Pad 4 (choir) | `subtractive` | Lead 6 と同じ**母音フォルマントのボディ**をより多く混ぜ、リードではなくパッドのエンベロープに乗せる |
-| 92 | Pad 5 (bowed) | `subtractive` | |
-| 93 | Pad 6 (metallic) | `subtractive` | |
-| 94 | Pad 7 (halo) | `subtractive` | |
-| 95 | Pad 8 (sweep) | `subtractive` | |
-
-#### シンセエフェクト（96-103）— すべて減算合成
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 96 | FX 1 (rain) | `subtractive` | 揺らぐデチューン三角波 |
-| 97 | FX 2 (soundtrack) | `subtractive` | |
-| 98 | FX 3 (crystal) | `subtractive` | |
-| 99 | FX 4 (atmosphere) | `subtractive` | |
-| 100 | FX 5 (brightness) | `subtractive` | |
-| 101 | FX 6 (goblins) | `subtractive` | |
-| 102 | FX 7 (echoes) | `subtractive` | |
-| 103 | FX 8 (sci-fi) | `subtractive` | |
-
-#### エスニック（104-111）— バズブリッジ撥弦 + karplus-strong
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 104 | Sitar | `plucked-string` | 暫定。ジャワリブリッジのバズ、長くきらめく響き |
-| 105 | Banjo | `karplus-strong` | 暫定。共有の撥弦スケッチ |
-| 106 | Shamisen | `plucked-string` | 暫定。サワリのバズ、シタールより乾いて硬い |
-| 107 | Koto | `plucked-string` | 暫定。ブリッジバズの撥弦 |
-| 108 | Kalimba | `karplus-strong` | 暫定。共有の撥弦スケッチ |
-| 109 | Bag pipe | `karplus-strong` | 暫定。共有の撥弦スケッチ（リードドローンはまだない） |
-| 110 | Fiddle | `karplus-strong` | 暫定。共有の撥弦スケッチ（擦弦ではまだない） |
-| 111 | Shanai | `karplus-strong` | 暫定。共有の撥弦スケッチ（リードモデルはまだない） |
-
-#### パーカッシブ（112-119）— すべてパーカッション
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 112 | Tinkle Bell | `percussion` | まばらな非調和モード |
-| 113 | Agogo | `percussion` | 2音のメタルベル |
-| 114 | Steel Drums | `percussion` | ほぼ調和的なモード |
-| 115 | Woodblock | `percussion` | 非常に短く、スティックのクリック音付き |
-| 116 | Taiko Drum | `percussion` | 強いピッチドロップ＋シェルの鳴り |
-| 117 | Melodic Tom | `percussion` | ノートトラッキング、シェルボディ付き |
-| 118 | Synth Drum | `percussion` | 減衰するサイン波の電子ドラム |
-| 119 | Reverse Cymbal | `percussion` | 長く立ち上がるスウェル（逆再生を模擬） |
-
-#### サウンドエフェクト（120-127）— 汎用プレースホルダー
-
-<SonareDemo id="gm-sfx" />
-
-上のデモでは、GM のサウンドエフェクト・プログラム8個を実際に試聴できます。これらが現状1つの音色を共有していることを、手早く確認できます。
-
-| Prog | 楽器 | エンジン | 備考 |
-|---|---|---|---|
-| 120 | Guitar Fret Noise | `subtractive` | 汎用の共鳴ノイズプレースホルダー（下の注記を参照） |
-| 121 | Breath Noise | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-| 122 | Seashore | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-| 123 | Bird Tweet | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-| 124 | Telephone Ring | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-| 125 | Helicopter | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-| 126 | Applause | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-| 127 | Gunshot | `subtractive` | 汎用の共鳴ノイズプレースホルダー |
-
-120-127についての注記: データ非依存フォールバックでは、この8プログラムは現状、共通の「ノイズ→共鳴バンドパス」音色を1つ共有しており、鳴らすノートによってのみ違いが出ます。個別の効果音を作るプロシージャルモデルはまだありません。これらのプログラムをカバーする SoundFont を読み込めば、そちらのサンプルが再生されます。
-:::
+完全な表は [GM 音色マップ](./gm-tone-map.md) を参照してください。

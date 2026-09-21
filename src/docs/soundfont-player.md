@@ -55,7 +55,7 @@ By the end of this page you should be able to:
 - load a caller-supplied SF2 into a `Project` or the realtime engine, and release it;
 - read the per-program manifest to see which notes resolve to `sf2` versus the `synth` fallback;
 - bounce a MIDI arrangement through SF2 instruments deterministically;
-- understand the SF2 modulator/envelope semantics and the GS architecture layer the player implements;
+- understand the SF2 modulator/envelope semantics the player implements;
 - bind an SF2 instrument for live MIDI input.
 
 ## Pick the right entry point
@@ -270,101 +270,10 @@ The player is a faithful SF2 synthesis core with a Roland-GS architecture layer 
 - **DAHDSR envelopes** — separate volume and modulation envelopes with Delay/Attack/Hold/Decay/Sustain/Release stages.
 - **LFOs** — a vibrato LFO and a modulation LFO change pitch/filter/amplitude per the SF2 generators.
 - **Low-pass filter with velocity tracking** — initial cutoff and resonance, with velocity influencing brightness.
-- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send), **CC93** (chorus send), and **CC94** (delay send) feed the GS system-effects sends (see the GS architecture layer below). (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
+- **The SF2 default modulator set** — velocity, **CC7** (channel volume), and **CC11** (expression) apply a square-law gain; **CC1** (modulation wheel) changes vibrato depth; **CC91** (reverb send), **CC93** (chorus send), and **CC94** (delay send) feed the GS system-effects sends (see [the GS architecture layer](./gm-gs.md#the-gs-architecture-layer)). (A **CC** is one of MIDI's continuous "knob" control-change messages — see [MIDI Input](./midi-input.md).)
 - **Pitch bend** — honored, with the bend range set by **RPN 0** (entered via Data Entry / RPN), so a part can request its own semitone range.
 
-### The GS architecture layer
-
-On top of GM, the player implements the Roland-GS extensions a GS-authored arrangement expects:
-
-- **Variation-bank fallback** — a GS variation bank that the SoundFont does not cover falls back to the capital (bank-0) tone, so a missing variation still plays the right family instead of going silent.
-- **Bank-128 drum kits on channel 10** — drum programs live in bank 128; channel 10 (index 9) is the drum part by convention.
-- **NRPN part edits** — TVF cutoff/resonance, TVA envelope, and vibrato can be edited per part via NRPN, plus **per-note drum NRPNs** for individual drum sounds.
-- **GS / GM SysEx** — **GS Reset**, **GM System On**, and "use for rhythm part" SysEx are recognized — both from the host and from SysEx events embedded inside an arrangement.
-- **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the single shared GS **insertion effect (EFX)** described below.
-- **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change, and resolves the **Bank Select LSB (CC#32)** one of two ways depending on the MSB:
-  - **GM2 addressing** — when the MSB is GM2's melodic bank (`0x79`) or percussion bank (`0x78`), the LSB *is* the variation number (or the percussion set), exactly as GM2 defines it.
-  - **GS tone-map select** — for any other MSB the LSB instead picks **which generation's tone set** the MSB's variation number reaches: `0` the module's own (newest) map, `1` SC-55, `2` SC-88, `3` SC-88Pro, `4` SC-8850. Any other value reads as `0`, because a module that never saw the message is already playing its own map. A tone or kit that the selected map predates falls back to the capital tone or the Standard kit — the same thing a real module of that generation does.
-
-::: warning The LSB means two different things
-This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the authoring tip below), and it is the easiest value to get wrong. Under a GM2 MSB it selects a *variation*; under a GS MSB it selects a *tone map*, and the variation number lives in the MSB instead. Writing `bankLsb: 1` next to a GS variation MSB does not pick variation 1 — it pins the part to the SC-55 tone set.
-:::
-
-::: warning The SFX kit and GM Sound-Effects programs are not yet individually synthesized
-The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback. The one-shot GS rhythm sets — SFX, Rhythm FX, Cymbal & Claps, and Rhythm FX 2 — currently play the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [NativeSynth](./gm-gs.md#the-gm-fallback-bank) for the built-in fallback voicing.
-:::
-
-### GS insertion effects (EFX)
-
-::: info An original DSP re-creation, not bundled hardware data
-libsonare's insertion effects are an original DSP re-creation — a combination of libsonare's own algorithms, reconstructed from publicly documented information, mapped onto the GS EFX SysEx and type-numbering model so GS-authored MIDI selects the effect the composer intended. Because the algorithms are independent, they follow the same addressing and effect structure but **do not reproduce the exact sound** of any hardware module; treat them as a compatible re-creation, not a 1:1 emulation. There are no bundled samples, ROM data, or firmware, and no affiliation with or endorsement by any hardware manufacturer. For the standards and literature behind this compatibility, see [Algorithm References](./algorithm-references.md).
-:::
-
-Separate from the reverb/chorus/delay send-return bus above, GS defines one **insertion effect (EFX)**: an effect inserted directly into a part's signal path, like a guitar pedal, rather than a send-return bus. libsonare implements this the way the hardware it follows does — as a **single shared insertion unit** for the whole player, not sixteen independent per-part effects. Any of the 16 parts can be routed through that one unit via a per-part on/off switch; a part that is switched off bypasses the unit entirely and reaches the mix dry.
-
-There is **no typed "set EFX" call** in any binding. Like real GS hardware, the EFX type and its parameters are programmed exclusively by sending raw SysEx: live, you push those bytes with `RealtimeEngine.pushMidiSysex()`; offline, SysEx embedded in the arrangement's MIDI is realised inline during the bounce.
-
-#### EFX type → insertion effect
-
-Each EFX type number selects one insertion effect. Type `0` is Thru (no effect).
-
-| EFX type | GS EFX name | libsonare insertion effect |
-|---|---|---|
-| 0x0100 | Stereo EQ | parametric EQ |
-| 0x0101 | Spectrum | graphic EQ |
-| 0x0102 | Enhancer | presence enhancer |
-| 0x0110 | Overdrive | amp-sim (crunch voicing) |
-| 0x0111 | Distortion | amp-sim (high-gain voicing) |
-| 0x0120 | Phaser | phaser |
-| 0x0121 | Auto Wah | envelope-following resonant bandpass |
-| 0x0122 | Rotary | dual-rotor rotary-speaker model |
-| 0x0123 | Stereo Flanger | flanger |
-| 0x0124 | Step Flanger | flanger |
-| 0x0126 | Auto Pan | auto-pan |
-| 0x0130 | Compressor | compressor |
-| 0x0131 | Limiter | limiter |
-| 0x0140 | Hexa Chorus | six-voice ensemble |
-| 0x0141 | Tremolo Chorus | chorus |
-| 0x0142 | Stereo Chorus | chorus |
-| 0x0143 | Space-D | chorus (unmodulated) |
-| 0x0144 | 3D Chorus | chorus (widened) |
-| 0x0150 | Stereo Delay | stereo delay |
-| 0x0151 | Modulation Delay | stereo delay |
-| 0x0152–0x0154 | 3-tap / 4-tap / Time-Control Delay | stereo delay |
-| 0x0155 | Reverb | plate reverb |
-| 0x0156 | Gate Reverb | plate reverb (gated tail not yet modelled) |
-| 0x0157 | 3D Delay | stereo delay |
-| 0x0160 | 2-voice Pitch Shifter | pitch shifter |
-| 0x0161 | Feedback Pitch Shifter | pitch shifter (feedback loop not modelled) |
-| 0x0172 / 0x0173 | Lo-Fi 1 / 2 | bit-crusher |
-
-A few GS types (Humanizer, Tremolo, 3D Auto/Manual) have no faithful stock insert yet and pass through dry. The Overdrive/Distortion drive+level and the pitch-shifter's coarse pitch+balance are translated from their raw EFX parameters; other single-effect types run at their insert's own defaults.
-
-#### Composite EFX types (multi-stage chains)
-
-A composite EFX type realises as an ordered **chain** of the same DSP inserts running in series, matching the hardware's block structure — a guitar multi-effect, for example, still runs through the individual amp-sim/chorus/delay inserts above, just chained together. The table below is a representative slice; the full map covers the dual-stage `0x0200`–`0x020C` matrix (Overdrive / Distortion / Enhancer feeding Chorus, Flanger, or Delay) and the guitar / bass / Rhodes / keyboard multi presets in the `0x0400`–`0x0500` range.
-
-| EFX type | GS EFX name | Chain (signal order) |
-|---|---|---|
-| 0x0200 | OD → Chorus | amp-sim → chorus |
-| 0x0202 | OD → Delay | amp-sim → stereo delay |
-| 0x0400 | Guitar Multi 1 | compressor → amp-sim → chorus → delay |
-| 0x0405 | Bass Multi | compressor → amp-sim (bass cab) → EQ → chorus |
-| 0x0406 | Rhodes Multi | enhancer → phaser → chorus → auto-pan |
-| 0x0500 | Keyboard Multi | ring-mod → EQ → pitch-shifter → phaser → delay |
-
-#### Live vs. offline realisation
-
-- **Offline (bounce)** — EFX SysEx embedded in the arrangement is applied inline during the render: an EFX change mid-bounce takes effect on the next block.
-- **Live** — `pushMidiSysex()` builds the new effect chain off the audio thread and hands it over wait-free, so a live engine hears an EFX change **without stopping** playback.
-
-The demo below renders one held chord through the GS-compatible player and lets you switch the insertion effect, so you can hear how each one reshapes the tone against the dry reference.
-
-<SonareDemo id="gs-efx" />
-
-::: tip Author GS banks with the MIDI helpers
-`Project.midiBankProgram(ppq, group, channel, bankMsb, bankLsb, program)` expands a bank-select-plus-program-change into the MIDI events `setMidiEvents` accepts — the right way to select a GS variation or a drum kit. Static helpers like `Project.gmInstrumentName(program)`, `Project.gmDrumName(note)`, `Project.gm2InstrumentName(bankLsb, program)`, and `Project.midiCcName(controller)` name the slots so your authoring code reads clearly. The reverse direction is symmetric: `Project.gmProgramForName(name)`, `Project.gmDrumNoteForName(name)`, and `Project.midiCcIndexForName(name)` return the number for a canonical name (`-1` when unknown), while `Project.gmFamilyName(family)` and `Project.gmFamilyFirstProgram(family)` enumerate the 16 GM instrument families. `Project.gm2DrumSetName(bankLsb)` and `Project.gm2DrumName(bankLsb, note)` name the GM2 drum-set variations.
-:::
+The GS side of the player — the variation-bank and drum-kit architecture, the NRPN and SysEx part edits, the send-return system effects, and the single shared insertion effect (EFX) — is documented with the rest of the GS material on [GM and GS Fallback Bank](./gm-gs.md#the-gs-architecture-layer).
 
 ## Live engine playback
 
@@ -445,6 +354,7 @@ const preview = project.bounceWithSf2Instrument(
 ## Related
 
 - [NativeSynth](./native-synth.md) — the data-free GM fallback engine that keeps MIDI from going silent
+- [GM and GS Fallback Bank](./gm-gs.md) — the GS architecture layer and insertion effects this player implements, and the fallback bank under them
 - [Project Bounce](./project-bounce.md) — offline rendering of a project, including the builtin/synth bounce siblings
 - [MIDI Input](./midi-input.md) — live keyboards, Web MIDI, and realtime engine routing
 - [Project Editing](./project-editing.md) — building the MIDI tracks and clips you render
