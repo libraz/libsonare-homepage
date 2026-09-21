@@ -227,6 +227,176 @@ interface MelodyPoint {
 }
 ```
 
+### MasteringChainConfig
+
+`masteringChain*` and `StreamingMasteringChain` use the nested config schema below. Every key is optional. Only the stages you set are activated.
+
+Stages always run in a fixed order:
+
+<FlowDiagram
+  title="Mastering chain order"
+  :nodes="[
+    { id: 'repair', label: 'Repair', col: 0, row: 0, variant: 'accent' },
+    { id: 'eq', label: 'EQ', col: 1, row: 0 },
+    { id: 'dynamics', label: 'Dynamics', col: 2, row: 0 },
+    { id: 'saturation', label: 'Saturation', col: 3, row: 0 },
+    { id: 'spectral', label: 'Spectral', col: 4, row: 0 },
+    { id: 'stereo', label: 'Stereo', col: 5, row: 0 },
+    { id: 'maximizer', label: 'Maximizer', col: 6, row: 0 },
+    { id: 'loudness', label: 'Loudness', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'repair', to: 'eq' },
+    { from: 'eq', to: 'dynamics' },
+    { from: 'dynamics', to: 'saturation' },
+    { from: 'saturation', to: 'spectral' },
+    { from: 'spectral', to: 'stereo' },
+    { from: 'stereo', to: 'maximizer' },
+    { from: 'maximizer', to: 'loudness' }
+  ]"
+  caption="Only the stages you configure are activated, but whichever are enabled run in this order."
+/>
+
+`masterAudio*` starts from a preset and accepts overrides using the same key names in flat dot-notation form, such as `"dynamics.compressor.thresholdDb"`.
+
+`maximizer.truePeakLimiter.releaseMs` controls the post-limiter release time. Omit it to keep the preset/config default of 50 ms; if you provide a flat override, the value is applied directly. `maximizer.truePeakLimiter.applyGainAtInputRate` applies static loudness gain before oversampling when set, which is useful when you need that gain staged at the source rate for host parity.
+
+`repair.denoise.reductionDb` (also reachable via the flat `repair.reductionDb` alias) sets the deepest attenuation, in dB, the gain mask may apply to any bin; it defaults to 26. The older `gainFloor` spelling — a linear floor rather than a dB depth — is still accepted and converted (`dB = -20*log10(gainFloor)`); the conversion carries the old validity range with it, so a floor above unity becomes a negative depth and is refused the same way.
+
+::: details Full interface (click to expand)
+
+```typescript
+interface MasteringChainConfig {
+  repair?: {
+    denoise?: boolean;
+    nFft?: number; hopLength?: number; ddAlpha?: number; reductionDb?: number;
+    /** @deprecated Use `reductionDb`; converted to it (dB = -20*log10(gainFloor)). */
+    gainFloor?: number;
+    declip?: { enabled?: boolean; clipThreshold?: number; lpcOrder?: number;
+               iterations?: number; lpcBlend?: number; };
+    decrackle?: { enabled?: boolean; threshold?: number;
+                  /** 0 = median, 1 = wavelet shrinkage. */
+                  mode?: number; levels?: number; };
+    dehum?: { enabled?: boolean; fundamentalHz?: number; harmonics?: number;
+              q?: number; adaptive?: boolean; searchRangeHz?: number;
+              adaptation?: number; frameSize?: number; pllBandwidth?: number; };
+    declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
+                lpcOrder?: number; residualRatio?: number; };
+    dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
+                 hopLength?: number; t60Sec?: number; lateDelayMs?: number;
+                 overSubtraction?: number; spectralFloor?: number;
+                 wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
+                 wpeStrength?: number; };
+  };
+  eq?: {
+    /** Canonical nested tilt stage. */
+    tilt?: { enabled?: boolean; tiltDb?: number; pivotHz?: number };
+    /** @deprecated Use `eq.tilt.tiltDb`. */
+    tiltDb?: number;
+    /** @deprecated Use `eq.tilt.pivotHz`. */
+    pivotHz?: number;
+  };
+  dynamics?: {
+    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
+                   releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
+                   autoMakeup?: boolean; };
+    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
+                attackMs?: number; releaseMs?: number; rangeDb?: number;
+                bandpassQ?: number; };
+    transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
+                        fastAttackMs?: number; fastReleaseMs?: number;
+                        slowAttackMs?: number; slowReleaseMs?: number;
+                        sensitivity?: number; maxGainDb?: number;
+                        gainSmoothingMs?: number; lookaheadMs?: number; };
+    multibandComp?: { lowCutoffHz?: number; highCutoffHz?: number;
+                      lowThresholdDb?: number;  lowRatio?: number;
+                      lowAttackMs?: number;     lowReleaseMs?: number;
+                      midThresholdDb?: number;  midRatio?: number;
+                      midAttackMs?: number;     midReleaseMs?: number;
+                      highThresholdDb?: number; highRatio?: number;
+                      highAttackMs?: number;    highReleaseMs?: number; };
+  };
+  saturation?: {
+    tape?: { driveDb?: number; saturation?: number; hysteresis?: number;
+             outputGainDb?: number; speedIps?: number; headBumpDb?: number;
+             bias?: number; gapLoss?: number; };
+    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number;
+                q?: number; evenOddMix?: number; };
+  };
+  spectral?: {
+    airBand?: { amount?: number; shelfFrequencyHz?: number;
+                dynamicThresholdDb?: number; dynamicRangeDb?: number; };
+  };
+  stereo?: {
+    imager?: { width?: number; outputGainDb?: number;
+               decorrelationAmount?: number; preserveEnergy?: boolean; };
+    monoMaker?: { amount?: number; frequencyHz?: number };
+  };
+  maximizer?: {
+    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
+                        releaseMs?: number; oversampleFactor?: number;
+                        applyGainAtInputRate?: boolean; };
+  };
+  loudness?: { targetLufs?: number; ceilingDb?: number;
+               truePeakOversample?: number; };
+}
+
+interface MasteringResult {
+  samples: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  loudnessTargetLimited?: boolean;
+  latencySamples?: number;
+}
+interface MasteringChainResult extends MasteringResult {
+  stages: string[];
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
+}
+interface MasteringStereoResult {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  latencySamples: number;
+}
+// Returned by masteringChainStereo / masterAudioStereo (and their
+// WithProgress variants); MasteringStereoResult is the return type of
+// masteringProcessStereo. There is no latencySamples field — the offline
+// chain output is already latency-compensated.
+interface MasteringChainStereoResult {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  stages: string[];
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
+}
+// MasteringStereoChainResult is a @deprecated alias for
+// MasteringChainStereoResult, retained for source compatibility with the
+// Node and Python bindings.
+```
+
+:::
+
+The glossary mastering guides explain when to reach for each section:
+[Repair](./glossary/mastering/repair.md), [Tone and Air](./glossary/mastering/tone-air.md),
+[Dynamics](./glossary/mastering/dynamics.md),
+[Stereo, Limiter, Loudness](./glossary/mastering/stereo-limiter-loudness.md).
+
 ## Enumerations
 
 ### PitchClass

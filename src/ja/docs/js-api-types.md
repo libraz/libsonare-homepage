@@ -222,6 +222,178 @@ interface MelodyPoint {
 }
 ```
 
+### MasteringChainConfig
+
+`masteringChain*` と `StreamingMasteringChain` は下のネスト構造の設定スキーマを使います。
+各キーは任意で、指定されたステージだけが下の固定順で有効になります。
+
+<FlowDiagram
+  title="マスタリングチェーンの順序"
+  :nodes="[
+    { id: 'repair', label: 'リペア', col: 0, row: 0, variant: 'accent' },
+    { id: 'eq', label: 'EQ', col: 1, row: 0 },
+    { id: 'dynamics', label: 'ダイナミクス', col: 2, row: 0 },
+    { id: 'saturation', label: 'サチュレーション', col: 3, row: 0 },
+    { id: 'spectral', label: 'スペクトル', col: 4, row: 0 },
+    { id: 'stereo', label: 'ステレオ', col: 5, row: 0 },
+    { id: 'maximizer', label: 'マキシマイザー', col: 6, row: 0 },
+    { id: 'loudness', label: 'ラウドネス', col: 7, row: 0, variant: 'success' }
+  ]"
+  :edges="[
+    { from: 'repair', to: 'eq' },
+    { from: 'eq', to: 'dynamics' },
+    { from: 'dynamics', to: 'saturation' },
+    { from: 'saturation', to: 'spectral' },
+    { from: 'spectral', to: 'stereo' },
+    { from: 'stereo', to: 'maximizer' },
+    { from: 'maximizer', to: 'loudness' }
+  ]"
+  caption="有効化したステージだけが処理されますが、有効なステージは常にこの順で実行されます。"
+/>
+
+`masterAudio*` はプリセットから開始し、同じキー名を
+`"dynamics.compressor.thresholdDb"` のようなフラットなドット記法の
+`overrides`（上書き値）として受け取ります。
+
+`maximizer.truePeakLimiter.releaseMs` はポストリミッターのリリース時間です。省略するとプリセット／設定の既定値 50 ms を保ちます。フラットな上書き値として渡した場合、その値がそのまま適用されます。`maximizer.truePeakLimiter.applyGainAtInputRate` を有効にすると、静的なラウドネスゲインをオーバーサンプリング前の入力サンプルレートで適用します。ホスト間でゲイン段の位置を揃えたい場合に使います。
+
+`repair.denoise.reductionDb`（フラットな `repair.reductionDb` エイリアスからも同じフィールドに到達できます）は、ゲインマスクが各ビンに適用できる最大の減衰量を dB で指定するもので、既定値は 26 です。以前の `gainFloor`（dB の深さではなく線形の下限値）という表記も引き続き受け付けられ、変換されます（`dB = -20*log10(gainFloor)`）。この変換は旧来の有効範囲も引き継ぐため、1 を超える下限値は負の深さになり、同様に拒否されます。
+
+::: details インターフェース全文（クリックで展開）
+
+```typescript
+interface MasteringChainConfig {
+  repair?: {
+    denoise?: boolean;
+    nFft?: number; hopLength?: number; ddAlpha?: number; reductionDb?: number;
+    /** @deprecated `reductionDb` を使用してください（`dB = -20*log10(gainFloor)` で変換） */
+    gainFloor?: number;
+    declip?: { enabled?: boolean; clipThreshold?: number; lpcOrder?: number;
+               iterations?: number; lpcBlend?: number; };
+    decrackle?: { enabled?: boolean; threshold?: number;
+                  /** 0 = メディアン、1 = ウェーブレット縮小 */
+                  mode?: number; levels?: number; };
+    dehum?: { enabled?: boolean; fundamentalHz?: number; harmonics?: number;
+              q?: number; adaptive?: boolean; searchRangeHz?: number;
+              adaptation?: number; frameSize?: number; pllBandwidth?: number; };
+    declick?: { threshold?: number; neighborRatio?: number; maxClickSamples?: number;
+                lpcOrder?: number; residualRatio?: number; };
+    dereverb?: { threshold?: number; attenuation?: number; nFft?: number;
+                 hopLength?: number; t60Sec?: number; lateDelayMs?: number;
+                 overSubtraction?: number; spectralFloor?: number;
+                 wpeEnabled?: boolean; wpeIterations?: number; wpeTaps?: number;
+                 wpeStrength?: number; };
+  };
+  eq?: {
+    /** 正規のネストされた tilt ステージ */
+    tilt?: { enabled?: boolean; tiltDb?: number; pivotHz?: number };
+    /** @deprecated `eq.tilt.tiltDb` を使用してください */
+    tiltDb?: number;
+    /** @deprecated `eq.tilt.pivotHz` を使用してください */
+    pivotHz?: number;
+  };
+  dynamics?: {
+    compressor?: { thresholdDb?: number; ratio?: number; attackMs?: number;
+                   releaseMs?: number; kneeDb?: number; makeupGainDb?: number;
+                   autoMakeup?: boolean; };
+    deesser?: { frequencyHz?: number; thresholdDb?: number; ratio?: number;
+                attackMs?: number; releaseMs?: number; rangeDb?: number;
+                bandpassQ?: number; };
+    transientShaper?: { attackGainDb?: number; sustainGainDb?: number;
+                        fastAttackMs?: number; fastReleaseMs?: number;
+                        slowAttackMs?: number; slowReleaseMs?: number;
+                        sensitivity?: number; maxGainDb?: number;
+                        gainSmoothingMs?: number; lookaheadMs?: number; };
+    multibandComp?: { lowCutoffHz?: number; highCutoffHz?: number;
+                      lowThresholdDb?: number;  lowRatio?: number;
+                      lowAttackMs?: number;     lowReleaseMs?: number;
+                      midThresholdDb?: number;  midRatio?: number;
+                      midAttackMs?: number;     midReleaseMs?: number;
+                      highThresholdDb?: number; highRatio?: number;
+                      highAttackMs?: number;    highReleaseMs?: number; };
+  };
+  saturation?: {
+    tape?: { driveDb?: number; saturation?: number; hysteresis?: number;
+             outputGainDb?: number; speedIps?: number; headBumpDb?: number;
+             bias?: number; gapLoss?: number; };
+    exciter?: { frequencyHz?: number; driveDb?: number; amount?: number;
+                q?: number; evenOddMix?: number; };
+  };
+  spectral?: {
+    airBand?: { amount?: number; shelfFrequencyHz?: number;
+                dynamicThresholdDb?: number; dynamicRangeDb?: number; };
+  };
+  stereo?: {
+    imager?: { width?: number; outputGainDb?: number;
+               decorrelationAmount?: number; preserveEnergy?: boolean; };
+    monoMaker?: { amount?: number; frequencyHz?: number };
+  };
+  maximizer?: {
+    truePeakLimiter?: { ceilingDb?: number; lookaheadMs?: number;
+                        releaseMs?: number; oversampleFactor?: number;
+                        applyGainAtInputRate?: boolean; };
+  };
+  loudness?: { targetLufs?: number; ceilingDb?: number;
+               truePeakOversample?: number; };
+}
+
+interface MasteringResult {
+  samples: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  loudnessTargetLimited?: boolean;
+  latencySamples?: number;
+}
+interface MasteringChainResult extends MasteringResult {
+  stages: string[];
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
+}
+interface MasteringStereoResult {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  latencySamples: number;
+}
+// masteringChainStereo / masterAudioStereo（および WithProgress 変種）の
+// 戻り値。MasteringStereoResult は masteringProcessStereo の戻り値。
+// latencySamples フィールドはない — オフラインチェーンの出力はすでに
+// レイテンシ補正済み。
+interface MasteringChainStereoResult {
+  left: Float32Array;
+  right: Float32Array;
+  sampleRate: number;
+  inputLufs: number;
+  outputLufs: number;
+  appliedGainDb: number;
+  stages: string[];
+  outputTruePeakDbtp: number;
+  outputLra: number;
+  loudnessTargetLimited: boolean;
+  stageGainReductions: StageGainReduction[];
+  report: MasteringReport;
+}
+// MasteringStereoChainResult は MasteringChainStereoResult の
+// @deprecated エイリアス。Node/Python バインディングとのソース互換性のために
+// 維持されている。
+```
+
+:::
+
+各ステージの使いどころは用語集の各ページに対応しています:
+[リペア](./glossary/mastering/repair.md)、
+[トーンと Air](./glossary/mastering/tone-air.md)、
+[ダイナミクス](./glossary/mastering/dynamics.md)、
+[ステレオ・リミッター・ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)。
+
 ## 列挙型
 
 ### PitchClass
