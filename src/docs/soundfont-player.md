@@ -74,7 +74,16 @@ The same SF2 player is exposed through WASM/JS, Node native, and Python. Names f
 
 ## Load a caller-supplied SF2
 
-Fetch the `.sf2` yourself and hand the player its raw bytes. The player makes its own copy during the call, so you can discard your buffer right after. A few things to know: loading a SoundFont **replaces** any previous one, and malformed bytes throw an error while leaving the previously loaded SoundFont intact.
+Fetch the `.sf2` yourself and hand the player its raw bytes. The player makes its own copy during the call, so you can discard your buffer right after. A few things to know: loading a SoundFont **replaces** any previous one, and a rejected load throws while leaving the previously loaded SoundFont intact.
+
+::: info A broken file and a broken call are different errors
+The load reports the two apart, so your handler can tell a user "this file is not usable" without also catching its own bugs:
+
+- `SONARE_ERROR_INVALID_PARAMETER` — the **call** is wrong: a NULL project or buffer, or a zero-length buffer. Nothing about the data was examined.
+- `SONARE_ERROR_INVALID_FORMAT` — the **data** is unusable: either the SF2 failed to parse, or the file is larger than the resource budget the loader accepts.
+
+Bindings surface these as their own error type (a thrown `Error` in JS, `SonareError` in Python) carrying the message.
+:::
 
 ::: code-group
 
@@ -88,7 +97,7 @@ const sf2Bytes = new Uint8Array(await (await fetch('/instruments/my-bank.sf2')).
 
 const project = new Project();
 try {
-  project.loadSoundFont(sf2Bytes);          // throws on malformed input
+  project.loadSoundFont(sf2Bytes);          // throws: unparseable or over the size budget
   project.soundFontPresetCount();           // e.g. 3 — presets in the loaded bank
   // ... build/edit the arrangement, then bounce (see below) ...
   project.clearSoundFont();                 // optional: release the loaded bank
@@ -105,7 +114,7 @@ with open("instruments/my-bank.sf2", "rb") as f:
 
 project = sonare.Project()
 try:
-    project.load_soundfont(sf2_bytes)        # raises SonareError on malformed input
+    project.load_soundfont(sf2_bytes)        # raises SonareError: unparseable or oversized
     project.soundfont_preset_count()         # e.g. 3
     # ... build/edit the arrangement, then bounce (see below) ...
     project.clear_soundfont()                # optional: release the loaded bank
@@ -126,7 +135,7 @@ Before you render, ask the project **which programs your arrangement actually pl
 - `'sf2'` — the loaded SoundFont covers the program (GS variation/drum fallbacks included), with the resolved `presetName`;
 - `'synth'` — no preset covers it, so it plays through the NativeSynth GM fallback; `presetName` is empty.
 
-Without a loaded SoundFont, every entry is a `synth` fallback. This is your honest coverage report: a `synth` row means "this part will sound, but from the data-free floor, not your samples". The fallback is still program-aware: for example, GM program 6 (Harpsichord) uses a Karplus-Strong plucked-string patch, while program 7 (Clavi) stays on an FM-style patch.
+Without a loaded SoundFont, every entry is a `synth` fallback. This is your honest coverage report: a `synth` row means "this part will sound, but from the data-free floor, not your samples". The fallback is still program-aware: for example, GM program 6 (Harpsichord) uses the dedicated jack-and-plectrum harpsichord engine, while program 7 (Clavi) stays on an FM-style patch.
 
 ::: code-group
 
@@ -273,10 +282,16 @@ On top of GM, the player implements the Roland-GS extensions a GS-authored arran
 - **NRPN part edits** — TVF cutoff/resonance, TVA envelope, and vibrato can be edited per part via NRPN, plus **per-note drum NRPNs** for individual drum sounds.
 - **GS / GM SysEx** — **GS Reset**, **GM System On**, and "use for rhythm part" SysEx are recognized — both from the host and from SysEx events embedded inside an arrangement.
 - **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the single shared GS **insertion effect (EFX)** described below.
-- **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change and resolves the **GM2 Bank Select LSB** to the variation bank, so GM2-authored material maps to the right tone.
+- **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change, and resolves the **Bank Select LSB (CC#32)** one of two ways depending on the MSB:
+  - **GM2 addressing** — when the MSB is GM2's melodic bank (`0x79`) or percussion bank (`0x78`), the LSB *is* the variation number (or the percussion set), exactly as GM2 defines it.
+  - **GS tone-map select** — for any other MSB the LSB instead picks **which generation's tone set** the MSB's variation number reaches: `0` the module's own (newest) map, `1` SC-55, `2` SC-88, `3` SC-88Pro, `4` SC-8850. Any other value reads as `0`, because a module that never saw the message is already playing its own map. A tone or kit that the selected map predates falls back to the capital tone or the Standard kit — the same thing a real module of that generation does.
+
+::: warning The LSB means two different things
+This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the authoring tip below), and it is the easiest value to get wrong. Under a GM2 MSB it selects a *variation*; under a GS MSB it selects a *tone map*, and the variation number lives in the MSB instead. Writing `bankLsb: 1` next to a GS variation MSB does not pick variation 1 — it pins the part to the SC-55 tone set.
+:::
 
 ::: warning The SFX kit and GM Sound-Effects programs are not yet individually synthesized
-The GS-style **SFX drum kit** (bank-128 kit 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback: the SFX kit currently plays the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [NativeSynth](./native-synth.md#the-gm-fallback-bank) for the built-in fallback voicing.
+The GS-style **SFX drum kit** (rhythm-part program 56) and the GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot) are addressed and named by the player, but their per-note effect sounds are not yet individually synthesized in the data-free NativeSynth fallback. The one-shot GS rhythm sets — SFX, Rhythm FX, Cymbal & Claps, and Rhythm FX 2 — currently play the Standard kit's voicing, and programs 120-127 share one generic noise-based voice. A SoundFont that supplies real samples for those addresses plays back normally through this SF2 player — the gap is in the fallback only. See [NativeSynth](./native-synth.md#the-gm-fallback-bank) for the built-in fallback voicing.
 :::
 
 ### GS insertion effects (EFX)
@@ -434,3 +449,4 @@ const preview = project.bounceWithSf2Instrument(
 - [MIDI Input](./midi-input.md) — live keyboards, Web MIDI, and realtime engine routing
 - [Project Editing](./project-editing.md) — building the MIDI tracks and clips you render
 - [Recording and Takes](./recording-and-takes.md) — capturing performances into the project
+- [Link targets](./cpp-api.md#link-targets) — driving the player from C++; note that `BUILD_FX=OFF` compiles the GS send effects out and the player then renders dry

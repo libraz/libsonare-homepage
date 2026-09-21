@@ -288,7 +288,7 @@ prepare 済みのチェーンでは値は**固定**です。リチューン経�
 動かしても報告値は変わりません。したがってコントロールを動かすたびに読み直す必要はなく、
 `prepare(...)` の後に一度読んで補正すれば済みます。支配的な項はリチューン段がピッチシフトの
 ために解析する窓の大きさで、グレインが大きいほど 1 ステップで解析する音が増え遅延も増えます
-（[StreamingRetune](./js-api.md#streamingretune) の `grainSize` フィールドを参照）。
+（[StreamingRetune](./js-api-mastering.md#streamingretune) の `grainSize` フィールドを参照）。
 True Peak（サンプル間ピーク、ISP）リミッターが有効な場合は、その遅延が加わります。
 :::
 
@@ -300,6 +300,6 @@ True Peak（サンプル間ピーク、ISP）リミッターが有効な場合�
 
 - [編集 DSP](./editing-dsp.md)
 - [ブラウザ / WASM](./wasm.md#リアルタイムボイスチェンジャー)
-- [JavaScript API](./js-api.md#realtimevoicechanger)
+- [JavaScript API](./js-api-mastering.md#realtimevoicechanger)
 - [Python API](./python-api.md#リアルタイムボイスチェンジャー)
 - [Node.js ネイティブ API](./node-api.md#ストリーミング-リアルタイムクラス)

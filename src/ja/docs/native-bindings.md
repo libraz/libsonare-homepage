@@ -78,6 +78,22 @@ yarn install
 yarn build
 ```
 
+### ABI バージョン
+
+バインディングと、それが読み込む共有ライブラリは、同じツリーから作られている必要があります。C ABI はサブシステムごとにバージョンを持ち、それぞれがそのサブシステムのフラットな POD 構造体のサイズとメンバーオフセットを保証します。バインディングは読み込み時にこれを照合するため、レイアウトの不一致は 1 バイトもやり取りする前に検出されます。運用上の指針は単純で、バインディングを再ビルドするときは必ずライブラリも再ビルドし、別のチェックアウトにある共有ライブラリをバインディングから参照させないことです。
+
+| ABI | 現在の値 | 対象 |
+|-----|---------|------|
+| Feature | 5 | フラットな解析・特徴量の結果構造体（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
+| Project | 1 | ヘッドレス DAW のプロジェクト・アレンジ構造体。アレンジ機能なしのビルドでは `0` を返します |
+| Voice changer | 2 | リアルタイムボイスチェンジャーの設定構造体 |
+| Acoustic | 4 | ルーム音響の構造体 |
+| Engine | 3 | リアルタイムコマンドキュー |
+
+`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic です。1 回の比較で全体を照合でき、Python バインディングがライブラリ読み込み時に確認しているのもこの値です。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。
+
+構造体へのフィールド追加は、構造体ごとの `struct_version` で段階的に有効化されるため、既存の C 呼び出し側はソースレベルでも呼び出しレベルでも影響を受けません。覚えておくとよい例が `SonareNoteSegmenterConfig` です。末尾の `voiced_threshold` は `struct_version` が `2` のときだけ読まれるので、従来どおりに埋めた設定はそのまま同じ挙動になり、ゼロ初期化した設定は既定値 0.5 を保ちます。変わるのはライブラリが報告するバージョンのほうです。自分のコードに手を入れていなくてもライブラリをバインディングと一緒に再ビルドする必要があるのは、このためです。
+
 ## マスタリング API
 
 Node.js では WASM npm パッケージとネイティブアドオンの 2 経路があります。
@@ -194,16 +210,49 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 
 | グループ | API 名 |
 |----------|--------|
-| プリセットと簡易入口 | `mastering()`、`masteringPresetNames()`、`masterAudio()`、`masterAudioStereo()`、`masterAudioWithProgress()`、`masterAudioStereoWithProgress()` |
+| プリセットと簡易入口 | `mastering()`、`masteringPresetNames()`、`masteringPlatformNames()`、`masterAudio()`、`masterAudioStereo()`、`masterAudioWithProgress()`、`masterAudioStereoWithProgress()` |
 | フルチェーン | `masteringChain()`、`masteringChainStereo()`、`masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
 | オフラインのダイナミクス（単発） | `masteringDynamicsCompressor()`、`masteringDynamicsGate()`、`masteringDynamicsTransientShaper()` |
-| オフラインのリペア（単発） | `masteringRepairDeclick()`、`masteringRepairDeclip()`、`masteringRepairDecrackle()`、`masteringRepairDehum()`、`masteringRepairDenoiseClassical()`、`masteringRepairDereverbClassical()`、`masteringRepairTrimSilence()` |
-| アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringStreamingPreviewStereo()` |
+| オフラインのリペア — モノラル | `masteringRepairDeclick()`、`masteringRepairDeclip()`、`masteringRepairDecrackle()`、`masteringRepairDehum()`、`masteringRepairDenoiseClassical()`、`masteringRepairDereverbClassical()`、`masteringRepairTrimSilence()` |
+| オフラインのリペア — ステレオペア | `masteringRepairDeclickStereo()`、`masteringRepairDeclipStereo()`、`masteringRepairDecrackleStereo()`、`masteringRepairDehumStereo()`、`masteringRepairDenoiseClassicalStereo()`、`masteringRepairDereverbClassicalStereo()`、`masteringRepairTrimSilenceStereo()` |
+| オフラインのリペア — チャンネルリンク（任意のチャンネル数） | `masteringRepairDenoiseClassicalLinked()`、`masteringRepairDereverbClassicalLinked()` |
+| リペアの計測（音声を返さない） | `masteringRepairDetectClicks()`、`masteringRepairDetectClipping()`、`masteringRepairDetectCrackle()`、`masteringRepairDetectHum()`、`masteringRepairDetectNoiseFloor()`、`masteringRepairDetectReverb()`、`masteringRepairDetectTrimRange()`、`masteringRepairDetectTrimRangeStereo()`、`masteringRepairNoiseBandBins()`、`masteringRepairDereverbConfigForRoom()` |
+| アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringAssistantSuggestChain()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringAssistantSuggestChainStereo()`、`masteringStreamingPreviewStereo()`、`masteringAbMatchLoudness()` |
 | 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name)`、`masteringProcess()`、`masteringProcessStereo()` |
 | ペア処理とステレオ解析 | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()`、`masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
 | ストリーミングレンダー | `StreamingMasteringChain` |
 
 Node ネイティブは同じ基本名を使いますが、進捗は個別の `*WithProgress` ヘルパー関数ではなく、最後のオプション引数に渡すコールバックとして受け取ります。
+
+### リペアの入口
+
+リペア系の関数はいずれも、リクエストオブジェクトと位置引数のどちらでも呼べます。これは両パッケージ共通です。違うのは入力の数と戻り値です。
+
+| 形 | 呼び出し | 戻り値 |
+|----|---------|--------|
+| モノラル | `masteringRepairDeclick(samples, sampleRate, options?)` | 修復後の `Float32Array` |
+| ステレオペア | `masteringRepairDeclickStereo(left, right, sampleRate, config?)` | 修復後のペアとレポートのフィールド |
+| チャンネルリンク | `masteringRepairDenoiseClassicalLinked(channels, sampleRate, config?)` | `{ channels, report }`。入力順に 1 チャンネルずつ出力を返します |
+| 計測 | `masteringRepairDetectClicks(samples, sampleRate, options?)` | 検出レポートのみで、音声は返しません |
+
+ステレオ版は、モノラル版を 2 回呼ぶのとは別物です。そこがステレオ版を選ぶ理由でもあります。ステレオイメージを動かしてしまう判断はペア全体で共有し、安全に変えられる部分だけをチャンネルごとに処理します。したがって、どちらかのチャンネルの検出が選んだ同相のクリックは両チャンネルで修復され、ノイズ低減のマスクは両チャンネルを合算したパワーから作って、そのまま両側へ適用します。
+
+戻り値のレポートもこの切り分けに従うので、次のように読んでください。
+
+| 関数 | レポートのフィールド |
+|------|--------------------|
+| `masteringRepairDeclickStereo()`、`masteringRepairDeclipStereo()`、`masteringRepairDecrackleStereo()`、`masteringRepairDehumStereo()` | `leftReport` と `rightReport`。各チャンネルは自分のサンプルから補間・フィルタされるため、2 つの内容は実際に異なります |
+| `masteringRepairDenoiseClassicalStereo()`、`masteringRepairDereverbClassicalStereo()` | 共有の `report` が 1 つ。マスクが 1 つなので、報告する対象も 1 つです |
+| `masteringRepairTrimSilenceStereo()` | 共有の `report` に加えて `leftRange` と `rightRange` |
+
+`*Linked` の 2 つは、左右のペアではなく `channels: Float32Array[]` を取り、マスクを 1 つにするという同じ考え方を任意のチャンネル数（1 チャンネルを含む）へ広げたものです。リンク版のレポートの `detected` はチャンネル集合全体の値で、チャンネル数とともに動きます。同一内容の N チャンネルは 1 チャンネルより `10*log10(N)`（ペアなら約 3 dB）高く読まれます。それ以外のフィールドは比率なので動きません。
+
+計測用のヘルパーは、対応するリペアと同じオプション型を取ります。これから実行しようとしている設定そのままで計測できるということです。このうち 2 つは、信号ごとの計測ではありません。
+
+- `masteringRepairNoiseBandBins(nFft?, sampleRate?)` は、`masteringRepairDetectNoiseFloor()` が `bandFloorDbfs` を報告するときのバンド分割を表す 33 個のビン番号を `Int32Array` で返します。32 バンドそれぞれの先頭ビンと、最後のバンドの終端の次のビンです。分割を決めるのは解析のジオメトリだけなので、ノイズ低減の設定は取りません。連続する 2 つの値が等しいところはバンドが空で、そのレベルは計測値ではなくセンチネルです。
+- `masteringRepairDereverbConfigForRoom(estimate, config?)` は、`estimateRoom(...)` の結果からディリバーブ設定一式を埋めます。手で調整した数値ではなく、実測した部屋の特性でリペアを駆動できます。
+
+残る 2 つは、リペアではなくアシスタント側の入口です。`masteringPlatformNames()` は、アシスタントが `targetPlatform` として受け付ける配信先の一覧を返します。バインディング側に持った一覧ではなくライブラリから読むため、コアに配信先が増えてもバインディングを変更せずに見つけられます。`masteringAbMatchLoudness({ source, reference, sampleRate })` は A/B 試聴のために `source` を `reference` のラウドネスへ合わせ、合わせた後のサンプルとあわせて `referenceLufs`、`sourceLufs`、`appliedGainDb`、`matchedTruePeakDbtp` を返します。リファレンス側は計測するだけで、そのまま返ります。ゲインには意図的に上限を設けていないため、`matchedTruePeakDbtp` が 0 dBTP を超えることがあります。ヘッドルームに合わせてクランプすると、フルスケール近くの音源だけが自分のラウドネスのまま取り残されることになり、それはラウドネスマッチが最もやってはいけないことだからです。マッチよりピークのほうが重要な場面では、後段でリミットしてください。
 
 ## ミキシング API
 
@@ -227,7 +276,23 @@ Node ネイティブアドオンは、WASM や Python と同じヘッドレス D
 
 ## エラーハンドリング
 
-WASM パッケージと同じく、ネイティブアドオンもネイティブ側の失敗をすべて構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。コード表と使用例は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照してください。
+WASM パッケージと同じく、ネイティブアドオンもネイティブ側の失敗をすべて構造化された `SonareError` としてスローします。`Error` のサブクラスで、C ABI のエラー enum を映した数値の `code` と正準名 `codeName` を持ちます。両パッケージとも `ErrorCode`・`SonareError`・型ガード `isSonareError(value)` をエクスポートし、同じ失敗はどのバインディングでも同じ数値コードを報告します。コード表と使用例は[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照してください。
+
+`SonareError` は両パッケージとも実行時のクラスです。値としてインポートすればコンストラクタが得られ、共有の TypeScript モジュールがどちらのパッケージからインポートしても同じ種類のものが手に入ります。`instanceof` はプロトタイプ判定ではなくブランド判定で、`SonareError` という名前を持ち数値の `code` を持つ `Error` であれば絞り込めます。
+
+```typescript
+import { ErrorCode, isSonareError, SonareError } from '@libraz/libsonare-native'
+
+try {
+  // ...
+} catch (err) {
+  if (err instanceof SonareError && err.code === ErrorCode.InvalidParameter) {
+    console.error(err.codeName, err.message)
+  }
+}
+```
+
+これが効くのは、プロトタイプ判定では取り逃がす 2 つの場合です。アドオンはクラスを構築せず、同じ形を持つ素の `Error` を送出します。また、ワーカー境界や `structuredClone()` を越えたエラーはプロトタイプを失っています。どちらもこの判定なら絞り込めます。`isSonareError(value)` は同じダックタイピング判定を型ガードとして書いたもので、`instanceof` はこれに委譲するため両者が食い違うことはなく、どちらを使っても構いません。プロトタイプを保持しない境界の向こうへネイティブの失敗を投げ直す用途のために、`SonareError` を直接構築することもできます。
 
 ## Audio メソッドの違い
 

@@ -83,7 +83,20 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 
 実行時にパンを編集したあとでシーンを書き出しても、ストリップの現在の `panMode` は保持されます。パン関連フィールドを手で組み直すのではなく、`Mixer.toSceneJson()` / `Mixer.to_scene_json()` を使ってください。
 
-インサートの `slot` とセンドの `timing` は**必ず文字列で指定してください**。`"timing": 1` のような文字列以外の値は、読み込み時に `InvalidParameter` エラー（`send timing must be a string ("pre" or "post")`）として拒否されます。常に `"pre"` か `"post"` と書いてください。
+インサートの `slot` とセンドの `timing` は**必ず文字列で指定してください**。`"timing": 1` のような文字列以外の値は、読み込み時に `send timing must be a string ("pre" or "post")` という理由で拒否されます。常に `"pre"` か `"post"` と書いてください。
+:::
+
+::: warning シーンが拒否されたときの届き方は実行環境ごとに異なります
+シーンの構築を止める要因 — 壊れた JSON、範囲外のフィールド、文字列でない `timing` — は、同じ実行環境の中ではすべて同じ形で失敗します。ただし実行環境どうしでは形が揃っていません。具体的な理由はメッセージに載りますが、エラーの型で分岐する価値はありません。
+
+| 実行環境 | 受け取るもの | 内側の理由 |
+|----------|--------------|------------|
+| WASM | `InvalidState`、メッセージは `failed to build mixer from scene JSON: <reason>` | 保持される |
+| Node ネイティブ | 型のない `Napi::Error`、メッセージは同じ | 保持される |
+| Python | 素の `RuntimeError` | **落ちる** — メッセージは `failed to build mixer from scene JSON` のみ |
+| C ABI | `sonare_mixer_from_scene_json` が `nullptr` を返す | `sonare_last_error_message()` を読む |
+
+例外にフィールド名を言わせるのではなく、ミキサーへ渡す前にシーンを検証してください。Python では例外と一緒にシーンそのものをログへ残してください。メッセージだけでは、どのフィールドが不正だったかは分かりません。
 :::
 
 ::: details フィールド用語: デュアルパン・ポラリティ反転・パンロー・PDC
@@ -274,7 +287,7 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 :::
 
 ::: info `mix --scene` でのストリップごとの入力指定は Python CLI 限定
-JSON ファイルからシーン全体をレンダーし、ストリップごとに `--input` を 1 つずつ渡す機能は Python CLI が実装しています。ネイティブ CLI の正式なコマンドは `sonare-cli mix-strip` で、`--scene` 非対応の単一ストリップ・単一入力プロセッサです。ネイティブの `mix` という名前は非推奨エイリアスとしてのみ残っています。フルシーンのレンダーではなく、ストリップ単位の手早い確認には `mix-strip` を使ってください。
+JSON ファイルからシーン全体をレンダーし、ストリップごとに `--input` を 1 つずつ渡す機能は Python CLI が実装しています。ネイティブ CLI に `mix` コマンドは存在しません。ストリップコマンドの名前は `sonare-cli mix-strip` だけなので、`sonare-cli mix` を呼ぶスクリプトは未知のコマンドとして失敗します。`mix-strip` 自体は両方の CLI にありますが、`--scene` 非対応の単一ストリップ・単一入力プロセッサです。フルシーンのレンダーではなく、ストリップ単位の手早い確認に使ってください。[チャンネルストリップ](./cli.md#チャンネルストリップ) も参照してください。
 :::
 
 ::: tip いつ再コンパイルするか

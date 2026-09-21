@@ -8,11 +8,20 @@ Use this page as performance context, not as a functional tutorial. If you need 
 Lower latency means the operation finished faster for this exact workload. A speedup such as `2x` means "twice as fast in this benchmark," not "twice as fast for every file." Hardware, sample rate, clip length, codec decode time, and whether intermediate features are reused can all change the result.
 :::
 
+::: danger Native numbers are not browser numbers
+Every figure on this page is labelled **native** or **browser (WebAssembly)**, and they are not interchangeable.
+
+The native build runs its transforms on SIMD FFT kernels: PFFFT serves every transform length it can factor, and KissFFT keeps the rest. The WebAssembly configuration keeps KissFFT alone — `CMakeLists.txt` forces `SONARE_USE_PFFFT=OFF` under `BUILD_WASM`, because carrying both FFTs costs the analysis-only module more than its size budget allows.
+
+So the transform-bound speedups below do not reach a browser. Anything whose cost lives in the FFT — the STFT, and everything built on top of it — is a native figure only. [What WebAssembly Costs](#what-webassembly-costs) is where the browser side is measured, and [Wins That Do Reach the Browser](#wins-that-do-reach-the-browser) covers the two that carry over unchanged.
+:::
+
 ## What You Will Learn
 
 By the end of this page you should be able to:
 
 - interpret benchmark numbers as workload-specific measurements rather than universal speed claims;
+- tell a native figure from a browser figure, and know why the transform-bound ones do not carry from one to the other;
 - distinguish all-in-one pipeline speedups from per-feature comparisons;
 - understand why shared intermediates, native execution, and pipeline design matter;
 - find the benchmark source and reproduce or update the measurements when hardware, inputs, or implementations change.
@@ -24,7 +33,7 @@ Every case runs **3 times and the tables report the median**, on both sides — 
 :::
 
 ::: info Hardware
-Measured on Apple M5 Max (18 hardware threads, 128 GB unified memory), on an idle machine — both halves of the benchmark record the load average they ran under, here 2.0. Absolute times scale with your hardware; the ratios are what carries over.
+Measured on Apple M5 Max (18 hardware threads, 128 GB unified memory). Both halves of the benchmark record the load average they ran under, and this run was not idle: the C++ half spanned 2.29 to 2.43, the librosa half 2.49 to 3.09. `benchmarks/README.md` says not to publish a run from a busy machine, because contention does not scale the two sides evenly — so read these as a run under light background load, and re-measure on a quiet machine before settling an argument with them. Absolute times scale with your hardware; the ratios are what carries over.
 :::
 
 ::: info Comparison versions
@@ -32,15 +41,15 @@ The Python side ran the versions pinned in `benchmarks/requirements.lock`:
 
 - **librosa** 0.11.0
 - **scipy** 1.17.1
-- **numpy** 2.4.4
-- **numba** 0.65.1
+- **numpy** 2.4.6
+- **numba** 0.67.0
 
 on CPython 3.11 or later — `benchmarks/pyproject.toml` sets the floor and the exact interpreter is not recorded in the results. Two of these move the numbers directly: librosa delegates its FFT to scipy, and numba JIT-compiles the inner loop of pYIN.
 :::
 
-## All-In-One Pipeline Analysis
+## All-In-One Pipeline Analysis (Native)
 
-All-in-one music analysis: BPM + key + beats + chords + sections + timbre + dynamics + rhythm + melody.
+All-in-one music analysis: BPM + key + beats + chords + sections + timbre + dynamics + rhythm + melody. Both sides run natively — libsonare as a native C++ binary, the Python pipeline on CPython.
 
 Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the committed `benchmarks/generate_audio.py` rather than shipped as a binary. Generation is deterministic, so your copy is the same bytes as the one these timings were measured on — the script prints its SHA-256 and warns if it does not match:
 
@@ -51,60 +60,60 @@ Test audio: synthetic WAV, 73 seconds, 44100 Hz stereo, generated locally by the
 <BenchChart
   title="All-In-One Analysis Latency (lower is better)"
   :data="[
-    { label: 'All-in-one analyze', librosa: 34545, libsonare: 1153 },
+    { label: 'All-in-one analyze', librosa: 38950, libsonare: 541 },
   ]"
 />
 
-| Library | Language | Time | Relative |
-|---------|----------|------|----------|
-| libsonare | C++ | 1.15s | 1x |
-| bpm-detector 1.1.0 `--comprehensive` (librosa-based) | Python | 34.5s | ~30x slower |
+| Library | Language | Runtime | Time | Relative |
+|---------|----------|---------|------|----------|
+| libsonare | C++ | native | 0.54s | 1x |
+| bpm-detector 1.1.0 `--comprehensive` (librosa-based) | Python | CPython | 38.9s | ~72x slower |
 
-::: warning What the 30x is against
+::: warning What the 72x is against
 The comparison target is **not librosa**. It is [bpm-detector](https://github.com/libraz/bpm-detector) 1.1.0 run with `--comprehensive`, a pipeline built on top of librosa — and it is written by the same author as libsonare, which libsonare supersedes. Read the ratio knowing that both sides of it are ours.
 
 librosa is a feature library rather than a one-shot analyzer — there is no `librosa.analyze()` to time — so any full-pipeline comparison has to pick some pipeline built on it. bpm-detector computes the same feature set end to end, which makes it comparable.
 
-Read 30x as "against this Python pipeline, on this fixture". A different librosa-based pipeline gives a different ratio, and the per-feature table below is the better guide to what libsonare will do for your own code.
+Read 72x as "against this Python pipeline, on this fixture, natively". A different librosa-based pipeline gives a different ratio, and the per-feature table below is the better guide to what libsonare will do for your own code.
 :::
 
 The all-in-one pipeline figure is where libsonare's design pays off most: shared spectrograms, parallel feature paths, automatic 44.1 → 22.05 kHz downsampling done once inside the C++ pipeline (the librosa pipeline resamples too, so the comparison stays apples-to-apples), and no Python boundary inside the pipeline.
 
-Most of that gap is structural rather than a language win — the per-feature table below shows C++ against Python on identical work, and there librosa is slightly ahead on the cheap features.
+Much of that gap is structural rather than a language win — the per-feature table below shows C++ against Python on identical work, and the individual margins there are far smaller than 72x.
 
-## Per-Feature Comparison
+## Per-Feature Comparison (Native)
 
-Individual feature extraction on the same 73-second audio (resampled to 22050 Hz). librosa measured with `time.perf_counter`, libsonare measured with `chrono::steady_clock` inside C++ via the `sonare_bench` binary.
+Individual feature extraction on the same 73-second audio (resampled to 22050 Hz). librosa measured with `time.perf_counter`, libsonare measured with `chrono::steady_clock` inside a native `sonare_bench` build — this is the SIMD-transform configuration, so these rows do not describe the browser. The browser equivalents are further down.
 
 <BenchChart
   title="Per-Feature Latency (lower is better)"
   :data="[
-    { label: 'STFT', librosa: 12.61, libsonare: 13.52 },
-    { label: 'Mel Spectrogram', librosa: 19.45, libsonare: 22.23 },
-    { label: 'HPSS', librosa: 1680.69, libsonare: 81.94 },
-    { label: 'Onset Strength', librosa: 20.54, libsonare: 22.72 },
-    { label: 'Chroma', librosa: 41.99, libsonare: 14.78 },
-    { label: 'Beat Track', librosa: 32.88, libsonare: 54.95 },
-    { label: 'MFCC', librosa: 20.80, libsonare: 23.01 },
-    { label: 'pYIN', librosa: 5461.02, libsonare: 427.89 },
-    { label: 'Spectral Centroid', librosa: 24.86, libsonare: 18.12 },
+    { label: 'STFT', librosa: 12.63, libsonare: 6.81 },
+    { label: 'Mel Spectrogram', librosa: 19.89, libsonare: 15.87 },
+    { label: 'HPSS', librosa: 1715.77, libsonare: 64.41 },
+    { label: 'Onset Strength', librosa: 20.98, libsonare: 16.76 },
+    { label: 'Chroma', librosa: 42.90, libsonare: 8.46 },
+    { label: 'Beat Track', librosa: 34.69, libsonare: 44.44 },
+    { label: 'MFCC', librosa: 21.29, libsonare: 16.91 },
+    { label: 'pYIN', librosa: 5745.04, libsonare: 364.38 },
+    { label: 'Spectral Centroid', librosa: 24.67, libsonare: 12.10 },
   ]"
 />
 
-| Feature | librosa | libsonare | Speedup |
-|---------|---------|-----------|---------|
-| STFT (2048, hop 512) | 12.6ms | 13.5ms | 0.93x — slower |
-| Mel Spectrogram (128 bands) | 19.5ms | 22.2ms | 0.88x — slower |
-| HPSS (harmonic/percussive separation, kernel 31) | 1,681ms | 81.9ms | **20.5x** |
-| Onset Strength | 20.5ms | 22.7ms | 0.90x — slower |
-| Chroma (STFT-based) | 42.0ms | 14.8ms | **2.84x** |
-| Beat Track | 32.9ms | 55.0ms | **0.60x — slower** |
-| MFCC (13 coefficients) | 20.8ms | 23.0ms | 0.90x — slower |
-| pYIN | 5,461ms | 428ms | **12.8x** |
-| Spectral Centroid | 24.9ms | 18.1ms | 1.37x |
+| Feature | librosa | libsonare (native) | Speedup |
+|---------|---------|--------------------|---------|
+| STFT (2048, hop 512) | 12.6ms | 6.81ms | **1.85x** |
+| Mel Spectrogram (128 bands) | 19.9ms | 15.9ms | 1.25x |
+| HPSS (harmonic/percussive separation, kernel 31) | 1,716ms | 64.4ms | **26.6x** |
+| Onset Strength | 21.0ms | 16.8ms | 1.25x |
+| Chroma (STFT-based) | 42.9ms | 8.46ms | **5.07x** |
+| Beat Track | 34.7ms | 44.4ms | **0.78x — slower** |
+| MFCC (13 coefficients) | 21.3ms | 16.9ms | 1.26x |
+| pYIN | 5,745ms | 364ms | **15.8x** |
+| Spectral Centroid | 24.7ms | 12.1ms | **2.04x** |
 
 ::: warning Beat tracking is slower standalone
-`Beat Track` is the row where libsonare loses by the widest margin: 55.0 ms against librosa's 32.9 ms on the same audio. Note also that `sonare beats` returns a time signature and downbeats alongside the beat grid, so it is not doing the same work as `librosa.beat.beat_track` — but if beat times are all you want, that extra work is cost with no return.
+`Beat Track` is the one row where libsonare still loses natively: 44.4 ms against librosa's 34.7 ms on the same audio. Note also that `sonare beats` returns a time signature and downbeats alongside the beat grid, so it is not doing the same work as `librosa.beat.beat_track` — but if beat times are all you want, that extra work is cost with no return.
 
 If you need beats along with anything else, call `analyze()` instead. The pipeline computes the onset envelope once and shares it, so beat tracking there does not pay the standalone cost in this table. Calling `sonare beats` on its own is the case where libsonare has nothing to offer over librosa today.
 :::
@@ -163,36 +172,40 @@ libsonare repository.
 
 ## What WebAssembly Costs
 
-The browser build is single-threaded, so the features that use multiple cores lose their advantage there. Native and WASM measured on the same fixture in the same run:
+Two things separate the browser build from the native one. It is single-threaded, so the features that fan out across cores lose that advantage; and it keeps KissFFT alone, so it does not get the SIMD transform either. Both columns are the same fixture and the same benchmark, but the browser column comes from its own WebAssembly run rather than from the same pass as the native one — so read the penalty as the shape of the gap, not as a paired measurement.
 
-| Feature | Native | WASM | WASM penalty |
-|---------|--------|------|--------------|
-| All-in-one analyze | 1,153ms | 3,159ms | 2.7x |
-| STFT | 13.5ms | 16.4ms | 1.2x |
-| Mel Spectrogram | 22.2ms | 47.3ms | 2.1x |
-| HPSS | 81.9ms | 422ms | **5.2x** |
-| Onset Strength | 22.7ms | 48.5ms | 2.1x |
-| Chroma | 14.8ms | 20.5ms | 1.4x |
-| Beat Track | 55.0ms | 80.4ms | 1.5x |
-| MFCC | 23.0ms | 48.9ms | 2.1x |
-| pYIN | 428ms | 437ms | **1.02x** |
-| Spectral Centroid | 18.1ms | 23.3ms | 1.3x |
+| Feature | Native | Browser (WASM) | Browser penalty |
+|---------|--------|----------------|-----------------|
+| All-in-one analyze | 541ms | 3,159ms | **5.8x** |
+| STFT | 6.81ms | 16.4ms | 2.4x |
+| Mel Spectrogram | 15.9ms | 47.3ms | 3.0x |
+| HPSS | 64.4ms | 422ms | **6.6x** |
+| Onset Strength | 16.8ms | 48.5ms | 2.9x |
+| Chroma | 8.46ms | 20.5ms | 2.4x |
+| Beat Track | 44.4ms | 80.4ms | 1.8x |
+| MFCC | 16.9ms | 48.9ms | 2.9x |
+| pYIN | 364ms | 437ms | **1.20x** |
+| Spectral Centroid | 12.1ms | 23.3ms | 1.9x |
 
-The penalty is not uniform, so what the browser costs you depends on which features you use. HPSS is the routine that fans out across cores, so it loses the most when there is only one: budget roughly 5x for harmonic-percussive separation in the browser. The mel-filterbank features sit around 2x.
+The penalty is not uniform, so what the browser costs you depends on which features you use. HPSS pays both prices at once — it is the routine that fans out across cores, and it sits on the transform — so budget roughly 6.6x for harmonic-percussive separation in a tab. The mel-filterbank features sit around 3x.
 
-pYIN is the outlier in the other direction — it costs essentially the same in a tab as it does natively. Its runtime is dominated by the Viterbi lattice, which is compare-and-add over doubles with the transition weights already stored as logarithms, and WASM runs that at close to native speed.
+pYIN is the outlier in the other direction, at 1.20x — the smallest penalty in the table. Its runtime is dominated by the Viterbi lattice, which is compare-and-add over doubles with the transition weights already stored as logarithms, and WASM runs that at close to native speed. Only the FFT-based YIN difference in front of the lattice notices which transform it got, and that is the smaller half of the work.
 
-For the all-in-one pipeline, expect around 2.7x. On this fixture that is 73 seconds of audio analyzed in 3.2 seconds — still around 23x faster than the audio plays.
+For the all-in-one pipeline, expect around 5.8x. On this fixture that is 73 seconds of audio analyzed in 3.2 seconds — still around 23x faster than the audio plays.
 
 ::: tip What this means for choosing a library
-If you only need one cheap feature — an STFT, a Mel spectrogram, MFCCs, an onset envelope — librosa is **slightly faster**, by around 10%. That is not a reason to switch to libsonare, and not a reason to leave it either. librosa delegates the FFT to scipy.fft (heavily optimized C/Fortran), and once the FFT is paid for there is little left for either side to win on a single call.
+The answer splits by runtime, and that split is the useful part.
 
-libsonare is worth it when you need **HPSS** (20x), **pitch tracking** (13x), **chroma** (2.8x), or **several features at once** — the last being where shared intermediates and the absence of a Python boundary dominate. For standalone beat tracking, librosa is faster.
+**Natively**, there is no cheap feature on this fixture where librosa comes out ahead: the SIMD transform puts libsonare 1.85x up on the STFT and about 1.25x up on everything that sits on top of it — Mel, MFCC, onset strength. Those three margins are small enough that they are not on their own a reason to switch, but they are no longer a reason against.
+
+**In the browser**, that advantage is absent — no SIMD transform, no threads — and the two tables above put the WebAssembly STFT and mel-filterbank features behind librosa running natively on the same machine. Choosing libsonare for a tab is choosing it because librosa is not available there at all, not because it is the faster of the two.
+
+Either way, libsonare is worth it when you need **HPSS** (27x native), **pitch tracking** (16x native), **chroma** (5.1x native), or **several features at once** — the last being where shared intermediates and the absence of a Python boundary dominate, and the one reason that survives the trip into a browser. For standalone beat tracking, librosa is faster on both.
 :::
 
-## Where the Big Wins Come From
+## Where the Big Wins Come From (Native)
 
-### All-in-one pipeline (30x): shared intermediates + no Python
+### All-in-one pipeline (72x): shared intermediates + no Python
 
 libsonare's `analyze()` computes the STFT and Mel spectrogram **once**, then reuses them across downstream analyzers.
 
@@ -207,14 +220,14 @@ Independent paths run in parallel across CPU cores. None of this crosses the Pyt
 
 bpm-detector (and any other librosa-based pipeline) rebuilds these intermediates per analyzer and orchestrates everything from Python — the cost adds up.
 
-### HPSS (20.5x): cache-friendly multithreaded median filter
+### HPSS (26.6x): cache-friendly multithreaded median filter
 
 librosa's HPSS calls `scipy.ndimage.median_filter` once horizontally and once vertically — a general-purpose C implementation processed sequentially per pixel.
 
 libsonare replaces this with a custom sliding median:
 - **Sorted flat array** with O(log k) binary search + O(k) memmove instead of a tree, which fits in L1 cache for typical kernel sizes
 - **Multi-threaded execution** — rows and columns processed in parallel across all cores
-- Result: ~20x faster end-to-end than the scipy version on this hardware, and the routine that loses the most when the browser build takes the threads away
+- Result: ~27x faster end-to-end than the scipy version on this hardware natively, and the routine that loses the most when the browser build takes the threads away
 
 ::: details What is a median filter (and a sliding median)?
 A **median filter** replaces each value with the *median* of its neighbors in a small window. Unlike averaging, it removes spikes and outliers while keeping edges sharp — which is exactly why HPSS uses it: a horizontal median pass keeps steady (harmonic) lines, a vertical pass keeps sharp (percussive) hits. A **sliding median** computes this efficiently as the window moves across the data, instead of re-sorting from scratch at every step.
@@ -222,24 +235,32 @@ A **median filter** replaces each value with the *median* of its neighbors in a 
 
 <SonareDemo id="hpss-separation" />
 
-### pYIN (12.8x): native YIN difference and Viterbi decoding
+### pYIN (15.8x): native YIN difference and Viterbi decoding
 
 pYIN's cost is per-frame candidate evaluation and the Viterbi decoding step. libsonare implements both in C++, replacing librosa's Numba-JIT'd inner loop, and computes the YIN difference function through an FFT rather than directly.
 
 Decoding dominates: with the default 65–2093 Hz range the lattice has 1,202 states and roughly 100 reachable transitions per state, so a 73-second clip visits the inner update several hundred million times. Everything that can leave that loop has left it — the transition weights are stored as logarithms and the voiced/unvoiced switch costs are constants — leaving a compare-and-add over doubles.
 
-This path is single-threaded. Unlike HPSS it gains nothing from extra cores, and for the same reason it loses nothing in a browser: the WASM penalty is 1.02x.
+The lattice is single-threaded. Unlike HPSS it gains nothing from extra cores, and for the same reason it gives up almost nothing in a browser — the WASM penalty is 1.20x, and what there is of it comes from the FFT in front of the lattice rather than from the decoding.
 
-### Chroma (2.84x): tighter STFT → filterbank path
+### Chroma (5.07x): tighter STFT → filterbank path
 
 Chroma derives a 12-pitch-class representation from the spectrogram via a constant-Q-like filterbank. libsonare's STFT and the filterbank multiplication run as Eigen3-vectorized matrix operations on a single contiguous buffer, avoiding the dispatch overhead of librosa's stack of NumPy operations.
 
-## What's Not Faster (And Why)
+## Wins That Do Reach the Browser
 
-- **STFT itself**: librosa delegates to `scipy.fft`, which is implemented in C/Fortran, and comes out about 7% ahead. Being written in C++ buys nothing here because the work was already in C.
-- **Mel / MFCC / Onset Strength**: dominated by their underlying STFT cost — once that's paid, the per-frame Mel filterbank multiplication and DCT are too cheap for a different language to matter. librosa is around 10% ahead on all three.
-- **Beat tracking**: *slower* than librosa when called standalone, and by the widest margin of any row. Use `analyze()`, which shares the onset envelope, if you need beats alongside anything else.
-- **Pipeline use cases**: inside `analyze()` these same features run in <1 ms apiece because the STFT/Mel is computed once and shared. The standalone numbers above represent the "what does it cost to call this in isolation" view, not the in-pipeline cost.
+The FFT backend is why most of the table above is native-only. These two are not: they are properties of how the work is organised rather than of the instruction set, so a tab gets them in full.
+
+**Offline LUFS does not scale its working set with the clip length.** Materializing the K-weighted signal whole costs one `double` per sample per channel, which for a long file is gigabytes of scratch that the measurement never needs all of at once. Instead the signal is filtered in chunks into a sliding window holding only what the earliest unfinished gating block still owes — bounded by the 3-second short-term window no matter how long the input is. Over an hour of 48 kHz mono, peak resident memory is 706 MB rather than the 2.09 GB the whole-signal form requires, and the remainder is the caller's own input buffer. The filter state carries across chunks and every block is still summed in one pass over its own window, so the reported loudness is bit-for-bit the same either way.
+
+**True peak interpolates only where a higher peak is still reachable.** Each polyphase phase bounds its output by the largest input magnitude its stencil can reach, so a group of output samples whose bound cannot exceed the peak found so far is skipped instead of computed. The measurement stays exact — only interpolations that provably cannot win are dropped. Material with a transient standing above its own body, which is most material, gets the whole benefit: a 10-second 48 kHz signal measured at 4x takes 0.6 ms where exhaustive interpolation of the same signal takes 6.1 ms. A signal sitting at full scale throughout has nothing to prune and costs what exhaustive interpolation costs.
+
+## What's Not Faster (And Where)
+
+- **STFT itself**: natively libsonare comes out 1.85x ahead, because its transform runs on SIMD kernels while librosa delegates to `scipy.fft`. In the browser there is no SIMD backend to run on, and the tables above put the WebAssembly STFT behind librosa on the same fixture — so this row reverses depending on where you run it.
+- **Mel / MFCC / Onset Strength**: dominated by their underlying STFT cost — once that is paid, the per-frame Mel filterbank multiplication and DCT are too cheap for a different language to matter. They therefore inherit whatever the transform does: natively about 1.25x in libsonare's favour on all three, and in the browser roughly 3x the native cost, which puts them behind librosa there.
+- **Beat tracking**: *slower* than librosa when called standalone, on either runtime, and by the widest margin of any row. Use `analyze()`, which shares the onset envelope, if you need beats alongside anything else.
+- **Pipeline use cases**: inside `analyze()` these same features cost between 0.47 ms and 8.75 ms apiece natively — onset strength 0.47 ms, MFCC 0.89 ms, chroma 1.10 ms, spectral centroid 2.65 ms, mel spectrogram 8.75 ms — because the STFT and Mel are computed once and shared. The standalone numbers above represent the "what does it cost to call this in isolation" view, not the in-pipeline cost.
 
 ## Reproduce These Numbers Yourself
 
@@ -277,11 +298,12 @@ Both halves record the one-minute load average before and after the run — `son
 :::
 
 ::: tip Calling libsonare from Python
-The numbers above measure libsonare's native C++ performance. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI (foreign function interface) boundary, which dominates the runtime for cheap features. The all-in-one pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
+The native column above measures libsonare's C++ performance directly. If you call individual feature functions through the Python binding (e.g. `libsonare.stft(samples, sr)`), every call marshals the sample buffer across the FFI (foreign function interface) boundary, which dominates the runtime for cheap features. The all-in-one pipeline `analyze()` is unaffected — it runs end-to-end in C++ and only the small result struct crosses the boundary.
 :::
 
 ## Notes
 
 - Numbers are hardware-dependent. Apple M5 Max here; relative gaps are stable across machines, absolute milliseconds are not. Ratios are the part worth carrying to your own hardware.
 - Synthetic test audio (deterministic chord progression + percussive bursts) is generated locally by a committed script rather than shipped as a binary, along with the ground truth the accuracy section scores against.
-- WASM builds are single-threaded, so the speedups that come from fanning out across cores shrink there — HPSS most of all. The single-threaded paths, pYIN among them, carry over almost unchanged. Build the WASM bench above and measure it on the runtime you care about rather than scaling the native figures by guesswork.
+- WASM builds are single-threaded, so the speedups that come from fanning out across cores shrink there — HPSS most of all. They also keep KissFFT alone, so the transform-bound rows shrink for a second, independent reason. The paths that are neither threaded nor transform-bound, the pYIN lattice among them, carry over almost unchanged. Build the WASM bench above and measure it on the runtime you care about rather than scaling the native figures by guesswork.
+- The offline LUFS and true-peak behaviour described under [Wins That Do Reach the Browser](#wins-that-do-reach-the-browser) is the exception: it is algorithmic, so it holds on every runtime.

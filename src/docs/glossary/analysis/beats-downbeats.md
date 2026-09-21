@@ -38,14 +38,24 @@ When adaptive tempo is enabled in the native configuration, the tracker can foll
 
 ## Downbeat tracking
 
-Downbeats are inferred after beats are placed. libsonare estimates meter phase and scores beat positions with beat strength, low-frequency energy, and a phase prior. The downbeat result is therefore more dependent on arrangement cues than raw beat tracking.
+Downbeats are inferred after beats are placed. libsonare estimates [meter](./meter-and-grouping.md) phase and scores beat positions with beat strength, low-frequency energy, and a phase prior. The downbeat result is therefore more dependent on arrangement cues than raw beat tracking.
 
 Chord-change evidence is a fourth cue, but it only becomes available once chords are known. The whole-track analysis path detects chords and then refines the downbeats a second time with that evidence; the standalone `detectDownbeats` helper never reaches that stage. Run the full music analysis when downbeat placement matters and the harmony is the clearest cue in the arrangement.
 
 Sparse intros, pickups (notes that lead in before the first downbeat), weak bass, or ambiguous meter can shift the perceived "one." For UI, it is useful to show downbeats as an assistive overlay rather than as an absolute truth.
 
+## The evidence behind the decision
+
+The evidence the downbeat pass scores is published as `AnalysisResult.beatObservations`, so a caller doing its own meter or accent work scores what the library scores instead of rebuilding a weaker approximation. Each non-empty stream holds one value per beat and indexes in parallel with `beats`: `onsetStrength`, `lowFrequencyEnergy` (the accent evidence a log-spectral difference discards, empty when the analysis ran without audio), and `chordChange` (empty until chords are analyzed). An empty stream means the analysis could not produce it, which is not the same as every beat having scored zero.
+
+::: warning `beat.strength` and `beatObservations.onsetStrength` are not the same measurement
+A beat's own `strength` is the onset envelope sampled at that beat's single frame. It is raw and unbounded, its scale depends on the material, and it moves with any jitter in the beat position — so it does not compare across tracks and it is a noisy accent cue.
+
+`onsetStrength` is the same envelope aggregated over a window around the beat, and it is the value the library's own downbeat pass scores. Use it for accents, and keep `strength` for the diagnostic it is.
+:::
+
 ::: details How libsonare computes it
-`BeatAnalyzer` computes mel onset strength, estimates BPM with `BpmAnalyzer`, and tracks beats with a dynamic program over candidate frames. It then refines downbeats with `DownbeatObservations` using onset strength, low-frequency energy, and meter phase; the chord-change term is left empty at that point, and `MusicAnalyzer` calls the refinement again with it once chord detection has run. Public helpers such as `detectBeats` and `detectDownbeats` return `Float32Array` / float-array time lists in seconds and stop at the first, chordless refinement.
+`BeatAnalyzer` computes mel onset strength, estimates BPM with `BpmAnalyzer`, and tracks beats with a dynamic program over candidate frames. It then refines downbeats with its internal `DownbeatObservations` using onset strength, low-frequency energy, and meter phase; the chord-change term is left empty at that point, and `MusicAnalyzer` calls the refinement again with it once chord detection has run. The public `beatObservations` carries the same three streams out of the analysis — it is the result surface, not that internal struct. Public helpers such as `detectBeats` and `detectDownbeats` return `Float32Array` / float-array time lists in seconds and stop at the first, chordless refinement.
 :::
 
 Related: [Onset Detection](./onset-detection.md), [Tempo and BPM](./tempo-bpm.md), [Chord Recognition](./chord-recognition.md)

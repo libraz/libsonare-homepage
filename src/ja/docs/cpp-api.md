@@ -52,17 +52,117 @@ libsonare は C++ アプリケーション向けに、オーディオ解析、�
 |------------|------|
 | `BUILD_MASTERING` | `sonare::mastering::*`、マスタリングの C ABI |
 | `BUILD_MIXING` | `sonare::mixing::*`、ミキサーの C ABI |
+| `BUILD_MIXING_ASSISTANT` | オフラインのミキシングアシスタント |
 | `BUILD_GRAPH` | ルーティンググラフライブラリ |
-| `BUILD_FX` | クリエイティブ系リアルタイム FX プロセッサ |
+| `BUILD_FX` | クリエイティブ系リアルタイム FX プロセッサと、SoundFont プレイヤーが送る GS システムエフェクト |
 | `BUILD_ACOUSTIC_SIM` | 幾何ベースのルーム音響（RIR 合成、ルーム推定、ルームモーフ） |
-| `BUILD_PITCH_EDITOR` | モノフォニックのピッチエディタ基盤 |
 | `BUILD_VOICE_CHANGER` | リアルタイムボイスチェンジャー |
-| `BUILD_ARRANGEMENT` | ヘッドレスのアレンジメント／DAW プロジェクト（`sonare_c_project.h`） |
+| `BUILD_PITCH_EDITOR` | スケールクオンタイズとノートセグメンテーション |
+| `BUILD_ARRANGEMENT` | MIDI とインストゥルメントのサブシステム（NativeSynth、GM フォールバックバンク、SoundFont プレイヤー）、およびヘッドレスのアレンジメント／DAW プロジェクト（`sonare_c_project.h`） |
 | `BUILD_ASSIST` | 作曲アシストの差し込み口（制御／オフラインのみ） |
+
+一部のオプションは独立しておらず、configure の段階で矛盾を解消します。いずれもステータス行を出力するので、意図どおりに削れなかった場合は configure の出力に現れます。
+
+- `BUILD_MIXING_ASSISTANT` は `BUILD_MIXING` を ON に戻します。
+- `BUILD_MIXING` は `BUILD_MASTERING` と `BUILD_GRAPH` を ON に戻します。
+- `BUILD_VOICE_CHANGER` は `BUILD_MASTERING` が OFF のとき、自分自身を OFF にします。
+- `SONARE_WASM_ANALYSIS_ONLY` は `BUILD_MIXING_ASSISTANT` を OFF にします。解析専用の WebAssembly モジュールにミキシングアシスタントは含まれません。
+
+はじめの 2 つは連鎖します。そしてこれが、削ったつもりが削れていない原因になりがちな組み合わせです。`BUILD_MIXING_ASSISTANT` を既定の `ON` のままにすると、ミキサー・マスタリングライブラリ・ルーティンググラフは、いくつ `OFF` を渡していても再び取り込まれます。
 
 C ABI はプロジェクト系のシンボルを常に *エクスポート* します。`BUILD_ARRANGEMENT`
 なしでビルドした場合、それらは `SONARE_ERROR_NOT_SUPPORTED` を返し、
 `sonare_project_abi_version()` は 0 を返します。
+
+`BUILD_PITCH_EDITOR` も同じ扱いです。`-DBUILD_PITCH_EDITOR=OFF` でビルドすると、
+`sonare_scale_quantize_midi`、`sonare_scale_correction_semitones`、
+`sonare_scale_pitch_class_enabled`、`sonare_note_segments` はエクスポートされたまま
+`SONARE_ERROR_NOT_SUPPORTED` を返します。出力引数は判定の前にゼロクリアされるので、
+この経路で返されたポインタを解放しても安全です。ライブラリはこのオプションを OFF にした
+状態で configure・ビルドできますが、ネイティブ CLI はできません。5 つのコマンドが
+ピッチエディタを直接呼んでいるためです。
+
+### リンクターゲット
+
+インストール済みの libsonare は、サブシステムごとの CMake ターゲットと、そのインストールに含まれるものをまとめて張る集約ターゲットをエクスポートします。
+
+```cmake
+find_package(sonare REQUIRED)
+target_link_libraries(app PRIVATE sonare::sonare)
+```
+
+既定は `sonare::sonare` で問題ありません。これはインストールに含まれる**静的アーカイブ**すべてを束ねた集約ターゲットなので、どのアーカイブが必要でどの順に並べるかを自分で考える必要はありません。ただし `sonare::shared` は意図的に含みません。これは FFI バインディングが読み込む C ABI の共有ライブラリで、それ自身がすべての静的アーカイブをリンク済みです。両方を 1 つのリンク行に並べると、各シンボルが二重に定義されてしまいます。
+
+リンクを絞りたい場合は、アーカイブを直接指定します（`sonare::core`、`sonare::rt`、`sonare::mastering`、`sonare::mixing`、`sonare::midi`、`sonare::engine` など、上の表のサブシステムに対応）。どれが存在するかはインストール時の構成によって変わるため、`if(TARGET sonare::mixing)` かパッケージ設定が定義する `SONARE_WITH_*` 変数で分岐してください。コンポーネントとして指定すると、欠けている場合にリンク時の未定義シンボルではなく configure 時のエラーになります。
+
+```cmake
+find_package(sonare REQUIRED COMPONENTS midi)
+```
+
+::: warning コンポーネント名はオプション名ではなくターゲット名
+コンポーネントはエクスポートされたターゲット名と 1 対 1 に対応します。これは内部のターゲット名から `sonare_` の接頭辞を取り除いたもので、それを制御する `BUILD_*` オプションの名前ではありません。`BUILD_ACOUSTIC_SIM` が作るのは `sonare::acoustic` なので、コンポーネント名は `acoustic` です。同様に `mixing_assistant`、`pitch_editor`、`voice_changer` となります。どの綴りでも存在しないコンポーネントを要求すると「libsonare was installed without the '…' component」というエラーになり、本当にサブシステムが欠けている場合と区別がつきません。
+:::
+
+エイリアス名は `add_subdirectory()` ビルドでも同じなので、リンク行に libsonare の入手経路が現れることはありません。
+
+インストール済みビルドについて、計画を立てる前に知っておく価値のある性質が 2 つあります。
+
+- **Eigen は利用側の要件ではありません。** インストールされるヘッダーはどれも Eigen を include しないため、利用側に必要なのは C++17 コンパイラと解決可能なスレッドライブラリだけです。パッケージ設定が宣言するのは `Threads`（および FFmpeg 付きでビルドされた場合の FFmpeg）のみです。
+- **同梱の FFT アーカイブは接頭辞付きのファイル名でインストールされます。** `libsonare_kissfft.a` と `libsonare_pffft.a` であり、利用側のライブラリディレクトリで一般的な名前を占有することはありません。CMake のターゲット名は変わりません。
+
+`sonare.pc` は共有ライブラリ構成でのみインストールされます。pkg-config が正しく記述できるのはその構成だけだからです。静的ライブラリのみのインストールでは生成されません。
+
+エクスポートされる各ターゲットは、専用のゲートで検証されています。プレフィックスにインストールしたうえで別の利用側プロジェクトを configure・ビルドし、各アーカイブを丸ごと強制ロードして、そのアーカイブ自身が宣言するリンクインターフェースに照らして確かめるものです。インストール規則の漏れや、リンクインターフェースの記述不足はこれで捕まります。どちらもソースツリーの内側からは見えません。ツリー内ではすべてのターゲットが全アーカイブをリンクしているからです。
+
+#### 内蔵インストゥルメントだけをリンクする
+
+シンセサイザー、GM フォールバックバンク、SoundFont プレイヤーはいずれも `sonare::midi` にあります。MIDI を音声にレンダリングするだけで解析もマスタリングも行わないアプリケーション（プレイヤー、ゲーム、MIDI 駆動のツールなど）は、制作系のサブシステムを外してこのアーカイブだけをリンクできます。`BUILD_TESTING` と `BUILD_CLI` はどちらも既定が `ON` なので、これらをそのままにした構成ではテストツリーとコマンドラインツールも一緒にコンパイルされます。
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_ARRANGEMENT=ON \
+  -DBUILD_MASTERING=OFF -DBUILD_MIXING=OFF -DBUILD_MIXING_ASSISTANT=OFF \
+  -DBUILD_GRAPH=OFF -DBUILD_ACOUSTIC_SIM=OFF \
+  -DBUILD_VOICE_CHANGER=OFF -DBUILD_ASSIST=OFF
+cmake --build build --parallel
+cmake --install build --prefix /your/prefix
+```
+
+```cmake
+find_package(sonare REQUIRED COMPONENTS midi)
+target_link_libraries(app PRIVATE sonare::midi)
+```
+
+```cpp
+#include <midi/synth/native_synth.h>
+#include <midi/synth/synth_presets.h>
+#include <midi/ump.h>
+
+using namespace sonare::midi;
+
+const synth::SynthPreset* preset = synth::find_synth_preset("acoustic-piano");
+synth::NativeSynth instrument(preset->config);
+instrument.prepare(48000.0, 512);
+
+MidiEvent note_on{};
+note_on.ump = make_midi1_note_on(/*group=*/0, /*channel=*/0, /*note=*/60, /*velocity=*/100);
+instrument.on_event(/*destination_id=*/0, note_on);
+
+float* channels[2] = {left, right};
+instrument.process(channels, 2, 512);
+```
+
+インストールされたヘッダは 2 通りの書き方で解決します。上の例のようなツリー内と同じパスと、インクルードルート経由の `<sonare/cpp/midi/synth/native_synth.h>` です。
+
+この構成を前提に設計する前に、3 つの制限を押さえてください。
+
+- **解析は外せません。** 解析、特徴量、エフェクト、メータリングにはビルドフラグがなく、`sonare::midi` は `sonare::core` をリンクするため、呼び出すかどうかにかかわらずバイナリに入ります。トリムで外れるのはマスタリング、ミキシング、ルーム音響、ボイスチェンジャーです。
+- **`BUILD_ARRANGEMENT` は 1 つのスイッチで 2 つのものを制御します。** インストゥルメントのために ON にすると、アレンジメント／MIR／シリアライズのアーカイブもビルドされます。リンクする必要はありませんが、コンパイルはされます。
+- **`BUILD_FX=OFF` にすると SoundFont プレイヤーはドライで鳴ります。** GS システムエフェクト（リバーブ、コーラス、ディレイの送り）がコンパイルから外れ、送りは無効になります。それを望まない限り `BUILD_FX=ON` のままにしてください。
+
+このトリムは C++ のソースビルドでのみ可能です。npm パッケージは解析専用バンドルを公開していますが（[インストール](./installation.md#wasm-パッケージのサブパス) を参照）、インストゥルメント専用のものはなく、Python ホイールはフルビルド 1 種類です。
+
+インストゥルメント自体で何ができるかは、[内蔵シンセサイザー](./native-synth.md) と [SoundFont 2 プレイヤー](./soundfont-player.md) を参照してください。
 
 ::: tip 用語について
 オーディオ解析が初めてですか？[用語集](/ja/docs/glossary) で BPM、STFT、Chroma、HPSS などの用語の説明をご覧ください。

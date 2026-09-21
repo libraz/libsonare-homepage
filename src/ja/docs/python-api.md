@@ -125,7 +125,50 @@ print(f"ビート数: {len(result.beat_times)}")
 
 ### エラーハンドリング
 
-エラーは `SonareError` を送出します。これは `RuntimeError` のサブクラスで、`.code` 属性にネイティブのエラーコードを保持します。そのため `except RuntimeError:` はそのまま機能し、`except sonare.SonareError as e:` ではコードを取得できます。このコードは JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値であり（[エラーハンドリング](./js-api.md#エラーハンドリング)を参照）、CLI も同じコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+例外クラスは 2 つで、あらゆる失敗がどちらかに入ります。
+
+| 送出されるタイミング | クラス | メッセージ |
+|---------------------|--------|-----------|
+| ネイティブライブラリが OK 以外のコードを返したとき | `SonareError`（`RuntimeError` のサブクラス） | `[4] ` という数値接頭辞が付きます |
+| C ABI に到達する前に、Python 側の引数・バッファ検証が呼び出しを拒否したとき | `SonareValueError` | 検証メッセージのみで、数値接頭辞は付きません |
+
+`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は `ErrorCode.INVALID_PARAMETER` なので、コードで分岐するコードからは、これが肩代わりしている C ABI の拒否とまったく同じに見えます。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で（[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照）、`.code_name` はバインディング間で共通の名称を返します。CLI はこれらのコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+
+```python
+try:
+    result = sonare.master_audio_stereo(left, right, sample_rate=48000, preset_name="pop")
+except sonare.SonareError as e:
+    print(e.code, e.code_name, e)
+```
+
+#### 引数は呼び出し前に検査されます
+
+バッファを受け取るエントリポイントは引数を事前検査します。そのため空・サイズ不一致・非有限値を含むバッファは、内部ヘルパーや素の C シンボルではなく、呼び出した関数の名前で報告されます。
+
+```text
+master_audio_stereo: right must not be empty
+spectral_centroid: samples contains NaN or Inf at index 0
+```
+
+メッセージに現れる名前は、呼び出し側のシグネチャにある名前です。`cross_similarity` は内部の `data` ／ `rows` ではなく `x` ／ `x_rows` を報告し、スカラーおよびステレオのメーターは `sonare_` 接頭辞付きの C シンボルではなくファサード関数名（`metering_peak_db`）を報告します。`validate` を公開しているエントリポイントでは、`validate=False` を渡すと O(n) の NaN／Inf 走査は省略されますが、空チェックは省略されません。
+
+::: warning メッセージ文字列で分岐している場合
+`SonareError` や `ValueError` を捕捉するハンドラ、`.code` で分岐するコードは変更不要です。検証メッセージの**文字列**を照合しているコードは影響を受けます。文言はエントリポイント名と引数名を含む形になっています。
+:::
+
+#### 受け付けなくなった入力
+
+- `trim_silence`、`split_silence`、`fix_frames` は、空のバッファに対して空の結果を返すのではなく例外を送出します。
+- `tempogram_ratio` は、有限かつ正でない `factors` の要素を拒否します。NaN はコア内で未定義の float→int 変換に到達し、無限大は黙って DC ラグに縮退するためです。
+- `mix_stereo` はミックスできないシーンを拒否します。すべてのストリップが空である場合、またはいずれかのストリップが NaN／Inf を含む場合で、ストリップのインデックスとチャンネルを示します（`mix_stereo: strips[1] right contains NaN or Inf at index 0`）。C ABI では 0 フレームのブロックは「このブロックを処理する」という意味の正当な no-op であり、「このストリップ群をミックスする」という意味ではありません。
+
+#### 検査されないもの
+
+要素ごとの変換は「空を渡せば空が返る」という契約を保っています。`power_to_db`、`amplitude_to_db`、`db_to_power`、`db_to_amplitude`、`preemphasis`、`deemphasis`、`vector_normalize`、`frame_signal`、`pad_center`、`fix_length` は空のシーケンスを受け取り、空を返します。テンポ系ヘルパーで入力行列を検査するのは `tempogram_ratio` だけで、`tempogram`、`fourier_tempogram`、`cyclic_tempogram`、`plp` は検査しません。
+
+`f0_hz` は非有限値の走査を一切受けません。pYIN は無声フレームを `nan` で表し、そのトラック表現はピッチ補正へそのまま渡される必要があるためです。`note_segments`、`extract_notes`、`decompose_note_pitch`、`split_note`、`merge_notes` は `f0_hz` の形状だけを検査し、値は検査しません。
+
+CLI の**使い方**の誤りは `SonareValueError` ではなくプレーンな `ValueError` を送出します。API 引数ではなくコマンドラインの誤りを報告するものだからです。どちらも終了コードは `3` です。
 
 ### このビルドで何ができるか
 
@@ -254,11 +297,15 @@ backtracked = sonare.onset_backtrack(onset_frames, energy)
 pitch = sonare.pitch_pyin(samples, sample_rate=48000)
 segments = sonare.note_segments(
     pitch.f0,
-    pitch.voiced_prob,
+    [1.0 if v else 0.0 for v in pitch.voiced_flag],
     frame_rate=48000 / 512,
     min_note_ms=60.0,
 )
 ```
+
+::: warning 渡すのは `voiced_flag` であって `voiced_prob` ではありません
+`note_segments` は、有声度の値が `voiced_threshold`（既定 `0.5`）を下回るところでノートを区切ります。したがって `pitch_pyin` の `voiced_flag` を `0.0`／`1.0` として渡してください。`voiced_prob` はそのフレームの有声観測**量**であり、解析窓に何周期分収まるかに依存するため、確信度を表すのではなく F0 とともに上昇します。`frame_length=2048`、48 kHz では、定常的な 3 倍音のトーンで C2 の平均が 0.1 をはるかに下回り、C5 で 0.5 前後になります。そのため低音楽器や低い男声のトラックを固定しきい値で処理すると、**例外は出ないまま空のリスト**が返ります。連続的な有声度で区切りたい場合は `voiced_threshold` がもう一方の調整点です。
+:::
 
 自己類似度系の関数は、JavaScript の `segment*` という名前とは異なり、Python では
 `segment_` 接頭辞なしで公開されています。
@@ -337,11 +384,13 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・コード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果に、オプションの `(progress, stage)` コールバックを付けたもの |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
+| `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | 手元にあるビート系列だけから拍子とアクセントのグルーピングをスコアリング。音声も再解析も不要 |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | 検出したコードに対する、キーを基準としたローマ数字ラベル（`"I"`、`"IV"`、`"V"`、`"vi"` …） |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | シンコペーション・グルーヴ・規則性 |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | ダイナミックレンジ・ラウドネスレンジ・クレストファクター |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | ブライトネス・ウォームス・密度・粗さ・複雑さと、窓ごとの `timbre_over_time`（`timbreOverTime` alias） |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | 楽曲構造のセクション（イントロ／Aメロ／サビ…） |
+| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | 構造の転換点と、それを拾い出した元の `novelty_curve`、および両者が乗るグリッド。`analyze_sections` のラベル付き区間ではなく、自前のしきい値を当てたいときに使います |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | 単音メロディの輪郭（YIN） |
 | `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | インパルス応答（IR）から求めるルーム音響（RT60／EDT／C50／C80）。`min_decay_db` は減衰フィットのしきい値 |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | ブラインドなルーム音響推定 |
@@ -384,6 +433,55 @@ chords = sonare.detect_chords(
 
 sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 ```
+
+#### `analyze()` のオプション
+
+`analyze(...)` は `MusicAnalyzerConfig` 全体をキーワード引数として受け取ります。`n_fft=2048`、`hop_length=512`、`bpm_min=60.0`、`bpm_max=200.0`、`start_bpm=120.0`、`use_triads_only=True`、`use_hpss=True`、`chroma_highpass_hz=80.0`、`use_bass_weighted=True`、`chroma_hop_multiplier=4`、`use_chord_hmm=False`、`use_chord_key_context=False`、`chord_hmm_beam_width=24`、`detect_chord_inversions=False`、`adaptive_tempo=False`、`tempo_update_interval_beats=8`、`compute_tempo_curve=False`、`meter_candidate_numerators=None`、`meter_denominator=4` です。
+
+::: warning `use_triads_only` はここでは既定が **True** です
+統合された `analyze(...)` の経路は、明示的に指定しないかぎりトライアドだけを探索します。一方、単独の `detect_chords(...)` API は同じフラグの既定が `False` です。`analyze(...)` からセブンスやテンションを得たい場合は `use_triads_only=False` を渡してください。
+:::
+
+このうち 3 つは特に注意が必要です。
+
+- `meter_candidate_numerators` の既定はネイティブの候補集合 `(3, 4, 6)` です。変拍子は、その分子を候補に含めた場合にのみ報告されます。要素は最大 16 個、各要素は `[2, 32]` の範囲です。候補を広げても広い拍子が強制されるわけではありません。
+- `meter_denominator`（`[1, 32]` の 2 のべき乗）は、検出した拍子に対して報告される拍の単位です。`analyze(...)` は音声を持っているので、複合拍子を解決したときは自身の判断で `8` を報告します。
+- `compute_tempo_curve=True` は `beat_local_bpm` を埋めます。既定で無効なのは、解析精度が上がるわけではなく出力が 1 つ増えるだけだからです。`adaptive_tempo=True` も併せて指定しないかぎりビートトラッキングは単一のテンポ事前分布を保持するため、実際に変動するテンポを測るには両方が必要です。
+
+#### 結果の読み方
+
+- `key.confidence` は、スコアリングされた全候補のプロファイル相関に対するソフトマックスです。値域は `[0, 1)` で、候補の confidence の総和は 1 になります。したがって 24 候補中の 1 つが 1 に達することはなく、証拠を分け合う平行調どうしはそれぞれおよそ半分を報告します。これはクロマがどれだけ明確に候補集合から 1 つを選び取ったかを示す値であり、**その選択がどれだけの頻度で正しいかではありません**。アノテーション付き録音に対して較正されたものは何もないため、この値で分岐するパイプラインは自前の素材に対して自前のしきい値を決める必要があります。
+- `downbeat_indices` は `beat_times` のインデックスで、`beat_times[downbeat_indices[k]]` が k 番目のダウンビートです。`beat_times` より短く、あるビートがダウンビートかどうかの判定は、別の時系列との時刻比較ではなくこのリストへの所属判定になります。`downbeat_phase` は拍子推定器自身の位相なので、コードや低域の証拠からダウンビートが精緻化されると `downbeat_indices[0]` と食い違うことがあります。
+- `beat_strengths` と `beat_observations.onset_strength` は別の測定値です。`beat_strengths` はビート自身のフレームで取得したオンセットエンベロープの生の 1 フレームで、正規化されておらず上限もなく、素材によってスケールが変わり、ビート位置の揺れに敏感です。`beat_observations.onset_strength` はライブラリ自身のダウンビート判定がスコアリングに使う窓処理済みの値で、アクセントを扱うならこちらを使います。`beat_observations` は `low_frequency_energy` と `chord_change` も保持します。
+- `beat_local_bpm` は各ビート位置での平滑化された局所テンポで、`beat_times` と並行します。`compute_tempo_curve` を指定しないかぎり空で、ビートが 2 つ未満しか検出されなかった場合は指定しても空です（テンポは 2 つのビートの間隔の性質だからです）。最後の要素は、最終ビートへ至る間隔のテンポを繰り返したものです。設計上、テンポが動く素材では `bpm` から離れるので、ここから 1 つの値を取り出して全体テンポとして読まないでください。
+
+#### 手元のビート系列から拍子をスコアリングする
+
+`estimate_meter(...)` は、呼び出し側が渡したビート系列に対して拍子をスコアリングします。読むのはビートごとの時刻とアクセント値だけなので、既存の解析結果を別の候補集合で、あるいはビートの任意の区間について、パイプラインを回し直さずに再スコアリングできます。概念的な説明は[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md)を参照してください。
+
+```python
+result = sonare.analyze(audio.data, audio.sample_rate)
+obs = result.beat_observations
+
+meter = sonare.estimate_meter(
+    result.beat_times,
+    obs.onset_strength if obs else result.beat_strengths,
+    candidate_numerators=(3, 4, 5, 6, 7),
+)
+if meter.searched:
+    print(meter.time_signature.numerator, meter.grouping)  # 例: 7 [3, 2, 2]
+```
+
+キーワードオプションは `candidate_numerators`（既定 `(3, 4, 6)`）、`denominator=4`、`downbeat_weight=1.0`、`measure_weight=0.5`、`subdivision_weight=0.15`、`compound_subdivision_threshold=0.85` です。結果が意味を持つかどうかは、次の 2 点で決まります。
+
+- 既定の候補集合は `{3, 4, 6}` なので、変拍子はその分子を指定した場合にのみ返ってきます。
+- `searched` は、ビート系列が 8 ビート未満だった場合に `False` になります。そのとき他のすべてのフィールドは測定結果ではなく固定のフォールバック値です。**confidence も含みます**。短い区間の答えを検出結果として読まないでください。
+
+`grouping` は小節が 2 拍・3 拍のアクセントグループにどう分かれるかを表し、常に報告された分子と一致します。7 拍子なら `[3, 2, 2]` です。複合拍子か単純拍子かは denominator ではなく grouping で判断してください。1 拍が 3 分割されるかどうかはビート**間**のエネルギーから測るものであり、ビートごとのアクセント値はそれを持たないため、この経路では `denominator` は指定されたとおりに報告されます。`candidate_scores` は指定した分子の並びと平行で、`candidates` は支持度の降順です。スコアと分子の対応は、`candidates` ではなく自分の指定リストを通して取ってください。スコアは標準化された符号付きの値で、スコアリングしたビート数の平方根に比例して大きくなるため、比較できるのは同一結果の内部だけです。
+
+#### コードのクオリティ
+
+`Chord.quality` は[型定義](#型定義)に列挙した文字列のいずれかです。そのうちいくつかは互いにアナグラムで、クロマグラムではこのペアを区別できません。`major6` は短 3 度下の `minor7` と同じ構成音で、`minor6` はその下の `halfDim7`、`dominant7Sus4` は完全 4 度下の `sus2Add4` と同じです。各ペアでは確立された読み方が既定のまま残り、6th へ持ち上げられるのはベースの証拠がある場合だけです。
 
 長いファイルでは、`analyze_with_progress(...)` が `analyze(...)` と同じ `AnalysisResult` を返しつつ、`on_progress=(progress, stage)` コールバックを受け取れます。下のマスタリング進捗コールバックと同じ形です。
 
@@ -473,10 +571,37 @@ morphed = sonare.room_morph(room_recording, sample_rate, 12.0, 9.0, 4.0, wet=0.6
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | リアルタイム音声プリセットチェーンで 1 回レンダリング |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | ピークを目標 dB にノーマライズ（デフォルト: 0.0） |
 | `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | RMS を目標 dB にノーマライズ（デフォルト: -20.0） |
+| `normalize_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインでピークノーマライズ（`target_db` 既定 `0.0`） |
+| `normalize_rms_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | ペア共通の 1 つのゲインで RMS ノーマライズ（`target_db` 既定 `-20.0`） |
+| `remix(samples, intervals, sample_rate?, align_zeros?)` | `np.ndarray` | 区間スライスで並べ替え／連結。`align_zeros` は既定 `False` |
+| `remix_aligned_intervals(samples, intervals, sample_rate?, align_zeros?)` | `list[int]` | `remix` が使う切り出し位置だけを解決する（切り出しはしない）。`align_zeros` は既定 `True` |
 | `trim(samples, sample_rate, threshold_db?, frame_length?, hop_length?)` | `list[float]` | 無音区間をトリム（既定: `-60.0` dB、`frame_length=2048`、`hop_length=512`） |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | 目標サンプルレートへリサンプリング |
 
 `trim(...)` は単純なしきい値ベースの編集ヘルパーです。下の librosa 互換 `trim_silence(...)` はフレーム RMS と `top_db` を使い、トリム後の音声と元音源上のサンプル範囲を返します。
+
+#### ステレオペアのノーマライズ
+
+Python はステレオ用のノーマライザを 2 つに分けて持っています。ピーク用の `normalize_stereo` と RMS 用の `normalize_rms_stereo` です（JavaScript 側は 1 つの関数と `mode` 引数で表現します）。どちらもレベルをペア全体で測り、**1 つの共通ゲインを両チャンネルに適用**します。これがステレオイメージを保つ仕組みです。チャンネルごとに自前のゲインでノーマライズすると、2 つのピークが揃うまで小さい側が持ち上がり、レベルではなく定位バランスが変わってしまいます。ゲインが共通なので `NormalizeStereoResult.applied_gain_db` はチャンネルごとの組ではなく単一の値で、すでに無音のペアはそのまま返り、ゲインはちょうど `0` になります。結果は `left`／`right` に加えて、ペア共通のサンプル数 `length` を保持します。
+
+どちらかのチャンネルが空の場合、および 2 つのチャンネルの長さが一致しない場合は拒否されます。C のエントリポイントはペアに対して 1 つのサンプルレートを取るので、2 つのチャンネルがサンプルレートで食い違うことはありません。
+
+```python
+result = sonare.normalize_stereo(left, right, 48000, target_db=-3.0)
+print(result.length, result.applied_gain_db)
+```
+
+#### マルチチャンネル素材を共通のフレームで切る
+
+`remix(..., align_zeros=True)` はスライス境界を信号のゼロクロスへスナップしますが、これは信号ごとの判断です。`remix` をチャンネルごとに呼ぶと各チャンネルが別々のフレームへスナップされ、ステレオ素材がずれていきます。`remix_aligned_intervals(...)` は 1 つのチャンネルから切り出し位置を 1 セットだけ解決し（クランプ済みの `(start, end)` ペアのフラットなリスト）、同じフレームで全チャンネルを切り出せるようにします。既定値が意図的に非対称な点に注意してください。`remix` は `align_zeros=False`、`remix_aligned_intervals` は `True` です。
+
+スナップでスライスが消えないよう、ガードが 2 つあります。符号変化がまったくない信号（無音、DC オフセット、あらゆる定数）はスナップされません。また、内容があったのにスナップ後に空へ潰れるスライスは、スナップ前の境界を保ちます。
+
+```python
+cuts = sonare.remix_aligned_intervals(left, [0, 48000, 96000, 144000], sample_rate=48000)
+left_out = sonare.remix(left, cuts, sample_rate=48000)
+right_out = sonare.remix(right, cuts, sample_rate=48000)
+```
 
 ### リアルタイムボイスチェンジャー
 
@@ -546,6 +671,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS クロマグラム — `(n_frames, 行優先 12 x n_frames データ)` を返す。`hop_length` の既定値は `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | 行優先スペクトログラムから NMF 分解係数 `(w, h)` を返す |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | 初期化方式を選べる NMF 分解 `(w, h)`。`init` は既定 `'random'`、`'nndsvd'`（SVD ウォームスタート）も受け付ける |
+| `decompose_stems(samples, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | 元の複素スペクトログラムにマスクを掛ける NMF 分離。各コンポーネントが元音源の位相を保ち、合計すると入力に戻る。既定は `n_components=4`、`n_iter=100`、`beta=2.0`、`init='random'`、`mask_power=1.0` |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルター |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度の包絡線（テンポグラム系の入力） |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | マルチバンドのオンセット強度。`(n_frames, [n_bands x n_frames])` を行優先で返す（`n_bands` 既定 3） |
@@ -559,7 +685,26 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 
 CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` を使います。VQT の既定 `gamma=-1` は ERB 由来の帯域幅を自動選択します。`chroma_cqt` と `chroma_cens` の既定は `n_chroma=12`、`bins_per_octave=36` です。`hpss(...)` と `hpss_with_residual(...)` は `kernel_harmonic=31`、`kernel_percussive=31`、`n_fft=2048`、`hop_length=512`、`hard_mask=False` を既定値とします。
 
-追加のエフェクト系ヘルパーとして `remix(samples, intervals, sample_rate?, align_zeros?)`、`phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` も利用できます。librosa 型の区間リミックス、直接のフェーズボコーダー時間伸縮、残差信号を保持した HPSS が必要な場合に使います。
+追加のエフェクト系ヘルパーとして `phase_vocoder(samples, sample_rate?, rate?)`、`hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)` も利用できます。直接のフェーズボコーダー時間伸縮や、残差信号を保持した HPSS が必要な場合に使います。
+
+#### NMF の係数と、聴けるステム
+
+`decompose` と `decompose_with_init` が返すのは**振幅**スペクトログラムの W／H 係数です。これらは位相を持たないため、そこから音声を再構成するには位相推定器が必要で、推定された位相はステムとしては実用に耐えません。`decompose_stems` は、同じ因子分解からコンポーネントごとのソフトマスクを作り、それを**元の複素**スペクトログラムへ適用します。したがって各コンポーネントは元音源の位相を保ちます。モデルにエネルギーがあるところではマスクの総和が 1 になり、逆 STFT は線形なので、コンポーネントを合計すると入力に戻ります。
+
+`mask_power` はソフトマスクの指数です。`1`（既定）は振幅比、`2` は Wiener 型のパワー比で、分離は強くなる代わりに倍音が重なる箇所でアーティファクトが増えます。1 未満は拒否されます。`init` は既定 `'random'`、SVD ウォームスタートなら `'nndsvd'` です。`beta` はダイバージェンス（`2` = Frobenius、`1` = Kullback-Leibler）です。
+
+```python
+stems = sonare.decompose_stems(audio.data, audio.sample_rate, n_components=4, mask_power=2.0)
+for component in stems["components"]:
+    ...  # いずれも入力と同じ長さの 1 次元 float32 配列
+print(stems["w"].shape, stems["h"].shape, stems["sample_rate"])
+```
+
+このエントリポイントでは `n_components`、`n_fft`、`hop_length`、`n_iter` が実際の既定値を持つため、`0` は「既定値を使う」というセンチネル（C ABI と JavaScript 側の同じフィールドではそう解釈されます）ではなく、呼び出し側の誤りとして拒否されます。
+
+::: warning NNDSVD のシードは倍精度で計算されます
+これは精度の改善ではなく**再現性**の確保です。そのため `decompose` と `decompose_stems` は、単精度でシードを計算していたビルドとは同じ入力に対して異なる係数を返します。振幅スペクトログラムの末尾側の特異ベクトルは単精度のノイズフロアに埋もれるため、float でのシードは総和の順序に依存し、ターゲットが違えば違うコンポーネントが返っていました。形状、非負性、再構成品質は影響を受けません。保存した係数を持っている場合や、以前のステム書き出しと比較する場合は、値が変わることを前提にしてください。
+:::
 
 ### 逆再構成関数
 
@@ -643,6 +788,7 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`n_bins=84`、`bins_per_octave=12` �
 | `deemphasis(samples, coef?, zi?)` | `list[float]` | ディエンファシス（librosa.effects.deemphasis）|
 | `trim_silence(samples, top_db?, frame_length?, hop_length?)` | `tuple[list[float], int, int]` | `librosa.effects.trim`。`(audio, start_sample, end_sample)` を返す |
 | `split_silence(samples, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | `librosa.effects.split`。非無音区間をサンプル単位で返す |
+| `split_silence_common(signals, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | 同じパートの複数テイクが揃って無音だと認める切れ目。`signals` はシーケンスのシーケンスを 1 つ取るため、信号数と各信号の長さが食い違うことがない |
 | `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame`。`(n_frames, row-major フレーム)` を返す |
 | `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
 | `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
@@ -716,7 +862,7 @@ class KeyProfile(IntEnum):
 class Key:
     root: PitchClass
     mode: Mode
-    confidence: float
+    confidence: float  # スコアリングされた候補全体のソフトマックス配分。[0, 1)
     name: str          # プロパティ -> "C major"、"A minor" など
     short_name: str    # プロパティ -> "C"、"Am" など
 
@@ -735,7 +881,10 @@ class Chord:
     quality: str             # "major"、"minor"、"diminished"、"augmented"、
                              #   "dominant7"、"major7"、"minor7"、"sus2"、"sus4"、
                              #   "add9"、"minorAdd9"、"dim7"、"halfDim7"、
-                             #   "major9"、"dominant9"、"sus2Add4"、"unknown"
+                             #   "major9"、"dominant9"、"sus2Add4"、
+                             #   "major6"、"minor6"、"minorMajor7"、
+                             #   "dominant7Sus4"、"dominant11"、"dominant13"、
+                             #   "dominant7Flat9"、"dominant7Sharp9"、"unknown"
     start: float             # セグメント開始（秒）
     end: float               # セグメント終了（秒）
     confidence: float
@@ -746,13 +895,22 @@ class Chord:
 class ChordAnalysisResult:
     chords: list[Chord]      # detect_chords(...) の戻り値の型
 
+class AnalysisBeatObservations:
+    onset_strength: list[float]        # 拍ごとの、窓処理済みアクセント値
+    low_frequency_energy: list[float]
+    chord_change: list[float]
+
 class AnalysisResult:
     bpm: float
     bpm_confidence: float
     key: Key
     time_signature: TimeSignature
     beat_times: list[float]
-    beat_strengths: list[float]    # 拍ごとの強度
+    beat_strengths: list[float]    # 拍ごとの、生で上限のないオンセットエンベロープ 1 フレーム
+    downbeat_indices: list[int]    # beat_times のうち小節頭にあたる位置
+    downbeat_phase: int            # 解析が第 1 小節の何拍目から始まるか
+    beat_local_bpm: list[float]    # beat_times と平行。compute_tempo_curve=True
+                                   #   でないかぎり空
     bpm_candidates: list[BpmHypothesis]
     time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # プロパティ: 各拍の強度を持つオブジェクト
@@ -763,9 +921,24 @@ class AnalysisResult:
     dynamics: AnalysisDynamics | None
     rhythm: AnalysisRhythm | None
     melody: AnalysisMelody | None
+    beat_observations: AnalysisBeatObservations | None
     form: str
     # 専用の detect_chords() / analyze_sections() / analyze_timbre() / ... は、
     # 1 つの側面だけ、または呼び出しごとのオプション指定に使えます。
+
+class MeterEstimate:
+    time_signature: TimeSignature
+    downbeat_phase: int
+    searched: bool                 # False = 系列が短すぎてスコアリングできなかった
+    grouping: list[int]            # アクセントグループ（例 [3, 2, 2]）。合計は分子
+    candidate_scores: list[float]  # 指定した分子の並びと平行
+    candidates: list[TimeSignature]  # 支持度の降順
+
+class NormalizeStereoResult:
+    left: list[float]
+    right: list[float]
+    length: int
+    applied_gain_db: float         # 両チャンネルに適用された単一のゲイン
 
 class HpssResult:
     harmonic: list[float]

@@ -112,6 +112,41 @@ const result = masterAudio({ samples, sampleRate, preset: 'pop' });
 
 The corresponding `*Request` TypeScript types are exported from the package.
 
+### Errors
+
+Library failures arrive as `SonareError` — a standard `Error` whose `name` is
+`'SonareError'`, augmented with a numeric `code` (an `ErrorCode` value) and its
+canonical `codeName`, for example `'InvalidParameter'`.
+
+`SonareError` is a runtime class, not a type-only declaration, so importing the
+name by value gives a real binding on this package and on the WASM one alike: a
+shared TypeScript module can import it from either surface and get the same kind
+of thing at run time.
+
+`instanceof SonareError` is brand-based rather than prototype-based — it checks
+the shape. That means it narrows an error raised by the addon, which carries the
+shape but never constructs the class, and one that lost its prototype crossing a
+worker or `structuredClone` boundary. `isSonareError(value)` is the same check
+written as a type guard, and the two are wired to each other so they never
+disagree; either one is fine.
+
+```typescript
+import { Audio, ErrorCode, isSonareError } from '@libraz/libsonare-native';
+
+try {
+  const audio = Audio.fromFile('missing.wav');
+  audio.destroy();
+} catch (err) {
+  if (isSonareError(err)) {
+    console.error(err.codeName, err.code === ErrorCode.FileNotFound);
+  }
+}
+```
+
+Argument-shape problems caught before the call reaches the library — two arrays
+of unequal length, a `mode` that is not one of the accepted strings — are raised
+as plain `RangeError` or `TypeError`, which `isSonareError` does not match.
+
 ### Audio
 
 | Method | Description |
@@ -181,13 +216,15 @@ cleanup that long-lived processes should prefer.
 | `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Frames below `threshold` are returned as explicit `N.C.` intervals; trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | Downbeat (bar-start) timestamps |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | Ranked key candidates with correlation scores |
-| `analyze(samples, sampleRate?)` | `AnalysisResult` | All-in-one analysis in one call: BPM and ranked BPM hypotheses, key, time signature and ranked time-signature candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, and form. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
+| `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | All-in-one analysis in one call: BPM and ranked BPM hypotheses, key, time signature and ranked time-signature candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, and form. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
 | `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback for long inputs |
+| `estimateMeter(request)` | `MeterEstimate` | Score a meter over a caller-supplied beat series, without audio and without re-running analysis. Request-only — takes `EstimateMeterRequest` |
 | `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | Time signature, groove, syncopation. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength` |
 | `analyzeDynamics(samples, sampleRate?, options?)` | `DynamicsResult` | Dynamic range, loudness range, crest factor. `options`: `windowSec`, `hopLength`, `compressionThreshold` |
 | `analyzeTimbre(samples, sampleRate?, options?)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbreOverTime`. `options`: `nFft`, `hopLength`, `nMels`, `nMfcc`, `windowSec` |
 | `analyzeSections(samples, sampleRate?, options?)` | `Section[]` | Structural sections (intro/verse/chorus…) with timings. `options`: `nFft`, `hopLength`, `minSectionSec`. Long inputs may use a pooled boundary grid; use each section's `start` / `end` for placement |
+| `detectBoundaries(request)` | `BoundaryResult` | Structural transitions plus the novelty curve they were picked from, and the grid both live on. `request`: `samples`, `sampleRate`, `nFft`, `hopLength`, `kernelSize`, `threshold`, `absoluteThreshold`, `nMfcc`, `nChroma`, `peakDistance`, `useMfcc`, `useChroma`. Reach for it when you want to apply your own threshold rather than take `analyzeSections`' labelled spans |
 | `analyzeMelody(samples, sampleRate?, options?)` | `MelodyResult` | Lead-melody contour (F0 per frame). `options`: `fmin`, `fmax`, `frameLength`, `hopLength`, `threshold`, `usePyin`, `center` |
 | `detectAcoustic(samples, sampleRate?, options?)` | `AcousticResult` | Room acoustics from a recording (RT60 — the time reverberation takes to decay 60 dB — and related measures). `options`: `nOctaveBands`, `nThirdOctaveSubbands`, `minDecayDb`, `noiseFloorMarginDb` |
 | `analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` | `AcousticResult` | Room acoustics from a measured impulse response; `minDecayDb` controls the decay-fit threshold (default `30`) |
@@ -216,6 +253,91 @@ Common helpers are also available as `Audio` instance methods, as noted in the `
 
 The tables below document the Node native API. The WASM package uses the same camelCase names, but functions with a required argument after `sampleRate` require that `sampleRate` position to be supplied. See [JavaScript API](./js-api.md) for the browser signatures.
 
+#### `analyze()` options
+
+`analyze(...)` takes an options object as its third argument, or the same fields
+directly on the request object. It covers the whole pipeline in one place:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `nFft` / `hopLength` | `2048` / `512` | STFT resolution shared across the pipeline |
+| `bpmMin` / `bpmMax` / `startBpm` | `60` / `200` / `120` | Tempo search range and prior |
+| `useTriadsOnly` | `true` | Restrict the chord search to triads |
+| `useHpss` | `true` | Harmonic-only chroma for chord and key detection |
+| `chromaHighpassHz` | `80` | Chroma high-pass cutoff in Hz (`0` disables) |
+| `useBassWeighted` | `true` | Bass-weighted chroma combination |
+| `chromaHopMultiplier` | `4` | Chroma hop multiplier; larger is faster |
+| `useChordHmm`, `useChordKeyContext`, `chordHmmBeamWidth`, `detectChordInversions` | — | Chord post-processing, matching the trailing options on `detectChords(...)` |
+| `adaptiveTempo` | `false` | Track a locally updated tempo prior through beat tracking |
+| `tempoUpdateIntervalBeats` | `8` | Local tempo context length in beats; read only when `adaptiveTempo` is set |
+| `computeTempoCurve` | `false` | Decode a per-beat local tempo curve into `beatLocalBpm` |
+| `meterCandidateNumerators` | `[3, 4, 6]` | Meter numerators the estimator scores. At most 16 entries, each in `[2, 32]`; an empty list is rejected rather than restoring the default, and widening the set does not force a wider meter |
+| `meterDenominator` | `4` | Beat unit reported for the detected meter, a power of two in `[1, 32]`. The estimator still reports 8 on its own when it resolves a compound meter |
+
+::: warning `useTriadsOnly` points the other way here
+In the unified `analyze()` path `useTriadsOnly` is **`true`**, while the
+standalone `detectChords(...)` defaults it to `false`. So `analyze()` searches
+triads alone — and reports no sevenths or extensions — until the caller passes
+`useTriadsOnly: false`.
+:::
+
+`computeTempoCurve` is off because the curve is an extra output rather than a
+better analysis: nothing else in the result changes, so a caller who never reads
+it would pay a decode over the beat grid for nothing. The curve also describes
+the beat grid it was decoded from, and beat tracking holds a fixed tempo prior
+unless `adaptiveTempo` is set as well — measuring a tempo that actually moves
+needs both options.
+
+#### `estimateMeter(...)`
+
+`estimateMeter(...)` scores a meter over a **caller-supplied beat series**. It
+reads only per-beat times and accent values, never audio, so an existing
+analysis — or an arbitrary span of one — can be re-scored without re-running the
+pipeline. For the underlying concept, see
+[Meter and grouping](./glossary/analysis/meter-and-grouping.md).
+
+```typescript
+const result = analyze(samples, sampleRate);
+
+const meter = estimateMeter({
+  beatTimes: result.beats.map((beat) => beat.time),
+  beatStrengths: result.beatObservations.onsetStrength,
+  candidateNumerators: [3, 4, 5, 6, 7],
+});
+
+console.log(meter.searched, meter.timeSignature.numerator, meter.grouping);
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `beatTimes` | — | Beat positions in seconds, non-decreasing |
+| `beatStrengths` | — | Per-beat accent, the same length as `beatTimes`. The series is divided by its own maximum before scoring, so it needs no pre-scaling |
+| `candidateNumerators` | `[3, 4, 6]` | Numerators to score; at most 16 entries, each in `[2, 32]` |
+| `denominator` | `4` | Beat unit reported for the detected meter |
+| `downbeatWeight` / `measureWeight` / `subdivisionWeight` | `1` / `0.5` / `0.15` | Scoring weights for the first beat of each measure, measure-to-measure accent agreement, and the subdivision pattern |
+
+Feed `beatStrengths` from `beatObservations.onsetStrength`, the windowed value
+the library's own downbeat pass scores. `beats[].strength` also works but is a
+single unwindowed frame of the same envelope.
+
+Two properties decide whether the answer means anything:
+
+- **The default candidate set is `{3, 4, 6}`.** An odd meter is reported only if
+  its numerator was asked for, so a seven needs it listed explicitly.
+- **`searched` is `false` when the beat series was under eight beats.** Every
+  other field then carries a fixed fallback rather than a result — including
+  `timeSignature.confidence`, which is the fallback's own value. Read `searched`
+  before treating a short span's answer as a detection.
+
+`grouping` reports how the bar divides into accent groups, so a seven comes back
+as `[3, 2, 2]` rather than as a bare seven, and it always sums to the numerator.
+A single entry means no internal division was resolved. `candidateScores` is
+standardized and signed, listed in the order the request gave the numerators:
+zero is the level a numerator reaches on beats carrying no meter, so only the
+ordering and the gaps between entries carry meaning, and a score grows with the
+square root of how many beats were scored. `candidates` is ordered by descending
+support instead, so match the two on `numerator` rather than by index.
+
 #### Asynchronous variants (Node only)
 
 The Node addon also exposes Promise-returning variants. They run the DSP pipeline on a libuv worker thread, so the JS event loop is not blocked.
@@ -242,7 +364,9 @@ Progress callbacks are not available on the async path. If you need progress upd
 | `phaseVocoder(samples, sampleRate, rate, nFft?, hopLength?)` | `Float32Array` | Direct phase-vocoder time scaling |
 | `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` | `Float32Array` | Pitch-shift without tempo change; defaults to `nFft=2048`, `hopLength=512` |
 | `remix(samples, intervals, sr?, alignZeros?)` | `Float32Array` | Reorder or concatenate sample intervals |
+| `remixAlignedIntervals(samples, intervals, sr?, alignZeros?)` | `Int32Array` | The cut points `remix` would use, without cutting: one clamped `(start, end)` pair per input interval, flattened. `alignZeros` defaults to `true` here |
 | `normalize(samples, sr?, targetDb?, mode?)` | `Float32Array` | Normalize to target peak or RMS dB (`mode`: `'peak'` or `'rms'`, default: `'peak'`) |
+| `normalizeStereo(request)` | `NormalizeStereoResult` | Normalize a channel pair on a level measured across both channels. Request-only — takes `NormalizeStereoRequest` |
 | `trim(samples, sr?, thresholdDb?, frameLength?, hopLength?)` | `Float32Array` | Trim silence (defaults: `-60.0` dB, `frameLength=2048`, `hopLength=512`) |
 | `resample(samples, srcSr, targetSr)` | `Float32Array` | Resample to target sample rate |
 | `pitchCorrectToMidi(samples, sr, currentMidi, targetMidi)` | `Float32Array` | Retune a held note from one MIDI pitch to another |
@@ -258,6 +382,38 @@ the librosa-compatible frame/RMS helper that returns the original sample range.
 `kernelHarmonic=31` and `kernelPercussive=31`. The request-object forms use the
 same names (`nFft`, `hopLength`, and `hardMask`) as the positional overloads.
 
+#### Cutting a stereo take with `remix`
+
+Zero-crossing snapping is a per-signal decision, so calling `remix(...)` channel
+by channel snaps each channel to a different frame and drifts a stereo take
+apart. Resolve one cut set from one channel with `remixAlignedIntervals(...)`
+and apply that same set to every channel. The two entry points point opposite
+ways by default: `remix` has `alignZeros` false, `remixAlignedIntervals` has it
+true.
+
+Two guards stop a slice from vanishing under snapping. A signal with no sign
+change at all — silence, a DC offset, any constant — is not snapped, and a slice
+that had content but collapses to empty after snapping keeps its unsnapped
+boundaries.
+
+#### Normalizing a channel pair
+
+`normalizeStereo({ left, right, sampleRate?, targetDb?, mode? })` applies **one**
+gain to both channels, so the stereo image is preserved. A per-channel gain
+would lift the quieter side until the two levels matched, which is a balance
+change rather than a normalization. That is why the result carries a single
+`appliedGainDb` and not a pair, and why a silent pair comes back untouched at
+exactly `0`. `mode: 'peak'` (the default) drives the peak of the pair to
+`targetDb`, so the louder channel lands on it and the other keeps its distance
+below; `mode: 'rms'` drives the root mean square over both channels' samples
+together — the quadratic mean of the per-channel figures, not their average —
+and hard-clips the result to [-1, 1].
+
+Unlike the mono `normalize(...)`, whose `targetDb` default is `0` in both modes,
+`normalizeStereo` defaults `targetDb` **by mode**: `0` for `'peak'` and `-20`
+for `'rms'`. 0 dBFS RMS is not a usable target, since the peaks sit well above
+the RMS and effectively all of them would clip.
+
 `VoicedFlags` is `Int32Array | Uint8Array | Float32Array | readonly number[] |
 readonly boolean[]`, so the `boolean[]` that `PitchResult.voicedFlag` hands back
 goes straight into pitch correction with no conversion step:
@@ -271,9 +427,22 @@ const tuned = pitchCorrectToMidiTimevarying(
   sampleRate,
   512,
   pitch.voicedFlag,   // boolean[] accepted as-is
-  pitch.voicedProb,
 );
 ```
+
+`voicedProb` derives the voicing decision **only** when `voiced` is omitted — a
+frame at or above 0.5 counts as voiced. When `voiced` is supplied, `voicedProb`
+is ignored entirely; in particular it does not scale the per-frame correction
+amount, so passing both is identical to passing `voiced` alone. The same holds
+for `PitchCorrectOptions.voicedProb` on `pitchCorrectTimevarying(...)`.
+
+::: warning Correction strength is not weighted by `voicedProb`
+A caller who relied on the correction being scaled by `voicedProb` will hear
+**stronger correction in the low register**. pYIN's voiced probability is a
+frequency-dependent observation mass that rises with the fundamental rather than
+tracking confidence, so using it as a weight silently under-corrected low
+registers.
+:::
 
 `voiced` and `voicedProb` must each be the same length as `f0Hz`. A mismatch
 throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
@@ -307,6 +476,8 @@ throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
 | `chromaCqt(samples, sr?, hopLength?, nChroma?)` | `{ nChroma, nFrames, data }` | Constant-Q chromagram (`librosa.feature.chroma_cqt` equivalent) |
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma); `options.hopLength` defaults to `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | NMF (non-negative matrix factorization) factor matrices from a row-major spectrogram, with selectable `init` (`'random'` default, `'nndsvd'`) |
+| `decomposeStems(request)` | `DecomposeStemsResult` | NMF separation that carries the original phase, so each component is directly listenable. Request-only — takes `DecomposeStemsRequest` |
+| `noteSegments(request)` | `NoteSegment[]` | Segment a caller-supplied monophonic F0 track into stable note regions. Request-only — takes `NoteSegmentsRequest` |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Hybrid CQT magnitude (true CQT in low bins, pseudo-CQT in high bins) |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude (single FFT) |
 | `bassChroma(samples, sr?, hopLength?, nChroma?)` | `ChromaResult` | Bass-focused chroma (low-register pitch-class distribution) |
@@ -318,6 +489,49 @@ throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
 Common defaults: `nFft=2048`, `hopLength=512`, `nMels=128`, `nMfcc=20`, pitch `fmin=65.0`, `fmax=2093.0`, `threshold=0.1`, and `rollPercent=0.85`.
 
 CQT/VQT use `fmin=32.70319566` Hz (C1), `nBins=84`, and `binsPerOctave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chromaCqt` defaults to `nChroma=12`, `nBins=252`, and `binsPerOctave=36`; `bassChroma` and `chromaCens` default to `nChroma=12`. `onsetStrengthMulti` defaults to `nBands=3`. `decompose` defaults to `nIter=50`, `beta=2`, and `init='random'`.
+
+#### `decompose` versus `decomposeStems`
+
+`decompose(...)` returns the W/H factors of a *magnitude* spectrogram. Those
+factors carry no phase, so reconstructing from them needs a phase estimator, and
+an estimated phase does not hold up as a stem. `decomposeStems(...)` builds a
+per-component soft mask from the same factorization and applies it to the
+**original complex** spectrogram, so every component keeps the source's phase.
+The masks sum to one wherever the model has energy and the inverse STFT is
+linear, so the components sum back to the input.
+
+`maskPower` sets how hard the mask separates: `1` (the default) keeps the
+magnitude ratio, `2` is the Wiener-style power ratio, which separates harder at
+the cost of more artifacts on overlapping partials. `decomposeStems` defaults to
+`nComponents=4`, `nFft=2048`, `hopLength=512`, `nIter=100`, `beta=2`, and
+`init='random'`, and returns `components` — one signal per component, each the
+length of the input — alongside the `w`/`h` matrices and `sampleRate`.
+
+::: warning NNDSVD factors will not match stored ones
+NNDSVD seeding is computed in double precision. A magnitude spectrogram's
+trailing singular vectors sit at single precision's noise floor, so a float seed
+depended on summation order, and wasm32 and arm64 answered with different
+components; the double-precision seed makes the result reproducible across
+builds. Shapes, non-negativity and reconstruction quality are unaffected — this
+is reproducibility, not accuracy — but a caller holding **stored factors**, or
+comparing against an older stem render, will find them different.
+:::
+
+#### `noteSegments`
+
+`noteSegments({ f0Hz, voicedProb, frameRate, ... })` segments a caller-supplied
+monophonic F0 track into stable note regions, one `NoteSegment` per region with
+`frameStart`, `frameEnd`, `startSeconds`, `endSeconds`, and `medianCents`. The
+tuning fields are `segmentationThresholdCents` (default `50`), `minNoteMs`
+(default `30`), `referenceHz` (default `440`), and `voicedThreshold` (default
+`0.5`), the value of `voicedProb` at or above which a frame counts as voiced.
+
+::: warning Do not feed pYIN's `voicedProb` straight in
+`voicedProb` is the frame's voiced observation **mass**, and for a fixed frame
+length it rises with F0 rather than tracking confidence. A fixed threshold
+therefore silently returns **no segments at all** for low-register material.
+Pass `pitchPyin`'s `voicedFlag` converted to `0`/`1`, or lower `voicedThreshold`.
+:::
 
 ### Inverse Reconstruction Functions
 
@@ -353,6 +567,7 @@ see [librosa Compatibility](./librosa-compatibility.md) for the full mapping.
 | `deemphasis(samples, coef?, zi?)` | `Float32Array` | Inverse pre-emphasis |
 | `trimSilence(samples, topDb?, frameLength?, hopLength?)` | `{ audio: Float32Array; startSample: number; endSample: number }` | `librosa.effects.trim`, distinct from threshold `trim(...)` |
 | `splitSilence(samples, topDb?, frameLength?, hopLength?)` | `Int32Array` | `librosa.effects.split` — flat `[start0, end0, start1, end1, ...]` |
+| `splitSilenceCommon(request)` | `Int32Array` | The cut points several takes of one part agree are silent. `request`: `signals`, `topDb`, `frameLength`, `hopLength`. Same flat layout; takes of unequal length need no padding |
 | `frameSignal(samples, frameLength, hopLength)` | `{ nFrames: number; frames: Float32Array }` | `librosa.util.frame` (row-major) |
 | `padCenter(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.pad_center` |
 | `fixLength(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
@@ -531,7 +746,7 @@ law setters accept the `PanLawInput` aliases described below.
 interface Key {
   root: string;        // Pitch-class name, e.g. "C", "C#", "A"
   mode: string;        // Mode name, e.g. "major", "minor"
-  confidence: number;
+  confidence: number;  // Softmax over every scored candidate, in [0, 1)
   name: string;        // "C major", "A minor"
   shortName: string;   // "C", "Am"
 }
@@ -548,6 +763,87 @@ interface BpmHypothesis {
   relation: 'primary' | 'half' | 'double' | 'other';
 }
 
+// One chord from detectChords(...). root/bass/quality are string labels;
+// rootName/bassName carry the canonical core spelling, identical on every
+// language binding. The quality union is the binding's own spelling — the
+// C++ enum names the same 25 qualities differently.
+interface Chord {
+  root: string;
+  bass: string;
+  rootName: string;
+  bassName: string;
+  quality:
+    | 'major' | 'minor' | 'diminished' | 'augmented'
+    | 'dominant7' | 'major7' | 'minor7'
+    | 'sus2' | 'sus4' | 'add9' | 'minorAdd9'
+    | 'dim7' | 'halfDim7'
+    | 'major9' | 'dominant9' | 'sus2Add4'
+    | 'major6' | 'minor6' | 'minorMajor7' | 'dominant7Sus4'
+    | 'dominant11' | 'dominant13' | 'dominant7Flat9' | 'dominant7Sharp9'
+    | 'unknown';
+  name: string;        // Canonical symbol, e.g. "Cmaj7", "Am/C", "N.C."
+  start: number;       // Seconds
+  end: number;         // Seconds
+  duration: number;    // Seconds — end minus start
+  confidence: number;
+}
+
+interface ChordAnalysisResult {
+  chords: Chord[];
+}
+
+// 0=Intro, 1=Verse, 2=PreChorus, 3=Chorus, 4=Bridge, 5=Instrumental,
+// 6=Outro, 7=Unknown.
+type SectionTypeOrdinal = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+// One section from analyzeSections(...).
+interface Section {
+  type: SectionTypeOrdinal;
+  name: string;        // Human-readable, e.g. "Chorus"
+  start: number;       // Seconds
+  end: number;         // Seconds
+  energyLevel: number; // Relative energy, [0, 1]
+  confidence: number;  // [0, 1]
+}
+
+// The chord shape inside AnalysisResult. Unlike the standalone Chord above,
+// root and bass are pitch-class ordinals (0..11, C = 0) and quality is a
+// ChordQuality ordinal; `name` carries the readable symbol either way.
+interface AnalysisChord {
+  root: number;
+  bass: number;
+  quality: number;
+  start: number;
+  end: number;
+  confidence: number;
+  name: string;        // e.g. "Cmaj7"
+}
+
+// The section shape inside AnalysisResult: the same fields as Section.
+interface AnalysisSection {
+  type: SectionTypeOrdinal;
+  start: number;
+  end: number;
+  energyLevel: number;
+  confidence: number;
+  name: string;
+}
+
+interface AnalysisBeat {
+  time: number;        // Seconds
+  strength: number;    // Raw, unbounded onset-envelope frame nearest this beat
+}
+
+// Beat-level evidence the downbeat and meter decisions score — their input,
+// not their output. Each stream runs parallel to beats, one value per beat.
+// An empty stream means the analysis could not produce it, not that every
+// beat scored zero.
+interface BeatObservations {
+  onsetStrength: number[];       // Windowed onset aggregate around each beat
+  lowFrequencyEnergy: number[];  // Empty when the analysis ran without audio
+  chordChange: number[];         // Empty until chords are analyzed
+}
+
 interface AnalysisResult {
   bpm: number;
   bpmConfidence: number;
@@ -556,7 +852,11 @@ interface AnalysisResult {
   timeSignature: TimeSignature;
   timeSignatureCandidates: TimeSignature[];
   beatTimes: Float32Array;                       // Derived from beats[].time
-  beats: Array<{ time: number; strength: number }>;
+  beats: AnalysisBeat[];
+  beatObservations: BeatObservations;            // Per-beat evidence
+  beatLocalBpm: number[];                        // Empty unless computeTempoCurve
+  downbeatIndices: number[];                     // Indices into beats
+  downbeatPhase: number;                         // Beat index the first bar starts on
   chords: AnalysisChord[];                       // Detected chord progression
   sections: AnalysisSection[];                   // Song-structure sections
   timbre: AnalysisTimbre;                        // Aggregate timbre summary
@@ -657,14 +957,51 @@ interface MeteringStereoRequest {
 }
 ```
 
+#### What `Key.confidence` measures
+
+`Key.confidence` is a softmax over the profile correlation of every scored
+candidate. It lies in `[0, 1)`, the candidates' confidences sum to 1, and a
+share of 24 candidates therefore cannot reach 1. It falls as the runner-up
+closes in, so two keys that split the evidence — a relative major and minor,
+typically — each report about half.
+
+Read it as how decisively the chroma picked one candidate out of the set, **not
+as how often that pick is right**: nothing here is calibrated against annotated
+recordings, so a confident wrong answer is entirely possible. A pipeline that
+branches on it has to pick its own threshold against its own material.
+
+#### Chord-tone anagrams
+
+::: warning A sixth and a seventh can spell the same notes
+A `major6` spells the same four pitch classes as the `minor7` a minor third
+below it, a `minor6` the same as the `halfDim7` a minor third below, and a
+`dominant7Sus4` the same as the `sus2Add4` a fourth below. Nothing in a
+chromagram separates a pair like that, so the established reading stays the
+default and only bass evidence promotes the sixth.
+:::
+
+#### Reading the beat fields
+
+`downbeatIndices` indexes into `beats` — it is a membership check on the beat
+grid, not a separate time series, so it is not the same length as `beats`.
+`downbeatPhase` is the beat index the first measure starts on.
+
+Each beat's `strength` is a single **raw, unbounded** onset-envelope frame: its
+scale depends on the material, and it shifts with beat-position jitter because
+nothing is averaged around the beat. `beatObservations.onsetStrength` is the
+windowed value the library's own downbeat pass scores, and is the intended
+accent source for anything that reads accents — `estimateMeter(...)` above, or a
+renderer drawing beat emphasis.
+
 The native package also exports TypeScript helper types for option objects, callbacks, streaming snapshots, and realtime engine messages. Use these names when annotating application code instead of re-declaring the shapes locally.
 
 | Area | Exported types |
 |------|----------------|
-| Analysis options/results | `AnalysisProgressCallback`, `BpmCandidate`, `ChordChromaMethod`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
+| Analysis options/results | `AnalysisProgressCallback`, `AnalysisBeat`, `BeatObservations`, `BpmCandidate`, `Chord`, `ChordAnalysisResult`, `AnalysisChord`, `AnalysisSection`, `ChordChromaMethod`, `EstimateMeterRequest`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `MeterEstimate`, `Section`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
+| Feature extraction | `DecomposeStemsRequest`, `DecomposeStemsResult`, `NoteSegment`, `NoteSegmentsRequest` |
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
 | Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
-| Stereo mastering and metering requests | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest` |
+| Stereo mastering and metering requests | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest`, `NormalizeStereoRequest`, `NormalizeStereoResult` |
 | Pitch correction | `PitchCorrectOptions`, `VoicedFlags` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
 | Realtime voice | `VoicePresetId`, `VoicePresetCategory`, `RealtimeVoiceChangerPresetMetadata`, `RealtimeVoiceChangerPreset`, `RealtimeVoiceChangerConfigInput`, `RealtimeVoiceChangerConfig`, `RealtimeVoiceChangerOptions` |

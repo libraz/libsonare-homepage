@@ -120,7 +120,50 @@ print(f"Beats: {len(result.beat_times)} detected")
 
 ### Error handling
 
-Errors raise `SonareError`, a `RuntimeError` subclass carrying the native error code in its `.code` attribute, so `except RuntimeError:` continues to work while `except sonare.SonareError as e:` gives you the code. The codes are the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api.md#error-handling)), and the CLI maps them onto its [exit codes](./cli.md#exit-codes).
+Two exception classes cover every failure:
+
+| Raised when | Class | Message |
+|-------------|-------|---------|
+| The native library returns a non-OK code | `SonareError`, a `RuntimeError` subclass | Carries a `[4] ` numeric prefix |
+| Python-side argument or buffer validation rejects a call before it reaches the C ABI | `SonareValueError` | Plain validation text, no numeric prefix |
+
+`SonareValueError` subclasses **both** `SonareError` and `ValueError`, so `except ValueError:` and `except sonare.SonareError:` each catch it and neither style of handler has to know which class a given entry point picks. Its `.code` is `ErrorCode.INVALID_PARAMETER`, so code that branches on the code treats it exactly like the C-ABI rejection it stands in for. `SonareError.code` holds the same C-ABI values the JS bindings expose as `ErrorCode` (see [Error Handling](./js-api-types.md#error-handling)), `.code_name` gives the cross-binding spelling, and the CLI maps the codes onto its [exit codes](./cli.md#exit-codes).
+
+```python
+try:
+    result = sonare.master_audio_stereo(left, right, sample_rate=48000, preset_name="pop")
+except sonare.SonareError as e:
+    print(e.code, e.code_name, e)
+```
+
+#### Arguments are checked before the call
+
+Buffer-taking entry points preflight their arguments, so an empty, mis-sized, or non-finite buffer is reported against the function you called rather than against an internal helper or a bare C symbol:
+
+```text
+master_audio_stereo: right must not be empty
+spectral_centroid: samples contains NaN or Inf at index 0
+```
+
+The names in the message are the ones in your call: `cross_similarity` reports `x` and `x_rows`, not the internal `data` / `rows` spelling, and the scalar and stereo meters name the facade function (`metering_peak_db`) rather than the `sonare_`-prefixed C symbol. On entry points that expose `validate`, passing `validate=False` still skips the O(n) NaN/Inf scan, but not the emptiness check.
+
+::: warning If you match on message text
+Handlers that catch `SonareError` or `ValueError`, or that branch on `.code`, need no change. Code that matches the *text* of a validation message does: the wording names the entry point and the argument.
+:::
+
+#### Input some entry points refuse
+
+- `trim_silence`, `split_silence` and `fix_frames` raise on an empty buffer instead of returning an empty result.
+- `tempogram_ratio` rejects a `factors` entry that is not finite and positive. A NaN reaches an undefined float-to-int cast in the core, and an infinity degenerates silently to the DC lag.
+- `mix_stereo` refuses a scene it cannot mix — strips that are all empty, or a strip carrying NaN or Inf, named by strip index and channel (`mix_stereo: strips[1] right contains NaN or Inf at index 0`). A zero-frame block stays a valid no-op at the C ABI, where it means "process this block" rather than "mix these strips".
+
+#### What is not checked
+
+The element-wise conversions keep their empty-in / empty-out contract: `power_to_db`, `amplitude_to_db`, `db_to_power`, `db_to_amplitude`, `preemphasis`, `deemphasis`, `vector_normalize`, `frame_signal`, `pad_center` and `fix_length` accept an empty sequence and return one. Among the tempo helpers only `tempogram_ratio` guards its input matrix; `tempogram`, `fourier_tempogram`, `cyclic_tempogram` and `plp` do not.
+
+`f0_hz` is never scanned for non-finite values. pYIN marks an unvoiced frame with `nan`, and that track representation has to pass straight into pitch correction, so `note_segments`, `extract_notes`, `decompose_note_pitch`, `split_note` and `merge_notes` check its shape but not its values.
+
+CLI **usage** errors raise a plain `ValueError`, not `SonareValueError`, because they report a command-line mistake rather than an API argument. Both exit with code `3`.
 
 ### What this build can do
 
@@ -250,11 +293,15 @@ backtracked = sonare.onset_backtrack(onset_frames, energy)
 pitch = sonare.pitch_pyin(samples, sample_rate=48000)
 segments = sonare.note_segments(
     pitch.f0,
-    pitch.voiced_prob,
+    [1.0 if v else 0.0 for v in pitch.voiced_flag],
     frame_rate=48000 / 512,
     min_note_ms=60.0,
 )
 ```
+
+::: warning Pass `voiced_flag`, not `voiced_prob`
+`note_segments` delimits notes where the voicing value falls below `voiced_threshold` (default `0.5`), so feed it `pitch_pyin`'s `voiced_flag` as `0.0`/`1.0`. `voiced_prob` is the frame's voiced observation *mass*: it depends on how many periods fit in the analysis window, so it rises with F0 rather than tracking confidence. At `frame_length=2048` and 48 kHz a steady three-harmonic tone averages well under 0.1 at C2 and around 0.5 at C5 — so a bass or low-male-vocal track run against a fixed threshold returns an **empty list and raises nothing**. `voiced_threshold` is the other lever if you do want to segment on a continuous voicing value.
+:::
 
 The structural-similarity family is spelled without a `segment_` prefix in
 Python, unlike the JavaScript `segment*` names:
@@ -333,11 +380,13 @@ with Audio.from_file("music.mp3") as audio:
 | `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
 | `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
+| `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | Meter and accent grouping scored over a beat series you already have — no audio, no re-analysis |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
 | `analyze_rhythm(samples, sample_rate, ...)` | `RhythmResult` | Syncopation, groove type, regularity |
 | `analyze_dynamics(samples, sample_rate, ...)` | `DynamicsResult` | Dynamic range, loudness range, crest factor |
 | `analyze_timbre(samples, sample_rate, ...)` | `TimbreResult` | Brightness, warmth, density, roughness, complexity, plus per-window `timbre_over_time` (`timbreOverTime` alias) |
 | `analyze_sections(samples, sample_rate, ...)` | `SectionResult` | Song-structure sections (intro/verse/chorus/...) |
+| `detect_boundaries(samples, sample_rate=22050, *, n_fft=2048, hop_length=512, kernel_size=64, threshold=0.3, absolute_threshold=0.005, n_mfcc=13, n_chroma=12, peak_distance=2.0, use_mfcc=True, use_chroma=True)` | `BoundaryResult` | Structural transitions plus the `novelty_curve` they were picked from, and the grid both live on. Reach for it when you want to apply your own threshold rather than take `analyze_sections`' labelled spans |
 | `analyze_melody(samples, sample_rate, ...)` | `MelodyResult` | Monophonic melody contour (YIN) |
 | `analyze_impulse_response(samples, sample_rate=48000, n_octave_bands=6, min_decay_db=30.0)` | `AcousticResult` | Room acoustics from an impulse response (RT60/EDT/C50/C80); `min_decay_db` controls the decay-fit threshold |
 | `detect_acoustic(samples, sample_rate, ...)` | `AcousticResult` | Blind room-acoustic estimation |
@@ -380,6 +429,55 @@ chords = sonare.detect_chords(
 
 sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 ```
+
+#### `analyze()` options
+
+`analyze(...)` takes the whole `MusicAnalyzerConfig` as keyword arguments: `n_fft=2048`, `hop_length=512`, `bpm_min=60.0`, `bpm_max=200.0`, `start_bpm=120.0`, `use_triads_only=True`, `use_hpss=True`, `chroma_highpass_hz=80.0`, `use_bass_weighted=True`, `chroma_hop_multiplier=4`, `use_chord_hmm=False`, `use_chord_key_context=False`, `chord_hmm_beam_width=24`, `detect_chord_inversions=False`, `adaptive_tempo=False`, `tempo_update_interval_beats=8`, `compute_tempo_curve=False`, `meter_candidate_numerators=None`, and `meter_denominator=4`.
+
+::: warning `use_triads_only` defaults to **True** here
+The unified `analyze(...)` path searches triads alone until you say otherwise, while the standalone `detect_chords(...)` API defaults the same flag to `False`. If you expect sevenths and extensions from `analyze(...)`, pass `use_triads_only=False`.
+:::
+
+Three of these are worth singling out:
+
+- `meter_candidate_numerators` defaults to `(3, 4, 6)`, the native candidate set. An odd meter is reported only if its numerator was among the candidates. At most 16 entries, each in `[2, 32]`; widening the set does not force a wider meter.
+- `meter_denominator` (a power of two in `[1, 32]`) is the beat unit reported for the detected meter. `analyze(...)` has the audio, so it still reports `8` on its own when it resolves a compound meter.
+- `compute_tempo_curve=True` fills `beat_local_bpm`; it is off by default because it adds an output rather than improving the analysis. Beat tracking holds one fixed tempo prior unless `adaptive_tempo=True` is also set, so measuring a tempo that actually moves needs both.
+
+#### Reading the result
+
+- `key.confidence` is a softmax over the profile correlations of every candidate that was scored: it lies in `[0, 1)` and the candidates' confidences sum to 1, so a share of 24 candidates cannot reach 1, and a relative major and minor that split the evidence each report about half. It says how decisively the chroma picked one candidate out of the set — **not how often that pick is right**. Nothing here is calibrated against annotated recordings, so a pipeline that branches on it has to choose its own threshold against its own material.
+- `downbeat_indices` indexes `beat_times`, so `beat_times[downbeat_indices[k]]` is the k-th downbeat. It is shorter than `beat_times`: testing a beat for downbeat status is a membership check, not a comparison against a separate time series. `downbeat_phase` is the meter estimator's own phase and can disagree with `downbeat_indices[0]` once downbeats are refined from chord and low-frequency evidence.
+- `beat_strengths` and `beat_observations.onset_strength` are not the same measurement. `beat_strengths` is a single raw, unbounded onset-envelope frame sampled at the beat's own frame — not normalized, scaled by the material, and sensitive to beat-position jitter. `beat_observations.onset_strength` is the windowed value the library's own downbeat pass scores, and is the accent source to use. `beat_observations` also carries `low_frequency_energy` and `chord_change`.
+- `beat_local_bpm` is the smoothed local tempo at each beat, parallel to `beat_times`. It is empty unless `compute_tempo_curve` was set, and empty regardless when fewer than two beats were detected, since a tempo is a property of the interval between two beats. The final entry repeats the tempo of the interval leading into the last beat. Do not read a single number out of it as the global tempo — on material whose tempo moves it departs from `bpm` by design.
+
+#### Scoring a meter over beats you already have
+
+`estimate_meter(...)` scores a meter over a caller-supplied beat series. It reads only per-beat times and accent values, so an existing analysis can be re-scored — over a different candidate set, or over an arbitrary span of its beats — without running the pipeline again. See [Meter and grouping](./glossary/analysis/meter-and-grouping.md) for the concept.
+
+```python
+result = sonare.analyze(audio.data, audio.sample_rate)
+obs = result.beat_observations
+
+meter = sonare.estimate_meter(
+    result.beat_times,
+    obs.onset_strength if obs else result.beat_strengths,
+    candidate_numerators=(3, 4, 5, 6, 7),
+)
+if meter.searched:
+    print(meter.time_signature.numerator, meter.grouping)  # e.g. 7 [3, 2, 2]
+```
+
+Keyword options are `candidate_numerators` (default `(3, 4, 6)`), `denominator=4`, `downbeat_weight=1.0`, `measure_weight=0.5`, `subdivision_weight=0.15`, and `compound_subdivision_threshold=0.85`. Two things decide whether the answer means anything:
+
+- The default candidate set is `{3, 4, 6}`, so an odd meter comes back only if you asked for its numerator.
+- `searched` is `False` when the beat series was shorter than eight beats. Every other field then carries a fixed fallback rather than a result — **including the confidence**, so a short span's answer must not be read as a detection.
+
+`grouping` reports how the bar divides into accent groups of two and three beats and always sums to the reported numerator, so a seven comes back as `[3, 2, 2]`. Read the grouping, not the denominator, to tell a compound bar from a simple one: whether a beat divides into three is measured from energy *between* the beats, which per-beat accents do not carry, so this path reports `denominator` as requested. `candidate_scores` is parallel to the numerators you requested while `candidates` is ordered by descending support — pair a score with a numerator through your request list, never through `candidates`. Scores are standardized and signed, grow with the square root of the number of beats scored, and are comparable only within one result.
+
+#### Chord qualities
+
+`Chord.quality` is one of the strings listed under [Types](#types). Some of them are anagrams of each other and no chromagram can separate the pair: a `major6` spells the `minor7` a minor third below, a `minor6` the `halfDim7` below it, and a `dominant7Sus4` the `sus2Add4` a fourth below. The established reading stays the default in each pair, and only bass evidence promotes the sixth.
 
 For long files, `analyze_with_progress(...)` returns the same `AnalysisResult` as `analyze(...)` but accepts an `on_progress=(progress, stage)` callback, mirroring the mastering progress callbacks below:
 
@@ -469,10 +567,37 @@ See [Room Acoustics](./acoustic-analysis.md) for interpretation notes and when a
 | `voice_change_realtime(samples, sample_rate?, preset?, channels?)` | `np.ndarray` | One-shot render through the realtime voice preset chain |
 | `normalize(samples, sample_rate, target_db?)` | `list[float]` | Normalize peak level to target dB (default: 0.0) |
 | `normalize_rms(samples, sample_rate, target_db?)` | `list[float]` | Normalize RMS level to target dB (default: -20.0) |
+| `normalize_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | Peak-normalize a pair on one shared gain (`target_db` default `0.0`) |
+| `normalize_rms_stereo(left, right, sample_rate?, target_db?, *, validate?)` | `NormalizeStereoResult` | RMS-normalize a pair on one shared gain (`target_db` default `-20.0`) |
+| `remix(samples, intervals, sample_rate?, align_zeros?)` | `np.ndarray` | Reorder/concatenate by interval slices; `align_zeros` default `False` |
+| `remix_aligned_intervals(samples, intervals, sample_rate?, align_zeros?)` | `list[int]` | Resolve the cut points `remix` would use, without cutting; `align_zeros` default `True` |
 | `trim(samples, sample_rate, threshold_db?, frame_length?, hop_length?)` | `list[float]` | Trim silence (defaults: `-60.0` dB, `frame_length=2048`, `hop_length=512`) |
 | `resample(samples, src_sr, target_sr)` | `list[float]` | Resample to target sample rate |
 
 `trim(...)` is the simple threshold-based edit helper. The librosa-compatible `trim_silence(...)` helper below uses frame RMS and `top_db`, and returns the trimmed audio together with its original sample range.
+
+#### Normalizing a stereo pair
+
+Python keeps two separate stereo normalizers — `normalize_stereo` for peak and `normalize_rms_stereo` for RMS — where the JavaScript surfaces take one function and a `mode` argument. Both measure the level across the pair and apply **one shared gain to both channels**, which is what keeps the stereo image intact: normalizing each channel on its own gain would lift the quieter side until the two peaks matched, changing the balance rather than the level. Because the gain is shared, `NormalizeStereoResult.applied_gain_db` is a single figure and not a pair, and an already-silent pair comes back untouched with the gain at exactly `0`. Alongside `left` and `right` the result carries `length`, the pair's shared sample count.
+
+Either channel empty, or the two channels unequal in length, is refused. The C entry takes one sample rate for the pair, so the two channels cannot disagree on it.
+
+```python
+result = sonare.normalize_stereo(left, right, 48000, target_db=-3.0)
+print(result.length, result.applied_gain_db)
+```
+
+#### Cutting a multichannel take on one frame set
+
+`remix(..., align_zeros=True)` snaps slice boundaries to the signal's zero-crossings, which is a per-signal decision: calling `remix` channel by channel snaps each channel to a different frame and drifts a stereo take apart. `remix_aligned_intervals(...)` resolves one cut set from one channel — a flat list of clamped `(start, end)` pairs — so you can slice every channel with the same frames. Note the deliberate asymmetry in defaults: `remix` has `align_zeros=False`, `remix_aligned_intervals` has it `True`.
+
+Two guards stop a slice from vanishing under snapping: a signal with no sign change at all (silence, a DC offset, any constant) is not snapped, and a slice that had content but would collapse to empty keeps its unsnapped boundaries.
+
+```python
+cuts = sonare.remix_aligned_intervals(left, [0, 48000, 96000, 144000], sample_rate=48000)
+left_out = sonare.remix(left, cuts, sample_rate=48000)
+right_out = sonare.remix(right, cuts, sample_rate=48000)
+```
 
 ### Realtime voice changer
 
@@ -542,6 +667,7 @@ Use `realtime_voice_changer_preset_config(preset)` when you want the resolved PO
 | `nnls_chroma(samples, sample_rate, *, enable_stft_blend?, stft_blend_weight?, stft_blend_n_fft?, hop_length?)` | `tuple[int, list[float]]` | NNLS chromagram — returns `(n_frames, row-major 12 x n_frames data)`; `hop_length` defaults to `512` |
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | NMF decomposition `(w, h)` with a selectable initialiser; `init` defaults to `'random'`, also accepts `'nndsvd'` (SVD warm start) |
+| `decompose_stems(samples, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | NMF separation that masks the original complex spectrogram, so the components keep the source's phase and sum back to the input; defaults `n_components=4`, `n_iter=100`, `beta=2.0`, `init='random'`, `mask_power=1.0` |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
@@ -555,7 +681,26 @@ Common defaults: `n_fft=2048`, `hop_length=512`, `n_mels=128`, `n_mfcc=20`, pitc
 
 CQT/VQT use `fmin=32.70319566` Hz (C1), `n_bins=84`, and `bins_per_octave=12`. VQT's default `gamma=-1` selects automatic ERB-derived bandwidth. `chroma_cqt` and `chroma_cens` default to `n_chroma=12` and `bins_per_octave=36`. `hpss(...)` and `hpss_with_residual(...)` default to `kernel_harmonic=31`, `kernel_percussive=31`, `n_fft=2048`, `hop_length=512`, and `hard_mask=False`.
 
-Additional effect helpers include `remix(samples, intervals, sample_rate?, align_zeros?)`, `phase_vocoder(samples, sample_rate?, rate?)`, and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)`. Use them when you need librosa-style interval remixing, direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
+Additional effect helpers include `phase_vocoder(samples, sample_rate?, rate?)` and `hpss_with_residual(samples, sample_rate?, kernel_harmonic?, kernel_percussive?, n_fft?, hop_length?, hard_mask?)`. Use them when you need direct phase-vocoder time scaling, or HPSS with the residual signal preserved.
+
+#### NMF factors versus listenable stems
+
+`decompose` and `decompose_with_init` return the W / H factors of a **magnitude** spectrogram. Those factors carry no phase, so reconstructing audio from them needs a phase estimator, and an estimated phase does not hold up as a stem. `decompose_stems` builds a per-component soft mask from the same factorisation and applies it to the **original complex** spectrogram instead, so every component keeps the source's phase. The masks sum to one wherever the model has energy and the inverse STFT is linear, so the components sum back to the input.
+
+`mask_power` is the soft-mask exponent: `1` (the default) keeps the magnitude ratio, `2` is the Wiener-style power ratio, which separates harder at the cost of more artefacts on overlapping partials. Values below 1 are refused. `init` is `'random'` by default, or `'nndsvd'` for the SVD warm start; `beta` is the divergence (`2` = Frobenius, `1` = Kullback-Leibler).
+
+```python
+stems = sonare.decompose_stems(audio.data, audio.sample_rate, n_components=4, mask_power=2.0)
+for component in stems["components"]:
+    ...  # each is a 1-D float32 array the length of the input
+print(stems["w"].shape, stems["h"].shape, stems["sample_rate"])
+```
+
+`n_components`, `n_fft`, `hop_length` and `n_iter` carry real defaults on this entry point, so `0` is refused as a caller mistake rather than read as the "use the default" sentinel the same field means on the C ABI and the JavaScript surfaces.
+
+::: warning NNDSVD seeding is solved in double precision
+This makes the factors **reproducible**, not more accurate — and it means `decompose` and `decompose_stems` return different factors for the same input than a build that seeded in single precision did. A magnitude spectrogram's trailing singular vectors sit at single precision's noise floor, so a float seed depended on summation order and different targets answered with different components. Shapes, non-negativity and reconstruction quality are unaffected. If you hold stored factors, or compare a stem render against an older one, expect them to differ.
+:::
 
 ### Inverse Reconstruction Functions
 
@@ -631,6 +776,7 @@ helper matches.
 | `deemphasis(samples, coef?, zi?)` | `list[float]` | Inverse pre-emphasis (librosa.effects.deemphasis) |
 | `trim_silence(samples, top_db?, frame_length?, hop_length?)` | `tuple[list[float], int, int]` | `librosa.effects.trim` — returns `(audio, start_sample, end_sample)` |
 | `split_silence(samples, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | `librosa.effects.split` — non-silent intervals as sample pairs |
+| `split_silence_common(signals, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | The cut points several takes of one part agree are silent. `signals` is one sequence of sequences, so the signal count and per-signal lengths cannot disagree |
 | `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame` — returns `(n_frames, row-major frames)` |
 | `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
 | `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |
@@ -704,7 +850,7 @@ class KeyProfile(IntEnum):
 class Key:
     root: PitchClass
     mode: Mode
-    confidence: float
+    confidence: float  # softmax share over the scored candidates, in [0, 1)
     name: str          # property -> "C major", "A minor"
     short_name: str    # property -> "C", "Am"
 
@@ -723,7 +869,10 @@ class Chord:
     quality: str             # "major", "minor", "diminished", "augmented",
                              #   "dominant7", "major7", "minor7", "sus2", "sus4",
                              #   "add9", "minorAdd9", "dim7", "halfDim7",
-                             #   "major9", "dominant9", "sus2Add4", "unknown"
+                             #   "major9", "dominant9", "sus2Add4",
+                             #   "major6", "minor6", "minorMajor7",
+                             #   "dominant7Sus4", "dominant11", "dominant13",
+                             #   "dominant7Flat9", "dominant7Sharp9", "unknown"
     start: float             # segment start (seconds)
     end: float               # segment end (seconds)
     confidence: float
@@ -734,13 +883,22 @@ class Chord:
 class ChordAnalysisResult:
     chords: list[Chord]      # return type of detect_chords(...)
 
+class AnalysisBeatObservations:
+    onset_strength: list[float]        # windowed accent value, one per beat
+    low_frequency_energy: list[float]
+    chord_change: list[float]
+
 class AnalysisResult:
     bpm: float
     bpm_confidence: float
     key: Key
     time_signature: TimeSignature
     beat_times: list[float]
-    beat_strengths: list[float]    # per-beat strength
+    beat_strengths: list[float]    # one raw, unbounded onset-envelope frame per beat
+    downbeat_indices: list[int]    # positions within beat_times that are bar starts
+    downbeat_phase: int            # which beat of the first bar the analysis starts on
+    beat_local_bpm: list[float]    # parallel to beat_times; empty unless
+                                   #   compute_tempo_curve=True
     bpm_candidates: list[BpmHypothesis]
     time_signature_candidates: list[TimeSignature]
     beats: list[Beat]              # property: per-beat objects with strength
@@ -751,9 +909,24 @@ class AnalysisResult:
     dynamics: AnalysisDynamics | None
     rhythm: AnalysisRhythm | None
     melody: AnalysisMelody | None
+    beat_observations: AnalysisBeatObservations | None
     form: str
     # The focused detect_chords() / analyze_sections() / analyze_timbre() / ...
     # functions remain useful for a single facet or per-call options.
+
+class MeterEstimate:
+    time_signature: TimeSignature
+    downbeat_phase: int
+    searched: bool                 # False = the series was too short to score
+    grouping: list[int]            # accent groups, e.g. [3, 2, 2]; sums to numerator
+    candidate_scores: list[float]  # parallel to the numerators you requested
+    candidates: list[TimeSignature]  # ordered by descending support
+
+class NormalizeStereoResult:
+    left: list[float]
+    right: list[float]
+    length: int
+    applied_gain_db: float         # one gain, applied to both channels
 
 class HpssResult:
     harmonic: list[float]

@@ -152,6 +152,11 @@ cmake ..                         # FFmpeg を自動検出
 
 cmake --build . --parallel
 
+# 任意: アーカイブ、2 つのヘッダーツリー、CMake のパッケージファイル、
+# ネイティブ CLI をプレフィックス配下にインストールする
+# （他のプロジェクトから find_package() で参照できるようになる）
+cmake --install . --prefix /your/prefix
+
 # WebAssembly をビルド（build/ ではなくリポジトリルートで実行）
 cd .. && make wasm
 ```
@@ -262,3 +267,16 @@ sonare::AnalysisResult result = sonare::quick::analyze(samples, size, sample_rat
 
 - 使う機能に応じて、`acoustic/rir_synthesizer.h`、`analysis/room_estimator.h`、`effects/acoustic/room_morph.h` のいずれかをインクルードする。
 - `BUILD_ACOUSTIC_SIM=ON` でビルドする。
+
+インストール済みのビルドを自分の CMake プロジェクトから使う場合は次のようにします。
+
+```cmake
+find_package(sonare REQUIRED)
+target_link_libraries(app PRIVATE sonare::sonare)
+```
+
+`sonare::sonare` は、そのインストールに含まれる静的アーカイブすべてを束ねた集約ターゲットです。どのアーカイブが必要かを自分で見極める必要はありません。各サブシステムは単独でもエクスポートされており、内蔵インストゥルメントで MIDI をレンダリングするだけのアプリなら `sonare::midi` だけで足ります。
+
+ヘッダーは、実際の書かれ方に合わせて 2 か所にインストールされます。C ABI は名前空間付きの綴り `<sonare/sonare_c.h>` のままです。C++ ツリーはヘッダー同士がソースルートからの相対パスで include し合う構造なので、`include/sonare/cpp` 配下にツリーごとインストールされます。その結果 `#include "sonare.h"` と `#include <sonare/cpp/sonare.h>` の両方が解決でき、`core/audio.h` のような一般的なパスが利用側の include ルートに現れることもありません。
+
+ターゲットの一覧、コンポーネント名の規則、どれが存在するかを決めるビルドフラグについては [リンクターゲット](./cpp-api.md#リンクターゲット) を参照してください。

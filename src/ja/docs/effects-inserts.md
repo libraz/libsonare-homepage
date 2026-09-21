@@ -23,12 +23,33 @@ description: libsonare のミキシング／リアルタイムエンジン向け
 |-----|----------|
 | `masteringInsertNames()` | 有効なインサート id の全リスト |
 | `masteringInsertParamNames(name)` | 1 つのインサートが受け付ける構築用キー（バンド／サブバンド型はインデックス付きの `band{i}.*` キーを列挙し、未知の名前には空配列を返す） |
-| `masteringInsertParamInfo(name)` | リアルタイムオートメーション可能なサブセット。各パラメータの JSON キー、数値のオートメーション id、リアルタイム安全フラグ |
+| `masteringInsertParamInfo(name)` | リアルタイムオートメーション可能なパラメータごとの完全な記述子。[パラメータ記述子](#パラメータ記述子)を参照 |
 | `masteringProcessorCatalog()` | `kind`、`realtimeInsertable`、`stereoOnly`、`latencySamples`、`tailSamples`、`channelPolicy` を持つ機械処理しやすいエントリ。代表的な既定構成（48 kHz／512 サンプル）のプローブでレイテンシと可聴な減衰テールを返し（オフライン専用はどちらも 0）、構成依存の正確なレイテンシは実際のプロセッサへ問い合わせます。プロセッサ ID をハードコードせず能力で絞り込めます。 |
 
 Python の対応関数は `mastering_insert_param_names(name)`、`mastering_insert_param_info(name)`、`mastering_processor_catalog()` です。
 
 一覧外のキーはプロセッサに無視され、そのキーを含むシーンを読み込むと [`Mixer.sceneWarnings()`](./mixing-scene-json.md) が報告します。
+
+### パラメータ記述子
+
+`masteringInsertParamInfo(name)` は、リアルタイムオートメーション可能なパラメータごとに記述子を 1 つ返します。記述子は次の 8 フィールドをすべて持ち、省略可能なフィールドはありません。
+
+| フィールド | 型 | 意味 |
+|------------|----|------|
+| `name` | `string` | シーンインサートの params で使う JSON キー |
+| `id` | `number` | リアルタイムオートメーションや MIDI CC 紐付けに使う整数のパラメータ id |
+| `rtSafe` | `boolean` | インサート稼働中にオーディオスレッドから値を変更できるか |
+| `type` | `'number'` \| `'boolean'` | 設定ビルダーがそのキーをどの型として読むか |
+| `min` | `number` \| `null` | 受理される最小値。カタログが制限を把握していない場合は `null` |
+| `max` | `number` \| `null` | 受理される最大値。カタログが制限を把握していない場合は `null` |
+| `default` | `number` \| `boolean` \| `null` | キーを省略したときに使われる値 |
+| `unit` | `string` \| `null` | 物理単位（`dB`、`Hz`、`ms`、`samples`）。無次元のパラメータは `null` |
+
+`unit` は省略可能フィールドではなく `string | null` です。無次元のパラメータはキーを省くのではなく `null` を返すため、ホストは存在チェックなしにすべての記述子から 8 フィールドを読めます。`min` / `max` / `default` は `capabilityCatalog()` に載る値と同じで、その出どころとどこまで信頼できるかは[カタログの値域の読み方](./mastering-processors.md#カタログの値域の読み方)で説明しています。
+
+::: info 記述子の一覧は構築用キーの一覧より狭い
+`masteringInsertParamNames(name)` はインサートが構築時に受け付けるキーをすべて列挙します。`masteringInsertParamInfo(name)` が扱うのは、その後オートメーションできるサブセットだけです。そのため、インサート構築時に決めるしかないキー — トポロジーの選択、渡すインパルス応答、その IR を収録したサンプリングレート — には記述子がありません。差が最も大きいのは `saturation.ampSim` で、キャビネットとマイク関連のキーはほとんどが構築時専用です。ピッカーはパラメータ名から、オートメーション面は記述子から組んでください。両者は同じ一覧ではありません。
+:::
 
 ## クリエイティブ FX インサートのカタログ
 
@@ -76,6 +97,14 @@ Python の対応関数は `mastering_insert_param_names(name)`、`mastering_inse
 | `effects.delay.stereo` の params | `delayTimeLMs`、`delayTimeRMs`、`feedback`、`pingPong`、`dryWet` |
 | `effects.reverb.convolution` | ネイティブの insert 構築時にインパルス応答を渡す必要がある |
 | IR のない convolution insert | 実質的にパススルーとして動作する |
+
+::: warning 幾何ベースのルーム系インサートは `absorption` をクランプせず検証する
+`effects.reverb.room` と `effects.acoustic.roomMorph` は、`[0, 1]` に正規化した吸音係数 `absorption` を受け取ります。この区間から外れた値は**拒否**され、最も近い有効な値に丸めて構築されることはありません。
+
+クランプの方が一見親切ですが、ここでは適切ではありません。百分率や別スケールの反射係数、あるいは dB 値を正規化済みのフィールドへ渡した場合、意図しない部屋がそのまま構築され、テイルが短すぎる／長すぎるという形でしか誤りが表に出ません。同じ係数を渡す他の経路 — これらのインサートのバンド別 absorption 配列と、オフラインのルームインパルス合成のファサード — はすでにパラメータエラーを返すため、スカラー経路も同じ挙動にしています。
+:::
+
+幾何ベースのルーム系インサートは、空気吸収のコントロールも受け取ります。`airAbsorptionEnabled`（既定は OFF）、`airTemperatureC`、`airHumidityPercent` の 3 つです。オフラインのファサードとまったく同じオプション解決を通るため、インサートとして構築した部屋と `synthesizeRir(...)` で構築した同じ部屋は一致します。気象条件の `0` がリテラルのゼロではなく ISO の基準気象条件を選ぶ、という規則も共通です。[ルーム音響解析](./acoustic-analysis.md#後期残響モデルとテールのコントロール) を参照してください。
 
 ::: details これらのリバーブアルゴリズムの違いは？
 いずれも残響のテイルを生成する方式の違いです。正しさではなく、欲しい質感で選んでください — どれも有効です。

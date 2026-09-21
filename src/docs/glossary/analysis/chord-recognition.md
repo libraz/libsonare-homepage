@@ -19,9 +19,13 @@ That is why recognition works on chroma rather than the raw spectrum.
 
 ## Templates over chroma
 
-libsonare compares each frame or beat-synchronous chroma summary against a set of chord templates. These cover the four triads — major, minor, diminished, and augmented — as well as richer qualities that add or alter notes: sevenths, ninths, add9, half-diminished, and sus voicings. The result is a best matching root and quality for each region.
+libsonare compares each frame or beat-synchronous chroma summary against a set of chord templates. These cover the four triads — major, minor, diminished, and augmented — as well as richer qualities that add or alter notes: sevenths, ninths, add9, half-diminished, and sus voicings. Beyond those sit the sixth chords (`6`, `m6`), the minor-major seventh (`mM7`), `7sus4`, and the dominant extensions and alterations (`11`, `13`, `7b9`, `7#9`). The result is a best matching root and quality for each region.
 
-By default, everything outside the triad group must beat the best triad by an extra margin before it is preferred. This keeps noisy chroma from turning plain triads into unstable extensions. Note that sus2 and sus4 are three-note chords but sit on the non-triad side of that comparison, so they pay the margin too.
+By default, everything outside the triad group must beat the best triad by an extra margin before it is preferred. This keeps noisy chroma from turning plain triads into unstable extensions. There are two margins, not one: a seventh chord needs 0.05 more correlation than the best triad, and a quality from the extended group needs 0.09. Note that sus2 and sus4 are three-note chords but sit on the non-triad side of that comparison, so they pay a margin too.
+
+::: info Why the extended qualities pay more
+They are the confusable ones, and the confusion is exact rather than approximate. A `maj6` spells the same four pitch classes as the `m7` a minor third below it; a `m6` spells the same set as the `m7b5` below it; a `7sus4` spells the same set as the `sus2add4` a fourth below. Nothing in a chromagram separates those pairs — only the bass evidence below can — so the established reading stays the default and the sixth is promoted only when the low register names its root.
+:::
 
 ## Timing and smoothing
 
@@ -33,14 +37,23 @@ Beat synchronization needs a list of beat times, and only the whole-track analys
 
 Optional HMM smoothing (a hidden Markov model, which favors sequences of chords that follow one another plausibly rather than judging each region in isolation) can run over the chord candidates, with optional key context, to further suppress jitter. In streaming mode, chord estimates update over time and should be treated as provisional until enough context accumulates.
 
+The transition model grades cadences rather than scoring them all alike. `V7 -> I` and `v -> i` are the same two scale degrees, so a test that looks only at root motion cannot tell them apart — and it is the dominant's tritone that actually resolves, the strongest harmonic cue there is. A cadence whose dominant carries that tritone is therefore favoured over one spelled with the expected qualities, which in turn is favoured over cadential root motion carrying a quality that does not pull.
+
 ## Common confusions
 
 Harmonically close chords share notes, so substitutions happen. C major and A minor 7 share three pitch classes, and a chord plus a passing melody note can look like a richer extension.
 
+Folding twelve pitch classes into one vector is what causes it. A chord and its relative — A and F#m share two of three tones — leave almost the same chroma evidence, and nothing in that vector says which of the shared tones is the root.
+
+The bass register carries exactly that cue, so the recogniser adds a low-register salience term to each template's score: a candidate whose root the bass sounds is preferred. Two things about how it is applied matter more than the term itself.
+
+- **It is a tie-breaker, not an override.** The bass names the root only in root position. A weight large enough to overturn a clear chroma decision would relabel every inversion after its own bass note, which is worse than the confusion it fixes.
+- **It measures what the low register *adds*, not what it says on its own.** The candidate root's share of the low-register energy has the same share taken over the harmonic chroma subtracted from it, leaving only the part of the bass evidence the chroma did not already carry. On material with no bass part the low-register chromagram is a scaled copy of the harmonic one, the two shares cancel, and the term decides nothing rather than nominating whichever pitch class the leakage happened to favour.
+
 Expect occasional swaps between neighboring chords. Recognition is strongest on clean, sustained material and weakest on dense or distorted mixes, where overtones blur the chroma the templates read.
 
 ::: details How libsonare computes it
-`ChordAnalyzer` builds STFT or NNLS chroma, scores templates by correlation, prefers triads unless a non-triad template clears the configured margin, and merges short segments below `minDuration`. Defaults include `minDuration = 0.3`, `smoothingWindow = 2.0`, `threshold = 0.5`, `nFft = 2048`, `hopLength = 512`, and `useBeatSync = true` — the last of which is honored only by the constructor that receives beat times, so it has no effect on `detectChords()`. Public bindings expose chord roots, qualities, timing, confidence, and optional inversion/key/HMM options depending on the binding.
+`ChordAnalyzer` builds STFT or NNLS chroma, scores templates by correlation plus the low-register root term (`bass_root_weight`, C++ only; 0 disables it), prefers triads unless a non-triad template clears its margin — `kTetradThreshold` 0.05 for the sevenths, `kExtendedQualityThreshold` 0.09 for the extended qualities — and merges short segments below `minDuration`. Defaults include `minDuration = 0.3`, `smoothingWindow = 2.0`, `threshold = 0.5`, `nFft = 2048`, `hopLength = 512`, and `useBeatSync = true` — the last of which is honored only by the constructor that receives beat times, so it has no effect on `detectChords()`. Public bindings expose chord roots, qualities, timing, confidence, and optional inversion/key/HMM options depending on the binding.
 :::
 
 Related: [Chroma Features](./chroma-features.md), [Key Detection](./key-detection.md), [Beats and Downbeats](./beats-downbeats.md)

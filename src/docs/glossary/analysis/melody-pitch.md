@@ -44,6 +44,17 @@ To track a melody inside a busy track, isolate the line first with a stem, [HPSS
 
 Not every frame has a pitch. Rests, unvoiced consonants ("s", "t"), and percussion have no clear F0. A naive tracker will still report some number for these frames, producing a jumpy, meaningless line. Voicing detection, which pYIN is designed to provide, marks those frames as unpitched so the melody line has gaps where the music does.
 
+pYIN returns that decision twice over, and the two are not interchangeable. `voiced` is the Viterbi path's voiced/unvoiced state — the decision itself, and what a consumer should gate on.
+
+::: warning `voicedProb` rises with pitch, not with confidence
+`voicedProb` is not a signal-quality confidence. It is the frame's voiced observation *mass*: the summed probability of its voiced pitch hypotheses. That mass depends on how many periods of the pitch fit inside the analysis frame, because the difference-function troughs of a long period measured over a short frame are shallower. For a fixed frame length it therefore climbs with F0 even when the signal is identical — a steady three-harmonic tone at 2048 samples / 48 kHz averages well under 0.1 at C2 and around 0.5 at C5, with every frame flagged voiced throughout.
+
+Two consequences follow:
+
+- a fixed threshold on it silently returns no note segments at all for low-register material. Pass the `voiced` flags as 0.0/1.0 instead, or lower `voicedThreshold` (default 0.5);
+- it is not a correction weight. Time-varying pitch correction does not scale its per-frame correction amount by it — it reads the value only to derive voicing when no explicit `voiced` array is supplied, so passing one alongside `voiced` changes nothing.
+:::
+
 <SonareDemo id="melody-contour" />
 
 ::: details How libsonare tracks pitch

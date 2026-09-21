@@ -344,9 +344,30 @@ sonare project bounce --in song.json -o master.wav --synth
 sonare project bounce --in song.json -o master.wav --synth saw
 sonare project bounce --in song.json -o pad.wav --synth warm-pad
 
+# 未解決のオーディオソースを持つプロジェクトは、先にサンプルの供給が必要です。
+# 各ソース自身の file:// URI を一括で開く...
+sonare project bounce --in song.json -o master.wav --resolve-audio
+
+# ...またはソースを ID で明示的に 1 つずつバインドする（ソースごとに繰り返し指定）
+sonare project bounce --in song.json -o master.wav --audio 1=vocals.wav
+
 # まず確認: コンパイル診断（インストゥルメント未バインド警告を含む）
 sonare project compile --in song.json --json
 ```
+
+プロジェクトの `sources` エントリはオーディオを URI だけで参照し、ライブラリ自身はそれを開きません。そのため、クリップがオーディオを参照するプロジェクトは、コマンドラインがサンプルを供給するまで何もレンダリングしません。`--resolve-audio` はドキュメントのソースがすでに持っている `file://` URI を開きます。それ以外のスキームはスキップされるのではなく、名指しで拒否されます。
+
+```
+Error: source 1 (https://example.com/take.wav): --resolve-audio opens file:// URIs only; pass --audio 1=FILE
+```
+
+`--audio <source_id>=WAV` は、プロジェクトの `sources` 配列（または下の拒否メッセージ）にある数値 ID でソースを指定し、デコード済みのファイルを 1 つのソースへバインドします。ソースごとにこのフラグを繰り返してください。レンダリング開始時にまだ未解決のソースがあると、その ID・URI・それを供給できたはずのオプションとともに拒否されます。
+
+```
+Error: source 1 (file:///song/vocals.wav) has no audio; pass --audio 1=FILE or --resolve-audio
+```
+
+バインドされたソースは、デコード元のファイルのチャンネル数をそのまま保ちます。モノラルのテイクをバインドしても、ステレオへアップミックスされることはありません。`midi-render` はどちらのフラグも受け付けません。未解決のオーディオソースを持つプロジェクトを `midi-render` でバウンスすると、`midi-render` が持たないオプションを名指しするメッセージではなく、素の `Error: [7] Invalid state` が発生します。
 
 `--synth` フラグは 2 通りに読まれます。プリセットを指定しない `--synth` はプロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングされ、マップがカバーしないものは `sine` パッチへフォールバックします。プロジェクトが本物の GM プログラムを持つときはこちらを選びます。`--synth <preset>` はすべてのデスティネーションを、`sonare_synth_preset_patch` が受け付ける固定の 1 つの NativeSynth プリセット——つまり[フルの NativeSynth プリセットカタログ](./native-synth.md)（`--synth warm-pad`、`--synth saw-lead` など）へ固定します。名前の一覧は `sonare project synth-presets` で取得できます。SF2 と出力先ごとの synth JSON は引き続きバインディング専用（WASM／Node／Python）です。SoundFont を使うバウンスには Project API を使ってください。ほかに `project new`、`project validate`、`project synth-presets`、`project abi` も使えます。
 

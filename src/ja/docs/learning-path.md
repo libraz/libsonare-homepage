@@ -16,28 +16,33 @@
 2. [学習順ガイド](./learning-path.md) で、解析・ストリーミング・編集・ミキシング・マスタリング・研究用途のどれを作るか決める。
 3. [はじめに](./getting-started.md)、[インストール](./installation.md)、[使用例](./examples.md) で小さなプログラムを 1 つ動かす。
 4. [機能マップ](./api-surface.md) で必要な API ファミリーを探す。
-5. **作りたいもの別** から該当する機能ガイドを 1 つ読む。
-6. **利用環境別 API** から実行環境に合うリファレンスを 1 つ読む。
-7. 実装詳細、アルゴリズム根拠、検証範囲、性能が必要になったときだけ、詳説ページを読む。
+5. 組み込みではなく完成した成果物が目的なら、**[実践ユースケース](./use-cases.md)** から通し手順を 1 つ読む。
+6. **作りたいもの別** から該当する機能ガイドを 1 つ読む。
+7. **利用環境別 API** から実行環境に合うリファレンスを 1 つ読む。
+8. 実装詳細、アルゴリズム根拠、検証範囲、性能が必要になったときだけ、詳説ページを読む。
 
 ## 作りたいものから選ぶ
 
 | 作りたいもの | 最初に読むページ | 次に読むページ |
 |--------------|------------------|----------------|
 | BPM、キー、コード、セクションを表示するブラウザアプリ | [はじめに](./getting-started.md) | [WebAssembly ガイド](./wasm.md)、[JavaScript API](./js-api.md) |
-| 曲構造、自己類似度、ノート区間を解析するツール | [機能マップ](./api-surface.md) | [JavaScript API](./js-api.md#librosa-互換ヘルパー)、[Python API](./python-api.md#特徴抽出) |
+| 曲構造、自己類似度、ノート区間を解析するツール | [機能マップ](./api-surface.md) | [JavaScript API](./js-api-analysis.md#librosa-互換ヘルパー)、[Python API](./python-api.md#特徴抽出) |
+| すでに手元にあるビート列から小節と拍子記号を求める | [拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) | [Node API](./node-api.md)、[Python API](./python-api.md) |
 | 音声解析を行う Python スクリプトやノートブック | [はじめに](./getting-started.md#python) | [Python API](./python-api.md) |
 | ターミナルでの簡易確認やバッチ解析 | [はじめに](./getting-started.md#cli-コマンドライン) | [CLI リファレンス](./cli.md) |
-| ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#オーディオエフェクト) |
+| ステムからマスターまで、あるいは納品前チェックまでをターミナルで完結させる | [実践ユースケース](./use-cases.md) | [CLI でミックスからマスタリングまで](./use-cases/cli-mix-and-master.md)、[CLI リファレンス](./cli.md) |
+| ピッチ、長さ、声質、音源分離の編集 | [編集 DSP](./editing-dsp.md) | [JavaScript API](./js-api-effects.md#オーディオエフェクト) |
 | 領域指定のスペクトル編集（時間×周波数の矩形を減衰・ミュート・ゲイン・修復） | [スペクトル編集](./spectral-editing.md) | [編集 DSP](./editing-dsp.md) |
 | ブラウザまたはネイティブのミキサー | [ミキシングエンジン](./mixing.md) | [ミキシングシーン JSON](./mixing-scene-json.md) |
+| トラックそのものを計測してミックスの出発点を提案させ、判断ごとの理由も受け取る | [ミキシングアシスタント](./mixing-assistant.md) | [ミキシングシーン JSON](./mixing-scene-json.md)、[ミキシングエンジン](./mixing.md) |
 | マスタリング UI や自動マスタリング | [マスタリングアシスタント](./mastering-assistant.md) | [マスタリングプロセッサ](./mastering-processors.md) |
 | MIDI を音声にレンダリングするシンセ／インストゥルメントアプリ | [内蔵シンセサイザー](./native-synth.md) | [MIDI 入力](./midi-input.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| 解析やマスタリングは使わず、インストゥルメントだけが必要な C++ アプリ | [リンクターゲット](./cpp-api.md#リンクターゲット) | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md) |
 | DAW、アレンジ、MIDI シーケンスツール | [プロジェクト編集](./project-editing.md) | [MIDI 入力](./midi-input.md)、[プロジェクトバウンス](./project-bounce.md) |
 | 内蔵プレイヤーでの SoundFont（SF2）再生 | [SoundFont 2 プレイヤー](./soundfont-player.md) | [内蔵シンセサイザー](./native-synth.md)、[MIDI 入力](./midi-input.md) |
 | ライブ可視化、リズムゲーム補助、AudioWorklet ツール | [リアルタイムとストリーミング](./realtime-streaming.md) | [WebAssembly ガイド](./wasm.md#ストリーミング解析) |
 | マイク入力のリアルタイムボイスチェンジャー | [リアルタイムボイスチェンジャー](./realtime-voice-changer.md) | [WebAssembly ガイド](./wasm.md#リアルタイムボイスチェンジャー) |
-| ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
+| ルームの響き、推定、生成された部屋らしさ | [ルーム音響解析](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api.md#ルーム音響解析) |
 | メル／MFCC 特徴量をプレビューやデバッグ用に逆変換する | [逆変換特徴量](./inverse-features.md) | [librosa 互換性](./librosa-compatibility.md) |
 | librosa からの移行 | [librosa 互換性](./librosa-compatibility.md) | [機能マップ](./api-surface.md) |
 

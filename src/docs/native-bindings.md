@@ -78,6 +78,22 @@ yarn install
 yarn build
 ```
 
+### ABI Versions
+
+A binding and the shared library it loads must come from the same tree. The C ABI carries a version per subsystem, each one guarding the exact size and member offsets of that subsystem's flat POD structs, and a binding compares them on load so a layout mismatch is caught before a single byte is exchanged. The practical rule: rebuild the library whenever you rebuild the binding, and never point a binding at a shared library from another checkout.
+
+| ABI | Current | Covers |
+|-----|---------|--------|
+| Feature | 5 | the flat analysis and feature-result structs — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
+| Project | 1 | the headless-DAW project and arrangement structs. Reports `0` in a build without arrangement support |
+| Voice changer | 2 | the realtime voice-changer configuration struct |
+| Acoustic | 4 | the room-acoustics structs |
+| Engine | 3 | the realtime command queue |
+
+`sonare_abi_version()` packs the first four into one `uint32_t` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — so one comparison covers all of them; that packed value is what the Python binding checks when it loads the library. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct.
+
+Additive struct changes are gated on a per-struct `struct_version` so existing C callers keep their behaviour at both source and call level. `SonareNoteSegmenterConfig` is the case to know: it carries a trailing `voiced_threshold` read only when `struct_version` is `2`, so a config filled the way it always was is unaffected, and a zero-initialized one keeps the 0.5 default. What does change is the version the library reports — which is why the library has to be rebuilt alongside the binding even when your own code is untouched.
+
 ## Mastering API
 
 Node users can choose between the WASM npm package and the native addon:
@@ -194,16 +210,49 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 
 | Group | API names |
 |-------|-----------|
-| Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masterAudio()`, `masterAudioStereo()`, `masterAudioWithProgress()`, `masterAudioStereoWithProgress()` |
+| Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masteringPlatformNames()`, `masterAudio()`, `masterAudioStereo()`, `masterAudioWithProgress()`, `masterAudioStereoWithProgress()` |
 | Full chains | `masteringChain()`, `masteringChainStereo()`, `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
 | Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
-| Offline repair (one-shot) | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
-| Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringStreamingPreview()`, `masteringAudioProfileStereo()`, `masteringAssistantSuggestStereo()`, `masteringStreamingPreviewStereo()` |
+| Offline repair — mono | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
+| Offline repair — stereo pair | `masteringRepairDeclickStereo()`, `masteringRepairDeclipStereo()`, `masteringRepairDecrackleStereo()`, `masteringRepairDehumStereo()`, `masteringRepairDenoiseClassicalStereo()`, `masteringRepairDereverbClassicalStereo()`, `masteringRepairTrimSilenceStereo()` |
+| Offline repair — channel-linked (any channel count) | `masteringRepairDenoiseClassicalLinked()`, `masteringRepairDereverbClassicalLinked()` |
+| Repair measurement (no audio returned) | `masteringRepairDetectClicks()`, `masteringRepairDetectClipping()`, `masteringRepairDetectCrackle()`, `masteringRepairDetectHum()`, `masteringRepairDetectNoiseFloor()`, `masteringRepairDetectReverb()`, `masteringRepairDetectTrimRange()`, `masteringRepairDetectTrimRangeStereo()`, `masteringRepairNoiseBandBins()`, `masteringRepairDereverbConfigForRoom()` |
+| Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringAssistantSuggestChain()`, `masteringStreamingPreview()`, `masteringAudioProfileStereo()`, `masteringAssistantSuggestStereo()`, `masteringAssistantSuggestChainStereo()`, `masteringStreamingPreviewStereo()`, `masteringAbMatchLoudness()` |
 | Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name)`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
 
 Node native uses the same base names but folds progress into an optional final callback argument instead of exporting separate `*WithProgress` helper functions.
+
+### Repair entry points
+
+Every repair function accepts either a request object or the positional form, on both packages. What differs is the input arity and what comes back:
+
+| Shape | Call | Returns |
+|-------|------|---------|
+| Mono | `masteringRepairDeclick(samples, sampleRate, options?)` | the repaired `Float32Array` |
+| Stereo pair | `masteringRepairDeclickStereo(left, right, sampleRate, config?)` | the repaired pair plus its report fields |
+| Channel-linked | `masteringRepairDenoiseClassicalLinked(channels, sampleRate, config?)` | `{ channels, report }` — one output per input channel, in input order |
+| Measurement | `masteringRepairDetectClicks(samples, sampleRate, options?)` | a detection report; no audio |
+
+A stereo repair is not two mono calls, which is the reason to prefer it. The decision that would move the stereo image is shared across the pair, and only the part that safely varies is per channel — so a common-mode click either channel's detection selects is repaired in both, and a denoise mask is built from the channel-summed power and applied unchanged to both sides.
+
+The result's report fields follow that split, so read them accordingly:
+
+| Function | Report fields |
+|----------|---------------|
+| `masteringRepairDeclickStereo()`, `masteringRepairDeclipStereo()`, `masteringRepairDecrackleStereo()`, `masteringRepairDehumStereo()` | `leftReport` and `rightReport`. Each channel is filled or filtered from its own samples, so the two genuinely differ |
+| `masteringRepairDenoiseClassicalStereo()`, `masteringRepairDereverbClassicalStereo()` | one shared `report` — there is one mask, so there is one thing to report |
+| `masteringRepairTrimSilenceStereo()` | one shared `report` plus `leftRange` and `rightRange` |
+
+The `*Linked` pair takes `channels: Float32Array[]` instead of a left/right pair and carries the same one-mask reasoning to any channel count, including a single channel. Note that a linked report's `detected` level is the set's and moves with the channel count — N identical channels read `10*log10(N)` above one of them, about 3 dB for a pair — while every other field is a fraction and does not.
+
+The measurement helpers take the same options type as the repair they belong to, so you can measure with the exact configuration you are about to run. Two of them are not per-signal measurements at all:
+
+- `masteringRepairNoiseBandBins(nFft?, sampleRate?)` returns the 33 `Int32Array` bin indices that describe the band grid `masteringRepairDetectNoiseFloor()` reports its `bandFloorDbfs` on — the first bin of each of the 32 bands plus the one-past-the-end bin of the last. Only the analysis geometry decides the grid, so it takes no denoise config. Where two consecutive entries are equal the band is empty and its level is a sentinel rather than a measurement.
+- `masteringRepairDereverbConfigForRoom(estimate, config?)` fills a complete dereverb configuration from an `estimateRoom(...)` result, so a measured room can drive the repair instead of hand-tuned numbers.
+
+Two more entry points sit beside the assistant rather than the repair family. `masteringPlatformNames()` lists the delivery targets the assistant accepts as `targetPlatform`, read from the library rather than from a list kept in the binding, so a target added in the core is discoverable without a binding change. `masteringAbMatchLoudness({ source, reference, sampleRate })` gain-matches `source` to `reference`'s loudness for A/B listening and returns the matched samples alongside `referenceLufs`, `sourceLufs`, `appliedGainDb`, and `matchedTruePeakDbtp`; the reference is measured and returned untouched. The gain has no upper bound on purpose, so `matchedTruePeakDbtp` can sit above 0 dBTP — clamping to headroom would leave a near-full-scale source at its own loudness, which is the one thing a loudness match must not do. Limit downstream when the peak matters more than the match.
 
 ## Mixing API
 
@@ -225,7 +274,23 @@ The guides carry the depth: [Project Editing](./project-editing.md), [Bouncing P
 
 ## Error Handling
 
-Like the WASM package, the native addon throws a structured `SonareError` on every native failure: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. See [Error Handling](./js-api.md#error-handling) for the code table and a usage example.
+Like the WASM package, the native addon throws a structured `SonareError` on every native failure: an `Error` subclass with a numeric `code` and its canonical `codeName`, mirroring the C ABI error enum. Both packages export `ErrorCode`, `SonareError`, and the `isSonareError(value)` type guard, and the same failure reports the same numeric code on every binding. See [Error Handling](./js-api-types.md#error-handling) for the code table and a usage example.
+
+`SonareError` is a runtime class on both packages, so importing the name by value gets you a constructor rather than `undefined`, and a shared TypeScript module can import it from either package and find the same *kind* of thing. Its `instanceof` is brand-based rather than prototype-based — it narrows any `Error` named `SonareError` that carries a numeric `code`:
+
+```typescript
+import { ErrorCode, isSonareError, SonareError } from '@libraz/libsonare-native'
+
+try {
+  // ...
+} catch (err) {
+  if (err instanceof SonareError && err.code === ErrorCode.InvalidParameter) {
+    console.error(err.codeName, err.message)
+  }
+}
+```
+
+That matters in two cases a prototype check would miss. The addon raises plain `Error` objects carrying the shape rather than constructing the class, and an error that crossed a worker or `structuredClone()` boundary has lost its prototype; both still narrow. `isSonareError(value)` is the same duck-typed check written as a type guard — `instanceof` delegates to it, so the two never disagree, and either is fine to use. Constructing a `SonareError` directly is supported for re-raising a native failure across a boundary that does not preserve prototypes.
 
 ## Audio Method Differences
 

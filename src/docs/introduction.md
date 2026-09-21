@@ -167,7 +167,7 @@ The high-level results that most users care about are built **on top of** the fe
 | Analysis | Built from | What it does |
 |----------|-----------|-------------|
 | **Key Detection** | Chroma → Krumhansl-Schmuckler algorithm | Determines the musical key (e.g., "A minor") by comparing chroma profiles against key templates |
-| **Chord Recognition** | Chroma → template matching | Identifies chords over time by matching chroma frames against 192 chord templates (16 qualities × 12 roots) |
+| **Chord Recognition** | Chroma → template matching | Identifies chords over time by matching chroma frames against per-root chord templates — 4 triad qualities by default, or 24 qualities across 12 roots once the full template set is enabled |
 | **BPM Detection** | Onset envelope → tempogram + autocorrelation | Estimates tempo by finding periodic patterns in onset strength |
 | **Beat Tracking** | Onset envelope → dynamic programming | Finds exact beat timestamps by optimizing for rhythmic regularity |
 | **Section Detection** | Chroma + spectral features → self-similarity | Segments the song into Intro, Verse, Chorus, etc. by detecting boundaries where musical character changes |

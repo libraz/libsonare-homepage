@@ -1,6 +1,6 @@
 ---
 title: Warp and Tempo Sync
-description: How warping makes an audio clip follow the project tempo — off, repitch, and tempo-sync modes, warp anchors, and the tempo map — explained from scratch for newcomers to libsonare's editing engine.
+description: How warping makes an audio clip follow the project tempo — the off, repitch, tempo-sync, and time-stretch modes, warp anchors, and the tempo map — explained from scratch for newcomers to libsonare's editing engine.
 ---
 
 # Warp and Tempo Sync
@@ -30,14 +30,15 @@ The grid is the thing a clip warps *to*, so it helps to see how tempo turns musi
 
 <SonareDemo id="tempo-grid" />
 
-## The three warp modes
+## The warp modes
 
 Every audio clip has a **warp mode** that decides *how* (or whether) it follows the grid.
 
-::: tip off vs repitch vs tempo-sync
+::: tip off vs repitch vs tempo-sync vs time-stretch
 - **off** — no stretching. The clip plays at its native speed and pitch, ignoring the project tempo. Use this for one-shots and sound effects that should not bend.
 - **repitch** — like changing the speed of a tape. The clip is sped up or slowed down to fit the tempo, and the **pitch moves with it**: faster means higher, slower means lower. Simple, CPU-cheap, and musically useful when you *want* that vintage varispeed character.
 - **tempo-sync** — follow the tempo while **keeping the original pitch**. The clip is time-stretched so its timing matches the grid, but a phase vocoder — an algorithm that stretches audio in the frequency domain — holds the pitch constant. This is what you want for vocals, melodic loops, and anything where the notes must stay in tune.
+- **time-stretch** — also keeps the original pitch, but produces the stretch on the audio thread. It reads the *same* anchor map as repitch and synthesizes the output by overlap-adding source segments at a fixed rate, so changing the map moves the timing and leaves the pitch where it was. Use it when the user is dragging a tempo or an anchor and the result has to be audible immediately.
 :::
 
 <SonareDemo id="time-stretch" />
@@ -47,6 +48,19 @@ Every audio clip has a **warp mode** that decides *how* (or whether) it follows 
 | off | No | Yes | One-shots, SFX |
 | repitch | Yes | No (moves with speed) | Tape/varispeed feel, drums |
 | tempo-sync | Yes | Yes | Vocals, melodic loops |
+| time-stretch | Yes | Yes | Live tempo/anchor editing |
+
+### time-stretch vs tempo-sync
+
+Both preserve pitch, so the choice between them is not about the sound — it is about **when the stretching happens** and what that costs a host.
+
+`tempo-sync` bakes the stretched audio on the control thread, ahead of playback. That gives the phase vocoder the whole clip to work with, but every new anchor set means a re-bake — and a `tempo-sync` clip with no warp map at all is a `compile()` error rather than a silent fallback. `time-stretch` does the work block by block on the audio thread, so a new anchor set takes effect from the very next block with nothing to re-bake.
+
+Paying for that immediacy means living inside a fixed budget. The stretcher's voices are preallocated: **eight warped clips** can stretch at once, each handling up to **two channels**. A clip that cannot get a voice — because all eight are busy, or because its source has more channels than a voice handles — falls back to `repitch` behaviour rather than allocating on the audio thread, which means its pitch starts moving with the tempo.
+
+::: warning Watch the fallback, it is silent
+The fallback makes no sound of its own — the clip simply starts behaving like `repitch`. `warpStretchOverflowCount()` counts the blocks in which that happened, so poll it from the control thread while developing and reduce how many `time-stretch` clips overlap if it climbs.
+:::
 
 ## Warp anchors: pinning the audio to the grid
 
@@ -61,7 +75,7 @@ Each anchor ties a position in the source audio to a position on the project tim
 />
 
 ::: tip Your app owns the anchors
-The engine reads anchors, it does not invent them. Each anchor is an absolute pair of sample positions, so a clip bends to the grid exactly as far as the map you supplied says — and editing the tempo map afterwards does not rewrite it. A host that lets the user change tempo has to recompute the anchors and push a new warp map. A map with fewer than two anchors describes no stretch at all: a `repitch` clip then plays at its native rate, and a `tempo-sync` clip fails to compile.
+The engine reads anchors, it does not invent them. Each anchor is an absolute pair of sample positions, so a clip bends to the grid exactly as far as the map you supplied says — and editing the tempo map afterwards does not rewrite it. A host that lets the user change tempo has to recompute the anchors and push a new warp map. A map with fewer than two anchors describes no stretch at all: a `repitch` or `time-stretch` clip then plays at its native rate, and a `tempo-sync` clip fails to compile.
 :::
 
 ::: warning tempo-sync is real time-stretching, with limits
@@ -73,7 +87,7 @@ Because tempo-sync changes duration while preserving pitch, it uses a phase voco
 A subtle but important guarantee: a clip warps the *same way* whether you are auditioning it live or rendering the final file. The tempo map, the warp mode, and the anchors are part of the project's edit model, so real-time playback and the offline [bounce](../../project-bounce.md) produce matching timing and pitch. What you hear while editing is what you get on render.
 
 ::: details How libsonare implements this
-Warp lives on the `Project` editing model. A clip's mode is set with `setClipWarpMode(clipId, mode)` where the mode is one of `'off' | 'repitch' | 'tempo-sync'`. Warp anchors are first-class warp maps: `setWarpMap({ id, name?, anchors })`, with each anchor as `{ warpSample, sourceSample }`, and a clip references one via `setClipWarpRef(clipId, warpRefId)` (`removeWarpMap` clears it). The grid comes from `setTempoSegments` (each `{ startPpq, bpm, endBpm? }`, where `endBpm` drives a ramp) and `setTimeSignatures` (each `{ startPpq, numerator, denominator }`). For `tempo-sync`, the stretch is performed by `StreamingPhaseVocoder` so the pitch is preserved, and the *same* path is used in both realtime playback and offline `bounce()` — `repitch`, by contrast, resamples and lets pitch track speed. All of warp mode, anchors, tempo, and time signatures round-trip through project JSON via `toJson()` / `Project.fromJson(json)`.
+Warp lives on the `Project` editing model. A clip's mode is set with `setClipWarpMode(clipId, mode)` where the mode is one of `'off' | 'repitch' | 'tempo-sync' | 'time-stretch'`. Warp anchors are first-class warp maps: `setWarpMap({ id, name?, anchors })`, with each anchor as `{ warpSample, sourceSample }`, and a clip references one via `setClipWarpRef(clipId, warpRefId)` (`removeWarpMap` clears it). The grid comes from `setTempoSegments` (each `{ startPpq, bpm, endBpm? }`, where `endBpm` drives a ramp) and `setTimeSignatures` (each `{ startPpq, numerator, denominator }`). For `tempo-sync`, the stretch is performed by `StreamingPhaseVocoder` so the pitch is preserved, and the *same* path is used in both realtime playback and offline `bounce()` — `repitch`, by contrast, resamples and lets pitch track speed, and `time-stretch` reads the same map as `repitch` but overlap-adds source segments on the audio thread, with `warpStretchOverflowCount()` reporting the blocks that fell back to resampling. All of warp mode, anchors, tempo, and time signatures round-trip through project JSON via `toJson()` / `Project.fromJson(json)`.
 :::
 
 Related: [Project Editing](../../project-editing.md), [Phase Vocoder Stretch](../editing/phase-vocoder-stretch.md), [Project Bounce](../../project-bounce.md)

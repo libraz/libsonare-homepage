@@ -4,6 +4,8 @@
 
 CLI は、アプリケーションコードを書かずに、簡易確認、バッチ処理、スクリプト向け JSON 出力を行いたい場合に使います。UI を作る場合は、[WebAssembly ガイド](./wasm.md)、[Python API](./python-api.md)、[ミキシングエンジン](./mixing.md) から始めてください。
 
+このページはコマンド単位のリファレンスです。ステムから完成マスターまで、リファレンス曲への追い込み、CI での納品前チェックといった、シェルで完結させる作業単位の手順は [実践ユースケース](./use-cases.md) にあります。
+
 ## このページで身につくこと
 
 このページを読むと、次のことを判断・実行できるようになります。
@@ -60,24 +62,27 @@ npm の WebAssembly パッケージ `@libraz/libsonare` ではインストール
 標準の PyPI ホイールは WAV/MP3 をデコードします。M4A/AAC/FLAC/OGG/Opus を直接読むには FFmpeg 有効ビルドが必要です。
 :::
 
-::: info ネイティブ CLI にしかないコマンド
-Python CLI はすでに解析・特徴量・編集・マスタリング・`mix` をカバーしています
-（下の [その他のコマンド](#その他のコマンド) を参照）。`sonare-cli` には PyPI
-パッケージにない追加コマンドがあります。リリースアーカイブから入手するか、[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
+::: info どちらの CLI にどのコマンドがあるか
+ほとんどのコマンドは両方の CLI にあり、オプションも共通です。`sonare-cli` には
+PyPI パッケージにない低レベルユーティリティと信号生成コマンドがあり、Python CLI
+にはシーンミキサーとプリセット駆動のマスタリングコマンドがあります。ネイティブの
+実行ファイルはリリースアーカイブから入手するか、[ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
 
-- 解析: `sections`, `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
-- エフェクト／変換: `preemphasis`, `deemphasis`, `split-silence`, `gain`, `fade`, `filter`
+**ネイティブ CLI のみ**
+
+- 解析: `melody`, `boundaries`, `meter`, `clipping`, `dynamic-range`, `stereo`, `phase`, `system-info`
+- エフェクト／変換: `preemphasis`, `deemphasis`, `gain`, `fade`, `filter`
 - 合成: `tone`, `chirp`, `clicks`
 - 特徴量: `cqt`, `vqt`, `mel-to-audio`, `mfcc-to-audio`, `tonnetz`, `pcen`, `onset-env`（onset-envelope の要約版。ピーク時刻・ピーク強度・平均）, `fourier-tempogram`, `tempogram-ratio`
 - librosa 互換ユーティリティ: `frames-to-samples`, `samples-to-frames`, `power-to-db`, `amplitude-to-db`, `db-to-power`, `db-to-amplitude`, `frame-signal`, `pad-center`, `fix-length`, `fix-frames`, `peak-pick`, `vector-normalize`
-- ミキシング: `mix-strip`（単一入力のチャンネルストリップ。`mix` は非推奨エイリアスとして残っています）
-- マスタリング: `mastering-pair-processor`（ソース／リファレンスのペア処理）, `mastering-stereo-analyses`, `mastering-stereo-analyze`
+- マスタリング: `mastering-stereo-analyses`
 
-逆に、ネイティブ CLI にはない Python CLI 専用のコマンドもあります。
-`pitch-correct-timevarying`, `note-move`, `scale-quantize`, `master`,
-`mastering-chain`, `mastering-streaming`, `mastering-suggest`,
-`mastering-profile`, `mastering-presets`, `declip`, `midi-render`、
-そしてシーンを読み込む `mix` です。
+**Python CLI のみ**
+
+`master`、`mastering-chain`、`declip`、そしてシーンミキサーの `mix`（[ミキシングワークフロー](#ミキシングワークフロー) を参照）です。
+
+`sections` は両方にありますが、オプションが異なります。共通の `--min-duration`
+に加えて、ネイティブ CLI には `--threshold` があります。
 :::
 
 ## 概要
@@ -126,9 +131,23 @@ sonare analyze music.mp3 --json
 
 | オプション | デフォルト | 説明 |
 |--------|---------|-------------|
-| `--with-seventh` | 無効 | コード解析にセブンスコードを含める |
+| `--with-seventh` | 無効 | トライアドだけでなく、コードテンプレート全体を探索する |
 | `--no-hpss` | 無効 | 倍音／打撃成分分離を無効化する |
 | `--chroma-highpass` | 80.0 | クロマ解析用のハイパスカットオフ周波数（Hz） |
+| `--meter-candidates` | `3,4,6` | 探索する拍子の分子。カンマ区切り |
+| `--meter-denominator` | 4 | 検出した拍子を報告するときの音符単位 |
+
+`--with-seventh` を指定しない場合、コード認識はメジャー・マイナー・ディミニッシュ
+・オーギュメントのトライアドだけを照合します。指定すると、ルートごとに 24 種類の
+コードクオリティすべてが対象になります。セブンスやナインスに加えて、シックスス、
+`7sus4`、イレブンス、サーティーンス、オルタードドミナントが含まれます。
+
+拍子の探索は、指定された分子しか報告しません。デフォルトの候補は `3,4,6` なので、
+5/4 や 7/8、11/8 の曲もこの 3 つのいずれかとして返ってきます。`--meter-candidates
+3,4,5,7` のように候補を広げて初めて検出できます。候補リストは 1〜16 個で、各値は
+2〜32 の範囲です。`--meter-denominator` は結果を報告するときの音符単位を決めるだけ
+で、探索そのものには影響しません。2 つの数字の意味は
+[拍子とグルーピング](./glossary/analysis/meter-and-grouping.md) で説明しています。
 
 **出力:**
 ```
@@ -158,6 +177,8 @@ sonare analyze music.mp3 --json
     {"time": 0.52, "strength": 0.84},
     {"time": 1.02, "strength": 0.78}
   ],
+  "downbeat_indices": [0, 4, 8],
+  "downbeat_phase": 0,
   "chords": [
     {"name": "C", "start": 0.0, "end": 2.0, "confidence": 0.88}
   ],
@@ -187,6 +208,8 @@ sonare analyze music.mp3 --json
 ```
 
 上の配列は省略した例です。特に `beats` はビート数ではなく、検出したビートごとの `{"time", "strength"}` オブジェクトを保持します。
+
+`downbeat_indices` は独自の時刻を持たず、`beats` のインデックスを保持します。つまりダウンビートかどうかは、この配列に含まれるかどうかで判定します（`i` が `downbeat_indices` にあれば `beats[i]` がダウンビートです）。`downbeat_phase` は最初のダウンビートが何番目のビートに来るかを表し、テイクが小節の途中から始まっている量を示します。
 
 ### bpm
 
@@ -386,6 +409,39 @@ sonare hpss music.mp3 -o separated --json
   Wrote: separated_harmonic.wav, separated_percussive.wav
 ```
 
+### decompose-stems
+
+ミックスを非負値行列因子分解（NMF）の成分に分けます。`hpss` のように倍音／打撃という固定の分け方をするのではなく、繰り返し現れるスペクトルパターンをデータから見つけて分離します。
+
+```bash
+sonare decompose-stems band.wav -o stems.wav
+sonare decompose-stems band.wav -o stems.wav --n-components 6 --init nndsvd --json
+```
+
+| オプション | デフォルト | 説明 |
+|--------|---------|-------------|
+| `--n-components <int>` | 4 | 分解する成分の数 |
+| `--n-iter <int>` | 100 | NMF の更新反復回数 |
+| `--beta` | 2.0 | ベータダイバージェンス。2 は Frobenius、1 は Kullback-Leibler |
+| `--init` | random | NMF の初期化方法。`random` または `nndsvd` |
+| `--mask-power` | 1.0 | ソフトマスクの指数（1 以上）。2 は Wiener 型のパワー比になる |
+
+`-o` は 1 つのファイルではなく、ファイル群の名前として扱われます。どちらの CLI も
+`<base>_component1.wav` 〜 `<base>_componentN.wav` を書き出し、渡したパス末尾の
+`.wav` は取り除かれます。各成分は元音声の位相を保つため、すべて足し合わせると入力に
+戻り、成分単体でもそのまま聴けます。ここがライブラリの `decompose` との違いです。
+`decompose` は振幅スペクトログラムの因子を返すだけなので、音として聴くには位相推定が
+必要になります。
+
+**出力:**
+```
+  Stems: 4 components
+     1. energy 0.031200  stems_component1.wav
+     2. energy 0.018400  stems_component2.wav
+     3. energy 0.009100  stems_component3.wav
+     4. energy 0.004700  stems_component4.wav
+```
+
 ## その他のコマンド
 
 Python CLI には、上記のコア以外にも多くのサブコマンドがあります。
@@ -414,11 +470,14 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare estimate-room room.wav` | 等価ルーム推定（体積、寸法、吸音率、DRR、信頼度） | `--json`, `--aspect-lw`, `--aspect-lh`, `--reference-absorption`, `--sabine`, `--n-octave-bands` |
 | `sonare synthesize-rir --length 7 --width 5 --height 3 -o rir.wav` | シューボックス形状からモノラル RIR を合成 | `--source-x`, `--source-y`, `--source-z`, `--listener-x`, `--listener-y`, `--listener-z`, `--absorption`, `--sample-rate`, `--ism-order`, `--seed`, `--max-seconds` |
 | `sonare room-morph dry.wav --length 12 --width 9 --height 4 -o wet.wav` | 目標ルームへ寄せる音作り向けのルームモーフィング | `--wet`, `--suppression`, 形状・配置オプション、`--max-seconds` |
+| `sonare boundaries music.mp3` | 構造の転換点と、それを拾い出した元のノヴェルティ曲線 | ネイティブ CLI のみ。`--threshold`（0.3）, `--absolute-threshold`（0.005）, `--kernel-size`（64）, `--n-mfcc`（13）, `--n-chroma`（12）, `--peak-distance`（2.0）, `--no-mfcc`, `--no-chroma`, `--n-fft`（2048）, `--hop-length`（512） |
 | `sonare meter music.wav` | ピーク、RMS、クレスト、True Peak（トゥルーピーク）、クリッピング率、無音率、DC オフセット | ネイティブ CLI のみ。`--clip-threshold`, `--oversample` |
 | `sonare clipping music.wav` | クリップしたサンプルと区間を検出 | ネイティブ CLI のみ。`--threshold`, `--min-region` |
 | `sonare dynamic-range music.wav` | percentile RMS ベースのダイナミックレンジ | ネイティブ CLI のみ。`--window-sec`, `--hop-sec`, `--low-percentile`, `--high-percentile` |
 | `sonare stereo left.wav --reference right.wav` | 左右ファイルからステレオ相関と幅を測定 | ネイティブ CLI のみ |
 | `sonare phase left.wav --reference right.wav` | 左右ファイルからフェーズスコープ要約を測定 | ネイティブ CLI のみ |
+
+`boundaries` は検出器の全パラメータを公開しており、2 つのしきい値は役割が違います。`--threshold` はノヴェルティ曲線自身の最大値に対する相対値なので、「そもそも変化があったのか」を問えません。それを問えるのが下限の `--absolute-threshold` です。両者の関係と、下限を下げても何が拾えて何が拾えないかは [`detectBoundaries(request)`](./js-api-analysis.md#detectboundaries-request) で説明しています。`--no-mfcc` と `--no-chroma` はそれぞれ特徴量ストリームを 1 つ落としますが、両方の指定は拒否されます。2 つはフレーム単位で結合されるため、どちらも無効では結合する対象がなくなるからです。
 
 ### その他の特徴量
 
@@ -438,7 +497,7 @@ Python CLI には、上記のコア以外にも多くのサブコマンドがあ
 | `sonare fourier-tempogram music.mp3` | 非対応 | 対応 | Fourier tempogram |
 | `sonare tempogram-ratio music.mp3` | 非対応 | 対応 | テンポ比特徴量 |
 
-Python CLI は行列特徴量の全データをそのまま出力せず、サマリーを表示します。完全な特徴量行列が必要な場合は [Python API](./python-api.md) または [JavaScript API](./js-api.md) を使ってください。
+Python CLI は行列特徴量の全データをそのまま出力せず、サマリーを表示します。完全な特徴量行列が必要な場合は [Python API](./python-api.md) または [JavaScript API](./js-api-analysis.md) を使ってください。
 
 ### 編集
 
@@ -457,12 +516,26 @@ Python CLI は行列特徴量の全データをそのまま出力せず、サマ
 | `sonare normalize mix.wav -o out.wav` | ピークまたは RMS ノーマライズ | `--mode peak\|rms`, `--target-db` |
 | `sonare trim-silence take.wav -o out.wav` | 前後の無音をトリム | `--top-db`, `--threshold-db`（-60） |
 | `sonare resample music.wav --target-sr 44100 -o out.wav` | リサンプリング | `--target-sr` |
+| `sonare polyphonic-notes chord.wav` | ポリフォニー解析が見つけたノートを一覧表示 | — |
+| `sonare polyphonic-render chord.wav -o out.wav` | その解析結果をノート単位で編集して再レンダリング | `--edit NOTE.FIELD=VALUE`（繰り返し可） |
 
 `--top-db` と `--threshold-db` は同時に指定できない、択一の無音判定方式です。
 どちらも省略すると `--threshold-db` が `-60` として扱われ、`--top-db` を指定すると
 ピーク相対のトップ dB 方式に切り替わります。
 
 Python CLI は、上のファイル書き出し編集コマンドを提供します。`hpss` も `-o` が必須で、エネルギー要約を表示しながら `<base>_harmonic.wav` と `<base>_percussive.wav` を書き出します。
+
+#### ノート単位の編集
+
+`polyphonic-notes` と `polyphonic-render` は対で使います。前者はポリフォニー解析が見つけたノートを 0 から番号付きで表示し、後者はその番号を使って編集を指定し、テイクを再レンダリングします。どちらも解析を同じ既定値で実行し、フレーミングを変えるオプションを持たないため、一方で読んだ番号がそのまま他方の対象になります。
+
+```bash
+sonare polyphonic-notes chord.wav --json
+sonare polyphonic-render chord.wav -o out.wav \
+  --edit 0.pitch_shift_semitones=2 --edit 3.muted=1
+```
+
+`--edit` は 1 回につき 1 つの `NOTE.FIELD=VALUE` を指定し、繰り返し渡せます。指定できるフィールドは `pitch_shift_semitones`、`gain_db`、`time_offset_samples`、`time_stretch_ratio`、`formant_shift_semitones`、`vibrato_depth_change`、`drift_change`、`muted` です。未知のフィールドは無視されるのではなくエラーになります。`polyphonic-render` は `-o` が必須で、`polyphonic-notes` は標準出力に表示するだけなので出力ファイルを取りません。
 
 ::: warning 何もしないデフォルトはエラーになりました
 `--semitones` と `--rate` には以前デフォルト値があり、省略するとコマンドが何もしない
@@ -476,9 +549,68 @@ Python CLI は、上のファイル書き出し編集コマンドを提供しま
 |--------------------|--------------------------|
 | `gain` | `-o`, `--gain-db` |
 | `fade` | `-o`, `--fade-in` または `--fade-out` |
-| `filter` | `-o`, `--type hp\|lp\|bp\|notch`; hp/lp は `--cutoff`、bp/notch は `--center` + `--bandwidth` |
+| `filter` | `-o`, `--type hp\|lp\|bp\|notch`; hp/lp は `--cutoff`、bp/notch は `--center` + `--bandwidth`; `--order`（2）, `--zero-phase` |
 | `preemphasis`, `deemphasis` | 処理後のファイルを書き出す場合は `-o`。`--coef`（0.97） |
-| `split-silence` | `--top-db`（60.0）。非無音区間を標準出力へ表示するだけでファイルは書き出さないため、`-o` は使用法エラー（終了コード 2）になる |
+
+`filter --order` は 2 か 4 を取り、4 は `hp`／`lp` でのみ使えます（`bp` や `notch` に 4 を指定するとエラーになります）。`--zero-phase` はフィルターを順方向と逆方向に 1 回ずつかけ（filtfilt）、位相のずれをなくします。その代わり実効的な傾きが 2 倍になり、ファイル全体が揃っている必要があります。
+
+#### split-silence
+
+`split-silence` はテイクを変更せず、どこが無音かを調べるコマンドです。非無音区間をサンプル範囲として表示するだけで、区間で切り出すよう指定したときだけ音声を書き出します。両方の CLI にあり、オプションも共通です。
+
+```bash
+sonare split-silence take1.wav
+sonare split-silence take1.wav --json
+```
+
+**出力:**
+```
+Non-silent intervals: 3
+  28160 - 116224
+  153088 - 241152
+  287232 - 394752
+```
+
+**JSON 出力:**
+```json
+[{"start_sample": 28160, "end_sample": 116224}, {"start_sample": 153088, "end_sample": 241152}, {"start_sample": 287232, "end_sample": 394752}]
+```
+
+| オプション | デフォルト | 説明 |
+|------------|------------|------|
+| `--input WAV` | — | 同じパートの別テイク。繰り返し指定可 |
+| `--top-db` | 60.0 | ピークからの無音しきい値（dB） |
+| `--write-takes PREFIX` | — | 各テイクを各区間で切り出して書き出す |
+
+テイクを複数渡すと、区間はテイクごとの区間の和集合になり、接する区間は結合されます。つまりカットが入るのは、すべてのテイクが無音になっている場所だけです。
+
+```bash
+sonare split-silence take1.wav --input take2.wav --input take3.wav
+```
+```
+Non-silent intervals: 3
+  23040 - 121344
+  147968 - 246272
+  282624 - 399872
+```
+
+`--write-takes PREFIX` は、各テイクを各区間で切り出して `PREFIX{take:02d}_{interval:03d}.wav`（どちらも 1 始まり）として書き出します。テイク 3 つ・区間 3 つなら 9 ファイルです。
+
+```bash
+sonare split-silence take1.wav --input take2.wav --input take3.wav \
+  --write-takes cut_
+```
+```
+Wrote 9 take files with prefix cut_
+```
+
+他より早く終わるテイクは短縮されず、パディングされます。そのため 1 つの区間のファイルはどのテイクでも同じ長さになり、そのまま比較できます。先頭のテイクとサンプルレートが異なるテイクは、リサンプルされずに名前付きで拒否されます。
+
+```
+Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 Hz
+```
+
+`-o`／`--output` は今も使用方法エラー（終了コード 2）です。このコマンドの結果は区間の一覧か切り出したテイクファイルであり、単一のレンダリング済み出力ファイルではありません。
 
 ### リアルタイムボイスプリセット
 
@@ -605,9 +737,9 @@ done
 ### マスタリングのワークフロー
 
 ::: info コマンドの提供範囲
-PyPI の Python CLI には `mastering`、`master`、`mastering-processor`、`mastering-processors`、`mastering-chain`、`mastering-presets`、`eq`、`declip`、および下記のペア解析コマンドが含まれます。
+マスタリング系のコマンドはほとんどが両方の CLI にあります。`mastering`、`eq`、`repair`、プロセッサ系とペア解析系の各コマンド、`mastering-pair-processor`、`mastering-stereo-analyze`、そして 3 つのアシスタントコマンドが該当します。
 
-ネイティブ CLI では、ソース／リファレンスを処理する `mastering-pair-processor`、ステレオ解析一覧、ステレオ解析実行などの追加マスタリングコマンドも利用できます。
+`master`、`mastering-chain`、`declip` は Python CLI のみ、`mastering-stereo-analyses` はネイティブ CLI のみです。
 
 [ソースからビルド](/ja/docs/installation#ソースからビルド) を参照してください。
 :::
@@ -656,24 +788,28 @@ reference.wav --target-sr <sr> -o reference-matched.wav`）、比較前のリサ
 
 `/ja/mastering` ブラウザデモも同じマスタリングプロセッサ群を呼び出しています。デモから書き出したレポートを CLI 自動化の起点として活用できます。
 
-Python CLI の名前付きマスタリングコマンド:
+名前付きマスタリングコマンド:
 
-| 目的 | コマンド |
-|------|---------|
-| 目標ラウドネス＋True Peak 上限でノーマライズ | `sonare mastering` |
-| 名前付きマスタリングプリセットを適用 | `sonare master` |
-| 構成可能なマスタリングチェーンを実行 | `sonare mastering-chain` |
-| マスタリングプリセット名を一覧表示 | `sonare mastering-presets` |
-| クリップしたオーディオを修復（LPC＝線形予測符号化による再構成） | `sonare declip` |
-| 統合イコライザを適用 | `sonare eq` |
-| モノラル／ステレオプロセッサ一覧 | `sonare mastering-processors` |
-| 名前付きプロセッサを適用 | `sonare mastering-processor` |
-| ペアプロセッサ一覧 | `sonare mastering-pair-processors` |
-| ペア解析一覧 | `sonare mastering-pair-analyses` |
-| ソース／リファレンスのペア解析 | `sonare mastering-pair-analyze` |
-| オーディオプロファイル解析（JSON を出力） | `sonare mastering-profile` |
-| アシスタントによるチェーン提案（JSON を出力） | `sonare mastering-suggest` |
-| ストリーミングプラットフォームのノーマライズプレビュー（JSON を出力） | `sonare mastering-streaming` |
+| 目的 | コマンド | 提供 |
+|------|---------|------|
+| 目標ラウドネス＋True Peak 上限でノーマライズ | `sonare mastering` | 両方 |
+| 統合イコライザを適用 | `sonare eq` | 両方 |
+| 欠陥を測定して修復 | `sonare repair` | 両方 |
+| モノラル／ステレオプロセッサ一覧 | `sonare mastering-processors` | 両方 |
+| 名前付きプロセッサを適用 | `sonare mastering-processor` | 両方 |
+| ペアプロセッサ一覧 | `sonare mastering-pair-processors` | 両方 |
+| 名前付きペアプロセッサを適用 | `sonare mastering-pair-processor` | 両方 |
+| ペア解析一覧 | `sonare mastering-pair-analyses` | 両方 |
+| ソース／リファレンスのペア解析 | `sonare mastering-pair-analyze` | 両方 |
+| ステレオペアを解析 | `sonare mastering-stereo-analyze` | 両方 |
+| マスタリングプリセット名を一覧表示 | `sonare mastering-presets` | 両方 |
+| オーディオプロファイル解析（JSON を出力） | `sonare mastering-profile` | 両方 |
+| アシスタントによるチェーン提案（JSON を出力） | `sonare mastering-suggest` | 両方 |
+| ストリーミングプラットフォームのノーマライズプレビュー（JSON を出力） | `sonare mastering-streaming` | 両方 |
+| 名前付きマスタリングプリセットを適用 | `sonare master` | Python |
+| 構成可能なマスタリングチェーンを実行 | `sonare mastering-chain` | Python |
+| クリップしたオーディオを修復（LPC＝線形予測符号化による再構成） | `sonare declip` | Python |
+| ステレオ解析一覧 | `sonare mastering-stereo-analyses` | ネイティブ |
 
 3 つのアシスタントコマンドはいずれもオーディオファイルを受け取り、JSON オブジェクトを標準出力に出力します。
 
@@ -694,7 +830,32 @@ Python CLI の名前付きマスタリングコマンド:
 | `sonare mastering-presets` | グローバルの `--json` フラグに対応 | 利用可能なマスタリングプリセット名を一覧表示する |
 | `sonare declip clipped.wav -o out.wav` | `--clip-threshold`（0.98）, `--lpc-order`（36）, `--iterations`（2）, `--lpc-blend`（0.65） | LPC 再構成でクリップしたオーディオを修復する |
 
-ネイティブ CLI のみ: `sonare mastering-pair-processor`、`sonare mastering-stereo-analyses`、`sonare mastering-stereo-analyze`。
+#### repair
+
+`declip` が直すのは 1 種類の欠陥だけです。`repair` はテイクを測定し、必要な修復ステージ（declip、declick、decrackle、dehum、denoise、dereverb をこの順で）を実行します。録音の何が悪いのかまだ分かっていないときは、このコマンドから始めます。
+
+```bash
+# 測定と報告のみ。ファイルは書き出さない
+sonare repair noisy.wav --detect --json
+
+# 測定し、ステージを選び、修復し、選んだ理由も出力する
+sonare repair noisy.wav -o clean.wav --explain
+
+# 自動で選ばせず、名前付きプリセットの設定を使う
+sonare repair noisy.wav --preset broadcast -o clean.wav
+```
+
+| オプション | 説明 |
+|------------|------|
+| `--detect` | 測定と報告のみ。処理は行わず、`-o` も不要 |
+| `--preset NAME` | 自動選択の代わりに、名前付きプリセットの修復ステージを使う（名前は `sonare mastering-presets` で確認） |
+| `--params` | ステージ設定の上書き。`repair.<stage>.<field>=value,...` の形式 |
+| `--explain` | 各ステージを選んだ理由を出力する |
+| `--bits` | 出力ビット深度。16 または 24 |
+
+`--detect` を指定しない場合、`-o` は必須です。`--explain` は実際に行われた判断についてしか説明できないため、`--preset` や `--detect` との併用は無効パラメータとして拒否されます。
+
+`repair` は意図的にリミッターを通しません。ディクリップはクリッパーが削ったピークを復元するので、結果はしばしばフルスケールを超えます。そこでサンプルごとにクランプするのではなく、ファイル全体に 1 つのゲインを掛けて収めます。クランプしてしまうと、復元したばかりのサンプルを元の天井へ押し戻すことになるからです。適用されたゲインは `output_gain_db` として必ず出力され、ピークがそのまま収まっていた場合は `0` になります。
 
 関連するマスタリングガイド: [配信ターゲット](./glossary/mastering/delivery-targets.md)、[メーターの読み方](./glossary/mastering/meter-reading.md)、[エラー復旧](./glossary/mastering/error-recovery.md)。
 
@@ -703,9 +864,9 @@ RT60、EDT、C50、C80、D50、体積、寸法、吸音率バンド、DRR、RIR 
 ### ミキシングワークフロー
 
 ::: info コマンドの提供範囲
-PyPI の Python CLI には `mix` が含まれます。JSON ファイルまたは組み込みプリセットからミキサーシーンを読み込み、必要ならストリップごとの入力 WAV をレンダリングします。
+JSON ファイルまたは組み込みプリセットからミキサーシーンを読み込み、必要ならストリップごとの入力 WAV をレンダリングする `mix` は、Python CLI のみです。
 
-`mixing-presets` と `mixing-preset` も含まれます。シーン一覧の確認や、WASM／Python／Node／C++ のミキサー API に読み込ませるシーン JSON の出力に使えます。
+`mixing-presets`、`mixing-preset`、`suggest-mix`、`mix-strip` は両方の CLI にあります。シーン一覧の確認、WASM／Python／Node／C++ のミキサー API に読み込ませるシーン JSON の出力、複数トラックからのシーン提案、単一入力チャンネルストリップの実行に使えます。
 :::
 
 ```bash
@@ -729,24 +890,57 @@ sonare mix \
 sonare mix --scene scene.json --input vocal.wav --input music.wav -o mixed.wav
 ```
 
-`mix` には `--scene` か `--preset` が必須です。両方渡した場合は `--scene` が優先
-されます。ストリップごとに `--input` を 1 つ渡してください。`--input` と
-`-o/--output` はセットで、どちらか片方だけは指定できません。どちらも省略した
-場合、`mix` はシーンを読み込んでストリップ数を報告するだけです。
+`--scene` と `--preset` は排他かつ必須のペアで、どちらか一方を必ず指定します。両方渡すと使用方法エラーになり、どちらも省略した場合も既定のシーンにフォールバックせず終了コード 2 になります。
 
-ネイティブ CLI の単一入力チャンネルストリップは役割の異なる別コマンドで、
-名前が `mix-strip` になりました。
+`--input` は `[ID=]WAV` の形式で、繰り返し指定できます。`ID=` を付けるとそのストリップに割り当てられ、パスだけを渡した場合はファイルのベース名が ID になります。どのエントリからも名前を指定されなかったストリップは、削除されるのではなく無音が供給されます。アシスタントが提案したシーンのようにエフェクトリターンをセンドで受けるストリップがあっても、リターンごとに無音 WAV を用意せずレンダリングできるのはこのためです。ストリップ名を一切指定しない書き方をした場合は位置指定として扱われ、シーン順に 1 つずつ割り当てられます。この 2 つの書き方を 1 回の実行で混ぜることはできません。長さが足りない入力は、最も長いものに合わせてパディングされます（短い方に切り詰められることはありません）。
+
+`--input` と `-o/--output` はセットで、どちらか片方だけは指定できません。どちらも省略した場合、`mix` はシーンを読み込んでストリップ数を報告するだけです。
+
+#### suggest-mix
+
+`suggest-mix` は逆方向のコマンドです。個々のトラックを渡すとミキサーシーンを提案し、それを `mix --scene` でレンダリングできます。
+
+```bash
+sonare suggest-mix \
+  --input vocal=vocal.wav \
+  --input drums=drums.wav \
+  --tempo-bpm auto \
+  --scene-out scene.json
+```
+
+| オプション | デフォルト | 説明 |
+|------------|------------|------|
+| `--input [ID=]WAV` | — | トラックごとに 1 つ、繰り返し可。ステレオファイルは 2 チャンネルのまま読み込まれ、アシスタントが音像を読み取れる。3 チャンネル以上はダウンミックスされる。いずれも `--sample-rate` へリサンプリングする。`ID` の既定はファイルのベース名 |
+| `--sample-rate` | 48000 | 解析に使う共通サンプルレート |
+| `--tempo-bpm BPM\|auto` | — | 提案するディレイタイムの基準テンポ。`auto` は最初の `--input` から検出する。省略するとトランスポートの既定テンポを使う |
+| `--params k=v,...` | — | アシスタントのパラメータ上書き |
+| `--scene-out FILE` | — | 提案されたシーンだけを、`mix --scene` が読める形式で書き出す |
+
+提案の全体は JSON として標準出力に出力されます。`mix` に渡すのは `--scene-out` で書き出したファイルです。
+
+#### チャンネルストリップ
+
+単一入力のチャンネルストリップは役割の異なる別コマンドで、名前は `mix-strip` です。両方のフロントエンドが持っており、オプションの組み合わせにかかわらずバイト単位で同一の出力を書きます。
 
 ```bash
 sonare-cli mix-strip vocal.wav -o strip.wav \
-  --input-trim-db -2 --fader-db 1.5 --pan 0.2 --width 1.4
+  --input-trim-db -2 --fader-db 1.5 --pan 0.2 --pan-mode balance --width 1.4
 ```
 
-::: info ネイティブ CLI の `mix` → `mix-strip`
-シーンミキサーと読み違えないよう、ストリップコマンドを改名しました。旧名の `mix` は
-非推奨エイリアスとして動きます。また、真のステレオで読み書きするようになったため
-`--width` が実際に音像を変えます（モノラル処理だった間は何も起きませんでした）。
-4 次フィルター経路が filtfilt を通るのは `--zero-phase` を指定したときだけです。
+| オプション | デフォルト | 説明 |
+|------------|------------|------|
+| `--input-trim-db` | 0.0 | ストリップ手前で適用するゲイン |
+| `--fader-db` | 0.0 | フェーダーのゲイン |
+| `--pan` | 0.0 | パン位置。-1 〜 1 |
+| `--pan-mode` | balance | `balance`、`stereo-pan`、`dual-pan`（大文字小文字は区別しない） |
+| `--width` | 1.0 | ステレオ幅。0 でモノラルに収束し、1 より大きくすると広がる |
+
+ストリップは真のステレオで読み書きするため、ステレオ素材は音像を保ったまま処理されます。モノラル素材に対して `--width` は作用する対象がないので、1.0 以外を指定すると黙って無視されるのではなくエラーになります。
+
+::: warning `sonare-cli mix` はもうありません
+ネイティブ CLI に `mix` コマンドは存在しません。ストリップコマンドの名前は `mix-strip` だけなので、`sonare-cli mix` を呼ぶスクリプトはオプションの誤りではなく、未知のコマンドとして失敗します。コマンド名を書き換えてください。オプションはそのまま使えます。
+
+同じ綴りが 2 つの異なるものを指していたため、この名前はなくなりました。ネイティブ側ではチャンネルストリップ、Python CLI 側ではシーンミキサーです。Python CLI の `sonare mix` は今もシーンミキサーで、こちらは変わりません。
 :::
 
 関連: [ミキシングエンジン](./mixing.md)。
@@ -797,11 +991,23 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o`, `--strict`（診断が 1 件でもあれば失敗） |
 | `sonare project compile` | プロジェクト JSON をコンパイルチェック。診断を表示し、エラー時は非ゼロで終了（ファイルは書き出さない） | `--in`, `--json` |
 | `sonare project synth-presets` | `--synth` が受け付ける NativeSynth プリセット名を一覧表示 | `--json` |
-| `sonare project bounce` | 指定チャンネル数で WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `-o` |
+| `sonare project bounce` | 指定チャンネル数で WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
 | `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
 | `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |
 | `sonare project import-midi2` | MIDI 2.0 Clip File からプロジェクトを構築 | `--midi2`, `-o` |
+
+プロジェクトドキュメントは、オーディオクリップのソースを URI 参照としてしか保持しません。デコード済みの PCM は持たないため、オーディオクリップを含むドキュメントは、ソースをバインドするまで無音のままレンダリングされます。`project bounce` にはバインドする方法が 2 つあります。`--audio SOURCE_ID=WAV` は 1 回につき 1 つのソースをバインドし、ソースごとに繰り返し指定します。`--resolve-audio` は代わりに、ドキュメント自身が持つ未解決ソースの `file://` URI を開きます。それ以外のスキームは名前を挙げて拒否します。両方を適用してもまだ未解決のソースがあれば、その id と URI、それを解決できたはずのオプション名とともに報告されます。どちらのフロントエンドも両方のオプションを受け付けます。
+
+```bash
+# 2 つのオーディオソースを id でバインドしてからレンダリング
+sonare project bounce --in project.json \
+  --audio 1=vocal-take.wav --audio 2=harmony-take.wav \
+  -o bounce.wav
+
+# または、各ソースを個別に指定せず、ドキュメント自身の file:// URI を解決する
+sonare project bounce --in project.json --resolve-audio -o bounce.wav
+```
 
 ```bash
 # プロジェクトを Standard MIDI File 形式でラウンドトリップ
@@ -816,11 +1022,53 @@ sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wav
 ```
 
-Python CLI には `midi-render` もあります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
+どちらの CLI にも `midi-render` があります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
+
+#### transcribe
+
+`transcribe` は逆方向のコマンドで、音声を受け取って Standard MIDI File を書き出します。どちらの CLI にもあります。
+
+```bash
+sonare transcribe solo.wav -o solo.mid
+sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
+```
+
+| オプション | 説明 |
+|------------|------|
+| `--tempo-bpm` | PPQ グリッドの基準テンポ。省略するとテイクから検出する |
+| `--polyphonic` | 重なり合うノートを検出するマルチ F0 経路を使う |
+| `--reference-hz` | MIDI ノート番号の基準となるチューニング周波数（既定 440） |
+| `--fmin`, `--fmax` | モノフォニック追跡が探す音高範囲（Hz。既定は 65 と 2093） |
+| `--min-note-ms` | ノートとして残す最短の長さ（ms。既定 30） |
+| `--segmentation-threshold-cents` | 1 つのノートを終わらせて次を始める音高変化量（既定 50） |
+| `--velocity-floor-db` | ベロシティ 1 に対応するレベル。負の値である必要がある（既定 -48） |
+| `--fixed-velocity N` | すべてのノートをベロシティ N（1〜127）にし、レベル測定を省く |
+| `--group`, `--channel` | イベントを出力する UMP グループと MIDI チャンネル（既定 0） |
+
+検出したノートはプロジェクトのテンポマップ上に置かれるため、`--tempo-bpm` を明示した場合はトランスクライバへ渡されるのではなく、そのテンポマップとして設定されます。`-o` は必須です。
 
 SoundFont（SF2）とデスティネーションごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
 関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
+
+## ステレオとモノラルの扱い
+
+CLI のコマンドの多くは、性質上モノラルです。実行する解析や報告するメーターが 1 チャンネルで定義されているためです。そうしたコマンドでは、どちらのフロントエンドもマルチチャンネル入力をモノラルへダウンミックスして読み込み、そのとき同じ警告を標準エラー出力に表示します。ステレオファイルが黙ってチャンネルを失うことはありません。
+
+ダウンミックスすると結果が悪くなるコマンドは、ステレオのまま扱います。
+
+| コマンド | ステレオ入力の扱い |
+|----------|--------------------|
+| `mastering` | ステレオのままマスタリングし、音像を最後まで保つ |
+| `mastering-processor` | `--stereo` フラグは無く、2 チャンネル入力は自身でステレオ経路をたどる。モノラル形式を持たないプロセッサは、入力にかかわらずステレオ経路をたどる。両チャンネルを処理し、両方を書き出す |
+| `mix`（Python）, `mix-strip` | ステレオのまま処理する。モノラルファイルは左右両方へ、ステレオファイルは自身の 2 チャンネルをそのまま使う |
+| `suggest-mix` | 各 `--input` は、ステレオファイルをダウンミックスせずペアのまま保持する。アシスタントの中で両チャンネルを測定するのは音像解析だけだから |
+| `normalize`, `master`, `mastering-chain`, `declip`（Python CLI） | ステレオのまま扱い、ゲインは両チャンネルをまたいで 1 つだけ求める。音像が中央へ寄らない |
+| 上記以外 | モノラルへダウンミックスし、警告を表示する |
+
+3 チャンネル以上の素材は常にダウンミックスされます。オフライン処理にはモノラル版とステレオ版しかなく、それより広いものがないためです。サラウンドファイルのチャンネル 0 だけを残して「元の音」と称するよりは、ダウンミックスしたと明示する方が正確です。
+
+CLI にないチャンネル保持処理が必要な場合は、[Python API](./python-api.md) や [JavaScript API](./js-api.md) のステレオ向けエントリポイントを使ってください。
 
 ## 対応オーディオ形式
 
@@ -849,8 +1097,14 @@ Python CLI とネイティブ CLI は、C ABI のエラー分類に揃えた次�
 | 9 | 無効な状態 |
 | 10 | その他のエラー |
 | 11 | キャンセル |
+| 12 | エンコード失敗 |
 
-使用方法／解析エラーは終了コード 2、意味上の無効パラメータは 3、キャンセルは 11 です。どちらの CLI でも `SONARE_LEGACY_EXIT=1` を設定すると、「失敗はすべて `1`」という旧来の挙動に戻せます（終了コード 1 を前提に書かれたスクリプト向け）。
+使用方法／解析エラーは終了コード 2、意味上の無効パラメータは 3、キャンセルは 11 です。終了コード 12 は出力ファイルを作る全段階をカバーするため、最も多い原因は書き込めない `-o` のパス（とくにディレクトリを指している場合）です。どちらの CLI でも `SONARE_LEGACY_EXIT=1` を設定すると、「失敗はすべて `1`」という旧来の挙動に戻せます（終了コード 1 を前提に書かれたスクリプト向け）。
+
+特定のコードで分岐する前に、次の 2 点を押さえておいてください。
+
+- **5 と 6 は 1 つのカテゴリとして扱う。** デコードできない入力に対してどちらが返るかは、ファイルではなくビルドが FFmpeg を含むかどうかで決まります。FFmpeg なしのビルドが 5 を返す場面で、FFmpeg ありのビルドは 6 を返します。壊れたプロジェクト JSON やプリセット文書は常に 5 です。
+- **Python CLI では、コマンドラインの誤りが 2 ではなく 3 になることがある。** 終了コード 2 は argparse のもので、パーサーが拒否した範囲をカバーします。ハンドラー側で捕捉される誤り（`--input` のない `mix --output`、因子分解が知らない `--init` など）は素の `ValueError` として扱われ、コマンドラインの書き間違いであっても終了コード 3 になります。そもそも目の前のビルドにそのコマンドが含まれているか怪しいときは `sonare doctor` を実行してください。
 
 ## パフォーマンスのヒント
 

@@ -86,4 +86,4 @@ The implementation uses the same C++ DSP core as analysis and mastering, but the
 
 ::::
 
-Related: [Editing DSP](../../editing-dsp.md), [Audio Basics](./audio-basics.md), [MIR Overview](./mir-overview.md), [JavaScript API](../../js-api.md)
+Related: [Editing DSP](../../editing-dsp.md), [Audio Basics](./audio-basics.md), [MIR Overview](./mir-overview.md), [JavaScript API](../../js-api-effects.md)

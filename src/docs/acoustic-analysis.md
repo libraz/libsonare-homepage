@@ -58,7 +58,7 @@ By the end of this page you should be able to:
 | Shoebox room dimensions and source/listener placement | `synthesizeRir(...)` | A reproducible mono RIR for the specified room and positions. |
 | A dry or existing recording you want to push toward a target room | `roomMorph(...)` | Creative offline room effect. It does not remove existing reverb. |
 
-`analyzeImpulseResponse(...)` and `detectAcoustic(...)` return `AcousticResult`: full-band metrics plus octave-band arrays. `estimateRoom(...)` returns `RoomEstimateResult`, `synthesizeRir(...)` returns `RirResult`, and `roomMorph(...)` returns processed samples.
+`analyzeImpulseResponse(...)` and `detectAcoustic(...)` return `AcousticResult`: full-band metrics plus octave-band arrays. `estimateRoom(...)` returns `RoomEstimateResult`, `synthesizeRir(...)` returns `RirResult`, and `roomMorph(...)` returns `RoomMorphResult` — the morphed samples on `audio`, plus the diagnostics its target-room synthesis reported.
 
 ::: info Why per-band (octave bands)?
 A room does not absorb all frequencies equally — bass often rings longer than treble. Splitting the analysis into octave bands (each band roughly doubling in frequency: 125, 250, 500, 1k, 2k, 4k Hz) reports RT60 and clarity separately per band instead of as one average. Third-octave subbands are a finer split used internally during blind estimation.
@@ -129,7 +129,7 @@ const { rir, hasError } = synthesizeRir({
   sampleRate,
 });
 
-const morphed = roomMorph(dryVoice, sampleRate, {
+const { audio: morphed, diagnostics } = roomMorph(dryVoice, sampleRate, {
   lengthM: 12,
   widthM: 9,
   heightM: 4,
@@ -209,9 +209,23 @@ It solves the *scale* of a shape you supply, not the shape itself.
 
 - The length : width : height ratios come from `aspectHintLw` / `aspectHintLh`, which default to `1`. A call that omits them always returns three identical dimensions — a cube — so do not present `length`, `width`, and `height` as recovered proportions unless you passed hints.
 - A single decay fixes only the *product* of volume and absorption, so `referenceAbsorption` (default `0.15`) is the prior that pins the volume down. The reported volume scales with the cube of it: a prior half the room's true mean absorption reports roughly an eighth of the volume. Keep it fixed when comparing recordings.
+
+The prior is clamped into `[0.01, 0.99]` rather than refused, so an out-of-range value still returns a successful estimate — computed from the clamped number, which at the low end is worth three orders of magnitude in the reported volume.
+:::
+
+::: info In C, a zero prior means "use the default"
+Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_absorption` is no exception: it selects the library default of `0.15`. The idiom the C header is written for is `SonareRoomEstimateConfig cfg = {};`, so a literal zero taken at face value would land on the analyzer's `0.01` floor and — because the volume goes as the **cube** of the prior — report a normal room as a fraction of a cubic meter, with full confidence, and then hand `sonare_synthesize_rir` an unrelated reverb to build from it. Node, Python, and WASM pass `0.15` explicitly and behave the same way. If you really do want a near-rigid prior, request `0.01` rather than `0`.
 :::
 
 `roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. Do not treat or present its output as dereverberation: it adds room character, it does not remove existing reverb.
+
+::: info Read the morph's diagnostics
+`roomMorph(...)` builds its target room with the same code `synthesizeRir(...)` uses, so it can report the same three warnings: an image-source order reduced to the safe maximum (`acoustic.ism_order_clamped`), a tail cut short against `maxSeconds` (`acoustic.rir_length_clamped`), and a request that produced no diffuse tail (`acoustic.no_late_tail`). Each one says the morph went through a room other than the one you asked for, and is otherwise invisible in the audio.
+
+There is no `hasError` here, unlike `RirResult`: a morph that cannot be produced throws instead, so every entry in `diagnostics` is a warning about a result you did get.
+
+On Node and in the browser the diagnostics arrive as a structured array; the Python result reports them as a single `warning_message` string instead.
+:::
 
 ### Wall absorption and materials
 
@@ -219,12 +233,22 @@ Both `synthesizeRir(...)` and `roomMorph(...)` accept the shared shoebox geometr
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `absorption` | number | Uniform wall absorption for every band, clamped to `[0, 0.999]`. The simplest, backward-compatible control. |
+| `absorption` | number | Uniform wall absorption for every band. Must be within `[0, 1]`; an accepted value is then clamped to `[0, 0.999]`. The simplest control. |
 | `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. |
-| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. |
-| `materialPreset` | number | A named wall-material preset. A non-zero preset wins over both `bandAbsorption` and `absorption`. |
+| `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. Applied to whichever wall material the absorption fields selected. |
+| `materialPreset` | number | A named wall-material preset. A non-zero preset wins over both `bandAbsorption` and `absorption`. It does not compete with `bandScattering`. |
 
-Precedence, highest first: a non-zero `materialPreset` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own `bandAbsorption`/`bandScattering`, leave `materialPreset` at `0`.
+Precedence decides the **absorption** only, highest first: a non-zero `materialPreset` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own per-band absorption, leave `materialPreset` at `0`.
+
+`bandScattering` sits outside that contest. It applies to whichever wall material the absorption precedence selected, so a preset *plus* a scattering array is a well-formed request: you get the preset's absorption with your roughness on top of it.
+
+::: warning A scattering array always reaches the walls
+`bandScattering` is never dropped, including alongside a `materialPreset`. Scattering diffuses energy out of the specular early reflections, which moves the mixing time and the early/late balance, so passing one changes the render. If some existing code hands `synthesizeRir(...)` or `roomMorph(...)` a scattering array it does not actually want applied, remove the array rather than relying on a preset to suppress it.
+:::
+
+::: warning Out-of-range absorption is refused, not pulled into range
+A scalar `absorption` that is non-finite or outside `[0, 1]` fails with `InvalidParameter`. Only an accepted value is clamped, to `[0, 0.999]`, because a perfectly rigid wall has no finite decay. `bandAbsorption` and `bandScattering` are validated the same way, so every wall-treatment field answers a bad value identically instead of one of them quietly building a different room than you asked for.
+:::
 
 The material presets map to integer codes: `0` none, `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. Concrete and glass are reflective and keep more high-frequency tail; curtain and carpet are absorptive and shorten it.
 
@@ -239,7 +263,7 @@ const concrete = synthesizeRir({
 // Custom per-band walls (six octave bands), with scattering
 const custom = synthesizeRir({
   lengthM: 7, widthM: 5, heightM: 3,
-  materialPreset: 0, // let the band arrays apply
+  materialPreset: 0, // no preset, so bandAbsorption decides the absorption
   bandAbsorption: [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
   bandScattering: [0.1, 0.1, 0.2, 0.2, 0.3, 0.3],
   sampleRate,
@@ -257,11 +281,27 @@ The shared geometry also exposes the late-tail behavior. `RirSynthOptions` and `
 | `crossfadeMs` | Equal-power crossfade width around the mixing time, in milliseconds. `0` uses the default. |
 | `ismOrder` | Image-source reflection order for the early part. |
 | `seed`, `maxSeconds` | Late-tail random seed and the maximum RIR length to generate. |
+| `airAbsorptionEnabled` | Adds the ISO 9613-1 atmospheric-absorption term to the late tail's per-band RT60. Off by default. |
+| `airTemperatureC`, `airHumidityPercent` | The climate that term is computed for. Read only while `airAbsorptionEnabled` is set. |
 
 The **mixing time** is where the response transitions from discrete image-source early reflections to the deterministic statistical late tail; the **crossfade** blends the two so the seam is inaudible. Sabine and Eyring are the two classical RT60 estimators behind the late tail; Eyring tends to be more accurate in highly absorptive rooms.
 
 ::: tip Sabine vs Eyring (you can usually ignore this)
 Both are classic formulas that predict a room's RT60 from its size and how absorptive its surfaces are. Eyring is generally more accurate in very absorptive (well-treated) rooms; Sabine is the older, simpler one. Leave the default unless you are matching a specific reference.
+:::
+
+::: tip What air absorption changes
+Air itself absorbs sound, and it absorbs treble far more than bass, so the effect
+accumulates with the distance a reflection travels. Turning `airAbsorptionEnabled`
+on mainly shortens the high bands of a large room and leaves a small one close to
+where it was. It is off by default, so a room described the same way renders the
+same way.
+
+The climate follows this surface's usual rule that `0` selects the library value —
+here the ISO reference climate, 20 °C at 50 % relative humidity. A literal `0 °C`
+is therefore not distinguishable from unset: ask for a freezing room with `0.01`,
+which absorbs identically. An implausible temperature/humidity pair is refused the
+way the surrounding geometry checks are, rather than pulled into range.
 :::
 
 ::: details What are image-source reflections?
@@ -309,7 +349,7 @@ For reliable numbers, record a clean impulse response:
 
 A blind estimate is useful for comparing recordings or warning that a take sounds too reverberant. Do not treat it as an architectural measurement.
 
-If you need live visual frames or BPM/key/chord estimates that update as audio arrives, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).
+If you need live visual frames or BPM/key/chord estimates that update as audio arrives, use [Realtime and Streaming](./realtime-streaming.md). If you need song-level metadata, use [JavaScript API](./js-api-analysis.md#analysis-functions) or [Python API](./python-api.md#analysis-functions).
 
 ## Related
 

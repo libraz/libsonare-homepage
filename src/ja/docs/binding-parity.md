@@ -32,9 +32,13 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 
 ## 機能対応
 
-ライブラリ系バインディングは同じ機能ファミリーを公開しています。対象は WASM、Python、Node ネイティブ、C++、C ABI です。
+DSP コアは 1 つで、その周りのランタイムは手書きです。コアの実装は 1 つきりで、どのランタイムもそこへ呼び込むため、Python で計算した結果と WASM で計算した結果は同じコードから出てきます。一方、コアを包む API サーフェスはバインディングごとに手で書かれており、同一ではありません。
 
-実質的な差が出るのは主に CLI です。下の表は各ファミリーについて、ライブラリ系での対応状況と CLI の対応範囲を短く示します。行に断りがなければ、ライブラリ系バインディングすべてで使えると考えてください。バインディングごとの名前の違いは上の[命名規則](#命名規則)に従います。
+libsonare リポジトリは、その差を主張ではなく計測で示します。`tools/parity/surface-coverage.md` は生成される対応表で、機能ドメインごとに、C ABI の入口のうち各ランタイムが実際に到達できる本数を報告します。C ABI の入口は全体で 772 本あり、Python は 721 本、Node は 718 本、WASM は 718 本に到達します。2 つのコマンドラインフロントエンドは意図的に絞り込んだ部分集合で、Python CLI が 108 本、ネイティブ CLI が 128 本です。差の性質が読み取れるのはドメインごとの行なので、合計値だけでなくファイル本体を確認してください。`make surface-coverage` で再生成でき、内容が古いと CI が失敗します。
+
+そこに現れる差は、品質ではなく到達範囲についての記述です。どちらの CLI も設計上絞り込まれていますし、WASM はホストのファイルシステムもスレッドを必要とする機能も公開できません。許可リストに載っている差も差として数えます。許可リストの項目は「その欠落を検討済み」という記録であって、「埋まっている」という意味ではありません。
+
+下の表は、その対応表に対応する読み物側の一覧です。各機能ファミリーについて、ライブラリ系での対応状況と CLI の対応範囲を示します。行に断りがなければ、ライブラリ系バインディングすべてにその機能があります。バインディングごとの名前の違いは上の[命名規則](#命名規則)に従います。
 
 | 機能ファミリー | ライブラリ系 | CLI |
 |----------------|------|-----|
@@ -52,6 +56,7 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | ステレオ版アシスタント／プロファイル／プレビュー JSON（`masteringAudioProfileStereo`、`masteringAssistantSuggestStereo`、`masteringStreamingPreviewStereo`） | 対応 — WASM、Node、Python（`mastering_audio_profile_stereo` ほか）、C ABI（`sonare_mastering_audio_profile_stereo` ほか）。ダウンミックスではなく左右のペアを測定する。ダウンミックスは無相関素材で積分ラウドネスを約 6 dB 過小に読む — [ステレオ素材](./mastering-assistant.md#ステレオ素材)を参照 | 専用コマンドなし |
 | ステレオ版クレストファクター（`meteringCrestFactorDbStereo` ／ `metering_crest_factor_db_stereo`） | 対応 — WASM、Node、Python、C ABI（`sonare_metering_crest_factor_db_stereo`） | 非対応 |
 | ミキシングエンジンとシーン | 対応 | `mix`（C++ CLI はシーンプリセット書き出しも対応） |
+| ミキシングアシスタント（`suggestMixScene` / `suggest_mix_scene`） | 対応 — WASM、Node、Python、C ABI（`sonare_mixing_assistant_suggest`）。ビルド時オプション `BUILD_MIXING_ASSISTANT` に依存し、`SONARE_WASM_ANALYSIS_ONLY` を指定すると強制的に無効になります。無効なビルドでも入口はエクスポートされたまま `NotSupported` を返すため、シンボルの有無ではなく機能カタログで判定してください — [ミキシングアシスタント](./mixing-assistant.md)を参照 | 対応 — `suggest-mix` |
 | サラウンド・マルチチャンネルミキシング | リアルタイムエンジンでは、ストリップの `surroundPan` 位置に従ってレーンを 5.1/7.1 グループバスへパンし、ワイドメーターも取得できます。単体のオフライン `Mixer` はステレオのままで、`sourceChannelLayout` は保存されますが、レーン入力のマルチチャンネル保持にはまだ使われません。[サラウンドとマルチチャンネル](./mixing.md#サラウンドとマルチチャンネル)を参照してください。 | 非対応 |
 | プロジェクト・アレンジ編集（ヘッドレス DAW） | 対応 — [プロジェクト編集](./project-editing.md)を参照 | 対応 |
 | 型付きオートメーションターゲット（トラックフェーダー／パン） | 対応 — [プロジェクト編集](./project-editing.md#オートメーションレーン)を参照 | 非対応 |
@@ -89,6 +94,7 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | ステレオミックス（`mixStereo` / `mix_stereo`） | 左右別々の `leftChannels` / `rightChannels` 配列と `MixOptions` オブジェクト | WASM と同じ | `[(left, right), …]` の strips と、`fader_db`・`pan`・`width`・`input_trim_db` などのキーワード配列 |
 | `timeStretch` / `pitchShift` | `(samples, sampleRate, rate/semitones)` | WASM と同じ | `(samples, sample_rate, rate/semitones)` |
 | メータータップ（`meterTap` / `stripMeter`） | 明示的なプリ／ポストフェーダータップは `meterTap(strip, tap)`。`stripMeter(strip)` はポストフェーダーの簡易入口 | WASM と同じ | `meter_tap(strip, tap)` / `strip_meter(strip)` |
+| ピーク／RMS 正規化 | 関数は 2 つで、統計量は `mode: 'peak' \| 'rms'` で選びます。`normalize(...)`（リクエストオブジェクトまたは位置引数）と `normalizeStereo(request)`（リクエストのみ）です。リクエストは `validate?` を受け取り、長さの揃わないペアはコアへ届く前に JavaScript 側で `RangeError` として拒否されます | 同じ 2 つの関数と同じ `mode` ですが、ステレオ版のリクエストは `validate` を持たず、JavaScript 側の長さ検査もありません。長さの揃わないペアはコアから `ErrorCode.InvalidParameter` の `SonareError` として返ります | 関数は 4 つで `mode` 引数はありません。モノラルは `normalize` / `normalize_rms`、ペアは `normalize_stereo` / `normalize_rms_stereo` で、いずれもキーワード引数 `validate=` を取ります |
 
 ### 設定・戻り値・データの形
 
@@ -98,7 +104,7 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | ステレオ版アシスタント／メータリングのリクエスト型 | モノラル版と並んで追加されたステレオ版の入口は、どの JS 系サーフェスでも**リクエストオブジェクト専用**で、位置引数のオーバーロードはありません。リクエスト型の名前もバインディングごとに異なり、WASM はプロファイルと提案で `MasteringStereoParamsRequest` を共有するのに対し、Node は `MasteringAssistantSuggestStereoRequest` と `MasteringAudioProfileStereoRequest` に分かれる（後者は前者を継承し、フィールドの追加はない）。Python は通常の位置引数／キーワード引数（`left, right, sample_rate=…`）を取り、C ABI は `const float* left, const float* right, size_t length` を取る |
 | `StreamingMasteringChain` の対象 | ブロック処理できるステージ専用。前後文脈やファイル全体が必要な repair 段は拒否する。`loudness` 段は、事前計算した静的ゲインを `loudnessStaticGainDb`（JS）/ `loudness_static_gain_db`（Python）で渡せば利用でき、音源の True Peak（トゥルーピーク）も任意で指定できる。静的ゲインを指定しない場合はコンストラクタが拒否する |
 | `analyze(...)` の戻り値 | C ABI・Python・Node ネイティブ・WASM のいずれも完全な `analyze` 結果を返す。コード、セクション、音色、ダイナミクス、リズム、メロディー、フォーム、ビートごとの強さが含まれる。専用関数（`detect_chords`、`analyze_sections` …）は、追加パラメータが必要なときや、全パイプラインを通さず 1 ファミリーだけ欲しいときに引き続き使える |
-| `normalize(...)` の既定値 | Python・WASM・Node ネイティブでは、モジュール関数 `normalize(...)` と `Audio.normalize()` 便利メソッドのどちらも `0.0` dBFS が既定。これはゲイン 0 を適用するのではなく、ピークをフルスケールへ正規化する意味 |
+| 正規化の既定値と戻り値 | モノラルのピーク正規化は、Python・WASM・Node ネイティブのいずれでも `0.0` dBFS が既定です（モジュール関数 `normalize(...)` と `Audio.normalize()` 便利メソッドの両方）。これはゲイン 0 を適用するのではなく、ピークをフルスケールへ正規化する意味です。RMS の既定は `-20.0` dBFS で、Python の `normalize_rms` / `normalize_rms_stereo` と、CLI が従うライブラリ既定値がこれにあたります。JS 系の 2 サーフェスはここで自分のモノラル版と食い違います。`normalizeStereo` の `targetDb` は**モードごとに**既定が変わり、`'peak'` では `0`、`'rms'` では `-20` です。一方 `normalize` はどちらのモードでも `0` を既定にします。RMS 目標を `0` dBFS にすると事実上すべてのピークがフルスケールを超えるためです。ステレオ版の入口は 4 つとも、ペア全体でレベルを 1 つ測り、同じゲインを両チャンネルへ適用します。したがってステレオバランスは保たれ、戻り値もペアではなく単一の `appliedGainDb` / `applied_gain_db` を報告します。無音のペアは手を加えずに `0` で返ります。Python の `NormalizeStereoResult` には JS 側の戻り値にない 4 つめのフィールド、共有される `length` があります |
 | `bounceOffline(...)` の LUFS | C API と WASM で LUFS 正規化の既定値が揃っている（LUFS はフルスケール基準のラウドネス単位。詳細は[LUFS](./glossary/lufs.md)）。古いコードを移植するときは、意図が重要なら `normalizeLufs` / `normalize_lufs` を明示する |
 | `mfcc` の lifter | `mfcc(...)` / `mfcc` はどのバインディングでも末尾に `lifter` / `lifter` 引数を取る（ケプストラルリフタリング。既定は `0` でリフタリングなし）。C ABI の明示レンジ入口は `sonare_mfcc_ex` |
 | `trim` と `trimSilence` | `trim(...)` は単純な `thresholdDb` で音声だけを返す。`trimSilence(...)` / `trim_silence(...)` は `librosa.effects.trim` 互換で、`topDb`・フレーム RMS・元音源上のサンプル範囲を扱う |
@@ -114,7 +120,8 @@ libsonare は単一の C++ コアを、C、Python、Node ネイティブ、WASM�
 | 自己類似度系の命名 | Python は JavaScript の `segment_` 接頭辞を落とします。`cross_similarity` / `recurrence_matrix` / `recurrence_to_lag` / `lag_to_recurrence` / `path_enhance` / `subsegment` / `agglomerative` が、`segmentCrossSimilarity` などに対応します |
 | `Audio` のサンプル取得 | WASM の `audio.data`、Node の `audio.getData()`、Python の `audio.data` はすべてコピーを返す。返り値に書き込んでもインスタンスは変わらず、取得するたびに確保が発生する |
 | 配布形態 | 公開されている成果物は WebAssembly の npm パッケージ、Python ホイール、ネイティブ CLI のアーカイブです。Node ネイティブバインディングは private 指定でローカル依存として使う前提のため、常にソースからビルドします |
-| エラー | どのバインディングも同じ C ABI 数値コードを持つ構造化 `SonareError` を送出する。WASM と Node は `code` + `codeName` 付きの `Error` サブクラスをスロー（`ErrorCode` enum と `isSonareError` ガードをエクスポート）。Python は `.code` 付きの `RuntimeError` サブクラスを送出。両 CLI は失敗を安定した終了コードへ対応付ける（使用方法エラー 2、無効パラメータ 3、キャンセル 11。[CLI](./cli.md)を参照） |
+| エラーの型 | どのバインディングも、同じ C ABI 数値コードを持つ構造化された `SonareError` を送出します。WASM と Node は `code` と `codeName` を持つ `Error` サブクラスをスローし、どちらのパッケージも `ErrorCode` enum と `isSonareError(value)` ガードをエクスポートします。Python は `.code` を持つ `RuntimeError` サブクラスを送出します。両 CLI は失敗を安定した終了コードへ対応付けます（使用方法エラー 2、無効パラメータ 3、キャンセル 11。[CLI](./cli.md)を参照）。バインディング固有の追加が 2 つあります。Python には `SonareValueError` があり、`SonareError` と `ValueError` の両方を継承するため、引数検証の失敗をどちらの `except` でも捕捉できます。C ABI へ到達していない失敗でも `ErrorCode.INVALID_PARAMETER` を持ちます。Node の `SonareError` は実行時のクラスで、`instanceof` はブランド判定です。アドオンがクラスを構築せずに送出したエラーも、ワーカー境界を越えてプロトタイプを失ったエラーも、そのまま絞り込めます。`isSonareError` は同じダックタイピング判定で、両者の結果が食い違うことはありません |
+| 同じ失敗の現れ方 | 上の行は、バインディング自身が送出する型についての説明です。バインディング層より下で発生した失敗は、ランタイムごとに違う形で届くことがあります。もっとも分かりやすいのが、未知の insert を指すシーンを `Mixer.fromSceneJson` に渡した場合です。WASM はファサードが包んだメッセージ付きの `InvalidState` を送出し、Node は型のない `Napi::Error`（`code` を持たない素の `Error` なので `isSonareError` は false）を送出し、Python は内側の理由を落とした素の `RuntimeError` を送出し、C ABI は `nullptr` を返して詳細を `sonare_last_error_message()` に残します。呼び出しごとに確認せずに、バインディングをまたいでエラー型で制御を分岐させないでください |
 | WASM のオブジェクト戻り値 | 名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、`synthPresetPatch`、セクション結果、キー候補ヘルパーが返す WASM の配列／オブジェクトは、呼び出し元の JavaScript realm へ再ルートされるため、通常のオブジェクトと同様に `structuredClone()` / `postMessage()` へそのまま渡せる |
 | CLI の提供範囲 | PyPI の Python CLI か、ソースビルドの C++ CLI かで異なる。詳細は [CLI](./cli.md) を参照 |
 
@@ -158,4 +165,4 @@ JavaScript の例を Python に移す、Python の検証コードを C++ に移�
 - `src/sonare.h`
 - `tools/sonare_cli.cpp`
 
-libsonare リポジトリには、C++、C ABI、Python、Node、WASM 間の既定値、定数／enum、パラメータ名を確認する `tools/parity` もあります。
+libsonare リポジトリには、C++、C ABI、Python、Node、WASM 間の既定値、定数／enum、パラメータ名を確認する `tools/parity` もあります。ランタイム対応表 `tools/parity/surface-coverage.md` もここで生成されます。

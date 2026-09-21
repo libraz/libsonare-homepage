@@ -166,6 +166,10 @@ cmake ..                         # auto-detect FFmpeg
 
 cmake --build . --parallel
 
+# Optional: install the archives, both header trees, the CMake package files
+# and the native CLI under a prefix, so other projects can find_package() it
+cmake --install . --prefix /your/prefix
+
 # Build WebAssembly (run from the repository root, not from build/)
 cd .. && make wasm
 ```
@@ -279,3 +283,16 @@ For geometric room acoustics:
 
 - include the header for the feature you use: `acoustic/rir_synthesizer.h`, `analysis/room_estimator.h`, or `effects/acoustic/room_morph.h`;
 - build with `BUILD_ACOUSTIC_SIM=ON`.
+
+To consume an installed build from your own CMake project:
+
+```cmake
+find_package(sonare REQUIRED)
+target_link_libraries(app PRIVATE sonare::sonare)
+```
+
+`sonare::sonare` is an aggregate over every static archive the installation was built with, so you do not have to work out which ones your calls need. Each subsystem is also exported on its own — `sonare::midi` alone is enough for an app that only renders MIDI through the built-in instruments.
+
+Headers land in two places, matching how they are already written. The C ABI keeps its namespaced spelling at `<sonare/sonare_c.h>`. The C++ tree, whose headers include each other by their path relative to the source root, installs whole under `include/sonare/cpp`, so both `#include "sonare.h"` and `#include <sonare/cpp/sonare.h>` resolve — and generic paths like `core/audio.h` stay out of your include root.
+
+See [Link targets](./cpp-api.md#link-targets) for the full target list, the component-naming rule, and the build flags that decide which targets exist.

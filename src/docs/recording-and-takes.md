@@ -250,7 +250,20 @@ project.setClipCompSegments(clipId, [
 ]);
 ```
 
-Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId? }`. Take ids must be unique, and any *non-zero* `takeId` referenced by a comp segment must match an existing take — a bad non-zero reference throws, so the edit fails loudly rather than corrupting the clip. A `takeId` of `0` (or omitted) is the deliberate exception: it falls back to the clip's active/base take for that region, so you can leave a segment on the active take without naming an id.
+Each `ProjectClipTake` is `{ id, sourceId?, sourceOffsetPpq?, name? }`; each `ProjectClipCompSegment` is `{ startPpq, endPpq, takeId?, crossfadePpq? }`. Take ids must be unique, and any *non-zero* `takeId` referenced by a comp segment must match an existing take — a bad non-zero reference throws, so the edit fails loudly rather than corrupting the clip. A `takeId` of `0` (or omitted) is the deliberate exception: it falls back to the clip's active/base take for that region, so you can leave a segment on the active take without naming an id.
+
+### Softening the seam
+
+Two takes are two different signals, so a comp splice steps the waveform wherever they disagree. `crossfadePpq` fades a segment in over the part *before* it, so the switch completes exactly where the segment starts and the clip length does not move. The fade is equal-power, which keeps the level steady across a correlated seam.
+
+```typescript
+project.setClipCompSegments(clipId, [
+  { startPpq: 0, endPpq: 2, takeId: 1 },
+  { startPpq: 2, endPpq: 4, takeId: 2, crossfadePpq: 0.25 }, // blend in over a quarter note
+]);
+```
+
+`0` — the default — is the butt join, so a comp written before this option existed renders exactly as it did. A fade cannot outrun either its own segment or the part ahead of it, and the first segment has nothing in front of it, so a crossfade there is held at `0`.
 
 The third argument, `activeTakeId`, is optional and defaults to `0`. Pass `0` (or omit it) and the clip keeps playing its **base source** with no active-take override — useful when you have defined takes but do not want any of them to replace the original clip audio by default. Any non-zero `activeTakeId` must match the `id` of one of the takes you pass; take ids themselves are always non-zero, so `0` unambiguously means 'no active take'.
 

@@ -162,6 +162,16 @@ Once a track id occupies a lane, its lane index stays fixed for the engine's lif
 `setTrackLanes`, `setTrackBuses`, and the strip JSON setters build internal structures and must not run concurrently with `process(...)` — issue them between renders or while stopped. The lightweight live controls are `setSoloMute` (queued sample-accurately) and the EQ-band updates, which mutate one band in place.
 :::
 
+### A bus insert chain sees the summed signal, once
+
+Clip audio and hosted-instrument audio are two contributors to the same buses, and they are aggregated into one block before any strip, send, or bus chain runs. A bus insert chain therefore processes the **sum** of its contributors exactly once per block. That is what a non-linear insert needs: a compressor or a saturator run separately over the clip contribution and again over the instrument contribution acts on two partial signals, which is not the same thing as acting on the summed bus, and a reverb would advance its tail twice per block.
+
+Two conditions open that merged block. Plugin delay compensation must be inactive — with PDC in play the clip bus is rendered into its own scratch buffer and delayed so it lands phase-aligned with the internally-delayed instruments, so those buses genuinely belong to that separate pass. And the instrument rack must be non-empty, since there is nothing to merge otherwise.
+
+::: info Solo and mute ramps take their full time
+Because each lane is finished once per block, its fader, pan, and gate smoothers advance once per block too. The gate — the smoother behind solo and mute — has a **10 ms** time constant, against **5 ms** for the pan smoother, so a solo or mute change is a short audible ramp rather than a step. This is unrelated to `setParamSmoothingMs`, which sets the default glide for insert-parameter and fader automation and defaults to 20 ms.
+:::
+
 <SonareDemo id="engine-lane-mixer" />
 
 ## Track monitor taps: off, PFL, and AFL
@@ -271,6 +281,50 @@ engine.setAutomationLane(thresholdId, [
   { ppq: 8, value: -24, curveToNext: 3 },
 ]);
 ```
+
+### Automating a hosted instrument
+
+A synth bound to a MIDI destination has automatable parameters too, and they resolve the same way an insert parameter does. `resolveInstrumentAutomationId(destinationId, paramName)` turns a hosted instrument's continuous parameter — addressed by its JSON-key name, such as `'cutoffHz'` — into a reserved id you pass straight to `setAutomationLane`, `setParameter`, or `setParameterSmoothed`. A host can then drive a synth's cutoff or vibrato depth from an automation lane at audio-block precision instead of stepping it from the control thread, and because the resolved lane is smoothed on the audio thread, live and offline rendering agree.
+
+Bind the instrument with `setSynthInstrument` or `setSf2Instrument` first, then resolve. Resolution is control-thread only and touches no audio state.
+
+::: code-group
+
+```typescript [node]
+engine.setSynthInstrument(0, patch);
+
+const cutoffId = engine.resolveInstrumentAutomationId(0, 'cutoffHz');
+if (cutoffId < 0) throw new Error('cutoffHz is not automatable on this instrument');
+
+engine.setAutomationLane(cutoffId, [
+  { ppq: 0, value: 400 },
+  { ppq: 8, value: 6000, curveToNext: 1 },
+]);
+```
+
+```python [python]
+from libsonare import AutomationCurve, AutomationPoint
+
+engine.set_synth_instrument(patch, destination_id=0)
+
+# Note the argument order: param_name comes first here.
+cutoff_id = engine.resolve_instrument_automation_id("cutoffHz", destination_id=0)
+
+engine.set_automation_lane(cutoff_id, [
+    AutomationPoint(ppq=0, value=400, curve_to_next=AutomationCurve.EXPONENTIAL),
+    AutomationPoint(ppq=8, value=6000),
+])
+```
+
+:::
+
+::: warning Python takes the arguments in the opposite order
+WASM and Node spell this `resolveInstrumentAutomationId(destinationId, paramName)` — destination first. Python spells it `resolve_instrument_automation_id(param_name, destination_id=0)` — **name first**, with the destination defaulting to `0`. Passing a destination id where the name belongs raises rather than resolving, so the mistake surfaces immediately, but it is worth checking once when porting a host between the two.
+:::
+
+The id encodes the destination slot as well as the parameter, so it survives an unbind and rebind of the *same* `destination_id` and simply applies nothing while that destination has no instrument bound. Structural fields — preset, engine mode, waveform, filter model, unison, polyphony — are not automatable: they resize voice pools or swap DSP topology, which is not audio-thread safe. Rebind the instrument with a new patch instead.
+
+The engine holds **32** instrument-automation slots; once they are claimed, further resolutions fail rather than retargeting an existing lane. Resolution returns `-1` on WASM and Node — or `SONARE_ERROR_INVALID_PARAMETER` at the C entry point `sonare_engine_resolve_instrument_automation_id` — when the key is unknown, no instrument is bound to that destination, the instrument exposes no automatable parameters, or the slot table is full. Always check the returned id before handing it to a lane. In a build without the arrangement subsystem the C entry point returns `SONARE_ERROR_NOT_SUPPORTED`, and that build reports `instrumentParamAutomation: false` in its capability JSON — the way a host detects up front that the resolver will not answer. See [`capabilities()`](./js-api.md#capabilities).
 
 `setParamSmoothingMs(ms)` changes the default glide used by smoothed fader/pan changes, insert-parameter automation, and MIDI-CC mappings. The default is `20` ms; `0` makes changes immediate. Set it once from the control thread before playback unless your host intentionally changes the global feel of automation.
 

@@ -12,7 +12,7 @@ MIR は **Music Information Retrieval**（音楽情報検索）の略で、音�
 ここで挙げる用語をまとめるのには理由があります。これらは単独の機能名ではなく、ほぼすべての MIR タスクが同じ**時間-周波数の土台**の上に立っています。その共通の土台を一度理解すれば、個々の機能は無関係な長いリストには見えなくなります。
 
 ::: tip 初めてなら、リファレンスではなく見取り図として読む
-このページは*各要素がどう関係するか*を説明します。呼び出しシグネチャは [JavaScript API](../../js-api.md#特徴抽出) や [Python API](../../python-api.md#特徴抽出) を、*どう計算されるか*は [DSP 実装解説](../../dsp-implementation.md) を参照してください。
+このページは*各要素がどう関係するか*を説明します。呼び出しシグネチャは [JavaScript API](../../js-api-analysis.md#特徴抽出) や [Python API](../../python-api.md#特徴抽出) を、*どう計算されるか*は [DSP 実装解説](../../dsp-implementation.md) を参照してください。
 :::
 
 ## 共通のパイプライン
@@ -165,4 +165,4 @@ libsonare はブラウザ（WASM）、JavaScript、Python、ネイティブバ�
 
 ::::
 
-関連: [イントロダクション](../../introduction.md)、[オーディオ基礎](./audio-basics.md)、[JavaScript API](../../js-api.md#特徴抽出)、[ルーム音響解析](../../acoustic-analysis.md)、[DSP 実装解説](../../dsp-implementation.md)、[librosa 互換性](../../librosa-compatibility.md)
+関連: [イントロダクション](../../introduction.md)、[オーディオ基礎](./audio-basics.md)、[JavaScript API](../../js-api-analysis.md#特徴抽出)、[ルーム音響解析](../../acoustic-analysis.md)、[DSP 実装解説](../../dsp-implementation.md)、[librosa 互換性](../../librosa-compatibility.md)

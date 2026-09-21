@@ -39,7 +39,7 @@ libsonare の内部アーキテクチャについて説明します。
     { id: 'editFx', label: 'ノーマライズ・無音トリム・プリ／ディエンファシス', col: 1, row: 3, group: 'effects' },
     { id: 'creativeFx', label: '分解・リバーブ・クリエイティブ FX', col: 2, row: 3, group: 'effects' },
     { id: 'roomFx', label: 'Room Morph・ボイス変換', col: 3, row: 3, group: 'effects' },
-    { id: 'nativeSynth', label: 'NativeSynth（15 エンジン）', col: 0, row: 4, group: 'instruments', variant: 'accent' },
+    { id: 'nativeSynth', label: 'NativeSynth（17 エンジン）', col: 0, row: 4, group: 'instruments', variant: 'accent' },
     { id: 'soundfont', label: 'SoundFont プレイヤー（SF2）', col: 1, row: 4, group: 'instruments' },
     { id: 'midiSeq', label: 'MIDI・シーケンサー・SMF/UMP', col: 2, row: 4, group: 'instruments' },
     { id: 'instrumentRack', label: 'インストゥルメントラック', col: 3, row: 4, group: 'instruments' },
@@ -113,7 +113,7 @@ libsonare の内部アーキテクチャについて説明します。
 
 | 見ている領域 | 読むページ |
 |--------------|------------|
-| `analysis/` と `feature/` | [JavaScript API](./js-api.md)、[Python API](./python-api.md)、[librosa 互換性](./librosa-compatibility.md) |
+| `analysis/` と `feature/` | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md)、[librosa 互換性](./librosa-compatibility.md) |
 | `analysis/acoustic_analyzer.*`、`analysis/room_estimator.*`、`src/acoustic/`、`effects/acoustic/` | [ルーム音響解析](./acoustic-analysis.md)、[アルゴリズム根拠](./algorithm-references.md#スコープの境界) |
 | `streaming/` | [リアルタイムとストリーミング](./realtime-streaming.md) |
 | `mastering/` | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[マスタリングアシスタント](./mastering-assistant.md) |
@@ -137,7 +137,7 @@ src/
 ├── core/               # レベル 1-3: コア DSP
 │   ├── convert.h       # Hz/Mel/MIDI 変換
 │   ├── window.h        # Hann, Hamming, Blackman
-│   ├── fft.h           # KissFFT アダプター
+│   ├── fft.h           # 変換の抽象層（PFFFT／KissFFT バックエンド）
 │   ├── spectrum.h      # STFT/iSTFT
 │   ├── audio.h         # オーディオバッファ
 │   ├── audio_io.h      # WAV/MP3 読み込み、任意で FFmpeg 対応形式
@@ -449,11 +449,22 @@ WASM ビルドでは、ネイティブのファイル I/O や FFmpeg ベース�
 | ライブラリ | 用途 | ライセンス |
 |---------|---------|---------|
 | KissFFT | FFT | BSD-3-Clause |
-| Eigen3 | 行列演算 | MPL-2.0 |
+| PFFFT | SIMD FFT（ネイティブビルド） | BSD-3-Clause |
+| Eigen3 | 行列演算（ビルド時のみ） | MPL-2.0 |
 | dr_libs | WAV デコード | Public Domain |
 | minimp3 | MP3 デコード | CC0-1.0 |
 | FFmpeg | 任意の拡張ファイルデコード | リンクするビルドにより LGPL/GPL |
 | r8brain | リサンプリング | MIT |
+
+::: info 1 つのヘッダーの裏に 2 つの FFT バックエンド
+`core/fft.h` は特定ライブラリへの結び付きではなく、変換の抽象層です。ネイティブビルドでは、PFFFT が因数分解できる変換長をすべて受け持ち、残りを KissFFT が受け持ちます。どちらが使われても受け付ける `n_fft` の範囲は同じで、違うのは速度だけです。KissFFT のみのネイティブビルドにしたい場合は `-DSONARE_USE_PFFFT=OFF` を指定します。
+
+WebAssembly ビルドは意図的に KissFFT のみです。2 つの変換を同時に抱えると、解析専用モジュールのサイズ予算を超えてしまううえ、ネイティブ SIMD を離れると得られる速度差も残らないためです。
+:::
+
+::: info Eigen は利用側の依存ではありません
+Eigen はコア自身の翻訳単位の内部で使われ、インストールされるヘッダーはどれも Eigen を include しません。したがって利用側がリンクしたり include したりするものではなく、ビルド時の依存です。インストール済みの libsonare に対してビルドするのに必要なのは C++17 コンパイラだけです。
+:::
 
 ## WASM コンパイル
 

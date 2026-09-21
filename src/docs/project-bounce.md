@@ -344,9 +344,30 @@ sonare project bounce --in song.json -o master.wav --synth
 sonare project bounce --in song.json -o master.wav --synth saw
 sonare project bounce --in song.json -o pad.wav --synth warm-pad
 
+# A project with unresolved audio sources needs their samples supplied first:
+# open every source's own file:// URI in one pass...
+sonare project bounce --in song.json -o master.wav --resolve-audio
+
+# ...or bind one source explicitly by id (repeatable, once per source)
+sonare project bounce --in song.json -o master.wav --audio 1=vocals.wav
+
 # Inspect first: compile diagnostics (including the no-instrument warning)
 sonare project compile --in song.json --json
 ```
+
+A project's `sources` entries name their audio by URI only — the library never opens one itself — so a project whose clips reference audio renders nothing until the command line supplies the samples. `--resolve-audio` opens the `file://` URIs the document's sources already carry; any other scheme is refused by name rather than skipped:
+
+```
+Error: source 1 (https://example.com/take.wav): --resolve-audio opens file:// URIs only; pass --audio 1=FILE
+```
+
+`--audio <source_id>=WAV` instead binds one decoded file to one source, addressed by the numeric id from the project's `sources` array (or from the refusal message below); repeat the flag once per source. A source still unresolved when the render starts is refused with its id, its URI, and the option that would have supplied it:
+
+```
+Error: source 1 (file:///song/vocals.wav) has no audio; pass --audio 1=FILE or --resolve-audio
+```
+
+A bound source keeps the channel count of the file it was decoded from — binding a mono take does not upmix it. `midi-render` accepts neither flag; a project bounced through it with an unresolved audio source still hits the bare `Error: [7] Invalid state` rather than a message naming options `midi-render` does not have.
 
 The `--synth` flag reads two ways. Bare `--synth` follows the project's General MIDI program changes per channel, with channel 10 routed through the GM drum-kit map, and falls back to the `sine` patch for anything the map does not cover — this is the option to use when the project carries real GM programs. `--synth <preset>` instead pins every destination to one fixed NativeSynth preset accepted by `sonare_synth_preset_patch`, i.e. the full [NativeSynth preset catalog](./native-synth.md) (`--synth warm-pad`, `--synth saw-lead`, and so on) — run `sonare project synth-presets` to list the names. SF2 and per-destination synth JSON remain binding-only (WASM/Node/Python); use the Project API for SoundFont-backed bounces. Other useful subcommands are `project new`, `project validate`, `project synth-presets`, and `project abi`.
 

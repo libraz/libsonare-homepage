@@ -47,6 +47,8 @@ The libsonare repository has librosa comparison tests for STFT, mel/MFCC, chroma
 
 Use the tolerances below as migration guidance. They are not exact numerical guarantees for every input.
 
+These reference tests establish agreement on the covered low-level helper, not whether a high-level result — a key, a chord, a beat — is musically correct on your material. See [Implementation Validation: Accuracy Boundaries](/docs/implementation-validation#accuracy-boundaries) and the [FAQ](/docs/faq#how-accurate-is-the-music-analysis) for that distinction and how to measure it yourself.
+
 ## Feature Comparison
 
 ### Supported Features
@@ -76,6 +78,7 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.phase_vocoder()` | `phaseVocoder()` / `phase_vocoder()` | Direct phase-vocoder time scaling |
 | `librosa.effects.pitch_shift()` | `pitch_shift()` / `pitchShift()` | Time stretch plus resampling |
 | `librosa.effects.remix()` | `remix()` | Reorder or concatenate interval slices; interval units are samples |
+| _(no librosa equivalent)_ | `remixAlignedIntervals()` / `remix_aligned_intervals()` | Resolves one zero-crossing-aligned cut set from a single channel, for applying identically across every channel of a stereo signal — snapping each channel independently with `remix()` drifts a stereo take apart, since zero-crossing snapping is a per-signal decision |
 | `librosa.effects.preemphasis()` | `preemphasis()` | `coef`, optional `zi` |
 | `librosa.effects.deemphasis()` | `deemphasis()` | Inverse pre-emphasis |
 | `librosa.effects.trim()` | `trimSilence()` / `trim_silence()` | WASM/Node return `{ audio, startSample, endSample }`; Python returns `(audio, start_sample, end_sample)` |
@@ -123,11 +126,18 @@ Use the tolerances below as migration guidance. They are not exact numerical gua
 | `librosa.decompose.decompose()` | `decompose()` | NMF factor matrices from a row-major spectrogram |
 | `librosa.decompose.decompose(init=...)` | `decomposeWithInit()` / `decompose_with_init()` | NMF with selectable init: `init='random'` (default) or `init='nndsvd'` (SVD warm start) |
 | `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | Nearest-neighbor filtering |
+| _(no librosa equivalent)_ | `decomposeStems()` / `decompose_stems()` | NMF-based stem separation: builds a per-component soft mask from the same factorisation and applies it to the original **complex** spectrogram, so every component keeps the source's phase and the components sum back to the input |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | Multichannel integrated loudness from interleaved samples |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | Loudness range in LU |
 
 ::: details What are NMF and NNLS here?
 NMF (non-negative matrix factorization) breaks a spectrogram into a small set of recurring spectral "templates" and how strongly each is active over time — useful for pulling apart layered sounds. NNLS (non-negative least squares) is the related fit used by `nnlsChroma` to estimate how much each musical note is active, giving a cleaner chroma than a raw spectrogram.
+
+`decompose()` returns the factors of a **magnitude** spectrogram, which carries no phase — turning a factor back into audio needs a phase estimator, and the result does not survive as a usable stem. `decomposeStems()` instead masks and inverts the original complex spectrogram per component, so each output stem keeps the source's actual phase.
+:::
+
+::: info NNDSVD seeding and reproducibility
+NNDSVD (`init='nndsvd'`) seeds from the leading singular vectors of the input, solved in double precision, so the same input produces the same factors on every platform. This is a reproducibility property, not an accuracy one: a magnitude spectrogram's trailing singular vectors sit at single precision's noise floor, so a float seed would depend on the order the target happens to sum in, and different targets would then answer with different components. Shapes, non-negativity, and reconstruction quality are unaffected — but a caller holding **stored factors**, or comparing a stem render against an older one, will see the components differ from what this produces now.
 :::
 
 #### Inverse reconstruction
@@ -174,7 +184,7 @@ librosa's strength is low-level DSP — higher-level music understanding is typi
 | libsonare | Description |
 |-----------|-------------|
 | `KeyAnalyzer` | Musical key detection (Krumhansl-Schmuckler profiles) |
-| `ChordAnalyzer` | Chord recognition (192 chord-type templates) |
+| `ChordAnalyzer` | Chord recognition (24 qualities across 12 roots when the full template set is enabled — see [Which chords can it recognise?](/docs/faq#which-chords-can-it-recognise) for the triads-only default inside `analyze()`) |
 | `SectionAnalyzer` | Song structure analysis (intro / verse / chorus, etc.) |
 | `TimbreAnalyzer` | Timbre characteristics (brightness, warmth, density, …) |
 | `DynamicsAnalyzer` | Loudness, dynamic range, crest factor |
@@ -495,13 +505,10 @@ auto energy = chroma.mean_energy();
 
 ## Performance Comparison
 
-The short version: core spectral transforms (STFT, Mel, MFCC) are roughly tied
-with librosa, while iterative algorithms (HPSS, pYIN) and the all-in-one analysis
-pipeline are dramatically faster. The per-feature numbers, hardware details,
-methodology, and reproduction steps live in one place — see
-[Benchmarks](/docs/benchmarks) — so this page doesn't carry a copy that can
-drift out of date.
+Native and browser tell different stories here, because they run on different FFT backends by design.
 
-WebAssembly is generally slower than native C++; exact performance depends on
-the feature, browser, input length, and build settings. See
-[Benchmarks](/docs/benchmarks) for measured results.
+Natively, libsonare's transforms run on SIMD FFT kernels, so the transform-bound features — STFT itself, and everything built on it such as Mel and MFCC — come out ahead of librosa, on top of already being well ahead on iterative algorithms (HPSS, pYIN) and the all-in-one analysis pipeline.
+
+The WebAssembly build keeps the scalar FFT alone: carrying both FFT backends costs more binary size than the analysis-only module's budget allows, so the SIMD path is compiled out under `BUILD_WASM`. Without it, the browser build's transform-bound features are only roughly tied with librosa running natively, rather than ahead of it.
+
+The per-feature numbers, hardware details, methodology, and reproduction steps live in one place, broken down by runtime — see [Benchmarks](/docs/benchmarks) — so this page doesn't carry a copy that can drift out of date.

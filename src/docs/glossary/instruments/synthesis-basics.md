@@ -1,13 +1,13 @@
 ---
 title: Synthesis Basics
-description: What a synthesizer actually does — oscillators, waveforms, filters, and amplifiers — and the fifteen synthesis families NativeSynth offers, explained from scratch for newcomers.
+description: What a synthesizer actually does — oscillators, waveforms, filters, and amplifiers — and the seventeen synthesis families NativeSynth offers, explained from scratch for newcomers.
 ---
 
 # Synthesis Basics
 
 A **synthesizer** is an instrument that *generates* sound from scratch instead of playing back a recording. There is no microphone and no audio file behind a synth note: the computer calculates the waveform sample by sample, in real time. That is the single idea that separates a synthesizer from a [sampled instrument](./soundfont.md), which plays back recorded audio.
 
-This page explains the building blocks every synth shares, then introduces the fifteen synthesis *families* (engines) you can choose from. It is concepts only — no code.
+This page explains the building blocks every synth shares, then introduces the seventeen synthesis *families* (engines) you can choose from. It is concepts only — no code.
 
 ::: info Why generate instead of record?
 A generated note can be any pitch, any length, and any tone, with no storage cost and no "stretching a recording" artifacts. The trade-off is that the sound has to be *designed*: someone picks a waveform, shapes it, and decides how it evolves. That design is called a **patch**.
@@ -63,15 +63,15 @@ The **amplifier** controls the volume of the note from the instant a key is pres
 
 <SonareDemo id="synth-adsr" />
 
-## The fifteen synthesis families
+## The seventeen synthesis families
 
-The blocks above describe *subtractive* synthesis, but it is only one way to make sound. **NativeSynth**, libsonare's built-in instrument engine, offers fifteen engines, each suited to different instruments:
+The blocks above describe *subtractive* synthesis, but it is only one way to make sound. **NativeSynth**, libsonare's built-in instrument engine, offers seventeen engines, each suited to different instruments:
 
 | Engine | How it makes sound | Good for |
 |--------|--------------------|----------|
 | **Subtractive / virtual-analog** | Oscillator → filter → amplifier (the classic chain above) | Leads, basses, pads |
 | **FM** | One oscillator modulates another oscillator's *pitch* | Metallic tones, bells, electric pianos, clavinet |
-| **Karplus-Strong** | A short feedback delay loop models a vibrating string | Plucked strings, guitars, harp, harpsichord |
+| **Karplus-Strong** | A short feedback delay loop models a vibrating string | Plucked strings, guitars, bass, harp |
 | **Modal** | A bank of tuned resonators models a struck object | Marimba, glockenspiel, struck bars and bells |
 | **Additive / drawbar** | Sums many harmonic sine partials, like organ drawbars | Hammond-style organs, harmonic pads |
 | **Membrane percussion** | Models the vibration modes of a drumhead | Drums, toms, percussion |
@@ -84,12 +84,16 @@ The blocks above describe *subtractive* synthesis, but it is only one way to mak
 | **Buzzing-bridge plucked string** | A plucked string whose bridge can be made to graze it and spray energy into the upper partials; at buzz 0 the termination stays clean (harp, koto) | Sitar, koto, harp |
 | **Source-filter vocal** | A glottal source (a buzzy sawtooth) shaped by a bank of vowel [formant](../editing/voice-formant.md) resonators (the resonant peaks that make one vowel sound different from another) | Choir and solo-voice vowels |
 | **Free reed** | A driven metal tongue swinging through a slot; adding a second tongue a few cents sharp of it gives the shimmering musette beat | Accordion, harmonica, bandoneon |
+| **Harpsichord** | A jack-and-plectrum mechanism plucking a registration of separate string choirs — two 8′ unisons and a 4′ octave are three independent strings, not one string with a mix knob | Harpsichord |
+| **Sample** | Plays PCM audio *you* supply, mapped over the keyboard, through the same filter, envelopes, and mod matrix as every other engine | Your own recordings, one-shot drums |
 
 ::: tip FM in one sentence
 In **FM (frequency modulation)** synthesis, instead of filtering a rich waveform, you take two simple sine oscillators and let one wobble the other's pitch very fast. The result is a complex, often metallic or bell-like tone that subtractive synthesis cannot easily make.
 :::
 
-Several of these — Karplus-Strong, modal, piano, pipe organ, bowed string, reed, brass, flute, buzzing-bridge plucked string, source-filter vocal, and free reed — are **physical modeling**: instead of stacking waveforms, they approximate the behavior of a vibrating object (a string, a metal bar, a pipe, a reed, the vocal tract, or an air jet). In libsonare's current NativeSynth these acoustic-style models are still provisional and being calibrated, so treat them as data-free preview/fallback voices rather than finished instrument simulations.
+Several of these — Karplus-Strong, modal, piano, pipe organ, bowed string, reed, brass, flute, buzzing-bridge plucked string, source-filter vocal, free reed, and harpsichord — are **physical modeling**: instead of stacking waveforms, they approximate the behavior of a vibrating object (a string, a metal bar, a pipe, a reed, the vocal tract, or an air jet). In libsonare's current NativeSynth these acoustic-style models are still provisional and being calibrated, so treat them as data-free preview/fallback voices rather than finished instrument simulations.
+
+The **sample** engine is the odd one out: it generates nothing. It takes PCM frames the host already has, resolves a key/velocity keymap at note-on, and hands the result to the oscillator's place in the subtractive chain — so your own audio arrives behind the same resonant filter and mod matrix as a synthesized tone. It is not a SoundFont reader; nothing is parsed, and you describe the mapping yourself.
 
 ## Filter character
 
@@ -101,7 +105,7 @@ The character of the filter itself can be changed. NativeSynth provides four fil
 - **sallen-key** — a smooth, musical filter associated with another lineage of classic synths.
 
 ::: details How libsonare implements this
-NativeSynth is configured with a `SynthPatch`. Its `engineMode` field selects one of the fifteen engines (`'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`), `waveform` picks the oscillator shape (`'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'`), and `filterModel` selects the filter character (`'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'`) together with `cutoffHz` and `resonanceQ`. Rather than build a patch by hand, you can list the ready-made catalog with `synthPresetNames()` and load one with `synthPresetPatch(name)`. The built-in presets are arranged over these same engines, so every preset is really one of the families above with its parameters filled in for you. Deep mode-specific data (FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry) lives inside the named presets, while the patch exposes the shared controls every engine has in common.
+NativeSynth is configured with a `SynthPatch`. Its `engineMode` field selects one of the seventeen engines (`'subtractive'`, `'fm'`, `'karplus-strong'`, `'modal'`, `'additive'`, `'percussion'`, `'piano'`, `'pipe-organ'`, `'bowed-string'`, `'reed'`, `'brass'`, `'flute'`, `'plucked-string'`, `'vocal'`, `'free-reed'`, `'harpsichord'`, `'sample'`), `waveform` picks the oscillator shape (`'sine'`, `'saw'`, `'square'`, `'triangle'`, `'noise'`), and `filterModel` selects the filter character (`'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'`) together with `cutoffHz` and `resonanceQ`. Rather than build a patch by hand, you can list the ready-made catalog with `synthPresetNames()` and load one with `synthPresetPatch(name)`. The built-in presets are arranged over these same engines, so every preset is really one of the families above with its parameters filled in for you. The `'sample'` engine is the one that needs data from you: it reads its PCM from a `SampleBank` you build and bind, and a `'sample'` patch with no bank renders silence. Deep mode-specific data (FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry) lives inside the named presets, while the patch exposes the shared controls every engine has in common.
 :::
 
 Related: [Built-in Synthesizer (NativeSynth)](../../native-synth.md), [Envelopes and Modulation](./envelopes-modulation.md), [Audio Basics](../concepts/audio-basics.md), [SoundFont and Sampled Instruments](./soundfont.md)

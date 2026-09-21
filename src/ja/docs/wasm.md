@@ -117,7 +117,7 @@ sonare analyze music.mp3 --json
 - **特徴量** — `pcen`（メルの動的レンジ圧縮）、`tonnetz`（ハーモニック空間射影）、`tempogram` / `plp`（テンポ表現）
 - **単位変換** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`、`framesToSamples` / `samplesToFrames`
 
-シグネチャは [JS API リファレンス](./js-api.md) を、librosa との対応関係は [librosa 互換性](./librosa-compatibility.md) を参照してください。
+シグネチャは [JS API リファレンス](./js-api-analysis.md) を、librosa との対応関係は [librosa 互換性](./librosa-compatibility.md) を参照してください。
 
 ## ブラウザ内ミキシング
 
@@ -202,7 +202,7 @@ sonare pitch-shift music.wav --semitones 2 -o shifted.wav
 sonare pitch music.mp3 --algorithm pyin --json
 ```
 
-インスタンスメソッドの一覧は [JS API リファレンス](/ja/docs/js-api#audio-クラス) を参照してください。
+インスタンスメソッドの一覧は [JS API リファレンス](/ja/docs/js-api-audio#audio-クラス) を参照してください。
 
 ## ブラウザ内マスタリング
 
@@ -922,6 +922,16 @@ try {
 - **オフライン Worker エントリ** — `@libraz/libsonare/worker` の背後にある `worker.js`。`OfflineWorkerClient` の Worker 側です。
 - **ボイスチェンジャーの JSON Schema** — 2 つのプリセットスキーマが `schemas/` 以下に同梱されるため、ホストは何も取得せずにプリセット文書を検証できます。
 
+### モジュールを自分でインスタンス化する場合
+
+`sonare.js` / `sonare.wasm` は、パッケージがラップしている Emscripten モジュールそのものです。通常のアプリケーションがこれに直接触れる必要はありません。`@libraz/libsonare` から import すればモジュールは初期化され、レルムごとに 1 インスタンスが保たれます。こちらがサポート対象の入口です。独自ローダー、非標準のバンドル先、ヒープを自前で管理するホストなど、モジュールを自分でインスタンス化する場合にかぎり、知っておくべき入力形式がひとつあります。
+
+::: warning マスタリングチェーンのバインディングはフラット化済みの形式だけを受け取ります
+モジュールのマスタリングチェーンのエントリが受け付ける設定形式はひとつだけです。コア自身のパラメータパーサが読む、フラット化されたパラメータ列です。代わりにネストした設定オブジェクトを渡すと、呼び出しは**名指しで拒否されます** — 認識できた部分だけを適用して残りを落とすのではなく、読めない設定を明示したエラーが返ります。
+
+**npm パッケージの利用には影響しません。** `masteringChain` と `masterAudio` は、ネストした `MasteringChainConfig` を（リペア段や denoise の設定も含めて）モジュールへ渡す前にフラット化します。したがって `@libraz/libsonare` から import しているコードは、JavaScript API の記述どおりネストした設定を渡し続けられます。該当するのは、モジュールを直接インスタンス化してネストしたオブジェクトをバインディングにそのまま渡す呼び出し側だけで、その場合も得られるのは、一部だけ適用されたチェーンではなく明確なエラーです。
+:::
+
 ## バンドルサイズ
 
 このサイズ表が対象とするのはメインモジュールとメイン API エントリです。解析専用モジュール、
@@ -978,4 +988,6 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 
 ### ネイティブ側の失敗は `SonareError` をスロー
 
-C++ コアが入力を拒否したとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api.md#エラーハンドリング)を参照。
+C++ コアが入力を拒否したとき、WASM バインディングは数値の `code` と `codeName` を持つ構造化された `SonareError` をスローします。生の Emscripten ポインタ番号や不透明な `[object Object]` が漏れることはありません。エクスポートされた `isSonareError(...)` ガードで捕捉し、`ErrorCode` で分岐してください。詳細は[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照。
+
+これはミキシングとプロジェクトのエントリポイントにも当てはまります。いずれも、下位の C++ 例外がそのまま表に出るのではなく、対応する C エントリポイントが定めているエラーコードを報告します。未知のインサートを指すシーンを `Mixer.fromSceneJson` に渡した場合は、コア側のメッセージを伴う `InvalidState` がスローされ、壊れたシーン JSON も同じく `InvalidState` になります（不明なエラーコードにはなりません）。成功だけを見て分岐しているコードに変更は不要です。特定のコードで分岐しているコードは、ここに挙げたコードで分岐してください。

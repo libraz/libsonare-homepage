@@ -38,6 +38,8 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 
 下の許容誤差は、移行時の目安として読んでください。すべての入力で厳密に同じ数値になることを保証するものではありません。
 
+これらの参照テストが確認しているのは、対象となる低レベルヘルパーが librosa と一致するかどうかであり、キー・コード・ビートといった高レベルの結果がお手元の素材で音楽的に正しいかどうかではありません。その違いと、自分で精度を測る方法は [実装検証: 精度の境界](/ja/docs/implementation-validation#精度の境界) と [FAQ](/ja/docs/faq#音楽解析の精度はどのくらいですか) を参照してください。
+
 ## 機能比較
 
 ### サポートされている機能
@@ -67,6 +69,7 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 | `librosa.phase_vocoder()` | `phaseVocoder()` / `phase_vocoder()` | 直接のフェーズボコーダー時間伸縮 |
 | `librosa.effects.pitch_shift()` | `pitch_shift()` / `pitchShift()` | タイムストレッチとリサンプリング |
 | `librosa.effects.remix()` | `remix()` | 区間スライスの並べ替え／連結。区間単位はサンプル |
+| _（librosa に相当なし）_ | `remixAlignedIntervals()` / `remix_aligned_intervals()` | 単一チャンネルからゼロクロス整列済みの切り出し区間を 1 組だけ求め、ステレオの全チャンネルに同一適用できるようにする。ゼロクロス整列はチャンネルごとに答えが変わる処理なので、各チャンネルを個別に `remix()` で整列させるとステレオのズレを生む |
 | `librosa.effects.preemphasis()` | `preemphasis()` | `coef`、任意の `zi` |
 | `librosa.effects.deemphasis()` | `deemphasis()` | プリエンファシスの逆 |
 | `librosa.effects.trim()` | `trimSilence()` / `trim_silence()` | WASM/Node は `{ audio, startSample, endSample }`、Python は `(audio, start_sample, end_sample)` を返す |
@@ -114,11 +117,18 @@ libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tunin
 | `librosa.decompose.decompose()` | `decompose()` | 行優先スペクトログラムから NMF 分解行列を返す |
 | `librosa.decompose.decompose(init=...)` | `decomposeWithInit()` / `decompose_with_init()` | 初期化方式を選べる NMF。`init='random'`（既定）または `init='nndsvd'`（SVD によるウォームスタート） |
 | `librosa.decompose.nn_filter()` | `nnFilter()` / `nn_filter()` | 近傍フィルター |
+| _（librosa に相当なし）_ | `decomposeStems()` / `decompose_stems()` | NMF ベースのステム分離。同じ分解から各成分のソフトマスクを作り、元の**複素**スペクトログラムに適用するため、各成分は入力の位相をそのまま保持し、全成分を足すと入力に戻る |
 | ITU-R BS.1770 / EBU R128 | `lufsInterleaved()` / `lufs_interleaved()` | インターリーブサンプルからマルチチャンネル Integrated loudness を測定 |
 | EBU Tech 3342 LRA | `ebur128LoudnessRange()` / `ebur128_loudness_range()` | LU 単位の loudness range |
 
 ::: details ここでの NMF と NNLS とは？
 NMF（非負値行列因子分解）は、スペクトログラムを少数の繰り返し現れるスペクトル「テンプレート」と、それぞれが時間方向にどれだけ強く働いているかへ分解します。重なった音を切り分けるのに役立ちます。NNLS（非負最小二乗）はこれに関連する当てはめで、`nnlsChroma` が各音符の活性度を推定するために使い、素のスペクトログラムより整理されたクロマを返します。
+
+`decompose()` が返すのは**振幅**スペクトログラムの分解結果で、位相情報を持ちません。これを音声に戻すには位相推定が必要になり、結果は実用的なステムとしては使えません。`decomposeStems()` は代わりに元の複素スペクトログラムを成分ごとにマスク・逆変換するため、各出力ステムは元の位相をそのまま保持します。
+:::
+
+::: info NNDSVD シードと再現性
+NNDSVD（`init='nndsvd'`）は入力の主成分特異ベクトルを倍精度で解いてシードを作るため、同じ入力からはどのプラットフォームでも同じ分解結果が得られます。これは精度ではなく再現性の性質です。振幅スペクトログラムの下位の特異ベクトルは単精度のノイズフロアに埋もれるため、単精度でシードすると対象データの合計順序に結果が依存し、対象が変わると成分も変わってしまいます。形状、非負性、再構成品質はどちらの実装でも変わりませんが、**保存済みの分解結果**を持っている場合や、過去のステムレンダーと比較する場合は、今回の実行結果と成分が異なって見えます。
 :::
 
 #### 逆再構成
@@ -165,7 +175,7 @@ librosa は低レベル DSP の充実が強みで、上位の音楽解析は別�
 | libsonare | 説明 |
 |-----------|-------------|
 | `KeyAnalyzer` | 音楽キー検出（Krumhansl-Schmuckler プロファイル） |
-| `ChordAnalyzer` | コード認識（192 種のテンプレートマッチング） |
+| `ChordAnalyzer` | コード認識（フルテンプレートセット有効時は 12 ルート × 24 クオリティ。`analyze()` 内での既定がトライアドのみである点は [認識できるコードの種類は？](/ja/docs/faq#認識できるコードの種類は) を参照） |
 | `SectionAnalyzer` | 楽曲構造解析（イントロ／Aメロ／サビなど） |
 | `TimbreAnalyzer` | 音色特性（ブライトネス、温かみ、密度ほか） |
 | `DynamicsAnalyzer` | ラウドネス・ダイナミックレンジ・クレストファクター |
@@ -473,6 +483,10 @@ auto energy = chroma.mean_energy();
 
 ## パフォーマンス比較
 
-要点だけ言うと、コアのスペクトル変換（STFT・メル・MFCC）は librosa とほぼ同等で、反復的なアルゴリズム（HPSS・pYIN）と総合解析パイプラインは大幅に高速です。機能別の数値、ハードウェア構成、計測手法、再現手順は 1 か所にまとめてあります（[ベンチマーク](/ja/docs/benchmarks) を参照）。このページに数値の複製を置かないのは、更新時のズレを防ぐためです。
+ネイティブとブラウザでは結果の見え方が違います。設計上、両者は異なる FFT バックエンドで動くためです。
 
-WebAssembly は一般にネイティブ C++ より低速です。実際の性能は機能、ブラウザ、入力長、ビルド設定に依存します。計測結果は [ベンチマーク](/ja/docs/benchmarks) を参照してください。
+ネイティブでは、libsonare の変換処理は SIMD の FFT カーネルで動くため、変換処理が支配的な機能 — STFT 自体と、メルや MFCC などその上に構築される機能全般 — で librosa を上回ります。これに加えて、反復的なアルゴリズム（HPSS・pYIN）と総合解析パイプラインでも大きく優位です。
+
+WebAssembly ビルドはスカラー FFT のみを使います。両方の FFT バックエンドを積むと、解析専用モジュールのサイズ予算を超えてしまうため、`BUILD_WASM` では SIMD 経路をビルドから外しています。その結果、ブラウザビルドの変換処理が支配的な機能は、ネイティブ実行の librosa とほぼ同等にとどまり、上回るわけではありません。
+
+機能別の数値、ハードウェア構成、計測手法、再現手順は 1 か所にまとめ、実行環境ごとに分けて記載しています（[ベンチマーク](/ja/docs/benchmarks) を参照）。このページに数値の複製を置かないのは、更新時のズレを防ぐためです。

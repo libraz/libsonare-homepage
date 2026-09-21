@@ -114,6 +114,12 @@ Use these entry points by intent:
 
 After the last input block, call `flushMono()` or `flushStereo()` until it returns an empty buffer. Skipping the flush drops the chain's delayed samples and finite processor tails from the rendered output.
 
-Related: [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), [JavaScript API](./js-api.md), [WASM](./wasm.md)
+::: info What the progress callback counts
+`masteringChainWithProgress()` and `masteringChainStereoWithProgress()` report the fraction of **enabled DSP stages** completed so far, along with the name of the stage that just finished. Disabled stages are not counted, so the denominator is the chain you actually configured, not the full stage list.
+
+The fraction reaches 1.0 as the last DSP stage returns. The trailing work — output measurement, spectrum, and the band deltas that go into the returned report — happens after that and reports nothing, so the call keeps running for a moment once the bar is full. Drive a progress bar from the callback, but hold the UI in its working state until the call itself resolves rather than until the fraction hits 1.0.
+:::
+
+Related: [Browser Local Processing](./glossary/concepts/browser-local-processing.md), [Mastering](./glossary/mastering.md), [JavaScript API](./js-api-mastering.md), [WASM](./wasm.md)
 
 For the complete named processor, preset, pair-analysis, and stereo-analysis lists, see [Mastering Processors](./mastering-processors.md). For assistant suggestions and profile construction, see [Mastering Assistant](./mastering-assistant.md).

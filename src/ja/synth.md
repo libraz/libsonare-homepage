@@ -1,7 +1,7 @@
 ---
 layout: synth
 title: libsonare シンセプレイグラウンド
-description: libsonare の内蔵ポリフォニックシンセサイザー（NativeSynth）をブラウザで演奏。15 種類の音作りエンジンと 69 個の重複しないプリセットを、WebAssembly AudioWorklet で端末内レンダリング。
+description: libsonare の内蔵ポリフォニックシンセサイザー（NativeSynth）をブラウザで演奏。17 種類の音作りエンジンと 70 個の重複しないプリセットを、WebAssembly AudioWorklet で端末内レンダリング。信号経路にあるのは内蔵インストゥルメントだけで、解析もマスタリングも通しません。
 head:
   - - meta
     - property: og:title

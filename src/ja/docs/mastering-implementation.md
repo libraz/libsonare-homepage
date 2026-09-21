@@ -114,6 +114,12 @@ description: ブラウザ内マスタリングデモが UI の判断を libsonar
 
 最後の入力ブロックを処理した後は、空のバッファが返るまで `flushMono()` または `flushStereo()` を呼びます。フラッシュしないと、チェーンの遅延分と有限長のプロセッサテールが出力から欠落します。
 
-関連: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md)、[マスタリング](./glossary/mastering.md)、[JavaScript API](./js-api.md)、[WASM](./wasm.md)
+::: info 進捗コールバックが数えているもの
+`masteringChainWithProgress()` と `masteringChainStereoWithProgress()` は、**有効な DSP ステージ**のうち完了した割合と、直前に完了したステージ名を返します。無効なステージは数に入らないため、分母は全ステージ一覧ではなく実際に構成したチェーンです。
+
+割合が 1.0 に達するのは最後の DSP ステージが返った時点です。それに続く出力の測定、スペクトル、返却レポートに載るバンド差分の算出はその後に走り、進捗を報告しません。つまりバーが満たされた後も呼び出しはしばらく続きます。プログレスバーはコールバックで動かして構いませんが、UI の処理中表示は割合が 1.0 になった時点ではなく、呼び出し自体が完了した時点まで維持してください。
+:::
+
+関連: [ブラウザ内ローカル処理](./glossary/concepts/browser-local-processing.md)、[マスタリング](./glossary/mastering.md)、[JavaScript API](./js-api-mastering.md)、[WASM](./wasm.md)
 
 名前付きプロセッサ、プリセット、ペア解析、ステレオ解析の完全な一覧は [マスタリングプロセッサ](./mastering-processors.md) を参照してください。提案生成とプロファイル構築は [マスタリングアシスタント](./mastering-assistant.md) にまとめています。

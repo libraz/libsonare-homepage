@@ -1,7 +1,7 @@
 ---
 layout: synth
 title: libsonare Synth Playground
-description: Play libsonare's native polyphonic synthesizer live in the browser — 69 unique presets across 15 synthesis engines, rendered locally in a WebAssembly AudioWorklet.
+description: Play libsonare's native polyphonic synthesizer live in the browser — 70 unique presets across 17 synthesis engines, rendered locally in a WebAssembly AudioWorklet. Built-in instruments only, with no analysis or mastering in the signal path.
 head:
   - - meta
     - property: og:title

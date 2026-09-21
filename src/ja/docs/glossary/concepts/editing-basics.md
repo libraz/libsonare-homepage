@@ -86,4 +86,4 @@ libsonare の編集関数は、解析やマスタリングと同じ C++ DSP コ�
 
 ::::
 
-関連: [編集 DSP](../../editing-dsp.md)、[オーディオ基礎](./audio-basics.md)、[MIR の全体像](./mir-overview.md)、[JavaScript API](../../js-api.md)
+関連: [編集 DSP](../../editing-dsp.md)、[オーディオ基礎](./audio-basics.md)、[MIR の全体像](./mir-overview.md)、[JavaScript API](../../js-api-effects.md)

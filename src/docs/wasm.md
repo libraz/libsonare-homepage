@@ -122,7 +122,7 @@ The browser build also exposes the full librosa-parity helper set — functions 
 - **Features** — `pcen` (mel dynamic-range compression), `tonnetz` (harmonic-space projection), `tempogram` / `plp` (tempo representations)
 - **Unit conversion** — `powerToDb` / `amplitudeToDb` / `dbToPower` / `dbToAmplitude`, `framesToSamples` / `samplesToFrames`
 
-See the [JS API reference](./js-api.md) for signatures and the [librosa Compatibility](./librosa-compatibility.md) mapping.
+See the [JS API reference](./js-api-analysis.md) for signatures and the [librosa Compatibility](./librosa-compatibility.md) mapping.
 
 ## Browser Mixing
 
@@ -207,7 +207,7 @@ sonare pitch-shift music.wav --semitones 2 -o shifted.wav
 sonare pitch music.mp3 --algorithm pyin --json
 ```
 
-See the [JS API Reference](/docs/js-api#audio-class) for the full list of instance methods.
+See the [JS API Reference](/docs/js-api-audio#audio-class) for the full list of instance methods.
 
 ## Browser Mastering
 
@@ -929,6 +929,16 @@ The published package ships a few coordinated pieces:
 - **Offline Worker entry** — `worker.js` behind `@libraz/libsonare/worker`, the Worker side of `OfflineWorkerClient`.
 - **Voice-changer JSON Schemas** — both preset schemas ship in the package under `schemas/`, so a host can validate a preset document without fetching anything.
 
+### Instantiating The Module Yourself
+
+`sonare.js` / `sonare.wasm` are the Emscripten module the package wraps, and almost no application needs to touch them directly: importing from `@libraz/libsonare` instantiates the module, keeps one instance per realm, and is the supported entry point. If you do instantiate the module yourself — a custom loader, a non-standard bundler target, a host that manages its own heap — one input shape is worth knowing about.
+
+::: warning The mastering-chain binding takes the flattened envelope only
+The module's mastering-chain entry accepts exactly one configuration shape: the flattened parameter envelope that the core's own parameter parser reads. Hand it a nested configuration object instead and the call is **refused by name** — it reports the configuration it cannot read rather than applying the part of it that it recognizes and dropping the rest.
+
+**This does not affect the npm package.** `masteringChain` and `masterAudio` flatten a nested `MasteringChainConfig` — repair stages, denoise settings and all — before anything crosses into the module, so code that imports from `@libraz/libsonare` passes nested configs exactly as the JavaScript API describes and is unaffected. Only a caller who instantiates the module directly and passes a nested object straight into the binding meets this, and what they get is a clear error instead of a partly applied chain.
+:::
+
 ## Bundle Size
 
 The size table covers the main module and the main API entry. The analysis-only
@@ -986,4 +996,6 @@ for (let start = 0; start < totalDuration; start += CHUNK_DURATION) {
 
 ### Native Failures Throw `SonareError`
 
-When the C++ core rejects an input, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api.md#error-handling).
+When the C++ core rejects an input, the WASM binding throws a structured `SonareError` carrying a numeric `code` and `codeName` — never a raw Emscripten pointer number or an opaque `[object Object]`. Catch it with the exported `isSonareError(...)` guard and branch on `ErrorCode`; see [Error Handling](./js-api-types.md#error-handling).
+
+That holds for the mixing and project entry points too: each reports the error code its own C entry point documents rather than surfacing the underlying C++ exception. `Mixer.fromSceneJson` on a scene that names an unknown insert throws `InvalidState` with the wrapped message from the core, and malformed scene JSON throws `InvalidState` as well — not an unknown-error code. Code that only branches on success needs no change; code that branches on a specific code should branch on the documented one.

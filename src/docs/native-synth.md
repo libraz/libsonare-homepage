@@ -1,6 +1,6 @@
 ---
 title: Built-in Synthesizer (NativeSynth)
-description: Guide to libsonare's data-free patch-driven NativeSynth — its fifteen synthesis engines, the SynthPatch object, the named preset catalog, the GM fallback bank, and how to drive it offline and live, with copy-paste recipes.
+description: Guide to libsonare's data-free patch-driven NativeSynth — its seventeen synthesis engines, the SynthPatch object, the named preset catalog, the GM fallback bank, and how to drive it offline and live, with copy-paste recipes.
 ---
 
 # Built-in Synthesizer (NativeSynth)
@@ -13,7 +13,7 @@ For a first pass, you only need three ideas:
 2. route MIDI notes to the destination that uses that preset;
 3. optionally override simple fields such as `cutoffHz`, `ampAttackMs`, or `stereoSpread`.
 
-Under the hood, NativeSynth is one synthesizer with **fifteen swappable synthesis engines**. Each engine is a different way to create the raw tone. Several acoustic-style engines are still provisional physical models: they are useful for data-free preview and fallback, but their final voicing/calibration is still in progress.
+Under the hood, NativeSynth is one synthesizer with **seventeen swappable synthesis engines**. Each engine is a different way to create the raw tone. Several acoustic-style engines are still provisional physical models: they are useful for data-free preview and fallback, but their final voicing/calibration is still in progress.
 
 - a virtual-analog subtractive voice (classic synth leads and pads),
 - FM (electric pianos, bells, and clavinet),
@@ -29,9 +29,11 @@ Under the hood, NativeSynth is one synthesizer with **fifteen swappable synthesi
 - air-jet flute waveguide,
 - a buzzing-bridge plucked string (koto, sitar, tanpura),
 - a source-filter vocal voice (choir and solo voices),
-- and a free-reed voice (accordion, harmonica, bandoneon).
+- a free-reed voice (accordion, harmonica, bandoneon),
+- a jack-and-plectrum harpsichord with real string choirs,
+- and a sample player for PCM you supply yourself.
 
-All fifteen share one common control layer for modulation, envelopes, filters, stereo width, and polyphony, so the same patch fields work across very different sounds. To get a sound, pick a preset by name — or start from a preset and change only the fields you care about with a `SynthPatch`. You never have to touch the engine internals to start.
+All seventeen share one common control layer for modulation, envelopes, filters, stereo width, and polyphony, so the same patch fields work across very different sounds. To get a sound, pick a preset by name — or start from a preset and change only the fields you care about with a `SynthPatch`. You never have to touch the engine internals to start.
 
 ::: info Synthesis terms in one place
 The engine names below are different ways to *generate* a tone. You don't need them all to start — pick a preset and play — but here is the one-line version of each:
@@ -46,6 +48,8 @@ The engine names below are different ways to *generate* a tone. You don't need t
 - **buzzing-bridge plucked** — a plucked-string loop whose bridge can be made to graze the string and spray energy into the upper partials: cleanly terminated at `buzz` 0 (harp, koto), shimmering and buzzing as `buzz` rises (sitar, tanpura).
 - **source-filter vocal** — a glottal source (sawtooth + tilt) fed through a bank of vowel formant resonators for choir and solo-voice tones.
 - **free reed** — a driven metal-tongue oscillator (accordion, harmonica, bandoneon), optionally musette-detuned into two beating tongues.
+- **jack and plectrum** — the harpsichord's own mechanism: a quill plucks a registration of separate string choirs, so key speed barely changes loudness.
+- **sample** — no synthesis at all: PCM frames you hand the engine, mapped over the keyboard and played through the same filter and mod matrix as every other voice.
 
 Two terms appear throughout the patch controls: an **ADSR envelope** (attack/decay/sustain/release — how a level rises and falls over a note) and the **mod matrix** (a routing table that sends modulation sources such as LFOs or envelopes to targets such as pitch or filter cutoff).
 :::
@@ -58,7 +62,7 @@ NativeSynth is also the **data-free floor** of the [SoundFont player](./soundfon
 A NativeSynth patch is an **instrument**: you bind it to a MIDI destination, and the MIDI on tracks routed to that destination plays through it. Offline you bind it in [`bounceWithSynthInstrument`](./project-bounce.md); live you bind it with `engine.setSynthInstrument` and feed [MIDI input](./midi-input.md). For sampled, multisampled instruments instead, use the [SoundFont player](./soundfont-player.md).
 :::
 
-A single signal path runs through NativeSynth on every note: a MIDI note picks one of the fifteen engines, and the engine's raw tone then flows through the shared control layer before reaching the stereo output.
+A single signal path runs through NativeSynth on every note: a MIDI note picks one of the seventeen engines, and the engine's raw tone then flows through the shared control layer before reaching the stereo output.
 
 <FlowDiagram
   title="NativeSynth signal path"
@@ -82,7 +86,7 @@ A single signal path runs through NativeSynth on every note: a MIDI note picks o
     { from: 'spread', to: 'out' }
   ]"
   :groups="[
-    { id: 'engines', label: '1 of 15 engines' },
+    { id: 'engines', label: '1 of 17 engines' },
     { id: 'control', label: 'Shared control layer' }
   ]"
   caption="Whichever engine is selected, the same shared control layer and patch fields apply afterward."
@@ -99,7 +103,11 @@ By the end of this page you should be able to:
 - render MIDI to audio offline with `bounceWithSynthInstrument` and live with `setSynthInstrument`;
 - know when a note plays NativeSynth versus the loaded SoundFont.
 
-## The fifteen synthesis engines
+::: tip Play it first
+The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboard, the full preset catalog, and live patch edits. It uses nothing but the instruments: no analysis, no mastering. The [instrument demos](/demos) cover single behaviours such as the ADSR envelope, the filter, and the GS effects.
+:::
+
+## The seventeen synthesis engines
 
 Every preset selects one `engineMode`. The shared sections (filter, envelopes, LFOs, mod matrix, body resonance, polyphony) apply on top of whichever engine is active. Mode-specific deep parameters — FM operator stacks, modal mode tables, drawbar registrations, kit pieces, piano strings, pipe ranks, bowed-string friction, reed/brass bores, and flute jet geometry — live **inside the named presets**, not in the patch.
 
@@ -128,7 +136,7 @@ A phase-modulation operator stack (one oscillator's output is added to another's
 
 ### `karplus-strong` — plucked string
 
-A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Treat the acoustic realism as **in calibration**, not as a finished instrument model. Good for **plucked and strummed strings** — guitar, bass, harp, harpsichord, and the plucked ethnic family. Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
+A fractional-delay waveguide loop (a short delay loop that models a plucked string) with phase-exact tuning, plus pick-position comb, velocity-driven brightness, decay stretching, and note-off loop damping (finger/palm mute). Guitar, harp, and bass presets add provisional physical details: pickup position, body coupling, steel-string dispersion, sympathetic open strings, tension bend, and dual-polarization decay. Treat the acoustic realism as **in calibration**, not as a finished instrument model. Good for **plucked and strummed strings** — guitar, bass, harp, and the plucked ethnic family. (The harpsichord is not a bright guitar and has its own engine; see below.) Presets: `classical-guitar`, `steel-guitar`, `electric-guitar`, `harp`, `bass-acoustic`, `bass-fingered`, `bass-picked`, `bass-fretless`, `bass-slap`.
 
 ### `modal` — mallet percussion
 
@@ -144,7 +152,17 @@ Rayleigh circular-membrane modes with a descending strike-pitch envelope under f
 
 ### `piano` — extended-waveguide acoustic piano
 
-A data-free grand-piano sketch with the four piano-defining elements: stiff-string dispersion (partials stretch sharp up the keyboard), a nonlinear felt hammer (hard strikes are shorter and brighter), 2-3 coupled micro-detuned unison strings, and a soundboard resonator bank. The voicing is register-scaled, so bass notes, middle-register chords, and treble notes do not share one over-simple brightness curve. This is still a provisional model intended for built-in preview, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`.
+A data-free grand-piano sketch with the four piano-defining elements: stiff-string dispersion (partials stretch sharp up the keyboard), a nonlinear felt hammer (hard strikes are shorter and brighter), 2-3 coupled micro-detuned unison strings, and a soundboard resonator bank. The voicing is register-scaled, so bass notes, middle-register chords, and treble notes do not share one over-simple brightness curve.
+
+Three structural details shape what you hear beyond that outline:
+
+- **Longitudinal string modes** are modelled and summed into the output. A struck string vibrates along its length as well as across it, and those modes — driven by the tension the transverse motion itself creates — are what fills the bass attack between roughly 200 Hz and 3 kHz. Without them a low note is felt more than heard.
+- **Inharmonicity follows a U-shaped curve**, not a monotonic climb. It grows toward the treble as stiffness would suggest, but below the bass break the wound strings turn it back upward, so the very bottom of the keyboard is more inharmonic than the notes just above it.
+- **Stretch tuning is an asymmetric Railsback curve** — two power-law branches meeting at the A4 anchor, about ten cents flat at the bottom against fifty sharp at the top, which is why one odd function about the middle cannot express it. The curve is held at the fitted keyboard bounds rather than extrapolated past them.
+
+The voice also carries **an explicit output level calibrated against a captured concert grand**. A physical model has no output level of its own — the string, the hammer, and the board are each calibrated against something and the product of the three is a number nobody chose — so without that step a piano sat well under the rest of the fallback bank. It now sits between the violin and the alto sax, which is where a grand belongs among them.
+
+This is still a provisional model intended for built-in preview, not a sampled-piano replacement. Good for **acoustic piano**. Preset: `acoustic-piano`. GM programs 0-3 use it, as do the five piano-derived [GS variations](#gs-variation-tones).
 
 ### `pipe-organ` — sustained flue pipe
 
@@ -178,13 +196,21 @@ A two-stage voice: a glottal source (a naive sawtooth shaped by a one-pole spect
 
 A driven metal-tongue oscillator (a phase accumulator shaped by an asymmetric saturator and a body lowpass) that models the free reed of an accordion, harmonica, or bandoneon — the tongue's own pitch sets the note, with no coupled air column. A `detune` control adds a second tongue a few cents sharp of the first, and the beat between the pair is the shimmering musette sound; `detune` 0 collapses back to a single tongue. Good for **accordion, harmonica, and reed-organ previews**. Presets: `accordion`, `harmonica`, `bandoneon`, `reed-organ`.
 
+### `harpsichord` — jack and plectrum
+
+A quill-plucked string model built around the mechanism rather than around a tone control. Three consequences of that mechanism are what a plucked-string engine with knobs cannot reproduce. **Key speed barely changes loudness** — a few decibels across the instrument, and not even monotonically, since past a certain speed the plectrum slips off sooner and the note gets *quieter*; the engine opts out of the velocity curve entirely. **Registration is separate string choirs**, not one string with a mix: two 8′ unisons and a 4′ octave are three independent delay lines at three periods. And the **inharmonic shimmer comes from the short undamped segment behind the bridge**, not from string stiffness, so the speaking partials stay harmonic to within a couple of cents. Good for **harpsichord**. Preset: `harpsichord`.
+
+### `sample` — host-supplied PCM
+
+The one engine that synthesizes nothing. You build a `SampleBank` of mono float frames with key/velocity zones, bind it alongside the patch, and the engine resolves a zone at note-on and steps it. It sits in the *oscillator's* place in the subtractive chain, so your own audio arrives behind the same resonant multi-mode filter, envelopes, LFOs, and mod matrix as a synthesized tone — which is what separates it from the [SoundFont player](./soundfont-player.md), a separate instrument that parses a container and brings its own generator model. Good for **your own recordings and one-shot drum material**. It has no preset: a `sample` patch with no bank bound renders silence. See [Host PCM: the `sample` engine](#host-pcm-the-sample-engine) for the patch fields.
+
 ## The GM fallback bank
 
 The GM fallback is not just a last-resort sine bank. When a SoundFont is absent or incomplete, NativeSynth chooses the closest built-in synthesis voice for the requested GM program. Some of those voices are provisional physical models whose calibration is still underway. The goal is useful, data-free preview and missing-program coverage, not final sampled-instrument realism.
 
 | GM area | Data-free fallback voice |
 |---------|--------------------------|
-| Programs 0-7, keyboard | Extended-waveguide grand piano, FM electric pianos/clavinet, and Karplus-Strong harpsichord bank variants |
+| Programs 0-7, keyboard | Extended-waveguide grand piano, FM electric pianos/clavinet, and the jack-and-plectrum harpsichord with its three registrations |
 | Programs 8-15, chromatic percussion | Modal celesta, glockenspiel, music box, vibraphone, marimba, xylophone, and tubular bells, plus a Karplus-Strong dulcimer |
 | Programs 16-23, organ | Additive drawbar organs (16-18), the physical church-organ flue pipe (19), and free-reed-engine reed-organ/accordion, harmonica, and bandoneon voices (20-23) |
 | Programs 24-37, guitar and bass | Karplus-Strong nylon, steel, electric, muted/overdriven/distorted guitars, and dedicated bass variants |
@@ -195,9 +221,56 @@ The GM fallback is not just a last-resort sine bank. When a SoundFont is absent 
 | Programs 112-119, percussive | Percussion-engine tinkle bell, agogo, steel drums, woodblock, taiko drum, melodic tom, synth drum, and reverse cymbal |
 | Drums and GS variants | GM/GS drum-kit variants and GM2/GS bank fallbacks, with GS EFX routed to built-in insert chains where available |
 
-Two notes worth knowing up front: named pipe-organ colors like `bourdon` and `trumpet-rank` live only in the named preset catalog, not in GM program routing (program 19 is the church-organ flue pipe, and programs 20-23 are the free-reed reed-organ, harmonica, and bandoneon); and program 6 (Harpsichord) is the one GM program whose fallback also reads Bank Select, choosing between plain, octave-mix, wide-stereo, and key-off-noise registrations.
+One note worth knowing up front: named pipe-organ colors like `bourdon` and `trumpet-rank` live only in the named preset catalog, not in GM program routing (program 19 is the church-organ flue pipe, and programs 20-23 are the free-reed reed-organ, harmonica, and bandoneon).
 
 For beginners, the practical rule is simple: **use SoundFont when you need exact or production-ready sampled instruments; rely on NativeSynth fallback when you need a small, always-available preview or a missing-program safety net**.
+
+### GS variation tones
+
+A GM program number selects a *capital* tone. GS and GM2 both let a file reach a **variation** of that capital — a wide piano, a detuned organ, a 12-string guitar — by sending Bank Select before the program change. The fallback bank voices thirty such variations under seventeen capital programs.
+
+Each variation carries **two addresses for one voice**: its GS Bank Select MSB number and its GM2 number. A GS-authored file and a GM2-authored file therefore sound the same tone, rather than one of them landing on the capital because it used the other standard's number.
+
+| Capital program | Variation | GS MSB | GM2 |
+|---|---|---|---|
+| 0 Acoustic Grand Piano | Wide | 8 | 1 |
+| 0 Acoustic Grand Piano | Dark | 16 | 2 |
+| 1 Bright Acoustic Piano | Wide | 8 | 1 |
+| 2 Electric Grand Piano | Wide | 8 | 1 |
+| 3 Honky-tonk Piano | Wide | 8 | 1 |
+| 4 Electric Piano 1 | Detuned | 8 | 1 |
+| 4 Electric Piano 1 | Velocity-switched | 16 | 2 |
+| 4 Electric Piano 1 | Sixties | 24 | 3 |
+| 5 Electric Piano 2 | Detuned | 8 | 1 |
+| 5 Electric Piano 2 | Velocity-switched | 16 | 2 |
+| 6 Harpsichord | Coupled (8′+4′ octave) | 8 | 1 |
+| 6 Harpsichord | Wide (two-choir stereo) | 16 | 2 |
+| 6 Harpsichord | Key-off jack noise | 24 | 3 |
+| 11 Vibraphone | Wide | 8 | 1 |
+| 12 Marimba | Wide | 8 | 1 |
+| 14 Tubular Bells | Church bell | 8 | 1 |
+| 14 Tubular Bells | Carillon | 9 | 2 |
+| 16 Drawbar Organ | Detuned | 8 | 1 |
+| 16 Drawbar Organ | Sixties | 16 | 2 |
+| 16 Drawbar Organ | Organ 4 | 32 | 3 |
+| 17 Percussive Organ | Detuned | 8 | 1 |
+| 17 Percussive Organ | Organ 5 | 32 | 2 |
+| 19 Church Organ | Flute registration | 8 | 1 |
+| 19 Church Organ | Full organ | 16 | 2 |
+| 21 Accordion | Italian tuning | 8 | — |
+| 24 Acoustic Guitar (nylon) | Ukulele | 8 | 1 |
+| 24 Acoustic Guitar (nylon) | Key-off noise | 16 | 2 |
+| 25 Acoustic Guitar (steel) | 12-string | 8 | 1 |
+| 25 Acoustic Guitar (steel) | Mandolin | 16 | 2 |
+| 40 Violin | Slow attack | 8 | 1 |
+
+The Italian accordion is deliberately GS-only. GM2 gives its own variation 1 under program 21 to the *French* accordion, which is the dry tuning the capital already voices — adopting that address would make the two standards contradict each other.
+
+::: info A bank number that names nothing still sounds
+A Bank Select value that reaches no variation this table voices resolves to the **capital tone**, which is what a hardware module does for a variation it does not have. No file loses a sound because it asked for a tone the bank has not been given yet, and adding a variation later changes only the files that were already asking for it.
+:::
+
+Each variation is voiced from **its capital's own physical model** rather than from a separate recording, so re-voicing a capital carries its variations with it instead of leaving them behind. That is also why the three piano capitals each get their own wide variation instead of sharing the grand's: sharing it would have made each one duller, quieter, or more in tune than the capital it is supposed to be a variation of.
 
 ## The named preset catalog
 
@@ -260,6 +333,7 @@ The catalog maps to the engines like this (one preset per row is enough to feel 
 | `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | buzzing-bridge plucked strings |
 | `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | choir and solo voices |
 | `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | accordion, harmonica, reed organ |
+| `harpsichord` | `harpsichord` | harpsichord |
 
 The roll below sequences one three-voice phrase and bounces it through `bounceWithSynthInstrument(presetName, …)`. The instrument selector walks across representative piano, FM, plucked-string, modal, organ, bowed-string, reed, brass, and flute presets, so the same notes audibly take on each engine's character.
 
@@ -275,22 +349,45 @@ A preset name may carry a `va:` prefix (for example `va:saw-lead`, `va:e-piano`)
 
 ### GS / GM drum-kit variants
 
-`drum-kit` also recognizes GS-style drum-kit selection (GS is Roland's General MIDI extension set; kits are addressed by bank-128 program numbers) and reshapes the Standard kit per variant at note-on — more shell body for Room, bigger/lower shells for Power, and so on. Two naming systems overlap at kit 25: the GS bank-128 name and the GM2 percussion-set name differ, which is a property of the two standards rather than a bug.
+`drum-kit` also recognizes GS-style drum-kit selection (GS is Roland's General MIDI extension set; kits are addressed by rhythm-part program numbers in bank 128) and reshapes the Standard kit per set at note-on — more shell body for Room, bigger/lower shells for Power, and so on.
 
-| Kit no. | GS (bank-128) name | GM2 percussion-set name | Voicing change vs Standard |
-|---|---|---|---|
-| 0 | Standard | Standard | — |
-| 8 | Room | Room | more shell body, longer ambient tail |
-| 16 | Power | Power | bigger/lower/longer shells |
-| 24 | Electronic | Electronic | sine-ified, dried-out membranes |
-| 25 | TR-808 | Analog | classic decaying-sine kick/snare/tom |
-| 32 | Jazz | Jazz | tighter, higher, softer |
-| 40 | Brush | Brush | snare becomes a sustained swish |
-| 48 | Orchestra | Orchestra | longer membrane/cymbal tails |
-| 56 | SFX | SFX | recognized/addressed; per-note SFX sounds not yet modeled (plays Standard voicing) |
+Two numbers appear per row and they are not interchangeable. **Program** is what a file sends; it is the rhythm part's program-change number and the address the standards define. **Index** is this bank's own slot for the set. Indices are **append-only**: a set added later takes the next free index, so adding one can never renumber a set already voiced, and nothing that already sounds right starts sounding like something else.
 
-::: warning SFX kit and Sound-Effects programs are addressed, not yet modeled
-The GS-style SFX drum kit (kit 56) and the GM Sound-Effects programs (120-127, covered in the GM tone map below) are **addressed and named** but their per-note effect sounds are not yet individually synthesized in the data-free fallback — the SFX kit plays the Standard kit's voicing, and programs 120-127 share one generic noise voice. A SoundFont that supplies real effect samples for these addresses plays back normally through the SF2 player.
+The **tone map** column is the earliest generation that defines the set — the same map a [Bank Select LSB](./soundfont-player.md#the-gs-architecture-layer) selects. A file that pins an older map does not reach the sets introduced after it, and those fall back to Standard, exactly as a module of that generation does.
+
+Every set is a **re-voicing of the one shared percussion model**, not a second copy of it: the kick, snare, tom, hat, and cymbal parameters are reshaped at note-on. Improving the underlying model therefore improves all 26 at once, and a set can only differ in ways the model has a parameter for.
+
+| Program | Index | GS name | Tone map | Voicing change vs Standard |
+|---|---|---|---|---|
+| 0 | 0 | Standard | SC-55 | — |
+| 8 | 1 | Room | SC-55 | more shell body, longer ambient tail |
+| 16 | 2 | Power | SC-55 | bigger, lower, longer shells |
+| 24 | 3 | Electronic | SC-55 | sine-ified, dried-out membranes |
+| 25 | 4 | TR-808 (GM2: Analog) | SC-55 | decaying-sine kick, single-tone snare and toms |
+| 32 | 5 | Jazz | SC-55 | tighter, higher, softer |
+| 40 | 6 | Brush | SC-55 | snare becomes a sustained swish |
+| 48 | 7 | Orchestra | SC-55 | longer membrane and cymbal tails |
+| 56 | 8 | SFX | SC-55 | one-shot set — plays the Standard voicing |
+| 127 | 9 | CM-64/32L | SC-55 | short, thin, bright — the LA-synth era |
+| 1 | 10 | Standard 2 | SC-88 | drier, tighter room; more snare wire |
+| 26 | 11 | Dance | SC-88 | sine kick, clap-lit snare, tight hats |
+| 49 | 12 | Ethnic | SC-88 | hand drums — struck near the rim, thin shell |
+| 50 | 13 | Kick & Snare | SC-88 | only the kick and snare move; the rest is Standard |
+| 57 | 14 | Rhythm FX | SC-88 | one-shot set — plays the Standard voicing |
+| 2 | 15 | Standard 3 | SC-88Pro | struck off-centre, left more open |
+| 9 | 16 | Hip Hop | SC-88Pro | low, short and squashed |
+| 10 | 17 | Jungle | SC-88Pro | everything cut off early and pushed bright |
+| 11 | 18 | Techno | SC-88Pro | purely synthetic membranes, hard bright top |
+| 27 | 19 | CR-78 | SC-88Pro | filtered noise ticks; snare with no wire under it |
+| 28 | 20 | TR-606 | SC-88Pro | thin and tinny — the smallest analog box |
+| 29 | 21 | TR-707 | SC-88Pro | sampled, not analog: crisp, dry and short |
+| 30 | 22 | TR-909 | SC-88Pro | long decaying-sine kick with a click on top |
+| 52 | 23 | Asia | SC-88Pro | gongs and taiko — big, low, long-ringing |
+| 53 | 24 | Cymbal & Claps | SC-88Pro | one-shot set — plays the Standard voicing |
+| 58 | 25 | Rhythm FX 2 | SC-88Pro | one-shot set — plays the Standard voicing |
+
+::: warning One-shot sets and Sound-Effects programs are addressed, not yet modeled
+Four sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX**, **Rhythm FX**, **Cymbal & Claps**, and **Rhythm FX 2**. There is nothing for a membrane model to reshape, so they are addressed and named but play the Standard kit's voicing. The GM Sound-Effects programs (120-127, covered in the GM tone map below) are in the same position and share one generic noise voice. A SoundFont that supplies real samples for these addresses plays back normally through the SF2 player.
 :::
 
 ## The `SynthPatch` object
@@ -341,6 +438,8 @@ Each **mod routing** is `{ source, destination, depth }`. The mod matrix lets en
 
 The `body` field is NativeSynth's body/formant resonance layer — the resonant character of an instrument's physical shell or vocal tract. Acoustic guitars, harps, violin-family strings, woodwinds, brass, and choir/voice fallbacks use this layer; solid-body electrics can leave `body` at `none`.
 
+`body: 'vocal'` is the vowel formant bank, and it is reachable on **any** patch rather than only on the `vocal` engine — a subtractive oscillator driven through it is a sung tone rather than a filtered saw. That is exactly how the GM fallback bank voices Lead 6 (voice) and Pad 4 (choir), which is why those two do not sound like the synth leads and pads around them.
+
 ::: info Pitch bend, controller reset, and per-channel state
 NativeSynth responds to **pitch-bend** messages, and the bend range follows **RPN 0** (the standard pitch-bend-range parameter, set with the **CC6 / CC38** Data Entry MSB/LSB fine-byte pair — default ±2 semitones). A MIDI **Reset All Controllers** message returns the performance controllers (mod wheel, expression, pitch-bend value, the pedals) and the RPN/NRPN selection to their defaults, but it deliberately leaves the bend range where you set it — send RPN 0 again if you want ±2 semitones back. You drive these with ordinary MIDI events: pitch-bend events (e.g. `Project.midiPitchBend(...)` offline) and the RPN 0 / data-entry / reset CCs in your stream.
 
@@ -362,7 +461,8 @@ synthEnumTables();
 //   engineModes:      ['default', 'subtractive', 'fm', 'karplus-strong',
 //                      'modal', 'additive', 'percussion', 'piano',
 //                      'pipe-organ', 'bowed-string', 'reed', 'brass', 'flute',
-//                      'plucked-string', 'vocal', 'free-reed'],
+//                      'plucked-string', 'vocal', 'free-reed', 'harpsichord',
+//                      'sample'],
 //   waveforms:        ['default', 'sine', 'saw', 'square', 'triangle', 'noise'],
 //   builtinWaveforms: ['sine', 'saw', 'sawtooth', 'square', 'triangle'],
 //   filterModels:     ['default', 'svf', 'moog-ladder', 'diode-ladder', 'sallen-key'],
@@ -378,6 +478,49 @@ synthEnumTables();
 The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYNTH_OSC_WAVEFORMS`, `SYNTH_FILTER_MODELS`, `SYNTH_FILTER_OUTPUTS`, `SYNTH_BODY_TYPES`, `SYNTH_MOD_SOURCES`, `SYNTH_MOD_DESTINATIONS`, plus `BUILTIN_SYNTH_WAVEFORMS`). Note the index 0 in most tables is `'default'` (keep the base value); `modSources` / `modDestinations` use `'none'` instead.
 
 `builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` is a separate list: it belongs to the minimal built-in oscillator synth (`setBuiltinInstrument`), not to NativeSynth's `waveform` field. It has no `'default'` entry, accepts `'sawtooth'` as well as `'saw'`, and does **not** accept `'noise'`.
+
+### Host PCM: the `sample` engine
+
+The `sample` engine reads its audio from a `SampleBank` you build yourself. Three steps: add mono float frames, map key/velocity rectangles onto them, then bind the bank alongside a patch whose `engineMode` is `'sample'`.
+
+```typescript
+import { init, Project, SampleBank } from '@libraz/libsonare';
+
+await init();
+
+const bank = new SampleBank();
+try {
+  const index = bank.addSample(pcm, { rootKey: 60, sourceRate: 44100 });
+  bank.addZone({ sampleIndex: index });          // an empty zone is the whole keyboard
+  const audio = project.bounceWithSynthInstrument(
+    { engineMode: 'sample', sampleSet: 0, sampleBank: bank },
+    { totalFrames: 24000 },
+  );
+} finally {
+  bank.delete();   // the WASM handle is NOT garbage-collected
+}
+```
+
+A **zone** is a key/velocity rectangle pointing at one sample; every bound defaults on its own, so `{}` is the whole keyboard at every velocity and narrowing one axis leaves the other whole. Zones live in numbered **sets**, and a patch names the set it plays through `sampleSet`. Build the whole bank before the bounce that binds it starts — the sample pool is contiguous and moves as it grows, so adding to it while something sounds invalidates the voices reading it.
+
+The patch fields the engine adds:
+
+| Field | Meaning |
+|-------|---------|
+| `sampleBank` | The bank to read PCM from. A JS binding convenience like `destinationId`, not part of the patch itself; a `'sample'` patch bound without one renders silence |
+| `sampleSet` | Keymap set in that bank (negative selects none) |
+| `sampleLevel` | Linear gain on the sample, before the voice's own amp stage |
+| `sampleLoop` | Overrides the loop mode the bank recorded for the sample |
+| `sampleStartOffset` | Attack skip, as a fraction of the mapped region (0 to just under 1) |
+| `sampleKeyTrack` | Whether the sample follows the played key, or plays every key at its recorded pitch — the latter is what a one-shot drum wants |
+
+`sampleLoop` takes `'default'` (keep what the bank recorded), `'none'`, `'continuous'`, or `'key-down'`. `sampleKeyTrack` takes `'default'`, `'on'`, or `'off'`. Both also accept the C ordinal.
+
+::: warning `synthEnumTables()` will not list these two
+The discovery recipe above returns exactly the enums the C ABI supplies names for, and the ABI has no kind for the sample loop mode or key tracking — so neither appears in `synthEnumTables()`, and looking for them there finds nothing. The names above are the list. In JavaScript they are also exported as the constants `SAMPLE_LOOP_MODES` and `SAMPLE_KEY_TRACKS`.
+:::
+
+A sample's own loop points and loop mode are properties of the *recording* and belong on the `SampleDesc` you pass to `addSample`; `sampleLoop` is the per-patch override on top of that. A loop that survives clamping empty is dropped, so a malformed loop plays as an unlooped sample rather than wrapping over nothing.
 
 ## Render offline: `bounceWithSynthInstrument`
 
@@ -547,7 +690,7 @@ The fallback bank uses the closest NativeSynth engine for each GM program family
 | GM program | Instrument | Fallback engine | Why |
 |------------|------------|-----------------|-----|
 | 4-5 | Electric Piano 1 / 2 | `fm` | phase-modulated tine/bell brightness |
-| 6 | Harpsichord | `karplus-strong` | quill-plucked string with near velocity-insensitive brightness |
+| 6 | Harpsichord | `harpsichord` | jack and plectrum; key speed barely changes loudness |
 | 7 | Clavi | `fm` | struck string and pickup color, currently approximated by FM |
 | 8, 10, 14 | Celesta, Music Box, Tubular Bells | `modal` | felt-struck steel bar, twin-tooth tine shimmer, and a missing-fundamental strike pitch |
 | 9, 11-13 | Glockenspiel, Vibraphone, Marimba, Xylophone | `modal` | tuned-bar resonators |
@@ -568,16 +711,16 @@ The fallback bank uses the closest NativeSynth engine for each GM program family
 | 104, 106, 107 | Sitar, Shamisen, Koto | `plucked-string` | buzzing-bridge (jawari / sawari) plucked string; the banjo (105) stays on `karplus-strong` |
 | 112-119 | Tinkle Bell, Agogo, Steel Drums, Woodblock, Taiko Drum, Melodic Tom, Synth Drum, Reverse Cymbal | `percussion` | note-tracked percussion-engine voices, distinct from the drum-kit map |
 
-Program 6 (Harpsichord) is the one GM program whose fallback also reads Bank Select: bank 0 plays a plain 8′ registration, bank 1 adds an octave (8′+4′) mix, bank 2 widens to a two-choir stereo spread, and bank 3 adds key-off jack noise.
+Bank Select is read on every capital program the fallback voices a variation for — see [GS variation tones](#gs-variation-tones) above for the full map.
 
 This routing is separate from the named preset catalog: `synthPresetNames()` still lists the hand-authored presets (`e-piano`, `harp`, `drum-kit`, and so on), while the GM fallback bank chooses the internal patch for each MIDI program number during SF2 fallback.
 
 ## GM tone map — all 128 programs
 
-Every General MIDI program resolves to one of the fifteen engines. The table below is the data-free fallback voicing NativeSynth uses for each GM program number when no SoundFont covers it; the canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`. Rows marked *provisional* use one of the acoustic physical models still being calibrated.
+Every General MIDI program resolves to one of the synthesis engines. The table below is the data-free fallback voicing NativeSynth uses for each GM program number when no SoundFont covers it; the canonical instrument names are also available at runtime from `Project.gmInstrumentName(program)`. Rows marked *provisional* use one of the acoustic physical models still being calibrated.
 
 ::: details Show the full 128-program tone map
-**Model status** — **stable**: the subtractive, FM, modal, additive, and percussion cores are settled. **provisional**: the piano, Karplus-Strong, pipe-organ, bowed-string, reed, brass, flute, plucked-string (buzzing-bridge), vocal, and free-reed physical models are still being calibrated.
+**Model status** — **stable**: the subtractive, FM, modal, additive, and percussion cores are settled. **provisional**: the piano, Karplus-Strong, pipe-organ, bowed-string, reed, brass, flute, plucked-string (buzzing-bridge), vocal, and free-reed physical models are still being calibrated. The harpsichord's decay and stretch are regressed against captured references, so it is not marked provisional.
 
 #### Piano (0-7)
 
@@ -589,7 +732,7 @@ Every General MIDI program resolves to one of the fifteen engines. The table bel
 | 3 | Honky-tonk Piano | `piano` | provisional |
 | 4 | Electric Piano 1 | `fm` | tine/bell FM |
 | 5 | Electric Piano 2 | `fm` | shares the EP1 voicing |
-| 6 | Harpsichord | `karplus-strong` | quill pluck; bank-aware registrations (see the note above) |
+| 6 | Harpsichord | `harpsichord` | jack and plectrum; three bank-selected registrations |
 | 7 | Clavi | `fm` | bright high-ratio FM |
 
 #### Chromatic Percussion (8-15)
@@ -709,7 +852,7 @@ Every General MIDI program resolves to one of the fifteen engines. The table bel
 | 78 | Whistle | `flute` | provisional |
 | 79 | Ocarina | `flute` | provisional; closed-vessel |
 
-#### Synth Lead (80-87) — all subtractive
+#### Synth Lead (80-87) — subtractive oscillators
 
 | Prog | Instrument | Engine | Notes |
 |---|---|---|---|
@@ -718,18 +861,18 @@ Every General MIDI program resolves to one of the fifteen engines. The table bel
 | 82 | Lead 3 (calliope) | `subtractive` | |
 | 83 | Lead 4 (chiff) | `subtractive` | |
 | 84 | Lead 5 (charang) | `subtractive` | |
-| 85 | Lead 6 (voice) | `subtractive` | |
+| 85 | Lead 6 (voice) | `subtractive` | a sung lead: the oscillator runs through the **vocal formant body**, which is the model — the oscillator only has to be rich enough to feed it |
 | 86 | Lead 7 (fifths) | `subtractive` | |
 | 87 | Lead 8 (bass + lead) | `subtractive` | |
 
-#### Synth Pad (88-95) — all subtractive
+#### Synth Pad (88-95) — subtractive oscillators
 
 | Prog | Instrument | Engine | Notes |
 |---|---|---|---|
 | 88 | Pad 1 (new age) | `subtractive` | 7-osc supersaw pad |
 | 89 | Pad 2 (warm) | `subtractive` | |
 | 90 | Pad 3 (polysynth) | `subtractive` | |
-| 91 | Pad 4 (choir) | `subtractive` | |
+| 91 | Pad 4 (choir) | `subtractive` | the same **vocal formant body** as Lead 6, mixed higher, over the pad's envelope instead of the lead's |
 | 92 | Pad 5 (bowed) | `subtractive` | |
 | 93 | Pad 6 (metallic) | `subtractive` | |
 | 94 | Pad 7 (halo) | `subtractive` | |
@@ -796,13 +939,15 @@ Note on 120-127: in the data-free fallback these eight programs currently share 
 
 ## Current status and limitations
 
-**The physical models are provisional and still being calibrated.** Ten of the fifteen engines are provisional physical models of acoustic instruments — piano, plucked string (Karplus-Strong), bowed string, reed woodwind, brass, air-jet flute, pipe organ, buzzing-bridge plucked string, source-filter vocal, and free reed. (The modal and membrane-percussion engines are also physical models, but their voicing is already mature — see below.) They are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Their voicing is tuned by a developer-run A/B harness that compares the synth against a reference SoundFont; this is a manual, ongoing loop, not an automatic or verified-against-reference calibration, and the tuning is not finished. Recent work continues to retune the piano, organ, brass, reed, and violin-family voicing.
+**Most of the physical models are provisional and still being calibrated.** Ten engines are provisional physical models of acoustic instruments — piano, plucked string (Karplus-Strong), bowed string, reed woodwind, brass, air-jet flute, pipe organ, buzzing-bridge plucked string, source-filter vocal, and free reed. (The modal, membrane-percussion, and harpsichord engines are also physical models, but their voicing is settled — see below.) They are designed for data-free preview and as the GM fallback floor, not as finished sampled-instrument replacements. Their voicing is tuned by a developer-run A/B harness that compares the synth against a reference SoundFont; this is a manual, ongoing loop, not an automatic or verified-against-reference calibration, and the tuning is not finished. Work continues on the piano, organ, brass, reed, and violin-family voicing.
+
+**The piano's balance against the rest of the bank has changed.** The acoustic piano now carries an output level measured against a captured concert grand rather than whatever its physics happened to produce. Anything built on the previous balance — a saved mix, a bounced render, a stored hash of one — will differ.
 
 **Some advanced physics is implemented but not yet reachable.** The bowed string, reed, brass, and flute engines carry richer nonlinear refinements (elasto-plastic bow friction, tonehole scattering, a brass "cuivré" edge, flute overblow, and more). These exist in the core and default to off — no public binding exposes a switch to turn them on yet — so the sound you get today is the simpler linear model. Expect these to become reachable, and the voicing to keep improving, in future releases.
 
 **A couple of self-oscillating models have a small residual intonation error.** The air-jet flute and flue pipe-organ lock slightly off the naive tuning and are corrected by a calibrated factor; a small, note-dependent residual remains.
 
-**The other five engines are settled.** Subtractive (virtual-analog), FM, and additive (drawbar organ) are signal-based (non-physical); modal (mallets/bells) and membrane percussion are physical models whose voicing is already mature. None carry provisional caveats — they are the settled core.
+**The remaining engines are settled.** Subtractive (virtual-analog), FM, and additive (drawbar organ) are signal-based (non-physical); modal (mallets/bells), membrane percussion, and the jack-and-plectrum harpsichord are physical models whose voicing is settled. The `sample` engine plays back what you give it and has no voicing of its own. None of these carry provisional caveats.
 
 **Where the sounds come from.** The synthesis engines are original implementations of published synthesis and physical-modelling algorithm families, and the GM/GS behavior follows the openly documented General MIDI / GS addressing — no sampled or captured instrument audio is bundled, and the result is an independent re-creation rather than a copy of any specific device. For the standards and papers behind each engine, see [Algorithm References](./algorithm-references.md).
 
@@ -874,3 +1019,4 @@ A non-empty `modRoutings` replaces the preset's mod matrix entirely.
 - [MIDI Input](./midi-input.md) — feeding live and scheduled MIDI to a bound instrument
 - [Project Editing](./project-editing.md) — building the MIDI arrangement you render
 - [Recording and Takes](./recording-and-takes.md) — capturing performances into the project
+- [Link targets](./cpp-api.md#link-targets) — driving this synthesizer from C++, and trimming a build down to the instruments alone

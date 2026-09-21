@@ -39,7 +39,9 @@ Fractional values are normal because singers are rarely exactly on a note.
 Correction is a pitch shift, so the same artifact rules apply: small intervals stay transparent, large ones expose phase-vocoder smearing. For natural vocals, correct by small amounts toward the nearest scale tone rather than forcing a big jump. Hard, full-snap correction is a creative effect, not a transparent fix.
 
 ::: warning `pitchCorrectToMidi` retunes the whole buffer
-`pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` has no region parameter. It works out one interval and transposes every sample by it, so pointing it at a full take moves the whole take — not just the note you were listening to. It also clamps the interval to ±12 semitones without reporting anything, so a two-octave request quietly comes back one octave short.
+`pitchCorrectToMidi(samples, sampleRate, currentMidi, targetMidi)` has no region parameter. It works out one interval and transposes every sample by it, so pointing it at a full take moves the whole take — not just the note you were listening to.
+
+The interval itself is applied in full. Both endpoints are yours, so this is a transposition rather than a correction: C3 → C5 moves the buffer by all 24 semitones. `max_correction_semitones` bounds only a *retune* — a correction computed from a measured pitch — so it does not apply here. Both MIDI numbers are validated to `[0, 127]` and a value outside that range is rejected rather than silently adjusted.
 
 To fix one note inside a take, either slice that span out of the buffer yourself and correct the slice, or use the time-varying variants: their per-frame F0 contour and `voiced` flags are what localise the correction, because unvoiced frames are left alone and each voiced frame gets its own amount.
 :::
@@ -53,7 +55,7 @@ Region-based edits like `noteStretch` take **sample offsets**, not seconds, beca
 If your UI works in seconds, convert to samples immediately before the call. Passing fractional seconds can land a sample away from where you meant, depending on how it rounds, and that can turn into a faint click at a loop seam. Thinking in samples keeps every edit on the exact position you chose.
 
 ::: details How libsonare corrects and edits
-`pitchCorrectToMidi` maps a current→target MIDI interval to a pitch shift over the signal, reusing the phase-vocoder path from [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md). Region edits use `NoteEditor` (`NoteEditorConfig`) over a `NoteRegion` defined by onset/offset sample offsets, with `NoteSegmenter` helping locate regions. `noteStretch` applies a region-bounded stretch ratio. All operate on decoded mono samples; `Audio` exposes the same operations as methods so file workflows can load once and edit.
+`pitchCorrectToMidi` maps a current→target MIDI interval to a pitch shift over the signal, reusing the phase-vocoder path from [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md). `PitchCorrectionConfig::max_correction_semitones` (default 12) bounds only the paths that derive the correction from a measured F0 — the `F0Track` overloads and the per-frame pipeline — never a caller-stated interval. Region edits use `NoteEditor` (`NoteEditorConfig`) over a `NoteRegion` defined by onset/offset sample offsets, with `NoteSegmenter` helping locate regions. `noteStretch` applies a region-bounded stretch ratio. All operate on decoded mono samples; `Audio` exposes the same operations as methods so file workflows can load once and edit.
 :::
 
 Related: [Editing Basics](../concepts/editing-basics.md), [Time Stretch and Pitch Shift](./phase-vocoder-stretch.md), [Melody and Pitch](../analysis/melody-pitch.md), [Editing DSP](../../editing-dsp.md)

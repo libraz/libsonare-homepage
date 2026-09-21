@@ -39,6 +39,8 @@ The engine is deliberately split into two levels. Start at the top row and only 
 | You need sends, buses, inserts, automation, meters, or a saved project | [`Mixer.fromSceneJson(...)`](#scene-based-mixing-mixer) | Persistent, serializable mixer state |
 | You are inside a browser `AudioWorklet` or audio callback | WASM [`Mixer.createRealtimeBuffer()`](#realtime-and-the-audioworklet-bridge) | Reuses buffers, never allocates per block |
 
+If you know you want a scene but not yet what should be in it, the optional [Mixing Assistant](./mixing-assistant.md) measures a set of tracks and proposes one — trims, faders, pans, inserts, and sends, each with a written reason. It only suggests: loading the result into a mixer remains your own explicit step.
+
 ::: info One engine, every runtime
 The same mixer engine is exposed through WASM/JS, Node native, Python, the C ABI, and the CLI. Names follow each language's convention (`mixStereo` ↔ `mix_stereo`; `fromSceneJson` ↔ `from_scene_json`), while the routing graph, scene JSON, and DSP are identical. The CLIs are the exception, and they differ from each other: the Python CLI's `mix` renders a scene in one shot (one `--input` WAV per strip), while the native CLI's `mix-strip` is a single-file, single-strip processor with no `--scene`. A **persistent** multi-strip `Mixer` you drive block by block is available only through WASM/JS, Node, and Python. See [Binding Parity](./binding-parity.md) for the per-runtime table.
 :::
@@ -268,6 +270,16 @@ A **bus** is a shared destination. Strips connect to buses, buses connect to oth
 
 `master` is the only role string the graph treats specially — `aux` is simply the default value a bus gets when you do not give it one. Any other role string (`submix`, `subgroup`, `group`, …) is treated as a generic non-master bus. The built-in `drumBusSubgroup` preset labels its drum bus `subgroup`, so a printed scene may show `"role": "subgroup"` rather than `"submix"`.
 
+::: info A group bus's inserts run once, on the summed signal
+A bus insert chain is stateful and usually non-linear — a compressor's envelope, a saturator's transfer curve, a reverb's tail. It therefore has to see the **sum** of everything feeding the bus, once per block, rather than each contributor on its own: a compressor fed two partial signals separately is not the same processor as one fed their sum.
+
+Inside the realtime engine, clip audio and hosted-instrument audio are two contributors to the same buses, so they share a single block-level aggregation pass. Every lane and every bus chain — and every strip smoother along the way — advances exactly once per block, no matter how many of those sources produced audio.
+
+That merged pass opens under two conditions: the instrument rack must be non-empty, and PDC must be inactive. With PDC active the clip bus is rendered into its own delayed scratch buffer so it lands phase-aligned with the internally-delayed instruments, and the buses in that pass genuinely belong to it. A project with no hosted instruments has only one contributor and needs no merge.
+
+If you have a saturating or compressing insert on a group bus, this is the difference between hearing it act on the group and hearing it act on each source that happens to feed the group.
+:::
+
 Connections form a graph. `Mixer.fromSceneJson` builds and compiles that graph while constructing the mixer, so the returned mixer is ready to process immediately. After construction, buses are added and removed with `mixer.addBus(id, role?)` (`role` defaults to `'aux'`) and `mixer.removeBus(id)`, and `mixer.busCount()` reports the current count. A topology change marks the graph dirty, and it is recompiled lazily on the next `processStereo` call — or eagerly when you call `compile()`.
 
 Call `compile()` after a **topology** change, before the next timing-critical block. Topology changes include:
@@ -310,6 +322,8 @@ Add a strip's group and group gain with `addVcaGroup(id, gainDb, members)`, adju
 - `setSoloed(strip, true)` implies-mutes every other strip — except those you mark **solo-safe** with `setSoloSafe(...)`. Mark effect-return strips solo-safe so soloing a vocal still lets you hear its reverb return.
 
 Solo, mute, and solo-safe take effect on the next block **without** a graph recompile.
+
+They are not instantaneous jumps, though. A lane's mute/solo gate is a smoothed gain with a **10 ms** time constant, so a mute closes and opens without a click; for comparison, the pan smoother runs at 5 ms, because a pan move needs to track the gesture more tightly than a gate does. Both are fixed engine behavior — not the separate parameter-smoothing control that governs how bound insert parameters ramp.
 
 ### Pan modes and pan laws
 
@@ -489,6 +503,7 @@ const mixer = Mixer.fromSceneJson(mixingScenePresetJson('commentaryDucking'), sa
 
 - [Mixing Basics](./glossary/concepts/mixing-basics.md) — the vocabulary, for newcomers
 - [Mixing Scene JSON](./mixing-scene-json.md) — the full scene schema and annotated presets
+- [Mixing Assistant](./mixing-assistant.md) — measures a set of tracks and suggests a scene, with reasons
 - [Mastering Processors](./mastering-processors.md) — the processors you load as strip/bus inserts
 - [Binding Parity](./binding-parity.md) — per-runtime API differences
 - [Mono Compatibility](./glossary/concepts/mono-compatibility.md) · [Gain Staging](./glossary/concepts/gain-staging.md) · [True Peak](./glossary/true-peak.md)

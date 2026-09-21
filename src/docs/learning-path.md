@@ -12,28 +12,33 @@ If you want to read the docs linearly, use this order:
 2. [Learning Path](./learning-path.md) to choose whether you are building analysis, streaming, editing, mixing, mastering, or research tooling.
 3. [Getting Started](./getting-started.md), [Installation](./installation.md), and [Examples](./examples.md) to run one small program.
 4. [Feature Map](./api-surface.md) to find the right API family.
-5. One task guide from **Build By Task**.
-6. One runtime reference from **API By Runtime**.
-7. The evidence pages only when you need implementation details, algorithm references, validation scope, or performance context.
+5. One walkthrough from **[Use Cases](./use-cases.md)** when what you want is a finished deliverable rather than an integration.
+6. One task guide from **Build By Task**.
+7. One runtime reference from **API By Runtime**.
+8. The evidence pages only when you need implementation details, algorithm references, validation scope, or performance context.
 
 ## Start With Your Goal
 
 | I want to build... | Read first | Then read |
 |--------------------|------------|-----------|
 | A browser app that shows BPM, key, chords, or sections | [Getting Started](./getting-started.md) | [WebAssembly Guide](./wasm.md), [JavaScript API](./js-api.md) |
-| Song-structure, self-similarity, or note-segmentation analysis | [Feature Map](./api-surface.md) | [JavaScript API](./js-api.md#librosa-compatible-helpers), [Python API](./python-api.md#feature-extraction) |
+| Song-structure, self-similarity, or note-segmentation analysis | [Feature Map](./api-surface.md) | [JavaScript API](./js-api-analysis.md#librosa-compatible-helpers), [Python API](./python-api.md#feature-extraction) |
+| Bars and time signatures scored over a beat series you already have | [Meter and Grouping](./glossary/analysis/meter-and-grouping.md) | [Node API](./node-api.md), [Python API](./python-api.md) |
 | A Python script or notebook for audio analysis | [Getting Started](./getting-started.md#python) | [Python API](./python-api.md) |
 | A terminal workflow for quick checks or batch analysis | [Getting Started](./getting-started.md#cli) | [CLI Reference](./cli.md) |
-| Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api.md#audio-effects) |
+| A whole production job — stems to master, or a delivery gate — done in the terminal | [Use Cases](./use-cases.md) | [Mix and Master in the CLI](./use-cases/cli-mix-and-master.md), [CLI Reference](./cli.md) |
+| Pitch, time, voice, or source-separation editing | [Editing DSP](./editing-dsp.md) | [JavaScript API](./js-api-effects.md#audio-effects) |
 | Region-based spectral edits (attenuate, mute, gain, or heal a time-frequency rectangle) | [Spectral Editing](./spectral-editing.md) | [Editing DSP](./editing-dsp.md) |
 | A browser or native mixer | [Mixing Engine](./mixing.md) | [Mixing Scene JSON](./mixing-scene-json.md) |
+| A starting mix proposed from the tracks themselves, with a reason for every move | [Mixing Assistant](./mixing-assistant.md) | [Mixing Scene JSON](./mixing-scene-json.md), [Mixing Engine](./mixing.md) |
 | A mastering UI or automatic mastering workflow | [Mastering Assistant](./mastering-assistant.md) | [Mastering Processors](./mastering-processors.md) |
 | A synth or instrument app that renders MIDI to audio | [Built-in Instruments](./native-synth.md) | [MIDI Input](./midi-input.md), [Realtime and Streaming](./realtime-streaming.md) |
+| A C++ app that needs the instruments only, without analysis or mastering | [Link targets](./cpp-api.md#link-targets) | [Built-in Instruments](./native-synth.md), [SoundFont 2 Player](./soundfont-player.md) |
 | A DAW, arrangement, or MIDI-sequencing tool | [Project Editing](./project-editing.md) | [MIDI Input](./midi-input.md), [Project Bounce](./project-bounce.md) |
 | SoundFont (SF2) playback through a built-in player | [SoundFont 2 Player](./soundfont-player.md) | [Built-in Instruments](./native-synth.md), [MIDI Input](./midi-input.md) |
 | A live visualizer, rhythm game helper, or AudioWorklet tool | [Realtime and Streaming](./realtime-streaming.md) | [WebAssembly Guide](./wasm.md#streaming-analysis) |
 | A realtime microphone voice changer | [Realtime Voice Changer](./realtime-voice-changer.md) | [WebAssembly Guide](./wasm.md#realtime-voice-changer) |
-| Room sound, estimates, or generated room character | [Room Acoustics](./acoustic-analysis.md) | [JavaScript API](./js-api.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
+| Room sound, estimates, or generated room character | [Room Acoustics](./acoustic-analysis.md) | [JavaScript API](./js-api-effects.md#room-acoustics), [Python API](./python-api.md#room-acoustics) |
 | Inverting mel/MFCC features for previews or debugging | [Inverse Features](./inverse-features.md) | [librosa Compatibility](./librosa-compatibility.md) |
 | A migration from librosa | [librosa Compatibility](./librosa-compatibility.md) | [Feature Map](./api-surface.md) |
 

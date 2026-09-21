@@ -384,6 +384,7 @@ The flow is lock-free by design:
 1. The render thread needs a page it does not have yet and pushes a request onto a **wait-free page-request queue**.
 2. The main thread drains that queue with `engine.popClipPageRequest()`, reads the audio for the requested page from storage, and calls `provider.supply(pageIndex, channels)`.
 3. When a page is no longer needed, `provider.clear(pageIndex)` releases it.
+4. Separately, the render thread also reports the pages it is *about to* read and does not have yet, so the host can supply them before the playhead arrives. See [Look-ahead](#look-ahead) below.
 
 Because the audio thread only enqueues requests and reads already-supplied pages, it never blocks on storage or allocation.
 
@@ -416,6 +417,18 @@ Because the audio thread only enqueues requests and reads already-supplied pages
 
 ::: info Lock-free and wait-free, for beginners
 A realtime audio thread must not pause — if it stalls for even a moment, the output glitches. **Lock-free** means the audio thread never waits to acquire a lock that another thread holds. **Wait-free** is the stronger guarantee used here: pushing a page-miss request onto the page-request queue always finishes in a bounded number of steps, so the audio thread never spins or blocks waiting on it. The slow part — reading the page from storage — happens on the main thread instead.
+:::
+
+### Look-ahead
+
+Reporting a miss only when the read has already happened is too late to be silent: the read produced silence for that block, and the host learns about it afterwards. At every page boundary it has not primed, that costs one block of silence. So the player also reports the pages it is about to reach.
+
+`prepare(...)` sets the look-ahead window to **half a second** at the engine's sample rate, and `setClipPagePrefetchFrames(frames)` changes it while audio is running (`clipPagePrefetchFrames()` reads it back; `0` disables the look-ahead entirely). The C entry points are `sonare_engine_set_clip_page_prefetch_frames` and `sonare_engine_clip_page_prefetch_frames`, and the `SonareEngine` worklet facade forwards the setter to both the worklet engine and this thread's offline engine.
+
+Look-ahead requests drain through the same `popClipPageRequest()` queue, and within a block they are queued **after** that block's genuine misses. A host that keeps only the newest request per clip therefore tracks the look-ahead frontier rather than a stale miss. The read-then-miss reporting above is unchanged and still runs, so a host that simply ignores look-ahead requests behaves exactly as it would without them. A clip whose pages are all resident produces no requests at all, either way.
+
+::: info This is not the `ClipPageStreamer` window
+Two different mechanisms sit on top of each other, and you want both. The look-ahead here is the **engine's** — the audio thread telling you which pages it is heading for. `ClipPageStreamer`'s `readAheadPages` / `retainBehindPages` (below) is the **JS-side** sliding window that decides how much audio stays resident in WASM memory. The engine's look-ahead tells the streamer what to fetch; the streamer's window decides what to keep.
 :::
 
 ### OPFS-backed provider in the browser
@@ -517,5 +530,5 @@ Both are batch reductions for a buffered clip, not audio-callback work. `samples
 
 - [Realtime Engine](./realtime-engine.md) — transport, the lane mixer, automation, MIDI clips, and external MIDI routing for the engine this page's bridge and clip streaming feed
 - [Mixing Engine](./mixing.md) — strips, buses, sends, and metering for multi-track realtime
-- [JavaScript API](./js-api.md) · [Python API](./python-api.md) — the batch feature transforms behind these estimates
+- [JavaScript API](./js-api-analysis.md) · [Python API](./python-api.md) — the batch feature transforms behind these estimates
 - [DSP Implementation Notes](./dsp-implementation.md) — how onset, chroma, and tempo features are built

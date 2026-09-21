@@ -12,7 +12,7 @@ The **inverse** helpers go the other way. They take those features and reconstru
 These helpers are useful when you need to debug a feature pipeline, build an audible preview of what a model "hears", test round trips, or port librosa-style notebooks to native or browser code.
 
 ::: tip New to analysis? This is not the first page
-These helpers assume you already produce mel spectrograms or MFCCs. If you are just getting started, read [Getting Started](./getting-started.md) and the feature-extraction sections of the [JavaScript API](./js-api.md#feature-extraction) or [Python API](./python-api.md#feature-extraction) first, then come back when you need to invert what you computed.
+These helpers assume you already produce mel spectrograms or MFCCs. If you are just getting started, read [Getting Started](./getting-started.md) and the feature-extraction sections of the [JavaScript API](./js-api-analysis.md#feature-extraction) or [Python API](./python-api.md#feature-extraction) first, then come back when you need to invert what you computed.
 :::
 
 ## What You Will Learn
@@ -204,6 +204,23 @@ The demo runs exactly the `melSpectrogram` → `melToAudio` round trip above on 
 There are two common conventions for spacing the Mel bands: the **Slaney** formula (librosa's and libsonare's default) and the **HTK** formula. They place the band edges differently, so the forward and inverse transforms must use the *same* convention — pass `htk: true` (or `htk=True`) to the inverse only if the forward transform used it.
 :::
 
+## When the component has to stay audio
+
+Everything above reconstructs from a magnitude, so everything above has to invent a phase. One route out of a spectral representation does not.
+
+`decompose` factors a **magnitude** spectrogram into components and activations. Those factors carry no phase, so turning one component back into sound means multiplying it out and handing the result to Griffin-Lim — the same approximation as `melToAudio`, with the same smeared character. What comes back is a preview of what that component *is*. It is not a stem: play the components together and you do not get the input back.
+
+`decomposeStems` takes the other route. It runs the same factorisation, then builds a per-component **soft mask** — each component's share of the total magnitude at every time-frequency point — and applies that mask to the **original complex** spectrogram. Nothing is estimated. Every component keeps the source's own phase, and because the masks divide each point rather than approximate it, the components **sum back to the input**.
+
+| | `decompose` + Griffin-Lim | `decomposeStems` |
+|---|---------------------------|------------------|
+| Phase | Invented, iteratively | The source's own |
+| Cost | `nIter` STFT round trips per component | One masking pass |
+| Components sum to the input | No | Yes |
+| Use it for | Seeing and hearing what a component holds | Separated audio you intend to keep |
+
+Reach for `decomposeStems` whenever a component will be listened to, mixed, or written to a file, and keep the Griffin-Lim route for what this page is really about: inspecting what a feature representation retained. The signatures and per-runtime spellings (`decomposeStems`, `decompose_stems`) are in [JavaScript API](./js-api-analysis.md) and [Python API](./python-api.md).
+
 ## A round-trip sanity check
 
 A common use is to confirm a feature pipeline is wired correctly: extract features, invert them, and listen to (or measure) the gap. The result will never be identical, but it should be *recognizable* — if it is silence or noise, a parameter or a matrix shape is wrong.
@@ -240,5 +257,5 @@ Inverse helpers are only meaningful with the **same** `sampleRate`, `nFft`, `hop
 ## Related
 
 - [librosa Compatibility](./librosa-compatibility.md) — how these map to `librosa.feature.inverse.*`
-- [JavaScript API](./js-api.md#feature-extraction) · [Python API](./python-api.md#feature-extraction) — the forward transforms
+- [JavaScript API](./js-api-analysis.md#feature-extraction) · [Python API](./python-api.md#feature-extraction) — the forward transforms
 - [DSP Implementation Notes](./dsp-implementation.md) — how the mel filterbank and STFT are built

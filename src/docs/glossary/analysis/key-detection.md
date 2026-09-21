@@ -28,16 +28,35 @@ Key detection starts from a mean chroma vector: the 12 pitch-class bins are aver
 
 A key profile is a 12-number template of how strongly each pitch class is expected to appear in a given key. The default profile is Krumhansl-Schmuckler, a classic set of reference pitch-class weights derived from listener experiments. The implementation can also use other profile families (Shaath, Faraldo EDM variants, Bellman-Budge, and Temperley), each tuned for different material; `genreHint` can steer the choice, and `auto` keeps the historical behavior unless another profile has clearly stronger evidence.
 
+The candidate set is the 24 major and minor keys by default. `modes` widens it to the five church modes (`'modal'`) or to all seven (`'all'`).
+
+::: warning The modal profiles do not have the standing the major/minor ones do
+Every major and minor profile above is a published one, derived from listening experiments or from a corpus. The five modal profiles (Dorian, Phrygian, Lydian, Mixolydian, Locrian) are not: they are a stated construction in the same shape, built from six named weights that put the tonic highest, then its fifth and third, then the degree that separates the mode from its major or minor neighbour, then the remaining scale tones, with everything outside the scale suppressed. The ordering is what carries the meaning; the exact numbers only place each weight between its neighbours. No probe-tone study or annotated corpus stands behind them, so read a modal result as a plausible heuristic rather than as a measurement — see the [FAQ](../../faq.md) for the full account.
+:::
+
 <SonareDemo id="chromagram" />
 
 ## Confidence is relative
 
-The confidence value reflects how strongly the best profile wins against alternatives. It is not proof that the track has one unambiguous key. Modal mixture (borrowing chords from the parallel major or minor), key changes, sparse arrangements, heavy percussion, or detuned material can all lower confidence or make neighboring keys plausible.
+`Key.confidence` is a **softmax over the profile correlation of every candidate that was scored**. That shape, not a rule of thumb, is what the number means, and four consequences follow from it directly:
+
+- it lands in `[0, 1)`, and the confidences of one analysis sum to 1;
+- a share of 24 candidates cannot reach 1, so a value here is not comparable with one from a two-way decision;
+- two keys splitting the same evidence — a relative major and minor, typically — each report about half;
+- on silence every candidate reports the same small share, because nothing separates them.
+
+::: warning Confidence is a belief, not an accuracy
+It says how decisively the chroma picked one candidate out of the set. It does not say how often that pick is right: nothing here is calibrated against annotated recordings, so a confident wrong answer is entirely possible. A pipeline that branches on the value has to pick its own threshold against its own material.
+:::
+
+The analyzer does not use this quantity for its own front-end selection. There it compares `evidence_score()` (C++ only), which blends the winner's correlation with its margin over the runner-up: a posterior mechanically shrinks as the candidate set widens, whether or not the evidence changed, so a margin is what stays on one scale across analyses that scored different numbers of candidates.
+
+Confidence is also not proof that the track has one unambiguous key. Modal mixture (borrowing chords from the parallel major or minor), key changes, sparse arrangements, heavy percussion, or detuned material can all lower it or make neighboring keys plausible.
 
 Use `detectKeyCandidates` when the runner-up matters. For UI, showing the top candidate plus confidence is usually better than treating the key as a fixed label.
 
 ::: details How libsonare computes it
-`KeyAnalyzer` computes chroma with default `n_fft = 4096` and `hop_length = 512`, then scores root/mode candidates by profile correlation. Options can enable harmonic HPSS input, RMS loudness weighting, a high-pass cutoff, explicit candidate modes, and genre/profile hints. `estimate_key_from_chords` and `refine_key_with_chords` provide chord-progression-aware helpers in the native layer, while the JS/Python detection helpers expose chroma-profile key estimates and candidate lists.
+`KeyAnalyzer` computes chroma with default `n_fft = 4096` and `hop_length = 512`, then scores root/mode candidates by profile correlation. Options can enable harmonic HPSS input, RMS loudness weighting, a high-pass cutoff, explicit candidate modes, and genre/profile hints. `estimate_key_from_chords` and `refine_key_with_chords` provide chord-progression-aware helpers in the native layer — they report the progression's diatonic share in the `confidence` field rather than the softmax posterior described above — while the JS/Python detection helpers expose chroma-profile key estimates and candidate lists.
 :::
 
 Related: [Chroma Features](./chroma-features.md), [Chord Recognition](./chord-recognition.md), [MIR Overview](../concepts/mir-overview.md)

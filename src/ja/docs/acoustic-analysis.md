@@ -58,7 +58,7 @@ libsonare には、部屋や録音環境の響きを説明するためのルー�
 | ルーム寸法と音源／聴取位置がある | `synthesizeRir(...)` / `synthesize_rir(...)` | 指定した部屋と位置から、再現性のあるモノラル RIR を作ります。 |
 | 録音を目標ルームの響きへ寄せたい | `roomMorph(...)` / `room_morph(...)` | オフラインの音作り効果です。既存の残響を取り除く処理ではありません。 |
 
-`analyzeImpulseResponse(...)` と `detectAcoustic(...)` は `AcousticResult` を返します。結果には、全帯域の値とオクターブバンドごとの配列が含まれます。`estimateRoom(...)` は `RoomEstimateResult`、`synthesizeRir(...)` は `RirResult`、`roomMorph(...)` は処理後サンプルを返します。
+`analyzeImpulseResponse(...)` と `detectAcoustic(...)` は `AcousticResult` を返します。結果には、全帯域の値とオクターブバンドごとの配列が含まれます。`estimateRoom(...)` は `RoomEstimateResult`、`synthesizeRir(...)` は `RirResult`、`roomMorph(...)` は `RoomMorphResult` を返します。モーフ後のサンプルは `audio` に入り、あわせて目標ルームの合成が報告した診断情報が付きます。
 
 ::: info なぜバンド別（オクターブバンド）なのか？
 部屋はすべての周波数を均等に吸音するわけではなく、低音は高音より長く響くことがよくあります。解析をオクターブバンド（各バンドでおよそ周波数が倍になる: 125、250、500、1k、2k、4k Hz）に分けると、RT60 や明瞭度を 1 つの平均値ではなくバンドごとに別々に報告できます。1/3 オクターブのサブバンドは、ブラインド推定の内部で使うより細かい分割です。
@@ -129,7 +129,7 @@ const { rir, hasError } = synthesizeRir({
   sampleRate,
 });
 
-const morphed = roomMorph(dryVoice, sampleRate, {
+const { audio: morphed, diagnostics } = roomMorph(dryVoice, sampleRate, {
   lengthM: 12,
   widthM: 9,
   heightM: 4,
@@ -209,9 +209,23 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 - 奥行き : 幅 : 高さの比は `aspectHintLw` ／ `aspectHintLh` から来ます（既定はどちらも `1`）。これらを省いた呼び出しは常に 3 つとも同じ寸法 — 立方体 — を返すので、ヒントを渡していない限り `length`・`width`・`height` を「復元された比率」として提示しないでください。
 - 1 本の減衰が決めるのは容積と吸音の**積**だけなので、容積を確定させているのは事前値 `referenceAbsorption`（既定 `0.15`）です。報告される容積はこの値の 3 乗で変化します。真の平均吸音率の半分を事前値にすると、容積は約 8 分の 1 として報告されます。録音どうしを比較するときは、この値を固定してください。
+
+この事前値は拒否されず `[0.01, 0.99]` にクランプされます。範囲外の値を渡しても推定は成功しますが、計算に使われるのはクランプ後の値です。低い側では、報告される容積が 3 桁ずれることになります。
+:::
+
+::: info C では事前値の 0 は「既定値を使う」の意味です
+`SonareRoomEstimateConfig` の float はすべて `0` を「未設定」として読み、`reference_absorption` も例外ではありません。`0` はライブラリ既定値の `0.15` を選びます。C ヘッダが想定している書き方は `SonareRoomEstimateConfig cfg = {};` です。ここで 0 をそのまま値として扱うと、解析側の下限 `0.01` に張り付きます。容積は事前値の **3 乗**で変わるため、普通の広さの部屋が 1 立方メートル未満として、しかも confidence は最大のまま報告され、その推定値を `sonare_synthesize_rir` に渡すと無関係な残響ができてしまいます。Node・Python・WASM は `0.15` を明示的に渡しており、動作は同じです。ほぼ剛壁の事前値が本当に必要な場合は、`0` ではなく `0.01` を指定してください。
 :::
 
 `roomMorph(...)` はオフラインの音作り効果です。合成した目標ルームの響きを足し、既存の残響尾部を少し弱めることがあります。この出力を残響除去として扱ったり説明したりしないでください。ルームの響きを足す処理であり、既存の残響を取り除く処理ではありません。
+
+::: info モーフの診断情報を読む
+`roomMorph(...)` は目標ルームを `synthesizeRir(...)` と同じコードで合成するため、同じ 3 種類の警告を報告します。鏡像音源の次数が安全上限まで下げられた場合（`acoustic.ism_order_clamped`）、テイルが `maxSeconds` で切られた場合（`acoustic.rir_length_clamped`）、そして拡散テイルがまったく生成されなかった場合（`acoustic.no_late_tail`）です。いずれも「指定したのとは別の部屋を通った」ことを意味しますが、音を聴いただけでは分かりません。
+
+`RirResult` と違って `hasError` はありません。生成できないモーフは例外になるため、`diagnostics` に入るのは「結果は得られたが注意が要る」警告だけです。
+
+Node とブラウザでは構造化された配列として返りますが、Python の結果では 1 本の `warning_message` 文字列として報告されます。
+:::
 
 ### 壁の吸音率と材質
 
@@ -219,12 +233,22 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 
 | フィールド | 型 | 意味 |
 |------------|----|------|
-| `absorption` | number | 全バンド一様の壁吸音率。`[0, 0.999]` にクランプされます。最も単純で後方互換のコントロールです。 |
+| `absorption` | number | 全バンド一様の壁吸音率。`[0, 1]` の範囲内である必要があり、受理された値はさらに `[0, 0.999]` にクランプされます。最も単純なコントロールです。 |
 | `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。 |
-| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。 |
-| `materialPreset` | number | 名前付きの壁材質プリセット。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。 |
+| `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。吸音率のフィールドが選んだ壁材質に対して適用されます。 |
+| `materialPreset` | number | 名前付きの壁材質プリセット。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。`bandScattering` とは優先順位を競いません。 |
 
-優先順位は高い順に次のとおりです。非ゼロの `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分の `bandAbsorption`／`bandScattering` を効かせたいときは `materialPreset` を `0` のままにしてください。
+優先順位が決めるのは**吸音率**だけです。高い順に、非ゼロの `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分のバンド別吸音率を効かせたいときは `materialPreset` を `0` のままにしてください。
+
+`bandScattering` はこの優先順位の外にあります。吸音率の優先順位が選んだ壁材質に対して適用されるので、プリセットと散乱配列を同時に渡す指定も成り立ちます。プリセットの吸音率に、指定した粗さが重なります。
+
+::: warning 散乱配列は必ず壁に届きます
+`bandScattering` が無視されることはありません。`materialPreset` と併用した場合も同じです。散乱は鏡面的な初期反射からエネルギーを拡散させるため、ミキシングタイムと初期／後期のバランスが動きます。つまり、渡せばレンダリング結果は変わります。`synthesizeRir(...)` や `roomMorph(...)` に、実際には効かせたくない散乱配列を渡しているコードがあるなら、プリセットで打ち消されることを当てにせず、配列そのものを外してください。
+:::
+
+::: warning 範囲外の吸音率はクランプされず拒否されます
+スカラーの `absorption` が非有限値、または `[0, 1]` の範囲外の場合は `InvalidParameter` で失敗します。クランプされるのは受理された値だけで、`[0, 0.999]` に収められます。完全な剛壁では減衰が有限時間で終わらないためです。`bandAbsorption` と `bandScattering` も同じ検証を通るため、壁の指定フィールドはどれも不正な値に対して同じ答えを返します。1 つだけが黙って別の部屋を組み立てることはありません。
+:::
 
 材質プリセットは整数コードに対応します。`0` なし、`1` コンクリート、`2` 木材、`3` カーテン、`4` カーペット、`5` ガラスです。コンクリートとガラスは反射的で高域のテールが残りやすく、カーテンとカーペットは吸音的でテールが短くなります。
 
@@ -239,7 +263,7 @@ const concrete = synthesizeRir({
 // バンド別の壁指定（6 オクターブバンド）と散乱
 const custom = synthesizeRir({
   lengthM: 7, widthM: 5, heightM: 3,
-  materialPreset: 0, // バンド配列を有効にする
+  materialPreset: 0, // プリセットなし。吸音率は bandAbsorption が決める
   bandAbsorption: [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],
   bandScattering: [0.1, 0.1, 0.2, 0.2, 0.3, 0.3],
   sampleRate,
@@ -257,11 +281,26 @@ const custom = synthesizeRir({
 | `crossfadeMs` | 混合時刻まわりの等パワークロスフェード幅（ミリ秒）。`0` で既定値です。 |
 | `ismOrder` | 初期反射部の鏡像音源の反射次数。 |
 | `seed`, `maxSeconds` | 後期テールの乱数シードと、生成する RIR の最大長。 |
+| `airAbsorptionEnabled` | ISO 9613-1 の空気吸収項を、後期テールのバンドごとの RT60 に加えます。既定は OFF。 |
+| `airTemperatureC`, `airHumidityPercent` | その項を計算する気象条件。`airAbsorptionEnabled` が ON のときだけ読まれます。 |
 
 **混合時刻**は、応答が離散的な鏡像音源の初期反射から決定論的な統計的後期テールへ移る点で、**クロスフェード**はその境目が聞こえないよう両者をなじませます。Sabine と Eyring は後期テールの背後にある 2 つの古典的な RT60 推定法で、Eyring はより吸音的な部屋で精度が高い傾向があります。
 
 ::: tip Sabine と Eyring（普段は気にしなくてよい）
 どちらも、部屋の大きさと表面の吸音具合から RT60 を予測する古典的な公式です。Eyring は吸音処理がよく効いた部屋でより正確になる傾向があり、Sabine はより古くて単純な方です。特定のリファレンスに合わせる場合を除いて、既定のままで構いません。
+:::
+
+::: tip 空気吸収が変えるもの
+空気そのものも音を吸収します。しかも低音よりはるかに高音を吸うため、反射が進む距離に応じて
+効果が積み上がります。`airAbsorptionEnabled` を ON にすると、主に大きな部屋の高域が短くなり、
+小さな部屋はほとんど変わりません。既定は OFF なので、同じ記述の部屋は同じようにレンダリング
+されます。
+
+気象条件は、このサーフェスに共通の「`0` はライブラリ既定値を選ぶ」規則に従います。ここでは
+ISO の基準気象条件、20 °C・相対湿度 50 % です。したがって `0 °C` そのものは未指定と区別
+できません。氷点下の部屋を指定したいときは `0.01` を使ってください。吸収量は同じです。
+現実的でない温度・湿度の組み合わせは、周囲のジオメトリ検査と同じように、範囲へ丸めるのでは
+なくエラーとして返されます。
 :::
 
 ::: details 鏡像音源の反射とは？
@@ -309,7 +348,7 @@ const custom = synthesizeRir({
 
 ブラインド推定は「このテイクは響きすぎているかも」といった比較や警告には便利です。ただし、建築音響の正式な測定値として扱うものではありません。
 
-ライブ表示や段階的な BPM/キー/コード推定が必要なら [リアルタイムとストリーミング](./realtime-streaming.md) を使います。楽曲メタデータが必要なら [JavaScript API](./js-api.md) または [Python API](./python-api.md) を参照してください。
+ライブ表示や段階的な BPM/キー/コード推定が必要なら [リアルタイムとストリーミング](./realtime-streaming.md) を使います。楽曲メタデータが必要なら [JavaScript API](./js-api-analysis.md) または [Python API](./python-api.md) を参照してください。
 
 ## 関連
 

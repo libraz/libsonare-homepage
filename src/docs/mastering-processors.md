@@ -100,8 +100,23 @@ A few capabilities sit underneath the maximizer/final and analysis APIs:
 
 - Integrated LUFS measurement supports surround layouts up to 8 channels, applying the [BS.1770](./algorithm-references.md) channel weights. BS.1770-4 itself normatively defines layouts only up to 5.1 (6 channels); the 7.1/8-channel weighting (treating the side-surround pair like the rear surrounds, +1.5 dB) is a non-normative extrapolation, not part of the standard.
 - The internal oversampler and true-peak stages accept power-of-two oversampling factors from 1 to 16 (1, 2, 4, 8, 16; the live meter accepts the same factors), trading CPU for inter-sample-peak accuracy.
+- `loudness.maxLimiterGainReductionDb` (12 dB) bounds how far the loudness stage will drive the true-peak limiter to reach its target. It decides how peaky an input the stage will still try to normalize, not how loud a master can get: the allowance never permits more gain than `target - current` asks for. Every loudness path shares the same default, so the chain, the standalone helper and the named processor normalize alike. Setting it to `0` restores a strict headroom clamp, which on peak-normalized material leaves the loudest targets short — `sonare mastering song.wav --preset pop --params "loudness.maxLimiterGainReductionDb=0"` lands at -16.19 LUFS against -14.06 at the default. Whatever shortfall remains is the limiter's own gain reduction, which one non-iterating pass does not re-measure, and is reported through `loudnessTargetLimited`.
 - For UI metering, pass `maxPoints` to `meteringVectorscope(...)` and `meteringPhaseScope(...)`: they thin the point series down to at most `maxPoints` points, so a busy scope stays cheap to draw. (Without `maxPoints` they emit one point per input sample. The older `meteringVectorscopeDecimated(...)` / `meteringPhaseScopeDecimated(...)` aliases are deprecated and just delegate.) `meteringSpectrumFrame(...)` reads a single, non-time-averaged spectrum frame for spectrum-analyzer snapshots.
 - Every `multiband.*` solo processor — `compressor`, `dynamicEq`, `expander`, `imager`, `limiter`, and `saturation` — shares the same crossover mechanism and accepts a custom number of crossover cutoffs, so you can split into the band count your material needs instead of a fixed three. This entry point exposes up to 8 `cutoffNHz` slots (`cutoff0Hz` … `cutoff7Hz`), so a single `multiband.*` call can address up to 9 bands.
+:::
+
+::: info Anti-aliasing on the distortion stages
+Five processors shape the waveform hard enough to fold energy back down the spectrum, and each takes an `aliasing` parameter selecting how that is handled: `0` none, `1` first-order antiderivative anti-aliasing (ADAA1), `2` second-order (ADAA2), `3` a 4x oversampled path.
+
+| Processor | Modes it implements |
+|---|---|
+| `saturation.hardClipper` | none, ADAA1, ADAA2, 4x oversample |
+| `saturation.softClipper`, `saturation.waveshaper` | none, ADAA1, 4x oversample |
+| `saturation.exciter`, `spectral.presenceEnhancer` | none, 4x oversample |
+
+A mode a processor does not implement is refused rather than silently ignored, and the message names the set that would have worked — `soft clipper ADAA2 anti-aliasing is not supported; use None, Adaa1, or Oversample4x`. Asking a processor outside this set of five for the parameter at all is refused by key: `unknown --params key for saturation.tube: aliasing`.
+
+The oversampled path aligns its dry signal and reports the delay it introduces, so `latency_samples` is `24` on the 4x path where the other modes report `0`. Compensate for it the same way you would for any other latency the chain reports.
 :::
 
 ::: info What is a crossover?
@@ -162,6 +177,29 @@ This reduces the warbly "musical noise" that naive subtraction can leave. These 
 
 ::: details What is `saturation.ampSim`?
 A guitar/bass-amp-style coloration stage in the form preamp drive → tone stack → power amp → cabinet. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then an optional power-amp section and a data-free cab voicing. Construction/param keys: `drive` (0-1), `bassDb`, `midDb`, `trebleDb`, `presenceDb`, `levelDb`, `power`, `sag`, `transformer`, and `nfb` are automatable through `set_parameter` on every binding. `power` adds a class-AB push-pull soft-saturation stage; `sag` models supply droop and bloom after hard hits; `transformer` adds low-frequency output-transformer saturation; `nfb` adds a negative-feedback loop around the active power stage. `cab` (boolean), `cabModel` (`0` = guitar 4x12, `1` = bass 8x10), and `ampModel` (`0` = classic crunch, `1` = Fender-style clean, `2` = modern high-gain, `3` = tweed, `4` = Vox-style chime, `5` = rectifier) are discrete topology choices, so set them at construction time rather than automating them.
+
+The cabinet and microphone keys are construction-only too, so none of them appear in `masteringInsertParamInfo('saturation.ampSim')`:
+
+| Key | Meaning |
+|-----|---------|
+| `preset` | Named amp rig, resolved before any numeric key applies |
+| `cabIrF32Base64` | A captured cabinet impulse response, base64-encoded 32-bit float samples |
+| `cabIrSampleRate` | The rate that capture was made at; `0` means it is already at the processor's rate |
+| `cabIrGenerate` | Synthesize a cabinet impulse response from `cabModel` instead of using the analytic cab voicing |
+| `cabIrDrivers` | Whether the cabinet's other drivers are summed into a generated impulse response |
+| `micModel`, `micAxis`, `micDistanceCm`, `micBlend` | The first microphone: type (`0` none, `1` dynamic, `2` ribbon, `3` condenser), on-axis position, distance, and blend |
+| `micBModel`, `micBAxis`, `micBDistanceCm`, `micBInvert` | The second microphone of a pair, with a polarity flip |
+| `cone`, `doppler` | Cone breakup and cone-motion Doppler; `doppler` moves the reported latency |
+:::
+
+::: warning Drain the tail of an offline `saturation.ampSim` render
+The tail this processor reports includes the cabinet impulse response, not just the second microphone's path-length delay. A loaded or generated cabinet response runs to roughly 21 ms at 48 kHz at its longest, so an offline bounce that stops pulling output at the last input sample loses that much cabinet decay — the render simply ends early and a little dry, with nothing to indicate it happened. Keep reading output until the reported tail is drained.
+:::
+
+::: info Prepare it for the channel count you will actually render
+`saturation.ampSim` allocates per channel: each one owns a cabinet-IR ring, a Doppler line, and two microphone delay lines. That makes it far and away the heaviest member of the saturation family to prepare — preparing the realtime maximum channel count for a mono bounce reserves around 84 MB where the equivalent `saturation.tube` render uses 2.6 MB, which is enough to fail an allocation inside a large WebAssembly mixing graph.
+
+The channel-aware `prepare` overload reserves state only for the channels it will process, so use it for an offline mono or stereo render. A realtime caller using the two-argument `prepare` is unaffected either way.
 :::
 
 ## Pair processors and analyses
@@ -181,13 +219,69 @@ These are registry names you pass to `masteringPairAnalyze(...)` / `masteringSte
 - **Mono compatibility** (`stereo.monoCompatCheck`) predicts what happens when your stereo mix is summed to mono (phone speakers, club PAs, some broadcast paths). If the left and right channels are out of phase, parts can cancel out and lose level when folded down. The check flags that risk before it surprises a listener. See [Mono Compatibility](./glossary/concepts/mono-compatibility.md) for a deeper walk-through.
 :::
 
+::: warning A match curve is defined only inside its frequency limits
+`match.applyMatchEq` and the `match.matchEqCurve` analysis fit the correction over `[minFrequencyHz, maxFrequencyHz]` — 40 Hz to 18 kHz by default — using at most `maxBands` bands (default 8) of at most `maxGainDb` (default 12). Nothing outside that interval is matched.
+
+Both realizations of the curve say so, which is what lets you swap between them. The parametric realization places no band outside the limits. The FIR realization tapers its gain back to unity over one octave beyond each edge, narrowed on the high side when Nyquist is closer than an octave so the weight reaches zero exactly at Nyquist.
+
+The taper is load-bearing, not a cosmetic smoothing. Carrying the fitted gain all the way down to DC instead would let a thin source matched against a bass-heavy reference reach the full `maxGainDb` below the low limit — a broadband offset plus subsonic energy that eats the headroom of every stage after it — while the parametric realization of the very same match left that region untouched. Lower `minFrequencyHz` if you actually want the sub region matched; do not expect the default fit to reach it.
+:::
+
+::: details Match EQ construction keys
+`match.applyMatchEq` and `match.matchEqCurve` read the same curve-fitting keys. The remainder configure the FIR realization only.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `minFrequencyHz` | `40` | Low edge of the matched band; must be greater than 0 |
+| `maxFrequencyHz` | `18000` | High edge of the matched band; must be greater than `minFrequencyHz` |
+| `maxBands` | `8` | Most bands the fit may use |
+| `maxGainDb` | `12` | Largest correction any one band may apply |
+| `q` | `1.0` | Q of each fitted band |
+| `smoothingBins` | `2` | Spectral smoothing applied before fitting |
+| `fftSize` | `2048` | Analysis FFT size for the FIR realization |
+| `kernelSize` | `513` | FIR kernel length |
+| `phase` | `0` | `0` = linear phase, `1` = minimum phase |
+| `partitionSize` | `0` | Convolution partition size; `0` selects it automatically |
+:::
+
+::: details Reading `stereo.monoCompatCheck` and `stereo.monoCompatCheckLogBands`
+`stereo.monoCompatCheck` returns one whole-signal verdict: `correlation`, `width`, `monoPeak`, `sideRms`, and a `likelyMonoCompatible` flag decided against its single `correlationThreshold` parameter (default `0`).
+
+`stereo.monoCompatCheckLogBands` spreads the same measurement across a logarithmic band set — `bandsPerOctave` (default `3`) between `lowHz` (default `20`) and `highHz` (default `20000`) — and returns a `bands` array whose entries each carry `lowHz`, `highHz`, `correlation`, and `sideRms`.
+
+Each band's correlation covers that band's whole `[lowHz, highHz)` interval rather than a single probe at its logarithmic centre, and the difference decides whether the read-out can be trusted. Two components inside one band, one in phase and one anti-phase, cancel when the mix is folded down; a centre-frequency probe would see only whichever of them happened to sit nearer the centre and call the band correlated. Measuring the interval reports the cancelling pair for what it is.
+
+Band count does not drive cost the way it looks like it should: the bands share one set of transforms instead of each taking its own full-length pass, so a thirty-band split over a long buffer is nowhere near ten times the work of a three-band one. Choose the resolution the material needs.
+:::
+
 ## Mixer and engine inserts
 
 The creative-FX insert catalog — reverb, modulation, and delay insert IDs, their parameter tables, the `masteringInsertNames()` discovery APIs, and `SONARE_HAVE_FX` / `BUILD_ACOUSTIC_SIM` build gating — lives on its own page: [Effects Inserts](./effects-inserts.md).
 
 ## How to call them
 
-Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, id, type, unit and realtime-safety — plus the built-in preset lists. Its `min` / `max` / `default` fields are always `null`, so it can populate a picker but not size a control; take value ranges from the per-processor tables on this page. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, id, type, unit, realtime-safety, and a `min` / `max` / `default` triple — plus the built-in preset lists. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+
+### Reading a catalog bound
+
+Every descriptor carries all three value fields, so a host can size a control straight from the catalog instead of transcribing the per-processor tables on this page. They are not equally populated: practically every parameter publishes a `default`, while `min` and `max` are published only where a limit exists. A `null` bound is not missing data — it states that the catalog knows of no limit on that side, which is still the common case.
+
+The two kinds of value come from different places, and that decides how far a host can trust them:
+
+- The **default** is the processor config struct's own field initializer, recorded as each builder falls back to it. A field whose initializer changes therefore cannot leave a stale number behind in the catalog.
+- The **range is measured**, not declared. Candidate values go through the same construction path a caller uses, and the catalog reports the interval validation accepted.
+
+::: warning A bound is a hard constraint, not a recommended range
+`min` and `max` describe what the processor will *accept*. They are not a musically sensible range to sweep a control over: a value inside the interval can still be a bad setting, and a value outside it is rejected rather than clamped.
+:::
+
+Because the range is measured rather than declared, three properties follow that a host has to allow for:
+
+- **Each bound is measured with the other parameters at their defaults.** Two controls that constrain each other therefore each report the *other's default* as their limit. `maximizer.adaptiveRelease` publishes `minReleaseMs` with a ceiling of 250 and `maxReleaseMs` with a floor of 20 for exactly that reason — those are the sibling's default values, not a limit on the pair as a whole.
+- **A sample-rate-derived bound reflects the un-prepared processor.** Every EQ `band*.frequencyHz` ceiling reads as 24000, and rises once the insert is prepared at a higher rate.
+- **An exclusive bound is reported as the limit it excludes.** `dynamics.compressor` publishes a `sidechainHpfHz` `min` of 0 and still rejects 0.
+
+The per-band EQ surface is the bulk of the flat parameter set: `eq.parametric`, `eq.midSide`, and `multiband.dynamicEq` publish a type and a default for every indexed `band*` field. Publishing them does not widen which keys count as *read* — a band supplied incompletely still has its remaining keys reported as ignored.
 
 ::: code-group
 

@@ -292,7 +292,7 @@ Large pitch, formant, or ambience moves can be useful for sound design, but they
 ::: info What "latency" means here
 **Latency** is the delay between sound going in and processed sound coming out, caused by the analysis the chain has to do. `latencySamples()` reports it in samples; divide by the sample rate for seconds.
 
-It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active.
+It is **fixed** for a given prepared chain: the retune and whole-chain dry paths are aligned to the overlap-add latency, so moving the wet or retune mix no longer changes the reported figure. That means you can read it once after `prepare(...)` and compensate for it, instead of re-reading it whenever a control moves. The dominant term is the retune stage's pitch-shift analysis window — a larger grain analyses more audio per step and adds more delay (see the [StreamingRetune](./js-api-mastering.md#streamingretune) `grainSize` field) — plus the true-peak (inter-sample peak, ISP) limiter's own delay when that limiter is active.
 :::
 
 Every live control is smoothed per sample, so adopting a new config snapshot with
@@ -304,6 +304,6 @@ nasal still act at amount zero.
 
 - [Editing DSP](./editing-dsp.md)
 - [Browser / WASM](./wasm.md#realtime-voice-changer)
-- [JavaScript API](./js-api.md#realtimevoicechanger)
+- [JavaScript API](./js-api-mastering.md#realtimevoicechanger)
 - [Python API](./python-api.md#realtime-voice-changer)
 - [Node.js Native API](./node-api.md#streaming-and-realtime-classes)

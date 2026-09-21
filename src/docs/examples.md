@@ -13,6 +13,8 @@ By the end of this page you should be able to:
 
 ## By Use Case
 
+Each one below is a small starting pattern. For a whole production job carried from raw files to a deliverable — stems to a finished master, a delivery gate that runs in CI, a batch of takes cleaned up — see [Use Cases](./use-cases.md).
+
 ### Show BPM and Key in a Browser App
 
 Use the npm WebAssembly package when audio stays in the browser. Decode files
@@ -136,6 +138,10 @@ The module-level `analyze(samples, sample_rate)` returns the all-in-one analysis
 The `Audio.analyze()` method returns only the core summary (BPM, key, time
 signature, beats), so pass the samples to the function when you need chords,
 sections, and form together.
+:::
+
+::: warning `analyze()` reports triads
+The all-in-one path runs chord detection with `useTriadsOnly` set to `true`, so `result.chords` comes back as triads — a seventh in the music is reported as the triad inside it. Pass `useTriadsOnly: false` to `analyze()` if you want the extended vocabulary there, or call `detectChords()` on its own, which searches the extended vocabulary by default.
 :::
 
 ::: code-group

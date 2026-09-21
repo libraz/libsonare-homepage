@@ -87,7 +87,20 @@ The scene **file** stores `panMode` and `panLaw` as integers, but insert `slot` 
 
 Serializing a scene after runtime pan edits preserves the strip's current `panMode`. Use `Mixer.toSceneJson()` / `Mixer.to_scene_json()` instead of rebuilding the pan fields by hand.
 
-**Insert `slot` and send `timing` must be strings.** A non-string value — e.g. a numeric `"timing": 1` — is rejected at load time with an `InvalidParameter` error (`send timing must be a string ("pre" or "post")`). Always write `"pre"` or `"post"`.
+**Insert `slot` and send `timing` must be strings.** A non-string value — e.g. a numeric `"timing": 1` — is rejected at load time, with the reason `send timing must be a string ("pre" or "post")`. Always write `"pre"` or `"post"`.
+:::
+
+::: warning How a rejected scene reaches you differs by runtime
+Everything that stops a scene from building — malformed JSON, an out-of-range field, a non-string `timing` — fails the same way within a runtime, but the runtimes do not agree with each other. The specific reason is carried in the message; the error type is not a discriminator worth branching on.
+
+| Runtime | What you catch | Inner reason |
+|---------|----------------|--------------|
+| WASM | `InvalidState`, message `failed to build mixer from scene JSON: <reason>` | Preserved |
+| Node native | An untyped `Napi::Error` with the same message | Preserved |
+| Python | A bare `RuntimeError` | **Dropped** — the message is only `failed to build mixer from scene JSON` |
+| C ABI | `nullptr` from `sonare_mixer_from_scene_json` | Read `sonare_last_error_message()` |
+
+Validate a scene before you hand it to a mixer rather than relying on the exception to name the field, and on Python log the scene next to the exception — the message alone will not tell you which field was wrong.
 :::
 
 ::: details Field terms: dual pan, polarity invert, pan law, PDC
@@ -278,7 +291,7 @@ sonare mix --scene my-scene.json --input vocal.wav --input reverb-return.wav -o 
 :::
 
 ::: info `mix --scene` with per-strip inputs is Python-CLI only
-Rendering a whole scene from a JSON file with one `--input` per strip is implemented by the Python CLI. The native CLI's canonical command is `sonare-cli mix-strip`, a single-strip, single-input processor with no `--scene`; the native `mix` name remains only as a deprecated alias. Use `mix-strip` for quick per-strip checks, not full scene renders.
+Rendering a whole scene from a JSON file with one `--input` per strip is implemented by the Python CLI. The native CLI has no `mix` command at all: its strip command answers to `sonare-cli mix-strip` and nothing else, so a script that still calls `sonare-cli mix` fails as an unknown command. `mix-strip` itself is on both CLIs, but it is a single-strip, single-input processor with no `--scene` — use it for quick per-strip checks, not full scene renders. See [the channel strip](./cli.md#the-channel-strip).
 :::
 
 ::: tip When to recompile

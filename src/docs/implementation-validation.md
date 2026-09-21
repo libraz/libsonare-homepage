@@ -79,3 +79,13 @@ librosa parity means the implementation is compared against generated reference 
 Mastering validation checks DSP invariants, loudness/true-peak behavior, golden hashes, and published-algorithm assumptions where applicable.
 
 Room-acoustic blind estimates and music-structure analysis are heuristic features. Treat them as estimates with confidence values.
+
+::: tip Measuring music-analysis accuracy against your own material
+"Estimate" above is qualitative. The repository ships a fixture-driven accuracy report — `tools/eval/summarize_accuracy.py`, run end to end with `make accuracy-report` — that rolls a corpus run into key accuracy and MIREX weighted score, BPM accuracy at the conventional 4% tolerance, beat and downbeat F-measure, meter accuracy, and chord recall in both a major/minor and an exact-quality vocabulary, broken down by dataset with the fixture count beside every figure.
+
+The datasets it measures against are licensed for research use and are not redistributable, so the manifests ship empty and the report runs against a corpus you hold.
+
+Two behaviors are worth knowing before reading or automating around the output. A dimension with no observations is reported as `unmeasured`, never as a score — a metric that silently skips unusable data points and averages the rest would score an empty set as perfect, and the fixture runner deliberately skips a row whose audio is missing. And `--require <dimension>` fails the run when a dimension expected to produce figures produced none, catching a typo'd fixture path that would otherwise look exactly like a pass.
+
+See [FAQ: How do I measure accuracy on my own material?](/docs/faq#how-do-i-measure-accuracy-on-my-own-material) for the walkthrough.
+:::

@@ -23,12 +23,33 @@ Mixer scene inserts use the same processor factory as mastering inserts, but the
 |-----|---------|
 | `masteringInsertNames()` | The full list of valid insert ids |
 | `masteringInsertParamNames(name)` | The construction keys one insert accepts (band/sub-band processors list their indexed `band{i}.*` keys; an unknown name returns an empty array) |
-| `masteringInsertParamInfo(name)` | The realtime-automatable subset: each parameter's JSON key, numeric automation id, and realtime-safety flag |
+| `masteringInsertParamInfo(name)` | A full descriptor for each realtime-automatable parameter — see [The parameter descriptor](#the-parameter-descriptor) |
 | `masteringProcessorCatalog()` | Machine-readable entries (`kind`, `realtimeInsertable`, `stereoOnly`, `latencySamples`, `tailSamples`, `channelPolicy`) for picker/filter UIs. The representative 48 kHz / 512-sample probe reports latency and audible decay tail (both 0 for offline processors); query the live processor for exact configuration-dependent latency. Hosts can filter capabilities without hard-coding processor IDs. |
 
 The Python equivalents are `mastering_insert_param_names(name)`, `mastering_insert_param_info(name)`, and `mastering_processor_catalog()`.
 
 Keys outside an insert's list are ignored by the processor and reported through [`Mixer.sceneWarnings()`](./mixing-scene-json.md) when a scene carrying them loads.
+
+### The parameter descriptor
+
+`masteringInsertParamInfo(name)` returns one descriptor per realtime-automatable parameter. Every descriptor carries all eight fields; none of them are optional.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `name` | `string` | The JSON key to use in scene insert params |
+| `id` | `number` | The integer parameter id for realtime automation and MIDI-CC binding |
+| `rtSafe` | `boolean` | Whether the value can be changed from the audio thread while the insert runs |
+| `type` | `'number'` \| `'boolean'` | How the config builder reads the key |
+| `min` | `number` \| `null` | The smallest accepted value, or `null` when the catalog knows of no limit |
+| `max` | `number` \| `null` | The largest accepted value, or `null` when the catalog knows of no limit |
+| `default` | `number` \| `boolean` \| `null` | The value used when the key is absent |
+| `unit` | `string` \| `null` | The physical unit — `dB`, `Hz`, `ms`, `samples` — or `null` when the parameter is unitless |
+
+`unit` is `string | null`, not an optional field: a unitless parameter reports `null` rather than omitting the key, so a host can read all eight fields off every descriptor without a presence check. The same `min` / `max` / `default` values appear in `capabilityCatalog()`, and [Reading a catalog bound](./mastering-processors.md#reading-a-catalog-bound) explains where they come from and how far to trust them.
+
+::: info The descriptor list is narrower than the construction key list
+`masteringInsertParamNames(name)` lists every key an insert accepts at construction. `masteringInsertParamInfo(name)` covers only the subset that can be automated afterwards, so a key that has to be fixed when the insert is built — a topology choice, a supplied impulse response, the rate that impulse response was captured at — has no descriptor at all. `saturation.ampSim` is the widest gap: most of its cabinet and microphone keys are construction-only. Build a picker from the param names and an automation surface from the descriptors; they are not the same list.
+:::
 
 ## Creative-FX insert catalog
 
@@ -76,6 +97,14 @@ There are a few practical details to know:
 | `effects.delay.stereo` params | `delayTimeLMs`, `delayTimeRMs`, `feedback`, `pingPong`, `dryWet` |
 | `effects.reverb.convolution` | Needs an impulse response (IR — a recording of how a real space responds to a single short burst) supplied through native insert construction |
 | Convolution insert without an IR | Effectively behaves as a passthrough |
+
+::: warning The geometric room inserts validate `absorption`, they do not clamp it
+`effects.reverb.room` and `effects.acoustic.roomMorph` take an `absorption` coefficient normalized to `[0, 1]`. A value outside that interval is **rejected**; the insert does not build with the nearest valid figure instead.
+
+Clamping is the friendlier-looking option, and it is the wrong one here. A caller who passes a percentage, a reflection coefficient on another scale, or a dB figure into a normalized field gets a room they did not ask for, and the mistake surfaces only as a tail that is too short or too long. Every other way of supplying the same coefficient — the per-band absorption array on these inserts, and the offline room-impulse synthesis facade — already reports a parameter error, so the scalar path reports one too.
+:::
+
+Both geometric room inserts also take the atmospheric-absorption controls: `airAbsorptionEnabled` (off by default), `airTemperatureC`, and `airHumidityPercent`. They resolve the same option bag as the offline facade, so a room built as an insert and the same room built through `synthesizeRir(...)` agree — including the rule that `0` on either climate value selects the ISO reference climate rather than a literal zero. See [Room Acoustics](./acoustic-analysis.md#late-reverb-model-and-tail-controls).
 
 ::: details What are these reverb algorithms?
 They are different ways to synthesize a reverb tail. Pick by the character you want, not by correctness — all are valid.

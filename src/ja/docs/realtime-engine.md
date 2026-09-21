@@ -161,6 +161,16 @@ engine.setSoloMute(0, true, false, -1);
 `setTrackLanes`、`setTrackBuses`、ストリップ JSON セッターは内部構造を構築するため、`process(...)` と同時に実行してはいけません。レンダーの合間か停止中に発行してください。ライブ操作向けの軽量なコントロールは、サンプル精度でキューされる `setSoloMute` と、1 バンドをその場で書き換える EQ バンド更新です。
 :::
 
+### バスのインサート列は合算後の信号を 1 度だけ通る
+
+クリップのオーディオとホストしたインストゥルメントのオーディオは、同じバスへ流れ込む 2 つの寄与であり、ストリップ・センド・バス列が走る前に 1 つのブロックへまとめて集約されます。したがってバスのインサート列は、寄与の **合計** を 1 ブロックにつきちょうど 1 回だけ処理します。これは非線形なインサートが必要とする条件そのものです。コンプレッサーやサチュレーションをクリップ側の寄与とインストゥルメント側の寄与に分けて 2 回走らせると、合算後のバスにかけるのとは別物の、2 つの部分信号にかけることになります。リバーブであればテールが 1 ブロックにつき 2 回進んでしまいます。
+
+このまとめられたブロックが開くには 2 つの条件があります。1 つはプラグインディレイコンペンセーション（PDC）が働いていないことです。PDC が有効なあいだ、クリップバスは専用のスクラッチへレンダリングされ、内部で遅延されたインストゥルメントと位相が揃うように遅延されます。そのときのバスはこの別パスに属するものです。もう 1 つはインストゥルメントラックが空でないことで、空であればそもそもまとめる相手がありません。
+
+::: info ソロとミュートのランプは所定の時間をかけて進みます
+各レーンが 1 ブロックにつき 1 度だけ仕上げられるため、そのフェーダー・パン・ゲートのスムーザーも 1 ブロックにつき 1 度だけ進みます。ソロとミュートの背後にあるゲートスムーザーの時定数は **10 ms**、パンスムーザーは **5 ms** です。そのためソロやミュートの切り替えは、段差ではなく短い可聴のランプになります。これはインサートパラメータやフェーダーのオートメーションの既定追従時間（既定 20 ms）を決める `setParamSmoothingMs` とは別のものです。
+:::
+
 <SonareDemo id="engine-lane-mixer" />
 
 ## トラックモニタータップ: off・PFL・AFL
@@ -256,6 +266,50 @@ engine.setAutomationLane(thresholdId, [
   { ppq: 8, value: -24, curveToNext: 3 },
 ]);
 ```
+
+### ホストしたインストゥルメントをオートメーションする
+
+MIDI デスティネーションにバインドしたシンセにもオートメーション可能なパラメータがあり、インサートパラメータとまったく同じ手順で解決できます。`resolveInstrumentAutomationId(destinationId, paramName)` は、ホストしたインストゥルメントの連続パラメータを JSON キー名（`'cutoffHz'` など）で指定し、`setAutomationLane`・`setParameter`・`setParameterSmoothed` にそのまま渡せる予約 id へ変換します。これによりホストは、シンセのカットオフやビブラートの深さをコントロールスレッドから小刻みに更新するのではなく、オートメーションレーンからオーディオブロック精度で駆動できます。解決されたレーンはオーディオスレッド上でスムージングされるため、ライブ再生とオフラインレンダリングの結果は一致します。
+
+先に `setSynthInstrument` または `setSf2Instrument` でインストゥルメントをバインドしてから解決してください。解決はコントロールスレッド専用で、オーディオ側の状態には触れません。
+
+::: code-group
+
+```typescript [node]
+engine.setSynthInstrument(0, patch);
+
+const cutoffId = engine.resolveInstrumentAutomationId(0, 'cutoffHz');
+if (cutoffId < 0) throw new Error('cutoffHz is not automatable on this instrument');
+
+engine.setAutomationLane(cutoffId, [
+  { ppq: 0, value: 400 },
+  { ppq: 8, value: 6000, curveToNext: 1 },
+]);
+```
+
+```python [python]
+from libsonare import AutomationCurve, AutomationPoint
+
+engine.set_synth_instrument(patch, destination_id=0)
+
+# 引数の順序に注意: こちらは param_name が先です。
+cutoff_id = engine.resolve_instrument_automation_id("cutoffHz", destination_id=0)
+
+engine.set_automation_lane(cutoff_id, [
+    AutomationPoint(ppq=0, value=400, curve_to_next=AutomationCurve.EXPONENTIAL),
+    AutomationPoint(ppq=8, value=6000),
+])
+```
+
+:::
+
+::: warning Python だけ引数の順序が逆です
+WASM と Node では `resolveInstrumentAutomationId(destinationId, paramName)` と、デスティネーションが先です。Python は `resolve_instrument_automation_id(param_name, destination_id=0)` と **名前が先** で、デスティネーションは既定値 `0` を持ちます。名前の位置にデスティネーション id を渡すと解決されずに例外になるので取り違えはすぐ表面化しますが、ホストを両者のあいだで移植するときは一度確認しておく価値があります。
+:::
+
+この id はパラメータだけでなくデスティネーションのスロットも符号化しているため、**同じ** `destination_id` に対するアンバインドと再バインドをまたいでも有効なままで、そのデスティネーションに何もバインドされていないあいだは単に何も適用しません。プリセット、エンジンモード、波形、フィルタモデル、ユニゾン、最大同時発音数といった構造的なフィールドはオートメーションできません。これらはボイスプールのサイズを変えたり DSP のトポロジを差し替えたりするため、オーディオスレッド上では安全に扱えないからです。こうした変更には、新しいパッチでインストゥルメントを再バインドしてください。
+
+エンジンが持つインストゥルメントオートメーションのスロットは **32** 個です。使い切ったあとの解決は、既存のレーンを付け替えるのではなく失敗します。キーが未知のとき、そのデスティネーションに何もバインドされていないとき、インストゥルメントがオートメーション可能なパラメータを持たないとき、スロットが満杯のときは、WASM と Node が `-1` を、C の入口 `sonare_engine_resolve_instrument_automation_id` が `SONARE_ERROR_INVALID_PARAMETER` を返します。レーンに渡す前に必ず戻り値を確認してください。アレンジメントサブシステムを含まないビルドでは C の入口が `SONARE_ERROR_NOT_SUPPORTED` を返し、そのビルドはケイパビリティ JSON に `instrumentParamAutomation: false` を報告します。ホストはこれを見て、リゾルバが応答しないことを事前に判別できます。[`capabilities()`](./js-api.md#capabilities) を参照してください。
 
 `setParamSmoothingMs(ms)` は、フェーダー／パンのスムーズな変更、インサートパラメータのオートメーション、MIDI CC マッピングに使う既定の追従時間を変更します。既定は `20` ms、`0` は即時変更です。ホストがオートメーション全体の感触を意図的に変える場合を除き、再生前にコントロールスレッドから 1 度設定してください。
 

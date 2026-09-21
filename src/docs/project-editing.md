@@ -104,7 +104,7 @@ By the end of this page you should be able to:
 - create a `Project`, add audio and MIDI tracks, and place clips on them;
 - edit clips (split, trim, move, gain, fade, loop, re-source, duplicate, remove) and tracks (add, rename, route, change kind, remove) through **undoable** operations;
 - place musical time correctly using PPQ, a tempo map with tempo segments, time signatures, and markers;
-- choose a clip overlap policy and a warp mode (`off` / `repitch` / `tempo-sync`) with warp anchors;
+- choose a clip overlap policy and a warp mode (`off` / `repitch` / `tempo-sync` / `time-stretch`) with warp anchors;
 - write key/chord annotations and automation lanes onto the project;
 - compile to a renderable timeline and read its structured diagnostics and non-fatal warnings;
 - save and load with deterministic JSON, and exchange MIDI through SMF (Standard MIDI File) and the MIDI 2.0 Clip File format.
@@ -418,11 +418,14 @@ project.getOverlapPolicy();  // read it back
 |-----------|---------|
 | `'off'` | Play the audio at its native rate; ignore tempo |
 | `'repitch'` | Speed up / slow down with the tempo (pitch moves too, like a tape) |
-| `'tempo-sync'` | Time-stretch to follow the tempo while preserving pitch |
+| `'tempo-sync'` | Time-stretch to follow the tempo while preserving pitch, baked on the control thread |
+| `'time-stretch'` | Time-stretch to follow the tempo while preserving pitch, synthesized on the audio thread |
 
 ::: info How tempo-sync keeps the pitch
 `'tempo-sync'` time-stretches the audio with a **phase vocoder** — an STFT-based time-stretch that changes the timing without changing the pitch (unlike `'repitch'`, which moves both like a tape). The same algorithm runs in both realtime playback and offline [bounce](./project-bounce.md), so a warped clip sounds identical whichever way you render it. On stereo and multichannel clips, all channels are stretched by one peak-locked vocoder pass, so the stretch stays phase-coherent across channels and the stereo image does not drift.
 :::
+
+`'time-stretch'` also preserves pitch, but reaches it a different way: it reads the *same* anchor map as `'repitch'` and synthesizes the output by overlap-adding source segments at a fixed rate, so changing the map moves the timing and leaves the pitch where it was. The practical difference is when the work happens — `'tempo-sync'` bakes the stretched audio on the control thread, while `'time-stretch'` takes effect from the next audio block with no re-bake. [Warp and Tempo Sync](./glossary/arrangement/warp-and-tempo.md) compares the two in full.
 
 <SonareDemo id="time-stretch" />
 
@@ -468,6 +471,7 @@ project.setWarpMap({
 });
 project.setClipWarpRef(clipId, 1);          // reference the map (0 clears it)
 project.setClipWarpMode(clipId, 'tempo-sync');
+// project.setClipWarpMode(clipId, 'time-stretch'); // same map, stretched on the audio thread
 // project.removeWarpMap(1);                 // remove the map by id when done
 ```
 
@@ -476,7 +480,7 @@ A warp map is a first-class, id-keyed object: `setWarpMap({ id, name, anchors })
 ::: warning Anchors are yours to maintain, and two of them are the minimum
 Anchors are absolute sample-to-sample pairs, and the engine never re-derives them from the tempo map. Editing the tempo with `setTempoSegments(...)` therefore does **not** restretch a warped clip — it moves the clip's start and length on the timeline, so a different amount of the same fixed warp curve gets played. When the tempo changes and the audio should follow it, recompute the anchors in your app and push a new map with `setWarpMap(...)`.
 
-A map also needs at least two anchors before it describes a stretch at all. A `'tempo-sync'` clip with no registered warp map (and no pre-baked warped audio) is a compile error — a dangling source ref, reported by `compile()`. A `'repitch'` clip with a missing or single-anchor map is not an error: it silently plays at its native rate, exactly as if the mode were `'off'`.
+A map also needs at least two anchors before it describes a stretch at all. A `'tempo-sync'` clip with no registered warp map (and no pre-baked warped audio) is a compile error — a dangling source ref, reported by `compile()`. A `'repitch'` or `'time-stretch'` clip with no warp ref at all is not an error: it silently plays at its native rate, exactly as if the mode were `'off'`. What *is* an error in every mode is a clip that references a warp map id nobody registered, which `compile()` reports as the same dangling source ref.
 :::
 
 ## Takes and comp lanes

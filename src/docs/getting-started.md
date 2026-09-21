@@ -46,6 +46,7 @@ Start with the page that matches where you will run libsonare:
 | Estimate, synthesize, or morph room acoustics | Room-acoustic helpers | [Room Acoustics](/docs/acoustic-analysis) |
 | Use libsonare from a Node.js backend or desktop tool | Native N-API binding | [Node.js Native](/docs/native-bindings) |
 | Embed the C++ library directly | C++17 library | [C++ API](/docs/cpp-api) |
+| Embed only the built-in instruments in a C++ app | `sonare::midi`, linked on its own | [Link targets](/docs/cpp-api#link-targets) |
 
 The browser package is primarily sample-based: most APIs take decoded
 `Float32Array` PCM. Its `Audio.fromMemory(...)` helper can decode WAV/MP3 bytes,
@@ -164,7 +165,7 @@ Next: read [Node.js / Native Bindings](/docs/native-bindings).
 - **BPM Detection** - Tempo estimation using tempogram and autocorrelation
 - **Key Detection** - Musical key detection using Krumhansl-Schmuckler profiles
 - **Beat Tracking** - Dynamic programming-based beat extraction
-- **Chord Recognition** - Template matching across 192 templates (16 chord qualities × 12 roots)
+- **Chord Recognition** - Template matching against per-root chord templates: 4 triad qualities by default, 24 qualities across 12 roots once the full template set is enabled
 - **Section Detection** - Structural segmentation such as intro, verse, and chorus
 - **Melody / Pitch Tracking** - YIN and pYIN algorithms for F0 detection
 - **Audio Characteristics** - Timbre, dynamics, and rhythm analysis

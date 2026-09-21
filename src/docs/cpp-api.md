@@ -50,16 +50,117 @@ build can drop them, and every symbol they own disappears with them.
 |--------|-------|
 | `BUILD_MASTERING` | `sonare::mastering::*`, the mastering C ABI |
 | `BUILD_MIXING` | `sonare::mixing::*`, the mixer C ABI |
+| `BUILD_MIXING_ASSISTANT` | the offline mixing assistant |
 | `BUILD_GRAPH` | the routing-graph library |
-| `BUILD_FX` | creative realtime FX processors |
+| `BUILD_FX` | creative realtime FX processors, and the GS system effects the SoundFont player sends to |
 | `BUILD_ACOUSTIC_SIM` | geometric room acoustics (RIR synthesis, room estimation, room morph) |
-| `BUILD_PITCH_EDITOR` | monophonic pitch-editor primitives |
 | `BUILD_VOICE_CHANGER` | realtime voice changer |
-| `BUILD_ARRANGEMENT` | headless arrangement / DAW project (`sonare_c_project.h`) |
+| `BUILD_PITCH_EDITOR` | scale quantization and note segmentation |
+| `BUILD_ARRANGEMENT` | the MIDI and instrument subsystem (NativeSynth, the GM fallback bank, the SoundFont player) and the headless arrangement / DAW project (`sonare_c_project.h`) |
 | `BUILD_ASSIST` | composition-assist seam (control/offline only) |
+
+Some options are not independent, and the configure step resolves the conflict rather than failing. Each of these prints a status line, so a trim that did not take is visible in the configure output:
+
+- `BUILD_MIXING_ASSISTANT` turns `BUILD_MIXING` back on.
+- `BUILD_MIXING` turns `BUILD_MASTERING` and `BUILD_GRAPH` back on.
+- `BUILD_VOICE_CHANGER` turns *itself* off when `BUILD_MASTERING` is off.
+- `SONARE_WASM_ANALYSIS_ONLY` turns `BUILD_MIXING_ASSISTANT` off, so the analysis-only WebAssembly module does not carry the assistant.
+
+The first two chain, and they are the ones that quietly defeat a trim: leaving `BUILD_MIXING_ASSISTANT` at its default `ON` pulls the mixer, the mastering library and the routing graph back in however many `OFF` flags you passed for them.
 
 The C ABI always *exports* the project symbols; without `BUILD_ARRANGEMENT` they
 return `SONARE_ERROR_NOT_SUPPORTED` and `sonare_project_abi_version()` returns 0.
+
+`BUILD_PITCH_EDITOR` behaves the same way. With `-DBUILD_PITCH_EDITOR=OFF`,
+`sonare_scale_quantize_midi`, `sonare_scale_correction_semitones`,
+`sonare_scale_pitch_class_enabled` and `sonare_note_segments` are still exported
+and answer `SONARE_ERROR_NOT_SUPPORTED`; their out-parameters are zeroed before
+the check, so freeing a returned pointer is safe on that path. The library
+configures and builds with the option off — the native CLI does not, because five
+of its commands reach the pitch editor directly.
+
+### Link targets
+
+An installed libsonare exports one CMake target per subsystem plus an aggregate that links whatever the installation contains:
+
+```cmake
+find_package(sonare REQUIRED)
+target_link_libraries(app PRIVATE sonare::sonare)
+```
+
+`sonare::sonare` is the safe default: an aggregate over every **static archive** the installation was built with, so you do not have to work out which archives your calls need or what order they go in. It deliberately excludes `sonare::shared`, the C-ABI shared artifact the FFI bindings load — that one already links every static archive itself, so pulling both into one link line would define each symbol twice.
+
+For a narrower link line, name the archives directly — `sonare::core`, `sonare::rt`, `sonare::mastering`, `sonare::mixing`, `sonare::midi`, `sonare::engine`, and the rest of the subsystems above. Which of them exist depends on how the installation was configured, so guard on `if(TARGET sonare::mixing)` or on the `SONARE_WITH_*` variables the package config sets. Naming a subsystem as a component turns a missing one into a configure-time error instead of an undefined symbol at link time:
+
+```cmake
+find_package(sonare REQUIRED COMPONENTS midi)
+```
+
+::: warning A component is a target name, not an option name
+Components map one-to-one onto the exported target names, which are the internal target names with the `sonare_` prefix stripped — not the `BUILD_*` options that gate them. `BUILD_ACOUSTIC_SIM` produces `sonare::acoustic`, so the component is `acoustic`; likewise `mixing_assistant`, `pitch_editor` and `voice_changer`. Asking for a component that does not exist under any spelling fails with "libsonare was installed without the '…' component", which reads the same as a genuinely absent subsystem.
+:::
+
+The alias names are identical in an `add_subdirectory()` build, so a link line does not encode how libsonare was obtained.
+
+Two further properties of an installed build are worth knowing before you plan around it:
+
+- **Eigen is not a usage requirement.** No installed header includes it, so a consumer needs nothing but a C++17 compiler and a resolvable threads library. The package config declares `Threads` — and FFmpeg, when the installation was built with it — and nothing else.
+- **The vendored FFT archives install under prefixed file names**, `libsonare_kissfft.a` and `libsonare_pffft.a`, rather than claiming the generic names in your library directory. Their CMake target names are unchanged.
+
+A `sonare.pc` is installed for the shared build, which is the configuration pkg-config can describe honestly; a static-only install does not get one.
+
+Every exported target is exercised by a consumer gate that installs to a prefix, then configures and builds a separate consumer project against it, force-loading each archive whole against its own declared link interface. That is what catches a missing install rule or an incomplete link interface — neither is visible from inside the source tree, where every target links the whole set.
+
+#### Linking only the built-in instruments
+
+The synthesizer, the GM fallback bank, and the SoundFont player all live in `sonare::midi`. An application that renders MIDI to audio and never analyzes or masters — a player, a game, a MIDI-driven tool — can drop the production subsystems and link that one archive. `BUILD_TESTING` and `BUILD_CLI` both default to `ON`, so a trim that leaves them alone still compiles the test tree and the command-line tool:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_ARRANGEMENT=ON \
+  -DBUILD_TESTING=OFF -DBUILD_CLI=OFF \
+  -DBUILD_MASTERING=OFF -DBUILD_MIXING=OFF -DBUILD_MIXING_ASSISTANT=OFF \
+  -DBUILD_GRAPH=OFF -DBUILD_ACOUSTIC_SIM=OFF \
+  -DBUILD_VOICE_CHANGER=OFF -DBUILD_ASSIST=OFF
+cmake --build build --parallel
+cmake --install build --prefix /your/prefix
+```
+
+```cmake
+find_package(sonare REQUIRED COMPONENTS midi)
+target_link_libraries(app PRIVATE sonare::midi)
+```
+
+```cpp
+#include <midi/synth/native_synth.h>
+#include <midi/synth/synth_presets.h>
+#include <midi/ump.h>
+
+using namespace sonare::midi;
+
+const synth::SynthPreset* preset = synth::find_synth_preset("acoustic-piano");
+synth::NativeSynth instrument(preset->config);
+instrument.prepare(48000.0, 512);
+
+MidiEvent note_on{};
+note_on.ump = make_midi1_note_on(/*group=*/0, /*channel=*/0, /*note=*/60, /*velocity=*/100);
+instrument.on_event(/*destination_id=*/0, note_on);
+
+float* channels[2] = {left, right};
+instrument.process(channels, 2, 512);
+```
+
+Installed headers resolve under two spellings: the bare in-tree path shown above, and `<sonare/cpp/midi/synth/native_synth.h>` through the include root.
+
+Three limits are worth knowing before you plan around this:
+
+- **Analysis is not optional.** Analysis, features, effects, and metering have no build flag, and `sonare::midi` links `sonare::core`, so that code is in the binary whether or not you call it. What a trim removes is mastering, mixing, room acoustics, and the voice changer.
+- **`BUILD_ARRANGEMENT` is one switch for two things.** Turning it on for the instruments also builds the arrangement, MIR, and serialization archives. You do not have to link them, but they are compiled.
+- **`BUILD_FX=OFF` makes the SoundFont player render dry.** The GS system effects — its reverb, chorus, and delay sends — are compiled out and the sends become no-ops. Keep `BUILD_FX=ON` unless you want that.
+
+This trim is a C++ source-build option only. The npm package publishes an analysis-only bundle (see [Installation](./installation.md#wasm-package-subpaths)) but no instruments-only one, and the Python wheel is a single full build.
+
+For what the instruments themselves can do, see [Built-in Instruments](./native-synth.md) and [SoundFont 2 Player](./soundfont-player.md).
 
 ::: tip Terminology
 New to audio analysis? See the [Glossary](/docs/glossary) for explanations of terms like BPM, STFT, Chroma, HPSS, and more.

@@ -44,7 +44,7 @@ class list — see the Page Map for where each subsystem's full API is documente
     { id: 'editFx', label: 'Normalize · Silence Trim · Pre/De-emphasis', col: 1, row: 3, group: 'effects' },
     { id: 'creativeFx', label: 'Decompose · Reverbs · Creative FX', col: 2, row: 3, group: 'effects' },
     { id: 'roomFx', label: 'Room Morph · Voice Change', col: 3, row: 3, group: 'effects' },
-    { id: 'nativeSynth', label: 'NativeSynth (15 engines)', col: 0, row: 4, group: 'instruments', variant: 'accent' },
+    { id: 'nativeSynth', label: 'NativeSynth (17 engines)', col: 0, row: 4, group: 'instruments', variant: 'accent' },
     { id: 'soundfont', label: 'SoundFont Player (SF2)', col: 1, row: 4, group: 'instruments' },
     { id: 'midiSeq', label: 'MIDI · Sequencer · SMF/UMP', col: 2, row: 4, group: 'instruments' },
     { id: 'instrumentRack', label: 'Instrument Rack', col: 3, row: 4, group: 'instruments' },
@@ -118,7 +118,7 @@ class list — see the Page Map for where each subsystem's full API is documente
 
 | If you are looking at... | Read... |
 |--------------------------|---------|
-| `analysis/` and `feature/` | [JavaScript API](./js-api.md), [Python API](./python-api.md), [librosa Compatibility](./librosa-compatibility.md) |
+| `analysis/` and `feature/` | [JavaScript API](./js-api-analysis.md), [Python API](./python-api.md), [librosa Compatibility](./librosa-compatibility.md) |
 | `analysis/acoustic_analyzer.*`, `analysis/room_estimator.*`, `src/acoustic/`, or `effects/acoustic/` | [Room Acoustics](./acoustic-analysis.md), [Algorithm References](./algorithm-references.md#scope-boundaries) |
 | `streaming/` | [Realtime and Streaming](./realtime-streaming.md) |
 | `mastering/` | [Mastering Processors](./mastering-processors.md), [DSP Implementation Notes](./dsp-implementation.md), [Mastering Assistant](./mastering-assistant.md) |
@@ -142,7 +142,7 @@ src/
 ├── core/               # Level 1-3: Core DSP
 │   ├── convert.h       # Hz/Mel/MIDI conversion
 │   ├── window.h        # Hann, Hamming, Blackman
-│   ├── fft.h           # KissFFT adapter
+│   ├── fft.h           # Transform seam (PFFFT / KissFFT backends)
 │   ├── spectrum.h      # STFT/iSTFT
 │   ├── audio.h         # Audio buffer
 │   ├── audio_io.h      # WAV/MP3 loading, optional FFmpeg-backed formats
@@ -469,11 +469,22 @@ to provide the sample rate; it does not implicitly resample to 22050 Hz the way
 | Library | Purpose | License |
 |---------|---------|---------|
 | KissFFT | FFT | BSD-3-Clause |
-| Eigen3 | Matrix ops | MPL-2.0 |
+| PFFFT | SIMD FFT, native builds | BSD-3-Clause |
+| Eigen3 | Matrix ops, build-time only | MPL-2.0 |
 | dr_libs | WAV decode | Public Domain |
 | minimp3 | MP3 decode | CC0-1.0 |
 | FFmpeg | Optional extended file decoding | LGPL/GPL depending on linked build |
 | r8brain | Resampling | MIT |
+
+::: info Two FFT backends behind one header
+`core/fft.h` is the seam, not a binding to one library. In a native build PFFFT serves every transform length it can factor and KissFFT serves the rest, so the accepted `n_fft` range is the same either way — only the speed differs. Configure with `-DSONARE_USE_PFFFT=OFF` for a KissFFT-only native build.
+
+The WebAssembly build is KissFFT-only on purpose: carrying both transforms costs the analysis-only module more than its size budget allows, for a gain that does not survive the move off native SIMD.
+:::
+
+::: info Eigen is not a consumer dependency
+Eigen is used inside the core's own translation units and no installed header includes it, so it is a build-time dependency rather than something a consumer links or includes. Building against an installed libsonare needs a C++17 compiler and nothing else.
+:::
 
 ## WASM Compilation
 
