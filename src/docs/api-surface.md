@@ -100,6 +100,45 @@ Each line is a one-line gloss; follow the link for the authoritative explanation
 
 This table says what exists, not how evenly each runtime exposes it. For a measured per-domain breakdown of how much of the surface every runtime actually reaches, see [Binding Parity](./binding-parity.md).
 
+## What The Capability Catalog Reports
+
+The build can describe its own processor surface. `capabilityCatalog()` on Node and WASM, `capability_catalog()` on Python, and `sonare_capability_catalog_json` on the C ABI return the same JSON document: the build's version and ABI numbers, every named processor with its parameters, and the built-in preset lists (mastering, synth, mixing scene, voice changer). Neither CLI exposes it; `doctor` prints the separate build-diagnostics report.
+
+The current build publishes **88 processors and 1,147 parameters**. Both numbers can be recounted rather than taken on trust: the libsonare repository tracks the generated document as `tools/capability-catalog.json`, `make capability-catalog-check` fails when that file drifts from what the shared library actually answers, and `schemas/capability-catalog.schema.json` fixes the shape.
+
+Every parameter carries the same eight fields:
+
+| Field | What it holds |
+|-------|---------------|
+| `name` | The key construction reads, such as `releaseMs` or `band0.frequencyHz` |
+| `id` | The integer id the realtime engine's insert-parameter setters use; ids run `0..n-1` in catalog order, so a band-splitting processor numbers `band0.*` before `band1.*` |
+| `rtSafe` | Whether the value can be changed live from the audio thread |
+| `type` | `number` or `boolean`, taken from the C++ type the config builder reads the key as |
+| `default` | The config struct's own field initializer, recorded as the builder falls back to it — never `null` |
+| `min`, `max` | The interval construction accepted when probed, or `null` when the catalog knows of no limit on that side |
+| `unit` | `dB`, `Hz`, `ms`, `samples`, or `null` for a dimensionless control |
+
+Defaults are read from the code, not written down, which is why none of the 1,147 reports `null`. Bounds are measured: candidate values go through the same construction path a caller uses, with the processor's other parameters at their defaults, and the catalog reports the interval validation accepted. In the tracked catalog 316 parameters publish a `min`, 193 a `max`, and 802 publish neither. A `null` bound means the processor takes any value on that side, or that construction never validates the key — not that a limit exists and went unmeasured. Two properties of a measured bound matter before you wire a slider to it: a control that constrains another reports the other's default, and an exclusive bound is reported as the value it excludes. [JavaScript API](./js-api.md#capabilitycatalog) walks through the concrete cases.
+
+Two things the descriptor is good for:
+
+- **A control surface without a hand-maintained table.** Lay out each parameter from its `type`, `default`, `min`, `max`, and `unit`, and a new processor or a renumbered band shows up in the UI when the build changes, not when someone edits a spreadsheet.
+- **Checking a value before it crosses the boundary.** A number outside a published bound is rejected at construction. Testing it against the catalog first turns that runtime error into a validation message at the point the user typed the value.
+
+```typescript
+const catalog = capabilityCatalog();
+const limiter = catalog.processors.find((p) => p.id === 'dynamics.brickwallLimiter');
+const release = limiter?.params.find((p) => p.name === 'releaseMs');
+
+function accepts(value: number): boolean {
+  if (!release) return false;
+  return (release.min === null || value >= release.min)
+      && (release.max === null || value <= release.max);
+}
+```
+
+The catalog describes the surface from the outside: which processors exist and what each accepts. It says nothing about why a processor is reachable from every runtime with the same id, or where the config builder that produced those defaults sits relative to the bindings that call it. That is the layering [Architecture](./architecture.md) lays out — the C++ core, the feature modules above it, and the thin bindings that translate language shapes into the same calls — and a reader who has just seen the catalog is the reader it was written for.
+
 ## Implementation And Evidence Pages
 
 | Page | Role |
