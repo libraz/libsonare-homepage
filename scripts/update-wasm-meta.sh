@@ -17,19 +17,19 @@ file_size() {
   fi
 }
 
-file_mtime_iso() {
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    stat -f%m "$1" | xargs -I{} date -u -r {} +"%Y-%m-%dT%H:%M:%SZ"
-  else
-    date -u -r "$1" +"%Y-%m-%dT%H:%M:%SZ"
-  fi
-}
-
 file_md5() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     md5 -q "$1"
   else
     md5sum "$1" | cut -d' ' -f1
+  fi
+}
+
+file_sha256() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    sha256sum "$1" | cut -d' ' -f1
   fi
 }
 
@@ -77,15 +77,6 @@ if [ -f "$WASM_FILE" ]; then
   TOTAL_GZIP_SIZE=$((SONARE_JS_GZIP_SIZE + INDEX_JS_GZIP_SIZE + GZIP_SIZE))
   TOTAL_GZIP_KB=$((TOTAL_GZIP_SIZE / 1024))
 
-  # Get build date from WASM file mtime (ISO 8601)
-  BUILD_DATE=$(file_mtime_iso "$WASM_FILE")
-
-  # Get commit hash from libsonare repo
-  COMMIT_HASH=""
-  if [ -d "$LIBSONARE_DIR/.git" ]; then
-    COMMIT_HASH=$(git -C "$LIBSONARE_DIR" rev-parse --short HEAD)
-  fi
-
   # Get version from libsonare WASM binding's package.json (single source of truth)
   WASM_PKG="$LIBSONARE_DIR/bindings/wasm/package.json"
   VERSION=""
@@ -123,6 +114,48 @@ if [ -f "$WASM_FILE" ]; then
   ENTRIES_FULL_GZIP_KB=$(node -pe 'JSON.parse(process.argv[1]).full.gzipKB' "$ENTRIES_JSON")
   ENTRIES_ANALYSIS_SIZE_KB=$(node -pe 'JSON.parse(process.argv[1]).analysis.sizeKB' "$ENTRIES_JSON")
   ENTRIES_ANALYSIS_GZIP_KB=$(node -pe 'JSON.parse(process.argv[1]).analysis.gzipKB' "$ENTRIES_JSON")
+
+  # Build provenance comes from the manifest the emscripten build writes beside
+  # its artifacts, never from the sibling checkout's current HEAD: the checkout
+  # keeps moving after a build, so a hash read here can name a tree that was
+  # never compiled. The manifest also pins the digest of every source that went
+  # in, which identifies the built tree even when that tree was dirty, and its
+  # artifact hash is checked against the copy so the recorded provenance cannot
+  # describe a binary other than the one in src/wasm.
+  SOURCES_MANIFEST="$LIBSONARE_DIR/bindings/wasm/dist/sonare.sources.json"
+  if [ ! -f "$SOURCES_MANIFEST" ]; then
+    echo "❌ Build manifest not found: $SOURCES_MANIFEST"
+    exit 1
+  fi
+  PROVENANCE=$(node -e '
+    const { createHash } = require("node:crypto");
+    const [manifestPath, wasmSha] = process.argv.slice(1);
+    const manifest = JSON.parse(require("node:fs").readFileSync(manifestPath, "utf8"));
+    const declared = manifest.artifacts?.["sonare.wasm"]?.sha256;
+    if (!declared) {
+      console.error(`❌ Build manifest declares no sonare.wasm artifact: ${manifestPath}`);
+      process.exit(1);
+    }
+    if (declared !== wasmSha) {
+      console.error("❌ Copied sonare.wasm is not the artifact the build manifest describes");
+      console.error(`   manifest: ${declared}`);
+      console.error(`   copied:   ${wasmSha}`);
+      process.exit(1);
+    }
+    const sources = manifest.sources ?? {};
+    const digest = createHash("sha256")
+      .update(
+        Object.keys(sources)
+          .sort()
+          .map((name) => `${name}:${sources[name]}`)
+          .join("\n"),
+      )
+      .digest("hex")
+      .slice(0, 12);
+    process.stdout.write(`${manifest.builtAt}\t${digest}`);
+  ' "$SOURCES_MANIFEST" "$(file_sha256 "$WASM_FILE")") || exit 1
+  BUILD_DATE=${PROVENANCE%%$'\t'*}
+  SOURCES_DIGEST=${PROVENANCE##*$'\t'}
 
   cat > "$META_FILE" << EOF
 {
@@ -173,7 +206,7 @@ if [ -f "$WASM_FILE" ]; then
   },
   "md5": "$MD5",
   "buildDate": "$BUILD_DATE",
-  "commitHash": "$COMMIT_HASH"
+  "sourcesDigest": "$SOURCES_DIGEST"
 }
 EOF
 
@@ -183,7 +216,7 @@ EOF
   echo "   Total assets: ${TOTAL_SIZE_KB}KB (${TOTAL_GZIP_KB}KB gzipped)"
   echo "   MD5: $MD5"
   echo "   Build: $BUILD_DATE"
-  [ -n "$COMMIT_HASH" ] && echo "   Commit: $COMMIT_HASH"
+  echo "   Sources: $SOURCES_DIGEST"
   exit 0
 else
   echo "❌ WASM file not found: $WASM_FILE"

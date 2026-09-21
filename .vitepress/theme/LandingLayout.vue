@@ -340,7 +340,7 @@ const wasmReceiptFields = (() => {
     });
   }
   const buildDate = wasmMeta.buildDate ? wasmMeta.buildDate.slice(0, 10) : '';
-  const buildParts = [buildDate, wasmMeta.commitHash].filter(Boolean);
+  const buildParts = [buildDate, wasmMeta.sourcesDigest].filter(Boolean);
   if (buildParts.length > 0) {
     fields.push({ key: 'BUILD', value: buildParts.join(' · ') });
   }
