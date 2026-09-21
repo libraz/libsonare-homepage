@@ -61,9 +61,9 @@ const localeCopy = {
     tagline: 'Audio engine with a dependency-free C++ core',
     hero: {
       eyebrow: 'Apache-2.0 · Dependency-free C++ core · WebAssembly',
-      title: 'From analysis to arrangement, powered by a dependency-free C++ core.',
+      title: 'Turn audio into data, and data back into audio.',
       subtitle:
-        'librosa-compatible analysis, broadcast-grade mastering and mixing, built-in instruments, and a realtime headless-DAW runtime — for C++, Python, and the browser. The C++ core runs native and WASM with no Python runtime, GPL/AGPL code, or model weights.',
+        'Analysis, mastering, mixing, built-in instruments and a DAW runtime — one C++17 engine, running natively and in the browser. Same results either way, and nothing is uploaded.',
       installCaption: 'Install',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -114,41 +114,68 @@ const localeCopy = {
         analysis: 'Analysis',
         mastering: 'Mastering',
         mixing: 'Mixing',
+        assistant: 'Assistant',
         editing: 'Editing DSP',
       },
       runtimes: { browser: 'Browser', python: 'Python', cli: 'CLI' },
       note: 'WASM accepts decoded Float32Array samples — use Web Audio API or a JS decoder.',
+      bundleNote:
+        'Analysis-only apps can import @libraz/libsonare/analysis instead — {analysis} KB gzip against the full entry’s {full} KB.',
     },
     pillars: {
       eyebrow: 'What ships in the box',
       heading: 'An audio engine, not a service',
+      subhead:
+        'Checked by a build: librosa parity against reference values, and each runtime’s reach against the C ABI itself.',
       items: [
         {
-          tag: 'ANALYSIS',
-          title: 'Deep MIR analysis for music tools.',
-          body: 'BPM, key, chords with Viterbi/HMM smoothing, beats, downbeats, time signature, sections, timbre, dynamics, YIN/pYIN pitch, tempogram/PLP, NNLS chroma, LUFS, room-acoustic estimates, and geometric room tools. Defaults are validated against generated reference values in CI.',
-          link: { label: 'Feature map', path: '/docs/api-surface' },
+          tag: 'INSTRUMENTS',
+          title: 'Seventeen synthesis engines, eleven of them physical models.',
+          body: 'Waveguide piano, bowed strings and reeds among them. The data-free GM/GS fallback voices all 128 programs, and its behaviour follows an open archive of hardware tone-generator measurements.',
+          links: [
+            { label: 'Hear the models', path: '/tuner' },
+            { label: 'Built-in instruments', path: '/docs/native-synth' },
+            {
+              label: 'Measurement archive',
+              path: 'https://soundings.libraz.net',
+              external: true,
+            },
+          ],
+        },
+        {
+          tag: 'ASSISTANTS',
+          title: 'They measure, they suggest, and they say why.',
+          body: 'The mixing and mastering assistants hand back a scene or a chain with the reason behind every change. Rule-based — no trained model, no upload — and applying the result stays your decision.',
+          links: [
+            { label: 'Mixing assistant', path: '/docs/mixing-assistant' },
+            { label: 'Mastering assistant', path: '/docs/mastering-assistant' },
+          ],
         },
         {
           tag: 'MASTERING & MIXING',
-          title: 'Broadcast-grade mastering and real-time-safe mixing.',
-          body: '88 named DSP processors in the capability catalog, including 76 solo mastering processors plus pair and creative-insert APIs — loudness, true peak, crossovers, clippers, tube saturation, oversampling — alongside a real-time-safe mixer with channel strips, buses, sends, metering, scene presets, and editing DSP.',
-          link: { label: 'Mastering processors', path: '/docs/mastering-processors' },
+          title: 'Broadcast-grade mastering and a real-time-safe mixer.',
+          body: '88 DSP processors built against published references, starting with BS.1770-4 loudness and true-peak limiting. 73 of them drop straight into a realtime chain.',
+          links: [{ label: 'Mastering processors', path: '/docs/mastering-processors' }],
         },
         {
-          tag: 'INSTRUMENTS & DAW',
-          title: 'Built-in instruments and a headless-DAW runtime.',
-          body: 'A 15-engine synth with a data-free GM fallback bank and a GS-compatible SoundFont 2 player — MIDI never renders silent. Author projects with audio and MIDI tracks, undo/redo, MIDI sequencing, SMF import/export, offline bounce, and a sample-accurate realtime engine that runs in the browser via AudioWorklet.',
-          link: { label: 'Built-in instruments', path: '/docs/native-synth' },
+          tag: 'ANALYSIS & DAW',
+          title: 'MIR analysis that ports over without surprises.',
+          body: 'BPM, key, chords, sections, EBU R128 loudness. Where it overlaps librosa the defaults match, and CI checks them against reference values. The results feed the headless DAW and the realtime engine directly.',
+          links: [
+            { label: 'Feature map', path: '/docs/api-surface' },
+            { label: 'Realtime engine', path: '/docs/realtime-engine' },
+          ],
         },
       ],
     },
     finalCta: {
       heading: 'Run the same DSP everywhere.',
-      subhead: 'C++, C, Python, Node, WASM, and CLI under one Apache-2.0 license.',
+      subhead:
+        'C++, C, Python, Node, WASM and two CLIs under one Apache-2.0 license. How far each runtime reaches is published as a table.',
       github: 'View source on GitHub',
       docs: 'Read the docs',
       license: 'Apache-2.0 License',
+      parity: 'Runtime parity',
     },
     demoCredit: 'Demo audio created with',
     midiSketch: 'MIDI Sketch',
@@ -160,9 +187,9 @@ const localeCopy = {
     tagline: '外部依存のない C++ コアを備えたオーディオエンジン',
     hero: {
       eyebrow: 'Apache-2.0 · 外部依存のない C++ コア · WebAssembly',
-      title: '解析からアレンジまで、外部依存のない C++ コアで。',
+      title: '音をデータに、データを音に。',
       subtitle:
-        'librosa 互換の解析、放送品質のマスタリングとミキシング、内蔵インストゥルメント、ヘッドレス DAW のリアルタイムランタイムを C++・Python・ブラウザで利用できます。C++ コアはネイティブと WASM で動き、Python ランタイム、GPL/AGPL コード、学習済みモデルを必要としません。',
+        '解析・マスタリング・ミキシング・内蔵音源・DAW を、ひとつの C++17 エンジンで。ネイティブでもブラウザでも同じ結果が出て、音声はどこにもアップロードされません。',
       installCaption: 'インストール',
       installNpm: 'npm install @libraz/libsonare',
       installPip: 'pip install libsonare',
@@ -213,41 +240,68 @@ const localeCopy = {
         analysis: '解析',
         mastering: 'マスタリング',
         mixing: 'ミキシング',
+        assistant: 'アシスタント',
         editing: '編集 DSP',
       },
       runtimes: { browser: 'Browser', python: 'Python', cli: 'CLI' },
       note: 'WASM はデコード済みの Float32Array サンプルを受け取ります（Web Audio API などでデコードしてください）。',
+      bundleNote:
+        '解析だけで足りるアプリは @libraz/libsonare/analysis を読み込めます。フルエントリの gzip {full} KB に対して {analysis} KB です。',
     },
     pillars: {
       eyebrow: '同梱されるもの',
       heading: 'サービスではなくオーディオエンジン',
+      subhead:
+        'ここに書いたことはビルドで検証しています。librosa との一致は参照値と、各ランタイムの到達範囲は C ABI そのものと、CI が毎回照合します。',
       items: [
         {
-          tag: 'ANALYSIS',
-          title: '音楽ツールのための本格的な MIR 解析。',
-          body: 'BPM、キー、Viterbi/HMM 平滑化つきコード、ビート、ダウンビート、拍子、セクション、音色、ダイナミクス、YIN/pYIN ピッチ、tempogram/PLP、NNLS クロマ、LUFS、ルーム音響推定、幾何ベースのルームツール。デフォルト値は CI で生成した参照値と照合しています。',
-          link: { label: '機能マップ', path: '/docs/api-surface' },
+          tag: 'INSTRUMENTS',
+          title: '17 の合成エンジン、うち 11 が物理モデル。',
+          body: '導波管によるピアノ、擦弦、リードなどを内蔵しています。データ不要の GM/GS フォールバックは 128 プログラムすべてを鳴らし、その挙動は実機音源の公開測定アーカイブに沿っています。',
+          links: [
+            { label: '物理モデルを聴く', path: '/tuner' },
+            { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
+            {
+              label: '測定アーカイブ',
+              path: 'https://soundings.libraz.net',
+              external: true,
+            },
+          ],
+        },
+        {
+          tag: 'ASSISTANTS',
+          title: '測って、提案して、理由を述べます。',
+          body: 'ミキシングとマスタリングのアシスタントが、シーンやチェーンを変更ごとの理由付きで返します。ルールベースなので学習済みモデルもアップロードもなく、適用するかどうかは呼び出し側が決められます。',
+          links: [
+            { label: 'ミキシングアシスタント', path: '/docs/mixing-assistant' },
+            { label: 'マスタリングアシスタント', path: '/docs/mastering-assistant' },
+          ],
         },
         {
           tag: 'MASTERING & MIXING',
-          title: '放送品質のマスタリングと、リアルタイムでも安全なミキシング。',
-          body: '機能カタログには 88 個の名前付き DSP プロセッサがあり、その内訳には 76 個の単体マスタリングプロセッサ、ペア処理、クリエイティブインサートが含まれます。ラウドネス、トゥルーピーク、クロスオーバー、クリッパー、真空管サチュレーション、オーバーサンプリングのほか、チャンネルストリップ、バス、センド、メーター、シーンプリセット、編集 DSP を備えた、リアルタイムでも安全なミキサーも利用できます。',
-          link: { label: 'マスタリングプロセッサ', path: '/docs/mastering-processors' },
+          title: '放送品質のマスタリングと、リアルタイムでも安全なミキサー。',
+          body: 'BS.1770-4 のラウドネスとトゥルーピーク制限をはじめ、公開文献に沿って実装した DSP プロセッサを 88 個収録しています。うち 73 個はリアルタイムのチェーンにそのまま挿せます。',
+          links: [{ label: 'マスタリングプロセッサ', path: '/docs/mastering-processors' }],
         },
         {
-          tag: 'INSTRUMENTS & DAW',
-          title: '内蔵インストゥルメントとヘッドレス DAW ランタイム。',
-          body: 'データ不要の GM フォールバックバンクを備えた 15 エンジンのシンセと、GS 互換の SoundFont 2 プレイヤーを内蔵。MIDI が無音になることはありません。オーディオと MIDI のトラックでプロジェクトを組み、アンドゥ/リドゥ、MIDI シーケンス、SMF の入出力、オフラインバウンスに対応。ブラウザでは AudioWorklet で動くサンプル精度のリアルタイムエンジンも使えます。',
-          link: { label: '内蔵インストゥルメント', path: '/docs/native-synth' },
+          tag: 'ANALYSIS & DAW',
+          title: '移植しても驚きのない MIR 解析。',
+          body: 'BPM、キー、コード、セクション、EBU R128 ラウドネス。librosa と重なる範囲はデフォルト値が一致し、CI が参照値と照合します。解析結果はそのままヘッドレス DAW とリアルタイムエンジンへ渡せます。',
+          links: [
+            { label: '機能マップ', path: '/docs/api-surface' },
+            { label: 'リアルタイムエンジン', path: '/docs/realtime-engine' },
+          ],
         },
       ],
     },
     finalCta: {
       heading: '同じ DSP をどこでも動かす。',
-      subhead: 'C++、C、Python、Node、WASM、CLI まで、ひとつの Apache-2.0 ライセンスで。',
+      subhead:
+        'C++、C、Python、Node、WASM、2 つの CLI を、ひとつの Apache-2.0 ライセンスで。どこまで届くかはランタイムごとに表で公開しています。',
       github: 'GitHub でソースを見る',
       docs: 'ドキュメントを読む',
       license: 'Apache-2.0 ライセンス',
+      parity: 'ランタイム間の対応',
     },
     demoCredit: 'デモ音源は',
     midiSketch: 'MIDI Sketch',
@@ -270,10 +324,19 @@ const packageLinks = {
 
 const wasmReceiptFields = (() => {
   const fields: { key: string; value: string }[] = [];
-  if (wasmMeta.gzipKB && wasmMeta.sizeKB) {
+  // Both entries come from the upstream size gate rather than from the copied
+  // artifact, so the two figures are one comparable measurement.
+  const entries = wasmMeta.entries;
+  if (entries?.full?.gzipKB) {
     fields.push({
       key: 'WASM',
-      value: `${wasmMeta.gzipKB} KB gzip / ${wasmMeta.sizeKB} KB raw`,
+      value: `${entries.full.gzipKB} KB gzip / ${entries.full.sizeKB} KB raw`,
+    });
+  }
+  if (entries?.analysis?.gzipKB) {
+    fields.push({
+      key: 'ANALYSIS ENTRY',
+      value: `${entries.analysis.gzipKB} KB gzip`,
     });
   }
   const buildDate = wasmMeta.buildDate ? wasmMeta.buildDate.slice(0, 10) : '';
@@ -318,7 +381,7 @@ function switchLocale(event: Event, targetPath: string) {
 }
 
 // Quick Start matrix
-type Discipline = 'analysis' | 'mastering' | 'mixing' | 'editing';
+type Discipline = 'analysis' | 'mastering' | 'mixing' | 'assistant' | 'editing';
 type Runtime = 'browser' | 'python' | 'cli';
 const discipline = ref<Discipline>('analysis');
 const runtime = ref<Runtime>('browser');
@@ -412,6 +475,45 @@ finally:
   --input music.wav \\
   -o mixed.wav`,
   },
+  assistant: {
+    browser: `import { init, Mixer, suggestMixScene } from '@libraz/libsonare'
+
+await init()
+
+const { scene, explanation } = suggestMixScene({
+  tracks: [
+    { id: 'vocal', name: 'lead vocal', left: vocalL, right: vocalR },
+    { id: 'drums', name: 'drums', left: drumsL, right: drumsR },
+  ],
+  sampleRate: 48000,
+})
+
+// Every change comes with the reason it was made.
+for (const line of explanation) console.log(line)
+
+// The assistant suggests; applying it is your own step.
+const mixer = Mixer.fromSceneJson(JSON.stringify(scene), 48000, 512)`,
+    python: `import libsonare as sonare
+
+result = sonare.suggest_mix_scene(
+    [
+        sonare.MixTrackInput("vocal", vocal_l, vocal_r, "lead vocal"),
+        sonare.MixTrackInput("drums", drums_l, drums_r, "drums"),
+    ],
+    sample_rate=48000,
+)
+
+for line in result["explanation"]:
+    print(line)
+
+scene = result["scene"]   # hand it to Mixer.from_scene_json when you accept it`,
+    cli: `sonare suggest-mix \\
+  --input vocal=vocal.wav \\
+  --input drums=drums.wav \\
+  --scene-out scene.json --json
+
+sonare mix --scene scene.json --input vocal.wav --input drums.wav -o mixed.wav`,
+  },
   editing: {
     browser: `import { init, noteStretch, pitchCorrectToMidi, voiceChange } from '@libraz/libsonare'
 
@@ -468,11 +570,11 @@ function highlight(code: string, rt: Runtime): string {
             '<span class="landing__code-string">$1</span>',
           )
           .replace(
-            /\b(import|as|from|with|print|def|return|f)\b/g,
+            /\b(import|as|from|with|print|def|return|for|in|f)\b/g,
             '<span class="landing__code-keyword">$1</span>',
           )
           .replace(
-            /\b(libsonare|audio|result)\b/g,
+            /\b(libsonare|sonare|audio|result|scene|line)\b/g,
             '<span class="landing__code-variable">$1</span>',
           )
           .replace(/(#.*$)/g, '<span class="landing__code-comment">$1</span>'),
@@ -491,11 +593,11 @@ function highlight(code: string, rt: Runtime): string {
           '<span class="landing__code-keyword">$1</span>',
         )
         .replace(
-          /\b(init|detectBpm|detectKey|analyze|masteringChainStereo|masteringChain|masteringProcess|Mixer|mixStereo|mixingScenePresetJson|processStereo|stripMeter|noteStretch|pitchCorrectToMidi|voiceChange)\b/g,
+          /\b(init|detectBpm|detectKey|analyze|masteringChainStereo|masteringChain|masteringProcess|Mixer|mixStereo|mixingScenePresetJson|suggestMixScene|fromSceneJson|processStereo|stripMeter|noteStretch|pitchCorrectToMidi|voiceChange)\b/g,
           '<span class="landing__code-function">$1</span>',
         )
         .replace(
-          /\b(samples|sampleRate|bpm|key|result|left|right|mix|mixer|block|meter|vocal|tuned|heldNote|character)\b/g,
+          /\b(samples|sampleRate|bpm|key|result|left|right|mix|mixer|block|meter|vocal|tuned|heldNote|character|scene|explanation|line)\b/g,
           '<span class="landing__code-variable">$1</span>',
         )
         .replace(/(\/\/.*$)/g, '<span class="landing__code-comment">$1</span>'),
@@ -504,6 +606,13 @@ function highlight(code: string, rt: Runtime): string {
 }
 
 const highlightedCode = computed(() => highlight(currentCode.value, runtime.value));
+
+/** Bundle-size note, with the two package entries filled in from the size gate. */
+const quickBundleNote = computed(() =>
+  currentLocale.value.quickStart.bundleNote
+    .replace('{analysis}', String(wasmMeta.entries?.analysis?.gzipKB ?? ''))
+    .replace('{full}', String(wasmMeta.entries?.full?.gzipKB ?? '')),
+);
 
 // Mini spectrum bars for the analyzer card — pseudo-spectrum based on a deterministic seed
 const spectrumBars = Array.from({ length: 22 }, (_, i) => {
@@ -822,7 +931,10 @@ const nodeId = computed(() => {
         </div>
 
         <div class="landing__quick-footer">
-          <p class="landing__quick-note">{{ currentLocale.quickStart.note }}</p>
+          <div class="landing__quick-notes">
+            <p class="landing__quick-note">{{ currentLocale.quickStart.note }}</p>
+            <p v-if="quickBundleNote" class="landing__quick-note">{{ quickBundleNote }}</p>
+          </div>
           <a :href="localePath('/docs/introduction')" class="landing__quick-link">
             {{ currentLocale.quickStart.docsLink }} →
           </a>
@@ -835,6 +947,7 @@ const nodeId = computed(() => {
       <header class="landing__section-header">
         <p class="landing__section-eyebrow">{{ currentLocale.pillars.eyebrow }}</p>
         <h2 class="landing__section-title">{{ currentLocale.pillars.heading }}</h2>
+        <p class="landing__section-subhead">{{ currentLocale.pillars.subhead }}</p>
       </header>
 
       <div class="landing__pillar-grid">
@@ -849,15 +962,18 @@ const nodeId = computed(() => {
           </span>
           <h3 class="landing__pillar-title">{{ pillar.title }}</h3>
           <p class="landing__pillar-body">{{ pillar.body }}</p>
-          <a
-            v-if="pillar.link"
-            :href="pillar.link.external ? pillar.link.path : localePath(pillar.link.path)"
-            :target="pillar.link.external ? '_blank' : undefined"
-            :rel="pillar.link.external ? 'noopener' : undefined"
-            class="landing__pillar-link"
-          >
-            {{ pillar.link.label }} →
-          </a>
+          <div class="landing__pillar-links">
+            <a
+              v-for="link in pillar.links"
+              :key="link.path"
+              :href="link.external ? link.path : localePath(link.path)"
+              :target="link.external ? '_blank' : undefined"
+              :rel="link.external ? 'noopener' : undefined"
+              class="landing__pillar-link"
+            >
+              {{ link.label }} →
+            </a>
+          </div>
         </article>
       </div>
     </section>
@@ -875,6 +991,9 @@ const nodeId = computed(() => {
           </a>
           <a :href="localePath('/docs/introduction')" class="landing__action landing__action--ghost">
             {{ currentLocale.finalCta.docs }} →
+          </a>
+          <a :href="localePath('/docs/binding-parity')" class="landing__action landing__action--ghost">
+            {{ currentLocale.finalCta.parity }} →
           </a>
           <a href="https://github.com/libraz/libsonare/blob/main/LICENSE" target="_blank" rel="noopener" class="landing__action landing__action--ghost">
             {{ currentLocale.finalCta.license }} →
