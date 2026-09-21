@@ -140,9 +140,29 @@ Every set is a **re-voicing of the one shared percussion model**, not a second c
 Four rhythm sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX** (program 56), **Rhythm FX** (57), **Cymbal & Claps** (53), and **Rhythm FX 2** (58). There is nothing for a membrane model to reshape, so the player addresses and names them while the fallback map sends all four through to the Standard kit's voicing. The GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot, covered in the [GM tone map](./gm-tone-map.md)) are in the same position and share one generic noise-based voice. Both gaps are in the data-free fallback only: a SoundFont that supplies real samples for those addresses plays back normally through the [SF2 player](./soundfont-player.md).
 :::
 
-The audition below plays one bar of the same groove through a selection of the sets, choosing the kit the way a GS file does — a Program Change on the rhythm part. It is a selection rather than the whole table because it was built by rendering every set and dropping the ones whose output came back bit-identical to Standard, which is exactly what the four one-shot programs above do by design.
+The audition below plays one bar of the same groove through a selection of the sets, choosing the kit the way a GS file does — a Program Change on the rhythm part. It is a selection rather than the whole table because it was built by rendering every set and dropping the ones whose output came back bit-identical to Standard, which is exactly what the four one-shot programs above do by design. A host does not need to render anything to draw that line — [the queries below](#deriving-which-sets-are-voiced-apart) return it.
 
 <SonareDemo id="gs-drum-kits" />
+
+### Deriving which sets are voiced apart
+
+Which slots a Program Change or Bank Select actually moves is a question the engine answers, so a picker's annotations should be computed from three queries rather than copied from the tables above. On WASM/Node they are `synthGsDrumKitName`, `synthGsDrumKitIsVoicedApart`, and `synthGsVariationIsVoicedApart`; the C ABI and Python expose the same three under their own naming conventions.
+
+- `synthGsDrumKitName(program)` returns the GS rhythm-set name a rhythm part's Program Change selects (`'Standard'`, `'Room'`, `'TR-808'`, ...), or `null` when the module's own tone map defines no set at that program.
+- `synthGsDrumKitIsVoicedApart(program)` returns `true` when at least one drum note in the set differs from Standard, `false` when the set renders exactly as Standard, and `null` when no set sits at that program. Program 0 is Standard itself, so it answers `false` too, alongside the four one-shot sets above.
+- `synthGsVariationIsVoicedApart(bank, program)` is the melodic half: `true` when the Bank Select variation has a patch of its own, `false` when it resolves to the capital tone, `null` for a negative argument or a program above 127. It accepts the GS Bank Select MSB and the GM2 LSB alike, since both address the same variation. Range-check the bank yourself — a bank above 127 answers `false` rather than `null`, so an unvalidated value reads as a real capital-tone resolution. Resolving an unvoiced variation to its capital is what GS specifies, so `false` is correct behaviour rather than a gap — but only this query separates it from a bank that is genuinely voiced, which otherwise takes rendering both and comparing.
+
+The answers are **derived, not listed**: the kit predicate applies the set to every drum note's own resolved patch and compares bytes, and the variation predicate asks whether resolution returns the capital tone's own patch. A slot that gains a voicing changes its answer with no list to keep in step, and a case that exists but no-ops against the current patches still reports honestly. The reference is the module's own tone map, which is the newest one and reaches every set this build voices; a file that selects an older tone map reaches fewer sets.
+
+Both predicates return **three states, and a truthiness check destroys them**: `null` means no slot is there at all, and 102 programs are in that state, so `if (!voicedApart)` sweeps those 102 empty programs in as placeholders on top of the few sets that answer `false`. Compare against `false` explicitly.
+
+```typescript [WASM / Node]
+import { synthGsDrumKitIsVoicedApart, synthGsDrumKitName } from '@libraz/libsonare';
+
+const kits = Array.from({ length: 128 }, (_, program) => ({ program, name: synthGsDrumKitName(program) }))
+  .filter((kit): kit is { program: number; name: string } => kit.name !== null)
+  .map((kit) => ({ ...kit, placeholder: synthGsDrumKitIsVoicedApart(kit.program) === false }));
+```
 
 ### Following GM programs instead of pinning one patch
 
