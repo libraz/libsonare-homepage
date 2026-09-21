@@ -448,7 +448,18 @@ engine.destroy();
 
 ### ブラウザの OPFS バックエンドプロバイダ
 
-パッケージには、[Origin Private File System（OPFS）](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) からワーカー上でページを読む既製プロバイダが同梱されており、ディスク読み取りをメインスレッドの外に保ちます。
+パッケージには、[Origin Private File System（OPFS）](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) からワーカー上でページを読む既製プロバイダが同梱されており、ディスク読み取りをメインスレッドの外に保ちます。クリップは生のインターリーブ `Float32`（`L0, R0, L1, R1, …`）として OPFS に置き、ヘッダーがあれば `dataOffsetBytes` で読み飛ばします。WASM メモリに載るのは、現在のウィンドウに入るページだけです。
+
+この仕組みは 4 つのエクスポートで構成され、それぞれが 1 つ上の段を土台にしています。
+
+| エクスポート | 何か |
+|--------------|------|
+| `opfsClipPageWorkerSource` | 関数ではなく JavaScript の**文字列**で、ページを読むワーカーのソーステキストです。ページインデックスを受け取ると、同期アクセスハンドルでファイルを開き、`dataOffsetBytes + pageIndex * pageFrames * numChannels * 4` から `pageFrames` フレームを読み、チャンネルごとのバッファにデインターリーブして、転送リスト付きで送り返します。同じ `path` への読み取りはワーカー内で直列化されます。使うのは、`blob:` ワーカーを禁じる CSP の下など、ワーカーを自前でバンドルするときだけです。 |
+| `createOpfsClipPageWorker()` | そのソースの Blob URL から `new Worker(...)` を作り、生成直後に URL を破棄します。`worker` を渡さなければ内部で呼ばれます。 |
+| `createOpfsClipPageProvider(engine, options)` | エンジン側の `ClipPageProvider`（`engine.createClipPageProvider(numChannels, numSamples, pageFrames)`）を作り、ワーカーと組み合わせます。返るのはバインディングで、`provider`、`supplyPage(pageIndex)`、`supplyRequest(request)`、`clearPage(pageIndex)`、`close()` を持ちます。`numChannels`、`numSamples`、`pageFrames` のいずれかが正でなければ例外になります。 |
+| `attachOpfsClipStream(streamer, engine, options)` | セッション向けの一括の入口です。バインディングを作り、先頭 `primePages` ページ（既定 `1`）をプライムして再生開始直後のミスを防ぎ、クリップを `ClipPageStreamer` に登録します。`{ binding, provider }` を返します。 |
+
+クリップ 1 本を手作業で処理する例です。
 
 ```typescript
 import { createOpfsClipPageProvider } from '@libraz/libsonare';
@@ -458,7 +469,9 @@ const binding = createOpfsClipPageProvider(engine, {
   numChannels: 2,
   numSamples: totalFrames,      // ファイルの総フレーム数
   pageFrames: 65536,            // フレーム単位のページサイズ
-  // dataOffsetBytes?: ヘッダーをスキップ。worker?: 自前の Worker を再利用
+  // dataOffsetBytes?: ヘッダーをスキップ
+  // worker?: 自前の Worker を再利用。terminateWorkerOnClose: true を
+  //          付けない限り close() 後も動き続ける
 });
 
 // UI tick で、レンダースレッドが要求した分を処理する:
@@ -471,7 +484,15 @@ while ((request = engine.popClipPageRequest()) !== null) {
 binding.close();  // プロバイダを解放し、所有していればワーカーも終了
 ```
 
-`createOpfsClipPageProvider(...)` はエンジン側の `ClipPageProvider` を作り、ワーカーと組み合わせます。既定では `createOpfsClipPageWorker()` でインラインワーカーを起動します。そのワーカー本体は `opfsClipPageWorkerSource` として公開されているので、自前でバンドルしたり、独自の `Worker` を渡したりもできます。`supplyRequest(request)` は排出した要求のサンプル位置をページインデックスへ写像し、`supplyPage(pageIndex)` はページを直接プリフェッチできます。
+`supplyRequest(request)` は排出した要求のサンプル位置をページインデックス（`Math.floor(request.sample / pageFrames)`）へ写像し、`supplyPage(pageIndex)` はページを直接プリフェッチします。どちらもページが常駐した時点で `true`、ファイル範囲外のページや途中で終わった読み取りでは `false` に解決し、`close()` 後は reject されます。1 つのバインディングを通る供給は呼び出し順に 1 件ずつ実行されます。各バインディングは自分の要求 id にしか応答しないので、1 つの `Worker` を複数のバインディングで共有できます。
+
+#### SharedArrayBuffer が要る場所と要らない場所
+
+ページの**データ**に `SharedArrayBuffer` は要りません。ワーカーは各ページを転送済みの `ArrayBuffer` として渡すため、所有権はコピーなしにメインスレッドへ移り、`provider.supply(...)` がそのチャンネルを WASM メモリへコピーします。Worklet ファサードでは、メインスレッドが同じバッファをもう一度転送して `AudioWorklet` へ送ります。このサイトも、ここで配布しているエンジンのブラウザビルドも cross-origin isolation なしで動いており、この経路はそのまま動作します。
+
+必要になるのは、Worklet ファサードでの**要求**の向きです。ページミスはレンダースレッドで発生し、ファサードはそれを `SonareRealtimeEngineNode.create(...)` が `'sab'` モードで用意する共有の要求リング経由でしか受け付けません（メインスレッドが 8 ms ごとにポーリングします）。レンダースレッドからの `postMessage` はリアルタイム安全とは見なされません。そのため `SonareEngine.attachOpfsClipStream(options)` は、`capabilities.clipPageRequestsRealtimeSafe` が `false` なら例外を投げます。COOP/COEP ヘッダーなしの環境で OPFS ページングが使えるのは、`popClipPageRequest()` を直接呼べるメインスレッドの `RealtimeEngine`（オフラインレンダーや自前のスケジューリング）だけで、Worklet ファサードでは使えません。
+
+ファサードでの呼び出しは `attachOpfsClipStream(engine, options)` の 2 引数で、ストリーマーは渡しません。ファサードが自前の `ClipPageStreamer` を持ち、要求リングからポンプします。返った `provider` は `engine.addClip(trackId, provider, startPpq, { id: clipId })` に渡し、`opts.id` を `options.clipId` と一致させます。この経路で作られていない `pageProvider` はファサードが拒否します。
 
 ::: warning OPFS 対応はブラウザによって異なる
 OPFS プロバイダは `navigator.storage.getDirectory()` と同期アクセスハンドルに依存します。これらは現行の Chromium・Firefox と最近の Safari の WebKit では利用できますが、古いブラウザでは使えません。利用前に機能検出し、OPFS が無い環境向けにメモリだけで動くプロバイダ（または任意のソースから読み込む自前の `ClipPageProvider`）を用意してください。

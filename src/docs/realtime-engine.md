@@ -16,7 +16,8 @@ The sections below are largely independent — read the first one, then jump to 
 - construct the engine, size it for your real channel count, and run transport plus meter/scope telemetry;
 - mix the tracks you play with the built-in lane mixer, and tap a lane into a separate cue bus with PFL or AFL;
 - reshape routing live — group buses, sidechains, pan — without rebuilding a channel strip;
-- automate engine parameters and insert parameters along the timeline;
+- automate engine parameters and insert parameters along the timeline, and rewrite a lane while audio runs;
+- schedule audio clips with a warp mode, and recognise a paging dropout when one happens;
 - schedule MIDI clips against the tempo map, and send a track to external MIDI gear.
 
 ::: warning Check the engine ABI before constructing
@@ -327,6 +328,55 @@ The id encodes the destination slot as well as the parameter, so it survives an 
 The engine holds **32** instrument-automation slots; once they are claimed, further resolutions fail rather than retargeting an existing lane. Resolution returns `-1` on WASM and Node — or `SONARE_ERROR_INVALID_PARAMETER` at the C entry point `sonare_engine_resolve_instrument_automation_id` — when the key is unknown, no instrument is bound to that destination, the instrument exposes no automatable parameters, or the slot table is full. Always check the returned id before handing it to a lane. In a build without the arrangement subsystem the C entry point returns `SONARE_ERROR_NOT_SUPPORTED`, and that build reports `instrumentParamAutomation: false` in its capability JSON — the way a host detects up front that the resolver will not answer. See [`capabilities()`](./js-api.md#capabilities).
 
 `setParamSmoothingMs(ms)` changes the default glide used by smoothed fader/pan changes, insert-parameter automation, and MIDI-CC mappings. The default is `20` ms; `0` makes changes immediate. Set it once from the control thread before playback unless your host intentionally changes the global feel of automation.
+
+### How a lane plays back
+
+A lane is a breakpoint curve, not a list of scheduled jumps. Each point is `{ ppq, value, curveToNext? }`, and a point's `curveToNext` shapes the segment that leads to the *next* point:
+
+| `curveToNext` | Segment to the next point |
+|---------------|---------------------------|
+| `0` linear | a straight line between the two values |
+| `1` exponential | interpolated in the log domain, so a gain or frequency sweep sounds even; two values of opposite sign fall back to linear |
+| `2` hold | keeps this point's value until the next point, then steps |
+| `3` s-curve | eases out of this point and into the next (smoothstep) |
+
+Outside the curve the lane is flat: before the first point it returns the first value, after the last point the last value, and nothing extrapolates. Points are sorted by `ppq` on receipt, and two points at the same `ppq` collapse to the first one you supplied — an instantaneous jump is a `hold` segment (or a second point placed a hair later), not two coincident points. A non-finite `ppq` or `value`, or a curve code outside `0..3`, is rejected as `InvalidParameter` rather than clamped.
+
+The audio thread samples the curve at every breakpoint — the block is split there, so a breakpoint lands on its exact frame — and every **64 frames** in between, widened only for blocks so large that the fixed boundary list would overflow. Each sampled value goes to the target the way a live `setParameter` would: mixer fader, pan and bus gain, insert parameters and instrument parameters run through their smoothers (`setParamSmoothingMs` governs the insert and instrument ones), so a step in the curve is a short glide; a parameter registered with `addParameter` is set directly and steps. A block holding more breakpoints than the boundary list can carry is reported as `BoundaryOverflow`, and the surplus breakpoints apply at the next 64-frame boundary instead of their own frame.
+
+**Writing a lane while audio is running does not glitch.** `setAutomationLane(id, points)` replaces the lane for that one id and leaves the others in place. The control thread builds the new lane set and publishes it; the audio thread adopts the newest set once, at the start of its next block — never mid-block, never with a lock or an allocation. What *can* be audible is the value you wrote: if the new curve differs from the old one at the current playhead, the target moves to the new value at the next sub-block — a glide on a smoothed target, a step on a directly-set one. A lane aimed at an id nothing is bound to is skipped and reported on `drainTelemetry()` as `UnknownTarget`; a parameter registered with `rtSafe: false` is refused up front (WASM and Node throw `SonareError`, the C entry point returns `SONARE_ERROR_INVALID_PARAMETER`).
+
+## Audio clips: warp mode and page underruns
+
+`setClips(clips)` replaces the engine's whole audio clip schedule in one call, on the control thread. A clip is either **direct** (`channels`: one `Float32Array` per channel) or **paged** (`pageProvider`: a provider the host feeds page by page — see [Paged clip audio streaming](./realtime-streaming.md#paged-clip-audio-streaming)); `startPpq` places it, `lengthSamples`, `clipOffsetSamples`, `loop`, `gain` and the fade lengths shape it, and `warpMode` plus `warpAnchors` decide how it follows the tempo map. Python spells the same call `set_clips` with `warp_mode`.
+
+```typescript
+engine.setClips([{
+  id: 1, trackId: 1, channels: [left, right],
+  startPpq: 0, lengthSamples: barLength,
+  warpMode: 'time-stretch',            // 'off' | 'repitch' | 'tempo-sync' | 'time-stretch' (or 0..3)
+  warpAnchors: [                       // warpSample: from the clip start; sourceSample: into the source
+    { warpSample: 0,         sourceSample: 0 },
+    { warpSample: barLength, sourceSample: sourceBarLength },
+  ],
+}]);
+```
+
+Anchors must be finite, non-negative and strictly increasing on both axes, or the call is rejected. `'repitch'` and `'time-stretch'` read the same anchor map on the audio thread; with fewer than two anchors both play the clip at its native rate, under either mode the map alone decides the source position (`clipOffsetSamples` is not added on top), and the loop-seam crossfade is not applied. `'tempo-sync'` is different in kind on the raw engine: the stretched audio is baked when `setClips` runs, so a tempo-sync clip cannot be paged, cannot `loop`, and must keep `clipOffsetSamples` inside the source — each is rejected as `InvalidParameter`. What the modes mean musically, and when to prefer one, is on [Warp and Tempo Sync](./glossary/arrangement/warp-and-tempo.md).
+
+### The `'time-stretch'` voice budget
+
+A `'time-stretch'` clip borrows one of **eight** preallocated stretcher voices for each block it renders, and a voice handles up to **two** channels. A clip keeps the voice it used last block; a new clip takes a free voice, or the voice that has been idle longest — a voice still producing output is never stolen mid-note. When every voice is busy, or the source has more than two channels, the clip renders through the `'repitch'` path for that block instead, so its pitch moves with the tempo. That fallback is silent, and `warpStretchOverflowCount()` (`warp_stretch_overflow_count()` in Python, `sonare_engine_warp_stretch_overflow_count` in C) is the only way to see it: a monotonic count of blocks in which a clip fell back, reset by `prepare`. Poll it from the control thread while developing; if it climbs, fewer `'time-stretch'` clips may overlap. A seek, a loop wrap, or a voice reassignment restarts the stretcher stream at the new position, so the join is a clean start rather than a smear of the previous one.
+
+### What a page underrun looks like
+
+A paged clip reads its samples from the provider on the audio thread. When the page holding a sample is not resident, the read is a **page miss**: that clip contributes silence for that sample, every other clip and instrument renders as usual, and the transport keeps rolling — the engine never stalls waiting for storage. The miss is queued as a page request for the host to serve, and it is reported once per block on `drainTelemetry()` as error `ClipPageUnderrun` (ordinal `15`, `CLIP_PAGE_UNDERRUN` in Python) with `value` set to the clip id. That record is the dropout signal.
+
+To keep the record from ever appearing, the player also asks for the pages it is *about to* read: by default the half second of timeline ahead of each block, through the same request queue. The window, its setter and how it interacts with the JS-side streaming window are on [Look-ahead](./realtime-streaming.md#look-ahead). A request does not say whether it was a miss or a look-ahead — only the telemetry record marks a miss — so serve every request promptly. If the bounded request queue fills, `clipPageRequestOverflowCount()` rises; the dropped pages are asked for again on the following block, but every block that arrives before they are served is a block of silence.
+
+::: warning Recognising a paging dropout
+A gap in one clip that lines up with a `ClipPageUnderrun` record is the host supplying a page after the playhead reached it. Check `clipPageRequestOverflowCount()` first — a rising value means requests are being dropped — then widen the look-ahead or the streamer's read-ahead window. A dropout with **no** such record is not a paging problem; look at `droppedRecords`, command-queue overflow, or the block budget instead.
+:::
 
 ## Surround group buses and wide meters
 

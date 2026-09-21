@@ -433,7 +433,18 @@ Two different mechanisms sit on top of each other, and you want both. The look-a
 
 ### OPFS-backed provider in the browser
 
-The package ships a ready-made provider that reads pages from the [Origin Private File System (OPFS)](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) on a worker, so disk reads stay off the main thread:
+The package ships a ready-made provider that reads pages from the [Origin Private File System (OPFS)](https://developer.mozilla.org/docs/Web/API/File_System_API/Origin_private_file_system) on a worker, so disk reads stay off the main thread. The clip lives in OPFS as raw interleaved `Float32` (`L0, R0, L1, R1, …`), optionally behind a header you skip with `dataOffsetBytes`; only the pages inside the current window are ever in WASM memory.
+
+Four exports make up the mechanism, and they nest: each one is built from the one above it.
+
+| Export | What it is |
+|--------|------------|
+| `opfsClipPageWorkerSource` | A JavaScript **string**, not a function: the source text of the page-reading worker. Given a page index it opens the file with a synchronous access handle, reads `pageFrames` frames from `dataOffsetBytes + pageIndex * pageFrames * numChannels * 4`, de-interleaves them into one buffer per channel, and posts those buffers back with a transfer list. Reads for one `path` are serialized inside the worker. Use it only to bundle the worker yourself, for example under a CSP that forbids `blob:` workers. |
+| `createOpfsClipPageWorker()` | `new Worker(...)` over a Blob URL of that source; the URL is revoked right after construction. Called for you when no `worker` is passed. |
+| `createOpfsClipPageProvider(engine, options)` | Creates the engine-side `ClipPageProvider` (`engine.createClipPageProvider(numChannels, numSamples, pageFrames)`) and pairs it with the worker. Returns a binding: `provider`, `supplyPage(pageIndex)`, `supplyRequest(request)`, `clearPage(pageIndex)`, `close()`. Throws unless `numChannels`, `numSamples`, and `pageFrames` are all positive. |
+| `attachOpfsClipStream(streamer, engine, options)` | The one-call path for a session: builds the binding, primes the first `primePages` pages (default `1`) so playback can start without a miss, and registers the clip with a `ClipPageStreamer`. Returns `{ binding, provider }`. |
+
+Servicing one clip by hand:
 
 ```typescript
 import { createOpfsClipPageProvider } from '@libraz/libsonare';
@@ -443,7 +454,9 @@ const binding = createOpfsClipPageProvider(engine, {
   numChannels: 2,
   numSamples: totalFrames,      // total frames in the file
   pageFrames: 65536,            // page size in frames
-  // dataOffsetBytes?: skip a header; worker?: reuse your own Worker
+  // dataOffsetBytes?: skip a header
+  // worker?: reuse your own Worker; it is left running on close()
+  //          unless terminateWorkerOnClose: true
 });
 
 // In a UI tick, service whatever the render thread asked for:
@@ -456,7 +469,15 @@ while ((request = engine.popClipPageRequest()) !== null) {
 binding.close();  // releases the provider and (if owned) terminates the worker
 ```
 
-`createOpfsClipPageProvider(...)` builds the engine-side `ClipPageProvider` for you and pairs it with a worker. By default it spins up an inline worker via `createOpfsClipPageWorker()`, whose body is exported as `opfsClipPageWorkerSource` if you prefer to bundle it yourself or pass your own `Worker`. `supplyRequest(request)` maps a popped request's sample position to a page index; `supplyPage(pageIndex)` lets you prefetch a page directly.
+`supplyRequest(request)` maps a popped request's sample position to a page index (`Math.floor(request.sample / pageFrames)`); `supplyPage(pageIndex)` prefetches a page directly. Both resolve `true` once the page is resident and `false` for a page outside the file or a short read; after `close()` they reject. Supplies through one binding run one at a time, in call order. One `Worker` can serve several bindings, since each binding only answers its own request ids.
+
+#### Where SharedArrayBuffer matters, and where it does not
+
+Page **data** never needs `SharedArrayBuffer`. The worker hands each page over as transferred `ArrayBuffer`s, so ownership moves to the main thread without a copy, and `provider.supply(...)` then copies the channels into WASM memory. On the worklet facade the main thread forwards the same buffers into the `AudioWorklet` by transfer again. This site, and the engine's browser build as it ships here, run without cross-origin isolation, and that whole path works as is.
+
+What does need it is the **request** direction on the worklet facade. A page miss originates on the render thread, and the facade only accepts it through the shared request ring that `SonareRealtimeEngineNode.create(...)` sets up in `'sab'` mode, polled from the main thread every 8 ms; a `postMessage` from the render thread is not treated as realtime-safe. `SonareEngine.attachOpfsClipStream(options)` therefore throws when `capabilities.clipPageRequestsRealtimeSafe` is `false`. Without COOP/COEP headers, OPFS paging is available for a main-thread `RealtimeEngine` (offline render, or your own scheduling), where `popClipPageRequest()` is a direct call, and not for the worklet facade.
+
+On the facade the call takes two arguments, `attachOpfsClipStream(engine, options)`, with no streamer: the facade keeps its own `ClipPageStreamer` and pumps it from the request ring. Pass the returned `provider` to `engine.addClip(trackId, provider, startPpq, { id: clipId })`, with `opts.id` equal to `options.clipId`; the facade rejects a `pageProvider` it did not create this way.
 
 ::: warning OPFS support varies by browser
 The OPFS provider relies on `navigator.storage.getDirectory()` and synchronous access handles, which are available in current Chromium and Firefox and in WebKit on recent Safari, but not in older browsers. Feature-detect before using it, and keep a fully in-memory provider (or your own `ClipPageProvider` loaded from any source) for environments without OPFS.
