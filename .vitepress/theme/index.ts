@@ -24,6 +24,7 @@ const figure = (name: string) =>
   defineAsyncComponent(() => import(`./components/figures/${name}.vue`));
 
 const FIGURES = [
+  'AnalysisPipelineFigure',
   'BandMapFigure',
   'BinSpacingFigure',
   'BlindDecayFigure',
@@ -35,6 +36,7 @@ const FIGURES = [
   'LoudnessGateFigure',
   'MasteringChainFigure',
   'MelBankFigure',
+  'MixerRoutingFigure',
   'ProjectModelFigure',
   'RoomDecayFigure',
   'RoomEquivalenceFigure',
@@ -42,6 +44,7 @@ const FIGURES = [
   'StftFramingFigure',
   'SynthSignalPathFigure',
   'WarpMapFigure',
+  'WaveguideLoopFigure',
 ] as const;
 
 export default {
