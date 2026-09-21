@@ -219,13 +219,20 @@ Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_a
 
 `roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. Do not treat or present its output as dereverberation: it adds room character, it does not remove existing reverb.
 
-::: info Read the morph's diagnostics
-`roomMorph(...)` builds its target room with the same code `synthesizeRir(...)` uses, so it can report the same three warnings: an image-source order reduced to the safe maximum (`acoustic.ism_order_clamped`), a tail cut short against `maxSeconds` (`acoustic.rir_length_clamped`), and a request that produced no diffuse tail (`acoustic.no_late_tail`). Each one says the morph went through a room other than the one you asked for, and is otherwise invisible in the audio.
+### Reading the room-morph result
 
-There is no `hasError` here, unlike `RirResult`: a morph that cannot be produced throws instead, so every entry in `diagnostics` is a warning about a result you did get.
+`roomMorph(...)` returns `RoomMorphResult`: the morphed samples on `audio` (the input length plus the target room's reverb tail, so the added reverberation is never cut off), the `sampleRate` they are at, and `diagnostics`, the list of what the target-room synthesis had to change to produce them. The morph builds its target room with the same code as `synthesizeRir(...)`, so it can report the same warnings, and every one of them means the morph went through a room other than the one you described. The audio does not tell you that; the list does.
 
-On Node and in the browser the diagnostics arrive as a structured array; the Python result reports them as a single `warning_message` string instead.
-:::
+| `code` | What happened | What to do |
+|--------|---------------|------------|
+| `acoustic.ism_order_clamped` | `ismOrder` was above the safe maximum of `12` and was reduced to it. | Request `12` or less so the render matches the request. |
+| `acoustic.rir_length_clamped` | The room's natural response was longer than the cap, so the tail was cut. The message says which cap: `maxSeconds`, or the shared RIR resource limit when `maxSeconds` was `0`. | Raise `maxSeconds` if you set it. Otherwise the room decays for longer than the budget allows, so make it smaller or more absorptive. |
+| `acoustic.rir_length_floored` | `maxSeconds` ended before the direct sound could arrive, so it was extended to fit it. The result is longer than you asked for. | Raise `maxSeconds`, or move the listener closer to the source. |
+| `acoustic.no_late_tail` | No usable diffuse tail existed at the mixing time, so the target room is early reflections only. Either the walls are fully rigid (absorption `0` in every band) or so absorptive that the tail ends before the crossover. | Move the absorption away from the extremes, or lower `mixingTimeMs`. |
+
+There is no `hasError` here, unlike `RirResult`: a morph that cannot be produced — invalid geometry, a listener outside the room, a climate outside the physical range — throws `InvalidParameter` instead, so every entry in `diagnostics` is a warning about a result you did get. Branch on `code`; the `message` text is for humans, and the `severity` of every entry on a returned morph is `'warning'`.
+
+The shape is the same on every surface. Node and the browser return the `RoomMorphResult` described on [JavaScript API Types](./js-api-types.md#roommorphresult). Python returns a `RoomMorphResult` dataclass whose `diagnostics` is a list of `RirDiagnostic`. The C ABI leaves the entries in `sonare_last_diagnostic_count()` / `sonare_last_diagnostic_code(i)` after a successful `sonare_room_morph`, as shown on [C++ API](./cpp-api.md#room-morph-through-the-c-abi). The `sonare room-morph` command prints each warning to stderr as `warning: <code>: <message>`, while the output file and any `--json` summary stay on stdout.
 
 ### Wall absorption and materials
 
@@ -281,8 +288,7 @@ The shared geometry also exposes the late-tail behavior. `RirSynthOptions` and `
 | `crossfadeMs` | Equal-power crossfade width around the mixing time, in milliseconds. `0` uses the default. |
 | `ismOrder` | Image-source reflection order for the early part. |
 | `seed`, `maxSeconds` | Late-tail random seed and the maximum RIR length to generate. |
-| `airAbsorptionEnabled` | Adds the ISO 9613-1 atmospheric-absorption term to the late tail's per-band RT60. Off by default. |
-| `airTemperatureC`, `airHumidityPercent` | The climate that term is computed for. Read only while `airAbsorptionEnabled` is set. |
+| `airAbsorptionEnabled`, `airTemperatureC`, `airHumidityPercent` | Atmospheric absorption along the reflection path, added to the late tail's per-band RT60. Off by default; see [Air absorption](#air-absorption). |
 
 The **mixing time** is where the response transitions from discrete image-source early reflections to the deterministic statistical late tail; the **crossfade** blends the two so the seam is inaudible. Sabine and Eyring are the two classical RT60 estimators behind the late tail; Eyring tends to be more accurate in highly absorptive rooms.
 
@@ -290,26 +296,41 @@ The **mixing time** is where the response transitions from discrete image-source
 Both are classic formulas that predict a room's RT60 from its size and how absorptive its surfaces are. Eyring is generally more accurate in very absorptive (well-treated) rooms; Sabine is the older, simpler one. Leave the default unless you are matching a specific reference.
 :::
 
-::: tip What air absorption changes
-Air itself absorbs sound, and it absorbs treble far more than bass, so the effect
-accumulates with the distance a reflection travels. Turning `airAbsorptionEnabled`
-on mainly shortens the high bands of a large room and leaves a small one close to
-where it was. It is off by default, so a room described the same way renders the
-same way.
-
-The climate follows this surface's usual rule that `0` selects the library value —
-here the ISO reference climate, 20 °C at 50 % relative humidity. A literal `0 °C`
-is therefore not distinguishable from unset: ask for a freezing room with `0.01`,
-which absorbs identically. An implausible temperature/humidity pair is refused the
-way the surrounding geometry checks are, rather than pulled into range.
-:::
-
 ::: details What are image-source reflections?
 When sound bounces off walls, each reflection can be modeled as if it came from a mirror-image copy of the source behind the wall. `ismOrder` sets how many bounces are computed this way: higher orders add more (but progressively weaker) early echoes at higher CPU cost. The diffuse late tail is generated separately.
 :::
 
 ::: details Implementation notes for room synthesis
-`synthesizeRir(...)` uses image-source early reflections plus a deterministic late tail. `acoustic::RirSynthConfig` exposes the reflection order, Sabine/Eyring late-tail model, seed, maximum RIR length, mixing time, and crossfade width.
+`synthesizeRir(...)` uses image-source early reflections plus a deterministic late tail. `acoustic::RirSynthConfig` exposes the reflection order, Sabine/Eyring late-tail model, seed, maximum RIR length, mixing time, crossfade width, and the optional air-absorption climate.
+:::
+
+### Air absorption
+
+Air itself absorbs sound, far more at high frequencies than at low, and the loss accumulates with the distance a reflection travels. The three options below add that loss, computed with the ISO 9613-1 atmospheric-absorption model, to the late tail's per-band RT60. They are read by `synthesizeRir(...)`, `roomMorph(...)` and the geometry-driven `effects.reverb.room` insert. The inverse direction, `estimateRoom(...)`, does not take them, and the CLI's `synthesize-rir` / `room-morph` commands do not expose them.
+
+| Option | Default | Accepted | Meaning |
+|--------|---------|----------|---------|
+| `airAbsorptionEnabled` | `false` | boolean | Adds the air term. Off, the RIR is identical to one rendered without the feature, so a room described the same way keeps rendering the same way. |
+| `airTemperatureC` | `20` | above −273.15 °C | Air temperature. `0` or omitted selects the ISO reference 20 °C, so a literal 0 °C is not distinguishable from unset — ask for a freezing room with `0.01`, which absorbs identically. |
+| `airHumidityPercent` | `50` | `0`–`100` | Relative humidity. `0` or omitted selects the ISO reference 50 %. |
+
+The climate pair is read only while `airAbsorptionEnabled` is set. A non-finite or out-of-range value is refused the way the surrounding geometry checks are, not pulled into range: `synthesizeRir(...)` returns `hasError` with `acoustic.invalid_air_absorption`, and `roomMorph(...)` throws `InvalidParameter`. Pressure is not an input; the model is evaluated at sea-level pressure.
+
+```typescript
+const hall = synthesizeRir({
+  lengthM: 30, widthM: 20, heightM: 12,
+  absorption: 0.2,
+  airAbsorptionEnabled: true,
+  airTemperatureC: 20,        // 0 would also mean 20
+  airHumidityPercent: 30,     // drier than the reference: the high bands decay sooner
+  sampleRate,
+});
+```
+
+Turning it on mainly shortens the high bands of a large room and leaves a small one close to where it was, because the term grows with the room's volume as well as with frequency. Drier or colder air absorbs the highs more. Which way each band moves, and by how much, is worked through on [Per-Band Decay and Absorption](./glossary/acoustics/absorption-bands.md#air-absorption-along-the-path).
+
+::: warning It is not wall absorption
+Air absorption models the loss along the propagation path, inside the air. It is not a substitute for `absorption`, `bandAbsorption` or `materialPreset`, which model the loss at the boundaries, and it does not touch the image-source early reflections at all — only the statistical tail's decay rates. A room whose highs ring too long because its walls are reflective needs a more absorptive wall material; humidity will not fix it, and it will never move the low bands, where the air term is negligible.
 :::
 
 ## Reading the result

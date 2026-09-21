@@ -62,6 +62,20 @@ Paying for that immediacy means living inside a fixed budget. The stretcher's vo
 The fallback makes no sound of its own — the clip simply starts behaving like `repitch`. `warpStretchOverflowCount()` counts the blocks in which that happened, so poll it from the control thread while developing and reduce how many `time-stretch` clips overlap if it climbs.
 :::
 
+### What time-stretch does, and what it costs
+
+`tempo-sync` stretches in the frequency domain: the phase vocoder takes the clip apart into sinusoids, moves them in time and puts them back together. `time-stretch` stays in the time domain. It cuts the source into overlapping frames of 1024 samples, lays them down at a fixed hop of 512 samples so the output always advances by the same amount, and chooses *where in the source* each frame is cut from according to the warp map. Playing faster means the cut points advance through the source faster than the output does, so frames get skipped; slower means they get repeated. Because each frame is a verbatim slice of the source, the waveform's own period — its pitch — is untouched.
+
+Laying arbitrary slices end to end would produce clicks and cancellation wherever two overlapping frames disagree in phase. That is the WSOLA step: before cutting a frame, the stretcher searches a window of ±512 samples around the mapped position for the offset whose start best continues the frame it just emitted, so consecutive frames overlap in phase and the sum stays clean. The search is a correlation, coarse first and then refined, and it is the whole per-frame cost: a bounded number of multiply-adds on the audio thread, with no transform and no allocation.
+
+That design sets what it costs and what it sounds like.
+
+- **A fixed voice budget.** The stretcher's state is preallocated so the audio thread never allocates. Eight voices exist, each handling up to two channels, and a `time-stretch` clip borrows one for every block it renders. A clip that cannot get a voice — all eight busy, or a source with more than two channels — renders through `repitch` for that block, silently, and its pitch moves with the tempo. How voices are assigned and how to watch the overflow counter is on [Realtime Engine](../../realtime-engine.md#the-time-stretch-voice-budget).
+- **Transients survive; dense textures can double.** A slice is the source itself, so a drum hit keeps its attack shape. On sustained, polyphonic material — a pad, a choir — a large stretch repeats or skips slices that no single offset can align for every note at once, and the result is a faint doubling or flutter rather than the phase vocoder's smear.
+- **A roughly 10 ms grain.** Position is honoured to within the search radius: each frame lands within about 10 ms of where the map points, which is invisible for tempo following and only matters when lining up sample-exact edits.
+
+Reach for `time-stretch` when the map is going to *change while audio runs* — a tempo the user is dragging, an anchor being nudged, a groove being auditioned — because the next block simply reads the new map. On the raw engine it is also the pitch-preserving mode that works with paged clips, where `tempo-sync` bakes and therefore cannot. Reach for `tempo-sync` when the map is settled and the material is sustained or harmonic, where the vocoder's whole-clip view gives the cleaner stretch.
+
 ## Warp anchors: pinning the audio to the grid
 
 A tempo change tells the clip *how fast* to play, but real performances are not perfectly even — a drummer pushes and pulls, a phrase rushes slightly. **Warp anchors** let you pin specific points inside the audio to specific points on the timeline.
