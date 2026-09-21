@@ -2,14 +2,16 @@
 /**
  * `ab-process` archetype: run a clip through one processor and A/B the result.
  *
- * The current instance is the classical denoiser. A clean sustained chord is fed a
- * deterministic layer of broadband hiss (the "Damaged" source), then the repair stage
- * removes it (the "Repaired" output). Both averaged spectra are drawn at once so the
- * raised noise floor — and the gap it leaves when removed — is the whole story: the
- * Damaged tail rides high across the highs, the Repaired tail drops back onto the
- * music. Flip Compare to audition each side (loudness is untouched, so the hiss is the
- * only thing that moves) and switch the algorithm to see how much floor each one pulls
- * down. The FLOOR readout is the high-band reduction in dB.
+ * The processor is picked from `def.config.processor` (see PROCESSORS below); a
+ * definition that omits it gets the classical denoiser, which is what `repair-denoise`
+ * relies on. The current instance documented here is that denoiser. A clean sustained
+ * chord is fed a deterministic layer of broadband hiss (the "Damaged" source), then the
+ * repair stage removes it (the "Repaired" output). Both averaged spectra are drawn at
+ * once so the raised noise floor — and the gap it leaves when removed — is the whole
+ * story: the Damaged tail rides high across the highs, the Repaired tail drops back
+ * onto the music. Flip Compare to audition each side (loudness is untouched, so the
+ * hiss is the only thing that moves) and switch the algorithm to see how much floor
+ * each one pulls down. The FLOOR readout is the high-band reduction in dB.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
@@ -75,6 +77,31 @@ let damaged: { samples: Float32Array; sampleRate: number } | null = null;
 let cleaned: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
 
+/** Runs a processor against the damaged samples and returns the "repaired" output. */
+type ProcessorFn = (
+  wasm: Awaited<ReturnType<typeof ensureWasm>>,
+  samples: Float32Array,
+  sampleRate: number,
+  mode: string,
+) => Float32Array;
+
+/**
+ * Processors this archetype can drive, keyed by the name a demo definition passes via
+ * `def.config.processor`. Each entry owns its own option shape, since a definition's
+ * `mode` param means something different (or nothing) per processor.
+ */
+const PROCESSORS: Record<string, ProcessorFn> = {
+  'denoise-classical': (wasm, samples, sampleRate, mode) =>
+    wasm.masteringRepairDenoiseClassical(samples, sampleRate, {
+      mode: mode as 'logMmse' | 'spectralSubtraction' | 'mmseStsa',
+      overSubtraction: 1.5,
+    }),
+  'dereverb-classical': (wasm, samples, sampleRate) =>
+    wasm.masteringRepairDereverbClassical(samples, sampleRate),
+  'hpss-decompose': (wasm, samples, sampleRate) => wasm.hpss(samples, sampleRate).percussive,
+};
+const DEFAULT_PROCESSOR = 'denoise-classical'; // keeps `repair-denoise` working with no config
+
 /** Mean linear magnitude above FLOOR_HZ — the high-band noise-floor proxy. */
 function highBandMean(spec: Float32Array): number {
   const c0 = Math.round((FLOOR_HZ / SPEC_MAX_HZ) * (SPEC_COLS - 1));
@@ -107,11 +134,16 @@ async function compute(): Promise<void> {
       damaged = { samples: noisy, sampleRate: sr };
     }
 
-    // Repaired output: classical denoiser at the selected algorithm.
-    const out = wasm.masteringRepairDenoiseClassical(damaged.samples, sr, {
-      mode: mode.value as 'logMmse' | 'spectralSubtraction' | 'mmseStsa',
-      overSubtraction: 1.5,
-    });
+    // Repaired output: the processor named by def.config.processor, at the selected mode.
+    const processorName =
+      typeof props.def.config?.processor === 'string'
+        ? props.def.config.processor
+        : DEFAULT_PROCESSOR;
+    const processor = PROCESSORS[processorName];
+    if (!processor) {
+      throw new Error(`ab-process: unknown processor "${processorName}"`);
+    }
+    const out = processor(wasm, damaged.samples, sr, mode.value);
     cleaned = { samples: out, sampleRate: sr };
 
     // Both spectra share the damaged scale so the floor drop is read on one axis.
