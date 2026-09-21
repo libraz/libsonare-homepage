@@ -43,6 +43,7 @@ const FIGURES = [
   'RoomDecayFigure',
   'RoomEquivalenceFigure',
   'SectionMatrixFigure',
+  'SoundSourceCostFigure',
   'StftFramingFigure',
   'SynthSignalPathFigure',
   'WarpMapFigure',
