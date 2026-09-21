@@ -243,11 +243,11 @@ and the built-in preset lists. It is the same canonical JSON the C ABI publishes
 and Python exposes as `capability_catalog`, validated against
 `schemas/capability-catalog.schema.json`.
 
-The catalog carries real values: across the 88 processors it publishes, 1132 of
-the 1137 parameters report a non-null `default`, 304 report a non-null `min` and
-190 a non-null `max`. The remaining 804 report `null` on both bounds — a `null`
-means the catalog knows of no limit for that parameter, not that bounds are
-unavailable in general.
+The catalog carries real values: across the 88 processors it publishes, every one
+of the 1147 parameters reports a non-null `default`; 316 report a non-null `min`
+and 193 a non-null `max`. The remaining 802 report `null` on both bounds — a
+`null` means the catalog knows of no limit for that parameter, not that bounds
+are unavailable in general.
 
 ::: warning Bounds are measured, and a measured bound has caveats
 A published bound is **a hard constraint on what may be sent, not a recommended
