@@ -171,17 +171,46 @@ export const analysisDemos: SonareDemoDef[] = [
   {
     id: 'meter-estimate',
     archetype: 'detector',
-    // The four-bar lead line is the only clip long enough for the meter search to
-    // run (it needs at least eight detected beats; the two-bar grooves yield seven).
-    source: { kind: 'clip', clip: 'lead' },
+    // Four bars of 4/4 with the downbeat accented and beat 3 held back, so the
+    // four-beat period wins over its 6/4 neighbour at every rate a browser is
+    // likely to decode at.
+    source: { kind: 'clip', clip: 'meter-groove' },
     viz: 'overlay',
     title: {
       en: 'Meter estimation — ranking time signatures by confidence',
       ja: '拍子の推定 — 拍子記号を信頼度で並べる',
     },
     caption: {
-      en: "Meter estimation scores candidate time signatures over the detected beats: each beat's accent is read from the onset envelope, and 3, 4 and 6 are tried as bar lengths. The result is a ranked list with a confidence for each, not a single verdict — the confidences are shares of the total support, so they read as a breakdown. This four-bar melody is a single voice with only gentle accents, so the candidates sit close together: a reminder to read the confidence, not just the winner. Switch to Beats to see the pulse the estimate was scored on. A clip with fewer than eight beats reports that no search ran.",
-      ja: '拍子の推定は、検出したビートの上で候補となる拍子記号を採点します。各ビートのアクセントはオンセットエンベロープから読み取り、小節の長さとして 3・4・6 拍を試します。結果は一つの断定ではなく、候補ごとに信頼度を付けた順位表です。信頼度は全体の支持の割合なので、内訳として読めます。この 4 小節の旋律は単声でアクセントが穏やかなため、候補同士が接近します。勝者だけでなく信頼度を読むべき理由がここにあります。「ビート」に切り替えると、採点の土台になった拍が見えます。ビートが 8 つに満たないクリップでは、探索が行われなかったことが表示されます。',
+      en: "Meter estimation scores candidate time signatures over the detected beats: each beat's accent is read from the onset envelope, and 3, 4 and 6 are tried as bar lengths. The result is a ranked list with a confidence for each, not a single verdict — the confidences are shares of the total support, so they read as a breakdown rather than as a probability of being right. Four bars of a plain 4/4 groove here, so 4 takes most of the support and 6 keeps the rest, since every other downbeat also starts a six-beat span. Switch to Beats to see the pulse the estimate was scored on. A clip with fewer than eight detected beats reports that no search ran at all, rather than guessing.",
+      ja: '拍子の推定は、検出したビートの上で候補となる拍子記号を採点します。各ビートのアクセントはオンセットエンベロープから読み取り、小節の長さとして 3・4・6 拍を試します。結果は一つの断定ではなく、候補ごとに信頼度を付けた順位表です。信頼度は全体の支持の割合なので、正解である確率ではなく内訳として読みます。ここでは素直な 4 拍子のグルーヴを 4 小節鳴らしているので、支持の大半を 4 が取り、残りを 6 が拾います。1 小節おきの強拍は 6 拍の区切りの開始点でもあるからです。「ビート」に切り替えると、採点の土台になった拍が見えます。ビートが 8 つに満たないクリップでは、推測せずに探索を行わなかったことを表示します。',
+    },
+    params: [
+      {
+        key: 'view',
+        kind: 'select',
+        default: 'meter-estimate',
+        label: { en: 'Detect', ja: '検出' },
+        options: [
+          { value: 'beat', label: { en: 'Beats', ja: 'ビート' } },
+          { value: 'meter-estimate', label: { en: 'Meter', ja: '拍子' } },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'meter-estimate-three',
+    archetype: 'detector',
+    // The same construction in 3/4. Ten bars rather than four: a three-beat bar
+    // needs more of them before its downbeat dominates at this tempo.
+    source: { kind: 'clip', clip: 'meter-groove-three' },
+    viz: 'overlay',
+    title: {
+      en: 'The same estimate on a waltz',
+      ja: '同じ推定を 3 拍子にかけると',
+    },
+    caption: {
+      en: 'The same estimator, the same controls, a groove in 3 instead of 4. The ranking is not close this time: nothing in the material supports a four-beat or six-beat bar, so 3 takes essentially all of the support and the others fall to zero. Comparing this with the 4/4 clip above is the point — a confident estimate and a divided one look different, and the breakdown is what tells them apart.',
+      ja: '推定器も操作子も同じで、グルーヴだけ 4 拍子から 3 拍子に変えたものです。今度は接戦になりません。素材に 4 拍や 6 拍の小節を支持する材料が無いため、支持のほぼ全部を 3 が取り、他はゼロに落ちます。上の 4 拍子のクリップと見比べるのがここの狙いです。自信のある推定と割れている推定は見え方が違い、その違いを教えてくれるのが内訳です。',
     },
     params: [
       {

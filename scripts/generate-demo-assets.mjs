@@ -519,6 +519,106 @@ function buildMixedStems(wasm) {
   );
 }
 
+/**
+ * Add a kick-drum thump (peak amplitude at its own start, so a single-frame
+ * onset-envelope sample lands on the loudest part regardless of small timing
+ * jitter in beat detection): a fast pitch-drop sine plus a click for attack.
+ *
+ * @param {Float32Array} out Output buffer, summed in place.
+ * @param {() => number} rng Deterministic [0, 1) generator for the click.
+ * @param {number} start Sample offset.
+ * @param {number} amp Peak linear amplitude.
+ * @param {number} decaySec Exponential decay time constant, in seconds.
+ */
+function addKick(out, rng, start, amp, decaySec) {
+  const dn = Math.min(out.length - start, Math.round(SR * decaySec * 6));
+  let phase = 0;
+  for (let j = 0; j < dn; j++) {
+    const k = start + j;
+    if (k < 0 || k >= out.length) continue;
+    const t = j / SR;
+    const freq = 55 + 90 * Math.exp(-t / 0.03); // 145 Hz -> 55 Hz over ~30 ms
+    phase += (TAU * freq) / SR;
+    const click = t < 0.004 ? (1 - t / 0.004) * (rng() * 2 - 1) * 0.5 : 0;
+    out[k] += amp * (Math.exp(-t / decaySec) * Math.sin(phase) + click);
+  }
+}
+
+/**
+ * Add a decaying noise hit (snare/hat), peak amplitude at its own start —
+ * the noise-layer counterpart of {@link addKick}.
+ *
+ * @param {Float32Array} out Output buffer, summed in place.
+ * @param {() => number} rng Deterministic [0, 1) generator.
+ * @param {number} start Sample offset.
+ * @param {number} amp Peak linear amplitude.
+ * @param {number} decaySec Exponential decay time constant, in seconds.
+ */
+function addNoiseHit(out, rng, start, amp, decaySec) {
+  const dn = Math.min(out.length - start, Math.round(SR * decaySec * 6));
+  for (let j = 0; j < dn; j++) {
+    const k = start + j;
+    if (k < 0 || k >= out.length) continue;
+    out[k] += amp * Math.exp(-(j / SR) / decaySec) * (rng() * 2 - 1);
+  }
+}
+
+/**
+ * `meter-groove` / `meter-groove-three`: a plain backbeat groove — kick on the
+ * downbeat, a noise hit on every other beat, soft eighth-note hats — built
+ * purely from decaying oscillator/noise hits (no synth voice) so the accent
+ * pattern is exact and reproducible, in a given numerator.
+ *
+ * The meter estimator only searches when a beat series holds at least 8 beats
+ * (`meter_analyzer.cpp`), and `detectBeats` drops the very first onset while it
+ * locks onto the tempo, so the groove needs several bars of margin above that
+ * floor. The bar counts below were picked empirically against the shipped
+ * `detectBeats` + `estimateMeter` pipeline (see the demo's own
+ * `detectBeats` -> `onsetEnvelope` -> `estimateMeter` chain in
+ * `DetectorDemo.vue`), checked at 32000/44100/48000 Hz — the demo decodes
+ * through an `AudioContext`, which resamples to the output device rate, and
+ * the estimator's candidate ranking is not resample-invariant: 3/4 needs
+ * materially more bars than 4/4 for its downbeat to win, and 4/4 needs its
+ * beat 3 kept quieter than beats 2 and 4 (a full-strength beat 3 reads enough
+ * like a second downbeat to alias into 6/4 at some rates).
+ *
+ * @param {number} numerator Beats per bar (3 or 4).
+ * @param {number} numBars Bars to render.
+ * @param {(beat: number) => number} [backbeatAmp] Peak amplitude for a
+ *   non-downbeat beat (1-indexed within the bar); defaults to a uniform 0.45.
+ * @returns {Float32Array} Mono PCM at {@link SR}.
+ */
+function buildGroove(numerator, numBars, backbeatAmp = () => 0.45) {
+  const barLen = numerator * Q;
+  const totalSec = numBars * barLen * SEC_PER_PPQ + 0.4;
+  const len = Math.round(SR * totalSec);
+  const out = new Float32Array(len);
+  const rng = mulberry32(0x7a3cf611);
+  const toSample = (ppq) => Math.round(ppq * SEC_PER_PPQ * SR);
+
+  for (let bar = 0; bar < numBars; bar++) {
+    const base = bar * barLen;
+    addKick(out, rng, toSample(base), 1.0, 0.16);
+    for (let beat = 1; beat < numerator; beat++) {
+      addNoiseHit(out, rng, toSample(base + beat * Q), backbeatAmp(beat), 0.045);
+    }
+    const eighths = numerator * 2;
+    for (let e = 0; e < eighths; e++) {
+      addNoiseHit(out, rng, toSample(base + e * (Q / 2)), e % 2 ? 0.063 : 0.09, 0.01);
+    }
+  }
+
+  return finalize(out, 0.92);
+}
+
+/**
+ * `meter-groove`: the backbeat groove in 4/4, four bars — beat 3 quieter than
+ * beats 2 and 4 so it doesn't read as a rival downbeat. See {@link buildGroove}.
+ */
+const buildMeterGroove = () => buildGroove(4, 4, (beat) => (beat === 2 ? 0.18 : 0.25));
+/** `meter-groove-three`: the same construction in 3/4 — see {@link buildGroove}. */
+const buildMeterGrooveThree = () => buildGroove(3, 10);
+
 // ---- WAV encoding ---------------------------------------------------------
 
 /**
@@ -568,6 +668,8 @@ const CLIPS = {
   mix: buildMix,
   'damaged-vinyl': buildDamagedVinyl,
   'mixed-stems': buildMixedStems,
+  'meter-groove': buildMeterGroove,
+  'meter-groove-three': buildMeterGrooveThree,
 };
 
 /**
