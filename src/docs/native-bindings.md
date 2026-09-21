@@ -85,12 +85,18 @@ A binding and the shared library it loads must come from the same tree. The C AB
 | ABI | Current | Covers |
 |-----|---------|--------|
 | Feature | 5 | the flat analysis and feature-result structs — `SonareKey`, `SonareAnalysisResult`, `SonareChordDetectionOptions`, and their neighbours |
-| Project | 1 | the headless-DAW project and arrangement structs. Reports `0` in a build without arrangement support |
+| Project | 2 | the headless-DAW project and arrangement structs. Reports `0` in a build without arrangement support |
 | Voice changer | 2 | the realtime voice-changer configuration struct |
 | Acoustic | 4 | the room-acoustics structs |
 | Engine | 3 | the realtime command queue |
 
-`sonare_abi_version()` packs the first four into one `uint32_t` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — so one comparison covers all of them; that packed value is what the Python binding checks when it loads the library. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct.
+`sonare_abi_version()` packs the first four into one `uint32_t` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — so one comparison covers all of them. The engine ABI is deliberately excluded and keeps its own accessor, `sonare_engine_abi_version()`, because it versions a SharedArrayBuffer record layout rather than a POD struct. Each subsystem's header owns its macro (`SONARE_FEATURE_ABI_VERSION`, `SONARE_PROJECT_ABI_VERSION`, `SONARE_VOICE_CHANGER_ABI_VERSION`, `SONARE_ACOUSTIC_ABI_VERSION`) and moves it on any layout change to the structs it guards; the project version moves once per release that changes the layout. Equal values therefore mean identical layout, and a field appended to a guarded struct is a bump, not an additive change.
+
+What each binding does with the number differs, and it decides where a stale library shows up:
+
+- **Python** compares the packed value against the one it was built for at import, before configuring a single symbol, and raises `RuntimeError` with a message beginning `libsonare ABI mismatch` — a shared library from another checkout fails at `import libsonare`, never at the first call.
+- **Node native and WASM** export `EXPECTED_PROJECT_ABI_VERSION` and `EXPECTED_ENGINE_ABI_VERSION` and the query functions `abiVersion()`, `projectAbiVersion()`, `engineAbiVersion()`, `voiceChangerAbiVersion()`. `projectAbiVersion()` equals the expected constant when arrangement support is compiled in and `0` when it is not, and WASM's `engineCapabilities()` reports `engineAbiVersion`, `expectedEngineAbiVersion` and `abiCompatible`. These are queries rather than guards, so the comparison is yours to make before constructing a `Project` or a `RealtimeEngine`.
+- **A C caller** compares `sonare_abi_version()` with its compile-time `SONARE_ABI_VERSION` once; the JSON entry points (the voice changer's JSON configuration, the capability catalog) tolerate layout drift and need no gate. See [C ABI versions](./cpp-api.md#c-abi-versions).
 
 Additive struct changes are gated on a per-struct `struct_version` so existing C callers keep their behaviour at both source and call level. `SonareNoteSegmenterConfig` is the case to know: it carries a trailing `voiced_threshold` read only when `struct_version` is `2`, so a config filled the way it always was is unaffected, and a zero-initialized one keeps the 0.5 default. What does change is the version the library reports — which is why the library has to be rebuilt alongside the binding even when your own code is untouched.
 

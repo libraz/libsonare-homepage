@@ -82,6 +82,10 @@ C ABI はプロジェクト系のシンボルを常に *エクスポート* し�
 状態で configure・ビルドできますが、ネイティブ CLI はできません。5 つのコマンドが
 ピッチエディタを直接呼んでいるためです。
 
+### C ABI のバージョン
+
+フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION`（5、`sonare_c_types.h`）、`SONARE_PROJECT_ABI_VERSION`（2、`sonare_c_project.h`）、`SONARE_VOICE_CHANGER_ABI_VERSION`（2、`sonare_c_voice_changer.h`）、`SONARE_ACOUSTIC_ABI_VERSION`（4、`sonare_c_acoustic.h`）の 4 つです。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違うということは両者が構造体レイアウトについて合意していないということで、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体のレイアウトが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトは同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
+
 ### リンクターゲット
 
 インストール済みの libsonare は、サブシステムごとの CMake ターゲットと、そのインストールに含まれるものをまとめて張る集約ターゲットをエクスポートします。
@@ -231,19 +235,8 @@ const float* end() const;
 ```
 
 ::: tip 大きなファイルの処理
-非常に大きなファイルを扱う場合は、読み込み後に `slice()` でセグメントに分割して処理することを検討してください。
+非常に大きなファイルを扱う場合は、読み込み後に `slice()` でセグメントに分割して処理することを検討してください。`audio.slice(0.0f, 30.0f)` や `audio.slice(60.0f, 90.0f)` はデコード済みバッファをコピーせず共有します。
 :::
-
-#### 使用例
-
-```cpp
-auto audio = sonare::Audio::from_file("song.mp3");
-std::cout << "Duration: " << audio.duration() << "s\n";
-
-// ゼロコピースライシング
-auto intro = audio.slice(0.0f, 30.0f);
-auto chorus = audio.slice(60.0f, 90.0f);
-```
 
 ### Spectrogram
 
@@ -353,14 +346,15 @@ effects::acoustic::RoomMorphConfig morph_config;
 morph_config.target = room;
 morph_config.placement = placement;
 morph_config.wet = 0.6f;
-Audio morphed = effects::acoustic::room_morph(recording, morph_config);
+effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recording, morph_config);
+// morphed.audio がレンダー結果、morphed.diagnostics は目標 RIR 合成でクランプされた項目の一覧。
 ```
 
 3 つの呼び出しは、ワークフローの別々の部分を担当します。
 
 - `estimate_room(...)` は、体積、代表寸法、吸音率バンド、RT60 バンド、DRR、信頼度を返します。
 - `synthesize_rir(...)` は、形状問題を診断情報で報告します。音源／聴取位置が不正な場合は空の RIR を返します。
-- `room_morph(...)` は、入力音声に目標ルームの響きを付けてレンダーします。
+- `room_morph(...)` は、入力音声に目標ルームの響きを付けてレンダーし、`RoomMorphResult` を返します。音声に加えて、`synthesize_rir(...)` と同じ診断情報を持ちます。目標 RIR を同じコードで合成しているためです。使えない設定はエラー項目として報告されるのではなく、`ErrorCode::InvalidParameter` をスローします。
 
 ::: details 設定項目の詳細
 `acoustic::RirSynthConfig` では、RIR 生成の設定を指定できます。
@@ -376,6 +370,27 @@ Audio morphed = effects::acoustic::room_morph(recording, morph_config);
 
 アスペクトヒントと `reference_absorption` は、等価ルームの事前条件を決めます。
 :::
+
+### C ABI からのルームモーフ
+
+`sonare_c_acoustic.h` の `sonare_room_morph` は、入力サンプル、そのサンプルレート、`SonareRoomMorphConfig` を受け取り、モーフ後のモノラル信号を出力ポインタの組で返します。目標ルームの合成が出した診断情報は戻り値には含まれず、スレッドローカルの構造化チャンネルに置かれるので、呼び出しが返ってから読み出します。所有権と寿命はコードのとおりです。
+
+```c
+float* out = NULL;
+size_t out_length = 0;
+SonareError err = sonare_room_morph(samples, length, sample_rate, &config, &out, &out_length);
+if (err != SONARE_OK) return err;  // 何も確保されていない。詳細は sonare_last_error_message() にある
+for (size_t i = 0; i < sonare_last_diagnostic_count(); ++i) {
+  const char* code = sonare_last_diagnostic_code(i);  // 例: "acoustic.rir_length_clamped"
+  // sonare_last_diagnostic_message(i) と sonare_last_diagnostic_severity(i) が同じ添字で並ぶ
+}
+sonare_free_floats(out);
+```
+
+- `*out` はライブラリが確保し、`sonare_free_floats` で解放します。長さは入力の `length` サンプルに目標ルームのテールを足したもので、サンプルレートは入力と同じです。空の入力では `NULL` ／ `0` が返り、そのまま解放しても安全です。戻り値が `SONARE_OK` 以外なら何も確保されていません。
+- 診断情報の文字列はライブラリが所有し、`NULL` になることはなく、同じスレッドで診断情報を記録またはクリアする次の C ABI 呼び出しまで有効です。`sonare_room_morph` と `sonare_synthesize_rir` はどちらも入口でこのチャンネルをクリアし、それ以外の呼び出しの後は件数が `0` になります。読み出しても項目は消費されず、解放するものもありません。保持したい文字列はコピーしてください。
+- 件数以上の添字を渡すと `""` と `SONARE_DIAGNOSTIC_INFO` が返るので、ループは重要度ではなく件数で区切ります。モーフが出す項目はすべて回復可能なクランプで、重要度は `SONARE_DIAGNOSTIC_WARNING` です。使えない設定は項目ではなくエラー戻り値になります。
+- `sonare_last_warning_message()` には同じ項目が `code: message; code: message` の 1 本の文字列に畳まれて入ります。これは従来この形式を読んでいた呼び出し側のために残されているもので、分岐には構造化アクセサを使ってください。区切り文字を含むメッセージは元に戻せず、重要度も文字列には含まれないためです。
 
 ### 大空間での空気吸収
 
@@ -493,9 +508,10 @@ std::vector<float> db_to_amplitude(const std::vector<float>& values, float ref =
 
 namespace api = sonare::mastering::api;
 
-// 25 個の組み込みプリセット: Pop, EDM, Acoustic, HipHop, AIMusic, Speech, Streaming,
+// 30 個の組み込みプリセット: Pop, EDM, Acoustic, HipHop, AIMusic, Speech, Streaming,
 // YouTube, Broadcast, Podcast, Audiobook, Cinema, JPop, Ambient, Lofi, Classical,
-// DrumAndBass, Techno, Metal, Trap, RnB, Jazz, KPop, Trance, GameOst。
+// DrumAndBass, Techno, Metal, Trap, RnB, Jazz, KPop, Trance, GameOst に加えて、
+// 復元系の Vinyl, TapeHiss, FieldRecording, VoiceMemo, Shellac78。
 std::vector<std::string> names = api::preset_names();
 api::Preset preset = api::preset_from_string("aiMusic");
 
@@ -512,9 +528,12 @@ api::MonoChainResult result = api::master_audio_mono(
 // api::master_audio_stereo(preset, left, right, length, sample_rate, overrides, 1);
 ```
 
-`preset_to_string(Preset)` は正規の識別子を返します。例外を投げず、不正値には `"unknown"` を返します。
+マスタリングプリセットを扱うときに役立つヘルパーが 2 つあります。
 
-`preset_config(Preset)` は、チェーン実行前に確認・調整できる可変の `MasteringChainConfig` を返します。
+| ヘルパー | 用途 |
+|----------|------|
+| `preset_to_string(Preset)` | 正規のプリセット識別子を得る。例外を投げず、不正値には `"unknown"` を返す |
+| `preset_config(Preset)` | チェーン実行前に確認・調整できる可変の `MasteringChainConfig` を得る |
 
 名前付きプロセッサのレジストリやアシスタント／プロファイルの JSON ヘルパーは、[マスタリングプロセッサ](./mastering-processors.md) と [マスタリングアシスタント](./mastering-assistant.md) を参照してください。
 
@@ -546,9 +565,7 @@ SonareError sonare_metering_crest_factor_db_stereo(const float* left, const floa
 
 `*json_out` はヒープ確保されるので、モノラル入口と同じ契約で `sonare_free_string` により解放します。`platforms` に `NULL` ／ `0` を渡すとエラーにはならず、組み込みの Spotify ／ Apple Music ／ YouTube のリストが使われます。
 
-2 チャンネルの素材を扱うときは、常にステレオ側を使ってください。モノラル入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差は 3.01 dB にとどまり、これはダウンミックスで振幅が半分になる分です。残りの約 3 dB が相関の低さによるものです。
-
-ステレオプロファイルのうち、両チャンネルから測るのは `loudness` ブロックだけです。インテグレーテッド LUFS と LRA はチャンネルを合算したプログラムから求め、True Peak（トゥルーピーク）は 2 つのうち大きい方を採ります。スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
+2 チャンネルの素材を扱うときは、常にステレオ側を使ってください。モノラル入口は `0.5 * (left + right)` のダウンミックスを測定するため、相関の低いステレオ素材では約 6 dB 低く出ます。その分だけ、インテグレーテッドラウドネス、そこから導かれるノーマライズゲイン、ピーク余裕の判定がまとめて過小評価されます。相関を落としたピンクノイズのペア（48 kHz・4 秒）では、ダウンミックス経由が -22.55 LUFS、ステレオ経由が -16.44 LUFS で、差は 6.11 dB でした。同じ差が Spotify の `normalizationGainDb` を +2.44 から +8.55 に押し上げます。相関の高いペアでは差はダウンミックスで振幅が半分になる 3.01 dB にとどまります。ステレオプロファイルのうち両チャンネルから測るのは `loudness` ブロックだけで（インテグレーテッド LUFS と LRA はチャンネルを合算したプログラムから、True Peak（トゥルーピーク）は 2 つのうち大きい方）、スペクトル・ダイナミクス・テンポの各フィールドは絶対レベルではなく形と時間構造を表すため、ダウンミックス基準のまま据え置き、モノラル呼び出しの結果とそのまま比較できます。
 
 `sonare_metering_crest_factor_db_stereo` は逆向きの誤差を正します。ピークは両チャンネルにまたがって取り、RMS は両チャンネルをまとめて計算します。ダウンミックスでは逆相のペアが打ち消し合い、RMS を小さく見積もる分だけクレストファクターが大きく出てしまうためです。位相を反転させたペアでは、ステレオメーターが `11.64` dB、ダウンミックス経由が `0.00` dB になります。
 

@@ -264,7 +264,14 @@ int         sonare_has_ffmpeg_support(void);     // FFmpeg 専用フォーマッ
 （段階ごとの進捗が要るなら `sonare_analyze_json_with_progress`）を呼び出します。
 camelCase の JSON 文字列を返し、`sonare_free_string` で解放します。
 
-エフェクト、特徴量、ルーム音響、変換、リサンプリング、librosa 互換ヘルパーにもサンプルベースの入口があります。ルーム音響は `sonare_analyze_impulse_response_ex`、`sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` から扱えます。関数一覧は `include/sonare/sonare_c.h` を参照してください。
+いくつかのヘルパー群には、サンプルベースの C ABI 入口もあります。
+
+| 系統 | 例 |
+|------|----|
+| エフェクト | `sonare_hpss`、`sonare_hpss_ex`、`sonare_hpss_with_residual`、`sonare_time_stretch_ex`、`sonare_phase_vocoder`、`sonare_pitch_shift_ex`、`sonare_spectral_edit`、`sonare_normalize`、`sonare_normalize_rms`、`sonare_trim_ex` |
+| 特徴量 | `sonare_stft`、`sonare_mel_spectrogram`、`sonare_mfcc`、`sonare_mfcc_ex`、`sonare_chroma`、`sonare_chroma_cqt`、`sonare_nnls_chroma_ex2`、`sonare_spectral_*`、`sonare_pitch_yin`、`sonare_pitch_pyin` |
+| ルーム音響 | `sonare_analyze_impulse_response_ex`、`sonare_synthesize_rir`、`sonare_estimate_room`、`sonare_room_morph` |
+| 変換とリサンプリング | `sonare_resample`。関数一覧は `include/sonare/sonare_c.h` を参照 |
 
 特徴量では、ノート活性の `sonare_chroma` に加えて、定 Q クロマグラム（`librosa.feature.chroma_cqt` 相当）の `sonare_chroma_cqt` があります。明示レンジ版の MFCC 入口 `sonare_mfcc_ex`（fmin/fmax/htk）は、末尾にケプストラルリフタリング引数 `lifter` を持ちます（`0` で無効）。
 
@@ -277,6 +284,18 @@ camelCase の JSON 文字列を返し、`sonare_free_string` で解放します�
 プロジェクト編集は `sonare_c_project.h` にあります。`sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` の最後の引数が任意の equal-power 継ぎ目クロスフェードです。有限で 0 以上である必要があり、`0` ならハードループのままです。エンジンは使用可能なプリロールとループ長の半分を上限にクランプし、ワープ時は無視します。
 
 `sonare_project_bounce_with_synth_instruments` と `sonare_engine_set_synth_instrument` が受け取る NativeSynth のパッチ `SonareSynthPatch` は、先頭の `struct_version` フィールドでバージョン管理されています。元のレイアウトでは数値フィールドはすべて「0 はベースプリセットの値を保つ」という規則に従うため、明示的なゼロを表現できませんでした。`struct_version = 2` は、呼び出し側が意図して設定したフィールドを示すビットマスク `present_fields`（`SONARE_SYNTH_FIELD_*`）を末尾に追加します。ビットが立っていれば、その値がゼロであってもベースを上書きし、立っていなければ従来の挙動のままです。この末尾のワードは `struct_version` が 2 以上のときだけ読まれます。したがって、これまで通りに構造体を埋める呼び出し側は、`struct_version` を `0` や `1` のままにしていても従来の挙動を保ち、ソースを変更する必要はありません。enum フィールドに存在ビットがないのは意図的です。ゼロがすでに「ベースを保つ」の予約値で、実際の値はすべて非ゼロだからです。`num_mod_routings == 0` の状態で `SONARE_SYNTH_FIELD_MOD_ROUTINGS` を立てると、ベースのモッドマトリクスを保つのではなく消去します。要素のあるテーブルはどちらの場合でも置き換えです。マスクは 32 ビット 1 ワードで、うち 27 ビットを使用しています。さらに拡張する場合は、このワードを広げるのではなく、新しい `struct_version` のもとで 2 ワード目を追加します。
+
+librosa 互換ヘルパーも C API から使えます。
+
+| 分類 | ヘルパー |
+|------|----------|
+| プリエンファシスと無音処理 | `sonare_preemphasis`、`sonare_deemphasis`、`sonare_trim_silence`、`sonare_split_silence` |
+| フレーム分割とパディング | `sonare_frame_signal`、`sonare_pad_center`、`sonare_fix_length`、`sonare_fix_frames` |
+| ピーク検出と正規化 | `sonare_peak_pick`、`sonare_vector_normalize` |
+| 特徴量ユーティリティ | `sonare_pcen`、`sonare_tonnetz`、`sonare_tempogram`、`sonare_plp` |
+| dB 変換 | `sonare_power_to_db`、`sonare_amplitude_to_db`、`sonare_db_to_power`、`sonare_db_to_amplitude` |
+| 時間／フレーム変換 | `sonare_frames_to_samples`、`sonare_samples_to_frames` |
+| 分解／ノイズ除去 | `sonare_decompose`、`sonare_decompose_with_init`（init は `"random"`／`"nndsvd"`）、`sonare_nn_filter` |
 
 現在の C ABI は、用途別のヘッダーに分かれています。上の短い例に出ていないシンボルは、この表から探してください。
 

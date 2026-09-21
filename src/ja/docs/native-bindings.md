@@ -85,12 +85,18 @@ yarn build
 | ABI | 現在の値 | 対象 |
 |-----|---------|------|
 | Feature | 5 | フラットな解析・特徴量の結果構造体（`SonareKey`、`SonareAnalysisResult`、`SonareChordDetectionOptions` など） |
-| Project | 1 | ヘッドレス DAW のプロジェクト・アレンジ構造体。アレンジ機能なしのビルドでは `0` を返します |
+| Project | 2 | ヘッドレス DAW のプロジェクト・アレンジ構造体。アレンジ機能なしのビルドでは `0` を返します |
 | Voice changer | 2 | リアルタイムボイスチェンジャーの設定構造体 |
 | Acoustic | 4 | ルーム音響の構造体 |
 | Engine | 3 | リアルタイムコマンドキュー |
 
-`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic です。1 回の比較で全体を照合でき、Python バインディングがライブラリ読み込み時に確認しているのもこの値です。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。
+`sonare_abi_version()` は上の 4 つを 1 つの `uint32_t` に詰めて返します。ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic で、1 回の比較で全体を照合できます。Engine の ABI はここに含めず、専用のアクセサ `sonare_engine_abi_version()` を持ちます。POD 構造体ではなく SharedArrayBuffer のレコードレイアウトをバージョン管理しているためです。各サブシステムのヘッダーが自分のマクロ（`SONARE_FEATURE_ABI_VERSION`、`SONARE_PROJECT_ABI_VERSION`、`SONARE_VOICE_CHANGER_ABI_VERSION`、`SONARE_ACOUSTIC_ABI_VERSION`）を持ち、保証対象の構造体のレイアウトが変わるたびに値を進めます。Project のバージョンだけは、レイアウトが変わったリリースごとに 1 回進みます。したがって値が等しければレイアウトは同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。
+
+この値をどう使うかはバインディングごとに異なり、古いライブラリがどこで露見するかもそれで決まります。
+
+- **Python** は import 時、個々のシンボルを設定する前に、詰め込まれた値をビルド時に想定した値と比較し、`libsonare ABI mismatch` で始まるメッセージの `RuntimeError` を送出します。別のチェックアウトの共有ライブラリは最初の呼び出しではなく `import libsonare` の時点で失敗します。
+- **Node ネイティブと WASM** は `EXPECTED_PROJECT_ABI_VERSION` と `EXPECTED_ENGINE_ABI_VERSION`、および問い合わせ関数 `abiVersion()`・`projectAbiVersion()`・`engineAbiVersion()`・`voiceChangerAbiVersion()` をエクスポートします。`projectAbiVersion()` はアレンジ機能がコンパイルされていれば想定定数と等しく、そうでなければ `0` です。WASM の `engineCapabilities()` は `engineAbiVersion`・`expectedEngineAbiVersion`・`abiCompatible` を報告します。これらは関門ではなく問い合わせなので、`Project` や `RealtimeEngine` を構築する前の比較は利用側の仕事です。
+- **C の呼び出し側** は `sonare_abi_version()` をコンパイル時の `SONARE_ABI_VERSION` と一度だけ比較します。JSON の入口（ボイスチェンジャーの JSON 設定、機能カタログ）はレイアウトのずれを許容するので関門は不要です。[C ABI のバージョン](./cpp-api.md#c-abi-のバージョン) も参照してください。
 
 構造体へのフィールド追加は、構造体ごとの `struct_version` で段階的に有効化されるため、既存の C 呼び出し側はソースレベルでも呼び出しレベルでも影響を受けません。覚えておくとよい例が `SonareNoteSegmenterConfig` です。末尾の `voiced_threshold` は `struct_version` が `2` のときだけ読まれるので、従来どおりに埋めた設定はそのまま同じ挙動になり、ゼロ初期化した設定は既定値 0.5 を保ちます。変わるのはライブラリが報告するバージョンのほうです。自分のコードに手を入れていなくてもライブラリをバインディングと一緒に再ビルドする必要があるのは、このためです。
 

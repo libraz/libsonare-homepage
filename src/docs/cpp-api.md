@@ -79,6 +79,10 @@ the check, so freeing a returned pointer is safe on that path. The library
 configures and builds with the option off — the native CLI does not, because five
 of its commands reach the pitch editor directly.
 
+### C ABI versions
+
+Every C-ABI header that declares flat POD structs owns a version macro guarding their exact size and member offsets: `SONARE_FEATURE_ABI_VERSION` (5, in `sonare_c_types.h`), `SONARE_PROJECT_ABI_VERSION` (2, `sonare_c_project.h`), `SONARE_VOICE_CHANGER_ABI_VERSION` (2, `sonare_c_voice_changer.h`) and `SONARE_ACOUSTIC_ABI_VERSION` (4, `sonare_c_acoustic.h`). `sonare_c.h` packs the four into `SONARE_ABI_VERSION` — feature in bits 0-7, project in 8-15, voice changer in 16-23, acoustic in 24-31 — and `sonare_abi_version()` returns the value the loaded library was compiled with. The realtime command queue is versioned apart from these through `sonare_engine_abi_version()` (currently 3), because it describes a SharedArrayBuffer record layout rather than a POD. A consumer that passes PODs across the boundary compares `sonare_abi_version()` against its own compile-time `SONARE_ABI_VERSION` once, before the first call, and refuses to continue on a mismatch: unequal values mean the two sides disagree on a struct layout, and the POD path would corrupt memory rather than fail. The JSON entry points tolerate layout drift and need no such gate. A version moves on any layout change to the structs it guards — the project version once per release that changes the layout — so equal numbers mean identical layout, and a field appended to a guarded struct is a bump, not an additive change. Which value each binding checks on load is on [Native Bindings](./native-bindings.md#abi-versions).
+
 ### Link targets
 
 An installed libsonare exports one CMake target per subsystem plus an aggregate that links whatever the installation contains:
@@ -229,19 +233,8 @@ const float* end() const;
 ```
 
 ::: tip Large File Handling
-For very large files, prefer streaming or process in segments using `slice()` after loading.
+For very large files, prefer streaming or process in segments using `slice()` after loading — `audio.slice(0.0f, 30.0f)` and `audio.slice(60.0f, 90.0f)` share the decoded buffer rather than copying it.
 :::
-
-#### Example
-
-```cpp
-auto audio = sonare::Audio::from_file("song.mp3");
-std::cout << "Duration: " << audio.duration() << "s\n";
-
-// Zero-copy slicing
-auto intro = audio.slice(0.0f, 30.0f);
-auto chorus = audio.slice(60.0f, 90.0f);
-```
 
 ### Spectrogram
 
@@ -351,14 +344,15 @@ effects::acoustic::RoomMorphConfig morph_config;
 morph_config.target = room;
 morph_config.placement = placement;
 morph_config.wet = 0.6f;
-Audio morphed = effects::acoustic::room_morph(recording, morph_config);
+effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recording, morph_config);
+// morphed.audio is the render; morphed.diagnostics lists what the target-RIR synthesis clamped.
 ```
 
 The three calls cover different parts of the workflow:
 
 - `estimate_room(...)` returns volume, representative dimensions, absorption bands, RT60 bands, DRR, and confidence.
 - `synthesize_rir(...)` reports geometry problems through diagnostics. It returns an empty RIR when the source or listener placement is invalid.
-- `room_morph(...)` renders the input with the target room character.
+- `room_morph(...)` renders the input with the target room character and returns a `RoomMorphResult`: the audio plus the same diagnostics `synthesize_rir(...)` raises, since the target RIR is built by the same code. An unusable configuration throws `ErrorCode::InvalidParameter` instead of reporting an error entry.
 
 ::: details Configuration details
 `acoustic::RirSynthConfig` controls RIR generation:
@@ -374,6 +368,27 @@ The three calls cover different parts of the workflow:
 
 Aspect hints and `reference_absorption` define the equivalent-room prior.
 :::
+
+### Room morph through the C ABI
+
+`sonare_room_morph` in `sonare_c_acoustic.h` takes the input samples, their sample rate and a `SonareRoomMorphConfig`, and hands back the morphed mono signal through an out-pointer pair. The diagnostics the target-room synthesis raised are not in the result: they travel on the thread-local structured channel, read after the call returns. Ownership and lifetime follow the code:
+
+```c
+float* out = NULL;
+size_t out_length = 0;
+SonareError err = sonare_room_morph(samples, length, sample_rate, &config, &out, &out_length);
+if (err != SONARE_OK) return err;  // nothing was allocated; sonare_last_error_message() has the detail
+for (size_t i = 0; i < sonare_last_diagnostic_count(); ++i) {
+  const char* code = sonare_last_diagnostic_code(i);  // e.g. "acoustic.rir_length_clamped"
+  // sonare_last_diagnostic_message(i) and sonare_last_diagnostic_severity(i) sit beside it
+}
+sonare_free_floats(out);
+```
+
+- `*out` is allocated by the library and released with `sonare_free_floats`. It holds `length` samples plus the target room's tail, at the input sample rate. An empty input yields `NULL` / `0`, which is safe to free; on a non-`SONARE_OK` return nothing was allocated.
+- The diagnostic strings are owned by the library, never `NULL`, and valid until the next C ABI call on the same thread that records or clears a diagnostic — `sonare_room_morph` and `sonare_synthesize_rir` both clear the channel on entry, and the count reads `0` after any other call. Reading does not consume an entry, and there is nothing to free; copy the strings you keep.
+- An index at or past the count returns `""` and `SONARE_DIAGNOSTIC_INFO`, so bound the loop by the count rather than by severity. Every entry a morph publishes is a recoverable clamp at `SONARE_DIAGNOSTIC_WARNING`; an unusable configuration is an error return, not an entry.
+- `sonare_last_warning_message()` carries the same entries flattened into one `code: message; code: message` string. It is kept for callers written against it — the structured accessors are the form to branch on, because a message containing the separator cannot be split back out and the severity is not in the text.
 
 ### Air absorption in large rooms
 
@@ -491,9 +506,10 @@ The high-level mastering API lives in `sonare::mastering::api`. `master_audio_mo
 
 namespace api = sonare::mastering::api;
 
-// 25 built-in presets: Pop, EDM, Acoustic, HipHop, AIMusic, Speech, Streaming,
+// 30 built-in presets: Pop, EDM, Acoustic, HipHop, AIMusic, Speech, Streaming,
 // YouTube, Broadcast, Podcast, Audiobook, Cinema, JPop, Ambient, Lofi, Classical,
-// DrumAndBass, Techno, Metal, Trap, RnB, Jazz, KPop, Trance, GameOst.
+// DrumAndBass, Techno, Metal, Trap, RnB, Jazz, KPop, Trance, GameOst, and the
+// restoration set Vinyl, TapeHiss, FieldRecording, VoiceMemo, Shellac78.
 std::vector<std::string> names = api::preset_names();
 api::Preset preset = api::preset_from_string("aiMusic");
 
@@ -547,9 +563,7 @@ SonareError sonare_metering_crest_factor_db_stereo(const float* left, const floa
 
 `*json_out` is heap-allocated; release it with `sonare_free_string`, the same contract as the mono entry points. Pass `NULL` / `0` for `platforms` to use the built-in Spotify / Apple Music / YouTube list rather than an error.
 
-Use the stereo forms whenever you have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement down by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55. A correlated pair differs by only 3.01 dB, the plain downmix halving; the remaining ~3 dB is the decorrelation.
-
-Only the `loudness` block of the stereo profile is measured from both channels: integrated LUFS and LRA come from the channel-summed program, and true peak is the larger of the two. The spectral, dynamics, and tempo fields describe shape and timing rather than absolute level, so they stay on the downmix and remain directly comparable with the mono call.
+Use the stereo forms whenever you have two channels. The mono entry points measure a `0.5 * (left + right)` downmix, which on decorrelated stereo material reads about 6 dB low — dragging integrated loudness, the normalization gain derived from it, and the ceiling-risk judgement down by the same amount. On a decorrelated pink-noise pair (48 kHz, 4 s) the downmix path reports -22.55 LUFS against -16.44 LUFS from the stereo path, a 6.11 dB gap that turns a Spotify `normalizationGainDb` of +2.44 into +8.55; a correlated pair differs by only the 3.01 dB downmix halving. Only the `loudness` block of the stereo profile is measured from both channels (integrated LUFS and LRA from the channel-summed program, true peak as the larger of the two); the spectral, dynamics, and tempo fields describe shape and timing rather than level, so they stay on the downmix and remain comparable with the mono call.
 
 `sonare_metering_crest_factor_db_stereo` fixes the opposite error — it takes the peak across both channels and the RMS over both together, where a downmix cancels an out-of-phase pair, understates RMS, and so overstates crest factor. An inverted pair reads `11.64` dB through the stereo meter and `0.00` dB through the downmix.
 

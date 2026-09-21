@@ -23,6 +23,7 @@ By the end of this page you should be able to:
 |----------|---------|
 | Which repository tests cover a feature area? | [Validation Matrix](#validation-matrix) |
 | Which parts are designed for realtime use? | [Realtime Safety](#realtime-safety) |
+| Is "one engine, every runtime" measured or asserted? | [Surface Coverage](#surface-coverage) |
 | What does compatibility or accuracy mean here? | [Accuracy Boundaries](#accuracy-boundaries) |
 
 ## Validation Matrix
@@ -38,7 +39,7 @@ By the end of this page you should be able to:
 | Realtime engine | `tests/engine/*_test.cpp`, `bindings/python/tests/test_engine.py`, and WASM worklet tests cover transport, tempo sync, metronome, capture, graph runtime, monitor runtime, mono monitor/bounce parity, telemetry, offline bounce, concurrency, and AudioWorklet runtime behavior |
 | NativeSynth voice calibration | `tools/voicematch/` renders the provisional GM fallback voices against a dry FluidSynth/SoundFont oracle and reports timbre metrics; `autofit.py` can tune selected numeric constants in an isolated build directory. This is a calibration harness, not proof that the physical models are finished |
 | Bindings | `bindings/wasm/tests/*.test.ts`, `bindings/node/tests/*.test.ts`, `bindings/python/tests/*.py`, and typing smoke tests cover exported API shape, structured-clone-safe WASM returns, input-validation guards, and cross-binding behavior |
-| Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so API drift is caught before release |
+| Cross-binding parity | `tools/parity` checks default values, constants/enums, and parameter names across C++, C ABI, Python, Node, and WASM so API drift is caught before release, and renders the per-runtime capability matrix described under [Surface Coverage](#surface-coverage) |
 | CLI | `tests/cli/cli_test.cpp` and Python CLI parser coverage exercise terminal entry points |
 | Performance | `benchmarks/*.cpp`, `benchmarks/results.json`, and `benchmarks/results_cpp.json` cover spectrum, streaming mel/chroma, mastering support, ISP (inter-sample peak) detection, stereo, mixing, EQ, and resampling-related hot paths |
 
@@ -62,6 +63,18 @@ Realtime-oriented code is tested in several ways:
 | Graph runtime, AudioWorklet smoke, block parity, and voice-changer quality gates | Realtime paths should behave like the offline reference where they are meant to match. |
 
 libsonare still separates realtime-safe block processing from offline helpers. Full repair or loudness optimization over an entire file is intentionally offline work.
+
+## Surface Coverage
+
+The claim that one C++ core is reachable from every runtime is true of the DSP and false if read as "every C entry point exists everywhere", so the repository publishes the actual reach instead of leaving it to inference. `tools/parity/surface-coverage.md` is that evidence: a generated table with a row per public C header (the domain) and a column per runtime — Python, Node, WASM, and the two command-line front-ends separately — where each cell counts the domain's C ABI entry points that runtime reaches.
+
+Three properties make it evidence rather than a claim:
+
+- **It is derived, not written.** `tools/parity/surface_coverage.py` reuses the parity checker's own extractors and reachability rules — class methods, handle-prefix renames, and verified aliases all resolve — so there is no second definition of "exposed" to drift from the first. `make surface-coverage` rewrites the file.
+- **CI fails on a stale copy.** `make surface-coverage-check` regenerates the table and compares it with the tracked one, so a header added without the table catching up is a failing build rather than a silently optimistic number.
+- **Reviewed absences stay visible.** The allowlist that lets a reviewed divergence pass the parity check does not put the capability back: an allowlisted gap is still counted as a gap, so the table cannot be made to look complete by review alone.
+
+A gap in the table is therefore a measured absence. Whether it is a defect is a separate question that [Binding Parity](./binding-parity.md#feature-availability) answers per runtime — both CLIs are a curated subset by design, and WASM cannot reach the host filesystem or threads.
 
 ## Voice Calibration Harness
 

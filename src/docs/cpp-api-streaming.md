@@ -151,7 +151,7 @@ struct StreamFrame {
 
 ### SOA Format (Efficient Transfer)
 
-For efficient inter-thread transfer, use Structure-of-Arrays format:
+For efficient inter-thread transfer — handing a batch of frames to a worker or UI thread — use the Structure-of-Arrays `FrameBuffer`. It packs into contiguous memory more readily than a `std::vector<StreamFrame>`, which suits WASM and `postMessage`-style transfers:
 
 ```cpp
 FrameBuffer buffer;
