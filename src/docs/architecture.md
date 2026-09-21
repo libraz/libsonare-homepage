@@ -208,7 +208,7 @@ src/
 │   └── stream_frame.h      # Frame and buffer types
 │
 ├── mastering/          # Mastering engine
-│   ├── api/            # Chain, registry, 25 presets, 76 solo processors + pair/stereo registries
+│   ├── api/            # Chain, 30 presets, named-processor and pair/stereo registries
 │   ├── eq/ dynamics/ spectral/ stereo/ final/
 │   ├── maximizer/ multiband/ saturation/ repair/
 │   ├── match/ assistant/                 # Reference match + assistant/profile
@@ -221,7 +221,7 @@ src/
 │
 ├── midi/               # MIDI I-O and the built-in instruments
 │   ├── synth/          # NativeSynth voices + SoundFont player
-│   │   ├── native_synth.*      # 12 physical models + subtractive/FM/additive
+│   │   ├── native_synth.*      # 17 engine modes: 11 physical models + 6 others
 │   │   ├── ks_/piano_/pipe_organ_/bowed_string_/reed_/brass_/flute_/... voice.*
 │   │   ├── sf2_player.* sf2_file.* sf2_voice.*   # SoundFont (SF2) playback
 │   │   └── synth_presets.* gm_fallback_map.* gs_layer.* gs_effects.*

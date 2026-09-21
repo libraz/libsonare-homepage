@@ -203,7 +203,7 @@ src/
 │   └── stream_frame.h      # フレームとバッファ型
 │
 ├── mastering/          # マスタリングエンジン
-│   ├── api/            # チェーン・レジストリ・25 プリセット・76 solo processors ＋ pair/stereo registries
+│   ├── api/            # チェーン・30 プリセット・named-processor と pair/stereo のレジストリ
 │   ├── eq/ dynamics/ spectral/ stereo/ final/
 │   ├── maximizer/ multiband/ saturation/ repair/
 │   ├── match/ assistant/                 # リファレンスマッチ＋アシスタント/プロファイル
@@ -216,7 +216,7 @@ src/
 │
 ├── midi/               # MIDI 入出力と内蔵インストゥルメント
 │   ├── synth/          # NativeSynth のボイス群＋SoundFont プレイヤー
-│   │   ├── native_synth.*      # 12 物理モデル＋サブトラクティブ/FM/アディティブ
+│   │   ├── native_synth.*      # 17 エンジンモード: 物理モデル 11 種＋その他 6 種
 │   │   ├── ks_/piano_/pipe_organ_/bowed_string_/reed_/brass_/flute_/... voice.*
 │   │   ├── sf2_player.* sf2_file.* sf2_voice.*   # SoundFont（SF2）再生
 │   │   └── synth_presets.* gm_fallback_map.* gs_layer.* gs_effects.*

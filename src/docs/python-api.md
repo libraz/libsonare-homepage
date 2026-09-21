@@ -332,7 +332,7 @@ insert_params = sonare.mastering_insert_param_info("eq.parametric")
 
 # Preset-driven chain (one-shot)
 sonare.mastering_preset_names()
-# -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech', 'streaming', 'youtube', 'broadcast', 'podcast', 'audiobook', 'cinema', 'jpop', 'ambient', 'lofi', 'classical', 'drumAndBass', 'techno', 'metal', 'trap', 'rnb', 'jazz', 'kpop', 'trance', 'gameOst']
+# -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech', 'streaming', 'youtube', 'broadcast', 'podcast', 'audiobook', 'cinema', 'jpop', 'ambient', 'lofi', 'classical', 'drumAndBass', 'techno', 'metal', 'trap', 'rnb', 'jazz', 'kpop', 'trance', 'gameOst', 'vinyl', 'tapeHiss', 'fieldRecording', 'voiceMemo', 'shellac78']
 chain_result = sonare.master_audio(
     samples,
     sample_rate=sample_rate,
