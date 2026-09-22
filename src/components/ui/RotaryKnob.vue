@@ -11,6 +11,12 @@ const props = withDefaults(
     step?: number;
     /** Silk-screen label printed above the knob. */
     label: string;
+    /**
+     * Accessible name. Defaults to the printed label, which is enough until a
+     * panel repeats one caption across sixteen strips and the label alone no
+     * longer says which control it is.
+     */
+    ariaLabel?: string;
     /** Formatted value readout shown under the knob (and to screen readers). */
     display?: string;
     /** Value restored on double click. */
@@ -39,6 +45,7 @@ const props = withDefaults(
     linkLabel?: string;
   }>(),
   {
+    ariaLabel: undefined,
     step: undefined,
     display: undefined,
     defaultValue: undefined,
@@ -206,7 +213,7 @@ function onKeyDown(event: KeyboardEvent): void {
       class="rotary-knob__control"
       role="slider"
       :tabindex="disabled ? -1 : 0"
-      :aria-label="label"
+      :aria-label="ariaLabel || label"
       :aria-valuemin="min"
       :aria-valuemax="max"
       :aria-valuenow="modelValue"

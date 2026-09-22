@@ -177,6 +177,32 @@
   text-transform: uppercase;
 }
 
+/* --- Shared equipment chassis ---------------------------------------
+   The brushed face with recessed corner screws that a demo built as a
+   piece of equipment sits on. One face rather than one per demo, so the
+   machines read as machines from one bench instead of as two designs.
+   A demo adds its own width, overflow and entrance on top. */
+.demo-deck {
+  border: 1px solid var(--demo-border-strong);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 13px 13px, var(--demo-border-strong) 0 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 13px) 13px, var(--demo-border-strong) 0 2px, transparent 3px),
+    radial-gradient(circle at 13px calc(100% - 13px), var(--demo-border-strong) 0 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 13px) calc(100% - 13px), var(--demo-border-strong) 0 2px, transparent 3px),
+    linear-gradient(180deg, var(--demo-bg-header) 0%, var(--demo-bg-elevated) 22%, var(--demo-bg-elevated) 100%);
+  box-shadow:
+    0 24px 48px -24px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+html:not(.dark) .demo-deck {
+  box-shadow:
+    0 20px 40px -24px rgba(80, 60, 140, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
 /* --- Shared focus ring ----------------------------------------------
    Every interactive element inside a demo surface gets a visible
    keyboard focus ring by default; components may tighten it locally. */

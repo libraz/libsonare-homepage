@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
 import { RotaryKnob, StatusIndicator, Tooltip } from '@/components/ui';
+import ChannelStrip from '@/components/ui/ChannelStrip.vue';
 import { useI18n } from '@/composables/useI18n';
-import ChannelStrip from '@/demos/studio/ChannelStrip.vue';
 import StepRow from '@/demos/studio/StepRow.vue';
 import {
   defaultPattern,
@@ -252,7 +252,7 @@ function downloadMidi() {
       </div>
     </template>
 
-    <div class="st-deck">
+    <div class="st-deck demo-deck">
       <!-- ===== TRANSPORT ===== -->
       <div class="st-deck__transport">
         <div class="st-brand">

@@ -32,32 +32,15 @@
   font-size: 11px;
 }
 
-/* ===== THE GROOVEBOX BODY ===== */
+/* ===== THE GROOVEBOX BODY =====
+   The face itself is the shared `.demo-deck` chassis; this is the machine's
+   own size and its entrance. */
 .st-deck {
   max-width: 1120px;
   margin: 0 auto;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 14px;
-  /* Recessed corner screws over the brushed face. */
-  background:
-    radial-gradient(circle at 13px 13px, var(--demo-border-strong) 0 2px, transparent 3px),
-    radial-gradient(circle at calc(100% - 13px) 13px, var(--demo-border-strong) 0 2px, transparent 3px),
-    radial-gradient(circle at 13px calc(100% - 13px), var(--demo-border-strong) 0 2px, transparent 3px),
-    radial-gradient(circle at calc(100% - 13px) calc(100% - 13px), var(--demo-border-strong) 0 2px, transparent 3px),
-    linear-gradient(180deg, var(--demo-bg-header) 0%, var(--demo-bg-elevated) 22%, var(--demo-bg-elevated) 100%);
-  box-shadow:
-    0 24px 48px -24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
   overflow: hidden;
   /* Subtle rise as the deck mounts. */
   animation: st-deck-rise 0.45s ease-out both;
-}
-
-html:not(.dark) .st-deck {
-  box-shadow:
-    0 20px 40px -24px rgba(80, 60, 140, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 @keyframes st-deck-rise {

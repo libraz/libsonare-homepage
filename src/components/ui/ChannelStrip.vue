@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import Tooltip from '@/components/ui/Tooltip.vue';
 import { meterFillPercent } from '@/utils/scale';
 
@@ -20,6 +20,11 @@ const props = withDefaults(
   defineProps<{
     /** Strip name printed on the scribble strip. */
     label: string;
+    /**
+     * Accessible name for the fader. Defaults to the strip name, which is
+     * enough until the name is a bare part number.
+     */
+    ariaLabel?: string;
     /** Fader gain (linear). */
     gain: number;
     /** Live post-fader peak (linear) for the LED meter. */
@@ -30,18 +35,39 @@ const props = withDefaults(
     muteLabel?: string;
     unmuteLabel?: string;
     /** Fader range and double-click reset point. */
+    min?: number;
     max?: number;
     defaultGain?: number;
+    /**
+     * Readout above the fader. Defaults to the gain in dB, which is what a
+     * strip carrying a linear gain wants; a strip whose fader is a raw
+     * parameter byte passes its own reading instead.
+     */
+    display?: string;
+    /** Unit printed after the readout, or empty for a bare number. */
+    unit?: string;
+    /** Rounding the fader commits to — 0.01 for a gain, 1 for a byte. */
+    quantum?: number;
+    /** Arrow-key and Page-key increments. */
+    nudge?: number;
+    coarse?: number;
     /** Optional help shown via an info dot next to the strip name. */
     help?: StripHelp;
   }>(),
   {
+    ariaLabel: undefined,
     mutable: false,
     muted: false,
     muteLabel: 'Mute',
     unmuteLabel: 'Unmute',
+    min: 0,
     max: 1.4,
     defaultGain: 0.9,
+    display: undefined,
+    unit: 'dB',
+    quantum: 0.01,
+    nudge: 0.02,
+    coarse: 0.2,
     help: undefined,
   },
 );
@@ -59,13 +85,31 @@ function gainToDb(gain: number): string {
   return `${(20 * Math.log10(gain)).toFixed(1)}`;
 }
 
+/** What the strip prints, and reads out to a screen reader. */
+const readout = computed(() => props.display ?? gainToDb(props.gain));
+
+/** Where the cap sits in its slot, as a fraction of the throw. */
+const travel = computed(() => {
+  const span = props.max - props.min || 1;
+  return Math.min(1, Math.max(0, (props.gain - props.min) / span));
+});
+
+/**
+ * Snap to the strip's own resolution before emitting. A byte fader that
+ * committed 71.4 would put a value on screen the parameter cannot hold.
+ */
+function quantize(value: number): number {
+  const clamped = Math.min(props.max, Math.max(props.min, value));
+  const snapped = Math.round(clamped / props.quantum) * props.quantum;
+  return Number(snapped.toFixed(4));
+}
+
 function commitFromPointer(event: PointerEvent): void {
   const track = trackRef.value;
   if (!track) return;
   const rect = track.getBoundingClientRect();
   const ratio = 1 - (event.clientY - rect.top) / rect.height;
-  const value = Math.min(props.max, Math.max(0, ratio * props.max));
-  emit('update:gain', Math.round(value * 100) / 100);
+  emit('update:gain', quantize(props.min + ratio * (props.max - props.min)));
 }
 
 function onPointerDown(event: PointerEvent): void {
@@ -87,15 +131,15 @@ function onPointerUp(event: PointerEvent): void {
 
 function onKeyDown(event: KeyboardEvent): void {
   let next: number | null = null;
-  if (event.key === 'ArrowUp') next = props.gain + 0.02;
-  else if (event.key === 'ArrowDown') next = props.gain - 0.02;
-  else if (event.key === 'PageUp') next = props.gain + 0.2;
-  else if (event.key === 'PageDown') next = props.gain - 0.2;
+  if (event.key === 'ArrowUp') next = props.gain + props.nudge;
+  else if (event.key === 'ArrowDown') next = props.gain - props.nudge;
+  else if (event.key === 'PageUp') next = props.gain + props.coarse;
+  else if (event.key === 'PageDown') next = props.gain - props.coarse;
   else if (event.key === 'Home') next = props.max;
-  else if (event.key === 'End') next = 0;
+  else if (event.key === 'End') next = props.min;
   if (next === null) return;
   event.preventDefault();
-  emit('update:gain', Math.min(props.max, Math.max(0, Math.round(next * 100) / 100)));
+  emit('update:gain', quantize(next));
 }
 </script>
 
@@ -109,18 +153,19 @@ function onKeyDown(event: KeyboardEvent): void {
         </button>
       </Tooltip>
     </span>
-    <span class="channel-strip__db">{{ gainToDb(gain) }}<small>dB</small></span>
+    <slot name="subtitle" />
+    <span class="channel-strip__db">{{ readout }}<small v-if="unit">{{ unit }}</small></span>
     <div class="channel-strip__bay">
       <div
         ref="trackRef"
         class="channel-strip__fader"
         role="slider"
         tabindex="0"
-        :aria-label="label"
-        :aria-valuemin="0"
+        :aria-label="ariaLabel || label"
+        :aria-valuemin="min"
         :aria-valuemax="max"
         :aria-valuenow="gain"
-        :aria-valuetext="`${gainToDb(gain)} dB`"
+        :aria-valuetext="unit ? `${readout} ${unit}` : readout"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
@@ -131,7 +176,7 @@ function onKeyDown(event: KeyboardEvent): void {
         <div class="channel-strip__slot"></div>
         <div
           class="channel-strip__thumb"
-          :style="{ bottom: `calc(${(gain / max) * 100}% - 9px)` }"
+          :style="{ bottom: `calc(${travel * 100}% - 9px)` }"
         ></div>
       </div>
       <div class="channel-strip__meter" aria-hidden="true">
@@ -150,7 +195,8 @@ function onKeyDown(event: KeyboardEvent): void {
       :aria-pressed="muted"
       @click="emit('toggle-mute')"
     >M</button>
-    <span v-else class="channel-strip__mute-spacer"></span>
+    <span v-else-if="!$slots.controls" class="channel-strip__mute-spacer"></span>
+    <slot name="controls" />
   </div>
 </template>
 
@@ -166,7 +212,7 @@ function onKeyDown(event: KeyboardEvent): void {
   border: 1px solid var(--demo-border);
   border-radius: 8px;
   background: var(--demo-control-bg);
-  min-width: 74px;
+  min-width: var(--strip-min-width, 74px);
   transition: opacity 0.15s ease;
 }
 
@@ -239,11 +285,13 @@ function onKeyDown(event: KeyboardEvent): void {
   letter-spacing: 0.06em;
 }
 
+/* A deck with a handful of strips gives the throw its full length; one with
+   sixteen shortens it rather than making the page scroll. */
 .channel-strip__bay {
   display: flex;
   gap: 7px;
   align-items: stretch;
-  height: 128px;
+  height: var(--strip-bay-height, 128px);
 }
 
 .channel-strip__fader {
