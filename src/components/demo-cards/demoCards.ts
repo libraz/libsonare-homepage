@@ -9,7 +9,8 @@ export type DemoVisual =
   | 'room'
   | 'keys'
   | 'steps'
-  | 'fall';
+  | 'fall'
+  | 'parts';
 
 export interface DemoEntry {
   id: ListedDemoId;
@@ -99,6 +100,13 @@ const CARD_META: Record<
     eyebrow: 'PLAY · LEARN',
     chips: ['SYNTH + SF2', 'RHYTHM GAME', 'WEB MIDI', 'FALLING NOTES'],
   },
+  'gs-module': {
+    visual: 'parts',
+    accent: false,
+    status: 'NEW',
+    eyebrow: 'GM · GS',
+    chips: ['16 PARTS', 'SYSEX', 'INSERT FX', 'DROP A .MID'],
+  },
 };
 
 export const demoCardsCopy = {
@@ -144,6 +152,11 @@ export const demoCardsCopy = {
         tagline:
           "libsonare's built-in synth and SoundFont engines render single-track MIDI on-device — practice with falling notes, a lit keyboard, and MIDI scoring.",
       },
+      'gs-module': {
+        title: 'GS Sound Module',
+        tagline:
+          'Sixteen parts, a sound each, one insertion effect — and your own .mid played through it, with every SysEx byte shown.',
+      },
     },
   },
   ja: {
@@ -187,6 +200,11 @@ export const demoCardsCopy = {
         title: 'ピアノ練習',
         tagline:
           '1 トラック MIDI を libsonare 内蔵の合成音源／SoundFont 音源で端末内レンダリング。落下ノート、光る鍵盤、MIDI 採点で練習できます。',
+      },
+      'gs-module': {
+        title: 'GS 音源モジュール',
+        tagline:
+          '16 パートにそれぞれ音色を割り当て、インサーションエフェクトを通し、手持ちの .mid を鳴らす。送っている SysEx も全部見えます。',
       },
     },
   },

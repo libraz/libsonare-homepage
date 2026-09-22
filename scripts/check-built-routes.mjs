@@ -77,6 +77,7 @@ function requiredDemoRoutes(locales, defaultLocale) {
     'synth',
     'studio',
     'practice',
+    'gs-module',
   ]
     .flatMap((route) => localizedBuiltFiles(route, locales, defaultLocale))
     .sort();

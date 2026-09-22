@@ -52,6 +52,7 @@ const copy = computed(() =>
         synth: 'Synth',
         studio: 'Studio',
         practice: 'Piano Practice',
+        'gs-module': 'GS Module',
       },
     },
     ja: {
@@ -72,6 +73,7 @@ const copy = computed(() =>
         synth: 'シンセ',
         studio: 'スタジオ',
         practice: 'ピアノ練習',
+        'gs-module': 'GS 音源',
       },
     },
   }),

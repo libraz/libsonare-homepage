@@ -414,6 +414,30 @@ html:not(.dark) .demo-grid__key-black {
   animation-delay: var(--d);
 }
 
+/* Sixteen part faders. The fill grows from the bottom once, so the card reads
+   as a panel settling into a setting rather than a meter bouncing. */
+.demo-grid__part-track {
+  fill: var(--demo-screen-bg-alpha, rgba(255, 255, 255, 0.08));
+}
+.demo-grid__part-fill {
+  fill: var(--demo-accent, #8b5cf6);
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: demo-grid-part-set 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: var(--d);
+}
+
+@keyframes demo-grid-part-set {
+  from {
+    transform: scaleY(0.12);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
 /* Falling notes */
 .demo-grid__fall-note {
   fill: var(--demo-accent-light, #a78bfa);
@@ -564,8 +588,13 @@ html:not(.dark) .demo-grid__visual {
   .demo-grid__step--on,
   .demo-grid__fall-note,
   .demo-grid__fall-key--lit,
+  .demo-grid__part-fill,
   .demo-grid__status-dot {
     animation: none;
+  }
+  .demo-grid__part-fill {
+    opacity: 1;
+    transform: none;
   }
   .demo-grid__card {
     opacity: 1;

@@ -16,6 +16,7 @@ here directly from their header.
 | [`synth/`](synth) | `/synth` | `SynthDemo.vue` |
 | [`studio/`](studio) | `/studio` | `StudioDemo.vue` |
 | [`practice/`](practice) | `/practice` | `PianoPracticeDemo.vue` |
+| [`gs-module/`](gs-module) | `/gs-module` | `GsModuleDemo.vue` |
 | [`inline/`](inline) | `<SonareDemo>` widgets in the docs | `SonareDemo.vue` |
 
 `manifest.ts` is the one table binding an id to its route and its directory.

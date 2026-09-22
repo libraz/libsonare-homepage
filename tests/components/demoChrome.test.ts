@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import DemoDisclaimer from '@/components/DemoDisclaimer.vue';
 import DemoCardGrid from '@/components/demo-cards/DemoCardGrid.vue';
+import { LISTED_DEMOS } from '@/demos/manifest';
 
 const lang = ref('en');
 
@@ -66,7 +67,7 @@ describe('DemoCardGrid', () => {
     await wrapper.find('.demo-grid').trigger('scroll');
 
     const cards = wrapper.findAll('.demo-grid__card');
-    expect(cards).toHaveLength(9);
+    expect(cards).toHaveLength(LISTED_DEMOS.length);
     expect(cards.map((card) => card.attributes('href'))).toEqual([
       '/analyzer',
       '/mastering',
@@ -77,6 +78,7 @@ describe('DemoCardGrid', () => {
       '/synth',
       '/studio',
       '/practice',
+      '/gs-module',
     ]);
     expect(wrapper.text()).toContain('Visual Player');
     expect(wrapper.text()).toContain('Mastering Studio');
@@ -84,6 +86,7 @@ describe('DemoCardGrid', () => {
     expect(wrapper.text()).toContain('Synth Playground');
     expect(wrapper.text()).toContain('Studio Mini');
     expect(wrapper.text()).toContain('Piano Practice');
+    expect(wrapper.text()).toContain('GS Sound Module');
     expect(wrapper.find('.demo-grid__visual--spectrum').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--lufs').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--chroma').exists()).toBe(true);
@@ -93,6 +96,7 @@ describe('DemoCardGrid', () => {
     expect(wrapper.find('.demo-grid__visual--keys').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--steps').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--fall').exists()).toBe(true);
+    expect(wrapper.find('.demo-grid__visual--parts').exists()).toBe(true);
     expect(wrapper.find('.demo-carousel__nav--next').classes()).not.toContain(
       'demo-carousel__nav--hidden',
     );
@@ -120,11 +124,13 @@ describe('DemoCardGrid', () => {
       '/ja/synth',
       '/ja/studio',
       '/ja/practice',
+      '/ja/gs-module',
     ]);
     expect(wrapper.text()).toContain('ビジュアルプレイヤー');
     expect(wrapper.text()).toContain('マスタリングスタジオ');
     expect(wrapper.text()).toContain('シンセプレイグラウンド');
     expect(wrapper.text()).toContain('ピアノ練習');
+    expect(wrapper.text()).toContain('GS 音源モジュール');
     expect(wrapper.find('.demo-carousel__nav--prev').attributes('aria-label')).toBe(
       '前のデモを表示',
     );

@@ -9,6 +9,8 @@ const spectrumBars = [34, 52, 28, 60, 44, 70, 38, 56, 30, 64, 42, 50];
 const faderLevels = [62, 38, 78, 46, 70, 30, 54, 42];
 const chromaCells = [20, 70, 35, 90, 50, 25, 80, 45, 60, 30, 75, 40];
 const stepCellsOn = [0, 3, 5, 9, 14, 16, 18, 20, 22];
+/** Sixteen part faders, each at its own setting — a module's front panel at rest. */
+const partLevels = [44, 30, 52, 26, 38, 48, 22, 34, 56, 18, 42, 28, 50, 36, 24, 46];
 const fallingNotes = [
   { x: 14, y: -8, h: 16 },
   { x: 60, y: 6, h: 12 },
@@ -116,6 +118,30 @@ const fallingNotes = [
           :class="{ 'demo-grid__step--on': stepCellsOn.includes(i - 1) }"
           :style="{ '--d': `${((i - 1) % 8) * 110}ms` }"
         />
+      </g>
+    </svg>
+
+    <svg v-else-if="visual === 'parts'" viewBox="0 0 220 60" preserveAspectRatio="none">
+      <g class="demo-grid__parts">
+        <g v-for="(level, i) in partLevels" :key="i">
+          <rect
+            :x="i * 13.75 + 3"
+            y="6"
+            width="7.75"
+            height="48"
+            rx="1.5"
+            class="demo-grid__part-track"
+          />
+          <rect
+            :x="i * 13.75 + 3"
+            :y="54 - level"
+            width="7.75"
+            :height="level"
+            rx="1.5"
+            class="demo-grid__part-fill"
+            :style="{ '--d': `${i * 70}ms` }"
+          />
+        </g>
       </g>
     </svg>
 
