@@ -19,3 +19,9 @@ fixed number, so a large room is not heard with its decay cut short. An
 auditioned impulse gets the whole decay — it *is* the decay. A morph's tail is
 capped shorter and runs over an excerpt of the loaded content, because
 convolution costs the product of the two lengths and the wait is the visitor's.
+
+What the demo rendered can be saved: the auditioned impulse as a mono WAV (a
+convolution IR), a morph as a stereo one, and the estimate as JSON. An untouched
+upload is not offered back — handing a visitor their own file is not an export.
+The JSON reports the source *distance* and no coordinates, because one channel
+resolves how far the source is and not which way.

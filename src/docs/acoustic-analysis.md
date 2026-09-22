@@ -33,7 +33,7 @@ For fuller explanations of every metric below, see the [Room Acoustics glossary]
 :::
 
 ::: tip Try it in the browser
-The [Spatial Room Scanner](/spatial) demo runs this whole pipeline locally: drop a recording (or pick a sample room) and it reconstructs the estimated geometry, RT60, clarity, and source distance as an interactive 3D scene.
+The [Spatial Room Scanner](/spatial) demo runs this whole pipeline locally: drop a recording (or pick a sample room) and it reconstructs the estimated geometry, RT60, clarity, and source distance as an interactive 3D scene. The reconstructed room can be saved as a convolution impulse response, and its numbers as a JSON estimate.
 :::
 
 ## What You Will Learn

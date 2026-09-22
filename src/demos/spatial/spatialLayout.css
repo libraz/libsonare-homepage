@@ -148,6 +148,65 @@
   transition: width 0.2s ease;
 }
 
+/* Saving sits under the action that produced the file, quieter than it so the
+   morph still reads as the primary move. Equal halves keep the row from
+   shifting when the audio label switches between the impulse and the morph. */
+.sp-exports {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sp-export {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 7px 9px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.sp-export svg {
+  flex: none;
+}
+
+/* A long label ellipses rather than widening its half of the row. */
+.sp-export span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-export:hover:not(:disabled) {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent);
+}
+
+.sp-export:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+.sp-export:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .sp-hint {
   margin: 9px 0 0;
   color: var(--demo-text-muted);

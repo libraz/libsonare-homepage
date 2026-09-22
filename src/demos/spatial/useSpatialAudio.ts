@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import type { RoomGeometry } from '@/demos/spatial/spatial.worker';
-import { decodeAudioBuffer } from '@/utils/audio';
+import { decodeAudioBuffer, wavBlob } from '@/utils/audio';
 
 type MorphGeometry = Partial<RoomGeometry> & {
   lengthM: number;
@@ -11,6 +11,9 @@ type MorphGeometry = Partial<RoomGeometry> & {
 
 /** How much of the loaded content is sent through the target room. */
 const MORPH_EXCERPT_SECONDS = 15;
+
+/** What the demo itself made of the loaded content, if anything. */
+export type RenderedKind = 'impulse' | 'morph';
 
 type MorphWorkerMessage =
   | { type: 'progress'; id: number; stage: string; value: number }
@@ -41,6 +44,7 @@ export function useSpatialAudio() {
   const isMorphing = ref(false);
   const morphProgress = ref(0);
   const contentLabel = ref('');
+  const renderedKind = ref<RenderedKind | null>(null);
 
   let ctx: AudioContext | null = null;
   let analyser: AnalyserNode | null = null;
@@ -103,6 +107,7 @@ export function useSpatialAudio() {
     duration.value = buf.duration;
     hasContent.value = true;
     contentLabel.value = file.name;
+    renderedKind.value = null;
     return buf;
   }
 
@@ -127,6 +132,7 @@ export function useSpatialAudio() {
     duration.value = buf.duration;
     hasContent.value = true;
     contentLabel.value = '';
+    renderedKind.value = 'impulse';
   }
 
   async function renderRoomMorph(
@@ -158,6 +164,7 @@ export function useSpatialAudio() {
       duration.value = contentBuffer.duration;
       hasContent.value = true;
       contentLabel.value = options.label;
+      renderedKind.value = 'morph';
     } finally {
       if (generation === contentGeneration) {
         isMorphing.value = false;
@@ -177,6 +184,22 @@ export function useSpatialAudio() {
     level.value = 0;
     hasContent.value = false;
     contentLabel.value = '';
+    renderedKind.value = null;
+  }
+
+  /**
+   * The rendered content as a WAV file, at the channel count it was made with:
+   * an auditioned impulse stays mono, a morph stays stereo. Null while nothing
+   * has been rendered — an untouched upload is the visitor's own file, and
+   * handing it back is not an export.
+   */
+  function renderedWav(): Blob | null {
+    const buffer = contentBuffer;
+    if (!buffer || !renderedKind.value) return null;
+    const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) =>
+      buffer.getChannelData(index),
+    );
+    return wavBlob(channels, buffer.sampleRate);
   }
 
   function disconnectSource(): void {
@@ -372,6 +395,8 @@ export function useSpatialAudio() {
     isMorphing,
     morphProgress,
     contentLabel,
+    renderedKind,
+    renderedWav,
     getContext,
     setUpload,
     setRoomImpulse,

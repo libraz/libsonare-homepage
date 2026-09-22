@@ -99,6 +99,9 @@ export const enCopy = {
     morph: 'Morph demo through room',
     morphUpload: 'Morph upload through room',
     morphing: 'Morphing...',
+    saveImpulse: 'Impulse .wav',
+    saveMorph: 'Morph .wav',
+    saveReport: 'Estimate .json',
   },
   rooms: {
     bedroom: {
@@ -180,6 +183,8 @@ export const enCopy = {
       'No clear room or decay was found in this recording. Room estimation needs audible reverberation — pick a sample room, or upload an impulse response (a clap, balloon pop, or sweep).',
     morph:
       'Room morph renders the playable audio through the estimated shoebox model. It is a creative audition of the room, not a corrective dereverb pass.',
+    exports:
+      'The saved impulse response is a convolution IR — load it into any reverb to play anything at all through this room.',
   },
   errors: {
     decode: 'Could not decode this audio file. Try WAV, FLAC, MP3, or OGG.',
@@ -194,13 +199,13 @@ export const enCopy = {
     items: {
       dimensions: {
         title: 'Dimensions',
-        body: 'The estimated length × width × height of an equivalent shoebox room, in meters. It reproduces the measured decay, not the literal floor plan.',
-        tip: 'On preset rooms, compare against the ground truth to see how close the blind estimate lands.',
+        body: "The estimated length × width × height of an equivalent shoebox room, in meters. One decay fixes the room's scale and nothing about its shape, so with no proportion hints the three come back equal — a cube of about the right size, not the right outline.",
+        tip: 'On preset rooms, compare the volume against the ground truth. The proportions are an assumption, not a reading.',
       },
       volume: {
         title: 'Volume',
-        body: 'Enclosed volume of the estimated room in cubic meters, derived from the dimensions. Larger volumes decay more slowly.',
-        tip: 'Big volume plus low absorption is what gives halls their long tails.',
+        body: 'Enclosed volume of the estimated room in cubic meters, derived from the dimensions. A single decay pins down only volume × absorption together, so the volume rests on an assumed mean absorption of 0.15.',
+        tip: 'It moves with the cube of that assumption: an unusually damped room reads far too small, an unusually live one too large.',
       },
       sourceDistance: {
         title: 'Source distance',
@@ -250,7 +255,7 @@ export const enCopy = {
       confidence: {
         title: 'Confidence',
         body: 'How reliable the estimate is, from the quality of the decay region found. Clean impulse responses score high; noisy or reverb-light material scores low.',
-        tip: 'Below about 35% the estimate is rough — try an impulse-response recording (clap, pop, sweep).',
+        tip: 'Below about 35% the estimate is rough — try an impulse-response recording (clap, pop, sweep). It grades the decay it found, not how close the geometry landed.',
       },
       band: {
         title: 'Per-band decay',
@@ -296,6 +301,9 @@ export const jaCopy: typeof enCopy = {
     morph: 'デモ音源をこの部屋に通す',
     morphUpload: 'アップロード音源をこの部屋に通す',
     morphing: 'モーフ中...',
+    saveImpulse: 'インパルス .wav',
+    saveMorph: 'モーフ .wav',
+    saveReport: '推定値 .json',
   },
   rooms: {
     bedroom: { label: '寝室', hint: '小さく吸音の効いた部屋。残響が短く直接音が明瞭。' },
@@ -374,6 +382,8 @@ export const jaCopy: typeof enCopy = {
       'この録音からは明確な部屋の響きや減衰を検出できませんでした。ルーム推定には聞き取れる残響が必要です。サンプルルームを選ぶか、インパルス応答（拍手・風船の破裂音・スイープ）をアップロードしてください。',
     morph:
       'ルームモーフは、再生対象の音声を推定されたシューボックスモデルの部屋に通してレンダーします。補正用のデリバーブではなく、部屋の響きを試聴するためのクリエイティブ処理です。',
+    exports:
+      '保存したインパルス応答はコンボリューション IR です。任意のリバーブに読み込めば、どんな音源でもこの部屋に通せます。',
   },
   errors: {
     decode: 'この音声ファイルをデコードできませんでした。WAV・FLAC・MP3・OGG をお試しください。',
@@ -388,13 +398,13 @@ export const jaCopy: typeof enCopy = {
     items: {
       dimensions: {
         title: '寸法',
-        body: '測定された減衰を再現する等価なシューボックス型の部屋の、奥行き × 幅 × 高さ（メートル）です。実際の間取りそのものではありません。',
-        tip: 'プリセットの部屋では正解値と比べて、ブラインド推定の精度を確認できます。',
+        body: '測定された減衰を再現する等価なシューボックス型の部屋の、奥行き × 幅 × 高さ（メートル）です。1 本の減衰から決まるのは部屋のスケールだけで形状は決まらないため、比率のヒントがなければ 3 辺は同じ値、つまり「大きさはおおむね合っているが形は合っていない」立方体として返ります。',
+        tip: 'プリセットの部屋では容積を正解値と比べてください。3 辺の比率は推定結果ではなく仮定です。',
       },
       volume: {
         title: '容積',
-        body: '寸法から求めた推定室の容積（立方メートル）です。容積が大きいほど減衰はゆっくりになります。',
-        tip: '大きな容積と低い吸音率の組み合わせが、ホール特有の長い残響を生みます。',
+        body: '寸法から求めた推定室の容積（立方メートル）です。1 本の減衰から決まるのは容積と吸音率の積だけなので、容積は平均吸音率 0.15 という仮定の上に乗っています。',
+        tip: 'この仮定の 3 乗で効きます。吸音が強すぎる部屋は極端に小さく、響きすぎる部屋は大きく出ます。',
       },
       sourceDistance: {
         title: '音源までの距離',
@@ -444,7 +454,7 @@ export const jaCopy: typeof enCopy = {
       confidence: {
         title: '信頼度',
         body: '見つかった減衰領域の質から求めた推定の信頼度です。クリーンなインパルス応答は高く、ノイズが多い・残響の乏しい素材は低くなります。',
-        tip: '約 35% を下回ると推定は粗くなります。インパルス応答の録音（拍手・破裂音・スイープ）をお試しください。',
+        tip: '約 35% を下回ると推定は粗くなります。インパルス応答の録音（拍手・破裂音・スイープ）をお試しください。これは見つかった減衰の質を表すもので、形状がどれだけ当たっているかを表すものではありません。',
       },
       band: {
         title: '帯域別の減衰',

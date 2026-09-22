@@ -22,8 +22,10 @@ import {
   SPATIAL_TERM_SLUGS,
   type SpatialTermKey,
 } from '@/demos/spatial/spatialCopy';
+import { exportStem, scanReport } from '@/demos/spatial/spatialExport';
 import { useSpatialAudio } from '@/demos/spatial/useSpatialAudio';
 import { useSpatialScanner } from '@/demos/spatial/useSpatialScanner';
+import { downloadBlob, jsonBlob } from '@/utils/audio';
 
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const { isDark } = useTheme();
@@ -77,6 +79,8 @@ const statusLabel = computed(() => copy.value.status[status.value]);
 const busy = computed(() => status.value === 'scanning' || status.value === 'decoding');
 const hasUploadedSource = computed(() => !!fileName.value);
 const canMorph = computed(() => !!sceneResult.value && !busy.value && !audio.isMorphing.value);
+const canSaveAudio = computed(() => !!audio.renderedKind.value && !audio.isMorphing.value);
+const canSaveReport = computed(() => !!sceneResult.value && !busy.value);
 
 const rooms = computed(() =>
   PRESET_ORDER.map((id) => ({
@@ -183,6 +187,27 @@ function fmtPct(v: number | null) {
   return `${Math.round(v * 100)}%`;
 }
 
+const reportContext = computed(() => ({
+  preset: activePreset.value,
+  fileName: fileName.value,
+  engineVersion: libVersion.value,
+}));
+
+function onSaveAudio() {
+  const blob = audio.renderedWav();
+  if (!blob) return;
+  const suffix = audio.renderedKind.value === 'morph' ? 'room-morph' : 'impulse';
+  downloadBlob(blob, `libsonare-${exportStem(reportContext.value)}-${suffix}.wav`);
+}
+
+function onSaveReport() {
+  if (!sceneResult.value) return;
+  downloadBlob(
+    jsonBlob(scanReport(sceneResult.value, reportContext.value)),
+    `libsonare-${exportStem(reportContext.value)}-room-estimate.json`,
+  );
+}
+
 function morphGeometry() {
   if (!sceneResult.value) return null;
   if (activePreset.value) return PRESET_GEOMETRY[activePreset.value];
@@ -277,7 +302,32 @@ function morphGeometry() {
             <span>{{ audio.isMorphing.value ? copy.actions.morphing : hasUploadedSource ? copy.actions.morphUpload : copy.actions.morph }}</span>
             <i :style="{ width: `${Math.round(audio.morphProgress.value * 100)}%` }" aria-hidden="true"></i>
           </button>
+          <div class="sp-exports">
+            <button
+              type="button"
+              class="sp-export"
+              :disabled="!canSaveAudio"
+              @click="onSaveAudio"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />
+              </svg>
+              <span>{{ audio.renderedKind.value === 'morph' ? copy.actions.saveMorph : copy.actions.saveImpulse }}</span>
+            </button>
+            <button
+              type="button"
+              class="sp-export"
+              :disabled="!canSaveReport"
+              @click="onSaveReport"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />
+              </svg>
+              <span>{{ copy.actions.saveReport }}</span>
+            </button>
+          </div>
           <p v-if="sceneResult" class="sp-hint">{{ copy.notes.morph }}</p>
+          <p v-if="audio.renderedKind.value === 'impulse'" class="sp-hint">{{ copy.notes.exports }}</p>
           <p v-if="localError" class="sp-error">{{ localError }}</p>
         </TechPanel>
 
