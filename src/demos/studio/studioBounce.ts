@@ -1,5 +1,6 @@
 import { BAR_PPQ, STEP_COUNT, STUDIO_TRACKS, type StudioPattern } from '@/demos/studio/studioCopy';
 import { masterLimiterStripJson } from '@/utils/masterLimiter';
+import { noteOffWord, noteOnWord } from '@/utils/ump';
 
 type WasmModule = typeof import('@/wasm/index.js');
 
@@ -15,14 +16,6 @@ export interface StudioMixSettings {
   gains: number[];
   mutes: boolean[];
   masterGain: number;
-}
-
-/** UMP MIDI 1.0 channel-voice words (group 0). */
-function noteOnWord(note: number, velocity: number): number {
-  return ((0x2 << 28) | (0x9 << 20) | ((note & 0x7f) << 8) | (velocity & 0x7f)) >>> 0;
-}
-function noteOffWord(note: number): number {
-  return ((0x2 << 28) | (0x8 << 20) | ((note & 0x7f) << 8)) >>> 0;
 }
 
 /** Linear fader value (0..~1.4) to dB for an engine strip fader. */

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ScopeDisplay from '@/demos/synth/ScopeDisplay.vue';
+import ScopeDisplay from '@/components/ui/ScopeDisplay.vue';
 
 defineProps<{
   model: string;
