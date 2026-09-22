@@ -335,7 +335,8 @@ export function shouldCheck(href) {
 }
 
 export function resolveTargetPath(root, sourcePath, href) {
-  const [rawPath] = href.split('#');
+  // A query string is page state (a demo's preset, say), not part of the page's path.
+  const [rawPath] = href.split('#')[0].split('?');
   if (!rawPath) return sourcePath;
 
   const base = rawPath.startsWith('/')

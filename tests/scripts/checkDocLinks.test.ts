@@ -154,6 +154,8 @@ describe('check-doc-links script helpers', () => {
         '[French](/fr/docs/guide#details)',
         '[External](https://example.test/ignored)',
         '[Mail](mailto:team@example.test)',
+        '[With state](/docs/guide?preset=cello)',
+        '[State and anchor](/docs/guide?preset=cello#details)',
       ].join('\n'),
     );
     writeFile(root, 'src/docs/guide.md', ['# Guide', '## Details'].join('\n'));
