@@ -6,7 +6,21 @@
  * by `id` via `<SonareDemo id="..." />`.
  */
 
+import { RHYTHM_SET_KINDS } from '@/utils/modelNames';
 import type { SonareDemoDef } from '../types';
+
+/**
+ * A rhythm set the standard names after a drum machine, offered by the kind of
+ * machine it voices. The kinds come from the same table the sound module's kit
+ * browser substitutes with, so the two demos call the same set the same thing.
+ */
+function machineKit(program: number) {
+  const kind = RHYTHM_SET_KINDS[program];
+  return {
+    value: String(program),
+    label: { en: `${program} ${kind.en}`, ja: `${program} ${kind.ja}` },
+  };
+}
 
 export const instrumentsDemos: SonareDemoDef[] = [
   {
@@ -485,8 +499,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'GS ドラムキット — 同じグルーヴを 8 つのセットで',
     },
     caption: {
-      en: "The same one-bar rock beat on the rhythm part (MIDI channel 10), with the kit chosen by that part's Program Change — exactly how a GS file switches drum sets. No SoundFont is loaded, so each kit is the built-in fallback's own re-voicing of the standard pieces: Power drops and lengthens the shells, TR-808 and TR-909 swap them for decaying sines with a click on top, Jazz tightens and lifts them, Orchestra rings like concert bass drum and timpani, Asia turns them into gongs and taiko. Sets the fallback leaves unvoiced (the one-shot SFX and Rhythm FX banks) sound identical to Standard and are left out here. Each render is level-matched; press play to compare.",
-      ja: 'リズムパート（MIDI チャンネル 10）で同じ 1 小節のロックビートを鳴らし、そのパートのプログラムチェンジでキットを選びます。GS ファイルがドラムセットを切り替えるのと同じ手順です。SoundFont は読み込まないので、各キットは内蔵フォールバックが標準セットの各パーツを鳴らし分けたものです。Power は胴を低く長く、TR-808 と TR-909 はクリックの乗った減衰する正弦波に、Jazz は締まって高めに、Orchestra はコンサートバスドラムとティンパニのように響き、Asia はゴングと太鼓になります。フォールバックが鳴らし分けていないセット（ワンショットの SFX や Rhythm FX バンク）は Standard とまったく同じ音になるため、ここには含めていません。各レンダーは音量を揃えてあります。再生して聴き比べてください。',
+      en: "The same one-bar rock beat on the rhythm part (MIDI channel 10), with the kit chosen by that part's Program Change — exactly how a GS file switches drum sets. No SoundFont is loaded, so each kit is the built-in fallback's own re-voicing of the standard pieces: Power drops and lengthens the shells, Analog Machine and Hybrid Machine swap them for decaying sines with a click on top, Jazz tightens and lifts them, Orchestra rings like concert bass drum and timpani, Asia turns them into gongs and taiko. Sets the fallback leaves unvoiced (the one-shot SFX and Rhythm FX banks) sound identical to Standard and are left out here. Each render is level-matched; press play to compare.",
+      ja: 'リズムパート（MIDI チャンネル 10）で同じ 1 小節のロックビートを鳴らし、そのパートのプログラムチェンジでキットを選びます。GS ファイルがドラムセットを切り替えるのと同じ手順です。SoundFont は読み込まないので、各キットは内蔵フォールバックが標準セットの各パーツを鳴らし分けたものです。Power は胴を低く長く、アナログマシンとハイブリッドマシンはクリックの乗った減衰する正弦波に、Jazz は締まって高めに、Orchestra はコンサートバスドラムとティンパニのように響き、Asia はゴングと太鼓になります。フォールバックが鳴らし分けていないセット（ワンショットの SFX や Rhythm FX バンク）は Standard とまったく同じ音になるため、ここには含めていません。各レンダーは音量を揃えてあります。再生して聴き比べてください。',
     },
     params: [
       {
@@ -498,8 +512,8 @@ export const instrumentsDemos: SonareDemoDef[] = [
           { value: '0', label: { en: '0 Standard', ja: '0 スタンダード' } },
           { value: '16', label: { en: '16 Power', ja: '16 パワー' } },
           { value: '24', label: { en: '24 Electronic', ja: '24 エレクトロニック' } },
-          { value: '25', label: { en: '25 TR-808', ja: '25 TR-808' } },
-          { value: '30', label: { en: '30 TR-909', ja: '30 TR-909' } },
+          machineKit(25),
+          machineKit(30),
           { value: '32', label: { en: '32 Jazz', ja: '32 ジャズ' } },
           { value: '48', label: { en: '48 Orchestra', ja: '48 オーケストラ' } },
           { value: '52', label: { en: '52 Asia', ja: '52 アジア' } },

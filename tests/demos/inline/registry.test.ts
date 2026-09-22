@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { implementedDemoArchetypes } from '@/demos/inline/archetypes';
 import { allDemos, demoIds, getDemo } from '@/demos/inline/registry';
 import type { DemoSource, I18nText, ParamDef, SonareDemoDef, VizKind } from '@/demos/inline/types';
+import { MODEL_DESIGNATION } from '@/utils/modelNames';
 
 const ARCHETYPES = new Set([
   'transform',
@@ -208,5 +209,29 @@ describe('demo registry', () => {
     expectWellFormedConfig(def);
 
     expect(getDemo(def.id)).toBe(def);
+  });
+});
+
+describe('what the registry puts on a page', () => {
+  /**
+   * Every string a reader sees, in both locales. Units are in: they sit beside
+   * a value on screen like any other label.
+   */
+  function visibleStrings(def: SonareDemoDef): string[] {
+    const out: string[] = [def.title.en, def.title.ja];
+    if (def.caption) out.push(def.caption.en, def.caption.ja);
+    for (const param of def.params ?? []) {
+      out.push(param.label.en, param.label.ja);
+      if (typeof param.unit === 'string') out.push(param.unit);
+      else if (param.unit) out.push(param.unit.en, param.unit.ja);
+      for (const opt of param.options ?? []) out.push(opt.label.en, opt.label.ja);
+    }
+    return out;
+  }
+
+  it.each(allDemos)('def "$id" names no hardware model', (def: SonareDemoDef) => {
+    for (const text of visibleStrings(def)) {
+      expect(text, `${def.id}: "${text}"`).not.toMatch(MODEL_DESIGNATION);
+    }
   });
 });

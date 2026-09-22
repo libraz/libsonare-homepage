@@ -15,7 +15,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { bootWasm, type SonareWasmModule } from '@/composables/useWasmBoot';
 import { buildSmf, noteEvents, type SmfEvent } from '@/utils/gsSysex';
-import { GM_FAMILY_SIZE, GM_PROGRAM_COUNT, gmFamilyOf, rhythmSetLabel } from './gsNames';
+import { rhythmSetLabel } from '@/utils/modelNames';
+import { GM_FAMILY_SIZE, GM_PROGRAM_COUNT, gmFamilyOf } from './gsNames';
 import {
   defaultModuleState,
   type GsModuleState,

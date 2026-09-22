@@ -9,7 +9,6 @@ import {
   GS_EFX_TYPES,
   GS_EFX_TYPES_UNNAMED,
   gmFamilyOf,
-  rhythmSetLabel,
 } from '@/demos/gs-module/gsNames';
 import {
   drumKitsOf,
@@ -17,20 +16,12 @@ import {
   gmProgramsOf,
   variationsOf,
 } from '@/demos/gs-module/useGsModule';
+import { MODEL_DESIGNATION, rhythmSetLabel } from '@/utils/modelNames';
 import * as wasm from '@/wasm/index.js';
 
 const EFX_TYPE_KEYS = Object.keys(
   (efxTables as { defaults: { by_type: Record<string, unknown> } }).defaults.by_type,
 );
-
-/**
- * A model designation — a short letter cluster bound to a number — names the
- * hardware these conventions came from, and no label here may carry one. The
- * check is structural rather than a list of names, since the list would spell
- * out exactly what it excludes.
- */
-const MODEL_DESIGNATION =
-  /\b[A-Za-z]{2,5}-\d{2,5}[A-Za-z]{0,3}\b|\b[A-Za-z]{2,5}\d{3,5}[A-Za-z]{0,3}\b/;
 
 describe('GS_EFX_TYPES', () => {
   it('names every key the data file declares, and no others', () => {

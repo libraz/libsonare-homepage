@@ -68,5 +68,7 @@ machine instead — and the program number, which is what a file actually
 selects, is displayed unchanged beside it. The guard is a structural pattern
 rather than a list of names: a set added upstream whose name matches and whose
 kind is unknown falls back to its slot number, so nothing can slip through by
-being new. The generated data under `data/` is guarded the same way, at
-generation time, by `scripts/generate-gs-data.mjs`.
+being new. It lives in `src/utils/modelNames.ts` because the inline kit
+audition offers the same sets as static copy and has to call them the same
+thing. The generated data under `data/` is guarded the same way, at generation
+time, by `scripts/generate-gs-data.mjs`.

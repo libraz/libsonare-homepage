@@ -221,7 +221,8 @@ function renderGmProgram(wasm: WasmModule, program: number): Float32Array {
 /**
  * gs-variation mode: the gm-program note, with the variation selected by Bank
  * Select MSB ahead of the capital tone's program. The LSB stays 0 — in GS it
- * picks the tone map (SC-55 / SC-88 / SC-88Pro), never the variation.
+ * picks the tone map (1 to 4, successive generations of the set), never the
+ * variation.
  */
 function renderGsVariation(wasm: WasmModule, bankMsb: number, capital: number): Float32Array {
   return bounceProject(
