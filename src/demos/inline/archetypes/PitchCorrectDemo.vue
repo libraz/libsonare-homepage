@@ -15,7 +15,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -240,7 +240,7 @@ function meanCentsOffScale(contour: Contour, degrees: number[]): number {
   return n > 0 ? sum / n : 0;
 }
 
-let disposed = false;
+const disposed = useDisposed();
 
 /** Bounce + analyze the raw take once; cache it across param changes. */
 function ensureRaw(wasm: WasmModule): void {
@@ -256,11 +256,11 @@ function ensureRaw(wasm: WasmModule): void {
 }
 
 async function compute(): Promise<void> {
-  if (disposed) return;
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
-    if (disposed) return;
+    if (disposed()) return;
     ensureRaw(wasm);
     if (!rawAudio || !rawF0 || !voicedInt || !rawContour) return;
 
@@ -284,7 +284,7 @@ async function compute(): Promise<void> {
     status.value = 'ready';
     startReveal();
   } catch (e) {
-    if (disposed) return;
+    if (disposed()) return;
     fail(e);
   }
 }
@@ -536,7 +536,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  disposed = true;
   stopLoop();
   if (pending) cancelAnimationFrame(pending);
 });

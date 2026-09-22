@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { MetricItem, TechPanel, TermLabel, Tooltip, TransportButton } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import {
@@ -58,6 +58,12 @@ const processingErrorMessage = computed(() =>
   localizedValue({
     en: 'The audio decoded, but its visualization data could not be generated. Try a shorter file.',
     ja: '音声はデコードできましたが、可視化データを生成できませんでした。より短いファイルをお試しください。',
+  }),
+);
+const initErrorMessage = computed(() =>
+  localizedValue({
+    en: 'The analysis engine could not be loaded. Reload the page and try again.',
+    ja: '解析エンジンを読み込めませんでした。ページを再読み込みしてからもう一度お試しください。',
   }),
 );
 
@@ -121,11 +127,14 @@ const sampleRate = ref(44100);
 const isLoadingFile = ref(false);
 const fileProgress = ref(0);
 const fileProgressStage = ref('');
-const hasUserFile = ref(false); // Track if user uploaded a file
 
-async function handleFile(file: File) {
-  // Clear the previous source before any asynchronous work so a failed
-  // replacement can never leave the old file behind under the new filename.
+// Every load (the bundled demo or a dropped file) runs under the generation it
+// captured at its start. A newer load or the unmount bumps the counter, and each
+// continuation re-checks it, so a superseded load never writes over the current one.
+let loadGeneration = 0;
+
+/** Drop the loaded audio and every derived view of it. */
+function clearLoaded() {
   resetAudio();
   resetStreamAnalyzer();
   setProcessCallback(null);
@@ -134,26 +143,42 @@ async function handleFile(file: File) {
   chromaData.value = null;
   bandData.value = null;
   beats.value = null;
+}
 
-  hasUserFile.value = true; // Mark that user uploaded a file
+/** Supersede any in-flight load and clear the previous source before any
+ * asynchronous work, so a failed replacement can never leave the old file
+ * behind under the new filename. */
+function beginLoad(): number {
+  loadGeneration += 1;
+  clearLoaded();
+  analysisError.value = null;
+  return loadGeneration;
+}
+
+async function handleFile(file: File) {
+  const generation = beginLoad();
   fileName.value = file.name;
   isLoadingFile.value = true;
   fileProgress.value = 0;
   fileProgressStage.value = 'DECODING AUDIO';
-  analysisError.value = null;
-  let failurePhase: 'decode' | 'processing' = 'decode';
+  let failurePhase: 'init' | 'decode' | 'processing' = 'init';
 
   try {
     // Initialize WASM and StreamAnalyzer if needed
     fileProgress.value = 5;
     await initStreamAnalyzer();
+    if (generation !== loadGeneration) return;
+    failurePhase = 'decode';
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 15;
     fileProgressStage.value = 'DECODING AUDIO';
     const buffer = await decodeAudio(file);
+    if (generation !== loadGeneration) return;
     failurePhase = 'processing';
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 35;
     fileProgressStage.value = 'INITIALIZING ANALYZER';
@@ -161,6 +186,7 @@ async function handleFile(file: File) {
     const ctx = getAudioContext();
     sampleRate.value = ctx.sampleRate;
     await reinitStreamAnalyzer(ctx.sampleRate);
+    if (generation !== loadGeneration) return;
 
     // Set expected duration for pattern lock timing
     setExpectedDuration(buffer.duration);
@@ -174,29 +200,35 @@ async function handleFile(file: File) {
       processAudioChunk(samples, sampleOffset);
     });
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 45;
     fileProgressStage.value = 'EXTRACTING SAMPLES';
     // Pre-compute visualization data
     const wasm = await import('@/wasm/index.js');
+    if (generation !== loadGeneration) return;
     const samples =
       buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 55;
     fileProgressStage.value = 'COMPUTING RMS';
     const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024);
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 70;
     fileProgressStage.value = 'COMPUTING CHROMA';
     const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 85;
     fileProgressStage.value = 'COMPUTING SPECTROGRAM';
     const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128);
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileProgress.value = 95;
     fileProgressStage.value = 'FINALIZING';
@@ -230,24 +262,21 @@ async function handleFile(file: File) {
     };
 
     fileProgress.value = 100;
-    isLoadingFile.value = false;
   } catch (e) {
+    if (generation !== loadGeneration) return;
     console.error('Failed to process audio:', e);
-    isLoadingFile.value = false;
     // Surface the failure and roll back the upload state so the drop zone
     // reappears with an explanation instead of silently showing a bare zone.
     analysisError.value =
-      failurePhase === 'decode' ? decodeErrorMessage.value : processingErrorMessage.value;
-    hasUserFile.value = false;
+      failurePhase === 'init'
+        ? initErrorMessage.value
+        : failurePhase === 'decode'
+          ? decodeErrorMessage.value
+          : processingErrorMessage.value;
     fileName.value = '';
-    resetAudio();
-    result.value = null;
-    rmsData.value = null;
-    chromaData.value = null;
-    bandData.value = null;
-    beats.value = null;
-    resetStreamAnalyzer();
-    setProcessCallback(null);
+    clearLoaded();
+  } finally {
+    if (generation === loadGeneration) isLoadingFile.value = false;
   }
 }
 
@@ -271,16 +300,9 @@ function handleSeek(time: number) {
 }
 
 function resetFile() {
-  resetAudio();
-  result.value = null;
-  hasUserFile.value = false;
+  loadGeneration += 1;
+  clearLoaded();
   fileName.value = '';
-  rmsData.value = null;
-  chromaData.value = null;
-  bandData.value = null;
-  beats.value = null;
-  resetStreamAnalyzer();
-  setProcessCallback(null);
 }
 
 // Use streaming estimates when available, fallback to batch analysis
@@ -381,63 +403,42 @@ const displayDetectedPatternScore = computed(() => {
 const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 async function loadDemoFile() {
+  const generation = beginLoad();
   isLoadingDemo.value = true;
 
-  // Wait for loading animation to render
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-  // Abort if user uploaded a file
-  if (hasUserFile.value) {
-    isLoadingDemo.value = false;
-    return;
-  }
-
-  const timings: Record<string, number> = {};
-  let t0 = performance.now();
-
   try {
+    // Wait for loading animation to render
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (generation !== loadGeneration) return;
+
     // Initialize WASM and StreamAnalyzer
-    t0 = performance.now();
     await initStreamAnalyzer();
-    timings['StreamAnalyzer init'] = performance.now() - t0;
-
-    // Abort if user uploaded a file
-    if (hasUserFile.value) {
-      isLoadingDemo.value = false;
-      return;
-    }
-
+    if (generation !== loadGeneration) return;
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
-    t0 = performance.now();
     const response = await fetch('/demo.mp3');
     if (!response.ok) {
       throw new Error('Failed to load demo file');
     }
     const arrayBuffer = await response.arrayBuffer();
-    timings['Fetch MP3'] = performance.now() - t0;
-
-    // Abort if user uploaded a file
-    if (hasUserFile.value) {
-      isLoadingDemo.value = false;
-      return;
-    }
-
+    if (generation !== loadGeneration) return;
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     fileName.value = 'demo.mp3';
 
-    t0 = performance.now();
     const buffer = await decodeAudioFromArrayBuffer(arrayBuffer.slice(0));
-    timings['Decode audio'] = performance.now() - t0;
-
+    if (generation !== loadGeneration) return;
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
     // Reinitialize stream analyzer with AudioContext sample rate
     // (AnalyserNode outputs at AudioContext rate, not buffer rate)
     const ctx = getAudioContext();
     sampleRate.value = ctx.sampleRate;
     await reinitStreamAnalyzer(ctx.sampleRate);
+    if (generation !== loadGeneration) return;
 
     // Set expected duration for pattern lock timing
     setExpectedDuration(buffer.duration);
@@ -453,41 +454,26 @@ async function loadDemoFile() {
 
     // Pre-compute initial visualization data for immediate display
     // (streaming will update this in real-time during playback)
-    t0 = performance.now();
     const wasm = await import('@/wasm/index.js');
+    if (generation !== loadGeneration) return;
     const samples =
       buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
-    timings['Mix to mono'] = performance.now() - t0;
-
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
-    t0 = performance.now();
     const rms = wasm.rmsEnergy(samples, buffer.sampleRate, 2048, 1024);
-    timings['rmsEnergy'] = performance.now() - t0;
-
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
-    t0 = performance.now();
     const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
-    timings['chroma'] = performance.now() - t0;
-
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
-    t0 = performance.now();
     const melResult = wasm.melSpectrogram(samples, buffer.sampleRate, 2048, 1024, 128);
-    timings['melSpectrogram'] = performance.now() - t0;
-
     await yieldToMain();
+    if (generation !== loadGeneration) return;
 
-    t0 = performance.now();
     const bands = splitMelBands(melResult);
-    timings['band separation'] = performance.now() - t0;
-
-    // Abort if user uploaded a file - don't overwrite their data
-    if (hasUserFile.value) {
-      isLoadingDemo.value = false;
-      return;
-    }
 
     setAudioBuffer(buffer);
     rmsData.value = rms;
@@ -514,10 +500,11 @@ async function loadDemoFile() {
       rhythm: { syncopation: 0, grooveType: '', patternRegularity: 0 },
       form: '',
     };
-
-    isLoadingDemo.value = false;
   } catch (e) {
+    if (generation !== loadGeneration) return;
     console.error('Failed to load demo file:', e);
+  } finally {
+    // Only the demo load owns this flag, so a superseded run clears it too.
     isLoadingDemo.value = false;
   }
 }
@@ -532,6 +519,10 @@ watch(isPlaying, (playing, wasPlaying) => {
 
 onMounted(() => {
   loadDemoFile();
+});
+
+onUnmounted(() => {
+  loadGeneration += 1;
 });
 </script>
 

@@ -17,7 +17,7 @@ import { peakEnvelope } from '@/demos/inline/audio/processors';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -130,15 +130,20 @@ async function ensureClips(): Promise<void> {
   });
 }
 
+const disposed = useDisposed();
+
 async function compute(): Promise<void> {
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     await ensureClips();
+    if (disposed()) return;
     assembled = assemble(segChoices.value);
     peakEnvelope(assembled, compPeaks);
     status.value = 'ready';
     startMorph();
   } catch (e) {
+    if (disposed()) return;
     fail(e);
   }
 }

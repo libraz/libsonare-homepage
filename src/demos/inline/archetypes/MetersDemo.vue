@@ -15,7 +15,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 import {
@@ -96,11 +96,19 @@ function fillContour(series: Float32Array, durationSec: number, windowSec: numbe
   for (let c = 0; c < COLS; c++) targetContour[c] = fill(contour.values[c]);
 }
 
+const disposed = useDisposed();
+
 async function compute(): Promise<void> {
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
-    if (!clip) clip = await loadClip(clipName.value);
+    if (disposed()) return;
+    if (!clip) {
+      const loaded = await loadClip(clipName.value);
+      if (disposed()) return;
+      clip = loaded;
+    }
     const { samples, sampleRate } = clip;
     const summary = wasm.lufs(samples, sampleRate);
     integrated.value = summary.integratedLufs;
@@ -118,6 +126,7 @@ async function compute(): Promise<void> {
     status.value = 'ready';
     startMorph();
   } catch (e) {
+    if (disposed()) return;
     fail(e);
   }
 }

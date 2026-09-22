@@ -1,6 +1,7 @@
+import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { computed, ref } from 'vue';
-import { useDemoChrome, useDemoParams } from '@/demos/inline/composables';
+import { computed, defineComponent, ref } from 'vue';
+import { useDemoChrome, useDemoParams, useDisposed } from '@/demos/inline/composables';
 import type { SonareDemoDef } from '@/demos/inline/types';
 
 const lang = ref('en');
@@ -54,5 +55,21 @@ describe('demo composables', () => {
     expect(chrome.status.value).toBe('error');
     expect(chrome.errorMsg.value).toBe('decode failed');
     expect(chrome.tone.value).toBe('error');
+  });
+
+  it('reports disposal once the owning component starts unmounting', () => {
+    let disposed!: () => boolean;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          disposed = useDisposed();
+          return () => null;
+        },
+      }),
+    );
+
+    expect(disposed()).toBe(false);
+    wrapper.unmount();
+    expect(disposed()).toBe(true);
   });
 });

@@ -13,8 +13,13 @@ interface BounceRequest {
 export function createMixBounceController() {
   let worker: Worker | null = null;
   let requestId = 0;
+  const pendingRejects = new Set<(reason?: unknown) => void>();
 
   function dispose() {
+    // Terminating the worker fires no message or error event, so the in-flight
+    // promise has to be settled here or it never settles at all.
+    for (const reject of pendingRejects) reject(new Error('Mix bounce disposed'));
+    pendingRejects.clear();
     worker?.terminate();
     worker = null;
   }
@@ -30,6 +35,7 @@ export function createMixBounceController() {
     const transfer = request.tracks.flatMap((track) => [track.left.buffer, track.right.buffer]);
 
     return new Promise<MixingBounceResult>((resolve, reject) => {
+      pendingRejects.add(reject);
       const onMessage = (event: MessageEvent<MixingWorkerMessage>) => {
         const message = event.data;
         if (message.id !== id) return;
@@ -41,6 +47,7 @@ export function createMixBounceController() {
 
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingRejects.delete(reject);
 
         if (message.type === 'done') resolve(message.result);
         else reject(new Error(message.error));
@@ -49,6 +56,7 @@ export function createMixBounceController() {
       const onError = (event: ErrorEvent) => {
         worker?.removeEventListener('message', onMessage);
         worker?.removeEventListener('error', onError);
+        pendingRejects.delete(reject);
         reject(event.error || new Error(event.message));
       };
 

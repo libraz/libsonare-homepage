@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type DecodedMasteringAudio, useMastering } from '@/demos/mastering/useMastering';
+import {
+  type DecodedMasteringAudio,
+  isSupersededError,
+  useMastering,
+} from '@/demos/mastering/useMastering';
 import { useMasteringInsights } from '@/demos/mastering/useMasteringInsights';
 
 // The composable itself only meters loudness directly; the analysis entry points
@@ -272,6 +276,29 @@ describe('useMastering failure paths and report parsing', () => {
       sampleRate: 44_100,
       platforms: [{ name: 'Service', targetLufs: -14, ceilingDb: -1 }],
     });
+  });
+
+  it('supersedes a slower reference load with a later one instead of racing it', async () => {
+    const mastering = useMastering();
+    let finishSlow!: (buffer: AudioBuffer) => void;
+    vi.spyOn(MasteringAudioContextMock.prototype, 'decodeAudioData').mockImplementationOnce(
+      () =>
+        new Promise<AudioBuffer>((resolve) => {
+          finishSlow = resolve;
+        }),
+    );
+
+    const slow = mastering.loadReference(new File([new Uint8Array([1])], 'slow.wav'));
+    const fast = mastering.loadReference(new File([new Uint8Array([2])], 'fast.wav'));
+
+    await expect(fast).resolves.toMatchObject({
+      audio: { fileName: 'fast.wav' },
+      integratedLufs: -16.25,
+    });
+
+    finishSlow(audioBuffer([new Float32Array([0.1, -0.1])]));
+    await expect(slow).rejects.toSatisfy((error: unknown) => isSupersededError(error));
+    expect(mastering.error.value).toBeNull();
   });
 
   it('throws analysis errors before wasm calls when no source is loaded', async () => {

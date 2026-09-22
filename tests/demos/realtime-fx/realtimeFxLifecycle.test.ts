@@ -16,6 +16,7 @@ interface FakeNode {
 }
 
 let createdNodes: FakeNode[] = [];
+let createdContexts: FakeAudioContext[] = [];
 let getUserMedia: ReturnType<typeof vi.fn>;
 
 class FakeAudioContext {
@@ -26,6 +27,9 @@ class FakeAudioContext {
   audioWorklet = { addModule: vi.fn(async () => undefined) };
   resume = vi.fn(async () => undefined);
   close = vi.fn(async () => undefined);
+  constructor() {
+    createdContexts.push(this);
+  }
   createGain() {
     return { gain: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() };
   }
@@ -46,6 +50,7 @@ class FakeAudioWorkletNode {
 
 function installMocks() {
   createdNodes = [];
+  createdContexts = [];
   getUserMedia = vi.fn(async () => ({ getTracks: () => [] }));
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('AudioWorkletNode', FakeAudioWorkletNode);
@@ -117,6 +122,38 @@ describe('useRealtimeFx lifecycle', () => {
     expect(fx.error.value).toBe('engine-error');
 
     await fx.dispose();
+  });
+
+  it('drops a monitor toggle when a dispose lands during the context resume', async () => {
+    const fx = makeFx();
+    const startPromise = fx.start();
+    await vi.waitFor(() => expect(createdNodes).toHaveLength(1));
+    const node = createdNodes.at(-1)!;
+    node.port.onmessage?.({ data: { type: 'ready', latencySamples: 0 } });
+    await expect(startPromise).resolves.toBe(true);
+
+    const ctx = createdContexts.at(-1)!;
+    let finishResume!: () => void;
+    ctx.state = 'suspended';
+    ctx.resume.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishResume = resolve;
+        }),
+    );
+    const connectsAfterStart = node.connect.mock.calls.length;
+
+    const toggle = fx.toggleMonitor();
+    await fx.dispose();
+    finishResume();
+
+    await expect(toggle).resolves.toBe(false);
+    expect(fx.monitoring.value).toBe(false);
+    // The torn-down node is neither re-wired nor told to process.
+    expect(node.connect.mock.calls.length).toBe(connectsAfterStart);
+    expect(node.port.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'setEnabled' }),
+    );
   });
 
   it('maps a mic-permission denial to a localizable code, not a raw message', async () => {

@@ -7,6 +7,7 @@ const masteringMock = vi.hoisted(() => ({
   state: null as any,
   loadFile: vi.fn(),
   decodeFile: vi.fn(),
+  loadReference: vi.fn(),
   render: vi.fn(),
   renderReferenceMatch: vi.fn(),
   createSourceAudioUrl: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock('@/demos/mastering/useMastering', async () => {
       initWasm: vi.fn(async () => undefined),
       decodeFile: masteringMock.decodeFile,
       loadFile: masteringMock.loadFile,
+      loadReference: masteringMock.loadReference,
       render: masteringMock.render,
       renderReferenceMatch: masteringMock.renderReferenceMatch,
       createSourceAudioUrl: masteringMock.createSourceAudioUrl,
@@ -171,11 +173,11 @@ vi.mock('@/demos/mastering/MasteringFineTune.vue', () => ({
 
 vi.mock('@/demos/mastering/MasteringReferencePanel.vue', () => ({
   default: defineComponent({
-    props: { canMatch: Boolean, reference: Object },
+    props: { canMatch: Boolean, reference: Object, referenceUrl: String },
     emits: ['file', 'match'],
     setup(props, { emit }) {
       return () =>
-        h('div', { class: 'reference-panel-stub' }, [
+        h('div', { class: 'reference-panel-stub', 'data-reference-url': props.referenceUrl }, [
           h(
             'button',
             {
@@ -337,6 +339,7 @@ describe('MasteringDemo flow', () => {
     localStorage.clear();
     masteringMock.loadFile.mockReset();
     masteringMock.decodeFile.mockReset();
+    masteringMock.loadReference.mockReset();
     masteringMock.render.mockReset();
     masteringMock.renderReferenceMatch.mockReset();
     masteringMock.createSourceAudioUrl.mockReset();
@@ -361,6 +364,10 @@ describe('MasteringDemo flow', () => {
       return audio;
     });
     masteringMock.decodeFile.mockImplementation(async (file: File) => decodedAudio(file.name));
+    masteringMock.loadReference.mockImplementation(async (file: File) => ({
+      audio: decodedAudio(file.name),
+      integratedLufs: -16,
+    }));
     masteringMock.render.mockImplementation(async () => {
       const rendered = renderedAudio();
       masteringMock.state.rendered.value = rendered;
@@ -504,7 +511,7 @@ describe('MasteringDemo flow', () => {
 
     await wrapper.find('.reference-load').trigger('click');
     await flushPromises();
-    expect(masteringMock.decodeFile).toHaveBeenCalledTimes(1);
+    expect(masteringMock.loadReference).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.reference-match').attributes('disabled')).toBeUndefined();
 
     await wrapper.find('.reference-match').trigger('click');
@@ -524,6 +531,52 @@ describe('MasteringDemo flow', () => {
     expect(wrapper.find('.result-panel-stub').attributes('data-output-url')).toBe(
       'blob:master.wav',
     );
+  });
+
+  it('keeps the newer reference when an earlier, slower reference load is superseded', async () => {
+    const revoke = vi.mocked(URL.revokeObjectURL);
+    revoke.mockClear();
+    let settleSlow!: (reason: unknown) => void;
+    masteringMock.loadReference
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            settleSlow = reject;
+          }),
+      )
+      .mockImplementationOnce(async () => ({
+        audio: decodedAudio('fast.wav'),
+        integratedLufs: -12,
+      }));
+    const wrapper = mount(MasteringDemo);
+
+    await loadSource(wrapper);
+    await wrapper
+      .findAll('.tool-mode-tabs__button')
+      .find((button) => button.text().includes('Studio'))!
+      .trigger('click');
+    await nextTick();
+
+    await wrapper.find('.reference-load').trigger('click');
+    await wrapper.find('.reference-load').trigger('click');
+    await flushPromises();
+    expect(masteringMock.loadReference).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('.reference-panel-stub').attributes('data-reference-url')).toBe(
+      'blob:fast.wav',
+    );
+    expect(wrapper.find('.reference-match').attributes('disabled')).toBeUndefined();
+
+    // The composable reports the earlier load as superseded; that is not a failure.
+    settleSlow(new DOMException('Superseded', 'AbortError'));
+    await flushPromises();
+
+    expect(wrapper.find('.reference-panel-stub').attributes('data-reference-url')).toBe(
+      'blob:fast.wav',
+    );
+    expect(revoke).not.toHaveBeenCalledWith('blob:fast.wav');
+    expect(wrapper.find('.result-panel-stub').attributes('data-error')).toBeUndefined();
+
+    wrapper.unmount();
   });
 
   it('surfaces render failures from the parent result panel', async () => {

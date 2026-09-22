@@ -70,4 +70,27 @@ describe('useStreamAnalyzer lifecycle', () => {
 
     expect(analyzer.dispose).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects init when the engine fails to load, and reinit reports the same cause', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    wasmMock.init.mockRejectedValue(new Error('wasm gone'));
+    const { wrapper, api } = mountAnalyzer();
+
+    try {
+      await expect(api.init()).rejects.toThrow('wasm gone');
+      expect(api.isInitialized.value).toBe(false);
+      expect(api.error.value).toContain('Failed to initialize StreamAnalyzer');
+      expect(wasmMock.instances).toHaveLength(0);
+
+      // A later reinit retries the load and surfaces the load failure itself,
+      // not a null dereference of the module that never arrived.
+      await expect(api.reinit(48_000)).rejects.toThrow('wasm gone');
+      expect(wasmMock.instances).toHaveLength(0);
+    } finally {
+      wasmMock.init.mockReset();
+      wasmMock.init.mockResolvedValue(undefined);
+      consoleError.mockRestore();
+      wrapper.unmount();
+    }
+  });
 });

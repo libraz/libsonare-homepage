@@ -433,7 +433,10 @@ export function useRealtimeFx(sonareUrl: string, wasmUrl: string) {
   async function toggleMonitor(): Promise<boolean> {
     const ctx = context.value;
     if (!ready.value || !ctx || !node) return false;
+    const currentGeneration = generation;
     if (ctx.state === 'suspended') await ctx.resume();
+    // A dispose or engine failure during the resume has already torn the graph down.
+    if (currentGeneration !== generation || !ready.value || !node) return false;
     monitoring.value = !monitoring.value;
     node.disconnect();
     if (monitoring.value) {

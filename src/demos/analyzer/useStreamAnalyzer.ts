@@ -272,24 +272,35 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     ...options,
   };
 
+  /**
+   * Load the WASM module and construct the native analyzer. A failure is
+   * recorded in `error` and rethrown, so an awaiting caller sees it where it
+   * happened instead of at the next call that assumes the module exists.
+   */
   async function init(): Promise<void> {
     if (isInitialized.value) return;
 
     try {
-      wasmModule = await import('@/wasm/index');
-      await wasmModule.init();
-      analyzer = new wasmModule.StreamAnalyzer(defaultConfig);
+      const mod = await import('@/wasm/index');
+      await mod.init();
+      analyzer = new mod.StreamAnalyzer(defaultConfig);
+      // Only a fully initialised module is kept, so a retry starts from scratch.
+      wasmModule = mod;
       isInitialized.value = true;
       error.value = null;
     } catch (e) {
       error.value = `Failed to initialize StreamAnalyzer: ${e}`;
       console.error(error.value);
+      throw e;
     }
   }
 
   async function reinit(newSampleRate: number): Promise<void> {
     if (!wasmModule) {
       await init();
+    }
+    if (!wasmModule) {
+      throw new Error('StreamAnalyzer is not initialized');
     }
 
     // Dispose existing analyzer
@@ -303,7 +314,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     defaultConfig.nFft = options.nFft ?? 2048;
     defaultConfig.hopLength = options.hopLength ?? 512;
 
-    analyzer = new wasmModule!.StreamAnalyzer(defaultConfig);
+    analyzer = new wasmModule.StreamAnalyzer(defaultConfig);
 
     reset();
   }

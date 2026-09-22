@@ -437,6 +437,88 @@ describe('AudioAnalyzer visual player flow', () => {
     }
   });
 
+  it('keeps the later of two overlapping drops even when the earlier one decodes last', async () => {
+    const wrapper = mount(AudioAnalyzer);
+    await drainAsyncWork();
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('FILE'))!
+      .trigger('click');
+
+    const slowBuffer = { ...audioBuffer(), duration: 9 } as AudioBuffer;
+    const fastBuffer = audioBuffer();
+    let finishSlow!: (buffer: AudioBuffer) => void;
+    playerMock.loadAudio.mockReset();
+    playerMock.loadAudio
+      .mockImplementationOnce(
+        () =>
+          new Promise<AudioBuffer>((resolve) => {
+            finishSlow = resolve;
+          }),
+      )
+      .mockImplementationOnce(async () => fastBuffer);
+
+    wrapper
+      .findComponent({ name: 'DropZone' })
+      .vm.$emit('file', new File([new Uint8Array([1])], 'slow.wav'));
+    await drainAsyncWork();
+    expect(playerMock.loadAudio).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('.analyzer__loading').exists()).toBe(true);
+
+    // A second file arrives while the first is still decoding. The progress
+    // overlay has replaced the drop zone, so it is handed to the handler directly.
+    void (wrapper.vm as unknown as { handleFile: (file: File) => Promise<void> }).handleFile(
+      new File([new Uint8Array([2])], 'fast.wav'),
+    );
+    await drainAsyncWork();
+
+    expect(playerMock.loadAudio).toHaveBeenCalledTimes(2);
+    expect(playerMock.state.audioBuffer.value).toBe(fastBuffer);
+    expect(wrapper.find('.analyzer__main').exists()).toBe(true);
+    expect(wrapper.text()).toContain('fast.wav');
+
+    // The first drop finishing afterwards must not overwrite the second.
+    finishSlow(slowBuffer);
+    await drainAsyncWork();
+
+    expect(playerMock.state.audioBuffer.value).toBe(fastBuffer);
+    expect(playerMock.state.duration.value).toBe(4);
+    expect(wrapper.text()).toContain('fast.wav');
+    expect(wrapper.text()).not.toContain('slow.wav');
+    expect(wrapper.find('.analyzer__error').exists()).toBe(false);
+    expect(wrapper.find('.analyzer__loading').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('names the engine as the cause when the stream analyzer cannot initialize', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    streamMock.init.mockRejectedValue(new Error('wasm gone'));
+
+    try {
+      const wrapper = mount(AudioAnalyzer);
+      await drainAsyncWork();
+
+      // The bundled demo fails the same way, so the drop zone is offered.
+      const dropZone = wrapper.findComponent({ name: 'DropZone' });
+      expect(dropZone.exists()).toBe(true);
+
+      dropZone.vm.$emit('file', new File([new Uint8Array([1])], 'song.wav'));
+      await drainAsyncWork();
+
+      const errorEl = wrapper.find('.analyzer__error');
+      expect(errorEl.exists()).toBe(true);
+      expect(errorEl.text()).toContain('analysis engine could not be loaded');
+      expect(errorEl.text()).not.toContain('decode');
+      expect(playerMock.loadAudio).not.toHaveBeenCalled();
+      expect(wrapper.findComponent({ name: 'DropZone' }).exists()).toBe(true);
+
+      wrapper.unmount();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('falls back to the drop zone when the bundled demo cannot be fetched', async () => {
     vi.stubGlobal(
       'fetch',

@@ -14,7 +14,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { type MonoAudio, useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -96,12 +96,17 @@ function paintStream(wasm: WasmModule, a: MonoAudio): void {
   ctx.putImageData(img, 0, 0);
 }
 
+const disposed = useDisposed();
+
 async function compute(): Promise<void> {
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
+    if (disposed()) return;
     if (!full) {
       const clip = await loadClip(clipName.value);
+      if (disposed()) return;
       full = clip;
       const r = wasm.hpss(clip.samples, clip.sampleRate);
       harmonic = { samples: r.harmonic, sampleRate: r.sampleRate };
@@ -111,6 +116,7 @@ async function compute(): Promise<void> {
     if (stream) paintStream(wasm, stream);
     status.value = 'ready';
   } catch (e) {
+    if (disposed()) return;
     fail(e);
   }
 }

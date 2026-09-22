@@ -14,7 +14,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 import { PHRASE_BEATS, PHRASE_BEATS_PER_BAR, PHRASE_VOICES } from './midiPhrase';
@@ -186,20 +186,20 @@ function renderPassage(wasm: WasmModule): Float32Array {
   }
 }
 
-let disposed = false;
+const disposed = useDisposed();
 
 async function compute(): Promise<void> {
-  if (disposed) return;
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
-    if (disposed) return;
+    if (disposed()) return;
     const pcm = renderPassage(wasm);
     lastAudio = { samples: pcm, sampleRate: SR };
     status.value = 'ready';
     startReveal();
   } catch (e) {
-    if (disposed) return;
+    if (disposed()) return;
     fail(e);
   }
 }
@@ -396,7 +396,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  disposed = true;
   stopLoop();
   if (pending) cancelAnimationFrame(pending);
 });

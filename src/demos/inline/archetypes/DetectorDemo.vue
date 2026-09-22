@@ -19,7 +19,7 @@ import { peakEnvelope } from '@/demos/inline/audio/processors';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -135,12 +135,18 @@ function detect(wasm: WasmModule, samples: Float32Array, sr: number): void {
   }
 }
 
+const disposed = useDisposed();
+
 async function compute(): Promise<void> {
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
+    if (disposed()) return;
     if (!clip) {
-      clip = await loadClip(clipName.value);
+      const loaded = await loadClip(clipName.value);
+      if (disposed()) return;
+      clip = loaded;
       duration = clip.samples.length / clip.sampleRate;
       peakEnvelope(clip.samples, peaks);
     }
@@ -149,6 +155,7 @@ async function compute(): Promise<void> {
     if (reveal.value < 1) startReveal();
     else paint();
   } catch (e) {
+    if (disposed()) return;
     fail(e);
   }
 }

@@ -163,6 +163,33 @@ describe('createMixBounceController', () => {
     }
   });
 
+  it('settles an in-flight bounce when disposed, since the terminated worker never will', async () => {
+    const originalWorker = globalThis.Worker;
+    // @ts-expect-error focused Worker mock
+    globalThis.Worker = MockWorker;
+    MockWorker.instances = [];
+
+    try {
+      const controller = createMixBounceController();
+      const pending = controller.bounce(makeRequest());
+      const worker = MockWorker.instances[0];
+
+      controller.dispose();
+
+      await expect(pending).rejects.toThrow('Mix bounce disposed');
+      expect(worker.terminated).toBe(true);
+
+      // A later request is unaffected by the settled one.
+      const next = controller.bounce(makeRequest());
+      const fresh = MockWorker.instances[1];
+      fresh.emitMessage({ type: 'error', id: 2, error: 'next failed' });
+      await expect(next).rejects.toThrow('next failed');
+      controller.dispose();
+    } finally {
+      globalThis.Worker = originalWorker;
+    }
+  });
+
   it('creates a fresh worker after dispose and supports empty transfer lists', async () => {
     const originalWorker = globalThis.Worker;
     // @ts-expect-error focused Worker mock

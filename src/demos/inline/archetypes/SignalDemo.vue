@@ -15,7 +15,7 @@ import { generateSignal } from '@/demos/inline/signal';
 import { type GeneratedSignal, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -66,8 +66,11 @@ const targetHarm = new Float32Array(MAX_HARM);
 
 let lastAudio: { samples: Float32Array; sampleRate: number } | null = null;
 
+const disposed = useDisposed();
+
 /** Build the current signal and refresh both target curves. */
 async function compute(): Promise<void> {
+  if (disposed()) return;
   try {
     const audio = generateSignal({
       kind: 'generate',
@@ -80,11 +83,13 @@ async function compute(): Promise<void> {
 
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
+    if (disposed()) return;
     const r = wasm.stft(audio.samples, audio.sampleRate, 2048, 512);
     fillSpecTarget(r, audio.sampleRate);
     status.value = 'ready';
     startMorph();
   } catch (e) {
+    if (disposed()) return;
     fail(e);
   }
 }

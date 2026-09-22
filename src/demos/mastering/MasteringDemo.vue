@@ -39,6 +39,7 @@ import {
   type DecodedMasteringAudio,
   defaultDiagnosticBypass,
   defaultModuleSettings,
+  isSupersededError,
   type MasteringDiagnosticBypass,
   type MasteringModuleSettings,
   type MasteringPlatformId,
@@ -488,7 +489,8 @@ async function loadFile(file: File) {
     listenTarget.value = 'source';
     activeModule.value = modules[0];
     void analyzeSourceInsights();
-  } catch {
+  } catch (e) {
+    if (isSupersededError(e)) return;
     localError.value = t('master.errors.loadFailed');
   }
 }
@@ -525,7 +527,8 @@ async function renderMaster() {
     listenTarget.value = 'master';
     await nextTick();
     updatePlaybackVolume();
-  } catch {
+  } catch (e) {
+    if (isSupersededError(e)) return;
     localError.value = t('master.errors.renderFailed');
   }
 }
@@ -537,15 +540,16 @@ async function handleReferenceFile(event: Event) {
   localError.value = null;
 
   try {
-    if (referenceUrl.value) {
-      URL.revokeObjectURL(referenceUrl.value);
-      referenceUrl.value = null;
-    }
-    reference.value = await mastering.decodeFile(file);
-    referenceUrl.value = mastering.createSourceAudioUrl(reference.value);
-    referenceLufs.value = await mastering.measureIntegratedLufs(reference.value);
+    const loaded = await mastering.loadReference(file);
+    // Swap the previous reference out only once the new one is fully loaded,
+    // so a superseded slower load can neither overwrite it nor leak its URL.
+    if (referenceUrl.value) URL.revokeObjectURL(referenceUrl.value);
+    reference.value = loaded.audio;
+    referenceUrl.value = mastering.createSourceAudioUrl(loaded.audio);
+    referenceLufs.value = loaded.integratedLufs;
     await refreshReferenceAnalysis();
-  } catch {
+  } catch (e) {
+    if (isSupersededError(e)) return;
     localError.value = t('master.errors.loadFailed');
   } finally {
     input.value = '';
@@ -584,7 +588,8 @@ async function renderReferenceMatch() {
     listenTarget.value = 'master';
     await nextTick();
     updatePlaybackVolume();
-  } catch {
+  } catch (e) {
+    if (isSupersededError(e)) return;
     localError.value = t('master.errors.referenceFailed');
   }
 }

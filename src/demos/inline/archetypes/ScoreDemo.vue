@@ -17,7 +17,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
-import { useDemoChrome, useDemoParams } from '../composables';
+import { useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 import { renderScoreEngraving, type ScoreStaffMark, updateScoreHighlight } from './scoreEngraving';
@@ -71,14 +71,14 @@ function updateHighlight(): void {
 }
 
 // ---- lifecycle -------------------------------------------------------------
-let disposed = false;
+const disposed = useDisposed();
 
 async function compute(): Promise<void> {
-  if (disposed) return;
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
-    if (disposed) return;
+    if (disposed()) return;
     const rendered = renderScorePassage(wasm as WasmModule, {
       instrument: instrument.value,
       tempo: tempo.value,
@@ -95,10 +95,10 @@ async function compute(): Promise<void> {
         console.warn('[ScoreDemo] notation render failed; audio only', e);
       }
     }
-    if (disposed) return;
+    if (disposed()) return;
     status.value = 'ready';
   } catch (e) {
-    if (disposed) return;
+    if (disposed()) return;
     fail(e);
   }
 }
@@ -140,7 +140,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  disposed = true;
   if (pending) cancelAnimationFrame(pending);
 });
 </script>

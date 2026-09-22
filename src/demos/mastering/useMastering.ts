@@ -256,6 +256,22 @@ export function useMastering() {
     }
   }
 
+  /**
+   * Decode a reference track and measure its integrated loudness under one
+   * operation generation, so a reference picked while an earlier one is still
+   * decoding supersedes it instead of racing it for the caller's state.
+   */
+  async function loadReference(
+    file: File,
+  ): Promise<{ audio: DecodedMasteringAudio; integratedLufs: number }> {
+    const generation = ++operationGeneration;
+    const audio = await decodeFile(file);
+    if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
+    const integratedLufs = await measureIntegratedLufs(audio);
+    if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
+    return { audio, integratedLufs };
+  }
+
   async function measureIntegratedLufs(audio: DecodedMasteringAudio): Promise<number> {
     await initWasm();
     const interleaved = interleaveStereo(audio.left, audio.right);
@@ -594,6 +610,7 @@ export function useMastering() {
     initWasm,
     decodeFile,
     loadFile,
+    loadReference,
     render,
     renderReferenceMatch,
     analyzeSource,
@@ -603,6 +620,14 @@ export function useMastering() {
     createSourceAudioUrl,
     dispose,
   };
+}
+
+/**
+ * Whether a rejection came from a newer operation superseding this one (or from
+ * dispose) rather than from a real failure; callers show no error for it.
+ */
+export function isSupersededError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {

@@ -29,7 +29,7 @@ import {
 import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
-import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
+import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
 
@@ -149,11 +149,16 @@ function highBandMean(spec: Float32Array): number {
   return n > 0 ? s / n : 0;
 }
 
+const disposed = useDisposed();
+
 async function compute(): Promise<void> {
+  if (disposed()) return;
   try {
     if (status.value === 'idle') status.value = 'loading';
     const wasm = await ensureWasm();
+    if (disposed()) return;
     const clip = await loadClip(clipName.value);
+    if (disposed()) return;
     const sr = clip.sampleRate;
 
     // "Before" source: the clip, plus deterministic broadband hiss unless the
@@ -197,6 +202,7 @@ async function compute(): Promise<void> {
     status.value = 'ready';
     startMorph();
   } catch (e) {
+    if (disposed()) return;
     fail(e);
   }
 }
