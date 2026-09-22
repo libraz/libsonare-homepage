@@ -516,10 +516,12 @@ html:not(.dark) .sp-scene {
   animation: sp-rise 0.4s ease both;
 }
 
+/* The absorption column is sized for its heading, not its "14%" values: the
+   English word is the widest thing in the table and was being clipped. */
 .sp-bands__head,
 .sp-band {
   display: grid;
-  grid-template-columns: 52px 1fr 46px;
+  grid-template-columns: 52px minmax(0, 1fr) 82px;
   align-items: center;
   gap: 10px;
 }
@@ -551,14 +553,22 @@ html:not(.dark) .sp-scene {
 }
 
 .sp-band__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-band__track {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 16px;
   border-radius: 4px;
   background: var(--demo-track-bg);
   overflow: hidden;
 }
 
-.sp-band__bar i {
+.sp-band__track i {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: 4px;
@@ -566,14 +576,14 @@ html:not(.dark) .sp-scene {
   transition: width 0.4s ease;
 }
 
+/* Beside the track rather than floating over it: inside, how much of the number
+   sat on the coloured fill depended on the value it was reporting. */
 .sp-band__bar em {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: none;
   font-family: var(--font-mono);
   font-size: 9px;
   font-style: normal;
+  font-variant-numeric: tabular-nums;
   color: var(--demo-text-strong);
 }
 
@@ -639,7 +649,9 @@ html:not(.dark) .sp-scene {
     animation: none;
   }
 
-  .sp-room {
+  .sp-room,
+  .sp-export,
+  .sp-band__track i {
     transition: none;
   }
 

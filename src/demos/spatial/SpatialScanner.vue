@@ -468,7 +468,9 @@ function morphGeometry() {
             <div v-for="band in result.bands" :key="band.freq" class="sp-band">
               <span class="sp-band__freq">{{ band.label }}<small>{{ copy.bands.hz }}</small></span>
               <span class="sp-band__bar">
-                <i :style="{ width: `${Math.min(100, (band.rt60 / maxBandRt60) * 100)}%` }"></i>
+                <span class="sp-band__track">
+                  <i :style="{ width: `${Math.min(100, (band.rt60 / maxBandRt60) * 100)}%` }"></i>
+                </span>
                 <em>{{ band.rt60.toFixed(2) }}</em>
               </span>
               <span class="sp-band__abs">{{ fmtPct(band.absorption) }}</span>

@@ -1,8 +1,9 @@
 /**
  * File export for rendered audio and MIDI: mix offline stems down to one
- * interleaved buffer, wrap it as a 16-bit PCM WAV blob, and wrap the native
- * SMF writer's bytes as a downloadable file. Pure and synchronous, so a demo
- * can call it from a download click on the main thread or from a worker.
+ * interleaved buffer, then hand it and the native SMF writer's bytes back as
+ * downloadable blobs. The WAV bytes themselves come from `utils/audio`, which
+ * is where the site's one encoder lives. Pure and synchronous, so a demo can
+ * call it from a download click on the main thread or from a worker.
  */
 
 import { encodeWavInterleaved } from '@/utils/audio';
