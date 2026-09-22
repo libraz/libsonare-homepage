@@ -19,7 +19,7 @@ export interface RealtimeStartPayload {
 // AudioWorklet processor source. Runs the libsonare WASM Mixer in the audio thread
 // with its own heap (SAB-free): static-import the emscripten factory, init from a
 // passed wasm binary, and bypass index.js (its init() uses dynamic import, which is
-// disallowed in WorkletGlobalScope). See memory: wasm-in-audioworklet.
+// disallowed in WorkletGlobalScope).
 export function buildProcessorSource(sonareUrl: string): string {
   return `
 import createModule from '${sonareUrl}';
