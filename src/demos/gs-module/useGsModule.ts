@@ -14,9 +14,11 @@
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { bootWasm, type SonareWasmModule } from '@/composables/useWasmBoot';
+import { downsampleWaveform, type WaveformPeak } from '@/utils/audio';
 import { buildSmf, noteEvents, type SmfEvent } from '@/utils/gsSysex';
 import { rhythmSetLabel } from '@/utils/modelNames';
 import { GM_FAMILY_SIZE, GM_PROGRAM_COUNT, gmFamilyOf } from './gsNames';
+import { type GsParamMeta, paramMetaOf } from './gsParamMeta';
 import {
   defaultModuleState,
   type GsModuleState,
@@ -29,6 +31,10 @@ const SAMPLE_RATE = 44100;
 /** Quarter notes at the default 120 BPM, so one beat is half a second. */
 const AUDITION_BEATS = 4;
 const AUDITION_SECONDS = 3;
+/** How much of the render a meter reads at once — a peak, not an instant sample. */
+const METER_WINDOW_SECONDS = 0.02;
+/** Points the waveform is reduced to; more than the scope has pixels buys nothing. */
+const SCOPE_POINTS = 900;
 
 /** A sustained triad, voiced low enough to show what a filter or drive is doing. */
 const AUDITION_CHORD = [52, 55, 59, 64];
@@ -157,6 +163,20 @@ export function variationsOf(wasm: SonareWasmModule, program: number): number[] 
   return banks;
 }
 
+/**
+ * Peak of the render around one moment, which is what a meter shows. A single
+ * sample would read as silence every time the waveform crosses zero.
+ */
+export function peakAround(buffer: Float32Array, seconds: number): number {
+  const centre = Math.round(seconds * SAMPLE_RATE);
+  const half = Math.round((METER_WINDOW_SECONDS * SAMPLE_RATE) / 2);
+  const from = Math.max(0, centre - half);
+  const to = Math.min(buffer.length, centre + half);
+  let peak = 0;
+  for (let i = from; i < to; i++) peak = Math.max(peak, Math.abs(buffer[i]));
+  return peak;
+}
+
 /** The static half of `Project` this demo uses. */
 interface GsProjectStatics {
   gmInstrumentName(program: number): string | null;
@@ -190,9 +210,25 @@ export function useGsModule() {
   const gmFamilyNames = shallowRef<string[]>([]);
   /** Bank values that give the selected part's program a distinct variation. */
   const variations = shallowRef<number[]>([]);
+  /** Unit and range for every control an effect slot can reach, from the engine. */
+  const paramMeta = shallowRef<Map<string, GsParamMeta>>(new Map());
+
+  /** True while a buffer is on the output, for the transport. */
+  const isPlaying = ref(false);
+  /** How far through the render playback is, 0 to 1. */
+  const playhead = ref(0);
+  /**
+   * Which part the buffer on the output is playing, or null when that cannot
+   * be said. An audition plays the selected part alone, so its strip can be
+   * metered; a dropped file is never parsed, so no strip can be.
+   */
+  const playingChannel = ref<number | null>(null);
+  const playingPeak = ref(0);
 
   let audio: AudioContext | null = null;
   let playing: AudioBufferSourceNode | null = null;
+  let startedAt = 0;
+  let frame = 0;
   let disposed = false;
   /** Renders are serialized; a newer request supersedes one still in flight. */
   let generation = 0;
@@ -200,10 +236,38 @@ export function useGsModule() {
   const selectedPart = computed<GsPartState>(() => state.parts[selectedChannel.value]);
   /** The frames the current state would send, for the SysEx view. */
   const frames = computed(() => setupEvents(state as GsModuleState));
+  /** The render as a waveform for the scope, rebuilt only when a render lands. */
+  const waveform = computed<WaveformPeak[]>(() =>
+    rendered.value ? downsampleWaveform(rendered.value, rendered.value, SCOPE_POINTS) : [],
+  );
+  /** What each strip's meter reads, indexed by channel. */
+  const activity = computed<number[]>(() => {
+    const levels = new Array<number>(state.parts.length).fill(0);
+    if (playingChannel.value !== null) levels[playingChannel.value] = playingPeak.value;
+    return levels;
+  });
 
   function stop() {
     playing?.stop();
     playing = null;
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    isPlaying.value = false;
+    playhead.value = 0;
+    playingChannel.value = null;
+    playingPeak.value = 0;
+  }
+
+  /** Follow the output: the playhead for the scope, the peak for the meter. */
+  function follow() {
+    frame = 0;
+    if (!playing || !audio) return;
+    const buffer = rendered.value;
+    if (!buffer) return;
+    const elapsed = audio.currentTime - startedAt;
+    playhead.value = Math.min(1, Math.max(0, elapsed / (buffer.length / SAMPLE_RATE)));
+    playingPeak.value = peakAround(buffer, elapsed);
+    frame = requestAnimationFrame(follow);
   }
 
   /** The variation list follows the selected part's program, not the state. */
@@ -232,6 +296,7 @@ export function useGsModule() {
       drumKits.value = drumKitsOf(wasm);
       gmPrograms.value = gmProgramsOf(wasm);
       gmFamilyNames.value = gmFamilyNamesOf(wasm);
+      paramMeta.value = paramMetaOf(wasm);
       refreshVariations(wasm);
     } catch (cause) {
       if (disposed) return;
@@ -282,14 +347,24 @@ export function useGsModule() {
     source.buffer = target;
     source.connect(audio.destination);
     source.onended = () => {
-      if (playing === source) playing = null;
+      if (playing === source) stop();
     };
     source.start();
     playing = source;
+    isPlaying.value = true;
+    playingChannel.value = droppedFile.value ? null : selectedChannel.value;
+    startedAt = audio.currentTime;
+    follow();
   }
 
-  /** Any edit invalidates the render, so the next play is of what is on screen. */
+  /**
+   * Any edit invalidates the render, so the next play is of what is on screen.
+   * Playback stops with it: the buffer on the output was bounced from the state
+   * before the edit, and letting it run would leave a sound on the speakers the
+   * panels no longer describe.
+   */
   function invalidate() {
+    stop();
     rendered.value = null;
     if (status.value === 'ready') status.value = 'idle';
   }
@@ -316,10 +391,15 @@ export function useGsModule() {
     status,
     error,
     rendered,
+    waveform,
+    activity,
+    isPlaying,
+    playhead,
     drumKits,
     gmPrograms,
     gmFamilyNames,
     variations,
+    paramMeta,
     render,
     play,
     stop,

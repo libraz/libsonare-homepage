@@ -14,7 +14,6 @@
  * while the part plays another.
  */
 import { computed } from 'vue';
-import { TechPanel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { GM_FAMILY_NAMES_JA, GM_FAMILY_SIZE, GM_PROGRAM_NAMES_JA, gmFamilyOf } from './gsNames';
 import type { GmProgram } from './useGsModule';
@@ -44,7 +43,8 @@ const copy = computed(() =>
       programs: 'Programs in this family',
       capital: 'Capital',
       variations: 'Variations',
-      none: 'This program has no variation this build voices apart from the capital tone.',
+      none: 'No variation this build voices apart from the capital tone.',
+      count: (n: number) => `${n} programs`,
       note: 'A variation is the same instrument voiced differently. The ones listed are the ones that actually sound different here; a bank this build does not voice apart resolves back to the capital tone, as GS intends.',
     },
     ja: {
@@ -54,7 +54,8 @@ const copy = computed(() =>
       programs: 'このファミリーの音色',
       capital: 'カピタル',
       variations: 'バリエーション',
-      none: 'このプログラムには、このビルドがカピタルトーンと鳴らし分けるバリエーションがありません。',
+      none: 'このビルドがカピタルトーンと鳴らし分けるバリエーションはありません。',
+      count: (n: number) => `${n} 音色`,
       note: 'バリエーションは同じ楽器の別の鳴らし方です。ここに出るのは実際に音が変わるものだけで、このビルドが鳴らし分けないバンクは GS の仕様どおりカピタルトーンに解決されます。',
     },
   }),
@@ -84,12 +85,13 @@ const bankChoices = computed(() => [0, ...props.variations]);
 </script>
 
 <template>
-  <TechPanel :title="copy.title">
-    <template #header-right>
-      <span v-if="props.programs.length" class="gs-value gs-patch__current">
-        {{ props.program }} · {{ programLabel(props.program) }}
+  <section class="gs-rack" :aria-label="copy.title">
+    <div class="gs-rack__head">
+      <span class="gs-rack__title">{{ copy.title }}</span>
+      <span v-if="props.programs.length" class="gs-rack__aside">
+        {{ copy.count(props.programs.length) }}
       </span>
-    </template>
+    </div>
 
     <p v-if="!props.programs.length" class="gs-note">{{ copy.loading }}</p>
 
@@ -98,13 +100,11 @@ const bankChoices = computed(() => [0, ...props.variations]);
         <li v-for="(_, family) in props.familyNames" :key="family">
           <button
             type="button"
-            class="gs-patch__family"
-            :class="{ 'gs-patch__family--selected': family === currentFamily }"
+            class="gs-patch__row gs-patch__family"
+            :class="{ 'gs-patch__row--selected': family === currentFamily }"
             :aria-pressed="family === currentFamily"
             @click="emit('select', family * GM_FAMILY_SIZE)"
-          >
-            {{ familyLabel(family) }}
-          </button>
+          >{{ familyLabel(family) }}</button>
         </li>
       </ul>
 
@@ -113,8 +113,8 @@ const bankChoices = computed(() => [0, ...props.variations]);
           <li v-for="entry in familyPrograms" :key="entry.program">
             <button
               type="button"
-              class="gs-patch__program"
-              :class="{ 'gs-patch__program--selected': entry.program === props.program }"
+              class="gs-patch__row gs-patch__program"
+              :class="{ 'gs-patch__row--selected': entry.program === props.program }"
               :aria-pressed="entry.program === props.program"
               @click="emit('select', entry.program)"
             >
@@ -125,66 +125,51 @@ const bankChoices = computed(() => [0, ...props.variations]);
         </ul>
 
         <div class="gs-patch__variations">
-          <span class="gs-patch__variations-label">{{ copy.variations }}</span>
+          <span class="gs-rack__title">{{ copy.variations }}</span>
           <div v-if="props.variations.length" class="gs-patch__banks">
             <button
               v-for="bank in bankChoices"
               :key="bank"
               type="button"
               class="gs-patch__bank"
-              :class="{ 'gs-patch__bank--selected': bank === props.bankMsb }"
+              :class="{ 'gs-patch__row--selected': bank === props.bankMsb }"
               :aria-pressed="bank === props.bankMsb"
               @click="emit('selectBank', bank)"
-            >
-              {{ bank === 0 ? copy.capital : bank }}
-            </button>
+            >{{ bank === 0 ? copy.capital : bank }}</button>
           </div>
           <p v-else class="gs-note">{{ copy.none }}</p>
+          <p class="gs-note gs-patch__note">{{ copy.note }}</p>
         </div>
       </div>
     </div>
-
-    <template #footer>
-      <p class="gs-note">{{ copy.note }}</p>
-    </template>
-  </TechPanel>
+  </section>
 </template>
 
 <style scoped>
 .gs-patch {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
-}
-
-.gs-patch__current {
-  font-size: 0.7rem;
 }
 
 .gs-patch__families,
 .gs-patch__programs {
   display: grid;
-  gap: 2px;
+  align-content: start;
+  gap: 1px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.gs-patch__families {
-  align-content: start;
-  max-block-size: 17rem;
-  overflow-y: auto;
-}
-
 .gs-patch__right {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 12px;
 }
 
-.gs-patch__family,
-.gs-patch__program,
-.gs-patch__bank {
+.gs-patch__row {
+  inline-size: 100%;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
@@ -195,9 +180,9 @@ const bankChoices = computed(() => [0, ...props.variations]);
 }
 
 .gs-patch__family {
-  inline-size: 100%;
-  padding: 5px 8px;
-  font-size: 0.74rem;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .gs-patch__program {
@@ -205,35 +190,23 @@ const bankChoices = computed(() => [0, ...props.variations]);
   align-items: center;
   gap: 8px;
   grid-template-columns: 2rem minmax(0, 1fr);
-  inline-size: 100%;
-  padding: 5px 8px;
-  font-size: 0.78rem;
+  padding: 4px 8px;
+  font-size: 13px;
 }
 
-.gs-patch__family:hover,
-.gs-patch__program:hover,
-.gs-patch__bank:hover {
+.gs-patch__row:hover {
   border-color: var(--demo-border);
-  background: var(--demo-control-bg);
+  background: var(--demo-control-bg-strong);
 }
 
-.gs-patch__family--selected,
-.gs-patch__program--selected,
-.gs-patch__bank--selected {
+.gs-patch__row--selected {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent-subtle);
   color: var(--demo-text-strong);
 }
 
-.gs-patch__family:focus-visible,
-.gs-patch__program:focus-visible,
-.gs-patch__bank:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
 .gs-patch__number {
-  font-size: 0.7rem;
+  font-size: 11px;
   text-align: end;
 }
 
@@ -245,16 +218,9 @@ const bankChoices = computed(() => [0, ...props.variations]);
 
 .gs-patch__variations {
   display: grid;
-  gap: 5px;
-  padding-block-start: 8px;
+  gap: 6px;
+  padding-block-start: 10px;
   border-block-start: 1px solid var(--demo-border);
-}
-
-.gs-patch__variations-label {
-  color: var(--demo-text-muted);
-  font-size: 0.66rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .gs-patch__banks {
@@ -264,10 +230,22 @@ const bankChoices = computed(() => [0, ...props.variations]);
 }
 
 .gs-patch__bank {
-  padding: 3px 9px;
-  border-color: var(--demo-border);
-  font-family: var(--demo-font-mono, monospace);
-  font-size: 0.7rem;
+  padding: 3px 10px;
+  border: 1px solid var(--demo-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--demo-text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.gs-patch__bank:hover {
+  border-color: var(--demo-border-strong);
+}
+
+.gs-patch__note {
+  font-size: 10.5px;
 }
 </style>

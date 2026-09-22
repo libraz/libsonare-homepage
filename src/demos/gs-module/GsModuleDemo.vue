@@ -4,9 +4,10 @@
  * insertion effect, and a `.mid` you can drop through it.
  *
  * The panels hold no state of their own. Each one reads the single module state
- * and emits an edit, so the SysEx list in the source panel is always the exact
- * difference between a freshly reset module and what is on screen — there is no
- * second account of the settings for it to disagree with.
+ * and emits an edit, so the display, the SysEx list and the render are all
+ * describing the same thing rather than three parallel accounts of it — the
+ * frame list is always the exact difference between a freshly reset module and
+ * what is on screen.
  *
  * Every edit invalidates the render rather than re-rendering, because a bounce
  * is not instant and a slider drag would otherwise queue dozens of them.
@@ -14,17 +15,22 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
 import { StatusIndicator } from '@/components/ui';
+import { useI18n } from '@/composables/useI18n';
 import { useUrlState } from '@/composables/useUrlState';
 import { useWasmBoot } from '@/composables/useWasmBoot';
+import GsDisplay from './GsDisplay.vue';
 import GsEfxInspector from './GsEfxInspector.vue';
 import GsKitBrowser from './GsKitBrowser.vue';
 import GsPartMixer from './GsPartMixer.vue';
 import GsPatchBrowser from './GsPatchBrowser.vue';
 import GsSourcePanel from './GsSourcePanel.vue';
-import { efxType } from './gsEfx';
+import { efxStanding, efxType } from './gsEfx';
 import './gsModule.css';
-import { useI18n } from '@/composables/useI18n';
-import { GM_PROGRAM_NAMES_JA } from './gsNames';
+import {
+  GM_PROGRAM_NAMES_JA,
+  GS_EFX_STANDINGS,
+  GS_EFX_TYPES as GS_EFX_TYPE_NAMES,
+} from './gsNames';
 import { efxTypeKey, type GsPartState, RHYTHM_CHANNEL, withEfxType } from './gsState';
 import { useGsModule } from './useGsModule';
 
@@ -35,10 +41,15 @@ const {
   droppedFile,
   frames,
   status,
+  waveform,
+  activity,
+  isPlaying,
+  playhead,
   drumKits,
   gmPrograms,
   gmFamilyNames,
   variations,
+  paramMeta,
   play,
   stop,
   invalidate,
@@ -62,6 +73,12 @@ const copy = computed(() =>
       guideBody:
         'Every note here plays a built-in fallback voice, so the page ships no samples and nothing leaves the browser. Each audition assembles a Standard MIDI File from the panels, imports it and bounces it offline.',
       guideLink: 'Read about the instruments',
+      maker: 'LIBSONARE',
+      model: 'GS MODULE',
+      tag: '16 PARTS · GM/GS TONE GENERATOR',
+      play: 'Play',
+      stop: 'Stop',
+      reset: 'Reset module',
       part: 'PART',
     },
     ja: {
@@ -72,6 +89,12 @@ const copy = computed(() =>
       guideBody:
         'ここで鳴る音はすべて内蔵のフォールバック音源です。ページはサンプルを一切同梱せず、データはブラウザの外に出ません。試聴のたびにパネルの設定から標準 MIDI ファイルを組み立て、読み込んでオフラインでバウンスしています。',
       guideLink: '内蔵音源について読む',
+      maker: 'LIBSONARE',
+      model: 'GS MODULE',
+      tag: '16 パート · GM/GS 音源',
+      play: '再生',
+      stop: '停止',
+      reset: 'モジュールをリセット',
       part: 'パート',
     },
   }),
@@ -83,7 +106,7 @@ const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
   return 'idle';
 });
 
-/** The name to show on a strip: a rhythm set on the rhythm part, a program elsewhere. */
+/** The name to show for a part: a rhythm set on the rhythm part, a program elsewhere. */
 const patchNames = computed(() =>
   state.parts.map((part) => {
     if (part.channel === RHYTHM_CHANNEL) {
@@ -93,6 +116,21 @@ const patchNames = computed(() =>
     return gmPrograms.value[part.program]?.name ?? '';
   }),
 );
+
+const efxKey = computed(() => efxTypeKey(state.efx.type));
+const efxName = computed(() => {
+  const name = GS_EFX_TYPE_NAMES[efxKey.value];
+  if (!name) return efxKey.value;
+  return ja.value ? name.ja : name.en;
+});
+const efxStandingKind = computed(() => {
+  const entry = efxType(state.efx.type);
+  return entry ? efxStanding(entry) : 'inert';
+});
+const efxStandingLabel = computed(() => {
+  const name = GS_EFX_STANDINGS[efxStandingKind.value];
+  return ja.value ? name.ja : name.en;
+});
 
 function updatePart(channel: number, patch: Partial<GsPartState>) {
   Object.assign(state.parts[channel], patch);
@@ -221,58 +259,96 @@ function clearFile() {
           <b>{{ copy.part }}</b>{{ selectedChannel + 1 }}
         </span>
         <span class="gs-statusbar__field">
-          <b>EFX</b>{{ efxTypeKey(state.efx.type) }}
+          <b>EFX</b>{{ efxKey }}
         </span>
       </div>
     </template>
 
-    <div class="gs-module">
-    <GsSourcePanel
-      class="gs-module__source"
-      :frames="frames"
-      :status="status"
-      :dropped-file="droppedFile"
-      @play="play"
-      @stop="stop"
-      @reset="reset"
-      @drop="onDrop"
-      @clear-file="clearFile"
-    />
+    <div class="gs-module demo-deck">
+      <div class="gs-head">
+        <div class="gs-brand">
+          <span class="gs-brand__maker">{{ copy.maker }}</span>
+          <span class="gs-brand__name">{{ copy.model }}</span>
+          <span class="gs-brand__tag">{{ copy.tag }}</span>
+        </div>
 
-    <GsKitBrowser
-      v-if="selectedChannel === RHYTHM_CHANNEL"
-      class="gs-module__browser"
-      :kits="drumKits"
-      :selected-program="selectedPart.program"
-      @select="selectProgram"
-    />
-    <GsPatchBrowser
-      v-else
-      class="gs-module__browser"
-      :programs="gmPrograms"
-      :family-names="gmFamilyNames"
-      :variations="variations"
-      :program="selectedPart.program"
-      :bank-msb="selectedPart.bankMsb"
-      @select="selectProgram"
-      @select-bank="updatePart(selectedChannel, { bankMsb: $event })"
-    />
+        <GsDisplay
+          :channel="selectedChannel"
+          :is-rhythm="selectedChannel === RHYTHM_CHANNEL"
+          :patch-name="patchNames[selectedChannel]"
+          :program="selectedPart.program"
+          :bank-msb="selectedPart.bankMsb"
+          :efx-key="efxKey"
+          :efx-name="efxName"
+          :efx-standing="efxStandingLabel"
+          :efx-inert="efxStandingKind !== 'adjustable'"
+        />
 
-    <GsEfxInspector
-      class="gs-module__efx"
-      :efx="state.efx"
-      @select-type="selectType"
-      @update-slot="updateSlot"
-    />
+        <div class="gs-transport">
+          <button
+            type="button"
+            class="gs-play"
+            :class="{ 'gs-play--on': isPlaying }"
+            :disabled="status === 'rendering'"
+            :aria-label="isPlaying ? copy.stop : copy.play"
+            @click="isPlaying ? stop() : play()"
+          >
+            <svg v-if="isPlaying" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12" rx="1.5" />
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5.5v13l11-6.5z" />
+            </svg>
+          </button>
+          <button type="button" class="gs-button" @click="reset">{{ copy.reset }}</button>
+        </div>
+      </div>
 
-    <GsPartMixer
-      class="gs-module__mixer"
-      :parts="state.parts"
-      :selected-channel="selectedChannel"
-      :patch-names="patchNames"
-      @select="selectedChannel = $event"
-      @update="updatePart"
-    />
+      <div class="gs-racks">
+        <GsKitBrowser
+          v-if="selectedChannel === RHYTHM_CHANNEL"
+          :kits="drumKits"
+          :selected-program="selectedPart.program"
+          @select="selectProgram"
+        />
+        <GsPatchBrowser
+          v-else
+          :programs="gmPrograms"
+          :family-names="gmFamilyNames"
+          :variations="variations"
+          :program="selectedPart.program"
+          :bank-msb="selectedPart.bankMsb"
+          @select="selectProgram"
+          @select-bank="updatePart(selectedChannel, { bankMsb: $event })"
+        />
+
+        <GsEfxInspector
+          :efx="state.efx"
+          :param-meta="paramMeta"
+          @select-type="selectType"
+          @update-slot="updateSlot"
+        />
+      </div>
+
+      <GsPartMixer
+        :parts="state.parts"
+        :selected-channel="selectedChannel"
+        :patch-names="patchNames"
+        :activity="activity"
+        @select="selectedChannel = $event"
+        @update="updatePart"
+      />
+
+      <GsSourcePanel
+        :frames="frames"
+        :status="status"
+        :dropped-file="droppedFile"
+        :waveform="waveform"
+        :playhead="playhead"
+        :is-playing="isPlaying"
+        @drop="onDrop"
+        @clear-file="clearFile"
+      />
     </div>
   </ToolShell>
 </template>
@@ -283,14 +359,20 @@ function clearFile() {
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  font-family: var(--demo-font-mono, monospace);
-  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.gs-statusbar__field {
+  color: var(--demo-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .gs-statusbar__field b {
   margin-inline-end: 6px;
-  color: var(--demo-text-muted);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  color: var(--demo-text-faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 </style>

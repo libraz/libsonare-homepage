@@ -26,17 +26,33 @@ never parses a byte of it.
 
 ## `data/` is generated
 
-`address-table.json`, `efx-tables.json` and `efx-audibility.json` are produced
-by `yarn generate:gs-data` from the sibling engine checkout and committed, the
-same way the WASM artifacts are. `yarn check:gs-data` compares the digests they
-record. Nothing here holds a GS address literal: `gsAddress.ts` resolves an
-address from a parameter name, and `gsState.ts` takes every power-on value from
-the table, so a control starts where the engine starts.
+`address-table.json`, `efx-tables.json`, `efx-bindings.json` and
+`efx-audibility.json` are produced by `yarn generate:gs-data` from the sibling
+engine checkout and committed, the same way the WASM artifacts are.
+`yarn check:gs-data` compares the digests they record. Nothing here holds a GS
+address literal: `gsAddress.ts` resolves an address from a parameter name, and
+`gsState.ts` takes every power-on value from the table, so a control starts
+where the engine starts.
 
-The third file is measured rather than derived — it records which effect types
+The last one is measured rather than derived — it records which effect types
 change the render at their power-on bytes, and which of their twenty parameter
 slots the engine acts on, both found by bouncing. It follows the bundled engine
 build, so refreshing the WASM turns that gate red.
+
+## A parameter slot is named, not numbered
+
+A slot number says nothing, so the inspector does not print one on its own.
+`efx-bindings.json` adjudicates every parameter the machine prints: either the
+byte reaches a named control on a named insert — `Chorus · Rate` — or it
+carries a reason it reaches nothing. The unit beside the name is asked of the
+engine at runtime through `capabilityCatalog()`, because a stage in that file
+is a processor id and a key is a parameter name, so the two join directly.
+
+The three sources disagree, and the panel shows the disagreement rather than
+resolving it. A slot can be named, have a measured conversion behind it, and
+still not move this build's render — which means the byte has a meaning the
+bundled engine does not carry yet. It is drawn as a named slot this build does
+not act on, and refreshing the WASM is what turns it into a working control.
 
 ## Files
 
@@ -44,14 +60,22 @@ build, so refreshing the WASM turns that gate red.
 | --- | --- |
 | `gsAddress.ts` | Address resolution, part-block mapping, DT1 framing |
 | `gsState.ts` | Module state and the messages that produce it |
-| `gsNames.ts` | Japanese labels, and the effect-type names |
-| `useGsModule.ts` | The store: state, render, playback, engine queries |
-| `GsModuleDemo.vue` | The entry, composing the five panels over one state |
+| `gsNames.ts` | Japanese labels, the effect-type names, and the binding vocabulary |
+| `gsEfx.ts` | The three sources joined per effect type and slot |
+| `gsBindingText.ts` | A binding as a reader sees it, in either language |
+| `gsParamMeta.ts` | Unit and range per control, asked of the engine |
+| `useGsModule.ts` | The store: state, render, playback, scope, engine queries |
+| `GsModuleDemo.vue` | The entry, composing the panels over one state |
+| `GsDisplay.vue` | The module's display: part, sound, effect |
 | `GsPartMixer.vue` | The sixteen part strips |
 | `GsPatchBrowser.vue` | Programs by family, and bank variations |
 | `GsKitBrowser.vue` | Rhythm sets on the rhythm part |
-| `GsEfxInspector.vue` | Effect type, its slots, and what each one does here |
-| `GsSourcePanel.vue` | File drop, transport, and the bytes being sent |
+| `GsEfxInspector.vue` | Effect type, its named slots, and what each one does here |
+| `GsSourcePanel.vue` | File drop, the scope, and the bytes being sent |
+
+The fader and the knobs are the shared `ChannelStrip` and `RotaryKnob` from
+`src/components/ui`, and the chassis is the shared `.demo-deck` face, so this
+module and the studio deck are built from one vocabulary rather than two.
 
 ## Names come from the engine wherever it has them
 

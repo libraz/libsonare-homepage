@@ -1,19 +1,22 @@
 <script setup lang="ts">
 /**
- * What gets played, and the bytes that configure it.
+ * What the module is playing, and the bytes that configure it.
  *
  * Two sources. On its own the module auditions the selected part with a short
  * built-in phrase. Drop a `.mid` and that file plays instead, imported exactly
  * as it arrived — the panel settings are carried on a separate track beside it,
  * so a file that sets up its own GS state keeps it.
  *
- * The frame list is the point of the panel rather than a debug aid: it is the
- * whole difference between the module's power-on state and what is on screen,
- * which is usually a handful of bytes.
+ * The scope shows the render that is actually on the output, so a setting that
+ * changed the sound is visible before it is heard. The frame list beside it is
+ * the point of the panel rather than a debug aid: it is the whole difference
+ * between the module's power-on state and what is on screen, which is usually
+ * a handful of bytes.
  */
-import { computed, ref } from 'vue';
-import { TechPanel } from '@/components/ui';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from '@/composables/useI18n';
+import { amplitudeToDb, type WaveformPeak } from '@/utils/audio';
+import { prepareCanvas2D } from '@/utils/canvas';
 import type { SmfEvent } from '@/utils/gsSysex';
 import type { GsRenderStatus } from './useGsModule';
 
@@ -21,47 +24,46 @@ const props = defineProps<{
   frames: SmfEvent[];
   status: GsRenderStatus;
   droppedFile: { name: string; bytes: Uint8Array } | null;
+  waveform: WaveformPeak[];
+  /** How far through the render playback is, 0 to 1. */
+  playhead: number;
+  isPlaying: boolean;
 }>();
 
 const emit = defineEmits<{
-  play: [];
-  stop: [];
-  reset: [];
   drop: [file: File];
   clearFile: [];
 }>();
 
 const { localizedValue } = useI18n();
 const dragging = ref(false);
-const showFrames = ref(false);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 const copy = computed(() =>
   localizedValue({
     en: {
-      title: 'Source',
-      play: 'Play',
-      stop: 'Stop',
-      reset: 'Reset module',
       rendering: 'Rendering…',
       error: 'Render failed',
-      builtIn: 'Built-in phrase — drop a .mid here to play your own',
+      idle: 'Press play to bounce and hear the module',
+      builtIn: 'Built-in phrase — drop a .mid to play your own',
       dropHint: 'Release to load',
       clear: 'Remove',
+      scope: 'The render on the output',
+      peak: 'PEAK',
       framesNone: 'Nothing to send: every setting is at its power-on value.',
       framesSome: (n: number) => `${n} message${n === 1 ? '' : 's'} to send`,
       fileNote:
         'The file plays as it arrived. Any GS setup it carries is applied, and the panels above are sent alongside it.',
     },
     ja: {
-      title: 'ソース',
-      play: '再生',
-      stop: '停止',
-      reset: 'モジュールをリセット',
       rendering: 'レンダリング中…',
       error: 'レンダリングに失敗しました',
-      builtIn: '内蔵フレーズ。.mid をここに落とすと自分のファイルを鳴らせます',
+      idle: '再生するとバウンスして音が出ます',
+      builtIn: '内蔵フレーズ。.mid を落とすと自分のファイルを鳴らせます',
       dropHint: '離すと読み込みます',
       clear: '外す',
+      scope: '出力されているレンダリング結果',
+      peak: 'ピーク',
       framesNone: '送るものはありません。すべて電源投入時の値のままです。',
       framesSome: (n: number) => `送信するメッセージ ${n} 件`,
       fileNote:
@@ -70,45 +72,129 @@ const copy = computed(() =>
   }),
 );
 
-/** A frame as the hex a reader can compare against the address table. */
-function spell(event: SmfEvent): string {
-  const bytes = event.sysex ? [0xf0, ...event.sysex] : (event.bytes ?? []);
-  return bytes.map((byte) => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+/** What the scope says when it has no render to show. */
+const emptyLabel = computed(() => {
+  if (props.status === 'rendering') return copy.value.rendering;
+  if (props.status === 'error') return copy.value.error;
+  return copy.value.idle;
+});
+
+/**
+ * The render's own peak. The scope draws against it rather than against full
+ * scale, because a module at its power-on levels leaves a flat line there and
+ * the shape of the sound is the point of the display. The figure is printed
+ * beside it so the scaling is stated rather than implied — the meters on the
+ * strips are what read absolute level.
+ */
+const peak = computed(() =>
+  props.waveform.reduce((most, point) => Math.max(most, point.max, -point.min), 0),
+);
+
+const peakLabel = computed(() =>
+  peak.value > 0 ? `${amplitudeToDb(peak.value).toFixed(1)} dBFS` : '',
+);
+
+function token(name: string, fallback: string): string {
+  const element = canvasRef.value;
+  if (!element) return fallback;
+  return getComputedStyle(element).getPropertyValue(name).trim() || fallback;
 }
+
+/**
+ * Draw the render and the playhead over it. The waveform is redrawn with the
+ * playhead rather than cached beside it — at this width it is nine hundred
+ * strokes, which costs less than keeping two canvases in step.
+ */
+function draw(): void {
+  const frame = prepareCanvas2D(canvasRef.value);
+  if (!frame) return;
+  const { ctx, width, height } = frame;
+  ctx.clearRect(0, 0, width, height);
+
+  const peaks = props.waveform;
+  if (peaks.length === 0) return;
+
+  const middle = height / 2;
+  ctx.strokeStyle = token('--demo-border', 'rgba(128,128,128,0.3)');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, middle);
+  ctx.lineTo(width, middle);
+  ctx.stroke();
+
+  const scale = peak.value > 0 ? (middle * 0.94) / peak.value : middle;
+  ctx.strokeStyle = token('--demo-accent', '#8B5CF6');
+  ctx.lineWidth = Math.max(1, width / peaks.length - 0.4);
+  ctx.beginPath();
+  for (let i = 0; i < peaks.length; i++) {
+    const x = ((i + 0.5) / peaks.length) * width;
+    const top = middle - peaks[i].max * scale;
+    const bottom = middle - peaks[i].min * scale;
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, Math.max(bottom, top + 0.7));
+  }
+  ctx.stroke();
+
+  if (!props.isPlaying) return;
+  const x = props.playhead * width;
+  ctx.strokeStyle = token('--demo-playhead', '#F59E0B');
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, height);
+  ctx.stroke();
+}
+
+let observer: ResizeObserver | null = null;
+
+onMounted(() => {
+  draw();
+  if (typeof ResizeObserver === 'undefined' || !canvasRef.value) return;
+  observer = new ResizeObserver(() => draw());
+  observer.observe(canvasRef.value);
+});
+
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  observer = null;
+});
+
+watch(() => [props.waveform, props.playhead, props.isPlaying], draw);
 
 function onDrop(payload: DragEvent) {
   dragging.value = false;
   const file = payload.dataTransfer?.files?.[0];
   if (file) emit('drop', file);
 }
+
+/** A frame as the hex a reader can compare against the address table. */
+function spell(event: SmfEvent): string {
+  const bytes = event.sysex ? [0xf0, ...event.sysex] : (event.bytes ?? []);
+  return bytes.map((byte) => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+}
 </script>
 
 <template>
-  <TechPanel :title="copy.title">
-    <div class="gs-source">
-      <div class="gs-source__transport">
-        <button type="button" class="gs-source__button" @click="emit('play')">
-          {{ props.status === 'rendering' ? copy.rendering : copy.play }}
-        </button>
-        <button type="button" class="gs-source__button" @click="emit('stop')">
-          {{ copy.stop }}
-        </button>
-        <button type="button" class="gs-source__button" @click="emit('reset')">
-          {{ copy.reset }}
-        </button>
-        <span v-if="props.status === 'error'" class="gs-source__error">{{ copy.error }}</span>
-      </div>
+  <div class="gs-source">
+    <div class="gs-scope">
+      <canvas ref="canvasRef" class="gs-scope__canvas" :aria-label="copy.scope" role="img"></canvas>
+      <span v-if="!props.waveform.length" class="gs-scope__empty">{{ emptyLabel }}</span>
+      <span v-else class="gs-scope__peak">
+        <b>{{ copy.peak }}</b>{{ peakLabel }}
+      </span>
+    </div>
 
+    <div class="gs-source__side">
       <div
-        class="gs-source__drop"
-        :class="{ 'gs-source__drop--over': dragging }"
+        class="gs-drop"
+        :class="{ 'gs-drop--over': dragging }"
         @dragover.prevent="dragging = true"
         @dragleave="dragging = false"
         @drop.prevent="onDrop"
       >
         <template v-if="props.droppedFile">
-          <span class="gs-source__file">{{ props.droppedFile.name }}</span>
-          <button type="button" class="gs-source__button" @click="emit('clearFile')">
+          <span class="gs-drop__file">{{ props.droppedFile.name }}</span>
+          <button type="button" class="gs-button" @click="emit('clearFile')">
             {{ copy.clear }}
           </button>
         </template>
@@ -117,9 +203,9 @@ function onDrop(payload: DragEvent) {
 
       <p v-if="props.droppedFile" class="gs-note">{{ copy.fileNote }}</p>
 
-      <details v-if="props.frames.length" class="gs-source__frames" :open="showFrames">
-        <summary @click="showFrames = !showFrames">{{ copy.framesSome(props.frames.length) }}</summary>
-        <ol class="gs-source__list">
+      <details v-if="props.frames.length" class="gs-details">
+        <summary>{{ copy.framesSome(props.frames.length) }}</summary>
+        <ol class="gs-details__list">
           <li v-for="(frame, index) in props.frames" :key="index" class="gs-value">
             {{ spell(frame) }}
           </li>
@@ -127,82 +213,5 @@ function onDrop(payload: DragEvent) {
       </details>
       <p v-else class="gs-note">{{ copy.framesNone }}</p>
     </div>
-  </TechPanel>
+  </div>
 </template>
-
-<style scoped>
-.gs-source {
-  display: grid;
-  gap: 10px;
-}
-
-.gs-source__transport {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.gs-source__button {
-  padding: 5px 12px;
-  border: 1px solid var(--demo-border-strong);
-  border-radius: 5px;
-  background: var(--demo-control-bg-strong);
-  color: var(--demo-text-strong);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.78rem;
-}
-
-.gs-source__button:hover {
-  border-color: var(--demo-accent-border);
-}
-
-.gs-source__button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.gs-source__error {
-  color: var(--demo-status-error);
-  font-size: 0.75rem;
-}
-
-.gs-source__drop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px dashed var(--demo-border-strong);
-  border-radius: 6px;
-  background: var(--demo-dropzone-bg);
-}
-
-.gs-source__drop--over {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-}
-
-.gs-source__file {
-  overflow: hidden;
-  font-size: 0.78rem;
-  color: var(--demo-text-strong);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gs-source__frames summary {
-  cursor: pointer;
-  color: var(--demo-text);
-  font-size: 0.76rem;
-}
-
-.gs-source__list {
-  margin: 8px 0 0;
-  padding-inline-start: 1.6rem;
-  display: grid;
-  gap: 2px;
-  font-size: 0.72rem;
-}
-</style>

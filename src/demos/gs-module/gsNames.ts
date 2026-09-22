@@ -270,3 +270,101 @@ export const GS_EFX_TYPES: Readonly<Record<string, LocalizedName>> = {
 
 /** Keys from {@link GS_EFX_TYPES} whose name could not be confirmed. Empty: every key was confirmed. */
 export const GS_EFX_TYPES_UNNAMED: readonly string[] = [];
+
+/**
+ * The insert an effect-binding row names, keyed the same way as
+ * `data/efx-bindings.json`'s `rows[].stage`.
+ */
+export const GS_EFX_STAGES: Readonly<Record<string, LocalizedName>> = {
+  'effects.delay.stereo': { en: 'Stereo Delay', ja: 'ステレオディレイ' },
+  'effects.modulation.chorus': { en: 'Chorus', ja: 'コーラス' },
+  'effects.modulation.ensemble': { en: 'Ensemble', ja: 'アンサンブル' },
+  'effects.modulation.flanger': { en: 'Flanger', ja: 'フランジャー' },
+  'effects.modulation.phaser': { en: 'Phaser', ja: 'フェイザー' },
+  'effects.modulation.ringModulator': { en: 'Ring Modulator', ja: 'リングモジュレーター' },
+  'effects.modulation.rotary': { en: 'Rotary Speaker', ja: 'ロータリースピーカー' },
+  'eq.graphic': { en: 'Graphic EQ', ja: 'グラフィックイコライザー' },
+  'eq.parametric': { en: 'Parametric EQ', ja: 'パラメトリックイコライザー' },
+  'stereo.autoPan': { en: 'Auto Pan', ja: 'オートパン' },
+  'utility.gain': { en: 'Output Gain', ja: 'アウトプットゲイン' },
+};
+
+/**
+ * The control an effect-binding row's key leaf names — the part of the key
+ * after its last dot. The `bandNNGainDb` leaves (the graphic EQ's fixed
+ * bands) are not listed one by one; {@link bindingLabel} resolves those
+ * through the plain `gainDb` entry instead.
+ */
+export const GS_EFX_PARAMS: Readonly<Record<string, LocalizedName>> = {
+  gainDb: { en: 'Gain', ja: 'ゲイン' },
+  frequencyHz: { en: 'Frequency', ja: '周波数' },
+  q: { en: 'Q', ja: 'Q' },
+  carrierHz: { en: 'Carrier Frequency', ja: 'キャリア周波数' },
+  centerDelayMs: { en: 'Center Delay', ja: 'センターディレイ' },
+  dampingHz: { en: 'Damping', ja: 'ダンピング' },
+  delayTimeLMs: { en: 'Delay Time (L)', ja: 'ディレイタイム（L）' },
+  delayTimeRMs: { en: 'Delay Time (R)', ja: 'ディレイタイム（R）' },
+  drumUndershootHz: { en: 'Drum Undershoot', ja: 'ドラムアンダーシュート' },
+  levelDb: { en: 'Level', ja: 'レベル' },
+  preFilterHz: { en: 'Pre-Filter', ja: 'プリフィルター' },
+  rateHz: { en: 'Rate', ja: 'レート' },
+  undershootHz: { en: 'Undershoot', ja: 'アンダーシュート' },
+};
+
+/**
+ * Japanese for each distinct `state`/`unmapped` reason `data/efx-bindings.json`
+ * carries, keyed by the engine's exact English wording. Falls back to the
+ * English itself when a key is missing, which is the signal that the engine
+ * reworded a reason this table has not caught up with.
+ */
+export const GS_BINDING_REASONS: Readonly<Record<string, string>> = {
+  'a bare 00-7F with no unit printed beside it, so no conversion may be guessed':
+    '00〜7F の生値で単位の記載がなく、変換式を推測できない',
+  'a pan places a signal where stereo.stereoBalance moves an image already there, and the measured pair is the raw constant-power curve, which that insert normalises to centre unity three decibels above':
+    'このパンは stereo.stereoBalance がすでに定位させた像を動かす位置指定で、測定されたペアは生の等パワーカーブだが、このインサートはセンターを基準ユニティより 3dB 上に正規化している',
+  'a printed column with no measured table behind it':
+    '記載列はあるが、裏付けとなる測定テーブルがない',
+  "the auto-pan insert's LFO takes no shape selector":
+    'オートパンインサートの LFO に波形セレクターはない',
+  'the auto-wah insert follows an envelope and carries no LFO rate':
+    'オートワウインサートはエンベロープ追従で、LFO レートを持たない',
+  'the bit-crusher insert has no filter': 'ビットクラッシャーインサートにフィルターはない',
+  'the bit-crusher insert has no gain ladder before its degrader':
+    'ビットクラッシャーインサートには劣化段の前段ゲインがない',
+  'the bit-crusher insert has no shelf table after its degrader':
+    'ビットクラッシャーインサートには劣化段の後段シェルフテーブルがない',
+  'the flanger insert has no sample-and-hold clock over its LFO':
+    'フランジャーインサートの LFO にサンプル&ホールドクロックはない',
+  'the graphic-EQ insert has no band width': 'グラフィック EQ インサートにバンド幅はない',
+  "the insert's mix is a crossfade, dry = 1 - wet; the measured law is two independent gains that meet at full in the middle of the byte, which the record calls the opposite sign to a crossfade":
+    'このインサートのミックスは dry = 1 - wet のクロスフェードだが、測定された特性はバイト中央でフルに達する独立した 2 本のゲインで、記録はクロスフェードとは符号が逆だとしている',
+  'the limiter insert has no post gain': 'リミッターインサートにポストゲインはない',
+  'the limiter insert has no ratio': 'リミッターインサートにレシオはない',
+  'the pitch-shifter insert has no feedback': 'ピッチシフターインサートにフィードバックはない',
+  'the pitch-shifter insert has one voice and this is a second':
+    'ピッチシフターインサートはボイス 1 系統のみで、これは 2 系統目にあたる',
+  "the ring modulator's carrier is a sine and takes no shape selector":
+    'リングモジュレーターのキャリアはサイン波固定で、波形セレクターはない',
+  'the rotary insert has no speed switch': 'ロータリーインサートにスピードスイッチはない',
+  'the stereo-delay insert carries no modulation LFO':
+    'ステレオディレイインサートに変調 LFO はない',
+  'the stereo-delay insert has two taps and this is a fourth':
+    'ステレオディレイインサートはタップ 2 系統のみで、これは 4 系統目にあたる',
+  'the stereo-delay insert has two taps and this is a third':
+    'ステレオディレイインサートはタップ 2 系統のみで、これは 3 系統目にあたる',
+  'a binaural panner has no insert, so the type realises no chain at all':
+    'バイノーラルパンナーにインサートはなく、このタイプはチェーンを一切構成しない',
+  'a parallel-2 type realises no chain at all': '並列 2 系統タイプはチェーンを一切構成しない',
+  'a vowel formant filter has no insert, so the type realises no chain at all':
+    '母音フォルマントフィルターにインサートはなく、このタイプはチェーンを一切構成しない',
+};
+
+/**
+ * How a type stands in this build, worded once for every panel that says it.
+ * The standing itself is measured; only its wording lives here.
+ */
+export const GS_EFX_STANDINGS: Readonly<Record<string, LocalizedName>> = {
+  adjustable: { en: 'Adjustable', ja: '調整できる' },
+  fixed: { en: 'Parameters inert', ja: 'パラメータが効かない' },
+  inert: { en: 'No effect here', ja: 'このビルドでは効かない' },
+};

@@ -8,7 +8,6 @@
  * exactly what a reader is most likely to mistake for a broken kit.
  */
 import { computed } from 'vue';
-import { TechPanel } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import type { GsDrumKit } from './useGsModule';
 
@@ -46,12 +45,13 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
 </script>
 
 <template>
-  <TechPanel :title="copy.title">
-    <template #header-right>
-      <span v-if="props.kits.length" class="gs-value gs-kits__count">
+  <section class="gs-rack" :aria-label="copy.title">
+    <div class="gs-rack__head">
+      <span class="gs-rack__title">{{ copy.title }}</span>
+      <span v-if="props.kits.length" class="gs-rack__aside">
         {{ copy.count(props.kits.length, apartCount) }}
       </span>
-    </template>
+    </div>
 
     <p v-if="!props.kits.length" class="gs-note">{{ copy.loading }}</p>
 
@@ -66,30 +66,27 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
         >
           <span class="gs-kits__program gs-value">{{ kit.program }}</span>
           <span class="gs-kits__name">{{ kit.name }}</span>
-          <span v-if="!kit.voicedApart" class="gs-inert gs-kits__tag">{{ copy.fallback }}</span>
+          <span v-if="!kit.voicedApart" class="gs-badge gs-badge--inert gs-kits__tag">
+            {{ copy.fallback }}
+          </span>
         </button>
       </li>
     </ul>
 
-    <template #footer>
-      <p class="gs-note">{{ copy.note }}</p>
-    </template>
-  </TechPanel>
+    <p class="gs-note gs-kits__note">{{ copy.note }}</p>
+  </section>
 </template>
 
 <style scoped>
 .gs-kits {
   display: grid;
-  gap: 3px;
+  align-content: start;
+  gap: 1px;
   margin: 0;
   padding: 0;
-  max-block-size: 18rem;
+  max-block-size: 19rem;
   overflow-y: auto;
   list-style: none;
-}
-
-.gs-kits__count {
-  font-size: 0.7rem;
 }
 
 .gs-kits__item {
@@ -98,20 +95,20 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
   gap: 8px;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   inline-size: 100%;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
   color: var(--demo-text);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.78rem;
+  font-size: 13px;
   text-align: start;
 }
 
 .gs-kits__item:hover {
   border-color: var(--demo-border);
-  background: var(--demo-control-bg);
+  background: var(--demo-control-bg-strong);
 }
 
 .gs-kits__item--selected {
@@ -126,7 +123,7 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
 }
 
 .gs-kits__program {
-  font-size: 0.7rem;
+  font-size: 11px;
   text-align: end;
 }
 
@@ -138,7 +135,12 @@ const apartCount = computed(() => props.kits.filter((kit) => kit.voicedApart).le
 
 .gs-kits__tag {
   padding: 1px 6px;
-  font-size: 0.64rem;
-  white-space: nowrap;
+  font-size: 8.5px;
+}
+
+.gs-kits__note {
+  padding-block-start: 10px;
+  border-block-start: 1px solid var(--demo-border);
+  font-size: 10.5px;
 }
 </style>

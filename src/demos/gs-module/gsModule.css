@@ -1,157 +1,489 @@
 /*
- * Layout and controls shared by the GS module panels.
+ * The GS module's front panel.
  *
- * The screen is a front panel: one row of sixteen part strips along the
- * bottom, the selected part's sound browser above it, and the insertion
- * effect beside them. Colour carries one meaning only — the accent marks
- * what is selected, and the warn tone marks something the engine receives
- * but does not act on. Nothing else is tinted.
+ * The page is one piece of equipment rather than a column of cards: a display
+ * across the top of the chassis, the sound and effect racks behind it, the
+ * sixteen part strips along the bottom, and the source bay under those. The
+ * face is the shared `.demo-deck` chassis, so this module and the studio deck
+ * read as two machines from one bench.
+ *
+ * Colour carries one meaning only. The accent marks what is selected, and the
+ * warn tone marks something the engine receives but does not act on. Nothing
+ * else is tinted — a part is not colour-coded, and the rhythm part is marked
+ * by its badge rather than by a hue of its own.
  */
 
 .gs-module {
-  display: grid;
-  gap: 12px;
-  grid-template-areas:
-    'source source'
-    'browser efx'
-    'mixer mixer';
-  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  max-width: 1360px;
+  margin: 0 auto;
+  overflow: hidden;
   font-family: var(--demo-font-body, inherit);
+  animation: gs-deck-rise 0.45s ease-out both;
 }
 
-.gs-module__source {
-  grid-area: source;
-}
-.gs-module__browser {
-  grid-area: browser;
-  /* The browser swaps between programs and drum kits when the rhythm part is
-     selected. Reserving the taller of the two keeps the panel from jumping. */
-  min-block-size: 22rem;
-}
-.gs-module__efx {
-  grid-area: efx;
-  min-block-size: 22rem;
-}
-.gs-module__mixer {
-  grid-area: mixer;
+@keyframes gs-deck-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
 }
 
-/* ---- part strips --------------------------------------------------------- */
+/* ---- front panel head ---------------------------------------------------- */
 
-.gs-mixer {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  padding-block-end: 4px;
-}
-
-.gs-strip {
-  display: flex;
-  flex: 1 0 3.25rem;
-  flex-direction: column;
+.gs-head {
+  display: grid;
   align-items: stretch;
-  gap: 6px;
-  padding: 8px 6px;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background: var(--demo-control-bg);
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  gap: 16px;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr) auto;
+  padding: 16px 20px;
 }
 
-.gs-strip:hover {
-  border-color: var(--demo-border-strong);
+.gs-brand {
+  display: grid;
+  align-content: center;
+  gap: 2px;
 }
 
-.gs-strip--selected {
-  border-color: var(--demo-accent);
-  background: var(--demo-accent-subtle);
-}
-
-.gs-strip:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
-}
-
-.gs-strip__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.gs-strip__channel {
-  font-family: var(--demo-font-mono, monospace);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
+.gs-brand__maker {
   color: var(--demo-text-strong);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
 }
 
-.gs-strip__role {
-  font-size: 0.6rem;
+.gs-brand__name {
+  color: var(--demo-accent-light);
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-weight: 800;
   letter-spacing: 0.04em;
-  color: var(--demo-text-muted);
+  line-height: 1.15;
+}
+
+html:not(.dark) .gs-brand__name {
+  color: var(--demo-accent);
+}
+
+.gs-brand__tag {
+  color: var(--demo-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+/* ---- the display --------------------------------------------------------- */
+
+/* The one place the module says, in one glance, what it is set to. Every
+   figure on it is the state the panels below write, never a second account. */
+.gs-lcd {
+  display: grid;
+  align-items: center;
+  gap: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 9px 4px;
+  border: 1px solid var(--demo-bezel);
+  border-radius: 7px;
+  background: var(--demo-screen-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--demo-screen-inset-2),
+    inset 0 2px 10px var(--demo-screen-inset-1);
+}
+
+.gs-lcd__cell {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 14px;
+}
+
+.gs-lcd__cell + .gs-lcd__cell {
+  border-inline-start: 1px solid var(--demo-screen-inset-1);
+}
+
+.gs-lcd__label {
+  color: var(--demo-text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
-.gs-strip__patch {
+.gs-lcd__part {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--demo-accent);
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+html.dark .gs-lcd__part {
+  color: var(--demo-accent-light);
+}
+
+.gs-lcd__role {
+  color: var(--demo-text-muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.gs-lcd__patch {
   overflow: hidden;
-  font-size: 0.66rem;
-  line-height: 1.25;
-  color: var(--demo-text);
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.gs-strip__level {
-  inline-size: 100%;
-}
-
-.gs-strip__sends {
-  display: grid;
-  gap: 3px;
-}
-
-.gs-send {
-  display: grid;
-  align-items: center;
-  gap: 4px;
-  grid-template-columns: 1.6rem minmax(0, 1fr);
-}
-
-.gs-send__label {
-  font-family: var(--demo-font-mono, monospace);
-  font-size: 0.58rem;
+.gs-lcd__sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
-.gs-strip__efx {
-  padding: 3px 0;
+.gs-lcd__efx {
+  overflow: hidden;
+  max-inline-size: 15rem;
+  color: var(--demo-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- transport ----------------------------------------------------------- */
+
+.gs-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gs-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 46px;
+  block-size: 46px;
+  padding: 0;
+  border: 1px solid var(--demo-accent-border);
+  border-radius: 50%;
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent-light);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+html:not(.dark) .gs-play:not(.gs-play--on) {
+  border-color: var(--demo-accent-dim);
+  color: var(--demo-accent);
+}
+
+.gs-play:hover:not(:disabled) {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-dim);
+}
+
+.gs-play--on {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+  box-shadow: 0 0 18px var(--demo-accent-dim);
+}
+
+.gs-play:disabled {
+  cursor: default;
+  opacity: var(--demo-disabled-opacity);
+}
+
+.gs-button {
+  padding: 7px 12px;
+  border: 1px solid var(--demo-border-strong);
+  border-radius: 6px;
+  background: var(--demo-control-bg-strong);
+  color: var(--demo-text);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.gs-button:hover:not(:disabled) {
+  border-color: var(--demo-accent-border);
+  color: var(--demo-text-strong);
+}
+
+.gs-button:disabled {
+  cursor: default;
+  opacity: var(--demo-disabled-opacity);
+}
+
+/* ---- racks --------------------------------------------------------------- */
+
+.gs-racks {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 25rem);
+  padding: 0 20px 16px;
+}
+
+.gs-rack {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px 14px 14px;
   border: 1px solid var(--demo-border);
+  border-radius: 9px;
+  background: var(--demo-control-bg);
+  min-block-size: 23rem;
+}
+
+.gs-rack__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-block-end: 8px;
+  border-block-end: 1px solid var(--demo-border);
+}
+
+.gs-rack__title {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
+}
+
+.gs-rack__aside {
+  color: var(--demo-text-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* ---- part strips --------------------------------------------------------- */
+
+.gs-parts {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px 16px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* Sixteen strips across the chassis, so each one is narrow and the fader
+   throw is shortened to match rather than the row being scrolled. */
+.gs-part {
+  --strip-bay-height: 104px;
+  --strip-min-width: 70px;
+
+  display: grid;
+  flex: 1 1 76px;
+  min-inline-size: 76px;
+}
+
+/* The selected part is the one every rack above is editing, so it is marked
+   on the strip as firmly as a selection anywhere else on the page. */
+.gs-part--selected .channel-strip {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+}
+
+.gs-part__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+/* The patch name is the strip's scribble label: two lines at this width, then
+   clipped. A part number is what identifies the strip; the name is the reminder
+   beside it, and the display above carries it in full. */
+.gs-part__select {
+  display: -webkit-box;
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 2.4em;
+  padding: 1px 2px;
+  border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
   color: var(--demo-text-muted);
   cursor: pointer;
-  font-family: var(--demo-font-mono, monospace);
-  font-size: 0.6rem;
-  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-align: center;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
-.gs-strip__efx--on {
+.gs-part__select:hover {
+  border-color: var(--demo-border);
+  color: var(--demo-text);
+}
+
+.gs-part--selected .gs-part__select {
+  color: var(--demo-text-strong);
+}
+
+.gs-part__knobs {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  inline-size: 100%;
+}
+
+.gs-part__sends {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+}
+
+.gs-part__efx {
+  inline-size: 100%;
+  padding: 3px 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--demo-text-faint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.gs-part__efx:hover {
+  border-color: var(--demo-border-strong);
+  color: var(--demo-text);
+}
+
+.gs-part__efx--on {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent-subtle);
   color: var(--demo-accent);
 }
 
-.gs-strip__efx:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
+/* ---- source bay ---------------------------------------------------------- */
+
+.gs-source {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20rem);
+  padding: 14px 20px 18px;
+  border-block-start: 1px solid var(--demo-border);
+  background: var(--demo-control-bg);
+}
+
+.gs-scope {
+  position: relative;
+  block-size: 96px;
+  border: 1px solid var(--demo-bezel);
+  border-radius: 7px;
+  background: var(--demo-screen-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--demo-screen-inset-2),
+    inset 0 2px 10px var(--demo-screen-inset-1);
+  overflow: hidden;
+}
+
+.gs-scope__canvas {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.gs-scope__peak {
+  position: absolute;
+  inset-block-start: 7px;
+  inset-inline-end: 10px;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gs-scope__peak b {
+  margin-inline-end: 6px;
+  color: var(--demo-text-faint);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.gs-scope__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: var(--demo-text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.gs-source__side {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.gs-drop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--demo-border-strong);
+  border-radius: 7px;
+  background: var(--demo-dropzone-bg);
+}
+
+.gs-drop--over {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+}
+
+.gs-drop__file {
+  overflow: hidden;
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- shared readouts ----------------------------------------------------- */
 
 .gs-value {
-  font-family: var(--demo-font-mono, monospace);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--demo-text);
 }
@@ -159,35 +491,95 @@
 .gs-note {
   margin: 0;
   color: var(--demo-text-muted);
-  font-size: 0.72rem;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.gs-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--demo-border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.gs-badge--on {
+  border-color: var(--demo-accent-border);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent);
 }
 
 /* A byte the engine receives and holds without acting on it. */
-.gs-inert {
-  border: 1px solid var(--demo-warn-border);
-  border-radius: 4px;
+.gs-badge--inert {
+  border-color: var(--demo-warn-border);
   background: var(--demo-warn-bg);
   color: var(--demo-warn-text);
 }
 
-@media (width <= 900px) {
-  .gs-module {
-    grid-template-areas:
-      'source'
-      'browser'
-      'efx'
-      'mixer';
+.gs-details {
+  color: var(--demo-text-muted);
+  font-size: 11px;
+}
+
+.gs-details summary {
+  cursor: pointer;
+}
+
+.gs-details summary:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.gs-details__list {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding-inline-start: 1.1rem;
+  line-height: 1.5;
+}
+
+/* ---- narrower panels ----------------------------------------------------- */
+
+@media (width <= 1080px) {
+  .gs-racks,
+  .gs-source {
     grid-template-columns: minmax(0, 1fr);
   }
-  .gs-module__browser,
-  .gs-module__efx {
+  .gs-rack {
     min-block-size: 0;
   }
 }
 
+@media (width <= 820px) {
+  .gs-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .gs-lcd {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .gs-lcd__cell--efx {
+    grid-column: 1 / -1;
+    padding-block-start: 8px;
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--demo-screen-inset-1);
+  }
+  .gs-transport {
+    justify-content: flex-start;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .gs-strip {
+  .gs-module {
+    animation: none;
+  }
+  .gs-play,
+  .gs-button,
+  .gs-part__efx {
     transition: none;
   }
 }
