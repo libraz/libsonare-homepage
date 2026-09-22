@@ -63,6 +63,21 @@ function range(from: number, to: number): number[] {
   return Array.from({ length: to - from }, (_, i) => from + i);
 }
 
+/** Steps per beat; each beat is set apart by a wider gutter, as on the bench. */
+const BEAT = 4;
+
+/** Equal step tracks with a narrow spacer track between beats. */
+function bankColumns(from: number, to: number): string {
+  const beats = Array.from({ length: (to - from) / BEAT }, () => `repeat(${BEAT}, minmax(0, 1fr))`);
+  return `var(--sb-gutter) ${beats.join(' var(--sb-beat-gap) ')}`;
+}
+
+/** Grid column of a step, skipping the spacer tracks. */
+function column(index: number, from: number): string {
+  const at = index - from;
+  return String(2 + at + Math.floor(at / BEAT));
+}
+
 // ------------------------------------------------------------ cell states
 
 /** An accent is latched at a note-on, so only a struck step can hold one. */
@@ -289,7 +304,7 @@ const reasons = computed(() => {
         class="step-grid__bank"
         role="grid"
         :aria-label="fill(copy.grid.bank, { a: from + 1, b: to })"
-        :style="{ '--sb-cols': String(to - from) }"
+        :style="{ '--sb-columns': bankColumns(from, to) }"
       >
         <div class="step-grid__row step-grid__row--ruler" role="row">
           <span class="step-grid__gutter" role="columnheader">{{ copy.grid.ruler }}</span>
@@ -298,6 +313,7 @@ const reasons = computed(() => {
             :key="index"
             class="step-grid__tick"
             role="columnheader"
+            :style="{ gridColumn: column(index, from) }"
             :class="{
               'step-grid__tick--beat': index % 4 === 0,
               'step-grid__tick--playing': index === playhead,
@@ -313,6 +329,7 @@ const reasons = computed(() => {
             class="step-grid__cell"
             :class="{ 'step-grid__cell--playing': index === playhead }"
             role="gridcell"
+            :style="{ gridColumn: column(index, from) }"
           >
             <!-- Pitch: a value rather than a switch, so it is a spin button and
                  plus / minus move it. -->
@@ -349,6 +366,12 @@ const reasons = computed(() => {
               :class="{
                 'step-grid__button--beat': index % 4 === 0,
                 'step-grid__button--selected': isCursor(row, index),
+                'step-grid__button--strike': lane === 'gate' && steps[index].gate === 'note',
+                'step-grid__button--tie': lane === 'gate' && steps[index].gate === 'tie',
+                'step-grid__button--accent-on': lane === 'accent' && accentState(index) === 'on',
+                'step-grid__button--slide-on':
+                  lane === 'slide' &&
+                  (slideState(index) === 'active' || slideState(index) === 'pitch-only'),
                 'step-grid__button--unavailable':
                   (lane === 'accent' && accentState(index) === 'unavailable') ||
                   (lane === 'slide' && slideState(index) === 'unavailable'),

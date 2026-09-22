@@ -12,6 +12,11 @@
 /** Panel legends. English in every locale, by the same decision the README states. */
 export const SILKSCREEN = {
   designation: 'SB-1',
+  tagline: 'MONO BASS / 16 STEPS',
+
+  // Control strip sections, in signal order.
+  oscillator: 'OSCILLATOR',
+  envelope: 'ENVELOPE',
 
   // Knobs, in signal order: oscillator, filter, envelope, output.
   vco: 'VCO',
@@ -31,9 +36,12 @@ export const SILKSCREEN = {
   gate: 'GATE',
   slide: 'SLIDE',
 
-  // Transport and meters.
+  // Transport, readout and meters.
   run: 'RUN',
   stop: 'STOP',
+  step: 'STEP',
+  pattern: 'PATTERN',
+  sequencer: 'SEQUENCER',
   peak: 'PEAK',
 
   // Views.
@@ -155,9 +163,7 @@ export const enCopy = {
   guideLink: 'Read about the synthesizer',
 
   sections: {
-    voice: 'Oscillator and filter',
-    envelope: 'Envelope and accent',
-    output: 'Tempo and output',
+    controls: 'Sound controls',
     transport: 'Transport',
     sequencer: 'Step sequencer',
     views: 'Displays',
@@ -251,11 +257,7 @@ export const enCopy = {
     output: {
       caption: 'Output peak after the master fader and its true-peak limiter at -1 dBTP.',
       ceiling: 'Ceiling',
-      tempo: 'Tempo',
-      step: 'Step',
-      pattern: 'Pattern',
       rate: 'Rate',
-      shape: 'Shape',
     },
   },
 };
@@ -271,9 +273,7 @@ export const jaCopy: typeof enCopy = {
   guideLink: 'シンセサイザーについて読む',
 
   sections: {
-    voice: 'オシレータとフィルタ',
-    envelope: 'エンベロープとアクセント',
-    output: 'テンポと出力',
+    controls: '音づくりのつまみ',
     transport: 'トランスポート',
     sequencer: 'ステップシーケンサ',
     views: 'ディスプレイ',
@@ -367,11 +367,7 @@ export const jaCopy: typeof enCopy = {
     output: {
       caption: 'マスターフェーダーと -1 dBTP の真のピークリミッタを通った後の出力ピークです。',
       ceiling: '天井',
-      tempo: 'テンポ',
-      step: 'ステップ',
-      pattern: 'パターン',
       rate: 'サンプルレート',
-      shape: '波形',
     },
   },
 };

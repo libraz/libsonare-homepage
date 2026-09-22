@@ -25,7 +25,6 @@ import {
   type FilterCurvePoint,
   filterCurve,
 } from '@/demos/step-bass/stepBassFilterCurve';
-import { STEP_COUNT } from '@/demos/step-bass/stepBassPatch';
 import { amplitudeToDb, formatSampleRate } from '@/utils/audio';
 import { prepareCanvas2D } from '@/utils/canvas';
 
@@ -35,13 +34,8 @@ const props = defineProps<{
   cutoffHz: number;
   resonanceQ: number;
   envModCents: number;
-  waveform: string;
   /** Output peak as a linear amplitude. */
   peak: number;
-  bpm: number;
-  /** Step the transport is on, or -1 while it is stopped. */
-  playhead: number;
-  patternName: string;
   sampleRate: number;
   /** All three displays stand at once; below this the switcher shows one. */
   wide: boolean;
@@ -192,13 +186,16 @@ const peakPercent = computed(() => {
   const span = 0 - METER_FLOOR_DB;
   return Math.min(100, Math.max(0, ((peakDb.value - METER_FLOOR_DB) / span) * 100));
 });
-const ceilingPercent = ((CEILING_DB - METER_FLOOR_DB) / (0 - METER_FLOOR_DB)) * 100;
+const ceilingPercent = meterPercent(CEILING_DB);
 const peakReadout = computed(() =>
   peakDb.value <= METER_FLOOR_DB ? '-∞ dB' : `${peakDb.value.toFixed(1)} dB`,
 );
-const stepReadout = computed(() =>
-  props.playhead < 0 ? `- / ${STEP_COUNT}` : `${props.playhead + 1} / ${STEP_COUNT}`,
-);
+/** Scale marks under the meter. */
+const METER_MARKS_DB = [-60, -48, -36, -24, -12, -6, 0];
+
+function meterPercent(db: number): number {
+  return ((db - METER_FLOOR_DB) / (0 - METER_FLOOR_DB)) * 100;
+}
 </script>
 
 <template>
@@ -218,39 +215,39 @@ const stepReadout = computed(() =>
 
     <div class="step-views__panels">
       <article v-if="visible('scope')" class="step-views__panel">
-        <span class="step-views__legend">{{ SILKSCREEN.scope }}</span>
+        <header class="step-views__head">
+          <span class="step-views__legend">{{ SILKSCREEN.scope }}</span>
+        </header>
         <ScopeDisplay class="step-views__scope" :analyser="analyser" />
         <p class="step-views__caption">{{ copy.views.scope.caption }}</p>
       </article>
 
       <article v-if="visible('filter')" class="step-views__panel">
-        <span class="step-views__legend">{{ SILKSCREEN.filter }}</span>
+        <header class="step-views__head">
+          <span class="step-views__legend">{{ SILKSCREEN.filter }}</span>
+          <span class="step-views__readouts">
+            <span class="step-views__readout">
+              <b>{{ copy.views.filter.corner }}</b>{{ formatHz(cornerHz) }}
+            </span>
+            <span class="step-views__readout step-views__readout--env">
+              <b>{{ copy.views.filter.envOpen }}</b>{{ formatHz(envOpenCutoffHz(cutoffHz, envModCents)) }}
+            </span>
+          </span>
+        </header>
         <div class="step-views__screen">
           <canvas ref="curveCanvas" class="step-views__canvas" aria-hidden="true"></canvas>
         </div>
-        <div>
-          <div class="step-views__metrics">
-            <MetricItem
-              layout="column"
-              :label="copy.views.filter.corner"
-              :value="formatHz(cornerHz)"
-            />
-            <MetricItem
-              layout="column"
-              :label="copy.views.filter.envOpen"
-              :value="formatHz(envOpenCutoffHz(cutoffHz, envModCents))"
-            />
-          </div>
-          <p class="step-views__caption">{{ copy.views.filter.caption }}</p>
-        </div>
+        <p class="step-views__caption">{{ copy.views.filter.caption }}</p>
       </article>
 
       <article v-if="visible('output')" class="step-views__panel">
-        <span class="step-views__legend">{{ SILKSCREEN.output }}</span>
+        <header class="step-views__head">
+          <span class="step-views__legend">{{ SILKSCREEN.output }}</span>
+        </header>
         <div class="step-views__meter">
-          <div class="step-views__meter-head">
-            <span>{{ SILKSCREEN.peak }}</span>
-            <span>{{ peakReadout }}</span>
+          <div class="step-views__peak">
+            <span class="step-views__peak-key">{{ SILKSCREEN.peak }}</span>
+            <span class="step-views__peak-value">{{ peakReadout }}</span>
           </div>
           <div
             class="step-views__meter-bar"
@@ -268,18 +265,19 @@ const stepReadout = computed(() =>
               :title="copy.views.output.ceiling"
             ></span>
           </div>
+          <div class="step-views__scale" aria-hidden="true">
+            <span
+              v-for="mark in METER_MARKS_DB"
+              :key="mark"
+              class="step-views__mark"
+              :style="{ left: `${meterPercent(mark)}%` }"
+            >{{ mark }}</span>
+          </div>
           <div class="step-views__metrics">
             <MetricItem
               layout="column"
-              :label="copy.views.output.tempo"
-              :value="`${Math.round(bpm)} BPM`"
-            />
-            <MetricItem layout="column" :label="copy.views.output.step" :value="stepReadout" />
-            <MetricItem layout="column" :label="copy.views.output.pattern" :value="patternName" />
-            <MetricItem
-              layout="column"
-              :label="copy.views.output.shape"
-              :value="waveform.toUpperCase()"
+              :label="copy.views.output.ceiling"
+              :value="`${CEILING_DB} dBTP`"
             />
             <MetricItem
               layout="column"

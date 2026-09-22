@@ -13,15 +13,16 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ToolShell from '@/components/ToolShell.vue';
-import { StatusIndicator } from '@/components/ui';
+import { StatusIndicator, TransportButton } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useUrlState } from '@/composables/useUrlState';
 import { bootWasm, useWasmBoot } from '@/composables/useWasmBoot';
+import StepBassHead from '@/demos/step-bass/StepBassHead.vue';
 import StepBassPanel from '@/demos/step-bass/StepBassPanel.vue';
 import StepBassViews from '@/demos/step-bass/StepBassViews.vue';
 import StepGrid from '@/demos/step-bass/StepGrid.vue';
 import { compile, LOOP_PPQ } from '@/demos/step-bass/stepBassCompile';
-import { STEP_BASS_COPY } from '@/demos/step-bass/stepBassCopy';
+import { SILKSCREEN, STEP_BASS_COPY } from '@/demos/step-bass/stepBassCopy';
 import { exportStepBassSmf, exportStepBassWav } from '@/demos/step-bass/stepBassExport';
 import {
   accentBrightnessCents,
@@ -280,6 +281,10 @@ function onPattern(id: string): void {
   knobs.value = { ...knobs.value, faderDb: found.faderDb };
 }
 
+function onPatternSelect(event: Event): void {
+  onPattern((event.target as HTMLSelectElement).value);
+}
+
 function onRandomise(): void {
   pattern.value = randomise(pattern.value.root, Math.random);
 }
@@ -378,23 +383,19 @@ onBeforeUnmount(() => {
       <StatusIndicator :status="statusKind" :label="statusText" />
     </template>
 
-    <div class="step-bass">
-      <StepBassPanel
-        :knobs="knobs"
-        :bpm="bpm"
+    <div class="step-bass demo-deck">
+      <StepBassHead
         :copy="copy"
+        :bpm="bpm"
         :running="transportOn"
         :offline="offline"
-        :patterns="FACTORY_PATTERNS"
-        :pattern-id="patternId"
+        :playhead="playhead"
+        :pattern-name="patternName"
+        :steps="pattern.steps"
         :exporting="exporting"
-        @knob="onKnob"
-        @waveform="knobs = { ...knobs, waveform: $event }"
         @bpm="bpm = $event"
         @run="onRun"
         @stop="onStop"
-        @randomise="onRandomise"
-        @pattern="onPattern"
         @export-wav="onExportWav"
         @export-midi="onExportMidi"
       />
@@ -406,13 +407,43 @@ onBeforeUnmount(() => {
         {{ copy.transport.gesture }}
       </p>
 
-      <StepGrid
-        :steps="pattern.steps"
+      <StepBassPanel
+        :knobs="knobs"
         :copy="copy"
-        :playhead="playhead"
-        :folded="folded"
-        @update="onStepUpdate"
+        @knob="onKnob"
+        @waveform="knobs = { ...knobs, waveform: $event }"
       />
+
+      <section class="step-bass__seq" :aria-label="copy.sections.sequencer">
+        <div class="step-bass__seq-head">
+          <h3 class="step-bass__title">{{ SILKSCREEN.sequencer }}</h3>
+          <label class="step-bass__field">
+            <span class="step-bass__field-label">{{ copy.transport.patterns }}</span>
+            <select
+              class="step-bass__select"
+              :value="patternId"
+              :aria-label="copy.transport.patternsLabel"
+              @change="onPatternSelect"
+            >
+              <option v-if="patternId === ''" value="" disabled>{{ copy.transport.custom }}</option>
+              <option v-for="item in FACTORY_PATTERNS" :key="item.id" :value="item.id">
+                {{ item.name }}
+              </option>
+            </select>
+          </label>
+          <TransportButton size="sm" @click="onRandomise">
+            <span :aria-label="copy.transport.randomiseLabel">{{ copy.transport.randomise }}</span>
+          </TransportButton>
+        </div>
+
+        <StepGrid
+          :steps="pattern.steps"
+          :copy="copy"
+          :playhead="playhead"
+          :folded="folded"
+          @update="onStepUpdate"
+        />
+      </section>
 
       <StepBassViews
         :copy="copy"
@@ -420,11 +451,7 @@ onBeforeUnmount(() => {
         :cutoff-hz="compiled.knobs.cutoffHz"
         :resonance-q="compiled.knobs.resonanceQ"
         :env-mod-cents="compiled.knobs.envToCutoffCents"
-        :waveform="knobs.waveform"
         :peak="peak"
-        :bpm="bpm"
-        :playhead="playhead"
-        :pattern-name="patternName"
         :sample-rate="sampleRate"
         :wide="wide"
       />

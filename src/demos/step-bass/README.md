@@ -77,6 +77,12 @@ its circuit topology and a control by what it reaches.
 
 ## Layout
 
+The face is the shared `.demo-deck` chassis, capped at 1120 px and centred like
+the other instrument decks. Top to bottom: the badge, the RUN/STOP key, the
+readout, TEMPO, the run lights and the exports; the control strip, one section
+per stage in signal order; the sequencer, its sixteen steps set apart in beats
+of four; and the three displays along the bottom edge.
+
 At 900 px and above all three displays stand at once; below that a segmented
 control puts up one at a time and the deck keeps its height. Below 700 px the
 sixteen steps fold into two banks of eight, because sixteen cells across a
@@ -103,8 +109,9 @@ meter.
 | `stepBassFilterCurve.ts` | The plotted response, fitted to a rendered noise pass |
 | `stepBassExport.ts` | WAV through the same path that was heard, and the MIDI file |
 | `stepBassCopy.ts` | The silkscreen table and the two locales' prose |
-| `StepBassDemo.vue` | State, the engine wiring, the URL, the one animation loop |
-| `StepBassPanel.vue` | The knobs in signal order, the waveform keys, the transport |
+| `StepBassDemo.vue` | State, the engine wiring, the URL, the one animation loop, the pattern picker |
+| `StepBassHead.vue` | The badge, the RUN/STOP key, the readout, TEMPO, the run lights, the exports |
+| `StepBassPanel.vue` | The control strip: the knobs in signal order and the waveform keys |
 | `StepGrid.vue` | The sixteen steps, their four lanes, and the selected-step readout |
 | `StepBassViews.vue` | The scope, the filter response and the output meter |
-| `stepBass.css` | The plate, the grid, the displays, and this panel's own tokens |
+| `stepBass.css` | The deck layout, the grid, the displays, and this deck's own lane colours |
