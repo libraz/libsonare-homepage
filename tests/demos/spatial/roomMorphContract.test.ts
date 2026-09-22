@@ -57,6 +57,8 @@ describe('roomMorph', () => {
     expect(result.audio.length).toBeGreaterThan(input.length);
   });
 
+  // Two cathedral-sized convolutions, one of them 11.4 s long: past the default
+  // per-test budget whenever the machine is doing anything else.
   it('cuts the tail at maxSeconds and says so, which is why it tracks the room', async () => {
     await wasm.init();
     const input = probe(0.5);
@@ -73,5 +75,5 @@ describe('roomMorph', () => {
 
     expect(long.audio.length).toBeGreaterThan(short.audio.length);
     expect(short.diagnostics.map((entry) => entry.code)).toContain('acoustic.rir_length_clamped');
-  });
+  }, 30_000);
 });
