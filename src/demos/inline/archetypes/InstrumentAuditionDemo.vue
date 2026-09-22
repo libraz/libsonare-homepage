@@ -35,6 +35,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
+import { buildSmf, dt1, type SmfEvent } from '@/utils/gsSysex';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
@@ -88,8 +89,6 @@ const stateLabel = computed(() => {
 
 // ---- render targets --------------------------------------------------------
 const SR = 44100;
-/** Ticks per quarter note in the SMF the EFX mode assembles. */
-const SMF_PPQN = 480;
 const ENV_COLS = 180;
 const SCOPE_N = 480;
 const SCOPE_CYCLES = 5;
@@ -147,69 +146,14 @@ interface ProjectCtor {
   ): MidiEvent;
 }
 // ---- GS SysEx helpers (Roland DT1 frames) ----------------------------------
-/** Wrap an address+data run in a Roland DT1 SysEx body with its checksum. */
-function dt1(addrData: number[]): number[] {
-  let sum = 0;
-  for (const b of addrData) sum = (sum + b) & 0x7f;
-  return [0x41, 0x10, 0x42, 0x12, ...addrData, (128 - sum) & 0x7f, 0xf7];
-}
 /** Select the shared GS insertion-effect type (14-bit, MSB<<8|LSB) at 40 03 00. */
 function efxTypeSysex(type: number): number[] {
   return dt1([0x40, 0x03, 0x00, (type >> 8) & 0x7f, type & 0x7f]);
 }
-/** Route a part (channel) through the insertion effect via the 40 4x 22 switch. */
+/** Assign a part (channel) to insertion-effect unit 1 via the 40 4x 22 address. */
 function efxPartOnSysex(channel: number): number[] {
   const block = channel === 9 ? 0 : channel + 1;
   return dt1([0x40, 0x40 | block, 0x22, 1]);
-}
-
-// ---- minimal SMF writer ----------------------------------------------------
-// Only `importSmf` carries SysEx into a project, so the EFX mode needs a file
-// rather than an event list. One format-0 track is all that takes.
-/** MIDI variable-length quantity. */
-function vlq(value: number): number[] {
-  const out = [value & 0x7f];
-  let rest = value >>> 7;
-  while (rest > 0) {
-    out.unshift((rest & 0x7f) | 0x80);
-    rest >>>= 7;
-  }
-  return out;
-}
-/** Prefix a chunk body with its four-character id and big-endian length. */
-function smfChunk(id: string, body: number[]): number[] {
-  const n = body.length;
-  return [
-    ...[...id].map((c) => c.charCodeAt(0)),
-    (n >>> 24) & 0xff,
-    (n >>> 16) & 0xff,
-    (n >>> 8) & 0xff,
-    n & 0xff,
-    ...body,
-  ];
-}
-/**
- * Build a one-track SMF from events timed in quarter notes, so the caller keeps
- * the same beat units the `Project.midi*` packers use. `sysex` bodies exclude
- * the leading `0xF0`, which the writer supplies with the payload length.
- */
-function buildSmf(
-  events: ReadonlyArray<{ beat: number; bytes?: number[]; sysex?: number[] }>,
-  endBeat: number,
-): Uint8Array {
-  const track: number[] = [];
-  let lastTick = 0;
-  const ordered = [...events].sort((a, b) => a.beat - b.beat);
-  for (const ev of [...ordered, { beat: endBeat, bytes: [0xff, 0x2f, 0x00] }]) {
-    const tick = Math.round(ev.beat * SMF_PPQN);
-    const payload = ev.sysex ? [0xf0, ...vlq(ev.sysex.length), ...ev.sysex] : (ev.bytes ?? []);
-    track.push(...vlq(tick - lastTick), ...payload);
-    lastTick = tick;
-  }
-  return Uint8Array.from([
-    ...smfChunk('MThd', [0, 0, 0, 1, (SMF_PPQN >> 8) & 0xff, SMF_PPQN & 0xff]),
-    ...smfChunk('MTrk', track),
-  ]);
 }
 
 // ---- renderers -------------------------------------------------------------
@@ -342,7 +286,7 @@ function renderGsDrumKit(wasm: WasmModule, kitProgram: number): Float32Array {
  */
 const EFX_CHORD = [52, 55, 59]; // a sustained triad on the default piano fallback
 function renderGsEfx(wasm: WasmModule, efxType: number): Float32Array {
-  const events: { beat: number; bytes?: number[]; sysex?: number[] }[] = [];
+  const events: SmfEvent[] = [];
   if (efxType > 0) {
     events.push({ beat: 0, sysex: efxTypeSysex(efxType) });
     events.push({ beat: 0, sysex: efxPartOnSysex(0) });
