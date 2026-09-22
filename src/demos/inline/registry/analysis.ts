@@ -83,6 +83,45 @@ export const analysisDemos: SonareDemoDef[] = [
     },
   },
   {
+    id: 'chord-track',
+    archetype: 'chord-track',
+    // The same C–Am–F–G clip the chromagram reads, so the two demos are evidence
+    // and answer for one passage. With the full template set the F bar comes back
+    // as Amadd9; triads only gives the plain turnaround.
+    source: { kind: 'clip', clip: 'band' },
+    viz: 'overlay',
+    title: {
+      en: 'Chord track — the segments recognition returns',
+      ja: 'コードトラック — 認識が返す区間',
+    },
+    caption: {
+      en: 'The chromagram above, read through the chord templates: each block is one segment, named and faded by its confidence, and play lights the one under the playhead. With every quality in play the F bar comes back as Amadd9 — the two chords share two of their three notes, and the extra tones in the mix tip the richer template ahead. Switch to triads only and the turnaround reads C–Am–F–G. Lower the minimum duration and the short readings the merge absorbed come back; raise it and F, the shortest bar, is swallowed by its neighbour.',
+      ja: '上のクロマグラムをコードテンプレートで読んだ結果です。ブロック 1 つがコード区間 1 つで、名前が付き、信頼度が低いほど淡くなります。再生するとプレイヘッドの下の区間が光ります。全品質で探索すると、F の小節は Amadd9 として返ってきます。3 音のうち 2 音が共通で、ミックスに混じる残りの音が豊かなほうのテンプレートを押し上げるためです。三和音のみに切り替えると、進行は C–Am–F–G と読めます。最小長を下げるとマージに吸収されていた短い読みが戻り、上げると最も短い F の小節が隣に飲み込まれます。',
+    },
+    params: [
+      {
+        key: 'vocabulary',
+        kind: 'select',
+        default: 'full',
+        label: { en: 'Templates', ja: 'テンプレート' },
+        options: [
+          { value: 'full', label: { en: 'All qualities', ja: '全品質' } },
+          { value: 'triads', label: { en: 'Triads only', ja: '三和音のみ' } },
+        ],
+      },
+      {
+        key: 'minDuration',
+        kind: 'range',
+        default: 0.3,
+        min: 0,
+        max: 1,
+        step: 0.1,
+        unit: 's',
+        label: { en: 'Min duration', ja: '最小長' },
+      },
+    ],
+  },
+  {
     id: 'mel-spectrogram',
     archetype: 'transform',
     // A vowel-like tone: formant bands are clearer on a perceptual mel axis.

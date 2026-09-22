@@ -21,6 +21,10 @@ That is why recognition works on chroma rather than the raw spectrum.
 
 libsonare compares each frame or beat-synchronous chroma summary against a set of chord templates. These cover the four triads — major, minor, diminished, and augmented — as well as richer qualities that add or alter notes: sevenths, ninths, add9, half-diminished, and sus voicings. Beyond those sit the sixth chords (`6`, `m6`), the minor-major seventh (`mM7`), `7sus4`, and the dominant extensions and alterations (`11`, `13`, `7b9`, `7#9`). The result is a best matching root and quality for each region.
 
+Run on the clip the chromagram above reads, that search returns these segments:
+
+<SonareDemo id="chord-track" />
+
 Everything outside the four triads must beat the best triad by an extra margin before it is preferred. This keeps noisy chroma from turning plain triads into unstable extensions. There are two margins, not one. The ordinary one is 0.05 of correlation, and it applies to every non-triad quality by default — the sevenths, the ninths, `sus2` and `sus4` (three-note chords, but on the non-triad side of the comparison), and also `6`, `m6` and `7sus4`. The wider one, 0.09, is reserved for the five qualities that add a tension a plainer chord already explains: `mM7`, `11`, `13`, `7b9` and `7#9`.
 
 ::: info Why the sixth chords pay a penalty instead of a wider margin

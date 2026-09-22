@@ -24,6 +24,7 @@ export const demoArchetypeComponents = {
   'tempo-grid': defineDemoAsync(() => import('./TempoGridDemo.vue')),
   'instrument-audition': defineDemoAsync(() => import('./InstrumentAuditionDemo.vue')),
   'pitch-correct': defineDemoAsync(() => import('./PitchCorrectDemo.vue')),
+  'chord-track': defineDemoAsync(() => import('./ChordTrackDemo.vue')),
 } satisfies Record<DemoArchetype, ReturnType<typeof defineDemoAsync>>;
 
 export function implementedDemoArchetypes(): DemoArchetype[] {

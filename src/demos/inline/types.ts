@@ -43,6 +43,7 @@ export type DemoLocale = string;
  * - `tempo-grid`   — BPM + beats-per-bar → bar/beat grid over a fixed seconds axis + metronome audition
  * - `instrument-audition` — pick a variant (GM program, or a GS insertion effect over one phrase) → data-free fallback render → envelope/scope + audition
  * - `pitch-correct` — off-pitch synthetic vocal → pYIN → scale retune → raw/tuned pitch-contour A/B + audition
+ * - `chord-track` — clip → `detectChords` → named chord segments laned over the waveform + audition
  */
 export type DemoArchetype =
   | 'transform'
@@ -66,7 +67,8 @@ export type DemoArchetype =
   | 'hpss'
   | 'tempo-grid'
   | 'instrument-audition'
-  | 'pitch-correct';
+  | 'pitch-correct'
+  | 'chord-track';
 
 /** Waveform shapes that can be generated in-browser without WASM (cheap test signals). */
 export type GeneratedSignal = 'sine' | 'saw' | 'square' | 'triangle' | 'sweep' | 'noise';
