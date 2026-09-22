@@ -11,6 +11,10 @@
  *
  * The caption and the value reserve their height and width, so a value growing
  * a digit or a caption wrapping never moves the cap beside it.
+ *
+ * Travel is a length the stylesheet owns (`--fader-travel`), so a panel can
+ * set it per breakpoint; the pointer math measures the slot rather than
+ * trusting a prop. `travel` exists for a fader that is not on such a panel.
  */
 import { computed, ref } from 'vue';
 
@@ -29,7 +33,7 @@ const props = withDefaults(
     display?: string;
     /** Value restored on double click. */
     defaultValue?: number;
-    /** Travel length in px. */
+    /** Travel length in px; when unset, the stylesheet's `--fader-travel` decides. */
     travel?: number;
     disabled?: boolean;
     /** Id of an element describing the control, such as a note on why it is inert. */
@@ -40,7 +44,7 @@ const props = withDefaults(
     caption: undefined,
     display: undefined,
     defaultValue: undefined,
-    travel: 96,
+    travel: undefined,
     disabled: false,
     describedBy: undefined,
   },
@@ -75,12 +79,18 @@ function commit(value: number): void {
 let dragStartY = 0;
 let dragStartValue = 0;
 
+/** The travel as laid out, in px: the slot less the cap it keeps room for. */
+function travelPx(): number {
+  const height = slot.value?.getBoundingClientRect().height ?? 0;
+  return Math.max(1, height - CAP_PX);
+}
+
 /** The value under a pointer, from its distance down the travel. */
 function valueAt(clientY: number): number {
   const rect = slot.value?.getBoundingClientRect();
   if (!rect) return props.modelValue;
   const y = clientY - rect.top - CAP_PX / 2;
-  const n = 1 - Math.min(1, Math.max(0, y / props.travel));
+  const n = 1 - Math.min(1, Math.max(0, y / travelPx()));
   return props.min + n * (props.max - props.min);
 }
 
@@ -98,7 +108,7 @@ function onPointerDown(event: PointerEvent): void {
 function onPointerMove(event: PointerEvent): void {
   if (!dragging.value) return;
   const fine = event.shiftKey ? 0.18 : 1;
-  const delta = ((dragStartY - event.clientY) / props.travel) * (props.max - props.min) * fine;
+  const delta = ((dragStartY - event.clientY) / travelPx()) * (props.max - props.min) * fine;
   commit(dragStartValue + delta);
 }
 
@@ -142,7 +152,11 @@ function onKeyDown(event: KeyboardEvent): void {
   <div
     class="fader"
     :class="{ 'fader--dragging': dragging, 'fader--disabled': disabled }"
-    :style="{ '--fader-travel': `${travel}px`, '--fader-cap': `${CAP_PX}px`, '--fader-norm': norm }"
+    :style="{
+      '--fader-travel': travel === undefined ? undefined : `${travel}px`,
+      '--fader-cap': `${CAP_PX}px`,
+      '--fader-norm': norm,
+    }"
   >
     <span class="fader__caption" aria-hidden="true">{{ caption ?? label }}</span>
     <div class="fader__body">
@@ -188,6 +202,8 @@ function onKeyDown(event: KeyboardEvent): void {
 
 <style scoped>
 .fader {
+  --fader-len: var(--fader-travel, 96px);
+
   display: grid;
   gap: 4px;
   justify-items: center;
@@ -227,7 +243,7 @@ function onKeyDown(event: KeyboardEvent): void {
 
 /* The scale sits beside the travel, inset by half a cap so its ends meet the cap's centre. */
 .fader__scale {
-  block-size: var(--fader-travel);
+  block-size: var(--fader-len);
   inline-size: 8px;
   margin-block-start: calc(var(--fader-cap) / 2);
   overflow: visible;
@@ -248,7 +264,7 @@ function onKeyDown(event: KeyboardEvent): void {
   position: relative;
   inline-size: var(--fader-cap);
   min-inline-size: 24px;
-  block-size: calc(var(--fader-travel) + var(--fader-cap));
+  block-size: calc(var(--fader-len) + var(--fader-cap));
   border-radius: 3px;
   cursor: ns-resize;
   touch-action: none;
@@ -266,7 +282,8 @@ function onKeyDown(event: KeyboardEvent): void {
   inset-inline-start: 50%;
   inline-size: 4px;
   border-radius: 2px;
-  background: var(--plate-recess);
+  /* A dark groove in both finishes: the cap is light, so the slot must not be. */
+  background: var(--plate-slot);
   box-shadow:
     inset 0 1px 2px var(--plate-groove),
     0 1px 0 var(--plate-highlight);
@@ -277,7 +294,7 @@ function onKeyDown(event: KeyboardEvent): void {
 .fader__cap {
   position: absolute;
   inset-inline: 0;
-  inset-block-start: calc((1 - var(--fader-norm)) * var(--fader-travel));
+  inset-block-start: calc((1 - var(--fader-norm)) * var(--fader-len));
   block-size: var(--fader-cap);
   border: 1px solid var(--plate-cap-edge);
   border-radius: 2px;

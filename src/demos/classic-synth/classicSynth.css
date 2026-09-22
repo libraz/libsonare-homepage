@@ -33,6 +33,7 @@
   --plate-shadow: rgba(36, 34, 30, 0.35);
   --plate-recess: rgba(36, 34, 30, 0.07);
   --plate-recess-solid: #c8c4bb;
+  --plate-slot: rgba(36, 34, 30, 0.55);
   /* Keys are dark with light text in both finishes. */
   --plate-key: #3a3833;
   --plate-key-on: #55524b;
@@ -63,6 +64,8 @@
   --plate-caption-tracking: 0.08em;
   --plate-value-size: 10px;
   --plate-fader-col: 2.4rem;
+  /* The faders carry the band: their travel is the tallest thing on the plate. */
+  --fader-travel: 210px;
 
   --demo-text-strong: var(--plate-ink);
   --demo-text: var(--plate-ink);
@@ -97,6 +100,7 @@ html.dark .cs-plate {
   --plate-shadow: rgba(0, 0, 0, 0.8);
   --plate-recess: rgba(0, 0, 0, 0.3);
   --plate-recess-solid: #17171a;
+  --plate-slot: rgba(0, 0, 0, 0.6);
   --plate-key: #16161a;
   --plate-key-on: #2c2c33;
   --plate-key-edge: rgba(0, 0, 0, 0.7);
@@ -212,9 +216,9 @@ html.dark .cs-plate {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
-  padding: 10px 6px 12px;
+  padding: 8px 6px 10px;
 }
 
 /* A lit section is outlined in the lamp colour, never filled. */
@@ -228,6 +232,22 @@ html.dark .cs-plate {
 .cs-module--dim .cs-pb__fold {
   opacity: 0.5;
   transition: opacity 0.18s ease;
+}
+
+/*
+ * On the pale finish a half-faded section washes into the plate, so the dim
+ * state drains less and the lit section carries more: a firmer outline and a
+ * faint warm tint beneath it.
+ */
+html:not(.dark) .cs-module--dim .cs-module__body,
+html:not(.dark) .cs-module--dim .cs-block__body,
+html:not(.dark) .cs-module--dim .cs-pb__fold {
+  opacity: 0.7;
+}
+
+html:not(.dark) .cs-module.cs-module--lit {
+  outline-color: var(--plate-lamp-dim);
+  background: var(--plate-lamp-tint);
 }
 
 .cs-module--dim .cs-legend {
@@ -246,16 +266,21 @@ html.dark .cs-plate {
   opacity: 1;
 }
 
-/* Printed under a key row: a fact of the panel, always present. */
+/* Printed under a key row: a fact of the panel, always present, and plain when it is the reason a row is dead. */
 .cs-module__print {
-  margin: -4px 0 0;
-  color: var(--plate-ink-faint);
+  margin: -3px 0 0;
+  color: var(--plate-ink-dim);
   font-family: var(--font-mono);
-  font-size: var(--plate-caption-size);
-  letter-spacing: 0.1em;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   line-height: 1.2;
   text-align: center;
   text-transform: uppercase;
+}
+
+.cs-module__print--live {
+  color: var(--plate-ink);
 }
 
 /* A reserved line for a note about an inert control. */
@@ -295,7 +320,7 @@ html.dark .cs-plate {
  */
 .cs-keys {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .cs-keys--2 {
@@ -313,8 +338,8 @@ html.dark .cs-plate {
   align-items: center;
   justify-content: flex-start;
   min-inline-size: 0;
-  min-block-size: 30px;
-  padding: 4px 3px 4px;
+  min-block-size: 26px;
+  padding: 3px 3px;
   border: 1px solid var(--plate-key-edge);
   border-radius: 2px;
   background: var(--plate-key);
@@ -724,6 +749,10 @@ html.dark .cs-plate {
 
 /* Below the width where eight sections fit in one band, the band folds into two after the VCF. */
 @media (max-width: 1180px) {
+  .cs-plate {
+    --fader-travel: 150px;
+  }
+
   .cs-deck__fold {
     display: block;
     border-block-start: 1px solid var(--plate-rule);

@@ -210,7 +210,7 @@ function describedBy(param: NumericParam): string | undefined {
             <span class="cs-key__text">{{ name(FILTER_OUTPUT_NAMES[output]) }}</span>
           </button>
         </div>
-        <p class="cs-module__print">
+        <p class="cs-module__print" :class="{ 'cs-module__print--live': !filterOutputEnabled }">
           <span aria-hidden="true">{{ copy.svfOnly }}</span>
           <span :id="FILTER_OUTPUT_NOTE_ID" class="cs-sr">{{ copy.filterOutputNote }}</span>
         </p>
