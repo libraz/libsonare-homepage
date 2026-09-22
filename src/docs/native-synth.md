@@ -64,6 +64,8 @@ A NativeSynth patch is an **instrument**: you bind it to a MIDI destination, and
 
 A single signal path runs through NativeSynth on every note. A MIDI note picks one of the seventeen engines, and that engine takes the oscillator's place at the head of the chain; the filter, the amplifier envelope, and the body resonance stage behind it are shared by all of them, and the modulation matrix reaches into whichever stage its destination names. The figure draws one voice with the subtractive oscillator in the first block.
 
+Because the engine takes the oscillator's place, `waveform` shapes the subtractive engine only; every other engine renders the same whatever it is set to. The percussion engine is the one exception to the shared stages. It voices each kit piece itself, and of the patch fields only `gain`, `busDrive` and `polyphony` change what it renders.
+
 <SynthSignalPathFigure title="One voice, and where the mod matrix reaches into it" />
 
 ## What You Will Learn

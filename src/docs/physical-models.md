@@ -225,7 +225,7 @@ The percussion engine does carry one pair of fields worth stating here, because 
 
 ## Reaching them from code
 
-**The deep fields above are not individually settable from any binding.** They exist in the engine's internal patch, and they are what the named presets are made of; the patch struct that crosses the C ABI, and therefore the `SynthPatch` a browser, Node or Python caller sees, deliberately carries only the wrapper sections every engine shares — oscillator, filter, envelopes, LFOs, mod matrix, body, gain. `sonare_synth_preset_patch(name, out)` is the one patch entry point in the C ABI, and it fills that wrapper-only struct.
+**The deep fields above are not individually settable from any binding.** They exist in the engine's internal patch, and they are what the named presets are made of; the patch struct that crosses the C ABI, and therefore the `SynthPatch` a browser, Node or Python caller sees, deliberately carries only the wrapper sections around the engines — oscillator, filter, envelopes, LFOs, mod matrix, body, gain. `sonare_synth_preset_patch(name, out)` is the one patch entry point in the C ABI, and it fills that wrapper-only struct.
 
 So there are three things you can actually do.
 
@@ -262,7 +262,7 @@ audio = project.bounce_with_synth_instrument(
 
 :::
 
-**Override the shared layer on top of it.** Anything in the wrapper — filter cutoff and resonance, both envelopes, the LFOs, glide, body mix, stereo spread, gain — applies over whichever engine the preset selected, and the same fields are resolvable as continuous automation targets through `resolveInstrumentAutomationId`. What you cannot automate that way is structure: preset, engine mode, waveform, filter model, polyphony and the mod routings are refused rather than smoothed.
+**Override the shared layer on top of it.** Anything in the wrapper — filter cutoff and resonance, both envelopes, the LFOs, glide, body mix, stereo spread, gain — applies over whichever engine the preset selected. The percussion engine is the exception: of these it honours only gain. The same fields are resolvable as continuous automation targets through `resolveInstrumentAutomationId`. What you cannot automate that way is structure: preset, engine mode, waveform, filter model, polyphony and the mod routings are refused rather than smoothed.
 
 **Play the exciter live, through the excitation axes.** This is the one route that reaches the physics. Rather than exposing `bow_force` or `breath_pressure` by name, the engine defines four abstract axes — force, position, brightness and morph — that a controller gesture or a mod-matrix route can move mid-note, and each engine declares which of them it reads.
 
