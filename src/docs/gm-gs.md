@@ -342,7 +342,15 @@ Because a unit's output is one signal, what sits downstream of it belongs to the
   item="gs-efx-state-slots"
   :labels="{
     title: 'Some EFX parameters are held rather than heard, and that is a fact about the effect',
-    body: 'A measurement archive of an individual unit gives 85 (type, slot) pairs a conversion from the raw byte to the quantity it names. 56 of those reach a control of the same physical kind on the insert their type maps to, and all 56 are translated and audible. The remaining 29 are received, held and readable, and nothing reads them — not because the translation is unwritten, but because the insert has no such control. Raising one means giving the insert the control first, not editing a table.'
+    body: 'A measurement archive of an individual unit prints a value for 770 (type, slot) pairs and gives 85 of them a conversion from the raw byte to the quantity it names; the rest are received and held with nothing downstream reading them. 56 of the 85 reach a control of the same physical kind on the insert their type maps to, and all 56 are translated and audible. The remaining 29 are received, held and readable, and nothing reads them — not because the translation is unwritten, but because the insert has no such control. Raising one means giving the insert the control first, not editing a table.'
+  }"
+/>
+
+<MaturityNote
+  item="gs-efx-assigned-conversions"
+  :labels="{
+    title: 'A few conversion laws are assigned rather than read',
+    body: '73 of the 85 conversions come from the measurements themselves. The other twelve were assigned, six of those as a unit override, where no reading settled what the byte counts in and the unit was taken from what the control it drives expects. They convert and the effect responds, but the law behind them is a reasoned choice rather than an observation.'
   }"
 />
 
