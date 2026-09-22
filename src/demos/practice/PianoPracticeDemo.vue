@@ -34,8 +34,9 @@ import PracticeScore from '@/demos/practice/PracticeScore.vue';
 import PracticeTransport from '@/demos/practice/PracticeTransport.vue';
 import { enCopy, jaCopy, type SoundSource } from '@/demos/practice/practiceCopy';
 import { LEAD_IN_SEC } from '@/demos/practice/rollConfig';
-import { noteLabel, paintPracticeRoll, sameSet } from '@/demos/practice/rollPainter';
+import { paintPracticeRoll, sameSet } from '@/demos/practice/rollPainter';
 import { type Judgment, useRhythmGame } from '@/demos/practice/useRhythmGame';
+import { formatNoteName } from '@/utils/pitch';
 
 const { locale, localizedPath, alternateLocalePath, localizedValue } = useI18n();
 const copy = computed(() => localizedValue({ en: enCopy, ja: jaCopy }));
@@ -207,7 +208,7 @@ const lengthLabel = computed(() => {
 });
 const rangeLabel = computed(() => {
   const m = midi.value;
-  return m ? `${noteLabel(m.lowestMidi)}–${noteLabel(m.highestMidi)}` : '—';
+  return m ? `${formatNoteName(m.lowestMidi)}–${formatNoteName(m.highestMidi)}` : '—';
 });
 const tempoLabel = computed(() => {
   const segs = midi.value?.tempoSegments ?? [];

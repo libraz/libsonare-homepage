@@ -14,6 +14,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
+import { formatNoteName } from '@/utils/pitch';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
@@ -42,10 +43,8 @@ const smooth = computed<boolean>(() => values.smooth !== false);
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
 
 // ---- presentation state ----------------------------------------------------
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 function noteName(midi: number): string {
-  const m = Math.round(midi);
-  return `${NOTE_NAMES[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`;
+  return formatNoteName(Math.round(midi));
 }
 const medianNote = ref('');
 const currentNote = ref('');

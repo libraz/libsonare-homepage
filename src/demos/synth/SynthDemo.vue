@@ -35,6 +35,7 @@ import {
   SYNTH_OUTPUT_GAIN_MAX,
   useSynthEngine,
 } from '@/demos/synth/useSynthEngine';
+import { formatNoteName } from '@/utils/pitch';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
 import type { WebMidiBinding, WebMidiInputInfo } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -59,7 +60,6 @@ const CLIP_THRESHOLD = 0.997; // ≈ -0.03 dBFS
 
 const MIN_BASE_NOTE = 24; // C1
 const MAX_BASE_NOTE = 84; // C6 (top key reaches B7)
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const wasmModule = shallowRef<WasmModule | null>(null);
 
@@ -136,10 +136,7 @@ const statusLabel = computed(() => {
   return copy.value.status.idle;
 });
 
-const octaveLabel = computed(() => {
-  const n = baseNote.value;
-  return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
-});
+const octaveLabel = computed(() => formatNoteName(baseNote.value));
 const peakDb = computed(() => {
   const peak = meter.value.peak;
   return peak > 0 ? `${(20 * Math.log10(peak)).toFixed(1)} dB` : '-∞ dB';

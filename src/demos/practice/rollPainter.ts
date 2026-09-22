@@ -1,12 +1,7 @@
+import { formatNoteName } from '@/utils/pitch';
 import { type KeyboardLayout, keyCenterRatio, keyWidthRatio } from './keyboard';
 import type { ParsedMidi } from './midiSmf';
 import { HIT_RATIO, LOOKAHEAD_SEC, NOTE_WIDTH } from './rollConfig';
-
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
-export function noteLabel(midi: number): string {
-  return `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
-}
 
 export function sameSet(a: Set<number>, b: Set<number>): boolean {
   if (a.size !== b.size) return false;
@@ -169,7 +164,7 @@ function paintOctaveGrid(
     ctx.font = '9px ui-monospace, "JetBrains Mono", monospace';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText(noteLabel(key.midi), x + 3, 4);
+    ctx.fillText(formatNoteName(key.midi), x + 3, 4);
   }
 }
 

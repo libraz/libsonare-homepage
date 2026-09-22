@@ -15,6 +15,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
+import { formatNoteName } from '@/utils/pitch';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
@@ -337,7 +338,6 @@ const PAD_TOP = 14;
 const PAD_BOT = 22;
 const RAW_COL = '#fb923c'; // amber = the out-of-tune take
 const TUNED_COL = '#2dd4bf'; // teal = the correction
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 // ---- legend text ------------------------------------------------------
 const LEGEND_RAW: I18nText = { en: 'Raw', ja: '補正前' };
@@ -394,11 +394,7 @@ function paint(): void {
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
     ctx.fillStyle = isRoot ? 'rgba(186, 230, 224, 0.65)' : 'rgba(148, 163, 184, 0.4)';
-    ctx.fillText(
-      `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`,
-      PAD_X - 4,
-      y,
-    );
+    ctx.fillText(formatNoteName(midi), PAD_X - 4, y);
   }
 
   // The contours are clipped to the reveal wipe so they "draw in" left to right.

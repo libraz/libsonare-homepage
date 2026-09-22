@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { noteLabel, sameSet, withAlpha } from '@/demos/practice/rollPainter';
+import { sameSet, withAlpha } from '@/demos/practice/rollPainter';
+import { formatNoteName } from '@/utils/pitch';
 
 describe('practice roll painter helpers', () => {
   it('formats MIDI notes as pitch names', () => {
-    expect(noteLabel(60)).toBe('C4');
-    expect(noteLabel(61)).toBe('C#4');
-    expect(noteLabel(59)).toBe('B3');
+    expect(formatNoteName(60)).toBe('C4');
+    expect(formatNoteName(61)).toBe('C#4');
+    expect(formatNoteName(59)).toBe('B3');
   });
 
   it('compares sets without depending on insertion order', () => {

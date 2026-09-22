@@ -9,6 +9,7 @@
  * so a learner can noodle along with the audio muted.
  */
 import { computed } from 'vue';
+import { formatNoteName } from '@/utils/pitch';
 import type { KeyboardLayout } from './keyboard';
 
 const props = withDefaults(
@@ -27,11 +28,11 @@ const emit = defineEmits<{
   (e: 'note-off', midi: number): void;
 }>();
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const whiteCount = computed(() => props.layout.whiteCount);
 
+// Only C keys carry a label, so this only ever renders NOTE_NAMES[0] anyway.
 function labelFor(midi: number): string | undefined {
-  return midi % 12 === 0 ? `C${Math.floor(midi / 12) - 1}` : undefined;
+  return midi % 12 === 0 ? formatNoteName(midi) : undefined;
 }
 
 function isActive(midi: number): boolean {

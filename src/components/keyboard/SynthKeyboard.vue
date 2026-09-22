@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { KEY_LAYOUT, type KeyDef } from '@/components/keyboard/keyLayout';
+import { formatNoteName } from '@/utils/pitch';
 
 const props = defineProps<{
   /** Lowest MIDI note (the range's base C). */
@@ -20,8 +21,6 @@ const emit = defineEmits<{
   (e: 'note-on', note: number, velocity: number): void;
   (e: 'note-off', note: number): void;
 }>();
-
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 interface RenderKey extends KeyDef {
   note: number;
@@ -54,8 +53,7 @@ const keys = computed<RenderKey[]>(() => {
   return layout.value.map((k) => {
     if (!k.black) whiteIndex += 1;
     const note = props.baseNote + k.semitone;
-    const name =
-      note % 12 === 0 ? `${NOTE_NAMES[note % 12]}${Math.floor(note / 12) - 1}` : undefined;
+    const name = note % 12 === 0 ? formatNoteName(note) : undefined;
     return { ...k, note, whiteIndex, name };
   });
 });

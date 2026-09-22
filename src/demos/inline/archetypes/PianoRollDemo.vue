@@ -14,6 +14,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
+import { formatNoteName } from '@/utils/pitch';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
@@ -88,9 +89,7 @@ const MIN_PITCH = Math.min(...allMidi) - PITCH_PAD;
 const MAX_PITCH = Math.max(...allMidi) + PITCH_PAD;
 const PITCH_RANGE = MAX_PITCH - MIN_PITCH + 1;
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const isBlackKey = (midi: number): boolean => [1, 3, 6, 8, 10].includes(((midi % 12) + 12) % 12);
-const octaveOf = (midi: number): number => Math.floor(midi / 12) - 1;
 
 // ---- render ----------------------------------------------------------------
 type WasmModule = Awaited<ReturnType<typeof ensureWasm>>;
@@ -329,7 +328,7 @@ function paint(): void {
   ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
   for (let midi = MIN_PITCH; midi <= MAX_PITCH; midi++) {
     if (midi % 12 !== 0) continue;
-    ctx.fillText(`${NOTE_NAMES[0]}${octaveOf(midi)}`, PAD_X + 3, yOf(midi) + laneH / 2);
+    ctx.fillText(formatNoteName(midi), PAD_X + 3, yOf(midi) + laneH / 2);
   }
 
   // Playhead — locked to the audio clock. The phrase fills the note area, so the

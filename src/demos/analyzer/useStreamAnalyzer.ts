@@ -1,4 +1,5 @@
 import { onUnmounted, ref } from 'vue';
+import { NOTE_NAMES } from '@/utils/pitch';
 import type { BarChord, ProgressiveEstimate, StreamAnalyzer, StreamConfig } from '@/wasm/index';
 
 export interface BarChordInfo {
@@ -31,7 +32,6 @@ export interface StreamEstimate {
   accumulatedSeconds: number;
 }
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 // ChordQuality: Major=0, Minor=1, Diminished=2, Augmented=3, Dominant7=4, Major7=5,
 // Minor7=6, Sus2=7, Sus4=8, Unknown=9, Add9=10, MinorAdd9=11, Dim7=12, HalfDim7=13,
 // Major9=14, Dominant9=15, Sus2Add4=16

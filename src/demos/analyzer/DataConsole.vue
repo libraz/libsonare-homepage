@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { StatusIndicator, TechPanel } from '@/components/ui';
+import { NOTE_NAMES } from '@/utils/pitch';
 import wasmMeta from '@/wasm/meta.json';
 
 const props = defineProps<{
@@ -23,8 +24,6 @@ const props = defineProps<{
 const consoleRef = ref<HTMLDivElement | null>(null);
 const logs = ref<{ text: string; type: 'data' | 'info' | 'metric' | 'note' }[]>([]);
 const maxLogs = 50;
-
-const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 let lastLogTime = 0;
 let frameCount = 0;
@@ -76,7 +75,7 @@ function getDominantNote(): { name: string; value: number } | null {
     }
   }
 
-  return maxVal > 0.1 ? { name: noteNames[maxIdx], value: maxVal } : null;
+  return maxVal > 0.1 ? { name: NOTE_NAMES[maxIdx], value: maxVal } : null;
 }
 
 function addLog(text: string, type: 'data' | 'info' | 'metric' | 'note' = 'data') {

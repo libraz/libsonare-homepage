@@ -1,5 +1,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useTheme } from '@/composables/useTheme';
+import { NOTE_NAMES } from '@/utils/pitch';
 
 export interface SynesthesiaVisualizerProps {
   chromaData: {
@@ -46,9 +47,6 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-reduced-motion: reduce)')
       : null;
-
-  // Note names - chromatic circle
-  const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
   // Refined color palette - warmer, more sophisticated
   const noteColors = [
@@ -598,7 +596,7 @@ export function useSynesthesiaVisualizer(props: SynesthesiaVisualizerProps) {
         ctx.fillStyle = hsl(color.h, color.s - 20, 55 + value * 25 * noteScale, labelAlpha);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(noteNames[i], labelX, labelY);
+        ctx.fillText(NOTE_NAMES[i], labelX, labelY);
       }
     } else {
       // === IDLE STATE ===
