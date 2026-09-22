@@ -12,7 +12,7 @@
  * carries and the panels layer on top without the demo having to parse a byte
  * of it.
  */
-import { computed, onBeforeUnmount, reactive, ref, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
 import { bootWasm, type SonareWasmModule } from '@/composables/useWasmBoot';
 import { buildSmf, noteEvents, type SmfEvent } from '@/utils/gsSysex';
 import {
@@ -84,6 +84,29 @@ export function bounceFiles(
   }
 }
 
+/** One GS rhythm set the build defines, as the engine reports it. */
+export interface GsDrumKit {
+  program: number;
+  name: string;
+  /**
+   * False where the build names the set but voices it as Standard. The query
+   * is three-state and `null` means no set at that program at all, so the
+   * caller has to test for the set before testing this.
+   */
+  voicedApart: boolean;
+}
+
+/** Every rhythm set the build defines, asked for rather than hardcoded. */
+export function drumKitsOf(wasm: SonareWasmModule): GsDrumKit[] {
+  const kits: GsDrumKit[] = [];
+  for (let program = 0; program < 128; program++) {
+    const name = wasm.synthGsDrumKitName(program);
+    if (name === null) continue;
+    kits.push({ program, name, voicedApart: wasm.synthGsDrumKitIsVoicedApart(program) === true });
+  }
+  return kits;
+}
+
 /** The slice of `Project` this demo uses. */
 interface GsProject {
   setSampleRate(rate: number): void;
@@ -105,6 +128,8 @@ export function useGsModule() {
   const status = ref<GsRenderStatus>('idle');
   const error = shallowRef<unknown>(null);
   const rendered = shallowRef<Float32Array | null>(null);
+  /** Filled on the first boot; empty until then, which the kit browser shows. */
+  const drumKits = shallowRef<GsDrumKit[]>([]);
 
   let audio: AudioContext | null = null;
   let playing: AudioBufferSourceNode | null = null;
@@ -120,6 +145,25 @@ export function useGsModule() {
     playing?.stop();
     playing = null;
   }
+
+  /**
+   * Boot far enough to fill the lists the panels read, without rendering. The
+   * kit browser has nothing to show until the engine has been asked what sets
+   * this build defines, and that should not wait for the first play.
+   */
+  async function prepare() {
+    try {
+      const wasm = await bootWasm();
+      if (disposed) return;
+      drumKits.value = drumKitsOf(wasm);
+    } catch (cause) {
+      if (disposed) return;
+      error.value = cause;
+      status.value = 'error';
+    }
+  }
+
+  onMounted(() => void prepare());
 
   async function render(): Promise<Float32Array | null> {
     const mine = ++generation;
@@ -195,6 +239,7 @@ export function useGsModule() {
     status,
     error,
     rendered,
+    drumKits,
     render,
     play,
     stop,

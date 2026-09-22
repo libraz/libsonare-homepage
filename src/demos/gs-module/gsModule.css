@@ -1,0 +1,193 @@
+/*
+ * Layout and controls shared by the GS module panels.
+ *
+ * The screen is a front panel: one row of sixteen part strips along the
+ * bottom, the selected part's sound browser above it, and the insertion
+ * effect beside them. Colour carries one meaning only — the accent marks
+ * what is selected, and the warn tone marks something the engine receives
+ * but does not act on. Nothing else is tinted.
+ */
+
+.gs-module {
+  display: grid;
+  gap: 12px;
+  grid-template-areas:
+    'source source'
+    'browser efx'
+    'mixer mixer';
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  font-family: var(--demo-font-body, inherit);
+}
+
+.gs-module__source {
+  grid-area: source;
+}
+.gs-module__browser {
+  grid-area: browser;
+  /* The browser swaps between programs and drum kits when the rhythm part is
+     selected. Reserving the taller of the two keeps the panel from jumping. */
+  min-block-size: 22rem;
+}
+.gs-module__efx {
+  grid-area: efx;
+  min-block-size: 22rem;
+}
+.gs-module__mixer {
+  grid-area: mixer;
+}
+
+/* ---- part strips --------------------------------------------------------- */
+
+.gs-mixer {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-block-end: 4px;
+}
+
+.gs-strip {
+  display: flex;
+  flex: 1 0 3.25rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 6px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  background: var(--demo-control-bg);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.gs-strip:hover {
+  border-color: var(--demo-border-strong);
+}
+
+.gs-strip--selected {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent-subtle);
+}
+
+.gs-strip:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+.gs-strip__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.gs-strip__channel {
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--demo-text-strong);
+}
+
+.gs-strip__role {
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: var(--demo-text-muted);
+  text-transform: uppercase;
+}
+
+.gs-strip__patch {
+  overflow: hidden;
+  font-size: 0.66rem;
+  line-height: 1.25;
+  color: var(--demo-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-strip__level {
+  inline-size: 100%;
+}
+
+.gs-strip__sends {
+  display: grid;
+  gap: 3px;
+}
+
+.gs-send {
+  display: grid;
+  align-items: center;
+  gap: 4px;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+}
+
+.gs-send__label {
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.58rem;
+  color: var(--demo-text-muted);
+}
+
+.gs-strip__efx {
+  padding: 3px 0;
+  border: 1px solid var(--demo-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+}
+
+.gs-strip__efx--on {
+  border-color: var(--demo-accent-border);
+  background: var(--demo-accent-subtle);
+  color: var(--demo-accent);
+}
+
+.gs-strip__efx:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+/* ---- shared readouts ----------------------------------------------------- */
+
+.gs-value {
+  font-family: var(--demo-font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--demo-text);
+}
+
+.gs-note {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+/* A byte the engine receives and holds without acting on it. */
+.gs-inert {
+  border: 1px solid var(--demo-warn-border);
+  border-radius: 4px;
+  background: var(--demo-warn-bg);
+  color: var(--demo-warn-text);
+}
+
+@media (width <= 900px) {
+  .gs-module {
+    grid-template-areas:
+      'source'
+      'browser'
+      'efx'
+      'mixer';
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gs-module__browser,
+  .gs-module__efx {
+    min-block-size: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-strip {
+    transition: none;
+  }
+}

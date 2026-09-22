@@ -6,7 +6,7 @@ import {
   RHYTHM_CHANNEL,
   withEfxType,
 } from '@/demos/gs-module/gsState';
-import { auditionSmf, bounceFiles } from '@/demos/gs-module/useGsModule';
+import { auditionSmf, bounceFiles, drumKitsOf } from '@/demos/gs-module/useGsModule';
 import * as wasm from '@/wasm/index.js';
 
 /**
@@ -84,5 +84,33 @@ describe('the audition renders', () => {
     const drums = render(() => {}, RHYTHM_CHANNEL);
     expect(rms(drums)).toBeGreaterThan(1e-3);
     expect(maxDeviation(drums, base)).toBeGreaterThan(ULP);
+  });
+});
+
+describe('drumKitsOf', () => {
+  it('returns only the programs that carry a set', () => {
+    const kits = drumKitsOf(wasm);
+    expect(kits.length).toBeGreaterThan(1);
+    expect(kits.length).toBeLessThan(128);
+    for (const kit of kits) expect(kit.name).not.toBe('');
+  });
+
+  it('keeps the programs in order and unique', () => {
+    const programs = drumKitsOf(wasm).map((kit) => kit.program);
+    expect(programs).toEqual([...programs].sort((a, b) => a - b));
+    expect(new Set(programs).size).toBe(programs.length);
+  });
+
+  it('collapses the three-state query so no unset program reads as a fallback set', () => {
+    // The query answers null for a program with no set at all, which `if (!x)`
+    // would sweep in with the sets that fall back to Standard.
+    const kits = drumKitsOf(wasm);
+    for (const kit of kits) expect(wasm.synthGsDrumKitIsVoicedApart(kit.program)).not.toBeNull();
+  });
+
+  it('reports at least one set that is not voiced apart', () => {
+    // If this ever goes empty the browser's fallback tag is dead UI, not a
+    // build where every set became distinct.
+    expect(drumKitsOf(wasm).some((kit) => !kit.voicedApart)).toBe(true);
   });
 });
