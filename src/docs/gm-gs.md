@@ -99,42 +99,42 @@ The audition takes one capital — program 16, Drawbar Organ — and offers the 
 
 Two numbers appear per row and they are not interchangeable. **Program** is what a file sends; it is the rhythm part's program-change number and the address the standards define. **Index** is this bank's own slot for the set. Indices are **append-only**: a set added later takes the next free index, so adding one can never renumber a set already voiced, and nothing that already sounds right starts sounding like something else.
 
-The **tone map** column is the earliest generation that defines the set, and Bank Select is what reaches it. The two halves of that message do two different jobs and never the same one: **Bank Select MSB selects the variation tone, and Bank Select LSB selects the tone map.** Writing a variation number into the LSB therefore pins a generation rather than picking a tone. (GM2 re-uses the LSB for its own variation number under its own two MSBs; [the GS architecture layer](#the-gs-architecture-layer) below has that exception.)
+The **tone map** column is the earliest generation that defines the set, numbered as the wire numbers them — `1` is the oldest and `4` the newest — and Bank Select is what reaches it. The two halves of that message do two different jobs and never the same one: **Bank Select MSB selects the variation tone, and Bank Select LSB selects the tone map.** Writing a variation number into the LSB therefore pins a generation rather than picking a tone. (GM2 re-uses the LSB for its own variation number under its own two MSBs; [the GS architecture layer](#the-gs-architecture-layer) below has that exception.)
 
-Which generation counts as the current one is fixed by the device being targeted, and that device is the **SC-8850 — which includes the SC-88Pro rather than trading against it.** The two Parameter Address Maps agree on every address they share and part company at ten points, and at nine of the ten the SC-8850 is the superset, so an SC-88Pro file selects the SC-88Pro map (`40 4x 00` = `03`) and plays. Two consequences are worth stating because they remove work rather than add it: there is no double-module mode to implement, and the target's sixty-four parts are four ports of sixteen rather than a second address space, so a part is still named by one address nibble.
+Which generation counts as the current one is fixed by the device being targeted, and that device is the **newest-generation module, the one whose own map is map 4 — which includes the map 3 generation rather than trading against it.** The two Parameter Address Maps agree on every address they share and part company at ten points, and at nine of the ten the newer module is the superset, so a file written for map 3 selects that map (`40 4x 00` = `03`) and plays. Two consequences are worth stating because they remove work rather than add it: there is no double-module mode to implement, and the target's sixty-four parts are four ports of sixteen rather than a second address space, so a part is still named by one address nibble.
 
-A tone map is audible exactly where it fails to reach a kit. Sixteen of the twenty-six sets below were introduced by a later map, so pinning an older one drops those to Standard, exactly as a module of that generation does. The melodic side is the opposite case: every variation the bank voices is an SC-55 tone that all maps reach, which is why the LSB alone moves nothing in the variation table above and a great deal in the kit table below.
+A tone map is audible exactly where it fails to reach a kit. Sixteen of the twenty-six sets below were introduced by a later map, so pinning an older one drops those to Standard, exactly as a module of that generation does. The melodic side is the opposite case: every variation the bank voices is a map 1 tone that all maps reach, which is why the LSB alone moves nothing in the variation table above and a great deal in the kit table below.
 
 Every set is a **re-voicing of the one shared percussion model**, not a second copy of it: the kick, snare, tom, hat, and cymbal parameters are reshaped at note-on. Improving the underlying model therefore improves all 26 at once, and a set can only differ in ways the model has a parameter for.
 
 | Program | Index | GS name | Tone map | Voicing change vs Standard |
 |---|---|---|---|---|
-| 0 | 0 | Standard | SC-55 | — |
-| 8 | 1 | Room | SC-55 | more shell body, longer ambient tail |
-| 16 | 2 | Power | SC-55 | bigger, lower, longer shells |
-| 24 | 3 | Electronic | SC-55 | sine-ified, dried-out membranes |
-| 25 | 4 | TR-808 (GM2: Analog) | SC-55 | decaying-sine kick, single-tone snare and toms |
-| 32 | 5 | Jazz | SC-55 | tighter, higher, softer |
-| 40 | 6 | Brush | SC-55 | snare becomes a sustained swish |
-| 48 | 7 | Orchestra | SC-55 | longer membrane and cymbal tails |
-| 56 | 8 | SFX | SC-55 | one-shot set — plays the Standard voicing |
-| 127 | 9 | CM-64/32L | SC-55 | short, thin, bright — the LA-synth era |
-| 1 | 10 | Standard 2 | SC-88 | drier, tighter room; more snare wire |
-| 26 | 11 | Dance | SC-88 | sine kick, clap-lit snare, tight hats |
-| 49 | 12 | Ethnic | SC-88 | hand drums — struck near the rim, thin shell |
-| 50 | 13 | Kick & Snare | SC-88 | only the kick and snare move; the rest is Standard |
-| 57 | 14 | Rhythm FX | SC-88 | one-shot set — plays the Standard voicing |
-| 2 | 15 | Standard 3 | SC-88Pro | struck off-centre, left more open |
-| 9 | 16 | Hip Hop | SC-88Pro | low, short and squashed |
-| 10 | 17 | Jungle | SC-88Pro | everything cut off early and pushed bright |
-| 11 | 18 | Techno | SC-88Pro | purely synthetic membranes, hard bright top |
-| 27 | 19 | CR-78 | SC-88Pro | filtered noise ticks; snare with no wire under it |
-| 28 | 20 | TR-606 | SC-88Pro | thin and tinny — the smallest analog box |
-| 29 | 21 | TR-707 | SC-88Pro | sampled, not analog: crisp, dry and short |
-| 30 | 22 | TR-909 | SC-88Pro | long decaying-sine kick with a click on top |
-| 52 | 23 | Asia | SC-88Pro | gongs and taiko — big, low, long-ringing |
-| 53 | 24 | Cymbal & Claps | SC-88Pro | one-shot set — plays the Standard voicing |
-| 58 | 25 | Rhythm FX 2 | SC-88Pro | one-shot set — plays the Standard voicing |
+| 0 | 0 | Standard | Map 1 | — |
+| 8 | 1 | Room | Map 1 | more shell body, longer ambient tail |
+| 16 | 2 | Power | Map 1 | bigger, lower, longer shells |
+| 24 | 3 | Electronic | Map 1 | sine-ified, dried-out membranes |
+| 25 | 4 | Analog Machine (GM2: Analog) | Map 1 | decaying-sine kick, single-tone snare and toms |
+| 32 | 5 | Jazz | Map 1 | tighter, higher, softer |
+| 40 | 6 | Brush | Map 1 | snare becomes a sustained swish |
+| 48 | 7 | Orchestra | Map 1 | longer membrane and cymbal tails |
+| 56 | 8 | SFX | Map 1 | one-shot set — plays the Standard voicing |
+| 127 | 9 | Legacy Map | Map 1 | short, thin, bright — the drum map that predates GS |
+| 1 | 10 | Standard 2 | Map 2 | drier, tighter room; more snare wire |
+| 26 | 11 | Dance | Map 2 | sine kick, clap-lit snare, tight hats |
+| 49 | 12 | Ethnic | Map 2 | hand drums — struck near the rim, thin shell |
+| 50 | 13 | Kick & Snare | Map 2 | only the kick and snare move; the rest is Standard |
+| 57 | 14 | Rhythm FX | Map 2 | one-shot set — plays the Standard voicing |
+| 2 | 15 | Standard 3 | Map 3 | struck off-centre, left more open |
+| 9 | 16 | Hip Hop | Map 3 | low, short and squashed |
+| 10 | 17 | Jungle | Map 3 | everything cut off early and pushed bright |
+| 11 | 18 | Techno | Map 3 | purely synthetic membranes, hard bright top |
+| 27 | 19 | Rhythm Box | Map 3 | filtered noise ticks; snare with no wire under it |
+| 28 | 20 | Compact Machine | Map 3 | thin and tinny — the least body of the analog sets |
+| 29 | 21 | Digital Machine | Map 3 | sampled, not analog: crisp, dry and short |
+| 30 | 22 | Hybrid Machine | Map 3 | long decaying-sine kick with a click on top |
+| 52 | 23 | Asia | Map 3 | gongs and taiko — big, low, long-ringing |
+| 53 | 24 | Cymbal & Claps | Map 3 | one-shot set — plays the Standard voicing |
+| 58 | 25 | Rhythm FX 2 | Map 3 | one-shot set — plays the Standard voicing |
 
 ::: warning One-shot sets and Sound-Effects programs are addressed, not yet modeled
 Four rhythm sets are banks of individual one-shot recordings on real GS hardware rather than re-voiced kits: **SFX** (program 56), **Rhythm FX** (57), **Cymbal & Claps** (53), and **Rhythm FX 2** (58). There is nothing for a membrane model to reshape, so the player addresses and names them while the fallback map sends all four through to the Standard kit's voicing. The GM **Sound-Effects** programs (120-127, Guitar Fret Noise through Gunshot, covered in the [GM tone map](./gm-tone-map.md)) are in the same position and share one generic noise-based voice. Both gaps are in the data-free fallback only: a SoundFont that supplies real samples for those addresses plays back normally through the [SF2 player](./soundfont-player.md).
@@ -148,7 +148,7 @@ The audition below plays one bar of the same groove through a selection of the s
 
 Which slots a Program Change or Bank Select actually moves is a question the engine answers, so a picker's annotations should be computed from three queries rather than copied from the tables above. On WASM/Node they are `synthGsDrumKitName`, `synthGsDrumKitIsVoicedApart`, and `synthGsVariationIsVoicedApart`; the C ABI and Python expose the same three under their own naming conventions.
 
-- `synthGsDrumKitName(program)` returns the GS rhythm-set name a rhythm part's Program Change selects (`'Standard'`, `'Room'`, `'TR-808'`, ...), or `null` when the module's own tone map defines no set at that program.
+- `synthGsDrumKitName(program)` returns the GS rhythm-set name a rhythm part's Program Change selects (`'Standard'`, `'Room'`, `'Jazz'`, ...), or `null` when the module's own tone map defines no set at that program. Six of the names the engine returns are the model designations of the drum machines those sets voice; the tables on this page call those six by the kind of machine instead, and the program number is the same either way.
 - `synthGsDrumKitIsVoicedApart(program)` returns `true` when at least one drum note in the set differs from Standard, `false` when the set renders exactly as Standard, and `null` when no set sits at that program. Program 0 is Standard itself, so it answers `false` too, alongside the four one-shot sets above.
 - `synthGsVariationIsVoicedApart(bank, program)` is the melodic half: `true` when the Bank Select variation has a patch of its own, `false` when it resolves to the capital tone, `null` when either argument falls outside `0..127`. It accepts the GS Bank Select MSB and the GM2 LSB alike, since both address the same variation. Note that `128` is out of range here rather than the drum bank it selects elsewhere in this API. Resolving an unvoiced variation to its capital is what GS specifies, so `false` is correct behaviour rather than a gap — but only this query separates it from a bank that is genuinely voiced, which otherwise takes rendering both and comparing.
 
@@ -305,10 +305,10 @@ The four levels are what the player promises per address. `AUDIBLE` means changi
 - **Send-return system effects** — one shared send-return bus behind all 16 parts, with **reverb**, **chorus**, and **delay** units. Each part's send amount is additive from two sources: the channel CC sends (**CC91** reverb, **CC93** chorus, **CC94** delay) and, for reverb and chorus only, the SF2 zone generators `reverbEffectsSend`/`chorusEffectsSend` layered on top (GS delay send is CC-only — there is no SF2 zone generator for it). At power-on the parts start with a musically audible default room (reverb send 40, chorus send 8), so a plain SMF that never sends a reset SysEx still has ambience. A separate per-part **drive** insert (gain-compensated saturation) sits alongside this bus — distinct from the GS **insertion effects (EFX)** described below.
 - **MIDI 2.0 / GM2** — the player decodes MIDI 2.0 banked Program Change, and resolves the **Bank Select LSB (CC#32)** one of two ways depending on the MSB:
   - **GM2 addressing** — when the MSB is GM2's melodic bank (`0x79`) or percussion bank (`0x78`), the LSB *is* the variation number (or the percussion set), exactly as GM2 defines it.
-  - **GS tone-map select** — for any other MSB the LSB instead picks **which generation's tone set** the MSB's variation number reaches: `0` the module's own (newest) map, `1` SC-55, `2` SC-88, `3` SC-88Pro, `4` SC-8850. Any other value reads as `0`, because a module that never saw the message is already playing its own map. A tone or kit that the selected map predates falls back to the capital tone or the Standard kit — the same thing a real module of that generation does.
+  - **GS tone-map select** — for any other MSB the LSB instead picks **which generation's tone set** the MSB's variation number reaches: `0` the module's own (newest) map, `1` to `4` the four generations of the tone set in the order they were defined, oldest first — so `4` is the newest, and the same set `0` reaches on this module. Any other value reads as `0`, because a module that never saw the message is already playing its own map. A tone or kit that the selected map predates falls back to the capital tone or the Standard kit — the same thing a real module of that generation does.
 
 ::: warning The LSB means two different things
-This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the authoring tip below), and it is the easiest value to get wrong. Under a GM2 MSB it selects a *variation*; under a GS MSB it selects a *tone map*, and the variation number lives in the MSB instead. Writing `bankLsb: 1` next to a GS variation MSB does not pick variation 1 — it pins the part to the SC-55 tone set.
+This is the byte you set as `bankLsb` in `Project.midiBankProgram(...)` (see the authoring tip below), and it is the easiest value to get wrong. Under a GM2 MSB it selects a *variation*; under a GS MSB it selects a *tone map*, and the variation number lives in the MSB instead. Writing `bankLsb: 1` next to a GS variation MSB does not pick variation 1 — it pins the part to tone map 1, the oldest set.
 :::
 
 <MaturityNote
