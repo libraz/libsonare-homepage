@@ -193,8 +193,61 @@ export function checkTerms({
   return { failures, unresolved };
 }
 
+/**
+ * The shape of a hardware model designation: a short letter cluster bound to a
+ * number, hyphenated or not. The same structural test the demo runtime and the
+ * data generator apply to engine-supplied strings — those guards only see what
+ * the engine hands to a screen, so the prose beside them is swept here.
+ *
+ * The letter cluster must carry a capital, which is what separates a product
+ * name from ordinary hyphenated prose ("first-10", "up-to-16").
+ */
+const DESIGNATION_SHAPE =
+  /\b([A-Za-z]{2,5})-(\d{2,5}[A-Za-z]{0,3})\b|\b([A-Za-z]{2,5})(\d{3,5}[A-Za-z]{0,3})\b/g;
+
+/**
+ * Clusters that take the designation shape without naming a machine, each with
+ * the reason it is not one. A standard, an algorithm and a language edition are
+ * all named this way, and the docs have to be able to cite them.
+ */
+const NOT_A_DESIGNATION = {
+  'DAFx-19': 'conference proceedings the dispersion filter design is cited from',
+  'SHA-256': 'the hash the build pins artifacts with',
+  'Bank-128': 'a MIDI bank number, written out in prose',
+  ES2017: 'the ECMAScript edition a browser requirement is stated against',
+};
+
+/**
+ * Sweeps doc prose for anything shaped like a hardware model designation.
+ *
+ * A designation the engine returns is rewritten before it reaches a screen, but
+ * nothing stops one being typed into a sentence, and a guarded demo beside a
+ * page that spells the name out is not guarded. The check is structural rather
+ * than a list of names, since a list would spell out exactly what it excludes.
+ */
+export function checkDesignations({ root = process.cwd() } = {}) {
+  const failures = [];
+  for (const file of collectDocFiles(root)) {
+    const content = fs.readFileSync(path.join(root, file.relPath), 'utf8');
+    maskNonProse(content)
+      .split('\n')
+      .forEach((line, lineIndex) => {
+        for (const match of line.matchAll(DESIGNATION_SHAPE)) {
+          const cluster = match[1] ?? match[3];
+          if (!/[A-Z]/.test(cluster)) continue;
+          if (Object.hasOwn(NOT_A_DESIGNATION, match[0])) continue;
+          failures.push(
+            `${file.relPath}:${lineIndex + 1} reads as a model designation: "${match[0]}"`,
+          );
+        }
+      });
+  }
+  return failures;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { failures, unresolved } = checkTerms();
+  failures.push(...checkDesignations());
 
   if (unresolved.length > 0) {
     console.log('unresolved terms (not fatal):');

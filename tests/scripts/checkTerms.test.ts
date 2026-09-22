@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  checkDesignations,
   checkTerms,
   collectDocFiles,
   maskGloss,
@@ -208,5 +209,63 @@ describe('check-terms script', () => {
     expect(failing.stdout).toContain('unresolved terms (not fatal):');
     expect(failing.stderr).toContain('terminology check failed:');
     expect(failing.stderr).toContain('src/docs/prose.md:1 uses "oldspelling"');
+  });
+});
+
+describe('checkDesignations', () => {
+  it('flags a model designation typed into prose, in either locale', () => {
+    const root = createWorkspace();
+    writeFile(root, 'src/docs/en.md', 'The XZ-12 filter is emulated here.\n');
+    writeFile(root, 'src/ja/docs/ja.md', 'ここでは XZ-12 のフィルタを再現しています。\n');
+
+    const failures = checkDesignations({ root });
+
+    expect(failures).toHaveLength(2);
+    expect(failures[0]).toContain('src/docs/en.md:1');
+    expect(failures[0]).toContain('"XZ-12"');
+    expect(failures[1]).toContain('src/ja/docs/ja.md:1');
+  });
+
+  it('reads no designation in an identifier, a path or a fenced block', () => {
+    const root = createWorkspace();
+    writeFile(
+      root,
+      'src/docs/code.md',
+      [
+        'Call `renderXZ-12()` to hear it.',
+        '',
+        'See [the notes](/assets/XZ-12.json).',
+        '',
+        '```ts',
+        'const preset = "XZ-12";',
+        '```',
+        '',
+        '<!-- XZ-12 is the machine this came from -->',
+      ].join('\n'),
+    );
+
+    expect(checkDesignations({ root })).toEqual([]);
+  });
+
+  it('leaves hyphenated prose and two-digit metrics alone', () => {
+    const root = createWorkspace();
+    writeFile(
+      root,
+      'src/docs/prose.md',
+      'The first-10 bars hold RT60 near C80, and D50 stays flat up-to-16 parts.\n',
+    );
+
+    expect(checkDesignations({ root })).toEqual([]);
+  });
+
+  it('allows the standards and algorithms the docs cite by number', () => {
+    const root = createWorkspace();
+    writeFile(
+      root,
+      'src/docs/cited.md',
+      'Built against ES2017, pinned by SHA-256, after the DAFx-19 paper, at Bank-128.\n',
+    );
+
+    expect(checkDesignations({ root })).toEqual([]);
   });
 });
