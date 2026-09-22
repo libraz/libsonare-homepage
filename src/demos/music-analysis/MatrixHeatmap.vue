@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useCanvasRedraw } from '@/composables/useCanvasRedraw';
 import { useTheme } from '@/composables/useTheme';
 import { prepareCanvas2D } from '@/utils/canvas';
 
@@ -59,6 +60,9 @@ function draw() {
 }
 
 onMounted(draw);
+// Without this the heatmap stays blank when it is first laid out at zero size,
+// and keeps a stale bitmap after a resize.
+useCanvasRedraw(canvasRef, draw);
 watch(() => [props.rows, props.columns, props.values, props.min, props.max, isDark.value], draw, {
   deep: false,
 });

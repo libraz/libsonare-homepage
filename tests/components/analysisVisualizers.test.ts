@@ -13,6 +13,7 @@ function audioBuffer(channels: Float32Array[]): AudioBuffer {
 
 describe('analysis visualizer components', () => {
   let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn>;
+  let boxSpies: Array<ReturnType<typeof vi.spyOn>>;
   let getContextSpy: ReturnType<typeof vi.spyOn>;
   let ctx: Record<string, any>;
   let calls: Array<{ method: string; args: unknown[]; fillStyle?: string; strokeStyle?: string }>;
@@ -38,6 +39,7 @@ describe('analysis visualizer components', () => {
         calls.push({ method: 'stroke', args: [], strokeStyle: this.strokeStyle });
       }),
       scale: vi.fn((...args: unknown[]) => calls.push({ method: 'scale', args })),
+      setTransform: vi.fn((...args: unknown[]) => calls.push({ method: 'setTransform', args })),
       createLinearGradient: vi.fn(() => ({
         addColorStop: vi.fn(),
       })),
@@ -57,6 +59,14 @@ describe('analysis visualizer components', () => {
         toJSON: () => ({}),
       });
 
+    // jsdom reports every element as zero-sized, and `prepareCanvas2D` refuses to
+    // draw into a box that has none. Give the canvas the same box the stubbed rect
+    // reports, so the component is measured rather than the environment.
+    boxSpies = [
+      vi.spyOn(HTMLCanvasElement.prototype, 'clientWidth', 'get').mockReturnValue(120),
+      vi.spyOn(HTMLCanvasElement.prototype, 'clientHeight', 'get').mockReturnValue(60),
+    ];
+
     getContextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
@@ -74,6 +84,7 @@ describe('analysis visualizer components', () => {
 
   afterEach(() => {
     getBoundingClientRectSpy.mockRestore();
+    for (const spy of boxSpies) spy.mockRestore();
     getContextSpy.mockRestore();
     vi.unstubAllGlobals();
     vi.useRealTimers();

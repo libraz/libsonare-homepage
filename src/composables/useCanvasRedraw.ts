@@ -1,9 +1,9 @@
 import { onBeforeUnmount, onMounted, type Ref, watch } from 'vue';
 
 /**
- * Redraw a demo canvas whenever its box changes size.
+ * Redraw a canvas whenever its box changes size.
  *
- * Archetypes draw once, in response to activation or a parameter change, and
+ * A demo canvas is drawn once, in response to activation or a parameter change, and
  * `prepareCanvas2D` bails out (returning `null`) when the canvas has no layout
  * box yet. Without this, two things go wrong and neither ever recovers:
  *
