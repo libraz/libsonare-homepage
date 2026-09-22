@@ -183,7 +183,7 @@ sonare mastering-pair-processor mix.wav --processor match.applyMatchEq \
 
 `matched.wav` は `channels: 1` で出てきます。`matched.wav` に対して `match.tonalBalance` を測り直すと、カーブフィット自体の精度は高く 0.29 / -0.02 / -0.001 / -0.07 dB まで収束します。ただしその精度と引き換えにモノラルファイルになっています。
 
-CLI 上で `match.applyMatchEq` を使うのは、納品物が本当にモノラルのとき、たとえばポッドキャストや音声トラックのときです。ステレオの納品物では、上のように形の合った単体プロセッサを `mastering-processor` 経由で使うか、ライブラリを直接呼び出します。`mastering_pair_process()` は 1 回の呼び出しにつき 1 本のフラット配列しか取らないので、左チャンネルをリファレンスの左チャンネルに対して 1 回、右チャンネルを右チャンネルに対してもう 1 回呼ぶと、[リファレンス一致](../glossary/mastering/reference-match.md)のブラウザデモと同じやり方で、チャンネルを保ったままフィット済みのカーブが得られます。呼び出しの形は [Python API](../python-api.md) を参照してください。
+CLI 上で `match.applyMatchEq` を使うのは、納品物が本当にモノラルのとき、たとえばポッドキャストや音声トラックのときです。ステレオの納品物では、上のように形の合った単体プロセッサを `mastering-processor` 経由で使うか、ライブラリを直接呼び出します。`mastering_pair_process()` は、1 回の呼び出しにつき 1 本のフラット配列しか取りません。そのため、左チャンネルをリファレンスの左チャンネルに対して 1 回、右チャンネルを右チャンネルに対してもう 1 回呼びます。こうすると、[リファレンス一致](../glossary/mastering/reference-match.md)のブラウザデモと同じやり方で、チャンネルを保ったままフィット済みのカーブが得られます。呼び出しの形は [Python API](../python-api.md) を参照してください。
 :::
 
 ## ステップ 6 — 収束を確認する

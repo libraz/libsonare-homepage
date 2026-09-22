@@ -5,7 +5,7 @@ description: libsonare JavaScript/TypeScript パッケージの解析関数、�
 
 # JavaScript/TypeScript 解析 API
 
-このページは libsonare JavaScript/TypeScript パッケージの中核となる解析関数を扱います。BPM・キー・ビート・オンセット検出、総合解析の `analyze()` とその個別ヘルパー、構造境界・拍子推定、そしてスケール量子化・単位変換・リサンプリングです。関連する 2 つのリファレンスが並んで存在します。[特徴抽出](./js-api-features.md) は STFT、mel/MFCC、クロマ、スペクトル特徴、ピッチ検出、CQT/VQT/分解系の関数を扱い、[librosa 互換ヘルパー](./js-api-helpers.md) はプリエンファシス、テスト信号生成、スペクトル再構成、構造解析、セグメンテーション、テンポグラムといった librosa の引数対応ポートを扱います。
+このページは libsonare JavaScript/TypeScript パッケージの中核となる解析関数を扱います。BPM・キー・ビート・オンセット検出、総合解析の `analyze()` とその個別ヘルパー、構造境界・拍子推定、そしてスケール量子化・単位変換・リサンプリングです。関連する 2 つのリファレンスが並んで存在します。[特徴抽出](./js-api-features.md) は、STFT、mel/MFCC、クロマ、スペクトル特徴、ピッチ検出、CQT/VQT/分解系の関数を扱います。[librosa 互換ヘルパー](./js-api-helpers.md) は、プリエンファシス、テスト信号生成、スペクトル再構成、構造解析、セグメンテーション、テンポグラムといった librosa の引数対応ポートを扱います。
 
 ## 各節の移動先
 

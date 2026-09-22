@@ -131,7 +131,7 @@ GS を名乗ることは、特定のハードウェアの音を再現すると�
 
 16 パートという上限を「ブラウザの制約」に分類したくなりますが、そうではありません。
 
-これは **MIDI ポートを 1 系統しか受けない**ことから来ており、エンジン自身の理由文字列がそう書いています。旧機種が別の 16 パートに届くために使っていた `50 ** **` と `51 ** **` は `IGNORE` で、理由は「libsonare receives one port, so there is no second group of parts to address」と「libsonare receives one port, so there is no second group's drum setup to address」です。`00 01 xx` のチャンネル別ポート割り当ても同じ理由を持ちます。3 つの行はいずれも `src/midi/synth/gs_address_table.h` にあります。
+これは **MIDI ポートを 1 系統しか受けない**ことから来ており、エンジン自身の理由文字列がそう書いています。旧機種が別の 16 パートに届くために使っていた `50 ** **` と `51 ** **` は `IGNORE` です。理由は「libsonare receives one port, so there is no second group of parts to address」と「libsonare receives one port, so there is no second group's drum setup to address」です。`00 01 xx` のチャンネル別ポート割り当ても同じ理由を持ちます。3 つの行はいずれも `src/midi/synth/gs_address_table.h` にあります。
 
 対象機では 64 パートは 2 つ目のアドレス空間ではなく 4 ポート × 16 であり、加えてこの機種はシングルモジュールの Mode-1 機です。`00 00 7F` SYSTEM MODE SET は範囲こそ受け取るものの、実際に効くのは `00` だけです（`src/midi/synth/docs/gs.md`）。つまり実装すべきダブルモジュールモードも存在しません。入力ポートが 1 系統、パートのグループも 1 つ。4 ポートを受けるネイティブビルドでも、同じ計算になります。
 

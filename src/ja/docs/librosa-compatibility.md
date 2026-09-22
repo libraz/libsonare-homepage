@@ -11,7 +11,7 @@ libsonare の関数が Python の librosa ライブラリにどのように対�
 
 ## 概要
 
-libsonare は、[librosa](https://librosa.org/) と同じような MIR（music information retrieval：音声からテンポ・キー・ピッチなどの音楽的特徴を抽出する分野）の基本部品を提供しつつ、C++、Python バインディング、Node.js ネイティブバインディング、WebAssembly での利用を想定しています。librosa の完全なドロップイン置き換えではありません。API、既定値、数値計算の細部は異なる場合があります。libsonare のテストスイートでは、一部の機能について librosa 0.11 の参照値と比較しています。
+libsonare は、[librosa](https://librosa.org/) と同じような MIR（music information retrieval：音声からテンポ・キー・ピッチなどの音楽的特徴を抽出する分野）の基本部品を提供します。C++、Python バインディング、Node.js ネイティブバインディング、WebAssembly での利用を想定しています。librosa の完全なドロップイン置き換えではありません。API、既定値、数値計算の細部は異なる場合があります。libsonare のテストスイートでは、一部の機能について librosa 0.11 の参照値と比較しています。
 
 ## 目的別マップ
 
@@ -35,7 +35,7 @@ PCEN（Per-Channel Energy Normalization）は、メルスペクトログラム�
 
 ここでいう互換性は「API が同一」という意味ではありません。librosa の挙動を参照し、近い結果になるかをテストしている、という意味です。
 
-libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT、pitch、tuning、onset/beat/tempo、tempogram/PLP、PCEN、spectral contrast/poly features/zero crossings、dB 変換、フレーミング／シーケンスヘルパー、silence trim/split、HPSS、harmonic/decompose/NN filter/remix/phase vocoder、tonnetz などについて librosa 参照比較テストがあります。
+libsonare リポジトリには、STFT、Mel/MFCC、chroma、CQT について librosa 参照比較テストがあります。pitch、tuning、onset/beat/tempo、tempogram/PLP、PCEN についても同様です。spectral contrast/poly features/zero crossings、dB 変換、フレーミング／シーケンスヘルパー、silence trim/split も対象です。HPSS、harmonic/decompose/NN filter/remix/phase vocoder、tonnetz など、その他の機能についてもテストがあります。
 
 下の許容誤差は、移行時の目安として読んでください。すべての入力で厳密に同じ数値になることを保証するものではありません。
 

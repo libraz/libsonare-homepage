@@ -69,7 +69,7 @@ SoundFont ごとにカバーする楽器は異なり、小さな `.sf2` には�
 何がどこに解決されたかは正確に確認できます。プログラムごとのレポートに、アレンジメントが鳴らす各 `(channel, bank, program)` がどちらのバックエンド（`'sf2'` か `'synth'`）に落ちたか、どのプリセット名に一致したかが載ります。
 
 ::: details libsonare での実装
-`Project` 上で `loadSoundFont(bytes)` がバイトバッファから `.sf2` ファイルを登録します。続いて `soundFontManifest()` が、アレンジメントの使う `(channel, bank, program)` の組ごとに 1 件の `Sf2ProgramStatus` を返し、各エントリは `'sf2'` か `'synth'` の `backend` と、解決された `presetName` を持つので、どのプログラムが SoundFont でカバーされ、どれが NativeSynth GM バンクへフォールバックしたかが一目で分かります（ドラムチャンネルはバンク `128` を報告します）。`bounceWithSf2Instrument(...)` は SoundFont プレイヤーを通じてアレンジメントをレンダリングし、ノートごとに同じ GM フォールバックを適用するため、カバーされていないプログラムでも出力が無音になりません。フォールバックバンクはデータ不要の最終手段で、SoundFont を一切読み込んでいなくても、すべてのプログラムが NativeSynth のボイスへ解決されます。
+`Project` 上で `loadSoundFont(bytes)` がバイトバッファから `.sf2` ファイルを登録します。続いて `soundFontManifest()` が、アレンジメントの使う `(channel, bank, program)` の組ごとに 1 件の `Sf2ProgramStatus` を返します。各エントリは `'sf2'` か `'synth'` の `backend` と、解決された `presetName` を持ちます。そのため、どのプログラムが SoundFont でカバーされ、どれが NativeSynth GM バンクへフォールバックしたかが一目で分かります（ドラムチャンネルはバンク `128` を報告します）。`bounceWithSf2Instrument(...)` は SoundFont プレイヤーを通じてアレンジメントをレンダリングし、ノートごとに同じ GM フォールバックを適用するため、カバーされていないプログラムでも出力が無音になりません。フォールバックバンクはデータ不要の最終手段で、SoundFont を一切読み込んでいなくても、すべてのプログラムが NativeSynth のボイスへ解決されます。
 :::
 
 関連: [SoundFont プレイヤー](../../soundfont-player.md)、[内蔵シンセサイザー（NativeSynth）](../../native-synth.md)、[MIDI の基礎](./midi-basics.md)

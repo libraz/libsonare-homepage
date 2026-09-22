@@ -274,7 +274,7 @@ Node の `stripMeter(strip)` はポストフェーダーメーターを読みま
 
 ## プロジェクト・インストゥルメント・ライブ MIDI
 
-Node ネイティブアドオンは、WASM や Python と同じヘッドレス DAW 向け API を公開しています。`Project` クラス（トラック、クリップ、テンポ、undo/redo、SMF／MIDI 2.0 入出力）、インストゥルメント付きバウンス（`bounceWithSynthInstrument(s)` と SoundFont のロード）、NativeSynth プリセットカタログ（`synthPresetNames()`／`synthPresetPatch()`／`SynthPatch`）、`chordFunctionalAnalysis(...)`、そしてライブ MIDI 入力付きの `RealtimeEngine` が使えます。
+Node ネイティブアドオンは、WASM や Python と同じヘッドレス DAW 向け API を公開しています。`Project` クラス（トラック、クリップ、テンポ、undo/redo、SMF／MIDI 2.0 入出力）と、インストゥルメント付きバウンス（`bounceWithSynthInstrument(s)` と SoundFont のロード）が使えます。NativeSynth プリセットカタログ（`synthPresetNames()`／`synthPresetPatch()`／`SynthPatch`）、`chordFunctionalAnalysis(...)`、ライブ MIDI 入力付きの `RealtimeEngine` も使えます。
 
 エンジンには他のバインディングと同じレーンミキサーと MIDI クリップスケジュールが載っています。`setTrackLanes` / `setTrackBuses`、トラック／マスター／バスのストリップ JSON とインサート操作、インサートオートメーション id の解決、`setParamSmoothingMs`、ワイド／スコープテレメトリ、`setMidiClips`、`sampleAtPpq` を、WASM と同じ camelCase 名で使えます。外部機器へのルーティングも `setMidiDestinationExternal`、`setExternalMidiClockEnabled`、`drainExternalMidi`、`externalMidiDroppedCount` から利用できます（[リアルタイムエンジン](./realtime-engine.md#トラックを外部-midi-機器へ送る)を参照）。ブラウザ専用のつなぎ込み（`bindWebMidi`、`bindMicrophoneInput`）は WASM 固有で、ネイティブアドオンには含まれません。
 
@@ -320,7 +320,7 @@ Node ネイティブの `Audio` オブジェクトは、ネイティブアドオ
 | ファイル構築 | `Audio.fromFile(...)`、`Audio.fromMemory(...)` | `Audio.fromBuffer(...)`、`Audio.fromMemory(...)`、`Audio.fromMemoryWithBrowserFallback(...)` |
 | サンプル取得 | `audio.getData()` はコピーを返す | `audio.data` はインスタンスが持つ可変な `Float32Array` そのもの |
 
-共通メソッドに加えて、次のような focused helper も `Audio` メソッドとして持ちます: `analyzeBpm(...)`、`analyzeImpulseResponse(...)`、`detectAcoustic(...)`、`analyzeRhythm(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`。ルーム系ヘルパーの `estimateRoom(...)`、`synthesizeRir(...)`、`roomMorph(...)` はスタンドアロン関数のままです。
+共通メソッドに加えて、用途を絞った次のヘルパーも `Audio` のメソッドとして持ちます。`analyzeBpm(...)`、`analyzeImpulseResponse(...)`、`detectAcoustic(...)`、`analyzeRhythm(...)`、`analyzeDynamics(...)`、`analyzeTimbre(...)`。ルーム系ヘルパーの `estimateRoom(...)`、`synthesizeRir(...)`、`roomMorph(...)` はスタンドアロン関数のままです。
 
 メソッドと関数の完全なリファレンスは [Node.js Native API](./node-api.md) を参照してください。
 
