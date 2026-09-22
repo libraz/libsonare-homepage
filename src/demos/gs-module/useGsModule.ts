@@ -12,9 +12,10 @@
  * carries and the panels layer on top without the demo having to parse a byte
  * of it.
  */
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { bootWasm, type SonareWasmModule } from '@/composables/useWasmBoot';
 import { buildSmf, noteEvents, type SmfEvent } from '@/utils/gsSysex';
+import { GM_FAMILY_SIZE, GM_PROGRAM_COUNT, gmFamilyOf } from './gsNames';
 import {
   defaultModuleState,
   type GsModuleState,
@@ -107,6 +108,55 @@ export function drumKitsOf(wasm: SonareWasmModule): GsDrumKit[] {
   return kits;
 }
 
+/** One GM program, named by the engine rather than by a table beside it. */
+export interface GmProgram {
+  program: number;
+  family: number;
+  name: string;
+}
+
+/** The whole GM sound set with the engine's own spellings. */
+export function gmProgramsOf(wasm: SonareWasmModule): GmProgram[] {
+  const Project = (wasm as unknown as { Project: GsProjectStatics }).Project;
+  return Array.from({ length: GM_PROGRAM_COUNT }, (_, program) => ({
+    program,
+    family: gmFamilyOf(program),
+    name: Project.gmInstrumentName(program) ?? '',
+  }));
+}
+
+/** The sixteen family names, in family order. */
+export function gmFamilyNamesOf(wasm: SonareWasmModule): string[] {
+  const Project = (wasm as unknown as { Project: GsProjectStatics }).Project;
+  return Array.from(
+    { length: GM_PROGRAM_COUNT / GM_FAMILY_SIZE },
+    (_, family) => Project.gmFamilyName(family) ?? '',
+  );
+}
+
+/**
+ * Bank Select values that give `program` a variation this build voices apart
+ * from its capital tone.
+ *
+ * The query answers for every bank, so a `false` means the bank resolves back
+ * to the capital rather than that the bank is unknown — which is what GS does
+ * with a variation a module never had. Only the ones that differ are listed,
+ * because a variation that sounds identical is not a choice a reader can hear.
+ */
+export function variationsOf(wasm: SonareWasmModule, program: number): number[] {
+  const banks: number[] = [];
+  for (let bank = 1; bank < 128; bank++) {
+    if (wasm.synthGsVariationIsVoicedApart(bank, program) === true) banks.push(bank);
+  }
+  return banks;
+}
+
+/** The static half of `Project` this demo uses. */
+interface GsProjectStatics {
+  gmInstrumentName(program: number): string | null;
+  gmFamilyName(family: number): string | null;
+}
+
 /** The slice of `Project` this demo uses. */
 interface GsProject {
   setSampleRate(rate: number): void;
@@ -130,6 +180,10 @@ export function useGsModule() {
   const rendered = shallowRef<Float32Array | null>(null);
   /** Filled on the first boot; empty until then, which the kit browser shows. */
   const drumKits = shallowRef<GsDrumKit[]>([]);
+  const gmPrograms = shallowRef<GmProgram[]>([]);
+  const gmFamilyNames = shallowRef<string[]>([]);
+  /** Bank values that give the selected part's program a distinct variation. */
+  const variations = shallowRef<number[]>([]);
 
   let audio: AudioContext | null = null;
   let playing: AudioBufferSourceNode | null = null;
@@ -146,6 +200,20 @@ export function useGsModule() {
     playing = null;
   }
 
+  /** The variation list follows the selected part's program, not the state. */
+  function refreshVariations(wasm: SonareWasmModule) {
+    variations.value = variationsOf(wasm, selectedPart.value.program);
+  }
+
+  watch(
+    () => [selectedChannel.value, selectedPart.value.program] as const,
+    () => {
+      void bootWasm().then((wasm) => {
+        if (!disposed) refreshVariations(wasm);
+      });
+    },
+  );
+
   /**
    * Boot far enough to fill the lists the panels read, without rendering. The
    * kit browser has nothing to show until the engine has been asked what sets
@@ -156,6 +224,9 @@ export function useGsModule() {
       const wasm = await bootWasm();
       if (disposed) return;
       drumKits.value = drumKitsOf(wasm);
+      gmPrograms.value = gmProgramsOf(wasm);
+      gmFamilyNames.value = gmFamilyNamesOf(wasm);
+      refreshVariations(wasm);
     } catch (cause) {
       if (disposed) return;
       error.value = cause;
@@ -200,7 +271,7 @@ export function useGsModule() {
     if (disposed) return;
     stop();
     const target = audio.createBuffer(1, buffer.length, SAMPLE_RATE);
-    target.copyToChannel(buffer, 0);
+    target.getChannelData(0).set(buffer);
     const source = audio.createBufferSource();
     source.buffer = target;
     source.connect(audio.destination);
@@ -240,6 +311,9 @@ export function useGsModule() {
     error,
     rendered,
     drumKits,
+    gmPrograms,
+    gmFamilyNames,
+    variations,
     render,
     play,
     stop,

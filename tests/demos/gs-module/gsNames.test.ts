@@ -1,12 +1,17 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import efxTables from '@/demos/gs-module/data/efx-tables.json';
 import {
-  GM_FAMILIES,
-  GM_PROGRAMS,
+  GM_FAMILY_COUNT,
+  GM_FAMILY_NAMES_JA,
+  GM_PROGRAM_COUNT,
+  GM_PROGRAM_NAMES_JA,
   GS_EFX_TYPES,
   GS_EFX_TYPES_UNNAMED,
   gmFamilyOf,
 } from '@/demos/gs-module/gsNames';
+import { gmFamilyNamesOf, gmProgramsOf, variationsOf } from '@/demos/gs-module/useGsModule';
+import * as wasm from '@/wasm/index.js';
 
 const EFX_TYPE_KEYS = Object.keys(
   (efxTables as { defaults: { by_type: Record<string, unknown> } }).defaults.by_type,
@@ -36,79 +41,96 @@ describe('GS_EFX_TYPES', () => {
       expect(GS_EFX_TYPES[key].ja.length).toBeGreaterThan(0);
     }
   });
-});
 
-describe('GM_PROGRAMS', () => {
-  it('has exactly 128 entries', () => {
-    expect(GM_PROGRAMS).toHaveLength(128);
-  });
-
-  it('gives every program non-empty en and ja names', () => {
-    for (const program of GM_PROGRAMS) {
-      expect(program.en.length).toBeGreaterThan(0);
-      expect(program.ja.length).toBeGreaterThan(0);
+  it('keeps every effect label to an effect name', () => {
+    for (const key of Object.keys(GS_EFX_TYPES)) {
+      expect(GS_EFX_TYPES[key].en).not.toMatch(MODEL_DESIGNATION);
+      expect(GS_EFX_TYPES[key].ja).not.toMatch(MODEL_DESIGNATION);
     }
-  });
-
-  it('starts with Acoustic Grand Piano', () => {
-    expect(GM_PROGRAMS[0].en).toBe('Acoustic Grand Piano');
   });
 });
 
-describe('GM_FAMILIES', () => {
-  it('has exactly 16 entries', () => {
-    expect(GM_FAMILIES).toHaveLength(16);
+describe('the Japanese tables', () => {
+  it('cover every program and every family', () => {
+    expect(GM_PROGRAM_NAMES_JA).toHaveLength(GM_PROGRAM_COUNT);
+    expect(GM_FAMILY_NAMES_JA).toHaveLength(GM_FAMILY_COUNT);
   });
 
-  it('exactly partitions 0..127 with no gap or overlap', () => {
-    const covered = new Array(128).fill(0);
-    for (const family of GM_FAMILIES) {
-      for (let program = family.first; program <= family.last; program++) {
-        covered[program]++;
-      }
+  it('leave no entry blank', () => {
+    for (const name of [...GM_PROGRAM_NAMES_JA, ...GM_FAMILY_NAMES_JA]) {
+      expect(name.length).toBeGreaterThan(0);
     }
-    expect(covered.every((count) => count === 1)).toBe(true);
   });
 
-  it('starts at 0 and ends at 127, sorted and contiguous', () => {
-    const sorted = [...GM_FAMILIES].sort((a, b) => a.first - b.first);
-    expect(sorted[0].first).toBe(0);
-    expect(sorted[sorted.length - 1].last).toBe(127);
-    for (let i = 1; i < sorted.length; i++) {
-      expect(sorted[i].first).toBe(sorted[i - 1].last + 1);
+  it('keep every label to a sound name', () => {
+    for (const name of [...GM_PROGRAM_NAMES_JA, ...GM_FAMILY_NAMES_JA]) {
+      expect(name).not.toMatch(MODEL_DESIGNATION);
     }
   });
 });
 
 describe('gmFamilyOf', () => {
-  it('returns the right family at each family boundary', () => {
-    for (const family of GM_FAMILIES) {
-      expect(gmFamilyOf(family.first)).toEqual(family.name);
-      expect(gmFamilyOf(family.last)).toEqual(family.name);
+  it('puts eight consecutive programs in each family, in order', () => {
+    for (let program = 0; program < GM_PROGRAM_COUNT; program++) {
+      expect(gmFamilyOf(program)).toBe(Math.floor(program / 8));
     }
+    expect(gmFamilyOf(GM_PROGRAM_COUNT - 1)).toBe(GM_FAMILY_COUNT - 1);
   });
 
-  it('throws outside the 0..127 range', () => {
+  it('throws outside the program range', () => {
     expect(() => gmFamilyOf(-1)).toThrow(RangeError);
-    expect(() => gmFamilyOf(128)).toThrow(RangeError);
+    expect(() => gmFamilyOf(GM_PROGRAM_COUNT)).toThrow(RangeError);
   });
 });
 
-describe('no model designations', () => {
-  function assertClean(name: { en: string; ja: string }) {
-    expect(name.en).not.toMatch(MODEL_DESIGNATION);
-    expect(name.ja).not.toMatch(MODEL_DESIGNATION);
-  }
-
-  it('keeps GM_PROGRAMS to sound names', () => {
-    for (const program of GM_PROGRAMS) assertClean(program);
+describe('the engine supplies the English names', () => {
+  it('names all 128 programs, in program order', async () => {
+    await wasm.init();
+    const programs = gmProgramsOf(wasm);
+    expect(programs).toHaveLength(GM_PROGRAM_COUNT);
+    expect(programs.map((entry) => entry.program)).toEqual(
+      Array.from({ length: GM_PROGRAM_COUNT }, (_, i) => i),
+    );
+    for (const entry of programs) expect(entry.name.length).toBeGreaterThan(0);
   });
 
-  it('keeps GM_FAMILIES to family names', () => {
-    for (const family of GM_FAMILIES) assertClean(family.name);
+  it('names all 16 families', async () => {
+    await wasm.init();
+    const families = gmFamilyNamesOf(wasm);
+    expect(families).toHaveLength(GM_FAMILY_COUNT);
+    for (const name of families) expect(name.length).toBeGreaterThan(0);
   });
 
-  it('keeps GS_EFX_TYPES to effect names', () => {
-    for (const key of Object.keys(GS_EFX_TYPES)) assertClean(GS_EFX_TYPES[key]);
+  it('agrees with gmFamilyOf about which family a program is in', async () => {
+    await wasm.init();
+    for (const entry of gmProgramsOf(wasm)) {
+      expect(entry.family).toBe(gmFamilyOf(entry.program));
+    }
+  });
+});
+
+describe('variationsOf', () => {
+  it('never offers the capital tone as a variation of itself', async () => {
+    await wasm.init();
+    for (const program of [0, 24, 48, 127]) {
+      expect(variationsOf(wasm, program)).not.toContain(0);
+    }
+  });
+
+  it('finds at least one program with a variation voiced apart', async () => {
+    await wasm.init();
+    const withVariations = Array.from({ length: GM_PROGRAM_COUNT }, (_, p) => p).filter(
+      (program) => variationsOf(wasm, program).length > 0,
+    );
+    expect(withVariations.length).toBeGreaterThan(0);
+  });
+
+  it('lists only banks the engine calls voiced apart', async () => {
+    await wasm.init();
+    for (const program of [0, 4, 16, 40]) {
+      for (const bank of variationsOf(wasm, program)) {
+        expect(wasm.synthGsVariationIsVoicedApart(bank, program)).toBe(true);
+      }
+    }
   });
 });

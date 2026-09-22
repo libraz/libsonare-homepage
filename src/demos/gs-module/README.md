@@ -44,10 +44,19 @@ build, so refreshing the WASM turns that gate red.
 | --- | --- |
 | `gsAddress.ts` | Address resolution, part-block mapping, DT1 framing |
 | `gsState.ts` | Module state and the messages that produce it |
-| `gsNames.ts` | Instrument and effect names, en and ja |
+| `gsNames.ts` | Japanese labels, and the effect-type names |
 | `useGsModule.ts` | The store: state, render, playback, engine queries |
+| `GsModuleDemo.vue` | The entry, composing the five panels over one state |
 | `GsPartMixer.vue` | The sixteen part strips |
 | `GsPatchBrowser.vue` | Programs by family, and bank variations |
 | `GsKitBrowser.vue` | Rhythm sets on the rhythm part |
 | `GsEfxInspector.vue` | Effect type, its slots, and what each one does here |
 | `GsSourcePanel.vue` | File drop, transport, and the bytes being sent |
+
+## Names come from the engine wherever it has them
+
+English instrument and family names are `Project.gmInstrumentName` and
+`Project.gmFamilyName`; the rhythm sets are `synthGsDrumKitName`; which bank
+variations are voiced apart is `synthGsVariationIsVoicedApart`. Only the
+Japanese, and the insertion-effect type names, are written down here — a second
+copy of anything the engine can answer is a copy that drifts.

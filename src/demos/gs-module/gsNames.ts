@@ -1,11 +1,16 @@
 /**
- * Bilingual names for the GM instrument set and the GS insertion-effect types,
- * for the module demo's labels rather than the engine itself.
+ * The Japanese side of the module's labels, and the effect-type names.
+ *
+ * English instrument and family names are not here: the engine answers them
+ * (`Project.gmInstrumentName`, `Project.gmFamilyName`) and its spellings are
+ * the canonical ones, down to the irregular forms the standard actually uses.
+ * A second copy would only be a copy that can drift. What the engine has no
+ * query for is the Japanese, and the effect-type names.
  *
  * `GS_EFX_TYPES` is keyed by the same two-byte hex spelling as
- * `data/efx-tables.json`'s `defaults.by_type`, so the demo can look a type's
- * name up by the exact key the data file already carries. Every one of that
- * file's 65 keys has a confirmed name here; there is nothing to list in
+ * `data/efx-tables.json`'s `defaults.by_type`, so the demo looks a type's name
+ * up by the exact key the data file already carries. Every one of that file's
+ * 65 keys has a confirmed name here; there is nothing to list in
  * {@link GS_EFX_TYPES_UNNAMED}.
  */
 
@@ -15,155 +20,173 @@ export interface LocalizedName {
   ja: string;
 }
 
-export const GM_FAMILIES: readonly { first: number; last: number; name: LocalizedName }[] = [
-  { first: 0, last: 7, name: { en: 'Piano', ja: 'ピアノ' } },
-  { first: 8, last: 15, name: { en: 'Chromatic Percussion', ja: 'クロマチックパーカッション' } },
-  { first: 16, last: 23, name: { en: 'Organ', ja: 'オルガン' } },
-  { first: 24, last: 31, name: { en: 'Guitar', ja: 'ギター' } },
-  { first: 32, last: 39, name: { en: 'Bass', ja: 'ベース' } },
-  { first: 40, last: 47, name: { en: 'Strings', ja: 'ストリングス' } },
-  { first: 48, last: 55, name: { en: 'Ensemble', ja: 'アンサンブル' } },
-  { first: 56, last: 63, name: { en: 'Brass', ja: 'ブラス' } },
-  { first: 64, last: 71, name: { en: 'Reed', ja: 'リード' } },
-  { first: 72, last: 79, name: { en: 'Pipe', ja: 'パイプ' } },
-  { first: 80, last: 87, name: { en: 'Synth Lead', ja: 'シンセリード' } },
-  { first: 88, last: 95, name: { en: 'Synth Pad', ja: 'シンセパッド' } },
-  { first: 96, last: 103, name: { en: 'Synth Effects', ja: 'シンセエフェクト' } },
-  { first: 104, last: 111, name: { en: 'Ethnic', ja: 'エスニック' } },
-  { first: 112, last: 119, name: { en: 'Percussive', ja: 'パーカッション' } },
-  { first: 120, last: 127, name: { en: 'Sound Effects', ja: 'サウンドエフェクト' } },
+/** GM groups its programs eight to a family, in order, with no exceptions. */
+export const GM_FAMILY_SIZE = 8;
+export const GM_FAMILY_COUNT = 16;
+export const GM_PROGRAM_COUNT = GM_FAMILY_SIZE * GM_FAMILY_COUNT;
+
+/** Family index of a program number. */
+export function gmFamilyOf(program: number): number {
+  if (!Number.isInteger(program) || program < 0 || program >= GM_PROGRAM_COUNT) {
+    throw new RangeError(`program out of range: ${program}`);
+  }
+  return Math.floor(program / GM_FAMILY_SIZE);
+}
+
+/** Japanese family names, index = family. */
+export const GM_FAMILY_NAMES_JA: readonly string[] = [
+  'ピアノ',
+  'クロマチックパーカッション',
+  'オルガン',
+  'ギター',
+  'ベース',
+  'ストリングス',
+  'アンサンブル',
+  'ブラス',
+  'リード',
+  'パイプ',
+  'シンセリード',
+  'シンセパッド',
+  'シンセエフェクト',
+  'エスニック',
+  'パーカッション',
+  'サウンドエフェクト',
 ];
 
-/** The General MIDI Level 1 sound set, index = program number. */
-export const GM_PROGRAMS: readonly LocalizedName[] = [
-  { en: 'Acoustic Grand Piano', ja: 'アコースティックグランドピアノ' },
-  { en: 'Bright Acoustic Piano', ja: 'ブライトアコースティックピアノ' },
-  { en: 'Electric Grand Piano', ja: 'エレクトリックグランドピアノ' },
-  { en: 'Honky-tonk Piano', ja: 'ホンキートンクピアノ' },
-  { en: 'Electric Piano 1', ja: 'エレクトリックピアノ 1' },
-  { en: 'Electric Piano 2', ja: 'エレクトリックピアノ 2' },
-  { en: 'Harpsichord', ja: 'ハープシコード' },
-  { en: 'Clavinet', ja: 'クラビネット' },
-  { en: 'Celesta', ja: 'チェレスタ' },
-  { en: 'Glockenspiel', ja: 'グロッケンシュピール' },
-  { en: 'Music Box', ja: 'ミュージックボックス' },
-  { en: 'Vibraphone', ja: 'ビブラフォン' },
-  { en: 'Marimba', ja: 'マリンバ' },
-  { en: 'Xylophone', ja: 'シロフォン' },
-  { en: 'Tubular Bells', ja: 'チューブラーベル' },
-  { en: 'Dulcimer', ja: 'ダルシマー' },
-  { en: 'Drawbar Organ', ja: 'ドローバーオルガン' },
-  { en: 'Percussive Organ', ja: 'パーカッシブオルガン' },
-  { en: 'Rock Organ', ja: 'ロックオルガン' },
-  { en: 'Church Organ', ja: 'チャーチオルガン' },
-  { en: 'Reed Organ', ja: 'リードオルガン' },
-  { en: 'Accordion', ja: 'アコーディオン' },
-  { en: 'Harmonica', ja: 'ハーモニカ' },
-  { en: 'Tango Accordion', ja: 'タンゴアコーディオン' },
-  { en: 'Acoustic Guitar (nylon)', ja: 'アコースティックギター（ナイロン）' },
-  { en: 'Acoustic Guitar (steel)', ja: 'アコースティックギター（スチール）' },
-  { en: 'Electric Guitar (jazz)', ja: 'エレキギター（ジャズ）' },
-  { en: 'Electric Guitar (clean)', ja: 'エレキギター（クリーン）' },
-  { en: 'Electric Guitar (muted)', ja: 'エレキギター（ミュート）' },
-  { en: 'Overdriven Guitar', ja: 'オーバードライブギター' },
-  { en: 'Distortion Guitar', ja: 'ディストーションギター' },
-  { en: 'Guitar Harmonics', ja: 'ギターハーモニクス' },
-  { en: 'Acoustic Bass', ja: 'アコースティックベース' },
-  { en: 'Electric Bass (finger)', ja: 'エレキベース（フィンガー）' },
-  { en: 'Electric Bass (pick)', ja: 'エレキベース（ピック）' },
-  { en: 'Fretless Bass', ja: 'フレットレスベース' },
-  { en: 'Slap Bass 1', ja: 'スラップベース 1' },
-  { en: 'Slap Bass 2', ja: 'スラップベース 2' },
-  { en: 'Synth Bass 1', ja: 'シンセベース 1' },
-  { en: 'Synth Bass 2', ja: 'シンセベース 2' },
-  { en: 'Violin', ja: 'バイオリン' },
-  { en: 'Viola', ja: 'ビオラ' },
-  { en: 'Cello', ja: 'チェロ' },
-  { en: 'Contrabass', ja: 'コントラバス' },
-  { en: 'Tremolo Strings', ja: 'トレモロストリングス' },
-  { en: 'Pizzicato Strings', ja: 'ピチカートストリングス' },
-  { en: 'Orchestral Harp', ja: 'オーケストラルハープ' },
-  { en: 'Timpani', ja: 'ティンパニ' },
-  { en: 'String Ensemble 1', ja: 'ストリングアンサンブル 1' },
-  { en: 'String Ensemble 2', ja: 'ストリングアンサンブル 2' },
-  { en: 'Synth Strings 1', ja: 'シンセストリングス 1' },
-  { en: 'Synth Strings 2', ja: 'シンセストリングス 2' },
-  { en: 'Choir Aahs', ja: 'クワイア（アー）' },
-  { en: 'Voice Oohs', ja: 'ボイス（ウー）' },
-  { en: 'Synth Voice', ja: 'シンセボイス' },
-  { en: 'Orchestra Hit', ja: 'オーケストラヒット' },
-  { en: 'Trumpet', ja: 'トランペット' },
-  { en: 'Trombone', ja: 'トロンボーン' },
-  { en: 'Tuba', ja: 'チューバ' },
-  { en: 'Muted Trumpet', ja: 'ミュートトランペット' },
-  { en: 'French Horn', ja: 'フレンチホルン' },
-  { en: 'Brass Section', ja: 'ブラスセクション' },
-  { en: 'Synth Brass 1', ja: 'シンセブラス 1' },
-  { en: 'Synth Brass 2', ja: 'シンセブラス 2' },
-  { en: 'Soprano Sax', ja: 'ソプラノサックス' },
-  { en: 'Alto Sax', ja: 'アルトサックス' },
-  { en: 'Tenor Sax', ja: 'テナーサックス' },
-  { en: 'Baritone Sax', ja: 'バリトンサックス' },
-  { en: 'Oboe', ja: 'オーボエ' },
-  { en: 'English Horn', ja: 'イングリッシュホルン' },
-  { en: 'Bassoon', ja: 'ファゴット' },
-  { en: 'Clarinet', ja: 'クラリネット' },
-  { en: 'Piccolo', ja: 'ピッコロ' },
-  { en: 'Flute', ja: 'フルート' },
-  { en: 'Recorder', ja: 'リコーダー' },
-  { en: 'Pan Flute', ja: 'パンフルート' },
-  { en: 'Blown Bottle', ja: 'ボトルブロー' },
-  { en: 'Shakuhachi', ja: '尺八' },
-  { en: 'Whistle', ja: 'ホイッスル' },
-  { en: 'Ocarina', ja: 'オカリナ' },
-  { en: 'Lead 1 (square)', ja: 'リード 1（矩形波）' },
-  { en: 'Lead 2 (sawtooth)', ja: 'リード 2（のこぎり波）' },
-  { en: 'Lead 3 (calliope)', ja: 'リード 3（カリオペ）' },
-  { en: 'Lead 4 (chiff)', ja: 'リード 4（チフ）' },
-  { en: 'Lead 5 (charang)', ja: 'リード 5（チャランゴ）' },
-  { en: 'Lead 6 (voice)', ja: 'リード 6（ボイス）' },
-  { en: 'Lead 7 (fifths)', ja: 'リード 7（フィフス）' },
-  { en: 'Lead 8 (bass + lead)', ja: 'リード 8（ベース + リード）' },
-  { en: 'Pad 1 (new age)', ja: 'パッド 1（ニューエイジ）' },
-  { en: 'Pad 2 (warm)', ja: 'パッド 2（ウォーム）' },
-  { en: 'Pad 3 (polysynth)', ja: 'パッド 3（ポリシンセ）' },
-  { en: 'Pad 4 (choir)', ja: 'パッド 4（クワイア）' },
-  { en: 'Pad 5 (bowed)', ja: 'パッド 5（ボウド）' },
-  { en: 'Pad 6 (metallic)', ja: 'パッド 6（メタリック）' },
-  { en: 'Pad 7 (halo)', ja: 'パッド 7（ハロー）' },
-  { en: 'Pad 8 (sweep)', ja: 'パッド 8（スイープ）' },
-  { en: 'FX 1 (rain)', ja: 'エフェクト 1（レイン）' },
-  { en: 'FX 2 (soundtrack)', ja: 'エフェクト 2（サウンドトラック）' },
-  { en: 'FX 3 (crystal)', ja: 'エフェクト 3（クリスタル）' },
-  { en: 'FX 4 (atmosphere)', ja: 'エフェクト 4（アトモスフィア）' },
-  { en: 'FX 5 (brightness)', ja: 'エフェクト 5（ブライトネス）' },
-  { en: 'FX 6 (goblins)', ja: 'エフェクト 6（ゴブリン）' },
-  { en: 'FX 7 (echoes)', ja: 'エフェクト 7（エコー）' },
-  { en: 'FX 8 (sci-fi)', ja: 'エフェクト 8（SF）' },
-  { en: 'Sitar', ja: 'シタール' },
-  { en: 'Banjo', ja: 'バンジョー' },
-  { en: 'Shamisen', ja: '三味線' },
-  { en: 'Koto', ja: '琴' },
-  { en: 'Kalimba', ja: 'カリンバ' },
-  { en: 'Bag pipe', ja: 'バグパイプ' },
-  { en: 'Fiddle', ja: 'フィドル' },
-  { en: 'Shanai', ja: 'シャナイ' },
-  { en: 'Tinkle Bell', ja: 'ティンクルベル' },
-  { en: 'Agogo', ja: 'アゴゴ' },
-  { en: 'Steel Drums', ja: 'スティールドラム' },
-  { en: 'Woodblock', ja: 'ウッドブロック' },
-  { en: 'Taiko Drum', ja: '太鼓' },
-  { en: 'Melodic Tom', ja: 'メロディックタム' },
-  { en: 'Synth Drum', ja: 'シンセドラム' },
-  { en: 'Reverse Cymbal', ja: 'リバースシンバル' },
-  { en: 'Guitar Fret Noise', ja: 'ギターのフレットノイズ' },
-  { en: 'Breath Noise', ja: 'ブレスノイズ' },
-  { en: 'Seashore', ja: '波の音' },
-  { en: 'Bird Tweet', ja: '鳥のさえずり' },
-  { en: 'Telephone Ring', ja: '電話の呼び出し音' },
-  { en: 'Helicopter', ja: 'ヘリコプター' },
-  { en: 'Applause', ja: '拍手' },
-  { en: 'Gunshot', ja: '銃声' },
+/**
+ * Japanese instrument names, index = program number. The English column is
+ * kept beside each one as a comment so a translation can be checked against
+ * the program it belongs to without loading the engine.
+ */
+export const GM_PROGRAM_NAMES_JA: readonly string[] = [
+  'アコースティックグランドピアノ', // Acoustic Grand Piano
+  'ブライトアコースティックピアノ', // Bright Acoustic Piano
+  'エレクトリックグランドピアノ', // Electric Grand Piano
+  'ホンキートンクピアノ', // Honky-tonk Piano
+  'エレクトリックピアノ 1', // Electric Piano 1
+  'エレクトリックピアノ 2', // Electric Piano 2
+  'ハープシコード', // Harpsichord
+  'クラビネット', // Clavinet
+  'チェレスタ', // Celesta
+  'グロッケンシュピール', // Glockenspiel
+  'ミュージックボックス', // Music Box
+  'ビブラフォン', // Vibraphone
+  'マリンバ', // Marimba
+  'シロフォン', // Xylophone
+  'チューブラーベル', // Tubular Bells
+  'ダルシマー', // Dulcimer
+  'ドローバーオルガン', // Drawbar Organ
+  'パーカッシブオルガン', // Percussive Organ
+  'ロックオルガン', // Rock Organ
+  'チャーチオルガン', // Church Organ
+  'リードオルガン', // Reed Organ
+  'アコーディオン', // Accordion
+  'ハーモニカ', // Harmonica
+  'タンゴアコーディオン', // Tango Accordion
+  'アコースティックギター（ナイロン）', // Acoustic Guitar (nylon)
+  'アコースティックギター（スチール）', // Acoustic Guitar (steel)
+  'エレキギター（ジャズ）', // Electric Guitar (jazz)
+  'エレキギター（クリーン）', // Electric Guitar (clean)
+  'エレキギター（ミュート）', // Electric Guitar (muted)
+  'オーバードライブギター', // Overdriven Guitar
+  'ディストーションギター', // Distortion Guitar
+  'ギターハーモニクス', // Guitar Harmonics
+  'アコースティックベース', // Acoustic Bass
+  'エレキベース（フィンガー）', // Electric Bass (finger)
+  'エレキベース（ピック）', // Electric Bass (pick)
+  'フレットレスベース', // Fretless Bass
+  'スラップベース 1', // Slap Bass 1
+  'スラップベース 2', // Slap Bass 2
+  'シンセベース 1', // Synth Bass 1
+  'シンセベース 2', // Synth Bass 2
+  'バイオリン', // Violin
+  'ビオラ', // Viola
+  'チェロ', // Cello
+  'コントラバス', // Contrabass
+  'トレモロストリングス', // Tremolo Strings
+  'ピチカートストリングス', // Pizzicato Strings
+  'オーケストラルハープ', // Orchestral Harp
+  'ティンパニ', // Timpani
+  'ストリングアンサンブル 1', // String Ensemble 1
+  'ストリングアンサンブル 2', // String Ensemble 2
+  'シンセストリングス 1', // Synth Strings 1
+  'シンセストリングス 2', // Synth Strings 2
+  'クワイア（アー）', // Choir Aahs
+  'ボイス（ウー）', // Voice Oohs
+  'シンセボイス', // Synth Voice
+  'オーケストラヒット', // Orchestra Hit
+  'トランペット', // Trumpet
+  'トロンボーン', // Trombone
+  'チューバ', // Tuba
+  'ミュートトランペット', // Muted Trumpet
+  'フレンチホルン', // French Horn
+  'ブラスセクション', // Brass Section
+  'シンセブラス 1', // Synth Brass 1
+  'シンセブラス 2', // Synth Brass 2
+  'ソプラノサックス', // Soprano Sax
+  'アルトサックス', // Alto Sax
+  'テナーサックス', // Tenor Sax
+  'バリトンサックス', // Baritone Sax
+  'オーボエ', // Oboe
+  'イングリッシュホルン', // English Horn
+  'ファゴット', // Bassoon
+  'クラリネット', // Clarinet
+  'ピッコロ', // Piccolo
+  'フルート', // Flute
+  'リコーダー', // Recorder
+  'パンフルート', // Pan Flute
+  'ボトルブロー', // Blown Bottle
+  '尺八', // Shakuhachi
+  'ホイッスル', // Whistle
+  'オカリナ', // Ocarina
+  'リード 1（矩形波）', // Lead 1 (square)
+  'リード 2（のこぎり波）', // Lead 2 (sawtooth)
+  'リード 3（カリオペ）', // Lead 3 (calliope)
+  'リード 4（チフ）', // Lead 4 (chiff)
+  'リード 5（チャランゴ）', // Lead 5 (charang)
+  'リード 6（ボイス）', // Lead 6 (voice)
+  'リード 7（フィフス）', // Lead 7 (fifths)
+  'リード 8（ベース + リード）', // Lead 8 (bass + lead)
+  'パッド 1（ニューエイジ）', // Pad 1 (new age)
+  'パッド 2（ウォーム）', // Pad 2 (warm)
+  'パッド 3（ポリシンセ）', // Pad 3 (polysynth)
+  'パッド 4（クワイア）', // Pad 4 (choir)
+  'パッド 5（ボウド）', // Pad 5 (bowed)
+  'パッド 6（メタリック）', // Pad 6 (metallic)
+  'パッド 7（ハロー）', // Pad 7 (halo)
+  'パッド 8（スイープ）', // Pad 8 (sweep)
+  'エフェクト 1（レイン）', // FX 1 (rain)
+  'エフェクト 2（サウンドトラック）', // FX 2 (soundtrack)
+  'エフェクト 3（クリスタル）', // FX 3 (crystal)
+  'エフェクト 4（アトモスフィア）', // FX 4 (atmosphere)
+  'エフェクト 5（ブライトネス）', // FX 5 (brightness)
+  'エフェクト 6（ゴブリン）', // FX 6 (goblins)
+  'エフェクト 7（エコー）', // FX 7 (echoes)
+  'エフェクト 8（SF）', // FX 8 (sci-fi)
+  'シタール', // Sitar
+  'バンジョー', // Banjo
+  '三味線', // Shamisen
+  '琴', // Koto
+  'カリンバ', // Kalimba
+  'バグパイプ', // Bag pipe
+  'フィドル', // Fiddle
+  'シャナイ', // Shanai
+  'ティンクルベル', // Tinkle Bell
+  'アゴゴ', // Agogo
+  'スティールドラム', // Steel Drums
+  'ウッドブロック', // Woodblock
+  '太鼓', // Taiko Drum
+  'メロディックタム', // Melodic Tom
+  'シンセドラム', // Synth Drum
+  'リバースシンバル', // Reverse Cymbal
+  'ギターのフレットノイズ', // Guitar Fret Noise
+  'ブレスノイズ', // Breath Noise
+  '波の音', // Seashore
+  '鳥のさえずり', // Bird Tweet
+  '電話の呼び出し音', // Telephone Ring
+  'ヘリコプター', // Helicopter
+  '拍手', // Applause
+  '銃声', // Gunshot
 ];
 
 /**
@@ -249,10 +272,3 @@ export const GS_EFX_TYPES: Readonly<Record<string, LocalizedName>> = {
 
 /** Keys from {@link GS_EFX_TYPES} whose name could not be confirmed. Empty: every key was confirmed. */
 export const GS_EFX_TYPES_UNNAMED: readonly string[] = [];
-
-/** The instrument family a GM program number belongs to. */
-export function gmFamilyOf(program: number): LocalizedName {
-  const family = GM_FAMILIES.find((f) => program >= f.first && program <= f.last);
-  if (!family) throw new RangeError(`program out of range: ${program}`);
-  return family.name;
-}
