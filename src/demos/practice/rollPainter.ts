@@ -1,3 +1,4 @@
+import { prepareCanvas2D } from '@/utils/canvas';
 import { formatNoteName } from '@/utils/pitch';
 import { type KeyboardLayout, keyCenterRatio, keyWidthRatio } from './keyboard';
 import type { ParsedMidi } from './midiSmf';
@@ -41,19 +42,9 @@ export interface PracticeRollPaintOptions {
 
 export function paintPracticeRoll(options: PracticeRollPaintOptions): void {
   const el = options.canvas;
-  if (!el) return;
-  const w = el.clientWidth;
-  const h = el.clientHeight;
-  if (w === 0 || h === 0) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  if (el.width !== Math.round(w * dpr) || el.height !== Math.round(h * dpr)) {
-    el.width = Math.round(w * dpr);
-    el.height = Math.round(h * dpr);
-  }
-  const ctx = el.getContext('2d');
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  const frame = prepareCanvas2D(el);
+  if (!el || !frame) return;
+  const { ctx, width: w, height: h } = frame;
 
   const lay = options.layout;
   const whiteCount = lay.whiteCount;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { prepareCanvas2D } from '@/utils/canvas';
 
 const props = defineProps<{
   /** Live analyser tap; the scope idles on a flat line while null. */
@@ -40,21 +41,9 @@ function colors(canvas: HTMLCanvasElement) {
 function draw(): void {
   if (!reduceMotion?.matches) rafId = requestAnimationFrame(draw);
   const canvas = canvasRef.value;
-  if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (width === 0 || height === 0) return;
-  const pxWidth = Math.round(width * dpr);
-  const pxHeight = Math.round(height * dpr);
-  if (canvas.width !== pxWidth || canvas.height !== pxHeight) {
-    canvas.width = pxWidth;
-    canvas.height = pxHeight;
-  }
-  const g = canvas.getContext('2d');
-  if (!g) return;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, width, height);
+  const frame = prepareCanvas2D(canvas);
+  if (!canvas || !frame) return;
+  const { ctx: g, width, height } = frame;
 
   const { trace, spectrum, grid } = colors(canvas);
   const light = isLightTheme();

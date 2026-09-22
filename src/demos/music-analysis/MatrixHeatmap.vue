@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useTheme } from '@/composables/useTheme';
+import { prepareCanvas2D } from '@/utils/canvas';
 
 const props = defineProps<{
   rows: number;
@@ -18,17 +19,14 @@ function draw() {
   const canvas = canvasRef.value;
   if (!canvas || !props.rows || !props.columns) return;
 
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  const frame = prepareCanvas2D(canvas);
+  if (!frame) return;
+  const { ctx, width, height } = frame;
 
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const cellWidth = canvas.width / props.columns;
-  const cellHeight = canvas.height / props.rows;
+  // Cells are ceiled so neighbours overlap rather than leaving a seam; each is
+  // painted over by the next, so the overlap never shows.
+  const cellWidth = width / props.columns;
+  const cellHeight = height / props.rows;
   const range = Math.max(1e-9, props.max - props.min);
   const dark = isDark.value;
 
@@ -52,11 +50,11 @@ function draw() {
   }
 
   if (dark) {
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
     gradient.addColorStop(0, 'rgba(255,255,255,0.08)');
     gradient.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, width, height);
   }
 }
 
