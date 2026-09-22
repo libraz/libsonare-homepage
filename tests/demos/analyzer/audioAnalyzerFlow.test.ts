@@ -23,12 +23,14 @@ const streamMock = vi.hoisted(() => ({
   process: vi.fn(),
   setExpectedDuration: vi.fn(),
   setNormalizationGain: vi.fn(),
+  setTuningRefHz: vi.fn(),
   reset: vi.fn(),
   state: null as any,
 }));
 const lang = vi.hoisted(() => ({ value: 'en' }));
 const analyzerWasmMock = vi.hoisted(() => ({
   rmsEnergy: vi.fn(() => new Float32Array([0.1, 0.2, 0.3])),
+  estimateTuning: vi.fn(() => 0.13),
   chroma: vi.fn(() => ({
     features: new Float32Array(36).fill(0.25),
     nFrames: 3,
@@ -135,6 +137,7 @@ vi.mock('@/demos/analyzer/useStreamAnalyzer', async () => {
       process: streamMock.process,
       setExpectedDuration: streamMock.setExpectedDuration,
       setNormalizationGain: streamMock.setNormalizationGain,
+      setTuningRefHz: streamMock.setTuningRefHz,
       reset: streamMock.reset,
     }),
   };
@@ -241,7 +244,10 @@ describe('AudioAnalyzer visual player flow', () => {
     streamMock.process.mockReset();
     streamMock.setExpectedDuration.mockReset();
     streamMock.setNormalizationGain.mockReset();
+    streamMock.setTuningRefHz.mockReset();
     streamMock.reset.mockReset();
+    analyzerWasmMock.estimateTuning.mockReset();
+    analyzerWasmMock.estimateTuning.mockReturnValue(0.13);
     analyzerWasmMock.rmsEnergy.mockReset();
     analyzerWasmMock.rmsEnergy.mockReturnValue(new Float32Array([0.1, 0.2, 0.3]));
     analyzerWasmMock.chroma.mockReset();
@@ -315,6 +321,8 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(streamMock.reinit).toHaveBeenCalledWith(48_000);
     expect(streamMock.setExpectedDuration).toHaveBeenCalledWith(4);
     expect(streamMock.setNormalizationGain).toHaveBeenCalledWith(0.5);
+    // The live key and chord readings follow the reference the recording sits at.
+    expect(streamMock.setTuningRefHz).toHaveBeenCalledWith(440 * 2 ** (0.13 / 12));
     expect(playerMock.setProcessCallback).toHaveBeenCalledWith(expect.any(Function));
     const processCallback = playerMock.setProcessCallback.mock.calls.find(
       ([callback]) => typeof callback === 'function',
@@ -327,6 +335,7 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(wrapper.text()).toContain('128');
     expect(wrapper.text()).toContain('A minor');
     expect(wrapper.text()).toContain('Am→F→C→G');
+    expect(wrapper.text()).toContain('+13¢');
     expect(wrapper.text()).toContain('Axis');
     expect(wrapper.find('.synesthesia-stub').attributes('data-has-chroma')).toBe('true');
     expect(wrapper.find('.data-console-stub').attributes('data-sample-rate')).toBe('48000');

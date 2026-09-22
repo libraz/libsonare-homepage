@@ -12,6 +12,7 @@ import {
   calculateNormalizationGain,
   mixToMono,
   splitMelBands,
+  tuningReference,
 } from '@/demos/analyzer/audioAnalyzerProcessing';
 import { useAudioAnalysis } from '@/demos/analyzer/useAudioAnalysis';
 import { useAudioPlayer } from '@/demos/analyzer/useAudioPlayer';
@@ -106,6 +107,7 @@ const {
   process: processAudioChunk,
   setExpectedDuration,
   setNormalizationGain,
+  setTuningRefHz,
   reset: resetStreamAnalyzer,
 } = useStreamAnalyzer({
   sampleRate: 44100, // Will be updated when audio is loaded
@@ -123,6 +125,8 @@ const rmsData = ref<Float32Array | null>(null);
 const chromaData = ref<{ features: Float32Array; nFrames: number; nChroma: number } | null>(null);
 const bandData = ref<{ low: Float32Array; high: Float32Array } | null>(null);
 const sampleRate = ref(44100);
+/** How far the loaded recording sits from A4 = 440 Hz, once estimated. */
+const tuningCents = ref<number | null>(null);
 
 const isLoadingFile = ref(false);
 const fileProgress = ref(0);
@@ -143,6 +147,14 @@ function clearLoaded() {
   chromaData.value = null;
   bandData.value = null;
   beats.value = null;
+  tuningCents.value = null;
+}
+
+/** Point the live key and chord readings at the reference pitch the recording sits at. */
+function applyTuning(offsetSemitones: number) {
+  const { refHz, cents } = tuningReference(offsetSemitones);
+  setTuningRefHz(refHz);
+  tuningCents.value = cents;
 }
 
 /** Supersede any in-flight load and clear the previous source before any
@@ -209,6 +221,7 @@ async function handleFile(file: File) {
     if (generation !== loadGeneration) return;
     const samples =
       buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
+    applyTuning(wasm.estimateTuning(samples, buffer.sampleRate));
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
@@ -356,6 +369,12 @@ const displayChordConfidence = computed(() => {
   return 0;
 });
 
+const displayTuning = computed(() => {
+  const cents = tuningCents.value;
+  if (cents === null) return '—';
+  return `${cents > 0 ? '+' : cents < 0 ? '−' : '±'}${Math.abs(cents)}¢`;
+});
+
 const displayTimeSignature = computed(() => {
   if (!result.value?.timeSignature || result.value.timeSignature.confidence <= 0) return '—';
   const ts = result.value.timeSignature;
@@ -458,6 +477,7 @@ async function loadDemoFile() {
     if (generation !== loadGeneration) return;
     const samples =
       buffer.numberOfChannels > 1 ? mixToMono(buffer) : buffer.getChannelData(0).slice();
+    applyTuning(wasm.estimateTuning(samples, buffer.sampleRate));
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
@@ -734,6 +754,9 @@ onUnmounted(() => {
             </MetricItem>
             <MetricItem :value="`${(sampleRate / 1000).toFixed(1)}kHz`">
               <template #label><TermLabel v-bind="term('rate')">{{ t('demo.panel.rate') }}</TermLabel></template>
+            </MetricItem>
+            <MetricItem :value="displayTuning">
+              <template #label><TermLabel v-bind="term('tuning')">{{ t('demo.panel.tuning') }}</TermLabel></template>
             </MetricItem>
             <div class="analyzer__metrics-divider"></div>
             <!-- Measured on this visitor's machine, not read from a table -->

@@ -78,3 +78,15 @@ export function splitMelBands(mel: MelSpectrogramLike): { low: Float32Array; hig
 
   return { low, high };
 }
+
+/** Concert pitch the analyzer assumes when nothing says otherwise. */
+const CONCERT_A4_HZ = 440;
+
+/**
+ * The A4 reference a recording sits at, from `estimateTuning`'s offset in
+ * fractions of a semitone. The stream analyzer takes the reference in hertz.
+ */
+export function tuningReference(offsetSemitones: number): { refHz: number; cents: number } {
+  const offset = Number.isFinite(offsetSemitones) ? offsetSemitones : 0;
+  return { refHz: CONCERT_A4_HZ * 2 ** (offset / 12), cents: Math.round(offset * 100) };
+}

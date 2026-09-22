@@ -8,8 +8,14 @@ spectrum, chroma, BPM, key and chords. The file never leaves the browser.
   shell. `AudioAnalyzer.vue` is also registered globally so docs pages can embed
   the player.
 - Engine: `analyzeWithProgress`, `detectBpm`, `detectBeats`, `chroma`,
-  `melSpectrogram`, `rmsEnergy`, and `StreamAnalyzer` for the live views.
+  `melSpectrogram`, `rmsEnergy`, `estimateTuning`, and `StreamAnalyzer` for the
+  live views.
 
 `useAudioAnalysis.ts` runs the one-shot analysis, `useStreamAnalyzer.ts` feeds
 the meters during playback, and `SynesthesiaVisualizer.vue` turns the chroma and
 spectral frames into the colour field behind the readouts.
+
+Each load estimates how far the file sits from A440 and hands the stream
+analyzer that reference pitch (`setTuningRefHz`), so a detuned recording still
+reads in its own key. The offline chroma, key and chord calls take no tuning
+argument, which is why the correction lives on the stream analyzer.

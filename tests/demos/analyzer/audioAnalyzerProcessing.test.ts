@@ -3,6 +3,7 @@ import {
   calculateNormalizationGain,
   mixToMono,
   splitMelBands,
+  tuningReference,
 } from '@/demos/analyzer/audioAnalyzerProcessing';
 
 function mockAudioBuffer(channels: Float32Array[]): AudioBuffer {
@@ -41,5 +42,19 @@ describe('audio analyzer processing helpers', () => {
 
     expect(Array.from(bands.low)).toEqual([1, 3]);
     expect(Array.from(bands.high)).toEqual([2, 4]);
+  });
+});
+
+describe('tuningReference', () => {
+  it('turns a semitone offset into the A4 reference and whole cents', () => {
+    expect(tuningReference(0)).toEqual({ refHz: 440, cents: 0 });
+    const sharp = tuningReference(0.13);
+    expect(sharp.cents).toBe(13);
+    expect(sharp.refHz).toBeCloseTo(440 * 2 ** (0.13 / 12), 9);
+    expect(tuningReference(-0.45).cents).toBe(-45);
+  });
+
+  it('falls back to concert pitch for an offset that is not a number', () => {
+    expect(tuningReference(Number.NaN)).toEqual({ refHz: 440, cents: 0 });
   });
 });

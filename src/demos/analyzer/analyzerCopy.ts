@@ -39,6 +39,11 @@ export const enCopy = {
       body: 'Samples per second of the decoded audio, in kHz. Analysis runs at the browser AudioContext rate.',
       tip: '44.1 kHz and 48 kHz are the usual rates; higher rates carry more high-frequency detail.',
     },
+    tuning: {
+      title: 'Tuning offset',
+      body: 'How far the recording sits from concert pitch (A4 = 440 Hz), in cents, estimated from the whole file when it loads. The live key and chord readings are taken against that reference, so a track tuned a quarter-tone flat still reads in its own key.',
+      tip: 'A few cents either way is ordinary. Tape transfers, live acoustic takes and older recordings can sit 20 cents or more away.',
+    },
     source: {
       title: 'Source file',
       body: 'The name of the audio currently loaded and analyzed. Everything is processed locally in your browser.',
@@ -92,6 +97,11 @@ export const jaCopy: typeof enCopy = {
       body: 'デコードした音声の 1 秒あたりのサンプル数（kHz）です。解析はブラウザの AudioContext のレートで実行されます。',
       tip: '通常は 44.1 kHz と 48 kHz が一般的で、レートが高いほど高域の情報を多く含みます。',
     },
+    tuning: {
+      title: 'チューニングのずれ',
+      body: '録音が標準ピッチ（A4 = 440 Hz）から何セントずれているかです。読み込んだときにファイル全体から推定します。ライブのキーとコードはこの基準ピッチで読むので、4 分の 1 音低く調律された曲でも本来のキーで表示されます。',
+      tip: '数セントのずれはよくあります。テープから起こした音源、アコースティックのライブ録音、古い録音では 20 セント以上ずれていることがあります。',
+    },
     source: {
       title: 'ソースファイル',
       body: '現在読み込んで解析している音声の名前です。すべての処理はブラウザ内でローカルに行われます。',
@@ -124,6 +134,7 @@ export const ANALYZER_TERM_SLUGS: Record<AnalyzerTermKey, string | undefined> = 
   timeSig: 'analysis/beats-downbeats',
   duration: undefined,
   rate: 'concepts/audio-basics',
+  tuning: 'analysis/chroma-features',
   source: 'concepts/browser-local-processing',
   visualizer: 'analysis/chroma-features',
   waveform: undefined,

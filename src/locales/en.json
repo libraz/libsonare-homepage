@@ -19,6 +19,7 @@
       "timeSig": "TIME",
       "duration": "LEN",
       "rate": "RATE",
+      "tuning": "TUNING",
       "source": "SRC",
       "analysisTime": "ANALYSIS",
       "realtime": "VS REALTIME",

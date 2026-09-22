@@ -408,6 +408,12 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     }
   }
 
+  function setTuningRefHz(refHz: number): void {
+    if (analyzer) {
+      analyzer.setTuningRefHz(refHz);
+    }
+  }
+
   function reset(baseSampleOffset = 0): void {
     if (analyzer) {
       analyzer.reset(baseSampleOffset);
@@ -457,6 +463,7 @@ export function useStreamAnalyzer(options: StreamConfig = { sampleRate: 44100 })
     process,
     setExpectedDuration,
     setNormalizationGain,
+    setTuningRefHz,
     reset,
     destroy,
   };

@@ -19,6 +19,7 @@
       "timeSig": "拍子",
       "duration": "長さ",
       "rate": "レート",
+      "tuning": "チューニング",
       "source": "ソース",
       "analysisTime": "解析時間",
       "realtime": "実時間比",
