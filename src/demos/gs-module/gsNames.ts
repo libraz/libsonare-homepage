@@ -272,3 +272,45 @@ export const GS_EFX_TYPES: Readonly<Record<string, LocalizedName>> = {
 
 /** Keys from {@link GS_EFX_TYPES} whose name could not be confirmed. Empty: every key was confirmed. */
 export const GS_EFX_TYPES_UNNAMED: readonly string[] = [];
+
+/**
+ * A model designation: a short letter cluster bound to a number, with or
+ * without a hyphen. The same shape the generated-data guard refuses, expressed
+ * once more here because names fetched from the engine at runtime never pass
+ * through the generator.
+ */
+const MODEL_DESIGNATION =
+  /\b[A-Za-z]{2,5}-\d{2,5}[A-Za-z]{0,3}\b|\b[A-Za-z]{2,5}\d{3,5}[A-Za-z]{0,3}\b/;
+
+/**
+ * What to call a rhythm set whose standard name is a machine's model number.
+ *
+ * Keyed by program, because the slot is what the substitution is about, and
+ * each entry says what kind of machine the set voices rather than which one.
+ */
+const RHYTHM_SET_KINDS: Readonly<Record<number, string>> = {
+  25: 'Analog Machine',
+  27: 'Rhythm Box',
+  28: 'Compact Machine',
+  29: 'Digital Machine',
+  30: 'Hybrid Machine',
+  127: 'Legacy Map',
+};
+
+/**
+ * The name to show for a rhythm set the engine reports.
+ *
+ * Most sets are named for their sound and pass through unchanged. Six are named
+ * after particular drum machines; this page prints no hardware model
+ * designations, so those show the kind of machine instead. The program number
+ * is displayed beside the name either way, and it is the identifier a file
+ * actually selects — nothing addressable is lost.
+ *
+ * The pattern is the guard, not the table: a name that looks like a model
+ * designation and has no entry falls back to its slot number, so a set added
+ * upstream cannot put one on screen.
+ */
+export function rhythmSetLabel(program: number, engineName: string): string {
+  if (!MODEL_DESIGNATION.test(engineName)) return engineName;
+  return RHYTHM_SET_KINDS[program] ?? `Set ${program}`;
+}

@@ -60,3 +60,13 @@ English instrument and family names are `Project.gmInstrumentName` and
 variations are voiced apart is `synthGsVariationIsVoicedApart`. Only the
 Japanese, and the insertion-effect type names, are written down here — a second
 copy of anything the engine can answer is a copy that drifts.
+
+One substitution stands between the engine and the screen. A handful of rhythm
+sets carry the model number of the drum machine they imitate, and this site
+prints no hardware model designations, so `rhythmSetLabel` shows the kind of
+machine instead — and the program number, which is what a file actually
+selects, is displayed unchanged beside it. The guard is a structural pattern
+rather than a list of names: a set added upstream whose name matches and whose
+kind is unknown falls back to its slot number, so nothing can slip through by
+being new. The generated data under `data/` is guarded the same way, at
+generation time, by `scripts/generate-gs-data.mjs`.

@@ -15,7 +15,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { bootWasm, type SonareWasmModule } from '@/composables/useWasmBoot';
 import { buildSmf, noteEvents, type SmfEvent } from '@/utils/gsSysex';
-import { GM_FAMILY_SIZE, GM_PROGRAM_COUNT, gmFamilyOf } from './gsNames';
+import { GM_FAMILY_SIZE, GM_PROGRAM_COUNT, gmFamilyOf, rhythmSetLabel } from './gsNames';
 import {
   defaultModuleState,
   type GsModuleState,
@@ -85,9 +85,10 @@ export function bounceFiles(
   }
 }
 
-/** One GS rhythm set the build defines, as the engine reports it. */
+/** One GS rhythm set the build defines. */
 export interface GsDrumKit {
   program: number;
+  /** The label to show — see {@link rhythmSetLabel}, which most names pass through. */
   name: string;
   /**
    * False where the build names the set but voices it as Standard. The query
@@ -103,7 +104,11 @@ export function drumKitsOf(wasm: SonareWasmModule): GsDrumKit[] {
   for (let program = 0; program < 128; program++) {
     const name = wasm.synthGsDrumKitName(program);
     if (name === null) continue;
-    kits.push({ program, name, voicedApart: wasm.synthGsDrumKitIsVoicedApart(program) === true });
+    kits.push({
+      program,
+      name: rhythmSetLabel(program, name),
+      voicedApart: wasm.synthGsDrumKitIsVoicedApart(program) === true,
+    });
   }
   return kits;
 }

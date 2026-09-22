@@ -9,8 +9,14 @@ import {
   GS_EFX_TYPES,
   GS_EFX_TYPES_UNNAMED,
   gmFamilyOf,
+  rhythmSetLabel,
 } from '@/demos/gs-module/gsNames';
-import { gmFamilyNamesOf, gmProgramsOf, variationsOf } from '@/demos/gs-module/useGsModule';
+import {
+  drumKitsOf,
+  gmFamilyNamesOf,
+  gmProgramsOf,
+  variationsOf,
+} from '@/demos/gs-module/useGsModule';
 import * as wasm from '@/wasm/index.js';
 
 const EFX_TYPE_KEYS = Object.keys(
@@ -106,6 +112,34 @@ describe('the engine supplies the English names', () => {
     for (const entry of gmProgramsOf(wasm)) {
       expect(entry.family).toBe(gmFamilyOf(entry.program));
     }
+  });
+});
+
+describe('rhythmSetLabel', () => {
+  it('leaves a set named for its sound alone', () => {
+    expect(rhythmSetLabel(0, 'Standard')).toBe('Standard');
+    expect(rhythmSetLabel(9, 'Hip Hop')).toBe('Hip Hop');
+    expect(rhythmSetLabel(58, 'Rhythm FX 2')).toBe('Rhythm FX 2');
+  });
+
+  it('falls back to the slot number for a designation it has no kind for', () => {
+    expect(rhythmSetLabel(64, 'XZ-12')).toBe('Set 64');
+  });
+
+  it('shows no model designation for any set this build defines', async () => {
+    await wasm.init();
+    const kits = drumKitsOf(wasm);
+    expect(kits.length).toBeGreaterThan(0);
+    for (const kit of kits) {
+      expect(kit.name).not.toMatch(MODEL_DESIGNATION);
+      expect(kit.name.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps one distinct label per set, so no two are confusable', async () => {
+    await wasm.init();
+    const names = drumKitsOf(wasm).map((kit) => kit.name);
+    expect(new Set(names).size).toBe(names.length);
   });
 });
 
