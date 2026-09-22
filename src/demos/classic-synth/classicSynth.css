@@ -1,0 +1,722 @@
+/*
+ * The page as a front panel.
+ *
+ * The idiom is a hardware synthesizer's control surface, not any one machine:
+ * a painted plate lit from above, modules printed onto it with engraved rules
+ * rather than boxed into cards, rotary controls with a 270° throw, and rocker
+ * switches for the things that are a choice rather than an amount. What it
+ * borrows is the *grammar* — no livery, no badge, no model.
+ *
+ * The plate is one surface, and the deck on it is one grid. Row 1 has a fixed
+ * height so the deck holds still when a chapter changes; a module taller than
+ * its cell scrolls inside itself. The annotation card is a grid item placed by
+ * `--note-area` over row 1, never absolutely positioned, so it sizes to real
+ * cells and cannot drift.
+ *
+ * Both themes get a plate. The light one is a pale painted plate rather than a
+ * dark panel dropped into a light page.
+ */
+
+.cs {
+  font-family: var(--demo-font-body, inherit);
+}
+
+/* ---- the plate ----------------------------------------------------------- */
+
+/*
+ * A painted plate lit from above. The site's text and border tokens are
+ * re-pointed inside it, so every component printed on it gets the right
+ * contrast without knowing it is there.
+ */
+.cs-plate {
+  --plate-top: #e2e0e7;
+  --plate-bottom: #cbc8d4;
+  --plate-groove: rgba(38, 30, 56, 0.17);
+  --plate-highlight: rgba(255, 255, 255, 0.8);
+  --plate-recess: rgba(38, 30, 56, 0.08);
+  --plate-ink: #22202b;
+  --plate-shadow: rgba(38, 30, 56, 0.5);
+  /* The annotation card: a lighter, matte sheet laid on the painted plate. */
+  --plate-note-bg: #f6f5f9;
+  --plate-note-border: rgba(38, 30, 56, 0.32);
+
+  --demo-text-strong: var(--plate-ink);
+  --demo-text: #3b3747;
+  --demo-text-muted: #635d73;
+  --demo-text-faint: #8c869b;
+  --demo-border: var(--plate-groove);
+  --demo-border-strong: rgba(38, 30, 56, 0.3);
+  --demo-control-bg: rgba(255, 255, 255, 0.4);
+  --demo-bezel-start: #e8e6ec;
+  --demo-bezel-end: #d2cfdb;
+  --demo-bezel: #dcd9e4;
+  --demo-bezel-inset-light: var(--plate-highlight);
+  --demo-bezel-inset-dark: var(--plate-groove);
+  --demo-bezel-shadow-deep: rgba(38, 30, 56, 0.22);
+  --demo-screen-bg-alpha: var(--plate-recess);
+
+  position: relative;
+  border: 1px solid rgba(38, 30, 56, 0.28);
+  border-radius: 4px;
+  /* A brushed grain over the lighting gradient, faint enough to be felt rather
+     than seen. */
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.5) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, var(--plate-top), var(--plate-bottom));
+  box-shadow:
+    inset 0 1px 0 var(--plate-highlight),
+    inset 0 -1px 0 var(--plate-groove),
+    0 12px 30px -22px var(--plate-shadow);
+}
+
+html.dark .cs-plate {
+  --plate-top: #2b2b33;
+  --plate-bottom: #1c1c22;
+  --plate-groove: rgba(0, 0, 0, 0.55);
+  --plate-highlight: rgba(255, 255, 255, 0.075);
+  --plate-recess: rgba(0, 0, 0, 0.32);
+  --plate-ink: #edebf3;
+  --plate-shadow: rgba(0, 0, 0, 0.9);
+  --plate-note-bg: #34333d;
+  --plate-note-border: rgba(255, 255, 255, 0.16);
+
+  --demo-text-strong: var(--plate-ink);
+  --demo-text: #cfccd9;
+  --demo-text-muted: #9893a6;
+  --demo-text-faint: #6f6a7e;
+  --demo-border: var(--plate-groove);
+  --demo-border-strong: rgba(255, 255, 255, 0.14);
+  --demo-control-bg: rgba(255, 255, 255, 0.045);
+  --demo-bezel-start: #34343e;
+  --demo-bezel-end: #23232b;
+  --demo-bezel: #2c2c35;
+  --demo-bezel-shadow-deep: rgba(0, 0, 0, 0.7);
+
+  border-color: rgba(255, 255, 255, 0.11);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, var(--plate-top), var(--plate-bottom));
+  box-shadow:
+    inset 0 1px 0 var(--plate-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+    0 14px 34px -24px var(--plate-shadow);
+}
+
+/* ---- the deck ------------------------------------------------------------ */
+
+.cs__deck {
+  position: relative;
+  display: grid;
+  grid-template-areas:
+    'osc    filter  env     lfo'
+    'matrix matrix  matrix  body'
+    'matrix matrix  matrix  out';
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.35fr) minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-rows: 26rem auto auto;
+}
+
+/* ---- a module of the deck ------------------------------------------------ */
+
+/*
+ * A printed region of the plate, not a card with its own background. The
+ * boundary between neighbours is engraved: a dark hairline on the module's
+ * trailing edges with a light one just inside the next module's leading edges.
+ */
+.cs-module {
+  grid-area: var(--area);
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--demo-bezel-inset-dark);
+  border-block-end: 1px solid var(--demo-bezel-inset-dark);
+  box-shadow: inset 1px 1px 0 var(--demo-bezel-inset-light);
+  transition: opacity 0.18s ease;
+}
+
+/* The patchbay owns its own scrolling; its module only frames the cell. */
+.cs-module--matrix {
+  display: grid;
+  min-block-size: 28rem;
+  overflow: hidden;
+}
+
+.cs-module__fill {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  min-block-size: 0;
+}
+
+/* An indicator lamp in every module's first legend; lit on the open chapter's modules. */
+.cs-module > .cs-card:first-child > .cs-card__label::before {
+  content: '';
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--demo-indicator-bg, var(--demo-bezel-inset-dark));
+  box-shadow: inset 0 0 0 1px var(--demo-bezel-inset-dark);
+}
+
+.cs-module--lit > .cs-card:first-child > .cs-card__label::before {
+  background: var(--demo-accent);
+  box-shadow: 0 0 6px var(--demo-accent-dim);
+}
+
+/* A lit module is outlined in the accent, never filled. */
+.cs-module--lit {
+  outline: 1px solid var(--demo-accent);
+  outline-offset: -3px;
+}
+
+.cs-module--dim {
+  opacity: 0.55;
+}
+
+.cs-module--dim:hover,
+.cs-module--dim:focus-within {
+  opacity: 1;
+}
+
+/* ---- the annotation card ------------------------------------------------- */
+
+/*
+ * A card laid on the panel: opaque, with a real border and a little
+ * elevation, so it reads as an object sitting on the plate rather than a
+ * region of it. It occupies its grid cells above the modules and scrolls.
+ */
+.cs-note {
+  grid-area: var(--note-area);
+  position: relative;
+  z-index: 2;
+  min-inline-size: 0;
+  min-block-size: 0;
+  margin: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--plate-note-border);
+  border-radius: 4px;
+  background: var(--plate-note-bg);
+  box-shadow:
+    inset 0 1px 0 var(--plate-highlight),
+    0 1px 2px var(--demo-bezel-shadow-deep),
+    0 14px 30px -16px var(--plate-shadow);
+}
+
+/* The card's own transport row (play, stop, setup) stays readable when it wraps. */
+.cs-note .cs-actions {
+  align-items: center;
+}
+
+/* ---- a printed section on the plate -------------------------------------- */
+
+.cs-card {
+  padding: 14px 16px 16px;
+}
+
+/* Engraved groove between two sections of the same module. */
+.cs-card + .cs-card {
+  border-block-start: 1px solid var(--demo-bezel-inset-dark);
+  box-shadow: inset 0 1px 0 var(--demo-bezel-inset-light);
+}
+
+/*
+ * The silkscreen heading: wide-tracked small caps followed by a rule that runs
+ * to the edge of the plate.
+ */
+.cs-card__label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 12px;
+  color: var(--demo-text-muted);
+  font-family: var(--demo-font-mono, monospace);
+  font-size: var(--demo-label-size, 9px);
+  font-weight: var(--demo-label-weight, 600);
+  letter-spacing: var(--demo-label-tracking, 0.12em);
+  text-transform: uppercase;
+}
+
+.cs-card__label::after {
+  content: '';
+  flex: 1 1 auto;
+  block-size: 1px;
+  background: var(--demo-bezel-inset-dark);
+  box-shadow: 0 1px 0 var(--demo-bezel-inset-light);
+}
+
+/* A second legend inside one section, such as the filter's output stage. */
+.cs-card__label--sub {
+  margin-block-start: 14px;
+}
+
+/*
+ * The chapter's own name, printed at the size a panel gives its main legend —
+ * the small silkscreen of `.cs-card__label` is for the banks inside it.
+ */
+.cs-card__title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 12px;
+  color: var(--demo-text-strong);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.cs-card__title::after {
+  content: '';
+  flex: 1 1 auto;
+  block-size: 1px;
+  background: var(--demo-bezel-inset-dark);
+  box-shadow: 0 1px 0 var(--demo-bezel-inset-light);
+}
+
+.cs-card__prose {
+  margin: 0 0 12px;
+  color: var(--demo-text);
+  font-size: 0.86rem;
+  line-height: 1.75;
+  white-space: normal;
+}
+
+.cs-card__prose + .cs-card__prose {
+  margin-block-start: -2px;
+}
+
+/*
+ * An aside is a legend printed in the free area of the plate — recessed a
+ * little, never a tinted callout, and never with a stripe down one side.
+ */
+.cs-card__aside {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--demo-bezel-inset-dark);
+  border-radius: 3px;
+  background: var(--demo-screen-bg-alpha);
+  box-shadow: inset 0 1px 2px var(--demo-bezel-inset-dark);
+  color: var(--demo-text-muted);
+  font-size: 0.775rem;
+  line-height: 1.7;
+}
+
+/* ---- rocker switches ----------------------------------------------------- */
+
+/*
+ * A choice, not an amount: a recessed track with the engaged position raised
+ * out of it. Every segment is the same width regardless of its label, so the
+ * switch bank does not change shape between languages.
+ */
+.cs-seg {
+  display: flex;
+  inline-size: 100%;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--demo-bezel-inset-dark);
+  border-radius: 4px;
+  background: var(--demo-screen-bg-alpha);
+  box-shadow: inset 0 1px 3px var(--demo-bezel-inset-dark);
+}
+
+.cs-seg__item {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  padding: 7px 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--demo-text-muted);
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-align: center;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.cs-seg__item:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--demo-text);
+}
+
+.cs-seg__item--on {
+  border-color: var(--demo-border-strong);
+  background: linear-gradient(180deg, var(--demo-bezel-start), var(--demo-bezel-end));
+  box-shadow:
+    inset 0 1px 0 var(--demo-bezel-inset-light),
+    0 1px 2px var(--demo-bezel-shadow-deep);
+  color: var(--demo-text-strong);
+  font-weight: 600;
+}
+
+.cs-seg__item:disabled {
+  opacity: var(--demo-disabled-opacity, 0.45);
+  cursor: not-allowed;
+}
+
+/* ---- knob bank ----------------------------------------------------------- */
+
+.cs-knobs {
+  display: grid;
+  gap: 10px 6px;
+  grid-template-columns: repeat(auto-fit, minmax(4.25rem, 1fr));
+  justify-items: center;
+}
+
+/* Knob labels are silkscreen: short, wide-tracked, and never shouting. */
+.cs-knob {
+  --knob-accent: var(--demo-accent);
+}
+
+/* A control the current settings make inaudible. Still turnable — the reader
+   may be setting it before the thing that wakes it. */
+.cs-knob--inert {
+  opacity: 0.55;
+}
+
+.cs-knobs__note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--demo-text-faint);
+  font-size: 0.7rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+/* ---- horizontal parameter rows (used outside the knob banks) ------------- */
+
+.cs-param {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding-block: 4px;
+}
+
+.cs-param__name {
+  color: var(--demo-text);
+  font-size: 0.76rem;
+}
+
+.cs-param__value {
+  color: var(--demo-text-strong);
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-param__slider {
+  grid-column: 1 / -1;
+  inline-size: 100%;
+  accent-color: var(--demo-accent);
+}
+
+.cs-param--muted .cs-param__name,
+.cs-param--muted .cs-param__value {
+  color: var(--demo-text-faint);
+}
+
+/* ---- audition strip ------------------------------------------------------ */
+
+/*
+ * The buttons a chapter compares with, as a row of equal keys — the reader is
+ * choosing between peers, so nothing is wider than its neighbour.
+ */
+.cs-variants {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+
+.cs-variant {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--demo-bezel-inset-dark);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--demo-bezel-start), var(--demo-bezel-end));
+  box-shadow:
+    inset 0 1px 0 var(--demo-bezel-inset-light),
+    0 1px 2px var(--demo-bezel-shadow-deep);
+  color: var(--demo-text);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cs-variant:hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--demo-border-strong);
+}
+
+/* Pressed keys travel. One pixel is enough to feel it. */
+.cs-variant:active:not(:disabled):not([aria-disabled='true']) {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px var(--demo-bezel-inset-dark);
+}
+
+.cs-variant--on {
+  border-color: var(--demo-accent-border);
+}
+
+.cs-variant--playing {
+  border-color: var(--demo-accent);
+  box-shadow:
+    inset 0 1px 0 var(--demo-bezel-inset-light),
+    0 0 0 1px var(--demo-accent-dim);
+}
+
+.cs-variant__name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cs-variant__note {
+  color: var(--demo-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.cs-variant:disabled,
+.cs-variant[aria-disabled='true'] {
+  opacity: var(--demo-disabled-opacity, 0.45);
+  cursor: not-allowed;
+}
+
+/* ---- buttons ------------------------------------------------------------- */
+
+.cs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block-start: 12px;
+}
+
+.cs-button {
+  padding: 8px 15px;
+  border: 1px solid var(--demo-bezel-inset-dark);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--demo-bezel-start), var(--demo-bezel-end));
+  box-shadow:
+    inset 0 1px 0 var(--demo-bezel-inset-light),
+    0 1px 2px var(--demo-bezel-shadow-deep);
+  color: var(--demo-text);
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cs-button:hover:not(:disabled) {
+  border-color: var(--demo-border-strong);
+}
+
+.cs-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px var(--demo-bezel-inset-dark);
+}
+
+.cs-button--primary {
+  border-color: var(--demo-accent-border);
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+  font-weight: 600;
+}
+
+.cs-button[aria-pressed='true'] {
+  border-color: var(--demo-accent-border);
+  box-shadow: inset 0 1px 2px var(--demo-bezel-inset-dark);
+}
+
+.cs-button:disabled {
+  opacity: var(--demo-disabled-opacity, 0.45);
+  cursor: not-allowed;
+}
+
+/* ---- transport ----------------------------------------------------------- */
+
+/*
+ * One strip along the bottom of the plate: chapter stepper, program ticks,
+ * play/stop, and the card's collapse toggle. It sits under the deck, so its
+ * top edge is the same engraved groove the modules use between themselves.
+ */
+.cs-transport {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  padding: 10px 14px;
+  box-shadow: inset 0 1px 0 var(--demo-bezel-inset-light);
+}
+
+.cs-transport__group {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
+/* The chapter readout takes the free width so the stepper reads as one unit. */
+.cs-transport__readout {
+  display: flex;
+  flex: 1 1 12rem;
+  gap: 10px;
+  align-items: baseline;
+  min-inline-size: 0;
+  margin: 0;
+  padding-inline: 4px;
+}
+
+.cs-transport__index {
+  flex: 0 0 auto;
+  color: var(--demo-accent);
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.cs-transport__title {
+  overflow: hidden;
+  color: var(--demo-text-strong);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Program ticks: eight small keys, the open chapter's lamp lit. */
+.cs-ticks {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2rem;
+  block-size: 1.9rem;
+  padding: 0;
+  border: 1px solid var(--demo-bezel-inset-dark);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--demo-bezel-start), var(--demo-bezel-end));
+  box-shadow:
+    inset 0 1px 0 var(--demo-bezel-inset-light),
+    0 1px 2px var(--demo-bezel-shadow-deep);
+  color: var(--demo-text-muted);
+  font-family: var(--demo-font-mono, monospace);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.cs-tick:hover {
+  border-color: var(--demo-border-strong);
+  color: var(--demo-text);
+}
+
+.cs-tick:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px var(--demo-bezel-inset-dark);
+}
+
+/* The open chapter's key is latched down and its lamp is on. */
+.cs-tick--on {
+  border-color: var(--demo-accent-border);
+  background: var(--demo-accent-subtle);
+  box-shadow:
+    inset 0 1px 2px var(--demo-bezel-inset-dark),
+    0 0 0 1px var(--demo-accent-dim);
+  color: var(--demo-accent);
+  font-weight: 600;
+}
+
+/* ---- focus --------------------------------------------------------------- */
+
+.cs-seg__item:focus-visible,
+.cs-variant:focus-visible,
+.cs-button:focus-visible,
+.cs-tick:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+/* ---- visually hidden ----------------------------------------------------- */
+
+.cs-sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- narrow screens ------------------------------------------------------ */
+
+/*
+ * Below the deck's natural width the grid becomes one column in module order,
+ * the card stops overlaying and flows inline ahead of the modules, and every
+ * module grows to its content instead of scrolling.
+ */
+@media (max-width: 1100px) {
+  .cs__deck {
+    grid-template-areas: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+
+  .cs-module,
+  .cs-note {
+    grid-area: auto;
+  }
+
+  .cs-module {
+    overflow: visible;
+    border-inline-end: 0;
+  }
+
+  .cs-module--matrix {
+    display: block;
+    min-block-size: 0;
+  }
+
+  .cs-module__fill {
+    position: static;
+  }
+
+  .cs-note {
+    z-index: auto;
+    max-block-size: none;
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-module,
+  .cs-seg__item,
+  .cs-variant,
+  .cs-button,
+  .cs-tick {
+    transition: none;
+  }
+  .cs-variant:active,
+  .cs-button:active,
+  .cs-tick:active {
+    transform: none;
+  }
+}
