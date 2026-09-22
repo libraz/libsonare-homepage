@@ -69,7 +69,9 @@ empty regardless when fewer than two beats were detected. Its last entry repeats
 the tempo of the interval leading into the final beat. It is genuine local
 tempo, not `bpm` resampled — which also means a curve decoded from a fixed beat
 grid describes that grid, so measuring a tempo that actually moves wants
-`adaptiveTempo` set as well.
+`adaptiveTempo` set as well. The curve is decoded on a tempo grid about 3%
+apart: a steady track reads as one value within about 1.5% of its tempo rather
+than exactly on it, and a slow drift arrives as steps.
 
 `bpm` and `timeSignature` are the winners; the two `*Candidates` arrays are the
 ranked field behind them. They matter because tempo is genuinely ambiguous —
