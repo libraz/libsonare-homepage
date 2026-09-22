@@ -42,8 +42,7 @@ interface HpssResult {
 }
 ```
 
-`hpssWithResidual(...)` は同じカーネル、STFT、マスクのオプションを受け取り、
-倍音／打撃のどちらにも分類されなかった残差成分も返します。
+`hpssWithResidual(...)` は同じカーネル、STFT、マスクのオプションを受け取り、倍音成分と打撃成分のどちらにも分類されなかった残差成分も返します。
 
 ```typescript
 function hpssWithResidual(
@@ -75,19 +74,19 @@ function percussive(samples: Float32Array, sampleRate?: number): Float32Array  /
 
 ### `timeStretch(samples, sampleRate, rate, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
 
-ピッチを変えずにテンポを変更します。Rate < 1.0 = 遅く、> 1.0 = 速く。
+ピッチを変えずにテンポを変更します。`rate` が 1.0 未満なら遅く、1.0 より大きければ速くなります。
 
 ::: info ユースケース
-- **練習ツール**: 難しいパッセージを学ぶために音楽をスローダウン
-- **DJミキシング**: トラック間のテンポをマッチング
-- **ポッドキャスト編集**: スピーチの速度調整
+- **練習ツール**: 難しいパッセージを練習するために音楽を遅くする
+- **DJ ミキシング**: トラック間のテンポを合わせる
+- **ポッドキャスト編集**: 話す速度の調整
 - **音楽制作**: サンプルをプロジェクトのテンポに合わせる
 :::
 
 <SonareDemo id="time-stretch" />
 
 ::: tip パフォーマンス
-フェーズボコーダーアルゴリズムを使用。処理時間はオーディオの長さに比例します。
+フェーズボコーダーを使います。処理時間はオーディオの長さに比例します。
 :::
 
 ```typescript
@@ -102,13 +101,13 @@ function timeStretch(
 
 ### `pitchShift(samples, sampleRate, semitones, nFft?, hopLength?)` <Badge type="warning" text="高負荷" />
 
-長さを変えずにピッチを変更します。半音単位で測定（+12 = 1オクターブ上）。
+長さを変えずにピッチを変更します。単位は半音で、+12 が 1 オクターブ上です。
 
 ::: info ユースケース
-- **キーマッチング**: ミキシング用に曲を移調
-- **ボーカルチューニング**: ボーカルピッチの補正や調整
-- **クリエイティブエフェクト**: ハーモニー作成、チップマンク/ディープボイスエフェクト
-- **楽器練習**: 演奏しやすいキーに移調
+- **キーマッチング**: ミキシング用に曲を移調する
+- **ボーカルチューニング**: ボーカルのピッチを補正・調整する
+- **クリエイティブエフェクト**: ハーモニーの生成、チップマンク／ディープボイス
+- **楽器練習**: 演奏しやすいキーに移調する
 :::
 
 ::: tip パフォーマンス
@@ -127,7 +126,7 @@ function pitchShift(
 
 ### 編集 DSP
 
-これらの関数は解析だけでなく、信号そのものを変更します。`Audio` インスタンスメソッドとしても利用でき、その場合は保持している `sampleRate` が自動的に使われます。
+これらの関数は解析ではなく、信号そのものを書き換えます。`Audio` インスタンスメソッドとしても利用でき、その場合は保持している `sampleRate` が自動的に使われます。
 
 ```typescript
 function pitchCorrectToMidi(
@@ -203,15 +202,9 @@ const tuned = pitchCorrectToMidiTimevarying(
 `voiced` と `voicedProb` は、どちらも `f0Hz` と同じ長さである必要があります。長さが食い違うと `RangeError`（`'pitchCorrectToMidiTimevarying: voiced length must match f0Hz length'`）を投げます。`SonareError` ではないため `isSonareError` では捕捉できません。
 
 ::: warning `voicedProb` が決めるのは有声判定だけ
-`voicedProb` の用途は 1 つだけです。`voiced` を渡さなかったときに、フレームごとの有声／無声の
-判定を導くことです。`voiced` を渡した場合、`voicedProb` は完全に無視されます。両方渡しても
-何も起きないため、上の例ではフラグだけを渡しています。
+`voicedProb` の用途は 1 つだけです。`voiced` を渡さなかったときに、フレームごとの有声／無声の判定を導くことです。`voiced` を渡した場合、`voicedProb` は完全に無視されます。両方渡しても何も起きないため、上の例ではフラグだけを渡しています。
 
-特に、フレームごとの補正量をスケーリングすることは**ありません**。確率で重み付けされた緩やかな
-リチューンを期待して `voicedProb` を渡していた場合、実際にはそうなっておらず、聞こえる補正は
-その想定より**低音域で強く**なります。`voicedProb` は F0 とともに上昇するため、その想定なら
-もっとも減衰されていたはずのフレームが低音域だからです。補正を緩めるには `retuneAmount` と
-`vibratoThresholdCents` を使ってください。
+特に、フレームごとの補正量をスケーリングすることは**ありません**。確率で重み付けされた緩やかなリチューンを期待して `voicedProb` を渡していた場合、実際にはそうなっておらず、聞こえる補正はその想定より**低音域で強く**なります。`voicedProb` は F0 とともに上昇するため、その想定でもっとも減衰されていたはずのフレームが低音域だからです。補正を緩めるには `retuneAmount` と `vibratoThresholdCents` を使ってください。
 :::
 
 ```typescript
@@ -238,7 +231,7 @@ function noteMove(
 ): Float32Array
 ```
 
-`Audio.noteStretch(options?)` と `Audio.noteMove(options?)` は `Audio` インスタンス上の対応メソッドです（サンプルレートはインスタンスの値を使用）。
+`Audio.noteStretch(options?)` と `Audio.noteMove(options?)` は `Audio` インスタンス上の対応メソッドです（サンプルレートはインスタンスの値を使います）。
 
 ```typescript
 function spectralEdit(
@@ -282,8 +275,7 @@ sonare voice-change vocal.wav --pitch-semitones 3 --formant-factor 1.05 -o voice
 
 ### `normalize(samples, sampleRate, targetDb?, mode?)`
 
-オーディオを目標レベルに正規化します。`mode` の既定値は `'peak'` で、
-RMS レベルを目標にする場合は `'rms'` を指定します。
+オーディオを目標レベルに正規化します。`mode` の既定値は `'peak'` で、RMS レベルを目標にする場合は `'rms'` を指定します。
 
 ```typescript
 function normalize(
@@ -317,30 +309,15 @@ interface NormalizeStereoResult {
 }
 ```
 
-レベルはペア全体から測られ、得られたゲインが**両チャンネル**にそのまま適用されます。これが
-この関数の要点です。チャンネルごとに別々の目標へ正規化すると、レベルではなく左右のバランスが
-変わってしまい、意図したパンがセンターに寄ってしまいます。判断が共通であるため、
-`appliedGainDb` はチャンネルごとのペアではなく単一の値になります。`'peak'` モードでは大きい側の
-チャンネルが `targetDb` に達し、小さい側はその差を保ちます。`'rms'` モードで `targetDb` に
-合わせられる量は両チャンネルのサンプルをまとめた RMS、つまりチャンネルごとの値の相加平均では
-なく二乗平均平方根であり、出力は `[-1, 1]` にハードクリップされます。
+レベルはペア全体から測り、得られたゲインを**両チャンネル**にそのまま適用します。これがこの関数の要点です。チャンネルごとに別々の目標へ正規化すると、レベルではなく左右のバランスが変わり、意図したパンがセンターに寄ります。判断が共通なので、`appliedGainDb` はチャンネルごとのペアではなく単一の値です。`'peak'` モードでは大きい側のチャンネルが `targetDb` に達し、小さい側はその差を保ちます。`'rms'` モードで `targetDb` に合わせる量は両チャンネルのサンプルをまとめた RMS、つまりチャンネルごとの値の相加平均ではなく二乗平均平方根で、出力は `[-1, 1]` にハードクリップされます。
 
 ::: warning `targetDb` の既定値はモード依存で、モノラルの `normalize` とは異なる
-`normalizeStereo` の `targetDb` の既定値は `mode: 'peak'` で **`0`**、`mode: 'rms'` で **`-20`**
-であり、他言語のサーフェスと一致します。このサーフェスのモノラル `normalize` は両モードとも
-`0` を既定としますが、RMS にとってこれは誤った値です。0 dBFS の RMS は信号中のすべてのピークを
-クリップさせます。モノラルの呼び出しをステレオ版へ移植するときは、明示的な `targetDb: 0` を
-そのまま持ち込まないでください。
+`normalizeStereo` の `targetDb` の既定値は `mode: 'peak'` で **`0`**、`mode: 'rms'` で **`-20`** であり、他言語のサーフェスと一致します。このサーフェスのモノラル `normalize` は両モードとも `0` を既定としますが、RMS にとってこれは誤った値です。0 dBFS の RMS は信号中のすべてのピークをクリップさせます。モノラルの呼び出しをステレオ版へ移植するときは、明示的な `targetDb: 0` をそのまま持ち込まないでください。
 :::
 
-チャンネル長が食い違うペアは、処理の前に `RangeError`（`'Stereo channel lengths must match.'`）
-を投げます。一方、**無音はエラーではありません**。中身のないペアはそのまま返り、
-`appliedGainDb` はちょうど `0` になります。例外も、際限のないブーストも起きません。
+チャンネル長が食い違うペアは、処理の前に `RangeError`（`'Stereo channel lengths must match.'`）を投げます。一方、**無音はエラーではありません**。中身のないペアはそのまま返り、`appliedGainDb` はちょうど `0` になります。例外も、際限のないブーストも起きません。
 
-`validate` が制御するのは JavaScript 側の事前スキャンだけです。問題のあるサンプルの添字を含む
-`RangeError` を出すのはこのスキャンです。ネイティブ層はいずれにせよ再検証するため、
-`validate: false` は安全性ではなく「詳しいメッセージ」と速度を交換します。無効化されるのは
-明示的に `false` を渡した場合だけです。
+`validate` が制御するのは JavaScript 側の事前スキャンだけです。問題のあるサンプルの添字を含む `RangeError` を出すのはこのスキャンです。ネイティブ層はいずれにせよ再検証するため、`validate: false` は安全性ではなく「詳しいメッセージ」と速度を交換します。無効化されるのは明示的に `false` を渡した場合だけです。
 
 ### `trim(samples, sampleRate, thresholdDb?, frameLength?, hopLength?)`
 
@@ -356,9 +333,7 @@ function trim(
 ): Float32Array
 ```
 
-これは `Audio` レベルの単純なしきい値トリムです。librosa 互換の
-フレーム RMS / `topDb` ベースの無音判定と、元音源上の開始・終了サンプル位置が
-必要な場合は、下の `trimSilence(...)` を使います。
+これは `Audio` レベルの単純なしきい値トリムです。librosa 互換のフレーム RMS / `topDb` ベースの無音判定と、元音源上の開始・終了サンプル位置が必要な場合は、下の `trimSilence(...)` を使います。
 
 ## ルーム音響解析
 
@@ -401,7 +376,6 @@ console.log(rir.sampleRate, rir.rir.length, rir.hasError);
 const morphed = roomMorph(samples, sampleRate, { lengthM: 12, widthM: 9, heightM: 4, wet: 0.6 });
 ```
 
-`analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` の
-`minDecayDb` は減衰フィットのしきい値で、既定値は `30` です。
+`analyzeImpulseResponse(samples, sampleRate?, nOctaveBands?, minDecayDb?)` の `minDecayDb` は減衰フィットのしきい値で、既定値は `30` です。
 
 RT60、EDT、C50、C80、D50、バンド別配列、ルーム推定、生成 RIR、信頼度の読み方は [ルーム音響解析](./acoustic-analysis.md) を参照してください。
