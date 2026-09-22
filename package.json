@@ -13,13 +13,14 @@
     "copy:wasm": "./scripts/copy-wasm.sh",
     "generate:demos": "node scripts/generate-demo-assets.mjs",
     "generate:practice": "node scripts/generate-practice-assets.mjs",
+    "generate:gs-data": "node --experimental-strip-types scripts/generate-gs-data.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "ncu": "NO_UPDATE_NOTIFIER=1 ncu",
     "ncu:update": "NO_UPDATE_NOTIFIER=1 ncu -u",
-    "check": "yarn check:docs && yarn check:glossary && yarn check:i18n && yarn check:demos && yarn check:mastering-docs && yarn check:mastering && yarn check:sweep && yarn check:terms",
+    "check": "yarn check:docs && yarn check:glossary && yarn check:i18n && yarn check:demos && yarn check:mastering-docs && yarn check:mastering && yarn check:sweep && yarn check:terms && yarn check:gs-data",
     "verify": "yarn check && yarn test && yarn build && yarn check:built-routes",
     "check:docs": "node scripts/check-doc-links.mjs",
     "check:glossary": "node scripts/check-glossary-coverage.mjs",
@@ -29,7 +30,8 @@
     "check:built-routes": "node scripts/check-built-routes.mjs",
     "check:mastering": "node scripts/validate-mastering-presets.mjs",
     "check:sweep": "node scripts/check-symbol-sweep.mjs",
-    "check:terms": "node scripts/check-terms.mjs"
+    "check:terms": "node scripts/check-terms.mjs",
+    "check:gs-data": "node scripts/check-gs-data.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
