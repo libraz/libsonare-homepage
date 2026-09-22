@@ -228,24 +228,24 @@ pad = sonare.synth_preset_patch("warm-pad")
 
 The catalog maps to the engines like this (one preset per row is enough to feel each engine):
 
-| Preset | Engine | Good for |
-|--------|--------|----------|
-| `sine` `saw` `square` `triangle` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | leads, basses, pads |
-| `e-piano` | `fm` | electric piano, bells, brass |
-| `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | plucked strings and basses |
-| `marimba` `glass` `bell` | `modal` | tuned mallets |
-| `organ` | `additive` | drawbar organ |
-| `drum-kit` | `percussion` | GM drum map |
-| `acoustic-piano` | `piano` | acoustic piano |
-| `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | pipe organ ranks |
-| `violin` `viola` `cello` `contrabass` | `bowed-string` | bowed strings |
-| `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | reed woodwinds |
-| `brass` `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | brass instruments |
-| `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | air-jet flutes and whistles |
-| `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | buzzing-bridge plucked strings |
-| `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | choir and solo voices |
-| `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | accordion, harmonica, reed organ |
-| `harpsichord` | `harpsichord` | harpsichord |
+| Preset | Engine | Good for | Play it |
+|--------|--------|----------|---------|
+| `sine` `saw` `square` `triangle` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | leads, basses, pads | [saw-lead](/synth?preset=saw-lead) |
+| `e-piano` | `fm` | electric piano, bells, brass | [e-piano](/synth?preset=e-piano) |
+| `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | plucked strings and basses | [classical-guitar](/synth?preset=classical-guitar) |
+| `marimba` `glass` `bell` | `modal` | tuned mallets | [marimba](/synth?preset=marimba) |
+| `organ` | `additive` | drawbar organ | [organ](/synth?preset=organ) |
+| `drum-kit` | `percussion` | GM drum map | [drum-kit](/synth?preset=drum-kit) |
+| `acoustic-piano` | `piano` | acoustic piano | [acoustic-piano](/synth?preset=acoustic-piano) |
+| `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | pipe organ ranks | [church-organ](/synth?preset=church-organ) |
+| `violin` `viola` `cello` `contrabass` | `bowed-string` | bowed strings | [cello](/synth?preset=cello) |
+| `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | reed woodwinds | [clarinet](/synth?preset=clarinet) |
+| `brass` `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | brass instruments | [trumpet](/synth?preset=trumpet) |
+| `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | air-jet flutes and whistles | [concert-flute](/synth?preset=concert-flute) |
+| `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | buzzing-bridge plucked strings | [koto](/synth?preset=koto) |
+| `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | choir and solo voices | [choir-aah](/synth?preset=choir-aah) |
+| `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | accordion, harmonica, reed organ | [accordion](/synth?preset=accordion) |
+| `harpsichord` | `harpsichord` | harpsichord | [harpsichord](/synth?preset=harpsichord) |
 
 The roll below sequences one three-voice phrase and bounces it through `bounceWithSynthInstrument(presetName, …)`. The instrument selector walks across representative piano, FM, plucked-string, modal, organ, bowed-string, reed, brass, and flute presets, so the same notes audibly take on each engine's character.
 

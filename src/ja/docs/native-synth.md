@@ -258,24 +258,24 @@ pad = sonare.synth_preset_patch("warm-pad")
 
 カタログとエンジンの対応は次のとおりです（各エンジンの感触は 1 行で十分つかめます）。
 
-| プリセット | エンジン | 向いている用途 |
-|------------|----------|----------------|
-| `sine` `saw` `square` `triangle` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | リード・ベース・パッド |
-| `e-piano` | `fm` | エレピ・ベル・ブラス |
-| `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | 撥弦とベース |
-| `marimba` `glass` `bell` | `modal` | 音程のあるマレット |
-| `organ` | `additive` | ドローバーオルガン |
-| `drum-kit` | `percussion` | GM ドラムマップ |
-| `acoustic-piano` | `piano` | アコースティックピアノ |
-| `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | パイプオルガンのランク |
-| `violin` `viola` `cello` `contrabass` | `bowed-string` | ボウイング弦 |
-| `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | リード木管 |
-| `brass` `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | 金管 |
-| `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | エアジェットフルートと笛 |
-| `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | バズブリッジの撥弦 |
-| `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | 合唱・ソロの声 |
-| `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | アコーディオン、ハーモニカ、リードオルガン |
-| `harpsichord` | `harpsichord` | ハープシコード |
+| プリセット | エンジン | 向いている用途 | 弾いてみる |
+|------------|----------|----------------|------------|
+| `sine` `saw` `square` `triangle` `saw-lead` `square-lead` `sub-bass` `warm-pad` | `subtractive` | リード・ベース・パッド | [saw-lead](/ja/synth?preset=saw-lead) |
+| `e-piano` | `fm` | エレピ・ベル・ブラス | [e-piano](/ja/synth?preset=e-piano) |
+| `classical-guitar` `steel-guitar` `electric-guitar` `harp` `bass-acoustic` `bass-fingered` `bass-picked` `bass-fretless` `bass-slap` | `karplus-strong` | 撥弦とベース | [classical-guitar](/ja/synth?preset=classical-guitar) |
+| `marimba` `glass` `bell` | `modal` | 音程のあるマレット | [marimba](/ja/synth?preset=marimba) |
+| `organ` | `additive` | ドローバーオルガン | [organ](/ja/synth?preset=organ) |
+| `drum-kit` | `percussion` | GM ドラムマップ | [drum-kit](/ja/synth?preset=drum-kit) |
+| `acoustic-piano` | `piano` | アコースティックピアノ | [acoustic-piano](/ja/synth?preset=acoustic-piano) |
+| `church-organ` `church-flute` `church-bourdon` `church-trumpet` | `pipe-organ` | パイプオルガンのランク | [church-organ](/ja/synth?preset=church-organ) |
+| `violin` `viola` `cello` `contrabass` | `bowed-string` | ボウイング弦 | [cello](/ja/synth?preset=cello) |
+| `clarinet` `soprano-sax` `alto-sax` `tenor-sax` `baritone-sax` `oboe` `english-horn` `bassoon` | `reed` | リード木管 | [clarinet](/ja/synth?preset=clarinet) |
+| `brass` `trumpet` `trombone` `tuba` `french-horn` `muted-trumpet` `cornet` `flugelhorn` `euphonium` | `brass` | 金管 | [trumpet](/ja/synth?preset=trumpet) |
+| `concert-flute` `piccolo` `recorder` `pan-flute` `shakuhachi` `tin-whistle` `ocarina` `blown-bottle` | `flute` | エアジェットフルートと笛 | [concert-flute](/ja/synth?preset=concert-flute) |
+| `pluck` `harp-plucked` `koto` `sitar` `tanpura` | `plucked-string` | バズブリッジの撥弦 | [koto](/ja/synth?preset=koto) |
+| `choir-aah` `choir-ooh` `voice-eeh` | `vocal` | 合唱・ソロの声 | [choir-aah](/ja/synth?preset=choir-aah) |
+| `accordion` `harmonica` `bandoneon` `reed-organ` | `free-reed` | アコーディオン、ハーモニカ、リードオルガン | [accordion](/ja/synth?preset=accordion) |
+| `harpsichord` | `harpsichord` | ハープシコード | [harpsichord](/ja/synth?preset=harpsichord) |
 
 下のロールは1つの3声フレーズをシーケンスし、`bounceWithSynthInstrument(presetName, …)` でバウンスします。楽器セレクタは、ピアノ、FM、撥弦、モーダル、オルガン、ボウイング弦、リード、金管、フルートの代表プリセットをまたぐので、同じ音符がそれぞれのエンジンの性格を帯びるのが聞き取れます。
 
