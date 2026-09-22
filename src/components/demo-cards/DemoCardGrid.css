@@ -438,6 +438,34 @@ html:not(.dark) .demo-grid__key-black {
   }
 }
 
+/* Filter responses */
+.demo-grid__filter-curve {
+  fill: none;
+  stroke: var(--demo-text-faint, rgba(255, 255, 255, 0.28));
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  animation: demo-grid-filter-draw 0.9s ease-out both;
+  animation-delay: var(--d);
+}
+.demo-grid__filter-curve--on {
+  stroke: var(--demo-accent, #8b5cf6);
+  stroke-width: 2;
+}
+.demo-grid__filter-cutoff {
+  stroke: var(--demo-text-faint, rgba(255, 255, 255, 0.28));
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+@keyframes demo-grid-filter-draw {
+  from {
+    stroke-dasharray: 0 260;
+  }
+  to {
+    stroke-dasharray: 260 0;
+  }
+}
+
 /* Falling notes */
 .demo-grid__fall-note {
   fill: var(--demo-accent-light, #a78bfa);
@@ -589,8 +617,12 @@ html:not(.dark) .demo-grid__visual {
   .demo-grid__fall-note,
   .demo-grid__fall-key--lit,
   .demo-grid__part-fill,
+  .demo-grid__filter-curve,
   .demo-grid__status-dot {
     animation: none;
+  }
+  .demo-grid__filter-curve {
+    stroke-dasharray: none;
   }
   .demo-grid__part-fill {
     opacity: 1;

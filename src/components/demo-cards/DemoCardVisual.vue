@@ -11,6 +11,17 @@ const chromaCells = [20, 70, 35, 90, 50, 25, 80, 45, 60, 30, 75, 40];
 const stepCellsOn = [0, 3, 5, 9, 14, 16, 18, 20, 22];
 /** Sixteen part faders, each at its own setting — a module's front panel at rest. */
 const partLevels = [44, 30, 52, 26, 38, 48, 22, 34, 56, 18, 42, 28, 50, 36, 24, 46];
+/**
+ * Four low-pass responses meeting at the same cutoff and parting either side of
+ * it — the page's own subject, which is that the four models are four
+ * characters rather than four names for one filter. The last is drawn bright.
+ */
+const filterCurves = [
+  'M4,21 L98,21 C112,21 117,16 124,16 C136,16 148,34 168,45 C186,54 200,57 214,57',
+  'M4,21 L98,21 C112,21 116,11 123,11 C132,11 139,33 154,44 C170,54 192,57 214,57',
+  'M4,21 L98,21 C112,21 115,9 122,9 C130,9 136,32 150,43 C166,54 190,57 214,57',
+  'M4,21 L98,21 C112,21 116,13 123,13 C133,13 142,33 160,44 C178,54 196,57 214,57',
+];
 const fallingNotes = [
   { x: 14, y: -8, h: 16 },
   { x: 60, y: 6, h: 12 },
@@ -142,6 +153,20 @@ const fallingNotes = [
             :style="{ '--d': `${i * 70}ms` }"
           />
         </g>
+      </g>
+    </svg>
+
+    <svg v-else-if="visual === 'filter'" viewBox="0 0 220 60" preserveAspectRatio="none">
+      <g class="demo-grid__filter">
+        <path
+          v-for="(curve, i) in filterCurves"
+          :key="i"
+          :d="curve"
+          class="demo-grid__filter-curve"
+          :class="{ 'demo-grid__filter-curve--on': i === filterCurves.length - 1 }"
+          :style="{ '--d': `${i * 140}ms` }"
+        />
+        <line x1="122" y1="6" x2="122" y2="56" class="demo-grid__filter-cutoff" />
       </g>
     </svg>
 

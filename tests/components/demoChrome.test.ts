@@ -68,18 +68,11 @@ describe('DemoCardGrid', () => {
 
     const cards = wrapper.findAll('.demo-grid__card');
     expect(cards).toHaveLength(LISTED_DEMOS.length);
-    expect(cards.map((card) => card.attributes('href'))).toEqual([
-      '/analyzer',
-      '/mastering',
-      '/music-analysis',
-      '/mixing',
-      '/realtime-fx',
-      '/spatial',
-      '/synth',
-      '/studio',
-      '/practice',
-      '/gs-module',
-    ]);
+    // One link per listed demo, in manifest order, unprefixed for the default
+    // locale. The route strings themselves are the manifest's to get right.
+    expect(cards.map((card) => card.attributes('href'))).toEqual(
+      LISTED_DEMOS.map((demo) => demo.route),
+    );
     expect(wrapper.text()).toContain('Visual Player');
     expect(wrapper.text()).toContain('Mastering Studio');
     expect(wrapper.text()).toContain('Spatial Room Scanner');
@@ -87,6 +80,7 @@ describe('DemoCardGrid', () => {
     expect(wrapper.text()).toContain('Studio Mini');
     expect(wrapper.text()).toContain('Piano Practice');
     expect(wrapper.text()).toContain('GS Sound Module');
+    expect(wrapper.text()).toContain('Classic Synth');
     expect(wrapper.find('.demo-grid__visual--spectrum').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--lufs').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--chroma').exists()).toBe(true);
@@ -97,6 +91,7 @@ describe('DemoCardGrid', () => {
     expect(wrapper.find('.demo-grid__visual--steps').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--fall').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--parts').exists()).toBe(true);
+    expect(wrapper.find('.demo-grid__visual--filter').exists()).toBe(true);
     expect(wrapper.find('.demo-carousel__nav--next').classes()).not.toContain(
       'demo-carousel__nav--hidden',
     );
@@ -114,23 +109,15 @@ describe('DemoCardGrid', () => {
     setScrollerMetrics(wrapper, { scrollWidth: 1600, clientWidth: 600, scrollLeft: 200 });
     await wrapper.find('.demo-grid').trigger('scroll');
 
-    expect(wrapper.findAll('.demo-grid__card').map((card) => card.attributes('href'))).toEqual([
-      '/ja/analyzer',
-      '/ja/mastering',
-      '/ja/music-analysis',
-      '/ja/mixing',
-      '/ja/realtime-fx',
-      '/ja/spatial',
-      '/ja/synth',
-      '/ja/studio',
-      '/ja/practice',
-      '/ja/gs-module',
-    ]);
+    expect(wrapper.findAll('.demo-grid__card').map((card) => card.attributes('href'))).toEqual(
+      LISTED_DEMOS.map((demo) => `/ja${demo.route}`),
+    );
     expect(wrapper.text()).toContain('ビジュアルプレイヤー');
     expect(wrapper.text()).toContain('マスタリングスタジオ');
     expect(wrapper.text()).toContain('シンセプレイグラウンド');
     expect(wrapper.text()).toContain('ピアノ練習');
     expect(wrapper.text()).toContain('GS 音源モジュール');
+    expect(wrapper.text()).toContain('クラシックシンセ');
     expect(wrapper.find('.demo-carousel__nav--prev').attributes('aria-label')).toBe(
       '前のデモを表示',
     );

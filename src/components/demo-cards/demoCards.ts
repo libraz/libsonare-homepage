@@ -10,7 +10,8 @@ export type DemoVisual =
   | 'keys'
   | 'steps'
   | 'fall'
-  | 'parts';
+  | 'parts'
+  | 'filter';
 
 export interface DemoEntry {
   id: ListedDemoId;
@@ -84,7 +85,7 @@ const CARD_META: Record<
     accent: false,
     status: 'NEW',
     eyebrow: 'INSTRUMENTS',
-    chips: ['15 ENGINES', '69 PRESETS', 'MIDI', 'PATCH'],
+    chips: ['17 ENGINES', '70 PRESETS', 'MIDI', 'PATCH'],
   },
   studio: {
     visual: 'steps',
@@ -106,6 +107,13 @@ const CARD_META: Record<
     status: 'NEW',
     eyebrow: 'GM · GS',
     chips: ['16 PARTS', 'SYSEX', 'INSERT FX', 'DROP A .MID'],
+  },
+  'classic-synth': {
+    visual: 'filter',
+    accent: false,
+    status: 'NEW',
+    eyebrow: 'SUBTRACTIVE',
+    chips: ['4 FILTERS', '12 × 8 MATRIX', 'BODY', 'WAV · MIDI'],
   },
 };
 
@@ -157,6 +165,11 @@ export const demoCardsCopy = {
         tagline:
           'Sixteen parts, a sound each, one insertion effect — and your own .mid played through it, with every SysEx byte shown.',
       },
+      'classic-synth': {
+        title: 'Classic Synth',
+        tagline:
+          'One voice taken apart a chapter at a time: four filter models on the same note, a matrix you wire by hand, and a playground.',
+      },
     },
   },
   ja: {
@@ -205,6 +218,11 @@ export const demoCardsCopy = {
         title: 'GS 音源モジュール',
         tagline:
           '16 パートにそれぞれ音色を割り当て、インサーションエフェクトを通し、手持ちの .mid を鳴らす。送っている SysEx も全部見えます。',
+      },
+      'classic-synth': {
+        title: 'クラシックシンセ',
+        tagline:
+          '1 つの音色を章ごとに分解。4 種類のフィルタを同じ音で聴き比べ、モジュレーション行列を手で結線し、最後は自由に組み立てます。',
       },
     },
   },
