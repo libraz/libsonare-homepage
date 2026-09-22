@@ -97,12 +97,12 @@ The classic oscillator → filter → amp voice. Detuned unison, drift, a pre-fi
 
 The filter model is the heart of the "character". Four classic models are available via `filterModel`:
 
-| Model | Voicing it emulates | Notes |
-|-------|--------------------|-------|
-| `svf` | TPT state-variable (SEM family) | Clean, the only model with a selectable `filterOutput` (lowpass / bandpass / highpass) |
-| `moog-ladder` | 4-pole transistor ladder | Zero-delay-feedback, saturating loop, self-oscillates |
-| `diode-ladder` | Diode ladder (VCS3 / TB-303 family) | Coupled-stage ZDF, self-oscillates |
-| `sallen-key` | Korg35 Sallen-Key (MS-10 / early MS-20) | Self-oscillates |
+| Model | Circuit topology | Notes |
+|-------|------------------|-------|
+| `svf` | TPT state-variable | Clean, the only model with a selectable `filterOutput` (lowpass / bandpass / highpass) |
+| `moog-ladder` | Four-pole transistor ladder | Zero-delay-feedback, saturating loop, self-oscillates |
+| `diode-ladder` | Diode ladder | Coupled-stage ZDF, self-oscillates |
+| `sallen-key` | Sallen-Key | Self-oscillates |
 
 All four stay stable and zipper-free under per-sample cutoff/resonance modulation, and self-oscillation is deterministic.
 
