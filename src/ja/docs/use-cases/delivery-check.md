@@ -119,7 +119,7 @@ DELIVERY GATE: FAIL
 これは丸め誤差ではなく、本物の不合格です。`-0.95` は `-1.0` より大きい、つまりより大きな音です。2 つの数値を目で見比べると逆に読みたくなりますが、ゲートは符号を正しく扱っています。直す場所はこのスクリプトではなくマスタリングの段階です。より厳しい `--ceiling-db` を指定して再実行するか、実際の納品先がヘッドルームの目減りを許容するなら [配信ターゲット](../glossary/mastering/delivery-targets.md) にある `-2 dBTP` というコーデック安全寄りのシーリングを選び、`GATE_CEILING_DBTP` をそれに合わせて更新してください。やってはいけないのは、このファイルがたまたま通るところまでゲートのシーリングを緩めることです。
 
 <FlowDiagram
-  title="納品をゲートする"
+  title="納品の合否を判定する"
   direction="LR"
   :nodes="[
     { id: 'master', label: 'master.wav', col: 0, row: 0, variant: 'muted' },
