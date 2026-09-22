@@ -5,6 +5,7 @@ import DemoCardGrid from '@/components/demo-cards/DemoCardGrid.vue';
 import StudioShowcase from '@/components/StudioShowcase.vue';
 import { CornerBrackets, GridOverlay } from '@/components/ui';
 import { createTheme } from '@/composables/useTheme';
+import { LISTED_DEMOS } from '@/demos/manifest';
 import {
   DEFAULT_LOCALE,
   localeLabels,
@@ -81,7 +82,7 @@ const localeCopy = {
     ],
     demoSection: {
       eyebrow: 'Try it locally',
-      heading: 'Nine demos. One library.',
+      heading: '{count} demos. One library.',
       subhead:
         'Every demo runs the same Apache-2.0 processors locally in your browser via WebAssembly.',
       viewAll: 'Browse all demos',
@@ -207,7 +208,7 @@ const localeCopy = {
     ],
     demoSection: {
       eyebrow: 'ローカルで試す',
-      heading: '9 つのデモ、ひとつのライブラリ。',
+      heading: '{count} つのデモ、ひとつのライブラリ。',
       subhead:
         'どのデモも同じ Apache-2.0 のプロセッサを、WebAssembly でブラウザ内でそのまま動かします。',
       viewAll: 'すべてのデモを見る',
@@ -316,6 +317,12 @@ const currentLocale = computed(
 );
 const localePath = (path: string, locale = currentLocaleKey.value) =>
   `${localePathPrefix(locale)}${path}`;
+
+// The grid below renders one card per listed demo, so the heading counts the
+// same list rather than a number that stops being true when a demo is added.
+const demoSectionHeading = computed(() =>
+  currentLocale.value.demoSection.heading.replace('{count}', String(LISTED_DEMOS.length)),
+);
 
 const packageLinks = {
   npm: 'https://www.npmjs.com/package/@libraz/libsonare',
@@ -854,10 +861,10 @@ const nodeId = computed(() => {
     </section>
 
     <!-- Demo cards -->
-    <section class="landing__demos" :aria-label="currentLocale.demoSection.heading">
+    <section class="landing__demos" :aria-label="demoSectionHeading">
       <header class="landing__section-header">
         <p class="landing__section-eyebrow">{{ currentLocale.demoSection.eyebrow }}</p>
-        <h2 class="landing__section-title">{{ currentLocale.demoSection.heading }}</h2>
+        <h2 class="landing__section-title">{{ demoSectionHeading }}</h2>
         <p class="landing__section-subhead">{{ currentLocale.demoSection.subhead }}</p>
       </header>
 
