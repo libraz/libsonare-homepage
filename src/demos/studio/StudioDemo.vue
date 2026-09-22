@@ -18,6 +18,7 @@ import {
 } from '@/demos/studio/studioCopy';
 import { drawStudioWaveforms, type StudioStemView } from '@/demos/studio/studioWaveforms';
 import { useStudioEngine } from '@/demos/studio/useStudioEngine';
+import { downloadBlob } from '@/utils/audio';
 import { meterFillPercent } from '@/utils/scale';
 import sonareJsUrl from '@/wasm/sonare.js?url';
 import sonareWasmUrl from '@/wasm/sonare.wasm?url';
@@ -209,15 +210,6 @@ function drawWaveforms(views: StudioStemView[]) {
   drawStudioWaveforms(canvases.value, views);
 }
 
-function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
 async function downloadWav() {
   if (downloading.value) return;
   downloading.value = true;
@@ -225,7 +217,7 @@ async function downloadWav() {
     // Yield a frame so the button label updates before the offline render.
     await new Promise((resolve) => setTimeout(resolve, 30));
     const blob = engine.exportWav(pattern.value, bpm.value);
-    if (blob) triggerDownload(blob, `libsonare-studio-${bpm.value}bpm.wav`);
+    if (blob) downloadBlob(blob, `libsonare-studio-${bpm.value}bpm.wav`);
   } finally {
     downloading.value = false;
   }
@@ -233,7 +225,7 @@ async function downloadWav() {
 
 function downloadMidi() {
   const blob = engine.exportMidi(pattern.value, bpm.value);
-  if (blob) triggerDownload(blob, `libsonare-studio-${bpm.value}bpm.mid`);
+  if (blob) downloadBlob(blob, `libsonare-studio-${bpm.value}bpm.mid`);
 }
 </script>
 

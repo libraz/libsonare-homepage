@@ -38,6 +38,8 @@ import {
   formatDb,
   formatDuration,
   formatSampleRate,
+  jsonBlob,
+  triggerDownload,
 } from '@/utils/audio';
 import { clamp, dbToLinear, invertedRangeToPercent } from '@/utils/scale';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -379,10 +381,7 @@ export function useMixingStudio() {
 
   function downloadMix() {
     if (!outputUrl.value) return;
-    const anchor = document.createElement('a');
-    anchor.href = outputUrl.value;
-    anchor.download = 'libsonare-mix.wav';
-    anchor.click();
+    triggerDownload(outputUrl.value, 'libsonare-mix.wav');
   }
 
   function exportScene() {
@@ -394,13 +393,9 @@ export function useMixingStudio() {
       vcaGains: { ...vcaGains.value },
       tracks: tracks.value.map(toSceneTrack),
     };
-    sceneUrl = URL.createObjectURL(
-      new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }),
-    );
-    const anchor = document.createElement('a');
-    anchor.href = sceneUrl;
-    anchor.download = 'libsonare-mix-scene.json';
-    anchor.click();
+    // The URL is kept so a repeated export can revoke the previous one.
+    sceneUrl = URL.createObjectURL(jsonBlob(scene));
+    triggerDownload(sceneUrl, 'libsonare-mix-scene.json');
   }
 
   function chooseScene() {

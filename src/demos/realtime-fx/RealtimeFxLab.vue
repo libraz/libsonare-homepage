@@ -11,6 +11,7 @@ import {
   VOICE_PRESET_MACROS,
   VOICE_PRESET_ORDER,
 } from '@/demos/realtime-fx/useRealtimeFx';
+import { amplitudeToDb, formatDb } from '@/utils/audio';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
 import type { VoicePresetId } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -191,14 +192,6 @@ function applyParams() {
 function applyFormantParams() {
   formantEngaged.value = true;
   applyParams();
-}
-
-function amplitudeToDb(value: number): number {
-  return value > 0 ? 20 * Math.log10(value) : -120;
-}
-
-function formatDb(value: number): string {
-  return `${Math.max(-120, value).toFixed(1)} dB`;
 }
 </script>
 

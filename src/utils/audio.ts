@@ -201,13 +201,44 @@ export function formatDb(value: number): string {
   return `${value.toFixed(1)} dB`;
 }
 
-export function downloadJson(filename: string, data: unknown): string {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
+/**
+ * Hands an object URL to the browser as a download. The anchor is never in the
+ * document — clicking a detached one is enough, and there is nothing to clean
+ * up afterwards. The caller owns the URL's lifetime.
+ */
+export function triggerDownload(url: string, filename: string): void {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
+}
+
+/**
+ * Revoking an object URL in the same tick as the click cancels the download in
+ * some browsers, so a one-shot blob is released on a timer instead.
+ */
+const DOWNLOAD_URL_LIFETIME_MS = 5000;
+
+/** Downloads a blob nothing else refers to, releasing the URL once it is safe. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  triggerDownload(url, filename);
+  setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
+}
+
+/** A pretty-printed JSON blob — the shape every export on the site uses. */
+export function jsonBlob(data: unknown): Blob {
+  return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+}
+
+/**
+ * Downloads `data` as JSON and returns the object URL, which stays alive so the
+ * caller can keep offering the same file. Revoking it is the caller's job; use
+ * {@link downloadBlob} instead when nothing will refer to it again.
+ */
+export function downloadJson(filename: string, data: unknown): string {
+  const url = URL.createObjectURL(jsonBlob(data));
+  triggerDownload(url, filename);
   return url;
 }
 
