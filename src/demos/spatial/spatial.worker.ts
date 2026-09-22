@@ -11,7 +11,7 @@
  *
  * Everything is dependency-free WASM running locally; no audio leaves the browser.
  */
-import type { AcousticResult, RirResult, RoomEstimateResult } from '@/wasm/index';
+import type { AcousticResult, RirResult, RoomEstimateResult, RoomMorphResult } from '@/wasm/index';
 
 export interface RoomGeometry {
   lengthM: number;
@@ -91,6 +91,9 @@ type PresetRequest = {
   geometry: RoomGeometry;
 };
 
+/** The part of a room that decides how long its response runs. */
+type TailGeometry = { lengthM: number; widthM: number; heightM: number; absorption: number };
+
 type MorphGeometry = Partial<RoomGeometry> & {
   lengthM: number;
   widthM: number;
@@ -134,18 +137,21 @@ type WasmModule = {
     samples: Float32Array,
     sampleRate: number,
     options?: Record<string, unknown>,
-  ) => Float32Array;
+  ) => RoomMorphResult;
   version: () => string;
 };
 
 const N_BANDS = 6;
 
-// Preset RIR length scales with the room's reverberation time so long-decay presets
-// (hall, cathedral) audition their full tail instead of a hard truncation that cuts
-// the decay short.
+// Response length scales with the room's own reverberation time, so a long-decay
+// room (hall, cathedral) is heard with its decay running out rather than cut short.
 const RIR_TAIL_FACTOR = 1.2;
 const RIR_MIN_SECONDS = 2.5;
+// An auditioned impulse *is* its tail, so it gets the room's whole decay. Under a
+// morph the tail rides on music, and convolution cost is the product of the two
+// lengths: a cathedral's last seconds are worth far less than the wait they add.
 const RIR_MAX_SECONDS = 12;
+const MORPH_MAX_SECONDS = 6;
 
 let wasmModule: WasmModule | null = null;
 
@@ -164,21 +170,23 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const leftOut = morphChannel(left, sampleRate, geometry);
       self.postMessage({ type: 'progress', id, stage: 'morph-right', value: 0.7 });
       const rightOut = morphChannel(right, sampleRate, geometry);
-      self.postMessage({ type: 'morphDone', id, left: leftOut, right: rightOut, sampleRate }, [
-        leftOut.buffer,
-        rightOut.buffer,
-      ]);
+      self.postMessage(
+        {
+          type: 'morphDone',
+          id,
+          left: leftOut.audio,
+          right: rightOut.audio,
+          sampleRate: leftOut.sampleRate,
+        },
+        [leftOut.audio.buffer, rightOut.audio.buffer],
+      );
       return;
     }
 
     if (request.type === 'preset') {
       const { geometry, sampleRate, id } = request;
       self.postMessage({ type: 'progress', id, stage: 'synthesize', value: 0.35 });
-      const maxSeconds = clamp(
-        sabineRt60(geometry) * RIR_TAIL_FACTOR,
-        RIR_MIN_SECONDS,
-        RIR_MAX_SECONDS,
-      );
+      const maxSeconds = responseSeconds(geometry, RIR_MAX_SECONDS);
       const rir = wasmModule.synthesizeRir({
         lengthM: geometry.lengthM,
         widthM: geometry.widthM,
@@ -229,14 +237,15 @@ function morphChannel(
   samples: Float32Array,
   sampleRate: number,
   geometry: MorphRequest['geometry'],
-): Float32Array {
+): RoomMorphResult {
   const wasm = wasmModule;
   if (!wasm) throw new Error('WASM not initialized');
+  const absorption = geometry.absorption ?? 0.18;
   return wasm.roomMorph(samples, sampleRate, {
     lengthM: geometry.lengthM,
     widthM: geometry.widthM,
     heightM: geometry.heightM,
-    absorption: geometry.absorption ?? 0.18,
+    absorption,
     sourceX: geometry.sourceX,
     sourceY: geometry.sourceY,
     sourceZ: geometry.sourceZ,
@@ -244,7 +253,8 @@ function morphChannel(
     listenerY: geometry.listenerY,
     listenerZ: geometry.listenerZ,
     ismOrder: geometry.ismOrder ?? 2,
-    maxSeconds: geometry.maxSeconds ?? 2.5,
+    maxSeconds:
+      geometry.maxSeconds ?? responseSeconds({ ...geometry, absorption }, MORPH_MAX_SECONDS),
     wet: 0.42,
     sourceTailSuppression: 0.18,
     seed: geometry.seed ?? 2026,
@@ -404,11 +414,16 @@ function finiteOrNull(value: number): number | null {
 }
 
 /**
- * Sabine reverberation-time estimate (s) from shoebox geometry. Used only to size the
- * synthesized preset RIR so its full decay tail is captured (not for the reported RT60,
- * which comes from the acoustic analysis of the synthesized impulse).
+ * How long a response through this room needs to be (s) for its decay to finish.
+ * Sizes both the synthesized preset impulse and a morph's reverb tail; it is not the
+ * reported RT60, which comes from analysing the synthesized impulse.
  */
-function sabineRt60(geometry: RoomGeometry): number {
+function responseSeconds(geometry: TailGeometry, maxSeconds: number): number {
+  return clamp(sabineRt60(geometry) * RIR_TAIL_FACTOR, RIR_MIN_SECONDS, maxSeconds);
+}
+
+/** Sabine reverberation-time estimate (s) from shoebox geometry. */
+function sabineRt60(geometry: TailGeometry): number {
   const { lengthM, widthM, heightM } = geometry;
   const volume = lengthM * widthM * heightM;
   const surface = 2 * (lengthM * widthM + lengthM * heightM + widthM * heightM);

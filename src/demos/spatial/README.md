@@ -13,3 +13,9 @@ measured impulse response is used directly when there is one.
 `spatial.worker.ts` does the estimation and the morph render; `RoomScene.vue`
 draws the room. A mono source carries no bearing, so the estimated position is
 shown as a distance shell rather than a point.
+
+Response length follows the room's own Sabine reverberation time rather than a
+fixed number, so a large room is not heard with its decay cut short. An
+auditioned impulse gets the whole decay — it *is* the decay. A morph's tail is
+capped shorter and runs over an excerpt of the loaded content, because
+convolution costs the product of the two lengths and the wait is the visitor's.

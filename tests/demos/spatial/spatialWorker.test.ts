@@ -64,7 +64,13 @@ const wasmMock = vi.hoisted(() => {
       sampleRate: 48000,
       hasError: wasmMock.rirError.value,
     })),
-    roomMorph: vi.fn((samples: Float32Array) => new Float32Array(samples)),
+    roomMorph: vi.fn(
+      (samples: Float32Array, sampleRate: number, _options?: Record<string, number>) => ({
+        audio: new Float32Array(samples),
+        sampleRate,
+        diagnostics: [],
+      }),
+    ),
   };
 });
 
@@ -241,7 +247,46 @@ describe('spatial worker protocol', () => {
     const morph = posted.find((p) => p.message?.type === 'morphDone')!;
     expect(morph.message.left).toBeInstanceOf(Float32Array);
     expect(morph.message.right).toBeInstanceOf(Float32Array);
+    expect(morph.message.sampleRate).toBe(48000);
+    // The rendered samples are unwrapped out of the result object. Posting the object
+    // itself puts `undefined` in the transfer list, which throws in every browser and
+    // reaches the page as a generic morph failure.
     expect(morph.transfer).toEqual([morph.message.left.buffer, morph.message.right.buffer]);
+    for (const buffer of morph.transfer!) expect(buffer).toBeInstanceOf(ArrayBuffer);
+  });
+
+  it('lets a morph tail grow with the room, up to what it is worth waiting for', async () => {
+    const small = { ...geometry, lengthM: 4, widthM: 3, heightM: 2.5, absorption: 0.32 };
+    await send({
+      type: 'morph',
+      id: 61,
+      left: new Float32Array(4),
+      right: new Float32Array(4),
+      sampleRate: 48000,
+      geometry: small,
+    });
+    const smallMax = wasmMock.roomMorph.mock.calls.at(-1)![2]?.maxSeconds as number;
+
+    const big = { ...geometry, lengthM: 34, widthM: 20, heightM: 24, absorption: 0.07 };
+    await send({
+      type: 'morph',
+      id: 62,
+      left: new Float32Array(4),
+      right: new Float32Array(4),
+      sampleRate: 48000,
+      geometry: big,
+    });
+    const bigMax = wasmMock.roomMorph.mock.calls.at(-1)![2]?.maxSeconds as number;
+
+    // A damped room decays inside the floor length; a cavernous one runs to the cap.
+    // Convolution costs the product of clip and tail, so the morph cap is the shorter
+    // of the two — an auditioned impulse of the same room runs longer.
+    expect(smallMax).toBe(2.5);
+    expect(bigMax).toBe(6);
+
+    await send({ type: 'preset', id: 63, sampleRate: 48000, geometry: big });
+    const bigImpulseMax = wasmMock.synthesizeRir.mock.calls.at(-1)![0].maxSeconds as number;
+    expect(bigImpulseMax).toBeGreaterThan(bigMax);
   });
 
   it('initializes the WASM module exactly once across requests', async () => {

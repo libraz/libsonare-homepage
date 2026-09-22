@@ -9,6 +9,9 @@ type MorphGeometry = Partial<RoomGeometry> & {
   absorption?: number;
 };
 
+/** How much of the loaded content is sent through the target room. */
+const MORPH_EXCERPT_SECONDS = 15;
+
 type MorphWorkerMessage =
   | { type: 'progress'; id: number; stage: string; value: number }
   | { type: 'morphDone'; id: number; left: Float32Array; right: Float32Array; sampleRate: number }
@@ -327,11 +330,14 @@ export function useSpatialAudio() {
       };
     }
 
-    const left = new Float32Array(buffer.getChannelData(0));
-    const right =
-      buffer.numberOfChannels > 1
-        ? new Float32Array(buffer.getChannelData(1))
-        : new Float32Array(buffer.getChannelData(0));
+    // Convolving a whole track costs seconds per channel and grows without bound on an
+    // upload, while a room reveals itself in the first few bars. Morph an excerpt so the
+    // wait stays the same whatever was loaded, and so the room's full tail is affordable.
+    const frames = Math.min(buffer.length, Math.round(buffer.sampleRate * MORPH_EXCERPT_SECONDS));
+    const left = new Float32Array(buffer.getChannelData(0).subarray(0, frames));
+    const right = new Float32Array(
+      buffer.getChannelData(buffer.numberOfChannels > 1 ? 1 : 0).subarray(0, frames),
+    );
 
     return new Promise((resolve, reject) => {
       pendingMorphs.set(id, { resolve, reject });
