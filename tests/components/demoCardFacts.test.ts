@@ -27,10 +27,19 @@ function countedChip(id: string, word: string): number {
 }
 
 describe('the synth card counts what the engine actually ships', () => {
-  it('counts the engines, leaving out the "keep the base value" sentinel', async () => {
+  it('counts the engines a visitor can reach, not the ones the type lists', async () => {
     await wasm.init();
-    const engines = wasm.SYNTH_ENGINE_MODES.filter((mode) => mode !== 'default');
-    expect(countedChip('synth', 'ENGINES')).toBe(engines.length);
+    // The page plays engines by loading presets, so an engine with no preset is not
+    // reachable from it. `sample` is one: it needs a sample bank the page never loads.
+    const reachable = new Set(
+      wasm.synthPresetNames().map((name) => wasm.synthPresetPatch(name).engineMode),
+    );
+    reachable.delete('default');
+    reachable.delete(undefined);
+    expect(countedChip('synth', 'ENGINES')).toBe(reachable.size);
+    expect(reachable.size).toBeLessThan(
+      wasm.SYNTH_ENGINE_MODES.filter((mode) => mode !== 'default').length,
+    );
   });
 
   it('counts the presets', async () => {

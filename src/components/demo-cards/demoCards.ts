@@ -85,7 +85,7 @@ const CARD_META: Record<
     accent: false,
     status: 'NEW',
     eyebrow: 'INSTRUMENTS',
-    chips: ['17 ENGINES', '70 PRESETS', 'MIDI', 'PATCH'],
+    chips: ['16 ENGINES', '70 PRESETS', 'MIDI', 'PATCH'],
   },
   studio: {
     visual: 'steps',
