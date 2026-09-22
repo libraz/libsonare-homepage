@@ -72,8 +72,10 @@ export function validateAddressTable(table) {
         throw new Error(`address ${row.address} has a non-integer ${field}`);
       }
     }
-    if (row.level === 'IGNORE' && !row.why) {
-      throw new Error(`address ${row.address} is IGNORE with no reason`);
+    // A row that drops the byte owes a reason, whether it declines the
+    // parameter outright or decodes it and discards it.
+    if ((row.level === 'IGNORE' || row.level === 'ACCEPT') && !row.why) {
+      throw new Error(`address ${row.address} is ${row.level} with no reason`);
     }
   }
   return table;
