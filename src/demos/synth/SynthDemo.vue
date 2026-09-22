@@ -5,6 +5,7 @@ import { useSynthKeyboardInput } from '@/components/keyboard/useSynthKeyboardInp
 import ToolShell from '@/components/ToolShell.vue';
 import { RotaryKnob, Tooltip } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
+import { useUrlState } from '@/composables/useUrlState';
 import { bootWasm } from '@/composables/useWasmBoot';
 import SynthDeckDisplay from '@/demos/synth/SynthDeckDisplay.vue';
 import SynthMidiPanel from '@/demos/synth/SynthMidiPanel.vue';
@@ -58,6 +59,26 @@ const presetEngines = ref<Record<string, string>>({});
 const engineModes = ref<string[]>([]);
 /** The preset last chosen on each engine, so returning to an engine plays it again. */
 const lastPresetByEngine = new Map<string, string>();
+/** A preset named by the URL before the catalog arrived to check it against. */
+let presetFromUrl: string | null = null;
+
+/** The program as the URL carries it; setting it takes the same path as a click. */
+const presetParam = computed<string>({
+  get: () => selectedPreset.value,
+  set: (name) => {
+    if (Object.keys(presetEngines.value).length === 0) presetFromUrl = name;
+    else if (name in presetEngines.value) selectPreset(name);
+  },
+});
+
+const url = useUrlState([
+  {
+    key: 'preset',
+    state: presetParam,
+    defaultValue: DEFAULT_PRESET,
+    parse: (raw: string) => (/^[a-z0-9][a-z0-9:-]*$/.test(raw) ? raw : null),
+  },
+]);
 const outputGain = ref(SYNTH_OUTPUT_GAIN_DEFAULT);
 const baseNote = ref(48); // C3 — two octaves up to B4
 const activeNotes = ref<Set<number>>(new Set());
@@ -226,6 +247,8 @@ onMounted(() => {
   if (ric) ric(initWasmMeta, { timeout: 2000 });
   else setTimeout(initWasmMeta, 100);
   void startEngine();
+  url.applyFromUrl();
+  url.enable();
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', releaseAll);
@@ -233,6 +256,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   componentDisposed = true;
+  url.disable();
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('keyup', onKeyUp);
   window.removeEventListener('blur', releaseAll);
@@ -256,6 +280,12 @@ async function initWasmMeta() {
     presetEngines.value = Object.fromEntries(
       names.map((name) => [name, String(wasm.synthPresetPatch(name).engineMode ?? '')]),
     );
+    if (presetFromUrl) {
+      presetParam.value = presetFromUrl;
+      presetFromUrl = null;
+      // A name the catalog does not have was dropped; stop the URL claiming it.
+      url.replaceInUrl();
+    }
     const tables = wasm.synthEnumTables();
     if (tables.waveforms?.length) waveforms.value = [...tables.waveforms];
     if (tables.filterModels?.length) filterModels.value = [...tables.filterModels];
@@ -413,11 +443,12 @@ async function connectMidi() {
 /** Boot the worklet at mount; the context stays suspended until a gesture. */
 async function startEngine() {
   clipped.value = false;
-  const ok = await engine.start(selectedPreset.value);
+  const bootPreset = selectedPreset.value;
+  const ok = await engine.start(bootPreset);
   if (!ok) return;
   engine.setGain(outputGain.value);
-  // Apply any tweaks made while the engine was still booting.
-  if (dirtyTweaks.value.size > 0) sendPatch();
+  // A program or tweak chosen while the engine was booting had no node to reach.
+  if (selectedPreset.value !== bootPreset || dirtyTweaks.value.size > 0) sendPatch();
 }
 
 function noteOn(note: number, velocity = 100) {
