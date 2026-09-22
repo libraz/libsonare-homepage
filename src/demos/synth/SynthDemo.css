@@ -246,29 +246,65 @@ html:not(.dark) .sy-deck {
 }
 
 /* Program memory grid */
+/* Engine list beside the programs it plays. The engine column fixes the
+   section's height, so switching engines never resizes the panel. */
 .sy-programs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(52px, 1fr));
-  gap: 4px;
-  align-content: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: start;
+  column-gap: 8px;
 }
 
+.sy-engines,
+.sy-presets {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sy-engines {
+  padding-right: 8px;
+  border-right: 1px solid var(--demo-border);
+}
+
+.sy-engine,
 .sy-program {
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 6px;
+  width: 100%;
   min-width: 0;
   padding: 4px 7px;
   line-height: 1.2;
-  border: 1px solid var(--demo-border);
+  border: 1px solid transparent;
   border-radius: 6px;
-  background: var(--demo-control-bg);
+  background: transparent;
   cursor: pointer;
+  font-family: var(--font-mono);
   text-align: left;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 
+.sy-program {
+  border-color: var(--demo-border);
+  background: var(--demo-control-bg);
+}
+
+.sy-engine:hover,
 .sy-program:hover {
+  border-color: var(--demo-accent-border);
+  background: var(--demo-accent-subtle);
+}
+
+.sy-engine:focus-visible,
+.sy-program:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 1px;
+}
+
+.sy-engine--active {
   border-color: var(--demo-accent-border);
   background: var(--demo-accent-subtle);
 }
@@ -279,34 +315,40 @@ html:not(.dark) .sy-deck {
   box-shadow: inset 0 0 10px var(--demo-accent-subtle), 0 0 8px var(--demo-accent-dim);
 }
 
-.sy-program__no {
-  flex: 0 0 auto;
-  color: var(--demo-text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-}
-
-.sy-program--active .sy-program__no {
-  color: var(--demo-accent-light);
-}
-
+.sy-engine__name,
 .sy-program__name {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--demo-text);
-  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
-  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.sy-engine__name {
+  color: var(--demo-text-muted);
+}
+
+.sy-program__name {
+  color: var(--demo-text);
+}
+
+.sy-engine--active .sy-engine__name,
 .sy-program--active .sy-program__name {
   color: var(--demo-text-strong);
+}
+
+.sy-engine__count {
+  flex: none;
+  color: var(--demo-text-faint);
+  font-size: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sy-engine--active .sy-engine__count {
+  color: var(--demo-accent-light);
 }
 
 /* Oscillator waveform buttons */
@@ -328,8 +370,24 @@ html:not(.dark) .sy-deck {
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-.sy-wave:hover {
+.sy-wave:hover:not(:disabled) {
   border-color: var(--demo-accent-border);
+}
+
+.sy-wave:disabled {
+  opacity: var(--demo-disabled-opacity);
+  cursor: default;
+}
+
+/* Says why the controls beside it are dimmed; empty on an engine that uses them all.
+   Wraps to the section instead of widening it: the deck's row layout must not
+   change with the engine. */
+.sy-engine-note {
+  contain: inline-size;
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
 }
 
 .sy-wave--active {
@@ -417,6 +475,11 @@ html:not(.dark) .sy-deck {
 }
 
 /* Envelope shape readout */
+/* The silhouette draws the envelope knobs, so it dims with them. */
+.sy-env--inert {
+  opacity: var(--demo-disabled-opacity);
+}
+
 .sy-env {
   width: 116px;
   height: 34px;

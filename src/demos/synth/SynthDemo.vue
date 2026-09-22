@@ -23,6 +23,9 @@ import {
   CUTOFF_MAX_HZ,
   CUTOFF_MIN_HZ,
   controlsFromPreset,
+  type EngineGroup,
+  groupPresetsByEngine,
+  inertTweaks,
   logKnobHz,
   msLabel,
   RELEASE_MAX_MS,
@@ -50,6 +53,11 @@ const engine = useSynthEngine(sonareJsUrl, sonareWasmUrl);
 const libVersion = ref('');
 const presetNames = ref<string[]>([DEFAULT_PRESET]);
 const selectedPreset = ref(DEFAULT_PRESET);
+/** Engine per preset name, read from each preset's own patch. */
+const presetEngines = ref<Record<string, string>>({});
+const engineModes = ref<string[]>([]);
+/** The preset last chosen on each engine, so returning to an engine plays it again. */
+const lastPresetByEngine = new Map<string, string>();
 const outputGain = ref(SYNTH_OUTPUT_GAIN_DEFAULT);
 const baseNote = ref(48); // C3 — two octaves up to B4
 const activeNotes = ref<Set<number>>(new Set());
@@ -170,6 +178,24 @@ const envPath = computed(() => {
   ].join(' ');
 });
 
+const engineGroups = computed(() =>
+  groupPresetsByEngine(
+    presetNames.value,
+    (name) => presetEngines.value[name] ?? '',
+    engineModes.value,
+  ),
+);
+const currentEngine = computed(() => presetEngines.value[selectedPreset.value] ?? '');
+const currentGroup = computed(
+  () => engineGroups.value.find((group) => group.engine === currentEngine.value) ?? null,
+);
+const inert = computed(() => inertTweaks(currentEngine.value));
+const engineNote = computed(() => {
+  if (inert.value.size === 0) return '';
+  if (inert.value.has('cutoffHz')) return copy.value.engineNotes.kit;
+  return copy.value.engineNotes.noOscillator.replace('{engine}', currentEngine.value);
+});
+
 const glossaryBase = computed(() => localizedPath('/docs/glossary'));
 
 /** Build the rich-tooltip props for a control from the copy + slug tables. */
@@ -227,9 +253,13 @@ async function initWasmMeta() {
     // name even though the current catalog has no collisions.
     const names = [...new Set(wasm.synthPresetNames())];
     if (names.length > 0) presetNames.value = names;
+    presetEngines.value = Object.fromEntries(
+      names.map((name) => [name, String(wasm.synthPresetPatch(name).engineMode ?? '')]),
+    );
     const tables = wasm.synthEnumTables();
     if (tables.waveforms?.length) waveforms.value = [...tables.waveforms];
     if (tables.filterModels?.length) filterModels.value = [...tables.filterModels];
+    if (tables.engineModes?.length) engineModes.value = [...tables.engineModes];
     midiSupported.value = wasm.isWebMidiAvailable();
     loadPresetBase(selectedPreset.value);
   } catch (error) {
@@ -438,9 +468,14 @@ function panic() {
 function selectPreset(name: string) {
   if (selectedPreset.value === name) return;
   selectedPreset.value = name;
+  lastPresetByEngine.set(presetEngines.value[name] ?? '', name);
   dirtyTweaks.value = new Set();
   loadPresetBase(name);
   sendPatchNow();
+}
+
+function selectEngine(group: EngineGroup) {
+  selectPreset(lastPresetByEngine.get(group.engine) ?? group.presets[0]);
 }
 
 function applyGain() {
@@ -499,17 +534,33 @@ function applyGain() {
             </Tooltip>
           </div>
           <div class="sy-programs">
-            <button
-              v-for="(name, i) in presetNames"
-              :key="name"
-              type="button"
-              class="sy-program"
-              :class="{ 'sy-program--active': name === selectedPreset }"
-              @click="selectPreset(name)"
-            >
-              <span class="sy-program__no">{{ String(i + 1).padStart(2, '0') }}</span>
-              <span class="sy-program__name">{{ name }}</span>
-            </button>
+            <ul class="sy-engines" :aria-label="copy.patch.engine">
+              <li v-for="group in engineGroups" :key="group.engine">
+                <button
+                  type="button"
+                  class="sy-engine"
+                  :class="{ 'sy-engine--active': group.engine === currentEngine }"
+                  :aria-pressed="group.engine === currentEngine"
+                  @click="selectEngine(group)"
+                >
+                  <span class="sy-engine__name">{{ group.engine || copy.sections.program }}</span>
+                  <span class="sy-engine__count">{{ group.presets.length }}</span>
+                </button>
+              </li>
+            </ul>
+            <ul class="sy-presets" :aria-label="copy.sections.program">
+              <li v-for="name in currentGroup?.presets ?? presetNames" :key="name">
+                <button
+                  type="button"
+                  class="sy-program"
+                  :class="{ 'sy-program--active': name === selectedPreset }"
+                  :aria-pressed="name === selectedPreset"
+                  @click="selectPreset(name)"
+                >
+                  <span class="sy-program__name">{{ name }}</span>
+                </button>
+              </li>
+            </ul>
           </div>
         </section>
 
@@ -528,8 +579,9 @@ function applyGain() {
               :key="w"
               type="button"
               class="sy-wave"
-              :class="{ 'sy-wave--active': w === waveform }"
+              :class="{ 'sy-wave--active': !inert.has('waveform') && w === waveform }"
               :title="w"
+              :disabled="inert.has('waveform')"
               @click="selectWaveform(w)"
             >
               <svg v-if="WAVE_ICONS[w]" viewBox="0 0 26 12" aria-hidden="true">
@@ -539,6 +591,7 @@ function applyGain() {
               <span class="sy-wave__label">{{ w === 'default' ? 'auto' : w }}</span>
             </button>
           </div>
+          <p class="sy-engine-note" aria-live="polite">{{ engineNote }}</p>
         </section>
 
         <section class="sy-sec">
@@ -559,6 +612,7 @@ function applyGain() {
               :display="cutoffLabel"
               :default-value="baseVals.cutoffNorm"
               :size="48"
+              :disabled="inert.has('cutoffHz')"
               @update:model-value="(v) => setTweak('cutoffHz', v)"
             />
             <RotaryKnob
@@ -569,6 +623,7 @@ function applyGain() {
               :display="resonanceQ.toFixed(2)"
               :default-value="baseVals.resonanceQ"
               :size="48"
+              :disabled="inert.has('resonanceQ')"
               @update:model-value="(v) => setTweak('resonanceQ', v)"
             />
           </div>
@@ -578,8 +633,9 @@ function applyGain() {
               :key="f"
               type="button"
               class="sy-chipbtn"
-              :class="{ 'sy-chipbtn--active': f === filterModel }"
+              :class="{ 'sy-chipbtn--active': !inert.has('filterModel') && f === filterModel }"
               :title="f"
+              :disabled="inert.has('filterModel')"
               @click="selectFilterModel(f)"
             >{{ FILTER_LABELS[f] ?? f }}</button>
           </div>
@@ -597,6 +653,7 @@ function applyGain() {
               :default-value="baseVals.attackNorm"
               :size="48"
               accent="var(--demo-cyan)"
+              :disabled="inert.has('ampAttackMs')"
               @update:model-value="(v) => setTweak('ampAttackMs', v)"
             />
             <RotaryKnob
@@ -608,10 +665,16 @@ function applyGain() {
               :default-value="baseVals.releaseNorm"
               :size="48"
               accent="var(--demo-cyan)"
+              :disabled="inert.has('ampReleaseMs')"
               @update:model-value="(v) => setTweak('ampReleaseMs', v)"
             />
           </div>
-          <svg class="sy-env" viewBox="0 0 116 34" aria-hidden="true">
+          <svg
+            class="sy-env"
+            :class="{ 'sy-env--inert': inert.has('ampAttackMs') }"
+            viewBox="0 0 116 34"
+            aria-hidden="true"
+          >
             <path class="sy-env__curve" :d="envPath" />
           </svg>
         </section>
@@ -627,6 +690,7 @@ function applyGain() {
               :display="`${Math.round(glideMs)} ms`"
               :default-value="baseVals.glideMs"
               :size="48"
+              :disabled="inert.has('glideMs')"
               @update:model-value="(v) => setTweak('glideMs', v)"
             />
             <RotaryKnob
@@ -637,6 +701,7 @@ function applyGain() {
               :display="`${Math.round(stereoSpread * 100)}%`"
               :default-value="baseVals.stereoSpread"
               :size="48"
+              :disabled="inert.has('stereoSpread')"
               @update:model-value="(v) => setTweak('stereoSpread', v)"
             />
           </div>

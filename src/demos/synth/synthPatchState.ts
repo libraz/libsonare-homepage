@@ -121,3 +121,60 @@ export function buildSynthPatch(
   }
   return patch;
 }
+
+/** The engine that has an oscillator for `waveform` to shape. */
+const OSCILLATOR_ENGINE = 'subtractive';
+/** The engine that voices its kit pieces itself, past every per-voice control. */
+const KIT_ENGINE = 'percussion';
+
+const NO_TWEAKS: ReadonlySet<SynthTweakKey> = new Set();
+const OSCILLATOR_TWEAKS: ReadonlySet<SynthTweakKey> = new Set(['waveform']);
+const ALL_TWEAKS: ReadonlySet<SynthTweakKey> = new Set([
+  'waveform',
+  'filterModel',
+  'cutoffHz',
+  'resonanceQ',
+  'ampAttackMs',
+  'ampReleaseMs',
+  'glideMs',
+  'stereoSpread',
+]);
+
+/**
+ * The tweaks an engine renders bit-identically without, measured across the
+ * whole preset catalog. An engine not yet known has none.
+ */
+export function inertTweaks(engine: string): ReadonlySet<SynthTweakKey> {
+  if (!engine || engine === OSCILLATOR_ENGINE) return NO_TWEAKS;
+  return engine === KIT_ENGINE ? ALL_TWEAKS : OSCILLATOR_TWEAKS;
+}
+
+/** One engine and the catalog presets that run on it. */
+export interface EngineGroup {
+  engine: string;
+  presets: string[];
+}
+
+/**
+ * Presets grouped by engine, in the engine's own order of its modes; an engine
+ * missing from that order follows, in the order its first preset appears.
+ * Presets keep their catalog order within a group.
+ */
+export function groupPresetsByEngine(
+  names: readonly string[],
+  engineOf: (name: string) => string,
+  engineOrder: readonly string[] = [],
+): EngineGroup[] {
+  const groups = new Map<string, EngineGroup>();
+  for (const engine of engineOrder) groups.set(engine, { engine, presets: [] });
+  for (const name of names) {
+    const engine = engineOf(name);
+    let group = groups.get(engine);
+    if (!group) {
+      group = { engine, presets: [] };
+      groups.set(engine, group);
+    }
+    group.presets.push(name);
+  }
+  return [...groups.values()].filter((group) => group.presets.length > 0);
+}

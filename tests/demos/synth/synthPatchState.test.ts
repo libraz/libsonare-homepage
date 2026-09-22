@@ -4,7 +4,9 @@ import {
   ATTACK_MIN_MS,
   buildSynthPatch,
   controlsFromPreset,
+  groupPresetsByEngine,
   hzToNorm,
+  inertTweaks,
   logKnobHz,
   msLabel,
   type SynthTweakKey,
@@ -74,5 +76,48 @@ describe('synth patch state helpers', () => {
     expect(buildSynthPatch('warm-pad', new Set(['glideMs']), controls)).not.toHaveProperty(
       'stereoSpread',
     );
+  });
+});
+
+describe('engine grouping', () => {
+  const engines: Record<string, string> = {
+    violin: 'bowed-string',
+    saw: 'subtractive',
+    cello: 'bowed-string',
+    sine: 'subtractive',
+    oddity: 'future-engine',
+  };
+  const engineOf = (name: string) => engines[name];
+
+  it("orders groups by the engine's own mode order, presets by catalog order", () => {
+    const groups = groupPresetsByEngine(['violin', 'saw', 'cello', 'sine'], engineOf, [
+      'subtractive',
+      'fm',
+      'bowed-string',
+    ]);
+    expect(groups).toEqual([
+      { engine: 'subtractive', presets: ['saw', 'sine'] },
+      { engine: 'bowed-string', presets: ['violin', 'cello'] },
+    ]);
+  });
+
+  it('keeps an engine the order does not know, after the known ones', () => {
+    const groups = groupPresetsByEngine(['oddity', 'saw'], engineOf, ['subtractive']);
+    expect(groups.map((group) => group.engine)).toEqual(['subtractive', 'future-engine']);
+  });
+});
+
+describe('inert tweaks', () => {
+  it('leaves every control live on the subtractive engine, and on one not yet known', () => {
+    expect(inertTweaks('subtractive').size).toBe(0);
+    expect(inertTweaks('').size).toBe(0);
+  });
+
+  it('dims only the waveform on an engine without an oscillator', () => {
+    expect([...inertTweaks('bowed-string')]).toEqual(['waveform']);
+  });
+
+  it('dims every per-voice control on the kit engine', () => {
+    expect(inertTweaks('percussion').size).toBe(8);
   });
 });

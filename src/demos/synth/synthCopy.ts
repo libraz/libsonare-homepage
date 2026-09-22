@@ -48,6 +48,12 @@ export const enCopy = {
     spread: 'Width',
     reset: 'Reset to preset',
     hint: 'Tweaks layer on top of the selected program and apply live while you play.',
+    engine: 'Engine',
+  },
+  engineNotes: {
+    noOscillator:
+      '{engine} makes its own tone, so there is no waveform to pick. Only the subtractive engine has an oscillator.',
+    kit: 'The kit voices each drum itself. The oscillator, filter, envelope and voice controls do not reach it; only the output level does.',
   },
   midi: {
     connect: 'Connect MIDI device',
@@ -83,13 +89,13 @@ export const enCopy = {
     items: {
       program: {
         title: 'Program',
-        body: 'Each program is a complete saved patch — oscillator, filter, envelope, and voice settings in one slot. Selecting one reloads every control to the stored sound and clears your tweaks.',
-        tip: 'Start here: pick the program closest to the sound you want, then nudge the knobs from there.',
+        body: 'Programs are grouped by the engine that plays them: subtractive, FM, the physical models and the rest. Each program is a complete saved patch; selecting one reloads every control to the stored sound and clears your tweaks. Picking an engine plays the program you last chose on it.',
+        tip: 'Start here: pick the program closest to the sound you want, then nudge the knobs from there. A control the engine does not use is dimmed.',
       },
       waveform: {
         title: 'Waveform',
         body: "The oscillator's raw tone before filtering. Sine is pure; saw and square are bright and harmonically rich; triangle is soft; noise is unpitched. AUTO keeps the program's own waveform.",
-        tip: 'Reach for saw or square when a patch needs more bite, triangle or sine when it should sit back. Only the subtractive programs (sine, saw, square, triangle, the leads, sub bass, warm pad) have a switchable oscillator — the physical-model, FM, and sampled-style programs generate their tone from their own engine and ignore this switch.',
+        tip: 'Reach for saw or square when a patch needs more bite, triangle or sine when it should sit back. Only the subtractive programs (sine, saw, square, triangle, the leads, sub bass, warm pad) have a switchable oscillator — the physical-model, FM, and sampled-style programs generate their tone from their own engine, so the switch is dimmed on them.',
       },
       cutoff: {
         title: 'Cutoff',
@@ -205,6 +211,12 @@ export const jaCopy: typeof enCopy = {
     spread: '広がり',
     reset: 'プリセットに戻す',
     hint: '選択中のプログラムに重ねて適用され、演奏中もリアルタイムに反映されます。',
+    engine: 'エンジン',
+  },
+  engineNotes: {
+    noOscillator:
+      '{engine} は音色を自分で作るため、選べる波形がありません。オシレーターを持つのは subtractive エンジンだけです。',
+    kit: 'キットは各ドラムを自分で鳴らします。オシレーター・フィルター・エンベロープ・ボイスのつまみは届かず、効くのは出力レベルだけです。',
   },
   midi: {
     connect: 'MIDI デバイスを接続',
@@ -240,13 +252,13 @@ export const jaCopy: typeof enCopy = {
     items: {
       program: {
         title: 'プログラム',
-        body: '各プログラムは、オシレーター・フィルター・エンベロープ・ボイス設定をひとつにまとめた完全な保存パッチです。選ぶとすべてのコントロールが保存音色に戻り、それまでの微調整はクリアされます。',
-        tip: 'まずここから。目的に近いプログラムを選び、そこからノブで詰めていきます。',
+        body: 'プログラムは、それを鳴らすエンジンごとにまとめてあります。減算方式、FM、物理モデルなどです。各プログラムは設定一式を収めた保存パッチで、選ぶとすべてのコントロールが保存音色に戻り、それまでの微調整はクリアされます。エンジンを選ぶと、そのエンジンで最後に選んだプログラムが鳴ります。',
+        tip: 'まずここから。目的に近いプログラムを選び、そこからノブで詰めていきます。そのエンジンが使わないコントロールは暗く表示されます。',
       },
       waveform: {
         title: '波形',
         body: 'フィルターに入る前の、オシレーターの元の音です。サイン波は純粋、ノコギリ波と矩形波は明るく倍音が豊か、三角波は柔らかく、ノイズは音程を持ちません。AUTO はプログラム本来の波形を使います。',
-        tip: 'もっと前に出したいときはノコギリ波／矩形波、後ろに収めたいときは三角波／サイン波を。オシレーターを切り替えられるのは減算方式のプログラム（sine・saw・square・triangle・各リード・サブベース・ウォームパッド）だけで、物理モデルや FM などのプログラムはそれぞれのエンジンで音を作るため、この切り替えは効きません。',
+        tip: 'もっと前に出したいときはノコギリ波／矩形波、後ろに収めたいときは三角波／サイン波を。オシレーターを切り替えられるのは減算方式のプログラム（sine・saw・square・triangle・各リード・サブベース・ウォームパッド）だけで、物理モデルや FM などのプログラムはそれぞれのエンジンで音を作るため、この切り替えは暗く表示されます。',
       },
       cutoff: {
         title: 'カットオフ',
