@@ -1,4 +1,5 @@
 import { ref, shallowRef } from 'vue';
+import { masterLimiterStripJson } from '@/utils/masterLimiter';
 import type { SynthPatch } from '@/wasm/index';
 
 export interface SynthMeterState {
@@ -15,13 +16,23 @@ export const SYNTH_GROUP = 0;
 export const SYNTH_CHANNEL = 0;
 // Realtime MIDI destination the synth instrument is bound to.
 export const SYNTH_DESTINATION = 0;
+/**
+ * Master strip the worklet installs: the engine's true-peak limiter at -1 dBTP,
+ * ahead of the monitor gain. Polyphonic chords on the loudest programs render
+ * well past full scale, so the ceiling is the engine's, not a JS clamp.
+ */
+export const SYNTH_MASTER_STRIP_JSON = masterLimiterStripJson();
+/** Monitor gain applied after the limiter; unity at most, so it cannot undo it. */
+export const SYNTH_OUTPUT_GAIN_MAX = 1;
+export const SYNTH_OUTPUT_GAIN_DEFAULT = 0.9;
 
 /**
  * Build the AudioWorklet processor source. It runs libsonare's NativeSynth in
  * the audio thread with its own WASM heap (SAB-free): the emscripten module is
  * built from a transferred wasm binary, a raw `RealtimeEngine` is bound to the
- * patch-driven synth, and note/CC/patch commands arrive over the port. The
- * render path is allocation-free (`processPrepared` over prepared scratch).
+ * patch-driven synth behind the master-strip limiter, and note/CC/patch
+ * commands arrive over the port. The render path is allocation-free
+ * (`processPrepared` over prepared scratch).
  *
  * Mirrors the proven `useRealtimeFx` wiring: static-import the emscripten
  * factory from `sonare.js` (dynamic import is forbidden in worklet scope), then
@@ -41,6 +52,8 @@ const CHANNELS = ${CHANNELS};
 const DEST = ${SYNTH_DESTINATION};
 const GROUP = ${SYNTH_GROUP};
 const CHANNEL = ${SYNTH_CHANNEL};
+const MASTER_STRIP = ${JSON.stringify(SYNTH_MASTER_STRIP_JSON)};
+const GAIN_MAX = ${SYNTH_OUTPUT_GAIN_MAX};
 
 class LibsonareSynthProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -50,7 +63,7 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
     this.engine = null;
     this.channelBuffers = [];
     this.seq = 0;
-    this.outputGain = 0.9;
+    this.outputGain = ${SYNTH_OUTPUT_GAIN_DEFAULT};
     this.pendingPatch = o.patch || 'e-piano';
 
     this.port.onmessage = (e) => this.onMessage(e.data);
@@ -62,6 +75,7 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
         for (let ch = 0; ch < CHANNELS; ch++) {
           this.channelBuffers[ch] = this.engine.getChannelBuffer(ch, BLOCK);
         }
+        this.engine.setMasterStripJson(MASTER_STRIP);
         // Native arg order is (destinationId, patch).
         this.engine.setSynthInstrument(DEST, this.pendingPatch);
         this.engine.setMidiInputSource(DEST);
@@ -88,7 +102,7 @@ class LibsonareSynthProcessor extends AudioWorkletProcessor {
         catch (err) { this.port.postMessage({ type: 'error', error: String(err) }); }
       }
     } else if (msg.type === 'gain') {
-      this.outputGain = msg.value;
+      this.outputGain = Math.min(GAIN_MAX, Math.max(0, Number(msg.value) || 0));
     }
   }
 
@@ -142,8 +156,9 @@ registerProcessor('libsonare-synth', LibsonareSynthProcessor);
 
 /**
  * SAB-free synthesizer engine: a dedicated AudioWorklet hosting libsonare's
- * native `RealtimeEngine` bound to the patch-driven NativeSynth. The main
- * thread sends note/CC/patch commands over the port; the audio thread renders.
+ * native `RealtimeEngine` bound to the patch-driven NativeSynth, with the
+ * engine's true-peak limiter on the master strip. The main thread sends
+ * note/CC/patch commands over the port; the audio thread renders.
  *
  * @param sonareUrl URL of the emscripten `sonare.js` factory module.
  * @param wasmUrl URL of the `sonare.wasm` binary.

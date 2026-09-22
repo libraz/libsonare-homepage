@@ -4,8 +4,11 @@ import {
   SYNTH_CHANNEL,
   SYNTH_DESTINATION,
   SYNTH_GROUP,
+  SYNTH_MASTER_STRIP_JSON,
+  SYNTH_OUTPUT_GAIN_MAX,
   useSynthEngine,
 } from '@/demos/synth/useSynthEngine';
+import { MASTER_LIMITER_PROCESSOR } from '@/utils/masterLimiter';
 
 const source = buildSynthProcessorSource('/wasm/sonare.js');
 
@@ -18,6 +21,22 @@ describe('buildSynthProcessorSource', () => {
     expect(source).toContain('this.engine = new mod.RealtimeEngine(sampleRate, BLOCK, 1024, 1024)');
     expect(source).toContain('this.engine.prepareChannels(CHANNELS, BLOCK)');
     expect(source).toContain('this.engine.getChannelBuffer(ch, BLOCK)');
+  });
+
+  it('installs the master-strip limiter before binding the synth', () => {
+    expect(source).toContain(`const MASTER_STRIP = ${JSON.stringify(SYNTH_MASTER_STRIP_JSON)};`);
+    expect(source).toContain('this.engine.setMasterStripJson(MASTER_STRIP)');
+    expect(SYNTH_MASTER_STRIP_JSON).toContain(MASTER_LIMITER_PROCESSOR);
+    expect(source.indexOf('setMasterStripJson')).toBeLessThan(
+      source.indexOf('this.engine.setSynthInstrument(DEST, this.pendingPatch)'),
+    );
+  });
+
+  it('clamps the monitor gain to its maximum so a message cannot undo the limiter', () => {
+    expect(source).toContain(`const GAIN_MAX = ${SYNTH_OUTPUT_GAIN_MAX};`);
+    expect(source).toContain(
+      'this.outputGain = Math.min(GAIN_MAX, Math.max(0, Number(msg.value) || 0))',
+    );
   });
 
   it('binds the patch-driven synth with the native (destination, patch) arg order', () => {

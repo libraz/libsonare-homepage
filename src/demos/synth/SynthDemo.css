@@ -447,6 +447,45 @@ html:not(.dark) .sy-deck {
   justify-content: center;
 }
 
+.sy-vmeter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Latching over indicator, the same chip as the realtime-fx output meter. */
+.sy-clip {
+  border: 1px solid var(--demo-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  background: var(--demo-bg-elevated);
+  color: var(--demo-text-faint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+}
+
+.sy-clip:hover:not(:disabled) {
+  border-color: var(--demo-accent);
+  color: var(--demo-text);
+}
+
+.sy-clip:focus-visible {
+  outline: 2px solid var(--demo-accent);
+  outline-offset: 2px;
+}
+
+.sy-clip--lit {
+  border-color: var(--demo-danger);
+  background: var(--demo-danger);
+  color: #fff;
+  box-shadow: 0 0 8px var(--demo-danger);
+}
+
 .sy-vmeter__track {
   position: relative;
   width: 12px;

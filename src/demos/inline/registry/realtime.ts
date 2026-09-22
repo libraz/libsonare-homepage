@@ -21,9 +21,11 @@ export const realtimeDemos: SonareDemoDef[] = [
       ja: 'エンジンのレーンミキサー — 再生エンジン内のフェーダーとミュート',
     },
     caption: {
-      en: 'Three MIDI clips loop through the realtime engine: each track occupies a lane with its own channel strip. The faders call the strip setters and the mutes call setSoloMute — every band below is the engine’s actual per-lane output, re-rendered through renderOffline as you move the controls.',
-      ja: '3 つの MIDI クリップがリアルタイムエンジンでループします。各トラックはレーンを 1 つ占有し、専用のチャンネルストリップを持ちます。フェーダーはストリップのセッターを、ミュートは setSoloMute を呼びます。下の各バンドはエンジンの実際のレーン別出力で、操作のたびに renderOffline で描き直されます。',
+      en: 'Three MIDI clips loop through the realtime engine: each track occupies a lane with its own channel strip, and the lanes sum into a master strip carrying the engine’s true-peak limiter. The faders call the strip setters and the mutes call setSoloMute — every band below is the engine’s actual per-lane output, re-rendered through renderOffline as you move the controls.',
+      ja: '3 つの MIDI クリップがリアルタイムエンジンでループします。各トラックはレーンを 1 つ占有し、専用のチャンネルストリップを持ち、レーンの合計はエンジンのトゥルーピークリミッターを載せたマスターストリップへ送られます。フェーダーはストリップのセッターを、ミュートは setSoloMute を呼びます。下の各バンドはエンジンの実際のレーン別出力で、操作のたびに renderOffline で描き直されます。',
     },
+    // Fader defaults set the balance: the kit renders far hotter than the two
+    // sustained voices and the sub-bass far quieter, so they start offset.
     params: [
       {
         key: 'leadDb',
@@ -38,7 +40,7 @@ export const realtimeDemos: SonareDemoDef[] = [
       {
         key: 'bassDb',
         kind: 'range',
-        default: 0,
+        default: 3,
         min: -24,
         max: 6,
         step: 1,
@@ -48,7 +50,7 @@ export const realtimeDemos: SonareDemoDef[] = [
       {
         key: 'drumsDb',
         kind: 'range',
-        default: 0,
+        default: -8,
         min: -24,
         max: 6,
         step: 1,

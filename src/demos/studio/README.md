@@ -6,7 +6,9 @@ tracks, mix them, and bounce the loop to WAV. There is no GUI on the engine side
 
 - Page: `/studio` — https://libsonare.libraz.net/studio
 - Entry: `StudioDemo.vue`
-- Engine: `Project` for the session, its offline render for the bounce.
+- Engine: `RealtimeEngine` lane mixer for playback and the bounce, `Project`
+  for the display stems and the MIDI export.
 
-`useStudioEngine.ts` boots the project and renders offline, so a bounce is
-deterministic rather than a recording of playback.
+`useStudioEngine.ts` runs the loop live in the engine worklet; `studioBounce.ts`
+renders the same lane mix (strips, mutes, master limiter) offline, so a bounce
+is deterministic rather than a recording of playback.

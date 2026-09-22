@@ -63,6 +63,7 @@ export const enCopy = {
     peak: 'Peak',
     rate: 'Rate',
     gain: 'Gain',
+    clip: 'Output clipped — click to reset',
   },
   keyboardHint:
     'Click or tap the keys, or play with your computer keyboard: A W S E D F T G Y H U J K. Use Z / X to shift the octave. Drag across keys for glissando — striking lower on a key plays louder.',
@@ -132,14 +133,14 @@ export const enCopy = {
       },
       gain: {
         title: 'Output gain',
-        body: 'Master level of the synth bus (0–150%). Above 100% the output can clip, so keep an eye on the peak meter.',
-        tip: 'Trim gain so the meter stays out of the red while you hold several keys at once.',
+        body: 'Monitor level after the engine’s master limiter (0–100%). A true-peak limiter on the engine’s master strip holds the synth bus at −1 dBTP, so a big chord on a loud program is caught there rather than clipped; this knob only sets how loud that ceiling sits.',
+        tip: 'Leave it near 90% and let the limiter do the protecting — turning it down does not change how hard chords hit the ceiling.',
         defaultRationale: 'Double-click the knob to restore 90%.',
       },
       peak: {
         title: 'Peak meter',
-        body: 'The loudest recent sample on the stereo output, in dBFS. 0 dB is the digital ceiling; readings near the top risk clipping.',
-        tip: 'Back off the output gain if the meter pins at the top during chords.',
+        body: 'The loudest recent sample on the stereo output, in dBFS. The engine’s master limiter holds the bus at −1 dBTP, so the meter tops out just under the ceiling; the CLIP chip latches if a sample ever reaches full scale.',
+        tip: 'Hold an eight-note chord on a loud program at full velocity and watch the limiter catch it.',
       },
       octave: {
         title: 'Octave',
@@ -219,6 +220,7 @@ export const jaCopy: typeof enCopy = {
     peak: 'ピーク',
     rate: 'レート',
     gain: 'ゲイン',
+    clip: '出力クリップ — クリックでリセット',
   },
   keyboardHint:
     '鍵盤をクリック／タップするか、PC キーボードで演奏できます: A W S E D F T G Y H U J K。Z / X でオクターブを切り替えます。鍵盤上をドラッグするとグリッサンド、鍵盤の下側を押すほど強く鳴ります。',
@@ -288,14 +290,14 @@ export const jaCopy: typeof enCopy = {
       },
       gain: {
         title: '出力ゲイン',
-        body: 'シンセバスのマスターレベル（0〜150%）。100% を超えると出力がクリップしうるので、ピークメーターに注意します。',
-        tip: '複数の鍵盤を同時に押しても、メーターが赤に張り付かないよう調整します。',
+        body: 'エンジンのマスターリミッター後のモニターレベル（0〜100%）。エンジンのマスターストリップに入ったトゥルーピークリミッターがシンセバスを −1 dBTP に抑えるため、大きな音色で和音を押し込んでもクリップせずそこで止まります。このノブはその上限をどの音量で聴くかを決めるだけです。',
+        tip: '90% 前後のままにして、保護はリミッターに任せます。ノブを下げても和音が上限に当たる強さは変わりません。',
         defaultRationale: 'ノブをダブルクリックすると 90% に戻ります。',
       },
       peak: {
         title: 'ピークメーター',
-        body: 'ステレオ出力で直近に最も大きかったサンプルを dBFS で表示します。0 dB がデジタルの上限で、上端付近はクリップの危険があります。',
-        tip: '和音でメーターが上端に張り付くなら、出力ゲインを下げます。',
+        body: 'ステレオ出力で直近に最も大きかったサンプルを dBFS で表示します。エンジンのマスターリミッターがバスを −1 dBTP に抑えるので、メーターは上限のすぐ下で止まります。サンプルがフルスケールに達すると CLIP チップが点灯したままになります。',
+        tip: '大きな音色で 8 音の和音を最大ベロシティで押さえ、リミッターが受け止める様子を見てみてください。',
       },
       octave: {
         title: 'オクターブ',

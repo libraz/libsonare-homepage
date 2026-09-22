@@ -30,7 +30,11 @@ import {
   type SynthPatchControls,
   type SynthTweakKey,
 } from '@/demos/synth/synthPatchState';
-import { useSynthEngine } from '@/demos/synth/useSynthEngine';
+import {
+  SYNTH_OUTPUT_GAIN_DEFAULT,
+  SYNTH_OUTPUT_GAIN_MAX,
+  useSynthEngine,
+} from '@/demos/synth/useSynthEngine';
 import { decayPeakHold, meterFillPercent } from '@/utils/scale';
 import type { WebMidiBinding, WebMidiInputInfo } from '@/wasm/index';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -45,10 +49,13 @@ const engine = useSynthEngine(sonareJsUrl, sonareWasmUrl);
 const libVersion = ref('');
 const presetNames = ref<string[]>([DEFAULT_PRESET]);
 const selectedPreset = ref(DEFAULT_PRESET);
-const outputGain = ref(0.9);
+const outputGain = ref(SYNTH_OUTPUT_GAIN_DEFAULT);
 const baseNote = ref(48); // C3 — two octaves up to B4
 const activeNotes = ref<Set<number>>(new Set());
 const peakHold = ref(0);
+/** Latched once any output sample reaches full scale; the CLIP chip resets it. */
+const clipped = ref(false);
+const CLIP_THRESHOLD = 0.997; // ≈ -0.03 dBFS
 
 const MIN_BASE_NOTE = 24; // C1
 const MAX_BASE_NOTE = 84; // C6 (top key reaches B7)
@@ -112,6 +119,7 @@ const meter = engine.meter;
 
 watch(meter, (value) => {
   peakHold.value = decayPeakHold(peakHold.value, value.peak);
+  if (value.peak >= CLIP_THRESHOLD) clipped.value = true;
 });
 
 const statusKind = computed<'idle' | 'active' | 'warning' | 'error'>(() => {
@@ -377,6 +385,7 @@ async function connectMidi() {
 
 /** Boot the worklet at mount; the context stays suspended until a gesture. */
 async function startEngine() {
+  clipped.value = false;
   const ok = await engine.start(selectedPreset.value);
   if (!ok) return;
   engine.setGain(outputGain.value);
@@ -650,16 +659,23 @@ function applyGain() {
             <RotaryKnob
               v-bind="term('gain')"
               :model-value="outputGain"
-              :min="0" :max="1.5" :step="0.01"
+              :min="0" :max="SYNTH_OUTPUT_GAIN_MAX" :step="0.01"
               :label="copy.output.gain"
               :display="`${Math.round(outputGain * 100)}%`"
-              :default-value="0.9"
+              :default-value="SYNTH_OUTPUT_GAIN_DEFAULT"
               :size="48"
               accent="var(--demo-amber)"
               @update:model-value="(v) => { outputGain = v; applyGain(); }"
             />
             <Tooltip v-bind="term('peak')">
               <div class="sy-vmeter" :aria-label="copy.output.peak" tabindex="0">
+                <button
+                  type="button"
+                  class="sy-clip"
+                  :class="{ 'sy-clip--lit': clipped }"
+                  :title="copy.output.clip"
+                  @click.stop="clipped = false"
+                >CLIP</button>
                 <div class="sy-vmeter__track">
                   <div class="sy-vmeter__fill" :style="{ height: `${meterFillPercent(meter.peak)}%` }"></div>
                   <i

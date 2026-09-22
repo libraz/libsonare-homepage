@@ -1,14 +1,27 @@
 import { ref, shallowRef } from 'vue';
 import { useAudioExport } from '@/composables/useAudioExport';
-import { BAR_PPQ, STEP_COUNT, STUDIO_TRACKS, type StudioPattern } from '@/demos/studio/studioCopy';
+import {
+  barFrames,
+  buildLaneClips,
+  EXPORT_SAMPLE_RATE,
+  laneTrackId,
+  linearToDb,
+  renderStudioMix,
+} from '@/demos/studio/studioBounce';
+import {
+  BAR_PPQ,
+  STEP_COUNT,
+  STUDIO_MASTER_GAIN,
+  STUDIO_TRACKS,
+  type StudioPattern,
+} from '@/demos/studio/studioCopy';
+import { masterLimiterStripJson } from '@/utils/masterLimiter';
 
 type WasmModule = typeof import('@/wasm/index.js');
 type WorkletModule = typeof import('@/wasm/worklet.js');
 type StudioFacade = Awaited<ReturnType<WorkletModule['SonareEngine']['create']>>;
 type FacadeOptions = NonNullable<Parameters<WorkletModule['SonareEngine']['create']>[1]>;
 
-/** Sample rate used for the offline WAV export and the stem waveform views. */
-const EXPORT_SAMPLE_RATE = 48000;
 /** Engine meter cadence in frames (~21 ms at 48 kHz). */
 const METER_INTERVAL_FRAMES = 1024;
 /** Per-tick meter decay factor, matching the previous analyser-based meters. */
@@ -18,19 +31,6 @@ export interface StudioStemView {
   /** Per-bucket min/max of the stem's left channel, for clip drawing. */
   min: Float32Array;
   max: Float32Array;
-}
-
-/** UMP MIDI 1.0 channel-voice words (group 0). */
-function noteOnWord(note: number, velocity: number): number {
-  return ((0x2 << 28) | (0x9 << 20) | ((note & 0x7f) << 8) | (velocity & 0x7f)) >>> 0;
-}
-function noteOffWord(note: number): number {
-  return ((0x2 << 28) | (0x8 << 20) | ((note & 0x7f) << 8)) >>> 0;
-}
-
-/** Linear fader value (0..~1.4) to dB for the engine strip fader. */
-function linearToDb(value: number): number {
-  return value <= 0.0001 ? -100 : 20 * Math.log10(value);
 }
 
 /** Meter dB (peak) to the linear 0..1+ scale the UI meters use. */
@@ -66,11 +66,12 @@ registerSonareRealtimeEngineWorkletProcessor();
  * The Studio Mini engine: the step pattern is compiled into looping MIDI clips
  * on libsonare's realtime engine (`setMidiClips`), one clip per track, each
  * routed to its own NativeSynth destination through the engine's per-track
- * lane mixer (`setTrackLanes` + strip fader/mute). Pattern and tempo edits
- * update the schedule in place — playback never stops to re-render. Meters
- * come from the engine's per-lane and master meter telemetry, the WAV export
- * stays a deterministic offline Project bounce, and the stem waveforms are
- * display-only offline renders.
+ * lane mixer (`setTrackLanes` + strip fader/mute) into a master strip carrying
+ * the engine's true-peak limiter. Pattern and tempo edits update the schedule
+ * in place — playback never stops to re-render. Meters come from the engine's
+ * per-lane and master meter telemetry, the WAV export is the same lane mix
+ * rendered deterministically offline, and the stem waveforms are display-only
+ * offline Project renders.
  */
 export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   const ready = ref(false);
@@ -92,9 +93,9 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   let context: AudioContext | null = null;
   let moduleUrl: string | null = null;
   let offMeter: (() => void) | null = null;
-  const gains: number[] = STUDIO_TRACKS.map(() => 0.9);
+  const gains: number[] = STUDIO_TRACKS.map((track) => track.gain);
   const mutes: boolean[] = STUDIO_TRACKS.map(() => false);
-  let masterGainValue = 0.9;
+  let masterGainValue = STUDIO_MASTER_GAIN;
   /** Set by dispose(); cancels an in-flight start() at its next await point. */
   let disposed = false;
   let currentBpm = 120;
@@ -107,11 +108,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   let auditioning = 0;
   let auditionRaf = 0;
   const stemCache = new Map<string, Float32Array>();
-
-  /** Engine lane track ids are 1-based; destination id == track id. */
-  function trackId(index: number): number {
-    return index + 1;
-  }
+  const trackId = laneTrackId;
 
   /**
    * Boot the WASM module, the AudioContext, and the engine worklet. Safe to
@@ -190,6 +187,9 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
       for (let i = 0; i < STUDIO_TRACKS.length; i++) {
         engine.setSynthInstrument(trackId(i), STUDIO_TRACKS[i].preset);
       }
+      // The master fader itself is driven by setStripGain; the scene only
+      // installs the limiter, so it goes in before any fader value.
+      engine.setMasterStripJson(masterLimiterStripJson());
       engine.transport.setLoop(0, BAR_PPQ, true);
       offMeter = engine.onMeter((meter) => {
         const linear = Math.max(dbToLinear(meter.peakDbL), dbToLinear(meter.peakDbR));
@@ -232,47 +232,9 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
     }
   }
 
-  /** One bar of the loop, in engine-timeline samples at the engine's rate. */
-  function barSamples(bpm: number): number {
-    const rate = context?.sampleRate ?? EXPORT_SAMPLE_RATE;
-    return Math.round((rate * BAR_PPQ * 60) / bpm);
-  }
-
-  /**
-   * Compile the step pattern into one looping MIDI clip per track. Event
-   * `renderFrame`s are absolute engine-timeline samples; the fixed tempo map
-   * (`startPpq: 0`) makes the conversion a plain ratio.
-   */
+  /** The one-bar clip schedule for the live engine, at the context's rate. */
   function buildMidiClips(pattern: StudioPattern, bpm: number) {
-    const frames = barSamples(bpm);
-    const clips = [];
-    for (let t = 0; t < STUDIO_TRACKS.length; t++) {
-      const def = STUDIO_TRACKS[t];
-      const events: { renderFrame: number; word0: number }[] = [];
-      for (let row = 0; row < def.rows.length; row++) {
-        for (let step = 0; step < STEP_COUNT; step++) {
-          if (!pattern[t][row][step]) continue;
-          const start = Math.round((step * frames) / STEP_COUNT);
-          const end = Math.min(start + Math.round((def.gatePpq / BAR_PPQ) * frames), frames - 1);
-          events.push({ renderFrame: start, word0: noteOnWord(def.rows[row].note, def.velocity) });
-          events.push({ renderFrame: end, word0: noteOffWord(def.rows[row].note) });
-        }
-      }
-      if (events.length === 0) continue;
-      events.sort((a, b) => a.renderFrame - b.renderFrame);
-      clips.push({
-        id: trackId(t),
-        trackId: trackId(t),
-        destinationId: trackId(t),
-        startSample: 0,
-        startPpq: 0,
-        lengthSamples: frames,
-        loop: true,
-        loopLengthSamples: frames,
-        events,
-      });
-    }
-    return clips;
+    return buildLaneClips(pattern, bpm, context?.sampleRate ?? EXPORT_SAMPLE_RATE, 1);
   }
 
   /**
@@ -373,7 +335,7 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
    * round-trip for no perceptible win at this loop length.
    */
   function refreshStemViews(mod: WasmModule, pattern: StudioPattern, bpm: number): void {
-    const frames = Math.round((EXPORT_SAMPLE_RATE * BAR_PPQ * 60) / bpm);
+    const frames = barFrames(EXPORT_SAMPLE_RATE, bpm);
     const views: StudioStemView[] = [];
     for (let i = 0; i < STUDIO_TRACKS.length; i++) {
       const interleaved = bounceStem(mod, pattern, i, bpm, frames);
@@ -494,8 +456,9 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   }
 
   /**
-   * Bounce a two-bar version of the session (release tails included) with the
-   * mixer's gains applied, as a 16-bit PCM WAV blob.
+   * Bounce a two-bar version of the session (release tails included) through
+   * the same lane strips, mutes, master fader and master limiter the live
+   * engine runs, as a 16-bit PCM WAV blob.
    *
    * Runs synchronously on the main thread by design: it fires from an explicit
    * download click (never on the first-paint path) and the fixed two-bar loop
@@ -505,32 +468,12 @@ export function useStudioEngine(sonareJsUrl: string, wasmUrl: string) {
   function exportWav(pattern: StudioPattern, bpm: number): Blob | null {
     const mod = wasm;
     if (!mod) return null;
-    const stems: Float32Array[] = [];
-    const stemGains: number[] = [];
-    for (let i = 0; i < STUDIO_TRACKS.length; i++) {
-      if (mutes[i]) continue;
-      const def = STUDIO_TRACKS[i];
-      const project = buildTrackProject(mod, pattern, i, bpm, 2);
-      try {
-        // No totalFrames: auto-derived length keeps the instrument's tail.
-        stems.push(
-          project.bounceWithSynthInstrument(
-            [{ preset: def.preset, destinationId: def.destination }],
-            { numChannels: 2, sampleRate: EXPORT_SAMPLE_RATE },
-          ),
-        );
-        stemGains.push(gains[i]);
-      } finally {
-        project.delete();
-      }
-    }
-    // The master fader applies to the bounce too, as the tooltip promises.
-    return audioExport.exportWav(stems, {
-      sampleRate: EXPORT_SAMPLE_RATE,
-      numChannels: 2,
-      gains: stemGains,
+    const mix = renderStudioMix(mod, pattern, bpm, {
+      gains,
+      mutes,
       masterGain: masterGainValue,
     });
+    return mix ? audioExport.encodeWav(mix, EXPORT_SAMPLE_RATE, 2) : null;
   }
 
   /**

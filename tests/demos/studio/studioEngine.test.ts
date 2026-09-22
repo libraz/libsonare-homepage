@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { exportFrames } from '@/demos/studio/studioBounce';
 import { BAR_PPQ, defaultPattern, STUDIO_TRACKS } from '@/demos/studio/studioCopy';
+import { MASTER_LIMITER_PROCESSOR, masterLimiterStripJson } from '@/utils/masterLimiter';
 
 const BUCKET_COUNT = 24;
 
@@ -33,6 +35,15 @@ const wasmMock = vi.hoisted(() => {
   class RealtimeEngineMock {
     static instances: RealtimeEngineMock[] = [];
     destroy = vi.fn();
+    setTempoSegments = vi.fn();
+    setTrackLanes = vi.fn();
+    setSynthInstrument = vi.fn();
+    setTrackStripJson = vi.fn();
+    setSoloMute = vi.fn();
+    setMasterStripJson = vi.fn();
+    setMidiClips = vi.fn();
+    // A constant non-zero render makes the WAV encoding observable.
+    renderOffline = vi.fn((planes: Float32Array[]) => planes.map((p) => p.fill(0.5)));
     constructor(
       public sampleRate: number,
       public blockSize: number,
@@ -73,6 +84,7 @@ const facadeMock = vi.hoisted(() => {
     setMidiClips: vi.fn(),
     setStripGain: vi.fn(() => true),
     setSoloMute: vi.fn(() => true),
+    setMasterStripJson: vi.fn(),
     pushMidiNoteOn: vi.fn(),
     pushMidiNoteOff: vi.fn(),
     pushMidiPanic: vi.fn(),
@@ -167,6 +179,10 @@ describe('useStudioEngine', () => {
     }
     expect(facadeMock.facade.transport.setLoop).toHaveBeenCalledWith(0, BAR_PPQ, true);
     expect(facadeMock.facade.node.connect).toHaveBeenCalled();
+
+    // The master strip carries the engine's limiter, installed at boot.
+    expect(facadeMock.facade.setMasterStripJson).toHaveBeenCalledWith(masterLimiterStripJson());
+    expect(masterLimiterStripJson()).toContain(MASTER_LIMITER_PROCESSOR);
   });
 
   it('compiles the pattern into looping MIDI clips and refreshes stem views', async () => {
@@ -229,7 +245,7 @@ describe('useStudioEngine', () => {
     );
   });
 
-  it('exports a WAV blob, skipping muted tracks and auto-deriving the tail length', async () => {
+  it('exports a WAV blob through an offline lane mix of fixed length, muting what is muted', async () => {
     const engine = await loadEngine();
     await engine.start();
     engine.setTrackMute(1, true);
@@ -238,13 +254,26 @@ describe('useStudioEngine', () => {
     expect(blob).toBeInstanceOf(Blob);
     expect(blob?.type).toBe('audio/wav');
 
-    // Export bounces the non-muted tracks only, without a fixed totalFrames.
-    const exportBounces = wasmMock.Project.instances.flatMap((p) => p.bounces);
-    expect(exportBounces.length).toBe(STUDIO_TRACKS.length - 1);
-    for (const bounce of exportBounces) {
-      expect(bounce.options).toEqual({ numChannels: 2, sampleRate: 48000 });
-      expect(bounce.options.totalFrames).toBeUndefined();
-    }
+    // A fresh offline engine renders the lane mix: every lane declared and
+    // bound, the muted one muted, the limiter on the master strip, and the
+    // render span fixed to the export length rather than auto-derived.
+    const offline = wasmMock.RealtimeEngine.instances.at(-1)!;
+    expect(offline.sampleRate).toBe(48000);
+    expect(offline.setTrackLanes).toHaveBeenCalledWith([1, 2, 3]);
+    expect(offline.setSoloMute).toHaveBeenCalledWith(1, false, true);
+    expect(offline.setSoloMute).toHaveBeenCalledWith(0, false, false);
+    expect(String(offline.setMasterStripJson.mock.lastCall?.[0])).toContain(
+      MASTER_LIMITER_PROCESSOR,
+    );
+    const clips = offline.setMidiClips.mock.lastCall?.[0] as Array<{ trackId: number }>;
+    expect(clips.map((clip) => clip.trackId)).toEqual([1, 3]);
+    const planes = offline.renderOffline.mock.lastCall?.[0] as Float32Array[];
+    expect(planes).toHaveLength(2);
+    expect(planes[0]).toHaveLength(exportFrames(120));
+    expect(offline.destroy).toHaveBeenCalledTimes(1);
+    expect(blob?.size).toBe(44 + exportFrames(120) * 2 * 2);
+    // The export never touches the Project path the stem views use.
+    expect(wasmMock.Project.instances.flatMap((p) => p.bounces)).toHaveLength(0);
   });
 
   it('exports a Standard MIDI File on GM channels, skipping muted tracks', async () => {
@@ -272,18 +301,32 @@ describe('useStudioEngine', () => {
     expect(channels).toEqual(new Set([0, 9]));
   });
 
-  it('applies the master fader to the WAV bounce', async () => {
+  it('applies the faders and the master fader to the WAV bounce as engine strip gains', async () => {
     const engine = await loadEngine();
     await engine.start();
     for (let i = 0; i < STUDIO_TRACKS.length; i++) engine.setTrackGain(i, 1);
+    engine.setTrackGain(2, 0.25);
     engine.setMasterGain(0.5);
 
     const blob = engine.exportWav(defaultPattern(), 120);
     expect(blob).toBeInstanceOf(Blob);
+    const offline = wasmMock.RealtimeEngine.instances.at(-1)!;
+    const stripDb = (call: unknown[]) => JSON.parse(String(call[1])).strips[0].faderDb as number;
+    const strips = offline.setTrackStripJson.mock.calls.map(stripDb);
+    expect(strips[0]).toBe(0);
+    expect(strips[2]).toBeCloseTo(20 * Math.log10(0.25), 6);
+    const master = JSON.parse(String(offline.setMasterStripJson.mock.lastCall?.[0]));
+    expect(master.strips[0].faderDb).toBeCloseTo(20 * Math.log10(0.5), 6);
+    // The encoded samples are the engine's render, untouched by JS gain.
     const view = new DataView(await (blob as Blob).arrayBuffer());
-    // Stems are a constant 0.5 per track; 3 tracks × unity faders × 0.5 master.
-    const expected = Math.trunc(0.5 * 3 * 0.5 * 0x7fff);
-    expect(view.getInt16(44, true)).toBe(expected);
+    expect(view.getInt16(44, true)).toBe(Math.trunc(0.5 * 0x7fff));
+  });
+
+  it('exports nothing when every track is muted', async () => {
+    const engine = await loadEngine();
+    await engine.start();
+    for (let i = 0; i < STUDIO_TRACKS.length; i++) engine.setTrackMute(i, true);
+    expect(engine.exportWav(defaultPattern(), 120)).toBeNull();
   });
 
   it('clears every meter on stop', async () => {

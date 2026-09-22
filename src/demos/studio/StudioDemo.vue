@@ -10,6 +10,8 @@ import {
   enCopy,
   jaCopy,
   STEP_COUNT,
+  STUDIO_FADER_MAX,
+  STUDIO_MASTER_GAIN,
   STUDIO_TERM_SLUGS,
   STUDIO_TRACKS,
   type StudioTermKey,
@@ -26,9 +28,9 @@ const engine = useStudioEngine(sonareJsUrl, sonareWasmUrl);
 
 const pattern = ref(defaultPattern());
 const bpm = ref(120);
-const trackGains = ref(STUDIO_TRACKS.map(() => 0.9));
+const trackGains = ref(STUDIO_TRACKS.map((track) => track.gain));
 const trackMutes = ref(STUDIO_TRACKS.map(() => false));
-const masterGain = ref(0.9);
+const masterGain = ref(STUDIO_MASTER_GAIN);
 const downloading = ref(false);
 
 const TRACK_HUES: Record<string, { fill: string; glow: string }> = {
@@ -434,6 +436,8 @@ function downloadMidi() {
             :gain="trackGains[t]"
             :level="engine.levels.value[t]"
             :help="term('level')"
+            :max="STUDIO_FADER_MAX"
+            :default-gain="track.gain"
             mutable
             :muted="trackMutes[t]"
             :mute-label="copy.mixer.mute"
@@ -451,6 +455,8 @@ function downloadMidi() {
             :gain="masterGain"
             :level="engine.masterLevel.value"
             :help="term('master')"
+            :max="STUDIO_FADER_MAX"
+            :default-gain="STUDIO_MASTER_GAIN"
             class="st-strips__master"
             @update:gain="setMaster"
           />

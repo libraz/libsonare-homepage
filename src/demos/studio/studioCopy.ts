@@ -2,6 +2,10 @@
 export const STEP_COUNT = 16;
 /** Pattern length in quarter notes (PPQ): one 4/4 bar. */
 export const BAR_PPQ = 4;
+/** Top of every fader (linear): about +3 dB, into the master limiter. */
+export const STUDIO_FADER_MAX = 1.4;
+/** Master fader starting position (linear). */
+export const STUDIO_MASTER_GAIN = 1;
 
 /** One togglable row in a track's step grid: a fixed pitch. */
 export interface StudioRowDef {
@@ -27,6 +31,11 @@ export interface StudioTrackDef {
   gatePpq: number;
   /** Fixed note-on velocity. */
   velocity: number;
+  /**
+   * Fader starting position (linear). These set the mix balance: the kit
+   * renders about 10 dB hotter than the sustained voices, so it starts low.
+   */
+  gain: number;
   /** Accent hue used for the lane's steps and meter. */
   hue: 'violet' | 'cyan' | 'amber';
   /**
@@ -44,6 +53,7 @@ export const STUDIO_TRACKS: StudioTrackDef[] = [
     destination: 0,
     gatePpq: 0.22,
     velocity: 100,
+    gain: 1,
     hue: 'violet',
     gm: { channel: 0, program: 81 }, // Lead 2 (sawtooth)
     rows: [
@@ -59,6 +69,7 @@ export const STUDIO_TRACKS: StudioTrackDef[] = [
     destination: 1,
     gatePpq: 0.45,
     velocity: 110,
+    gain: 1,
     hue: 'cyan',
     gm: { channel: 1, program: 38 }, // Synth Bass 1
     rows: [
@@ -73,6 +84,7 @@ export const STUDIO_TRACKS: StudioTrackDef[] = [
     destination: 2,
     gatePpq: 0.12,
     velocity: 112,
+    gain: 0.35,
     hue: 'amber',
     gm: { channel: 9 }, // GM drum channel; row notes are GM drum notes
     rows: [
@@ -162,7 +174,7 @@ export const enCopy = {
   },
   guide: {
     title: 'A headless DAW, running live in your browser',
-    body: 'The pattern is compiled into looping MIDI clips on libsonare\u2019s realtime engine: three NativeSynth destinations mixed through the engine\u2019s per-track lane mixer, with faders, mutes, and meters living engine-side. Edits replace the clip schedule in place — playback never stops to re-render. The WAV you download is the same arrangement rendered deterministically offline, and the MIDI export writes the pattern itself as a Standard MIDI File for any DAW. This is a deliberately small session; the engine API goes much further.',
+    body: 'The pattern is compiled into looping MIDI clips on libsonare\u2019s realtime engine: three NativeSynth destinations mixed through the engine\u2019s per-track lane mixer, with faders, mutes, meters and a true-peak limiter on the master strip all living engine-side. Edits replace the clip schedule in place — playback never stops to re-render. The WAV you download is the same arrangement rendered deterministically offline through the same lane mixer, and the MIDI export writes the pattern itself as a Standard MIDI File for any DAW. This is a deliberately small session; the engine API goes much further.',
     docs: 'Project docs',
   },
   terms: {
@@ -178,7 +190,7 @@ export const enCopy = {
       },
       mixer: {
         title: 'Mixer',
-        body: 'Three engine lane strips feed the master strip. Faders and mutes run inside the realtime engine, and the same gains are applied to the WAV you bounce.',
+        body: 'Three engine lane strips feed the master strip, whose true-peak limiter holds the output at −1 dBTP. Faders and mutes run inside the realtime engine, and the WAV you bounce goes through the same strips and the same limiter.',
         tip: 'Balance the tracks here; pull a part down or mute it to hear how the arrangement changes.',
       },
       tempo: {
@@ -215,14 +227,14 @@ export const enCopy = {
       },
       master: {
         title: 'Master level',
-        body: 'The final output fader feeding the master bus and the bounce. Everything passes through it after the channel strips.',
-        tip: 'Trim the master so the bounce peaks comfortably below 0 dB.',
+        body: 'The final output fader feeding the master bus and the bounce. Everything passes through it after the channel strips, then through the master strip’s true-peak limiter, which holds the output at −1 dBTP.',
+        tip: 'Push it and the limiter squashes the transients rather than letting them clip — pull back until the meter stops sitting at the ceiling.',
         defaultRationale: 'Double-click the fader to reset the level.',
       },
       vu: {
         title: 'Master meter',
-        body: 'Post-master peak level on a dB scale (−60 to 0). 0 dB is the digital ceiling; readings into the amber and red risk clipping the bounce.',
-        tip: 'Keep the loudest moments out of the red so the exported WAV stays clean.',
+        body: 'Post-master peak level on a dB scale (−60 to 0). The master limiter holds the output at −1 dBTP, so the meter tops out just under the ceiling; a reading parked there means the mix is being limited hard.',
+        tip: 'Keep the loudest moments below the ceiling so the bounce keeps its transients.',
       },
     },
   },
@@ -276,7 +288,7 @@ export const jaCopy: typeof enCopy = {
   },
   guide: {
     title: 'ブラウザ内でライブに動くヘッドレス DAW',
-    body: 'パターンは libsonare のリアルタイムエンジン上のループ MIDI クリップへコンパイルされます。3 つの NativeSynth デスティネーションをエンジン内蔵のトラックレーンミキサーがミックスし、フェーダー・ミュート・メーターもエンジン側で動きます。編集はクリップスケジュールをその場で置き換えるため、再生を止めて再レンダーすることはありません。ダウンロードする WAV は同じアレンジを決定的にオフラインレンダーしたもので、MIDI 書き出しはパターンそのものをスタンダード MIDI ファイルとして保存し、どの DAW でも開けます。これは意図的に小さなセッションで、エンジン API 自体はさらに多くの機能を持ちます。',
+    body: 'パターンは libsonare のリアルタイムエンジン上のループ MIDI クリップへコンパイルされます。3 つの NativeSynth デスティネーションをエンジン内蔵のトラックレーンミキサーがミックスし、フェーダー・ミュート・メーター、そしてマスターストリップのトゥルーピークリミッターもエンジン側で動きます。編集はクリップスケジュールをその場で置き換えるため、再生を止めて再レンダーすることはありません。ダウンロードする WAV は同じアレンジを同じレーンミキサーで決定的にオフラインレンダーしたもので、MIDI 書き出しはパターンそのものをスタンダード MIDI ファイルとして保存し、どの DAW でも開けます。これは意図的に小さなセッションで、エンジン API 自体はさらに多くの機能を持ちます。',
     docs: 'Project ドキュメント',
   },
   terms: {
@@ -292,7 +304,7 @@ export const jaCopy: typeof enCopy = {
       },
       mixer: {
         title: 'ミキサー',
-        body: '3 本のエンジンレーンストリップがマスターストリップへ送られます。フェーダーとミュートはリアルタイムエンジン内で動き、バウンスする WAV にも同じゲインが適用されます。',
+        body: '3 本のエンジンレーンストリップがマスターストリップへ送られ、そのトゥルーピークリミッターが出力を −1 dBTP に抑えます。フェーダーとミュートはリアルタイムエンジン内で動き、バウンスする WAV も同じストリップと同じリミッターを通ります。',
         tip: 'ここでトラックのバランスを取ります。下げたりミュートしたりして、アレンジの変化を確認しましょう。',
       },
       tempo: {
@@ -329,14 +341,14 @@ export const jaCopy: typeof enCopy = {
       },
       master: {
         title: 'マスターレベル',
-        body: 'マスターバスとバウンスへ送る最終出力フェーダーです。チャンネルストリップの後段で、すべてがここを通ります。',
-        tip: 'バウンスが 0 dB に十分な余裕を持って収まるようマスターを調整します。',
+        body: 'マスターバスとバウンスへ送る最終出力フェーダーです。チャンネルストリップの後段で、すべてがここを通り、さらにマスターストリップのトゥルーピークリミッターが出力を −1 dBTP に抑えます。',
+        tip: '上げすぎるとクリップする代わりにリミッターがトランジェントを潰します。メーターが上限に張り付かなくなるところまで戻します。',
         defaultRationale: 'フェーダーをダブルクリックするとレベルがリセットされます。',
       },
       vu: {
         title: 'マスターメーター',
-        body: 'マスター後のピークレベルを dB スケール（−60〜0）で表示します。0 dB がデジタルの上限で、アンバー／レッドに入るとバウンスがクリップする恐れがあります。',
-        tip: '最も大きい瞬間がレッドに入らないようにすれば、書き出した WAV はクリーンに保てます。',
+        body: 'マスター後のピークレベルを dB スケール（−60〜0）で表示します。マスターリミッターが出力を −1 dBTP に抑えるため、メーターは上限のすぐ下で止まります。そこに張り付いたままなら、ミックスが強くリミッティングされています。',
+        tip: '最も大きい瞬間が上限に届かないようにしておけば、バウンスのトランジェントが保たれます。',
       },
     },
   },
