@@ -107,6 +107,8 @@ interface MixerInstance {
   ): void;
   toSceneJson(): string;
   sceneWarnings(): string[];
+  tailSamples(): number;
+  latencySamples(): number;
   delete(): void;
 }
 
@@ -182,9 +184,11 @@ function bounce(request: WorkerRequest): MixingBounceResult {
     return emptyResult(left, right, sampleRate);
   }
 
-  // Reverb decay and per-channel delay compensation ring out past the dry input;
-  // extend the render so processStereo is fed zero input through the whole tail.
-  const frames = dryFrames + tailFrames(activeTracks, request.reverb, sampleRate);
+  const sceneJson = buildSceneJson(activeTracks, request.reverb, request.vcaGroups);
+  const mixer = wasmModule.Mixer.fromSceneJson(sceneJson, sampleRate, BLOCK_SIZE);
+  // Reverb decay and per-channel delay ring out past the dry input, so feed the
+  // mixer silence for as long as its own graph says they last.
+  const frames = dryFrames + mixer.tailSamples() + mixer.latencySamples();
 
   // Pad each strip's audio by its arrangement offset so the bounce preserves timeline starts.
   const leftChannels = activeTracks.map((track) =>
@@ -194,8 +198,6 @@ function bounce(request: WorkerRequest): MixingBounceResult {
     padChannel(track.right, track.offsetSeconds, sampleRate, frames),
   );
 
-  const sceneJson = buildSceneJson(activeTracks, request.reverb, request.vcaGroups);
-  const mixer = wasmModule.Mixer.fromSceneJson(sceneJson, sampleRate, BLOCK_SIZE);
   // Insert params no processor consumed (typos / renamed keys) load silently but
   // take no effect — surface them so a broken control never ships unnoticed.
   const sceneWarnings = mixer.sceneWarnings();
@@ -325,22 +327,6 @@ function measureMasterTruePeak(
   } catch {
     return fallback;
   }
-}
-
-// Extra render frames so reverb decay and per-channel delay compensation ring out
-// past the dry input instead of being truncated at the last dry sample.
-function tailFrames(
-  tracks: MixingTrackRenderState[],
-  reverb: ReverbConfig | undefined,
-  sampleRate: number,
-): number {
-  const maxDelay = tracks.reduce((max, track) => Math.max(max, track.channelDelaySamples ?? 0), 0);
-  let tail = maxDelay;
-  if (reverb?.enabled && reverb.decaySec > 0) {
-    tail += Math.ceil(reverb.decaySec * sampleRate);
-    tail += Math.ceil(((reverb.preDelayMs ?? 0) / 1000) * sampleRate);
-  }
-  return tail;
 }
 
 function applyAutomation(

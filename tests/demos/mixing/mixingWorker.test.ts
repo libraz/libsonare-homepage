@@ -4,6 +4,8 @@ const mixerInstances: any[] = [];
 
 const wasmMock = vi.hoisted(() => {
   const instances: any[] = [];
+  // What the compiled graph reports; the worker must size the bounce from these.
+  const graph = { tailSamples: 0, latencySamples: 0 };
 
   // Mimic an embind std::vector: an array-like carrying wrapped methods as own
   // properties. Structured clone rejects it (DataCloneError), so the worker must
@@ -92,6 +94,14 @@ const wasmMock = vi.hoisted(() => {
       return [];
     }
 
+    tailSamples() {
+      return graph.tailSamples;
+    }
+
+    latencySamples() {
+      return graph.latencySamples;
+    }
+
     delete() {
       this.deleted = true;
     }
@@ -99,6 +109,7 @@ const wasmMock = vi.hoisted(() => {
 
   return {
     instances,
+    graph,
     init: vi.fn(async () => undefined),
     // Mono downmix path; the worker must NOT use this for the master readout.
     lufs: vi.fn(() => ({
@@ -160,6 +171,8 @@ describe('mixing worker protocol', () => {
     vi.resetModules();
     vi.clearAllMocks();
     wasmMock.instances.length = 0;
+    wasmMock.graph.tailSamples = 0;
+    wasmMock.graph.latencySamples = 0;
     mixerInstances.length = 0;
     posted = [];
     originalSelf = globalThis.self;
@@ -366,49 +379,33 @@ describe('mixing worker protocol', () => {
     expect((posted.at(-1)!.message as any).result.integratedLufs).toBe(-14);
   });
 
-  it('extends the render tail when reverb decay is active', async () => {
-    const dry = track({
-      soloed: true,
-      left: new Float32Array([0.5, 0.5]),
-      right: new Float32Array([0.5, 0.5]),
-    });
+  it("renders past the dry input for as long as the mixer's graph rings", async () => {
+    const bounceLength = async (id: number) => {
+      await (self as any).onmessage({
+        data: {
+          type: 'mixBounce',
+          id,
+          sampleRate: 10,
+          masterFaderDb: 0,
+          tracks: [
+            track({
+              soloed: true,
+              left: new Float32Array([0.5, 0.5]),
+              right: new Float32Array([0.5, 0.5]),
+            }),
+          ],
+          reverb: { enabled: true, decaySec: 1, preDelayMs: 0 },
+          vcaGroups: [],
+        },
+      });
+      return (posted.at(-1)!.message as any).result.left.length;
+    };
 
-    await (self as any).onmessage({
-      data: {
-        type: 'mixBounce',
-        id: 7,
-        sampleRate: 10,
-        masterFaderDb: 0,
-        tracks: [dry],
-        reverb: { enabled: false, decaySec: 1, preDelayMs: 0 },
-        vcaGroups: [],
-      },
-    });
-    const dryLength = (posted.at(-1)!.message as any).result.left.length;
-
-    await (self as any).onmessage({
-      data: {
-        type: 'mixBounce',
-        id: 8,
-        sampleRate: 10,
-        masterFaderDb: 0,
-        tracks: [
-          track({
-            soloed: true,
-            left: new Float32Array([0.5, 0.5]),
-            right: new Float32Array([0.5, 0.5]),
-          }),
-        ],
-        reverb: { enabled: true, decaySec: 1, preDelayMs: 0 },
-        vcaGroups: [],
-      },
-    });
-    const wetLength = (posted.at(-1)!.message as any).result.left.length;
-
-    expect(dryLength).toBe(2);
-    // 2 dry frames + ceil(1s * 10) reverb decay tail.
-    expect(wetLength).toBe(12);
-    expect(wetLength).toBeGreaterThan(dryLength);
+    expect(await bounceLength(7)).toBe(2);
+    wasmMock.graph.tailSamples = 11;
+    wasmMock.graph.latencySamples = 3;
+    // 2 dry frames, then the reported tail and the reported latency.
+    expect(await bounceLength(8)).toBe(16);
   });
 
   it('measures master true peak on the post-master-fader output', async () => {

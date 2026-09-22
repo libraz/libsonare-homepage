@@ -9,5 +9,5 @@ scene readable as JSON and the mix bounceable to WAV.
   `meteringTruePeakDb` for the master readouts.
 
 `useMixingStudio.ts` holds the console state, `mixingScene.ts` is the scene JSON
-shape documented on the site, and `mixing.worker.ts` renders the bounce (tail
-included when a reverb is still decaying).
+shape documented on the site, and `mixing.worker.ts` renders the bounce, running
+past the dry input for the tail and latency the mixer reports for its own graph.
