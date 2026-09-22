@@ -18,6 +18,7 @@ import ToolShell from '@/components/ToolShell.vue';
 import { StatusIndicator } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import { useMidiInput } from '@/composables/useMidiInput';
+import { useUrlState } from '@/composables/useUrlState';
 import { createAudioBufferCache } from '@/demos/practice/audioBufferCache';
 import {
   type BounceClient,
@@ -60,6 +61,10 @@ const midi = shallowRef<ParsedMidi | null>(null);
 const layout = shallowRef<KeyboardLayout>(buildKeyboard(60, 71));
 /** Index into {@link GOLDBERG} — the movement currently loaded. */
 const currentMv = ref(0);
+/** Bumped per load, so a slower superseded fetch cannot land after a newer one. */
+let loadGeneration = 0;
+/** The movement last asked for, which may still be loading. */
+let requestedMv = 0;
 
 const isPlaying = ref(false);
 // Playhead in 1x "score seconds". Starts at -LEAD_IN_SEC so the roll opens
@@ -637,15 +642,19 @@ function computeBeatTimes(parsed: ParsedMidi): number[] {
 /** Load a Goldberg movement by catalog index (0 = Aria … 31 = Aria da capo). */
 async function loadMovement(no: number): Promise<void> {
   const mv = GOLDBERG[Math.max(0, Math.min(GOLDBERG.length - 1, no))];
+  const generation = ++loadGeneration;
+  requestedMv = mv.no;
   status.value = 'loading';
   try {
     const res = await fetch(mv.file);
     if (!res.ok) throw new Error(`MIDI fetch failed (${res.status})`);
     const bytes = new Uint8Array(await res.arrayBuffer());
+    if (generation !== loadGeneration) return;
     const parsed = parseMidi(bytes);
     currentMv.value = mv.no;
     applyMidi(parsed);
   } catch (e) {
+    if (generation !== loadGeneration) return;
     status.value = 'error';
     errorMsg.value = e instanceof Error ? e.message : copy.value.errors.parse;
   }
@@ -653,17 +662,36 @@ async function loadMovement(no: number): Promise<void> {
 
 /** Load a movement, then bounce it in the background so play is lag-free. */
 function loadAndPrewarm(no: number): void {
+  const generation = loadGeneration + 1;
   void loadMovement(no).then(() => {
-    if (status.value !== 'error') void prewarmBuffer();
+    if (generation === loadGeneration && status.value !== 'error') void prewarmBuffer();
   });
 }
 function selectMovement(no: number): void {
-  if (no === currentMv.value) return;
+  if (no === requestedMv) return;
   loadAndPrewarm(no);
 }
 function stepMovement(delta: number): void {
-  loadAndPrewarm(Math.max(0, Math.min(GOLDBERG.length - 1, currentMv.value + delta)));
+  loadAndPrewarm(Math.max(0, Math.min(GOLDBERG.length - 1, requestedMv + delta)));
 }
+
+/** The movement as the URL carries it: 0 the Aria, 1–30 the variations, 31 the da capo. */
+const movementParam = computed<number>({
+  get: () => currentMv.value,
+  set: (no) => selectMovement(no),
+});
+
+const url = useUrlState([
+  {
+    key: 'mv',
+    state: movementParam,
+    defaultValue: 0,
+    parse: (raw: string) => {
+      const no = Number(raw);
+      return Number.isInteger(no) && no >= 0 && no < GOLDBERG.length ? no : null;
+    },
+  },
+]);
 
 // ---- game controls ----------------------------------------------------------
 /** Arm a fresh chart from the current piece, ignoring notes before `fromSec`. */
@@ -716,7 +744,10 @@ onMounted(() => {
   // The default built-in synth needs no asset fetch, so warm its bounce right
   // away: the render happens while the page settles and the intro is read, and
   // the first play starts instantly instead of waiting on a fresh bounce.
-  loadAndPrewarm(0);
+  // A movement the URL names starts loading from applyFromUrl instead.
+  url.applyFromUrl();
+  if (loadGeneration === 0) loadAndPrewarm(0);
+  url.enable();
   if (stage.value && typeof ResizeObserver !== 'undefined') {
     resizeObs = new ResizeObserver(() => paint());
     resizeObs.observe(stage.value);
@@ -725,6 +756,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  url.disable();
   stopLoop();
   stopSource();
   resizeObs?.disconnect();

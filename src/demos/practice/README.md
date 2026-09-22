@@ -14,3 +14,8 @@ without changing pitch.
 a repeat does not re-render. `rollPainter.ts` draws the note roll; scoring lives
 in `useRhythmGame.ts`. MIDI input comes from the shared
 `@/composables/useMidiInput`.
+
+The loaded movement is mirrored in the `mv` query parameter (0 the Aria, 1–30
+the variations, 31 the da capo), so a link opens on a given variation. Each load
+takes a generation number and a superseded fetch drops its result, so stepping
+through movements quickly lands on the last one asked for.
