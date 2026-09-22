@@ -8,7 +8,7 @@ import {
   filterCurve,
 } from '@/demos/step-bass/stepBassFilterCurve';
 import {
-  PLAY_FROM_CURRENT,
+  RENDER_NOW,
   STEP_BASS_ARTICULATION,
   STEP_BASS_BASE_PATCH,
   STEP_BASS_TRACK_ID,
@@ -111,7 +111,7 @@ function noiseCompiled(opts: NoiseCase): CompiledPattern {
 function renderNoise(opts: NoiseCase): Float32Array {
   const engine = new wasm.RealtimeEngine(SAMPLE_RATE, BLOCK, 1024, 1024);
   applyCompiled(engine, noiseCompiled(opts), 'facade');
-  engine.play(PLAY_FROM_CURRENT);
+  engine.play(RENDER_NOW);
   const out = pump(engine, RENDER_FRAMES);
   engine.destroy();
   return out.subarray(SKIP_FRAMES);

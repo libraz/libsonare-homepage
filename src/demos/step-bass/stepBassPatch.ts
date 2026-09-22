@@ -16,11 +16,11 @@ export const STEP_BASS_TRACK_ID = 1;
 export const STEP_BASS_CHANNEL = 0;
 
 /**
- * `play()` argument meaning "from wherever the transport already is". The JS
- * facade defaults it; the native embind object does not, and a zero-argument
- * call there throws while converting `undefined` to a BigInt.
+ * Render-frame argument meaning "at the start of the next block". The JS facade
+ * defaults it; the native embind object does not, and omitting it there throws
+ * while converting `undefined` to a BigInt.
  */
-export const PLAY_FROM_CURRENT = -1;
+export const RENDER_NOW = -1;
 
 /**
  * Every field carries a real value: the engine reads an absent field as "keep

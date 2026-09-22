@@ -10,7 +10,7 @@
 import { applyCompiled } from '@/demos/step-bass/stepBassApply';
 import {
   MASTER_FADER_PARAM_ID,
-  PLAY_FROM_CURRENT,
+  RENDER_NOW,
   STEP_BASS_CHANNEL,
 } from '@/demos/step-bass/stepBassPatch';
 
@@ -46,7 +46,7 @@ const CHANNEL = ${STEP_BASS_CHANNEL};
 const FADER_ID = ${MASTER_FADER_PARAM_ID};
 const METER_BLOCKS = ${METER_BLOCK_INTERVAL};
 const NOTE_ON = ${NOTE_ON_STATUS};
-const PLAY_FROM_CURRENT = ${PLAY_FROM_CURRENT};
+const RENDER_NOW = ${RENDER_NOW};
 
 const applyCompiled = ${applyCompiled.toString()};
 
@@ -108,10 +108,10 @@ class StepBassProcessor extends AudioWorkletProcessor {
     // Applying leaves the transport alone, so state it here: a re-apply while
     // running keeps running, and the instrument boots stopped.
     if (this.playing) {
-      this.engine.play(PLAY_FROM_CURRENT);
+      this.engine.play(RENDER_NOW);
     } else {
-      this.engine.stop();
-      this.engine.seekPpq(0);
+      this.engine.stop(RENDER_NOW);
+      this.engine.seekPpq(0, RENDER_NOW);
     }
   }
 
@@ -135,11 +135,11 @@ class StepBassProcessor extends AudioWorkletProcessor {
           break;
         case 'param': {
           const id = this.paramIds[msg.param];
-          if (id !== undefined) this.engine.setParameterSmoothed(id, msg.value);
+          if (id !== undefined) this.engine.setParameterSmoothed(id, msg.value, RENDER_NOW);
           break;
         }
         case 'fader':
-          this.engine.setParameterSmoothed(FADER_ID, msg.faderDb);
+          this.engine.setParameterSmoothed(FADER_ID, msg.faderDb, RENDER_NOW);
           break;
         case 'lanes':
           for (const lane of msg.lanes) {
@@ -157,15 +157,15 @@ class StepBassProcessor extends AudioWorkletProcessor {
         case 'tempo':
           this.engine.setTempoSegments([{ startPpq: 0, bpm: msg.bpm }]);
           this.installClip(msg.clip);
-          this.engine.seekPpq(msg.seekPpq);
+          this.engine.seekPpq(msg.seekPpq, RENDER_NOW);
           break;
         case 'transport':
           if (msg.action === 'play') {
-            this.engine.play(PLAY_FROM_CURRENT);
+            this.engine.play(RENDER_NOW);
           } else {
-            this.engine.stop();
-            this.engine.pushMidiPanic(-1);
-            this.engine.seekPpq(0);
+            this.engine.stop(RENDER_NOW);
+            this.engine.pushMidiPanic(RENDER_NOW);
+            this.engine.seekPpq(0, RENDER_NOW);
           }
           break;
         default:

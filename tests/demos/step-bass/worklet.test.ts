@@ -121,6 +121,14 @@ describe('buildStepBassProcessorSource', () => {
 
 // ------------------------------------------------------------- fake engine
 
+/**
+ * The native embind object has no default for a render frame: omitting one
+ * throws converting `undefined` to a BigInt, so the fake throws too.
+ */
+function requireFrame(renderFrame: number | undefined): void {
+  if (renderFrame === undefined) throw new TypeError('Cannot convert undefined to a BigInt');
+}
+
 class FakeEngine {
   calls: { method: string; args: unknown[] }[] = [];
   transport = { playing: false, samplePosition: 0 };
@@ -172,24 +180,29 @@ class FakeEngine {
   setAutomationLane(id: number, points: unknown[]) {
     this.record('setAutomationLane', id, points);
   }
-  setParameterSmoothed(id: number, value: number) {
+  setParameterSmoothed(id: number, value: number, renderFrame?: number) {
+    requireFrame(renderFrame);
     this.record('setParameterSmoothed', id, value);
   }
   setLoop(startPpq: number, endPpq: number, enabled?: boolean) {
     this.record('setLoop', startPpq, endPpq, enabled);
   }
-  pushMidiPanic(frame: number) {
+  pushMidiPanic(frame?: number) {
+    requireFrame(frame);
     this.record('pushMidiPanic', frame);
   }
-  play() {
+  play(renderFrame?: number) {
+    requireFrame(renderFrame);
     this.record('play');
     this.transport.playing = true;
   }
-  stop() {
+  stop(renderFrame?: number) {
+    requireFrame(renderFrame);
     this.record('stop');
     this.transport.playing = false;
   }
-  seekPpq(ppq: number) {
+  seekPpq(ppq: number, renderFrame?: number) {
+    requireFrame(renderFrame);
     this.record('seekPpq', ppq);
   }
   getTransportState() {
