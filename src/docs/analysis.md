@@ -228,27 +228,23 @@ for (const { key: candidate, correlation } of ranked.slice(0, 3)) {
 ```typescript
 import { detectChords, chordFunctionalAnalysis } from '@libraz/libsonare';
 
-const { chords } = detectChords({
-  samples,
-  sampleRate,
+const chordOptions = {
   useTriadsOnly: false,   // include the extended qualities
   useHmm: true,           // smooth the sequence instead of deciding per frame
   useKeyContext: true,
   keyRoot: key.root,
   keyMode: key.mode,
   chromaMethod: 'nnls',
-});
+} as const;
+
+const { chords } = detectChords({ samples, sampleRate, ...chordOptions });
 
 for (const chord of chords) {
   console.log(chord.name, chord.start.toFixed(2), chord.duration.toFixed(2), chord.confidence);
 }
 
-const roman = chordFunctionalAnalysis({
-  samples,
-  sampleRate,
-  keyRoot: key.root,
-  keyMode: key.mode,
-});
+// The same options, so roman[i] labels chords[i].
+const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
 ```
 
 Each `Chord` carries `root`, `bass`, `quality`, `start`, `end`, `duration`, `confidence` and a `name` the core spells canonically, so `rootName`, `bassName` and `name` read identically from every binding.

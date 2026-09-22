@@ -261,27 +261,23 @@ for (const { key: candidate, correlation } of ranked.slice(0, 3)) {
 ```typescript
 import { detectChords, chordFunctionalAnalysis } from '@libraz/libsonare';
 
-const { chords } = detectChords({
-  samples,
-  sampleRate,
+const chordOptions = {
   useTriadsOnly: false,   // 拡張クオリティを含める
   useHmm: true,           // フレームごとではなく系列として平滑化する
   useKeyContext: true,
   keyRoot: key.root,
   keyMode: key.mode,
   chromaMethod: 'nnls',
-});
+} as const;
+
+const { chords } = detectChords({ samples, sampleRate, ...chordOptions });
 
 for (const chord of chords) {
   console.log(chord.name, chord.start.toFixed(2), chord.duration.toFixed(2), chord.confidence);
 }
 
-const roman = chordFunctionalAnalysis({
-  samples,
-  sampleRate,
-  keyRoot: key.root,
-  keyMode: key.mode,
-});
+// 同じオプションを渡すので、roman[i] が chords[i] のラベルになる
+const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
 ```
 
 各 `Chord` は `root`、`bass`、`quality`、`start`、`end`、`duration`、`confidence`、そしてコアが正規の綴りで与える `name` を持ちます。`rootName`、`bassName`、`name` はどのバインディングから読んでも同一です。

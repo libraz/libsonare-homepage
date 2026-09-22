@@ -437,6 +437,8 @@ interface MeterEstimate {
 
 指定したキーを基準に、検出されたコード進行を機能（ローマ数字）和声解析します。内部でコード検出を実行し、検出された各コードにラベルを付けるため、`detectKey(...)` から得た `keyRoot`／`keyMode` と、`detectChords(...)` に渡すのと同じ `options` をそのまま渡します。
 
+ラベルには時刻が付きません。`detectChords(...)` の結果と 1 対 1 に対応するのは、両方に同じオプションを渡したときだけです。オプションが違うと、返る配列の長さが変わることがあります。`analyze(...)` の中のコードは独自の設定で別に検出したものなので、これらのラベルとは対応しません。
+
 ```typescript
 function chordFunctionalAnalysis(
   samples: Float32Array,

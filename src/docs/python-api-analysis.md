@@ -236,7 +236,7 @@ def on_step(progress: float, stage: str) -> None:
 result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress=on_step)
 ```
 
-To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns one label per detected chord, in chord order:
+To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns one label per detected chord, in chord order. The labels line up with a `detect_chords(...)` result only when both calls get the same options:
 
 ```python
 labels = sonare.chord_functional_analysis(

@@ -463,6 +463,12 @@ relative to the given key. It runs chord detection internally and labels each
 detected chord, so pass the same `keyRoot`/`keyMode` you get from `detectKey(...)`
 and the same `options` you would give `detectChords(...)`.
 
+The labels carry no times; they pair with `detectChords(...)` one for one only
+when both calls get the same options, and different options can give a list of a
+different length. The chords inside `analyze(...)` come from a
+separate detection with its own settings, so they do not line up with these
+labels either.
+
 ```typescript
 function chordFunctionalAnalysis(
   samples: Float32Array,
