@@ -1,5 +1,4 @@
 import type { Ref } from 'vue';
-import { clamp } from '@/demos/mastering/masteringMetrics';
 import {
   MASTERING_MODULES,
   MASTERING_PLATFORMS,
@@ -15,6 +14,7 @@ import type {
   MasteringPresetId,
   MasteringVenueId,
 } from '@/demos/mastering/useMastering';
+import { clamp } from '@/utils/scale';
 
 const sessionStorageKey = 'libsonare-mastering-session-v1';
 const chainPresetStorageKey = 'libsonare-mastering-chain-preset-v1';

@@ -1,10 +1,7 @@
 import { computed, type Ref } from 'vue';
-import {
-  analyzeMasteringSignal,
-  formatMasteringDuration,
-  normalizeRange,
-} from '@/demos/mastering/masteringMetrics';
+import { analyzeMasteringSignal, normalizeRange } from '@/demos/mastering/masteringMetrics';
 import type { DecodedMasteringAudio, useMastering } from '@/demos/mastering/useMastering';
+import { formatClipLength } from '@/utils/audio';
 
 type MasteringApi = ReturnType<typeof useMastering>;
 
@@ -21,7 +18,7 @@ export function useMasteringMetering(options: MasteringMeteringOptions) {
     if (!audio) return null;
     const stats = analyzeMasteringSignal(audio.left, audio.right);
     return {
-      duration: formatMasteringDuration(audio.duration),
+      duration: formatClipLength(audio.duration),
       sampleRate: `${Math.round(audio.sampleRate / 1000)} kHz`,
       channels: audio.channels === 1 ? 'Mono' : 'Stereo',
       peak: `${stats.peakDb.toFixed(1)} dBFS`,
@@ -49,7 +46,7 @@ export function useMasteringMetering(options: MasteringMeteringOptions) {
     const stats = analyzeMasteringSignal(audio.left, audio.right);
     return {
       fileName: audio.fileName,
-      duration: formatMasteringDuration(audio.duration),
+      duration: formatClipLength(audio.duration),
       peak: `${stats.peakDb.toFixed(1)} dBFS`,
       rms: `${stats.rmsDb.toFixed(1)} dBFS`,
       crest: `${stats.crestDb.toFixed(1)} dB`,

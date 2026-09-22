@@ -4,6 +4,7 @@ import type {
   MasteringPlatformId,
   MasteringPresetId,
 } from '@/demos/mastering/useMastering';
+import { clamp } from '@/utils/scale';
 
 export interface MasteringAssistantPreviewRow {
   ceilingRisk?: boolean;
@@ -33,10 +34,6 @@ export interface ApplyMasteringAssistantSettingsResult {
 export function numericParam(params: Record<string, unknown>, key: string): number | null {
   const value = params[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function applyParam(

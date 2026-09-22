@@ -1,5 +1,5 @@
 import { ref, shallowRef } from 'vue';
-import { decodeAudioBuffer } from '@/utils/audio';
+import { decodeAudioBuffer, encodeWavStereo } from '@/utils/audio';
 import type { MasteringChainConfig, StreamingPlatform } from '@/wasm/index';
 
 export type MasteringPresetId =
@@ -326,12 +326,12 @@ export function useMastering() {
   }
 
   function createAudioUrl(audio: RenderedMasteringAudio): string {
-    const wav = encodeWav(audio.left, audio.right, audio.sampleRate);
+    const wav = encodeWavStereo(audio.left, audio.right, audio.sampleRate);
     return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
   }
 
   function createSourceAudioUrl(audio: DecodedMasteringAudio): string {
-    const wav = encodeWav(audio.left, audio.right, audio.sampleRate);
+    const wav = encodeWavStereo(audio.left, audio.right, audio.sampleRate);
     return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
   }
 
@@ -1038,47 +1038,4 @@ export function defaultModuleSettings(): MasteringModuleSettings {
     limiterCeilingDb: -1,
     limiterLookaheadMs: 5,
   };
-}
-
-function encodeWav(left: Float32Array, right: Float32Array, sampleRate: number): ArrayBuffer {
-  const channels = 2;
-  const bytesPerSample = 2;
-  const blockAlign = channels * bytesPerSample;
-  const dataSize = left.length * blockAlign;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(view, 8, 'WAVE');
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bytesPerSample * 8, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-  for (let i = 0; i < left.length; i++) {
-    view.setInt16(offset, floatToInt16(left[i]), true);
-    view.setInt16(offset + 2, floatToInt16(right[i]), true);
-    offset += 4;
-  }
-
-  return buffer;
-}
-
-function floatToInt16(value: number): number {
-  const clipped = Math.max(-1, Math.min(1, value));
-  return clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
-}
-
-function writeString(view: DataView, offset: number, value: string) {
-  for (let i = 0; i < value.length; i++) {
-    view.setUint8(offset + i, value.charCodeAt(i));
-  }
 }

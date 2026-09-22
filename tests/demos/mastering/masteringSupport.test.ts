@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref, shallowRef } from 'vue';
-import {
-  analyzeMasteringSignal,
-  dbToLinear,
-  formatMasteringDuration,
-  normalizeRange,
-} from '@/demos/mastering/masteringMetrics';
+import { analyzeMasteringSignal, normalizeRange } from '@/demos/mastering/masteringMetrics';
 import { createMasteringReportUrl, reportItems } from '@/demos/mastering/masteringReport';
 import {
   type DecodedMasteringAudio,
@@ -14,6 +9,7 @@ import {
 } from '@/demos/mastering/useMastering';
 import { useMasteringMetering } from '@/demos/mastering/useMasteringMetering';
 import { useMasteringSession } from '@/demos/mastering/useMasteringSession';
+import { formatClipLength } from '@/utils/audio';
 
 function decodedAudio(overrides: Partial<DecodedMasteringAudio> = {}): DecodedMasteringAudio {
   return {
@@ -53,9 +49,7 @@ describe('mastering metrics and report helpers', () => {
     expect(stats.crestDb).toBeGreaterThan(0);
     expect(stats.correlation).toBeGreaterThanOrEqual(-1);
     expect(stats.correlation).toBeLessThanOrEqual(1);
-    expect(formatMasteringDuration(125)).toBe('2:05');
-    expect(dbToLinear(-6)).toBeCloseTo(0.501, 3);
-    expect(dbToLinear(6)).toBe(1);
+    expect(formatClipLength(125)).toBe('2:05');
     expect(normalizeRange(-16, -24, -8)).toBe(50);
     expect(normalizeRange(Number.NaN, -24, -8)).toBe(0);
   });
@@ -76,10 +70,9 @@ describe('mastering metrics and report helpers', () => {
     );
     expect(fallbackRight.peakDb).toBeCloseTo(0, 6);
     expect(fallbackRight.correlation).toBeGreaterThan(0.9);
-    expect(formatMasteringDuration(59.6)).toBe('1:00');
-    expect(formatMasteringDuration(Number.NaN)).toBe('0:00');
-    expect(formatMasteringDuration(Number.POSITIVE_INFINITY)).toBe('0:00');
-    expect(dbToLinear(-Infinity)).toBe(0);
+    expect(formatClipLength(59.6)).toBe('1:00');
+    expect(formatClipLength(Number.NaN)).toBe('0:00');
+    expect(formatClipLength(Number.POSITIVE_INFINITY)).toBe('0:00');
     expect(normalizeRange(-99, -24, -8)).toBe(0);
     expect(normalizeRange(0, -24, -8)).toBe(100);
   });

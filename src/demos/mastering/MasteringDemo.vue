@@ -21,7 +21,6 @@ import {
   applyMasteringAssistantSettings,
   assistantParamsFromSuggestions,
 } from '@/demos/mastering/masteringAssistant';
-import { dbToLinear, formatMasteringDuration } from '@/demos/mastering/masteringMetrics';
 import { createMasteringReportUrl } from '@/demos/mastering/masteringReport';
 import {
   MASTERING_METER_TARGETS,
@@ -51,6 +50,8 @@ import {
 import { useMasteringInsights } from '@/demos/mastering/useMasteringInsights';
 import { useMasteringMetering } from '@/demos/mastering/useMasteringMetering';
 import { useMasteringSession } from '@/demos/mastering/useMasteringSession';
+import { formatClipLength } from '@/utils/audio';
+import { dbToLinear } from '@/utils/scale';
 
 const { t, locale, localizedPath, alternateLocalePath } = useI18n();
 const mastering = useMastering();
@@ -323,7 +324,7 @@ const statusVariant = computed<'idle' | 'active' | 'warning'>(() => {
 
 const statusBarFile = computed(() => mastering.source.value?.fileName || '—');
 const statusBarDuration = computed(() =>
-  mastering.source.value ? formatMasteringDuration(mastering.source.value.duration) : '—:——',
+  mastering.source.value ? formatClipLength(mastering.source.value.duration) : '—:——',
 );
 const statusBarRate = computed(() => {
   const sr = mastering.source.value?.sampleRate;

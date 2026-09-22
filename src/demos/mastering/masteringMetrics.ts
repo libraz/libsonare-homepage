@@ -1,3 +1,5 @@
+import { clamp } from '@/utils/scale';
+
 export interface MasteringSignalStats {
   peakDb: number;
   rmsDb: number;
@@ -47,25 +49,7 @@ export function analyzeMasteringSignal(
   };
 }
 
-export function formatMasteringDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
-  // Round to whole seconds first, then split — rounding the remainder in
-  // isolation can carry to 60 (e.g. 59.6 -> "0:60" instead of "1:00").
-  const total = Math.round(seconds);
-  const minutes = Math.floor(total / 60);
-  const rest = (total % 60).toString().padStart(2, '0');
-  return `${minutes}:${rest}`;
-}
-
-export function dbToLinear(db: number): number {
-  return clamp(10 ** (db / 20), 0, 1);
-}
-
 export function normalizeRange(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return 0;
   return clamp(((value - min) / (max - min)) * 100, 0, 100);
-}
-
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }

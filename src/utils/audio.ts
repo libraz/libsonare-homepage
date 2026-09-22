@@ -167,11 +167,28 @@ export function amplitudeToDb(value: number): number {
   return value > 0 ? 20 * Math.log10(value) : -120;
 }
 
+/**
+ * A position in a clip — a playhead, a section boundary, a marker. Floors, the
+ * way a clock does: a readout must not show 1:00 before the minute is reached.
+ */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds)) return '--:--';
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * How long a clip is. Rounds, because a length is being reported rather than
+ * counted up to, and a 59.6 s file reads as a minute.
+ */
+export function formatClipLength(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
+  // Round the whole value first: rounding the remainder alone can carry to 60.
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = (total % 60).toString().padStart(2, '0');
+  return `${minutes}:${rest}`;
 }
 
 export function formatSampleRate(sampleRate: number): string {
