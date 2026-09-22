@@ -11,7 +11,7 @@
  * fader all the way down. Everything is synthesized in-browser; no clip or WASM.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -34,6 +34,12 @@ const faderLin = computed<number>(() => (faderDb.value <= -40 ? 0 : 10 ** (fader
 
 const SOURCE_LIN = 0.8; // the channel's pre-fader signal level (fixed)
 const PRE_LIN = SOURCE_LIN * 0.7; // pre-fader send: tapped before the fader → fixed
+
+// ---- bar-tag text -----------------------------------------------------
+const TAG_FIXED: I18nText = { en: 'fixed', ja: '固定' };
+const TAG_TRACKS_FADER: I18nText = { en: 'tracks fader', ja: '追従' };
+const tagFixedText = computed<string>(() => localized(TAG_FIXED, loc.value));
+const tagTracksFaderText = computed<string>(() => localized(TAG_TRACKS_FADER, loc.value));
 
 // ---- presentation state ----------------------------------------------------
 const stateLabel = computed(() => {
@@ -152,7 +158,7 @@ function paint(): void {
     ctx.textAlign = 'center';
     ctx.fillText(b.label, cx, bot + 13);
     ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
-    ctx.fillText(b.fixed ? 'fixed' : 'tracks fader', cx, top - 2);
+    ctx.fillText(b.fixed ? tagFixedText.value : tagTracksFaderText.value, cx, top - 2);
   }
   ctx.textAlign = 'left';
 }

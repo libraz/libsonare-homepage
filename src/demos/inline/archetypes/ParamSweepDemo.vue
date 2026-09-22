@@ -29,7 +29,7 @@
  * spectrum. A playback-synced beam sweeps the waveform.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -109,6 +109,10 @@ const eyebrow = computed(() => {
 const showFundamental = computed(
   () => processor.value === 'pitch-shift' || processor.value === 'formant-shift',
 );
+
+// ---- canvas copy, localized -------------------------------------------------
+const PIVOT_LABEL: I18nText = { en: 'PIVOT', ja: 'ピボット' };
+const pivotLabel = computed<string>(() => localized(PIVOT_LABEL, loc.value));
 
 // ---- presentation state ----------------------------------------------------
 const fundHz = ref(0);
@@ -317,7 +321,7 @@ function paint(): void {
     ctx.fillStyle = 'rgba(252, 211, 77, 0.95)';
     ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
     ctx.textBaseline = 'top';
-    ctx.fillText('PIVOT', px + 4, specTop);
+    ctx.fillText(pivotLabel.value, px + 4, specTop);
   }
 
   // Axis labels.

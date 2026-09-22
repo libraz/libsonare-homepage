@@ -13,7 +13,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { peakEnvelope } from '@/demos/inline/audio/processors';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -72,6 +72,10 @@ const ENV_COLS = 160;
 const LANES = ['LEAD', 'BASS', 'DRUMS'] as const;
 const LANE_HUES = ['167, 139, 250', '34, 211, 238', '245, 158, 11'] as const; // violet / cyan / amber
 const MASTER_HUE = '45, 212, 191'; // teal
+
+// ---- lane-tag text ----------------------------------------------------
+const TAG_MUTED: I18nText = { en: 'MUTED', ja: 'ミュート' };
+const tagMutedText = computed<string>(() => localized(TAG_MUTED, loc.value));
 
 let engine: LaneMixerEngine | null = null;
 /** Set on unmount; an engine that finishes booting afterwards is destroyed. */
@@ -235,7 +239,9 @@ function paint(): void {
   };
 
   for (let t = 0; t < 3; t++) {
-    const tag = muted.value[t] ? `${LANES[t]} · MUTED` : `${LANES[t]} ${faderDb.value[t]} dB`;
+    const tag = muted.value[t]
+      ? `${LANES[t]} · ${tagMutedText.value}`
+      : `${LANES[t]} ${faderDb.value[t]} dB`;
     band(dispLaneEnvs[t], 12 + t * (rowH + gap), LANE_HUES[t], tag, muted.value[t]);
   }
   band(dispMasterEnv, 12 + 3 * (rowH + gap), MASTER_HUE, 'MASTER', false);

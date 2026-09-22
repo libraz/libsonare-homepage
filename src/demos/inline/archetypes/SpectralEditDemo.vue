@@ -19,7 +19,7 @@ import {
   peakEnvelope,
   SPECTRUM_COMPRESSION,
 } from '@/demos/inline/audio/processors';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
@@ -50,6 +50,12 @@ const view = computed<string>(() => String(values.view ?? 'artifact'));
 const mode = computed<EditMode>(() => String(values.mode ?? 'heal') as EditMode);
 const edited = computed(() => view.value === 'edited');
 const clipName = computed(() => (props.def.source.kind === 'clip' ? props.def.source.clip : ''));
+
+// ---- legend text -------------------------------------------------------
+const LEGEND_ARTIFACT: I18nText = { en: 'Artifact', ja: '編集前' };
+const LEGEND_EDITED: I18nText = { en: 'Edited', ja: '編集後' };
+const legendArtifactText = computed<string>(() => localized(LEGEND_ARTIFACT, loc.value));
+const legendEditedText = computed<string>(() => localized(LEGEND_EDITED, loc.value));
 
 // ---- whistle artifact + edit region (fixed time x frequency rectangle) ------
 const WHISTLE_HZ = 2600; // injected narrow-band tone
@@ -310,10 +316,10 @@ function paint(): void {
   const legendY = specTop + 2;
   ctx.fillStyle = hexA(artCol, emph > 0.5 ? 0.5 : 0.95);
   ctx.fillRect(padX, legendY + 1, 9, 3);
-  ctx.fillText('Artifact', padX + 13, legendY);
+  ctx.fillText(legendArtifactText.value, padX + 13, legendY);
   ctx.fillStyle = hexA(edCol, emph > 0.5 ? 0.95 : 0.5);
   ctx.fillRect(padX + 68, legendY + 1, 9, 3);
-  ctx.fillText('Edited', padX + 81, legendY);
+  ctx.fillText(legendEditedText.value, padX + 81, legendY);
 
   // Axis labels.
   ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';

@@ -11,7 +11,7 @@
  * pair. Everything is computed in-browser; no clip or WASM.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -54,6 +54,15 @@ const stateLabel = computed(() => {
   }
   return 'IDLE';
 });
+
+// ---- canvas copy, localized -------------------------------------------------
+const RECONSTRUCTED_WAVEFORM_LABEL: I18nText = {
+  en: 'RECONSTRUCTED WAVEFORM',
+  ja: '再構成後の波形',
+};
+const reconstructedWaveformLabel = computed<string>(() =>
+  localized(RECONSTRUCTED_WAVEFORM_LABEL, loc.value),
+);
 
 function markReady(): void {
   status.value = 'ready';
@@ -227,7 +236,7 @@ function paint(): void {
   // labels
   ctx.textBaseline = 'top';
   ctx.fillStyle = 'rgba(186, 230, 224, 0.55)';
-  ctx.fillText('RECONSTRUCTED WAVEFORM', padX, 6);
+  ctx.fillText(reconstructedWaveformLabel.value, padX, 6);
   ctx.textAlign = 'right';
   ctx.fillStyle = clips.value ? '#fca5a5' : 'rgba(186, 230, 224, 0.7)';
   ctx.fillText(

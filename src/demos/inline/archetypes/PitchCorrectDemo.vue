@@ -12,7 +12,7 @@
  * the glide, and Compare auditions the raw take against the tuned one.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
@@ -339,6 +339,12 @@ const RAW_COL = '#fb923c'; // amber = the out-of-tune take
 const TUNED_COL = '#2dd4bf'; // teal = the correction
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+// ---- legend text ------------------------------------------------------
+const LEGEND_RAW: I18nText = { en: 'Raw', ja: '補正前' };
+const LEGEND_TUNED: I18nText = { en: 'Tuned', ja: '補正後' };
+const legendRawText = computed<string>(() => localized(LEGEND_RAW, loc.value));
+const legendTunedText = computed<string>(() => localized(LEGEND_TUNED, loc.value));
+
 /** Semitone window the contours span, padded above and below the extremes. */
 function pitchWindow(): { lo: number; hi: number } {
   let lo = Number.POSITIVE_INFINITY;
@@ -459,10 +465,10 @@ function paint(): void {
   ctx.textBaseline = 'top';
   ctx.fillStyle = hexA(RAW_COL, dispEmph > 0.5 ? 0.5 : 0.95);
   ctx.fillRect(PAD_X, PAD_TOP - 1, 9, 3);
-  ctx.fillText('Raw', PAD_X + 13, PAD_TOP - 2);
+  ctx.fillText(legendRawText.value, PAD_X + 13, PAD_TOP - 2);
   ctx.fillStyle = hexA(TUNED_COL, dispEmph > 0.5 ? 0.95 : 0.5);
   ctx.fillRect(PAD_X + 44, PAD_TOP - 1, 9, 3);
-  ctx.fillText('Tuned', PAD_X + 57, PAD_TOP - 2);
+  ctx.fillText(legendTunedText.value, PAD_X + 57, PAD_TOP - 2);
 
   // Playhead — locked to the audio clock. The contours are plotted across every
   // analysis frame of the bounced buffer (phrase plus release tail), and

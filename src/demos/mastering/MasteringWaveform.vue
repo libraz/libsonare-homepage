@@ -199,7 +199,7 @@ function draw() {
     ctx.letterSpacing = '0.16em' as unknown as string;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('NO AUDIO LOADED', w / 2, mid + 2);
+    ctx.fillText(t('master.studio.waveformIdle').toUpperCase(), w / 2, mid + 2);
     return;
   }
 

@@ -13,7 +13,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { type TempoGrid, tempoGrid } from '@/demos/inline/audio/processors';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
@@ -44,6 +44,21 @@ const stateLabel = computed(() => {
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
   if (status.value !== 'ready') return 'IDLE';
   return `${secPerBar.value.toFixed(2)} s/bar`;
+});
+
+// ---- canvas copy, localized -------------------------------------------------
+const MUSICAL_GRID_LABEL: I18nText = { en: 'MUSICAL GRID', ja: '音楽的なグリッド' };
+const BAR_UNIT: I18nText = { en: 'bar', ja: '小節' };
+const BEAT_UNIT: I18nText = { en: 'beat', ja: '拍' };
+const TICK_UNIT: I18nText = { en: 'tick', ja: 'ティック' };
+const musicalGridLabel = computed<string>(() => localized(MUSICAL_GRID_LABEL, loc.value));
+// A tick is 1/PPQ of a quarter note, independent of the beat unit.
+const tickUs = computed<number>(() => (grid.value.secPerQuarter / PPQ) * 1e6);
+const readoutText = computed<string>(() => {
+  const bar = localized(BAR_UNIT, loc.value);
+  const beat = localized(BEAT_UNIT, loc.value);
+  const tick = localized(TICK_UNIT, loc.value);
+  return `1 ${bar} = ${secPerBar.value.toFixed(2)} s   1 ${beat} = ${(secPerBeat.value * 1000).toFixed(0)} ms   1 ${tick} = ${tickUs.value.toFixed(0)} µs   PPQ ${PPQ}`;
 });
 
 // ---- grid morph (ease the beat spacing so a tempo change slides) -----------
@@ -188,16 +203,10 @@ function paint(): void {
   ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
   ctx.fillText('SECONDS', padX, 4);
   ctx.fillStyle = 'rgba(94, 234, 212, 0.7)';
-  ctx.fillText(`MUSICAL GRID · ${grid.value.label}`, padX, gridTop - 13);
+  ctx.fillText(`${musicalGridLabel.value} · ${grid.value.label}`, padX, gridTop - 13);
 
-  // A tick is 1/PPQ of a quarter note, independent of the beat unit.
-  const tickUs = (grid.value.secPerQuarter / PPQ) * 1e6;
   ctx.fillStyle = 'rgba(186, 230, 224, 0.62)';
-  ctx.fillText(
-    `1 bar = ${secPerBar.value.toFixed(2)} s   1 beat = ${(secPerBeat.value * 1000).toFixed(0)} ms   1 tick = ${tickUs.toFixed(0)} µs   PPQ ${PPQ}`,
-    padX,
-    gridBot + 8,
-  );
+  ctx.fillText(readoutText.value, padX, gridBot + 8);
 }
 
 /** Re-paint when the screen is first laid out and on every later resize. */

@@ -16,7 +16,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { peakEnvelope } from '@/demos/inline/audio/processors';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
@@ -64,6 +64,11 @@ const meterCandidates = ref<MeterCandidate[]>([]);
 /** Whether the meter search actually ran, or the beat series was too short to score. */
 const meterSearched = ref(true);
 
+// Single source for the "meter search didn't run" message: it's drawn both in the
+// state pill and directly on the canvas panel, so it can't drift between them.
+const TOO_FEW_BEATS: I18nText = { en: 'TOO FEW BEATS', ja: '拍不足' };
+const tooFewBeatsText = computed(() => localized(TOO_FEW_BEATS, loc.value));
+
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'ANALYZING';
   if (status.value === 'error') return 'ERROR';
@@ -72,7 +77,7 @@ const stateLabel = computed(() => {
   if (view.value === 'beat') return bpm.value > 0 ? `≈ ${Math.round(bpm.value)} BPM` : 'BEATS';
   if (view.value === 'downbeat') return `${markerCount.value} BARS`;
   if (view.value === 'meter-estimate') {
-    if (!meterSearched.value) return 'TOO FEW BEATS';
+    if (!meterSearched.value) return tooFewBeatsText.value;
     const top = meterCandidates.value[0];
     return top ? `${top.numerator}/${top.denominator}` : 'NO METER';
   }
@@ -289,7 +294,7 @@ function paintMeterCandidates(ctx: CanvasRenderingContext2D, w: number): void {
   if (!meterSearched.value || rows.length === 0) {
     ctx.fillStyle = 'rgba(167, 139, 250, 0.75)';
     ctx.textAlign = 'center';
-    ctx.fillText('TOO FEW BEATS', panelX + panelW / 2, panelTop + panelH / 2);
+    ctx.fillText(tooFewBeatsText.value, panelX + panelW / 2, panelTop + panelH / 2);
     ctx.textAlign = 'left';
     return;
   }

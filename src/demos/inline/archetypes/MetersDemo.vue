@@ -12,7 +12,7 @@
  * the short-term contour only starts three seconds into the clip.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
@@ -58,6 +58,10 @@ const stateLabel = computed(() => {
   if (status.value === 'ready') return `${integrated.value.toFixed(1)} LUFS`;
   return 'IDLE';
 });
+
+// ---- canvas copy, localized -------------------------------------------------
+const WINDOW_LABEL: I18nText = { en: 'WINDOW', ja: 'ウィンドウ' };
+const windowLabel = computed<string>(() => localized(WINDOW_LABEL, loc.value));
 
 // ---- meter data ------------------------------------------------------------
 const LO = -40; // LUFS axis bottom
@@ -259,7 +263,7 @@ function paint(): void {
     ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
-    const label = `${contourWindowSec}s WINDOW`;
+    const label = `${contourWindowSec}s ${windowLabel.value}`;
     if (leadW > ctx.measureText(label).width + 8) {
       ctx.fillText(label, plotX + leadW / 2, (top + bot) / 2);
     }
