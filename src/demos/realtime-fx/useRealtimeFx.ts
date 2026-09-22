@@ -71,7 +71,7 @@ const MAX_BLOCK = 128;
 // AudioWorklet processor source. Runs libsonare's native RealtimeVoiceChanger in
 // the audio thread with its own heap (SAB-free): static-import the emscripten
 // factory, init from a passed wasm binary, and drive the zero-copy mono path.
-// Exported for tests/composables/realtimeFxWorklet.test.ts.
+// Exported for tests/demos/realtime-fx/realtimeFxWorklet.test.ts.
 export function buildProcessorSource(sonareUrl: string): string {
   return `
 import createModule from '${sonareUrl}';
@@ -92,7 +92,7 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
     this.vc = null; this.base = null;
     this.seq = 0;
     this.wasProcessing = false;
-    this.inView = null; this.outView = null;
+    this.inView = null; this.outView = null; this.viewGeneration = -1;
 
     this.port.onmessage = (e) => this.onMessage(e.data);
     createModule({ wasmBinary: o.wasmBinary, locateFile: () => 'sonare.wasm' })
@@ -250,20 +250,26 @@ class LibsonareVoiceProcessor extends AudioWorkletProcessor {
     return true;
   }
 
-  // Cached zero-copy heap views. Re-acquire only when Emscripten heap growth has
-  // detached the backing ArrayBuffer (its byteLength drops to 0).
+  // Cached zero-copy heap views. Heap growth detaches them (byteLength 0); a
+  // re-prepare moves the scratch buffers without detaching, which bufferGeneration reports.
+  viewsStale(view) {
+    return !view || view.buffer.byteLength === 0 || this.viewGeneration !== this.vc.bufferGeneration();
+  }
+
   inputView() {
-    if (!this.inView || this.inView.buffer.byteLength === 0) {
-      this.inView = this.vc.getMonoInputBuffer(MAX_BLOCK);
-    }
+    if (this.viewsStale(this.inView)) this.acquireViews();
     return this.inView;
   }
 
   outputView() {
-    if (!this.outView || this.outView.buffer.byteLength === 0) {
-      this.outView = this.vc.getMonoOutputBuffer(MAX_BLOCK);
-    }
+    if (this.viewsStale(this.outView)) this.acquireViews();
     return this.outView;
+  }
+
+  acquireViews() {
+    this.viewGeneration = this.vc.bufferGeneration();
+    this.inView = this.vc.getMonoInputBuffer(MAX_BLOCK);
+    this.outView = this.vc.getMonoOutputBuffer(MAX_BLOCK);
   }
 
   publishMeter(n, inputPeak, outputPeak, inputSum, outputSum) {

@@ -23,11 +23,11 @@ describe('buildProcessorSource', () => {
     expect(source).not.toContain('voiceChange(');
   });
 
-  it('caches heap views and re-acquires them only after the buffer detaches', () => {
+  it('caches heap views and re-acquires them when they go stale', () => {
     expect(source).toContain('this.vc.getMonoInputBuffer(MAX_BLOCK)');
     expect(source).toContain('this.vc.getMonoOutputBuffer(MAX_BLOCK)');
-    expect(source).toContain('this.inView.buffer.byteLength === 0');
-    expect(source).toContain('this.outView.buffer.byteLength === 0');
+    expect(source).toContain('view.buffer.byteLength === 0');
+    expect(source).toContain('this.viewGeneration !== this.vc.bufferGeneration()');
     expect(source).toContain('this.inView = null; this.outView = null');
   });
 

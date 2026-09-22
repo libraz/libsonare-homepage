@@ -20,7 +20,7 @@ export interface RealtimeStartPayload {
 // with its own heap (SAB-free): static-import the emscripten factory, init from a
 // passed wasm binary, and bypass index.js (its init() uses dynamic import, which is
 // disallowed in WorkletGlobalScope). See memory: wasm-in-audioworklet.
-function buildProcessorSource(sonareUrl: string): string {
+export function buildProcessorSource(sonareUrl: string): string {
   return `
 import createModule from '${sonareUrl}';
 
@@ -55,6 +55,11 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
   buildMixer(sceneJson) {
     if (this.mixer) { try { this.mixer.delete(); } catch (e) {} this.mixer = null; }
     this.mixer = this.mod.createMixerFromSceneJson(sceneJson, sampleRate, BLOCK);
+    this.acquireViews();
+  }
+
+  // Heap growth detaches cached views (byteLength 0); the module is built with memory growth.
+  acquireViews() {
     this.inL = []; this.inR = [];
     for (let i = 0; i < this.strips.length; i++) {
       this.inL.push(this.mixer.inputLeftView(i));
@@ -87,6 +92,7 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
     const outA = out[0], outB = out[1];
     if (!this.ready || !this.playing) { outA.fill(0); outB.fill(0); return true; }
 
+    if (this.outL.byteLength === 0 || (this.inL[0] && this.inL[0].byteLength === 0)) this.acquireViews();
     const pos = this.playhead;
     for (let s = 0; s < this.strips.length; s++) {
       const vl = this.inL[s], vr = this.inR[s];
