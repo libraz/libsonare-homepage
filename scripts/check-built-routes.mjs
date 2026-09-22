@@ -40,6 +40,7 @@ export function checkBuiltRoutes({
 
   checkSitemap(dist, glossaryFiles, failures, locales, defaultLocale);
   checkLlmsTxt(dist, failures, locales, defaultLocale);
+  checkSearchIndexes(dist, failures, locales);
   checkBuiltAssetBudgets(dist, failures);
   checkBrowserExternalShims(dist, failures);
 
@@ -82,6 +83,44 @@ function requiredDemoRoutes(locales, defaultLocale) {
   ]
     .flatMap((route) => localizedBuiltFiles(route, locales, defaultLocale))
     .sort();
+}
+
+/**
+ * Every locale ships a search index, and every route in it resolves to a page
+ * that was actually built — a result that 404s is worse than no result.
+ */
+function checkSearchIndexes(dist, failures, locales) {
+  for (const locale of locales) {
+    const name = `search-index-${locale}.json`;
+    const indexPath = path.join(dist, name);
+    if (!fs.existsSync(indexPath)) {
+      failures.push(`missing built search index: ${name}`);
+      continue;
+    }
+
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    } catch (error) {
+      failures.push(`${name} is not valid JSON: ${error.message}`);
+      continue;
+    }
+
+    if (!Array.isArray(data.pages) || data.pages.length === 0) {
+      failures.push(`${name} indexes no pages`);
+      continue;
+    }
+    if (!data.index || Object.keys(data.index).length === 0) {
+      failures.push(`${name} carries no tokens`);
+    }
+
+    for (const page of data.pages) {
+      const route = page.l.endsWith('/') ? `${page.l}index.html` : page.l;
+      if (!fs.existsSync(path.join(dist, route.replace(/^\//, '')))) {
+        failures.push(`${name} points at a route that was not built: ${page.l}`);
+      }
+    }
+  }
 }
 
 function checkSitemap(dist, glossaryFiles, failures, locales, defaultLocale) {

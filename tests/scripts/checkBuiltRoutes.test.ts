@@ -30,6 +30,10 @@ const demoRoutes = [
   'ja/studio.html',
   'practice.html',
   'ja/practice.html',
+  'gs-module.html',
+  'ja/gs-module.html',
+  'classic-synth.html',
+  'ja/classic-synth.html',
 ];
 
 const siteUrl = 'https://libsonare.libraz.net';
@@ -124,6 +128,33 @@ function writeLlmsIndexes(dist: string, locales = ['en', 'ja']) {
   }
 }
 
+function searchIndex(routes: string[]) {
+  return JSON.stringify({
+    pages: routes.map((route) => ({
+      l: `/${route}`,
+      t: route,
+      d: '',
+      s: 'doc',
+      k: [],
+      tt: [],
+      dt: [],
+      h: [],
+    })),
+    index: { audio: routes.map((_, position) => position) },
+  });
+}
+
+function writeSearchIndexes(dist: string, routes: string[], locales = ['en', 'ja']) {
+  const prefixes = locales.filter((locale) => locale !== 'en').map((locale) => `${locale}/`);
+  for (const locale of locales) {
+    const localeRoutes =
+      locale === 'en'
+        ? routes.filter((route) => !prefixes.some((prefix) => route.startsWith(prefix)))
+        : routes.filter((route) => route.startsWith(`${locale}/`));
+    writeFile(dist, `search-index-${locale}.json`, searchIndex(localeRoutes));
+  }
+}
+
 describe('check-built-routes script helpers', () => {
   afterEach(() => {
     for (const workspace of workspaces) {
@@ -172,10 +203,45 @@ describe('check-built-routes script helpers', () => {
     writeFile(dist, 'assets/app.js', 'console.log("ok")');
     writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
     writeLlmsIndexes(dist);
+    writeSearchIndexes(dist, [...demoRoutes, ...glossaryFiles]);
 
     const result = checkBuiltRoutes({ dist, manifestPath });
 
     expect(result).toEqual({ skipped: false, failures: [] });
+  });
+
+  it('requires a search index for every locale', () => {
+    const { dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    const glossaryFiles = expectedGlossaryFiles(manifestPath);
+
+    for (const file of [...demoRoutes, ...glossaryFiles]) writeFile(dist, file);
+    writeFile(dist, 'index.html');
+    writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
+    writeLlmsIndexes(dist);
+    writeSearchIndexes(dist, [...demoRoutes, ...glossaryFiles], ['en']);
+
+    const result = checkBuiltRoutes({ dist, manifestPath });
+
+    expect(result.failures).toContain('missing built search index: search-index-ja.json');
+  });
+
+  it('rejects a search index pointing at a route that was not built', () => {
+    const { dist, manifestPath } = createWorkspace();
+    writeManifest(manifestPath);
+    const glossaryFiles = expectedGlossaryFiles(manifestPath);
+
+    for (const file of [...demoRoutes, ...glossaryFiles]) writeFile(dist, file);
+    writeFile(dist, 'index.html');
+    writeFile(dist, 'sitemap.xml', sitemap([...demoRoutes, ...glossaryFiles]));
+    writeLlmsIndexes(dist);
+    writeSearchIndexes(dist, [...demoRoutes, ...glossaryFiles, 'docs/removed-page.html']);
+
+    const result = checkBuiltRoutes({ dist, manifestPath });
+
+    expect(result.failures).toContain(
+      'search-index-en.json points at a route that was not built: /docs/removed-page.html',
+    );
   });
 
   it('requires demo and glossary routes for every locale file', () => {
