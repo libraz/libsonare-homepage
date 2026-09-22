@@ -80,6 +80,8 @@ interface Strip {
   variants: Variant[];
   /** False for a pure A/B whose variants are not settings to carry away. */
   adopt: boolean;
+  /** Why this comparison will not tell the reader much where the panel sits. */
+  hint?: string | null;
 }
 
 /** The four waveforms the first chapter compares; noise waits for the next. */
@@ -88,6 +90,13 @@ const PLAIN_WAVEFORMS: readonly WaveformName[] = ['sine', 'saw', 'square', 'tria
 const REAL_BODIES: readonly BodyName[] = BODIES.filter((body) => body !== 'none');
 /** The mix every body variant plays at: where the strongest and weakest were measured. */
 const BODY_AUDITION_MIX = 0.6;
+/**
+ * Above this cutoff the high-pass tap has so little left above it that the three
+ * outputs differ in level rather than in character. Measured on a saw at C4: the
+ * high-pass sits 2.9 dB under the low-pass at 6 kHz, 8.0 dB at 10 kHz and 16.7 dB
+ * at the top of the range, where it reads as a dead button rather than a filter.
+ */
+const OUTPUT_COMPARISON_CEILING_HZ = 10_000;
 
 const copy = computed(() =>
   localizedValue({
@@ -141,6 +150,8 @@ const copy = computed(() =>
         aside:
           'The comparison runs at the cutoff and resonance the panel shows. The measurement was made at 1200 Hz and resonance 4; the button below puts the voice there.',
         setup: 'Set the measured point: 1200 Hz, resonance 4',
+        cutoffTooHigh:
+          'With the cutoff this high the high-pass tap has almost nothing left above it — measured on this build, it sits 8 dB under the low-pass at 10 kHz and 17 dB under it at the top of the range, so the three below will differ in level rather than in character. Set the measured point above first.',
         models: 'The four models',
         outputs: 'The three outputs',
         modelNotes: {
@@ -291,6 +302,8 @@ const copy = computed(() =>
         aside:
           '比較はパネルに表示されているカットオフとレゾナンスで行う。測定は 1200 Hz・レゾナンス 4 で行ったもので、下のボタンでボイスをその点に置ける。',
         setup: '測定点に置く：1200 Hz、レゾナンス 4',
+        cutoffTooHigh:
+          'カットオフがここまで高いと、ハイパスのタップに残るものがほとんどない。このビルドでの実測で、ローパスに対して 10 kHz で 8 dB、レンジ上端では 17 dB 下。下の 3 つは音色ではなく音量の差になる。先に上の測定点に置くとよい。',
         models: '4 つのモデル',
         outputs: '3 つの出力',
         modelNotes: {
@@ -520,6 +533,10 @@ const strips = computed<Strip[]>(() => {
             blocked,
           })),
           adopt: true,
+          hint:
+            outputOffered && props.patch.cutoffHz >= OUTPUT_COMPARISON_CEILING_HZ
+              ? c.filter.cutoffTooHigh
+              : null,
         },
       ];
     }
@@ -691,6 +708,7 @@ function reasonId(strip: Strip, variant: Variant): string {
 
     <section v-for="strip in strips" :key="strip.id" class="cs-card" :aria-label="strip.title">
       <h3 class="cs-card__label">{{ strip.title }}</h3>
+      <p v-if="strip.hint" class="cs-card__hint">{{ strip.hint }}</p>
       <div class="cs-variants">
         <button
           v-for="variant in strip.variants"

@@ -80,6 +80,8 @@ const copy = computed(() =>
       svfOnly: 'SVF only',
       body: 'Body type',
       detuneMuted: 'No effect at unison 1 — raise unison to spread the stack.',
+      bandClosed:
+        'Above the cutoff, so the two filters are closing on the same band — 8 dB down where they meet and about 9 dB more for every octave past it.',
       filterOutputNote:
         'Only the state-variable filter offers a choice here. The three ladder models always answer through their own low-pass.',
     },
@@ -90,6 +92,8 @@ const copy = computed(() =>
       svfOnly: 'SVF のみ',
       body: 'ボディの種類',
       detuneMuted: 'ユニゾン 1 では効果なし。スタックを広げるにはユニゾンを上げる。',
+      bandClosed:
+        'カットオフより上。2 つのフィルタが同じ帯域を挟みにいっている。重なった時点で 8 dB 下、そこから 1 オクターブごとに約 9 dB 下がる。',
       filterOutputNote:
         'ここで選べるのはステートバリアブルフィルタだけ。3 種のラダーフィルタは常に自身のローパスを通す。',
     },
@@ -110,6 +114,17 @@ const faders = computed<NumericParam[]>(() => props.module.faders.map((key) => p
 const filterOutputEnabled = computed(() => offersFilterOutput(props.patch.filterModel));
 const FILTER_OUTPUT_NOTE_ID = 'cs-filter-output-note';
 const DETUNE_NOTE_ID = 'cs-detune-note';
+const BAND_NOTE_ID = 'cs-band-note';
+
+/**
+ * The high-pass has climbed to or past the low-pass cutoff, so the pair is
+ * squeezing the same band from both sides. Measured on a saw at C4: the voice
+ * sits 8 dB under an open filter where the two meet, and roughly 9 dB lower for
+ * each octave the high-pass goes above it — five octaves apart is silence.
+ */
+const bandClosed = computed(
+  () => props.patch.hpCutoffHz > 0 && props.patch.hpCutoffHz >= props.patch.cutoffHz,
+);
 
 const STARTING_PATCH = defaultPatch();
 
@@ -139,7 +154,9 @@ function isInert(param: NumericParam): boolean {
 }
 
 function describedBy(param: NumericParam): string | undefined {
-  return isInert(param) ? DETUNE_NOTE_ID : undefined;
+  if (isInert(param)) return DETUNE_NOTE_ID;
+  if (param.key === 'hpCutoffHz' && bandClosed.value) return BAND_NOTE_ID;
+  return undefined;
 }
 </script>
 
@@ -239,6 +256,9 @@ function describedBy(param: NumericParam): string | undefined {
       <!-- The line is reserved above the bank so the note appearing moves no cap. -->
       <p v-if="props.module.id === 'dco'" :id="DETUNE_NOTE_ID" class="cs-module__note">
         {{ isInert(paramOf('detuneCents')) ? copy.detuneMuted : '' }}
+      </p>
+      <p v-if="props.module.id === 'hpf'" :id="BAND_NOTE_ID" class="cs-module__note">
+        {{ bandClosed ? copy.bandClosed : '' }}
       </p>
 
       <div class="cs-bank">

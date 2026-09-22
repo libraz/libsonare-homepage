@@ -281,6 +281,37 @@ describe('what the chapters claim about this build', () => {
   });
 });
 
+describe('the settings that render something a reader cannot hear', () => {
+  const dB = (value: number) => 20 * Math.log10(Math.max(value, 1e-12));
+
+  function peakDb(patch: ClassicPatch): number {
+    return dB(peak(renderPhrase(wasm, patch, PHRASE_SUSTAIN).interleaved));
+  }
+
+  it('leaves no band at all when the high-pass climbs over the cutoff', async () => {
+    await wasm.init();
+    const open = peakDb(defaultPatch());
+    const closed = peakDb({ ...defaultPatch(), hpCutoffHz: 18_000, cutoffHz: 200 });
+    // Two faders, no warning, and nothing comes out — the panel has to say so.
+    expect(closed).toBeLessThan(-100);
+    expect(open - closed).toBeGreaterThan(60);
+  });
+
+  it('puts the high-pass tap further under the low-pass the higher the cutoff goes', async () => {
+    await wasm.init();
+    const gapAt = (cutoffHz: number) =>
+      peakDb({ ...defaultPatch(), cutoffHz, filterOutput: 'lowpass' }) -
+      peakDb({ ...defaultPatch(), cutoffHz, filterOutput: 'highpass' });
+
+    // The chapter offers its three outputs at whatever cutoff the panel shows,
+    // so this is the number behind the note it prints above 10 kHz.
+    expect(gapAt(6_000)).toBeLessThan(5);
+    expect(gapAt(10_000)).toBeGreaterThan(6);
+    expect(gapAt(18_000)).toBeGreaterThan(14);
+    expect(gapAt(18_000)).toBeGreaterThan(gapAt(10_000));
+  });
+});
+
 describe('renderKey', () => {
   it('is the same for two patches that differ only in the order keys were set', () => {
     const a = defaultPatch();

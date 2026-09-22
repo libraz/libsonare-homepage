@@ -565,6 +565,18 @@ html:not(.dark) .cs-module.cs-module--lit {
   background: var(--plate-rule);
 }
 
+/* Why the strip below will not answer the question the reader came with. */
+.cs-card__hint {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--demo-amber) 32%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--demo-amber) 9%, transparent);
+  color: var(--plate-ink);
+  font-size: 0.8rem;
+  line-height: 1.65;
+}
+
 .cs-card__prose {
   margin: 0 0 10px;
   color: var(--plate-ink);
