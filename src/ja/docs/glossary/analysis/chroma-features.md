@@ -54,7 +54,7 @@ description: クロマ、ピッチクラス、クロマグラム。libsonare が
 ::: warning チューニングは自動推定されません
 `ChromaConfig.tuning` の既定は `0`、つまり A440 で、libsonare がこれを信号から推定することはありません。`librosa.feature.chroma_stft` は既定の `tuning=None` でまず `estimate_tuning()` を実行するので、この点で挙動が異なります。A440 から半音の何分の一かずれた録音では、ピッチクラスの格子が実際の倍音列と合わなくなり、エネルギーが隣のビンへにじみ、キーやコードの結果が何の警告もないまま劣化します。
 
-古い録音、テープ、生演奏、意図的に別の基準ピッチで演奏されたものなど、素材が A440 でない可能性がある場合は、音声に対して `estimateTuning()`／`estimate_tuning()` を実行し、その結果を `tuning` に渡してください。
+古い録音、テープ、生演奏、意図的に別の基準ピッチで演奏されたものなど、素材が A440 でない可能性がある場合は、音声に対して `estimateTuning()`／`estimate_tuning()` を実行してください。戻り値は半音を単位としたずれで、それをどこへ渡すかはバインディングによって違います。C++ では `ChromaConfig.tuning` にそのまま渡します。JavaScript・Node・Python の `chroma`、`detectKey`、`detectChords`、`analyze`（Python ではスネークケース）にはチューニングの引数がありません。これらのバインディングで使える場所はストリーム解析器で、基準ピッチを Hz で渡します。作成時なら `tuningRefHz`、途中からなら `setTuningRefHz()` に、440 × 2^(ずれ / 12) を指定します。45 セント低く調律したハ長調のループは、A440 のままだと別のキーと判定され、この基準ピッチを渡すとハ長調に戻ります。[ビジュアルプレイヤー](/ja/analyzer)は、読み込んだファイルごとにずれを推定して適用しています。
 :::
 
 関連: [MIR の全体像](../concepts/mir-overview.md)、[キー検出](./key-detection.md)、[コード認識](./chord-recognition.md)、[スペクトログラムと STFT](./spectrogram-stft.md)
