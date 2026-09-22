@@ -156,13 +156,21 @@ const SR = 44100;
 const PROBE_CHORD = [52, 55, 59];
 const PROBE_SECONDS = 1.7;
 
-/** Bounce the probe chord with the shared insertion effect set to `type` (0 = Thru). */
-function renderThroughEfx(wasm, type) {
+/**
+ * Bounce the probe chord with the shared insertion effect set to `type`
+ * (0 = Thru), optionally overriding one parameter slot.
+ *
+ * The slot write goes after the type, and has to: selecting a type overwrites
+ * the whole parameter block with that type's own power-on bytes, so a slot
+ * written first is wiped.
+ */
+function renderThroughEfx(wasm, type, slot = null, value = 0) {
   const events = [];
   if (type > 0) {
     events.push({ beat: 0, sysex: dt1([0x40, 0x03, 0x00, (type >> 8) & 0x7f, type & 0x7f]) });
     events.push({ beat: 0, sysex: dt1([0x40, 0x41, 0x22, 1]) });
   }
+  if (slot !== null) events.push({ beat: 0, sysex: dt1([0x40, 0x03, 0x03 + slot, value]) });
   for (const note of PROBE_CHORD) events.push(...noteEvents(0, note, 112, 0, 2.3));
   const project = new wasm.Project();
   try {
@@ -210,18 +218,27 @@ export function compareRenders(a, b) {
 }
 
 /**
- * How far each effect type moves the render from Thru, at the bytes it powers
- * up holding.
+ * What each effect type does to the render, at the bytes it powers up holding,
+ * and which of its parameter slots the engine acts on.
  *
- * `changes_signal` is the only claim drawn mechanically, and its cut is
- * round-off rather than a tuned number. Whether a change above it is *heard* is
- * a listening question this cannot answer, which is why the distance ships.
+ * `changes_signal` is the only claim drawn mechanically from the distance, and
+ * its cut is round-off rather than a tuned number. Whether a change above it is
+ * *heard* is a listening question this cannot answer, which is why the distance
+ * ships alongside.
  *
  * It says nothing about whether the build has an insert for the type either:
  * two of the EQ types land on opposite sides of the line because one is flat at
- * its power-on defaults and the other is not.
+ * its power-on defaults and the other is not. `live_slots` is the question that
+ * survives that — a type flat at its defaults still has slots that move it.
+ *
+ * The archive says which slots it derived a conversion for, but that describes
+ * the hardware it measured, not this build. Whether a write lands in the audio
+ * is only findable by writing it, so each slot is probed at both ends of its
+ * range. A slot that moves neither way is received and held rather than used:
+ * the distinction the address table draws as AUDIBLE against STATE, resolved
+ * per slot instead of per block.
  */
-function measureAudibility(wasm, types) {
+function measureAudibility(wasm, types, slotCount) {
   const dry = renderThroughEfx(wasm, 0);
   const dryRms = rms(dry);
   return types.map((key) => {
@@ -233,6 +250,7 @@ function measureAudibility(wasm, types) {
       changes_signal: maxAbs > FLOAT32_ULP,
       distance: Number(distance.toPrecision(4)),
       level_ratio: Number((rms(rendered) / dryRms).toPrecision(4)),
+      live_slots: liveSlots(wasm, type, rendered, slotCount),
     };
   });
 }
@@ -243,6 +261,30 @@ function measureAudibility(wasm, types) {
  * `biome.jsonc` excludes this directory, or the formatter and this function
  * would take turns rewriting the same files.
  */
+/**
+ * Which of each type's twenty parameter slots the engine actually acts on.
+ *
+ * The archive says which slots it derived a conversion for; that is a statement
+ * about the hardware it measured, not about this build. Whether a write lands
+ * in the audio can only be found by writing it, so each slot is probed at both
+ * ends of its range against the type's own baseline. A slot that moves neither
+ * way is being received and held rather than used — the difference the address
+ * table draws as AUDIBLE against STATE, resolved per slot instead of per block.
+ */
+function liveSlots(wasm, type, baseline, slotCount) {
+  const live = [];
+  for (let slot = 0; slot < slotCount; slot++) {
+    for (const value of [0, 127]) {
+      const { maxAbs } = compareRenders(renderThroughEfx(wasm, type, slot, value), baseline);
+      if (maxAbs > FLOAT32_ULP) {
+        live.push(slot);
+        break;
+      }
+    }
+  }
+  return live;
+}
+
 function write(file, payload, sources) {
   const target = path.join(OUT_DIR, file);
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -282,7 +324,8 @@ async function main() {
 
   const wasm = await import(path.join(ROOT, 'src/wasm/index.js'));
   await wasm.init();
-  const audibility = measureAudibility(wasm, Object.keys(efx.defaults.by_type));
+  const slotCount = addressTable.rows.find((row) => row.param === 'kEfxParameter').size;
+  const audibility = measureAudibility(wasm, Object.keys(efx.defaults.by_type), slotCount);
   const meta = JSON.parse(fs.readFileSync(WASM_META, 'utf8'));
   const measuredOut = write(
     AUDIBILITY_ARTIFACT,
@@ -293,19 +336,23 @@ async function main() {
         velocity: 112,
         sample_rate: SR,
         seconds: PROBE_SECONDS,
+        slots: slotCount,
         distance: 'RMS between the two renders after peak-normalizing each',
         changes_signal: 'peak deviation from Thru above one float32 quantum',
+        live_slots:
+          'slots whose value moves the render, probed at both ends of the range against this type at its own defaults',
         what_this_cannot_say:
-          'Whether a change above that floor is audible. Every type powers up at its own default bytes, so a type can carry a working effect and still measure flat here.',
+          'Whether a change above that floor is audible. Every type powers up at its own default bytes, so a type can carry a working effect and still measure flat here; its live slots are the better question in that case.',
       },
       types: audibility,
     },
     digestSources(artifact(AUDIBILITY_ARTIFACT)),
   );
   const changed = audibility.filter((row) => row.changes_signal).length;
+  const live = audibility.reduce((total, row) => total + row.live_slots.length, 0);
   console.log(
     `✓ ${AUDIBILITY_ARTIFACT} — ${changed} of ${audibility.length} types change the signal ` +
-      `at their power-on defaults, ${measuredOut.bytes} B`,
+      `at their power-on defaults, ${live} live parameter slots across them, ${measuredOut.bytes} B`,
   );
 }
 
