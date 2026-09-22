@@ -7,6 +7,22 @@ import { fileURLToPath } from 'node:url';
 const minimumPublishedBodyLength = 1600;
 const minimumDetailsBodyLength = 120;
 
+// Kana, CJK ideographs and halfwidth kana, which carry a word where Latin script
+// needs several characters. Measured across the 65 published page pairs, a Japanese
+// page says the same thing in 0.58 of its English sibling's characters, so a raw
+// character count holds a CJK page to a bar roughly 1.7x the one a Latin page meets.
+const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]/g;
+const CJK_WEIGHT = 1.72;
+
+/**
+ * Body length in units comparable across scripts. One CJK character counts as
+ * {@link CJK_WEIGHT} Latin ones, so a single threshold means the same amount of
+ * content whatever the page is written in, and a new locale needs no table entry.
+ */
+function contentLength(text) {
+  return text.length + (text.match(CJK)?.length ?? 0) * (CJK_WEIGHT - 1);
+}
+
 export function checkGlossaryCoverage({
   root = process.cwd(),
   manifestPath = path.join(root, 'scripts/glossary/manifest.json'),
@@ -98,7 +114,7 @@ export function checkPublishedPage(failures, label, filePath) {
   if (!frontmatter?.title) failures.push(`${label}: missing frontmatter title`);
   if (!frontmatter?.description) failures.push(`${label}: missing frontmatter description`);
   if (!h1) failures.push(`${label}: missing H1`);
-  if (body.length < minimumPublishedBodyLength) {
+  if (contentLength(body) < minimumPublishedBodyLength) {
     failures.push(`${label}: body is too short for a reviewed public page`);
   }
   checkRelatedLinks(failures, label, content);
@@ -107,7 +123,7 @@ export function checkPublishedPage(failures, label, filePath) {
     ?.trim();
   if (!detailsBody) {
     failures.push(`${label}: missing implementation details block`);
-  } else if (detailsBody.length < minimumDetailsBodyLength) {
+  } else if (contentLength(detailsBody) < minimumDetailsBodyLength) {
     failures.push(`${label}: implementation details block is too thin`);
   }
 }
