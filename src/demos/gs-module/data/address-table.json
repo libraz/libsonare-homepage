@@ -2359,7 +2359,7 @@
       "lo_addr": 4194576,
       "hi_addr": 4194607,
       "mask": 0,
-      "why": "no row between PATCH NAME and REVERB MACRO; the SC-55/SC-88 PARTIAL RESERVE the SC-8850 dropped arrives here"
+      "why": "no row between PATCH NAME and REVERB MACRO; the PARTIAL RESERVE block earlier GS modules defined, and the one modelled here dropped, arrives here"
     },
     {
       "from": "40 01 36",

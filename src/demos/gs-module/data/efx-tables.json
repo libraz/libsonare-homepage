@@ -2,8 +2,6 @@
   "_sources": {
     "tools/gs/efx-tables.json": "270f47f897e0a81fe05f0f96ecfb185de2241901225612006652887fd47d72e8"
   },
-  "unit_id": "roland-sc8850-01",
-  "model": "SC-8850",
   "archive_revision": "47bd72cfb3ddd5a074dc9f5433e517525626555e",
   "what_this_is": "The byte-to-physical-quantity conversions the GS insertion-effect parameter block uses, and which (type, slot) pairs an archive of what one individual unit answered gives one to. Committed so that a clone reads them without the archive.",
   "what_this_cannot_see": [

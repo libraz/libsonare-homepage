@@ -27,6 +27,7 @@
  * needs node's type stripping.
  */
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -135,8 +136,6 @@ function runAddressDumper(engineDir) {
  */
 function selectEfxFields(raw) {
   return {
-    unit_id: raw.unit_id,
-    model: raw.model,
     archive_revision: raw.archive_revision,
     what_this_is: raw.what_this_is,
     what_this_cannot_see: raw.what_this_cannot_see,
@@ -285,10 +284,66 @@ function liveSlots(wasm, type, baseline, slotCount) {
   return live;
 }
 
+/**
+ * A model designation — a short letter cluster bound to a number — names the
+ * hardware an archive measured, and nothing published from this repo carries
+ * one. The guard is structural rather than a list of names, because a list
+ * would put the very strings it excludes into this file.
+ */
+const MODEL_DESIGNATION =
+  /\b[A-Za-z]{2,5}-\d{2,5}[A-Za-z]{0,3}\b|\b[A-Za-z]{2,5}\d{3,5}[A-Za-z]{0,3}\b/;
+
+/**
+ * Rewrites for engine prose that trips the guard, keyed by the digest of the
+ * original so neither side of the pair spells a designation out. An unknown
+ * digest fails the run: the engine changed its wording and a human decides how
+ * the sentence should read here.
+ */
+const REDACTIONS = new Map([
+  [
+    '49e2a7dac2676993',
+    'no row between PATCH NAME and REVERB MACRO; the PARTIAL RESERVE block earlier ' +
+      'GS modules defined, and the one modelled here dropped, arrives here',
+  ],
+]);
+
+function digestOf(text) {
+  return crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+}
+
+/** Walks a payload, rewriting or refusing any string that names a model. */
+function scrub(value, where = '$') {
+  if (typeof value === 'string') {
+    if (!MODEL_DESIGNATION.test(value)) return value;
+    const replacement = REDACTIONS.get(digestOf(value));
+    if (replacement === undefined) {
+      throw new Error(
+        `${where} reads as a model designation and has no rewrite (digest ${digestOf(value)}). ` +
+          'Add one to REDACTIONS in this script, or drop the field.',
+      );
+    }
+    if (MODEL_DESIGNATION.test(replacement)) {
+      throw new Error(`the rewrite for ${where} still reads as a model designation`);
+    }
+    return replacement;
+  }
+  if (Array.isArray(value)) return value.map((item, i) => scrub(item, `${where}[${i}]`));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => {
+        if (MODEL_DESIGNATION.test(key)) throw new Error(`${where}.${key} names a model`);
+        return [key, scrub(item, `${where}.${key}`)];
+      }),
+    );
+  }
+  return value;
+}
+
 function write(file, payload, sources) {
   const target = path.join(OUT_DIR, file);
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(target, `${JSON.stringify({ _sources: sources, ...payload }, null, 2)}\n`);
+  const body = { _sources: sources, ...scrub(payload, file) };
+  fs.writeFileSync(target, `${JSON.stringify(body, null, 2)}\n`);
   return { target, bytes: fs.statSync(target).size };
 }
 

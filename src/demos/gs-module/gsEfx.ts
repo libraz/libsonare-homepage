@@ -47,7 +47,6 @@ const AUDIBILITY = audibility as unknown as {
 };
 
 const TABLES = tables as unknown as {
-  unit_id: string;
   what_this_is: string;
   what_this_cannot_see: string[];
   classes: Record<string, { read_by: string; tables: Record<string, unknown> }>;
