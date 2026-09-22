@@ -1,41 +1,96 @@
 /**
- * The deck's modules, the chapters printed over it, and what each chapter lights.
+ * The voice deck's sections, the chapters printed over them, and what each
+ * chapter lights.
  *
- * A chapter is metadata only: which modules it is about, where its annotation
- * card sits, which phrase it plays, and what it is called. The prose and the
- * comparisons live in `SynthChapters.vue`, keyed by the same id.
+ * A section lists its faders explicitly rather than deriving them from a
+ * parameter group, because the panel cuts one group two ways: the high-pass
+ * fader stands in its own HPF section while the rest of the `filter` group is
+ * the VCF. `groups` stays as the contract a section's faders must satisfy, and
+ * it is checked once at load.
  *
- * `noteArea` is chosen per chapter so the card never covers a module the
- * chapter lights and never covers the patchbay. Every value stays in row 1,
- * whose height is fixed, so the deck holds still when a chapter changes.
+ * A chapter is metadata only: which sections it is about, whether the assign
+ * block is in scope, which phrase it plays, and what it is called. The prose
+ * and the comparisons live in `SynthChapters.vue`, keyed by the same id.
  */
 import type { LocalizedName } from './classicSynthCopy';
-import type { ParamGroup } from './classicSynthState';
+import { type NumericParamKey, type ParamGroup, paramOf } from './classicSynthState';
 
 /**
- * One region of the instrument, in deck order. `groups` names the parameter
- * sections printed inside it; `matrix` has none because it holds the patchbay.
+ * One section of the voice deck, in panel order. `legend` is the silkscreen
+ * printed over it, `groups` the parameter groups it may print, `faders` the
+ * amounts it prints in order, and `area` the layout hook the stylesheet keys on.
  */
 export const DECK_MODULES = [
-  { id: 'osc', groups: ['osc'], area: 'osc' },
-  { id: 'filter', groups: ['filter'], area: 'filter' },
-  { id: 'env', groups: ['amp', 'filter-env'], area: 'env' },
-  { id: 'lfo', groups: ['lfo'], area: 'lfo' },
-  { id: 'matrix', groups: [], area: 'matrix' },
-  { id: 'body', groups: ['body'], area: 'body' },
-  { id: 'out', groups: ['out'], area: 'out' },
-] as const satisfies readonly { id: string; groups: readonly ParamGroup[]; area: string }[];
+  {
+    id: 'lfo',
+    legend: 'LFO',
+    groups: ['lfo'],
+    area: 'lfo',
+    faders: ['lfoRateHz', 'lfoToPitchCents', 'lfo2RateHz'],
+  },
+  {
+    id: 'dco',
+    legend: 'DCO',
+    groups: ['osc'],
+    area: 'dco',
+    faders: ['unison', 'detuneCents', 'driftCents', 'drive'],
+  },
+  { id: 'hpf', legend: 'HPF', groups: ['filter'], area: 'hpf', faders: ['hpCutoffHz'] },
+  {
+    id: 'vcf',
+    legend: 'VCF',
+    groups: ['filter'],
+    area: 'vcf',
+    faders: ['cutoffHz', 'resonanceQ', 'keyTrack', 'envToCutoffCents', 'velToCutoffCents'],
+  },
+  {
+    id: 'env-a',
+    legend: 'ENV-A',
+    groups: ['amp'],
+    area: 'env-a',
+    faders: ['ampAttackMs', 'ampDecayMs', 'ampSustain', 'ampReleaseMs'],
+  },
+  {
+    id: 'env-f',
+    legend: 'ENV-F',
+    groups: ['filter-env'],
+    area: 'env-f',
+    faders: ['filterAttackMs', 'filterDecayMs', 'filterSustain', 'filterReleaseMs'],
+  },
+  { id: 'body', legend: 'BODY', groups: ['body'], area: 'body', faders: ['bodyMix'] },
+  {
+    id: 'out',
+    legend: 'OUT',
+    groups: ['out'],
+    area: 'out',
+    faders: ['glideMs', 'stereoSpread', 'gain', 'busDrive'],
+  },
+] as const satisfies readonly {
+  id: string;
+  legend: string;
+  groups: readonly ParamGroup[];
+  area: string;
+  faders: readonly NumericParamKey[];
+}[];
 
 export type DeckModule = (typeof DECK_MODULES)[number];
 export type ModuleId = DeckModule['id'];
 
+for (const module of DECK_MODULES) {
+  for (const key of module.faders) {
+    if (!(module.groups as readonly ParamGroup[]).includes(paramOf(key).group)) {
+      throw new Error(`Fader ${key} is printed in ${module.id}, which does not own its group`);
+    }
+  }
+}
+
 export interface Chapter {
   id: string;
   title: LocalizedName;
-  /** Deck modules this chapter is about. Every other module dims. */
+  /** Deck sections this chapter is about. Every other section dims. */
   modules: ModuleId[];
-  /** Where the annotation card sits, as CSS grid lines: row/col start, row/col end. */
-  noteArea: string;
+  /** Whether the assign block (the patchbay) is in scope and opens with the chapter. */
+  patchbay: boolean;
   /** Which phrase its comparisons and its play button use. */
   phraseId: string;
 }
@@ -46,59 +101,59 @@ export const CHAPTERS: readonly Chapter[] = [
   {
     id: 'sound',
     title: { en: 'Make a sound', ja: 'まず鳴らす' },
-    modules: ['osc', 'out'],
-    noteArea: '1 / 2 / 2 / 4',
+    modules: ['dco', 'out'],
+    patchbay: false,
     phraseId: 'sustain',
   },
   {
     id: 'waveform',
     title: { en: 'The waveform', ja: '波形' },
-    modules: ['osc'],
-    noteArea: '1 / 2 / 2 / 4',
+    modules: ['dco'],
+    patchbay: false,
     phraseId: 'sustain',
   },
   {
     id: 'filter',
     title: { en: "The filter's four characters", ja: 'フィルタの 4 つの人格' },
-    modules: ['filter'],
-    noteArea: '1 / 3 / 2 / 5',
+    modules: ['vcf'],
+    patchbay: false,
     phraseId: 'sustain',
   },
   {
     id: 'envelope',
     title: { en: 'Envelopes', ja: 'エンベロープ' },
-    // The filter module is in scope too: the filter envelope reaches the sound
-    // only through the cutoff amount, which lives there.
-    modules: ['env', 'filter'],
-    noteArea: '1 / 1 / 2 / 3',
+    // The VCF is in scope too: the filter envelope reaches the sound only
+    // through the envelope amount, which lives there.
+    modules: ['env-a', 'env-f', 'vcf'],
+    patchbay: false,
     phraseId: 'staccato',
   },
   {
     id: 'modulation',
     title: { en: 'LFOs and the mod matrix', ja: 'LFO とモジュレーション行列' },
-    modules: ['lfo', 'matrix'],
-    noteArea: '1 / 1 / 2 / 4',
+    modules: ['lfo'],
+    patchbay: true,
     phraseId: 'gesture',
   },
   {
     id: 'body',
     title: { en: 'Body resonance', ja: 'ボディ共鳴' },
     modules: ['body'],
-    noteArea: '1 / 1 / 2 / 3',
+    patchbay: false,
     phraseId: 'staccato',
   },
   {
     id: 'thickness',
     title: { en: 'Thickness and width', ja: '厚みと広がり' },
-    modules: ['osc', 'out'],
-    noteArea: '1 / 2 / 2 / 4',
+    modules: ['dco', 'out'],
+    patchbay: false,
     phraseId: 'chord',
   },
   {
     id: 'playground',
     title: { en: 'Playground', ja: 'プレイグラウンド' },
     modules: ALL_MODULES,
-    noteArea: '1 / 1 / 2 / 4',
+    patchbay: true,
     phraseId: 'range',
   },
 ];

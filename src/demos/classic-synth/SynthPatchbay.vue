@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * The patchbay: a source × destination grid over the shared voice, with the
- * depth of every routing beside it. It is a deck module, so it lives in a cell
- * of fixed height and scrolls inside that cell rather than growing it.
+ * The assign block: a source × destination grid over the shared voice, with the
+ * depth of every routing beside it. Closed, it shows its legend, its routing
+ * count and one line per routing; open, the whole grid. The page owns `open`
+ * so the modulation chapter can raise it, and it stays where the reader last
+ * left it otherwise.
  *
  * The grid has no `'none'` row or column, because the engine accepts a routing
  * from nowhere and renders no difference — a half-made routing must be
@@ -42,6 +44,9 @@ const emit = defineEmits<{
   update: [change: Partial<ClassicPatch>];
 }>();
 
+/** Whether the grid is unfolded. The page raises it on the modulation chapter. */
+const open = defineModel<boolean>('open', { default: false });
+
 const { isLocale, localizedValue } = useI18n();
 const ja = computed(() => isLocale('ja'));
 
@@ -59,7 +64,10 @@ const MATRIX_ONLY_SOURCES: readonly ModSourceName[] = ['breath', 'aftertouch'];
 const copy = computed(() =>
   localizedValue({
     en: {
-      label: 'Patchbay',
+      label: 'Assign',
+      blockLabel: 'Mod matrix',
+      open: 'Open',
+      close: 'Close',
       gridLabel: 'Modulation matrix: sources by destinations',
       corner: 'Source → Destination',
       matrixOnly: 'matrix only',
@@ -73,6 +81,7 @@ const copy = computed(() =>
       cellSilent: ', destination silent until fixed',
       routings: 'Routings',
       none: 'No routings. Click a cell to add one.',
+      noneClosed: 'No routings. Open the matrix to add one.',
       depthLabel: (source: string, dest: string) => `Depth, ${source} to ${dest}`,
       clear: 'Clear',
       clearNamed: (source: string, dest: string) => `Clear ${source} to ${dest}`,
@@ -82,7 +91,10 @@ const copy = computed(() =>
       unreachable: 'This voice cannot reach this destination; the routing renders no difference.',
     },
     ja: {
-      label: 'パッチベイ',
+      label: 'Assign',
+      blockLabel: 'モジュレーション行列',
+      open: '開く',
+      close: '閉じる',
       gridLabel: 'モジュレーション行列：ソース × デスティネーション',
       corner: 'ソース → デスティネーション',
       matrixOnly: '行列のみ',
@@ -97,6 +109,7 @@ const copy = computed(() =>
       cellSilent: '、デスティネーションは設定まで無音',
       routings: '結線',
       none: '結線はありません。セルを押すと追加できます。',
+      noneClosed: '結線はありません。行列を開くと追加できます。',
       depthLabel: (source: string, dest: string) => `深さ、${source} → ${dest}`,
       clear: '消す',
       clearNamed: (source: string, dest: string) => `${source} → ${dest} を消す`,
@@ -298,212 +311,276 @@ function removeRouting(index: number) {
 </script>
 
 <template>
-  <div class="cs-patchbay">
-    <div class="cs-pb__head">
-      <h3 class="cs-card__label cs-pb__label">{{ copy.label }}</h3>
+  <div class="cs-patchbay" :class="{ 'cs-patchbay--open': open }" :aria-label="copy.blockLabel">
+    <header class="cs-block__head cs-pb__head">
+      <span class="cs-lamp" aria-hidden="true" />
+      <h3 class="cs-legend">{{ copy.label }}</h3>
       <span class="cs-pb__count" aria-live="polite">{{ copy.count(routings.length) }}</span>
-    </div>
+      <button
+        type="button"
+        class="cs-key cs-key--inline cs-pb__toggle"
+        :class="{ 'cs-key--on': open }"
+        :aria-expanded="open"
+        aria-controls="cs-pb-body"
+        @click="open = !open"
+      >
+        <span class="cs-key__lamp" aria-hidden="true" />
+        <span class="cs-key__text">{{ open ? copy.close : copy.open }}</span>
+      </button>
+    </header>
 
-    <div class="cs-pb__body">
-      <div class="cs-pb__scroll">
-        <table class="cs-pb__grid" :aria-label="copy.gridLabel">
-          <thead>
-            <tr>
-              <th scope="col" class="cs-pb__corner">
-                <span class="cs-pb__sr">{{ copy.corner }}</span>
-              </th>
-              <th
-                v-for="column in columns"
-                :key="column.key"
-                scope="col"
-                class="cs-pb__col"
-                :class="{ 'cs-pb__col--silent': column.unmet }"
-                :aria-describedby="column.unmet ? `cs-pb-req-${column.key}` : undefined"
-              >
-                <span class="cs-pb__col-name">{{ column.name }}</span>
-                <span v-if="column.unmet" class="cs-pb__badge">{{ copy.silent }}</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in gridRows" :key="row.source">
-              <th scope="row" class="cs-pb__row">
-                <span class="cs-pb__row-name">{{ row.name }}</span>
-                <span v-if="row.matrixOnly" class="cs-pb__row-note">{{ copy.matrixOnly }}</span>
-              </th>
-              <td
-                v-for="cell in row.cells"
-                :key="cell.column.key"
-                class="cs-pb__cell"
-                :class="{ 'cs-pb__cell--silent': cell.column.unmet }"
-              >
-                <button
-                  type="button"
-                  class="cs-pb__dot"
-                  :class="{
-                    'cs-pb__dot--on': cell.index >= 0,
-                    'cs-pb__dot--selected': cell.index >= 0 && cell.index === selected,
-                    'cs-pb__dot--blocked': cell.blocked,
-                  }"
-                  :aria-label="cell.label"
-                  :aria-disabled="cell.blocked ? 'true' : undefined"
-                  :aria-describedby="cell.blocked ? 'cs-pb-cap' : undefined"
-                  @click="pressCell(row.source, cell)"
+    <div id="cs-pb-body" class="cs-pb__fold">
+      <!-- Closed: one printed line per routing, the way a panel lists its assignments. -->
+      <ul v-if="!open" class="cs-pb__brief" :aria-label="copy.routings">
+        <li v-if="!routeRows.length" class="cs-pb__brief-empty">{{ copy.noneClosed }}</li>
+        <li
+          v-for="row in routeRows"
+          :key="`${row.index}:${row.routing.source}>${row.routing.destination}`"
+          class="cs-pb__brief-row"
+        >
+          <span class="cs-pb__brief-name">
+            {{ row.sourceLabel }}
+            <span class="cs-pb__arrow" aria-hidden="true">→</span>
+            {{ row.destinationLabel }}
+          </span>
+          <span v-if="row.value !== null" class="cs-pb__brief-value">{{ row.value }}</span>
+        </li>
+      </ul>
+
+      <div v-else class="cs-pb__body">
+        <div class="cs-pb__scroll">
+          <table class="cs-pb__grid" :aria-label="copy.gridLabel">
+            <thead>
+              <tr>
+                <th scope="col" class="cs-pb__corner">
+                  <span class="cs-sr">{{ copy.corner }}</span>
+                </th>
+                <th
+                  v-for="column in columns"
+                  :key="column.key"
+                  scope="col"
+                  class="cs-pb__col"
+                  :class="{ 'cs-pb__col--silent': column.unmet }"
+                  :aria-describedby="column.unmet ? `cs-pb-req-${column.key}` : undefined"
                 >
-                  <span v-if="cell.mark" aria-hidden="true">{{ cell.mark }}</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                  <span class="cs-pb__col-name">{{ column.name }}</span>
+                  <span v-if="column.unmet" class="cs-pb__badge">{{ copy.silent }}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in gridRows" :key="row.source">
+                <th scope="row" class="cs-pb__row">
+                  <span class="cs-pb__row-name">{{ row.name }}</span>
+                  <span v-if="row.matrixOnly" class="cs-pb__row-note">{{ copy.matrixOnly }}</span>
+                </th>
+                <td
+                  v-for="cell in row.cells"
+                  :key="cell.column.key"
+                  class="cs-pb__cell"
+                  :class="{ 'cs-pb__cell--silent': cell.column.unmet }"
+                >
+                  <button
+                    type="button"
+                    class="cs-pb__pin"
+                    :class="{
+                      'cs-pb__pin--on': cell.index >= 0,
+                      'cs-pb__pin--selected': cell.index >= 0 && cell.index === selected,
+                      'cs-pb__pin--blocked': cell.blocked,
+                    }"
+                    :aria-label="cell.label"
+                    :aria-disabled="cell.blocked ? 'true' : undefined"
+                    :aria-describedby="cell.blocked ? 'cs-pb-cap' : undefined"
+                    @click="pressCell(row.source, cell)"
+                  >
+                    <span v-if="cell.mark" aria-hidden="true">{{ cell.mark }}</span>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <div class="cs-pb__side" :aria-label="copy.routings">
-        <p v-if="full" id="cs-pb-cap" class="cs-pb__notice" role="status">{{ copy.capReached }}</p>
+        <div class="cs-pb__side" :aria-label="copy.routings">
+          <p v-if="full" id="cs-pb-cap" class="cs-pb__notice" role="status">{{ copy.capReached }}</p>
 
-        <ul v-if="unmetColumns.length" class="cs-pb__requirements">
-          <li
-            v-for="column in unmetColumns"
-            :id="`cs-pb-req-${column.key}`"
-            :key="column.key"
-            class="cs-pb__notice cs-pb__requirement"
-          >
-            <span class="cs-pb__requirement-text">
-              <b>{{ column.name }}</b> — {{ requirementNote(column.unmet as ModRequirement) }}
-            </span>
-            <button
-              type="button"
-              class="cs-button cs-pb__fix"
-              @click="fixRequirement(column.unmet as ModRequirement)"
+          <ul v-if="unmetColumns.length" class="cs-pb__requirements">
+            <li
+              v-for="column in unmetColumns"
+              :id="`cs-pb-req-${column.key}`"
+              :key="column.key"
+              class="cs-pb__notice cs-pb__requirement"
             >
-              {{ fixLabel(column.unmet as ModRequirement) }}
-            </button>
-          </li>
-        </ul>
-
-        <p v-if="!routeRows.length" class="cs-pb__empty">{{ copy.none }}</p>
-        <ul v-else class="cs-pb__routings">
-          <li
-            v-for="row in routeRows"
-            :key="`${row.index}:${row.routing.source}>${row.routing.destination}`"
-            class="cs-pb__route"
-            :class="{ 'cs-pb__route--on': row.index === selected }"
-          >
-            <div class="cs-pb__route-head">
-              <button type="button" class="cs-pb__route-name" @click="selected = row.index">
-                {{ row.sourceLabel }}
-                <span class="cs-pb__arrow" aria-hidden="true">→</span>
-                {{ row.destinationLabel }}
-              </button>
-              <span v-if="row.value !== null" class="cs-param__value">{{ row.value }}</span>
+              <span class="cs-pb__requirement-text">
+                <b>{{ column.name }}</b> — {{ requirementNote(column.unmet as ModRequirement) }}
+              </span>
               <button
                 type="button"
-                class="cs-button cs-pb__clear"
-                :aria-label="row.clearLabel"
-                @click="removeRouting(row.index)"
+                class="cs-button cs-pb__fix"
+                @click="fixRequirement(column.unmet as ModRequirement)"
               >
-                {{ copy.clear }}
+                {{ fixLabel(column.unmet as ModRequirement) }}
               </button>
-            </div>
-            <input
-              v-if="row.destination"
-              type="range"
-              class="cs-param__slider"
-              :min="row.destination.min"
-              :max="row.destination.max"
-              :step="row.destination.step"
-              :value="row.routing.depth"
-              :aria-label="row.depthLabel"
-              :aria-valuetext="row.value ?? undefined"
-              @input="setDepth(row.index, Number(($event.target as HTMLInputElement).value))"
-              @focus="selected = row.index"
-            />
-            <p v-else class="cs-pb__route-note">{{ copy.unreachable }}</p>
-            <p v-if="row.unmet" class="cs-pb__route-note cs-pb__route-note--silent">
-              {{ requirementNote(row.unmet) }}
-            </p>
-            <p v-if="row.resonanceFloor" class="cs-pb__route-note">
-              {{ copy.resonanceFloor(formatValue(patch.resonanceQ, 'ratio')) }}
-            </p>
-          </li>
-        </ul>
+            </li>
+          </ul>
+
+          <p v-if="!routeRows.length" class="cs-pb__empty">{{ copy.none }}</p>
+          <ul v-else class="cs-pb__routings">
+            <li
+              v-for="row in routeRows"
+              :key="`${row.index}:${row.routing.source}>${row.routing.destination}`"
+              class="cs-pb__route"
+              :class="{ 'cs-pb__route--on': row.index === selected }"
+            >
+              <div class="cs-pb__route-head">
+                <button type="button" class="cs-pb__route-name" @click="selected = row.index">
+                  {{ row.sourceLabel }}
+                  <span class="cs-pb__arrow" aria-hidden="true">→</span>
+                  {{ row.destinationLabel }}
+                </button>
+                <span v-if="row.value !== null" class="cs-pb__value">{{ row.value }}</span>
+                <button
+                  type="button"
+                  class="cs-button cs-pb__clear"
+                  :aria-label="row.clearLabel"
+                  @click="removeRouting(row.index)"
+                >
+                  {{ copy.clear }}
+                </button>
+              </div>
+              <input
+                v-if="row.destination"
+                type="range"
+                class="cs-pb__depth"
+                :min="row.destination.min"
+                :max="row.destination.max"
+                :step="row.destination.step"
+                :value="row.routing.depth"
+                :aria-label="row.depthLabel"
+                :aria-valuetext="row.value ?? undefined"
+                @input="setDepth(row.index, Number(($event.target as HTMLInputElement).value))"
+                @focus="selected = row.index"
+              />
+              <p v-else class="cs-pb__route-note">{{ copy.unreachable }}</p>
+              <p v-if="row.unmet" class="cs-pb__route-note cs-pb__route-note--silent">
+                {{ requirementNote(row.unmet) }}
+              </p>
+              <p v-if="row.resonanceFloor" class="cs-pb__route-note">
+                {{ copy.resonanceFloor(formatValue(patch.resonanceQ, 'ratio')) }}
+              </p>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/*
- * The module fills its deck cell and never grows it: the head takes its own
- * height, and the body below splits the rest between the grid and the routing
- * list, each of which scrolls on its own.
- */
 .cs-patchbay {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  block-size: 100%;
-  min-block-size: 0;
+  min-inline-size: 0;
   container-type: inline-size;
 }
 
 .cs-pb__head {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 12px;
-  align-items: center;
-}
-
-.cs-pb__label {
-  flex: 1 1 auto;
-  margin: 0;
+  gap: 10px;
 }
 
 .cs-pb__count {
+  flex: 1 1 auto;
+  color: var(--plate-ink-dim);
+  font-family: var(--font-mono);
+  font-size: var(--plate-value-size);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.cs-pb__toggle {
   flex: 0 0 auto;
-  color: var(--demo-text-muted);
-  font-family: var(--demo-font-mono, monospace);
+  min-inline-size: 4.5rem;
+  margin-inline-end: -4px;
+}
+
+.cs-pb__fold {
+  padding: 10px 12px 12px;
+}
+
+/* ---- closed: the printed assignment list --------------------------------- */
+
+.cs-pb__brief {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-pb__brief-empty,
+.cs-pb__brief-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-inline-size: 0;
+  color: var(--plate-ink-dim);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.cs-pb__brief-name {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--plate-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-pb__brief-value,
+.cs-pb__value {
+  flex: 0 0 auto;
+  color: var(--plate-ink);
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- open: grid beside the routing list ---------------------------------- */
+
 .cs-pb__body {
   display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
   min-block-size: 0;
 }
 
-/* Below the width where grid and list can share a row, they stack and split the height. */
-@container (max-width: 42rem) {
+/* Below the width where grid and list can share a row, they stack. */
+@container (max-width: 44rem) {
   .cs-pb__body {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   }
 }
 
-/* ---- grid ---------------------------------------------------------------- */
-
 /*
- * Twelve rows by eight columns fits neither the width nor the height of the
- * cell. The body scrolls both ways; the header row and the source column stay
- * put so a reader always knows which cell they are on.
+ * Twelve rows by eight columns is wider than the block at most sizes. The body
+ * scrolls sideways; the source column stays put so a reader always knows which
+ * row they are on.
  */
 .cs-pb__scroll {
-  min-block-size: 0;
   overflow: auto;
-  border: 1px solid var(--demo-border);
-  border-radius: 7px;
-  background: var(--demo-control-bg);
+  border: 1px solid var(--plate-groove);
+  border-radius: 3px;
+  background: var(--plate-recess);
+  box-shadow: inset 0 1px 3px var(--plate-groove);
 }
 
 .cs-pb__grid {
   inline-size: 100%;
-  min-inline-size: 30rem;
+  min-inline-size: 26rem;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
 }
 
 .cs-pb__grid th {
@@ -515,7 +592,7 @@ function removeRouting(index: number) {
   position: sticky;
   inset-block-start: 0;
   z-index: 2;
-  background: var(--demo-control-bg);
+  background: var(--plate-recess-solid);
 }
 
 .cs-pb__corner,
@@ -523,11 +600,11 @@ function removeRouting(index: number) {
   position: sticky;
   inset-inline-start: 0;
   z-index: 1;
-  inline-size: 6.5rem;
-  min-inline-size: 6.5rem;
-  padding: 4px 8px;
-  border-inline-end: 1px solid var(--demo-border);
-  background: var(--demo-control-bg);
+  inline-size: 5.75rem;
+  min-inline-size: 5.75rem;
+  padding: 3px 8px;
+  border-inline-end: 1px solid var(--plate-groove);
+  background: var(--plate-recess-solid);
 }
 
 .cs-pb__grid thead .cs-pb__corner {
@@ -535,12 +612,16 @@ function removeRouting(index: number) {
 }
 
 .cs-pb__col {
-  min-inline-size: 3.4rem;
-  padding: 6px 3px 5px;
-  border-block-end: 1px solid var(--demo-border);
-  color: var(--demo-text);
+  min-inline-size: 2.8rem;
+  padding: 6px 2px 5px;
+  border-block-end: 1px solid var(--plate-groove);
+  color: var(--plate-ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
   line-height: 1.3;
   text-align: center;
+  text-transform: uppercase;
   vertical-align: bottom;
 }
 
@@ -550,32 +631,32 @@ function removeRouting(index: number) {
 }
 
 .cs-pb__col--silent .cs-pb__col-name {
-  color: var(--demo-warn-text);
+  color: var(--plate-lamp);
 }
 
 .cs-pb__badge {
   display: inline-block;
   margin-block-start: 2px;
-  padding: 0 5px;
-  border: 1px solid var(--demo-warn-border);
-  border-radius: 4px;
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
-  font-size: 0.58rem;
-  letter-spacing: 0.04em;
+  padding: 0 4px;
+  border: 1px solid var(--plate-lamp-dim);
+  border-radius: 2px;
+  color: var(--plate-lamp);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .cs-pb__row-name {
   display: block;
-  color: var(--demo-text);
+  color: var(--plate-ink);
 }
 
 .cs-pb__row-note {
   display: block;
-  color: var(--demo-text-faint);
-  font-size: 0.58rem;
-  letter-spacing: 0.04em;
+  color: var(--plate-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -585,65 +666,54 @@ function removeRouting(index: number) {
 }
 
 .cs-pb__cell--silent {
-  background: var(--demo-warn-bg);
+  background: var(--plate-lamp-tint);
 }
 
-.cs-pb__dot {
+/* A pin: a small dark key that lights when a routing is patched through it. */
+.cs-pb__pin {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   inline-size: 100%;
-  min-inline-size: 26px;
-  block-size: 26px;
+  min-inline-size: 24px;
+  block-size: 24px;
   padding: 0;
-  border: 1px solid var(--demo-border);
-  border-radius: 5px;
-  background: var(--demo-bg-elevated);
-  color: var(--demo-on-accent);
-  font-family: var(--demo-font-mono, monospace);
+  border: 1px solid var(--plate-key-edge);
+  border-radius: 2px;
+  background: var(--plate-key);
+  color: var(--plate-key-ink);
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.cs-pb__dot:hover:not(.cs-pb__dot--blocked) {
-  border-color: var(--demo-border-strong);
+.cs-pb__pin:hover:not(.cs-pb__pin--blocked) {
+  border-color: var(--plate-ink-dim);
 }
 
-.cs-pb__dot:focus-visible {
-  outline: 2px solid var(--demo-accent);
+.cs-pb__pin:focus-visible {
+  outline: 2px solid var(--plate-focus);
   outline-offset: 1px;
 }
 
-.cs-pb__dot--on {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent);
+.cs-pb__pin--on {
+  border-color: var(--plate-lamp);
+  background: var(--plate-lamp);
+  color: var(--plate-on-lamp);
+  box-shadow: 0 0 6px var(--plate-lamp-dim);
 }
 
-.cs-pb__cell--silent .cs-pb__dot--on {
-  border-color: var(--demo-warn-border);
-  background: var(--demo-warn);
-}
-
-.cs-pb__dot--selected {
+.cs-pb__pin--selected {
   box-shadow:
-    0 0 0 2px var(--demo-bg-elevated),
-    0 0 0 4px var(--demo-accent);
+    0 0 0 2px var(--plate-recess-solid),
+    0 0 0 3px var(--plate-ink);
 }
 
-.cs-pb__dot--blocked {
+.cs-pb__pin--blocked {
   opacity: var(--demo-disabled-opacity, 0.45);
   cursor: not-allowed;
-}
-
-.cs-pb__sr {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 /* ---- side: cap, requirements, routings ----------------------------------- */
@@ -652,26 +722,22 @@ function removeRouting(index: number) {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-block-size: 0;
-  overflow-y: auto;
-  padding-inline-end: 2px;
+  min-inline-size: 0;
 }
 
 .cs-pb__notice {
-  flex: 0 0 auto;
   margin: 0;
   padding: 6px 10px;
-  border: 1px solid var(--demo-warn-border);
-  border-radius: 6px;
-  background: var(--demo-warn-bg);
-  color: var(--demo-warn-text);
+  border: 1px solid var(--plate-lamp-dim);
+  border-radius: 3px;
+  background: var(--plate-lamp-tint);
+  color: var(--plate-ink);
   font-size: 0.72rem;
   line-height: 1.5;
 }
 
 .cs-pb__requirements {
   display: grid;
-  flex: 0 0 auto;
   gap: 6px;
   margin: 0;
   padding: 0;
@@ -693,18 +759,17 @@ function removeRouting(index: number) {
 .cs-pb__fix {
   flex: 0 0 auto;
   padding: 4px 10px;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
 }
 
 .cs-pb__empty {
   margin: 0;
-  color: var(--demo-text-muted);
+  color: var(--plate-ink-dim);
   font-size: 0.76rem;
 }
 
 .cs-pb__routings {
   display: grid;
-  flex: 0 0 auto;
   gap: 4px;
   margin: 0;
   padding: 0;
@@ -713,14 +778,13 @@ function removeRouting(index: number) {
 
 .cs-pb__route {
   padding: 5px 8px 7px;
-  border: 1px solid var(--demo-border);
-  border-radius: 6px;
-  background: var(--demo-control-bg);
+  border: 1px solid var(--plate-groove);
+  border-radius: 3px;
+  background: var(--plate-recess);
 }
 
 .cs-pb__route--on {
-  border-color: var(--demo-accent-border);
-  background: var(--demo-accent-subtle);
+  border-color: var(--plate-lamp-dim);
 }
 
 .cs-pb__route-head {
@@ -735,7 +799,7 @@ function removeRouting(index: number) {
   padding: 2px 0;
   border: none;
   background: none;
-  color: var(--demo-text);
+  color: var(--plate-ink);
   font-family: inherit;
   font-size: 0.74rem;
   text-align: start;
@@ -744,39 +808,48 @@ function removeRouting(index: number) {
 
 .cs-pb__route-name:focus-visible {
   border-radius: 3px;
-  outline: 2px solid var(--demo-accent);
+  outline: 2px solid var(--plate-focus);
   outline-offset: 2px;
 }
 
 .cs-pb__arrow {
   margin-inline: 4px;
-  color: var(--demo-text-faint);
+  color: var(--plate-ink-faint);
 }
 
 .cs-pb__clear {
   padding: 3px 8px;
-  font-size: 0.68rem;
+  font-size: 0.64rem;
 }
 
-.cs-pb__route .cs-param__slider {
+/* Depth is the one horizontal control on the panel; it keeps the lamp colour. */
+.cs-pb__depth {
   display: block;
-  margin-block-start: 3px;
+  inline-size: 100%;
+  margin-block-start: 4px;
+  accent-color: var(--plate-lamp);
+}
+
+.cs-pb__depth:focus-visible {
+  outline: 2px solid var(--plate-focus);
+  outline-offset: 2px;
 }
 
 .cs-pb__route-note {
   margin: 3px 0 0;
-  color: var(--demo-text-muted);
+  color: var(--plate-ink-dim);
   font-size: 0.7rem;
   line-height: 1.5;
 }
 
 .cs-pb__route-note--silent {
-  color: var(--demo-warn-text);
+  color: var(--plate-lamp);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cs-pb__dot {
+  .cs-pb__pin {
     transition: none;
   }
 }
 </style>
+

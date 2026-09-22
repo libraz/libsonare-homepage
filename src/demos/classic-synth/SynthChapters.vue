@@ -14,8 +14,9 @@
  * change). The copy is kept as one object keyed by chapter id so the English
  * and Japanese of a chapter sit side by side and drift is visible.
  *
- * This is the body of the annotation card laid over the deck, so it assumes a
- * width of about 30rem and a height it does not control; the card scrolls.
+ * This is the body of the chapter display in the lower deck. The display
+ * strip above it already prints the chapter's number and name, so the body
+ * begins with the prose.
  */
 import { computed, ref } from 'vue';
 import { useI18n } from '@/composables/useI18n';
@@ -108,7 +109,7 @@ const copy = computed(() =>
           'Start with the waveform. The four below are the same note through the voice exactly as it stands on the deck, and only the waveform differs. Click one to hear it, another to compare, then adopt the one you want to carry on with.',
         ],
         aside:
-          'The deck under this card is the voice. It stays there for the rest of the page: each chapter dims the modules it is not about, but what you hear and edit is always this one voice.',
+          'The deck above is the voice. It stays there for the rest of the page: each chapter dims the sections it is not about, but what you hear and edit is always this one voice.',
         strip: 'The plain waveforms',
         notes: {
           sine: 'the fundamental alone, no harmonics',
@@ -258,7 +259,7 @@ const copy = computed(() =>
           'まず波形から。下の 4 つは、デッキにあるボイスそのままで同じ音を鳴らしたもので、違うのは波形だけ。1 つ押して聴き、別のものを押して比べ、続けたいものをボイスに採用する。',
         ],
         aside:
-          'このカードの下に広がるデッキがボイスそのものだ。このページの最後までそこに居続ける。章が変わるとその章に関係ないモジュールは薄くなるが、聴いているのも編集しているのも常にこの 1 つのボイスだ。',
+          '上に広がるデッキがボイスそのものだ。このページの最後までそこに居続ける。章が変わるとその章に関係ないセクションは薄くなるが、聴いているのも編集しているのも常にこの 1 つのボイスだ。',
         strip: '基本の波形',
         notes: {
           sine: '基音だけ。倍音なし',
@@ -684,7 +685,6 @@ function reasonId(strip: Strip, variant: Variant): string {
 <template>
   <div class="chapter">
     <article class="cs-card">
-      <h2 class="cs-card__title">{{ label(props.chapter.title) }}</h2>
       <p v-for="(paragraph, index) in intro" :key="index" class="cs-card__prose">{{ paragraph }}</p>
       <p v-if="aside" class="cs-card__aside">{{ aside }}</p>
     </article>
@@ -705,10 +705,8 @@ function reasonId(strip: Strip, variant: Variant): string {
           :aria-describedby="reasonId(strip, variant)"
           @click="audition(strip, variant)"
         >
-          <span class="cs-variant__name chapter__name">
-            <span class="chapter__mark" aria-hidden="true">
-              {{ isPlaying(variant) ? '▶' : isInVoice(variant) ? '●' : '' }}
-            </span>
+          <span class="cs-variant__lamp" aria-hidden="true" />
+          <span class="cs-variant__name">
             <span class="chapter__sr">{{ copy.shared.playPrefix }} </span>
             <span>{{ variant.name }}</span>
             <span v-if="isPlaying(variant)" class="chapter__sr">, {{ copy.shared.playing }}</span>
@@ -749,27 +747,12 @@ function reasonId(strip: Strip, variant: Variant): string {
 </template>
 
 <style scoped>
-/* The card scrolls, not this; the root only has to be shrinkable. */
 .chapter {
-  min-block-size: 0;
-}
-
-.chapter__name {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-/* Fixed width, so a marker appearing does not shift the name beside it. */
-.chapter__mark {
-  flex: 0 0 auto;
-  inline-size: 0.8em;
-  color: var(--demo-accent);
-  font-size: 0.7em;
+  min-inline-size: 0;
 }
 
 .chapter__note--blocked {
-  color: var(--demo-text-faint);
+  color: var(--plate-key-ink-dim);
 }
 
 /* A blocked variant stays focusable so its reason can be reached; it only looks disabled. */
@@ -779,13 +762,7 @@ function reasonId(strip: Strip, variant: Variant): string {
 }
 
 .cs-variant[aria-disabled='true']:hover {
-  border-color: var(--demo-border);
-}
-
-.cs-variant:focus-visible,
-.cs-button:focus-visible {
-  outline: 2px solid var(--demo-accent);
-  outline-offset: 2px;
+  background: var(--plate-key);
 }
 
 .chapter__transport {
@@ -796,7 +773,7 @@ function reasonId(strip: Strip, variant: Variant): string {
 .chapter__status {
   flex: 1 1 auto;
   min-block-size: 1.2em;
-  color: var(--demo-text-muted);
+  color: var(--plate-ink-dim);
   font-size: 0.74rem;
   text-align: end;
 }

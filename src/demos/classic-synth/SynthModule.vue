@@ -1,25 +1,23 @@
 <script setup lang="ts">
 /**
- * One module of the deck: the legends, switch banks and knobs of the parameter
- * groups printed inside it. The deck places it and dims it; the page footer
- * carries the transport. This component only edits the voice.
+ * One section of the voice deck: its legend and lamp in the header row, its
+ * rows of choice keys, and its fader bank. The deck places it and dims it; this
+ * component only edits the voice.
  *
- * Section membership comes from `CLASSIC_PARAMS`, so a field moved to another
- * group only needs the one declaration. An amount is a knob and a choice is a
- * switch, which is the one rule the layout follows.
+ * An amount is a fader and a choice is a key, which is the one rule the layout
+ * follows. Banks are bottom-aligned across the deck so every cap rides the same
+ * line whether or not keys sit above it.
  *
- * A logarithmic parameter rides a 0..1 normal through its knob — `min *
+ * A logarithmic parameter rides a 0..1 normal through its fader — `min *
  * (max/min) ** norm` out, the inverse log in — because a linear cutoff control
  * spends most of its throw above 10 kHz.
  *
  * Two controls carry a measured caveat rather than being disabled outright.
  * `detuneCents` does nothing below unison 2, so it is dimmed and noted, not
- * locked — a reader may set it ahead of raising unison. `filterOutput` only
- * acts on the state-variable filter; its switch bank is disabled on the other
- * three models, with the reason printed where it can be reached.
+ * locked. `filterOutput` only acts on the state-variable filter; its keys are
+ * disabled on the other three models, with the reason reachable from each key.
  */
 import { computed } from 'vue';
-import { RotaryKnob } from '@/components/ui';
 import { useI18n } from '@/composables/useI18n';
 import type { DeckModule } from './classicSynthChapters';
 import {
@@ -27,15 +25,15 @@ import {
   FILTER_MODEL_NAMES,
   FILTER_OUTPUT_NAMES,
   formatValue,
-  GROUP_NAMES,
   type LocalizedName,
+  MODULE_NAMES,
+  PANEL_CAPTIONS,
   PARAM_NAMES,
   WAVEFORM_NAMES,
 } from './classicSynthCopy';
 import {
   BODIES,
   type BodyName,
-  CLASSIC_PARAMS,
   type ClassicPatch,
   defaultPatch,
   detuneHasEffect,
@@ -46,11 +44,11 @@ import {
   type NumericParam,
   type NumericParamKey,
   offersFilterOutput,
-  type ParamGroup,
   paramOf,
   WAVEFORMS,
   type WaveformName,
 } from './classicSynthState';
+import SynthFader from './SynthFader.vue';
 
 const props = defineProps<{
   module: DeckModule;
@@ -76,170 +74,190 @@ function name(entry: LocalizedName): string {
 const copy = computed(() =>
   localizedValue({
     en: {
-      detuneMuted: 'No effect at unison 1 — raise unison to spread the stack.',
+      waveform: 'Waveform',
+      filterModel: 'Filter model',
       outputStage: 'Output stage',
+      svfOnly: 'SVF only',
+      body: 'Body type',
+      detuneMuted: 'No effect at unison 1 — raise unison to spread the stack.',
       filterOutputNote:
         'Only the state-variable filter offers a choice here. The three ladder models always answer through their own low-pass.',
     },
     ja: {
-      detuneMuted: 'ユニゾン 1 では効果なし。スタックを広げるにはユニゾンを上げてください。',
+      waveform: '波形',
+      filterModel: 'フィルタモデル',
       outputStage: '出力段',
+      svfOnly: 'SVF のみ',
+      body: 'ボディの種類',
+      detuneMuted: 'ユニゾン 1 では効果なし。スタックを広げるにはユニゾンを上げる。',
       filterOutputNote:
-        'ここで選べるのはステートバリアブルフィルタだけです。3 種のラダーフィルタは常に自身のローパスを通します。',
+        'ここで選べるのはステートバリアブルフィルタだけ。3 種のラダーフィルタは常に自身のローパスを通す。',
     },
   }),
 );
 
-/** The seven sections, in the order `CLASSIC_PARAMS` lists their fields. */
-const GROUP_ORDER: readonly ParamGroup[] = (() => {
-  const order: ParamGroup[] = [];
-  for (const param of CLASSIC_PARAMS) {
-    if (!order.includes(param.group)) order.push(param.group);
-  }
-  return order;
-})();
+/** Waveform glyphs, one period across an 18 × 10 box, printed on the keys. */
+const WAVEFORM_GLYPHS: Readonly<Record<WaveformName, string>> = {
+  sine: 'M1 5 C 3.5 0, 6.5 0, 9 5 S 14.5 10, 17 5',
+  saw: 'M1 9 L 9 1 L 9 9 L 17 1',
+  square: 'M1 9 L 1 1 L 9 1 L 9 9 L 17 9 L 17 1',
+  triangle: 'M1 9 L 5 1 L 13 9 L 17 1',
+  noise: 'M1 5 L 3 2 L 5 8 L 7 3 L 9 7 L 11 1 L 13 9 L 15 4 L 17 6',
+};
 
-const PARAMS_BY_GROUP: ReadonlyMap<ParamGroup, NumericParam[]> = (() => {
-  const map = new Map<ParamGroup, NumericParam[]>();
-  for (const group of GROUP_ORDER) map.set(group, []);
-  for (const param of CLASSIC_PARAMS) map.get(param.group)?.push(param);
-  return map;
-})();
-
-/** This module's groups, in parameter-table order rather than declaration order. */
-const groups = computed<ParamGroup[]>(() =>
-  GROUP_ORDER.filter((group) => (props.module.groups as readonly ParamGroup[]).includes(group)),
-);
-
-function paramsOf(group: ParamGroup): NumericParam[] {
-  return PARAMS_BY_GROUP.get(group) ?? [];
-}
-
-const legendIds = computed(() => groups.value.map((group) => `csg-${group}`).join(' '));
+const faders = computed<NumericParam[]>(() => props.module.faders.map((key) => paramOf(key)));
 
 const filterOutputEnabled = computed(() => offersFilterOutput(props.patch.filterModel));
 const FILTER_OUTPUT_NOTE_ID = 'cs-filter-output-note';
+const DETUNE_NOTE_ID = 'cs-detune-note';
 
 const STARTING_PATCH = defaultPatch();
 
 /**
- * What the knob is turned to. A logarithmic parameter rides a 0..1 normal so
- * its throw is even across the decades; everything else rides its own unit.
+ * Where the cap sits. A logarithmic parameter rides a 0..1 normal so its
+ * travel is even across the decades; everything else rides its own unit.
  */
-function knobValue(param: NumericParam, value: number): number {
+function faderValue(param: NumericParam, value: number): number {
   if (!param.log) return value;
   return Math.log(value / param.min) / Math.log(param.max / param.min);
 }
 
-/** The knob's position, converted back to the parameter's own unit. */
-function onKnob(param: NumericParam, raw: number) {
+/** The cap's position, converted back to the parameter's own unit. */
+function onFader(param: NumericParam, raw: number) {
   const value = param.log ? param.min * (param.max / param.min) ** raw : raw;
   emit('update-param', param.key, value);
 }
 
-/** Double-clicking a knob returns it to the voice a reader started with. */
-function knobDefault(param: NumericParam): number {
-  return knobValue(param, STARTING_PATCH[param.key]);
+/** Double-clicking a cap returns it to the voice a reader started with. */
+function faderDefault(param: NumericParam): number {
+  return faderValue(param, STARTING_PATCH[param.key]);
 }
 
-/** A control the current settings make inaudible, and the reason to print. */
-function inertNote(param: NumericParam): string | null {
-  if (param.key === 'detuneCents' && !detuneHasEffect(props.patch)) return copy.value.detuneMuted;
-  return null;
+/** True for a control the current settings make inaudible. */
+function isInert(param: NumericParam): boolean {
+  return param.key === 'detuneCents' && !detuneHasEffect(props.patch);
+}
+
+function describedBy(param: NumericParam): string | undefined {
+  return isInert(param) ? DETUNE_NOTE_ID : undefined;
 }
 </script>
 
 <template>
-  <section class="cs-module" :aria-labelledby="legendIds">
-    <div v-for="group in groups" :key="group" class="cs-card">
-      <h3 :id="`csg-${group}`" class="cs-card__label">{{ name(GROUP_NAMES[group]) }}</h3>
+  <section
+    class="cs-module"
+    :data-area="props.module.area"
+    :style="{ '--span': props.module.faders.length }"
+    :aria-label="name(MODULE_NAMES[props.module.id])"
+  >
+    <header class="cs-module__head">
+      <span class="cs-lamp" aria-hidden="true" />
+      <h3 class="cs-legend">{{ props.module.legend }}</h3>
+    </header>
 
-      <div v-if="group === 'osc'" class="cs-seg" role="group" :aria-labelledby="`csg-${group}`">
+    <div class="cs-module__body">
+      <div
+        v-if="props.module.id === 'dco'"
+        class="cs-keys cs-keys--3"
+        role="group"
+        :aria-label="copy.waveform"
+      >
         <button
           v-for="waveform in WAVEFORMS"
           :key="waveform"
           type="button"
-          class="cs-seg__item"
-          :class="{ 'cs-seg__item--on': props.patch.waveform === waveform }"
+          class="cs-key"
+          :class="{ 'cs-key--on': props.patch.waveform === waveform }"
           :aria-pressed="props.patch.waveform === waveform"
+          :aria-label="name(WAVEFORM_NAMES[waveform])"
           @click="emit('update-waveform', waveform)"
         >
-          {{ name(WAVEFORM_NAMES[waveform]) }}
+          <span class="cs-key__lamp" aria-hidden="true" />
+          <svg class="cs-key__glyph" viewBox="0 0 18 10" aria-hidden="true">
+            <path :d="WAVEFORM_GLYPHS[waveform]" />
+          </svg>
         </button>
       </div>
 
-      <div v-if="group === 'filter'" class="cs-seg" role="group" :aria-labelledby="`csg-${group}`">
-        <button
-          v-for="model in FILTER_MODELS"
-          :key="model"
-          type="button"
-          class="cs-seg__item"
-          :class="{ 'cs-seg__item--on': props.patch.filterModel === model }"
-          :aria-pressed="props.patch.filterModel === model"
-          @click="emit('update-filter-model', model)"
-        >
-          {{ name(FILTER_MODEL_NAMES[model]) }}
-        </button>
-      </div>
-
-      <template v-if="group === 'filter'">
-        <span id="cs-filter-output-label" class="cs-card__label cs-card__label--sub">
-          {{ copy.outputStage }}
-        </span>
-        <div class="cs-seg" role="group" aria-labelledby="cs-filter-output-label">
+      <template v-if="props.module.id === 'vcf'">
+        <div class="cs-keys cs-keys--2" role="group" :aria-label="copy.filterModel">
+          <button
+            v-for="model in FILTER_MODELS"
+            :key="model"
+            type="button"
+            class="cs-key"
+            :class="{ 'cs-key--on': props.patch.filterModel === model }"
+            :aria-pressed="props.patch.filterModel === model"
+            @click="emit('update-filter-model', model)"
+          >
+            <span class="cs-key__lamp" aria-hidden="true" />
+            <span class="cs-key__text">{{ name(FILTER_MODEL_NAMES[model]) }}</span>
+          </button>
+        </div>
+        <div class="cs-keys cs-keys--3" role="group" :aria-label="copy.outputStage">
           <button
             v-for="output in FILTER_OUTPUTS"
             :key="output"
             type="button"
-            class="cs-seg__item"
-            :class="{ 'cs-seg__item--on': props.patch.filterOutput === output }"
+            class="cs-key"
+            :class="{ 'cs-key--on': props.patch.filterOutput === output }"
             :disabled="!filterOutputEnabled"
             :aria-pressed="props.patch.filterOutput === output"
             :aria-describedby="filterOutputEnabled ? undefined : FILTER_OUTPUT_NOTE_ID"
             @click="emit('update-filter-output', output)"
           >
-            {{ name(FILTER_OUTPUT_NAMES[output]) }}
+            <span class="cs-key__lamp" aria-hidden="true" />
+            <span class="cs-key__text">{{ name(FILTER_OUTPUT_NAMES[output]) }}</span>
           </button>
         </div>
-        <p v-if="!filterOutputEnabled" :id="FILTER_OUTPUT_NOTE_ID" class="cs-card__aside">
-          {{ copy.filterOutputNote }}
+        <p class="cs-module__print">
+          <span aria-hidden="true">{{ copy.svfOnly }}</span>
+          <span :id="FILTER_OUTPUT_NOTE_ID" class="cs-sr">{{ copy.filterOutputNote }}</span>
         </p>
       </template>
 
-      <div v-if="group === 'body'" class="cs-seg" role="group" :aria-labelledby="`csg-${group}`">
+      <div
+        v-if="props.module.id === 'body'"
+        class="cs-keys cs-keys--2"
+        role="group"
+        :aria-label="copy.body"
+      >
         <button
           v-for="body in BODIES"
           :key="body"
           type="button"
-          class="cs-seg__item"
-          :class="{ 'cs-seg__item--on': props.patch.body === body }"
+          class="cs-key"
+          :class="{ 'cs-key--on': props.patch.body === body }"
           :aria-pressed="props.patch.body === body"
           @click="emit('update-body', body)"
         >
-          {{ name(BODY_NAMES[body]) }}
+          <span class="cs-key__lamp" aria-hidden="true" />
+          <span class="cs-key__text">{{ name(BODY_NAMES[body]) }}</span>
         </button>
       </div>
 
-      <div class="cs-knobs">
-        <RotaryKnob
-          v-for="param in paramsOf(group)"
+      <!-- The line is reserved above the bank so the note appearing moves no cap. -->
+      <p v-if="props.module.id === 'dco'" :id="DETUNE_NOTE_ID" class="cs-module__note">
+        {{ isInert(paramOf('detuneCents')) ? copy.detuneMuted : '' }}
+      </p>
+
+      <div class="cs-bank">
+        <SynthFader
+          v-for="param in faders"
           :key="param.key"
-          class="cs-knob"
-          :class="{ 'cs-knob--inert': inertNote(param) !== null }"
-          :model-value="knobValue(param, props.patch[param.key])"
+          class="cs-fader"
+          :class="{ 'cs-fader--inert': isInert(param) }"
+          :model-value="faderValue(param, props.patch[param.key])"
           :min="param.log ? 0 : param.min"
           :max="param.log ? 1 : param.max"
           :step="param.log ? 0.005 : param.step"
-          :default-value="knobDefault(param)"
+          :default-value="faderDefault(param)"
           :label="name(PARAM_NAMES[param.key])"
+          :caption="name(PANEL_CAPTIONS[param.key])"
           :display="formatValue(props.patch[param.key], param.unit)"
-          :size="46"
-          label-wrap
-          @update:model-value="onKnob(param, $event)"
+          :described-by="describedBy(param)"
+          @update:model-value="onFader(param, $event)"
         />
-        <p v-if="group === 'osc' && inertNote(paramOf('detuneCents'))" class="cs-knobs__note">
-          {{ copy.detuneMuted }}
-        </p>
       </div>
     </div>
   </section>

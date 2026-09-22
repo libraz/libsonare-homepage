@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
  * What this engine's subtractive synthesizer is made of, read as chapters
- * printed over one instrument.
+ * printed on one instrument.
  *
- * The page is one deck seen head-on. A chapter names the modules it is about,
- * the deck dims the rest, and the chapter's prose floats as a card over a part
- * of the deck it is not about. Row 1 of the deck has a fixed height and the
- * card is a grid item placed by `--note-area`, so nothing moves when a chapter
- * changes — the whole point of one panel serving eight chapters is that the
- * reader never loses where they are in it.
+ * The page is one front panel in two decks. The upper deck is the voice: eight
+ * sections side by side, every amount a fader and every choice a key. The lower
+ * deck is the strip: the chapter display, the assign block, and the program
+ * keys. A chapter lights the sections it is about and the deck dims the rest;
+ * the prose lives in the display and covers nothing, because a fader bank
+ * cannot afford to be covered.
  *
  * A chapter's comparisons play without touching the shared patch. Hearing four
  * filter models should not silently rewrite the voice a reader has been
@@ -50,11 +50,15 @@ const ja = computed(() => isLocale('ja'));
 const chapter = ref(0);
 const current = computed(() => CHAPTERS[chapter.value]);
 
-/** Whether the annotation card is showing. Reopens on every chapter change. */
-const noteOpen = ref(true);
-watch(chapter, () => {
-  noteOpen.value = true;
-});
+/** Whether the assign block is unfolded. A chapter about it raises it; only the reader closes it. */
+const assignOpen = ref(false);
+watch(
+  current,
+  (next) => {
+    if (next.patchbay) assignOpen.value = true;
+  },
+  { immediate: true },
+);
 
 function isLit(id: ModuleId): boolean {
   return current.value.modules.includes(id);
@@ -79,9 +83,12 @@ const copy = computed(() =>
         'No samples ship with the page and nothing leaves the browser. Each comparison bounces the same phrase through the engine offline, so two variants differ in exactly the one thing the chapter is about.',
       guideLink: 'Read about the synthesizer',
       chapters: 'CHAPTERS',
-      voice: 'VOICE',
       deck: 'The voice',
-      matrix: 'Mod matrix',
+      strip: 'Chapter, mod matrix and program',
+      chapterBlock: 'Chapter',
+      chapterLegend: 'Chapter',
+      programBlock: 'Program',
+      programLegend: 'Program',
       chapterNav: 'Chapters',
       tick: (index: number, title: string) => `Chapter ${index}: ${title}`,
       prev: 'Prev',
@@ -91,8 +98,6 @@ const copy = computed(() =>
       play: 'Play',
       rendering: 'Rendering…',
       stop: 'Stop',
-      hideNote: 'Hide notes',
-      showNote: 'Show notes',
     },
     ja: {
       title: 'クラシックシンセ',
@@ -103,9 +108,13 @@ const copy = computed(() =>
         'サンプルは同梱しておらず、データはブラウザの外に出ません。比較のたびに同じフレーズをオフラインでバウンスするので、2 つの音の違いはその章が扱う 1 点だけです。',
       guideLink: 'シンセサイザーについて読む',
       chapters: '章',
-      voice: 'ボイス',
       deck: 'ボイス',
-      matrix: 'モジュレーション行列',
+      strip: '章、モジュレーション行列、プログラム',
+      chapterBlock: '章',
+      // Silkscreen legends stay Latin in both locales, like the voice deck's.
+      chapterLegend: 'Chapter',
+      programBlock: 'プログラム',
+      programLegend: 'Program',
       chapterNav: '章',
       tick: (index: number, title: string) => `第 ${index} 章：${title}`,
       prev: '前へ',
@@ -115,8 +124,6 @@ const copy = computed(() =>
       play: '再生',
       rendering: 'レンダリング中…',
       stop: '停止',
-      hideNote: '注釈を隠す',
-      showNote: '注釈を表示',
     },
   }),
 );
@@ -274,56 +281,14 @@ onBeforeUnmount(() => url.disable());
     </template>
 
     <div class="cs cs-plate">
-      <section class="cs__deck" :aria-label="copy.deck">
-        <section
-          v-if="noteOpen"
-          id="cs-note"
-          class="cs-note"
-          :style="{ '--note-area': current.noteArea }"
-          :aria-label="ja ? current.title.ja : current.title.en"
-        >
-          <SynthPlayground
-            v-if="current.id === 'playground'"
-            :preset-names="presetNames"
-            :status="status"
-            @load="loadPreset"
-            @reset="reset"
-            @play="playCurrent"
-            @stop="stop"
-            @export-wav="download('wav')"
-            @export-midi="download('midi')"
-          />
-          <SynthChapters
-            v-else
-            :chapter="current"
-            :patch="patch"
-            :status="status"
-            :playing-key="playingKey"
-            @apply="applyToVoice"
-            @audition="audition"
-            @play="playCurrent"
-            @stop="stop"
-          />
-        </section>
-
-        <template v-for="module in DECK_MODULES" :key="module.id">
-          <section
-            v-if="module.id === 'matrix'"
-            class="cs-module cs-module--matrix"
-            :class="isLit(module.id) ? 'cs-module--lit' : 'cs-module--dim'"
-            :style="{ '--area': module.area }"
-            :aria-label="copy.matrix"
-          >
-            <div class="cs-module__fill">
-              <SynthPatchbay :patch="patch" @update="applyToVoice" />
-            </div>
-          </section>
+      <section class="cs-deck cs-deck--voice" :aria-label="copy.deck">
+        <template v-for="(module, index) in DECK_MODULES" :key="module.id">
+          <!-- Where the deck folds into two rows when the width runs out. -->
+          <span v-if="index === 4" class="cs-deck__fold" aria-hidden="true" />
           <SynthModule
-            v-else
             :module="module"
             :patch="patch"
             :class="isLit(module.id) ? 'cs-module--lit' : 'cs-module--dim'"
-            :style="{ '--area': module.area }"
             @update-param="setParam"
             @update-waveform="patch.waveform = $event"
             @update-filter-model="patch.filterModel = $event"
@@ -333,74 +298,114 @@ onBeforeUnmount(() => url.disable());
         </template>
       </section>
 
-      <footer class="cs__transport cs-transport">
-        <nav class="cs-transport__group" :aria-label="copy.chapterNav">
-          <button
-            type="button"
-            class="cs-button"
-            :disabled="chapter === 0"
-            :aria-label="copy.prevLabel"
-            @click="stepChapter(-1)"
-          >
-            {{ copy.prev }}
-          </button>
-          <p class="cs-transport__readout" role="status" aria-live="polite" aria-atomic="true">
-            <span class="cs-transport__index">
-              {{ String(chapter + 1).padStart(2, '0') }} / {{ String(CHAPTERS.length).padStart(2, '0') }}
-            </span>
-            <span class="cs-transport__title">{{ ja ? current.title.ja : current.title.en }}</span>
-          </p>
-          <button
-            type="button"
-            class="cs-button"
-            :disabled="chapter === CHAPTERS.length - 1"
-            :aria-label="copy.nextLabel"
-            @click="stepChapter(1)"
-          >
-            {{ copy.next }}
-          </button>
-          <ol class="cs-ticks">
-            <li v-for="(entry, index) in CHAPTERS" :key="entry.id">
+      <div class="cs-hairline" role="presentation" />
+
+      <section
+        class="cs-deck cs-deck--strip"
+        :class="{ 'cs-deck--assign-open': assignOpen }"
+        :aria-label="copy.strip"
+      >
+        <section class="cs-block cs-block--chapter cs-module--lit" :aria-label="copy.chapterBlock">
+          <header class="cs-block__head">
+            <span class="cs-lamp" aria-hidden="true" />
+            <h3 class="cs-legend">{{ copy.chapterLegend }}</h3>
+          </header>
+          <div class="cs-display" role="status" aria-live="polite" aria-atomic="true">
+            <span class="cs-display__index">{{ String(chapter + 1).padStart(2, '0') }}</span>
+            <h2 class="cs-display__title">{{ ja ? current.title.ja : current.title.en }}</h2>
+          </div>
+          <div class="cs-block__body">
+            <SynthPlayground
+              v-if="current.id === 'playground'"
+              :preset-names="presetNames"
+              :status="status"
+              @load="loadPreset"
+              @reset="reset"
+              @play="playCurrent"
+              @stop="stop"
+              @export-wav="download('wav')"
+              @export-midi="download('midi')"
+            />
+            <SynthChapters
+              v-else
+              :chapter="current"
+              :patch="patch"
+              :status="status"
+              :playing-key="playingKey"
+              @apply="applyToVoice"
+              @audition="audition"
+              @play="playCurrent"
+              @stop="stop"
+            />
+          </div>
+        </section>
+
+        <section
+          class="cs-block cs-block--assign"
+          :class="current.patchbay ? 'cs-module--lit' : 'cs-module--dim'"
+        >
+          <SynthPatchbay v-model:open="assignOpen" :patch="patch" @update="applyToVoice" />
+        </section>
+
+        <section class="cs-block cs-block--program cs-module--lit" :aria-label="copy.programBlock">
+          <header class="cs-block__head">
+            <span class="cs-lamp" aria-hidden="true" />
+            <h3 class="cs-legend">{{ copy.programLegend }}</h3>
+          </header>
+          <div class="cs-block__body cs-program">
+            <nav :aria-label="copy.chapterNav">
+              <ol class="cs-program__keys">
+                <li v-for="(entry, index) in CHAPTERS" :key="entry.id">
+                  <button
+                    type="button"
+                    class="cs-key cs-key--square"
+                    :class="{ 'cs-key--on': index === chapter }"
+                    :aria-label="copy.tick(index + 1, ja ? entry.title.ja : entry.title.en)"
+                    :aria-current="index === chapter ? 'step' : undefined"
+                    @click="chapter = index"
+                  >
+                    <span class="cs-key__lamp" aria-hidden="true" />
+                    <span class="cs-key__text">{{ index + 1 }}</span>
+                  </button>
+                </li>
+              </ol>
+              <div class="cs-program__row">
+                <button
+                  type="button"
+                  class="cs-button"
+                  :disabled="chapter === 0"
+                  :aria-label="copy.prevLabel"
+                  @click="stepChapter(-1)"
+                >
+                  {{ copy.prev }}
+                </button>
+                <button
+                  type="button"
+                  class="cs-button"
+                  :disabled="chapter === CHAPTERS.length - 1"
+                  :aria-label="copy.nextLabel"
+                  @click="stepChapter(1)"
+                >
+                  {{ copy.next }}
+                </button>
+              </div>
+            </nav>
+            <div class="cs-program__row cs-program__transport">
               <button
                 type="button"
-                class="cs-tick"
-                :class="{ 'cs-tick--on': index === chapter }"
-                :aria-label="copy.tick(index + 1, ja ? entry.title.ja : entry.title.en)"
-                :aria-current="index === chapter ? 'step' : undefined"
-                @click="chapter = index"
+                class="cs-button cs-button--primary"
+                :disabled="status === 'rendering'"
+                @click="playCurrent"
               >
-                {{ index + 1 }}
+                {{ status === 'rendering' ? copy.rendering : copy.play }}
               </button>
-            </li>
-          </ol>
-        </nav>
-
-        <div class="cs-transport__group">
-          <button
-            type="button"
-            class="cs-button cs-button--primary"
-            :disabled="status === 'rendering'"
-            @click="playCurrent"
-          >
-            {{ status === 'rendering' ? copy.rendering : copy.play }}
-          </button>
-          <button type="button" class="cs-button" :disabled="playingKey === null" @click="stop">
-            {{ copy.stop }}
-          </button>
-        </div>
-
-        <div class="cs-transport__group">
-          <button
-            type="button"
-            class="cs-button"
-            :aria-expanded="noteOpen"
-            aria-controls="cs-note"
-            @click="noteOpen = !noteOpen"
-          >
-            {{ noteOpen ? copy.hideNote : copy.showNote }}
-          </button>
-        </div>
-      </footer>
+              <button type="button" class="cs-button" :disabled="playingKey === null" @click="stop">
+                {{ copy.stop }}
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
     </div>
   </ToolShell>
 </template>
@@ -411,7 +416,7 @@ onBeforeUnmount(() => url.disable());
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  font-family: var(--demo-font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 0.7rem;
 }
 
@@ -420,11 +425,5 @@ onBeforeUnmount(() => url.disable());
   color: var(--demo-text-muted);
   font-weight: 600;
   letter-spacing: 0.06em;
-}
-
-/* The stepper wraps as one unit; the readout inside it takes the free width. */
-.cs-transport__group:first-child {
-  flex: 1 1 24rem;
-  flex-wrap: wrap;
 }
 </style>

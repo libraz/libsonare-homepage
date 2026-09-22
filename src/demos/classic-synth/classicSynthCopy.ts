@@ -7,6 +7,7 @@
  *
  * Prose stays in the component that shows it. This file is nouns.
  */
+import type { ModuleId } from './classicSynthChapters';
 import type {
   BodyName,
   FilterModelName,
@@ -34,6 +35,57 @@ export const GROUP_NAMES: Readonly<Record<ParamGroup, LocalizedName>> = {
   lfo: { en: 'LFO', ja: 'LFO' },
   body: { en: 'Body', ja: 'ボディ' },
   out: { en: 'Output', ja: '出力' },
+};
+
+/** What a deck section is called in full; its silkscreen legend is the short form printed on it. */
+export const MODULE_NAMES: Readonly<Record<ModuleId, LocalizedName>> = {
+  lfo: { en: 'LFO', ja: 'LFO' },
+  dco: { en: 'Oscillator', ja: 'オシレータ' },
+  hpf: { en: 'High-pass filter', ja: 'ハイパスフィルタ' },
+  vcf: { en: 'Filter', ja: 'フィルタ' },
+  'env-a': { en: 'Amp envelope', ja: 'アンプエンベロープ' },
+  'env-f': { en: 'Filter envelope', ja: 'フィルタエンベロープ' },
+  body: { en: 'Body', ja: 'ボディ' },
+  out: { en: 'Output', ja: '出力' },
+};
+
+/**
+ * The silkscreen printed above a fader: the panel's short form of `PARAM_NAMES`,
+ * cut to fit a fader's width. A fader's accessible name is always the full name.
+ */
+export const PANEL_CAPTIONS: Readonly<Record<NumericParamKey, LocalizedName>> = {
+  unison: { en: 'Unison', ja: 'ユニゾン' },
+  detuneCents: { en: 'Detune', ja: 'デチューン' },
+  driftCents: { en: 'Drift', ja: 'ドリフト' },
+  drive: { en: 'Drive', ja: 'ドライブ' },
+
+  cutoffHz: { en: 'Cutoff', ja: 'カットオフ' },
+  resonanceQ: { en: 'Res', ja: 'レゾナンス' },
+  hpCutoffHz: { en: 'Freq', ja: 'カットオフ' },
+  keyTrack: { en: 'Key track', ja: 'キートラック' },
+  envToCutoffCents: { en: 'Env amt', ja: 'エンベロープ量' },
+  velToCutoffCents: { en: 'Vel amt', ja: 'ベロシティ量' },
+
+  ampAttackMs: { en: 'Attack', ja: 'アタック' },
+  ampDecayMs: { en: 'Decay', ja: 'ディケイ' },
+  ampSustain: { en: 'Sustain', ja: 'サステイン' },
+  ampReleaseMs: { en: 'Release', ja: 'リリース' },
+
+  filterAttackMs: { en: 'Attack', ja: 'アタック' },
+  filterDecayMs: { en: 'Decay', ja: 'ディケイ' },
+  filterSustain: { en: 'Sustain', ja: 'サステイン' },
+  filterReleaseMs: { en: 'Release', ja: 'リリース' },
+
+  lfoRateHz: { en: 'LFO 1 rate', ja: 'LFO 1 レート' },
+  lfoToPitchCents: { en: 'LFO 1 pitch', ja: 'LFO 1 ピッチ' },
+  lfo2RateHz: { en: 'LFO 2 rate', ja: 'LFO 2 レート' },
+
+  bodyMix: { en: 'Mix', ja: 'ミックス' },
+
+  glideMs: { en: 'Glide', ja: 'グライド' },
+  stereoSpread: { en: 'Width', ja: '広がり' },
+  gain: { en: 'Gain', ja: 'ゲイン' },
+  busDrive: { en: 'Bus drive', ja: 'バスドライブ' },
 };
 
 export const PARAM_NAMES: Readonly<Record<NumericParamKey, LocalizedName>> = {

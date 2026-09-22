@@ -22,16 +22,30 @@ made of absent keys can only be explained by describing the thing it inherits
 from, and there is no room in a chapter for that.
 
 `CLASSIC_PARAMS` in `classicSynthState.ts` is the one description of every
-editable field — range, unit, and whether its knob travels logarithmically. The
-deck modules, the playground and the URL state all read it.
+editable field — range, unit, and whether its fader travels logarithmically.
+The deck sections, the playground and the URL state all read it.
 
-## One instrument, annotated
+## One instrument, in two decks
 
-The page is a single deck seen head-on, with the chapters printed over it. A
-chapter names the modules it is about; the deck dims the rest and floats the
-chapter's prose as a card over a part of the deck the chapter is not about. The
-deck's first row has a fixed height and the card is placed by grid lines, so
-nothing on the instrument moves when the chapter changes.
+The page is a front panel in the grammar of an early-1980s analogue polysynth:
+two horizontal decks divided by one warm hairline. The upper deck is the voice —
+eight sections side by side on one plate (LFO, DCO, HPF, VCF, ENV-A, ENV-F,
+BODY, OUT), every amount a vertical fader and every choice a row of small keys.
+The lower deck is the strip: a recessed display holding the chapter's number and
+name with its prose and comparisons below, the assign block (the mod matrix,
+closed to a legend and its routings until a chapter or the reader opens it), and
+the program keys that step the chapters and carry the transport.
+
+A chapter names the sections it is about; those keep their lamp lit and an
+outline, and the rest dim. The prose covers nothing — a shallow fader bank
+cannot afford to be covered — so nothing on the instrument moves or hides when
+the chapter changes.
+
+`DECK_MODULES` in `classicSynthChapters.ts` lists each section's faders
+explicitly, because the panel cuts the `filter` group two ways (HPF and VCF).
+Section membership is still checked against the parameter groups at load. The
+faders themselves are `SynthFader.vue`, a sibling of the shared `RotaryKnob`
+with the same props and keyboard contract.
 
 ## Why every chapter renders offline
 
@@ -53,15 +67,16 @@ two variants is the listening method the whole page is built around.
 | File | What it owns |
 | --- | --- |
 | `classicSynthState.ts` | The patch type, the parameter table, the phrases |
-| `classicSynthChapters.ts` | The deck's modules, the chapters, and where each card sits |
-| `classicSynthCopy.ts` | The label vocabulary every component shares |
+| `classicSynthChapters.ts` | The deck's sections and their faders, and the chapters |
+| `classicSynthCopy.ts` | The label vocabulary every component shares, including the silkscreen captions |
 | `useClassicSynth.ts` | Bounce, playback, the render cache, WAV/MIDI export |
-| `ClassicSynthDemo.vue` | The screen: the deck, the annotation card, the transport |
-| `SynthModule.vue` | One deck module: the legends, switch banks and knobs of its groups |
-| `SynthPatchbay.vue` | The source × destination patchbay in the deck's matrix area |
-| `SynthChapters.vue` | The chapters and their comparisons, as the card's body |
+| `ClassicSynthDemo.vue` | The panel: the voice deck, the hairline, the strip |
+| `SynthModule.vue` | One section: its legend and lamp, its key rows and its fader bank |
+| `SynthFader.vue` | The vertical fader every amount on the panel uses |
+| `SynthPatchbay.vue` | The assign block: the source × destination grid, closed or open |
+| `SynthChapters.vue` | The chapters and their comparisons, as the display's body |
 | `SynthPlayground.vue` | Free editing, presets, and the export buttons |
-| `classicSynth.css` | The plate, the deck grid, and the page's own tokens |
+| `classicSynth.css` | The plate tokens, both decks, keys and the display |
 
 ## Phrases
 

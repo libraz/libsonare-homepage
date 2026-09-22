@@ -3,7 +3,7 @@
  * The last chapter: free editing, presets, and the way a voice leaves the page.
  *
  * Unlike every earlier chapter, this component edits nothing of the voice
- * itself — every control already lives on the deck behind this card. What
+ * itself — every control already lives on the deck above. What
  * belongs here is what only makes sense at the end: loading a preset wholesale,
  * returning to the starting patch, and turning the voice a reader has built
  * into a file.
@@ -46,7 +46,7 @@ const copy = computed(() =>
   localizedValue({
     en: {
       intro:
-        'This is the same voice every earlier chapter shares, still on the deck behind this card — but nothing here is fixed to make a point. Fold the card away, turn any control, start from a preset, or keep building from the plain saw you began with.',
+        'This is the same voice every earlier chapter shares, still on the deck above — but nothing here is fixed to make a point. Move any fader, start from a preset, or keep building from the plain saw you began with.',
       presetsLabel: 'Presets',
       presetsHint: `The engine ships presets across sixteen engine modes. Only the ${props.presetNames.length} built on this subtractive engine are offered here — a preset built on a physical model would load with most of this panel meaning nothing.`,
       selectionNote:
@@ -70,7 +70,7 @@ const copy = computed(() =>
     },
     ja: {
       intro:
-        'ここまでの章と同じ 1 つのボイスが、このカードの後ろのデッキにそのまま載っています。ただし何かを説明するための制約はもうありません。カードを畳んで好きなノブを回してもいいし、プリセットを起点にしてもいいし、最初ののこぎり波から組み立て直してもかまいません。',
+        'ここまでの章と同じ 1 つのボイスが、上のデッキにそのまま載っています。ただし何かを説明するための制約はもうありません。好きなフェーダーを動かしてもいいし、プリセットを起点にしてもいいし、最初ののこぎり波から組み立て直してもかまいません。',
       presetsLabel: 'プリセット',
       presetsHint: `このエンジンのプリセットは 16 のエンジンモードにまたがりますが、ここに並ぶのはサブトラクティブエンジンで組まれた ${props.presetNames.length} つだけです。物理モデル系のプリセットを読み込むと、このパネルのほとんどが意味を持たなくなります。`,
       selectionNote:
