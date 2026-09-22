@@ -157,10 +157,13 @@ export function setupEvents(state: GsModuleState, beat = 0): SmfEvent[] {
 
   for (const part of state.parts) {
     const base = defaultPartState(part.channel);
-    if (part.bankMsb !== base.bankMsb) {
+    const bankMoved = part.bankMsb !== base.bankMsb;
+    if (bankMoved) {
       events.push({ beat, bytes: [0xb0 | part.channel, 0x00, part.bankMsb] });
     }
-    if (part.program !== base.program) {
+    // A bank select only latches on the next program change, so a variation
+    // chosen on a part still holding program 0 needs that program sent again.
+    if (bankMoved || part.program !== base.program) {
       events.push({ beat, bytes: [0xc0 | part.channel, part.program] });
     }
     for (const { key, param } of PART_PARAMS) {

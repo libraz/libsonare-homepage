@@ -138,6 +138,31 @@ describe('setupEvents', () => {
     expect((events[0].sysex as number[])[7]).toBe(1);
   });
 
+  it('resends the program after a bank select, or the variation never latches', () => {
+    const events = setupEvents(
+      edited((s) => {
+        s.parts[0].bankMsb = 8;
+      }),
+    );
+    expect(events.map((event) => event.bytes)).toEqual([
+      [0xb0, 0x00, 8],
+      [0xc0, 0],
+    ]);
+  });
+
+  it('sends the bank before the program it applies to', () => {
+    const events = setupEvents(
+      edited((s) => {
+        s.parts[3].bankMsb = 8;
+        s.parts[3].program = 4;
+      }),
+    );
+    expect(events.map((event) => event.bytes)).toEqual([
+      [0xb3, 0x00, 8],
+      [0xc3, 4],
+    ]);
+  });
+
   it('places every setup frame on the beat it is given', () => {
     const events = setupEvents(
       edited((s) => {

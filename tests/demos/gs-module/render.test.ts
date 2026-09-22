@@ -56,6 +56,16 @@ describe('the audition renders', () => {
     expect(maxDeviation(strings, base)).toBeGreaterThan(ULP);
   });
 
+  it('reaches a bank variation, which needs the program resent to latch', () => {
+    // Bank 8 on program 0 is one the engine reports as voiced apart, and the
+    // part is already sitting on program 0 — the case where a setup that only
+    // emits changed values would send the bank and no program change at all.
+    const variation = render((state) => {
+      state.parts[0].bankMsb = 8;
+    });
+    expect(maxDeviation(variation, base)).toBeGreaterThan(ULP);
+  });
+
   it('follows a part level, and downward', () => {
     const quiet = render((state) => {
       state.parts[0].level = 30;
