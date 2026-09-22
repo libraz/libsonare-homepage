@@ -243,7 +243,7 @@ Both `synthesizeRir(...)` and `roomMorph(...)` accept the shared shoebox geometr
 | `absorption` | number | Uniform wall absorption for every band. Must be within `[0, 1]`; an accepted value is then clamped to `[0, 0.999]`. The simplest control. |
 | `bandAbsorption` | `Float32Array` / `number[]` | Per-octave-band wall absorption (125 / 250 / 500 / 1k / 2k / 4k… Hz). When provided it overrides `absorption`, unless `materialPreset` is set. |
 | `bandScattering` | `Float32Array` / `number[]` | Per-band wall scattering. Missing bands default to `0`. Applied to whichever wall material the absorption fields selected. |
-| `materialPreset` | number | A named wall-material preset. A non-zero preset wins over both `bandAbsorption` and `absorption`. It does not compete with `bandScattering`. |
+| `materialPreset` | number | A named wall-material preset: `1` concrete, `2` wood, `3` curtain, `4` carpet, `5` glass. One material covers every surface, so the rooms it makes are extreme: an all-carpet room absorbs almost nothing at 125 Hz. A non-zero preset wins over both `bandAbsorption` and `absorption`. It does not compete with `bandScattering`. |
 
 Precedence decides the **absorption** only, highest first: a non-zero `materialPreset` wins over everything; otherwise `bandAbsorption` (per band) wins over `absorption` (uniform). So to use your own per-band absorption, leave `materialPreset` at `0`.
 

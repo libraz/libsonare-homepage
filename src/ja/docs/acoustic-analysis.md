@@ -243,7 +243,7 @@ Python の `Audio` からも同じ処理を呼べます: `audio.analyze_impulse_
 | `absorption` | number | 全バンド一様の壁吸音率。`[0, 1]` の範囲内である必要があり、受理された値はさらに `[0, 0.999]` にクランプされます。最も単純なコントロールです。 |
 | `bandAbsorption` | `Float32Array` / `number[]` | オクターブバンド別の壁吸音率（125 / 250 / 500 / 1k / 2k / 4k… Hz）。指定すると `absorption` を上書きします（ただし `materialPreset` が設定されている場合を除く）。 |
 | `bandScattering` | `Float32Array` / `number[]` | バンド別の壁の散乱。指定のないバンドは `0` になります。吸音率のフィールドが選んだ壁材質に対して適用されます。 |
-| `materialPreset` | number | 名前付きの壁材質プリセット。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。`bandScattering` とは優先順位を競いません。 |
+| `materialPreset` | number | 名前付きの壁材質プリセット。`1` コンクリート、`2` 木、`3` カーテン、`4` カーペット、`5` ガラス。1 つの材質がすべての面を覆うため、できる部屋は極端になります。全面カーペットの部屋は 125 Hz をほとんど吸音しません。非ゼロのプリセットは `bandAbsorption` と `absorption` の両方より優先されます。`bandScattering` とは優先順位を競いません。 |
 
 優先順位が決めるのは**吸音率**だけです。高い順に、非ゼロの `materialPreset` がすべてに優先し、それ以外では `bandAbsorption`（バンド別）が `absorption`（一様）に優先します。したがって、自分のバンド別吸音率を効かせたいときは `materialPreset` を `0` のままにしてください。
 
