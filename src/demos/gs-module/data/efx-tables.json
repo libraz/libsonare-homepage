@@ -1,8 +1,8 @@
 {
   "_sources": {
-    "tools/gs/efx-tables.json": "270f47f897e0a81fe05f0f96ecfb185de2241901225612006652887fd47d72e8"
+    "tools/gs/efx-tables.json": "2cef7d2a8edfa31b896522f2b2fe1871cedf81cfd8853d87318507363282b696"
   },
-  "archive_revision": "47bd72cfb3ddd5a074dc9f5433e517525626555e",
+  "archive_revision": "0860b74681d4e6f4f0f8ab2fe84d0abf69e9edb0",
   "what_this_is": "The byte-to-physical-quantity conversions the GS insertion-effect parameter block uses, and which (type, slot) pairs an archive of what one individual unit answered gives one to. Committed so that a clone reads them without the archive.",
   "what_this_cannot_see": [
     "One unit is one unit. Every number here is what one individual machine answered, and no second one has been measured. Entries flagged unit_specific are the ones a second machine is most likely to disagree with; that a entry is not flagged is not a claim that it would agree.",
@@ -17,16 +17,27 @@
   "schema": {
     "every_entry_carries": [
       "unit_specific",
-      "approximate"
+      "approximate",
+      "source"
     ],
     "unit_specific": "This unit returned a value the class's own law does not account for, by more than the reading separates. A second unit is free to differ here.",
-    "approximate": "No reading placed this entry; it is carried on the law alone."
+    "approximate": "No reading placed this entry; it is carried on the law alone.",
+    "source": "The provenance of the conversion law, as the three values the two flags above project onto: unit_overrides_assigned where a reading overruled the law, assigned where no reading placed it, measured where a reading placed it and it agrees. The two flags are exclusive on one entry; on a table or a map row they are a fold over entries and both can hold, where overruled is what it reads as. Not the provenance of a binding, which is a different axis and is counted by tools/gs/coverage.py.",
+    "what_placed_it": "Where a cell says so, which reading or which law put the value there. Prose beside source rather than under it, since source is mechanical."
   },
   "reach": {
+    "printed": 770,
+    "measured": 85,
     "reached": 85,
     "translatable": null,
     "translated": null,
-    "why_two_are_null": "Translatable asks whether the insert a slot maps to has a control of the same physical unit, and translated asks whether the GS layer emits the key. Neither is a property of the archive, so neither is derived here."
+    "what_the_first_two_are": "Printed is every (type, slot) the unit's own records carry a printed value for, counted by tools/gs/coverage.py's enumeration -- the denominator the block's coverage is read against. Measured is how many of them these tables give a conversion to; reached is the same count under the name the schema opened with.",
+    "why_two_are_null": "Translatable asks whether the insert a slot maps to has a control of the same physical unit, and translated asks whether the GS layer emits the key. Neither is a property of the archive, so neither is derived here.",
+    "by_source": {
+      "measured": 73,
+      "assigned": 6,
+      "unit_overrides_assigned": 6
+    }
   },
   "reach_by_class": {
     "rate": 21,
@@ -60,18 +71,21 @@
               "setting": 0,
               "hz": 0.05,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "hz": 6.4,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 3
+          "entries_using_it": 3,
+          "source": "measured"
         },
         "wide": {
           "printed_ends": [
@@ -88,37 +102,43 @@
               "setting": 0,
               "hz": 0.05,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 99,
               "hz": 5,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 119,
               "hz": 7,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 125,
               "hz": 10,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "hz": 10,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "why_the_last_two_settings_repeat": "The table has 126 entries over 128 settings, so 126 and 127 have none of their own and return what 125 returns.",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 18
+          "entries_using_it": 18,
+          "source": "measured"
         }
       },
       "rests_on": "rate-the-byte-indexes-a-printed-table.json"
@@ -141,42 +161,49 @@
               "setting": 0,
               "ms": 0,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 50,
               "ms": 5,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 60,
               "ms": 10,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 100,
               "ms": 50,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 125,
               "ms": 100,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "ms": 100,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 4
+          "entries_using_it": 4,
+          "source": "measured"
         },
         "time1": {
           "printed_ends": [
@@ -193,30 +220,35 @@
               "setting": 0,
               "ms": 200,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 70,
               "ms": 550,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 115,
               "ms": 1000,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "ms": 1000,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 7
+          "entries_using_it": 7,
+          "source": "measured"
         },
         "time2": {
           "printed_ends": [
@@ -233,30 +265,35 @@
               "setting": 0,
               "ms": 200,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 80,
               "ms": 600,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 120,
               "ms": 1000,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "ms": 1000,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 0
+          "entries_using_it": 0,
+          "source": "measured"
         },
         "time3": {
           "printed_ends": [
@@ -273,48 +310,56 @@
               "setting": 0,
               "ms": 0,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 50,
               "ms": 5,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 60,
               "ms": 10,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 90,
               "ms": 40,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 116,
               "ms": 300,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 126,
               "ms": 500,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "ms": 500,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 11
+          "entries_using_it": 11,
+          "source": "measured"
         },
         "time4": {
           "printed_ends": [
@@ -331,18 +376,21 @@
               "setting": 0,
               "ms": 0,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "ms": 635,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 1
+          "entries_using_it": 1,
+          "source": "measured"
         }
       },
       "cut": {
@@ -376,7 +424,8 @@
           "outside_the_window": "the nearest edge value, not the byte read as decibels",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 14
+          "entries_using_it": 14,
+          "source": "measured"
         }
       },
       "rests_on": "gain-the-byte-is-a-decibel-a-step.json"
@@ -401,774 +450,903 @@
               "numerator": 0,
               "approximate": true,
               "why": "filled from the straight line the byte gives; the take sits at the floor",
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "setting": 1,
               "numerator": 1,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 2,
               "numerator": 1,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 3,
               "numerator": 2,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 4,
               "numerator": 3,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 5,
               "numerator": 4,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 6,
               "numerator": 4,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 7,
               "numerator": 5,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 8,
               "numerator": 6,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 9,
               "numerator": 6,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 10,
               "numerator": 7,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 11,
               "numerator": 8,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 12,
               "numerator": 9,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 13,
               "numerator": 9,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 14,
               "numerator": 10,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 15,
               "numerator": 11,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 16,
               "numerator": 12,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 17,
               "numerator": 12,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 18,
               "numerator": 13,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 19,
               "numerator": 14,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 20,
               "numerator": 15,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 21,
               "numerator": 15,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 22,
               "numerator": 16,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 23,
               "numerator": 17,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 24,
               "numerator": 18,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 25,
               "numerator": 19,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 26,
               "numerator": 19,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 27,
               "numerator": 20,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 28,
               "numerator": 21,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 29,
               "numerator": 22,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 30,
               "numerator": 23,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 31,
               "numerator": 23,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 32,
               "numerator": 24,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 33,
               "numerator": 25,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 34,
               "numerator": 26,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 35,
               "numerator": 27,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 36,
               "numerator": 28,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 37,
               "numerator": 28,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 38,
               "numerator": 29,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 39,
               "numerator": 30,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 40,
               "numerator": 31,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 41,
               "numerator": 32,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 42,
               "numerator": 33,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 43,
               "numerator": 34,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 44,
               "numerator": 34,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 45,
               "numerator": 35,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 46,
               "numerator": 36,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 47,
               "numerator": 37,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 48,
               "numerator": 38,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 49,
               "numerator": 39,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 50,
               "numerator": 40,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 51,
               "numerator": 41,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 52,
               "numerator": 42,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 53,
               "numerator": 43,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 54,
               "numerator": 44,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 55,
               "numerator": 44,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 56,
               "numerator": 45,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 57,
               "numerator": 46,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 58,
               "numerator": 47,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 59,
               "numerator": 48,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 60,
               "numerator": 49,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 61,
               "numerator": 50,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 62,
               "numerator": 51,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 63,
               "numerator": 52,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 64,
               "numerator": 53,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 65,
               "numerator": 54,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 66,
               "numerator": 55,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 67,
               "numerator": 56,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 68,
               "numerator": 57,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 69,
               "numerator": 58,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 70,
               "numerator": 59,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 71,
               "numerator": 60,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 72,
               "numerator": 61,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 73,
               "numerator": 62,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 74,
               "numerator": 63,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 75,
               "numerator": 64,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 76,
               "numerator": 65,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 77,
               "numerator": 66,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 78,
               "numerator": 67,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 79,
               "numerator": 68,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 80,
               "numerator": 70,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 81,
               "numerator": 71,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 82,
               "numerator": 72,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 83,
               "numerator": 73,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 84,
               "numerator": 74,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 85,
               "numerator": 75,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 86,
               "numerator": 76,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 87,
               "numerator": 77,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 88,
               "numerator": 78,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 89,
               "numerator": 79,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 90,
               "numerator": 81,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 91,
               "numerator": 82,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 92,
               "numerator": 83,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 93,
               "numerator": 84,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 94,
               "numerator": 85,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 95,
               "numerator": 86,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 96,
               "numerator": 87,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 97,
               "numerator": 89,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 98,
               "numerator": 90,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 99,
               "numerator": 91,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 100,
               "numerator": 92,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 101,
               "numerator": 93,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 102,
               "numerator": 95,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 103,
               "numerator": 96,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 104,
               "numerator": 97,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 105,
               "numerator": 98,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 106,
               "numerator": 99,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 107,
               "numerator": 101,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 108,
               "numerator": 102,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 109,
               "numerator": 103,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 110,
               "numerator": 104,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 111,
               "numerator": 106,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 112,
               "numerator": 107,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 113,
               "numerator": 108,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 114,
               "numerator": 110,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 115,
               "numerator": 111,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 116,
               "numerator": 112,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 117,
               "numerator": 114,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 118,
               "numerator": 115,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 119,
               "numerator": 116,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 120,
               "numerator": 117,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 121,
               "numerator": 119,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 122,
               "numerator": 120,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 123,
               "numerator": 122,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 124,
               "numerator": 123,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 125,
               "numerator": 124,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 126,
               "numerator": 126,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             },
             {
               "setting": 127,
               "numerator": 127,
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             }
           ],
           "unit_specific": false,
           "approximate": true,
-          "entries_using_it": 3
+          "entries_using_it": 3,
+          "source": "assigned"
         }
       },
       "rests_on": "level-the-multiplier-is-a-seventh-bit-table.json"
@@ -1190,38 +1368,44 @@
               "setting": 0,
               "octaves": 0.25,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 1,
               "octaves": 0.5,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 2,
               "octaves": 1,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 3,
               "octaves": 2,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 4,
               "octaves": 4.5,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "settings_past_the_table_return": 0,
           "what_that_cannot_be_told_from": "This slot powers up at setting 0, so a setting past the table returning entry 0 and a setting past the table doing nothing are the same takes.",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 4
+          "entries_using_it": 4,
+          "source": "measured"
         }
       },
       "rests_on": "width-the-byte-halves-the-printed-table.json"
@@ -1250,7 +1434,8 @@
                 "01 26": 0.5
               },
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 1,
@@ -1263,7 +1448,8 @@
                 "01 26": 0.3281
               },
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 2,
@@ -1280,7 +1466,8 @@
                 0.0614
               ],
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 3,
@@ -1293,7 +1480,8 @@
                 "01 26": 0.8906
               },
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "setting": 4,
@@ -1306,13 +1494,15 @@
                 "01 26": 0.1094
               },
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "what_the_reading_cannot_separate": "Which direction Saw1 and Saw2 run. A magnitude-only reading places the fraction of the cycle that climbs and not the sign.",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 3
+          "entries_using_it": 3,
+          "source": "measured"
         }
       },
       "rests_on": "wave-the-byte-picks-one-of-five-fixed-shapes.json"
@@ -1337,109 +1527,127 @@
                 "setting": 0,
                 "multiplier": 1.001002,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 1,
                 "multiplier": 1,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 8,
                 "multiplier": 0.979141,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 16,
                 "multiplier": 0.949046,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 24,
                 "multiplier": 0.927557,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 32,
                 "multiplier": 0.903376,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 40,
                 "multiplier": 0.872693,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 48,
                 "multiplier": 0.835437,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 56,
                 "multiplier": 0.790175,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 64,
                 "multiplier": 0.754909,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 72,
                 "multiplier": 0.707822,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 80,
                 "multiplier": 0.651537,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 88,
                 "multiplier": 0.591701,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 96,
                 "multiplier": 0.518187,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 104,
                 "multiplier": 0.432559,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 112,
                 "multiplier": 0.32774,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 120,
                 "multiplier": 0.18725,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 126,
                 "multiplier": 0.059583,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               }
             ],
             "right": [
@@ -1447,116 +1655,135 @@
                 "setting": 1,
                 "multiplier": 0.059017,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 8,
                 "multiplier": 0.21119,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 16,
                 "multiplier": 0.34676,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 24,
                 "multiplier": 0.450704,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 32,
                 "multiplier": 0.529286,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 40,
                 "multiplier": 0.600908,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 48,
                 "multiplier": 0.665236,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 56,
                 "multiplier": 0.708199,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 64,
                 "multiplier": 0.756399,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 72,
                 "multiplier": 0.803473,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 80,
                 "multiplier": 0.84064,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 88,
                 "multiplier": 0.875925,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 96,
                 "multiplier": 0.902617,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 104,
                 "multiplier": 0.933513,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 112,
                 "multiplier": 0.954793,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 120,
                 "multiplier": 0.979115,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 126,
                 "multiplier": 1,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               },
               {
                 "setting": 127,
                 "multiplier": 0.996956,
                 "unit_specific": false,
-                "approximate": false
+                "approximate": false,
+                "source": "measured"
               }
             ]
           },
           "recovered_up_to": "A constant. The table is pinned by putting its quietest entry at silence, which bounds the last entry's depth from one side only.",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 3
+          "entries_using_it": 3,
+          "source": "measured"
         }
       },
       "rests_on": "pan-one-multiplier-a-side-under-a-term-added-after-it.json"
@@ -1582,7 +1809,8 @@
           "why_the_middle_stands_over_the_ends": "The two corners sum to 128 and the halves meet at full at setting 64, so the middle of the byte carries both at once and stands 3 dB over either end -- the opposite sign to a crossfade.",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 3
+          "entries_using_it": 3,
+          "source": "measured"
         }
       },
       "rests_on": "balance-two-ramps-that-meet-at-full.json"
@@ -1611,7 +1839,8 @@
               ],
               "degrees": -180,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -14,
@@ -1621,7 +1850,8 @@
               ],
               "degrees": -168,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -13,
@@ -1631,7 +1861,8 @@
               ],
               "degrees": -156,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -12,
@@ -1641,7 +1872,8 @@
               ],
               "degrees": -144,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -11,
@@ -1651,7 +1883,8 @@
               ],
               "degrees": -132,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -10,
@@ -1661,7 +1894,8 @@
               ],
               "degrees": -120,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -9,
@@ -1671,7 +1905,8 @@
               ],
               "degrees": -108,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -8,
@@ -1681,7 +1916,8 @@
               ],
               "degrees": -96,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -7,
@@ -1691,7 +1927,8 @@
               ],
               "degrees": -84,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -6,
@@ -1701,7 +1938,8 @@
               ],
               "degrees": -72,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -5,
@@ -1711,7 +1949,8 @@
               ],
               "degrees": -60,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -4,
@@ -1721,7 +1960,8 @@
               ],
               "degrees": -48,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -3,
@@ -1731,7 +1971,8 @@
               ],
               "degrees": -36,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -2,
@@ -1741,7 +1982,8 @@
               ],
               "degrees": -24,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": -1,
@@ -1751,7 +1993,8 @@
               ],
               "degrees": -12,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 0,
@@ -1761,7 +2004,8 @@
               ],
               "degrees": 0,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 1,
@@ -1771,7 +2015,8 @@
               ],
               "degrees": 12,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 2,
@@ -1781,7 +2026,8 @@
               ],
               "degrees": 24,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 3,
@@ -1791,7 +2037,8 @@
               ],
               "degrees": 36,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 4,
@@ -1801,7 +2048,8 @@
               ],
               "degrees": 48,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 5,
@@ -1811,7 +2059,8 @@
               ],
               "degrees": 60,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 6,
@@ -1821,7 +2070,8 @@
               ],
               "degrees": 72,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 7,
@@ -1831,7 +2081,8 @@
               ],
               "degrees": 84,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 8,
@@ -1841,7 +2092,8 @@
               ],
               "degrees": 96,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 9,
@@ -1851,7 +2103,8 @@
               ],
               "degrees": 108,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 10,
@@ -1861,7 +2114,8 @@
               ],
               "degrees": 120,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 11,
@@ -1871,7 +2125,8 @@
               ],
               "degrees": 132,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 12,
@@ -1881,7 +2136,8 @@
               ],
               "degrees": 144,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 13,
@@ -1891,7 +2147,8 @@
               ],
               "degrees": 156,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 14,
@@ -1901,7 +2158,8 @@
               ],
               "degrees": 168,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "position": 15,
@@ -1911,14 +2169,16 @@
               ],
               "degrees": 180,
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "the_two_poles_are_one_place": true,
           "the_table_is_a_mirror": "A position and its opposite put the same separation with the sign reversed, so a renderer needs sixteen magnitudes and a sign.",
           "unit_specific": false,
           "approximate": false,
-          "entries_using_it": 2
+          "entries_using_it": 2,
+          "source": "measured"
         }
       },
       "rests_on": "azimuth-a-byte-rounded-to-a-quarter-and-clamped.json"
@@ -1943,9 +2203,10 @@
                 7
               ],
               "divisor": 1,
-              "source": "the sequence; no multiplier is published for this entry",
+              "what_placed_it": "the sequence; no multiplier is published for this entry",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 1,
@@ -1954,9 +2215,10 @@
                 15
               ],
               "divisor": 2,
-              "source": "the sequence; no multiplier is published for this entry",
+              "what_placed_it": "the sequence; no multiplier is published for this entry",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 2,
@@ -1968,9 +2230,10 @@
               "sequence_says": 3,
               "measured_multiplier": 3.02,
               "times_the_take_told_apart": 0.86,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 3,
@@ -1982,9 +2245,10 @@
               "sequence_says": 4,
               "measured_multiplier": 4,
               "times_the_take_told_apart": 0,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 4,
@@ -1996,9 +2260,10 @@
               "sequence_says": 5,
               "measured_multiplier": 4.92,
               "times_the_take_told_apart": 0.4,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 5,
@@ -2010,9 +2275,10 @@
               "sequence_says": 6,
               "measured_multiplier": 5.9,
               "times_the_take_told_apart": 0.33,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 6,
@@ -2024,9 +2290,10 @@
               "sequence_says": 7,
               "measured_multiplier": 6.82,
               "times_the_take_told_apart": 0.48,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 7,
@@ -2038,9 +2305,10 @@
               "sequence_says": 8,
               "measured_multiplier": 7.9,
               "times_the_take_told_apart": 1.23,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 8,
@@ -2052,9 +2320,10 @@
               "sequence_says": 9,
               "measured_multiplier": 8.99,
               "times_the_take_told_apart": 0.28,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 9,
@@ -2066,9 +2335,10 @@
               "sequence_says": 10,
               "measured_multiplier": 10.09,
               "times_the_take_told_apart": 0.31,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 10,
@@ -2080,9 +2350,10 @@
               "sequence_says": 12,
               "measured_multiplier": 11.99,
               "times_the_take_told_apart": 0.08,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 11,
@@ -2094,9 +2365,10 @@
               "sequence_says": 16,
               "measured_multiplier": 15.99,
               "times_the_take_told_apart": 0.06,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 12,
@@ -2108,9 +2380,10 @@
               "sequence_says": 32,
               "measured_multiplier": 31.71,
               "times_the_take_told_apart": 0.92,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 13,
@@ -2122,9 +2395,10 @@
               "sequence_says": 64,
               "measured_multiplier": 63.84,
               "times_the_take_told_apart": 0.19,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 14,
@@ -2136,9 +2410,10 @@
               "sequence_says": 128,
               "measured_multiplier": 125.23,
               "times_the_take_told_apart": 0.56,
-              "source": "the sequence",
+              "what_placed_it": "the sequence",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 15,
@@ -2150,9 +2425,10 @@
               "sequence_says": 256,
               "measured_multiplier": 168.41,
               "times_the_take_told_apart": 4.96,
-              "source": "this unit's reading",
+              "what_placed_it": "this unit's reading",
               "unit_specific": true,
-              "approximate": false
+              "approximate": false,
+              "source": "unit_overrides_assigned"
             }
           ],
           "what_the_divisor_is": "What the rotor's control loop divides the distance to its target rate by before shifting toward it.",
@@ -2164,7 +2440,8 @@
           },
           "unit_specific": true,
           "approximate": true,
-          "entries_using_it": 2
+          "entries_using_it": 2,
+          "source": "unit_overrides_assigned"
         }
       },
       "rests_on": "0122-an-acceleration-byte-is-four-bits-and-a-multiplier.json"
@@ -2192,9 +2469,10 @@
               "hz": 198.4,
               "series_hz": 200,
               "away_octaves": 0.0116,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 1,
@@ -2205,9 +2483,10 @@
               "hz": 240.5,
               "series_hz": 250,
               "away_octaves": 0.0559,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 2,
@@ -2218,9 +2497,10 @@
               "hz": 279.1,
               "series_hz": 315,
               "away_octaves": 0.1746,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": true,
-              "approximate": false
+              "approximate": false,
+              "source": "unit_overrides_assigned"
             },
             {
               "index": 3,
@@ -2231,9 +2511,10 @@
               "hz": 397.9,
               "series_hz": 400,
               "away_octaves": 0.0076,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 4,
@@ -2244,9 +2525,10 @@
               "hz": 481.4,
               "series_hz": 500,
               "away_octaves": 0.0547,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 5,
@@ -2257,9 +2539,10 @@
               "hz": 600,
               "series_hz": 630,
               "away_octaves": 0.0704,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 6,
@@ -2270,9 +2553,10 @@
               "hz": 778.1,
               "series_hz": 800,
               "away_octaves": 0.04,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 7,
@@ -2283,9 +2567,10 @@
               "hz": 977.3,
               "series_hz": 1000,
               "away_octaves": 0.0331,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 8,
@@ -2296,9 +2581,10 @@
               "hz": 1224.4,
               "series_hz": 1250,
               "away_octaves": 0.0299,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 9,
@@ -2309,9 +2595,10 @@
               "hz": 1585,
               "series_hz": 1600,
               "away_octaves": 0.0136,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 10,
@@ -2322,9 +2609,10 @@
               "hz": 1952.3,
               "series_hz": 2000,
               "away_octaves": 0.0348,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 11,
@@ -2335,9 +2623,10 @@
               "hz": 2468.9,
               "series_hz": 2500,
               "away_octaves": 0.0181,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 12,
@@ -2348,9 +2637,10 @@
               "hz": 3105,
               "series_hz": 3150,
               "away_octaves": 0.0208,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 13,
@@ -2361,9 +2651,10 @@
               "hz": 3948.8,
               "series_hz": 4000,
               "away_octaves": 0.0186,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 14,
@@ -2374,9 +2665,10 @@
               "hz": 4931.8,
               "series_hz": 5000,
               "away_octaves": 0.0198,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 15,
@@ -2387,15 +2679,17 @@
               "hz": 6166.8,
               "series_hz": 6300,
               "away_octaves": 0.0308,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             }
           ],
           "band_the_reading_separates_octaves": 0.0833,
           "unit_specific": true,
           "approximate": false,
-          "entries_using_it": 4
+          "entries_using_it": 4,
+          "source": "unit_overrides_assigned"
         },
         "pre_filter": {
           "printed_ends": [
@@ -2416,9 +2710,10 @@
               ],
               "hz": 250,
               "series_hz": 250,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 1,
@@ -2428,9 +2723,10 @@
               ],
               "hz": 315,
               "series_hz": 315,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 2,
@@ -2440,9 +2736,10 @@
               ],
               "hz": 400,
               "series_hz": 400,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 3,
@@ -2452,9 +2749,10 @@
               ],
               "hz": 500,
               "series_hz": 500,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 4,
@@ -2464,9 +2762,10 @@
               ],
               "hz": 630,
               "series_hz": 630,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 5,
@@ -2476,9 +2775,10 @@
               ],
               "hz": 800,
               "series_hz": 800,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 6,
@@ -2488,9 +2788,10 @@
               ],
               "hz": 1000,
               "series_hz": 1000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 7,
@@ -2500,9 +2801,10 @@
               ],
               "hz": 1250,
               "series_hz": 1250,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 8,
@@ -2512,9 +2814,10 @@
               ],
               "hz": 1600,
               "series_hz": 1600,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 9,
@@ -2524,9 +2827,10 @@
               ],
               "hz": 2000,
               "series_hz": 2000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 10,
@@ -2536,9 +2840,10 @@
               ],
               "hz": 2500,
               "series_hz": 2500,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 11,
@@ -2548,9 +2853,10 @@
               ],
               "hz": 3150,
               "series_hz": 3150,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 12,
@@ -2560,9 +2866,10 @@
               ],
               "hz": 4000,
               "series_hz": 4000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 13,
@@ -2572,9 +2879,10 @@
               ],
               "hz": 5000,
               "series_hz": 5000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 14,
@@ -2584,9 +2892,10 @@
               ],
               "hz": 6300,
               "series_hz": 6300,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 15,
@@ -2596,16 +2905,18 @@
               ],
               "hz": 8000,
               "series_hz": 8000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             }
           ],
           "band_the_reading_separates_octaves": 0.0847,
           "unit_specific": false,
           "approximate": true,
           "checked_against": "Eleven settings across the range, a median 0.046 octaves from this series, and its second entry read 325.2 Hz through the low-pass and 324.2 through the high-pass -- inside the band this reading separates. No per-entry readout is published, so the entries are the series.",
-          "entries_using_it": 1
+          "entries_using_it": 1,
+          "source": "assigned"
         },
         "damping": {
           "printed_ends": [
@@ -2627,9 +2938,10 @@
               "hz": 312.9,
               "series_hz": 315,
               "away_octaves": 0.0097,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 1,
@@ -2640,9 +2952,10 @@
               "hz": 398.7,
               "series_hz": 400,
               "away_octaves": 0.0047,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 2,
@@ -2653,9 +2966,10 @@
               "hz": 500,
               "series_hz": 500,
               "away_octaves": 0,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 3,
@@ -2666,9 +2980,10 @@
               "hz": 622.2,
               "series_hz": 630,
               "away_octaves": 0.018,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 4,
@@ -2679,9 +2994,10 @@
               "hz": 801.2,
               "series_hz": 800,
               "away_octaves": 0.0022,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 5,
@@ -2691,9 +3007,10 @@
               ],
               "hz": 1000,
               "series_hz": 1000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 6,
@@ -2704,9 +3021,10 @@
               "hz": 1245.4,
               "series_hz": 1250,
               "away_octaves": 0.0053,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 7,
@@ -2716,9 +3034,10 @@
               ],
               "hz": 1600,
               "series_hz": 1600,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 8,
@@ -2729,9 +3048,10 @@
               "hz": 2016.6,
               "series_hz": 2000,
               "away_octaves": 0.0119,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 9,
@@ -2741,9 +3061,10 @@
               ],
               "hz": 2500,
               "series_hz": 2500,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 10,
@@ -2754,9 +3075,10 @@
               "hz": 3138.3,
               "series_hz": 3150,
               "away_octaves": 0.0054,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 11,
@@ -2766,9 +3088,10 @@
               ],
               "hz": 4000,
               "series_hz": 4000,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 12,
@@ -2779,9 +3102,10 @@
               "hz": 4964.3,
               "series_hz": 5000,
               "away_octaves": 0.0103,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 13,
@@ -2791,9 +3115,10 @@
               ],
               "hz": 6300,
               "series_hz": 6300,
-              "source": "the series; no reading of this entry is published",
+              "what_placed_it": "the series; no reading of this entry is published",
               "approximate": true,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "assigned"
             },
             {
               "index": 14,
@@ -2804,9 +3129,10 @@
               "hz": 7972.9,
               "series_hz": 8000,
               "away_octaves": 0.0049,
-              "source": "read",
+              "what_placed_it": "read",
               "unit_specific": false,
-              "approximate": false
+              "approximate": false,
+              "source": "measured"
             },
             {
               "index": 15,
@@ -2816,15 +3142,17 @@
               ],
               "hz": null,
               "bypass": true,
-              "source": "the range's own last position, which is not a frequency",
+              "what_placed_it": "the range's own last position, which is not a frequency",
               "approximate": false,
-              "unit_specific": false
+              "unit_specific": false,
+              "source": "measured"
             }
           ],
           "band_the_reading_separates_octaves": 0.0847,
           "unit_specific": false,
           "approximate": true,
-          "entries_using_it": 2
+          "entries_using_it": 2,
+          "source": "assigned"
         }
       },
       "rests_on": "freq-the-byte-indexes-a-third-octave-table.json"
@@ -4280,7 +4608,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 00",
@@ -4293,7 +4622,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 00",
@@ -4306,7 +4636,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": true,
-      "approximate": false
+      "approximate": false,
+      "source": "unit_overrides_assigned"
     },
     {
       "type": "01 00",
@@ -4319,7 +4650,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 00",
@@ -4332,7 +4664,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 00",
@@ -4345,7 +4678,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": true,
-      "approximate": false
+      "approximate": false,
+      "source": "unit_overrides_assigned"
     },
     {
       "type": "01 00",
@@ -4358,7 +4692,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 00",
@@ -4371,7 +4706,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 00",
@@ -4384,7 +4720,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": true
+      "approximate": true,
+      "source": "assigned"
     },
     {
       "type": "01 01",
@@ -4397,7 +4734,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 03",
@@ -4410,7 +4748,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 11",
@@ -4423,7 +4762,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": true
+      "approximate": true,
+      "source": "assigned"
     },
     {
       "type": "01 20",
@@ -4436,7 +4776,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 21",
@@ -4449,7 +4790,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 22",
@@ -4462,7 +4804,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": true,
-      "approximate": true
+      "approximate": true,
+      "source": "unit_overrides_assigned"
     },
     {
       "type": "01 22",
@@ -4475,7 +4818,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": true,
-      "approximate": true
+      "approximate": true,
+      "source": "unit_overrides_assigned"
     },
     {
       "type": "01 23",
@@ -4488,7 +4832,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 25",
@@ -4501,7 +4846,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 25",
@@ -4514,7 +4860,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 26",
@@ -4527,7 +4874,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 26",
@@ -4540,7 +4888,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 30",
@@ -4553,7 +4902,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 40",
@@ -4566,7 +4916,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 40",
@@ -4579,7 +4930,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": true
+      "approximate": true,
+      "source": "assigned"
     },
     {
       "type": "01 42",
@@ -4592,7 +4944,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": false,
       "unit_specific": false,
-      "approximate": true
+      "approximate": true,
+      "source": "assigned"
     },
     {
       "type": "01 42",
@@ -4605,7 +4958,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 42",
@@ -4618,7 +4972,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 42",
@@ -4631,7 +4986,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 43",
@@ -4644,7 +5000,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 44",
@@ -4657,7 +5014,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 50",
@@ -4670,7 +5028,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 50",
@@ -4683,7 +5042,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 50",
@@ -4696,7 +5056,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": true
+      "approximate": true,
+      "source": "assigned"
     },
     {
       "type": "01 50",
@@ -4709,7 +5070,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 50",
@@ -4722,7 +5084,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 50",
@@ -4735,7 +5098,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 51",
@@ -4748,7 +5112,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 51",
@@ -4761,7 +5126,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 51",
@@ -4774,7 +5140,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 52",
@@ -4787,7 +5154,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 52",
@@ -4800,7 +5168,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 52",
@@ -4813,7 +5182,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 53",
@@ -4826,7 +5196,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 53",
@@ -4839,7 +5210,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 53",
@@ -4852,7 +5224,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 53",
@@ -4865,7 +5238,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 54",
@@ -4878,7 +5252,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 57",
@@ -4891,7 +5266,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 57",
@@ -4904,7 +5280,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 57",
@@ -4917,7 +5294,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 57",
@@ -4930,7 +5308,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 70",
@@ -4943,7 +5322,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 70",
@@ -4956,7 +5336,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "01 71",
@@ -4969,7 +5350,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 00",
@@ -4982,7 +5364,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 01",
@@ -4995,7 +5378,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 03",
@@ -5008,7 +5392,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 04",
@@ -5021,7 +5406,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 06",
@@ -5034,7 +5420,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 07",
@@ -5047,7 +5434,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 08",
@@ -5060,7 +5448,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 09",
@@ -5073,7 +5462,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 09",
@@ -5086,7 +5476,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "02 0A",
@@ -5099,7 +5490,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 00",
@@ -5112,7 +5504,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 00",
@@ -5125,7 +5518,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 01",
@@ -5138,7 +5532,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 01",
@@ -5151,7 +5546,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": true,
-      "approximate": false
+      "approximate": false,
+      "source": "unit_overrides_assigned"
     },
     {
       "type": "04 01",
@@ -5164,7 +5560,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 01",
@@ -5177,7 +5574,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 01",
@@ -5190,7 +5588,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 03",
@@ -5203,7 +5602,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": false,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 03",
@@ -5216,7 +5616,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": true,
-      "approximate": false
+      "approximate": false,
+      "source": "unit_overrides_assigned"
     },
     {
       "type": "04 03",
@@ -5229,7 +5630,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 03",
@@ -5242,7 +5644,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 03",
@@ -5255,7 +5658,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": false,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 03",
@@ -5268,7 +5672,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "04 03",
@@ -5281,7 +5686,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": false,
       "unit_specific": false,
-      "approximate": true
+      "approximate": true,
+      "source": "assigned"
     },
     {
       "type": "04 06",
@@ -5294,7 +5700,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "05 00",
@@ -5307,7 +5714,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "11 00",
@@ -5320,7 +5728,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "11 00",
@@ -5333,7 +5742,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "11 01",
@@ -5346,7 +5756,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "11 01",
@@ -5359,7 +5770,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     },
     {
       "type": "11 05",
@@ -5372,7 +5784,8 @@
       "inference_state": "standing",
       "address_inside_the_inferences_list": true,
       "unit_specific": false,
-      "approximate": false
+      "approximate": false,
+      "source": "measured"
     }
   ]
 }
