@@ -3,6 +3,7 @@ import { useData } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
 import { computed } from 'vue';
 import { defineDemoAsync } from '@/components/defineDemoAsync';
+import NavSearch from '@/components/search/NavSearch.vue';
 import { createTheme } from '@/composables/useTheme';
 
 // Each custom route is a standalone application. Keep it out of the shared
@@ -63,5 +64,9 @@ const isClassicSynth = computed(() => frontmatter.value.layout === 'classic-synt
   <PianoPracticeDemo v-else-if="isPractice" />
   <GsModuleDemo v-else-if="isGsModule" />
   <ClassicSynthDemo v-else-if="isClassicSynth" />
-  <DefaultLayout v-else />
+  <DefaultLayout v-else>
+    <template #nav-bar-content-before>
+      <NavSearch />
+    </template>
+  </DefaultLayout>
 </template>

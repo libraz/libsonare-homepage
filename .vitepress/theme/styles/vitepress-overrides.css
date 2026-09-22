@@ -71,6 +71,26 @@ html[lang="ja"] .VPNavBarTitle .title::after {
   background-color: var(--vp-c-brand-soft);
 }
 
+/* --- Nav search alignment ---
+   The default theme's own search slot sits right after ours and grows, so our
+   field is pinned to the very start of the nav content area with nothing
+   before it. That start is the sidebar's edge on a page that has one, which
+   left the field against the divider and out of step with the column beneath.
+   Take the gutter the theme gives its own search slot: with a sidebar it puts
+   the field, the page title and the prose on one left edge, and without one it
+   keeps the field off the site title. */
+@media (min-width: 768px) {
+  .VPNavBar .nav-search {
+    margin-left: 24px;
+  }
+}
+
+@media (min-width: 960px) {
+  .VPNavBar .nav-search {
+    margin-left: 32px;
+  }
+}
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .VPNavBarTitle .title::after {

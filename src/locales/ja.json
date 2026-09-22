@@ -530,5 +530,31 @@
     "loading": "読み込み中...",
     "error": "エラー",
     "retry": "再試行"
+  },
+  "search": {
+    "label": "検索",
+    "placeholder": "ドキュメントとデモを検索",
+    "loading": "検索中...",
+    "noResults": "一致する項目がありません",
+    "error": "検索を利用できません。",
+    "clear": "入力を消去",
+    "seeAll": "{total} 件すべてを表示",
+    "openPage": "検索ページを開く",
+    "sections": {
+      "doc": "ドキュメント",
+      "glossary": "用語集",
+      "demo": "デモ"
+    },
+    "page": {
+      "title": "検索",
+      "standfirst": "ドキュメント・用語集・デモページを横断する全文検索です。インデックスはデプロイ時に生成され、検索はブラウザ内で完結します。",
+      "placeholder": "用語・API 名・知りたいことを入力",
+      "scopeAll": "すべて",
+      "resultCount": "「{query}」の検索結果 {total} 件",
+      "resultCountOne": "「{query}」の検索結果 1 件",
+      "empty": "「{query}」に一致する項目はありませんでした。",
+      "emptyHint": "より短い語で試すか、別のセクションを検索してください。",
+      "idle": "入力するとサイト内を検索します。"
+    }
   }
 }

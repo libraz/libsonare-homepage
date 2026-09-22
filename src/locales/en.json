@@ -530,5 +530,31 @@
     "loading": "Loading...",
     "error": "Error",
     "retry": "Retry"
+  },
+  "search": {
+    "label": "Search",
+    "placeholder": "Search docs and demos",
+    "loading": "Searching...",
+    "noResults": "No matches",
+    "error": "Search is unavailable right now.",
+    "clear": "Clear the query",
+    "seeAll": "See all {total} results",
+    "openPage": "Open search",
+    "sections": {
+      "doc": "Docs",
+      "glossary": "Glossary",
+      "demo": "Demos"
+    },
+    "page": {
+      "title": "Search",
+      "standfirst": "Full-text search across the documentation, the glossary, and the demo pages. The index is built at deploy time and searched in your browser.",
+      "placeholder": "Type a term, an API name, or a question",
+      "scopeAll": "Everything",
+      "resultCount": "{total} results for \"{query}\"",
+      "resultCountOne": "1 result for \"{query}\"",
+      "empty": "Nothing matched \"{query}\".",
+      "emptyHint": "Try a shorter term, or search in another section.",
+      "idle": "Start typing to search the site."
+    }
   }
 }
