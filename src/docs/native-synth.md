@@ -78,7 +78,7 @@ By the end of this page you should be able to:
 - know when a note plays NativeSynth versus the loaded SoundFont.
 
 ::: tip Play it first
-The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboard, the full preset catalog, and live patch edits. It uses nothing but the instruments: no analysis, no mastering. [Classic Synth](/classic-synth) takes the subtractive engine apart a chapter at a time instead: the four filter models compared on the same note, the mod matrix wired by hand, body resonance. The [instrument demos](/demos) cover single behaviours such as the ADSR envelope, the filter, and the GS effects.
+The [Synth Playground](/synth) runs this synthesizer in the browser — a keyboard, the full preset catalog, and live patch edits. It uses nothing but the instruments: no analysis, no mastering. [Step Bass](/step-bass) puts the subtractive engine to work as one instrument instead: a sixteen-step monophonic bass machine on the diode ladder, where accent and slide are sequenced per step and the cutoff moves under a sounding note. The [instrument demos](/demos) cover single behaviours such as the ADSR envelope, the filter, and the GS effects.
 :::
 
 ## The seventeen synthesis engines

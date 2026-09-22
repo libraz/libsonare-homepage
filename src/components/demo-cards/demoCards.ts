@@ -108,12 +108,12 @@ const CARD_META: Record<
     eyebrow: 'GM · GS',
     chips: ['16 PARTS', 'SYSEX', 'INSERT FX', 'DROP A .MID'],
   },
-  'classic-synth': {
+  'step-bass': {
     visual: 'filter',
     accent: false,
     status: 'NEW',
-    eyebrow: 'SUBTRACTIVE',
-    chips: ['4 FILTERS', '12 × 8 MATRIX', 'BODY', 'WAV · MIDI'],
+    eyebrow: 'BASSLINE',
+    chips: ['16 STEPS', 'ACCENT · SLIDE', 'DIODE LADDER', 'WAV · MIDI'],
   },
 };
 
@@ -165,10 +165,10 @@ export const demoCardsCopy = {
         tagline:
           'Sixteen parts, a sound each, one insertion effect — and your own .mid played through it, with every SysEx byte shown.',
       },
-      'classic-synth': {
-        title: 'Classic Synth',
+      'step-bass': {
+        title: 'Step Bass',
         tagline:
-          'One voice taken apart a chapter at a time: four filter models on the same note, a matrix you wire by hand, and a playground.',
+          'A sixteen-step monophonic bass machine: one oscillator, a diode-ladder lowpass, and per-step accent and slide.',
       },
     },
   },
@@ -219,10 +219,10 @@ export const demoCardsCopy = {
         tagline:
           '16 パートにそれぞれ音色を割り当て、インサーションエフェクトを通し、手持ちの .mid を鳴らす。送っている SysEx も全部見えます。',
       },
-      'classic-synth': {
-        title: 'クラシックシンセ',
+      'step-bass': {
+        title: 'ステップベース',
         tagline:
-          '1 つの音色を章ごとに分解。4 種類のフィルタを同じ音で聴き比べ、モジュレーション行列を手で結線し、最後は自由に組み立てます。',
+          '16 ステップのモノフォニック・ベースマシン。1 オシレータをダイオードラダー・ローパスに通し、ステップごとのアクセントとスライドを効かせます。',
       },
     },
   },

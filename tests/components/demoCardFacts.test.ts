@@ -54,18 +54,10 @@ describe('the GS card counts what the format has', () => {
   });
 });
 
-describe('the classic-synth card counts what its own page offers', () => {
-  it('counts the filter models', async () => {
-    const { FILTER_MODELS } = await import('@/demos/classic-synth/classicSynthState');
-    expect(countedChip('classic-synth', 'FILTERS')).toBe(FILTER_MODELS.length);
-  });
-
-  it('sizes the matrix chip by the axes the page actually offers', async () => {
-    const { MOD_SOURCES, MOD_DESTINATIONS } = await import(
-      '@/demos/classic-synth/classicSynthState'
-    );
-    const chip = chipsOf('classic-synth').find((text) => text.includes('MATRIX'));
-    expect(chip).toBe(`${MOD_SOURCES.length} × ${MOD_DESTINATIONS.length} MATRIX`);
+describe('the step-bass card counts what its own page offers', () => {
+  it('counts the sequencer steps', async () => {
+    const { STEP_COUNT } = await import('@/demos/step-bass/stepBassPatch');
+    expect(countedChip('step-bass', 'STEPS')).toBe(STEP_COUNT);
   });
 });
 

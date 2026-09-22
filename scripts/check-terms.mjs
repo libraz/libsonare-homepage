@@ -202,7 +202,7 @@ export function checkTerms({
  * The letter cluster must carry a capital, which is what separates a product
  * name from ordinary hyphenated prose ("first-10", "up-to-16").
  */
-const DESIGNATION_SHAPE =
+export const DESIGNATION_SHAPE =
   /\b([A-Za-z]{2,5})-(\d{2,5}[A-Za-z]{0,3})\b|\b([A-Za-z]{2,5})(\d{3,5}[A-Za-z]{0,3})\b/g;
 
 /**

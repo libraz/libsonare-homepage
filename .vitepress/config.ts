@@ -547,7 +547,7 @@ const enDemoMenu = [
       { text: 'Studio Mini', link: '/studio' },
       { text: 'Piano Practice', link: '/practice' },
       { text: 'GS Sound Module', link: '/gs-module' },
-      { text: 'Classic Synth', link: '/classic-synth' },
+      { text: 'Step Bass', link: '/step-bass' },
     ],
   },
 ];
@@ -1046,7 +1046,7 @@ export default defineConfig({
                   { text: 'スタジオミニ', link: '/ja/studio' },
                   { text: 'ピアノ練習', link: '/ja/practice' },
                   { text: 'GS 音源モジュール', link: '/ja/gs-module' },
-                  { text: 'クラシックシンセ', link: '/ja/classic-synth' },
+                  { text: 'ステップベース', link: '/ja/step-bass' },
                 ],
               },
             ],

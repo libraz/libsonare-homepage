@@ -53,7 +53,7 @@ const copy = computed(() =>
         studio: 'Studio',
         practice: 'Piano Practice',
         'gs-module': 'GS Module',
-        'classic-synth': 'Classic Synth',
+        'step-bass': 'Step Bass',
       },
     },
     ja: {
@@ -75,7 +75,7 @@ const copy = computed(() =>
         studio: 'スタジオ',
         practice: 'ピアノ練習',
         'gs-module': 'GS 音源',
-        'classic-synth': 'クラシックシンセ',
+        'step-bass': 'ステップベース',
       },
     },
   }),

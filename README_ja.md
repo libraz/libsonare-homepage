@@ -22,7 +22,7 @@ VitePress 製。**デモはすべてブラウザ内でエンジンを動かし�
 | [スタジオミニ](https://libsonare.libraz.net/ja/studio) | 3 トラックをステップ入力し、ミックスしてループをバウンス |
 | [ピアノ練習](https://libsonare.libraz.net/ja/practice) | 落下ノート、光る鍵盤、MIDI 入力による採点 |
 | [GS 音源モジュール](https://libsonare.libraz.net/ja/gs-module) | 16 パート、インサーションエフェクト 1 系統、そして手持ちの .mid |
-| [クラシックシンセ](https://libsonare.libraz.net/ja/classic-synth) | 1 つの音色を章ごとに分解。比較はすべてその場で合成 |
+| [ステップベース](https://libsonare.libraz.net/ja/step-bass) | 16 ステップ・1 ボイス。ダイオードラダー・ローパスにステップごとのアクセントとスライド |
 
 デモの id とルートとディレクトリを結び付けている表は `src/demos/manifest.ts`
 の 1 か所だけです。この一覧がそこからずれると `tests/readme.test.ts` が落ちます。

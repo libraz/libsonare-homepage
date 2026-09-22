@@ -80,7 +80,7 @@ describe('DemoCardGrid', () => {
     expect(wrapper.text()).toContain('Studio Mini');
     expect(wrapper.text()).toContain('Piano Practice');
     expect(wrapper.text()).toContain('GS Sound Module');
-    expect(wrapper.text()).toContain('Classic Synth');
+    expect(wrapper.text()).toContain('Step Bass');
     expect(wrapper.find('.demo-grid__visual--spectrum').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--lufs').exists()).toBe(true);
     expect(wrapper.find('.demo-grid__visual--chroma').exists()).toBe(true);
@@ -117,7 +117,7 @@ describe('DemoCardGrid', () => {
     expect(wrapper.text()).toContain('シンセプレイグラウンド');
     expect(wrapper.text()).toContain('ピアノ練習');
     expect(wrapper.text()).toContain('GS 音源モジュール');
-    expect(wrapper.text()).toContain('クラシックシンセ');
+    expect(wrapper.text()).toContain('ステップベース');
     expect(wrapper.find('.demo-carousel__nav--prev').attributes('aria-label')).toBe(
       '前のデモを表示',
     );

@@ -79,7 +79,7 @@ function requiredDemoRoutes(locales, defaultLocale) {
     'studio',
     'practice',
     'gs-module',
-    'classic-synth',
+    'step-bass',
   ]
     .flatMap((route) => localizedBuiltFiles(route, locales, defaultLocale))
     .sort();

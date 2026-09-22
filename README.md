@@ -23,7 +23,7 @@ Bilingual throughout: English under `src/docs/`, Japanese mirrored under
 | [Studio Mini](https://libsonare.libraz.net/studio) | Step-sequence three tracks, mix them, bounce the loop |
 | [Piano Practice](https://libsonare.libraz.net/practice) | Falling notes, a lit keyboard and MIDI-input scoring |
 | [GS Sound Module](https://libsonare.libraz.net/gs-module) | Sixteen parts, one insertion effect, and your own `.mid` through them |
-| [Classic Synth](https://libsonare.libraz.net/classic-synth) | One voice taken apart a chapter at a time, with every comparison rendered |
+| [Step Bass](https://libsonare.libraz.net/step-bass) | Sixteen steps, one voice, a diode-ladder lowpass with per-step accent and slide |
 
 `src/demos/manifest.ts` is the one table binding a demo's id to its route and
 its directory; `tests/readme.test.ts` fails if this list drifts from it.

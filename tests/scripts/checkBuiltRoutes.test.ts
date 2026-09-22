@@ -32,8 +32,8 @@ const demoRoutes = [
   'ja/practice.html',
   'gs-module.html',
   'ja/gs-module.html',
-  'classic-synth.html',
-  'ja/classic-synth.html',
+  'step-bass.html',
+  'ja/step-bass.html',
 ];
 
 const siteUrl = 'https://libsonare.libraz.net';

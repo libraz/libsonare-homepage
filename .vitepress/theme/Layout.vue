@@ -17,9 +17,7 @@ const MusicAnalysisStudio = defineDemoAsync(
   () => import('@/demos/music-analysis/MusicAnalysisStudio.vue'),
 );
 const GsModuleDemo = defineDemoAsync(() => import('@/demos/gs-module/GsModuleDemo.vue'));
-const ClassicSynthDemo = defineDemoAsync(
-  () => import('@/demos/classic-synth/ClassicSynthDemo.vue'),
-);
+const StepBassDemo = defineDemoAsync(() => import('@/demos/step-bass/StepBassDemo.vue'));
 const PianoPracticeDemo = defineDemoAsync(() => import('@/demos/practice/PianoPracticeDemo.vue'));
 const RealtimeFxLab = defineDemoAsync(() => import('@/demos/realtime-fx/RealtimeFxLab.vue'));
 const SpatialScanner = defineDemoAsync(() => import('@/demos/spatial/SpatialScanner.vue'));
@@ -47,7 +45,7 @@ const isSynth = computed(() => frontmatter.value.layout === 'synth');
 const isStudio = computed(() => frontmatter.value.layout === 'studio');
 const isPractice = computed(() => frontmatter.value.layout === 'practice');
 const isGsModule = computed(() => frontmatter.value.layout === 'gs-module');
-const isClassicSynth = computed(() => frontmatter.value.layout === 'classic-synth');
+const isStepBass = computed(() => frontmatter.value.layout === 'step-bass');
 </script>
 
 <template>
@@ -63,7 +61,7 @@ const isClassicSynth = computed(() => frontmatter.value.layout === 'classic-synt
   <StudioDemo v-else-if="isStudio" />
   <PianoPracticeDemo v-else-if="isPractice" />
   <GsModuleDemo v-else-if="isGsModule" />
-  <ClassicSynthDemo v-else-if="isClassicSynth" />
+  <StepBassDemo v-else-if="isStepBass" />
   <DefaultLayout v-else>
     <template #nav-bar-content-before>
       <NavSearch />

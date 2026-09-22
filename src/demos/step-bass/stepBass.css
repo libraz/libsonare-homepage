@@ -1,0 +1,578 @@
+/* The step bass instrument's own surface.
+   Tokens are declared for both themes here rather than in the shared demo
+   token layer, because only this panel uses them. Light mode gets its own
+   values instead of the dark plate pushed through a filter. */
+
+.step-bass {
+  --sb-gutter: 58px;
+  --sb-cell-gap: 3px;
+  --sb-radius: 6px;
+
+  --sb-plate: rgba(255, 255, 255, 0.5);
+  --sb-plate-line: rgba(80, 60, 140, 0.16);
+  --sb-engrave: rgba(80, 60, 140, 0.1);
+  --sb-cell: rgba(255, 255, 255, 0.72);
+  --sb-cell-beat: rgba(124, 58, 237, 0.07);
+  --sb-cell-edge: rgba(80, 60, 140, 0.16);
+  --sb-ink: var(--demo-text-strong);
+  --sb-ink-faint: rgba(0, 0, 0, 0.26);
+  --sb-note: #6D28D9;
+  --sb-accent-ink: #B45309;
+  --sb-slide-ink: #0E7490;
+  --sb-playhead: rgba(180, 83, 9, 0.22);
+
+  display: grid;
+  gap: 14px;
+}
+
+.dark .step-bass {
+  --sb-plate: rgba(0, 0, 0, 0.22);
+  --sb-plate-line: rgba(139, 92, 246, 0.24);
+  --sb-engrave: rgba(139, 92, 246, 0.14);
+  --sb-cell: rgba(0, 0, 0, 0.32);
+  --sb-cell-beat: rgba(139, 92, 246, 0.1);
+  --sb-cell-edge: rgba(139, 92, 246, 0.28);
+  --sb-ink-faint: rgba(255, 255, 255, 0.28);
+  --sb-note: #C4B5FD;
+  --sb-accent-ink: #FBBF24;
+  --sb-slide-ink: #67E8F9;
+  --sb-playhead: rgba(245, 158, 11, 0.18);
+}
+
+/* --- plate ----------------------------------------------------------- */
+
+.step-bass__plate {
+  padding: 14px;
+  border: 1px solid var(--sb-plate-line);
+  border-radius: 12px;
+  background: var(--sb-plate);
+}
+
+.step-bass__masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sb-engrave);
+}
+
+.step-bass__designation {
+  color: var(--sb-ink);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.step-bass__masthead-note {
+  flex: 1 1 260px;
+  color: var(--demo-text-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* --- knob groups ------------------------------------------------------ */
+
+.step-bass__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.step-bass__group {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--sb-engrave);
+  border-radius: 10px;
+  background: var(--demo-control-bg);
+}
+
+.step-bass__group-legend {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
+}
+
+.step-bass__knobs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+/* --- waveform selector (two states, so it keeps its intrinsic width) --- */
+
+.step-bass__wave {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.step-bass__wave-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.step-bass__wave-keys {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--sb-cell-edge);
+  border-radius: 8px;
+  background: var(--sb-cell);
+}
+
+.step-bass__wave-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--sb-radius);
+  background: transparent;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.step-bass__wave-key svg {
+  display: block;
+}
+
+.step-bass__wave-key--on {
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+}
+
+.step-bass__wave-hint {
+  max-width: 200px;
+  color: var(--demo-text-muted);
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* --- transport -------------------------------------------------------- */
+
+.step-bass__transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sb-engrave);
+}
+
+.step-bass__spacer {
+  flex: 1 1 auto;
+}
+
+.step-bass__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-bass__field-label,
+.step-grid__field-label {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.step-bass__select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--sb-cell-edge);
+  border-radius: var(--sb-radius);
+  background: var(--sb-cell);
+  color: var(--demo-text-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.step-bass__notice {
+  margin: 0;
+  color: var(--demo-warn-text);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* --- step grid -------------------------------------------------------- */
+
+.step-grid {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--sb-plate-line);
+  border-radius: 12px;
+  background: var(--sb-plate);
+}
+
+.step-grid__banks {
+  display: grid;
+  gap: 12px;
+}
+
+.step-grid__bank {
+  display: grid;
+  gap: var(--sb-cell-gap);
+}
+
+.step-grid__row {
+  display: grid;
+  grid-template-columns: var(--sb-gutter) repeat(var(--sb-cols, 16), minmax(0, 1fr));
+  gap: var(--sb-cell-gap);
+  align-items: center;
+}
+
+.step-grid__gutter {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
+}
+
+.step-grid__tick {
+  padding: 2px 0;
+  border-radius: 4px;
+  color: var(--sb-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.step-grid__tick--beat {
+  color: var(--demo-text-muted);
+  font-weight: 700;
+}
+
+.step-grid__tick--playing {
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+}
+
+.step-grid__cell {
+  display: block;
+  border-radius: var(--sb-radius);
+}
+
+.step-grid__cell--playing {
+  background: var(--sb-playhead);
+}
+
+.step-grid__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--sb-cell-edge);
+  border-radius: var(--sb-radius);
+  background: var(--sb-cell);
+  color: var(--sb-ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.step-grid__button--beat {
+  background: var(--sb-cell-beat);
+}
+
+/* The only drag target on the page: a vertical drag sets the pitch, so this
+   element — and nothing around it — takes the pointer away from scrolling. */
+.step-grid__button--note {
+  color: var(--sb-note);
+  cursor: ns-resize;
+  font-weight: 700;
+  touch-action: none;
+}
+
+.step-grid__button--unavailable {
+  color: var(--sb-ink-faint);
+  cursor: default;
+  opacity: 0.75;
+}
+
+.step-grid__button--selected {
+  border-color: var(--demo-accent);
+  box-shadow: inset 0 0 0 1px var(--demo-accent);
+}
+
+.step-grid__glyph {
+  display: block;
+}
+
+.step-grid__glyph--accent {
+  color: var(--sb-accent-ink);
+}
+
+.step-grid__glyph--slide {
+  color: var(--sb-slide-ink);
+}
+
+.step-grid__glyph--muted {
+  color: var(--sb-ink-faint);
+}
+
+/* --- selected-step inspector ------------------------------------------ */
+
+.step-grid__inspector {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--sb-engrave);
+  border-radius: 10px;
+  background: var(--demo-control-bg);
+}
+
+.step-grid__inspector-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.step-grid__inspector-title {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
+}
+
+.step-grid__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-grid__value {
+  min-width: 42px;
+  color: var(--sb-ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.step-grid__badge {
+  padding: 2px 6px;
+  border: 1px solid var(--sb-slide-ink);
+  border-radius: 999px;
+  color: var(--sb-slide-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.step-grid__reason {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.step-grid__keyhint {
+  margin: 0;
+  color: var(--demo-text-faint);
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* --- displays --------------------------------------------------------- */
+
+.step-views {
+  display: grid;
+  gap: 10px;
+}
+
+.step-views__switch {
+  display: flex;
+  width: 100%;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: var(--demo-control-bg);
+}
+
+.step-views__switch-button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--sb-radius);
+  background: transparent;
+  color: var(--demo-text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.step-views__switch-button--on {
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+}
+
+.step-views__panels {
+  display: grid;
+  gap: 12px;
+}
+
+.step-views__panel {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  /* Held so switching displays on a narrow screen does not resize the deck. */
+  min-block-size: 250px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--sb-engrave);
+  border-radius: 10px;
+  background: var(--demo-control-bg);
+}
+
+.step-views__legend {
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--demo-label-size);
+  font-weight: var(--demo-label-weight);
+  letter-spacing: var(--demo-label-tracking);
+  text-transform: uppercase;
+}
+
+.step-views__screen {
+  position: relative;
+  min-block-size: 140px;
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  background: var(--demo-screen-bg);
+  overflow: hidden;
+}
+
+.step-views__canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: var(--demo-text-strong);
+}
+
+.step-views__scope {
+  min-block-size: 140px;
+}
+
+.step-views__caption {
+  margin: 0;
+  color: var(--demo-text-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.step-views__meter {
+  display: grid;
+  gap: 6px;
+  align-content: center;
+}
+
+.step-views__meter-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--demo-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.step-views__meter-bar {
+  position: relative;
+  height: 14px;
+  border: 1px solid var(--sb-cell-edge);
+  border-radius: 999px;
+  background: var(--demo-track-bg);
+  overflow: hidden;
+}
+
+.step-views__meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--demo-cyan), var(--demo-accent));
+}
+
+.step-views__meter-ceiling {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--demo-clip);
+}
+
+.step-views__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px 14px;
+}
+
+/* --- folds ------------------------------------------------------------- */
+
+/* Above this width all three displays stand at once; below it the segmented
+   control puts up one at a time. The same breakpoint gates both, so the
+   markup and the columns can never disagree. */
+@media (min-width: 900px) {
+  .step-views__panels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .step-bass {
+    --sb-gutter: 46px;
+  }
+
+  .step-bass__group {
+    flex-basis: 100%;
+  }
+
+  .step-grid__button {
+    min-height: 34px;
+  }
+}
