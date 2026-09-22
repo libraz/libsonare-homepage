@@ -296,9 +296,31 @@ html[lang='ja'] .vp-doc .custom-block li {
   font-variant-numeric: tabular-nums;
 }
 
+/* Auto layout hands out the width in proportion to each column's longest
+   line, and Japanese breaks between any two characters, so a label column
+   collapses to one character per line while a prose column keeps the rest.
+   The floor stops the collapse; multi-line rows read better top-aligned. */
+.vp-doc th,
+.vp-doc td {
+  min-width: 7.5rem;
+  vertical-align: top;
+}
+
+/* The ceiling caps one column's claim so the remainder reaches the columns
+   beside it. Two-column tables are exempt: there the wide column is the
+   whole content, and capping it only pads the label column. */
+.vp-doc tr > th:first-child:nth-last-child(n + 3),
+.vp-doc tr > th:first-child:nth-last-child(n + 3) ~ th,
+.vp-doc tr > td:first-child:nth-last-child(n + 3),
+.vp-doc tr > td:first-child:nth-last-child(n + 3) ~ td {
+  max-width: 30rem;
+}
+
+/* break-word rather than anywhere: an identifier keeps its column from
+   narrowing below it, and breaks only where it genuinely cannot fit. */
 .vp-doc td code,
 .vp-doc th code {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Japanese pages: wider columns read better */
@@ -625,10 +647,39 @@ html[lang='ja'] .vp-doc th {
 .doc-diagram-wrap {
   border-radius: var(--radius-md);
   border: 1px solid var(--vp-c-divider);
-  background: var(--vp-code-block-bg);
   padding: 1.25rem;
   margin: 1.5rem 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  /* Edge shadows appear only while there is more diagram to scroll to: the
+     matching covers travel with the content and mask them at either end. */
+  background:
+    linear-gradient(to right, var(--vp-code-block-bg) 60%, transparent) 0 0 / 28px 100% no-repeat
+      local,
+    linear-gradient(to left, var(--vp-code-block-bg) 60%, transparent) 100% 0 / 28px 100% no-repeat
+      local,
+    radial-gradient(
+        farthest-side at 0 50%,
+        color-mix(in srgb, var(--color-text-primary) 18%, transparent),
+        transparent
+      )
+      0 0 / 14px 100% no-repeat scroll,
+    radial-gradient(
+        farthest-side at 100% 50%,
+        color-mix(in srgb, var(--color-text-primary) 18%, transparent),
+        transparent
+      )
+      100% 0 / 14px 100% no-repeat scroll,
+    var(--vp-code-block-bg);
+}
+
+/* The panel scrolls when a diagram is wider than the column, so the title and
+   the caption stay pinned to the left edge instead of sliding out of view. */
+.doc-diagram-wrap .doc-diagram-head,
+.doc-diagram-wrap .doc-diagram-caption {
+  position: sticky;
+  left: 0;
 }
 
 .doc-diagram-wrap .doc-diagram-head {
@@ -784,5 +835,12 @@ html[lang='ja'] .vp-doc th {
   .vp-doc th,
   .vp-doc td {
     padding: 0.6rem 0.75rem;
+    min-width: 6rem;
+  }
+  /* At this width breaking a long identifier beats scrolling the table
+     sideways to reach the end of it. */
+  .vp-doc td code,
+  .vp-doc th code {
+    overflow-wrap: anywhere;
   }
 }
