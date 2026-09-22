@@ -242,16 +242,42 @@ export function downloadJson(filename: string, data: unknown): string {
   return url;
 }
 
-export function encodeWavStereo(
-  left: Float32Array,
-  right: Float32Array,
+/** A WAV file from planar channels, ready to download or hand to an `<audio>`. */
+export function wavBlob(channels: readonly Float32Array[], sampleRate: number): Blob {
+  return new Blob([encodeWav(channels, sampleRate)], { type: 'audio/wav' });
+}
+
+/**
+ * WAV bytes from planar channels — the shape an AudioBuffer and the engine's
+ * per-channel results hand back. Any channel count; the encode stops at the
+ * shortest channel, so a ragged set cannot read past its end.
+ */
+export function encodeWav(channels: readonly Float32Array[], sampleRate: number): ArrayBuffer {
+  // No channels is degenerate input, not an empty stereo file: call it mono, no frames.
+  const channelCount = channels.length || 1;
+  const frames = channels.length ? Math.min(...channels.map((c) => c.length)) : 0;
+  const interleaved = new Float32Array(frames * channelCount);
+  for (let c = 0; c < channels.length; c++) {
+    const channel = channels[c];
+    for (let i = 0; i < frames; i++) interleaved[i * channelCount + c] = channel[i];
+  }
+  return encodeWavInterleaved(interleaved, sampleRate, channelCount);
+}
+
+/**
+ * WAV bytes from samples already in the frame-interleaved order a WAV stores,
+ * which is how a mixed offline render arrives. `encodeWav` interleaves and
+ * calls this; a caller that already has that order should not be made to
+ * unpack it first.
+ */
+export function encodeWavInterleaved(
+  samples: Float32Array,
   sampleRate: number,
+  channels: number,
 ): ArrayBuffer {
-  const frames = Math.min(left.length, right.length);
-  const channels = 2;
   const bytesPerSample = 2;
   const blockAlign = channels * bytesPerSample;
-  const dataSize = frames * blockAlign;
+  const dataSize = samples.length * bytesPerSample;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
@@ -270,10 +296,9 @@ export function encodeWavStereo(
   view.setUint32(40, dataSize, true);
 
   let offset = 44;
-  for (let i = 0; i < frames; i++) {
-    view.setInt16(offset, floatToInt16(left[i]), true);
-    view.setInt16(offset + 2, floatToInt16(right[i]), true);
-    offset += 4;
+  for (let i = 0; i < samples.length; i++) {
+    view.setInt16(offset, floatToInt16(samples[i]), true);
+    offset += bytesPerSample;
   }
 
   return buffer;

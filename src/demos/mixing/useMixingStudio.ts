@@ -34,12 +34,12 @@ import {
   AudioInputBudgetError,
   calculatePeakRms,
   decodeAudioFile,
-  encodeWavStereo,
   formatDb,
   formatDuration,
   formatSampleRate,
   jsonBlob,
   triggerDownload,
+  wavBlob,
 } from '@/utils/audio';
 import { clamp, dbToLinear, invertedRangeToPercent } from '@/utils/scale';
 import sonareJsUrl from '@/wasm/sonare.js?url';
@@ -365,8 +365,9 @@ export function useMixingStudio() {
       })
       .then((result) => {
         bounceResult.value = result;
-        const wav = encodeWavStereo(result.left, result.right, result.sampleRate);
-        outputUrl.value = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+        outputUrl.value = URL.createObjectURL(
+          wavBlob([result.left, result.right], result.sampleRate),
+        );
         progress.value = 1;
         progressStage.value = copy.value.progress.complete;
       })

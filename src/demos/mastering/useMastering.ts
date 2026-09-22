@@ -1,5 +1,5 @@
 import { ref, shallowRef } from 'vue';
-import { decodeAudioBuffer, encodeWavStereo } from '@/utils/audio';
+import { decodeAudioBuffer, wavBlob } from '@/utils/audio';
 import type { MasteringChainConfig, StreamingPlatform } from '@/wasm/index';
 
 export type MasteringPresetId =
@@ -326,13 +326,11 @@ export function useMastering() {
   }
 
   function createAudioUrl(audio: RenderedMasteringAudio): string {
-    const wav = encodeWavStereo(audio.left, audio.right, audio.sampleRate);
-    return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+    return URL.createObjectURL(wavBlob([audio.left, audio.right], audio.sampleRate));
   }
 
   function createSourceAudioUrl(audio: DecodedMasteringAudio): string {
-    const wav = encodeWavStereo(audio.left, audio.right, audio.sampleRate);
-    return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+    return URL.createObjectURL(wavBlob([audio.left, audio.right], audio.sampleRate));
   }
 
   function dispose() {

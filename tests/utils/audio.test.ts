@@ -7,7 +7,8 @@ import {
   decodeAudioFile,
   downloadJson,
   downsampleWaveform,
-  encodeWavStereo,
+  encodeWav,
+  encodeWavInterleaved,
   formatDb,
   formatDuration,
   formatSampleRate,
@@ -219,10 +220,10 @@ describe('formatters', () => {
   });
 });
 
-describe('encodeWavStereo', () => {
+describe('encodeWav', () => {
   it('writes a valid 44-byte RIFF/WAVE header', () => {
     const left = new Float32Array([0, 0.5, -0.5]);
-    const buffer = encodeWavStereo(left, left, 48000);
+    const buffer = encodeWav([left, left], 48000);
     const view = new DataView(buffer);
     const tag = (off: number) =>
       String.fromCharCode(
@@ -240,9 +241,8 @@ describe('encodeWavStereo', () => {
     expect(buffer.byteLength).toBe(44 + 3 * 4); // 3 frames * 2ch * 2 bytes
   });
   it('clips samples to signed 16-bit PCM and uses the shorter channel length', () => {
-    const buffer = encodeWavStereo(
-      new Float32Array([-2, -1, 0, 1, 2]),
-      new Float32Array([2, 1, 0]),
+    const buffer = encodeWav(
+      [new Float32Array([-2, -1, 0, 1, 2]), new Float32Array([2, 1, 0])],
       44_100,
     );
     const view = new DataView(buffer);
@@ -254,6 +254,21 @@ describe('encodeWavStereo', () => {
     expect(view.getInt16(50, true)).toBe(32767);
     expect(view.getInt16(52, true)).toBe(0);
     expect(view.getInt16(54, true)).toBe(0);
+  });
+  it('writes numChannels = 1 and blockAlign = 2 for a single channel', () => {
+    const mono = new Float32Array([0, 0.25, -0.25]);
+    const buffer = encodeWav([mono], 48000);
+    const view = new DataView(buffer);
+    expect(view.getUint16(22, true)).toBe(1);
+    expect(view.getUint16(32, true)).toBe(2);
+  });
+  it('agrees with encodeWavInterleaved for a stereo pair', () => {
+    const left = new Float32Array([0, 0.5, -0.5]);
+    const right = new Float32Array([0.25, -0.25, 0.75]);
+    const interleaved = new Float32Array([left[0], right[0], left[1], right[1], left[2], right[2]]);
+    const planar = encodeWav([left, right], 44_100);
+    const flat = encodeWavInterleaved(interleaved, 44_100, 2);
+    expect(new Uint8Array(planar)).toEqual(new Uint8Array(flat));
   });
 });
 

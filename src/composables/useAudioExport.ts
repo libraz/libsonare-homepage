@@ -1,9 +1,11 @@
 /**
  * File export for rendered audio and MIDI: mix offline stems down to one
- * interleaved buffer, encode it as a 16-bit PCM WAV, and wrap the native SMF
- * writer's bytes as a downloadable file. Pure and synchronous, so a demo can
- * call it from a download click on the main thread or from a worker.
+ * interleaved buffer, wrap it as a 16-bit PCM WAV blob, and wrap the native
+ * SMF writer's bytes as a downloadable file. Pure and synchronous, so a demo
+ * can call it from a download click on the main thread or from a worker.
  */
+
+import { encodeWavInterleaved } from '@/utils/audio';
 
 export interface StemMixOptions {
   /** Linear gain per stem, in stem order. Missing entries mean unity. */
@@ -43,33 +45,9 @@ export function useAudioExport() {
 
   /** Encode interleaved float samples as a 16-bit PCM WAV blob. */
   function encodeWav(interleaved: Float32Array, sampleRate: number, numChannels: number): Blob {
-    const bytesPerSample = 2;
-    const dataBytes = interleaved.length * bytesPerSample;
-    const buffer = new ArrayBuffer(44 + dataBytes);
-    const view = new DataView(buffer);
-    const writeStr = (offset: number, s: string) => {
-      for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
-    };
-    writeStr(0, 'RIFF');
-    view.setUint32(4, 36 + dataBytes, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
-    view.setUint16(32, numChannels * bytesPerSample, true);
-    view.setUint16(34, 8 * bytesPerSample, true);
-    writeStr(36, 'data');
-    view.setUint32(40, dataBytes, true);
-    let offset = 44;
-    for (let i = 0; i < interleaved.length; i++) {
-      const s = Math.max(-1, Math.min(1, interleaved[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-      offset += bytesPerSample;
-    }
-    return new Blob([buffer], { type: 'audio/wav' });
+    return new Blob([encodeWavInterleaved(interleaved, sampleRate, numChannels)], {
+      type: 'audio/wav',
+    });
   }
 
   /** Mix stems with their gains and encode the result; null when nothing was mixed. */
