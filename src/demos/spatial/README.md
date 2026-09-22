@@ -20,6 +20,12 @@ auditioned impulse gets the whole decay — it *is* the decay. A morph's tail is
 capped shorter and runs over an excerpt of the loaded content, because
 convolution costs the product of the two lengths and the wait is the visitor's.
 
+The engine warns about a tail cut whenever it cuts anything, even a tail already
+a hundred decibels down. `renderNotes.ts` works out how far into the decay the
+cut landed (60 dB × cut ÷ RT60, the same Sabine RT60 that sized the tail) and
+shows the cut only while the decay was still running: in practice a cathedral
+morph, about 38 dB down. Every other synthesis diagnostic is always shown.
+
 What the demo rendered can be saved: the auditioned impulse as a mono WAV (a
 convolution IR), a morph as a stereo one, and the estimate as JSON. An untouched
 upload is not offered back — handing a visitor their own file is not an export.

@@ -214,6 +214,11 @@
   line-height: 1.45;
 }
 
+/* What the render had to change is worth reading before the file is saved. */
+.sp-hint--warn {
+  color: var(--demo-warn-text);
+}
+
 .sp-error {
   margin: 10px 0 0;
   padding: 8px 10px;

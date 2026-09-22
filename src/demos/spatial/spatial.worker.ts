@@ -11,6 +11,7 @@
  *
  * Everything is dependency-free WASM running locally; no audio leaves the browser.
  */
+import { type RenderNote, renderNotes } from '@/demos/spatial/renderNotes';
 import type { AcousticResult, RirResult, RoomEstimateResult, RoomMorphResult } from '@/wasm/index';
 
 export interface RoomGeometry {
@@ -74,6 +75,8 @@ export interface ScanResult {
   /** Synthesized room impulse response (preset rooms only) for convolution auralization. */
   rir?: Float32Array;
   rirSampleRate?: number;
+  /** What the synthesis changed to render that impulse response. */
+  rirNotes?: RenderNote[];
 }
 
 type ScanRequest = {
@@ -165,11 +168,17 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
 
     if (request.type === 'morph') {
-      const { id, left, right, sampleRate, geometry } = request;
+      const { id, left, right, sampleRate } = request;
+      const geometry = { ...request.geometry, absorption: request.geometry.absorption ?? 0.18 };
+      const maxSeconds = geometry.maxSeconds ?? responseSeconds(geometry, MORPH_MAX_SECONDS);
       self.postMessage({ type: 'progress', id, stage: 'morph-left', value: 0.35 });
-      const leftOut = morphChannel(left, sampleRate, geometry);
+      const leftOut = morphChannel(left, sampleRate, geometry, maxSeconds);
       self.postMessage({ type: 'progress', id, stage: 'morph-right', value: 0.7 });
-      const rightOut = morphChannel(right, sampleRate, geometry);
+      const rightOut = morphChannel(right, sampleRate, geometry, maxSeconds);
+      const notes = renderNotes([...leftOut.diagnostics, ...rightOut.diagnostics], {
+        seconds: maxSeconds,
+        rt60: sabineRt60(geometry),
+      });
       self.postMessage(
         {
           type: 'morphDone',
@@ -177,6 +186,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           left: leftOut.audio,
           right: rightOut.audio,
           sampleRate: leftOut.sampleRate,
+          notes,
         },
         [leftOut.audio.buffer, rightOut.audio.buffer],
       );
@@ -214,6 +224,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       // this room with a WebAudio ConvolverNode (transfer the buffer, zero-copy).
       result.rir = rir.rir;
       result.rirSampleRate = rir.sampleRate;
+      result.rirNotes = renderNotes(rir.diagnostics, {
+        seconds: maxSeconds,
+        rt60: sabineRt60(geometry),
+      });
       self.postMessage({ type: 'done', id, result }, [rir.rir.buffer]);
       return;
     }
@@ -236,16 +250,16 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 function morphChannel(
   samples: Float32Array,
   sampleRate: number,
-  geometry: MorphRequest['geometry'],
+  geometry: MorphGeometry & { absorption: number },
+  maxSeconds: number,
 ): RoomMorphResult {
   const wasm = wasmModule;
   if (!wasm) throw new Error('WASM not initialized');
-  const absorption = geometry.absorption ?? 0.18;
   return wasm.roomMorph(samples, sampleRate, {
     lengthM: geometry.lengthM,
     widthM: geometry.widthM,
     heightM: geometry.heightM,
-    absorption,
+    absorption: geometry.absorption,
     sourceX: geometry.sourceX,
     sourceY: geometry.sourceY,
     sourceZ: geometry.sourceZ,
@@ -253,8 +267,7 @@ function morphChannel(
     listenerY: geometry.listenerY,
     listenerZ: geometry.listenerZ,
     ismOrder: geometry.ismOrder ?? 2,
-    maxSeconds:
-      geometry.maxSeconds ?? responseSeconds({ ...geometry, absorption }, MORPH_MAX_SECONDS),
+    maxSeconds,
     wet: 0.42,
     sourceTailSuppression: 0.18,
     seed: geometry.seed ?? 2026,

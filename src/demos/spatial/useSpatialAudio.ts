@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
+import type { RenderNote } from '@/demos/spatial/renderNotes';
 import type { RoomGeometry } from '@/demos/spatial/spatial.worker';
 import { decodeAudioBuffer, wavBlob } from '@/utils/audio';
 
@@ -17,7 +18,14 @@ export type RenderedKind = 'impulse' | 'morph';
 
 type MorphWorkerMessage =
   | { type: 'progress'; id: number; stage: string; value: number }
-  | { type: 'morphDone'; id: number; left: Float32Array; right: Float32Array; sampleRate: number }
+  | {
+      type: 'morphDone';
+      id: number;
+      left: Float32Array;
+      right: Float32Array;
+      sampleRate: number;
+      notes: RenderNote[];
+    }
   | { type: 'error'; id: number; message: string };
 
 /**
@@ -45,6 +53,8 @@ export function useSpatialAudio() {
   const morphProgress = ref(0);
   const contentLabel = ref('');
   const renderedKind = ref<RenderedKind | null>(null);
+  /** What the synthesis changed to render the current content; empty for an upload. */
+  const renderNotes = ref<RenderNote[]>([]);
 
   let ctx: AudioContext | null = null;
   let analyser: AnalyserNode | null = null;
@@ -62,7 +72,12 @@ export function useSpatialAudio() {
   const pendingMorphs = new Map<
     number,
     {
-      resolve: (value: { left: Float32Array; right: Float32Array; sampleRate: number }) => void;
+      resolve: (value: {
+        left: Float32Array;
+        right: Float32Array;
+        sampleRate: number;
+        notes: RenderNote[];
+      }) => void;
       reject: (reason: Error) => void;
     }
   >();
@@ -108,12 +123,13 @@ export function useSpatialAudio() {
     hasContent.value = true;
     contentLabel.value = file.name;
     renderedKind.value = null;
+    renderNotes.value = [];
     return buf;
   }
 
   /** Audition a preset room by playing its synthesized impulse response directly.
    *  The RIR is peak-normalized into a fresh buffer so the direct impulse can't clip. */
-  function setRoomImpulse(rir: Float32Array, sampleRate: number): void {
+  function setRoomImpulse(rir: Float32Array, sampleRate: number, notes: RenderNote[] = []): void {
     contentGeneration++;
     cancelMorphs(new DOMException('Superseded', 'AbortError'));
     const ctxLocal = getCtx();
@@ -133,6 +149,7 @@ export function useSpatialAudio() {
     hasContent.value = true;
     contentLabel.value = '';
     renderedKind.value = 'impulse';
+    renderNotes.value = notes;
   }
 
   async function renderRoomMorph(
@@ -165,6 +182,7 @@ export function useSpatialAudio() {
       hasContent.value = true;
       contentLabel.value = options.label;
       renderedKind.value = 'morph';
+      renderNotes.value = result.notes;
     } finally {
       if (generation === contentGeneration) {
         isMorphing.value = false;
@@ -185,6 +203,7 @@ export function useSpatialAudio() {
     hasContent.value = false;
     contentLabel.value = '';
     renderedKind.value = null;
+    renderNotes.value = [];
   }
 
   /**
@@ -321,7 +340,7 @@ export function useSpatialAudio() {
   function morphInWorker(
     buffer: AudioBuffer,
     geometry: MorphGeometry,
-  ): Promise<{ left: Float32Array; right: Float32Array; sampleRate: number }> {
+  ): Promise<{ left: Float32Array; right: Float32Array; sampleRate: number; notes: RenderNote[] }> {
     const id = ++morphRequestId;
     if (!morphWorker) {
       morphWorker = new Worker(new URL('./spatial.worker.ts', import.meta.url), {
@@ -341,6 +360,7 @@ export function useSpatialAudio() {
             left: message.left,
             right: message.right,
             sampleRate: message.sampleRate,
+            notes: message.notes,
           });
         } else {
           pending.reject(new Error(message.message));
@@ -396,6 +416,7 @@ export function useSpatialAudio() {
     morphProgress,
     contentLabel,
     renderedKind,
+    renderNotes,
     renderedWav,
     getContext,
     setUpload,

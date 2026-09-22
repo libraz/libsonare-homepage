@@ -52,6 +52,7 @@ const wasmMock = vi.hoisted(() => {
     degenerate: { value: false },
     farSource: { value: false },
     rirError: { value: false },
+    rirDiagnostics: { value: [] as Array<{ code: string; message: string; severity: string }> },
     init: vi.fn(async () => undefined),
     version: vi.fn(() => '1.3.1-test'),
     estimateRoom: vi.fn(() =>
@@ -63,6 +64,7 @@ const wasmMock = vi.hoisted(() => {
       rir: wasmMock.rirError.value ? new Float32Array(0) : new Float32Array([1, 0.5, 0.25, 0.1]),
       sampleRate: 48000,
       hasError: wasmMock.rirError.value,
+      diagnostics: wasmMock.rirDiagnostics.value,
     })),
     roomMorph: vi.fn(
       (samples: Float32Array, sampleRate: number, _options?: Record<string, number>) => ({
@@ -99,6 +101,7 @@ describe('spatial worker protocol', () => {
     wasmMock.degenerate.value = false;
     wasmMock.farSource.value = false;
     wasmMock.rirError.value = false;
+    wasmMock.rirDiagnostics.value = [];
     posted = [];
     originalSelf = globalThis.self;
     Object.defineProperty(globalThis, 'self', {
@@ -287,6 +290,40 @@ describe('spatial worker protocol', () => {
     await send({ type: 'preset', id: 63, sampleRate: 48000, geometry: big });
     const bigImpulseMax = wasmMock.synthesizeRir.mock.calls.at(-1)![0].maxSeconds as number;
     expect(bigImpulseMax).toBeGreaterThan(bigMax);
+  });
+
+  it('passes a morph tail cut on once, with the depth it was cut at', async () => {
+    const clamped = (samples: Float32Array, sampleRate: number) => ({
+      audio: new Float32Array(samples),
+      sampleRate,
+      diagnostics: [
+        { code: 'acoustic.rir_length_clamped', message: 'clamped', severity: 'warning' },
+      ],
+    });
+    // Both channels report the cut, as the engine does.
+    wasmMock.roomMorph.mockImplementationOnce(clamped).mockImplementationOnce(clamped);
+    const big = { ...geometry, lengthM: 34, widthM: 20, heightM: 24, absorption: 0.07 };
+    await send({
+      type: 'morph',
+      id: 64,
+      left: new Float32Array(4),
+      right: new Float32Array(4),
+      sampleRate: 48000,
+      geometry: big,
+    });
+    const { notes } = posted.find((p) => p.message?.type === 'morphDone')!.message;
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ kind: 'tailCut', seconds: 6 });
+    expect(notes[0].decayDb).toBeLessThan(60);
+  });
+
+  it('keeps quiet about a preset impulse cut after its decay has finished', async () => {
+    wasmMock.rirDiagnostics.value = [
+      { code: 'acoustic.rir_length_clamped', message: 'clamped', severity: 'warning' },
+    ];
+    const big = { ...geometry, lengthM: 34, widthM: 20, heightM: 24, absorption: 0.07 };
+    await send({ type: 'preset', id: 65, sampleRate: 48000, geometry: big });
+    expect(done()!.message.result.rirNotes).toEqual([]);
   });
 
   it('initializes the WASM module exactly once across requests', async () => {

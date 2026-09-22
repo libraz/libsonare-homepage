@@ -165,7 +165,7 @@ async function onMorph() {
 // room's own acoustic signature, not an arbitrary music clip.
 watch(result, (r) => {
   if (r?.rir && r.rirSampleRate) {
-    audio.setRoomImpulse(r.rir, r.rirSampleRate);
+    audio.setRoomImpulse(r.rir, r.rirSampleRate, r.rirNotes);
   }
 });
 
@@ -186,6 +186,16 @@ function fmtPct(v: number | null) {
   if (v === null || !Number.isFinite(v)) return '—';
   return `${Math.round(v * 100)}%`;
 }
+
+const renderNoteText = computed(() =>
+  audio.renderNotes.value.map((note) => {
+    if (note.kind === 'engine') return note.message;
+    if (note.kind !== 'tailCut') return copy.value.renderNotes[note.kind];
+    return copy.value.renderNotes.tailCut
+      .replace('{seconds}', note.seconds.toFixed(1))
+      .replace('{decay}', String(Math.round(note.decayDb)));
+  }),
+);
 
 const reportContext = computed(() => ({
   preset: activePreset.value,
@@ -328,6 +338,7 @@ function morphGeometry() {
           </div>
           <p v-if="sceneResult" class="sp-hint">{{ copy.notes.morph }}</p>
           <p v-if="audio.renderedKind.value === 'impulse'" class="sp-hint">{{ copy.notes.exports }}</p>
+          <p v-for="note in renderNoteText" :key="note" class="sp-hint sp-hint--warn">{{ note }}</p>
           <p v-if="localError" class="sp-error">{{ localError }}</p>
         </TechPanel>
 

@@ -186,6 +186,16 @@ export const enCopy = {
     exports:
       'The saved impulse response is a convolution IR — load it into any reverb to play anything at all through this room.',
   },
+  renderNotes: {
+    tailCut:
+      'The reverb tail stops at {seconds} s, about {decay} dB into a decay that has not died away yet. Every second of tail is convolved against the whole clip, so the quietest end is left out, and the saved file ends the same way.',
+    reflectionsReduced:
+      'The early reflections were computed to a lower image-source order than requested, so they are sparser than this room would give.',
+    lengthExtended:
+      'The requested length was shorter than the direct sound takes to reach the listener, so the response was extended to fit it.',
+    noLateTail:
+      'This room produced no diffuse late tail: what you hear is the direct sound and the early reflections only.',
+  },
   errors: {
     decode: 'Could not decode this audio file. Try WAV, FLAC, MP3, or OGG.',
     scan: 'Scan failed.',
@@ -384,6 +394,16 @@ export const jaCopy: typeof enCopy = {
       'ルームモーフは、再生対象の音声を推定されたシューボックスモデルの部屋に通してレンダーします。補正用のデリバーブではなく、部屋の響きを試聴するためのクリエイティブ処理です。',
     exports:
       '保存したインパルス応答はコンボリューション IR です。任意のリバーブに読み込めば、どんな音源でもこの部屋に通せます。',
+  },
+  renderNotes: {
+    tailCut:
+      '残響の尾は {seconds} 秒で打ち切っています。この時点で減衰はまだ約 {decay} dB で、消え切っていません。尾は 1 秒ごとにクリップ全体と畳み込むため、最も静かな終わりの部分は省いています。保存したファイルも同じところで終わります。',
+    reflectionsReduced:
+      '初期反射は指定より低い鏡像法の次数で計算しているため、この部屋本来のものより疎になっています。',
+    lengthExtended:
+      '指定した長さが直接音がリスナーに届くまでの時間より短かったため、届くところまで延長しています。',
+    noLateTail:
+      'この部屋では拡散した後部残響が生成されませんでした。聞こえるのは直接音と初期反射だけです。',
   },
   errors: {
     decode: 'この音声ファイルをデコードできませんでした。WAV・FLAC・MP3・OGG をお試しください。',
