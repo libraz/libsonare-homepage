@@ -1,0 +1,3624 @@
+{
+  "_sources": {
+    "tools/gs/efx-bindings/01.json": "00c64d7ae4aa93351b7e5095a8d73725b55d23000215760c4c89fbc273d1330e",
+    "tools/gs/efx-bindings/02.json": "3a6ac68c5917872056177fc9afce6dcd8a615ab6023f4292a213d446ce54b84a",
+    "tools/gs/efx-bindings/04.json": "0b89a65c1da41ab862379d07f7d12618fc21b3d8377e94fc5d0dc81826739f9d",
+    "tools/gs/efx-bindings/05.json": "8ade376e3e383e1584b50e9fb76b667a978e44fbbf89f1a60da5372bcee80066",
+    "tools/gs/efx-bindings/11.json": "0f8d2158f61fc7f96e48bd5bcfc6a5335a840de6a029a15a623b1d4d2461cdbe"
+  },
+  "what_this_is": "Which physical quantity each insertion-effect (type, slot) names, and which insert control receives it. The conversion archive measures laws and which slots move the sound; it does not record what a slot is called, so this is the side that gives a byte a name.",
+  "slots_per_type": 20,
+  "counts": {
+    "stage": 223,
+    "state": 207,
+    "unmapped": 157,
+    "builder": 0,
+    "unreadable": 0
+  },
+  "rows": [
+    {
+      "type": "01 00",
+      "slot": 1,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 00",
+      "slot": 3,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band3.gainDb"
+    },
+    {
+      "type": "01 00",
+      "slot": 4,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "01 00",
+      "slot": 5,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "01 00",
+      "slot": 6,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 00",
+      "slot": 7,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band2.frequencyHz"
+    },
+    {
+      "type": "01 00",
+      "slot": 8,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band2.q"
+    },
+    {
+      "type": "01 00",
+      "slot": 9,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "01 00",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 0,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band11GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 1,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band14GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 2,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band17GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 3,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band18GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 4,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band20GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 5,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band22GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 6,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band23GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 7,
+      "stage": "eq.graphic",
+      "class": "gain",
+      "table": "tone",
+      "key": "band26GainDb"
+    },
+    {
+      "type": "01 01",
+      "slot": 8,
+      "state": "the graphic-EQ insert has no band width"
+    },
+    {
+      "type": "01 01",
+      "slot": 18,
+      "state": "a pan places a signal where stereo.stereoBalance moves an image already there, and the measured pair is the raw constant-power curve, which that insert normalises to centre unity three decibels above"
+    },
+    {
+      "type": "01 01",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 02",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 02",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 02",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 02",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 02",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 03",
+      "slot": 0,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 1,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 2,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 3,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 16,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 17,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 18,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 03",
+      "slot": 19,
+      "unmapped": "a vowel formant filter has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 10",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 10",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 10",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 10",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 10",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 11",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 11",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 11",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 11",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 11",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 20",
+      "slot": 0,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "01 20",
+      "slot": 1,
+      "stage": "effects.modulation.phaser",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 20",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 20",
+      "slot": 3,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 20",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 20",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 20",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 20",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 21",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 21",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 21",
+      "slot": 3,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 21",
+      "slot": 4,
+      "state": "the auto-wah insert follows an envelope and carries no LFO rate"
+    },
+    {
+      "type": "01 21",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 21",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 21",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 21",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 21",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 22",
+      "slot": 2,
+      "stage": "effects.modulation.rotary",
+      "class": "accel",
+      "table": "rotor",
+      "key": "drumUndershootHz"
+    },
+    {
+      "type": "01 22",
+      "slot": 3,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 22",
+      "slot": 6,
+      "stage": "effects.modulation.rotary",
+      "class": "accel",
+      "table": "rotor",
+      "key": "undershootHz"
+    },
+    {
+      "type": "01 22",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 22",
+      "slot": 8,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 22",
+      "slot": 10,
+      "state": "the rotary insert has no speed switch"
+    },
+    {
+      "type": "01 22",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 22",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 22",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 23",
+      "slot": 1,
+      "stage": "effects.modulation.flanger",
+      "class": "freq",
+      "table": "pre_filter",
+      "key": "preFilterHz"
+    },
+    {
+      "type": "01 23",
+      "slot": 2,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 23",
+      "slot": 3,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 23",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 23",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 23",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 23",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 23",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 24",
+      "slot": 0,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 24",
+      "slot": 1,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 24",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 24",
+      "slot": 5,
+      "state": "the flanger insert has no sample-and-hold clock over its LFO"
+    },
+    {
+      "type": "01 24",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 24",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 24",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 24",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 25",
+      "slot": 0,
+      "state": "the ring modulator's carrier is a sine and takes no shape selector"
+    },
+    {
+      "type": "01 25",
+      "slot": 1,
+      "stage": "effects.modulation.ringModulator",
+      "class": "rate",
+      "table": "wide",
+      "key": "carrierHz"
+    },
+    {
+      "type": "01 25",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 25",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 25",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 25",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 26",
+      "slot": 0,
+      "state": "the auto-pan insert's LFO takes no shape selector"
+    },
+    {
+      "type": "01 26",
+      "slot": 1,
+      "stage": "stereo.autoPan",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 26",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 26",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 26",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 26",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 30",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 30",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 30",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 30",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 30",
+      "slot": 18,
+      "state": "a pan places a signal where stereo.stereoBalance moves an image already there, and the measured pair is the raw constant-power curve, which that insert normalises to centre unity three decibels above"
+    },
+    {
+      "type": "01 30",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 31",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 31",
+      "slot": 1,
+      "state": "the limiter insert has no ratio"
+    },
+    {
+      "type": "01 31",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 31",
+      "slot": 3,
+      "state": "the limiter insert has no post gain"
+    },
+    {
+      "type": "01 31",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 31",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 31",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 31",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 40",
+      "slot": 0,
+      "stage": "effects.modulation.ensemble",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 40",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 40",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 40",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 40",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 40",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 41",
+      "slot": 0,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 41",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 41",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 41",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 41",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 41",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 41",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 42",
+      "slot": 1,
+      "stage": "effects.modulation.chorus",
+      "class": "freq",
+      "table": "pre_filter",
+      "key": "preFilterHz"
+    },
+    {
+      "type": "01 42",
+      "slot": 2,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 42",
+      "slot": 3,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 42",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 42",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 42",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 42",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 42",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 43",
+      "slot": 0,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 43",
+      "slot": 1,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 43",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 43",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 43",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 43",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 43",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 44",
+      "slot": 0,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "01 44",
+      "slot": 1,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 44",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 44",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 44",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 44",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 44",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 50",
+      "slot": 0,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "01 50",
+      "slot": 1,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeRMs"
+    },
+    {
+      "type": "01 50",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "01 50",
+      "slot": 15,
+      "state": "the insert's mix is a crossfade, dry = 1 - wet; the measured law is two independent gains that meet at full in the middle of the byte, which the record calls the opposite sign to a crossfade"
+    },
+    {
+      "type": "01 50",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 50",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 50",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 51",
+      "slot": 0,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "01 51",
+      "slot": 1,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeRMs"
+    },
+    {
+      "type": "01 51",
+      "slot": 4,
+      "state": "the stereo-delay insert carries no modulation LFO"
+    },
+    {
+      "type": "01 51",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 51",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 51",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 51",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 51",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 52",
+      "slot": 0,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time1",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "01 52",
+      "slot": 1,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time1",
+      "key": "delayTimeRMs"
+    },
+    {
+      "type": "01 52",
+      "slot": 2,
+      "state": "the stereo-delay insert has two taps and this is a third"
+    },
+    {
+      "type": "01 52",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 52",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 52",
+      "slot": 6,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 52",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 52",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 52",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 52",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 53",
+      "slot": 0,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time1",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "01 53",
+      "slot": 1,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time1",
+      "key": "delayTimeRMs"
+    },
+    {
+      "type": "01 53",
+      "slot": 2,
+      "state": "the stereo-delay insert has two taps and this is a third"
+    },
+    {
+      "type": "01 53",
+      "slot": 3,
+      "state": "the stereo-delay insert has two taps and this is a fourth"
+    },
+    {
+      "type": "01 53",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 53",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 53",
+      "slot": 6,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 53",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 53",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 53",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 53",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 53",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 54",
+      "slot": 0,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time2",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "01 54",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 54",
+      "slot": 15,
+      "state": "the insert's mix is a crossfade, dry = 1 - wet; the measured law is two independent gains that meet at full in the middle of the byte, which the record calls the opposite sign to a crossfade"
+    },
+    {
+      "type": "01 54",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 54",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 54",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 55",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 55",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 55",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 55",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 55",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 56",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 56",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 56",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 56",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 57",
+      "slot": 0,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "01 57",
+      "slot": 1,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeRMs"
+    },
+    {
+      "type": "01 57",
+      "slot": 2,
+      "state": "the stereo-delay insert has two taps and this is a third"
+    },
+    {
+      "type": "01 57",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 57",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 57",
+      "slot": 6,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 57",
+      "slot": 15,
+      "state": "the insert's mix is a crossfade, dry = 1 - wet; the measured law is two independent gains that meet at full in the middle of the byte, which the record calls the opposite sign to a crossfade"
+    },
+    {
+      "type": "01 57",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 57",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 57",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 60",
+      "slot": 3,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 60",
+      "slot": 4,
+      "state": "the pitch-shifter insert has one voice and this is a second"
+    },
+    {
+      "type": "01 60",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 60",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 60",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 60",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 60",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 60",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 61",
+      "slot": 2,
+      "state": "the pitch-shifter insert has no feedback"
+    },
+    {
+      "type": "01 61",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 61",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 61",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 61",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 61",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 70",
+      "slot": 0,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 70",
+      "slot": 1,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 70",
+      "slot": 2,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 70",
+      "slot": 3,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 70",
+      "slot": 14,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 70",
+      "slot": 19,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 71",
+      "slot": 0,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 71",
+      "slot": 14,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 71",
+      "slot": 19,
+      "unmapped": "a binaural panner has no insert, so the type realises no chain at all"
+    },
+    {
+      "type": "01 72",
+      "slot": 0,
+      "state": "the bit-crusher insert has no gain ladder before its degrader"
+    },
+    {
+      "type": "01 72",
+      "slot": 2,
+      "state": "the bit-crusher insert has no shelf table after its degrader"
+    },
+    {
+      "type": "01 72",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 72",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 72",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 72",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 72",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "01 73",
+      "slot": 2,
+      "state": "the bit-crusher insert has no filter"
+    },
+    {
+      "type": "01 73",
+      "slot": 3,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 6,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "01 73",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 9,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "01 73",
+      "slot": 10,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 12,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "01 73",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "01 73",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "01 73",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 00",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 00",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 00",
+      "slot": 6,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 00",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 00",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 00",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 00",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 00",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 01",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 01",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 01",
+      "slot": 5,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 01",
+      "slot": 6,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 01",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 01",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 01",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 01",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 01",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 02",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 02",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 02",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 02",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 02",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 02",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 03",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 03",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 03",
+      "slot": 6,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 03",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 03",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 03",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 03",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 03",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 04",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 04",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 04",
+      "slot": 5,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 04",
+      "slot": 6,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 04",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 04",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 04",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 04",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 04",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 05",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 05",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 05",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 05",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 05",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 05",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 06",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 06",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 06",
+      "slot": 6,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 06",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 06",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 06",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 06",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 06",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 07",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 07",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 07",
+      "slot": 5,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 07",
+      "slot": 6,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 07",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 07",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 07",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 07",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 07",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 08",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 08",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 08",
+      "slot": 5,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "02 08",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 08",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 08",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 08",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 09",
+      "slot": 0,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 09",
+      "slot": 1,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 09",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 09",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 09",
+      "slot": 5,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "02 09",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 09",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 09",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 09",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 0A",
+      "slot": 0,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 0A",
+      "slot": 1,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 0A",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0A",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0A",
+      "slot": 5,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "02 0A",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "02 0A",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0A",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 0A",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 0A",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 0B",
+      "slot": 0,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 0B",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0B",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0B",
+      "slot": 5,
+      "stage": "effects.modulation.flanger",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 0B",
+      "slot": 7,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0B",
+      "slot": 9,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0B",
+      "slot": 16,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 0B",
+      "slot": 17,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 0B",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "02 0C",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0C",
+      "slot": 4,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "02 0C",
+      "slot": 5,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "02 0C",
+      "slot": 9,
+      "stage": "effects.modulation.rotary",
+      "class": "accel",
+      "table": "rotor",
+      "key": "drumUndershootHz"
+    },
+    {
+      "type": "02 0C",
+      "slot": 10,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0C",
+      "slot": 14,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0C",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0C",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 00",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 12,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "04 00",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 16,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time4",
+      "key": "delayTimeLMs"
+    },
+    {
+      "type": "04 00",
+      "slot": 17,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 01",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 9,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "04 01",
+      "slot": 10,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "04 01",
+      "slot": 11,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "04 01",
+      "slot": 12,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "04 01",
+      "slot": 13,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "04 01",
+      "slot": 16,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 02",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 17,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 03",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 4,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "04 03",
+      "slot": 5,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "04 03",
+      "slot": 6,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "04 03",
+      "slot": 7,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "04 03",
+      "slot": 8,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "04 03",
+      "slot": 10,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "04 03",
+      "slot": 11,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 16,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "04 03",
+      "slot": 17,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 04",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 17,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 05",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 2,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 10,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "04 05",
+      "slot": 11,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "04 05",
+      "slot": 16,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "04 06",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 2,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "04 06",
+      "slot": 4,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 5,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 6,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 8,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "04 06",
+      "slot": 11,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 15,
+      "state": "the auto-pan insert's LFO takes no shape selector"
+    },
+    {
+      "type": "04 06",
+      "slot": 17,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "05 00",
+      "slot": 0,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 1,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 3,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "05 00",
+      "slot": 4,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "05 00",
+      "slot": 6,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "05 00",
+      "slot": 10,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 11,
+      "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "05 00",
+      "slot": 12,
+      "stage": "effects.modulation.phaser",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "05 00",
+      "slot": 13,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 14,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 15,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 17,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 18,
+      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 19,
+      "stage": "utility.gain",
+      "class": "level",
+      "table": "output",
+      "key": "levelDb"
+    },
+    {
+      "type": "11 00",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 4,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 00",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 4,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 01",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 4,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 02",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 03",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 10,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 11,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 12,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 13,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 14,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 04",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 05",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 10,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 11,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 06",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 4,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 10,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 11,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 12,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 13,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 14,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 07",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 0,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 1,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 2,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 3,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 4,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 5,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 6,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 7,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 8,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 9,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 10,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 11,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 15,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 16,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 17,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 18,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    },
+    {
+      "type": "11 08",
+      "slot": 19,
+      "unmapped": "a parallel-2 type realises no chain at all"
+    }
+  ]
+}

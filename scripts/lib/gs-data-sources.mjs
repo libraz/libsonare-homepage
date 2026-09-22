@@ -17,6 +17,21 @@ export const ENGINE_DIR = path.resolve(ROOT, '../libsonare');
 export const OUT_DIR = path.join(ROOT, 'src/demos/gs-module/data');
 export const WASM_META = path.join(ROOT, 'src/wasm/meta.json');
 
+export const EFX_BINDINGS_DIR = 'tools/gs/efx-bindings';
+
+/**
+ * The binding files, listed from the checkout rather than written down: the
+ * tree holds one per effect-type MSB, and a new MSB has to be picked up rather
+ * than silently skipped. Without a checkout there is nothing to hash and
+ * nothing to compare, which is the one case the gate already sits out.
+ */
+const EFX_BINDING_FILES = fs.existsSync(path.join(ENGINE_DIR, EFX_BINDINGS_DIR))
+  ? fs
+      .readdirSync(path.join(ENGINE_DIR, EFX_BINDINGS_DIR))
+      .filter((name) => name.endsWith('.json'))
+      .sort()
+  : [];
+
 /**
  * One row per artifact: the file it writes and the inputs whose hashes it
  * records. `engineRelative` inputs are resolved inside the sibling checkout;
@@ -35,6 +50,10 @@ export const ARTIFACTS = [
   {
     file: 'efx-tables.json',
     engineRelative: ['tools/gs/efx-tables.json'],
+  },
+  {
+    file: 'efx-bindings.json',
+    engineRelative: EFX_BINDING_FILES.map((name) => `${EFX_BINDINGS_DIR}/${name}`),
   },
   {
     file: 'efx-audibility.json',

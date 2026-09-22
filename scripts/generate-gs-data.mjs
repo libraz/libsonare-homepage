@@ -5,7 +5,7 @@
  * the sibling — this runs the same way `copy:wasm` does, by hand after the
  * engine changes.
  *
- * Three artifacts, each for a different reason it cannot be read at runtime:
+ * Four artifacts, each for a different reason it cannot be read at runtime:
  *
  * - The address table (every GS address with its AUDIBLE/STATE/ACCEPT/IGNORE
  *   level, range, power-on default and, for IGNORE, the reason) lives in a
@@ -14,6 +14,10 @@
  * - The insertion-effect conversion tables are derived from a hardware
  *   measurement archive into `tools/gs/efx-tables.json`; the C++ header beside
  *   them is itself generated from that file, so the JSON is the source to read.
+ * - The insertion-effect bindings — which control each (type, slot) reaches —
+ *   are hand-adjudicated beside those tables and compiled into a header the
+ *   WASM surface does not export either. They are what turns a slot number on
+ *   screen into the name of the thing the byte moves.
  * - Whether an effect type changes the sound at its power-on defaults is not
  *   written down anywhere: it is a property of the build. This renders the same
  *   chord through every type and compares, which is 65 bounces and far too slow
@@ -33,12 +37,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSmf, dt1, noteEvents } from '../src/utils/gsSysex.ts';
-import { artifact, digestSources, ENGINE_DIR, OUT_DIR, WASM_META } from './lib/gs-data-sources.mjs';
+import {
+  artifact,
+  digestSources,
+  EFX_BINDINGS_DIR,
+  ENGINE_DIR,
+  OUT_DIR,
+  WASM_META,
+} from './lib/gs-data-sources.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const ADDRESS_ARTIFACT = 'address-table.json';
 const EFX_ARTIFACT = 'efx-tables.json';
+const BINDINGS_ARTIFACT = 'efx-bindings.json';
 const AUDIBILITY_ARTIFACT = 'efx-audibility.json';
 
 /** The four levels the table promises per address; anything else is a parse failure. */
@@ -100,6 +112,88 @@ export function validateEfxTables(tables) {
     throw new Error('efx tables carry no statement of their own limits');
   }
   return tables;
+}
+
+/**
+ * The five forms a binding row takes. A row carries exactly one of them, which
+ * is what makes "every printed parameter has been adjudicated" checkable rather
+ * than asserted.
+ */
+const BINDING_FORMS = ['stage', 'state', 'unmapped', 'builder', 'unreadable'];
+
+/** Fields a row may carry beside its form, all of them read by the inspector. */
+const BINDING_EXTRAS = ['class', 'table', 'key', 'keys', 'via', 'range', 'printed_mark'];
+
+/**
+ * Join every binding file into one list.
+ *
+ * The engine splits them by effect-type MSB so a file stays small enough to
+ * read; that split is an authoring convenience, and carrying it into the
+ * browser would make the demo know a filing rule it has no use for.
+ */
+function readEfxBindings(engineDir) {
+  const dir = path.join(engineDir, EFX_BINDINGS_DIR);
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .flatMap((name) => JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')));
+}
+
+/**
+ * Throws unless every row names one effect type, one slot and exactly one form.
+ *
+ * Two forms on a row, or none, would leave the inspector guessing what the
+ * slot is — and the whole point of the tree upstream is that each printed
+ * parameter was looked at once. A duplicated `(type, slot)` is the same defect
+ * seen from the other side: two answers for one byte.
+ */
+export function validateEfxBindings(rows, slotCount) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('efx bindings carry no rows');
+  }
+  const seen = new Set();
+  for (const row of rows) {
+    if (typeof row.type !== 'string' || !/^[0-9A-F]{2} [0-9A-F]{2}$/.test(row.type)) {
+      throw new Error(`binding row has an unreadable type: ${JSON.stringify(row).slice(0, 120)}`);
+    }
+    if (!Number.isInteger(row.slot) || row.slot < 0 || row.slot >= slotCount) {
+      throw new Error(`binding row ${row.type} has a slot outside the block: ${row.slot}`);
+    }
+    const forms = BINDING_FORMS.filter((form) => row[form] !== undefined);
+    if (forms.length !== 1) {
+      throw new Error(
+        `binding row ${row.type}/${row.slot} carries ${forms.length} forms (${forms.join(', ')}), expected one`,
+      );
+    }
+    const id = `${row.type}/${row.slot}`;
+    if (seen.has(id)) throw new Error(`binding row ${id} appears twice`);
+    seen.add(id);
+    if (row.stage !== undefined && row.key === undefined && row.keys === undefined) {
+      throw new Error(`binding row ${id} names a stage with no key`);
+    }
+  }
+  return rows;
+}
+
+/**
+ * The fields the inspector reads, in a stable key order.
+ *
+ * The tree also carries `note`, which its own schema calls free text nothing
+ * parses. A panel that printed it would turn an authoring aside into published
+ * copy, so it stops here.
+ */
+function selectBindingFields(rows) {
+  return rows.map((row) => {
+    const picked = { type: row.type, slot: row.slot };
+    for (const form of BINDING_FORMS) {
+      if (row[form] !== undefined) picked[form] = row[form];
+    }
+    for (const extra of BINDING_EXTRAS) {
+      if (row[extra] !== undefined) picked[extra] = row[extra];
+    }
+    return picked;
+  });
 }
 
 /** Compile the engine's address-table dumper and read its JSON. */
@@ -377,9 +471,32 @@ async function main() {
       `${efxOut.bytes} B`,
   );
 
+  const slotCount = addressTable.rows.find((row) => row.param === 'kEfxParameter').size;
+  const bindings = selectBindingFields(validateEfxBindings(readEfxBindings(ENGINE_DIR), slotCount));
+  const counts = Object.fromEntries(
+    BINDING_FORMS.map((form) => [form, bindings.filter((row) => row[form] !== undefined).length]),
+  );
+  const bindingsOut = write(
+    BINDINGS_ARTIFACT,
+    {
+      what_this_is:
+        'Which physical quantity each insertion-effect (type, slot) names, and which ' +
+        'insert control receives it. The conversion archive measures laws and which ' +
+        'slots move the sound; it does not record what a slot is called, so this is ' +
+        'the side that gives a byte a name.',
+      slots_per_type: slotCount,
+      counts,
+      rows: bindings,
+    },
+    digestSources(artifact(BINDINGS_ARTIFACT), ENGINE_DIR),
+  );
+  console.log(
+    `✓ ${BINDINGS_ARTIFACT} — ${bindings.length} adjudicated slots ` +
+      `(${counts.stage} reach a control), ${bindingsOut.bytes} B`,
+  );
+
   const wasm = await import(path.join(ROOT, 'src/wasm/index.js'));
   await wasm.init();
-  const slotCount = addressTable.rows.find((row) => row.param === 'kEfxParameter').size;
   const audibility = measureAudibility(wasm, Object.keys(efx.defaults.by_type), slotCount);
   const meta = JSON.parse(fs.readFileSync(WASM_META, 'utf8'));
   const measuredOut = write(
