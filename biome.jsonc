@@ -15,6 +15,7 @@
       "!**/coverage",
       "!**/*.css",
       "!src/wasm",
+      "!src/demos/gs-module/data",
       "!src/public/audio-stream-processor.js",
       "!src/public/sonare-worklet.js"
     ]

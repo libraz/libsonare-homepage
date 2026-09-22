@@ -1,12 +1,18 @@
 {
-  "_sources": { "src/wasm/sonare.wasm": "45270167a0327f811708bf25dffbdb71" },
+  "_sources": {
+    "src/wasm/sonare.wasm": "45270167a0327f811708bf25dffbdb71"
+  },
   "measured_against": {
     "version": "1.8.0",
     "md5": "45270167a0327f811708bf25dffbdb71",
     "buildDate": "2026-09-21T23:22:07.911Z"
   },
   "probe": {
-    "chord": [52, 55, 59],
+    "chord": [
+      52,
+      55,
+      59
+    ],
     "velocity": 112,
     "sample_rate": 44100,
     "seconds": 1.7,
@@ -15,70 +21,395 @@
     "what_this_cannot_say": "Whether a change above that floor is audible. Every type powers up at its own default bytes, so a type can carry a working effect and still measure flat here."
   },
   "types": [
-    { "type": "00 00", "changes_signal": false, "distance": 0, "level_ratio": 1 },
-    { "type": "01 00", "changes_signal": true, "distance": 0.02627, "level_ratio": 0.8599 },
-    { "type": "01 01", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "01 02", "changes_signal": true, "distance": 0.005645, "level_ratio": 1.01 },
-    { "type": "01 03", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "01 10", "changes_signal": true, "distance": 0.1178, "level_ratio": 0.02151 },
-    { "type": "01 11", "changes_signal": true, "distance": 0.09507, "level_ratio": 0.2974 },
-    { "type": "01 20", "changes_signal": true, "distance": 0.08471, "level_ratio": 0.5819 },
-    { "type": "01 21", "changes_signal": true, "distance": 0.1309, "level_ratio": 0.2648 },
-    { "type": "01 22", "changes_signal": true, "distance": 0.162, "level_ratio": 0.6435 },
-    { "type": "01 23", "changes_signal": true, "distance": 0.07297, "level_ratio": 0.5417 },
-    { "type": "01 24", "changes_signal": true, "distance": 0.07682, "level_ratio": 0.534 },
-    { "type": "01 25", "changes_signal": true, "distance": 0.03346, "level_ratio": 0.7404 },
-    { "type": "01 26", "changes_signal": true, "distance": 0.02704, "level_ratio": 0.8921 },
-    { "type": "01 30", "changes_signal": true, "distance": 0.01638, "level_ratio": 0.8709 },
-    { "type": "01 31", "changes_signal": true, "distance": 0.1686, "level_ratio": 0.9832 },
-    { "type": "01 40", "changes_signal": true, "distance": 0.04118, "level_ratio": 0.4887 },
-    { "type": "01 41", "changes_signal": true, "distance": 0.07591, "level_ratio": 0.4345 },
-    { "type": "01 42", "changes_signal": true, "distance": 0.0742, "level_ratio": 0.6128 },
-    { "type": "01 43", "changes_signal": true, "distance": 0.0742, "level_ratio": 0.6128 },
-    { "type": "01 44", "changes_signal": true, "distance": 0.0742, "level_ratio": 0.6128 },
-    { "type": "01 50", "changes_signal": true, "distance": 0.08768, "level_ratio": 0.6187 },
-    { "type": "01 51", "changes_signal": true, "distance": 0.08029, "level_ratio": 0.5616 },
-    { "type": "01 52", "changes_signal": true, "distance": 0.08073, "level_ratio": 0.6312 },
-    { "type": "01 53", "changes_signal": true, "distance": 0.08812, "level_ratio": 0.6238 },
-    { "type": "01 54", "changes_signal": true, "distance": 0.1055, "level_ratio": 0.7342 },
-    { "type": "01 55", "changes_signal": true, "distance": 0.07529, "level_ratio": 0.9199 },
-    { "type": "01 56", "changes_signal": true, "distance": 0.07529, "level_ratio": 0.9199 },
-    { "type": "01 57", "changes_signal": true, "distance": 0.08073, "level_ratio": 0.6312 },
-    { "type": "01 60", "changes_signal": true, "distance": 0.05338, "level_ratio": 0.7 },
-    { "type": "01 61", "changes_signal": true, "distance": 0.08756, "level_ratio": 0.6606 },
-    { "type": "01 70", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "01 71", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "01 72", "changes_signal": true, "distance": 0.0003753, "level_ratio": 1 },
-    { "type": "01 73", "changes_signal": true, "distance": 0.0003753, "level_ratio": 1 },
-    { "type": "02 00", "changes_signal": true, "distance": 0.1268, "level_ratio": 0.0333 },
-    { "type": "02 01", "changes_signal": true, "distance": 0.121, "level_ratio": 0.03082 },
-    { "type": "02 02", "changes_signal": true, "distance": 0.1419, "level_ratio": 0.03919 },
-    { "type": "02 03", "changes_signal": true, "distance": 0.1134, "level_ratio": 0.1913 },
-    { "type": "02 04", "changes_signal": true, "distance": 0.1078, "level_ratio": 0.1809 },
-    { "type": "02 05", "changes_signal": true, "distance": 0.1211, "level_ratio": 0.2195 },
-    { "type": "02 06", "changes_signal": true, "distance": 0.07417, "level_ratio": 0.6185 },
-    { "type": "02 07", "changes_signal": true, "distance": 0.07386, "level_ratio": 0.5488 },
-    { "type": "02 08", "changes_signal": true, "distance": 0.1043, "level_ratio": 0.7403 },
-    { "type": "02 09", "changes_signal": true, "distance": 0.1545, "level_ratio": 0.5471 },
-    { "type": "02 0A", "changes_signal": true, "distance": 0.1372, "level_ratio": 0.3996 },
-    { "type": "02 0B", "changes_signal": true, "distance": 0.1238, "level_ratio": 0.3571 },
-    { "type": "03 00", "changes_signal": true, "distance": 0.2089, "level_ratio": 0.03485 },
-    { "type": "04 00", "changes_signal": true, "distance": 0.1846, "level_ratio": 0.02141 },
-    { "type": "04 01", "changes_signal": true, "distance": 0.1319, "level_ratio": 0.03862 },
-    { "type": "04 02", "changes_signal": true, "distance": 0.2075, "level_ratio": 0.00751 },
-    { "type": "04 03", "changes_signal": true, "distance": 0.1505, "level_ratio": 0.613 },
-    { "type": "04 04", "changes_signal": true, "distance": 0.2029, "level_ratio": 0.1093 },
-    { "type": "04 05", "changes_signal": true, "distance": 0.1327, "level_ratio": 0.02985 },
-    { "type": "04 06", "changes_signal": true, "distance": 0.131, "level_ratio": 0.3885 },
-    { "type": "05 00", "changes_signal": true, "distance": 0.1686, "level_ratio": 0.3222 },
-    { "type": "11 00", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 01", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 02", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 03", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 04", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 05", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 06", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 07", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 },
-    { "type": "11 08", "changes_signal": false, "distance": 2.066e-8, "level_ratio": 1 }
+    {
+      "type": "00 00",
+      "changes_signal": false,
+      "distance": 0,
+      "level_ratio": 1
+    },
+    {
+      "type": "01 00",
+      "changes_signal": true,
+      "distance": 0.02627,
+      "level_ratio": 0.8599
+    },
+    {
+      "type": "01 01",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "01 02",
+      "changes_signal": true,
+      "distance": 0.005645,
+      "level_ratio": 1.01
+    },
+    {
+      "type": "01 03",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "01 10",
+      "changes_signal": true,
+      "distance": 0.1178,
+      "level_ratio": 0.02151
+    },
+    {
+      "type": "01 11",
+      "changes_signal": true,
+      "distance": 0.09507,
+      "level_ratio": 0.2974
+    },
+    {
+      "type": "01 20",
+      "changes_signal": true,
+      "distance": 0.08471,
+      "level_ratio": 0.5819
+    },
+    {
+      "type": "01 21",
+      "changes_signal": true,
+      "distance": 0.1309,
+      "level_ratio": 0.2648
+    },
+    {
+      "type": "01 22",
+      "changes_signal": true,
+      "distance": 0.162,
+      "level_ratio": 0.6435
+    },
+    {
+      "type": "01 23",
+      "changes_signal": true,
+      "distance": 0.07297,
+      "level_ratio": 0.5417
+    },
+    {
+      "type": "01 24",
+      "changes_signal": true,
+      "distance": 0.07682,
+      "level_ratio": 0.534
+    },
+    {
+      "type": "01 25",
+      "changes_signal": true,
+      "distance": 0.03346,
+      "level_ratio": 0.7404
+    },
+    {
+      "type": "01 26",
+      "changes_signal": true,
+      "distance": 0.02704,
+      "level_ratio": 0.8921
+    },
+    {
+      "type": "01 30",
+      "changes_signal": true,
+      "distance": 0.01638,
+      "level_ratio": 0.8709
+    },
+    {
+      "type": "01 31",
+      "changes_signal": true,
+      "distance": 0.1686,
+      "level_ratio": 0.9832
+    },
+    {
+      "type": "01 40",
+      "changes_signal": true,
+      "distance": 0.04118,
+      "level_ratio": 0.4887
+    },
+    {
+      "type": "01 41",
+      "changes_signal": true,
+      "distance": 0.07591,
+      "level_ratio": 0.4345
+    },
+    {
+      "type": "01 42",
+      "changes_signal": true,
+      "distance": 0.0742,
+      "level_ratio": 0.6128
+    },
+    {
+      "type": "01 43",
+      "changes_signal": true,
+      "distance": 0.0742,
+      "level_ratio": 0.6128
+    },
+    {
+      "type": "01 44",
+      "changes_signal": true,
+      "distance": 0.0742,
+      "level_ratio": 0.6128
+    },
+    {
+      "type": "01 50",
+      "changes_signal": true,
+      "distance": 0.08768,
+      "level_ratio": 0.6187
+    },
+    {
+      "type": "01 51",
+      "changes_signal": true,
+      "distance": 0.08029,
+      "level_ratio": 0.5616
+    },
+    {
+      "type": "01 52",
+      "changes_signal": true,
+      "distance": 0.08073,
+      "level_ratio": 0.6312
+    },
+    {
+      "type": "01 53",
+      "changes_signal": true,
+      "distance": 0.08812,
+      "level_ratio": 0.6238
+    },
+    {
+      "type": "01 54",
+      "changes_signal": true,
+      "distance": 0.1055,
+      "level_ratio": 0.7342
+    },
+    {
+      "type": "01 55",
+      "changes_signal": true,
+      "distance": 0.07529,
+      "level_ratio": 0.9199
+    },
+    {
+      "type": "01 56",
+      "changes_signal": true,
+      "distance": 0.07529,
+      "level_ratio": 0.9199
+    },
+    {
+      "type": "01 57",
+      "changes_signal": true,
+      "distance": 0.08073,
+      "level_ratio": 0.6312
+    },
+    {
+      "type": "01 60",
+      "changes_signal": true,
+      "distance": 0.05338,
+      "level_ratio": 0.7
+    },
+    {
+      "type": "01 61",
+      "changes_signal": true,
+      "distance": 0.08756,
+      "level_ratio": 0.6606
+    },
+    {
+      "type": "01 70",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "01 71",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "01 72",
+      "changes_signal": true,
+      "distance": 0.0003753,
+      "level_ratio": 1
+    },
+    {
+      "type": "01 73",
+      "changes_signal": true,
+      "distance": 0.0003753,
+      "level_ratio": 1
+    },
+    {
+      "type": "02 00",
+      "changes_signal": true,
+      "distance": 0.1268,
+      "level_ratio": 0.0333
+    },
+    {
+      "type": "02 01",
+      "changes_signal": true,
+      "distance": 0.121,
+      "level_ratio": 0.03082
+    },
+    {
+      "type": "02 02",
+      "changes_signal": true,
+      "distance": 0.1419,
+      "level_ratio": 0.03919
+    },
+    {
+      "type": "02 03",
+      "changes_signal": true,
+      "distance": 0.1134,
+      "level_ratio": 0.1913
+    },
+    {
+      "type": "02 04",
+      "changes_signal": true,
+      "distance": 0.1078,
+      "level_ratio": 0.1809
+    },
+    {
+      "type": "02 05",
+      "changes_signal": true,
+      "distance": 0.1211,
+      "level_ratio": 0.2195
+    },
+    {
+      "type": "02 06",
+      "changes_signal": true,
+      "distance": 0.07417,
+      "level_ratio": 0.6185
+    },
+    {
+      "type": "02 07",
+      "changes_signal": true,
+      "distance": 0.07386,
+      "level_ratio": 0.5488
+    },
+    {
+      "type": "02 08",
+      "changes_signal": true,
+      "distance": 0.1043,
+      "level_ratio": 0.7403
+    },
+    {
+      "type": "02 09",
+      "changes_signal": true,
+      "distance": 0.1545,
+      "level_ratio": 0.5471
+    },
+    {
+      "type": "02 0A",
+      "changes_signal": true,
+      "distance": 0.1372,
+      "level_ratio": 0.3996
+    },
+    {
+      "type": "02 0B",
+      "changes_signal": true,
+      "distance": 0.1238,
+      "level_ratio": 0.3571
+    },
+    {
+      "type": "03 00",
+      "changes_signal": true,
+      "distance": 0.2089,
+      "level_ratio": 0.03485
+    },
+    {
+      "type": "04 00",
+      "changes_signal": true,
+      "distance": 0.1846,
+      "level_ratio": 0.02141
+    },
+    {
+      "type": "04 01",
+      "changes_signal": true,
+      "distance": 0.1319,
+      "level_ratio": 0.03862
+    },
+    {
+      "type": "04 02",
+      "changes_signal": true,
+      "distance": 0.2075,
+      "level_ratio": 0.00751
+    },
+    {
+      "type": "04 03",
+      "changes_signal": true,
+      "distance": 0.1505,
+      "level_ratio": 0.613
+    },
+    {
+      "type": "04 04",
+      "changes_signal": true,
+      "distance": 0.2029,
+      "level_ratio": 0.1093
+    },
+    {
+      "type": "04 05",
+      "changes_signal": true,
+      "distance": 0.1327,
+      "level_ratio": 0.02985
+    },
+    {
+      "type": "04 06",
+      "changes_signal": true,
+      "distance": 0.131,
+      "level_ratio": 0.3885
+    },
+    {
+      "type": "05 00",
+      "changes_signal": true,
+      "distance": 0.1686,
+      "level_ratio": 0.3222
+    },
+    {
+      "type": "11 00",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 01",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 02",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 03",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 04",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 05",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 06",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 07",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    },
+    {
+      "type": "11 08",
+      "changes_signal": false,
+      "distance": 2.066e-8,
+      "level_ratio": 1
+    }
   ]
 }

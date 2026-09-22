@@ -17,7 +17,10 @@
     "Whether a slot that returns a constant fraction of its cited column is on a second law or on the same one read through something else. The fraction and the shortfall are both reported for a slot this derivation does not reach, and neither is acted on: separating them wants a reading the unit can be asked for and this cannot produce."
   ],
   "schema": {
-    "every_entry_carries": ["unit_specific", "approximate"],
+    "every_entry_carries": [
+      "unit_specific",
+      "approximate"
+    ],
     "unit_specific": "This unit returned a value the class's own law does not account for, by more than the reading separates. A second unit is free to differ here.",
     "approximate": "No reading placed this entry; it is carried on the law alone."
   },
@@ -45,29 +48,74 @@
       "read_by": "the byte, whole",
       "tables": {
         "narrow": {
-          "printed_ends": ["0.05", "6.40"],
-          "columns": ["*7"],
+          "printed_ends": [
+            "0.05",
+            "6.40"
+          ],
+          "columns": [
+            "*7"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting",
           "breakpoints": [
-            { "setting": 0, "hz": 0.05, "unit_specific": false, "approximate": false },
-            { "setting": 127, "hz": 6.4, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "hz": 0.05,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "hz": 6.4,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "unit_specific": false,
           "approximate": false,
           "entries_using_it": 3
         },
         "wide": {
-          "printed_ends": ["0.05", "10.00"],
-          "columns": ["*6"],
+          "printed_ends": [
+            "0.05",
+            "10.00"
+          ],
+          "columns": [
+            "*6"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting",
           "breakpoints": [
-            { "setting": 0, "hz": 0.05, "unit_specific": false, "approximate": false },
-            { "setting": 99, "hz": 5, "unit_specific": false, "approximate": false },
-            { "setting": 119, "hz": 7, "unit_specific": false, "approximate": false },
-            { "setting": 125, "hz": 10, "unit_specific": false, "approximate": false },
-            { "setting": 127, "hz": 10, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "hz": 0.05,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 99,
+              "hz": 5,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 119,
+              "hz": 7,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 125,
+              "hz": 10,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "hz": 10,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "why_the_last_two_settings_repeat": "The table has 126 entries over 128 settings, so 126 and 127 have none of their own and return what 125 returns.",
           "unit_specific": false,
@@ -81,78 +129,218 @@
       "read_by": "the byte, whole",
       "tables": {
         "pre_delay": {
-          "printed_ends": ["0.0", "100"],
-          "columns": ["*1"],
+          "printed_ends": [
+            "0.0",
+            "100"
+          ],
+          "columns": [
+            "*1"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting, then cut",
           "breakpoints": [
-            { "setting": 0, "ms": 0, "unit_specific": false, "approximate": false },
-            { "setting": 50, "ms": 5, "unit_specific": false, "approximate": false },
-            { "setting": 60, "ms": 10, "unit_specific": false, "approximate": false },
-            { "setting": 100, "ms": 50, "unit_specific": false, "approximate": false },
-            { "setting": 125, "ms": 100, "unit_specific": false, "approximate": false },
-            { "setting": 127, "ms": 100, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "ms": 0,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 50,
+              "ms": 5,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 60,
+              "ms": 10,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 100,
+              "ms": 50,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 125,
+              "ms": 100,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "ms": 100,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "unit_specific": false,
           "approximate": false,
           "entries_using_it": 4
         },
         "time1": {
-          "printed_ends": ["200", "1000"],
-          "columns": ["*2"],
+          "printed_ends": [
+            "200",
+            "1000"
+          ],
+          "columns": [
+            "*2"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting, then cut",
           "breakpoints": [
-            { "setting": 0, "ms": 200, "unit_specific": false, "approximate": false },
-            { "setting": 70, "ms": 550, "unit_specific": false, "approximate": false },
-            { "setting": 115, "ms": 1000, "unit_specific": false, "approximate": false },
-            { "setting": 127, "ms": 1000, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "ms": 200,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 70,
+              "ms": 550,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 115,
+              "ms": 1000,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "ms": 1000,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "unit_specific": false,
           "approximate": false,
           "entries_using_it": 7
         },
         "time2": {
-          "printed_ends": ["200", "1000"],
-          "columns": ["*3"],
+          "printed_ends": [
+            "200",
+            "1000"
+          ],
+          "columns": [
+            "*3"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting, then cut",
           "breakpoints": [
-            { "setting": 0, "ms": 200, "unit_specific": false, "approximate": false },
-            { "setting": 80, "ms": 600, "unit_specific": false, "approximate": false },
-            { "setting": 120, "ms": 1000, "unit_specific": false, "approximate": false },
-            { "setting": 127, "ms": 1000, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "ms": 200,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 80,
+              "ms": 600,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 120,
+              "ms": 1000,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "ms": 1000,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "unit_specific": false,
           "approximate": false,
           "entries_using_it": 0
         },
         "time3": {
-          "printed_ends": ["0.0", "500"],
-          "columns": ["*4"],
+          "printed_ends": [
+            "0.0",
+            "500"
+          ],
+          "columns": [
+            "*4"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting, then cut",
           "breakpoints": [
-            { "setting": 0, "ms": 0, "unit_specific": false, "approximate": false },
-            { "setting": 50, "ms": 5, "unit_specific": false, "approximate": false },
-            { "setting": 60, "ms": 10, "unit_specific": false, "approximate": false },
-            { "setting": 90, "ms": 40, "unit_specific": false, "approximate": false },
-            { "setting": 116, "ms": 300, "unit_specific": false, "approximate": false },
-            { "setting": 126, "ms": 500, "unit_specific": false, "approximate": false },
-            { "setting": 127, "ms": 500, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "ms": 0,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 50,
+              "ms": 5,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 60,
+              "ms": 10,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 90,
+              "ms": 40,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 116,
+              "ms": 300,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 126,
+              "ms": 500,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "ms": 500,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "unit_specific": false,
           "approximate": false,
           "entries_using_it": 11
         },
         "time4": {
-          "printed_ends": ["0", "635"],
-          "columns": ["*5"],
+          "printed_ends": [
+            "0",
+            "635"
+          ],
+          "columns": [
+            "*5"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting, then cut",
           "breakpoints": [
-            { "setting": 0, "ms": 0, "unit_specific": false, "approximate": false },
-            { "setting": 127, "ms": 635, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "ms": 0,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 127,
+              "ms": 635,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "unit_specific": false,
           "approximate": false,
@@ -172,11 +360,19 @@
       "read_by": "the byte, whole",
       "tables": {
         "tone": {
-          "printed_ends": ["-12", "+12"],
-          "columns": ["34–4C"],
+          "printed_ends": [
+            "-12",
+            "+12"
+          ],
+          "columns": [
+            "34–4C"
+          ],
           "kind": "rule",
           "rule": "clamp(setting, 52, 76) - 64 decibels",
-          "window": [52, 76],
+          "window": [
+            52,
+            76
+          ],
           "offset": 64,
           "db_per_step": 1,
           "outside_the_window": "the nearest edge value, not the byte read as decibels",
@@ -191,8 +387,13 @@
       "read_by": "the byte, whole",
       "tables": {
         "output": {
-          "printed_ends": ["0", "127"],
-          "columns": ["00–7F"],
+          "printed_ends": [
+            "0",
+            "127"
+          ],
+          "columns": [
+            "00–7F"
+          ],
           "kind": "entries",
           "denominator": 127,
           "why_this_denominator": "The reading stands for 127 and 128 alike -- a constant 0.068 dB it cannot resolve -- and 127 is the byte's own top and what the surrounding code already divides by.",
@@ -204,133 +405,768 @@
               "why": "filled from the straight line the byte gives; the take sits at the floor",
               "unit_specific": false
             },
-            { "setting": 1, "numerator": 1, "approximate": false, "unit_specific": false },
-            { "setting": 2, "numerator": 1, "approximate": false, "unit_specific": false },
-            { "setting": 3, "numerator": 2, "approximate": false, "unit_specific": false },
-            { "setting": 4, "numerator": 3, "approximate": false, "unit_specific": false },
-            { "setting": 5, "numerator": 4, "approximate": false, "unit_specific": false },
-            { "setting": 6, "numerator": 4, "approximate": false, "unit_specific": false },
-            { "setting": 7, "numerator": 5, "approximate": false, "unit_specific": false },
-            { "setting": 8, "numerator": 6, "approximate": false, "unit_specific": false },
-            { "setting": 9, "numerator": 6, "approximate": false, "unit_specific": false },
-            { "setting": 10, "numerator": 7, "approximate": false, "unit_specific": false },
-            { "setting": 11, "numerator": 8, "approximate": false, "unit_specific": false },
-            { "setting": 12, "numerator": 9, "approximate": false, "unit_specific": false },
-            { "setting": 13, "numerator": 9, "approximate": false, "unit_specific": false },
-            { "setting": 14, "numerator": 10, "approximate": false, "unit_specific": false },
-            { "setting": 15, "numerator": 11, "approximate": false, "unit_specific": false },
-            { "setting": 16, "numerator": 12, "approximate": false, "unit_specific": false },
-            { "setting": 17, "numerator": 12, "approximate": false, "unit_specific": false },
-            { "setting": 18, "numerator": 13, "approximate": false, "unit_specific": false },
-            { "setting": 19, "numerator": 14, "approximate": false, "unit_specific": false },
-            { "setting": 20, "numerator": 15, "approximate": false, "unit_specific": false },
-            { "setting": 21, "numerator": 15, "approximate": false, "unit_specific": false },
-            { "setting": 22, "numerator": 16, "approximate": false, "unit_specific": false },
-            { "setting": 23, "numerator": 17, "approximate": false, "unit_specific": false },
-            { "setting": 24, "numerator": 18, "approximate": false, "unit_specific": false },
-            { "setting": 25, "numerator": 19, "approximate": false, "unit_specific": false },
-            { "setting": 26, "numerator": 19, "approximate": false, "unit_specific": false },
-            { "setting": 27, "numerator": 20, "approximate": false, "unit_specific": false },
-            { "setting": 28, "numerator": 21, "approximate": false, "unit_specific": false },
-            { "setting": 29, "numerator": 22, "approximate": false, "unit_specific": false },
-            { "setting": 30, "numerator": 23, "approximate": false, "unit_specific": false },
-            { "setting": 31, "numerator": 23, "approximate": false, "unit_specific": false },
-            { "setting": 32, "numerator": 24, "approximate": false, "unit_specific": false },
-            { "setting": 33, "numerator": 25, "approximate": false, "unit_specific": false },
-            { "setting": 34, "numerator": 26, "approximate": false, "unit_specific": false },
-            { "setting": 35, "numerator": 27, "approximate": false, "unit_specific": false },
-            { "setting": 36, "numerator": 28, "approximate": false, "unit_specific": false },
-            { "setting": 37, "numerator": 28, "approximate": false, "unit_specific": false },
-            { "setting": 38, "numerator": 29, "approximate": false, "unit_specific": false },
-            { "setting": 39, "numerator": 30, "approximate": false, "unit_specific": false },
-            { "setting": 40, "numerator": 31, "approximate": false, "unit_specific": false },
-            { "setting": 41, "numerator": 32, "approximate": false, "unit_specific": false },
-            { "setting": 42, "numerator": 33, "approximate": false, "unit_specific": false },
-            { "setting": 43, "numerator": 34, "approximate": false, "unit_specific": false },
-            { "setting": 44, "numerator": 34, "approximate": false, "unit_specific": false },
-            { "setting": 45, "numerator": 35, "approximate": false, "unit_specific": false },
-            { "setting": 46, "numerator": 36, "approximate": false, "unit_specific": false },
-            { "setting": 47, "numerator": 37, "approximate": false, "unit_specific": false },
-            { "setting": 48, "numerator": 38, "approximate": false, "unit_specific": false },
-            { "setting": 49, "numerator": 39, "approximate": false, "unit_specific": false },
-            { "setting": 50, "numerator": 40, "approximate": false, "unit_specific": false },
-            { "setting": 51, "numerator": 41, "approximate": false, "unit_specific": false },
-            { "setting": 52, "numerator": 42, "approximate": false, "unit_specific": false },
-            { "setting": 53, "numerator": 43, "approximate": false, "unit_specific": false },
-            { "setting": 54, "numerator": 44, "approximate": false, "unit_specific": false },
-            { "setting": 55, "numerator": 44, "approximate": false, "unit_specific": false },
-            { "setting": 56, "numerator": 45, "approximate": false, "unit_specific": false },
-            { "setting": 57, "numerator": 46, "approximate": false, "unit_specific": false },
-            { "setting": 58, "numerator": 47, "approximate": false, "unit_specific": false },
-            { "setting": 59, "numerator": 48, "approximate": false, "unit_specific": false },
-            { "setting": 60, "numerator": 49, "approximate": false, "unit_specific": false },
-            { "setting": 61, "numerator": 50, "approximate": false, "unit_specific": false },
-            { "setting": 62, "numerator": 51, "approximate": false, "unit_specific": false },
-            { "setting": 63, "numerator": 52, "approximate": false, "unit_specific": false },
-            { "setting": 64, "numerator": 53, "approximate": false, "unit_specific": false },
-            { "setting": 65, "numerator": 54, "approximate": false, "unit_specific": false },
-            { "setting": 66, "numerator": 55, "approximate": false, "unit_specific": false },
-            { "setting": 67, "numerator": 56, "approximate": false, "unit_specific": false },
-            { "setting": 68, "numerator": 57, "approximate": false, "unit_specific": false },
-            { "setting": 69, "numerator": 58, "approximate": false, "unit_specific": false },
-            { "setting": 70, "numerator": 59, "approximate": false, "unit_specific": false },
-            { "setting": 71, "numerator": 60, "approximate": false, "unit_specific": false },
-            { "setting": 72, "numerator": 61, "approximate": false, "unit_specific": false },
-            { "setting": 73, "numerator": 62, "approximate": false, "unit_specific": false },
-            { "setting": 74, "numerator": 63, "approximate": false, "unit_specific": false },
-            { "setting": 75, "numerator": 64, "approximate": false, "unit_specific": false },
-            { "setting": 76, "numerator": 65, "approximate": false, "unit_specific": false },
-            { "setting": 77, "numerator": 66, "approximate": false, "unit_specific": false },
-            { "setting": 78, "numerator": 67, "approximate": false, "unit_specific": false },
-            { "setting": 79, "numerator": 68, "approximate": false, "unit_specific": false },
-            { "setting": 80, "numerator": 70, "approximate": false, "unit_specific": false },
-            { "setting": 81, "numerator": 71, "approximate": false, "unit_specific": false },
-            { "setting": 82, "numerator": 72, "approximate": false, "unit_specific": false },
-            { "setting": 83, "numerator": 73, "approximate": false, "unit_specific": false },
-            { "setting": 84, "numerator": 74, "approximate": false, "unit_specific": false },
-            { "setting": 85, "numerator": 75, "approximate": false, "unit_specific": false },
-            { "setting": 86, "numerator": 76, "approximate": false, "unit_specific": false },
-            { "setting": 87, "numerator": 77, "approximate": false, "unit_specific": false },
-            { "setting": 88, "numerator": 78, "approximate": false, "unit_specific": false },
-            { "setting": 89, "numerator": 79, "approximate": false, "unit_specific": false },
-            { "setting": 90, "numerator": 81, "approximate": false, "unit_specific": false },
-            { "setting": 91, "numerator": 82, "approximate": false, "unit_specific": false },
-            { "setting": 92, "numerator": 83, "approximate": false, "unit_specific": false },
-            { "setting": 93, "numerator": 84, "approximate": false, "unit_specific": false },
-            { "setting": 94, "numerator": 85, "approximate": false, "unit_specific": false },
-            { "setting": 95, "numerator": 86, "approximate": false, "unit_specific": false },
-            { "setting": 96, "numerator": 87, "approximate": false, "unit_specific": false },
-            { "setting": 97, "numerator": 89, "approximate": false, "unit_specific": false },
-            { "setting": 98, "numerator": 90, "approximate": false, "unit_specific": false },
-            { "setting": 99, "numerator": 91, "approximate": false, "unit_specific": false },
-            { "setting": 100, "numerator": 92, "approximate": false, "unit_specific": false },
-            { "setting": 101, "numerator": 93, "approximate": false, "unit_specific": false },
-            { "setting": 102, "numerator": 95, "approximate": false, "unit_specific": false },
-            { "setting": 103, "numerator": 96, "approximate": false, "unit_specific": false },
-            { "setting": 104, "numerator": 97, "approximate": false, "unit_specific": false },
-            { "setting": 105, "numerator": 98, "approximate": false, "unit_specific": false },
-            { "setting": 106, "numerator": 99, "approximate": false, "unit_specific": false },
-            { "setting": 107, "numerator": 101, "approximate": false, "unit_specific": false },
-            { "setting": 108, "numerator": 102, "approximate": false, "unit_specific": false },
-            { "setting": 109, "numerator": 103, "approximate": false, "unit_specific": false },
-            { "setting": 110, "numerator": 104, "approximate": false, "unit_specific": false },
-            { "setting": 111, "numerator": 106, "approximate": false, "unit_specific": false },
-            { "setting": 112, "numerator": 107, "approximate": false, "unit_specific": false },
-            { "setting": 113, "numerator": 108, "approximate": false, "unit_specific": false },
-            { "setting": 114, "numerator": 110, "approximate": false, "unit_specific": false },
-            { "setting": 115, "numerator": 111, "approximate": false, "unit_specific": false },
-            { "setting": 116, "numerator": 112, "approximate": false, "unit_specific": false },
-            { "setting": 117, "numerator": 114, "approximate": false, "unit_specific": false },
-            { "setting": 118, "numerator": 115, "approximate": false, "unit_specific": false },
-            { "setting": 119, "numerator": 116, "approximate": false, "unit_specific": false },
-            { "setting": 120, "numerator": 117, "approximate": false, "unit_specific": false },
-            { "setting": 121, "numerator": 119, "approximate": false, "unit_specific": false },
-            { "setting": 122, "numerator": 120, "approximate": false, "unit_specific": false },
-            { "setting": 123, "numerator": 122, "approximate": false, "unit_specific": false },
-            { "setting": 124, "numerator": 123, "approximate": false, "unit_specific": false },
-            { "setting": 125, "numerator": 124, "approximate": false, "unit_specific": false },
-            { "setting": 126, "numerator": 126, "approximate": false, "unit_specific": false },
-            { "setting": 127, "numerator": 127, "approximate": false, "unit_specific": false }
+            {
+              "setting": 1,
+              "numerator": 1,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 2,
+              "numerator": 1,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 3,
+              "numerator": 2,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 4,
+              "numerator": 3,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 5,
+              "numerator": 4,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 6,
+              "numerator": 4,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 7,
+              "numerator": 5,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 8,
+              "numerator": 6,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 9,
+              "numerator": 6,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 10,
+              "numerator": 7,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 11,
+              "numerator": 8,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 12,
+              "numerator": 9,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 13,
+              "numerator": 9,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 14,
+              "numerator": 10,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 15,
+              "numerator": 11,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 16,
+              "numerator": 12,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 17,
+              "numerator": 12,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 18,
+              "numerator": 13,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 19,
+              "numerator": 14,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 20,
+              "numerator": 15,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 21,
+              "numerator": 15,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 22,
+              "numerator": 16,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 23,
+              "numerator": 17,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 24,
+              "numerator": 18,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 25,
+              "numerator": 19,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 26,
+              "numerator": 19,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 27,
+              "numerator": 20,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 28,
+              "numerator": 21,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 29,
+              "numerator": 22,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 30,
+              "numerator": 23,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 31,
+              "numerator": 23,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 32,
+              "numerator": 24,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 33,
+              "numerator": 25,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 34,
+              "numerator": 26,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 35,
+              "numerator": 27,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 36,
+              "numerator": 28,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 37,
+              "numerator": 28,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 38,
+              "numerator": 29,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 39,
+              "numerator": 30,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 40,
+              "numerator": 31,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 41,
+              "numerator": 32,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 42,
+              "numerator": 33,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 43,
+              "numerator": 34,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 44,
+              "numerator": 34,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 45,
+              "numerator": 35,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 46,
+              "numerator": 36,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 47,
+              "numerator": 37,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 48,
+              "numerator": 38,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 49,
+              "numerator": 39,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 50,
+              "numerator": 40,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 51,
+              "numerator": 41,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 52,
+              "numerator": 42,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 53,
+              "numerator": 43,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 54,
+              "numerator": 44,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 55,
+              "numerator": 44,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 56,
+              "numerator": 45,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 57,
+              "numerator": 46,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 58,
+              "numerator": 47,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 59,
+              "numerator": 48,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 60,
+              "numerator": 49,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 61,
+              "numerator": 50,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 62,
+              "numerator": 51,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 63,
+              "numerator": 52,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 64,
+              "numerator": 53,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 65,
+              "numerator": 54,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 66,
+              "numerator": 55,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 67,
+              "numerator": 56,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 68,
+              "numerator": 57,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 69,
+              "numerator": 58,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 70,
+              "numerator": 59,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 71,
+              "numerator": 60,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 72,
+              "numerator": 61,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 73,
+              "numerator": 62,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 74,
+              "numerator": 63,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 75,
+              "numerator": 64,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 76,
+              "numerator": 65,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 77,
+              "numerator": 66,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 78,
+              "numerator": 67,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 79,
+              "numerator": 68,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 80,
+              "numerator": 70,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 81,
+              "numerator": 71,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 82,
+              "numerator": 72,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 83,
+              "numerator": 73,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 84,
+              "numerator": 74,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 85,
+              "numerator": 75,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 86,
+              "numerator": 76,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 87,
+              "numerator": 77,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 88,
+              "numerator": 78,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 89,
+              "numerator": 79,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 90,
+              "numerator": 81,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 91,
+              "numerator": 82,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 92,
+              "numerator": 83,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 93,
+              "numerator": 84,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 94,
+              "numerator": 85,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 95,
+              "numerator": 86,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 96,
+              "numerator": 87,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 97,
+              "numerator": 89,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 98,
+              "numerator": 90,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 99,
+              "numerator": 91,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 100,
+              "numerator": 92,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 101,
+              "numerator": 93,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 102,
+              "numerator": 95,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 103,
+              "numerator": 96,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 104,
+              "numerator": 97,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 105,
+              "numerator": 98,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 106,
+              "numerator": 99,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 107,
+              "numerator": 101,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 108,
+              "numerator": 102,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 109,
+              "numerator": 103,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 110,
+              "numerator": 104,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 111,
+              "numerator": 106,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 112,
+              "numerator": 107,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 113,
+              "numerator": 108,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 114,
+              "numerator": 110,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 115,
+              "numerator": 111,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 116,
+              "numerator": 112,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 117,
+              "numerator": 114,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 118,
+              "numerator": 115,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 119,
+              "numerator": 116,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 120,
+              "numerator": 117,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 121,
+              "numerator": 119,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 122,
+              "numerator": 120,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 123,
+              "numerator": 122,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 124,
+              "numerator": 123,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 125,
+              "numerator": 124,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 126,
+              "numerator": 126,
+              "approximate": false,
+              "unit_specific": false
+            },
+            {
+              "setting": 127,
+              "numerator": 127,
+              "approximate": false,
+              "unit_specific": false
+            }
           ],
           "unit_specific": false,
           "approximate": true,
@@ -343,15 +1179,45 @@
       "read_by": "the byte, whole",
       "tables": {
         "section": {
-          "printed_ends": ["0", "4"],
-          "columns": ["00/01/02/03/04"],
+          "printed_ends": [
+            "0",
+            "4"
+          ],
+          "columns": [
+            "00/01/02/03/04"
+          ],
           "kind": "entries",
           "entries": [
-            { "setting": 0, "octaves": 0.25, "unit_specific": false, "approximate": false },
-            { "setting": 1, "octaves": 0.5, "unit_specific": false, "approximate": false },
-            { "setting": 2, "octaves": 1, "unit_specific": false, "approximate": false },
-            { "setting": 3, "octaves": 2, "unit_specific": false, "approximate": false },
-            { "setting": 4, "octaves": 4.5, "unit_specific": false, "approximate": false }
+            {
+              "setting": 0,
+              "octaves": 0.25,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 1,
+              "octaves": 0.5,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 2,
+              "octaves": 1,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 3,
+              "octaves": 2,
+              "unit_specific": false,
+              "approximate": false
+            },
+            {
+              "setting": 4,
+              "octaves": 4.5,
+              "unit_specific": false,
+              "approximate": false
+            }
           ],
           "settings_past_the_table_return": 0,
           "what_that_cannot_be_told_from": "This slot powers up at setting 0, so a setting past the table returning entry 0 and a setting past the table doing nothing are the same takes.",
@@ -366,8 +1232,13 @@
       "read_by": "the byte, whole",
       "tables": {
         "modulator": {
-          "printed_ends": ["0", "4"],
-          "columns": ["00/01/02/03/04"],
+          "printed_ends": [
+            "0",
+            "4"
+          ],
+          "columns": [
+            "00/01/02/03/04"
+          ],
           "kind": "entries",
           "entries": [
             {
@@ -376,7 +1247,10 @@
               "shape": "triangle",
               "rising_fraction": 0.5,
               "third_harmonic": 0,
-              "rising_fraction_read_on": { "01 25": 0.5, "01 26": 0.5 },
+              "rising_fraction_read_on": {
+                "01 25": 0.5,
+                "01 26": 0.5
+              },
               "unit_specific": false,
               "approximate": false
             },
@@ -386,7 +1260,10 @@
               "shape": "square",
               "rising_fraction": 0.3516,
               "third_harmonic": 0,
-              "rising_fraction_read_on": { "01 25": 0.375, "01 26": 0.3281 },
+              "rising_fraction_read_on": {
+                "01 25": 0.375,
+                "01 26": 0.3281
+              },
               "unit_specific": false,
               "approximate": false
             },
@@ -396,8 +1273,14 @@
               "shape": "sine carrying a third harmonic and almost nothing above it",
               "rising_fraction": 0.4688,
               "third_harmonic": 0.06,
-              "rising_fraction_read_on": { "01 25": 0.4375, "01 26": 0.5 },
-              "third_harmonic_read_on": [0.0586, 0.0614],
+              "rising_fraction_read_on": {
+                "01 25": 0.4375,
+                "01 26": 0.5
+              },
+              "third_harmonic_read_on": [
+                0.0586,
+                0.0614
+              ],
               "unit_specific": false,
               "approximate": false
             },
@@ -407,7 +1290,10 @@
               "shape": "sawtooth, rising over most of the cycle",
               "rising_fraction": 0.8828,
               "third_harmonic": 0,
-              "rising_fraction_read_on": { "01 25": 0.875, "01 26": 0.8906 },
+              "rising_fraction_read_on": {
+                "01 25": 0.875,
+                "01 26": 0.8906
+              },
               "unit_specific": false,
               "approximate": false
             },
@@ -417,7 +1303,10 @@
               "shape": "sawtooth, rising over little of the cycle",
               "rising_fraction": 0.1094,
               "third_harmonic": 0,
-              "rising_fraction_read_on": { "01 25": 0.1094, "01 26": 0.1094 },
+              "rising_fraction_read_on": {
+                "01 25": 0.1094,
+                "01 26": 0.1094
+              },
               "unit_specific": false,
               "approximate": false
             }
@@ -435,8 +1324,13 @@
       "what_it_does_not_carry": "The term added after the pan, which is what stops the far channel short of silence and is frequency-dependent. It is characterised by its net effect and not decomposed.",
       "tables": {
         "output": {
-          "printed_ends": ["L63", "R63"],
-          "columns": ["00–7F"],
+          "printed_ends": [
+            "L63",
+            "R63"
+          ],
+          "columns": [
+            "00–7F"
+          ],
           "kind": "breakpoints",
           "interpolate": "linear in the setting",
           "sides": {
@@ -447,7 +1341,12 @@
                 "unit_specific": false,
                 "approximate": false
               },
-              { "setting": 1, "multiplier": 1, "unit_specific": false, "approximate": false },
+              {
+                "setting": 1,
+                "multiplier": 1,
+                "unit_specific": false,
+                "approximate": false
+              },
               {
                 "setting": 8,
                 "multiplier": 0.979141,
@@ -552,7 +1451,12 @@
                 "unit_specific": false,
                 "approximate": false
               },
-              { "setting": 8, "multiplier": 0.21119, "unit_specific": false, "approximate": false },
+              {
+                "setting": 8,
+                "multiplier": 0.21119,
+                "unit_specific": false,
+                "approximate": false
+              },
               {
                 "setting": 16,
                 "multiplier": 0.34676,
@@ -637,7 +1541,12 @@
                 "unit_specific": false,
                 "approximate": false
               },
-              { "setting": 126, "multiplier": 1, "unit_specific": false, "approximate": false },
+              {
+                "setting": 126,
+                "multiplier": 1,
+                "unit_specific": false,
+                "approximate": false
+              },
               {
                 "setting": 127,
                 "multiplier": 0.996956,
@@ -658,8 +1567,13 @@
       "read_by": "the byte, whole",
       "tables": {
         "effect": {
-          "printed_ends": ["D>0E", "D0<E"],
-          "columns": ["00–7F"],
+          "printed_ends": [
+            "D>0E",
+            "D0<E"
+          ],
+          "columns": [
+            "00–7F"
+          ],
           "kind": "rule",
           "rule": "min(1, floor((114 - n) * 128 / 50) / 128) past the effect, min(1, floor((n - 14) * 128 / 50) / 128) through it",
           "corner_past_the_effect": 114,
@@ -679,8 +1593,13 @@
       "read_by": "two added, shifted right two, recentred, clamped",
       "tables": {
         "placement": {
-          "printed_ends": ["L180(=R180)", "R180(=L180)"],
-          "columns": ["*13"],
+          "printed_ends": [
+            "L180(=R180)",
+            "R180(=L180)"
+          ],
+          "columns": [
+            "*13"
+          ],
           "kind": "rule",
           "rule": "clamp(((byte + 2) >> 2) - 16, -15, 15), 12 degrees a position",
           "degrees_per_position": 12,
@@ -688,217 +1607,310 @@
           "entries": [
             {
               "position": -15,
-              "settings": [0, 5],
+              "settings": [
+                0,
+                5
+              ],
               "degrees": -180,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -14,
-              "settings": [6, 9],
+              "settings": [
+                6,
+                9
+              ],
               "degrees": -168,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -13,
-              "settings": [10, 13],
+              "settings": [
+                10,
+                13
+              ],
               "degrees": -156,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -12,
-              "settings": [14, 17],
+              "settings": [
+                14,
+                17
+              ],
               "degrees": -144,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -11,
-              "settings": [18, 21],
+              "settings": [
+                18,
+                21
+              ],
               "degrees": -132,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -10,
-              "settings": [22, 25],
+              "settings": [
+                22,
+                25
+              ],
               "degrees": -120,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -9,
-              "settings": [26, 29],
+              "settings": [
+                26,
+                29
+              ],
               "degrees": -108,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -8,
-              "settings": [30, 33],
+              "settings": [
+                30,
+                33
+              ],
               "degrees": -96,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -7,
-              "settings": [34, 37],
+              "settings": [
+                34,
+                37
+              ],
               "degrees": -84,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -6,
-              "settings": [38, 41],
+              "settings": [
+                38,
+                41
+              ],
               "degrees": -72,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -5,
-              "settings": [42, 45],
+              "settings": [
+                42,
+                45
+              ],
               "degrees": -60,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -4,
-              "settings": [46, 49],
+              "settings": [
+                46,
+                49
+              ],
               "degrees": -48,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -3,
-              "settings": [50, 53],
+              "settings": [
+                50,
+                53
+              ],
               "degrees": -36,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -2,
-              "settings": [54, 57],
+              "settings": [
+                54,
+                57
+              ],
               "degrees": -24,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": -1,
-              "settings": [58, 61],
+              "settings": [
+                58,
+                61
+              ],
               "degrees": -12,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 0,
-              "settings": [62, 65],
+              "settings": [
+                62,
+                65
+              ],
               "degrees": 0,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 1,
-              "settings": [66, 69],
+              "settings": [
+                66,
+                69
+              ],
               "degrees": 12,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 2,
-              "settings": [70, 73],
+              "settings": [
+                70,
+                73
+              ],
               "degrees": 24,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 3,
-              "settings": [74, 77],
+              "settings": [
+                74,
+                77
+              ],
               "degrees": 36,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 4,
-              "settings": [78, 81],
+              "settings": [
+                78,
+                81
+              ],
               "degrees": 48,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 5,
-              "settings": [82, 85],
+              "settings": [
+                82,
+                85
+              ],
               "degrees": 60,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 6,
-              "settings": [86, 89],
+              "settings": [
+                86,
+                89
+              ],
               "degrees": 72,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 7,
-              "settings": [90, 93],
+              "settings": [
+                90,
+                93
+              ],
               "degrees": 84,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 8,
-              "settings": [94, 97],
+              "settings": [
+                94,
+                97
+              ],
               "degrees": 96,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 9,
-              "settings": [98, 101],
+              "settings": [
+                98,
+                101
+              ],
               "degrees": 108,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 10,
-              "settings": [102, 105],
+              "settings": [
+                102,
+                105
+              ],
               "degrees": 120,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 11,
-              "settings": [106, 109],
+              "settings": [
+                106,
+                109
+              ],
               "degrees": 132,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 12,
-              "settings": [110, 113],
+              "settings": [
+                110,
+                113
+              ],
               "degrees": 144,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 13,
-              "settings": [114, 117],
+              "settings": [
+                114,
+                117
+              ],
               "degrees": 156,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 14,
-              "settings": [118, 121],
+              "settings": [
+                118,
+                121
+              ],
               "degrees": 168,
               "unit_specific": false,
               "approximate": false
             },
             {
               "position": 15,
-              "settings": [122, 127],
+              "settings": [
+                122,
+                127
+              ],
               "degrees": 180,
               "unit_specific": false,
               "approximate": false
@@ -917,13 +1929,21 @@
       "read_by": "the top four bits; eight settings share an entry",
       "tables": {
         "rotor": {
-          "printed_ends": ["0", "15"],
-          "columns": ["*14"],
+          "printed_ends": [
+            "0",
+            "15"
+          ],
+          "columns": [
+            "*14"
+          ],
           "kind": "entries",
           "entries": [
             {
               "index": 0,
-              "settings": [0, 7],
+              "settings": [
+                0,
+                7
+              ],
               "divisor": 1,
               "source": "the sequence; no multiplier is published for this entry",
               "approximate": true,
@@ -931,7 +1951,10 @@
             },
             {
               "index": 1,
-              "settings": [8, 15],
+              "settings": [
+                8,
+                15
+              ],
               "divisor": 2,
               "source": "the sequence; no multiplier is published for this entry",
               "approximate": true,
@@ -939,7 +1962,10 @@
             },
             {
               "index": 2,
-              "settings": [16, 23],
+              "settings": [
+                16,
+                23
+              ],
               "divisor": 3,
               "sequence_says": 3,
               "measured_multiplier": 3.02,
@@ -950,7 +1976,10 @@
             },
             {
               "index": 3,
-              "settings": [24, 31],
+              "settings": [
+                24,
+                31
+              ],
               "divisor": 4,
               "sequence_says": 4,
               "measured_multiplier": 4,
@@ -961,7 +1990,10 @@
             },
             {
               "index": 4,
-              "settings": [32, 39],
+              "settings": [
+                32,
+                39
+              ],
               "divisor": 5,
               "sequence_says": 5,
               "measured_multiplier": 4.92,
@@ -972,7 +2004,10 @@
             },
             {
               "index": 5,
-              "settings": [40, 47],
+              "settings": [
+                40,
+                47
+              ],
               "divisor": 6,
               "sequence_says": 6,
               "measured_multiplier": 5.9,
@@ -983,7 +2018,10 @@
             },
             {
               "index": 6,
-              "settings": [48, 55],
+              "settings": [
+                48,
+                55
+              ],
               "divisor": 7,
               "sequence_says": 7,
               "measured_multiplier": 6.82,
@@ -994,7 +2032,10 @@
             },
             {
               "index": 7,
-              "settings": [56, 63],
+              "settings": [
+                56,
+                63
+              ],
               "divisor": 8,
               "sequence_says": 8,
               "measured_multiplier": 7.9,
@@ -1005,7 +2046,10 @@
             },
             {
               "index": 8,
-              "settings": [64, 71],
+              "settings": [
+                64,
+                71
+              ],
               "divisor": 9,
               "sequence_says": 9,
               "measured_multiplier": 8.99,
@@ -1016,7 +2060,10 @@
             },
             {
               "index": 9,
-              "settings": [72, 79],
+              "settings": [
+                72,
+                79
+              ],
               "divisor": 10,
               "sequence_says": 10,
               "measured_multiplier": 10.09,
@@ -1027,7 +2074,10 @@
             },
             {
               "index": 10,
-              "settings": [80, 87],
+              "settings": [
+                80,
+                87
+              ],
               "divisor": 12,
               "sequence_says": 12,
               "measured_multiplier": 11.99,
@@ -1038,7 +2088,10 @@
             },
             {
               "index": 11,
-              "settings": [88, 95],
+              "settings": [
+                88,
+                95
+              ],
               "divisor": 16,
               "sequence_says": 16,
               "measured_multiplier": 15.99,
@@ -1049,7 +2102,10 @@
             },
             {
               "index": 12,
-              "settings": [96, 103],
+              "settings": [
+                96,
+                103
+              ],
               "divisor": 32,
               "sequence_says": 32,
               "measured_multiplier": 31.71,
@@ -1060,7 +2116,10 @@
             },
             {
               "index": 13,
-              "settings": [104, 111],
+              "settings": [
+                104,
+                111
+              ],
               "divisor": 64,
               "sequence_says": 64,
               "measured_multiplier": 63.84,
@@ -1071,7 +2130,10 @@
             },
             {
               "index": 14,
-              "settings": [112, 119],
+              "settings": [
+                112,
+                119
+              ],
               "divisor": 128,
               "sequence_says": 128,
               "measured_multiplier": 125.23,
@@ -1082,7 +2144,10 @@
             },
             {
               "index": 15,
-              "settings": [120, 127],
+              "settings": [
+                120,
+                127
+              ],
               "divisor": 168.41,
               "sequence_says": 256,
               "measured_multiplier": 168.41,
@@ -1110,14 +2175,22 @@
       "read_by": "the top four bits; eight settings share an entry",
       "tables": {
         "eq": {
-          "printed_ends": ["200", "6300"],
-          "columns": ["*10"],
+          "printed_ends": [
+            "200",
+            "6300"
+          ],
+          "columns": [
+            "*10"
+          ],
           "printed_range_the_claim_calls_it": "200 - 6.3k",
           "kind": "entries",
           "entries": [
             {
               "index": 0,
-              "settings": [0, 7],
+              "settings": [
+                0,
+                7
+              ],
               "hz": 198.4,
               "series_hz": 200,
               "away_octaves": 0.0116,
@@ -1127,7 +2200,10 @@
             },
             {
               "index": 1,
-              "settings": [8, 15],
+              "settings": [
+                8,
+                15
+              ],
               "hz": 240.5,
               "series_hz": 250,
               "away_octaves": 0.0559,
@@ -1137,7 +2213,10 @@
             },
             {
               "index": 2,
-              "settings": [16, 23],
+              "settings": [
+                16,
+                23
+              ],
               "hz": 279.1,
               "series_hz": 315,
               "away_octaves": 0.1746,
@@ -1147,7 +2226,10 @@
             },
             {
               "index": 3,
-              "settings": [24, 31],
+              "settings": [
+                24,
+                31
+              ],
               "hz": 397.9,
               "series_hz": 400,
               "away_octaves": 0.0076,
@@ -1157,7 +2239,10 @@
             },
             {
               "index": 4,
-              "settings": [32, 39],
+              "settings": [
+                32,
+                39
+              ],
               "hz": 481.4,
               "series_hz": 500,
               "away_octaves": 0.0547,
@@ -1167,7 +2252,10 @@
             },
             {
               "index": 5,
-              "settings": [40, 47],
+              "settings": [
+                40,
+                47
+              ],
               "hz": 600,
               "series_hz": 630,
               "away_octaves": 0.0704,
@@ -1177,7 +2265,10 @@
             },
             {
               "index": 6,
-              "settings": [48, 55],
+              "settings": [
+                48,
+                55
+              ],
               "hz": 778.1,
               "series_hz": 800,
               "away_octaves": 0.04,
@@ -1187,7 +2278,10 @@
             },
             {
               "index": 7,
-              "settings": [56, 63],
+              "settings": [
+                56,
+                63
+              ],
               "hz": 977.3,
               "series_hz": 1000,
               "away_octaves": 0.0331,
@@ -1197,7 +2291,10 @@
             },
             {
               "index": 8,
-              "settings": [64, 71],
+              "settings": [
+                64,
+                71
+              ],
               "hz": 1224.4,
               "series_hz": 1250,
               "away_octaves": 0.0299,
@@ -1207,7 +2304,10 @@
             },
             {
               "index": 9,
-              "settings": [72, 79],
+              "settings": [
+                72,
+                79
+              ],
               "hz": 1585,
               "series_hz": 1600,
               "away_octaves": 0.0136,
@@ -1217,7 +2317,10 @@
             },
             {
               "index": 10,
-              "settings": [80, 87],
+              "settings": [
+                80,
+                87
+              ],
               "hz": 1952.3,
               "series_hz": 2000,
               "away_octaves": 0.0348,
@@ -1227,7 +2330,10 @@
             },
             {
               "index": 11,
-              "settings": [88, 95],
+              "settings": [
+                88,
+                95
+              ],
               "hz": 2468.9,
               "series_hz": 2500,
               "away_octaves": 0.0181,
@@ -1237,7 +2343,10 @@
             },
             {
               "index": 12,
-              "settings": [96, 103],
+              "settings": [
+                96,
+                103
+              ],
               "hz": 3105,
               "series_hz": 3150,
               "away_octaves": 0.0208,
@@ -1247,7 +2356,10 @@
             },
             {
               "index": 13,
-              "settings": [104, 111],
+              "settings": [
+                104,
+                111
+              ],
               "hz": 3948.8,
               "series_hz": 4000,
               "away_octaves": 0.0186,
@@ -1257,7 +2369,10 @@
             },
             {
               "index": 14,
-              "settings": [112, 119],
+              "settings": [
+                112,
+                119
+              ],
               "hz": 4931.8,
               "series_hz": 5000,
               "away_octaves": 0.0198,
@@ -1267,7 +2382,10 @@
             },
             {
               "index": 15,
-              "settings": [120, 127],
+              "settings": [
+                120,
+                127
+              ],
               "hz": 6166.8,
               "series_hz": 6300,
               "away_octaves": 0.0308,
@@ -1282,14 +2400,22 @@
           "entries_using_it": 4
         },
         "pre_filter": {
-          "printed_ends": ["250", "8000"],
-          "columns": ["*9"],
+          "printed_ends": [
+            "250",
+            "8000"
+          ],
+          "columns": [
+            "*9"
+          ],
           "printed_range_the_claim_calls_it": "250 - 8k",
           "kind": "entries",
           "entries": [
             {
               "index": 0,
-              "settings": [0, 7],
+              "settings": [
+                0,
+                7
+              ],
               "hz": 250,
               "series_hz": 250,
               "source": "the series; no reading of this entry is published",
@@ -1298,7 +2424,10 @@
             },
             {
               "index": 1,
-              "settings": [8, 15],
+              "settings": [
+                8,
+                15
+              ],
               "hz": 315,
               "series_hz": 315,
               "source": "the series; no reading of this entry is published",
@@ -1307,7 +2436,10 @@
             },
             {
               "index": 2,
-              "settings": [16, 23],
+              "settings": [
+                16,
+                23
+              ],
               "hz": 400,
               "series_hz": 400,
               "source": "the series; no reading of this entry is published",
@@ -1316,7 +2448,10 @@
             },
             {
               "index": 3,
-              "settings": [24, 31],
+              "settings": [
+                24,
+                31
+              ],
               "hz": 500,
               "series_hz": 500,
               "source": "the series; no reading of this entry is published",
@@ -1325,7 +2460,10 @@
             },
             {
               "index": 4,
-              "settings": [32, 39],
+              "settings": [
+                32,
+                39
+              ],
               "hz": 630,
               "series_hz": 630,
               "source": "the series; no reading of this entry is published",
@@ -1334,7 +2472,10 @@
             },
             {
               "index": 5,
-              "settings": [40, 47],
+              "settings": [
+                40,
+                47
+              ],
               "hz": 800,
               "series_hz": 800,
               "source": "the series; no reading of this entry is published",
@@ -1343,7 +2484,10 @@
             },
             {
               "index": 6,
-              "settings": [48, 55],
+              "settings": [
+                48,
+                55
+              ],
               "hz": 1000,
               "series_hz": 1000,
               "source": "the series; no reading of this entry is published",
@@ -1352,7 +2496,10 @@
             },
             {
               "index": 7,
-              "settings": [56, 63],
+              "settings": [
+                56,
+                63
+              ],
               "hz": 1250,
               "series_hz": 1250,
               "source": "the series; no reading of this entry is published",
@@ -1361,7 +2508,10 @@
             },
             {
               "index": 8,
-              "settings": [64, 71],
+              "settings": [
+                64,
+                71
+              ],
               "hz": 1600,
               "series_hz": 1600,
               "source": "the series; no reading of this entry is published",
@@ -1370,7 +2520,10 @@
             },
             {
               "index": 9,
-              "settings": [72, 79],
+              "settings": [
+                72,
+                79
+              ],
               "hz": 2000,
               "series_hz": 2000,
               "source": "the series; no reading of this entry is published",
@@ -1379,7 +2532,10 @@
             },
             {
               "index": 10,
-              "settings": [80, 87],
+              "settings": [
+                80,
+                87
+              ],
               "hz": 2500,
               "series_hz": 2500,
               "source": "the series; no reading of this entry is published",
@@ -1388,7 +2544,10 @@
             },
             {
               "index": 11,
-              "settings": [88, 95],
+              "settings": [
+                88,
+                95
+              ],
               "hz": 3150,
               "series_hz": 3150,
               "source": "the series; no reading of this entry is published",
@@ -1397,7 +2556,10 @@
             },
             {
               "index": 12,
-              "settings": [96, 103],
+              "settings": [
+                96,
+                103
+              ],
               "hz": 4000,
               "series_hz": 4000,
               "source": "the series; no reading of this entry is published",
@@ -1406,7 +2568,10 @@
             },
             {
               "index": 13,
-              "settings": [104, 111],
+              "settings": [
+                104,
+                111
+              ],
               "hz": 5000,
               "series_hz": 5000,
               "source": "the series; no reading of this entry is published",
@@ -1415,7 +2580,10 @@
             },
             {
               "index": 14,
-              "settings": [112, 119],
+              "settings": [
+                112,
+                119
+              ],
               "hz": 6300,
               "series_hz": 6300,
               "source": "the series; no reading of this entry is published",
@@ -1424,7 +2592,10 @@
             },
             {
               "index": 15,
-              "settings": [120, 127],
+              "settings": [
+                120,
+                127
+              ],
               "hz": 8000,
               "series_hz": 8000,
               "source": "the series; no reading of this entry is published",
@@ -1439,14 +2610,22 @@
           "entries_using_it": 1
         },
         "damping": {
-          "printed_ends": ["315", "Bypass"],
-          "columns": ["*8"],
+          "printed_ends": [
+            "315",
+            "Bypass"
+          ],
+          "columns": [
+            "*8"
+          ],
           "printed_range_the_claim_calls_it": "315 - 8k/Bypass",
           "kind": "entries",
           "entries": [
             {
               "index": 0,
-              "settings": [0, 7],
+              "settings": [
+                0,
+                7
+              ],
               "hz": 312.9,
               "series_hz": 315,
               "away_octaves": 0.0097,
@@ -1456,7 +2635,10 @@
             },
             {
               "index": 1,
-              "settings": [8, 15],
+              "settings": [
+                8,
+                15
+              ],
               "hz": 398.7,
               "series_hz": 400,
               "away_octaves": 0.0047,
@@ -1466,7 +2648,10 @@
             },
             {
               "index": 2,
-              "settings": [16, 23],
+              "settings": [
+                16,
+                23
+              ],
               "hz": 500,
               "series_hz": 500,
               "away_octaves": 0,
@@ -1476,7 +2661,10 @@
             },
             {
               "index": 3,
-              "settings": [24, 31],
+              "settings": [
+                24,
+                31
+              ],
               "hz": 622.2,
               "series_hz": 630,
               "away_octaves": 0.018,
@@ -1486,7 +2674,10 @@
             },
             {
               "index": 4,
-              "settings": [32, 39],
+              "settings": [
+                32,
+                39
+              ],
               "hz": 801.2,
               "series_hz": 800,
               "away_octaves": 0.0022,
@@ -1496,7 +2687,10 @@
             },
             {
               "index": 5,
-              "settings": [40, 47],
+              "settings": [
+                40,
+                47
+              ],
               "hz": 1000,
               "series_hz": 1000,
               "source": "the series; no reading of this entry is published",
@@ -1505,7 +2699,10 @@
             },
             {
               "index": 6,
-              "settings": [48, 55],
+              "settings": [
+                48,
+                55
+              ],
               "hz": 1245.4,
               "series_hz": 1250,
               "away_octaves": 0.0053,
@@ -1515,7 +2712,10 @@
             },
             {
               "index": 7,
-              "settings": [56, 63],
+              "settings": [
+                56,
+                63
+              ],
               "hz": 1600,
               "series_hz": 1600,
               "source": "the series; no reading of this entry is published",
@@ -1524,7 +2724,10 @@
             },
             {
               "index": 8,
-              "settings": [64, 71],
+              "settings": [
+                64,
+                71
+              ],
               "hz": 2016.6,
               "series_hz": 2000,
               "away_octaves": 0.0119,
@@ -1534,7 +2737,10 @@
             },
             {
               "index": 9,
-              "settings": [72, 79],
+              "settings": [
+                72,
+                79
+              ],
               "hz": 2500,
               "series_hz": 2500,
               "source": "the series; no reading of this entry is published",
@@ -1543,7 +2749,10 @@
             },
             {
               "index": 10,
-              "settings": [80, 87],
+              "settings": [
+                80,
+                87
+              ],
               "hz": 3138.3,
               "series_hz": 3150,
               "away_octaves": 0.0054,
@@ -1553,7 +2762,10 @@
             },
             {
               "index": 11,
-              "settings": [88, 95],
+              "settings": [
+                88,
+                95
+              ],
               "hz": 4000,
               "series_hz": 4000,
               "source": "the series; no reading of this entry is published",
@@ -1562,7 +2774,10 @@
             },
             {
               "index": 12,
-              "settings": [96, 103],
+              "settings": [
+                96,
+                103
+              ],
               "hz": 4964.3,
               "series_hz": 5000,
               "away_octaves": 0.0103,
@@ -1572,7 +2787,10 @@
             },
             {
               "index": 13,
-              "settings": [104, 111],
+              "settings": [
+                104,
+                111
+              ],
               "hz": 6300,
               "series_hz": 6300,
               "source": "the series; no reading of this entry is published",
@@ -1581,7 +2799,10 @@
             },
             {
               "index": 14,
-              "settings": [112, 119],
+              "settings": [
+                112,
+                119
+              ],
               "hz": 7972.9,
               "series_hz": 8000,
               "away_octaves": 0.0049,
@@ -1591,7 +2812,10 @@
             },
             {
               "index": 15,
-              "settings": [120, 127],
+              "settings": [
+                120,
+                127
+              ],
               "hz": null,
               "bypass": true,
               "source": "the range's own last position, which is not a frequency",
@@ -1614,73 +2838,1436 @@
     "types_with_complete_defaults": 62,
     "what_they_are": "The bytes the unit was measured holding at power-on, per type. Not the manual's printed defaults, which the archive does not transcribe.",
     "by_type": {
-      "00 00": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127],
-      "01 00": [1, 69, 1, 52, 72, 0, 72, 56, 0, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127],
-      "01 01": [60, 65, 67, 70, 66, 63, 60, 59, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 127],
-      "01 02": [64, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 67, 64, 0, 127],
-      "01 03": [48, 1, 0, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 127],
-      "01 10": [48, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 96],
-      "01 11": [76, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 56, 64, 84],
-      "01 20": [36, 16, 64, 16, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 104],
-      "01 21": [1, 0, 68, 62, 40, 72, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 96],
-      "01 22": [6, 113, 24, 127, 17, 120, 88, 64, 96, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 127],
-      "01 23": [0, 0, 16, 11, 24, 104, 90, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 104],
-      "01 24": [10, 5, 95, 79, 90, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 96],
-      "01 25": [1, 60, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 127],
-      "01 26": [1, 60, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 127],
-      "01 30": [72, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 104],
-      "01 31": [85, 3, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 127],
-      "01 40": [24, 8, 127, 5, 66, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 112],
-      "01 41": [16, 8, 40, 40, 60, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 64, 64, 0, 127],
-      "01 42": [0, 0, 10, 8, 111, 0, 90, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 104],
-      "01 43": [32, 8, 127, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 96],
-      "01 44": [10, 8, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 80],
-      "01 50": [101, 116, 88, 1, 0, 0, 0, 127, 0, 0, 0, 0, 0, 0, 0, 48, 64, 64, 0, 127],
-      "01 51": [90, 108, null, 1, 12, 21, 90, 127, 0, 0, 0, 0, 0, 0, 0, 40, 64, 64, 0, 127],
-      "01 52": [20, 0, 7, 80, 127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 48, 64, 64, 0, 127],
-      "01 53": [60, 20, 40, 0, 127, 127, 127, 127, 80, 127, 0, 0, 0, 0, 0, 48, 64, 64, 0, 127],
-      "01 54": [60, 80, 80, 127, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 64, 64, 0, 127],
-      "01 55": [3, 112, 120, 104, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 64, 0, 127],
-      "01 56": [0, 5, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42, 64, 61, 0, 112],
-      "01 57": [116, 106, 110, 80, 40, 64, 64, 127, 0, 0, 0, 0, 0, 0, 0, 48, 64, 64, 0, 127],
-      "01 60": [71, 62, 0, 127, 59, 66, 0, 0, 2, 64, 0, 0, 0, 0, 0, 48, 64, 64, 0, 95],
-      "01 61": [71, 64, 84, 95, 2, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 58, 0, 127],
-      "01 70": [64, 25, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127],
-      "01 71": [64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127],
-      "01 72": [1, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 64, 64, 64, 127],
-      "01 73": [1, 1, 36, 0, 64, 1, 127, 0, 0, 127, 0, 0, 127, 0, 1, 127, 64, 64, 64, 127],
-      "02 00": [48, 64, 1, 0, 0, 10, 8, 72, 0, 64, 0, 0, 0, 0, 0, 0, 64, 64, 0, 80],
-      "02 01": [48, 64, 1, 0, 0, 16, 11, 40, 104, 32, 0, 0, 0, 0, 0, 0, 64, 64, 0, 80],
-      "02 02": [48, 64, 1, 0, 0, 111, 80, 127, 0, 48, 0, 0, 0, 0, 0, 0, 64, 64, 0, 80],
-      "02 03": [48, 64, 1, 0, 0, 10, 8, 72, 0, 64, 0, 0, 0, 0, 0, 0, 64, 64, 0, 72],
-      "02 04": [48, 64, 1, 0, 0, 11, 11, 24, 104, 32, 0, 0, 0, 0, 0, 0, 64, 64, 0, 72],
-      "02 05": [48, 64, 1, 0, 0, 111, 80, 127, 0, 48, 0, 0, 0, 0, 0, 0, 64, 64, 0, 72],
-      "02 06": [64, 127, 0, 0, 0, 64, 8, 101, 0, 64, 0, 0, 0, 0, 0, 0, 64, 64, 0, 80],
-      "02 07": [64, 127, 0, 0, 0, 16, 11, 24, 104, 48, 0, 0, 0, 0, 0, 0, 64, 64, 0, 96],
-      "02 08": [64, 127, 0, 0, 0, 111, 80, 127, 0, 48, 0, 0, 0, 0, 0, 0, 64, 64, 0, 88],
-      "02 09": [10, 9, 120, 0, 64, 111, null, 127, 0, 48, 0, 0, 0, 0, 0, 0, 64, 64, 0, 127],
-      "02 0A": [16, 11, 24, 104, 64, 111, null, 127, 0, 48, 0, 0, 0, 0, 0, 0, 64, 64, 0, 127],
-      "02 0B": [10, 8, 120, 0, 64, 16, 11, 24, 104, 64, 0, 0, 0, 0, 0, 0, 64, 64, 0, 112],
-      "03 00": [13, 1, 64, 72, 0, 64, 64, 6, 113, 24, 127, 17, 120, 88, 64, 96, 0, 0, 0, 96],
-      "04 00": [100, 80, 100, 1, 0, 80, 0, 1, 69, 74, 1, 0, 8, 30, 102, 40, 60, 34, 15, 110],
-      "04 01": [70, 127, 90, 1, 0, 80, 2, 1, 1, 76, 56, 2, 69, 54, 0, 8, 96, 102, 0, 80],
-      "04 02": [1, 60, 10, 1, 1, 80, 2, 1, 64, 64, 1, 0, 8, 0, 89, 50, 32, 64, 30, 88],
-      "04 03": [50, 127, 75, 1, 76, 0, 2, 69, 52, 0, 8, 40, 79, 100, 24, 40, 127, 30, 0, 95],
-      "04 04": [1, 55, 40, 29, 80, 1, 76, 72, 0, 64, 64, 0, 8, 20, 102, 100, 6, 15, 80, 76],
-      "04 05": [72, 100, 75, 1, 0, 48, 0, 0, 1, 66, 72, 1, 68, 64, 0, 5, 20, 102, 64, 76],
-      "04 06": [64, 64, 36, 16, 32, 16, 64, 0, 127, 10, 8, 64, 104, 127, 1, 2, 60, 64, 1, 127],
-      "05 00": [50, 20, 67, 0, 2, 69, 61, 71, 64, 0, 39, 36, 8, 90, 80, 75, 20, 64, 40, 96],
-      "11 00": [10, 8, 120, 0, 64, 111, 80, 127, 0, 40, 0, 0, 0, 0, 0, 0, 127, 127, 127, 96],
-      "11 01": [16, 11, 24, 104, 64, 111, 80, 127, 0, 48, 0, 0, 0, 0, 0, 0, 127, 127, 127, 96],
-      "11 02": [16, 8, 120, 0, 64, 16, 11, 24, 104, 64, 0, 0, 0, 0, 0, 0, 127, 127, 127, 88],
-      "11 03": [0, 48, 1, 1, 0, 1, 76, 3, 1, 0, 0, 0, 0, 0, 0, 0, 96, 127, 84, 127],
-      "11 04": [0, 48, 1, 1, 0, 6, 113, 24, 127, 17, 120, 88, 64, 96, 0, 0, 96, 127, 127, 127],
-      "11 05": [0, 48, 1, 1, 0, 36, 16, 64, 16, 127, 0, 0, 0, 0, 0, 0, 96, 127, 127, 127],
-      "11 06": [0, 48, 1, 1, 0, 1, 0, 68, 62, 40, 72, 1, 0, 0, 0, 0, 96, 127, 127, 127],
-      "11 07": [
-        36, 16, 64, 16, 127, 6, 113, 24, 127, 17, 120, 88, 64, 96, 0, 0, 127, 127, 127, 127
+      "00 00": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127
       ],
-      "11 08": [36, 16, 64, 16, 127, 1, 0, 68, 62, 40, 72, 1, 0, 0, 0, 0, 127, 127, 127, 127]
+      "01 00": [
+        1,
+        69,
+        1,
+        52,
+        72,
+        0,
+        72,
+        56,
+        0,
+        56,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127
+      ],
+      "01 01": [
+        60,
+        65,
+        67,
+        70,
+        66,
+        63,
+        60,
+        59,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        127
+      ],
+      "01 02": [
+        64,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        67,
+        64,
+        0,
+        127
+      ],
+      "01 03": [
+        48,
+        1,
+        0,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        127
+      ],
+      "01 10": [
+        48,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        96
+      ],
+      "01 11": [
+        76,
+        3,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        56,
+        64,
+        84
+      ],
+      "01 20": [
+        36,
+        16,
+        64,
+        16,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        104
+      ],
+      "01 21": [
+        1,
+        0,
+        68,
+        62,
+        40,
+        72,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        96
+      ],
+      "01 22": [
+        6,
+        113,
+        24,
+        127,
+        17,
+        120,
+        88,
+        64,
+        96,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 23": [
+        0,
+        0,
+        16,
+        11,
+        24,
+        104,
+        90,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        104
+      ],
+      "01 24": [
+        10,
+        5,
+        95,
+        79,
+        90,
+        54,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        96
+      ],
+      "01 25": [
+        1,
+        60,
+        96,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 26": [
+        1,
+        60,
+        96,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 30": [
+        72,
+        100,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        104
+      ],
+      "01 31": [
+        85,
+        3,
+        16,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        127
+      ],
+      "01 40": [
+        24,
+        8,
+        127,
+        5,
+        66,
+        16,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        112
+      ],
+      "01 41": [
+        16,
+        8,
+        40,
+        40,
+        60,
+        96,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 42": [
+        0,
+        0,
+        10,
+        8,
+        111,
+        0,
+        90,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        104
+      ],
+      "01 43": [
+        32,
+        8,
+        127,
+        90,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        96
+      ],
+      "01 44": [
+        10,
+        8,
+        72,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        80
+      ],
+      "01 50": [
+        101,
+        116,
+        88,
+        1,
+        0,
+        0,
+        0,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        48,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 51": [
+        90,
+        108,
+        null,
+        1,
+        12,
+        21,
+        90,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        40,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 52": [
+        20,
+        0,
+        7,
+        80,
+        127,
+        127,
+        127,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        48,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 53": [
+        60,
+        20,
+        40,
+        0,
+        127,
+        127,
+        127,
+        127,
+        80,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        48,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 54": [
+        60,
+        80,
+        80,
+        127,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        48,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 55": [
+        3,
+        112,
+        120,
+        104,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 56": [
+        0,
+        5,
+        12,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        42,
+        64,
+        61,
+        0,
+        112
+      ],
+      "01 57": [
+        116,
+        106,
+        110,
+        80,
+        40,
+        64,
+        64,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        48,
+        64,
+        64,
+        0,
+        127
+      ],
+      "01 60": [
+        71,
+        62,
+        0,
+        127,
+        59,
+        66,
+        0,
+        0,
+        2,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        48,
+        64,
+        64,
+        0,
+        95
+      ],
+      "01 61": [
+        71,
+        64,
+        84,
+        95,
+        2,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        58,
+        0,
+        127
+      ],
+      "01 70": [
+        64,
+        25,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127
+      ],
+      "01 71": [
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127
+      ],
+      "01 72": [
+        1,
+        5,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127,
+        64,
+        64,
+        64,
+        127
+      ],
+      "01 73": [
+        1,
+        1,
+        36,
+        0,
+        64,
+        1,
+        127,
+        0,
+        0,
+        127,
+        0,
+        0,
+        127,
+        0,
+        1,
+        127,
+        64,
+        64,
+        64,
+        127
+      ],
+      "02 00": [
+        48,
+        64,
+        1,
+        0,
+        0,
+        10,
+        8,
+        72,
+        0,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        80
+      ],
+      "02 01": [
+        48,
+        64,
+        1,
+        0,
+        0,
+        16,
+        11,
+        40,
+        104,
+        32,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        80
+      ],
+      "02 02": [
+        48,
+        64,
+        1,
+        0,
+        0,
+        111,
+        80,
+        127,
+        0,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        80
+      ],
+      "02 03": [
+        48,
+        64,
+        1,
+        0,
+        0,
+        10,
+        8,
+        72,
+        0,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        72
+      ],
+      "02 04": [
+        48,
+        64,
+        1,
+        0,
+        0,
+        11,
+        11,
+        24,
+        104,
+        32,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        72
+      ],
+      "02 05": [
+        48,
+        64,
+        1,
+        0,
+        0,
+        111,
+        80,
+        127,
+        0,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        72
+      ],
+      "02 06": [
+        64,
+        127,
+        0,
+        0,
+        0,
+        64,
+        8,
+        101,
+        0,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        80
+      ],
+      "02 07": [
+        64,
+        127,
+        0,
+        0,
+        0,
+        16,
+        11,
+        24,
+        104,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        96
+      ],
+      "02 08": [
+        64,
+        127,
+        0,
+        0,
+        0,
+        111,
+        80,
+        127,
+        0,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        88
+      ],
+      "02 09": [
+        10,
+        9,
+        120,
+        0,
+        64,
+        111,
+        null,
+        127,
+        0,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        127
+      ],
+      "02 0A": [
+        16,
+        11,
+        24,
+        104,
+        64,
+        111,
+        null,
+        127,
+        0,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        127
+      ],
+      "02 0B": [
+        10,
+        8,
+        120,
+        0,
+        64,
+        16,
+        11,
+        24,
+        104,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        64,
+        64,
+        0,
+        112
+      ],
+      "03 00": [
+        13,
+        1,
+        64,
+        72,
+        0,
+        64,
+        64,
+        6,
+        113,
+        24,
+        127,
+        17,
+        120,
+        88,
+        64,
+        96,
+        0,
+        0,
+        0,
+        96
+      ],
+      "04 00": [
+        100,
+        80,
+        100,
+        1,
+        0,
+        80,
+        0,
+        1,
+        69,
+        74,
+        1,
+        0,
+        8,
+        30,
+        102,
+        40,
+        60,
+        34,
+        15,
+        110
+      ],
+      "04 01": [
+        70,
+        127,
+        90,
+        1,
+        0,
+        80,
+        2,
+        1,
+        1,
+        76,
+        56,
+        2,
+        69,
+        54,
+        0,
+        8,
+        96,
+        102,
+        0,
+        80
+      ],
+      "04 02": [
+        1,
+        60,
+        10,
+        1,
+        1,
+        80,
+        2,
+        1,
+        64,
+        64,
+        1,
+        0,
+        8,
+        0,
+        89,
+        50,
+        32,
+        64,
+        30,
+        88
+      ],
+      "04 03": [
+        50,
+        127,
+        75,
+        1,
+        76,
+        0,
+        2,
+        69,
+        52,
+        0,
+        8,
+        40,
+        79,
+        100,
+        24,
+        40,
+        127,
+        30,
+        0,
+        95
+      ],
+      "04 04": [
+        1,
+        55,
+        40,
+        29,
+        80,
+        1,
+        76,
+        72,
+        0,
+        64,
+        64,
+        0,
+        8,
+        20,
+        102,
+        100,
+        6,
+        15,
+        80,
+        76
+      ],
+      "04 05": [
+        72,
+        100,
+        75,
+        1,
+        0,
+        48,
+        0,
+        0,
+        1,
+        66,
+        72,
+        1,
+        68,
+        64,
+        0,
+        5,
+        20,
+        102,
+        64,
+        76
+      ],
+      "04 06": [
+        64,
+        64,
+        36,
+        16,
+        32,
+        16,
+        64,
+        0,
+        127,
+        10,
+        8,
+        64,
+        104,
+        127,
+        1,
+        2,
+        60,
+        64,
+        1,
+        127
+      ],
+      "05 00": [
+        50,
+        20,
+        67,
+        0,
+        2,
+        69,
+        61,
+        71,
+        64,
+        0,
+        39,
+        36,
+        8,
+        90,
+        80,
+        75,
+        20,
+        64,
+        40,
+        96
+      ],
+      "11 00": [
+        10,
+        8,
+        120,
+        0,
+        64,
+        111,
+        80,
+        127,
+        0,
+        40,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127,
+        127,
+        127,
+        96
+      ],
+      "11 01": [
+        16,
+        11,
+        24,
+        104,
+        64,
+        111,
+        80,
+        127,
+        0,
+        48,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127,
+        127,
+        127,
+        96
+      ],
+      "11 02": [
+        16,
+        8,
+        120,
+        0,
+        64,
+        16,
+        11,
+        24,
+        104,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        127,
+        127,
+        127,
+        88
+      ],
+      "11 03": [
+        0,
+        48,
+        1,
+        1,
+        0,
+        1,
+        76,
+        3,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        96,
+        127,
+        84,
+        127
+      ],
+      "11 04": [
+        0,
+        48,
+        1,
+        1,
+        0,
+        6,
+        113,
+        24,
+        127,
+        17,
+        120,
+        88,
+        64,
+        96,
+        0,
+        0,
+        96,
+        127,
+        127,
+        127
+      ],
+      "11 05": [
+        0,
+        48,
+        1,
+        1,
+        0,
+        36,
+        16,
+        64,
+        16,
+        127,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        96,
+        127,
+        127,
+        127
+      ],
+      "11 06": [
+        0,
+        48,
+        1,
+        1,
+        0,
+        1,
+        0,
+        68,
+        62,
+        40,
+        72,
+        1,
+        0,
+        0,
+        0,
+        0,
+        96,
+        127,
+        127,
+        127
+      ],
+      "11 07": [
+        36,
+        16,
+        64,
+        16,
+        127,
+        6,
+        113,
+        24,
+        127,
+        17,
+        120,
+        88,
+        64,
+        96,
+        0,
+        0,
+        127,
+        127,
+        127,
+        127
+      ],
+      "11 08": [
+        36,
+        16,
+        64,
+        16,
+        127,
+        1,
+        0,
+        68,
+        62,
+        40,
+        72,
+        1,
+        0,
+        0,
+        0,
+        0,
+        127,
+        127,
+        127,
+        127
+      ]
     }
   },
   "map": [

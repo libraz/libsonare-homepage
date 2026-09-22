@@ -235,10 +235,16 @@ function measureAudibility(wasm, types) {
   });
 }
 
+/**
+ * Indented so an engine change reads as a reviewable diff rather than one
+ * rewritten line. Vite minifies the import, so the width costs nothing shipped.
+ * `biome.jsonc` excludes this directory, or the formatter and this function
+ * would take turns rewriting the same files.
+ */
 function write(file, payload, sources) {
   const target = path.join(OUT_DIR, file);
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(target, `${JSON.stringify({ _sources: sources, ...payload })}\n`);
+  fs.writeFileSync(target, `${JSON.stringify({ _sources: sources, ...payload }, null, 2)}\n`);
   return { target, bytes: fs.statSync(target).size };
 }
 
