@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue';
+import { estText, wrapLabel } from './text';
 
 interface Participant {
   id: string;
@@ -28,35 +29,31 @@ const props = withDefaults(
 
 const uid = useId();
 
-const BOX_H = 32;
+const PART_FONT = 13;
+const MSG_FONT = 11;
+const MSG_WRAP_W = 150;
+
+const BOX_H = 34;
 const MSG_PITCH = 44;
 const SELF_PITCH = 54;
 const LOOP_TOP = 22;
 const LOOP_BOTTOM = 18;
 const FRAME_SIDE = 34;
 
-/**
- * Estimate rendered text width without DOM measurement (SSR-safe).
- * CJK glyphs advance ~1em; Latin averages are tuned for Inter /
- * JetBrains Mono at UI sizes, with padding absorbing the error.
- */
-function estText(s: string, size: number, mono = false): number {
-  let w = 0;
-  for (const ch of s) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (cp > 0x2e7f) w += 1;
-    else if (mono) w += 0.62;
-    else if (/[A-Z0-9@#%&_-]/.test(ch)) w += 0.68;
-    else if (/[ijl.,:;'"!|()[\] ]/.test(ch)) w += 0.34;
-    else w += 0.56;
-  }
-  return w * size;
+/** A message label as drawn: its lines and the plate they sit on. */
+function msgPlate(text: string) {
+  const lines = wrapLabel(text, MSG_WRAP_W, MSG_FONT, true);
+  return {
+    lines,
+    w: Math.max(...lines.map((l) => estText(l, MSG_FONT, true))) + 14,
+    h: lines.length * 14 + 4,
+  };
 }
 
 const layout = computed(() => {
   const ps = props.participants;
   const idx = new Map(ps.map((p, i) => [p.id, i]));
-  const boxW = ps.map((p) => Math.max(88, Math.ceil(estText(p.label, 12)) + 28));
+  const boxW = ps.map((p) => Math.max(88, Math.ceil(estText(p.label, PART_FONT)) + 28));
 
   // Per-gap width requirements from the messages that cross each gap.
   const gaps: number[] = new Array(Math.max(ps.length - 1, 0)).fill(120);
@@ -64,7 +61,7 @@ const layout = computed(() => {
     const f = idx.get(m.from);
     const t = idx.get(m.to);
     if (f === undefined || t === undefined) continue;
-    const labelW = estText(m.label, 10.5, true);
+    const labelW = msgPlate(m.label).w;
     if (f === t) {
       // Self-message loops out to the right: widen that gap.
       if (f < gaps.length) gaps[f] = Math.max(gaps[f], labelW + 64);
@@ -94,11 +91,14 @@ const layout = computed(() => {
   const blockStart = new Map(blocks.map((b) => [b.start, b]));
   const blockEnd = new Set(blocks.map((b) => b.end));
 
-  // Vertical rhythm.
+  // Vertical rhythm. A wrapped label needs its extra line above the arrow.
+  const plates = props.messages.map((m) => msgPlate(m.label));
+  const extra = (i: number) => Math.max(0, plates[i].h - 18);
   const ys: number[] = [];
   let y = BOX_H + 34;
   for (let i = 0; i < props.messages.length; i++) {
     if (blockStart.has(i)) y += LOOP_TOP;
+    y += extra(i);
     ys.push(y);
     const m = props.messages[i];
     y += m.from === m.to ? SELF_PITCH : MSG_PITCH;
@@ -114,6 +114,8 @@ const layout = computed(() => {
     labelX: number;
     labelY: number;
     labelW: number;
+    labelH: number;
+    labelLines: string[];
     labelAnchor: 'middle' | 'start';
   }
   const arrows: Arrow[] = [];
@@ -129,7 +131,8 @@ const layout = computed(() => {
     const my = ys[i];
     const dashed = m.type === 'async' || m.type === 'return';
     const soft = m.type === 'return';
-    const labelW = estText(m.label, 10.5, true) + 14;
+    const plate = plates[i];
+    const labelW = plate.w;
 
     if (f === t) {
       const sx = cx[f];
@@ -138,8 +141,10 @@ const layout = computed(() => {
         dashed,
         soft,
         labelX: sx + 16,
-        labelY: my - 9,
+        labelY: my - 4 - plate.h / 2,
         labelW,
+        labelH: plate.h,
+        labelLines: plate.lines,
         labelAnchor: 'start',
       });
       xs.push(sx + 16 + labelW, sx + 58);
@@ -152,8 +157,10 @@ const layout = computed(() => {
         dashed,
         soft,
         labelX: (sx + cx[t]) / 2,
-        labelY: my - 9,
+        labelY: my - 4 - plate.h / 2,
         labelW,
+        labelH: plate.h,
+        labelLines: plate.lines,
         labelAnchor: 'middle',
       });
     }
@@ -180,10 +187,10 @@ const layout = computed(() => {
     if (involved.length === 0) continue;
     const x0 = Math.min(...involved.map((i) => cx[i])) - FRAME_SIDE;
     const x1 = Math.max(...involved.map((i) => cx[i])) + FRAME_SIDE;
-    const y0 = ys[b.start] - 28;
+    const y0 = ys[b.start] - 28 - extra(b.start);
     const y1 = ys[b.end] + (props.messages[b.end].from === props.messages[b.end].to ? 30 : 14);
     const chipText = `LOOP · ${b.label.toUpperCase()}`;
-    const chipW = estText(chipText, 9.5, true) * 1.06 + 18;
+    const chipW = estText(chipText, 10, true) * 1.06 + 18;
     frames.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, chipW, label: chipText });
     xs.push(x0 - 4, x1 + 4, x0 + 10 + chipW);
   }
@@ -218,7 +225,7 @@ const ariaLabel = computed(() => props.title ?? 'Sequence diagram');
     <svg
       class="doc-diagram-svg"
       :viewBox="layout.viewBox"
-      :style="{ maxWidth: `${layout.width}px`, minWidth: `${layout.width * 0.6}px` }"
+      :style="{ maxWidth: `${layout.width}px`, minWidth: `${Math.round(layout.width * 0.8)}px` }"
       role="img"
       :aria-label="ariaLabel"
       xmlns="http://www.w3.org/2000/svg"
@@ -268,19 +275,20 @@ const ariaLabel = computed(() => props.title ?? 'Sequence diagram');
         <rect
           class="sd-msg-label-bg"
           :x="a.labelAnchor === 'middle' ? a.labelX - a.labelW / 2 : a.labelX - 4"
-          :y="a.labelY - 8"
+          :y="a.labelY - a.labelH / 2"
           :width="a.labelW"
-          height="16"
+          :height="a.labelH"
           rx="4"
         />
-        <text
-          class="sd-msg-label"
-          :x="a.labelX"
-          :y="a.labelY"
-          :text-anchor="a.labelAnchor"
-          dy="0.34em"
-        >
-          {{ messages[i].label }}
+        <text class="sd-msg-label" :x="a.labelX" :y="a.labelY" :text-anchor="a.labelAnchor">
+          <tspan
+            v-for="(line, li) in a.labelLines"
+            :key="li"
+            :x="a.labelX"
+            :dy="li === 0 ? (a.labelLines.length > 1 ? '-0.25em' : '0.34em') : '1.25em'"
+          >
+            {{ line }}
+          </tspan>
         </text>
       </g>
 
@@ -316,7 +324,7 @@ const ariaLabel = computed(() => props.title ?? 'Sequence diagram');
 
 .sd-part-label {
   font-family: var(--font-reading);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   fill: var(--color-text-primary);
 }
@@ -346,7 +354,7 @@ const ariaLabel = computed(() => props.title ?? 'Sequence diagram');
 
 .sd-msg-label {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   fill: var(--color-text-secondary);
 }
 
@@ -364,7 +372,7 @@ const ariaLabel = computed(() => props.title ?? 'Sequence diagram');
 
 .sd-loop-label {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.08em;
   fill: var(--color-brand);

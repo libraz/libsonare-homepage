@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue';
+import { estText, roundedPath, wrapLabel } from './text';
 
 /** A single node placed on the author-chosen grid. */
 interface FlowNode {
@@ -43,40 +44,46 @@ const props = withDefaults(
 
 const uid = useId();
 
-const NODE_H = 40;
-const LANE_GAP_LR = 36;
+const NODE_H = 44;
+const NODE_H_WRAPPED = 58;
+const NODE_FONT = 13.5;
+const NODE_PAD_X = 28;
+const NODE_MIN_W = 80;
+const NODE_WRAP_W = 150;
+const EDGE_FONT = 11;
+const EDGE_WRAP_W = 120;
+const LANE_GAP_LR = 38;
 const LANE_GAP_TB = 44;
 const STEP_GAP_TB = 56;
 const GROUP_PAD = 14;
 const GROUP_PAD_LABEL_TOP = 28;
 
-/**
- * Estimate rendered text width without DOM measurement (SSR-safe).
- * CJK glyphs advance ~1em; Latin averages are tuned for Inter /
- * JetBrains Mono at UI sizes, with box padding absorbing the error.
- */
-function estText(s: string, size: number, mono = false): number {
-  let w = 0;
-  for (const ch of s) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (cp > 0x2e7f) w += 1;
-    else if (mono) w += 0.62;
-    else if (/[A-Z0-9@#%&_ワ-]/.test(ch)) w += 0.68;
-    else if (/[ijl.,:;'"!|()[\] ]/.test(ch)) w += 0.34;
-    else w += 0.56;
-  }
-  return w * size;
+/** An edge label as drawn: its lines and the plate they sit on. */
+function edgeLabelBox(text: string, x: number, y: number) {
+  const lines = wrapLabel(text, EDGE_WRAP_W, EDGE_FONT, true);
+  return {
+    lines,
+    x,
+    y,
+    w: Math.max(...lines.map((l) => estText(l, EDGE_FONT, true))) + 14,
+    h: lines.length * 14 + 4,
+  };
 }
 
-interface Rect {
+/** Anything a route has to steer around: a node box or a group's label chip. */
+interface Obstacle {
   id: string;
-  label: string;
   x: number;
   y: number;
   w: number;
   h: number;
   cx: number;
   cy: number;
+}
+
+interface Rect extends Obstacle {
+  label: string;
+  lines: string[];
   rx: number;
   variant: string;
 }
@@ -96,10 +103,16 @@ const layout = computed(() => {
   const stepOf = (n: FlowNode) => (LR ? n.col : n.row);
   const laneOf = (n: FlowNode) => (LR ? n.row : n.col);
 
+  const labelLines = new Map<string, string[]>();
   const widths = new Map<string, number>();
   for (const n of props.nodes) {
-    widths.set(n.id, Math.max(84, Math.ceil(estText(n.label, 12.5)) + 32));
+    const lines = wrapLabel(n.label, NODE_WRAP_W, NODE_FONT);
+    labelLines.set(n.id, lines);
+    const textW = Math.max(...lines.map((l) => estText(l, NODE_FONT)));
+    widths.set(n.id, Math.max(NODE_MIN_W, Math.ceil(textW) + NODE_PAD_X));
   }
+  // One height for every box in a figure, tall enough for the wrapped ones.
+  const nodeH = [...labelLines.values()].some((l) => l.length > 1) ? NODE_H_WRAPPED : NODE_H;
 
   // Map sparse author coordinates to dense ordinal indices.
   const stepVals = [...new Set(props.nodes.map(stepOf))].sort((a, b) => a - b);
@@ -107,11 +120,25 @@ const layout = computed(() => {
   const stepIdx = new Map(stepVals.map((v, i) => [v, i]));
   const laneIdx = new Map(laneVals.map((v, i) => [v, i]));
 
-  const maxEdgeLabel = Math.max(
-    0,
-    ...props.edges.filter((e) => e.label).map((e) => estText(e.label as string, 10, true)),
-  );
-  const stepGapLR = Math.max(64, Math.min(150, maxEdgeLabel + 28));
+  // Only the gap a labelled one-step edge actually sits in is widened for it;
+  // a label on a longer edge rides the detour lane instead of the gap.
+  const stepGaps = new Array(Math.max(0, stepVals.length - 1)).fill(46);
+  let sidewaysLabelW = 0;
+  for (const e of props.edges) {
+    if (!e.label) continue;
+    const sn = props.nodes.find((n) => n.id === e.from);
+    const tn = props.nodes.find((n) => n.id === e.to);
+    if (!sn || !tn) continue;
+    const si = stepIdx.get(stepOf(sn)) as number;
+    const ti = stepIdx.get(stepOf(tn)) as number;
+    const plate = edgeLabelBox(e.label, 0, 0);
+    if (Math.abs(ti - si) !== 1) {
+      sidewaysLabelW = Math.max(sidewaysLabelW, plate.w);
+      continue;
+    }
+    const g = Math.min(si, ti);
+    stepGaps[g] = Math.max(stepGaps[g], Math.min(150, plate.w + 12));
+  }
 
   const rects = new Map<string, Rect>();
 
@@ -126,14 +153,14 @@ const layout = computed(() => {
     let x = 0;
     for (let i = 0; i < stepW.length; i++) {
       stepX.push(x);
-      x += stepW[i] + stepGapLR;
+      x += stepW[i] + (stepGaps[i] ?? 0);
     }
     for (const n of props.nodes) {
       const si = stepIdx.get(stepOf(n)) as number;
       const li = laneIdx.get(laneOf(n)) as number;
       const w = widths.get(n.id) as number;
       const nx = stepX[si] + (stepW[si] - w) / 2;
-      const ny = li * (NODE_H + LANE_GAP_LR);
+      const ny = li * (nodeH + LANE_GAP_LR);
       rects.set(n.id, makeRect(n, nx, ny, w));
     }
   } else {
@@ -143,18 +170,21 @@ const layout = computed(() => {
         ...props.nodes.filter((n) => laneOf(n) === v).map((n) => widths.get(n.id) as number),
       ),
     );
+    // A label on an edge that does not join neighbouring steps rides a lane
+    // gap here rather than a step gap, so the lanes carry the room for it.
+    const laneGap = Math.max(LANE_GAP_TB, sidewaysLabelW + 16);
     const laneX: number[] = [];
     let x = 0;
     for (let i = 0; i < laneW.length; i++) {
       laneX.push(x);
-      x += laneW[i] + LANE_GAP_TB;
+      x += laneW[i] + laneGap;
     }
     for (const n of props.nodes) {
       const si = stepIdx.get(stepOf(n)) as number;
       const li = laneIdx.get(laneOf(n)) as number;
       const w = widths.get(n.id) as number;
       const nx = laneX[li] + (laneW[li] - w) / 2;
-      const ny = si * (NODE_H + STEP_GAP_TB);
+      const ny = si * (nodeH + STEP_GAP_TB);
       rects.set(n.id, makeRect(n, nx, ny, w));
     }
   }
@@ -164,20 +194,28 @@ const layout = computed(() => {
     return {
       id: n.id,
       label: n.label,
+      lines: labelLines.get(n.id) as string[],
       x,
       y,
       w,
-      h: NODE_H,
+      h: nodeH,
       cx: x + w / 2,
-      cy: y + NODE_H / 2,
-      rx: variant === 'decision' ? NODE_H / 2 : 8,
+      cy: y + nodeH / 2,
+      rx: variant === 'decision' ? nodeH / 2 : 8,
       variant,
     };
   }
 
   // Group frames (mermaid subgraph replacement).
-  const groupFrames: { id: string; label: string; x: number; y: number; w: number; h: number }[] =
-    [];
+  const groupFrames: {
+    id: string;
+    label: string;
+    labelW: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }[] = [];
   for (const g of props.groups) {
     const members = props.nodes.filter((n) => n.group === g.id).map((n) => rects.get(n.id) as Rect);
     if (members.length === 0) continue;
@@ -186,21 +224,175 @@ const layout = computed(() => {
     const padTop = g.label ? GROUP_PAD_LABEL_TOP : GROUP_PAD;
     const minY = Math.min(...members.map((r) => r.y)) - padTop;
     const maxY = Math.max(...members.map((r) => r.y + r.h)) + 12;
-    const minW = g.label ? estText(g.label, 9.5, true) * 1.1 + 26 : 0;
+    const labelW = g.label ? estText(g.label, 9.5, true) * 1.1 + 8 : 0;
     groupFrames.push({
       id: g.id,
       label: g.label ? g.label.toUpperCase() : '',
+      labelW,
       x: minX,
       y: minY,
-      w: Math.max(maxX - minX, minW),
+      w: Math.max(maxX - minX, labelW + 18),
       h: maxY - minY,
     });
   }
 
   // Edges.
   const edgePaths: { d: string; dashed: boolean }[] = [];
-  const edgeLabels: { text: string; x: number; y: number; w: number }[] = [];
+  const edgeLabels: ReturnType<typeof edgeLabelBox>[] = [];
   const extraPoints: [number, number][] = [];
+
+  const rectList = [...rects.values()];
+  // A group's label chip is drawn inside its frame, so a detour lane has to
+  // keep clear of it the way it keeps clear of a box.
+  const routeBlockers: Obstacle[] = [
+    ...rectList,
+    ...groupFrames
+      .filter((g) => g.label)
+      .map((g) => ({
+        id: `group-${g.id}`,
+        x: g.x + 8,
+        y: g.y + 4,
+        w: g.labelW,
+        h: 20,
+        cx: g.x + 8,
+        cy: g.y + 14,
+      })),
+  ];
+  const EDGE_BAND = 10;
+  const BYPASS_GAP = 22;
+  const BYPASS_R = 9;
+  /** Stands in for an unbounded channel edge, past any real coordinate. */
+  const OPEN = 1e5;
+
+  // Flow-axis and lane-axis extents of anything a route has to avoid.
+  const mainLo = (r: Obstacle, horiz: boolean) => (horiz ? r.x : r.y);
+  const mainHi = (r: Obstacle, horiz: boolean) => (horiz ? r.x + r.w : r.y + r.h);
+  const offLo = (r: Obstacle, horiz: boolean) => (horiz ? r.y : r.x);
+  const offHi = (r: Obstacle, horiz: boolean) => (horiz ? r.y + r.h : r.x + r.w);
+  const offMid = (r: Obstacle, horiz: boolean) => (horiz ? r.cy : r.cx);
+  const mainMid = (r: Obstacle, horiz: boolean) => (horiz ? r.cx : r.cy);
+
+  /** True when the direct route between two nodes would run through a third. */
+  function directBlocked(s: Rect, t: Rect, horiz: boolean): boolean {
+    const mLo = Math.min(mainHi(s, horiz), mainHi(t, horiz));
+    const mHi = Math.max(mainLo(s, horiz), mainLo(t, horiz));
+    const oLo = Math.min(offMid(s, horiz), offMid(t, horiz)) - EDGE_BAND;
+    const oHi = Math.max(offMid(s, horiz), offMid(t, horiz)) + EDGE_BAND;
+    return rectList.some(
+      (r) =>
+        r.id !== s.id &&
+        r.id !== t.id &&
+        mainHi(r, horiz) > mLo &&
+        mainLo(r, horiz) < mHi &&
+        offHi(r, horiz) > oLo &&
+        offLo(r, horiz) < oHi,
+    );
+  }
+
+  /** Faces the detour leaves from and arrives at, following the travel axis. */
+  function faces(s: Rect, t: Rect, horiz: boolean) {
+    const fwd = mainMid(t, horiz) >= mainMid(s, horiz);
+    return {
+      fwd,
+      exit: fwd ? mainHi(s, horiz) : mainLo(s, horiz),
+      entry: fwd ? mainLo(t, horiz) : mainHi(t, horiz),
+    };
+  }
+
+  /**
+   * The intervals of an axis that no box in `boxes` covers, the two outermost
+   * ones open-ended. A detour turning inside one of these crosses nothing,
+   * whatever it does on the other axis.
+   */
+  function freeSpans(boxes: Obstacle[], lo: (r: Obstacle) => number, hi: (r: Obstacle) => number) {
+    const used = boxes.map((r): [number, number] => [lo(r), hi(r)]).sort((a, b) => a[0] - b[0]);
+    const merged: [number, number][] = [];
+    for (const [a, b] of used) {
+      const last = merged[merged.length - 1];
+      if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+      else merged.push([a, b]);
+    }
+    if (merged.length === 0) return [[-OPEN, OPEN]] as [number, number][];
+    const free: [number, number][] = [[-OPEN, merged[0][0]]];
+    for (let i = 1; i < merged.length; i++) free.push([merged[i - 1][1], merged[i][0]]);
+    free.push([merged[merged.length - 1][1], OPEN]);
+    return free;
+  }
+
+  /** The point of `span` closest to `to`, keeping `want` clear of its edges. */
+  function nearestIn(span: [number, number], to: number, want = BYPASS_GAP): number {
+    const pad = Math.min(want, (span[1] - span[0]) / 2);
+    return Math.min(Math.max(to, span[0] + pad), span[1] - pad);
+  }
+
+  /** Where the detour turns off the travel axis: the nearest clear channel. */
+  function turnPoints(s: Rect, t: Rect, horiz: boolean): [number, number] {
+    const { fwd, exit, entry } = faces(s, t, horiz);
+    const spans = freeSpans(
+      routeBlockers,
+      (r) => mainLo(r, horiz),
+      (r) => mainHi(r, horiz),
+    ).filter((sp) => sp[1] - sp[0] >= 10);
+    const pick = (from: number, increasing: boolean) => {
+      const cands = spans.filter((sp) => (increasing ? sp[0] >= from - 0.5 : sp[1] <= from + 0.5));
+      const span = increasing ? cands[0] : cands[cands.length - 1];
+      if (!span) return from + (increasing ? 18 : -18);
+      return nearestIn(span, from);
+    };
+    return [pick(exit, fwd), pick(entry, !fwd)];
+  }
+
+  /**
+   * Off-axis coordinate of the detour lane: the nearest channel beside the
+   * route with room for `want` on either side, so a label rides it clear.
+   */
+  function bypassRun(s: Rect, t: Rect, horiz: boolean, want = BYPASS_GAP): number {
+    const [ma, mb] = turnPoints(s, t, horiz);
+    const runLo = Math.min(ma, mb);
+    const runHi = Math.max(ma, mb);
+    const blocking = routeBlockers.filter(
+      (r) => mainHi(r, horiz) > runLo && mainLo(r, horiz) < runHi && r.id !== s.id && r.id !== t.id,
+    );
+    const lane = (offMid(s, horiz) + offMid(t, horiz)) / 2;
+    const spans = freeSpans(
+      blocking,
+      (r) => offLo(r, horiz),
+      (r) => offHi(r, horiz),
+    ).filter((sp) => sp[1] - sp[0] >= 22);
+    if (spans.length === 0) return lane;
+    let best = nearestIn(spans[0], lane, want);
+    for (const sp of spans.slice(1)) {
+      const cand = nearestIn(sp, lane, want);
+      if (Math.abs(cand - lane) < Math.abs(best - lane)) best = cand;
+    }
+    return best;
+  }
+
+  /**
+   * Orthogonal detour: out of the source's face, aside to a clear lane in the
+   * gap next to it, along, and back into the target's facing side. Both turns
+   * happen in the gaps between boxes, so the detour crosses none of them.
+   */
+  function bypassEdge(s: Rect, t: Rect, horiz: boolean, runO: number) {
+    const xy = (m: number, o: number): [number, number] => (horiz ? [m, o] : [o, m]);
+    const { fwd, exit, entry } = faces(s, t, horiz);
+    const [ma, mb] = turnPoints(s, t, horiz);
+    const o0 = offMid(s, horiz);
+    const o1 = offMid(t, horiz);
+    const pts: [number, number][] = [
+      xy(exit, o0),
+      xy(ma, o0),
+      xy(ma, runO),
+      xy(mb, runO),
+      xy(mb, o1),
+      xy(entry + (fwd ? -1 : 1), o1),
+    ];
+    return {
+      d: roundedPath(pts, BYPASS_R),
+      mid: xy((ma + mb) / 2, runO),
+      ends: [xy(ma, runO), xy(mb, runO)],
+    };
+  }
 
   for (const e of props.edges) {
     const sn = props.nodes.find((n) => n.id === e.from);
@@ -209,6 +401,22 @@ const layout = computed(() => {
     const s = rects.get(sn.id) as Rect;
     const t = rects.get(tn.id) as Rect;
     const ds = (stepIdx.get(stepOf(tn)) as number) - (stepIdx.get(stepOf(sn)) as number);
+
+    // An edge whose direct route would run through another box takes an
+    // orthogonal detour instead, carrying its label onto the clear lane.
+    // It travels along the flow axis, except between lanes of one step.
+    const travelHoriz = LR === (ds !== 0);
+    if (directBlocked(s, t, travelHoriz)) {
+      const plate = e.label ? edgeLabelBox(e.label, 0, 0) : undefined;
+      // The run has to clear the label's own plate, not just the line.
+      const want = plate ? (travelHoriz ? plate.h : plate.w) / 2 + 6 : 0;
+      const runO = bypassRun(s, t, travelHoriz, Math.max(BYPASS_GAP, want));
+      const { d, mid, ends } = bypassEdge(s, t, travelHoriz, runO);
+      edgePaths.push({ d, dashed: e.style === 'dashed' });
+      extraPoints.push(mid, ...ends);
+      if (e.label) edgeLabels.push(edgeLabelBox(e.label, mid[0], mid[1]));
+      continue;
+    }
 
     let p0: [number, number];
     let p1: [number, number];
@@ -274,14 +482,7 @@ const layout = computed(() => {
     });
     const mid = cubicMid(p0, p1, p2, p3);
     extraPoints.push(mid);
-    if (e.label) {
-      edgeLabels.push({
-        text: e.label,
-        x: mid[0],
-        y: mid[1],
-        w: estText(e.label, 10, true) + 14,
-      });
-    }
+    if (e.label) edgeLabels.push(edgeLabelBox(e.label, mid[0], mid[1]));
   }
 
   // Canvas bounds from every drawn element, then a symmetric viewBox pad.
@@ -326,7 +527,7 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
     <svg
       class="doc-diagram-svg"
       :viewBox="layout.viewBox"
-      :style="{ maxWidth: `${layout.width}px`, minWidth: `${layout.width * 0.6}px` }"
+      :style="{ maxWidth: `${layout.width}px`, minWidth: `${Math.round(layout.width * 0.8)}px` }"
       role="img"
       :aria-label="ariaLabel"
       xmlns="http://www.w3.org/2000/svg"
@@ -345,10 +546,16 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
         </marker>
       </defs>
 
-      <g v-for="g in layout.groupFrames" :key="`g-${g.id}`">
-        <rect class="fd-group" :x="g.x" :y="g.y" :width="g.w" :height="g.h" rx="10" />
-        <text v-if="g.label" class="fd-group-label" :x="g.x + 12" :y="g.y + 17">{{ g.label }}</text>
-      </g>
+      <rect
+        v-for="g in layout.groupFrames"
+        :key="`g-${g.id}`"
+        class="fd-group"
+        :x="g.x"
+        :y="g.y"
+        :width="g.w"
+        :height="g.h"
+        rx="10"
+      />
 
       <path
         v-for="(e, i) in layout.edgePaths"
@@ -359,17 +566,39 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
         :marker-end="`url(#${uid}-arrow)`"
       />
 
+      <!-- Group captions ride above the edges so a route cannot strike them out. -->
+      <g v-for="g in layout.groupFrames" :key="`gl-${g.id}`">
+        <template v-if="g.label">
+          <rect
+            class="fd-group-label-bg"
+            :x="g.x + 8"
+            :y="g.y + 6"
+            :width="g.labelW"
+            height="17"
+            rx="4"
+          />
+          <text class="fd-group-label" :x="g.x + 12" :y="g.y + 17">{{ g.label }}</text>
+        </template>
+      </g>
+
       <g v-for="(l, i) in layout.edgeLabels" :key="`el-${i}`">
         <rect
           class="fd-edge-label-bg"
           :x="l.x - l.w / 2"
-          :y="l.y - 8"
+          :y="l.y - l.h / 2"
           :width="l.w"
-          height="16"
+          :height="l.h"
           rx="4"
         />
-        <text class="fd-edge-label" :x="l.x" :y="l.y" text-anchor="middle" dy="0.34em">
-          {{ l.text }}
+        <text class="fd-edge-label" :x="l.x" :y="l.y" text-anchor="middle">
+          <tspan
+            v-for="(line, li) in l.lines"
+            :key="li"
+            :x="l.x"
+            :dy="li === 0 ? (l.lines.length > 1 ? '-0.25em' : '0.34em') : '1.25em'"
+          >
+            {{ line }}
+          </tspan>
         </text>
       </g>
 
@@ -389,9 +618,15 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
           :x="n.cx"
           :y="n.cy"
           text-anchor="middle"
-          dy="0.35em"
         >
-          {{ n.label }}
+          <tspan
+            v-for="(line, li) in n.lines"
+            :key="li"
+            :x="n.cx"
+            :dy="li === 0 ? (n.lines.length > 1 ? '-0.25em' : '0.35em') : '1.2em'"
+          >
+            {{ line }}
+          </tspan>
         </text>
       </g>
     </svg>
@@ -427,7 +662,7 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
 
 .fd-edge-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   fill: var(--color-text-secondary);
 }
 
@@ -471,7 +706,7 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
 
 .fd-node-label {
   font-family: var(--font-reading);
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 500;
   fill: var(--color-text-primary);
 }
@@ -485,6 +720,10 @@ const ariaLabel = computed(() => props.title ?? 'Flow diagram');
   fill: color-mix(in srgb, var(--vp-c-brand-1) 4%, transparent);
   stroke: color-mix(in srgb, var(--vp-c-brand-1) 26%, transparent);
   stroke-width: 1;
+}
+
+.fd-group-label-bg {
+  fill: var(--dg-bg);
 }
 
 .fd-group-label {
