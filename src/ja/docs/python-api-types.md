@@ -272,7 +272,9 @@ class StreamStats:
 | ミキシング | `MixerStereoResult` |
 | プロジェクト | `AssistSidecar`（`project.get_assist_sidecar(index)` / `project.assist_sidecars()` の戻り値 — [プロジェクト編集](./project-editing-midi.md#アシストサイドカー) を参照）、`NotePairValidation` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
-| ビルド情報 | `Capabilities`, `CapabilityCatalog`, `MasteringInsertParamInfo`, `MasteringProcessorCatalogEntry`（[API サーフェス](./api-surface.md#機能カタログが返すもの) で説明している JSON ドキュメントに対応する `TypedDict`） |
+| ビルド情報 | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`（[API サーフェス](./api-surface.md#機能カタログが返すもの) で説明している JSON ドキュメントに対応する `TypedDict`） |
+
+`CapabilityCatalog["masteringPresets"]` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ `MasteringPresetCatalogEntry` を返します。修復プリセットでは 3 つの数値フィールドが `None` です。`MasteringProcessorCatalogEntry` の `slots` は条件付きキー群を列挙します。`MasteringInsertParamInfo` の記述子は `id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`、`choices`、`slot` を持ち、`MasteringInsertTiming` は指定したインサート構成の `latencySamples` と `tailSamples` を持ちます。
 
 ### 例外
 

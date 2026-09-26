@@ -220,6 +220,8 @@ Griffin-Lim は振幅のみからの反復再構成です。目標の振幅ス�
 
 `decomposeStems` はもう一方の経路を取ります。同じ分解を行ったうえで、成分ごとの**ソフトマスク**（各時間周波数点における、その成分が占める振幅の割合）を作り、それを**元の複素**スペクトログラムに適用します。推定は一切行いません。各成分はソース自身の位相をそのまま保ち、マスクは各点を近似するのではなく分配するため、成分は**足し合わせると入力に戻ります**。
 
+マルチチャンネルの録音には `decomposeStemsLinked`（Python では `decompose_stems_linked`）を使います。各チャンネルの振幅を平均して 1 つの NMF モデルとマスクを作り、そのマスクを各チャンネル固有の複素スペクトログラムへ同じまま適用します。チャンネル間のレベル差と位相差が保たれます。同じ長さのチャンネルを少なくとも 1 つ、最大 64 チャンネルまで渡してください。結果の `components[k][c]` が成分 `k` のチャンネル `c` を表し、共有された `w` と `h` も返します。NMF の既定値は `decomposeStems` と同じで、成分 4 個、`nFft` 2048、`hopLength` 512、反復 100 回、`beta: 2`、`init: 'random'`、`maskPower: 1` です。`decomposeStemsLinked` はサンプルレートを省略すると 22050 を使います。1 チャンネルなら、同じオプションを渡した `decomposeStems` とビット単位で一致します。
+
 | | `decompose` ＋ Griffin-Lim | `decomposeStems` |
 |---|---------------------------|------------------|
 | 位相 | 反復的に作り出す | ソース自身のもの |
@@ -227,7 +229,40 @@ Griffin-Lim は振幅のみからの反復再構成です。目標の振幅ス�
 | 成分の総和が入力に戻るか | 戻らない | 戻る |
 | 向いている用途 | 成分が何を含むかを見る・聴く | そのまま使い続ける分離音声 |
 
-成分を聴かせる、ミックスに載せる、ファイルに書き出す — そうした場合は `decomposeStems` を選んでください。Griffin-Lim の経路は、このページ本来の目的、つまり特徴量表現に何が残っているかを確認する用途に向いています。シグネチャと環境ごとの名前（`decomposeStems`、`decompose_stems`）は [JavaScript API](./js-api-analysis.md) と [Python API](./python-api.md) にあります。
+モノラルの成分を聴かせる、ミックスに載せる、ファイルに書き出す場合は `decomposeStems` を使います。複数チャンネルで分離を共有し、相対的なレベルと位相を保つ場合は `decomposeStemsLinked` を使います。Griffin-Lim の経路は、特徴量表現に何が残っているかを確認する用途に向いています。シグネチャと環境ごとの名前（`decomposeStems`、`decomposeStemsLinked`、`decompose_stems`、`decompose_stems_linked`）は [JavaScript API](./js-api-features.md) と [Python API](./python-api-analysis.md) にあります。
+
+::: code-group
+
+```typescript [Browser]
+import { init, decomposeStemsLinked } from '@libraz/libsonare';
+
+await init();
+const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
+```typescript [Node]
+import { decomposeStemsLinked } from '@libraz/libsonare-native';
+
+const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
+```python [Python]
+import libsonare as sonare
+
+linked = sonare.decompose_stems_linked([left_channel, right_channel], sample_rate=sample_rate)
+first_left = linked["components"][0][0]
+first_right = linked["components"][0][1]
+```
+
+```bash [CLI]
+# CLI はモノラルの `decompose-stems` だけを提供します。連動したチャンネルにはライブラリ API を使います。
+```
+
+:::
 
 ## 往復の動作確認
 

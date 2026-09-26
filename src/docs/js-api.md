@@ -243,11 +243,11 @@ and the built-in preset lists. It is the same canonical JSON the C ABI publishes
 and Python exposes as `capability_catalog`, validated against
 `schemas/capability-catalog.schema.json`.
 
-The catalog carries real values: across the 88 processors it publishes, every one
-of the 1147 parameters reports a non-null `default`; 316 report a non-null `min`
-and 193 a non-null `max`. The remaining 802 report `null` on both bounds — a
-`null` means the catalog knows of no limit for that parameter, not that bounds
-are unavailable in general.
+The catalog carries real values: the current build publishes 89 processors and
+5,352 parameter descriptors. Defaults can be `null` when a construction key has
+no fallback. Bounds are measured with the processor's other parameters at their
+defaults; a `null` bound means the catalog knows of no limit on that side, not
+that bounds are unavailable in general.
 
 ::: warning Bounds are measured, and a measured bound has caveats
 A published bound is **a hard constraint on what may be sent, not a recommended
@@ -283,13 +283,21 @@ function capabilityCatalog(): {
     category: string;
     params: Array<{
       name: string;
-      id: number;
+      id: number | null;
       rtSafe: boolean;
-      type: 'boolean' | 'number';
+      type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
       min: number | null;
       max: number | null;
       default: boolean | number | null;
       unit: string | null;
+      choices: Array<{ name: string; value: number }> | null;
+      slot: string | null;
+    }>;
+    slots: Array<{
+      name: string;
+      parent: string | null;
+      activation: 'anyKey' | 'always';
+      minCrossoverCutoffs: number;
     }>;
   }>;
   presets: {
@@ -298,6 +306,13 @@ function capabilityCatalog(): {
     mixingScene: string[];
     voiceChanger: string[];
   };
+  masteringPresets: Array<{
+    name: string;
+    kind: 'mastering' | 'restoration';
+    targetLufs: number | null;
+    truePeakCeilingDb: number | null;
+    maxLimiterGainReductionDb: number | null;
+  }>;
 }
 ```
 
@@ -306,10 +321,11 @@ default comes from the catalog rather than from a table you maintain by hand. A
 bound the core does not know is reported as an explicit `null` — treat that as
 "unbounded/unknown", not as zero.
 
-The per-band EQ surfaces publish a `type` and a `default` for every band field,
-so a generic UI can lay out the bands without a hand-written table:
-`eq.parametric` publishes 72 parameters, `eq.midSide` 144 and
-`multiband.dynamicEq` 264. Publishing those defaults does not change which keys
+The per-band EQ surfaces publish a descriptor for every indexed band field, so a
+generic UI can lay out the bands without a hand-written table. These descriptors
+now include construction keys as well as automation targets; use `id !== null`
+to select automation targets, and use `slot` plus the processor's `slots` array
+for conditional band groups. Publishing descriptors does not change which keys
 count as *read*, though — a band you supply incompletely still reports its stray
 keys as ignored, exactly as before.
 

@@ -40,6 +40,7 @@ The table below is the reader-facing companion to that matrix: each feature fami
 |----------------|------------------|-----|
 | Batch analysis | Yes | Yes |
 | Low-level features and librosa helpers | Yes | Common commands |
+| NMF stem separation (`decomposeStems` / `decomposeStemsLinked`, `decompose_stems` / `decompose_stems_linked`) | Yes — WASM, Node, Python, C ABI | `decompose-stems` for mono input only |
 | Constant-Q chroma (`chromaCqt` / `chroma_cqt`) | Yes — WASM, Node, Python, C ABI | No |
 | Streaming analyzer and processors (`StreamAnalyzer`, `StreamingEqualizer`, `StreamingMasteringChain`) | Yes | No |
 | Mel/MFCC inverse reconstruction | Yes | No |
@@ -83,7 +84,8 @@ These functions exist across the library bindings but take their arguments diffe
 
 | Function | WASM | Node native | Python |
 |----------|------|-------------|--------|
-| `detectChords` / `detect_chords` | options object | positional / keyword params | positional / keyword params |
+| `detectChords` / `detect_chords` | options object | options object or legacy positional params | positional / keyword params |
+| `decomposeStemsLinked` / `decompose_stems_linked` | request object with planar `channels` | request object with planar `channels` | planar channel sequence or 2-D array, positional/keyword options |
 | Streaming reads | `process`, `readFrames`, `stats` | float Structure-of-Arrays read is `readFramesSoa` | `process`, `read_frames`, `stats` |
 | Quantized stream reads | `readFramesI16` / `readFramesU8` (legacy `StreamConfig.outputFormat` must be `0`) | same as WASM | `read_frames_i16` / `read_frames_u8` (legacy `output_format` must be `0`) |
 | `Mixer` strip references | numeric index; `stripById(id)` for lookup | numeric index or strip-id string | numeric index or strip-id string |

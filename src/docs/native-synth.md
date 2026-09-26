@@ -288,10 +288,13 @@ The patch exposes the shared controls every engine uses:
 | LFOs & glide | `lfoRateHz`, `lfoToPitchCents`, `lfo2RateHz`, `glideMs` |
 | Body resonance | `body` (`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`), `bodyMix` (0-1) |
 | Stereo & output | `stereoSpread` (0-1), `gain` (linear), `polyphony` (1-64), `busDrive` (0-1) |
+| Voice start state | `retrigger` (`'default'` / `'free'` / `'note'`) |
 | Mod matrix | `modRoutings` (up to 8) |
 | Binding (JS only) | `destinationId` (default `0`) |
 
 (*Polyphony* is how many notes can sound at once; a *voice* is one sounding note, and *voice stealing* cuts the oldest note when you run out.)
+
+`retrigger` chooses the seed used when each voice starts. `'default'` keeps the base patch's choice; every catalog preset uses `'free'`. `'free'` varies oscillator start phases, unison jitter, drift, and each engine's noise stream from the voice pool slot and running note count, so repeated notes generally differ. `'note'` derives those values from the MIDI note number alone, so playing the same note again after its tail ends renders the same samples. The setting applies to each voice's start state. It does not reset controllers, the bus DC blocker, a piano's shared soundboard, a plucked string's sympathetic halo, an organ's wind chest, or effect tails. The `drum-kit` preset keeps its own mode for each drum piece.
 
 ::: info LFO 2 needs a routing
 The two LFOs behave differently. LFO 1 (`lfoRateHz` + `lfoToPitchCents`) is hardwired to pitch and produces vibrato on its own. LFO 2 is matrix-only: setting `lfo2RateHz` does nothing until a `modRoutings` entry uses `source: 'lfo2'` to send it to a destination.
@@ -345,6 +348,8 @@ synthEnumTables();
 ```
 
 The same arrays are also exported as named constants (`SYNTH_ENGINE_MODES`, `SYNTH_OSC_WAVEFORMS`, `SYNTH_FILTER_MODELS`, `SYNTH_FILTER_OUTPUTS`, `SYNTH_BODY_TYPES`, `SYNTH_MOD_SOURCES`, `SYNTH_MOD_DESTINATIONS`, plus `BUILTIN_SYNTH_WAVEFORMS`). Note the index 0 in most tables is `'default'` (keep the base value); `modSources` / `modDestinations` use `'none'` instead.
+
+Node and WASM expose this field as `SynthPatch.retrigger`, and Python uses the same `SynthPatch.retrigger` attribute. Its TypeScript union is `SynthRetrigger`, and `SYNTH_RETRIGGERS` is the exported name table `['default', 'free', 'note']`. This table is separate from the object returned by `synthEnumTables()`. The C API names the matching enum `SonareSynthRetrigger` and its values `SONARE_SYNTH_RETRIGGER_BASE`, `SONARE_SYNTH_RETRIGGER_FREE`, and `SONARE_SYNTH_RETRIGGER_NOTE`.
 
 `builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` is a separate list: it belongs to the minimal built-in oscillator synth (`setBuiltinInstrument`), not to NativeSynth's `waveform` field. It has no `'default'` entry, accepts `'sawtooth'` as well as `'saw'`, and does **not** accept `'noise'`.
 

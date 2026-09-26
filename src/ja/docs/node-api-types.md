@@ -262,9 +262,10 @@ interface MeteringStereoRequest {
 | 分野 | エクスポートされる型 |
 |------|----------------|
 | 解析オプション／結果 | `AnalysisProgressCallback`, `AnalysisBeat`, `BeatObservations`, `BpmCandidate`, `Chord`, `ChordAnalysisResult`, `AnalysisChord`, `AnalysisSection`, `ChordChromaMethod`, `EstimateMeterRequest`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `MeterEstimate`, `Section`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
-| 特徴抽出 | `DecomposeStemsRequest`, `DecomposeStemsResult`, `NoteSegment`, `NoteSegmentsRequest` |
+| 特徴抽出 | `DecomposeStemsRequest`, `DecomposeStemsResult`, `DecomposeStemsLinkedRequest`, `DecomposeStemsLinkedResult`, `NoteSegment`, `NoteSegmentsRequest` |
 | ストリーミング解析 | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
-| マスタリングとメータリング | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
+| マスタリングとメータリング | `MasteringPreset`, `MasteringInsertParamInfo`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`, `MasteringInsertSlot`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
+| 機能カタログ | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `MasteringInsertParamChoice` |
 | ステレオのマスタリング／メータリングのリクエスト | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest`, `NormalizeStereoRequest`, `NormalizeStereoResult` |
 | ピッチ補正 | `PitchCorrectOptions`, `VoicedFlags` |
 | ミキシング | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
@@ -273,3 +274,5 @@ interface MeteringStereoRequest {
 | リアルタイムエンジントランスポート | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig`, `EngineTrackMonitorMode` |
 | プロジェクトのメタデータ／オートメーション | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | リアルタイムエンジンのジョブ／テレメトリ | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |
+
+`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは 3 つの数値フィールドが `null` になります。`CapabilityCatalogProcessor.slots` は条件付きパラメータ群を表し、`MasteringInsertParamInfo` の各記述子には対応する `slot` があります。`masteringInsertTiming(name, params, sampleRate)` は `latencySamples` と `tailSamples` を持つ `MasteringInsertTiming` を返し、`masteringPresetParams(preset)` は `masterAudio({ samples, overrides })` に渡せるフラットな `Record<string, number | boolean>` を返します。

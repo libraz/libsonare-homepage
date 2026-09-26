@@ -69,9 +69,10 @@ empty regardless when fewer than two beats were detected. Its last entry repeats
 the tempo of the interval leading into the final beat. It is genuine local
 tempo, not `bpm` resampled — which also means a curve decoded from a fixed beat
 grid describes that grid, so measuring a tempo that actually moves wants
-`adaptiveTempo` set as well. The curve is decoded on a tempo grid about 3%
-apart: a steady track reads as one value within about 1.5% of its tempo rather
-than exactly on it, and a slow drift arrives as steps.
+`adaptiveTempo` set as well. The values are continuous rather than quantized to
+a fixed tempo grid. Each value is a weighted local average of neighbouring
+inter-beat intervals in log-tempo space, so a changing tempo can lag by a few
+beats.
 
 `bpm` and `timeSignature` are the winners; the two `*Candidates` arrays are the
 ranked field behind them. They matter because tempo is genuinely ambiguous —
@@ -547,7 +548,7 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 | Key/chord/rhythm/timbre analysis | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | Spectral, pitch, and feature transforms | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | Paged clip streaming | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| Mastering | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
+| Mastering and capability catalog | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertParamChoice`, `MasteringInsertSlot`, `MasteringInsertTiming`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
 | Metering requests | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
 | Streaming retune | `StreamingRetuneConfig` |
 | Streaming EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
@@ -560,7 +561,7 @@ The WASM package exports TypeScript helper types in addition to functions and cl
 
 ### Literal unions and enum-like tables
 
-These exported string-literal unions name the values a field or call accepts. Each synth vocabulary also accepts the value's ordinal, and `synthEnumTables()` returns every synth table as `string[]` at runtime (`SynthEnumTables`).
+These exported string-literal unions name the values a field or call accepts. Each synth vocabulary also accepts the value's ordinal. `synthEnumTables()` returns the runtime tables represented by `SynthEnumTables` as `string[]`; the `retrigger` table is exported separately as `SYNTH_RETRIGGERS`.
 
 | Type | Values | Where it appears |
 |------|--------|------------------|
@@ -569,6 +570,7 @@ These exported string-literal unions name the values a field or call accepts. Ea
 | `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
 | `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput` (SVF only) |
 | `SynthBodyType` | `'default'`, `'none'`, `'guitar'`, `'violin'`, `'wood-tube'`, `'brass-bell'`, `'vocal'` | `SynthPatch.body` |
+| `SynthRetrigger` | `'default'`, `'free'`, `'note'` | `SynthPatch.retrigger`; exported as `SynthRetrigger` and `SYNTH_RETRIGGERS` on Node/WASM |
 | `SynthModSource` | `'none'`, `'amp-env'`, `'filter-env'`, `'lfo1'`, `'lfo2'`, `'velocity'`, `'key-track'`, `'mod-wheel'`, `'random'`, `'breath'`, `'aftertouch'`, `'expression-cc'`, `'pitch-bend'` | `SynthModRouting.source` |
 | `SynthModDestination` | `'none'`, `'pitch-cents'`, `'cutoff-cents'`, `'amp-gain'`, `'pan-units'`, `'resonance-q'`, `'vibrato-depth-cents'`, `'filter-env-depth'`, `'lfo1-rate-scale'`, `'excitation-force'`, `'excitation-position'`, `'excitation-brightness'`, `'spectrum-morph'` | `SynthModRouting.destination` |
 | `SampleLoopMode` / `SampleKeyTrack` | `'default'`, `'none'`, `'continuous'`, `'key-down'` / `'default'`, `'on'`, `'off'` | `SynthPatch.sampleLoop` / `SynthPatch.sampleKeyTrack` |
@@ -591,3 +593,5 @@ These exported string-literal unions name the values a field or call accepts. Ea
 | `MixAnalysisBand` | `'sub'`, `'low'`, `'lowMid'`, `'mid'`, `'highMid'`, `'high'`, `'air'` | keys of `MixBandOccupancy`; `MixCrowdedBand.band` in the mix assistant's analysis |
 | `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `SpectralRegionOp.mode` / `SpectralEditOptions.window` for `spectralEdit` |
 | `NoteTargetUnmatchedPolicy` | `'leave'` (default), `'mute'`, `'nearest'` | `unmatchedPolicy` of `assignNoteTargets` |
+
+`MasteringInsertParamInfo` and `CapabilityCatalogParameter` use `id: number | null`, `choices: MasteringInsertParamChoice[] | null`, and `slot: string | null`. `CapabilityCatalogProcessor.slots` lists the conditional key groups described by `MasteringInsertSlot`. `CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; the three numeric fields are `null` for restoration presets. For the voice-start behavior of `SynthPatch.retrigger`, see [Built-in Synthesizer](./native-synth.md#the-synthpatch-object).

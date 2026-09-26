@@ -283,7 +283,7 @@ camelCase の JSON 文字列を返し、`sonare_free_string` で解放します�
 
 プロジェクト編集は `sonare_c_project.h` にあります。`sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` の最後の引数が任意の equal-power 継ぎ目クロスフェードです。有限で 0 以上である必要があり、`0` ならハードループのままです。エンジンは使用可能なプリロールとループ長の半分を上限にクランプし、ワープ時は無視します。
 
-`sonare_project_bounce_with_synth_instruments` と `sonare_engine_set_synth_instrument` が受け取る NativeSynth のパッチ `SonareSynthPatch` は、先頭の `struct_version` フィールドでバージョン管理されています。元のレイアウトでは数値フィールドはすべて「0 はベースプリセットの値を保つ」という規則に従うため、明示的なゼロを表現できませんでした。`struct_version = 2` は、呼び出し側が意図して設定したフィールドを示すビットマスク `present_fields`（`SONARE_SYNTH_FIELD_*`）を末尾に追加します。ビットが立っていれば、その値がゼロであってもベースを上書きし、立っていなければ従来の挙動のままです。この末尾のワードは `struct_version` が 2 以上のときだけ読まれます。したがって、これまで通りに構造体を埋める呼び出し側は、`struct_version` を `0` や `1` のままにしていても従来の挙動を保ち、ソースを変更する必要はありません。enum フィールドに存在ビットがないのは意図的です。ゼロがすでに「ベースを保つ」の予約値で、実際の値はすべて非ゼロだからです。`num_mod_routings == 0` の状態で `SONARE_SYNTH_FIELD_MOD_ROUTINGS` を立てると、ベースのモッドマトリクスを保つのではなく消去します。要素のあるテーブルはどちらの場合でも置き換えです。マスクは 32 ビット 1 ワードで、うち 27 ビットを使用しています。さらに拡張する場合は、このワードを広げるのではなく、新しい `struct_version` のもとで 2 ワード目を追加します。
+`sonare_project_bounce_with_synth_instruments` と `sonare_engine_set_synth_instrument` が受け取る NativeSynth のパッチ `SonareSynthPatch` は、現在 `SONARE_SYNTH_PATCH_STRUCT_VERSION` 7 です。`struct_version` が 0 または 1 なら元のレイアウト、2 なら末尾の `present_fields` ビットマスク、3〜6 ならサンプルエンジン、高域通過、コンバーター、ピッチオフセットの各フィールドが追加され、7 なら末尾の `retrigger` フィールドまで読み取ります。`retrigger` は `SONARE_SYNTH_RETRIGGER_BASE`（0）、`SONARE_SYNTH_RETRIGGER_FREE`（1）、`SONARE_SYNTH_RETRIGGER_NOTE`（2）のいずれかです。`FREE` はノートごとにオシレーターの位相、ユニゾンの揺らぎ、ドリフト、エンジンのノイズストリームを変え、`NOTE` はノート番号からそれらを決めるため、テール後に同じノートを鳴らすと同じサンプル列になります。どちらもボイス外の状態（コントローラー、共有楽器の共鳴、エフェクトのテールなど）はリセットしません。`present_fields` は 31 ビットを使用しており、さらに拡張する場合はワードを広げず、新しい `struct_version` で 2 ワード目を追加します。enum フィールドに存在ビットがないのは、ゼロがベースを保つ値で、実際の enum 値はすべて非ゼロだからです。`SONARE_SYNTH_FIELD_MOD_ROUTINGS` を立てて `num_mod_routings == 0` にするとベースのモッドマトリクスを消去し、要素のあるテーブルは置き換えます。
 
 librosa 互換ヘルパーも C API から使えます。
 
@@ -295,7 +295,19 @@ librosa 互換ヘルパーも C API から使えます。
 | 特徴量ユーティリティ | `sonare_pcen`、`sonare_tonnetz`、`sonare_tempogram`、`sonare_plp` |
 | dB 変換 | `sonare_power_to_db`、`sonare_amplitude_to_db`、`sonare_db_to_power`、`sonare_db_to_amplitude` |
 | 時間／フレーム変換 | `sonare_frames_to_samples`、`sonare_samples_to_frames` |
-| 分解／ノイズ除去 | `sonare_decompose`、`sonare_decompose_with_init`（init は `"random"`／`"nndsvd"`）、`sonare_nn_filter` |
+| 分解／ノイズ除去 | `sonare_decompose`、`sonare_decompose_with_init`（init は `"random"`／`"nndsvd"`）、`sonare_decompose_stems`、`sonare_decompose_stems_linked`、`sonare_nn_filter` |
+
+リンク版のステム分解は、チャンネル平均の振幅から 1 つの NMF モデルを作り、同じソフトマスクを各チャンネルの複素スペクトルへ適用します。そのため、チャンネル間の位相とレベルの関係が保たれます。フラットな出力は `(component, channel, sample)` の順で、`out_w` と `out_h` は `sonare_decompose_stems` と同じ因子の形状です。
+
+```c
+SonareError sonare_decompose_stems_linked(const float* const* channels, size_t channel_count,
+                                          size_t length, int sample_rate,
+                                          const SonareDecomposeStemsConfig* config, float** out,
+                                          size_t* out_component_count, size_t* out_channel_count,
+                                          size_t* out_component_length, float** out_w,
+                                          size_t* out_w_length, float** out_h,
+                                          size_t* out_h_length);
+```
 
 現在の C ABI は、用途別のヘッダーに分かれています。上の短い例に出ていないシンボルは、この表から探してください。
 
@@ -335,7 +347,19 @@ C ABI のリアルタイム・インサートオートメーションと外部 M
 - ホスト／制御スレッドでは `sonare_engine_drain_external_midi` をイベント数が 0 になるまで繰り返し呼び、得られた 1〜3 バイトの MIDI 1.0 メッセージを機器へ渡します。1 個の UMP（Universal MIDI Packet）レコードが 3 メッセージへ展開される場合があるため、`max_events` は 3 以上必要です。ホストの回収が遅すぎないかは `sonare_engine_external_midi_dropped_count` で監視できます。SysEx／Data など MIDI 1.0 へ変換できない UMP メッセージは、この drain API からは出力されません。
 - drain した各 `SonareEngineTelemetry` レコードの `error` フィールドは `SonareEngineTelemetryError`（`sonare_c_types_engine.h`）の序数です。`NONE = 0` に続き、キュー／バックログ／オーバーフロー系の条件が `1`〜`18`（コマンドキュー、保留コマンド、境界、テレメトリ、キャプチャ、オートメーションバインドターゲット、インサートオートメーション、MIDI クロック、メトロノームのオーバーフローなど）、そして `MAX_CHANNELS_EXCEEDED = 20` と続きます。
 
-C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値です。`tailSamples` は可聴な減衰テールの長さを表し、どちらもオフライン id では 0 です。`realtimeCost` はライブインサート向けの大まかな `low`／`moderate`／`high` のアルゴリズム負荷見積もりであり、ハードウェア上のベンチマークではなく、非インサート id では `null` です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするか、`category` は id 名前空間から導出する安定した UI グループ、`params` はリアルタイムインサートのパラメータ記述子を示します（非インサートプロセッサでは空配列）。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
+C ABI でプロセッサを分類するには、`sonare_mastering_processor_catalog()` が JSON 配列の文字列 `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params","slots"}, ...]` を返します。`kind` は `realtime`／`offline`／`pair` で、`realtimeInsertable` は `sonare_mastering_insert_names()` の id に対してのみ真になります。`latencySamples` と `tailSamples` は代表的な既定構成（48 kHz／512 サンプル）での測定値で、構成によって変わる値は `sonare_mastering_insert_timing` で取得します。`realtimeCost` はライブインサート向けの大まかな `low`／`moderate`／`high` のアルゴリズム負荷見積もりであり、ハードウェア上のベンチマークではなく、非インサート id では `null` です。`channelPolicy` はサラウンドホストでミキサーがプロセッサをどうラップするか、`category` は id 名前空間から導出する安定した UI グループです。`params` はリアルタイム対象と構築用キーの記述子（非インサートプロセッサでは空配列）で、各記述子は `name`、`id`、`rtSafe`、`type`、`min`、`max`、`default`、`unit`、`choices`、`slot` を持ちます。`slots` は条件付きキー群を `{name,parent,activation,minCrossoverCutoffs}` として列挙します。id の全集合は `sonare_mastering_processor_names()`、インサート集合、`sonare_mastering_pair_processor_names()` の和なので、ホストは id をハードコードせずにプロセッサ選択を絞り込めます。ポインタはスレッドローカルで（解放せず、スレッドをまたいでキャッシュしないでください）、`sonare_mastering_processor_names()` と同様の扱いです。
+
+C ABI の専用クエリは次のとおりです。
+
+```c
+const char* sonare_mastering_insert_param_info(const char* name);
+SonareError sonare_mastering_insert_timing(const char* name, const char* params,
+                                           int sample_rate, int* out_latency_samples,
+                                           int* out_tail_samples);
+SonareError sonare_mastering_preset_params_json(const char* preset, char** json_out);
+```
+
+`sonare_mastering_insert_param_info` はスレッドローカルな JSON 記述子配列を返すため、解放しないでください。`sonare_mastering_insert_timing` は未知のキーを拒否し、指定した構成のレイテンシとテールを返します。`sonare_mastering_preset_params_json` は `{"version":1,"params":{...}}` を返し、ヒープで確保された文字列を `sonare_free_string` で解放します。`sonare_capability_catalog_json()` はプロセッサカタログ、組み込みのマスタリング、シンセ、ミキシングシーン、ボイスチェンジャーのプリセット名一覧、詳細な `masteringPresets` 項目をまとめて返します。
 
 リアルタイムボイスプリセットは C では `sonare_realtime_voice_changer_preset_names()`、`sonare_realtime_voice_changer_preset_json()`、`sonare_realtime_voice_changer_validate_preset_json()` から扱えます。型付きのプリセット選択子は `SonareVoiceCharacterPreset` 列挙です（`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 から `SONARE_VC_PRESET_DARK_VILLAIN` = 5）。`sonare_voice_character_preset_id(preset)` は正規の id 文字列を返し（不明値には NULL）、`SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` マクロはコンパイル時のバインディング生成向けに改行区切りの id 一覧を提供します。ネイティブ POD 設定の ABI は `SONARE_VOICE_CHANGER_ABI_VERSION` で、プリセット JSON の `schemaVersion` とは別です。
 
@@ -363,4 +387,3 @@ strip.prepare(48000.0, 512);
 ```
 
 ランタイム横断の例とシーン単位の説明は [ミキシングエンジン](./mixing.md) を参照してください。
-

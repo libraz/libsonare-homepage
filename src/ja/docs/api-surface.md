@@ -81,7 +81,7 @@
 | メータリング | レベル、ラウドネス、クレストファクター（モノラルとステレオペアの両方）、True Peak、DC オフセットのオフライン計測；クリッピング／ダイナミックレンジレポート；ステレオ相関・幅；ベクトルスコープ、フェーズスコープ、スペクトルスナップショット | [JavaScript API](./js-api-audio.md#メータリング)、[Python API](./python-api.md)、[ネイティブバインディング](./native-bindings.md) |
 | スケール量子化 | MIDI ノートをスケールにスナップし、補正量をセミトーンで測定、ピッチクラスの所属を判定 | [JavaScript API](./js-api-analysis.md#スケール量子化)、[Python API](./python-api.md) |
 | エフェクトと編集 | HPSS、残差付き HPSS、倍音成分／打撃成分の抽出、正規化、トリム、リミックス、フェーズボコーダー、タイムストレッチ、ピッチシフト、ピッチ補正、ノートストレッチ、領域指定スペクトル編集、ボイスのピッチ／フォルマント変更、リアルタイム音声プリセット | [編集 DSP](./editing-dsp.md)、[スペクトル編集](./spectral-editing.md)、[JavaScript API](./js-api-effects.md#オーディオエフェクト) |
-| ステム分解 | ソフトマスクによる分離。各成分がソース自身の位相を保ち、足し合わせると入力に戻ります：`decomposeStems` / `decompose_stems` / `sonare_decompose_stems`、および両方の CLI の `decompose-stems` | [逆変換特徴量](./inverse-features.md)、[JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md) |
+| ステム分解 | ソフトマスクによる分離。各成分がソース自身の位相を保ち、足し合わせると入力に戻ります：`decomposeStems` / `decompose_stems` / `sonare_decompose_stems`。マルチチャンネルを連動させる `decomposeStemsLinked` / `decompose_stems_linked` / `sonare_decompose_stems_linked` と、両方の CLI の `decompose-stems` も使えます | [逆変換特徴量](./inverse-features.md)、[連動ステム](./js-api-features.md#decomposestemslinked-request)、[Python API](./python-api.md) |
 | ゼロ交差に揃えたリミックス区間 | カット位置をゼロ交差に一度だけスナップして解決し、テイクの全チャンネルを同じフレームで切り出せるようにします：`remixAlignedIntervals` / `remix_aligned_intervals` / `sonare_remix_aligned_intervals`。API のみで、どちらの CLI にもありません | [JavaScript API](./js-api-analysis.md)、[Python API](./python-api.md) |
 | ステレオ正規化 | 左右ペアのピークまたは RMS 正規化。JavaScript 側は `mode` を持つ `normalizeStereo` 1 つ、Python は `normalize_stereo` と `normalize_rms_stereo` の 2 関数です | [JavaScript API](./js-api-effects.md)、[Python API](./python-api.md) |
 | ルーム音響解析 | インパルス応答からの残響時間（RT60 / EDT）、明瞭度（C50 / C80）、定義度（D50）、ブラインド音響推定、等価ルーム推定、幾何ベースの RIR 合成、ルームモーフィング | [ルーム音響解析](./acoustic-analysis.md)、[JavaScript API](./js-api-effects.md#ルーム音響解析)、[Python API](./python-api-effects.md#ルーム音響解析) |
@@ -90,7 +90,7 @@
 | マスタリングアシスタント | 音源プロファイル、チェーン提案 JSON、配信プラットフォーム別プレビュー JSON、およびダウンミックスではなく左右のペアを測定する 3 つのステレオ版 | [マスタリングアシスタント](./mastering-assistant.md) |
 | マスタリング | プリセット、フルチェーン、名前付きプロセッサ、プロセッサカタログメタデータ、インサートパラメータメタデータ、ペアプロセッサ、ペア解析、ステレオ解析、ストリーミングチェーン、任意バンド数の構造化マルチバンドコンプレッサー（チェーン設定スキーマバージョン 2） | [マスタリングプロセッサ](./mastering-processors.md)、[DSP 実装解説](./dsp-implementation.md)、[アルゴリズム根拠](./algorithm-references.md)、[マスタリング実装](./mastering-implementation.md) |
 | ストリーミング MIR | ライブのメル／クロマ／オンセットフレーム、時間とともに更新される BPM／キー／コード推定、コード進行、パターンスコア | [リアルタイムとストリーミング](./realtime-streaming.md)、[WASM](./wasm-streaming.md#ストリーミング解析) |
-| リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン（`resolveInstrumentAutomationId` / `sonare_engine_resolve_instrument_automation_id` で解決するホスト側インストゥルメントのパラメータ対象を含む）、グラフトポロジー、クリップページの先読み幅を設定できるクリップ（`setClipPagePrefetchFrames` / `clipPagePrefetchFrames`）、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、トラックごとの PFL/AFL キューモニタリング、名前付きテレメトリエラー序数を伴うステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムエンジン](./realtime-engine.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
+| リアルタイムエンジン | トランスポート、テンポ、構造化マーカー、メトロノーム、オートメーションレーン（`resolveInstrumentAutomationId` / `sonare_engine_resolve_instrument_automation_id` で解決するホスト側インストゥルメントのパラメータ対象を含む）、予約パラメータのメタデータを返す `parameterInfo` / `parameterInfoByIndex`、タイムストレッチのボイスプールを設定する `setWarpVoiceCapacity` / `warpVoiceCapacity`、グラフトポロジー、クリップページの先読み幅を設定できるクリップ（`setClipPagePrefetchFrames` / `clipPagePrefetchFrames`）、MIDI クリップスケジュール、トラックごとのレーンミキサー（レーン、バス、センド、チャンネルストリップ、サラウンドパン、インサートパラメータ）、外部 MIDI 出力／クロック、キャプチャ、トラックごとの PFL/AFL キューモニタリング、名前付きテレメトリエラー序数を伴うステレオ／ワイドメーターテレメトリ、スコープテレメトリと Worklet スコープリング、バウンス／フリーズ | [リアルタイムエンジン](./realtime-engine.md#パラメータオートメーション)、[ボイス予算](./realtime-engine.md#time-stretch-のボイス予算)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | プロジェクトとアレンジ | オーディオ／MIDI トラックとクリップ、メモリ上でのプロジェクト作成、上限付き履歴メモリを備えたアンドゥ/リドゥ、テイク／コンピング、ワープ（クリップのモードは `off`、`repitch`、`tempo-sync`、`time-stretch`）、MIDI シーケンス、SMF および MIDI 2.0 クリップファイル（`SMF2CLIP`）の入出力、JSON 保存／読込、アシストサイドカー、オフラインバウンス | [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[録音・テイク](./recording-and-takes.md)、[リアルタイムとストリーミング](./realtime-streaming.md) |
 | インストゥルメントと MIDI | GM フォールバックバンクを備えたマルチエンジンシンセ、GS 互換 SoundFont 2 プレイヤー、ライブ MIDI 再生、ライブ SysEx で選択する GS インサーションエフェクト（EFX） | [内蔵シンセサイザー](./native-synth.md)、[SoundFont 2 プレイヤー](./soundfont-player.md)、[MIDI 入力](./midi-input.md#ライブイベントのキューイング) |
 | 逆変換特徴量 | メルから STFT／音声、MFCC からメル／音声、CQT/VQT 振幅から音声 | [逆変換特徴量](./inverse-features.md) |
@@ -102,23 +102,29 @@
 
 ## 機能カタログが返すもの
 
-ビルドは自分のプロセッサ面を自分で説明できます。Node と WASM の `capabilityCatalog()`、Python の `capability_catalog()`、C ABI の `sonare_capability_catalog_json` は同じ JSON 文書を返します。内容は、ビルドのバージョンと ABI 番号、パラメータ付きの全プロセッサ、組み込みプリセット一覧（マスタリング、シンセ、ミキシングシーン、ボイスチェンジャー）です。どちらの CLI にもこのカタログはなく、`doctor` が出すのは別物のビルド診断レポートです。
+ビルドは自分のプロセッサ面を自分で説明できます。Node と WASM の `capabilityCatalog()`、Python の `capability_catalog()`、C ABI の `sonare_capability_catalog_json` は同じ JSON 文書を返します。内容は、ビルドのバージョンと ABI 番号、パラメータとスロットメタデータを持つ全プロセッサ、組み込みプリセット名一覧、マスタリングプリセットのメタデータです。どちらの CLI にもこのカタログはなく、`doctor` が出すのは別物のビルド診断レポートです。
 
-現行ビルドは **88 個のプロセッサと 1,147 個のパラメータ** を公開します。どちらの数も鵜呑みにせず数え直せます。libsonare リポジトリは生成物を `tools/capability-catalog.json` として追跡しており、共有ライブラリが実際に返す内容とずれると `make capability-catalog-check` が失敗し、`schemas/capability-catalog.schema.json` が形を固定しています。
+現行ビルドは **89 個のプロセッサと 5,352 個のパラメータ記述子** を公開します。どちらの数も鵜呑みにせず数え直せます。libsonare リポジトリは生成物を `tools/capability-catalog.json` として追跡しており、共有ライブラリが実際に返す内容とずれると `make capability-catalog-check` が失敗し、`schemas/capability-catalog.schema.json` が形を固定しています。
 
-各パラメータは同じ 8 つのフィールドを持ちます。
+各パラメータ記述子は同じ 10 個のフィールドを持ちます。
 
 | フィールド | 内容 |
 |------------|------|
 | `name` | 構築時に読まれるキー。`releaseMs` や `band0.frequencyHz` など |
-| `id` | リアルタイムエンジンのインサートパラメータ設定 API が使う整数 id。カタログ順に `0..n-1` を振るので、帯域分割型のプロセッサでは `band0.*` が `band1.*` より先に番号を持つ |
+| `id` | Mixer のインサートオートメーションと MIDI CC 紐付けに使う整数 id。構築時専用キーは `null` です。リアルタイムのインサート設定 API は `name` で対象を解決し、整数の id はオートメーション順に `0..n-1` です |
 | `rtSafe` | オーディオスレッドから稼働中に値を変えられるか |
-| `type` | `number` か `boolean`。設定ビルダーがそのキーを読む C++ の型から決まる |
-| `default` | 設定構造体自身のフィールドの既定値。ビルダーがそこへフォールバックする瞬間に記録され、`null` になることはない |
+| `type` | 設定ビルダーが読む値の型。`number`、`boolean`、`enum`、`string`、`array` のいずれかです |
+| `default` | 設定構造体のフィールドの初期化子。フォールバックがない場合は `null` です |
 | `min`、`max` | 探索時に構築が受け入れた区間。その側の制限をカタログが知らなければ `null` |
-| `unit` | `dB`、`Hz`、`ms`、`samples`、または無次元の制御なら `null` |
+| `unit` | `dB`、`Hz`、`ms`、`samples`、`referenceSamples@29761Hz`、またはキーに既知の単位がない場合の `null`。`null` でも無次元とは限りません |
+| `choices` | 名前付き数値選択肢の閉じた集合。間隔のある離散値も含み、閉じた集合を公開しない場合は `null` です |
+| `slot` | キーが属するプロセッサのスロット群。どの群にも属さないキーは `null` です |
 
-既定値は書き写したものではなくコードから読み取るので、1,147 個のうち `null` を返すものはありません。範囲は実測です。候補値を呼び出し側と同じ構築経路に通し、そのプロセッサの他のパラメータは既定値のまま、検証が受け入れた区間をカタログが報告します。追跡中のカタログでは、316 個が `min` を、193 個が `max` を公開し、802 個はどちらも公開しません。`null` の境界が意味するのは、その側ではどんな値も通る、または構築がそのキーを検証していない、のどちらかです。制限があるのに測っていない、という意味ではありません。スライダーを直結する前に押さえておきたい性質が 2 つあります。互いに制約し合う制御は相手の既定値を境界として報告すること、そして開区間の境界は除外される値そのものとして報告されることです。具体例は [JavaScript API](./js-api.md#capabilitycatalog) が順に追っています。
+`id` が整数の項目はオートメーション対象で、構築時専用の項目は `id: null` かつ `rtSafe: false` です。`id` があっても `rtSafe: false` ならライブオートメーションへ渡せません。`choices` は名前付き数値の閉じた集合を示し、間隔のある離散値も含みます。`slot` はキーが属するスロット群を示し、`null` はどのスロットにも属さないことを示します。`slot` が非 null でも必ず条件付きとは限りません。各プロセッサの `slots` 配列にある `activation`（`anyKey` または `always`）、親スロットを示す `parent`、存在条件となる `minCrossoverCutoffs` を組み合わせて、スロットの有無を判断します。
+
+既定値は書き写したものではなくコードから読み取りますが、構築用キーにフォールバックがなければ `null` になります。範囲は実測です。候補値を呼び出し側と同じ構築経路に通し、そのプロセッサの他のパラメータは既定値のまま、検証が受け入れた区間をカタログが報告します。`null` の境界が意味するのは、その側ではどんな値も通る、または構築がそのキーを検証していない、のどちらかです。制限があるのに測っていない、という意味ではありません。スライダーを直結する前に押さえておきたい性質が 2 つあります。互いに制約し合う制御は相手の既定値を境界として報告すること、そして開区間の境界は除外される値そのものとして報告されることです。具体例は [JavaScript API](./js-api.md#capabilitycatalog) が順に追っています。
+
+`presets.mastering` は従来どおりマスタリングプリセット名の簡潔な配列です。トップレベルの `masteringPresets` は各名前について `kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つオブジェクトを返します。レストレーション用の項目では、後ろ 3 つの数値が `null` です。選択したプリセットを展開した数値／真偽値のパラメータマップが必要なときは、バインディングの `masteringPresetParams` を使います。
 
 この記述子が役に立つ場面は 2 つあります。
 

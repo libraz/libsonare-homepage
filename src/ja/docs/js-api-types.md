@@ -67,7 +67,7 @@ interface BeatObservations {
 有無にかかわらず空になります。最後の要素は、最終拍へ至る区間のテンポを繰り返した値です。
 これは `bpm` をリサンプルしたものではなく本物の局所テンポです。つまり、固定されたビート
 グリッドからデコードされたカーブはそのグリッドを記述するので、実際に動くテンポを測りたい
-場合は `adaptiveTempo` も併せて指定してください。カーブは約 3% 刻みのテンポ格子上でデコードされます。そのため一定テンポの曲でも値はテンポちょうどではなく、±1.5% ほどずれた 1 つの値になり、ゆるやかな揺れは階段状に現れます。
+場合は `adaptiveTempo` も併せて指定してください。値は固定されたテンポ格子に量子化されず、連続値になります。各値は隣接する拍間隔を対数テンポ空間で重み付き平均した局所値なので、テンポが変化すると数拍遅れて追従することがあります。
 
 `bpm` と `timeSignature` は勝ち残った値で、2 つの `*Candidates` 配列はその背後にある
 順位付きの候補群です。テンポは本質的に曖昧で、ハーフタイム感とその倍テンポは同じ曲の
@@ -540,7 +540,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | キー／コード／リズム／音色解析 | `ChordDetectionOptions`, `KeyProfileName`, `RhythmAnalysisResult`, `TimbreAnalysisResult`, `TimbreFrame`, `DynamicsAnalysisResult` |
 | スペクトル／ピッチ／特徴量変換 | `MelPowerResult`, `StftPowerResult`, `PitchCorrectOptions`, `VoicedFlags`, `SpectralRegionOp`, `SpectralEditOptions`, `TempogramMode` |
 | ページ式クリップストリーミング | `ClipPageStreamerEngine`, `ClipPageStreamerOptions`, `ClipPageStreamSource`, `OpfsClipStream`, `OpfsClipStreamOptions`, `OpfsClipPageProviderOptions` |
-| マスタリング | `MasteringProcessorParams`, `MasteringProcessorCatalogEntry`, `MasteringInsertParamInfo`, `MasteringChannelPolicy`, `MasteringChainStereoResult`, `MasteringStereoParamsRequest`, `MasteringStreamingPreviewStereoRequest` |
+| マスタリングと機能カタログ | `MasteringProcessorParams`、`MasteringProcessorCatalogEntry`、`MasteringInsertParamInfo`、`MasteringInsertParamChoice`、`MasteringInsertSlot`、`MasteringInsertTiming`、`CapabilityCatalog`、`CapabilityCatalogParameter`、`CapabilityCatalogProcessor`、`CapabilityCatalogPresets`、`CapabilityCatalogMasteringPreset`、`MasteringChannelPolicy`、`MasteringChainStereoResult`、`MasteringStereoParamsRequest`、`MasteringStreamingPreviewStereoRequest` |
 | メータリングのリクエスト | `MeteringStereoRequest`, `MeteringStereoDecimatedRequest` |
 | ストリーミングリチューン | `StreamingRetuneConfig` |
 | ストリーミング EQ | `StreamingEqualizerConfig`, `EqBandType`, `EqBandPhase`, `EqCoeffMode`, `EqMatchOptions`, `EqStereoPlacement` |
@@ -553,7 +553,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 
 ### リテラルユニオン型と enum 相当のテーブル
 
-以下のエクスポートされた文字列リテラルのユニオン型は、フィールドや呼び出しが受け付ける値を列挙したものです。シンセ系の語彙はいずれも値の序数も受け付け、`synthEnumTables()` はランタイムからシンセの全テーブルを `string[]` として返します（`SynthEnumTables`）。
+以下のエクスポートされた文字列リテラルのユニオン型は、フィールドや呼び出しが受け付ける値を列挙したものです。シンセ系の各語彙は序数も受け付けます。`synthEnumTables()` は `SynthEnumTables` に含まれるランタイムテーブルを `string[]` として返します。`retrigger` のテーブルは戻り値に含まれず、`SYNTH_RETRIGGERS` として別に公開されます。
 
 | 型 | 値 | 現れる場所 |
 |----|----|-----------|
@@ -562,6 +562,7 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | `SynthFilterModel` | `'default'`, `'svf'`, `'moog-ladder'`, `'diode-ladder'`, `'sallen-key'` | `SynthPatch.filterModel` |
 | `SynthFilterOutput` | `'default'`, `'lowpass'`, `'bandpass'`, `'highpass'` | `SynthPatch.filterOutput`（SVF のみ） |
 | `SynthBodyType` | `'default'`, `'none'`, `'guitar'`, `'violin'`, `'wood-tube'`, `'brass-bell'`, `'vocal'` | `SynthPatch.body` |
+| `SynthRetrigger` | `'default'`, `'free'`, `'note'` | `SynthPatch.retrigger`。Node/WASM では `SynthRetrigger` と `SYNTH_RETRIGGERS` としてエクスポート |
 | `SynthModSource` | `'none'`, `'amp-env'`, `'filter-env'`, `'lfo1'`, `'lfo2'`, `'velocity'`, `'key-track'`, `'mod-wheel'`, `'random'`, `'breath'`, `'aftertouch'`, `'expression-cc'`, `'pitch-bend'` | `SynthModRouting.source` |
 | `SynthModDestination` | `'none'`, `'pitch-cents'`, `'cutoff-cents'`, `'amp-gain'`, `'pan-units'`, `'resonance-q'`, `'vibrato-depth-cents'`, `'filter-env-depth'`, `'lfo1-rate-scale'`, `'excitation-force'`, `'excitation-position'`, `'excitation-brightness'`, `'spectrum-morph'` | `SynthModRouting.destination` |
 | `SampleLoopMode` / `SampleKeyTrack` | `'default'`, `'none'`, `'continuous'`, `'key-down'` / `'default'`, `'on'`, `'off'` | `SynthPatch.sampleLoop` / `SynthPatch.sampleKeyTrack` |
@@ -584,3 +585,5 @@ WASM パッケージは、関数やクラスに加えて TypeScript の補助型
 | `MixAnalysisBand` | `'sub'`, `'low'`, `'lowMid'`, `'mid'`, `'highMid'`, `'high'`, `'air'` | `MixBandOccupancy` のキー。ミックスアシスタントの解析における `MixCrowdedBand.band` |
 | `SpectralEditMode` / `SpectralEditWindow` | `'gain'`, `'attenuate'`, `'mute'`, `'heal'` / `'hann'`, `'hamming'`, `'blackman'`, `'rectangular'`, `'rect'` | `spectralEdit` に渡す `SpectralRegionOp.mode` / `SpectralEditOptions.window` |
 | `NoteTargetUnmatchedPolicy` | `'leave'`（既定）, `'mute'`, `'nearest'` | `assignNoteTargets` の `unmatchedPolicy` |
+
+`MasteringInsertParamInfo` と `CapabilityCatalogParameter` の `id` は `number | null`、`choices` は `MasteringInsertParamChoice[] | null`、`slot` は `string | null` です。`CapabilityCatalogProcessor.slots` は `MasteringInsertSlot` で表す条件付きキー群を列挙します。`CapabilityCatalog.masteringPresets` は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持つ要素を返し、修復プリセットでは後ろ 3 つが `null` です。`SynthPatch.retrigger` のボイス開始時の挙動は[内蔵シンセサイザー](./native-synth.md#synthpatch-オブジェクト)を参照してください。

@@ -189,6 +189,8 @@ Branch on the catalog rather than on a hand-maintained table: a parameter's
 range, default, unit, and realtime-safety all come from the loaded build. The
 same data is `capabilities()` / `capabilityCatalog()` on Node and WASM.
 
+`catalog["masteringPresets"]` lists built-in mastering and restoration presets. Each entry has `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `None`. Processor entries also expose conditional parameter groups in `slots`, with `name`, `parent`, `activation`, and `minCrossoverCutoffs` fields.
+
 ### Cancelling a long call
 
 Analysis and mastering calls that report progress also take `cancel`, a
@@ -333,6 +335,7 @@ insert_params = sonare.mastering_insert_param_info("eq.parametric")
 # Preset-driven chain (one-shot)
 sonare.mastering_preset_names()
 # -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech', 'streaming', 'youtube', 'broadcast', 'podcast', 'audiobook', 'cinema', 'jpop', 'ambient', 'lofi', 'classical', 'drumAndBass', 'techno', 'metal', 'trap', 'rnb', 'jazz', 'kpop', 'trance', 'gameOst', 'vinyl', 'tapeHiss', 'fieldRecording', 'voiceMemo', 'shellac78']
+preset_params = sonare.mastering_preset_params("aiMusic")
 chain_result = sonare.master_audio(
     samples,
     sample_rate=sample_rate,
@@ -456,10 +459,13 @@ result = sonare.mastering_chain(
 
 The named mastering API families are:
 
+`mastering_insert_param_info(name)` returns descriptors for the insert's construction keys and realtime automation targets, including their type, bounds, default, choices, and conditional `slot`. `mastering_insert_timing(name, params, sample_rate)` builds that configured insert and returns its `latencySamples` and `tailSamples`; keys the insert does not read are rejected. `mastering_preset_params(preset)` returns the preset's flat override map, which can be passed to `master_audio(..., overrides=...)` unchanged.
+
 | Purpose | Function |
 |---------|----------|
 | Apply simple loudness mastering | `mastering()` |
 | List built-in mastering presets | `mastering_preset_names()` |
+| Get a built-in preset's flat chain parameters | `mastering_preset_params(preset)` |
 | Apply a preset to mono audio | `master_audio()` |
 | Apply a preset to stereo audio | `master_audio_stereo()` |
 | Run a full mono chain | `mastering_chain()` |
@@ -475,7 +481,8 @@ The named mastering API families are:
 | Get machine-readable processor classifications | `mastering_processor_catalog()` |
 | List chain insert processors | `mastering_insert_names()` |
 | List the parameter keys an insert accepts | `mastering_insert_param_names(name)` |
-| List realtime-automatable insert parameters | `mastering_insert_param_info(name)` |
+| Describe insert construction keys and automation targets | `mastering_insert_param_info(name)` |
+| Get configured insert latency and tail | `mastering_insert_timing(name, params, sample_rate)` |
 | Process mono audio | `mastering_process()` |
 | Process stereo audio | `mastering_process_stereo()` |
 | List pair processors | `mastering_pair_processor_names()` |
@@ -559,7 +566,7 @@ Note that `Project` supports `with` for automatic cleanup, while `Mixer` does no
 
 For synth preset introspection, `synth_preset_patch(name)` returns a named catalog preset as a `SynthPatch` (it raises `SonareError` for unknown names and accepts a `'va:'` routing prefix) so you can inspect and tweak fields before binding it. `synth_enum_tables()` returns the runtime enum-name tables (`dict[str, tuple[str, ...]]`) for validating `SynthModRouting` source/destination names against the loaded build.
 
-Every numeric `SynthPatch` field defaults to `None`, meaning "keep the base preset's value". A field you never set therefore reads back as `None`, not `0.0`, and any value you do supply is a real override — including an explicit `0`, so `SynthPatch(preset="warm-pad", amp_sustain=0)` genuinely zeroes the amp sustain instead of being indistinguishable from leaving it unset. A patch obtained from `synth_preset_patch(name)` comes back fully populated with the preset's concrete values, so its numeric fields are never `None`. Enum fields (`engine_mode`, `waveform`, `filter_model`, `filter_output`, `body`) keep `0` / `"default"` as their keep-the-base value. `mod_routings=None` keeps the base mod matrix, an empty tuple clears it, and a non-empty tuple replaces it.
+Every numeric `SynthPatch` field defaults to `None`, meaning "keep the base preset's value". A field you never set therefore reads back as `None`, not `0.0`, and any value you do supply is a real override — including an explicit `0`, so `SynthPatch(preset="warm-pad", amp_sustain=0)` genuinely zeroes the amp sustain instead of being indistinguishable from leaving it unset. A patch obtained from `synth_preset_patch(name)` comes back fully populated with the preset's concrete values, so its numeric fields are never `None`. Enum fields (`engine_mode`, `waveform`, `filter_model`, `filter_output`, `body`, `retrigger`) keep `0` / `"default"` as their keep-the-base value. `mod_routings=None` keeps the base mod matrix, an empty tuple clears it, and a non-empty tuple replaces it.
 
 ### Opaque assist sidecars
 

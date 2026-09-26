@@ -216,7 +216,7 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 
 | Group | API names |
 |-------|-----------|
-| Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masteringPlatformNames()`, `masterAudio()`, `masterAudioStereo()`, `masterAudioWithProgress()`, `masterAudioStereoWithProgress()` |
+| Presets and quick entry points | `mastering()`, `masteringPresetNames()`, `masteringPresetParams()`, `masteringPlatformNames()`, `masterAudio()`, `masterAudioStereo()`, `masterAudioWithProgress()`, `masterAudioStereoWithProgress()` |
 | Full chains | `masteringChain()`, `masteringChainStereo()`, `masteringChainWithProgress()`, `masteringChainStereoWithProgress()` |
 | Offline dynamics (one-shot) | `masteringDynamicsCompressor()`, `masteringDynamicsGate()`, `masteringDynamicsTransientShaper()` |
 | Offline repair — mono | `masteringRepairDeclick()`, `masteringRepairDeclip()`, `masteringRepairDecrackle()`, `masteringRepairDehum()`, `masteringRepairDenoiseClassical()`, `masteringRepairDereverbClassical()`, `masteringRepairTrimSilence()` |
@@ -224,7 +224,7 @@ The WASM package exposes the same camelCase mastering API names as the browser d
 | Offline repair — channel-linked (any channel count) | `masteringRepairDenoiseClassicalLinked()`, `masteringRepairDereverbClassicalLinked()` |
 | Repair measurement (no audio returned) | `masteringRepairDetectClicks()`, `masteringRepairDetectClipping()`, `masteringRepairDetectCrackle()`, `masteringRepairDetectHum()`, `masteringRepairDetectNoiseFloor()`, `masteringRepairDetectReverb()`, `masteringRepairDetectTrimRange()`, `masteringRepairDetectTrimRangeStereo()`, `masteringRepairNoiseBandBins()`, `masteringRepairDereverbConfigForRoom()` |
 | Assistant and profiling | `masteringAudioProfile()`, `masteringAssistantSuggest()`, `masteringAssistantSuggestChain()`, `masteringStreamingPreview()`, `masteringAudioProfileStereo()`, `masteringAssistantSuggestStereo()`, `masteringAssistantSuggestChainStereo()`, `masteringStreamingPreviewStereo()`, `masteringAbMatchLoudness()` |
-| Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name)`, `masteringProcess()`, `masteringProcessStereo()` |
+| Named processors | `masteringProcessorNames()`, `masteringProcessorCatalog()`, `masteringInsertNames()`, `masteringInsertParamNames(name)`, `masteringInsertParamInfo(name)`, `masteringInsertTiming(name, params, sampleRate)`, `masteringProcess()`, `masteringProcessStereo()` |
 | Pair and stereo analysis | `masteringPairProcessorNames()`, `masteringPairProcess()`, `masteringPairAnalysisNames()`, `masteringPairAnalyze()`, `masteringStereoAnalysisNames()`, `masteringStereoAnalyze()` |
 | Streaming render | `StreamingMasteringChain` |
 

@@ -21,7 +21,7 @@ description: libsonare の音楽情報検索（MIR）を使うためのタスク
 - 一括結果が粗すぎるとき、または必要なオプションが隠れているときに、個別のヘルパーを選ぶ
 - 拍子推定の 2 つの `confidence` を取り違えず、実測とフォールバックを見分ける
 - キーの信頼度を、精度ではなくモデル自身の確信度として解釈する
-- 2 つの音源分離ルートを使い分け、それぞれが何を取り出せて何を取り出せないかを把握する
+- 3 つの音源分離ルートを使い分け、それぞれが何を取り出せて何を取り出せないかを把握する
 - 互換レイヤーのほうが入口として適している場面を判断する
 
 ## まず 1 回の呼び出しから
@@ -46,9 +46,10 @@ console.log(result.key.name, result.key.confidence);
 console.log(result.timeSignature.numerator, result.timeSignature.denominator);
 console.log(result.beats.length, result.downbeatIndices.length);
 console.log(result.chords.length, result.sections.length, result.form);
+console.log(result.chords[0]?.name, result.chords[0]?.romanNumeral);
 ```
 
-`sampleRate` を省略すると既定の 22050 Hz が使われるので、バッファ本来のレートを必ず渡してください。誤ったレートは時間領域の結果すべてを黙ってスケールし直します。この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker から駆動し、画面を固めずに進捗を出したいときは `analyzeWithProgress(...)` を使います。
+`sampleRate` を省略すると既定の 22050 Hz が使われるので、バッファ本来のレートを必ず渡してください。誤ったレートは時間領域の結果すべてを黙ってスケールし直します。この呼び出しは同期で、WASM ビルドはシングルスレッドです。短いクリップでなければ Web Worker から駆動してください。`analyzeWithProgress(...)` は同じ解析オプションを受け取り、`(progress, stage)` を通知し、長いリクエストをキャンセルできます。
 
 ::: warning `analyze()` はトライアドしか探索しない
 一括パスは `useTriadsOnly` を `true` にします。単体の `detectChords(...)` は `false` のままです。`useTriadsOnly: false` を渡すまで、セブンスコードはその中のトライアドとして返ります。拡張クオリティが必要なら明示的に渡してください。
@@ -114,9 +115,9 @@ console.log(result.chords.length, result.sections.length, result.form);
 | 音色 | `analyzeTimbre(...)` · `mfcc(...)` · `melSpectrogram(...)` | [メル・MFCC・音色](./glossary/analysis/mel-mfcc-timbre.md) |
 | 時間軸上の和声行列 | `chroma(...)` · `chromaCqt(...)` · `nnlsChroma(...)` | [クロマ特徴量](./glossary/analysis/chroma-features.md) |
 | 生の時間周波数表現 | `stft(...)` · `melSpectrogram(...)` | [スペクトログラムと STFT](./glossary/analysis/spectrogram-stft.md) |
-| ミックスの分割 | `hpss(...)` · `decomposeStems(...)` | 後述の[音源分離](#音源分離) |
+| モノラル／マルチチャンネルのミックスの分割 | `hpss(...)` · `decomposeStems(...)` · `decomposeStemsLinked(...)` | 後述の[音源分離](#音源分離) |
 
-左列の項目はすべて `analyze(...)` の結果のフィールドでもあります。ヘルパーが要るのは、より細かく制御したいとき（テンポ範囲を狭める、別のキープロファイルを使う、拡張クオリティを含めてコードを探索する）か、答えが 1 つだけ必要で残りが無駄になるときです。
+`analyze(...)` はテンポ、拍子、ビート、キー、コード、セクション、メロディ、音色、ダイナミクス、リズムの主な結果を含みます。特徴量行列、低レベルの変換、ステム分離には個別のヘルパーを使います。ヘルパーが要るのは、より細かく制御したいとき（テンポ範囲を狭める、別のキープロファイルを使う、拡張クオリティを含めてコードを探索する）か、答えが 1 つだけ必要で残りが無駄になるときです。
 
 ## リズム
 
@@ -280,7 +281,7 @@ for (const chord of chords) {
 const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
 ```
 
-各 `Chord` は `root`、`bass`、`quality`、`start`、`end`、`duration`、`confidence`、そしてコアが正規の綴りで与える `name` を持ちます。`rootName`、`bassName`、`name` はどのバインディングから読んでも同一です。
+各 `Chord` は `root`、`bass`、`quality`、`start`、`end`、`duration`、`confidence`、そしてコアが正規の綴りで与える `name` を持ちます。`rootName`、`bassName`、`name` はどのバインディングから読んでも同一です。`analyze(...)` 内のコードには `result.key` を基準にした `romanNumeral` も付き、`N.C.` では空になります。
 
 クオリティの網羅範囲はトライアドや素のセブンスをはるかに超えています。`maj`、`m`、`dim`、`aug`、`7`、`maj7`、`m7`、`m7b5`、`dim7`、`sus2`、`sus4`、`sus2add4`、`add9`、`madd9`、`maj9`、`9` に加えて、**`6`**、**`m6`**、**`mM7`**、**`7sus4`**、**`11`**、**`13`**、**`7b9`**、**`7#9`** も認識します。オンコードはベース音を付け足して `C/E` のように表記されます。相関が `threshold` を下回った区間は、無理に推測せず不明として報告されます。
 
@@ -291,6 +292,7 @@ const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
 | `useKeyContext` · `keyRoot` · `keyMode` | 検出済みのキーに属するコードへ探索を寄せます。 |
 | `chromaMethod` | `'stft'` か `'nnls'`。後者は照合前にベースの倍音を抑えるので、密度の高い素材で有効です。 |
 | `detectInversions` | ベース音をルートに畳み込まず、別に報告します。 |
+| `tuning` | チューニングのずれを半音の分数単位でコード用クロマへ反映します。`estimateTuning(...)` が返す単位を使い、範囲は `[-0.5, 0.5)`、既定値は `0`（A440）です。`analyze(...)` でも同じオプションを使うと、キー・コード・セクションに使うクロマへ反映されます。 |
 | `useBeatSync` · `minDuration` · `smoothingWindow` | フレーム単位の判断を区間へまとめる方法を制御します。 |
 
 ## 構成とメロディ
@@ -331,7 +333,7 @@ const voiced = melody.points.filter((point) => point.frequency > 0);
 
 ## 音源分離
 
-ルートは 2 つあり、それぞれ別の問いに答えます。
+ルートは 3 つあり、それぞれ別の問いに答えます。
 
 <SonareDemo id="stem-decompose" />
 
@@ -363,9 +365,59 @@ const { components, w, h } = decomposeStems({
 | 再構成 | 出力を足すと入力に戻る | モデルにエネルギーがある領域でマスクの和が 1 になるため、成分を足すと入力に戻る |
 | 位相 | 元のまま | 元のまま。複素スペクトログラムにマスクを掛けるので、各成分がそのまま聴ける |
 
-覚えておくとよい既定値。メディアンフィルタのカーネルはどちらも 31 で、既定のソフトマスクでは 2 つのマスクの和がすでに 1 になるため `hpssWithResidual(...)` の残差は無音です。どちらの成分も主張しなかった帯域を残差として得たい場合は `hardMask: true` を渡します。`decomposeStems(...)` の既定は成分 4 個、反復 100 回、`beta: 2`（Frobenius。Kullback-Leibler なら `1`）で、`maskPower: 1` は振幅比をそのまま保ちます。
+覚えておくとよい既定値。メディアンフィルタのカーネルはどちらも 31 で、既定のソフトマスクでは 2 つのマスクの和がすでに 1 になるため `hpssWithResidual(...)` の残差は無音です。どちらの成分も主張しなかった帯域を残差として得たい場合は `hardMask: true` を渡します。`decomposeStems(...)` と `decomposeStemsLinked(...)` の NMF の既定値は同じで、成分 4 個、`nFft: 2048`、`hopLength: 512`、反復 100 回、`beta: 2`（Frobenius。Kullback-Leibler なら `1`）、`init: 'random'`、`maskPower: 1`（振幅比）です。`decomposeStemsLinked(...)` は `sampleRate` を省略すると `22050` を使います。
 
-どちらも学習済みの楽器分離器ではなく、密なミックスからきれいなボーカルだけを取り出すものでもありません。得意なのは後段の推定器の仕事を楽にすることです。打撃成分でビート追跡、倍音成分でクロマとキー、リードが分離できた成分でピッチ追跡、といった使い方になります。
+マルチチャンネルの録音には `decomposeStemsLinked(...)` を使います。各チャンネルの振幅スペクトログラムを平均して 1 つの NMF モデルと成分マスクを作り、そのマスクを各チャンネルの元の複素スペクトログラムへ同じまま適用します。チャンネル間のレベル差と位相差が保たれるため、成分を分離してもステレオの定位は動きません。
+
+入力は同じ長さの `Float32Array` を少なくとも 1 つ渡し、チャンネル数を 64 以下にします。結果の `components[k][c]` は成分 `k` のチャンネル `c` の信号です。`w`、`h`、`sampleRate` の意味は `decomposeStems(...)` と同じです。1 チャンネルだけ渡すと、同じオプションの `decomposeStems(...)` とビット単位で一致します。
+
+::: code-group
+
+```typescript [Browser]
+import { init, decomposeStemsLinked } from '@libraz/libsonare';
+
+await init();
+
+const linked = decomposeStemsLinked({
+  channels: [leftChannel, rightChannel], // 同じ長さの Float32Array
+  sampleRate,
+  nComponents: 4,
+});
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+console.log(linked.w.length, linked.h.length);
+```
+
+```typescript [Node]
+import { decomposeStemsLinked } from '@libraz/libsonare-native';
+
+const linked = decomposeStemsLinked({
+  channels: [leftChannel, rightChannel], // 同じ長さの Float32Array
+  sampleRate,
+});
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
+```python [Python]
+import libsonare as sonare
+
+linked = sonare.decompose_stems_linked(
+    [left_channel, right_channel], sample_rate=sample_rate, n_components=4
+)
+first_left = linked["components"][0][0]
+first_right = linked["components"][0][1]
+print(linked["w"].shape, linked["h"].shape)
+```
+
+```bash [CLI]
+# CLI はモノラルの `decompose-stems` だけを提供します。
+# 複数チャンネルで 1 つの NMF モデルを共有する場合はライブラリ API を使います。
+```
+
+:::
+
+どのルートも学習済みの楽器分離器ではなく、密なミックスからきれいなボーカルだけを取り出すものでもありません。得意なのは後段の推定器の仕事を楽にすることです。打撃成分でビート追跡、倍音成分でクロマとキー、リードが分離できた成分でピッチ追跡、またはステレオの定位を保ったマルチチャンネル処理、といった使い方になります。
 
 ## その下の層
 

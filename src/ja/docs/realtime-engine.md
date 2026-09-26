@@ -234,6 +234,8 @@ WASM と Node は `{ output, monitor }` を返します。Python は `set_track_
 
 `RealtimeEngine` は、[`setTrackStripInsertParamByName`](#グループルーティング・サイドチェイン・ライブストリップ操作) のストリップインサートパラメータとは別に、エンジンレベルのパラメータレジストリを持ちます。`addParameter(info)` でパラメータを 1 度登録し、`setParameter(id, value, renderFrame?)`（ランプには `setParameterSmoothed(...)`）でライブに変更するか、`setAutomationLane(id, points)` でタイムライン上にスケジュールします。
 
+メタデータは `parameterInfo(id)` で調べられます。ホストが登録した id に加えて、ホストしたインストゥルメントのパラメータ、ミキサーのフェーダー／パン／ステレオ幅（`width`）のターゲット、エンジンがストリップ仕様を保持しているチャンネルストリップのインサートパラメータに対応する予約 id も解決します。予約 id のメタデータはコンパイル時の既定値とインサートカタログに基づき、現在の音声状態を表しません。インストゥルメントの既定値はロード前のパッチの値で、外部でバインドしたストリップにはインサートを説明する仕様が保持されません。`parameterCount()` と `parameterInfoByIndex(index)` が列挙するのはホストが登録したパラメータだけです。予約 id は `parameterInfo(id)` で取得できますが、この列挙には含まれません。Python は `parameter_info`、`parameter_count`、`parameter_info_by_index`、C API は `sonare_engine_parameter_info`、`sonare_engine_parameter_count`、`sonare_engine_parameter_info_by_index` を使います。
+
 ```typescript
 // EngineParameterInfo: id, name, unit, min/max/default, rtSafe, defaultCurve（0=linear）
 engine.addParameter({
@@ -331,6 +333,8 @@ WASM と Node では `resolveInstrumentAutomationId(destinationId, paramName)` �
 
 **再生中にレーンを書き換えても、それ自体でグリッチは起きません。** `setAutomationLane(id, points)` はその id のレーンだけを置き換え、ほかのレーンはそのまま残します。新しいレーン集合はコントロールスレッドが組み立てて発行し、オーディオスレッドは次のブロックの先頭で 1 度だけ最新の集合を取り込みます。ブロックの途中で切り替わることはなく、ロックもメモリ確保も伴いません。聞こえうるのは、書き込んだ値のほうです。現在の再生位置で新しい曲線の値が古い曲線と異なれば、ターゲットは次のサブブロックでその値へ移ります。スムーザーを通るターゲットではグライド、直接設定されるターゲットでは段差です。何もバインドされていない id を狙ったレーンはスキップされ、`drainTelemetry()` に `UnknownTarget` として報告されます。`rtSafe: false` で登録したパラメータは入口で拒否されます（WASM と Node は `SonareError` を投げ、C のエントリーポイントは `SONARE_ERROR_INVALID_PARAMETER` を返します）。
 
+レーンをクリアするには空の点配列を渡します: `setAutomationLane(id, [])`。オーディオスレッドがクリアを取り込むと、対象は `setParameter` または `setParameterSmoothed` で最後に明示的に送った値へ戻ります。その id に手動値を一度も送っていなければ、現在値をそのまま保ちます。手動書き込みとレーンのクリアのどちらを先にオーディオスレッドが取り込んでも、この結果は変わりません。Python では `[]` を渡し、C API では `point_count == 0` にします。
+
 ## オーディオクリップ — ワープモードとページアンダーラン
 
 `setClips(clips)` は、エンジンのオーディオクリップスケジュール全体をコントロールスレッドから 1 回の呼び出しで置き換えます。クリップは **直接** 型（`channels`: チャンネルごとに 1 本の `Float32Array`）か **ページ** 型（`pageProvider`: ホストがページ単位で供給するプロバイダ。[クリップ音声のページストリーミング](./realtime-streaming.md#クリップ音声のページストリーミング) を参照）のどちらかです。`startPpq` で配置し、`lengthSamples`・`clipOffsetSamples`・`loop`・`gain`・フェード長で形を整え、`warpMode` と `warpAnchors` でテンポマップへの追従の仕方を決めます。Python では同じ呼び出しを `set_clips`、`warp_mode` と綴ります。
@@ -351,7 +355,9 @@ engine.setClips([{
 
 ### `'time-stretch'` のボイス予算
 
-`'time-stretch'` クリップは、レンダーするブロックごとに、事前確保された **8 本** のストレッチャボイスのうち 1 本を借ります。1 本のボイスが扱えるのは **2 チャンネル** までです。クリップは前のブロックで使ったボイスをそのまま使い続け、新しいクリップは空いているボイスか、最も長くアイドル状態だったボイスを取ります。出力を出している最中のボイスが音の途中で奪われることはありません。すべてのボイスが使用中のとき、あるいはソースが 3 チャンネル以上のときは、そのブロックに限ってクリップは `'repitch'` の経路でレンダーされ、音程がテンポに連動して動きます。このフォールバックは音を立てず、`warpStretchOverflowCount()`（Python では `warp_stretch_overflow_count()`、C では `sonare_engine_warp_stretch_overflow_count`）だけがそれを見る手段です。フォールバックが起きたブロック数を単調増加で数え、`prepare` でリセットされます。開発中はコントロールスレッドから監視し、増えていくようなら重なる `'time-stretch'` クリップを減らしてください。シーク、ループの折り返し、ボイスの付け替えが起きるとストレッチャのストリームは新しい位置から再開するため、つなぎ目は前の位置を引きずらず、きれいな頭出しになります。
+`'time-stretch'` クリップは、レンダーするブロックごとに事前確保されたストレッチャボイスを 1 本借ります。プールの容量は既定で **8** 本で、1 本のボイスが扱えるのは **2 チャンネル** までです。コントロールスレッドから `setWarpVoiceCapacity(voices)` で容量を設定し、`warpVoiceCapacity()` で読み取れます。Python では `set_warp_voice_capacity()` と `warp_voice_capacity()`、C では `sonare_engine_set_warp_voice_capacity()` と `sonare_engine_warp_voice_capacity()` を使います。指定できる範囲は **0..64** です。64 を超える値は拒否され、直前の容量は変わりません。容量 **0** はこれらのクリップのタイムストレッチを無効にします。クリップは `'repitch'` 経路を使い、このフォールバックは `warpStretchOverflowCount()`（Python では `warp_stretch_overflow_count()`、C では `sonare_engine_warp_stretch_overflow_count()`）に加算されません。エンジンが prepare 済みのときに容量を変更すると、ボイスプールが直ちに作り直され、その時点でボイスを使っているクリップは WSOLA 状態を引き継がずに再開します。
+
+クリップは前のブロックで使ったボイスをそのまま使い続け、新しいクリップは空いているボイスか、最も長くアイドル状態だったボイスを取ります。出力中のボイスが音の途中で奪われることはありません。空きボイスがないと、そのブロックは `'repitch'` 経路になり、オーバーフローカウンターが増えます。ソースが 3 チャンネル以上の場合もストレッチャの状態に収まらないため `'repitch'` 経路になります。カウンターは prepare 済みセッション内で単調増加し、`prepare` でリセットされます。シーク、ループの折り返し、ボイスの付け替えが起きるとストレッチャのストリームは新しい位置から再開するため、つなぎ目は前の位置を引きずらず、きれいな頭出しになります。
 
 ### ページアンダーランはどう見えるか
 

@@ -43,6 +43,8 @@ Presets are named chain configurations, not separate algorithms. Apply one with 
 
 `pop`, `edm`, `acoustic`, `hipHop`, `aiMusic`, `speech`, `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `jpop`, `ambient`, `lofi`, `classical`, `drumAndBass`, `techno`, `metal`, `trap`, `rnb`, `jazz`, `kpop`, `trance`, `gameOst`, `vinyl`, `tapeHiss`, `fieldRecording`, `voiceMemo`, `shellac78`
 
+`masteringPresetNames()` returns this compact name list. The capability catalog's `masteringPresets` array adds `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb` for each name; restoration entries have `null` for the three numeric fields. Use `masteringPresetParams(preset)` to expand a selected name into the flat numeric/boolean map accepted by `masterAudio` overrides.
+
 See [Choosing a Mastering Preset](./glossary/mastering/preset-selection.md) for how to pick one without treating a preset as a finished master.
 
 ### Restoration presets
@@ -219,9 +221,9 @@ This reduces the warbly "musical noise" that naive subtraction can leave. These 
 :::
 
 ::: details What is `saturation.ampSim`?
-A guitar/bass-amp-style coloration stage in the form preamp drive → tone stack → power amp → cabinet. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then an optional power-amp section and a data-free cab voicing. Construction/param keys: `drive` (0-1), `bassDb`, `midDb`, `trebleDb`, `presenceDb`, `levelDb`, `power`, `sag`, `transformer`, and `nfb` are automatable through `set_parameter` on every binding. `power` adds a class-AB push-pull soft-saturation stage; `sag` models supply droop and bloom after hard hits; `transformer` adds low-frequency output-transformer saturation; `nfb` adds a negative-feedback loop around the active power stage. `cab` (boolean), `cabModel` (`0` = guitar 4x12, `1` = bass 8x10), and `ampModel` (`0` = classic crunch, `1` = Fender-style clean, `2` = modern high-gain, `3` = tweed, `4` = Vox-style chime, `5` = rectifier) are discrete topology choices, so set them at construction time rather than automating them.
+A guitar/bass-amp-style coloration stage in the form preamp drive → tone stack → power amp → cabinet. An oversampled 12AX7 triode drive stage sits behind a single `[0, 1]` drive knob, with a drive-scaled pre-emphasis shelf so the gain character shifts as you push it. After the drive comes a bass/mid/treble tone stack, then an optional power-amp section and a data-free cab voicing. The live automation targets are `drive` (0-1), `bassDb`, `midDb`, `trebleDb`, `presenceDb`, `levelDb`, `power`, `sag`, `transformer`, `nfb`, `micAxis`, `micBAxis`, `micBlend`, `cone`, `crossover`, `biasShift`, and `inputDb`; all are automatable through `set_parameter` on every binding. `power` adds a class-AB push-pull soft-saturation stage; `sag` models supply droop and bloom after hard hits; `transformer` adds low-frequency output-transformer saturation; `nfb` adds a negative-feedback loop around the active power stage. `cab` (boolean), `cabModel` (`0` = guitar 4x12, `1` = bass 8x10), and `ampModel` (`0` = classic crunch, `1` = Fender-style clean, `2` = modern high-gain, `3` = tweed, `4` = Vox-style chime, `5` = rectifier) are discrete topology choices, so set them at construction time rather than automating them.
 
-The cabinet and microphone keys are construction-only too, so none of them appear in `masteringInsertParamInfo('saturation.ampSim')`:
+The cabinet and microphone keys are included in `masteringInsertParamInfo('saturation.ampSim')` with nullable ids. Most are construction-only (`id: null`, `rtSafe: false`), while `micAxis`, `micBAxis`, `micBlend`, and `cone` have live automation ids; the other live targets are `crossover`, `biasShift`, and `inputDb`. Read each descriptor before deciding whether a cabinet or microphone control can be changed after preparation:
 
 | Key | Meaning |
 |-----|---------|
@@ -303,11 +305,11 @@ The creative-FX insert catalog — reverb, modulation, and delay insert IDs, the
 
 ## How to call them
 
-Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, id, type, unit, realtime-safety, and a `min` / `max` / `default` triple — plus the built-in preset lists. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
+Use `capabilityCatalog()` / `capability_catalog()` when a host needs one build-aware picker across solo, pair, and creative-insert processors. It lists each processor's parameter descriptors — name, nullable id, type, unit, realtime-safety, `min` / `max` / nullable `default`, `choices`, and slot membership — plus the processor `slots` metadata, built-in preset lists, and mastering-preset metadata. `masteringProcessorCatalog()` is the narrower mastering registry classification used for mastering-specific pickers.
 
 ### Reading a catalog bound
 
-Every descriptor carries all three value fields, so a host can size a control straight from the catalog instead of transcribing the per-processor tables on this page. They are not equally populated: practically every parameter publishes a `default`, while `min` and `max` are published only where a limit exists. A `null` bound is not missing data — it states that the catalog knows of no limit on that side, which is still the common case.
+Every descriptor carries the ten fields, so a host can size a control straight from the catalog instead of transcribing the per-processor tables on this page. Construction-only keys appear with `id: null` and `rtSafe: false`; an id-bearing descriptor with `rtSafe: false` is also unavailable for live automation. `default` may be `null` when there is no fallback. `choices` describes a closed named numeric set, including discrete values with gaps, and `slot` links a key to a slot group. The group's `activation`, `parent`, and `minCrossoverCutoffs` in the processor `slots` metadata determine whether that group is present. A `null` bound is not missing data — it states that the catalog knows of no limit on that side.
 
 The two kinds of value come from different places, and that decides how far a host can trust them:
 
@@ -324,7 +326,7 @@ Because the range is measured rather than declared, three properties follow that
 - **A sample-rate-derived bound reflects the un-prepared processor.** Every EQ `band*.frequencyHz` ceiling reads as 24000, and rises once the insert is prepared at a higher rate.
 - **An exclusive bound is reported as the limit it excludes.** `dynamics.compressor` publishes a `sidechainHpfHz` `min` of 0 and still rejects 0.
 
-The per-band EQ surface is the bulk of the flat parameter set: `eq.parametric`, `eq.midSide`, and `multiband.dynamicEq` publish a type and a default for every indexed `band*` field. Publishing them does not widen which keys count as *read* — a band supplied incompletely still has its remaining keys reported as ignored.
+The per-band EQ surface is the bulk of the flat parameter set: `eq.parametric`, `eq.midSide`, and `multiband.dynamicEq` publish descriptors for every indexed `band*` field, including construction keys. Publishing them does not widen which keys count as *read* — a band supplied incompletely still has its remaining keys reported as ignored.
 
 ::: code-group
 
@@ -334,7 +336,9 @@ console.log(build.processors.length, build.presets.mastering);
 
 masteringProcessorNames();   // discover solo processor ids at runtime
 masteringProcessorCatalog(); // classify processors for picker/filter UIs
-masteringInsertParamInfo('eq.parametric'); // realtime automation metadata
+masteringInsertParamInfo('eq.parametric'); // construction and automation metadata
+masteringInsertTiming('eq.parametric', { 'band0.frequencyHz': 1000 }, sampleRate);
+masteringPresetParams('pop'); // flat overrides for masterAudio
 
 const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
   thresholdDb: -24,
@@ -352,11 +356,13 @@ const mono   = JSON.parse(masteringStereoAnalyze('stereo.monoCompatCheck', left,
 import {
   capabilityCatalog,
   masteringInsertParamInfo,
+  masteringInsertTiming,
   masteringPairAnalyze,
   masteringProcess,
   masteringProcessStereo,
   masteringProcessorCatalog,
   masteringProcessorNames,
+  masteringPresetParams,
   masteringStereoAnalyze,
 } from '@libraz/libsonare-native';
 
@@ -366,6 +372,8 @@ console.log(build.processors.length, build.presets.mastering);
 masteringProcessorNames();
 masteringProcessorCatalog();
 masteringInsertParamInfo('eq.parametric');
+masteringInsertTiming('eq.parametric', { 'band0.frequencyHz': 1000 }, sampleRate);
+masteringPresetParams('pop');
 
 const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
   thresholdDb: -24,
@@ -384,6 +392,9 @@ build = sonare.capability_catalog()
 print(len(build["processors"]), build["presets"]["mastering"])
 
 sonare.mastering_processor_names()   # discover solo processor ids at runtime
+sonare.mastering_insert_param_info('eq.parametric')
+sonare.mastering_insert_timing('eq.parametric', {'band0.frequencyHz': 1000}, sr)
+sonare.mastering_preset_params('pop')
 
 out = sonare.mastering_process('dynamics.compressor', samples, sample_rate=sr, params={
     'thresholdDb': -24,
@@ -404,6 +415,10 @@ sonare doctor --json
 # discover solo processor ids
 sonare mastering-processors
 
+# The CLI lists and applies presets, but does not expose the API-only timing or
+# flat-preset-parameter queries.
+sonare mastering-presets
+
 # apply one solo processor (--params are floats: k=v,k=v)
 sonare mastering-processor song.wav --processor dynamics.compressor \
   --params "thresholdDb=-24,ratio=1.5" -o out.wav
@@ -418,6 +433,8 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 ```
 
 :::
+
+Native C callers use `sonare_mastering_insert_timing` with the same flat JSON parameter map and sample-rate query, and `sonare_mastering_preset_params_json` to obtain `{"version":1,"params":{...}}` for a named preset; free the returned JSON with the C ABI's string-free function. `sonare_capability_catalog_json` carries the `masteringPresets` metadata. The CLI exposes preset names and application, but not these timing or parameter-map queries.
 
 :::: details Config style differs between chain entry points
 The registry is string-based so C, Python, Node, WASM, and CLI callers share processor identifiers.

@@ -272,7 +272,9 @@ Additional Python result classes used by focused APIs:
 | Mixing | `MixerStereoResult` |
 | Projects | `AssistSidecar` (return type of `project.get_assist_sidecar(index)` / `project.assist_sidecars()` — see [Project Editing](./project-editing-midi.md#assist-sidecars)), `NotePairValidation` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `MeterTelemetryRecord`, `MeterTelemetryRecordWide`, `ScopeTelemetryRecord` |
-| Build introspection | `Capabilities`, `CapabilityCatalog`, `MasteringInsertParamInfo`, `MasteringProcessorCatalogEntry` (`TypedDict`s over the JSON documents described on [API Surface](./api-surface.md#what-the-capability-catalog-reports)) |
+| Build introspection | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogPresets`, `MasteringPresetCatalogEntry`, `MasteringInsertParamInfo`, `MasteringInsertSlot`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry` (`TypedDict`s over the JSON documents described on [API Surface](./api-surface.md#what-the-capability-catalog-reports)) |
+
+`CapabilityCatalog["masteringPresets"]` contains `MasteringPresetCatalogEntry` values with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries use `None` for the three numeric fields. `MasteringProcessorCatalogEntry` includes `slots` for conditional key groups. `MasteringInsertParamInfo` descriptors include `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit`, `choices`, and `slot`, while `MasteringInsertTiming` contains `latencySamples` and `tailSamples` for the requested insert configuration.
 
 ### Exceptions
 

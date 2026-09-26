@@ -21,7 +21,7 @@ By the end of this page you should be able to:
 - pick a focused helper when the all-in-one result is too coarse or hides an option you need;
 - read a meter estimate without confusing its two different `confidence` numbers, and tell a real detection from the fallback;
 - interpret a key confidence as the model's own belief rather than as an accuracy;
-- choose between the two source-separation routes and know what each one can and cannot recover;
+- choose between the three source-separation routes and know what each one can and cannot recover;
 - decide when the compatibility layer is the better entry point than the music-analysis calls.
 
 ## Start with one call
@@ -46,9 +46,10 @@ console.log(result.key.name, result.key.confidence);
 console.log(result.timeSignature.numerator, result.timeSignature.denominator);
 console.log(result.beats.length, result.downbeatIndices.length);
 console.log(result.chords.length, result.sections.length, result.form);
+console.log(result.chords[0]?.name, result.chords[0]?.romanNumeral);
 ```
 
-`sampleRate` defaults to 22050 Hz when omitted, so pass the buffer's real rate — a wrong rate rescales every time-domain result silently. The call is synchronous and the WASM build is single-threaded, so drive it from a Web Worker for anything longer than a short clip, and use `analyzeWithProgress(...)` when you want a progress bar rather than a frozen one.
+`sampleRate` defaults to 22050 Hz when omitted, so pass the buffer's real rate — a wrong rate rescales every time-domain result silently. The call is synchronous and the WASM build is single-threaded, so drive it from a Web Worker for anything longer than a short clip. `analyzeWithProgress(...)` accepts the same analysis options, reports `(progress, stage)`, and can cancel a long request.
 
 ::: warning `analyze()` searches triads only
 The unified path sets `useTriadsOnly` to `true`, while the standalone `detectChords(...)` leaves it `false`. Until you pass `useTriadsOnly: false`, a seventh chord comes back as the triad inside it. Pass it explicitly when the extended qualities matter.
@@ -81,9 +82,9 @@ That layout explains a cost difference worth knowing. `analyze(...)` pays for th
 | What it sounds like | `analyzeTimbre(...)` · `mfcc(...)` · `melSpectrogram(...)` | [Mel, MFCC, and Timbre](./glossary/analysis/mel-mfcc-timbre.md) |
 | Harmony as a matrix over time | `chroma(...)` · `chromaCqt(...)` · `nnlsChroma(...)` | [Chroma Features](./glossary/analysis/chroma-features.md) |
 | The raw time-frequency picture | `stft(...)` · `melSpectrogram(...)` | [Spectrogram and STFT](./glossary/analysis/spectrogram-stft.md) |
-| How to split the mix up | `hpss(...)` · `decomposeStems(...)` | [Source separation](#source-separation), below |
+| How to split a mono or multichannel mix | `hpss(...)` · `decomposeStems(...)` · `decomposeStemsLinked(...)` | [Source separation](#source-separation), below |
 
-Everything in the left column is also a field of the `analyze(...)` result. The helpers exist for the cases where you want tighter control — a narrower tempo range, a different key profile, a chord search that includes extended qualities — or where you only need one answer and the rest would be wasted work.
+`analyze(...)` includes the principal tempo, beat, meter, key, chord, section, melody, timbre, dynamics, and rhythm results. Feature matrices, low-level transforms, and stem separation use focused helpers. Use those helpers when you want tighter control — a narrower tempo range, a different key profile, a chord search that includes extended qualities — or when you only need one answer and the rest would be wasted work.
 
 ## Rhythm
 
@@ -247,7 +248,7 @@ for (const chord of chords) {
 const roman = chordFunctionalAnalysis({ samples, sampleRate, ...chordOptions });
 ```
 
-Each `Chord` carries `root`, `bass`, `quality`, `start`, `end`, `duration`, `confidence` and a `name` the core spells canonically, so `rootName`, `bassName` and `name` read identically from every binding.
+Each `Chord` carries `root`, `bass`, `quality`, `start`, `end`, `duration`, `confidence` and a `name` the core spells canonically, so `rootName`, `bassName` and `name` read identically from every binding. Chords inside `analyze(...)` additionally carry `romanNumeral` relative to `result.key`; it is empty for `N.C.`.
 
 Quality coverage goes well past triads and plain sevenths. Beyond `maj`, `m`, `dim`, `aug`, `7`, `maj7`, `m7`, `m7b5`, `dim7`, `sus2`, `sus4`, `sus2add4`, `add9`, `madd9`, `maj9` and `9`, the search also recognises **`6`**, **`m6`**, **`mM7`**, **`7sus4`**, **`11`**, **`13`**, **`7b9`** and **`7#9`**. A slash chord appends the bass, as in `C/E`. Below the correlation `threshold` the segment is reported as unknown rather than as a forced guess.
 
@@ -258,6 +259,7 @@ Quality coverage goes well past triads and plain sevenths. Beyond `maj`, `m`, `d
 | `useKeyContext` · `keyRoot` · `keyMode` | Bias the search toward chords that belong to a key you already detected. |
 | `chromaMethod` | `'stft'` or `'nnls'`. The second suppresses harmonics of the bass before matching, which helps on dense material. |
 | `detectInversions` | Report the bass note separately instead of folding it into the root. |
+| `tuning` | Shift the chord chroma by a tuning offset in fractions of a semitone. Use the unit returned by `estimateTuning(...)`; the value must be in `[-0.5, 0.5)` and defaults to `0` (A440). The same option on `analyze(...)` shifts the chroma used for key, chords and sections. |
 | `useBeatSync` · `minDuration` · `smoothingWindow` | Control how the frame-level decision is aggregated into segments. |
 
 ## Structure and melody
@@ -298,7 +300,7 @@ Pitch tracking reads the waveform directly rather than the STFT, and it expects 
 
 ## Source separation
 
-There are two routes, and they answer different questions.
+There are three routes, and they answer different questions.
 
 <SonareDemo id="stem-decompose" />
 
@@ -330,9 +332,59 @@ const { components, w, h } = decomposeStems({
 | Reconstruction | The outputs sum back to the input | The masks sum to one where the model has energy, so the components sum back to the input |
 | Phase | Original | Original — the mask is applied to the complex spectrogram, which is what makes each component listenable |
 
-Defaults worth knowing: both median kernels are 31, and under the default soft mask `hpssWithResidual(...)` returns a silent residual because the two masks already sum to one — pass `hardMask: true` for a residual that actually carries the band neither component claimed. `decomposeStems(...)` defaults to 4 components, 100 iterations and `beta: 2` (Frobenius; pass `1` for Kullback-Leibler), with `maskPower: 1` keeping the magnitude ratio.
+Defaults worth knowing: both median kernels are 31, and under the default soft mask `hpssWithResidual(...)` returns a silent residual because the two masks already sum to one — pass `hardMask: true` for a residual that actually carries the band neither component claimed. `decomposeStems(...)` and `decomposeStemsLinked(...)` use the same NMF defaults: 4 components, `nFft: 2048`, `hopLength: 512`, 100 iterations, `beta: 2` (Frobenius; pass `1` for Kullback-Leibler), `init: 'random'`, and `maskPower: 1` keeping the magnitude ratio. `decomposeStemsLinked(...)` defaults an omitted `sampleRate` to `22050`.
 
-Neither route is a trained instrument separator, and neither will hand you a clean isolated vocal from a dense mix. What they are good at is making a downstream estimator's job easier: beat tracking on the percussive part, chroma and key on the harmonic part, pitch tracking on a component that isolated the lead.
+For a multichannel recording, use `decomposeStemsLinked(...)`. It averages the channels' magnitude spectrograms to fit one NMF model and one set of component masks. It then applies each mask unchanged to every channel's original complex spectrogram. Interchannel level and phase differences therefore stay in place, so a stereo image does not move as the components are separated.
+
+Pass at least one `Float32Array` channel, make every channel the same length, and keep the channel count at 64 or below. The result uses `components[k][c]` for component `k` on channel `c`; `w`, `h`, and `sampleRate` have the same meaning as in `decomposeStems(...)`. A one-channel call is bit-identical to `decomposeStems(...)` with the same options.
+
+::: code-group
+
+```typescript [Browser]
+import { init, decomposeStemsLinked } from '@libraz/libsonare';
+
+await init();
+
+const linked = decomposeStemsLinked({
+  channels: [leftChannel, rightChannel], // equal-length Float32Array planes
+  sampleRate,
+  nComponents: 4,
+});
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+console.log(linked.w.length, linked.h.length);
+```
+
+```typescript [Node]
+import { decomposeStemsLinked } from '@libraz/libsonare-native';
+
+const linked = decomposeStemsLinked({
+  channels: [leftChannel, rightChannel], // equal-length Float32Array planes
+  sampleRate,
+});
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
+```python [Python]
+import libsonare as sonare
+
+linked = sonare.decompose_stems_linked(
+    [left_channel, right_channel], sample_rate=sample_rate, n_components=4
+)
+first_left = linked["components"][0][0]
+first_right = linked["components"][0][1]
+print(linked["w"].shape, linked["h"].shape)
+```
+
+```bash [CLI]
+# The CLI exposes mono `decompose-stems` only.
+# Use a library binding when one NMF model must serve several channels.
+```
+
+:::
+
+None of these routes is a trained instrument separator, and none will hand you a clean isolated vocal from a dense mix. They are useful for making a downstream estimator's job easier: beat tracking on the percussive part, chroma and key on the harmonic part, pitch tracking on a component that isolated the lead, or multichannel processing that must keep the stereo image.
 
 ## The layer underneath
 

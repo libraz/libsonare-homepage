@@ -34,6 +34,8 @@ try {
 }
 ```
 
+For a first-order low or high shelf, set the band's `slopeDbOct` to `6`. Its `frequencyHz` is then where the shelf reaches half its gain change in dB, and `q` has no effect. Leaving `slopeDbOct` unset uses the regular shelf design shown above.
+
 Source-built C++ CLI equivalents for file-based EQ and filtering:
 
 ```bash [C++ CLI]

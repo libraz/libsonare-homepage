@@ -125,8 +125,8 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | Downbeat timestamps (seconds) |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | Ranked key candidates with correlation |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | Chord segments over time; frames below the detection threshold are explicit `N.C.` intervals |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, form |
-| `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result as `analyze`, with an optional `(progress, stage)` callback |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | All-in-one analysis: BPM and its candidates, key, time signature and its candidates, beats, chords (each with `roman_numeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, form |
+| `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | Same result and analysis keyword options as `analyze`, with an optional `(progress, stage)` callback and keyword-only `cancel` callback |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | BPM with top candidates |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | Meter and accent grouping scored over a beat series you already have — no audio, no re-analysis |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | Roman-numeral labels (`"I"`, `"IV"`, `"V"`, `"vi"`, ...) for detected chords, relative to a key |
@@ -155,7 +155,7 @@ helpers such as `analyze_sections(...)`, `analyze_melody(...)`, `cqt(...)`, and
 `vqt(...)` remain standalone functions; pass `audio.data` and
 `audio.sample_rate` to those.
 
-In Python, `analyze(...)` calls `sonare_analyze_json` and returns the all-in-one `AnalysisResult`: BPM and ranked BPM hypotheses, key, time signature and its candidates, beat times and per-beat strengths, chords, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
+In Python, `analyze(...)` calls `sonare_analyze_json_ex` on the current build and returns the all-in-one `AnalysisResult`: BPM and ranked BPM hypotheses, key, time signature and its candidates, beat times and per-beat strengths, chords with `roman_numeral` labels relative to the detected key, sections, timbre, dynamics, rhythm, melody, and form. The focused functions above remain useful when you want a single facet, parameterized/targeted analysis, or to avoid recomputing the whole result. (Acoustic/room metrics are separate — see `estimate_room` and the room helpers; they are not part of `AnalysisResult`.)
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -180,7 +180,9 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 #### `analyze()` options
 
-`analyze(...)` takes the whole `MusicAnalyzerConfig` as keyword arguments: `n_fft=2048`, `hop_length=512`, `bpm_min=60.0`, `bpm_max=200.0`, `start_bpm=120.0`, `use_triads_only=True`, `use_hpss=True`, `chroma_highpass_hz=80.0`, `use_bass_weighted=True`, `chroma_hop_multiplier=4`, `use_chord_hmm=False`, `use_chord_key_context=False`, `chord_hmm_beam_width=24`, `detect_chord_inversions=False`, `adaptive_tempo=False`, `tempo_update_interval_beats=8`, `compute_tempo_curve=False`, `meter_candidate_numerators=None`, and `meter_denominator=4`.
+`analyze(...)` takes the whole `MusicAnalyzerConfig` as keyword arguments: `n_fft=2048`, `hop_length=512`, `bpm_min=60.0`, `bpm_max=200.0`, `start_bpm=120.0`, `use_triads_only=True`, `use_hpss=True`, `chroma_highpass_hz=80.0`, `use_bass_weighted=True`, `chroma_hop_multiplier=4`, `use_chord_hmm=False`, `use_chord_key_context=False`, `chord_hmm_beam_width=24`, `detect_chord_inversions=False`, `adaptive_tempo=False`, `tempo_update_interval_beats=8`, `compute_tempo_curve=False`, `meter_candidate_numerators=None`, `meter_denominator=4`, and `tuning=0.0`.
+
+`tuning` is a recording offset in fractions of a semitone, using the unit returned by `estimate_tuning(...)`. It must be in `[-0.5, 0.5)`; the default `0.0` is concert A440. The same keyword is available on `analyze_with_progress(...)`, and shifts the chroma used for key, chords, and sections.
 
 ::: warning `use_triads_only` defaults to **True** here
 The unified `analyze(...)` path searches triads alone until you say otherwise, while the standalone `detect_chords(...)` API defaults the same flag to `False`. If you expect sevenths and extensions from `analyze(...)`, pass `use_triads_only=False`.
@@ -227,7 +229,7 @@ Keyword options are `candidate_numerators` (default `(3, 4, 6)`), `denominator=4
 
 `Chord.quality` is one of the strings listed under [Types](./python-api-types.md#types). Some of them are anagrams of each other and no chromagram can separate the pair: a `major6` spells the `minor7` a minor third below, a `minor6` the `halfDim7` below it, and a `dominant7Sus4` the `sus2Add4` a fourth below. The established reading stays the default in each pair, and only bass evidence promotes the sixth.
 
-For long files, `analyze_with_progress(...)` returns the same `AnalysisResult` as `analyze(...)` but accepts an `on_progress=(progress, stage)` callback, mirroring the mastering progress callbacks below:
+For long files, `analyze_with_progress(...)` returns the same `AnalysisResult` as `analyze(...)`, accepts the same analysis keyword options including `tuning`, and accepts an `on_progress=(progress, stage)` callback plus keyword-only `cancel`. It mirrors the mastering progress callbacks below:
 
 ```python
 def on_step(progress: float, stage: str) -> None:
@@ -236,7 +238,7 @@ def on_step(progress: float, stage: str) -> None:
 result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress=on_step)
 ```
 
-To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns one label per detected chord, in chord order. The labels line up with a `detect_chords(...)` result only when both calls get the same options:
+`detect_chords(...)` and `chord_functional_analysis(...)` accept `tuning` in the same fractions-of-a-semitone unit as `analyze(...)`. To label chords with Roman numerals relative to a key, use `chord_functional_analysis(...)`. It detects chords with the same algorithm as `detect_chords(...)`, then returns one label per detected chord, in chord order. The labels line up with a `detect_chords(...)` result only when both calls get the same options:
 
 ```python
 labels = sonare.chord_functional_analysis(
@@ -284,6 +286,7 @@ print(labels)  # e.g. ['I', 'V', 'vi', 'IV']
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | NMF decomposition factors `(w, h)` from a row-major spectrogram |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | NMF decomposition `(w, h)` with a selectable initialiser; `init` defaults to `'random'`, also accepts `'nndsvd'` (SVD warm start) |
 | `decompose_stems(samples, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | NMF separation that masks the original complex spectrogram, so the components keep the source's phase and sum back to the input; defaults `n_components=4`, `n_iter=100`, `beta=2.0`, `init='random'`, `mask_power=1.0` |
+| `decompose_stems_linked(channels, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | Shared NMF separation for one or more same-length channels (maximum 64); preserves interchannel level and phase, and returns `components[k][c]` planes. Defaults match `decompose_stems`; one channel is bit-identical |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | Nearest-neighbor filtering of a row-major spectrogram |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | Onset strength envelope (input to the tempogram family) |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | Multi-band onset strength; returns `(n_frames, [n_bands x n_frames])` row-major (`n_bands` default 3) |
@@ -310,6 +313,24 @@ stems = sonare.decompose_stems(audio.data, audio.sample_rate, n_components=4, ma
 for component in stems["components"]:
     ...  # each is a 1-D float32 array the length of the input
 print(stems["w"].shape, stems["h"].shape, stems["sample_rate"])
+```
+
+For multichannel input, use `decompose_stems_linked(...)`. It fits one NMF
+model and one soft-mask set from the channels' averaged magnitudes, then applies
+each mask unchanged to each channel's original complex spectrum. This preserves
+interchannel level and phase. Pass one or more same-length channels, with no
+more than 64 channels. Each `components[k]` is a two-dimensional float32 array
+whose rows are channels, so `components[k][c]` is component `k` on channel `c`.
+The `w` and `h` arrays are shared across channels, and all defaults match
+`decompose_stems`; one channel is bit-identical to `decompose_stems(...)`.
+
+```python
+linked = sonare.decompose_stems_linked(
+    [left_channel, right_channel], sample_rate=sample_rate
+)
+first_left = linked["components"][0][0]
+first_right = linked["components"][0][1]
+print(linked["w"].shape, linked["h"].shape)
 ```
 
 `n_components`, `n_fft`, `hop_length` and `n_iter` carry real defaults on this entry point, so `0` is refused as a caller mistake rather than read as the "use the default" sentinel the same field means on the C ABI and the JavaScript surfaces.

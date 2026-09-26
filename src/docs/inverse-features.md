@@ -212,6 +212,8 @@ Everything above reconstructs from a magnitude, so everything above has to inven
 
 `decomposeStems` takes the other route. It runs the same factorisation, then builds a per-component **soft mask** — each component's share of the total magnitude at every time-frequency point — and applies that mask to the **original complex** spectrogram. Nothing is estimated. Every component keeps the source's own phase, and because the masks divide each point rather than approximate it, the components **sum back to the input**.
 
+For a multichannel recording, use `decomposeStemsLinked` (or `decompose_stems_linked` in Python). It averages the channels' magnitudes to fit one NMF model and one set of masks, then applies each mask unchanged to every channel's own complex spectrogram. Interchannel level and phase differences stay in place. Pass at least one same-length channel and no more than 64 channels. The result stores component `k` on channel `c` in `components[k][c]`, alongside the shared `w` and `h` factors. Its NMF defaults match `decomposeStems`: 4 components, `nFft` 2048, `hopLength` 512, 100 iterations, `beta` 2, `init: 'random'`, and `maskPower` 1. `decomposeStemsLinked` defaults an omitted sample rate to 22050. With one channel, the result is bit-identical to `decomposeStems` with the same options.
+
 | | `decompose` + Griffin-Lim | `decomposeStems` |
 |---|---------------------------|------------------|
 | Phase | Invented, iteratively | The source's own |
@@ -219,7 +221,40 @@ Everything above reconstructs from a magnitude, so everything above has to inven
 | Components sum to the input | No | Yes |
 | Use it for | Seeing and hearing what a component holds | Separated audio you intend to keep |
 
-Reach for `decomposeStems` whenever a component will be listened to, mixed, or written to a file, and keep the Griffin-Lim route for what this page is really about: inspecting what a feature representation retained. The signatures and per-runtime spellings (`decomposeStems`, `decompose_stems`) are in [JavaScript API](./js-api-analysis.md) and [Python API](./python-api.md).
+Reach for `decomposeStems` whenever a mono component will be listened to, mixed, or written to a file. Use `decomposeStemsLinked` when several channels must share one separation while keeping their relative level and phase. Keep the Griffin-Lim route for inspecting what a feature representation retained. The signatures and per-runtime spellings (`decomposeStems`, `decomposeStemsLinked`, `decompose_stems`, `decompose_stems_linked`) are in [JavaScript API](./js-api-features.md) and [Python API](./python-api-analysis.md).
+
+::: code-group
+
+```typescript [Browser]
+import { init, decomposeStemsLinked } from '@libraz/libsonare';
+
+await init();
+const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
+```typescript [Node]
+import { decomposeStemsLinked } from '@libraz/libsonare-native';
+
+const linked = decomposeStemsLinked({ channels: [leftChannel, rightChannel], sampleRate });
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
+```python [Python]
+import libsonare as sonare
+
+linked = sonare.decompose_stems_linked([left_channel, right_channel], sample_rate=sample_rate)
+first_left = linked["components"][0][0]
+first_right = linked["components"][0][1]
+```
+
+```bash [CLI]
+# The CLI has mono `decompose-stems` only; use a library binding for linked channels.
+```
+
+:::
 
 ## A round-trip sanity check
 

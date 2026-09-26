@@ -247,7 +247,7 @@ These functions are not just "more features"; they solve different modeling prob
 | Chord-friendly chroma | `chromaCqt(...)`, `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | Constant-Q, NNLS, CENS, and low-register chroma variants can be cleaner for chord or bass-register work than plain STFT chroma. |
 | Spectral shape detail | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | Librosa-compatible contrast bands, polynomial coefficients, zero-crossing indices, and multi-band onset strength. |
 | Pitch/tuning offset | `pitchTuning(...)`, `estimateTuning(...)` | Estimate tuning in fractions of a bin from detected frequencies or directly from audio. |
-| Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, mask-based stem output, nearest-neighbor filtering, interval remixing, channel-consistent cut points, time scaling, and HPSS residual output. |
+| Decomposition and remixing | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `decomposeStemsLinked(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF factorization, selectable NMF initialization, mono and linked multichannel stem output, nearest-neighbor filtering, interval remixing, channel-consistent cut points, time scaling, and HPSS residual output. |
 | Reconstruct approximate audio/features | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | Griffin-Lim based inverse paths for visualization, debugging, and feature round-trips. CQT/VQT inputs are magnitude matrices. |
 | Delivery loudness measurements | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 style loudness values, including multichannel integrated loudness and LRA (loudness range — how much the loudness varies over the program). |
 
@@ -369,8 +369,46 @@ and reconstruction quality are unchanged. But the factors themselves are not the
 same numbers a float seed produced. If you have **stored `w`/`h` matrices**, or
 you are diffing a stem render against one you rendered earlier, expect them to
 differ; re-derive stored factors rather than assuming a mismatch is a bug. The
-same applies to `decomposeWithInit(..., 'nndsvd')`.
+same applies to `decomposeWithInit(..., 'nndsvd')` and `decomposeStemsLinked(...)`.
 :::
+
+### `decomposeStemsLinked(request)` <Badge type="warning" text="Heavy" />
+
+Use this form for a multichannel recording when every channel must use one shared
+separation while keeping its own stereo image.
+
+```typescript
+function decomposeStemsLinked(
+  request: DecomposeStemsLinkedRequest,
+): DecomposeStemsLinkedResult
+
+interface DecomposeStemsLinkedRequest {
+  channels: Float32Array[];  // at least one, all the same length, at most 64
+  sampleRate?: number;       // default 22050
+  nComponents?: number;      // default 4
+  nFft?: number;             // default 2048
+  hopLength?: number;        // default 512
+  nIter?: number;            // default 100
+  beta?: number;             // default 2 (Frobenius); 1 = Kullback-Leibler
+  init?: 'random' | 'nndsvd';  // default 'random'
+  maskPower?: number;        // default 1; must be >= 1
+}
+
+interface DecomposeStemsLinkedResult {
+  components: Float32Array[][];  // components[k][c], each input-length
+  w: Float32Array;                // [nBins x nComponents], row-major
+  h: Float32Array;                // [nComponents x nFrames], row-major
+  sampleRate: number;
+}
+```
+
+The function averages channel magnitudes to fit one NMF model and one set of
+soft masks. It applies each mask unchanged to each channel's original complex
+spectrogram, so interchannel level and phase differences stay in place. Pass at
+least one same-length channel and no more than 64 channels. `w` and `h` describe
+the shared factorization. With one channel, this result is bit-identical to
+`decomposeStems(...)` with the same options. All NMF option defaults match
+`decomposeStems(...)`.
 
 ### `remixAlignedIntervals(...)`
 

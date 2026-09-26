@@ -242,7 +242,7 @@ interface WaveformPeaksReport {
 | コード検出向けのクロマ | `chromaCqt(...)`, `nnlsChroma(...)`, `chromaCens(...)`, `bassChroma(...)` | Constant-Q、NNLS、CENS、低域寄りのクロマは、通常の STFT クロマよりコードや低音域の処理に向く場合があります。 |
 | スペクトル形状の詳細 | `spectralContrast(...)`, `polyFeatures(...)`, `zeroCrossings(...)`, `onsetStrengthMulti(...)` | librosa 互換のコントラスト帯域、多項式係数、ゼロ交差インデックス、マルチバンドオンセット強度を返します。 |
 | ピッチ／チューニングずれ | `pitchTuning(...)`, `estimateTuning(...)` | 検出済み周波数または音声から、ビン単位のチューニングずれを推定します。 |
-| 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、マスクベースのステム出力、近傍フィルタ、区間リミックス、チャンネル間で一貫したカット位置、時間スケーリング、残差付き HPSS。 |
+| 分解とリミックス | `decompose(...)`, `decomposeWithInit(...)`, `decomposeStems(...)`, `decomposeStemsLinked(...)`, `nnFilter(...)`, `remix(...)`, `remixAlignedIntervals(...)`, `phaseVocoder(...)`, `hpssWithResidual(...)` | NMF 分解、初期化方式を選べる NMF、モノラル／連動マルチチャンネルのステム出力、近傍フィルタ、区間リミックス、チャンネル間で一貫したカット位置、時間スケーリング、残差付き HPSS。 |
 | 特徴量や音声の近似復元 | `melToStft`, `melToAudio`, `mfccToMel`, `mfccToAudio`, `cqtToAudio`, `vqtToAudio` | 可視化、デバッグ、特徴量の往復確認に使います。CQT/VQT の入力は振幅行列です。 |
 | 配信向けラウドネス測定 | `lufs`, `lufsInterleaved`, `momentaryLufs`, `shortTermLufs`, `ebur128LoudnessRange` | ITU-R BS.1770 / EBU R128 系のラウドネス値。マルチチャンネル Integrated LUFS と LRA（ラウドネスレンジ。曲全体でラウドネスがどれだけ変動するか）も含みます。 |
 
@@ -349,8 +349,39 @@ interface DecomposeStemsResult {
 ただし因子そのものは、単精度の初期値が生成していた数値とは異なります。**`w` / `h` を保存して
 いる**場合や、以前レンダリングしたステムと差分を取っている場合は、値が異なることを前提にして
 ください。不一致をバグと決めつけず、保存済みの因子は再計算してください。
-`decomposeWithInit(..., 'nndsvd')` についても同様です。
+`decomposeWithInit(..., 'nndsvd')` と `decomposeStemsLinked(...)` についても同様です。
 :::
+
+### `decomposeStemsLinked(request)` <Badge type="warning" text="高負荷" />
+
+各チャンネルで 1 つの分離を共有し、ステレオの定位を保ったままマルチチャンネルの録音を処理するときに使います。
+
+```typescript
+function decomposeStemsLinked(
+  request: DecomposeStemsLinkedRequest,
+): DecomposeStemsLinkedResult
+
+interface DecomposeStemsLinkedRequest {
+  channels: Float32Array[];  // 1 以上、すべて同じ長さ、最大 64
+  sampleRate?: number;       // 既定 22050
+  nComponents?: number;      // 既定 4
+  nFft?: number;             // 既定 2048
+  hopLength?: number;        // 既定 512
+  nIter?: number;            // 既定 100
+  beta?: number;             // 既定 2（Frobenius）。1 で Kullback-Leibler
+  init?: 'random' | 'nndsvd';  // 既定 'random'
+  maskPower?: number;        // 既定 1。1 以上であること
+}
+
+interface DecomposeStemsLinkedResult {
+  components: Float32Array[][];  // components[k][c]。各要素は入力と同じ長さ
+  w: Float32Array;                // [nBins x nComponents] の行優先行列
+  h: Float32Array;                // [nComponents x nFrames] の行優先行列
+  sampleRate: number;
+}
+```
+
+チャンネルの振幅を平均して 1 つの NMF モデルとソフトマスクを作り、各チャンネルの元の複素スペクトログラムへマスクを同じまま適用します。そのためチャンネル間のレベル差と位相差が保たれます。同じ長さのチャンネルを少なくとも 1 つ、最大 64 チャンネルまで渡してください。`w` と `h` は共有された因子分解を表します。1 チャンネルなら、同じオプションを渡した `decomposeStems(...)` とビット単位で一致します。NMF オプションの既定値は `decomposeStems(...)` と同じです。
 
 ### `remixAlignedIntervals(...)`
 

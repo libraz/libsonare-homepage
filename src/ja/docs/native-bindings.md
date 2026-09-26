@@ -216,7 +216,7 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 
 | グループ | API 名 |
 |----------|--------|
-| プリセットと簡易入口 | `mastering()`、`masteringPresetNames()`、`masteringPlatformNames()`、`masterAudio()`、`masterAudioStereo()`、`masterAudioWithProgress()`、`masterAudioStereoWithProgress()` |
+| プリセットと簡易入口 | `mastering()`、`masteringPresetNames()`、`masteringPresetParams()`、`masteringPlatformNames()`、`masterAudio()`、`masterAudioStereo()`、`masterAudioWithProgress()`、`masterAudioStereoWithProgress()` |
 | フルチェーン | `masteringChain()`、`masteringChainStereo()`、`masteringChainWithProgress()`、`masteringChainStereoWithProgress()` |
 | オフラインのダイナミクス（単発） | `masteringDynamicsCompressor()`、`masteringDynamicsGate()`、`masteringDynamicsTransientShaper()` |
 | オフラインのリペア — モノラル | `masteringRepairDeclick()`、`masteringRepairDeclip()`、`masteringRepairDecrackle()`、`masteringRepairDehum()`、`masteringRepairDenoiseClassical()`、`masteringRepairDereverbClassical()`、`masteringRepairTrimSilence()` |
@@ -224,7 +224,7 @@ WASM パッケージは、ブラウザデモと同じ camelCase のマスタリ�
 | オフラインのリペア — チャンネルリンク（任意のチャンネル数） | `masteringRepairDenoiseClassicalLinked()`、`masteringRepairDereverbClassicalLinked()` |
 | リペアの計測（音声を返さない） | `masteringRepairDetectClicks()`、`masteringRepairDetectClipping()`、`masteringRepairDetectCrackle()`、`masteringRepairDetectHum()`、`masteringRepairDetectNoiseFloor()`、`masteringRepairDetectReverb()`、`masteringRepairDetectTrimRange()`、`masteringRepairDetectTrimRangeStereo()`、`masteringRepairNoiseBandBins()`、`masteringRepairDereverbConfigForRoom()` |
 | アシスタントとプロファイル | `masteringAudioProfile()`、`masteringAssistantSuggest()`、`masteringAssistantSuggestChain()`、`masteringStreamingPreview()`、`masteringAudioProfileStereo()`、`masteringAssistantSuggestStereo()`、`masteringAssistantSuggestChainStereo()`、`masteringStreamingPreviewStereo()`、`masteringAbMatchLoudness()` |
-| 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name)`、`masteringProcess()`、`masteringProcessStereo()` |
+| 名前付きプロセッサ | `masteringProcessorNames()`、`masteringProcessorCatalog()`、`masteringInsertNames()`、`masteringInsertParamNames(name)`、`masteringInsertParamInfo(name)`、`masteringInsertTiming(name, params, sampleRate)`、`masteringProcess()`、`masteringProcessStereo()` |
 | ペア処理とステレオ解析 | `masteringPairProcessorNames()`、`masteringPairProcess()`、`masteringPairAnalysisNames()`、`masteringPairAnalyze()`、`masteringStereoAnalysisNames()`、`masteringStereoAnalyze()` |
 | ストリーミングレンダー | `StreamingMasteringChain` |
 

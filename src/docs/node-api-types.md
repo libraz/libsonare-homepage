@@ -266,9 +266,10 @@ The native package also exports TypeScript helper types for option objects, call
 | Area | Exported types |
 |------|----------------|
 | Analysis options/results | `AnalysisProgressCallback`, `AnalysisBeat`, `BeatObservations`, `BpmCandidate`, `Chord`, `ChordAnalysisResult`, `AnalysisChord`, `AnalysisSection`, `ChordChromaMethod`, `EstimateMeterRequest`, `KeyMode`, `KeyProfile`, `MelodyPoint`, `MeterEstimate`, `Section`, `SectionTypeOrdinal`, `TempogramMode`, `TrimSilenceMode` |
-| Feature extraction | `DecomposeStemsRequest`, `DecomposeStemsResult`, `NoteSegment`, `NoteSegmentsRequest` |
+| Feature extraction | `DecomposeStemsRequest`, `DecomposeStemsResult`, `DecomposeStemsLinkedRequest`, `DecomposeStemsLinkedResult`, `NoteSegment`, `NoteSegmentsRequest` |
 | Streaming analysis | `StreamAnalyzerConfig`, `StreamAnalyzerStats`, `StreamFramesSoa`, `StreamProgressiveEstimate`, `StreamChordChange`, `StreamBarChord`, `StreamPatternScore` |
-| Mastering and metering | `MasteringPreset`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
+| Mastering and metering | `MasteringPreset`, `MasteringInsertParamInfo`, `MasteringInsertTiming`, `MasteringProcessorCatalogEntry`, `MasteringInsertSlot`, `SoloProcessor`, `StreamingPlatform`, `DynamicsProcessorResult`, `CompressorDetector`, `DecrackleMode`, `DenoiseClassicalMode`, `DenoiseClassicalNoiseEstimator`, `EqBandInput`, `EqPhaseMode`, `EqSpectrumSnapshot`, `NormalizeMode` |
+| Capability catalog | `Capabilities`, `CapabilityCatalog`, `CapabilityCatalogParameter`, `CapabilityCatalogProcessor`, `CapabilityCatalogPresets`, `CapabilityCatalogMasteringPreset`, `MasteringInsertParamChoice` |
 | Stereo mastering and metering requests | `MasteringAssistantSuggestStereoRequest`, `MasteringAudioProfileStereoRequest`, `MasteringStreamingPreviewStereoRequest`, `MeteringStereoRequest`, `NormalizeStereoRequest`, `NormalizeStereoResult` |
 | Pitch correction | `PitchCorrectOptions`, `VoicedFlags` |
 | Mixing | `AutomationCurve`, `GoniometerPoint`, `MeterTap`, `MixMeterSnapshot`, `MixResult`, `MixerProcessResult`, `PanLaw`, `PanLawName`, `PanLawInput`, `PanMode`, `SendTiming` |
@@ -277,3 +278,5 @@ The native package also exports TypeScript helper types for option objects, call
 | Realtime engine transport | `EngineTransportState`, `EngineMarker`, `EngineClip`, `EngineAutomationPoint`, `EngineAutomationPointCurve`, `EngineMetronomeConfig`, `EngineTrackMonitorMode` |
 | Project metadata and automation | `ProjectAssistSidecar`, `ProjectAssistSidecarInput`, `ProjectAutomationTargetKind`, `ProjectAutomationLaneDesc` |
 | Realtime engine jobs/telemetry | `EngineBounceOptions`, `EngineBounceResult`, `EngineFreezeOptions`, `EngineFreezeResult`, `EngineCaptureStatus`, `EngineTelemetry`, `EngineTelemetryType`, `EngineTelemetryError`, `EngineMeterTelemetry` |
+
+`CapabilityCatalog.masteringPresets` contains entries with `name`, `kind`, `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`; restoration entries set the three numeric fields to `null`. `CapabilityCatalogProcessor.slots` describes conditional parameter groups, and `MasteringInsertParamInfo` adds the corresponding `slot` to each descriptor. `masteringInsertTiming(name, params, sampleRate)` returns `MasteringInsertTiming` with `latencySamples` and `tailSamples`, while `masteringPresetParams(preset)` returns a flat `Record<string, number | boolean>` suitable for `masterAudio({ samples, overrides })`.

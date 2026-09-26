@@ -15,11 +15,11 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `detectKey(samples, sampleRate?)` | `Key` | ルート、モード、確信度 |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | ビート位置 |
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | オンセット位置 |
-| `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。末尾の引数で HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）を制御 |
+| `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | コード進行（開始／終了時刻付き）。`threshold` 未満のフレームは明示的な `N.C.` 区間として返ります。オプション形式では HMM 平滑化・キーコンテキスト・転回形・クロマ手法（既定 `'stft'`）・`tuning` を指定できます（従来の位置引数形式も利用可能） |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | 小節頭（ダウンビート）の位置 |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | 相関スコア付きのキー候補ランキング |
-| `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | 1 回の呼び出しで、BPM と順位付き BPM 仮説、キー、拍子と順位付き拍子候補、ビート、コード、セクション、音色、ダイナミクス、リズム、メロディ、フォームを解析。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
-| `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | `analyze` と同じ。長尺入力向けに `(progress, stage)` コールバックを受け取ります |
+| `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | 1 回の呼び出しで、BPM と順位付き BPM 仮説、キー、拍子と順位付き拍子候補、ビート、コード（検出キーを基準にした `romanNumeral` 付き）、セクション、音色、ダイナミクス、リズム、メロディ、フォームを解析。以下の専用 `detect*`／`analyze*` 関数は、個別解析やパラメータ指定の解析向けに引き続き利用できます |
+| `analyzeWithProgress(request)` / `analyzeWithProgress(samples, sampleRate, onProgress, options?)` | `AnalysisResult` | `analyze` と同じ結果を `(progress, stage)` で通知します。リクエスト形式では `options` と `cancel`、位置引数形式では `onProgress` の後ろの解析オプションを指定できます |
 | `estimateMeter(request)` | `MeterEstimate` | 呼び出し側が渡したビート列に対して拍子を採点します。音声も再解析も不要。リクエスト専用で `EstimateMeterRequest` を受け取ります |
 | `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | 確信度と候補付きテンポ。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength`、`maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | 拍子・グルーブ・シンコペーション。`options`: `bpmMin`、`bpmMax`、`startBpm`、`nFft`、`hopLength` |
@@ -76,6 +76,7 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 | `computeTempoCurve` | `false` | ビートごとの局所テンポ曲線を `beatLocalBpm` へデコードします |
 | `meterCandidateNumerators` | `[3, 4, 6]` | 拍子推定が採点する分子。最大 16 個、各値は `[2, 32]`。空リストは既定値へ戻らずエラーになり、候補を広げても広い拍子が選ばれやすくなるわけではありません |
 | `meterDenominator` | `4` | 検出された拍子の分母。`[1, 32]` の 2 の冪。複合拍子と判定した場合は推定側が自分で 8 を報告します |
+| `tuning` | `0` | `estimateTuning(...)` が返す単位で指定する、半音の分数単位の録音チューニングずれ。範囲は `[-0.5, 0.5)` で、キー・コード・セクションに使うクロマへ反映されます |
 
 ::: warning ここでは `useTriadsOnly` の既定値が逆向きです
 統合された `analyze()` の経路では `useTriadsOnly` が **`true`** で、スタンドアロンの
@@ -89,6 +90,9 @@ description: '@libraz/libsonare-native パッケージの解析関数・エフ�
 デコード元のビートグリッドを記述したものであり、ビートトラッキングは
 `adaptiveTempo` を併用しない限り固定のテンポ事前分布を保持します。実際に動くテンポを
 測るには両方のオプションが必要です。
+
+`analyzeWithProgress(...)` は `analyze(...)` と同じ `MusicAnalyzeOptions` を受け取ります。
+リクエスト形式では `options` の下に入れ、`cancel` は `true` を返してキャンセルを要求する別のコールバックです。位置引数形式では `onProgress` の後ろにオプションオブジェクトを置きます。
 
 ### `estimateMeter(...)`
 
@@ -281,6 +285,7 @@ const tuned = pitchCorrectToMidiTimevarying(
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS クロマグラム（音符活性化クロマ）。`options.hopLength` の既定値は `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | 行優先スペクトログラムから NMF（非負値行列因子分解）の分解行列を返す。`init` を選択できる（`'random'` 既定、`'nndsvd'`） |
 | `decomposeStems(request)` | `DecomposeStemsResult` | 元の位相を保持する NMF 分離。各成分をそのまま音として再生できます。リクエスト専用で `DecomposeStemsRequest` を受け取ります |
+| `decomposeStemsLinked(request)` | `DecomposeStemsLinkedResult` | 1 つ以上の同じ長さのチャンネル（最大 64）で NMF モデルとソフトマスクを共有し、各チャンネルの元の複素スペクトルへ適用してチャンネル間のレベルと位相を保ちます。リクエスト専用で、`components[k][c]` を返します。既定値は `decomposeStems` と同じで、1 チャンネルならビット単位で一致します |
 | `noteSegments(request)` | `NoteSegment[]` | 呼び出し側が渡した単旋律の F0 系列を、安定した音符区間へ分割します。リクエスト専用で `NoteSegmentsRequest` を受け取ります |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | ハイブリッド CQT 振幅（低域は真の CQT、高域は擬似 CQT） |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | 近似（擬似）CQT 振幅（単一 FFT） |
@@ -309,6 +314,19 @@ CQT/VQT は `fmin=32.70319566` Hz（C1）、`nBins=84`、`binsPerOctave=12` を�
 `beta=2`、`init='random'` です。戻り値は成分ごとの信号 `components`（それぞれ入力と同じ
 長さ）と、`w`／`h` 行列、`sampleRate` です。
 
+マルチチャンネル入力には `decomposeStemsLinked({ channels, sampleRate, ... })` を使います。各チャンネルの振幅を平均して 1 つの NMF モデルとマスクを作り、そのマスクを各チャンネルの元の複素スペクトルへ同じまま適用します。チャンネル間のレベル差と位相差が保たれます。`channels` には同じ長さの `Float32Array` を少なくとも 1 つ、最大 64 チャンネルまで渡します。結果の `components[k][c]` が成分を表し、`w` と `h` は共有された因子分解を表します。既定値は `decomposeStems` と同じで、1 チャンネルならビット単位で一致します。
+
+```typescript
+import { decomposeStemsLinked } from '@libraz/libsonare-native';
+
+const linked = decomposeStemsLinked({
+  channels: [leftChannel, rightChannel],
+  sampleRate,
+});
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
 ::: warning NNDSVD の因子は保存済みのものと一致しません
 NNDSVD の初期化は倍精度で計算されます。振幅スペクトログラムの末尾の特異ベクトルは
 単精度のノイズフロアに埋もれているため、単精度の初期化は加算順序に依存し、wasm32 と
@@ -333,4 +351,3 @@ arm64 とで異なる成分が返っていました。倍精度の初期化に�
 **区間がまったく返らなくなります**。`pitchPyin` の `voicedFlag` を `0`／`1` へ変換して
 渡すか、`voicedThreshold` を下げてください。
 :::
-

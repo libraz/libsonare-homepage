@@ -125,8 +125,8 @@ with Audio.from_file("music.mp3") as audio:
 | `detect_downbeats(samples, sample_rate)` | `list[float]` | ダウンビート位置（秒） |
 | `detect_key_candidates(samples, sample_rate, ...)` | `list[KeyCandidate]` | 相関値つきのキー候補（順位付き） |
 | `detect_chords(samples, sample_rate, ...)` | `ChordAnalysisResult` | 時系列のコードセグメント。検出しきい値未満のフレームは明示的な `N.C.` 区間になります |
-| `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・コード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
-| `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果に、オプションの `(progress, stage)` コールバックを付けたもの |
+| `analyze(samples, sample_rate)` | `AnalysisResult` | 総合解析: BPM とその候補・キー・拍子とその候補・ビート・検出キーを基準にした `roman_numeral` 付きコード・セクション・音色・ダイナミクス・リズム・メロディ・フォーム |
+| `analyze_with_progress(samples, sample_rate, on_progress?)` | `AnalysisResult` | `analyze` と同じ結果・解析キーワードオプションに、任意の `(progress, stage)` コールバックとキーワード専用の `cancel` コールバックを加えたもの |
 | `analyze_bpm(samples, sample_rate, ...)` | `BpmAnalysisResult` | 上位候補付きの BPM 解析 |
 | `estimate_meter(beat_times, beat_strengths, ...)` | `MeterEstimate` | 手元にあるビート系列だけから拍子とアクセントのグルーピングをスコアリング。音声も再解析も不要 |
 | `chord_functional_analysis(samples, key_root, key_mode?, ...)` | `list[str]` | 検出したコードに対する、キーを基準としたローマ数字ラベル（`"I"`、`"IV"`、`"V"`、`"vi"` …） |
@@ -155,7 +155,7 @@ with Audio.from_file("music.mp3") as audio:
 など一部の詳細ヘルパーはスタンドアロン関数です。これらには `audio.data` と
 `audio.sample_rate` を渡してください。
 
-Python の `analyze(...)` は内部で `sonare_analyze_json` を呼び、BPM と順位付き BPM 仮説、キー、拍子とその候補、ビート時刻・拍ごとの強度に加えてコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。ルーム音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
+Python の `analyze(...)` は現行ビルドでは内部で `sonare_analyze_json_ex` を呼び、BPM と順位付き BPM 仮説、キー、拍子とその候補、ビート時刻・拍ごとの強度に加えて、検出キーを基準にした `roman_numeral` を持つコード、セクション、音色、ダイナミクス、リズム、メロディ、フォームまで含む `AnalysisResult` を 1 回で返します（他のバインディングと揃っています）。上の専用関数は、1 つのフィールドだけが欲しい、呼び出しごとにオプションを変えたい、または結果全体の再計算を避けたいときに役立ちます。ルーム音響（RT60 など）は `AnalysisResult` には含まれず、`estimate_room` などのルームヘルパーで取得します。
 
 ```python
 keys = sonare.detect_key_candidates(
@@ -180,7 +180,9 @@ sections = sonare.analyze_sections(audio.data, audio.sample_rate)
 
 #### `analyze()` のオプション
 
-`analyze(...)` は `MusicAnalyzerConfig` 全体をキーワード引数として受け取ります。`n_fft=2048`、`hop_length=512`、`bpm_min=60.0`、`bpm_max=200.0`、`start_bpm=120.0`、`use_triads_only=True`、`use_hpss=True`、`chroma_highpass_hz=80.0`、`use_bass_weighted=True`、`chroma_hop_multiplier=4`、`use_chord_hmm=False`、`use_chord_key_context=False`、`chord_hmm_beam_width=24`、`detect_chord_inversions=False`、`adaptive_tempo=False`、`tempo_update_interval_beats=8`、`compute_tempo_curve=False`、`meter_candidate_numerators=None`、`meter_denominator=4` です。
+`analyze(...)` は `MusicAnalyzerConfig` 全体をキーワード引数として受け取ります。`n_fft=2048`、`hop_length=512`、`bpm_min=60.0`、`bpm_max=200.0`、`start_bpm=120.0`、`use_triads_only=True`、`use_hpss=True`、`chroma_highpass_hz=80.0`、`use_bass_weighted=True`、`chroma_hop_multiplier=4`、`use_chord_hmm=False`、`use_chord_key_context=False`、`chord_hmm_beam_width=24`、`detect_chord_inversions=False`、`adaptive_tempo=False`、`tempo_update_interval_beats=8`、`compute_tempo_curve=False`、`meter_candidate_numerators=None`、`meter_denominator=4`、`tuning=0.0` です。
+
+`tuning` は `estimate_tuning(...)` が返す単位で指定する、半音の分数単位の録音チューニングずれです。範囲は `[-0.5, 0.5)`、既定値 `0.0` は A440 です。`analyze_with_progress(...)` でも同じキーワードを使え、キー・コード・セクションに使うクロマへ反映されます。
 
 ::: warning `use_triads_only` はここでは既定が **True** です
 統合された `analyze(...)` の経路は、明示的に指定しないかぎりトライアドだけを探索します。一方、単独の `detect_chords(...)` API は同じフラグの既定が `False` です。`analyze(...)` からセブンスやテンションを得たい場合は `use_triads_only=False` を渡してください。
@@ -227,7 +229,7 @@ if meter.searched:
 
 `Chord.quality` は[型定義](./python-api-types.md#型定義)に列挙した文字列のいずれかです。そのうちいくつかは互いにアナグラムで、クロマグラムではこのペアを区別できません。`major6` は短 3 度下の `minor7` と同じ構成音で、`minor6` はその下の `halfDim7`、`dominant7Sus4` は完全 4 度下の `sus2Add4` と同じです。各ペアでは確立された読み方が既定のまま残り、6th へ持ち上げられるのはベースの証拠がある場合だけです。
 
-長いファイルでは、`analyze_with_progress(...)` が `analyze(...)` と同じ `AnalysisResult` を返しつつ、`on_progress=(progress, stage)` コールバックを受け取れます。下のマスタリング進捗コールバックと同じ形です。
+長いファイルでは、`analyze_with_progress(...)` が `analyze(...)` と同じ `AnalysisResult` を返し、`tuning` を含む同じ解析キーワード、`on_progress=(progress, stage)` コールバック、キーワード専用の `cancel` コールバックを受け取れます。下のマスタリング進捗コールバックと同じ形です。
 
 ```python
 def on_step(progress: float, stage: str) -> None:
@@ -236,7 +238,7 @@ def on_step(progress: float, stage: str) -> None:
 result = sonare.analyze_with_progress(audio.data, audio.sample_rate, on_progress=on_step)
 ```
 
-コードをキー基準のローマ数字でラベル付けするには `chord_functional_analysis(...)` を使います。`detect_chords(...)` と同じアルゴリズムでコードを検出し、検出順に 1 コードあたり 1 ラベルを返します。`detect_chords(...)` の結果とラベルが対応するのは、両方に同じオプションを渡したときだけです。
+`detect_chords(...)` と `chord_functional_analysis(...)` の `tuning` も `analyze(...)` と同じ半音の分数単位です。コードをキー基準のローマ数字でラベル付けするには `chord_functional_analysis(...)` を使います。`detect_chords(...)` と同じアルゴリズムでコードを検出し、検出順に 1 コードあたり 1 ラベルを返します。`detect_chords(...)` の結果とラベルが対応するのは、両方に同じオプションを渡したときだけです。
 
 ```python
 labels = sonare.chord_functional_analysis(
@@ -284,6 +286,7 @@ print(labels)  # 例: ['I', 'V', 'vi', 'IV']
 | `decompose(s, n_features, n_frames, n_components, n_iter?, beta?)` | `tuple` | 行優先スペクトログラムから NMF 分解係数 `(w, h)` を返す |
 | `decompose_with_init(s, n_features, n_frames, n_components, n_iter?, beta?, init?)` | `tuple` | 初期化方式を選べる NMF 分解 `(w, h)`。`init` は既定 `'random'`、`'nndsvd'`（SVD ウォームスタート）も受け付ける |
 | `decompose_stems(samples, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | 元の複素スペクトログラムにマスクを掛ける NMF 分離。各コンポーネントが元音源の位相を保ち、合計すると入力に戻る。既定は `n_components=4`、`n_iter=100`、`beta=2.0`、`init='random'`、`mask_power=1.0` |
+| `decompose_stems_linked(channels, sample_rate?, n_components?, n_fft?, hop_length?, n_iter?, beta?, init?, mask_power?, *, validate?)` | `dict[str, object]` | 1 つ以上の同じ長さのチャンネル（最大 64）で共有 NMF 分離を行い、チャンネル間のレベルと位相を保ちます。`components[k][c]` の平面を返し、既定値は `decompose_stems` と同じです。1 チャンネルならビット単位で一致します |
 | `nn_filter(s, n_features, n_frames, aggregate?, k?, width?)` | `np.ndarray` | 行優先スペクトログラムの近傍フィルター |
 | `onset_envelope(samples, sample_rate, n_fft?, hop_length?, n_mels?)` | `list[float]` | オンセット強度の包絡線（テンポグラム系の入力） |
 | `onset_strength_multi(samples, sample_rate?, n_fft?, hop_length?, n_mels?, n_bands?)` | `tuple[int, list[float]]` | マルチバンドのオンセット強度。`(n_frames, [n_bands x n_frames])` を行優先で返す（`n_bands` 既定 3） |
@@ -310,6 +313,17 @@ stems = sonare.decompose_stems(audio.data, audio.sample_rate, n_components=4, ma
 for component in stems["components"]:
     ...  # いずれも入力と同じ長さの 1 次元 float32 配列
 print(stems["w"].shape, stems["h"].shape, stems["sample_rate"])
+```
+
+マルチチャンネル入力には `decompose_stems_linked(...)` を使います。各チャンネルの振幅を平均して 1 つの NMF モデルとソフトマスクを作り、そのマスクを各チャンネルの元の複素スペクトルへ同じまま適用します。チャンネル間のレベル差と位相差が保たれます。同じ長さのチャンネルを 1 つ以上、最大 64 チャンネルまで渡してください。各 `components[k]` はチャンネルを行にした 2 次元の float32 配列で、`components[k][c]` が成分 `k` のチャンネル `c` です。`w` と `h` はチャンネル間で共有され、既定値は `decompose_stems` と同じです。1 チャンネルなら `decompose_stems(...)` とビット単位で一致します。
+
+```python
+linked = sonare.decompose_stems_linked(
+    [left_channel, right_channel], sample_rate=sample_rate
+)
+first_left = linked["components"][0][0]
+first_right = linked["components"][0][1]
+print(linked["w"].shape, linked["h"].shape)
 ```
 
 このエントリポイントでは `n_components`、`n_fft`、`hop_length`、`n_iter` が実際の既定値を持つため、`0` は「既定値を使う」というセンチネル（C ABI と JavaScript 側の同じフィールドではそう解釈されます）ではなく、呼び出し側の誤りとして拒否されます。

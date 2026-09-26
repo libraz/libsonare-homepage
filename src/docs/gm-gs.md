@@ -338,6 +338,8 @@ Routing does not add an address either. `40 4x 22` PART EFX ASSIGN keeps `00` BY
 
 Because a unit's output is one signal, what sits downstream of it belongs to the unit rather than to the parts. Its send to the system effects is the unit's own (`40 3u 17`–`19`), and the part-level CC91/CC93/CC94 send is suppressed for a routed part so the wet tail is not sent twice. Its master-EQ routing follows the parts feeding it only where those parts agree: a bypass at `40 4x 20` holds when every part on the unit asked for it, and otherwise the unit takes the EQ, which is what every part powers on with.
 
+The GS tone controls and equalizers use first-order low and high shelves. Their `slopeDbOct` is `6` dB/octave; each shelf's frequency is where it reaches half its gain change in dB, and its `q` setting does not affect that first-order section. This is also how a host selects a first-order shelf in the parametric EQ band API.
+
 <MaturityNote
   item="gs-efx-state-slots"
   :labels="{

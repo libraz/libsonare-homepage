@@ -288,7 +288,7 @@ while `sonare_nnls_chroma_ex2` adds the CQT `hop_length` to the NNLS options.
 
 Project editing lives in `sonare_c_project.h`. `sonare_project_set_clip_loop(project, clip_id, loop_mode, loop_length_ppq, loop_crossfade_ppq)` accepts the optional equal-power seam crossfade as the final argument. It must be finite and non-negative; `0` keeps a hard loop. The engine clamps it to the available pre-roll and half the loop, and ignores it under warp.
 
-`SonareSynthPatch` — the NativeSynth patch accepted by `sonare_project_bounce_with_synth_instruments` and `sonare_engine_set_synth_instrument` — is versioned through its leading `struct_version` field. Under the original layout every numeric field follows a "0 means keep the base preset's value" rule, so an explicit zero could not be expressed at all. `struct_version = 2` adds a trailing `present_fields` bitmask (`SONARE_SYNTH_FIELD_*`) naming the fields the caller set on purpose: a set bit overrides the base with that field's value even when the value is zero, and a clear bit keeps the earlier behaviour. The trailing word is read only when `struct_version` is 2 or higher, so a caller that fills the struct exactly the way it always did — including leaving `struct_version` at `0` or `1` — keeps its previous behaviour and needs no source change. Enum fields have no presence bits on purpose: zero is already their reserved keep-the-base value and every real value is non-zero. Setting `SONARE_SYNTH_FIELD_MOD_ROUTINGS` with `num_mod_routings == 0` clears the base mod matrix instead of keeping it; a non-empty table replaces it either way. The mask is one 32-bit word with 27 bits in use — a further extension appends a second word under a new `struct_version` rather than widening this one.
+`SonareSynthPatch` — the NativeSynth patch accepted by `sonare_project_bounce_with_synth_instruments` and `sonare_engine_set_synth_instrument` — currently uses `SONARE_SYNTH_PATCH_STRUCT_VERSION` 7. `struct_version` 0 or 1 selects the original layout, 2 enables the trailing `present_fields` bitmask, 3 through 6 append the sample-engine, highpass, converter, and pitch-offset fields, and 7 reads the trailing `retrigger` field. `retrigger` is `SONARE_SYNTH_RETRIGGER_BASE` (0), `SONARE_SYNTH_RETRIGGER_FREE` (1), or `SONARE_SYNTH_RETRIGGER_NOTE` (2). `FREE` varies oscillator phases, unison jitter, drift, and engine-noise streams per note; `NOTE` derives them from the note number, so the same note after its tail ends renders the same samples. Neither mode resets state outside the voice, such as controllers, shared instrument resonances, or effect tails. The `present_fields` mask has 31 bits in use; a further extension appends a second word under a new `struct_version` rather than widening it. Enum fields have no presence bits because zero keeps the base, while every real enum value is non-zero. Setting `SONARE_SYNTH_FIELD_MOD_ROUTINGS` with `num_mod_routings == 0` clears the base mod matrix; a non-empty table replaces it.
 
 The librosa-parity helpers are also exposed through the C API:
 
@@ -300,7 +300,19 @@ The librosa-parity helpers are also exposed through the C API:
 | Feature utilities | `sonare_pcen`, `sonare_tonnetz`, `sonare_tempogram`, `sonare_plp` |
 | dB conversions | `sonare_power_to_db`, `sonare_amplitude_to_db`, `sonare_db_to_power`, `sonare_db_to_amplitude` |
 | Time/frame conversion | `sonare_frames_to_samples`, `sonare_samples_to_frames` |
-| Decomposition / denoising | `sonare_decompose`, `sonare_decompose_with_init` (init `"random"`/`"nndsvd"`), `sonare_nn_filter` |
+| Decomposition / denoising | `sonare_decompose`, `sonare_decompose_with_init` (init `"random"`/`"nndsvd"`), `sonare_decompose_stems`, `sonare_decompose_stems_linked`, `sonare_nn_filter` |
+
+The linked stem entry point fits one shared NMF model from the channel-averaged magnitude, then applies the same soft mask to each channel's complex spectrum so interchannel phase and level stay aligned. Its flat output is indexed as `(component, channel, sample)`; `out_w` and `out_h` use the same factor shapes as `sonare_decompose_stems`.
+
+```c
+SonareError sonare_decompose_stems_linked(const float* const* channels, size_t channel_count,
+                                          size_t length, int sample_rate,
+                                          const SonareDecomposeStemsConfig* config, float** out,
+                                          size_t* out_component_count, size_t* out_channel_count,
+                                          size_t* out_component_length, float** out_w,
+                                          size_t* out_w_length, float** out_h,
+                                          size_t* out_h_length);
+```
 
 The current C ABI is split across focused headers. Use this index when a symbol is not in the compact examples above:
 
@@ -340,7 +352,19 @@ For realtime insert automation and external MIDI in the C ABI:
 - On the host/control thread, call `sonare_engine_drain_external_midi` repeatedly until it returns zero events, then deliver each 1–3-byte MIDI 1.0 message to the device. `max_events` must be at least 3 because one queued UMP (Universal MIDI Packet) record can expand to three messages. Monitor `sonare_engine_external_midi_dropped_count` to detect a host that is draining too slowly. SysEx/Data and other UMP messages that cannot be lowered to MIDI 1.0 are not emitted by this drain API.
 - Each drained `SonareEngineTelemetry` record's `error` field is a `SonareEngineTelemetryError` ordinal (`sonare_c_types_engine.h`): `NONE = 0`, then queue/backlog/overflow conditions `1`–`18` (command queue, pending-command, boundary, telemetry, capture, automation-bind-target, insert-automation, MIDI-clock, and metronome overflow among them), and `MAX_CHANNELS_EXCEEDED = 20`.
 
-To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params"}, ...]`. `kind` is `realtime`/`offline`/`pair`, and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); `tailSamples` is the audible decay length, and both are 0 for offline ids. `realtimeCost` is a coarse `low`/`moderate`/`high` algorithmic estimate for live inserts, not a hardware benchmark, and is `null` for non-insert ids. `channelPolicy` tells a surround host how the mixer wraps the processor, `category` is the stable UI grouping derived from the id namespace, and `params` contains the realtime-insert parameter descriptors (empty for non-insert processors). The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
+To classify processors in the C ABI, `sonare_mastering_processor_catalog()` returns a JSON array string `[{"id","kind","realtimeInsertable","stereoOnly","latencySamples","tailSamples","realtimeCost","channelPolicy","category","params","slots"}, ...]`. `kind` is `realtime`/`offline`/`pair`, and `realtimeInsertable` is true exactly for the ids in `sonare_mastering_insert_names()`. `latencySamples` and `tailSamples` are representative default-configuration probes (48 kHz / 512 samples); configuration-dependent values should come from `sonare_mastering_insert_timing`. `realtimeCost` is a coarse `low`/`moderate`/`high` algorithmic estimate for live inserts, not a hardware benchmark, and is `null` for non-insert ids. `channelPolicy` tells a surround host how the mixer wraps the processor, `category` is the stable UI grouping derived from the id namespace, and `params` contains descriptors for realtime and construction keys (empty for non-insert processors). Each descriptor includes `name`, `id`, `rtSafe`, `type`, `min`, `max`, `default`, `unit`, `choices`, and `slot`. `slots` lists conditional key groups as `{name,parent,activation,minCrossoverCutoffs}`. The id universe is the union of `sonare_mastering_processor_names()`, the insert set, and `sonare_mastering_pair_processor_names()`, so hosts can filter a processor picker without hardcoding ids. The pointer is thread-local (do not free it or cache it across threads), mirroring `sonare_mastering_processor_names()`.
+
+The focused C ABI queries are:
+
+```c
+const char* sonare_mastering_insert_param_info(const char* name);
+SonareError sonare_mastering_insert_timing(const char* name, const char* params,
+                                           int sample_rate, int* out_latency_samples,
+                                           int* out_tail_samples);
+SonareError sonare_mastering_preset_params_json(const char* preset, char** json_out);
+```
+
+`sonare_mastering_insert_param_info` returns a thread-local JSON descriptor array; do not free it. `sonare_mastering_insert_timing` rejects unknown keys and reports the configured latency and tail. `sonare_mastering_preset_params_json` returns `{"version":1,"params":{...}}`; release its heap-owned string with `sonare_free_string`. `sonare_capability_catalog_json()` combines the processor catalog, built-in mastering, synth, mixing-scene, and voice-changer preset lists, and detailed `masteringPresets` entries.
 
 Realtime voice presets are exposed in C as `sonare_realtime_voice_changer_preset_names()`, `sonare_realtime_voice_changer_preset_json()`, and `sonare_realtime_voice_changer_validate_preset_json()`. The typed preset selector is the `SonareVoiceCharacterPreset` enum (`SONARE_VC_PRESET_NEUTRAL_MONITOR` = 0 through `SONARE_VC_PRESET_DARK_VILLAIN` = 5); `sonare_voice_character_preset_id(preset)` returns its canonical id string (NULL for unknown values), and the `SONARE_REALTIME_VOICE_CHANGER_PRESET_IDS` macro provides the newline-separated id list for compile-time binding generation. The native POD config ABI is `SONARE_VOICE_CHANGER_ABI_VERSION`; it is separate from the preset JSON `schemaVersion`.
 
@@ -366,4 +390,3 @@ strip.prepare(48000.0, 512);
 ```
 
 For cross-runtime examples and scene-level guidance, see [Mixing Engine](./mixing.md).
-

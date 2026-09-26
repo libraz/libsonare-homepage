@@ -44,6 +44,7 @@ libsonare リポジトリは、その差を主張ではなく計測で示しま�
 |----------------|------|-----|
 | バッチ解析 | 対応 | 対応 |
 | 低レベル特徴量と librosa 互換ヘルパー | 対応 | 主要コマンド |
+| NMF ステム分離（`decomposeStems` / `decomposeStemsLinked`、`decompose_stems` / `decompose_stems_linked`） | 対応 — WASM、Node、Python、C ABI | モノラル入力の `decompose-stems` のみ |
 | 定Qクロマ（`chromaCqt` / `chroma_cqt`） | 対応 — WASM、Node、Python、C ABI | 非対応 |
 | ストリーミングアナライザーと処理器（`StreamAnalyzer`、`StreamingEqualizer`、`StreamingMasteringChain`） | 対応 | 非対応 |
 | Mel/MFCC 逆再構成 | 対応 | 非対応 |
@@ -87,7 +88,8 @@ libsonare リポジトリは、その差を主張ではなく計測で示しま�
 
 | 関数 | WASM | Node ネイティブ | Python |
 |------|------|----------------|--------|
-| `detectChords` / `detect_chords` | オプションオブジェクト | 位置引数 / キーワード引数 | 位置引数 / キーワード引数 |
+| `detectChords` / `detect_chords` | オプションオブジェクト | オプションオブジェクトまたは従来の位置引数 | 位置引数 / キーワード引数 |
+| `decomposeStemsLinked` / `decompose_stems_linked` | `channels` を持つ平面チャンネルのリクエストオブジェクト | `channels` を持つ平面チャンネルのリクエストオブジェクト | 平面チャンネル列または 2 次元配列と、位置／キーワードオプション |
 | ストリーミング読み出し | `process`、`readFrames`、`stats` | float の Structure-of-Arrays 読み出しは `readFramesSoa` | `process`、`read_frames`、`stats` |
 | 量子化ストリーム読み出し | `readFramesI16` / `readFramesU8`（レガシーの `StreamConfig.outputFormat` は `0`） | WASM と同じ | `read_frames_i16` / `read_frames_u8`（レガシーの `output_format` は `0`） |
 | `Mixer` のストリップ参照 | 数値インデックス。ID 参照は `stripById(id)` | 数値インデックスまたはストリップ ID 文字列 | 数値インデックスまたはストリップ ID 文字列 |

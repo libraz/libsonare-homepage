@@ -239,6 +239,7 @@ The named mastering API families are:
 |---------|----------|
 | Apply simple loudness mastering | `mastering()` |
 | List built-in mastering presets | `masteringPresetNames()` |
+| Expand one preset into flat chain parameters | `masteringPresetParams(preset)` |
 | Apply a preset to mono audio | `masterAudio()` |
 | Apply a preset to stereo audio | `masterAudioStereo()` |
 | Apply a preset to mono audio with progress | `masterAudioWithProgress()` |
@@ -260,7 +261,8 @@ The named mastering API families are:
 | Get machine-readable processor classifications | `masteringProcessorCatalog()` |
 | List chain insert processors | `masteringInsertNames()` |
 | List the parameter keys an insert accepts | `masteringInsertParamNames(name)` |
-| List realtime-automatable insert parameters | `masteringInsertParamInfo(name)` |
+| Describe construction keys and realtime insert parameters | `masteringInsertParamInfo(name)` |
+| Measure configured insert latency and tail | `masteringInsertTiming(name, params, sampleRate)` |
 | Process mono audio | `masteringProcess()` |
 | Process stereo audio | `masteringProcessStereo()` |
 | List pair processors | `masteringPairProcessorNames()` |
@@ -269,6 +271,28 @@ The named mastering API families are:
 | Analyze source/reference pair | `masteringPairAnalyze()` |
 | List stereo analyses | `masteringStereoAnalysisNames()` |
 | Analyze stereo channels | `masteringStereoAnalyze()` |
+
+### Preset parameters and configured insert timing
+
+`masteringPresetNames()` is the compact name list. `capabilityCatalog().masteringPresets` adds one metadata object per name: `kind` is `mastering` or `restoration`, and restoration entries have `null` for `targetLufs`, `truePeakCeilingDb`, and `maxLimiterGainReductionDb`.
+
+```typescript
+function masteringPresetParams(preset: MasteringPreset): Record<string, number | boolean>
+```
+
+`masteringPresetParams` returns the flat numeric/boolean map used by the assistant chain and accepted as the `overrides` argument of `masterAudio` and `masterAudioStereo`. Unknown preset names throw.
+
+The catalog's `latencySamples` and `tailSamples` values are representative defaults. Query a prepared configuration when those values matter for routing or scheduling:
+
+```typescript
+function masteringInsertTiming(
+  name: string,
+  params: Record<string, number | boolean>,
+  sampleRate: number,
+): { latencySamples: number; tailSamples: number }
+```
+
+`masteringInsertTiming` applies the supplied construction parameters and returns the exact latency and tail for that sample rate. The wrapper accepts finite numbers and booleans only, so catalog keys typed `string` or `array` cannot be supplied through this query. It rejects unknown keys and invalid sample rates, and throws when the processor cannot be prepared. Passing `{}` at 48 kHz gives the default configuration represented by the processor catalog; use the actual insert parameters when a topology or slot changes the timing.
 
 Related mastering guides: [Processing chain](./glossary/mastering.md), [Tone and air](./glossary/mastering/tone-air.md), [Dynamics](./glossary/mastering/dynamics.md), [Stereo, limiter, and loudness](./glossary/mastering/stereo-limiter-loudness.md), [Reference match](./glossary/mastering/reference-match.md).
 

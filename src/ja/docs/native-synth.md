@@ -318,10 +318,13 @@ pad = sonare.synth_preset_patch("warm-pad")
 | LFO とグライド | `lfoRateHz`、`lfoToPitchCents`、`lfo2RateHz`、`glideMs` |
 | ボディ共鳴 | `body`（`none` / `guitar` / `violin` / `wood-tube` / `brass-bell` / `vocal`）、`bodyMix`（0-1） |
 | ステレオと出力 | `stereoSpread`（0-1）、`gain`（リニア）、`polyphony`（1-64）、`busDrive`（0-1） |
+| ボイスの開始状態 | `retrigger`（`'default'` / `'free'` / `'note'`） |
 | モッドマトリクス | `modRoutings`（最大 8 本） |
 | バインディング（JS のみ） | `destinationId`（既定 `0`） |
 
 （**ポリフォニー**は同時に鳴らせるノート数、**ボイス**は鳴っている 1 つのノートで、**ボイススティール**は足りなくなったとき最も古いノートを止めることです。）
+
+`retrigger` は、各ボイスの開始時に使うシードを選びます。`'default'` はベースパッチの設定を保ちます。カタログのプリセットはすべて `'free'` です。`'free'` はボイスプールのスロットとノートごとに増えるカウントから、オシレーターの開始位相、ユニゾンの揺らぎ、ドリフト、各エンジンのノイズストリームを変化させるため、同じノートを繰り返しても通常は異なる音になります。`'note'` はこれらを MIDI ノート番号だけから導くため、テイルが終わったあとに同じノートを鳴らすと同じサンプル列をレンダリングします。この設定が制御するのは各ボイスの開始状態です。コントローラー、バスの DC ブロッカー、ピアノの共有サウンドボード、撥弦の共鳴ハロー、オルガンのウィンドチェスト、エフェクトのテイルはリセットしません。`drum-kit` プリセットの各ドラム音は独自のモードを保ちます。
 
 ::: info LFO 2 にはルーティングが必要
 2 つの LFO は挙動が異なります。LFO 1（`lfoRateHz` + `lfoToPitchCents`）はピッチへ固定配線されており、単独でビブラートを生みます。LFO 2 はマトリクス経由専用で、`modRoutings` のエントリが `source: 'lfo2'` で送り先を指定するまで、`lfo2RateHz` を設定しても何も起きません。
@@ -375,6 +378,8 @@ synthEnumTables();
 ```
 
 同じ配列は名前付き定数（`SYNTH_ENGINE_MODES`、`SYNTH_OSC_WAVEFORMS`、`SYNTH_FILTER_MODELS`、`SYNTH_FILTER_OUTPUTS`、`SYNTH_BODY_TYPES`、`SYNTH_MOD_SOURCES`、`SYNTH_MOD_DESTINATIONS`、および `BUILTIN_SYNTH_WAVEFORMS`）としてもエクスポートされます。多くのテーブルでインデックス 0 は `'default'`（ベース値を保つ）で、`modSources` / `modDestinations` は代わりに `'none'` を使います。
+
+Node と WASM の `SynthPatch` はこのフィールドを `retrigger` として公開し、Python も `SynthPatch.retrigger` という属性名を使います。TypeScript のユニオン型は `SynthRetrigger`、名前の配列は `SYNTH_RETRIGGERS`（`['default', 'free', 'note']`）です。この配列は `synthEnumTables()` の戻り値とは別に公開されています。C API では対応する enum が `SonareSynthRetrigger` で、値は `SONARE_SYNTH_RETRIGGER_BASE`、`SONARE_SYNTH_RETRIGGER_FREE`、`SONARE_SYNTH_RETRIGGER_NOTE` です。
 
 `builtinWaveforms` / `BUILTIN_SYNTH_WAVEFORMS` は別系統のリストです。これは NativeSynth の `waveform` フィールドではなく、最小構成の内蔵オシレーターシンセ（`setBuiltinInstrument`）が受け付ける名前を表します。`'default'` を持たず、`'saw'` に加えて `'sawtooth'` も受け付け、`'noise'` は受け付けません。
 

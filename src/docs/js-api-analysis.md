@@ -204,7 +204,8 @@ interface MusicAnalyzeOptions {
 **Returns:** Complete `AnalysisResult`. A single `analyze()` call returns the
 full result — chords, sections, timbre, dynamics, rhythm, melody, form, and
 per-beat strength — on every binding, so you rarely need the focused helpers
-unless you only want one field.
+unless you only want one field. Chords in the result carry `romanNumeral`
+relative to `result.key`; it is an empty string for `N.C.`.
 
 ::: warning `useTriadsOnly` defaults to `true` in `analyze()`
 The unified path defaults `useTriadsOnly` to **`true`** even though the
@@ -465,9 +466,10 @@ and the same `options` you would give `detectChords(...)`.
 
 The labels carry no times; they pair with `detectChords(...)` one for one only
 when both calls get the same options, and different options can give a list of a
-different length. The chords inside `analyze(...)` come from a
-separate detection with its own settings, so they do not line up with these
-labels either.
+different length. `analyze(...)` performs a separate chord detection with its
+own settings, so its chord list does not pair with these labels. Each chord in
+the `analyze(...)` result carries its own `romanNumeral`, relative to
+`result.key`; it is an empty string for `N.C.`.
 
 ```typescript
 function chordFunctionalAnalysis(

@@ -15,11 +15,11 @@ This page covers the analysis, effects, and feature-extraction functions of the 
 | `detectKey(samples, sampleRate?)` | `Key` | Root, mode, confidence |
 | `detectBeats(samples, sampleRate?)` | `Float32Array` | Beat timestamps |
 | `detectOnsets(samples, sampleRate?)` | `Float32Array` | Onset timestamps |
-| `detectChords(samples, sampleRate?, minDuration?, smoothingWindow?, threshold?, useTriadsOnly?, nFft?, hopLength?, useBeatSync?, useHmm?, hmmBeamWidth?, useKeyContext?, keyRoot?, keyMode?, detectInversions?, chromaMethod?)` | `ChordAnalysisResult` | Chord progression with timings. Frames below `threshold` are returned as explicit `N.C.` intervals; trailing options enable HMM smoothing, key context, inversions, and the chroma method (`'stft'` default) |
+| `detectChords(request)` / `detectChords(samples, sampleRate?, options?)` | `ChordAnalysisResult` | Chord progression with timings. Frames below `threshold` are returned as explicit `N.C.` intervals; the options form enables HMM smoothing, key context, inversions, chroma method (`'stft'` default), and `tuning` (the legacy positional form is also supported) |
 | `detectDownbeats(samples, sampleRate?)` | `Float32Array` | Downbeat (bar-start) timestamps |
 | `detectKeyCandidates(samples, sampleRate?, options?)` | `KeyCandidate[]` | Ranked key candidates with correlation scores |
-| `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | All-in-one analysis in one call: BPM and ranked BPM hypotheses, key, time signature and ranked time-signature candidates, beats, chords, sections, timbre, dynamics, rhythm, melody, and form. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
-| `analyzeWithProgress(samples, sampleRate?, onProgress?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback for long inputs |
+| `analyze(samples, sampleRate?, options?)` | `AnalysisResult` | All-in-one analysis in one call: BPM and ranked BPM hypotheses, key, time signature and ranked time-signature candidates, beats, chords (including `romanNumeral` relative to the detected key), sections, timbre, dynamics, rhythm, melody, and form. The dedicated `detect*`/`analyze*` functions below remain available for targeted or parameterized analysis |
+| `analyzeWithProgress(request)` / `analyzeWithProgress(samples, sampleRate, onProgress, options?)` | `AnalysisResult` | Same as `analyze` with a `(progress, stage)` callback; the request form accepts `options` and `cancel`, while the positional form takes analysis options fourth |
 | `estimateMeter(request)` | `MeterEstimate` | Score a meter over a caller-supplied beat series, without audio and without re-running analysis. Request-only — takes `EstimateMeterRequest` |
 | `analyzeBpm(samples, sampleRate?, options?)` | `BpmAnalysisResult` | Tempo with confidence and alternate candidates. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength`, `maxCandidates` |
 | `analyzeRhythm(samples, sampleRate?, options?)` | `RhythmResult` | Time signature, groove, syncopation. `options`: `bpmMin`, `bpmMax`, `startBpm`, `nFft`, `hopLength` |
@@ -75,6 +75,7 @@ directly on the request object. It covers the whole pipeline in one place:
 | `computeTempoCurve` | `false` | Decode a per-beat local tempo curve into `beatLocalBpm` |
 | `meterCandidateNumerators` | `[3, 4, 6]` | Meter numerators the estimator scores. At most 16 entries, each in `[2, 32]`; an empty list is rejected rather than restoring the default, and widening the set does not force a wider meter |
 | `meterDenominator` | `4` | Beat unit reported for the detected meter, a power of two in `[1, 32]`. The estimator still reports 8 on its own when it resolves a compound meter |
+| `tuning` | `0` | Recording tuning offset in fractions of a semitone, using the unit from `estimateTuning(...)`; must be in `[-0.5, 0.5)`. It shifts the chroma used for key, chords, and sections |
 
 ::: warning `useTriadsOnly` points the other way here
 In the unified `analyze()` path `useTriadsOnly` is **`true`**, while the
@@ -89,6 +90,11 @@ it would pay a decode over the beat grid for nothing. The curve also describes
 the beat grid it was decoded from, and beat tracking holds a fixed tempo prior
 unless `adaptiveTempo` is set as well — measuring a tempo that actually moves
 needs both options.
+
+`analyzeWithProgress(...)` accepts the same `MusicAnalyzeOptions` as `analyze(...)`.
+In the request form, put them under `options`; `cancel` is a separate callback
+that returns `true` to request cancellation. The positional overload puts the
+options object after `onProgress`.
 
 ### `estimateMeter(...)`
 
@@ -288,6 +294,7 @@ throws a `RangeError` (`'voiced must have the same length as f0Hz'`), not a
 | `nnlsChroma(samples, sr?, options?)` | `{ nChroma, nFrames, data }` | NNLS chromagram (note-activation chroma); `options.hopLength` defaults to `512` |
 | `decompose(s, nFeatures, nFrames, nComponents, nIter?, beta?, init?)` | `DecomposeResult` | NMF (non-negative matrix factorization) factor matrices from a row-major spectrogram, with selectable `init` (`'random'` default, `'nndsvd'`) |
 | `decomposeStems(request)` | `DecomposeStemsResult` | NMF separation that carries the original phase, so each component is directly listenable. Request-only — takes `DecomposeStemsRequest` |
+| `decomposeStemsLinked(request)` | `DecomposeStemsLinkedResult` | Shared NMF model and soft mask for one or more same-length channels (maximum 64); applies each mask to each channel's original complex spectrum, preserving interchannel level and phase. Request-only — returns `components[k][c]` with the same defaults as `decomposeStems`; one channel is bit-identical |
 | `noteSegments(request)` | `NoteSegment[]` | Segment a caller-supplied monophonic F0 track into stable note regions. Request-only — takes `NoteSegmentsRequest` |
 | `hybridCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Hybrid CQT magnitude (true CQT in low bins, pseudo-CQT in high bins) |
 | `pseudoCqt(samples, sr?, hopLength?, fmin?, nBins?, binsPerOctave?)` | `CqtResult` | Approximate (pseudo) CQT magnitude (single FFT) |
@@ -318,6 +325,25 @@ the cost of more artifacts on overlapping partials. `decomposeStems` defaults to
 `init='random'`, and returns `components` — one signal per component, each the
 length of the input — alongside the `w`/`h` matrices and `sampleRate`.
 
+For multichannel input, `decomposeStemsLinked({ channels, sampleRate, ... })`
+fits one NMF model and one mask set from the channels' averaged magnitudes, then
+applies each mask unchanged to each channel's original complex spectrum. This
+preserves interchannel level and phase. `channels` must contain at least one
+same-length `Float32Array` and at most 64 channels. The result uses
+`components[k][c]`; `w` and `h` describe the shared factorisation. Its option
+defaults match `decomposeStems`, and a one-channel call is bit-identical.
+
+```typescript
+import { decomposeStemsLinked } from '@libraz/libsonare-native';
+
+const linked = decomposeStemsLinked({
+  channels: [leftChannel, rightChannel],
+  sampleRate,
+});
+const firstLeft = linked.components[0][0];
+const firstRight = linked.components[0][1];
+```
+
 ::: warning NNDSVD factors will not match stored ones
 NNDSVD seeding is computed in double precision. A magnitude spectrogram's
 trailing singular vectors sit at single precision's noise floor, so a float seed
@@ -343,4 +369,3 @@ length it rises with F0 rather than tracking confidence. A fixed threshold
 therefore silently returns **no segments at all** for low-register material.
 Pass `pitchPyin`'s `voicedFlag` converted to `0`/`1`, or lower `voicedThreshold`.
 :::
-

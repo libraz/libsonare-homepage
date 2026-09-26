@@ -45,6 +45,8 @@ description: libsonare の名前付きマスタリング API、プリセット�
 
 `pop`, `edm`, `acoustic`, `hipHop`, `aiMusic`, `speech`, `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `jpop`, `ambient`, `lofi`, `classical`, `drumAndBass`, `techno`, `metal`, `trap`, `rnb`, `jazz`, `kpop`, `trance`, `gameOst`, `vinyl`, `tapeHiss`, `fieldRecording`, `voiceMemo`, `shellac78`
 
+`masteringPresetNames()` はこの簡潔な名前一覧を返します。カタログの `masteringPresets` 配列は各名前に `kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を加えます。レストレーション用の項目では 3 つの数値が `null` です。選択した名前を `masterAudio` の上書き値として使える数値／真偽値のフラットなマップへ展開するには、`masteringPresetParams(preset)` を使います。
+
 プリセットを完成マスターと見なさずに選ぶ方法は [プリセットの選び方](./glossary/mastering/preset-selection.md) を参照してください。
 
 ### レストレーション用プリセット
@@ -235,9 +237,9 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 :::
 
 ::: details `saturation.ampSim` とは？
-ギター／ベースアンプ系の色付け段で、プリアンプドライブ → トーンスタック → パワーアンプ → キャビネットの構成です。オーバーサンプリングした 12AX7 三極管のドライブ段が 1 つの `[0, 1]` ドライブノブの背後にあり、ドライブ量に応じてプリエンファシスのシェルフが変化するため、押し込むほど歪みの質感が変わります。ドライブの後にはバス／ミッド／トレブルのトーンスタックが続き、その後に任意のパワーアンプ段とデータ不要のキャビネット特性が入ります。構築／パラメータキーのうち、`drive`（0-1）、`bassDb`、`midDb`、`trebleDb`、`presenceDb`、`levelDb`、`power`、`sag`、`transformer`、`nfb` は、全バインディングで `set_parameter` から自動化できます。`power` は class-AB プッシュプルのソフトサチュレーション、`sag` は強い入力後の電源電圧低下と膨らみ、`transformer` は低域の出力トランス飽和、`nfb` は有効なパワーアンプ段を囲むネガティブフィードバックを加えます。`cab`（ブール値）、`cabModel`（`0` = ギター 4x12、`1` = ベース 8x10）、`ampModel`（`0` = classic crunch、`1` = Fender 系 clean、`2` = modern high-gain、`3` = tweed、`4` = Vox 系 chime、`5` = rectifier）は、離散的なトポロジー選択です。そのため、オートメーションではなく構築時に指定します。
+ギター／ベースアンプ系の色付け段で、プリアンプドライブ → トーンスタック → パワーアンプ → キャビネットの構成です。オーバーサンプリングした 12AX7 三極管のドライブ段が 1 つの `[0, 1]` ドライブノブの背後にあり、ドライブ量に応じてプリエンファシスのシェルフが変化するため、押し込むほど歪みの質感が変わります。ドライブの後にはバス／ミッド／トレブルのトーンスタックが続き、その後に任意のパワーアンプ段とデータ不要のキャビネット特性が入ります。ライブオートメーション対象は `drive`（0-1）、`bassDb`、`midDb`、`trebleDb`、`presenceDb`、`levelDb`、`power`、`sag`、`transformer`、`nfb`、`micAxis`、`micBAxis`、`micBlend`、`cone`、`crossover`、`biasShift`、`inputDb` で、全バインディングの `set_parameter` から自動化できます。`power` は class-AB プッシュプルのソフトサチュレーション、`sag` は強い入力後の電源電圧低下と膨らみ、`transformer` は低域の出力トランス飽和、`nfb` は有効なパワーアンプ段を囲むネガティブフィードバックを加えます。`cab`（ブール値）、`cabModel`（`0` = ギター 4x12、`1` = ベース 8x10）、`ampModel`（`0` = classic crunch、`1` = Fender 系 clean、`2` = modern high-gain、`3` = tweed、`4` = Vox 系 chime、`5` = rectifier）は、離散的なトポロジー選択です。そのため、オートメーションではなく構築時に指定します。
 
-キャビネットとマイク関連のキーも構築時専用で、`masteringInsertParamInfo('saturation.ampSim')` にはいずれも現れません。
+キャビネットとマイク関連のキーも `masteringInsertParamInfo('saturation.ampSim')` に含まれ、id は nullable です。大半は構築時専用（`id: null`、`rtSafe: false`）ですが、`micAxis`、`micBAxis`、`micBlend`、`cone` にはライブオートメーション用の id があり、その他のライブ対象は `crossover`、`biasShift`、`inputDb` です。キャビネットやマイクのコントロールを prepare 後に変更できるかどうかは、各記述子を読んで判断してください。
 
 | キー | 意味 |
 |------|------|
@@ -321,11 +323,11 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 
 ## 呼び出し方
 
-単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・id・型・単位・リアルタイム安全性、および `min` / `max` / `default` の 3 値）と、組み込みプリセット一覧も取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
+単体・ペア・クリエイティブインサートのプロセッサを、現在のビルドに合わせた 1 つのピッカーへまとめる場合は `capabilityCatalog()` / `capability_catalog()` を使います。各プロセッサのパラメータ記述子（名前・nullable な id・型・単位・リアルタイム安全性、`min` / `max` / nullable な `default`、`choices`、スロット所属）と、プロセッサの `slots` メタデータ、組み込みプリセット一覧、マスタリングプリセットのメタデータも取得できます。`masteringProcessorCatalog()` は、マスタリング専用ピッカー向けの、より狭いレジストリ分類です。
 
 ### カタログの値域の読み方
 
-記述子は 3 つの値フィールドをすべて持つため、本ページのプロセッサ別の表を書き写さなくても、カタログから直接コントロールの範囲を決められます。ただし埋まり方は一様ではありません。`default` はほぼすべてのパラメータが公開する一方、`min` と `max` は制限が存在する場合にだけ公開されます。`null` の値域はデータの欠落ではなく、その側に既知の制限がないことを表しており、これが依然として多数派です。
+記述子は 10 個のフィールドをすべて持つため、本ページのプロセッサ別の表を書き写さなくても、カタログから直接コントロールの範囲を決められます。構築時専用キーは `id: null` かつ `rtSafe: false` で、id 付きでも `rtSafe: false` ならライブオートメーションには使えません。フォールバックがない場合は `default` も `null` です。`choices` は間隔のある離散値も含む名前付き数値の閉じた集合を、`slot` はキーが属するスロット群を表します。スロットの存在はプロセッサの `slots` メタデータにある `activation`、`parent`、`minCrossoverCutoffs` で決まります。`null` の値域はデータの欠落ではなく、その側に既知の制限がないことを表します。
 
 2 種類の値は出どころが異なり、ホストがどこまで信頼できるかもそれで決まります。
 
@@ -342,7 +344,7 @@ DNN 音源分離やニューラルなスペクトル修復**ではありませ�
 - **サンプルレート由来の値域は prepare 前の状態を反映します**。EQ の `band*.frequencyHz` の上限がいずれも 24000 と読めるのはこのためで、インサートをより高いレートで prepare すれば上がります。
 - **開区間の境界は、除外される値そのものとして報告されます**。`dynamics.compressor` は `sidechainHpfHz` の `min` を 0 として公開しますが、0 は拒否します。
 
-フラットなパラメータ集合の大半を占めるのがバンド単位の EQ です。`eq.parametric`、`eq.midSide`、`multiband.dynamicEq` は、インデックス付きの `band*` フィールドすべてについて型と既定値を公開します。公開されたからといって**読み取られる**キーが増えるわけではなく、不完全に指定したバンドの残りのキーは、これまでどおり無視されたものとして報告されます。
+フラットなパラメータ集合の大半を占めるのがバンド単位の EQ です。`eq.parametric`、`eq.midSide`、`multiband.dynamicEq` は、構築用キーも含め、インデックス付きの `band*` フィールドすべてについて記述子を公開します。公開されたからといって**読み取られる**キーが増えるわけではなく、不完全に指定したバンドの残りのキーは、これまでどおり無視されたものとして報告されます。
 
 ::: code-group
 
@@ -352,7 +354,9 @@ console.log(build.processors.length, build.presets.mastering);
 
 masteringProcessorNames();   // 実行時にソロプロセッサ id を取得
 masteringProcessorCatalog(); // ピッカー／フィルタ用にプロセッサを分類
-masteringInsertParamInfo('eq.parametric'); // リアルタイムオートメーション用メタデータ
+masteringInsertParamInfo('eq.parametric'); // 構築用／オートメーション用メタデータ
+masteringInsertTiming('eq.parametric', { 'band0.frequencyHz': 1000 }, sampleRate);
+masteringPresetParams('pop'); // masterAudio 用のフラットな上書き値
 
 const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
   thresholdDb: -24,
@@ -370,11 +374,13 @@ const mono   = JSON.parse(masteringStereoAnalyze('stereo.monoCompatCheck', left,
 import {
   capabilityCatalog,
   masteringInsertParamInfo,
+  masteringInsertTiming,
   masteringPairAnalyze,
   masteringProcess,
   masteringProcessStereo,
   masteringProcessorCatalog,
   masteringProcessorNames,
+  masteringPresetParams,
   masteringStereoAnalyze,
 } from '@libraz/libsonare-native';
 
@@ -384,6 +390,8 @@ console.log(build.processors.length, build.presets.mastering);
 masteringProcessorNames();
 masteringProcessorCatalog();
 masteringInsertParamInfo('eq.parametric');
+masteringInsertTiming('eq.parametric', { 'band0.frequencyHz': 1000 }, sampleRate);
+masteringPresetParams('pop');
 
 const out = masteringProcess('dynamics.compressor', samples, sampleRate, {
   thresholdDb: -24,
@@ -402,6 +410,9 @@ build = sonare.capability_catalog()
 print(len(build["processors"]), build["presets"]["mastering"])
 
 sonare.mastering_processor_names()   # 実行時にソロプロセッサ id を取得
+sonare.mastering_insert_param_info('eq.parametric')
+sonare.mastering_insert_timing('eq.parametric', {'band0.frequencyHz': 1000}, sr)
+sonare.mastering_preset_params('pop')
 
 out = sonare.mastering_process('dynamics.compressor', samples, sample_rate=sr, params={
     'thresholdDb': -24,
@@ -422,6 +433,10 @@ sonare doctor --json
 # ソロプロセッサ id を取得
 sonare mastering-processors
 
+# CLI はプリセットの一覧と適用を提供しますが、タイミングとフラットな
+# プリセットパラメータの問い合わせは API 専用です。
+sonare mastering-presets
+
 # ソロプロセッサを 1 つ適用（--params は浮動小数の k=v,k=v）
 sonare mastering-processor song.wav --processor dynamics.compressor \
   --params "thresholdDb=-24,ratio=1.5" -o out.wav
@@ -436,6 +451,8 @@ sonare mastering-pair-analyze song.wav --reference ref.wav --analysis match.refe
 ```
 
 :::
+
+ネイティブ C の呼び出し側は、同じフラットな JSON パラメータマップとサンプルレートを `sonare_mastering_insert_timing` に渡して問い合わせます。名前付きプリセットの展開には `sonare_mastering_preset_params_json` を使い、`{"version":1,"params":{...}}` を受け取ったら C ABI の文字列解放関数で解放します。`sonare_capability_catalog_json` には `masteringPresets` のメタデータも含まれます。CLI はプリセット名の一覧と適用を提供しますが、タイミングやパラメータマップの問い合わせは提供しません。
 
 :::: details チェーンの入口で設定スタイルが異なる
 レジストリは文字列ベースなので、C・Python・Node・WASM・CLI が同じプロセッサ識別子を共有できます。

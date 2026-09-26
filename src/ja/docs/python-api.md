@@ -192,7 +192,7 @@ for processor in catalog["processors"]:
 
 手で管理した表ではなくカタログで分岐してください。パラメータの範囲・既定値・単位・
 リアルタイム安全性は、すべて読み込まれているビルドから得られます。Node と WASM では
-同じデータが `capabilities()` / `capabilityCatalog()` です。
+同じデータが `capabilities()` / `capabilityCatalog()` です。`catalog["masteringPresets"]` には、組み込みのマスタリングおよび修復プリセットが並びます。各要素は `name`、`kind`、`targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` を持ち、修復プリセットでは 3 つの数値フィールドが `None` になります。プロセッサ要素には条件付きパラメータ群を表す `slots` もあり、`name`、`parent`、`activation`、`minCrossoverCutoffs` を持ちます。
 
 ### 長い処理をキャンセルする
 
@@ -339,6 +339,7 @@ insert_params = sonare.mastering_insert_param_info("eq.parametric")
 # プリセット式のチェーン（一括処理）
 sonare.mastering_preset_names()
 # -> ['pop', 'edm', 'acoustic', 'hipHop', 'aiMusic', 'speech', 'streaming', 'youtube', 'broadcast', 'podcast', 'audiobook', 'cinema', 'jpop', 'ambient', 'lofi', 'classical', 'drumAndBass', 'techno', 'metal', 'trap', 'rnb', 'jazz', 'kpop', 'trance', 'gameOst', 'vinyl', 'tapeHiss', 'fieldRecording', 'voiceMemo', 'shellac78']
+preset_params = sonare.mastering_preset_params("aiMusic")
 chain_result = sonare.master_audio(
     samples,
     sample_rate=sample_rate,
@@ -464,12 +465,15 @@ result = sonare.mastering_chain(
 )
 ```
 
+`mastering_insert_param_info(name)` は、インサートが構築時に読むキーとリアルタイムオートメーション対象の記述子を返します。型、範囲、既定値、選択肢、条件付きの `slot` を確認できます。`mastering_insert_timing(name, params, sample_rate)` はそのパラメータでインサートを構築し、`latencySamples` と `tailSamples` を返します。インサートが読まないキーは拒否されます。`mastering_preset_params(preset)` はプリセットのフラットな上書きマップを返し、そのまま `master_audio(..., overrides=...)` に渡せます。
+
 マスタリング API は次の系統に分かれます。
 
 | 目的 | 関数 |
 |------|------|
 | シンプルなラウドネスマスタリング | `mastering()` |
 | 組み込みプリセット一覧 | `mastering_preset_names()` |
+| 組み込みプリセットのフラットなチェーンパラメータを取得 | `mastering_preset_params(preset)` |
 | プリセットをモノラルに適用 | `master_audio()` |
 | プリセットをステレオに適用 | `master_audio_stereo()` |
 | フルチェーン実行（モノラル） | `mastering_chain()` |
@@ -485,7 +489,8 @@ result = sonare.mastering_chain(
 | プロセッサ分類カタログを取得 | `mastering_processor_catalog()` |
 | チェーンのインサートプロセッサ一覧 | `mastering_insert_names()` |
 | インサートが受け付けるパラメータキー一覧 | `mastering_insert_param_names(name)` |
-| リアルタイムオートメーション可能なインサートパラメータ一覧 | `mastering_insert_param_info(name)` |
+| インサートの構築キーとオートメーション対象の記述子 | `mastering_insert_param_info(name)` |
+| 構成したインサートのレイテンシとテールを取得 | `mastering_insert_timing(name, params, sample_rate)` |
 | モノラルプロセッサを単体で実行 | `mastering_process()` |
 | ステレオプロセッサを単体で実行 | `mastering_process_stereo()` |
 | ペアプロセッサ一覧 | `mastering_pair_processor_names()` |
@@ -569,7 +574,7 @@ with sonare.Project() as project:
 
 シンセプリセットの確認には `synth_preset_patch(name)` を使います。名前付きカタログプリセットを `SynthPatch` として返すので、バインドする前にフィールドを確認・調整できます（不明な名前では `SonareError` を送出し、`'va:'` ルーティング接頭辞も受け付けます）。`synth_enum_tables()` は実行時の enum 名テーブル（`dict[str, tuple[str, ...]]`）を返し、`SynthModRouting` のソース／デスティネーション名を、読み込まれたビルドに対して検証できます。
 
-`SynthPatch` の数値フィールドはすべて既定値が `None` で、「ベースプリセットの値を保つ」という意味です。設定していないフィールドを読むと `0.0` ではなく `None` が返り、値を渡せばそれは明示的な上書きになります。`0` も同様なので、`SynthPatch(preset="warm-pad", amp_sustain=0)` は未設定として扱われず、アンプサステインを本当にゼロにします。`synth_preset_patch(name)` から得たパッチはプリセットの具体値で埋まって返るため、数値フィールドが `None` になることはありません。enum フィールド（`engine_mode`、`waveform`、`filter_model`、`filter_output`、`body`）では `0` ／ `"default"` が「ベースを保つ」を意味します。`mod_routings=None` はベースのモッドマトリクスを保ち、空タプルは消去、要素のあるタプルは置き換えです。
+`SynthPatch` の数値フィールドはすべて既定値が `None` で、「ベースプリセットの値を保つ」という意味です。設定していないフィールドを読むと `0.0` ではなく `None` が返り、値を渡せばそれは明示的な上書きになります。`0` も同様なので、`SynthPatch(preset="warm-pad", amp_sustain=0)` は未設定として扱われず、アンプサステインを本当にゼロにします。`synth_preset_patch(name)` から得たパッチはプリセットの具体値で埋まって返るため、数値フィールドが `None` になることはありません。enum フィールド（`engine_mode`、`waveform`、`filter_model`、`filter_output`、`body`、`retrigger`）では `0` ／ `"default"` が「ベースを保つ」を意味します。`mod_routings=None` はベースのモッドマトリクスを保ち、空タプルは消去、要素のあるタプルは置き換えです。
 
 ### 不透明なアシストサイドカー
 

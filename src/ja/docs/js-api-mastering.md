@@ -235,6 +235,7 @@ interface LufsSeriesResult {
 |------|----------|
 | シンプルなラウドネスマスタリングを実行 | `mastering()` |
 | 組み込みプリセットの一覧 | `masteringPresetNames()` |
+| 1 つのプリセットをフラットなチェーンパラメータへ展開 | `masteringPresetParams(preset)` |
 | プリセットをモノラルに適用 | `masterAudio()` |
 | プリセットをステレオに適用 | `masterAudioStereo()` |
 | プリセットをモノラルに適用（進捗付き） | `masterAudioWithProgress()` |
@@ -256,7 +257,8 @@ interface LufsSeriesResult {
 | プロセッサ分類カタログを取得 | `masteringProcessorCatalog()` |
 | チェーンのインサートプロセッサ一覧 | `masteringInsertNames()` |
 | インサートが受け付けるパラメータキー一覧 | `masteringInsertParamNames(name)` |
-| リアルタイムオートメーション可能なインサートパラメータ一覧 | `masteringInsertParamInfo(name)` |
+| 構築用キーとリアルタイムインサートパラメータを記述 | `masteringInsertParamInfo(name)` |
+| 構成済みインサートのレイテンシとテールを測定 | `masteringInsertTiming(name, params, sampleRate)` |
 | モノラル音声を処理 | `masteringProcess()` |
 | ステレオ音声を処理 | `masteringProcessStereo()` |
 | ペアプロセッサ一覧 | `masteringPairProcessorNames()` |
@@ -265,6 +267,28 @@ interface LufsSeriesResult {
 | ソース／リファレンスのペアを解析 | `masteringPairAnalyze()` |
 | ステレオ解析の一覧 | `masteringStereoAnalysisNames()` |
 | ステレオチャンネルを解析 | `masteringStereoAnalyze()` |
+
+### プリセットパラメータと構成済みインサートのタイミング
+
+`masteringPresetNames()` は簡潔な名前一覧です。`capabilityCatalog().masteringPresets` は名前ごとにメタデータを返します。`kind` は `mastering` または `restoration` で、レストレーション用の項目では `targetLufs`、`truePeakCeilingDb`、`maxLimiterGainReductionDb` が `null` です。
+
+```typescript
+function masteringPresetParams(preset: MasteringPreset): Record<string, number | boolean>
+```
+
+`masteringPresetParams` は、アシスタントのチェーンが使い、`masterAudio` と `masterAudioStereo` の `overrides` 引数が受け取る、数値／真偽値のフラットなマップを返します。存在しないプリセット名は例外になります。
+
+カタログの `latencySamples` と `tailSamples` は代表的な既定構成の値です。ルーティングやスケジューリングで構成後の値が必要なら、prepare する構成を問い合わせてください。
+
+```typescript
+function masteringInsertTiming(
+  name: string,
+  params: Record<string, number | boolean>,
+  sampleRate: number,
+): { latencySamples: number; tailSamples: number }
+```
+
+`masteringInsertTiming` は指定した構築用パラメータを適用し、そのサンプルレートでの正確なレイテンシとテールを返します。ラッパーが受け付けるのは有限の数値と真偽値だけなので、カタログで `string` や `array` 型のキーはこの問い合わせに渡せません。未知のキーと不正なサンプルレートを拒否し、プロセッサを prepare できなければ例外にします。48 kHz で `{}` を渡すとプロセッサカタログの既定構成に相当します。トポロジーやスロットでタイミングが変わる場合は、実際のインサートパラメータを渡してください。
 
 関連するマスタリングガイド: [処理チェーン](./glossary/mastering.md)、[トーンと Air](./glossary/mastering/tone-air.md)、[ダイナミクス](./glossary/mastering/dynamics.md)、[ステレオ、リミッター、ラウドネス](./glossary/mastering/stereo-limiter-loudness.md)、[リファレンスマッチ](./glossary/mastering/reference-match.md)。
 

@@ -239,10 +239,7 @@ function capabilities(): {
 返します。C ABI が公開し Python が `capability_catalog` として公開しているのと同じ正規
 JSON で、`schemas/capability-catalog.schema.json` で検証されます。
 
-カタログは実際の値を持っています。公開される 88 個のプロセッサ全体で 1147 個のパラメータが
-あり、`default` はそのすべてが非 null です。`min` は 316 個、`max` は 193 個が非 null で、
-残る 802 個は上下限とも `null` です。`null` は「そのパラメータに関する制限をカタログが把握
-していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
+カタログは実際の値を持っています。現行ビルドは 89 個のプロセッサと 5,352 個のパラメータ記述子を公開します。構築用キーにフォールバックがなければ `default` は `null` になります。値域はプロセッサの他のパラメータを既定値に置いて実測されます。`null` は「その側の制限をカタログが把握していない」という意味であって、範囲情報が一般に得られないという意味ではありません。
 
 ::: warning 範囲は実測値であり、実測ゆえの注意点がある
 公開される範囲は**送ってよい値の厳密な制約であって、UI の推奨レンジではありません**。しかも、
@@ -276,13 +273,21 @@ function capabilityCatalog(): {
     category: string;
     params: Array<{
       name: string;
-      id: number;
+      id: number | null;
       rtSafe: boolean;
-      type: 'boolean' | 'number';
+      type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
       min: number | null;
       max: number | null;
       default: boolean | number | null;
       unit: string | null;
+      choices: Array<{ name: string; value: number }> | null;
+      slot: string | null;
+    }>;
+    slots: Array<{
+      name: string;
+      parent: string | null;
+      activation: 'anyKey' | 'always';
+      minCrossoverCutoffs: number;
     }>;
   }>;
   presets: {
@@ -291,6 +296,13 @@ function capabilityCatalog(): {
     mixingScene: string[];
     voiceChanger: string[];
   };
+  masteringPresets: Array<{
+    name: string;
+    kind: 'mastering' | 'restoration';
+    targetLufs: number | null;
+    truePeakCeilingDb: number | null;
+    maxLimiterGainReductionDb: number | null;
+  }>;
 }
 ```
 
@@ -298,11 +310,7 @@ function capabilityCatalog(): {
 なくカタログから得られます。コアが把握していない範囲は明示的な `null` で報告されるので、
 0 ではなく「上限・下限なし／不明」として扱ってください。
 
-バンドごとの EQ サーフェスは、各バンドフィールドについて `type` と `default` を公開するため、
-汎用 UI が手書きの表なしにバンドを並べられます。公開されるパラメータ数は `eq.parametric` が
-72 個、`eq.midSide` が 144 個、`multiband.dynamicEq` が 264 個です。ただし既定値を公開しても、
-どのキーが**読まれた**とみなされるかは変わりません。不完全に渡したバンドは、従来どおり余分な
-キーを「無視した」と報告します。
+バンドごとの EQ サーフェスは、インデックス付きの各バンドフィールドについて記述子を公開するため、汎用 UI が手書きの表なしにバンドを並べられます。記述子には構築用キーとオートメーション対象の両方が含まれるので、オートメーション対象は `id !== null` で選び、条件付きのバンド群は `slot` とプロセッサの `slots` 配列で扱ってください。記述子を公開しても、どのキーが**読まれた**とみなされるかは変わりません。不完全に渡したバンドは、従来どおり余分なキーを「無視した」と報告します。
 
 ### `abiVersion()`
 
