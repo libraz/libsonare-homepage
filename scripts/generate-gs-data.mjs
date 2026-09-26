@@ -229,6 +229,11 @@ function runAddressDumper(engineDir) {
  * shipping those to a browser would only invite the demo to explain them.
  */
 function selectEfxFields(raw) {
+  const classes = structuredClone(raw.classes);
+  // Archive paths identify a specific hardware model; the inspector uses the table values, not those paths.
+  for (const table of Object.values(classes?.corner?.tables ?? {})) {
+    delete table.from;
+  }
   return {
     archive_revision: raw.archive_revision,
     what_this_is: raw.what_this_is,
@@ -236,7 +241,7 @@ function selectEfxFields(raw) {
     schema: raw.schema,
     reach: raw.reach,
     reach_by_class: raw.reach_by_class,
-    classes: raw.classes,
+    classes,
     defaults: raw.defaults,
     map: raw.map,
   };

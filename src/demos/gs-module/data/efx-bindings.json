@@ -1,21 +1,29 @@
 {
   "_sources": {
-    "tools/gs/efx-bindings/01.json": "00c64d7ae4aa93351b7e5095a8d73725b55d23000215760c4c89fbc273d1330e",
-    "tools/gs/efx-bindings/02.json": "3a6ac68c5917872056177fc9afce6dcd8a615ab6023f4292a213d446ce54b84a",
-    "tools/gs/efx-bindings/04.json": "0b89a65c1da41ab862379d07f7d12618fc21b3d8377e94fc5d0dc81826739f9d",
-    "tools/gs/efx-bindings/05.json": "8ade376e3e383e1584b50e9fb76b667a978e44fbbf89f1a60da5372bcee80066",
+    "tools/gs/efx-bindings/01.json": "07cb7674bdb5ac6fa20b20efc755846ea6e8af187ee425a3049f93adec3d81d2",
+    "tools/gs/efx-bindings/02.json": "47f4eeb1c4ab9c3f9d7c47c8be571025b43bda757869e9bc578321a511a8f9ce",
+    "tools/gs/efx-bindings/04.json": "2e1592c5d22464284f6f9e41ed7fba46e0aa16022986a33b26836105e8162e0e",
+    "tools/gs/efx-bindings/05.json": "bc066b237213881475cc0877625518f0cb8e774a40ad332f7b313d076cf54785",
     "tools/gs/efx-bindings/11.json": "0f8d2158f61fc7f96e48bd5bcfc6a5335a840de6a029a15a623b1d4d2461cdbe"
   },
   "what_this_is": "Which physical quantity each insertion-effect (type, slot) names, and which insert control receives it. The conversion archive measures laws and which slots move the sound; it does not record what a slot is called, so this is the side that gives a byte a name.",
   "slots_per_type": 20,
   "counts": {
-    "stage": 223,
-    "state": 207,
+    "stage": 295,
+    "state": 312,
     "unmapped": 157,
-    "builder": 0,
+    "builder": 6,
     "unreadable": 0
   },
   "rows": [
+    {
+      "type": "01 00",
+      "slot": 0,
+      "stage": "eq.parametric",
+      "class": "corner",
+      "table": "low",
+      "key": "band0.frequencyHz"
+    },
     {
       "type": "01 00",
       "slot": 1,
@@ -23,6 +31,14 @@
       "class": "gain",
       "table": "tone",
       "key": "band0.gainDb"
+    },
+    {
+      "type": "01 00",
+      "slot": 2,
+      "stage": "eq.parametric",
+      "class": "corner",
+      "table": "high",
+      "key": "band3.frequencyHz"
     },
     {
       "type": "01 00",
@@ -247,7 +263,17 @@
     {
       "type": "01 10",
       "slot": 0,
-      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+      "builder": "the skeleton reads the byte as the amp model's drive fraction; the archive measured a gain in front of one fixed curve and derived no byte-to-decibel law"
+    },
+    {
+      "type": "01 10",
+      "slot": 1,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "01 10",
+      "slot": 2,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
     },
     {
       "type": "01 10",
@@ -281,7 +307,17 @@
     {
       "type": "01 11",
       "slot": 0,
-      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+      "builder": "the skeleton reads the byte as the amp model's drive fraction; the archive measured a gain in front of one fixed curve and derived no byte-to-decibel law"
+    },
+    {
+      "type": "01 11",
+      "slot": 1,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "01 11",
+      "slot": 2,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
     },
     {
       "type": "01 11",
@@ -366,6 +402,11 @@
     },
     {
       "type": "01 21",
+      "slot": 0,
+      "state": "the auto-wah insert has one filter shape"
+    },
+    {
+      "type": "01 21",
       "slot": 1,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -388,6 +429,11 @@
       "type": "01 21",
       "slot": 5,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 21",
+      "slot": 6,
+      "state": "the auto-wah insert sweeps in one direction"
     },
     {
       "type": "01 21",
@@ -420,6 +466,16 @@
     },
     {
       "type": "01 22",
+      "slot": 0,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "01 22",
+      "slot": 1,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "01 22",
       "slot": 2,
       "stage": "effects.modulation.rotary",
       "class": "accel",
@@ -433,11 +489,25 @@
     },
     {
       "type": "01 22",
+      "slot": 4,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "01 22",
+      "slot": 5,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "01 22",
       "slot": 6,
       "stage": "effects.modulation.rotary",
       "class": "accel",
       "table": "rotor",
-      "key": "undershootHz"
+      "keys": [
+        "undershootHz",
+        "accelTauS",
+        "decelTauS"
+      ]
     },
     {
       "type": "01 22",
@@ -480,6 +550,11 @@
     },
     {
       "type": "01 23",
+      "slot": 0,
+      "builder": "the skeleton reads the byte as the pre-filter's shape, which the archive read to be the Stereo Chorus's section; the archive measured an enumeration rather than a conversion, so the derivation gives it no class"
+    },
+    {
+      "type": "01 23",
       "slot": 1,
       "stage": "effects.modulation.flanger",
       "class": "freq",
@@ -506,6 +581,23 @@
       "type": "01 23",
       "slot": 4,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 23",
+      "slot": 5,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 23",
+      "slot": 6,
+      "state": "the flanger insert has no phase between its two channels' sweeps"
     },
     {
       "type": "01 23",
@@ -556,6 +648,23 @@
       "type": "01 24",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 24",
+      "slot": 3,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 24",
+      "slot": 4,
+      "state": "the flanger insert has no phase between its two channels' sweeps"
     },
     {
       "type": "01 24",
@@ -687,6 +796,14 @@
     },
     {
       "type": "01 30",
+      "slot": 2,
+      "stage": "dynamics.compressor",
+      "class": "post_gain",
+      "table": "makeup",
+      "key": "makeupGainDb"
+    },
+    {
+      "type": "01 30",
       "slot": 16,
       "stage": "eq.parametric",
       "class": "gain",
@@ -773,8 +890,28 @@
     },
     {
       "type": "01 40",
+      "slot": 1,
+      "state": "the ensemble insert runs a slow and a fast sweep and has no single rate"
+    },
+    {
+      "type": "01 40",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 40",
+      "slot": 3,
+      "state": "the ensemble insert has no per-voice deviation"
+    },
+    {
+      "type": "01 40",
+      "slot": 4,
+      "state": "the ensemble insert has no per-voice deviation"
+    },
+    {
+      "type": "01 40",
+      "slot": 5,
+      "state": "the ensemble insert has no per-voice deviation"
     },
     {
       "type": "01 40",
@@ -815,8 +952,29 @@
     },
     {
       "type": "01 41",
+      "slot": 1,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "01 41",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 41",
+      "slot": 3,
+      "state": "the ring-modulator insert has no phase between its channels"
+    },
+    {
+      "type": "01 41",
+      "slot": 4,
+      "stage": "effects.modulation.ringModulator",
+      "class": "rate",
+      "table": "wide",
+      "key": "carrierHz"
     },
     {
       "type": "01 41",
@@ -854,6 +1012,11 @@
     },
     {
       "type": "01 42",
+      "slot": 0,
+      "builder": "the skeleton reads the byte as the pre-filter's shape; the archive measured an enumeration rather than a conversion, so the derivation gives it no class"
+    },
+    {
+      "type": "01 42",
       "slot": 1,
       "stage": "effects.modulation.chorus",
       "class": "freq",
@@ -883,6 +1046,11 @@
     },
     {
       "type": "01 42",
+      "slot": 6,
+      "state": "the chorus insert has no phase between its two channels' sweeps"
+    },
+    {
+      "type": "01 42",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -933,6 +1101,11 @@
     },
     {
       "type": "01 43",
+      "slot": 3,
+      "state": "the chorus insert has no phase between its two channels' sweeps"
+    },
+    {
+      "type": "01 43",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -980,6 +1153,11 @@
       "type": "01 44",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 44",
+      "slot": 14,
+      "state": "the chain carries no binaural stage for this output mode to configure"
     },
     {
       "type": "01 44",
@@ -1025,6 +1203,33 @@
       "class": "delay_time",
       "table": "time3",
       "key": "delayTimeRMs"
+    },
+    {
+      "type": "01 50",
+      "slot": 2,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 50",
+      "slot": 3,
+      "state": "no reading measured where the cross mode routes the loop, so it is not taken for the stereo-delay insert's ping-pong"
+    },
+    {
+      "type": "01 50",
+      "slot": 4,
+      "state": "the stereo-delay insert has no polarity inversion"
+    },
+    {
+      "type": "01 50",
+      "slot": 5,
+      "state": "the stereo-delay insert has no polarity inversion"
     },
     {
       "type": "01 50",
@@ -1081,6 +1286,23 @@
     },
     {
       "type": "01 51",
+      "slot": 2,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 51",
+      "slot": 3,
+      "state": "no reading measured where the cross mode routes the loop, so it is not taken for the stereo-delay insert's ping-pong"
+    },
+    {
+      "type": "01 51",
       "slot": 4,
       "state": "the stereo-delay insert carries no modulation LFO"
     },
@@ -1088,6 +1310,19 @@
       "type": "01 51",
       "slot": 5,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 51",
+      "slot": 6,
+      "state": "the stereo-delay insert carries no modulation LFO"
+    },
+    {
+      "type": "01 51",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
     },
     {
       "type": "01 51",
@@ -1141,6 +1376,18 @@
     },
     {
       "type": "01 52",
+      "slot": 3,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 52",
       "slot": 4,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1153,6 +1400,14 @@
       "type": "01 52",
       "slot": 6,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 52",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
     },
     {
       "type": "01 52",
@@ -1231,6 +1486,26 @@
     },
     {
       "type": "01 53",
+      "slot": 8,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 53",
+      "slot": 9,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "01 53",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1264,7 +1539,35 @@
       "stage": "effects.delay.stereo",
       "class": "delay_time",
       "table": "time2",
-      "key": "delayTimeLMs"
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
+    },
+    {
+      "type": "01 54",
+      "slot": 1,
+      "state": "the stereo-delay insert has no glide between delay times"
+    },
+    {
+      "type": "01 54",
+      "slot": 2,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 54",
+      "slot": 3,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
     },
     {
       "type": "01 54",
@@ -1302,8 +1605,26 @@
     },
     {
       "type": "01 55",
+      "slot": 0,
+      "state": "the reverb insert is one algorithm and has no room-type selector"
+    },
+    {
+      "type": "01 55",
+      "slot": 1,
+      "stage": "effects.reverb.dattorro",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "preDelayMs"
+    },
+    {
+      "type": "01 55",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 55",
+      "slot": 3,
+      "state": "the reverb insert's damping is a coefficient rather than a corner"
     },
     {
       "type": "01 55",
@@ -1333,6 +1654,24 @@
       "class": "level",
       "table": "output",
       "key": "levelDb"
+    },
+    {
+      "type": "01 56",
+      "slot": 0,
+      "state": "the reverb insert has no gate"
+    },
+    {
+      "type": "01 56",
+      "slot": 1,
+      "stage": "effects.reverb.dattorro",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "preDelayMs"
+    },
+    {
+      "type": "01 56",
+      "slot": 2,
+      "state": "the reverb insert has no gate"
     },
     {
       "type": "01 56",
@@ -1386,6 +1725,18 @@
     },
     {
       "type": "01 57",
+      "slot": 3,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "01 57",
       "slot": 4,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1398,6 +1749,19 @@
       "type": "01 57",
       "slot": 6,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 57",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "01 57",
+      "slot": 14,
+      "state": "the chain carries no binaural stage for this output mode to configure"
     },
     {
       "type": "01 57",
@@ -1430,6 +1794,28 @@
     },
     {
       "type": "01 60",
+      "slot": 0,
+      "stage": "effects.modulation.pitchShifter",
+      "class": "ratio",
+      "table": "semitone",
+      "key": "semitones",
+      "range": [
+        -24,
+        12
+      ]
+    },
+    {
+      "type": "01 60",
+      "slot": 1,
+      "state": "the pitch-shifter insert takes one pitch, which the coarse byte sets in whole semitones"
+    },
+    {
+      "type": "01 60",
+      "slot": 2,
+      "state": "the pitch-shifter insert has no pre-delay"
+    },
+    {
+      "type": "01 60",
       "slot": 3,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1440,8 +1826,26 @@
     },
     {
       "type": "01 60",
+      "slot": 5,
+      "state": "the pitch-shifter insert has one voice and this is a second"
+    },
+    {
+      "type": "01 60",
+      "slot": 6,
+      "state": "the pitch-shifter insert has one voice and this is a second"
+    },
+    {
+      "type": "01 60",
       "slot": 7,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 60",
+      "slot": 8,
+      "stage": "effects.modulation.pitchShifter",
+      "class": "window",
+      "table": "splice",
+      "key": "windowMs"
     },
     {
       "type": "01 60",
@@ -1451,7 +1855,7 @@
     {
       "type": "01 60",
       "slot": 15,
-      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+      "builder": "the skeleton reads the byte as a linear effect balance; the measured two-ramp law names three delay types and not this one"
     },
     {
       "type": "01 60",
@@ -1479,8 +1883,38 @@
     },
     {
       "type": "01 61",
+      "slot": 0,
+      "stage": "effects.modulation.pitchShifter",
+      "class": "ratio",
+      "table": "semitone",
+      "key": "semitones",
+      "range": [
+        -24,
+        12
+      ]
+    },
+    {
+      "type": "01 61",
+      "slot": 1,
+      "state": "the pitch-shifter insert takes one pitch, which the coarse byte sets in whole semitones"
+    },
+    {
+      "type": "01 61",
       "slot": 2,
       "state": "the pitch-shifter insert has no feedback"
+    },
+    {
+      "type": "01 61",
+      "slot": 3,
+      "state": "the pitch-shifter insert has no pre-delay"
+    },
+    {
+      "type": "01 61",
+      "slot": 4,
+      "stage": "effects.modulation.pitchShifter",
+      "class": "window",
+      "table": "splice",
+      "key": "windowMs"
     },
     {
       "type": "01 61",
@@ -1490,7 +1924,7 @@
     {
       "type": "01 61",
       "slot": 15,
-      "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+      "builder": "the skeleton reads the byte as a linear effect balance; the measured two-ramp law names three delay types and not this one"
     },
     {
       "type": "01 61",
@@ -1568,6 +2002,11 @@
     },
     {
       "type": "01 72",
+      "slot": 1,
+      "state": "no reading placed the hold the index's flat group applies or the size of the step its quantiser leaves, so neither field of the byte may be given a conversion"
+    },
+    {
+      "type": "01 72",
       "slot": 2,
       "state": "the bit-crusher insert has no shelf table after its degrader"
     },
@@ -1607,6 +2046,16 @@
     },
     {
       "type": "01 73",
+      "slot": 0,
+      "state": "the bit-crusher insert has no type ladder"
+    },
+    {
+      "type": "01 73",
+      "slot": 1,
+      "state": "the bit-crusher insert has no filter"
+    },
+    {
+      "type": "01 73",
       "slot": 2,
       "state": "the bit-crusher insert has no filter"
     },
@@ -1622,6 +2071,11 @@
     },
     {
       "type": "01 73",
+      "slot": 5,
+      "state": "the bit-crusher insert adds no noise"
+    },
+    {
+      "type": "01 73",
       "slot": 6,
       "state": "a printed column with no measured table behind it"
     },
@@ -1629,6 +2083,11 @@
       "type": "01 73",
       "slot": 7,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 8,
+      "state": "the bit-crusher insert adds no noise"
     },
     {
       "type": "01 73",
@@ -1642,6 +2101,11 @@
     },
     {
       "type": "01 73",
+      "slot": 11,
+      "state": "the bit-crusher insert adds no noise"
+    },
+    {
+      "type": "01 73",
       "slot": 12,
       "state": "a printed column with no measured table behind it"
     },
@@ -1649,6 +2113,11 @@
       "type": "01 73",
       "slot": 13,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "01 73",
+      "slot": 14,
+      "state": "the bit-crusher insert has no mono switch"
     },
     {
       "type": "01 73",
@@ -1696,6 +2165,24 @@
     },
     {
       "type": "02 00",
+      "slot": 2,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "02 00",
+      "slot": 3,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "02 00",
+      "slot": 5,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "02 00",
       "slot": 6,
       "stage": "effects.modulation.chorus",
       "class": "rate",
@@ -1748,6 +2235,16 @@
     },
     {
       "type": "02 01",
+      "slot": 2,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "02 01",
+      "slot": 3,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "02 01",
       "slot": 5,
       "stage": "effects.modulation.flanger",
       "class": "delay_time",
@@ -1769,6 +2266,18 @@
     },
     {
       "type": "02 01",
+      "slot": 8,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 01",
       "slot": 9,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1808,6 +2317,47 @@
     },
     {
       "type": "02 02",
+      "slot": 2,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "02 02",
+      "slot": 3,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "02 02",
+      "slot": 5,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
+    },
+    {
+      "type": "02 02",
+      "slot": 6,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 02",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "02 02",
       "slot": 9,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1844,6 +2394,24 @@
       "type": "02 03",
       "slot": 1,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 03",
+      "slot": 2,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "02 03",
+      "slot": 3,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "02 03",
+      "slot": 5,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
     },
     {
       "type": "02 03",
@@ -1899,6 +2467,16 @@
     },
     {
       "type": "02 04",
+      "slot": 2,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "02 04",
+      "slot": 3,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "02 04",
       "slot": 5,
       "stage": "effects.modulation.flanger",
       "class": "delay_time",
@@ -1920,6 +2498,18 @@
     },
     {
       "type": "02 04",
+      "slot": 8,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 04",
       "slot": 9,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1959,6 +2549,47 @@
     },
     {
       "type": "02 05",
+      "slot": 2,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "02 05",
+      "slot": 3,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "02 05",
+      "slot": 5,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time3",
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
+    },
+    {
+      "type": "02 05",
+      "slot": 6,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 05",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
+    },
+    {
+      "type": "02 05",
       "slot": 9,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -1995,6 +2626,14 @@
       "type": "02 06",
       "slot": 1,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 06",
+      "slot": 5,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
     },
     {
       "type": "02 06",
@@ -2068,6 +2707,18 @@
       "type": "02 07",
       "slot": 7,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 07",
+      "slot": 8,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
     },
     {
       "type": "02 07",
@@ -2114,7 +2765,30 @@
       "stage": "effects.delay.stereo",
       "class": "delay_time",
       "table": "time3",
-      "key": "delayTimeLMs"
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
+    },
+    {
+      "type": "02 08",
+      "slot": 6,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 08",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
     },
     {
       "type": "02 08",
@@ -2177,7 +2851,30 @@
       "stage": "effects.delay.stereo",
       "class": "delay_time",
       "table": "time3",
-      "key": "delayTimeLMs"
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
+    },
+    {
+      "type": "02 09",
+      "slot": 6,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 09",
+      "slot": 7,
+      "stage": "effects.delay.stereo",
+      "class": "freq",
+      "table": "damping",
+      "key": "dampingHz"
     },
     {
       "type": "02 09",
@@ -2231,6 +2928,18 @@
     },
     {
       "type": "02 0A",
+      "slot": 3,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
+    },
+    {
+      "type": "02 0A",
       "slot": 4,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2240,7 +2949,22 @@
       "stage": "effects.delay.stereo",
       "class": "delay_time",
       "table": "time3",
-      "key": "delayTimeLMs"
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
+    },
+    {
+      "type": "02 0A",
+      "slot": 6,
+      "stage": "effects.delay.stereo",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
     },
     {
       "type": "02 0A",
@@ -2289,6 +3013,14 @@
     },
     {
       "type": "02 0B",
+      "slot": 1,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 0B",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2307,8 +3039,28 @@
     },
     {
       "type": "02 0B",
+      "slot": 6,
+      "stage": "effects.modulation.flanger",
+      "class": "rate",
+      "table": "wide",
+      "key": "rateHz"
+    },
+    {
+      "type": "02 0B",
       "slot": 7,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0B",
+      "slot": 8,
+      "stage": "effects.modulation.flanger",
+      "class": "ratio",
+      "table": "percent",
+      "key": "feedback",
+      "range": [
+        -98,
+        98
+      ]
     },
     {
       "type": "02 0B",
@@ -2346,6 +3098,27 @@
     },
     {
       "type": "02 0C",
+      "slot": 1,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "02 0C",
+      "slot": 2,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "02 0C",
+      "slot": 3,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "02 0C",
       "slot": 4,
       "stage": "eq.parametric",
       "class": "width",
@@ -2359,6 +3132,24 @@
       "class": "gain",
       "table": "tone",
       "key": "band1.gainDb"
+    },
+    {
+      "type": "02 0C",
+      "slot": 6,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "02 0C",
+      "slot": 7,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "02 0C",
+      "slot": 8,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
     },
     {
       "type": "02 0C",
@@ -2375,6 +3166,28 @@
     },
     {
       "type": "02 0C",
+      "slot": 11,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "02 0C",
+      "slot": 12,
+      "state": "the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows"
+    },
+    {
+      "type": "02 0C",
+      "slot": 13,
+      "stage": "effects.modulation.rotary",
+      "class": "accel",
+      "table": "rotor",
+      "keys": [
+        "undershootHz",
+        "accelTauS",
+        "decelTauS"
+      ]
+    },
+    {
+      "type": "02 0C",
       "slot": 14,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2382,6 +3195,11 @@
       "type": "02 0C",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "02 0C",
+      "slot": 16,
+      "state": "the rotary insert has no speed switch"
     },
     {
       "type": "02 0C",
@@ -2408,8 +3226,48 @@
     },
     {
       "type": "04 00",
+      "slot": 3,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 00",
+      "slot": 4,
+      "state": "the chain runs the overdrive voicing whichever character this selects"
+    },
+    {
+      "type": "04 00",
       "slot": 5,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 00",
+      "slot": 6,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "04 00",
+      "slot": 7,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "04 00",
+      "slot": 8,
+      "state": "no reading measured which filter this gain drives, and the amp-sim insert's tone stack is not a pair of shelves"
+    },
+    {
+      "type": "04 00",
+      "slot": 9,
+      "state": "no reading measured which filter this gain drives, and the amp-sim insert's tone stack is not a pair of shelves"
+    },
+    {
+      "type": "04 00",
+      "slot": 10,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 00",
+      "slot": 11,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
     },
     {
       "type": "04 00",
@@ -2426,6 +3284,11 @@
     },
     {
       "type": "04 00",
+      "slot": 14,
+      "state": "the chorus insert has no feedback"
+    },
+    {
+      "type": "04 00",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2435,7 +3298,10 @@
       "stage": "effects.delay.stereo",
       "class": "delay_time",
       "table": "time4",
-      "key": "delayTimeLMs"
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
     },
     {
       "type": "04 00",
@@ -2472,8 +3338,33 @@
     },
     {
       "type": "04 01",
+      "slot": 3,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 01",
+      "slot": 4,
+      "state": "the chain runs the overdrive voicing whichever character this selects"
+    },
+    {
+      "type": "04 01",
       "slot": 5,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 6,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "04 01",
+      "slot": 7,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "04 01",
+      "slot": 8,
+      "state": "the chain runs this stage whichever way the switch is set"
     },
     {
       "type": "04 01",
@@ -2517,8 +3408,26 @@
     },
     {
       "type": "04 01",
+      "slot": 14,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
+    },
+    {
+      "type": "04 01",
+      "slot": 15,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "04 01",
       "slot": 16,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 01",
+      "slot": 17,
+      "state": "the chorus insert has no feedback"
     },
     {
       "type": "04 01",
@@ -2535,6 +3444,11 @@
     },
     {
       "type": "04 02",
+      "slot": 0,
+      "state": "the wah insert has one filter shape"
+    },
+    {
+      "type": "04 02",
       "slot": 1,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2545,8 +3459,56 @@
     },
     {
       "type": "04 02",
+      "slot": 3,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 02",
+      "slot": 4,
+      "state": "the chain runs the overdrive voicing whichever character this selects"
+    },
+    {
+      "type": "04 02",
       "slot": 5,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 6,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "04 02",
+      "slot": 7,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "04 02",
+      "slot": 8,
+      "state": "no reading measured which filter this gain drives, and the amp-sim insert's tone stack is not a pair of shelves"
+    },
+    {
+      "type": "04 02",
+      "slot": 9,
+      "state": "no reading measured which filter this gain drives, and the amp-sim insert's tone stack is not a pair of shelves"
+    },
+    {
+      "type": "04 02",
+      "slot": 10,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 02",
+      "slot": 11,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
+    },
+    {
+      "type": "04 02",
+      "slot": 12,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
     },
     {
       "type": "04 02",
@@ -2555,8 +3517,24 @@
     },
     {
       "type": "04 02",
+      "slot": 14,
+      "state": "the chorus insert has no feedback"
+    },
+    {
+      "type": "04 02",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 02",
+      "slot": 16,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time4",
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
     },
     {
       "type": "04 02",
@@ -2590,6 +3568,11 @@
       "type": "04 03",
       "slot": 2,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 3,
+      "state": "the chain runs this stage whichever way the switch is set"
     },
     {
       "type": "04 03",
@@ -2633,6 +3616,11 @@
     },
     {
       "type": "04 03",
+      "slot": 9,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
+    },
+    {
+      "type": "04 03",
       "slot": 10,
       "stage": "effects.modulation.chorus",
       "class": "rate",
@@ -2646,8 +3634,24 @@
     },
     {
       "type": "04 03",
+      "slot": 12,
+      "state": "the chorus insert has no feedback"
+    },
+    {
+      "type": "04 03",
       "slot": 13,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 03",
+      "slot": 14,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time4",
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
     },
     {
       "type": "04 03",
@@ -2677,6 +3681,11 @@
     },
     {
       "type": "04 04",
+      "slot": 0,
+      "state": "the auto-wah insert has one filter shape"
+    },
+    {
+      "type": "04 04",
       "slot": 1,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2687,8 +3696,71 @@
     },
     {
       "type": "04 04",
+      "slot": 3,
+      "state": "the auto-wah insert follows an envelope and carries no LFO rate"
+    },
+    {
+      "type": "04 04",
       "slot": 4,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 5,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 04",
+      "slot": 6,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "04 04",
+      "slot": 7,
+      "stage": "eq.parametric",
+      "class": "freq",
+      "table": "eq",
+      "key": "band1.frequencyHz"
+    },
+    {
+      "type": "04 04",
+      "slot": 8,
+      "stage": "eq.parametric",
+      "class": "width",
+      "table": "section",
+      "key": "band1.q"
+    },
+    {
+      "type": "04 04",
+      "slot": 9,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "04 04",
+      "slot": 10,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "04 04",
+      "slot": 11,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
+    },
+    {
+      "type": "04 04",
+      "slot": 12,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
     },
     {
       "type": "04 04",
@@ -2697,8 +3769,24 @@
     },
     {
       "type": "04 04",
+      "slot": 14,
+      "state": "the chorus insert has no feedback"
+    },
+    {
+      "type": "04 04",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 04",
+      "slot": 16,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time4",
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
     },
     {
       "type": "04 04",
@@ -2735,8 +3823,41 @@
     },
     {
       "type": "04 05",
+      "slot": 3,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 05",
+      "slot": 4,
+      "state": "the chain runs the overdrive voicing whichever character this selects"
+    },
+    {
+      "type": "04 05",
       "slot": 5,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 6,
+      "state": "the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves"
+    },
+    {
+      "type": "04 05",
+      "slot": 7,
+      "state": "the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out"
+    },
+    {
+      "type": "04 05",
+      "slot": 8,
+      "state": "the chain runs this stage whichever way the switch is set"
+    },
+    {
+      "type": "04 05",
+      "slot": 9,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
     },
     {
       "type": "04 05",
@@ -2756,8 +3877,42 @@
     },
     {
       "type": "04 05",
+      "slot": 12,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "04 05",
+      "slot": 13,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band2.gainDb"
+    },
+    {
+      "type": "04 05",
+      "slot": 14,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
+    },
+    {
+      "type": "04 05",
+      "slot": 15,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "04 05",
       "slot": 16,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 05",
+      "slot": 17,
+      "state": "the chorus insert has no feedback"
     },
     {
       "type": "04 05",
@@ -2789,6 +3944,14 @@
     },
     {
       "type": "04 06",
+      "slot": 3,
+      "stage": "effects.modulation.phaser",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "04 06",
       "slot": 4,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
     },
@@ -2804,8 +3967,29 @@
     },
     {
       "type": "04 06",
+      "slot": 7,
+      "state": "the chain realises the chorus/flanger block as the chorus insert whichever this selects"
+    },
+    {
+      "type": "04 06",
       "slot": 8,
       "state": "a printed column with no measured table behind it"
+    },
+    {
+      "type": "04 06",
+      "slot": 9,
+      "stage": "effects.modulation.chorus",
+      "class": "delay_time",
+      "table": "pre_delay",
+      "key": "centerDelayMs"
+    },
+    {
+      "type": "04 06",
+      "slot": 10,
+      "stage": "effects.modulation.chorus",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
     },
     {
       "type": "04 06",
@@ -2814,8 +3998,18 @@
     },
     {
       "type": "04 06",
+      "slot": 12,
+      "state": "the chorus insert has no feedback"
+    },
+    {
+      "type": "04 06",
       "slot": 13,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 14,
+      "state": "the chain realises the tremolo/pan block as the auto-pan insert whichever this selects"
     },
     {
       "type": "04 06",
@@ -2824,8 +4018,21 @@
     },
     {
       "type": "04 06",
+      "slot": 16,
+      "stage": "stereo.autoPan",
+      "class": "rate",
+      "table": "narrow",
+      "key": "rateHz"
+    },
+    {
+      "type": "04 06",
       "slot": 17,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "04 06",
+      "slot": 18,
+      "state": "the chain runs this stage whichever way the switch is set"
     },
     {
       "type": "04 06",
@@ -2847,6 +4054,14 @@
     },
     {
       "type": "05 00",
+      "slot": 2,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band0.gainDb"
+    },
+    {
+      "type": "05 00",
       "slot": 3,
       "stage": "eq.parametric",
       "class": "freq",
@@ -2863,11 +4078,41 @@
     },
     {
       "type": "05 00",
+      "slot": 5,
+      "stage": "eq.parametric",
+      "class": "gain",
+      "table": "tone",
+      "key": "band1.gainDb"
+    },
+    {
+      "type": "05 00",
       "slot": 6,
       "stage": "eq.parametric",
       "class": "gain",
       "table": "tone",
       "key": "band2.gainDb"
+    },
+    {
+      "type": "05 00",
+      "slot": 7,
+      "stage": "effects.modulation.pitchShifter",
+      "class": "ratio",
+      "table": "semitone",
+      "key": "semitones",
+      "range": [
+        -24,
+        12
+      ]
+    },
+    {
+      "type": "05 00",
+      "slot": 8,
+      "state": "the pitch-shifter insert takes one pitch, which the coarse byte sets in whole semitones"
+    },
+    {
+      "type": "05 00",
+      "slot": 9,
+      "state": "no reading measured this type's shift mode; the five splice windows were read on the two pitch-shifter types, and a claim does not reach a type it never measured"
     },
     {
       "type": "05 00",
@@ -2901,6 +4146,17 @@
       "type": "05 00",
       "slot": 15,
       "state": "a bare 00-7F with no unit printed beside it, so no conversion may be guessed"
+    },
+    {
+      "type": "05 00",
+      "slot": 16,
+      "stage": "effects.delay.stereo",
+      "class": "delay_time",
+      "table": "time4",
+      "keys": [
+        "delayTimeLMs",
+        "delayTimeRMs"
+      ]
     },
     {
       "type": "05 00",

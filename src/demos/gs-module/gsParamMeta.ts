@@ -1,8 +1,7 @@
 /**
  * Unit and range for a bound control, asked of the engine's capability
  * catalog rather than written down here — a second copy would drift from the
- * build that actually ships. A stage the catalog does not carry (`utility.gain`
- * in the bundled build) is a stage this build predates, not an error.
+ * build that actually ships.
  */
 
 import type { SonareWasmModule } from '@/composables/useWasmBoot';

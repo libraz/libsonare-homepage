@@ -27,21 +27,20 @@ const RAW_STAGES = [
   ),
 ];
 
-/** Distinct key leaves the raw data file's `stage` rows carry. */
+/** Distinct key leaves carried by the raw binding rows. */
 const RAW_LEAVES = [
   ...new Set(
-    efxBindings.rows
-      .filter((row): row is typeof row & { key: string } => 'key' in row)
-      .map((row) => (row.key.includes('.') ? row.key.split('.').pop()! : row.key)),
+    efxBindings.rows.flatMap((row) => {
+      const keys = 'keys' in row ? row.keys : 'key' in row ? [row.key] : [];
+      return keys.map((key) => (key.includes('.') ? key.split('.').pop()! : key));
+    }),
   ),
 ];
 
-/** Distinct `state`/`unmapped` reasons the raw data file carries. */
 /**
  * Every form but `stage` carries its reason as prose, and every one of them
- * reaches the panel. Collecting all four rather than the two the data happens
- * to use today is what makes the translation gate catch a form the engine
- * starts using later, instead of letting English through on a Japanese page.
+ * reaches the panel. Collecting all four catches new reasons before English
+ * appears on a Japanese page.
  */
 const REASON_FORMS = ['state', 'unmapped', 'builder', 'unreadable'] as const;
 
@@ -89,6 +88,16 @@ describe('efx-bindings.json rows', () => {
     for (const form of BINDING_FORMS) {
       expect(counted[form] ?? 0).toBe(EFX_BINDING_COUNTS[form]);
     }
+  });
+
+  it('keeps builder and unreadable as first-class non-stage forms', () => {
+    expect(EFX_BINDING_COUNTS).toEqual({
+      stage: 295,
+      state: 312,
+      unmapped: 157,
+      builder: 6,
+      unreadable: 0,
+    });
   });
 });
 

@@ -276,13 +276,16 @@ export const GS_EFX_TYPES_UNNAMED: readonly string[] = [];
  * `data/efx-bindings.json`'s `rows[].stage`.
  */
 export const GS_EFX_STAGES: Readonly<Record<string, LocalizedName>> = {
+  'dynamics.compressor': { en: 'Compressor', ja: 'コンプレッサー' },
   'effects.delay.stereo': { en: 'Stereo Delay', ja: 'ステレオディレイ' },
   'effects.modulation.chorus': { en: 'Chorus', ja: 'コーラス' },
   'effects.modulation.ensemble': { en: 'Ensemble', ja: 'アンサンブル' },
   'effects.modulation.flanger': { en: 'Flanger', ja: 'フランジャー' },
   'effects.modulation.phaser': { en: 'Phaser', ja: 'フェイザー' },
+  'effects.modulation.pitchShifter': { en: 'Pitch Shifter', ja: 'ピッチシフター' },
   'effects.modulation.ringModulator': { en: 'Ring Modulator', ja: 'リングモジュレーター' },
   'effects.modulation.rotary': { en: 'Rotary Speaker', ja: 'ロータリースピーカー' },
+  'effects.reverb.dattorro': { en: 'Reverb', ja: 'リバーブ' },
   'eq.graphic': { en: 'Graphic EQ', ja: 'グラフィックイコライザー' },
   'eq.parametric': { en: 'Parametric EQ', ja: 'パラメトリックイコライザー' },
   'stereo.autoPan': { en: 'Auto Pan', ja: 'オートパン' },
@@ -296,26 +299,33 @@ export const GS_EFX_STAGES: Readonly<Record<string, LocalizedName>> = {
  * through the plain `gainDb` entry instead.
  */
 export const GS_EFX_PARAMS: Readonly<Record<string, LocalizedName>> = {
+  accelTauS: { en: 'Acceleration Time', ja: '加速時間' },
   gainDb: { en: 'Gain', ja: 'ゲイン' },
   frequencyHz: { en: 'Frequency', ja: '周波数' },
   q: { en: 'Q', ja: 'Q' },
   carrierHz: { en: 'Carrier Frequency', ja: 'キャリア周波数' },
   centerDelayMs: { en: 'Center Delay', ja: 'センターディレイ' },
+  decelTauS: { en: 'Deceleration Time', ja: '減速時間' },
   dampingHz: { en: 'Damping', ja: 'ダンピング' },
   delayTimeLMs: { en: 'Delay Time (L)', ja: 'ディレイタイム（L）' },
   delayTimeRMs: { en: 'Delay Time (R)', ja: 'ディレイタイム（R）' },
   drumUndershootHz: { en: 'Drum Undershoot', ja: 'ドラムアンダーシュート' },
+  feedback: { en: 'Feedback', ja: 'フィードバック' },
   levelDb: { en: 'Level', ja: 'レベル' },
+  makeupGainDb: { en: 'Makeup Gain', ja: 'メイクアップゲイン' },
   preFilterHz: { en: 'Pre-Filter', ja: 'プリフィルター' },
+  preDelayMs: { en: 'Pre-Delay', ja: 'プリディレイ' },
   rateHz: { en: 'Rate', ja: 'レート' },
+  semitones: { en: 'Semitones', ja: '半音' },
   undershootHz: { en: 'Undershoot', ja: 'アンダーシュート' },
+  windowMs: { en: 'Window', ja: 'ウィンドウ' },
 };
 
 /**
- * Japanese for each distinct `state`/`unmapped` reason `data/efx-bindings.json`
- * carries, keyed by the engine's exact English wording. Falls back to the
- * English itself when a key is missing, which is the signal that the engine
- * reworded a reason this table has not caught up with.
+ * Japanese for each distinct non-stage reason `data/efx-bindings.json` carries,
+ * keyed by the engine's exact English wording. Falls back to the English
+ * itself when a key is missing, which is the signal that the engine reworded a
+ * reason this table has not caught up with.
  */
 export const GS_BINDING_REASONS: Readonly<Record<string, string>> = {
   'a bare 00-7F with no unit printed beside it, so no conversion may be guessed':
@@ -357,6 +367,66 @@ export const GS_BINDING_REASONS: Readonly<Record<string, string>> = {
   'a parallel-2 type realises no chain at all': '並列 2 系統タイプはチェーンを一切構成しない',
   'a vowel formant filter has no insert, so the type realises no chain at all':
     '母音フォルマントフィルターにインサートはなく、このタイプはチェーンを一切構成しない',
+  "no reading measured this type's shift mode; the five splice windows were read on the two pitch-shifter types, and a claim does not reach a type it never measured":
+    'このタイプのシフトモードは測定されていない。5つのスプライス窓は2種類のピッチシフターで読まれたもので、測定していないタイプには適用できない',
+  "no reading measured where the cross mode routes the loop, so it is not taken for the stereo-delay insert's ping-pong":
+    'クロスモードがループをどう経路指定するかは測定されていないため、ステレオディレイのピンポンには適用しない',
+  "no reading measured which filter this gain drives, and the amp-sim insert's tone stack is not a pair of shelves":
+    'このゲインがどのフィルターを駆動するかは測定されておらず、アンプシミュレーターのトーンスタックは2本のシェルフではない',
+  "no reading placed the hold the index's flat group applies or the size of the step its quantiser leaves, so neither field of the byte may be given a conversion":
+    'ホールドをどのフラットグループが受け持つか、量子化器が残すステップ幅も測定されておらず、バイトのどちらのフィールドにも変換を与えられない',
+  'the auto-wah insert has one filter shape': 'オートワウインサートのフィルター形状は1種類のみ',
+  'the auto-wah insert sweeps in one direction': 'オートワウインサートは一方向にのみスイープする',
+  'the bit-crusher insert adds no noise': 'ビットクラッシャーインサートはノイズを加えない',
+  'the bit-crusher insert has no mono switch': 'ビットクラッシャーインサートにモノスイッチはない',
+  'the bit-crusher insert has no type ladder': 'ビットクラッシャーインサートにタイプ切り替えはない',
+  'the chain carries no binaural stage for this output mode to configure':
+    'この出力モードのチェーンには設定できるバイノーラル段がない',
+  'the chain realises the chorus/flanger block as the chorus insert whichever this selects':
+    'チェーンはこの選択値にかかわらず、コーラス / フランジャーブロックをコーラスインサートとして実行する',
+  'the chain realises the tremolo/pan block as the auto-pan insert whichever this selects':
+    'チェーンはこの選択値にかかわらず、トレモロ / パンブロックをオートパンインサートとして実行する',
+  'the chain runs the overdrive voicing whichever character this selects':
+    'チェーンはこのキャラクター選択値にかかわらず、オーバードライブの音色を実行する',
+  'the chain runs this stage whichever way the switch is set':
+    'チェーンはスイッチの設定にかかわらずこの段を実行する',
+  'the chorus insert has no feedback': 'コーラスインサートにフィードバックはない',
+  "the chorus insert has no phase between its two channels' sweeps":
+    'コーラスインサートの2チャンネルのスイープには位相差がない',
+  'the ensemble insert has no per-voice deviation':
+    'アンサンブルインサートにボイスごとの偏差はない',
+  'the ensemble insert runs a slow and a fast sweep and has no single rate':
+    'アンサンブルインサートは遅いスイープと速いスイープを実行し、単一のレートは持たない',
+  "the flanger insert has no phase between its two channels' sweeps":
+    'フランジャーインサートの2チャンネルのスイープには位相差がない',
+  'the four amplifier responses are one measured table of fixed curves, and no insert here realises those curves':
+    '4種類のアンプ特性は固定カーブをまとめた1つの測定テーブルで、このインサートはそのカーブを再現しない',
+  'the pitch-shifter insert has no pre-delay': 'ピッチシフターインサートにプリディレイはない',
+  'the pitch-shifter insert takes one pitch, which the coarse byte sets in whole semitones':
+    'ピッチシフターインサートはピッチを1つだけ受け取り、粗調整バイトが整数半音単位で設定する',
+  'the reverb insert has no gate': 'リバーブインサートにゲートはない',
+  'the reverb insert is one algorithm and has no room-type selector':
+    'リバーブインサートは1つのアルゴリズムのみで、ルームタイプのセレクターはない',
+  "the reverb insert's damping is a coefficient rather than a corner":
+    'リバーブインサートのダンピングはコーナー周波数ではなく係数である',
+  'the ring-modulator insert has no phase between its channels':
+    'リングモジュレーターインサートのチャンネル間に位相差はない',
+  'the rotary insert has one rate per rotor, and the speed switch picks which of the two rate bytes it follows':
+    'ロータリーインサートはローターごとに1つのレートを持ち、スピードスイッチが2つのレートバイトのどちらに従うかを選ぶ',
+  'the skeleton reads the byte as a linear effect balance; the measured two-ramp law names three delay types and not this one':
+    'スケルトンはバイトをエフェクト量の線形バランスとして読むが、測定された2本のランプ則が対象にするのは3種類のディレイで、このタイプではない',
+  "the skeleton reads the byte as the amp model's drive fraction; the archive measured a gain in front of one fixed curve and derived no byte-to-decibel law":
+    'スケルトンはバイトをアンプモデルのドライブ比率として読むが、アーカイブが測定したのは1つの固定カーブ前段のゲインで、バイトからデシベルへの則は導出されていない',
+  "the skeleton reads the byte as the pre-filter's shape, which the archive read to be the Stereo Chorus's section; the archive measured an enumeration rather than a conversion, so the derivation gives it no class":
+    'スケルトンはバイトをプリフィルターの形状として読む。アーカイブはそれをステレオコーラスのセクションとして読んだが、測定したのは変換ではなく列挙なので、導出に変換クラスはない',
+  "the skeleton reads the byte as the pre-filter's shape; the archive measured an enumeration rather than a conversion, so the derivation gives it no class":
+    'スケルトンはバイトをプリフィルターの形状として読むが、アーカイブが測定したのは変換ではなく列挙なので、導出に変換クラスはない',
+  'the stereo-delay insert has no glide between delay times':
+    'ステレオディレイインサートにディレイタイム間のグライドはない',
+  'the stereo-delay insert has no polarity inversion': 'ステレオディレイインサートに極性反転はない',
+  'the switch takes the measured amplifier response out of the path, and no insert here carries that response to take out':
+    'スイッチは測定されたアンプ特性を信号経路から外すが、このインサートにはその特性を外す機能がない',
+  'the wah insert has one filter shape': 'ワウインサートのフィルター形状は1種類のみ',
 };
 
 /**

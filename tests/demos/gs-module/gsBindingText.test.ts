@@ -67,8 +67,9 @@ describe('bindingLabel', () => {
   });
 
   it('returns null for every non-stage form', () => {
-    expect(bindingLabel(reasonBinding('a reason', 'state'), false)).toBeNull();
-    expect(bindingLabel(reasonBinding('a reason', 'unmapped'), false)).toBeNull();
+    for (const form of ['state', 'unmapped', 'builder', 'unreadable'] as const) {
+      expect(bindingLabel(reasonBinding('a reason', form), false)).toBeNull();
+    }
   });
 });
 

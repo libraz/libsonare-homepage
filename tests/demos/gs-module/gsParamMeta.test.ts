@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { paramMetaKey, paramMetaOf } from '@/demos/gs-module/gsParamMeta';
 import * as wasm from '@/wasm/index.js';
 
@@ -12,22 +12,28 @@ describe('paramMetaKey', () => {
 });
 
 describe('paramMetaOf', () => {
-  it('describes a stage/key pair the bundled engine carries', async () => {
+  let meta: ReturnType<typeof paramMetaOf>;
+  beforeAll(async () => {
     await wasm.init();
-    const meta = paramMetaOf(wasm);
+    meta = paramMetaOf(wasm);
+  }, 30_000);
+
+  it('describes a stage/key pair the bundled engine carries', () => {
     expect(meta.size).toBeGreaterThan(0);
     const gain = meta.get(paramMetaKey('eq.parametric', 'band1.gainDb'));
     expect(gain).toBeDefined();
   });
 
-  it('is ordinarily absent for a stage this build predates, not an error', async () => {
-    await wasm.init();
-    const meta = paramMetaOf(wasm);
-    expect(meta.get(paramMetaKey('utility.gain', 'levelDb'))).toBeUndefined();
+  it('describes the utility gain control carried by the current catalog', () => {
+    expect(meta.get(paramMetaKey('utility.gain', 'levelDb'))).toEqual({
+      unit: 'dB',
+      min: null,
+      max: null,
+      default: 0,
+    });
   });
 
-  it('caches across calls rather than re-parsing the catalog', async () => {
-    await wasm.init();
-    expect(paramMetaOf(wasm)).toBe(paramMetaOf(wasm));
+  it('caches across calls rather than re-parsing the catalog', () => {
+    expect(paramMetaOf(wasm)).toBe(meta);
   });
 });

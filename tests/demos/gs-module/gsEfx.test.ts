@@ -57,11 +57,9 @@ describe('efxStanding', () => {
     expect(counts.adjustable + counts.fixed + counts.inert).toBe(GS_EFX_TYPES.length);
   });
 
-  it('has a non-empty population in each standing, or the panel has dead branches', () => {
+  it('matches the current render-probe standing counts', () => {
     const counts = efxStandingCounts();
-    expect(counts.adjustable).toBeGreaterThan(0);
-    expect(counts.fixed).toBeGreaterThan(0);
-    expect(counts.inert).toBeGreaterThan(0);
+    expect(counts).toEqual({ adjustable: 52, fixed: 0, inert: 13 });
   });
 });
 
