@@ -511,7 +511,8 @@ function convertAnalysisResult(wasm) {
       end: c.end,
       duration: c.end - c.start,
       confidence: c.confidence,
-      name: c.name
+      name: c.name,
+      romanNumeral: c.romanNumeral
     })),
     sections: wasm.sections.map((s) => ({
       type: s.type,
@@ -584,12 +585,13 @@ function detectChords(samples, sampleRate = 22050, options = {}) {
     request.keyRoot ?? PitchClass.C,
     request.keyMode ?? Mode.Major,
     request.detectInversions ?? false,
-    chordChromaMethodValue(request.chromaMethod ?? "stft")
+    chordChromaMethodValue(request.chromaMethod ?? "stft"),
+    request.tuning ?? 0
   );
   return convertChordAnalysisResult(result);
 }
-function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress } : samples;
+function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : samples;
   validateAnalysisInput(
     "analyzeWithProgress",
     request.samples,
@@ -599,6 +601,7 @@ function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
   const result = requireModule2().analyzeWithProgress(
     request.samples,
     request.sampleRate ?? 22050,
+    request.options ?? {},
     request.onProgress ?? (() => {
     }),
     request.cancel ?? (() => false)

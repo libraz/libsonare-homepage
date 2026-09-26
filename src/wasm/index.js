@@ -1148,6 +1148,9 @@ function masteringChainStereoWithProgress(left, right, sampleRate = 22050, confi
 function masteringPresetNames() {
   return Array.from(requireModule7().masteringPresetNames());
 }
+function masteringPresetParams(preset) {
+  return requireModule7().masteringPresetParams(preset);
+}
 function masteringPlatformNames() {
   return Array.from(requireModule7().masteringPlatformNames());
 }
@@ -1274,6 +1277,28 @@ function masteringInsertParamNames(name) {
 function masteringInsertParamInfo(name) {
   const json = requireModule8().masteringInsertParamInfo(name);
   return JSON.parse(json);
+}
+function insertTimingParamsToJson(fnName, params) {
+  const out = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "boolean") {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new SonareError(
+        4 /* InvalidParameter */,
+        "InvalidParameter",
+        `${fnName}: params.${key} must be a finite number or boolean`
+      );
+    }
+    out[key] = value;
+  }
+  return JSON.stringify(out);
+}
+function masteringInsertTiming(name, params, sampleRate) {
+  const json = insertTimingParamsToJson("masteringInsertTiming", params);
+  return requireModule8().masteringInsertTiming(name, json, sampleRate);
 }
 function masteringProcessorCatalog() {
   const json = requireModule8().masteringProcessorCatalog();
@@ -1993,6 +2018,17 @@ function decomposeWithInit(s, nFeatures = 0, nFrames = 0, nComponents = 0, nIter
 }
 function decomposeStems(request) {
   return requireModule16().decomposeStems(request.samples, request.sampleRate, {
+    nComponents: request.nComponents,
+    nFft: request.nFft,
+    hopLength: request.hopLength,
+    nIter: request.nIter,
+    beta: request.beta,
+    init: request.init,
+    maskPower: request.maskPower
+  });
+}
+function decomposeStemsLinked(request) {
+  return requireModule16().decomposeStemsLinked(request.channels, request.sampleRate ?? 22050, {
     nComponents: request.nComponents,
     nFft: request.nFft,
     hopLength: request.hopLength,
@@ -3687,7 +3723,8 @@ function convertAnalysisResult(wasm) {
       end: c.end,
       duration: c.end - c.start,
       confidence: c.confidence,
-      name: c.name
+      name: c.name,
+      romanNumeral: c.romanNumeral
     })),
     sections: wasm.sections.map((s) => ({
       type: s.type,
@@ -3797,7 +3834,8 @@ function detectChords(samples, sampleRate = 22050, options = {}) {
     request.keyRoot ?? PitchClass.C,
     request.keyMode ?? Mode.Major,
     request.detectInversions ?? false,
-    chordChromaMethodValue(request.chromaMethod ?? "stft")
+    chordChromaMethodValue(request.chromaMethod ?? "stft"),
+    request.tuning ?? 0
   );
   return convertChordAnalysisResult(result);
 }
@@ -3825,7 +3863,8 @@ function chordFunctionalAnalysis(samples, keyRoot, keyMode, sampleRate = 22050, 
     request.hmmBeamWidth ?? 24,
     request.useKeyContext ?? false,
     request.detectInversions ?? false,
-    chordChromaMethodValue(request.chromaMethod ?? "stft")
+    chordChromaMethodValue(request.chromaMethod ?? "stft"),
+    request.tuning ?? 0
   );
 }
 function analyze(samples, sampleRate = 22050, options = {}) {
@@ -3896,8 +3935,8 @@ function roomMorph(samples, sampleRate, options = {}) {
   validateAnalysisInput("roomMorph", request.samples, request.sampleRate, request);
   return module2.roomMorph(request.samples, request.sampleRate, request);
 }
-function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
-  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress } : samples;
+function analyzeWithProgress(samples, sampleRate = 22050, onProgress, options) {
+  const request = samples instanceof Float32Array ? { samples, sampleRate, onProgress, options } : samples;
   validateAnalysisInput(
     "analyzeWithProgress",
     request.samples,
@@ -3907,6 +3946,7 @@ function analyzeWithProgress(samples, sampleRate = 22050, onProgress) {
   const result = requireModule25().analyzeWithProgress(
     request.samples,
     request.sampleRate ?? 22050,
+    request.options ?? {},
     request.onProgress ?? (() => {
     }),
     request.cancel ?? (() => false)
@@ -4997,6 +5037,7 @@ var SYNTH_ENGINE_MODES = [
 ];
 var SAMPLE_LOOP_MODES = ["default", "none", "continuous", "key-down"];
 var SAMPLE_KEY_TRACKS = ["default", "on", "off"];
+var SYNTH_RETRIGGERS = ["default", "free", "note"];
 var SYNTH_OSC_WAVEFORMS = [
   "default",
   "sine",
@@ -6648,10 +6689,12 @@ var RealtimeEngine = class {
   }
   /**
    * Changes one track-strip insert parameter in realtime, addressed by the
-   * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
-   * Applied at the next block head via the engine command queue; safe during
-   * playback. Throws if the track, insert, or name is unknown, the param is not
-   * realtime-safe, or the command queue is full.
+   * processor's JSON-key parameter name — one of the entries
+   * {@link masteringInsertParamInfo} reports with a non-null `id`; a
+   * construction-only entry (`id` null) takes effect only when the insert is
+   * built. Applied at the next block head via the engine command queue; safe
+   * during playback. Throws if the track, insert, or name is unknown, the
+   * param is not realtime-safe, or the command queue is full.
    */
   setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
     this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
@@ -6787,6 +6830,22 @@ var RealtimeEngine = class {
   /** Cumulative warp-stretch requests dropped because the native queue was full. */
   warpStretchOverflowCount() {
     return this.native.warpStretchOverflowCount();
+  }
+  /**
+   * Sets the number of concurrent time-stretch voices. `voices` must be an
+   * integer in `[0, 64]`; a non-integer, negative, or larger value throws and
+   * leaves the capacity unchanged. Default is 8. Capacity 0 disables
+   * time-stretch, so every warped clip plays resampled instead and none of
+   * that counts toward {@link warpStretchOverflowCount}. A change applied
+   * while the engine is running restarts the splice state of any clip
+   * stretching through a voice at that moment. Control-thread only.
+   */
+  setWarpVoiceCapacity(voices) {
+    this.native.setWarpVoiceCapacity(voices);
+  }
+  /** Reads the current time-stretch voice capacity (default 8). */
+  warpVoiceCapacity() {
+    return this.native.warpVoiceCapacity();
   }
   /**
    * Sets the clip-page look-ahead window in timeline frames.
@@ -9106,6 +9165,7 @@ export {
   SYNTH_MOD_DESTINATIONS,
   SYNTH_MOD_SOURCES,
   SYNTH_OSC_WAVEFORMS,
+  SYNTH_RETRIGGERS,
   SampleBank,
   SectionType,
   SonareError,
@@ -9150,6 +9210,7 @@ export {
   decompose,
   decomposeNotePitch,
   decomposeStems,
+  decomposeStemsLinked,
   decomposeWithInit,
   deemphasis,
   detectAcoustic,
@@ -9213,12 +9274,14 @@ export {
   masteringInsertNames,
   masteringInsertParamInfo,
   masteringInsertParamNames,
+  masteringInsertTiming,
   masteringPairAnalysisNames,
   masteringPairAnalyze,
   masteringPairProcess,
   masteringPairProcessorNames,
   masteringPlatformNames,
   masteringPresetNames,
+  masteringPresetParams,
   masteringProcess,
   masteringProcessStereo,
   masteringProcessorCatalog,

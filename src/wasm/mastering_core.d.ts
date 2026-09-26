@@ -1,4 +1,5 @@
-import type { LoudnessMatchResult, MasteringAssistantParams, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, PairAnalysis, PairProcessor, SoloProcessor, StereoAnalysis, StreamingPlatform } from './public_types';
+import type { LoudnessMatchResult, MasteringAssistantParams, MasteringInsertParamChoice, MasteringInsertSlot, MasteringOptions, MasteringProcessorParams, MasteringResult, MasteringStereoResult, PairAnalysis, PairProcessor, SoloProcessor, StereoAnalysis, StreamingPlatform } from './public_types';
+export type { MasteringInsertParamChoice, MasteringInsertSlot };
 /** Canonical request form for loudness/true-peak mastering. */
 export interface MasteringRequest extends MasteringOptions {
     samples: Float32Array;
@@ -116,45 +117,101 @@ export declare function masteringInsertNames(): string[];
  * @param name - Insert processor name (see {@link masteringInsertNames}).
  */
 export declare function masteringInsertParamNames(name: string): string[];
-/** One realtime-automatable parameter of an insert processor. */
+/**
+ * One parameter an insert processor's construction reads, whether or not it
+ * is realtime-automatable.
+ */
 export interface MasteringInsertParamInfo {
     /** JSON-key parameter name, as used in scene insert params. */
     name: string;
-    /** Integer param id for realtime automation lanes / MIDI-CC binding. */
-    id: number;
-    /** Whether the param can be changed live from the audio thread. */
+    /**
+     * Integer param id for realtime automation lanes / MIDI-CC binding, or null
+     * for a construction-only key with no automation target.
+     */
+    id: number | null;
+    /** Whether the param can be changed live from the audio thread; false when `id` is null. */
     rtSafe: boolean;
-    /** The C++ type the processor's config builder reads the key as. */
-    type: 'boolean' | 'number';
+    /**
+     * The C++ type the processor's config builder reads the key as. `"enum"` is
+     * sent as the number in its `choices` entry; `"string"` / `"array"` (an
+     * embedded impulse response, a per-band list) is construction-only and
+     * reports null for `min`, `max`, `default` and `choices`.
+     */
+    type: 'boolean' | 'number' | 'enum' | 'string' | 'array';
     /**
      * Smallest value construction accepts, or null when the catalog states no
-     * limit. Measured, so it is a hard constraint rather than a UI range; see
-     * {@link CapabilityCatalogParameter} for what a measured bound does and does
-     * not promise.
+     * limit or `choices` is non-null. Measured, so it is a hard constraint
+     * rather than a UI range; see {@link CapabilityCatalogParameter} for what a
+     * measured bound does and does not promise.
      */
     min: number | null;
-    /** Largest value construction accepts, or null when the catalog states no limit. */
+    /** Largest value construction accepts, or null when the catalog states no limit or `choices` is non-null. */
     max: number | null;
     /**
      * Value the processor uses when the key is absent — the config struct's own
-     * field initializer. Null only for a param id with no construction key.
+     * field initializer, an enum as its number. Null for a param id with no
+     * construction key, a `"string"` / `"array"` key, or a construction key with
+     * no fallback.
      */
     default: boolean | number | null;
     /** Physical unit, or null when the parameter is unitless. */
     unit: string | null;
+    /**
+     * The closed set of values construction accepts, in value order, or null
+     * when the accepted values are not a closed set. Non-null only for `"enum"`
+     * (every declared enumerator construction accepts) or a `"number"` key
+     * whose accepted integers have holes; `min` / `max` are then both null.
+     */
+    choices: MasteringInsertParamChoice[] | null;
+    /**
+     * The {@link MasteringInsertSlot} this key belongs to, or null for a key that
+     * always exists.
+     */
+    slot: string | null;
 }
 /**
- * Returns the realtime-automatable parameter descriptors for an insert / FX
- * processor: each entry maps a JSON-key parameter name to the integer id used by
- * realtime automation and reports whether it is realtime-safe. Unlike
- * {@link masteringInsertParamNames} (every construction key), this lists only the
- * realtime-controllable subset — the keys accepted by
- * {@link RealtimeEngine.setTrackStripInsertParamByName}. Returns an empty array
- * for an unknown name or a processor with no automatable parameters.
+ * Returns every parameter an insert / FX processor's construction reads,
+ * including construction-time-only keys with no realtime automation target.
+ * Entries come in two runs: first the processor's realtime automation
+ * targets in id order (the keys accepted by
+ * {@link RealtimeEngine.setTrackStripInsertParamByName}, `id` non-null); then,
+ * sorted by name, every other construction key with `id` null and `rtSafe`
+ * false. The name set matches {@link masteringInsertParamNames} plus any
+ * automation target construction does not read. Returns an empty array for an
+ * unknown name.
  *
  * @param name - Insert processor name (see {@link masteringInsertNames}).
  */
 export declare function masteringInsertParamInfo(name: string): MasteringInsertParamInfo[];
+/** Latency and tail of one insert instance, in samples. */
+export interface MasteringInsertTiming {
+    /** Latency in samples at the queried sample rate. */
+    latencySamples: number;
+    /** Audible decay tail in samples at the queried sample rate. */
+    tailSamples: number;
+}
+/**
+ * Latency and tail of insert `name` built from `params` and prepared at
+ * `sampleRate` (`mastering::api::insert_timing`). Answers for the exact
+ * instance a scene or strip would build — an oversampled saturation path, a
+ * linear-phase crossover, a lookahead all change the reported latency. The
+ * capability catalog's `latencySamples` / `tailSamples` are this query at
+ * default parameters and 48 kHz. `effects.reverb.convolution` answers for its
+ * configuration without an impulse response: its latency is its fixed
+ * partition size and does not depend on one.
+ *
+ * A key `name`'s construction does not read is refused rather than ignored,
+ * because an ignored key would answer for a configuration the caller did not
+ * ask for.
+ *
+ * @param name - Insert processor name (see {@link masteringInsertNames}).
+ * @param params - Flat parameter values, keyed as in {@link masteringInsertParamInfo}.
+ * @param sampleRate - Rate the insert is prepared at.
+ * @throws For an unknown `name`, a key the insert does not read, a value its
+ *   construction or `prepare` refuses, or a `params` value that is not a
+ *   finite number or boolean.
+ */
+export declare function masteringInsertTiming(name: string, params: Record<string, number | boolean>, sampleRate: number): MasteringInsertTiming;
 /**
  * How a processor handles a buffer with more than two channels (a surround
  * bed). "multichannel" processes every plane in one call; "stereoPairOnly"
@@ -168,7 +225,7 @@ export type MasteringRealtimeCost = 'low' | 'moderate' | 'high';
  * Catalog grouping for a processor picker, derived from the id's prefix
  * ("eq.*" -> "eq", "match.*" -> "reference"); anything unprefixed is "other".
  */
-export type MasteringProcessorCategory = 'dynamics' | 'effects' | 'eq' | 'final' | 'maximizer' | 'multiband' | 'other' | 'reference' | 'repair' | 'saturation' | 'spectral' | 'stereo';
+export type MasteringProcessorCategory = 'dynamics' | 'effects' | 'eq' | 'final' | 'maximizer' | 'multiband' | 'other' | 'reference' | 'repair' | 'saturation' | 'spectral' | 'stereo' | 'utility';
 /** One processor's realtime/offline/pair classification in the catalog. */
 export interface MasteringProcessorCatalogEntry {
     /** Processor id (the name used for scene inserts / named processors). */
@@ -204,11 +261,16 @@ export interface MasteringProcessorCatalogEntry {
     /** Grouping for a processor picker; see {@link MasteringProcessorCategory}. */
     category: MasteringProcessorCategory;
     /**
-     * The processor's automatable parameters, the same list
+     * The processor's construction parameters, the same list
      * {@link masteringInsertParamInfo} returns. Empty for entries that are not
      * realtime-insertable.
      */
     params: MasteringInsertParamInfo[];
+    /**
+     * The insert's conditional key groups in declaration order, named by each
+     * parameter's `slot`. Empty for entries that are not realtime-insertable.
+     */
+    slots: MasteringInsertSlot[];
 }
 /**
  * Returns the machine-readable classification catalog for every named processor

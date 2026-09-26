@@ -31,6 +31,8 @@ export interface DetectKeyRequest extends KeyDetectionOptions, SamplesRequest {
 export interface AnalyzeWithProgressRequest extends SamplesRequest {
     onProgress?: ProgressCallback;
     cancel?: () => boolean;
+    /** Analysis options, with the same fields and defaults {@link analyze} takes. */
+    options?: MusicAnalyzeOptions;
 }
 /** Canonical request form for chord detection. */
 export interface DetectChordsRequest extends ChordDetectionOptions, SamplesRequest {
@@ -77,6 +79,9 @@ export declare function detectBpm(request: SamplesRequest): number;
 export declare function detectBpm(samples: Float32Array, sampleRate?: number, options?: GuardedOptions): number;
 /**
  * Detect musical key from audio samples.
+ *
+ * The chroma is read at concert A440; a tuning offset is applied through
+ * {@link analyze}'s `tuning` option (and to chords through {@link detectChords}).
  *
  * @param samples - Audio samples (mono, float32)
  * @param sampleRate - Sample rate in Hz (default: 22050)
@@ -187,6 +192,14 @@ export interface MusicAnalyzeOptions {
      * a compound meter, so this is the unit for everything else.
      */
     meterDenominator?: number;
+    /**
+     * Tuning offset of the recording in fractions of a semitone, the unit
+     * `estimateTuning` returns; must be in `[-0.5, 0.5)`. Every chroma the
+     * analysis builds (key, chords, sections) is shifted by it, so a recording
+     * that is not at A440 reads its key and chords on its own pitch grid.
+     * Default 0 (concert A440).
+     */
+    tuning?: number;
 }
 export interface MusicAnalyzeRequest extends SamplesRequest, MusicAnalyzeOptions {
 }
@@ -329,7 +342,7 @@ export declare function roomMorph(samples: Float32Array, sampleRate: number, opt
  * @returns Complete analysis result
  */
 export declare function analyzeWithProgress(request: AnalyzeWithProgressRequest): AnalysisResult;
-export declare function analyzeWithProgress(samples: Float32Array, sampleRate: number | undefined, onProgress: ProgressCallback): AnalysisResult;
+export declare function analyzeWithProgress(samples: Float32Array, sampleRate: number | undefined, onProgress: ProgressCallback, options?: MusicAnalyzeOptions): AnalysisResult;
 export interface BpmCandidate {
     bpm: number;
     confidence: number;

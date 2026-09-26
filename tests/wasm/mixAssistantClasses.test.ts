@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest';
 import * as wasm from '@/wasm/index.js';
 
 /**
- * The mixing-assistant page warns that sustained synthesized parts classify as
- * `vocal` and a whole-kit drum stem as `tom`, and that naming the track drops
- * the wrong class under the confidence gate. These render such stems with the
- * engine's own synthesizer and hold the warning to what the classifier does.
+ * Render sustained synth parts and a drum groove with the engine's own
+ * synthesizer, then check the source classes described by the mixing assistant.
  */
 
 const SAMPLE_RATE = 48_000;
@@ -78,33 +76,39 @@ function stems() {
   };
 }
 
+let renderedStems: ReturnType<typeof stems> | undefined;
+function getStems() {
+  if (!renderedStems) renderedStems = stems();
+  return renderedStems;
+}
+
 describe('mixing assistant source classes', () => {
-  it('reads a synth pad and lead as vocal, as sure as a choir, and a whole kit as tom', async () => {
+  it('leaves unnamed sustained parts unknown and classifies the rendered drum groove', async () => {
     await wasm.init();
-    const rendered = stems();
+    const rendered = getStems();
     const result = wasm.suggestMixScene({
       sampleRate: SAMPLE_RATE,
       tracks: Object.entries(rendered).map(([id, audio]) => ({ id, ...audio })),
     });
     const byId = Object.fromEntries(result.tracks.map((track) => [track.stripId, track]));
 
-    expect(byId.choir.source).toBe('vocal');
-    for (const id of ['pad', 'lead']) {
-      expect(byId[id].source, id).toBe('vocal');
-      expect(byId[id].sourceConfidence, id).toBeGreaterThanOrEqual(GATE);
-      expect(byId[id].sourceConfidence, id).toBeCloseTo(byId.choir.sourceConfidence, 2);
+    for (const id of ['pad', 'lead', 'choir']) {
+      expect(byId[id].source, id).toBe('unknown');
+      expect(byId[id].sourceConfidence, id).toBe(0);
     }
     expect(byId.drums.source).toBe('tom');
+    expect(byId.drums.sourceConfidence).toBeGreaterThan(0);
+    expect(byId.drums.sourceConfidence).toBeLessThan(GATE);
   }, 60_000);
 
-  it('drops the wrong class under the gate when the track is named for what it is', async () => {
+  it('uses a compatible track name to classify an otherwise unknown part', async () => {
     await wasm.init();
-    const { pad } = stems();
+    const { pad } = getStems();
     const result = wasm.suggestMixScene({
       sampleRate: SAMPLE_RATE,
       tracks: [{ id: 'pad', name: 'keys', ...pad }],
     });
-    expect(result.tracks[0].source).toBe('vocal');
-    expect(result.tracks[0].sourceConfidence).toBeLessThan(GATE);
+    expect(result.tracks[0].source).toBe('keys');
+    expect(result.tracks[0].sourceConfidence).toBeGreaterThanOrEqual(GATE);
   }, 60_000);
 });

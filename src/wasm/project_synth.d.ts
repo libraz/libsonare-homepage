@@ -13,7 +13,7 @@ export declare function projectAbiVersion(): number;
 export declare function synthPresetNames(): string[];
 /**
  * GS rhythm-set name a rhythm part's `program` selects (`'Standard'`,
- * `'Room'`, `'TR-808'`, ...), or `null` when the module's own tone map defines
+ * `'Room'`, `'Jazz'`, ...), or `null` when the module's own tone map defines
  * no set there.
  *
  * @remarks

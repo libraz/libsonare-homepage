@@ -149,6 +149,11 @@ export interface ChordDetectionOptions extends ValidateOptions {
     keyMode?: Mode;
     detectInversions?: boolean;
     chromaMethod?: 'stft' | 'nnls';
+    /**
+     * Tuning offset of the recording in fractions of a semitone, the unit
+     * `estimateTuning` returns; must be in `[-0.5, 0.5)`. Default 0 (concert A440).
+     */
+    tuning?: number;
 }
 /** Options for `analyzeBpm`. All fields are optional. */
 export interface AnalyzeBpmOptions extends ValidateOptions {
@@ -274,6 +279,15 @@ export interface Chord {
     duration: number;
     confidence: number;
     name: string;
+}
+/** A chord in {@link AnalysisResult.chords}, which carries its function in the key. */
+export interface AnalysisChord extends Chord {
+    /**
+     * Roman numeral of the chord relative to {@link AnalysisResult.key}, e.g.
+     * `'V7'`, `'vi'`, `'bVII'`. The same spelling `chordFunctionalAnalysis`
+     * returns for that chord and key. Empty for a chord that is N.C.
+     */
+    romanNumeral: string;
 }
 export interface ChordAnalysisResult {
     chords: Chord[];
@@ -583,12 +597,17 @@ export interface AnalysisResult {
      * between two beats. The last entry repeats the tempo of the interval leading
      * into the final beat, which opens no interval of its own.
      *
+     * Values are continuous, not points on a tempo grid: each is a weighted
+     * average, in log tempo, of the beat intervals around it. A steady tempo
+     * reads within about 1% at every beat, and a tempo that moves is followed a
+     * few beats late.
+     *
      * This is the local tempo rather than {@link AnalysisResult.bpm} resampled:
      * on material whose tempo moves it departs from `bpm`, and reading a single
      * number out of it is not how to get the global tempo.
      */
     beatLocalBpm: number[];
-    chords: Chord[];
+    chords: AnalysisChord[];
     sections: Section[];
     timbre: Timbre;
     dynamics: Dynamics;

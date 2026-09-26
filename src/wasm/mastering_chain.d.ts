@@ -156,6 +156,16 @@ export declare function masteringChainStereoWithProgress(left: Float32Array, rig
  */
 export declare function masteringPresetNames(): MasteringPreset[];
 /**
+ * The flat `{key: number|boolean}` params of preset `preset`'s built-in chain
+ * configuration, in the same key space {@link masteringAssistantSuggestChain}
+ * returns. Passing this straight through as `overrides` to {@link masterAudio}
+ * reproduces the preset unchanged, bit for bit in the C++ core.
+ *
+ * @param preset - Preset identifier from {@link masteringPresetNames}.
+ * @throws For an unknown `preset`.
+ */
+export declare function masteringPresetParams(preset: MasteringPreset): Record<string, number | boolean>;
+/**
  * List the delivery targets the mastering assistant accepts as `targetPlatform`.
  *
  * Read from the library rather than from a list kept here, so a target added in

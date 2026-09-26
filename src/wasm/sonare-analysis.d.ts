@@ -1,2 +1,8 @@
-export * from '../src/sonare-analysis.js';
-export { default } from '../src/sonare-analysis.js';
+import type { SonareModule } from './sonare.js';
+
+declare const createSonareAnalysis: (options?: {
+  locateFile?: (path: string, prefix: string) => string;
+  wasmBinary?: ArrayBuffer | Uint8Array;
+}) => Promise<SonareModule>;
+
+export default createSonareAnalysis;

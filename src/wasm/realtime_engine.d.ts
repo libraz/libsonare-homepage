@@ -480,10 +480,12 @@ export declare class RealtimeEngine {
     setMasterStripInsertBypassed(insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
     /**
      * Changes one track-strip insert parameter in realtime, addressed by the
-     * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
-     * Applied at the next block head via the engine command queue; safe during
-     * playback. Throws if the track, insert, or name is unknown, the param is not
-     * realtime-safe, or the command queue is full.
+     * processor's JSON-key parameter name — one of the entries
+     * {@link masteringInsertParamInfo} reports with a non-null `id`; a
+     * construction-only entry (`id` null) takes effect only when the insert is
+     * built. Applied at the next block head via the engine command queue; safe
+     * during playback. Throws if the track, insert, or name is unknown, the
+     * param is not realtime-safe, or the command queue is full.
      */
     setTrackStripInsertParamByName(trackId: number, insertIndex: number, paramName: string, value: number): void;
     /** Master-strip counterpart of {@link setTrackStripInsertParamByName}. */
@@ -573,6 +575,18 @@ export declare class RealtimeEngine {
     clipPageRequestOverflowCount(): number;
     /** Cumulative warp-stretch requests dropped because the native queue was full. */
     warpStretchOverflowCount(): number;
+    /**
+     * Sets the number of concurrent time-stretch voices. `voices` must be an
+     * integer in `[0, 64]`; a non-integer, negative, or larger value throws and
+     * leaves the capacity unchanged. Default is 8. Capacity 0 disables
+     * time-stretch, so every warped clip plays resampled instead and none of
+     * that counts toward {@link warpStretchOverflowCount}. A change applied
+     * while the engine is running restarts the splice state of any clip
+     * stretching through a voice at that moment. Control-thread only.
+     */
+    setWarpVoiceCapacity(voices: number): void;
+    /** Reads the current time-stretch voice capacity (default 8). */
+    warpVoiceCapacity(): number;
     /**
      * Sets the clip-page look-ahead window in timeline frames.
      *

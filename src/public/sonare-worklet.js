@@ -1397,10 +1397,12 @@ var RealtimeEngine = class {
   }
   /**
    * Changes one track-strip insert parameter in realtime, addressed by the
-   * processor's JSON-key parameter name (see {@link masteringInsertParamInfo}).
-   * Applied at the next block head via the engine command queue; safe during
-   * playback. Throws if the track, insert, or name is unknown, the param is not
-   * realtime-safe, or the command queue is full.
+   * processor's JSON-key parameter name — one of the entries
+   * {@link masteringInsertParamInfo} reports with a non-null `id`; a
+   * construction-only entry (`id` null) takes effect only when the insert is
+   * built. Applied at the next block head via the engine command queue; safe
+   * during playback. Throws if the track, insert, or name is unknown, the
+   * param is not realtime-safe, or the command queue is full.
    */
   setTrackStripInsertParamByName(trackId, insertIndex, paramName, value) {
     this.native.setTrackStripInsertParamByName(trackId, insertIndex, paramName, value);
@@ -1536,6 +1538,22 @@ var RealtimeEngine = class {
   /** Cumulative warp-stretch requests dropped because the native queue was full. */
   warpStretchOverflowCount() {
     return this.native.warpStretchOverflowCount();
+  }
+  /**
+   * Sets the number of concurrent time-stretch voices. `voices` must be an
+   * integer in `[0, 64]`; a non-integer, negative, or larger value throws and
+   * leaves the capacity unchanged. Default is 8. Capacity 0 disables
+   * time-stretch, so every warped clip plays resampled instead and none of
+   * that counts toward {@link warpStretchOverflowCount}. A change applied
+   * while the engine is running restarts the splice state of any clip
+   * stretching through a voice at that moment. Control-thread only.
+   */
+  setWarpVoiceCapacity(voices) {
+    this.native.setWarpVoiceCapacity(voices);
+  }
+  /** Reads the current time-stretch voice capacity (default 8). */
+  warpVoiceCapacity() {
+    return this.native.warpVoiceCapacity();
   }
   /**
    * Sets the clip-page look-ahead window in timeline frames.
@@ -2949,6 +2967,7 @@ var SonareEngineTelemetryError = /* @__PURE__ */ ((SonareEngineTelemetryError2) 
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["MetronomeOverflow"] = 18] = "MetronomeOverflow";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["InvalidCommand"] = 19] = "InvalidCommand";
   SonareEngineTelemetryError2[SonareEngineTelemetryError2["MaxChannelsExceeded"] = 20] = "MaxChannelsExceeded";
+  SonareEngineTelemetryError2[SonareEngineTelemetryError2["ParameterBaseOverflow"] = 21] = "ParameterBaseOverflow";
   return SonareEngineTelemetryError2;
 })(SonareEngineTelemetryError || {});
 function isRecord(value) {
@@ -3594,7 +3613,8 @@ var ENGINE_SYNC_MESSAGE_TYPES = {
   syncTrackStripInsertParamByName: true,
   syncTrackStripPan: true,
   syncTrackStripPanLaw: true,
-  syncTrackStripPanMode: true
+  syncTrackStripPanMode: true,
+  syncWarpVoiceCapacity: true
 };
 var engineSyncMessageTypes = new Set(Object.keys(ENGINE_SYNC_MESSAGE_TYPES));
 function isEngineSyncMessage(value) {
@@ -5517,6 +5537,26 @@ var SonareEngine = class _SonareEngine {
     this.offlineEngine.setClipPagePrefetchFrames(frames);
     this.postSync({ type: "syncClipPagePrefetchFrames", frames });
   }
+  /**
+   * Sets the number of concurrent time-stretch voices on both this thread's
+   * offline engine and the live worklet engine. `voices` must be an integer
+   * in `[0, 64]`; a non-integer, negative, or larger value throws and leaves
+   * the capacity unchanged on both engines. Default is 8. Capacity 0 disables
+   * time-stretch, so every warped clip plays resampled instead. A change
+   * applied while the engine is running restarts the splice state of any clip
+   * stretching through a voice at that moment.
+   */
+  setWarpVoiceCapacity(voices) {
+    if (this.destroyed) {
+      throw new Error("SonareEngine is destroyed.");
+    }
+    this.offlineEngine.setWarpVoiceCapacity(voices);
+    this.postSync({ type: "syncWarpVoiceCapacity", voices });
+  }
+  /** Reads the current time-stretch voice capacity (default 8). */
+  warpVoiceCapacity() {
+    return this.offlineEngine.warpVoiceCapacity();
+  }
   addClip(trackId, buffer, startPpq, opts = {}) {
     return addClip(this.clipContext, trackId, buffer, startPpq, opts);
   }
@@ -6430,6 +6470,10 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
       }
       case "syncClipPagePrefetchFrames": {
         this.engine.setClipPagePrefetchFrames(message.frames);
+        break;
+      }
+      case "syncWarpVoiceCapacity": {
+        this.engine.setWarpVoiceCapacity(message.voices);
         break;
       }
       case "syncClipPageCommit": {

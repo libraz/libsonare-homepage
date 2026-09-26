@@ -4,8 +4,9 @@ import * as wasm from '@/wasm/index.js';
 
 /**
  * The analysis pages say `chordFunctionalAnalysis` labels line up with
- * `detectChords` one for one only under the same options, and not with the
- * chords inside `analyze`. This holds those sentences to the engine.
+ * `detectChords` one for one only under the same options, while chords inside
+ * `analyze` carry their own Roman numeral relative to the result key. This
+ * holds those sentences to the engine.
  */
 
 const SAMPLE_RATE = 22_050;
@@ -49,28 +50,47 @@ describe('chordFunctionalAnalysis alignment', () => {
     ...key,
   } as const;
 
+  let tunedChords: ReturnType<typeof wasm.detectChords>;
+  let tunedRoman: ReturnType<typeof wasm.chordFunctionalAnalysis>;
+  let bareRoman: ReturnType<typeof wasm.chordFunctionalAnalysis>;
+  let analyzed: ReturnType<typeof wasm.analyze>;
+
   beforeAll(async () => {
     await wasm.init();
-  });
+    tunedChords = wasm.detectChords({ samples, sampleRate: SAMPLE_RATE, ...options });
+    tunedRoman = wasm.chordFunctionalAnalysis({ samples, sampleRate: SAMPLE_RATE, ...options });
+    bareRoman = wasm.chordFunctionalAnalysis({ samples, sampleRate: SAMPLE_RATE, ...key });
+    analyzed = wasm.analyze(samples, SAMPLE_RATE);
+  }, 30_000);
 
   it('labels detectChords one for one under the same options', () => {
-    const { chords } = wasm.detectChords({ samples, sampleRate: SAMPLE_RATE, ...options });
-    const roman = wasm.chordFunctionalAnalysis({ samples, sampleRate: SAMPLE_RATE, ...options });
-    expect(roman).toHaveLength(chords.length);
+    expect(tunedRoman).toHaveLength(tunedChords.chords.length);
     // A chord rooted on the tonic reads as a I-family label.
-    chords.forEach((chord, i) => {
-      if (chord.root === 0) expect(roman[i]).toMatch(/^I(?![IV])/);
+    expect(tunedChords.chords.some(({ root }) => root === 0)).toBe(true);
+    tunedChords.chords.forEach((chord, i) => {
+      if (chord.root === 0) expect(tunedRoman[i]).toMatch(/^I(?![IV])/);
     });
   });
 
   it('gives a list of another length under other options', () => {
-    const bare = wasm.chordFunctionalAnalysis({ samples, sampleRate: SAMPLE_RATE, ...key });
-    const tuned = wasm.chordFunctionalAnalysis({ samples, sampleRate: SAMPLE_RATE, ...options });
-    expect(bare.length).not.toBe(tuned.length);
+    expect(bareRoman.length).not.toBe(tunedRoman.length);
   });
 
-  it('does not line up with the chords inside analyze', () => {
-    const roman = wasm.chordFunctionalAnalysis({ samples, sampleRate: SAMPLE_RATE, ...key });
-    expect(wasm.analyze(samples, SAMPLE_RATE).chords.length).not.toBe(roman.length);
+  it('attaches Roman numerals to the chords returned by analyze', () => {
+    expect(analyzed.key).toMatchObject({ root: 0, mode: 0 });
+    expect(analyzed.chords).toContainEqual(expect.objectContaining({ root: 0, romanNumeral: 'I' }));
+    expect(analyzed.chords).toContainEqual(expect.objectContaining({ root: 7, romanNumeral: 'V' }));
+    expect(analyzed.chords).toContainEqual(
+      expect.objectContaining({ root: 9, romanNumeral: 'vi' }),
+    );
+    expect(analyzed.chords.length).toBeGreaterThan(0);
+    const named = analyzed.chords.filter(({ name }) => name !== 'N.C.');
+    expect(named.length).toBeGreaterThan(0);
+    for (const { romanNumeral } of named) {
+      expect(romanNumeral).not.toBe('');
+    }
+    for (const { romanNumeral } of analyzed.chords.filter(({ name }) => name === 'N.C.')) {
+      expect(romanNumeral).toBe('');
+    }
   });
 });
