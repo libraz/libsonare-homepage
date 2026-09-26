@@ -105,14 +105,25 @@ function installCanvasMocks() {
   });
 }
 
+function installScrollMocks() {
+  if (typeof Element === 'undefined') return;
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  });
+}
+
 installUrlMocks();
 installCanvasMocks();
 installStorageMocks();
+installScrollMocks();
 
 beforeEach(() => {
   installUrlMocks();
   installCanvasMocks();
   installStorageMocks();
+  installScrollMocks();
   localStorageMock.clear();
   sessionStorageMock.clear();
 });

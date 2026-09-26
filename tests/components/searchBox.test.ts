@@ -169,8 +169,10 @@ describe('SearchBox', () => {
     expect(input.attributes('aria-activedescendant')).toBeUndefined();
 
     await input.trigger('keydown', { key: 'ArrowDown' });
+    await nextTick();
     const listboxId = wrapper.get('[role="listbox"]').attributes('id');
     expect(input.attributes('aria-activedescendant')).toBe(`${listboxId}-0`);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
 
     await input.trigger('keydown', { key: 'ArrowDown' });
     expect(input.attributes('aria-activedescendant')).toBe(`${listboxId}-1`);
