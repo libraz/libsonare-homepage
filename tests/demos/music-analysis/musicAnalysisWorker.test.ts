@@ -1,8 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const wasmMock = vi.hoisted(() => ({
   init: vi.fn(async () => undefined),
   version: vi.fn(() => '1.2.3-test'),
+  resample: vi.fn((samples: Float32Array, sourceRate: number, targetRate: number) => {
+    const targetLength = Math.max(1, Math.round((samples.length / sourceRate) * targetRate));
+    return new Float32Array(targetLength);
+  }),
   analyzeWithProgress: vi.fn(
     (
       _samples: Float32Array,
@@ -137,6 +143,7 @@ describe('music analysis worker protocol', () => {
     });
 
     expect(wasmMock.init).toHaveBeenCalledTimes(1);
+    expect(wasmMock.resample).not.toHaveBeenCalled();
     expect(wasmMock.detectKeyCandidates).toHaveBeenCalledWith(samples, 48_000, {
       useHpss: true,
       loudnessWeighted: true,
@@ -233,18 +240,23 @@ describe('music analysis worker protocol', () => {
   });
 
   it('downsamples long high-rate files before running expensive analysis stages', async () => {
-    const samples = new Float32Array(48_000 * 121);
+    const sourceRate = 24_000;
+    const samples = new Float32Array(sourceRate * 121);
 
     await (self as any).onmessage({
       data: {
         type: 'analyze',
         id: 4,
         samples,
-        sampleRate: 48_000,
+        sampleRate: sourceRate,
       },
     });
 
     const analyzedSamples = wasmMock.analyzeWithProgress.mock.calls[0][0] as Float32Array;
+    expect(wasmMock.resample).toHaveBeenCalledTimes(1);
+    expect(wasmMock.resample.mock.calls[0][0]).toBe(samples);
+    expect(wasmMock.resample.mock.calls[0][1]).toBe(sourceRate);
+    expect(wasmMock.resample.mock.calls[0][2]).toBe(22_050);
     expect(analyzedSamples.length).toBe(22_050 * 121);
     expect(wasmMock.analyzeWithProgress).toHaveBeenCalledWith(
       analyzedSamples,
@@ -256,11 +268,50 @@ describe('music analysis worker protocol', () => {
     const done = posted.at(-1)!.message as any;
     expect(done.result).toMatchObject({
       duration: 121,
-      sampleRate: 48_000,
+      sampleRate: sourceRate,
       analysisSampleRate: 22_050,
     });
-    // Analyses a real 121 s file: ~5 s alone, but several times that when the
-    // rest of the suite is competing for the same cores.
+  }, 30_000);
+
+  it('the shipped WASM resampler rejects content above the target Nyquist', async () => {
+    const realSonare = await vi.importActual<typeof import('@/wasm/sonare.js')>('@/wasm/sonare.js');
+    const realModule = await realSonare.default({
+      locateFile: () => join(process.cwd(), 'src/wasm/sonare.wasm'),
+      wasmBinary: readFileSync(join(process.cwd(), 'src/wasm/sonare.wasm')),
+    });
+
+    const sourceRate = 48_000;
+    const analysisRate = 22_050;
+    const durationSeconds = 2;
+    const sampleCount = sourceRate * durationSeconds;
+    const makeTone = (frequency: number) => {
+      const samples = new Float32Array(sampleCount);
+      for (let i = 0; i < samples.length; i++) {
+        samples[i] = 0.5 * Math.sin((2 * Math.PI * frequency * i) / sourceRate);
+      }
+      return samples;
+    };
+    const highTone = makeTone(16_000);
+    const inBandTone = makeTone(8_000);
+
+    const analyzed = [
+      realModule.resample(highTone, sourceRate, analysisRate),
+      realModule.resample(inBandTone, sourceRate, analysisRate),
+    ];
+    expect(analyzed[0]).toHaveLength(analysisRate * durationSeconds);
+    expect(analyzed[1]).toHaveLength(analysisRate * durationSeconds);
+
+    const rms = (samples: Float32Array) => {
+      const start = Math.round(0.25 * analysisRate);
+      const end = samples.length - start;
+      let sumSquares = 0;
+      for (let i = start; i < end; i++) sumSquares += samples[i] ** 2;
+      return Math.sqrt(sumSquares / (end - start));
+    };
+    // 16 kHz is above the 11.025 kHz Nyquist limit after conversion and
+    // must not fold into the analysis band. 8 kHz is an in-band control.
+    expect(rms(analyzed[0])).toBeLessThan(0.01);
+    expect(rms(analyzed[1])).toBeGreaterThan(0.2);
   }, 30_000);
 
   it('posts recoverable errors when analysis throws', async () => {

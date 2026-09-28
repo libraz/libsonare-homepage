@@ -35,6 +35,7 @@ type WorkerRequest =
 
 type WasmModule = {
   init: () => Promise<void>;
+  resample: (samples: Float32Array, srcSr: number, targetSr: number) => Float32Array;
   analyzeWithProgress: (
     samples: Float32Array,
     sampleRate: number,
@@ -471,6 +472,7 @@ function strideToArray(values: Float32Array, target: number): number[] {
 }
 
 function prepareSamplesForAnalysis(samples: Float32Array, sampleRate: number) {
+  if (!wasmModule) throw new Error('WASM module is not initialized');
   const duration = samples.length / sampleRate;
   const targetSampleRate = duration > 120 && sampleRate > 22_050 ? 22_050 : sampleRate;
   if (targetSampleRate === sampleRate) {
@@ -478,30 +480,10 @@ function prepareSamplesForAnalysis(samples: Float32Array, sampleRate: number) {
   }
 
   return {
-    samples: downsampleLinear(samples, sampleRate, targetSampleRate),
+    samples: wasmModule.resample(samples, sampleRate, targetSampleRate),
     sampleRate: targetSampleRate,
     resampled: true,
   };
-}
-
-function downsampleLinear(
-  samples: Float32Array,
-  sourceRate: number,
-  targetRate: number,
-): Float32Array {
-  const targetLength = Math.max(1, Math.round((samples.length / sourceRate) * targetRate));
-  const output = new Float32Array(targetLength);
-  const ratio = sourceRate / targetRate;
-
-  for (let i = 0; i < targetLength; i++) {
-    const sourceIndex = i * ratio;
-    const left = Math.floor(sourceIndex);
-    const right = Math.min(samples.length - 1, left + 1);
-    const mix = sourceIndex - left;
-    output[i] = samples[left] * (1 - mix) + samples[right] * mix;
-  }
-
-  return output;
 }
 
 function serializeSection(section: Section) {
