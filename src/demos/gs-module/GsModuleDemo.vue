@@ -41,6 +41,7 @@ const {
   droppedFile,
   frames,
   status,
+  error,
   waveform,
   activity,
   isPlaying,
@@ -342,6 +343,7 @@ function clearFile() {
       <GsSourcePanel
         :frames="frames"
         :status="status"
+        :error="error"
         :dropped-file="droppedFile"
         :waveform="waveform"
         :playhead="playhead"

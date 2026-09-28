@@ -1,10 +1,10 @@
 /**
  * The one store behind every panel of the GS module demo.
  *
- * Rendering is offline throughout. The live engine has no program change, so a
- * patch browser cannot be driven by it at all, and SysEx only reaches a project
- * through an imported file — `setMidiEvents` drops it. So each audition
- * assembles a Standard MIDI File, imports it and bounces.
+ * Rendering is offline throughout. The live engine accepts raw MIDI UMP, but
+ * has no dedicated patch selector. SysEx only reaches a project through an
+ * imported file — `setMidiEvents` drops it. So each audition assembles a
+ * Standard MIDI File, imports it and bounces.
  *
  * A dropped file is imported untouched beside the setup rather than merged into
  * it. Imports append, and tick-zero SysEx from any track is realized before
@@ -52,6 +52,13 @@ const AUDITION_DRUMS: { note: number; beat: number }[] = [
 
 export type GsRenderStatus = 'idle' | 'rendering' | 'ready' | 'error';
 
+export class EmptyMidiError extends Error {
+  constructor() {
+    super('The MIDI file contains no playable notes.');
+    this.name = 'EmptyMidiError';
+  }
+}
+
 /** The notes one part plays when auditioned on its own. */
 export function auditionPhrase(channel: number): SmfEvent[] {
   if (channel === RHYTHM_CHANNEL) {
@@ -76,17 +83,21 @@ export function auditionSmf(state: GsModuleState, channel: number): Uint8Array {
 export function bounceFiles(
   wasm: SonareWasmModule,
   files: readonly Uint8Array[],
-  seconds: number,
+  seconds?: number,
 ): Float32Array {
   const Project = (wasm as unknown as { Project: new () => GsProject }).Project;
   const project = new Project();
   try {
     project.setSampleRate(SAMPLE_RATE);
     for (const file of files) project.importSmf(file);
-    return project.bounceWithSf2Instrument(
-      {},
-      { numChannels: 1, sampleRate: SAMPLE_RATE, totalFrames: Math.round(SAMPLE_RATE * seconds) },
-    );
+    const options: { numChannels: number; sampleRate: number; totalFrames?: number } = {
+      numChannels: 1,
+      sampleRate: SAMPLE_RATE,
+    };
+    if (seconds !== undefined) options.totalFrames = Math.round(SAMPLE_RATE * seconds);
+    const audio = project.bounceWithSf2Instrument({}, options);
+    if (audio.length === 0) throw new EmptyMidiError();
+    return audio;
   } finally {
     project.delete();
   }
@@ -189,7 +200,7 @@ interface GsProject {
   importSmf(data: Uint8Array): number;
   bounceWithSf2Instrument(
     instrument: Record<string, never>,
-    options: { numChannels: number; sampleRate: number; totalFrames: number },
+    options: { numChannels: number; sampleRate: number; totalFrames?: number },
   ): Float32Array;
   delete(): void;
 }
@@ -315,10 +326,13 @@ export function useGsModule() {
       const wasm = await bootWasm();
       if (disposed || mine !== generation) return null;
       const setup = buildSmf(setupEvents(state as GsModuleState), 0.01);
-      const files = droppedFile.value
-        ? [setup, droppedFile.value.bytes]
+      const imported = droppedFile.value;
+      const files = imported
+        ? [setup, imported.bytes]
         : [auditionSmf(state as GsModuleState, selectedChannel.value)];
-      const buffer = bounceFiles(wasm, files, AUDITION_SECONDS);
+      const buffer = imported
+        ? bounceFiles(wasm, files)
+        : bounceFiles(wasm, files, AUDITION_SECONDS);
       if (disposed || mine !== generation) return null;
       rendered.value = buffer;
       status.value = 'ready';
@@ -334,7 +348,7 @@ export function useGsModule() {
   /** Render if needed, then play the buffer on screen. */
   async function play() {
     const buffer = rendered.value ?? (await render());
-    if (!buffer || disposed) return;
+    if (!buffer?.length || disposed) return;
     audio ??= new AudioContext({ sampleRate: SAMPLE_RATE });
     // A context created before a gesture starts suspended, and a suspended
     // context plays nothing while reporting success.

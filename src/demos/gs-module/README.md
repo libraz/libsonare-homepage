@@ -11,12 +11,12 @@ fallback voices and the page ships no sample data.
   render, `synthGsDrumKitName` and `synthGsDrumKitIsVoicedApart` for the
   rhythm-set list.
 
-## Everything is offline, and it has to be
+## Why this demo renders offline
 
-The live engine has no program change, so a patch browser cannot be driven by
-it. SysEx only reaches a project through an imported file — `setMidiEvents`
-drops every payload the clip held. So each audition assembles a Standard MIDI
-File, imports it and bounces.
+The live engine exposes raw MIDI UMP injection, which can carry Program Change,
+but has no dedicated patch selector. SysEx only reaches a project through an
+imported file — `setMidiEvents` drops every payload the clip held. So each
+audition assembles a Standard MIDI File, imports it and bounces.
 
 Imports append rather than replace, and tick-zero SysEx is realized before
 tick-zero notes whatever track it arrived on. A dropped file is therefore

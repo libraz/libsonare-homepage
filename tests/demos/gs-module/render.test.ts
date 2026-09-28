@@ -1,12 +1,14 @@
 // @vitest-environment node
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   defaultModuleState,
   type GsModuleState,
   RHYTHM_CHANNEL,
+  setupEvents,
   withEfxType,
 } from '@/demos/gs-module/gsState';
 import { auditionSmf, bounceFiles, drumKitsOf } from '@/demos/gs-module/useGsModule';
+import { buildSmf, noteEvents } from '@/utils/gsSysex';
 import * as wasm from '@/wasm/index.js';
 
 /**
@@ -94,6 +96,38 @@ describe('the audition renders', () => {
     const drums = render(() => {}, RHYTHM_CHANNEL);
     expect(rms(drums)).toBeGreaterThan(1e-3);
     expect(maxDeviation(drums, base)).toBeGreaterThan(ULP);
+  });
+
+  it('renders an imported arrangement after the three-second audition preview', () => {
+    // At the default 120 BPM this note starts at four seconds. An imported
+    // file must derive its length from the arrangement, including the release
+    // tail, instead of inheriting the built-in audition's fixed preview.
+    const imported = buildSmf(noteEvents(0, 60, 100, 8, 8.5), 9);
+    const full = bounceFiles(wasm, [imported]);
+    expect(full.length).toBeGreaterThan(Math.round(9 * 0.5 * 44100));
+    const afterNoteOnset = full.subarray(Math.round(4 * 44100), Math.round(4.5 * 44100));
+    expect(rms(afterNoteOnset)).toBeGreaterThan(1e-3);
+  });
+
+  it('omits the fixed frame limit when bouncing an imported file', () => {
+    const bounce = vi.fn(() => new Float32Array(1));
+    class ProjectMock {
+      setSampleRate = vi.fn();
+      importSmf = vi.fn(() => 0);
+      bounceWithSf2Instrument = bounce;
+      delete = vi.fn();
+    }
+    const importedWasm = { Project: ProjectMock } as never;
+
+    bounceFiles(importedWasm, [new Uint8Array([0x4d, 0x49, 0x44, 0x49])]);
+
+    expect(bounce).toHaveBeenCalledWith({}, { numChannels: 1, sampleRate: 44100 });
+  });
+
+  it('rejects an imported file with no notes before Web Audio playback', () => {
+    const setup = buildSmf(setupEvents(defaultModuleState()), 0.01);
+    const emptyFile = buildSmf([], 1);
+    expect(() => bounceFiles(wasm, [setup, emptyFile])).toThrow(/playable/i);
   });
 });
 

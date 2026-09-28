@@ -18,11 +18,12 @@ import { useI18n } from '@/composables/useI18n';
 import { amplitudeToDb, type WaveformPeak } from '@/utils/audio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import type { SmfEvent } from '@/utils/gsSysex';
-import type { GsRenderStatus } from './useGsModule';
+import { EmptyMidiError, type GsRenderStatus } from './useGsModule';
 
 const props = defineProps<{
   frames: SmfEvent[];
   status: GsRenderStatus;
+  error?: unknown;
   droppedFile: { name: string; bytes: Uint8Array } | null;
   waveform: WaveformPeak[];
   /** How far through the render playback is, 0 to 1. */
@@ -44,6 +45,7 @@ const copy = computed(() =>
     en: {
       rendering: 'Rendering…',
       error: 'Render failed',
+      emptyMidi: 'This MIDI file has no notes to play.',
       idle: 'Press play to bounce and hear the module',
       builtIn: 'Built-in phrase — drop a .mid to play your own',
       dropHint: 'Release to load',
@@ -58,6 +60,7 @@ const copy = computed(() =>
     ja: {
       rendering: 'レンダリング中…',
       error: 'レンダリングに失敗しました',
+      emptyMidi: 'この MIDI ファイルに再生できるノートはありません。',
       idle: '再生するとバウンスして音が出ます',
       builtIn: '内蔵フレーズ。.mid を落とすと自分のファイルを鳴らせます',
       dropHint: '離すと読み込みます',
@@ -75,7 +78,8 @@ const copy = computed(() =>
 /** What the scope says when it has no render to show. */
 const emptyLabel = computed(() => {
   if (props.status === 'rendering') return copy.value.rendering;
-  if (props.status === 'error') return copy.value.error;
+  if (props.status === 'error')
+    return props.error instanceof EmptyMidiError ? copy.value.emptyMidi : copy.value.error;
   return copy.value.idle;
 });
 
