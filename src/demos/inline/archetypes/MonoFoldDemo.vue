@@ -1,15 +1,10 @@
 <script setup lang="ts">
 /**
- * `mono-fold` archetype: hear and see what summing to mono does to stereo content.
+ * `mono-fold` archetype: hear and see how phase offset changes a mono fold.
  *
- * A musical tone is the centre (left) channel; the right channel is the same tone
- * driven from in-phase to anti-phase by one control. Summing to mono averages the
- * two, so as the right channel swings negative the sum shrinks — at full anti-phase
- * it cancels to silence. The panels show both channels, the mono sum collapsing, and
- * a correlation meter swinging +1 → −1. Pressing play auditions the *mono sum*, the
- * signal a phone or club PA actually reproduces, so the cancellation is audible.
- *
- * Pure JS — no WASM. The lesson is phase, not a transform.
+ * The two channels are the same sine wave with a continuous phase offset. The
+ * display and audition both come from the same finite PCM buffers, so the
+ * correlation and RMS readouts describe the signal the listener receives.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { SonareDemoDef } from '@/demos/inline/types';
@@ -18,150 +13,152 @@ import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import {
+  buildMonoFoldSignal,
+  type MonoFoldMetrics,
+  type MonoFoldSignal,
+  measureMonoFold,
+} from './monoFoldMath';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { play, playingId, progress } = useSonareDemoAudio();
+const { play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
 const { locale: loc, title, caption, status, tone } = useDemoChrome(props.def, isPlaying);
-
-// ---- reader-adjustable parameters ------------------------------------------
 const { values, updateParams } = useDemoParams(props.def);
 
-/** 0 = in-phase (mono-safe), 1 = full anti-phase (cancels in mono). */
-const antiphase = computed<number>(() => Number(values.antiphase ?? 70) / 100);
-/** Right-channel polarity factor: +1 (in-phase) … 0 … −1 (inverted). */
-const rGain = computed<number>(() => 1 - 2 * antiphase.value);
-/** Mono sum keeps a (1 − antiphase) fraction; reaches 0 at full anti-phase. */
-const monoLevel = computed<number>(() => 1 - antiphase.value);
-const correlation = computed<number>(() => (rGain.value > 1e-4 ? 1 : rGain.value < -1e-4 ? -1 : 0));
-
-const stateLabel = computed(() => {
-  if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
-  if (status.value !== 'ready') return 'IDLE';
-  const db = monoLevel.value <= 1e-4 ? -Infinity : 20 * Math.log10(monoLevel.value);
-  return Number.isFinite(db) ? `MONO ${db.toFixed(1)} dB` : 'MONO −∞ dB';
-});
-
-// ---- centre signal (left channel) ------------------------------------------
-const SR = 44100;
-const DUR = 1.8;
-const N = Math.round(SR * DUR);
-const HARMONICS: Array<[number, number]> = [
-  [220, 1],
-  [440, 0.5],
-  [660, 0.32],
-  [880, 0.2],
-];
-let mid: Float32Array | null = null;
-
-/** Build the mono centre tone once: a few harmonics under a soft window. */
-function buildMid(): Float32Array {
-  const m = new Float32Array(N);
-  let peak = 1e-6;
-  for (let i = 0; i < N; i++) {
-    const t = i / SR;
-    let s = 0;
-    for (const [f, a] of HARMONICS) s += a * Math.sin(2 * Math.PI * f * t);
-    // Soft fade in/out so playback has no clicks.
-    const env = Math.min(1, t / 0.05, (DUR - t) / 0.05);
-    m[i] = s * Math.max(0, env);
-    const abs = Math.abs(m[i]);
-    if (abs > peak) peak = abs;
-  }
-  const g = 0.7 / peak;
-  for (let i = 0; i < N; i++) m[i] *= g;
-  return m;
-}
-
-// ---- display waveforms (a short window, a few cycles) ----------------------
+const SAMPLE_RATE = 44_100;
+const DURATION = 1.8;
+const FREQUENCY = 220;
 const WAVE_COLS = 360;
-const dispL = new Float32Array(WAVE_COLS);
-const dispR = new Float32Array(WAVE_COLS);
-const dispMono = new Float32Array(WAVE_COLS);
-const targetR = new Float32Array(WAVE_COLS);
+
+const phaseDegrees = computed(() => Math.max(0, Math.min(180, Number(values.phase ?? 90))));
+const phaseRadians = computed(() => (phaseDegrees.value * Math.PI) / 180);
+const audition = computed(() => (values.audition === 'left' ? 'left' : 'mono'));
+
+const displayedLeft = new Float32Array(WAVE_COLS);
+const displayedRight = new Float32Array(WAVE_COLS);
+const displayedMono = new Float32Array(WAVE_COLS);
+const targetLeft = new Float32Array(WAVE_COLS);
+const targetRight = new Float32Array(WAVE_COLS);
 const targetMono = new Float32Array(WAVE_COLS);
 const reveal = ref(0);
+const metrics = ref<MonoFoldMetrics | null>(null);
+let currentSignal: MonoFoldSignal | null = null;
 
-/** Sample the centre tone across ~6 fundamental cycles for the display window. */
-function fillWindow(): void {
-  if (!mid) mid = buildMid();
-  const cycles = 6;
-  const span = Math.round((SR / 220) * cycles);
-  const start = Math.floor(N * 0.4);
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const idx = start + Math.floor((c / (WAVE_COLS - 1)) * span);
-    const v = mid[Math.min(N - 1, idx)];
-    dispL[c] = v; // left = centre, constant across the sweep
-    targetR[c] = v * rGain.value;
-    targetMono[c] = v * monoLevel.value;
+function signed(value: number, decimals: number): string {
+  const rounded = Math.abs(value) < 0.5 * 10 ** -decimals ? 0 : value;
+  return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(decimals)}`;
+}
+
+function relativeDbLabel(value: number): string {
+  if (!Number.isFinite(value) || value < -120) return '−∞ dB';
+  const formatted = value.toFixed(2);
+  return `${formatted.startsWith('-') ? `−${formatted.slice(1)}` : formatted} dB`;
+}
+
+const correlation = computed(() => metrics.value?.correlation ?? 0);
+const stateLabel = computed(() => {
+  if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
+  if (status.value !== 'ready' || !metrics.value) return 'IDLE';
+  return `MONO ${relativeDbLabel(metrics.value.monoRelativeDb)}`;
+});
+
+function fillWindow(signal: MonoFoldSignal): void {
+  const period = SAMPLE_RATE / FREQUENCY;
+  const span = Math.min(signal.left.length - 1, Math.max(8, Math.round(period * 6)));
+  const start = Math.max(0, Math.floor((signal.left.length - span) * 0.4));
+  for (let column = 0; column < WAVE_COLS; column++) {
+    const ratio = WAVE_COLS > 1 ? column / (WAVE_COLS - 1) : 0;
+    const index = Math.min(signal.left.length - 1, start + Math.floor(ratio * span));
+    targetLeft[column] = signal.left[index] ?? 0;
+    targetRight[column] = signal.right[index] ?? 0;
+    targetMono[column] = signal.mono[index] ?? 0;
   }
 }
 
 function compute(): void {
-  fillWindow();
+  const signal = buildMonoFoldSignal({
+    sampleRate: SAMPLE_RATE,
+    duration: DURATION,
+    frequency: FREQUENCY,
+    phaseRadians: phaseRadians.value,
+    amplitude: 0.7,
+    fadeSeconds: 0.05,
+  });
+  currentSignal = signal;
+  metrics.value = measureMonoFold(signal);
+  fillWindow(signal);
+  reveal.value = 0;
   status.value = 'ready';
   startMorph();
 }
 
 // ---- morph + paint ---------------------------------------------------------
-let rafId = 0;
+let morphRaf = 0;
 function startMorph(): void {
-  if (rafId) return;
+  if (morphRaf) return;
   const step = () => {
     let delta = 0;
     if (reveal.value < 1) {
       reveal.value = Math.min(1, reveal.value + 0.1);
       delta = Math.max(delta, 1 - reveal.value);
     }
-    for (let c = 0; c < WAVE_COLS; c++) {
-      const dr = targetR[c] - dispR[c];
-      const dm = targetMono[c] - dispMono[c];
-      dispR[c] += dr * 0.28;
-      dispMono[c] += dm * 0.28;
-      delta = Math.max(delta, Math.abs(dr), Math.abs(dm));
+    for (let column = 0; column < WAVE_COLS; column++) {
+      const leftDelta = targetLeft[column] - displayedLeft[column];
+      const rightDelta = targetRight[column] - displayedRight[column];
+      const monoDelta = targetMono[column] - displayedMono[column];
+      displayedLeft[column] += leftDelta * 0.28;
+      displayedRight[column] += rightDelta * 0.28;
+      displayedMono[column] += monoDelta * 0.28;
+      delta = Math.max(delta, Math.abs(leftDelta), Math.abs(rightDelta), Math.abs(monoDelta));
     }
     paint();
     if (delta > 0.001) {
-      rafId = requestAnimationFrame(step);
+      morphRaf = requestAnimationFrame(step);
     } else {
-      dispR.set(targetR);
-      dispMono.set(targetMono);
+      displayedLeft.set(targetLeft);
+      displayedRight.set(targetRight);
+      displayedMono.set(targetMono);
       paint();
-      rafId = 0;
+      morphRaf = 0;
     }
   };
-  rafId = requestAnimationFrame(step);
+  morphRaf = requestAnimationFrame(step);
 }
 
 let playRaf = 0;
 watch(isPlaying, (on) => {
   if (on && !playRaf) {
-    const stepFn = () => {
+    const step = () => {
       paint();
-      playRaf = isPlaying.value ? requestAnimationFrame(stepFn) : 0;
+      playRaf = isPlaying.value ? requestAnimationFrame(step) : 0;
     };
-    playRaf = requestAnimationFrame(stepFn);
+    playRaf = requestAnimationFrame(step);
   }
 });
 
-function trace(disp: Float32Array, midY: number, amp: number, color: string, w: number): void {
-  const el = canvas.value;
-  const ctx = el?.getContext('2d');
-  if (!ctx || !el) return;
-  const width = el.clientWidth;
+function trace(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  samples: Float32Array,
+  midY: number,
+  amplitude: number,
+  color: string,
+  lineWidth: number,
+): void {
   const padX = 16;
-  const innerW = width - padX * 2;
+  const innerWidth = width - padX * 2;
   ctx.strokeStyle = color;
-  ctx.lineWidth = w;
+  ctx.lineWidth = lineWidth;
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const x = padX + (c / (WAVE_COLS - 1)) * innerW;
-    const y = midY - disp[c] * amp * reveal.value;
-    c === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  for (let column = 0; column < WAVE_COLS; column++) {
+    const x = padX + (column / (WAVE_COLS - 1)) * innerWidth;
+    const y = midY - samples[column] * amplitude * reveal.value;
+    column === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke();
 }
@@ -169,104 +166,102 @@ function trace(disp: Float32Array, midY: number, amp: number, color: string, w: 
 function paint(): void {
   const frame = prepareCanvas2D(canvas.value);
   if (!frame) return;
-  const { ctx, width: w, height: h } = frame;
-
+  const { ctx, width, height } = frame;
   const padX = 16;
-  const innerW = w - padX * 2;
-  // Three stacked lanes: channels (L/R overlaid), mono sum, correlation bar.
-  const chMid = h * 0.22;
-  const chAmp = h * 0.16;
-  const monoMid = h * 0.56;
-  const monoAmp = h * 0.16;
-  const corrY = h * 0.86;
+  const innerWidth = width - padX * 2;
+  const channelMid = height * 0.22;
+  const channelAmplitude = height * 0.16;
+  const monoMid = height * 0.56;
+  const monoAmplitude = height * 0.16;
+  const correlationY = height * 0.86;
 
-  // Zero baselines.
   ctx.strokeStyle = 'rgba(186, 230, 224, 0.14)';
   ctx.lineWidth = 1;
-  for (const y of [chMid, monoMid]) {
+  for (const y of [channelMid, monoMid]) {
     ctx.beginPath();
     ctx.moveTo(padX, y + 0.5);
-    ctx.lineTo(padX + innerW, y + 0.5);
+    ctx.lineTo(padX + innerWidth, y + 0.5);
     ctx.stroke();
   }
 
-  // Channels: left (teal, constant) and right (violet, swings to anti-phase).
-  trace(dispL, chMid, chAmp, 'rgba(45, 212, 191, 0.85)', 1.8);
-  trace(dispR, chMid, chAmp, 'rgba(167, 139, 250, 0.9)', 1.6);
+  trace(ctx, width, displayedLeft, channelMid, channelAmplitude, 'rgba(45, 212, 191, 0.9)', 1.8);
+  trace(ctx, width, displayedRight, channelMid, channelAmplitude, 'rgba(167, 139, 250, 0.9)', 1.6);
 
-  // Mono sum (amber), filled, collapsing toward the baseline as it cancels.
-  const grad = ctx.createLinearGradient(0, monoMid - monoAmp, 0, monoMid + monoAmp);
-  grad.addColorStop(0, 'rgba(251, 191, 36, 0.5)');
-  grad.addColorStop(1, 'rgba(251, 191, 36, 0.05)');
+  const gradient = ctx.createLinearGradient(0, monoMid - monoAmplitude, 0, monoMid + monoAmplitude);
+  gradient.addColorStop(0, 'rgba(251, 191, 36, 0.5)');
+  gradient.addColorStop(1, 'rgba(251, 191, 36, 0.05)');
   ctx.beginPath();
   ctx.moveTo(padX, monoMid);
-  for (let c = 0; c < WAVE_COLS; c++) {
-    const x = padX + (c / (WAVE_COLS - 1)) * innerW;
-    ctx.lineTo(x, monoMid - dispMono[c] * monoAmp * reveal.value);
+  for (let column = 0; column < WAVE_COLS; column++) {
+    const x = padX + (column / (WAVE_COLS - 1)) * innerWidth;
+    ctx.lineTo(x, monoMid - displayedMono[column] * monoAmplitude * reveal.value);
   }
-  ctx.lineTo(padX + innerW, monoMid);
+  ctx.lineTo(padX + innerWidth, monoMid);
   ctx.closePath();
-  ctx.fillStyle = grad;
+  ctx.fillStyle = gradient;
   ctx.fill();
-  trace(dispMono, monoMid, monoAmp, '#fbbf24', 1.6);
+  trace(ctx, width, displayedMono, monoMid, monoAmplitude, '#fbbf24', 1.6);
 
-  // Correlation meter: −1 (left) … 0 (centre) … +1 (right).
-  const barW = innerW;
-  const barX = padX;
   ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(barX, corrY);
-  ctx.lineTo(barX + barW, corrY);
+  ctx.moveTo(padX, correlationY);
+  ctx.lineTo(padX + innerWidth, correlationY);
   ctx.stroke();
-  const zeroX = barX + barW / 2;
+  const zeroX = padX + innerWidth / 2;
   ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
   ctx.beginPath();
-  ctx.moveTo(zeroX, corrY - 7);
-  ctx.lineTo(zeroX, corrY + 7);
+  ctx.moveTo(zeroX, correlationY - 7);
+  ctx.lineTo(zeroX, correlationY + 7);
   ctx.stroke();
-  const corrX = barX + ((correlation.value + 1) / 2) * barW;
-  const corrColor =
+  const correlationX = padX + ((correlation.value + 1) / 2) * innerWidth;
+  const correlationColor =
     correlation.value < -0.1 ? '#f87171' : correlation.value < 0.1 ? '#fbbf24' : '#2dd4bf';
-  ctx.fillStyle = corrColor;
+  ctx.fillStyle = correlationColor;
   ctx.beginPath();
-  ctx.arc(corrX, corrY, 5, 0, Math.PI * 2);
+  ctx.arc(correlationX, correlationY, 5, 0, Math.PI * 2);
   ctx.fill();
 
-  // Labels + readouts.
   ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = 'rgba(45, 212, 191, 0.85)';
-  ctx.fillText('L', padX, chMid - chAmp - 12);
+  ctx.fillStyle = 'rgba(45, 212, 191, 0.9)';
+  ctx.fillText('L · REFERENCE', padX, channelMid - channelAmplitude - 12);
   ctx.fillStyle = 'rgba(167, 139, 250, 0.9)';
-  ctx.fillText('R', padX + 14, chMid - chAmp - 12);
-  ctx.fillStyle = 'rgba(251, 191, 36, 0.9)';
-  ctx.fillText('MONO SUM', padX, monoMid - monoAmp - 12);
-  ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
-  ctx.fillText('−1', barX, corrY + 8);
-  ctx.textAlign = 'center';
-  ctx.fillText('CORRELATION', zeroX, corrY + 8);
-  ctx.textAlign = 'right';
-  ctx.fillText('+1', barX + barW, corrY + 8);
-  ctx.fillStyle = corrColor;
   ctx.fillText(
-    `CORR ${correlation.value >= 0 ? '+' : ''}${correlation.value.toFixed(0)}`,
-    padX + innerW,
-    chMid - chAmp - 12,
+    `R · PHASE ${phaseDegrees.value.toFixed(0)}°`,
+    padX + 105,
+    channelMid - channelAmplitude - 12,
+  );
+  ctx.fillStyle = 'rgba(251, 191, 36, 0.9)';
+  ctx.fillText(
+    `MONO FOLD · ${relativeDbLabel(metrics.value?.monoRelativeDb ?? Number.NEGATIVE_INFINITY)}`,
+    padX,
+    monoMid - monoAmplitude - 12,
+  );
+  ctx.fillStyle = 'rgba(186, 230, 224, 0.5)';
+  ctx.fillText('−1', padX, correlationY + 8);
+  ctx.textAlign = 'center';
+  ctx.fillText('CORRELATION', zeroX, correlationY + 8);
+  ctx.textAlign = 'right';
+  ctx.fillText('+1', padX + innerWidth, correlationY + 8);
+  ctx.fillStyle = correlationColor;
+  ctx.fillText(
+    `CORR ${signed(correlation.value, 2)}`,
+    padX + innerWidth,
+    channelMid - channelAmplitude - 12,
   );
   ctx.textAlign = 'left';
 }
 
-/** Re-paint when the screen is first laid out and on every later resize. */
 useCanvasRedraw(canvas, paint);
 
-// ---- audition: play the mono sum -------------------------------------------
+// ---- audition --------------------------------------------------------------
 async function onPlay(): Promise<void> {
-  if (!mid) mid = buildMid();
-  const sum = new Float32Array(N);
-  const g = monoLevel.value;
-  for (let i = 0; i < N; i++) sum[i] = mid[i] * g;
-  await play(props.def.id, { samples: sum, sampleRate: SR });
+  if (!currentSignal) compute();
+  const signal = currentSignal;
+  if (!signal) return;
+  const samples = audition.value === 'left' ? signal.left : signal.mono;
+  await play(props.def.id, { samples, sampleRate: signal.sampleRate });
 }
 
 let pending = 0;
@@ -278,8 +273,13 @@ function scheduleCompute(): void {
   });
 }
 
-watch(antiphase, () => {
-  if (props.active && status.value !== 'idle') scheduleCompute();
+watch([phaseDegrees, audition], () => {
+  if (!props.active || status.value === 'idle') return;
+  // The shared transport cannot retarget an existing AudioBuffer. Stop it before
+  // changing the displayed signal so the playhead never describes a different
+  // phase or audition choice than the waveform.
+  if (isPlaying.value) stop();
+  scheduleCompute();
 });
 
 watch(
@@ -291,7 +291,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  if (rafId) cancelAnimationFrame(rafId);
+  if (morphRaf) cancelAnimationFrame(morphRaf);
   if (playRaf) cancelAnimationFrame(playRaf);
   if (pending) cancelAnimationFrame(pending);
 });

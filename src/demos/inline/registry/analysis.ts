@@ -69,8 +69,8 @@ export const analysisDemos: SonareDemoDef[] = [
   {
     id: 'chromagram',
     archetype: 'transform',
-    // The band clip walks C–Am–F–G, so the lit pitch classes shift chord to chord.
-    source: { kind: 'clip', clip: 'band' },
+    // A dedicated chord-only clip keeps the chroma changes easy to read.
+    source: { kind: 'clip', clip: 'chord-turnaround' },
     viz: 'chroma',
     config: { transform: 'chroma', nFft: 2048, hopLength: 512 },
     title: {
@@ -78,25 +78,23 @@ export const analysisDemos: SonareDemoDef[] = [
       ja: 'クロマグラム — ハーモニーを12ビンに畳む',
     },
     caption: {
-      en: 'Every frequency is folded onto one of twelve pitch classes, so octave is forgotten and only the harmony remains. This clip walks a C–Am–F–G turnaround: watch the lit rows shift as each chord changes, then play to follow the progression.',
-      ja: 'すべての周波数を12のピッチクラスのどれかへ畳み込むため、オクターブは忘れられ、ハーモニーだけが残ります。このクリップは C–Am–F–G を循環します。コードが変わるたびに点灯する行が移るのを見て、再生して進行を追ってください。',
+      en: 'Every frequency is folded onto one of twelve pitch classes, so octave is forgotten and the harmony remains. This clip contains only four separated triads, C–Am–F–G, with a one-beat gap between bars. Watch the lit rows move, then play the turnaround.',
+      ja: 'すべての周波数を12のピッチクラスへ畳み込むため、オクターブは消え、ハーモニーが残ります。このクリップは C–Am–F–G の三和音だけを小節ごとに鳴らし、コードの間に1拍の休符を置いています。点灯する行の移動を見てから、進行を再生してください。',
     },
   },
   {
     id: 'chord-track',
     archetype: 'chord-track',
-    // The same C–Am–F–G clip the chromagram reads, so the two demos are evidence
-    // and answer for one passage. With the full template set the F bar comes back
-    // as Amadd9; triads only gives the plain turnaround.
-    source: { kind: 'clip', clip: 'band' },
+    // Use the clean chord-only passage so the default result has four readable bars.
+    source: { kind: 'clip', clip: 'chord-turnaround' },
     viz: 'overlay',
     title: {
       en: 'Chord track — the segments recognition returns',
       ja: 'コードトラック — 認識が返す区間',
     },
     caption: {
-      en: 'The chromagram above, read through the chord templates: each block is one segment, named and faded by its confidence, and play lights the one under the playhead. With every quality in play the F bar comes back as Amadd9 — the two chords share two of their three notes, and the extra tones in the mix tip the richer template ahead. Switch to triads only and the turnaround reads C–Am–F–G. Lower the minimum duration and the short readings the merge absorbed come back; raise it and F, the shortest bar, is swallowed by its neighbour.',
-      ja: '上のクロマグラムをコードテンプレートで読んだ結果です。ブロック 1 つがコード区間 1 つで、名前が付き、信頼度が低いほど淡くなります。再生するとプレイヘッドの下の区間が光ります。全品質で探索すると、F の小節は Amadd9 として返ってきます。3 音のうち 2 音が共通で、ミックスに混じる残りの音が豊かなほうのテンプレートを押し上げるためです。三和音のみに切り替えると、進行は C–Am–F–G と読めます。最小長を下げるとマージに吸収されていた短い読みが戻り、上げると最も短い F の小節が隣に飲み込まれます。',
+      en: 'Each block is a detected chord segment. With the default STFT chroma and a 0.3 second minimum, both template sets read this clip as C–Am–F–G. Lower the minimum duration to keep brief extension readings near chord changes, then switch between all qualities and triads to compare the template vocabulary.',
+      ja: 'ブロック 1 つが検出されたコード区間です。初期設定の STFT クロマと最小長 0.3 秒では、どちらのテンプレート集合でもこのクリップを C–Am–F–G と読みます。最小長を下げるとコードの切り替わり付近にある短い拡張コードの読みが残り、「全品質」と「三和音のみ」を切り替えてテンプレート集合の違いを比べられます。',
     },
     params: [
       {
@@ -183,22 +181,22 @@ export const analysisDemos: SonareDemoDef[] = [
   {
     id: 'downbeat-tracking',
     archetype: 'detector',
-    // Same groove: beats are the pulse, downbeats are the "1" of each bar.
-    source: { kind: 'clip', clip: 'drum' },
+    // The groove gives the detector enough repeated bars to establish its phase.
+    source: { kind: 'clip', clip: 'meter-groove' },
     viz: 'overlay',
     title: {
-      en: 'Beats vs downbeats — finding the bar line',
-      ja: 'ビートとダウンビート — 小節の頭を見つける',
+      en: 'Downbeat tracking — finding the bar line',
+      ja: 'ダウンビート追跡 — 小節線を見つける',
     },
     caption: {
-      en: 'Beats are the steady pulse; downbeats are the stronger "one" that starts each bar. Switch the view to see the tracker thin the full pulse down to just the bar lines — far fewer markers, spaced a whole measure apart. Press play to feel where the count resets.',
-      ja: 'ビートは一定の拍、ダウンビートは各小節の頭にあたる強い「1」です。表示を切り替えると、すべての拍から小節の頭だけへと絞り込まれ、マーカーがぐっと減って1小節ごとの間隔になります。再生すると、カウントがリセットされる位置が体感できます。',
+      en: 'Downbeat tracking keeps the first beat of each bar from the full pulse. On this four-bar groove, the detector settles after the opening hit and returns bar lines near 2, 4, and 6 seconds. Switch to Beats to see the pulse it follows.',
+      ja: 'ダウンビート追跡は、拍全体から各小節の1拍目を残します。この4小節のグルーヴでは、冒頭の打点を過ぎて検出器が安定し、およそ2・4・6秒に小節線を返します。「ビート」に切り替えると、追跡の土台になった拍が見えます。',
     },
     params: [
       {
         key: 'view',
         kind: 'select',
-        default: 'beat',
+        default: 'downbeat',
         label: { en: 'Detect', ja: '検出' },
         options: [
           { value: 'beat', label: { en: 'Beats', ja: 'ビート' } },

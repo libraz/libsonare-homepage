@@ -25,10 +25,10 @@
  * That is peak matching, not loudness matching — a bright tilt still measures a
  * couple of LU under a dark one.
  *
- * The top panel is the waveform you hear; the bottom is the averaged magnitude
- * spectrum. A playback-synced beam sweeps the waveform.
+ * The top panel is the selected Original or Processed waveform; the bottom is the
+ * matching averaged magnitude spectrum. A playback-synced beam sweeps the waveform.
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
@@ -43,14 +43,16 @@ import {
   PARAM_SWEEP_WAVE_COLS,
 } from './paramSweepData';
 import {
+  type ParamSweepAudio,
   type ParamSweepProcessor,
   type ParamSweepProcessorWasm,
-  renderParamSweepAudio,
+  type ParamSweepSide,
+  renderParamSweepComparison,
 } from './paramSweepProcessing';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { ensureWasm, loadClip, play, playingId, progress } = useSonareDemoAudio();
+const { ensureWasm, loadClip, play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
@@ -110,15 +112,37 @@ const showFundamental = computed(
   () => processor.value === 'pitch-shift' || processor.value === 'formant-shift',
 );
 
+// ---- original / processed preview -----------------------------------------
+const selectedSide = ref<ParamSweepSide>('processed');
+interface ParamSweepView extends ParamSweepAudio {
+  wavePeaks: Float32Array;
+  spectrum: Float32Array;
+}
+const views = shallowRef<Record<ParamSweepSide, ParamSweepView> | null>(null);
+
+const AB_LABEL: I18nText = { en: 'Preview', ja: '試聴対象' };
+const AB_HINT: I18nText = {
+  en: 'Switching during playback restarts the selected audio from the beginning.',
+  ja: '再生中に切り替えると、選んだ音を先頭から再生します。',
+};
+const SIDE_LABELS: Record<ParamSweepSide, I18nText> = {
+  original: { en: 'Original', ja: 'オリジナル' },
+  processed: { en: 'Processed', ja: '処理後' },
+};
+const abLabel = computed(() => localized(AB_LABEL, loc.value));
+const abHint = computed(() => localized(AB_HINT, loc.value));
+const selectedAudio = computed(() => views.value?.[selectedSide.value] ?? null);
+const selectedSideLabel = computed(() => localized(SIDE_LABELS[selectedSide.value], loc.value));
+
 // ---- canvas copy, localized -------------------------------------------------
 const PIVOT_LABEL: I18nText = { en: 'PIVOT', ja: 'ピボット' };
 const pivotLabel = computed<string>(() => localized(PIVOT_LABEL, loc.value));
 
 // ---- presentation state ----------------------------------------------------
-const fundHz = ref(0);
-const pivotHz = ref(0); // tilt-eq rotation axis; 0 when not applicable
-const outDur = ref(0); // rendered duration in seconds
-let widthFrac = 1; // fraction of the waveform panel the rendered clip fills (time-stretch)
+const fundHz = computed(() => selectedAudio.value?.fundHz ?? 0);
+const pivotHz = computed(() => selectedAudio.value?.pivotHz ?? 0); // tilt-eq rotation axis; 0 when not applicable
+const outDur = computed(() => selectedAudio.value?.outDur ?? 0); // rendered duration in seconds
+const widthFrac = computed(() => selectedAudio.value?.widthFrac ?? 1); // fraction of the waveform panel the rendered clip fills (time-stretch)
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'RENDERING';
   if (status.value === 'error') return 'ERROR';
@@ -128,23 +152,21 @@ const stateLabel = computed(() => {
     case 'time-stretch':
       return `${outDur.value.toFixed(1)} s`;
     case 'formant-shift':
-      return `×${formant.value.toFixed(2)}`;
+      return `×${(selectedSide.value === 'original' ? 1 : formant.value).toFixed(2)}`;
     case 'griffin-lim':
-      return `${iters.value} iter`;
+      return selectedSide.value === 'original' ? 'ORIGINAL' : `${iters.value} iter`;
     case 'tilt-eq':
-      return `${tilt.value >= 0 ? '+' : ''}${tilt.value.toFixed(1)} dB`;
+      return `${selectedSide.value === 'original' || tilt.value >= 0 ? '+' : ''}${(selectedSide.value === 'original' ? 0 : tilt.value).toFixed(1)} dB`;
     default:
       return `${Math.round(fundHz.value)} Hz`;
   }
 });
 
 // ---- audio + figure data ---------------------------------------------------
-const wavePeaks = new Float32Array(PARAM_SWEEP_WAVE_COLS);
 const dispSpec = new Float32Array(PARAM_SWEEP_SPEC_COLS);
 const targetSpec = new Float32Array(PARAM_SWEEP_SPEC_COLS);
 
 let baseClip: { samples: Float32Array; sampleRate: number } | null = null;
-let rendered: { samples: Float32Array; sampleRate: number } | null = null;
 const reveal = ref(0);
 
 /** Smallest rate the slider allows; sets the longest (reference) duration. */
@@ -154,11 +176,12 @@ function minRate(): number {
 
 async function compute(): Promise<void> {
   try {
+    if (isPlaying.value) stop();
     if (status.value === 'idle') status.value = 'loading';
     const wasm = (await ensureWasm()) as ParamSweepProcessorWasm;
     if (!baseClip) baseClip = await loadClip(clipName.value);
 
-    const audio = renderParamSweepAudio(wasm, baseClip, {
+    const result = renderParamSweepComparison(wasm, baseClip, {
       processor: processor.value,
       semitones: semitones.value,
       rate: rate.value,
@@ -167,17 +190,44 @@ async function compute(): Promise<void> {
       tilt: tilt.value,
       minRate: minRate(),
     });
-    fundHz.value = audio.fundHz;
-    pivotHz.value = audio.pivotHz;
-    outDur.value = audio.outDur;
-    widthFrac = audio.widthFrac;
-    rendered = { samples: audio.samples, sampleRate: audio.sampleRate };
-    fillParamSweepWavePeaks(audio.samples, wavePeaks);
-    fillParamSweepSpectrum(wasm, audio.samples, audio.sampleRate, targetSpec);
+    views.value = {
+      original: buildView(wasm, result.original),
+      processed: buildView(wasm, result.processed),
+    };
+    applySelectedView();
     status.value = 'ready';
     startMorph();
   } catch (e) {
     fail(e);
+  }
+}
+
+function buildView(wasm: ParamSweepProcessorWasm, audio: ParamSweepAudio): ParamSweepView {
+  const wave = new Float32Array(PARAM_SWEEP_WAVE_COLS);
+  const spectrum = new Float32Array(PARAM_SWEEP_SPEC_COLS);
+  fillParamSweepWavePeaks(audio.samples, wave);
+  fillParamSweepSpectrum(wasm, audio.samples, audio.sampleRate, spectrum);
+  return { ...audio, wavePeaks: wave, spectrum };
+}
+
+function applySelectedView(instant = false): void {
+  const view = views.value?.[selectedSide.value];
+  if (!view) return;
+  targetSpec.set(view.spectrum);
+  if (instant) dispSpec.set(targetSpec);
+  startMorph();
+  paint();
+}
+
+function selectSide(side: ParamSweepSide): void {
+  if (selectedSide.value === side) return;
+  const restart = isPlaying.value;
+  if (restart) stop();
+  selectedSide.value = side;
+  applySelectedView(true);
+  if (restart) {
+    const audio = selectedAudio.value;
+    if (audio) void play(props.def.id, audio).catch(fail);
   }
 }
 
@@ -238,10 +288,10 @@ function paint(): void {
   // --- top: waveform (time). Passed portion brightens during playback. ---
   // For time-stretch the clip fills only `widthFrac` of the panel, so a shorter
   // (faster) render visibly occupies less width than a longer (slower) one.
-  const waveW = innerW * widthFrac;
+  const waveW = innerW * widthFrac.value;
   for (let c = 0; c < PARAM_SWEEP_WAVE_COLS; c++) {
     const x = padX + (c / (PARAM_SWEEP_WAVE_COLS - 1)) * waveW;
-    const a = wavePeaks[c] * (waveH / 2) * reveal.value;
+    const a = (selectedAudio.value?.wavePeaks[c] ?? 0) * (waveH / 2) * reveal.value;
     const passed = playT >= 0 && c / (PARAM_SWEEP_WAVE_COLS - 1) <= playT;
     ctx.strokeStyle = passed ? 'rgba(45, 212, 191, 0.9)' : 'rgba(148, 163, 184, 0.42)';
     ctx.lineWidth = 1;
@@ -339,8 +389,8 @@ function paint(): void {
 useCanvasRedraw(canvas, paint);
 
 async function onPlay(): Promise<void> {
-  if (!rendered) await compute();
-  if (rendered) await play(props.def.id, rendered);
+  if (!selectedAudio.value) await compute();
+  if (selectedAudio.value) await play(props.def.id, selectedAudio.value);
 }
 
 // Coalesce rapid slider changes into one render per frame.
@@ -391,18 +441,126 @@ onBeforeUnmount(() => {
       <canvas ref="canvas" class="ps-canvas" />
     </template>
     <template #controls>
-      <DemoControls
-        :model-value="values"
-        :params="def.params ?? []"
-        :locale="loc"
-        :disabled="status === 'loading'"
-        @update:model-value="updateParams"
-      />
+      <div class="ps-controls">
+        <div
+          class="ps-ab"
+          role="group"
+          :aria-labelledby="`${def.id}-preview-label`"
+          :aria-describedby="`${def.id}-preview-hint`"
+        >
+          <span :id="`${def.id}-preview-label`" class="ps-ab__label">{{ abLabel }}</span>
+          <div class="ps-ab__buttons">
+            <button
+              v-for="side in (['original', 'processed'] as ParamSweepSide[])"
+              :key="side"
+              type="button"
+              class="ps-ab__button"
+              :class="{ 'is-on': selectedSide === side }"
+              :data-side="side"
+              :aria-pressed="selectedSide === side"
+              :aria-describedby="`${def.id}-preview-hint`"
+              :aria-label="localized(SIDE_LABELS[side], loc)"
+              :disabled="status === 'loading'"
+              @click="selectSide(side)"
+            >
+              {{ localized(SIDE_LABELS[side], loc) }}
+            </button>
+          </div>
+          <span :id="`${def.id}-preview-hint`" class="ps-ab__hint">{{ abHint }}</span>
+          <span class="ps-ab__selected" aria-live="polite">
+            {{ selectedSideLabel }}
+          </span>
+        </div>
+        <DemoControls
+          :model-value="values"
+          :params="def.params ?? []"
+          :locale="loc"
+          :disabled="status === 'loading'"
+          @update:model-value="updateParams"
+        />
+      </div>
     </template>
   </DemoFrame>
 </template>
 
 <style scoped>
+.ps-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-5);
+  width: 100%;
+}
+
+.ps-ab {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.ps-ab__label,
+.ps-ab__selected {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.ps-ab__buttons {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full, 999px);
+  background: var(--vp-c-bg);
+}
+
+.ps-ab__button {
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-full, 999px);
+  padding: 4px 10px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.ps-ab__button:hover:not(:disabled):not(.is-on) {
+  color: var(--color-text-primary);
+}
+
+.ps-ab__button.is-on {
+  color: #fff;
+  background: linear-gradient(150deg, var(--color-brand-light), var(--color-brand-dark));
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--color-brand) 70%, transparent);
+}
+
+.ps-ab__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ps-ab__hint {
+  flex: 1 1 100%;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ps-ab__selected {
+  color: var(--color-brand);
+}
+
 .ps-canvas {
   position: absolute;
   inset: 0;

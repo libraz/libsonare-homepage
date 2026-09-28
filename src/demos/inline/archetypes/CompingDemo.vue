@@ -3,27 +3,33 @@
  * `comping` archetype: assemble one performance from the best of several takes.
  *
  * Three takes of the same short phrase are loaded (same length, same note timing,
- * so they line up). The timeline is split into four segments; one select per
- * segment picks which take owns it. The chosen path is highlighted across the take
- * lanes, and a fourth lane shows the assembled comp — built by copying each
- * segment from its take with a short equal-power crossfade at every boundary.
- * Pressing play auditions that comp. Take B has a wrong note in segment 3, so the
- * demo also shows comping *around* a flubbed moment.
+ * so they line up). The timeline is split at the phrase's eighth-note pairs; one
+ * select per segment picks which take owns it. The chosen path is highlighted
+ * across the take lanes, and a fourth lane shows the assembled comp — built by
+ * copying each segment from its take with a short linear crossfade at every
+ * boundary. Take B has a wrong note at the start of segment 3, so the demo also
+ * shows comping around a flubbed moment.
  *
  * Pure clip assembly — no WASM transform.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { peakEnvelope } from '@/demos/inline/audio/processors';
-import type { SonareDemoDef } from '@/demos/inline/types';
+import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
 import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams, useDisposed } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
+import {
+  assembleComp,
+  type CompingTake,
+  compSegmentAtFrame,
+  compSegmentBoundaries,
+} from './compingSession';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
-const { loadClip, play, playingId, progress } = useSonareDemoAudio();
+const { loadClip, play, stop, playingId, progress } = useSonareDemoAudio();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isPlaying = computed(() => playingId.value === props.def.id);
@@ -40,22 +46,43 @@ const {
 // ---- reader-adjustable parameters ------------------------------------------
 const { values, updateParams } = useDemoParams(props.def);
 
-const TAKES = ['a', 'b', 'c'] as const;
+const TAKES = ['a', 'b', 'c'] as const satisfies readonly CompingTake[];
 type Take = (typeof TAKES)[number];
 const SEG_KEYS = ['seg1', 'seg2', 'seg3', 'seg4'] as const;
 const NSEG = SEG_KEYS.length;
+
+type AuditionMode = 'comp' | Take;
+const AUDITION_OPTIONS: readonly { mode: AuditionMode; label: I18nText }[] = [
+  { mode: 'comp', label: { en: 'Comp', ja: 'コンプ' } },
+  { mode: 'a', label: { en: 'Take A', ja: 'テイク A' } },
+  { mode: 'b', label: { en: 'Take B', ja: 'テイク B' } },
+  { mode: 'c', label: { en: 'Take C', ja: 'テイク C' } },
+];
+const AUDITION_GROUP_LABEL: I18nText = { en: 'Audition source', ja: '試聴する音源' };
+const PLAY_LABEL: I18nText = { en: 'Play', ja: '再生' };
+const STOP_LABEL: I18nText = { en: 'Stop', ja: '停止' };
+const selectedAudition = ref<AuditionMode>('comp');
 
 /** The take chosen for each of the four segments. */
 const segChoices = computed<Take[]>(() =>
   SEG_KEYS.map((k) => (TAKES.includes(values[k] as Take) ? (values[k] as Take) : 'a')),
 );
 
+function auditionLabel(mode: AuditionMode): string {
+  const option = AUDITION_OPTIONS.find((candidate) => candidate.mode === mode);
+  return option ? localized(option.label, loc.value) : mode.toUpperCase();
+}
+
+const auditionGroupLabel = computed(() => localized(AUDITION_GROUP_LABEL, loc.value));
+const currentAuditionLabel = computed(() => auditionLabel(selectedAudition.value));
+
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'LOADING';
   if (status.value === 'error') return 'ERROR';
-  if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
+  if (isPlaying.value)
+    return `▸ ${currentAuditionLabel.value} ${Math.round(progress.value * 100)}%`;
   if (status.value !== 'ready') return 'IDLE';
-  return segChoices.value.map((t) => t.toUpperCase()).join(' · ');
+  return currentAuditionLabel.value;
 });
 
 // ---- clip data -------------------------------------------------------------
@@ -73,36 +100,22 @@ const dispComp = new Float32Array(WAVE_COLS);
 let assembled: Float32Array | null = null;
 const reveal = ref(0);
 
-/** Segment boundaries in samples (NSEG + 1 edges). */
+/** Segment boundaries in samples (NSEG + 1 edges), aligned to phrase notes. */
 function bounds(): number[] {
-  const b: number[] = [];
-  for (let k = 0; k <= NSEG; k++) b.push(Math.round((k / NSEG) * clipLen));
-  return b;
+  return compSegmentBoundaries(clipLen, sampleRate);
 }
 
-/** Build the comp: each segment from its take, with equal-power boundary crossfades. */
-function assemble(segs: Take[]): Float32Array {
-  const comp = new Float32Array(clipLen);
-  const edges = bounds();
-  const bufOf = (k: number) => takeBuf[segs[k]] as Float32Array;
-  for (let k = 0; k < NSEG; k++) {
-    const src = bufOf(k);
-    for (let i = edges[k]; i < edges[k + 1]; i++) comp[i] = src[i];
-  }
-  const xf = Math.round(sampleRate * 0.008);
-  for (let k = 1; k < NSEG; k++) {
-    if (segs[k] === segs[k - 1]) continue; // same take → already seamless
-    const edge = edges[k];
-    const prev = bufOf(k - 1);
-    const next = bufOf(k);
-    for (let j = -xf; j <= xf; j++) {
-      const i = edge + j;
-      if (i < 0 || i >= clipLen) continue;
-      const t = (j + xf) / (2 * xf); // 0..1 across the fade
-      comp[i] = prev[i] * Math.cos((t * Math.PI) / 2) + next[i] * Math.sin((t * Math.PI) / 2);
-    }
-  }
-  return comp;
+/** Build the comp: each segment from its take, with linear boundary crossfades. */
+function assemble(segs: readonly Take[]): Float32Array {
+  return assembleComp(
+    {
+      a: takeBuf.a as Float32Array,
+      b: takeBuf.b as Float32Array,
+      c: takeBuf.c as Float32Array,
+    },
+    segs,
+    sampleRate,
+  );
 }
 
 /**
@@ -198,6 +211,7 @@ function paintLane(
   amp: number,
   baseColor: string,
   ownedBy: (seg: number) => boolean,
+  segmentAtColumn: (column: number) => number,
   rev: number,
 ): void {
   const el = canvas.value;
@@ -207,7 +221,7 @@ function paintLane(
   const padX = 16;
   const innerW = w - padX * 2;
   for (let c = 0; c < WAVE_COLS; c++) {
-    const seg = Math.min(NSEG - 1, Math.floor((c / WAVE_COLS) * NSEG));
+    const seg = segmentAtColumn(c);
     const owned = ownedBy(seg);
     const x = padX + (c / (WAVE_COLS - 1)) * innerW;
     const a = peaks[c] * amp * rev;
@@ -228,6 +242,9 @@ function paint(): void {
   const padX = 16;
   const innerW = w - padX * 2;
   const segs = segChoices.value;
+  const edges = bounds();
+  const segmentAtColumn = (column: number) =>
+    compSegmentAtFrame(((column + 0.5) / WAVE_COLS) * clipLen, edges);
   // Four lanes: take A, B, C, then the assembled comp.
   const laneH = h / 4.6;
   const amp = laneH * 0.36;
@@ -235,26 +252,34 @@ function paint(): void {
 
   // Segment boundary guides.
   for (let k = 1; k < NSEG; k++) {
-    const x = padX + (k / NSEG) * innerW;
+    const x = padX + (clipLen > 0 ? edges[k] / clipLen : k / NSEG) * innerW;
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
     ctx.moveTo(x, 4);
-    ctx.lineTo(x, laneH * 3 + 4);
+    ctx.lineTo(x, h - 4);
     ctx.stroke();
     ctx.setLineDash([]);
   }
 
   // Take lanes: highlight the segments that the comp draws from this take.
   TAKES.forEach((t, i) => {
-    paintLane(takePeaks[t], laneMid(i), amp, TAKE_COLORS[t], (seg) => segs[seg] === t, 1);
+    paintLane(
+      takePeaks[t],
+      laneMid(i),
+      amp,
+      TAKE_COLORS[t],
+      (seg) => segs[seg] === t,
+      segmentAtColumn,
+      1,
+    );
   });
 
   // Comp lane: assembled result, each segment tinted by its source take.
   const compMid = laneMid(3);
   for (let c = 0; c < WAVE_COLS; c++) {
-    const seg = Math.min(NSEG - 1, Math.floor((c / WAVE_COLS) * NSEG));
+    const seg = segmentAtColumn(c);
     const x = padX + (c / (WAVE_COLS - 1)) * innerW;
     const a = dispComp[c] * amp * reveal.value;
     ctx.strokeStyle = TAKE_COLORS[segs[seg]].replace('1)', '0.95)');
@@ -292,9 +317,29 @@ function paint(): void {
 useCanvasRedraw(canvas, paint);
 
 // ---- audition --------------------------------------------------------------
-async function onPlay(): Promise<void> {
+function isAuditionPlaying(mode: AuditionMode): boolean {
+  return isPlaying.value && selectedAudition.value === mode;
+}
+
+function auditionButtonLabel(mode: AuditionMode): string {
+  const action = isAuditionPlaying(mode)
+    ? localized(STOP_LABEL, loc.value)
+    : localized(PLAY_LABEL, loc.value);
+  return `${action} ${auditionLabel(mode)}`;
+}
+
+async function onAudition(mode: AuditionMode): Promise<void> {
+  const switchingSource = isPlaying.value && selectedAudition.value !== mode;
+  selectedAudition.value = mode;
+  if (switchingSource) stop();
   if (!assembled) await compute();
-  if (assembled) await play(props.def.id, { samples: assembled, sampleRate });
+
+  const samples = mode === 'comp' ? assembled : takeBuf[mode];
+  if (samples) await play(props.def.id, { samples, sampleRate });
+}
+
+async function onPlay(): Promise<void> {
+  await onAudition('comp');
 }
 
 let pending = 0;
@@ -307,6 +352,7 @@ function scheduleCompute(): void {
 }
 
 watch(segChoices, () => {
+  if (isPlaying.value && selectedAudition.value === 'comp') stop();
   if (props.active && status.value !== 'idle') scheduleCompute();
 });
 
@@ -344,18 +390,83 @@ onBeforeUnmount(() => {
       <canvas ref="canvas" class="cp-canvas" />
     </template>
     <template #controls>
-      <DemoControls
-        :model-value="values"
-        :params="def.params ?? []"
-        :locale="loc"
-        :disabled="status === 'loading'"
-        @update:model-value="updateParams"
-      />
+      <div class="cp-controls">
+        <div class="cp-audition" role="group" :aria-label="auditionGroupLabel">
+          <button
+            v-for="option in AUDITION_OPTIONS"
+            :key="option.mode"
+            type="button"
+            class="cp-audition__button"
+            :class="{ 'is-playing': isAuditionPlaying(option.mode) }"
+            :aria-label="auditionButtonLabel(option.mode)"
+            :aria-pressed="isAuditionPlaying(option.mode)"
+            :disabled="status === 'loading'"
+            @click="onAudition(option.mode)"
+          >
+            {{ localized(option.label, loc) }}
+          </button>
+        </div>
+        <DemoControls
+          :model-value="values"
+          :params="def.params ?? []"
+          :locale="loc"
+          :disabled="status === 'loading'"
+          @update:model-value="updateParams"
+        />
+      </div>
     </template>
   </DemoFrame>
 </template>
 
 <style scoped>
+.cp-controls {
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.cp-audition {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cp-audition__button {
+  appearance: none;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full, 999px);
+  padding: 5px 10px;
+  color: var(--color-text-secondary);
+  background: var(--vp-c-bg);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color var(--transition-fast), background var(--transition-fast),
+    border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.cp-audition__button:hover:not(:disabled),
+.cp-audition__button:focus-visible {
+  border-color: var(--color-brand);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.cp-audition__button.is-playing {
+  border-color: var(--color-brand);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-brand) 12%, var(--vp-c-bg));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand) 24%, transparent);
+}
+
+.cp-audition__button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .cp-canvas {
   position: absolute;
   inset: 0;

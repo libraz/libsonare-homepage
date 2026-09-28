@@ -5,10 +5,10 @@
  *
  * A sine is drawn as the continuous, band-limited waveform a converter actually
  * reconstructs, with the stored sample points marked on top. The samples are
- * aligned with a true peak between the central pair. The finite sample column is
- * then measured and normalized from its actual largest absolute value: at some
- * frequencies a dot near another cycle lands closer to a peak than the central
- * pair. Everything is computed in-browser; no clip or WASM.
+ * aligned with a true peak between the central pair. The finite audition buffer
+ * is peak-normalized from its actual stored samples, and the same normalization,
+ * frequency, and phase drive this analytical plot. A true-peak meter may report
+ * a slightly different value for the finite audio buffer.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { type I18nText, localized, type SonareDemoDef } from '@/demos/inline/types';
@@ -17,7 +17,7 @@ import { prepareCanvas2D } from '@/utils/canvas';
 import { useCanvasRedraw, useDemoChrome, useDemoParams } from '../composables';
 import DemoControls from '../DemoControls.vue';
 import DemoFrame from '../DemoFrame.vue';
-import { buildTruePeakSampleModel } from './truePeakMath';
+import { buildTruePeakAudio, buildTruePeakSampleModel } from './truePeakMath';
 
 const props = defineProps<{ def: SonareDemoDef; active: boolean }>();
 
@@ -39,7 +39,7 @@ const nyq = computed<number>(() => Number(values.nyquist ?? 0.48));
 // under worst-case alignment. cos(theta) = sample peak / true peak.
 const theta = computed<number>(() => (Math.PI / 2) * nyq.value);
 const peakModel = computed(() => buildTruePeakSampleModel(sampleDb.value, nyq.value));
-const sampleLin = computed<number>(() => peakModel.value.samplePeak);
+const sampleLin = computed<number>(() => 10 ** (sampleDb.value / 20));
 const trueLin = computed<number>(() => peakModel.value.continuousPeak);
 const trueDb = computed<number>(() => peakModel.value.truePeakDb);
 
@@ -50,15 +50,15 @@ const stateLabel = computed(() => {
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
   if (status.value === 'ready') {
     const sign = trueDb.value >= 0 ? '+' : '';
-    return `TP ${sign}${trueDb.value.toFixed(1)} dBTP`;
+    return `ANALYTIC TP ${sign}${trueDb.value.toFixed(1)} dBTP`;
   }
   return 'IDLE';
 });
 
 // ---- canvas copy, localized -------------------------------------------------
 const RECONSTRUCTED_WAVEFORM_LABEL: I18nText = {
-  en: 'RECONSTRUCTED WAVEFORM',
-  ja: '再構成後の波形',
+  en: 'ANALYTIC RECONSTRUCTION',
+  ja: '解析的な再構成',
 };
 const reconstructedWaveformLabel = computed<string>(() =>
   localized(RECONSTRUCTED_WAVEFORM_LABEL, loc.value),
@@ -136,18 +136,12 @@ function paint(): void {
   ctx.textBaseline = 'bottom';
   ctx.fillText('0 dBFS', padX, yAt(1) - 2);
 
-  // Enumerate the exact finite sample column before drawing guides. At some
-  // frequencies a sample farther from the centre lands closer to another peak.
+  // The selected sample peak is measured over the full finite audition buffer.
+  // The visible window can omit that sample at frequencies whose phase grid
+  // reaches a larger crest later in the buffer.
   const samplePhaseStep = 2 * th;
-  let sampleMax = Number.NEGATIVE_INFINITY;
-  let sampleMin = Number.POSITIVE_INFINITY;
-  for (let k = -200; k <= 200; k++) {
-    const ph = (k + 0.5) * samplePhaseStep;
-    if (Math.abs(ph) > halfSpan) continue;
-    const value = amp * Math.cos(ph);
-    sampleMax = Math.max(sampleMax, value);
-    sampleMin = Math.min(sampleMin, value);
-  }
+  const sampleMax = sampleLin.value;
+  const sampleMin = -sampleMax;
 
   // Continuous reconstructed waveform: amp * cos(phase). Highlight the overshoot
   // segments (where the curve rises above the highest stored sample).
@@ -240,7 +234,7 @@ function paint(): void {
   ctx.textAlign = 'right';
   ctx.fillStyle = clips.value ? '#fca5a5' : 'rgba(186, 230, 224, 0.7)';
   ctx.fillText(
-    `SAMPLE ${sampleDb.value.toFixed(1)} dBFS · TRUE ${trueDb.value >= 0 ? '+' : ''}${trueDb.value.toFixed(1)} dBTP`,
+    `SAMPLE ${sampleDb.value.toFixed(1)} dBFS · ANALYTIC TP ${trueDb.value >= 0 ? '+' : ''}${trueDb.value.toFixed(1)} dBTP`,
     padX + innerW,
     6,
   );
@@ -250,19 +244,10 @@ function paint(): void {
 /** Re-paint when the screen is first laid out and on every later resize. */
 useCanvasRedraw(canvas, paint);
 
-// ---- audition: play the tone at the stored sample level (safe, ≤ 0 dBFS) ----
+// ---- audition: play the same finite, sample-level-normalized tone as the visual ----
 function buildAudio(): { samples: Float32Array; sampleRate: number } {
-  const sampleRate = 44100;
-  const dur = 1.4;
-  const n = Math.round(sampleRate * dur);
-  const out = new Float32Array(n);
-  const f = 660; // a comfortable audible tone; the overshoot itself is inaudible
-  const a = sampleLin.value;
-  for (let i = 0; i < n; i++) {
-    const env = Math.min(1, i / 600, (n - i) / 600);
-    out[i] = a * env * Math.sin((2 * Math.PI * f * i) / sampleRate);
-  }
-  return { samples: out, sampleRate };
+  const audio = buildTruePeakAudio(sampleDb.value, nyq.value);
+  return { samples: audio.samples, sampleRate: audio.sampleRate };
 }
 async function onPlay(): Promise<void> {
   await play(props.def.id, buildAudio());

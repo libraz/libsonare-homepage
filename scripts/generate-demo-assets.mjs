@@ -8,9 +8,11 @@
  * libsonare itself (the same WASM module the browser uses runs under Node — see
  * `useSonareDemoAudio` for the browser side).
  *
- * Four reusable clips are produced:
+ * Reusable clips are produced:
  *  - `band`  — a short multi-part phrase (piano chords + bass + lead), broadband and
  *              musical; the workhorse for detector / ab-process / meters demos.
+ *  - `chord-turnaround` — four clean, separated triads (C–Am–F–G) for chord and
+ *              chromagram demos; no bass or lead notes obscure the chord tones.
  *  - `drum`  — a two-bar kit groove (kick / snare / hat) for beat, onset and metering.
  *  - `pad`   — a sustained warm-pad chord progression for EQ / filter / param-sweep.
  *  - `vowel` — a sustained source-filter "ah": a saw glottal source shaped by three
@@ -227,6 +229,42 @@ function buildBand(wasm) {
       { buf: bass, gain: 1.0 },
       { buf: lead, gain: 0.55 },
     ]),
+  );
+}
+
+/**
+ * `chord-turnaround`: four isolated triads, one per bar, for harmony demos.
+ *
+ * Every note belongs to the current chord. Each voicing ends one beat before
+ * the next bar, leaving the synth release in a short gap so the detector can place
+ * four stable segments without the band clip's lead and bass adding other pitch
+ * classes.
+ */
+function buildChordTurnaround(wasm) {
+  const totalSec = 4 * BAR * SEC_PER_PPQ;
+  const noteLen = BAR - Q;
+  const voicings = [
+    [60, 64, 67], // C
+    [57, 60, 64], // Am
+    [53, 57, 60], // F
+    [55, 59, 62], // G
+  ];
+  const notes = voicings.flatMap((midis, bar) =>
+    midis.map(
+      (midi) =>
+        /** @type {[number, number, number, number]} */
+        ([bar * BAR, bar === voicings.length - 1 ? BAR : noteLen, midi, 96]),
+    ),
+  );
+  return finalize(
+    renderPart(wasm, 'sine', notes, totalSec, {
+      ampAttackMs: 8,
+      ampDecayMs: 25,
+      ampSustain: 0.78,
+      ampReleaseMs: 20,
+    }),
+    0.78,
+    0.02,
   );
 }
 
@@ -658,6 +696,7 @@ function encodeWav(samples, sampleRate) {
 
 const CLIPS = {
   band: buildBand,
+  'chord-turnaround': buildChordTurnaround,
   drum: buildDrum,
   pad: buildPad,
   vowel: buildVowel,

@@ -12,6 +12,10 @@ export type ParamSweepProcessor =
   | 'griffin-lim'
   | 'tilt-eq';
 
+export type ParamSweepSide = 'original' | 'processed';
+
+export const PARAM_SWEEP_PEAK = 0.7;
+
 export interface ParamSweepAudio {
   samples: Float32Array;
   sampleRate: number;
@@ -29,6 +33,11 @@ export interface ParamSweepRenderOptions {
   iters: number;
   tilt: number;
   minRate: number;
+}
+
+export interface ParamSweepComparison {
+  original: ParamSweepAudio;
+  processed: ParamSweepAudio;
 }
 
 export interface ParamSweepProcessorWasm extends ParamSweepWasm {
@@ -138,5 +147,50 @@ export function renderParamSweepAudio(
   // passed the cached clip through untouched, since normalization is in place and
   // the clip cache is shared page-wide.
   const out = samples === baseClip.samples ? Float32Array.from(samples) : samples;
-  return { samples: peakNormalize(out, 0.7), sampleRate, fundHz, pivotHz, outDur, widthFrac };
+  return {
+    samples: peakNormalize(out, PARAM_SWEEP_PEAK),
+    sampleRate,
+    fundHz,
+    pivotHz,
+    outDur,
+    widthFrac,
+  };
+}
+
+/**
+ * Make the cached source safe for the page-wide clip cache and give it the same
+ * playback headroom as the processed render. The source stays untouched because
+ * peakNormalize works in place.
+ */
+export function renderParamSweepOriginal(
+  baseClip: { samples: Float32Array; sampleRate: number },
+  options: Pick<ParamSweepRenderOptions, 'processor' | 'minRate'>,
+): ParamSweepAudio {
+  const baseDur = baseClip.samples.length / baseClip.sampleRate;
+  const isPitchTracked =
+    options.processor === 'pitch-shift' || options.processor === 'formant-shift';
+  const isTilt = options.processor === 'tilt-eq';
+  const widthFrac =
+    options.processor === 'time-stretch' ? Math.max(0.04, Math.min(1, options.minRate)) : 1;
+
+  return {
+    samples: peakNormalize(Float32Array.from(baseClip.samples), PARAM_SWEEP_PEAK),
+    sampleRate: baseClip.sampleRate,
+    fundHz: isPitchTracked ? PARAM_SWEEP_BASE_F0 : 0,
+    pivotHz: isTilt ? PARAM_SWEEP_TILT_PIVOT_HZ : 0,
+    outDur: baseDur,
+    widthFrac,
+  };
+}
+
+/** Render both A/B sides once; switching sides never invokes the transform again. */
+export function renderParamSweepComparison(
+  wasm: ParamSweepProcessorWasm,
+  baseClip: { samples: Float32Array; sampleRate: number },
+  options: ParamSweepRenderOptions,
+): ParamSweepComparison {
+  return {
+    original: renderParamSweepOriginal(baseClip, options),
+    processed: renderParamSweepAudio(wasm, baseClip, options),
+  };
 }

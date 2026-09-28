@@ -309,14 +309,14 @@ export const instrumentsDemos: SonareDemoDef[] = [
       ja: 'コンピング — 3 つのテイクから 1 つの演奏を',
     },
     caption: {
-      en: "Three takes of the same phrase, each strong somewhere: Take A is warm and even, Take B is bright and lands its accents in the opening segment but fluffs a note in segment 2, Take C builds to an expressive finish. Pick a take for each of the four segments and the comp lane assembles them with short crossfades at the seams — the recipe for a performance that never happened in one pass. Press play to audition your comp; route around Take B's wrong note and keep its bright opening. The takes are never altered — you are only choosing which one plays when.",
-      ja: '同じフレーズの 3 テイクは、それぞれ得意な場所が違います。テイク A は温かく均一、テイク B は明るく最初の区間にアクセントが決まりますが第 2 区間で音を外し、テイク C は表情豊かな終わりへ向かって盛り上がります。4 つの区間それぞれにテイクを選ぶと、コンプレーンが継ぎ目に短いクロスフェードを入れて組み上げます — 一度の演奏では実現しなかった「いいとこ取り」のレシピです。再生して自分のコンプを試聴しましょう。テイク B の外した音を避けつつ、その明るい出だしは活かせます。テイク自体は一切変更されません — どれをいつ鳴らすかを選んでいるだけです。',
+      en: 'Compare the three takes, then choose one for each note-pair segment. Take B is bright but plays G#5 instead of A5 at the start of segment 3. The default B/A/A/C comp keeps its opening and uses Take A for that note. Short crossfades join the selected audio.',
+      ja: '3 つのテイクを聴き比べ、音符 2 つずつの区間に使うテイクを選びます。テイク B は明るい音ですが、区間 3 の最初で A5 の代わりに G♯5 を鳴らします。初期設定の B/A/A/C は出だしに B、外した音には A を使います。継ぎ目は短くクロスフェードします。',
     },
     params: [
       {
         key: 'seg1',
         kind: 'select',
-        default: 'a',
+        default: 'b',
         label: { en: 'Segment 1', ja: '区間 1' },
         options: [
           { value: 'a', label: { en: 'Take A', ja: 'テイク A' } },
@@ -327,7 +327,7 @@ export const instrumentsDemos: SonareDemoDef[] = [
       {
         key: 'seg2',
         kind: 'select',
-        default: 'b',
+        default: 'a',
         label: { en: 'Segment 2', ja: '区間 2' },
         options: [
           { value: 'a', label: { en: 'Take A', ja: 'テイク A' } },

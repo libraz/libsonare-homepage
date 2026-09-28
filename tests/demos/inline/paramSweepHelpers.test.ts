@@ -7,6 +7,7 @@ import {
 import {
   type ParamSweepProcessorWasm,
   renderParamSweepAudio,
+  renderParamSweepComparison,
 } from '@/demos/inline/archetypes/paramSweepProcessing';
 
 function fakeWasm(): ParamSweepProcessorWasm {
@@ -26,6 +27,10 @@ function fakeWasm(): ParamSweepProcessorWasm {
     melToAudio: vi.fn(() => new Float32Array([0.1, -0.2, 0.3])),
     pitchShift: vi.fn((samples: Float32Array) => Float32Array.from(samples)),
   };
+}
+
+function peakOf(samples: Float32Array): number {
+  return Math.max(...Array.from(samples, (sample) => Math.abs(sample)));
 }
 
 const baseClip = {
@@ -88,6 +93,50 @@ describe('param sweep helpers', () => {
 
     expect(Math.max(...Array.from(audio.samples, Math.abs))).toBeCloseTo(0.7);
     expect(Array.from(baseClip.samples)).toEqual(before);
+  });
+
+  it('caches original and processed sides at the same peak without rerunning the transform', () => {
+    const wasm = fakeWasm();
+    const before = Array.from(baseClip.samples);
+
+    const comparison = renderParamSweepComparison(wasm, baseClip, {
+      processor: 'pitch-shift',
+      semitones: 12,
+      rate: 1,
+      formant: 1,
+      iters: 8,
+      tilt: 0,
+      minRate: 0.5,
+    });
+
+    expect(wasm.pitchShift).toHaveBeenCalledTimes(1);
+    expect(comparison.original.samples).not.toBe(baseClip.samples);
+    expect(comparison.processed.samples).not.toBe(baseClip.samples);
+    expect(comparison.original.samples).not.toBe(comparison.processed.samples);
+    expect(peakOf(comparison.original.samples)).toBeCloseTo(0.7);
+    expect(peakOf(comparison.processed.samples)).toBeCloseTo(0.7);
+    expect(comparison.original.fundHz).toBeCloseTo(PARAM_SWEEP_BASE_F0);
+    expect(comparison.processed.fundHz).toBeCloseTo(PARAM_SWEEP_BASE_F0 * 2);
+    expect(Array.from(baseClip.samples)).toEqual(before);
+  });
+
+  it('keeps original time metadata fixed while processed duration follows the stretch', () => {
+    const comparison = renderParamSweepComparison(fakeWasm(), baseClip, {
+      processor: 'time-stretch',
+      semitones: 0,
+      rate: 0.5,
+      formant: 1,
+      iters: 8,
+      tilt: 0,
+      minRate: 0.5,
+    });
+
+    expect(comparison.original.outDur).toBeCloseTo(baseClip.samples.length / baseClip.sampleRate);
+    expect(comparison.processed.outDur).toBeCloseTo(
+      (baseClip.samples.length * 2) / baseClip.sampleRate,
+    );
+    expect(comparison.original.widthFrac).toBeCloseTo(0.5);
+    expect(comparison.processed.widthFrac).toBeCloseTo(1);
   });
 
   it('reports stretched duration and normalized width for time-stretch', () => {

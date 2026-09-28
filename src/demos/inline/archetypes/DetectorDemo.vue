@@ -68,6 +68,8 @@ const meterSearched = ref(true);
 // state pill and directly on the canvas panel, so it can't drift between them.
 const TOO_FEW_BEATS: I18nText = { en: 'TOO FEW BEATS', ja: '拍不足' };
 const tooFewBeatsText = computed(() => localized(TOO_FEW_BEATS, loc.value));
+const DOWNBEATS: I18nText = { en: 'DOWNBEATS', ja: 'ダウンビート' };
+const downbeatsText = computed(() => localized(DOWNBEATS, loc.value));
 
 const stateLabel = computed(() => {
   if (status.value === 'loading') return 'ANALYZING';
@@ -75,7 +77,7 @@ const stateLabel = computed(() => {
   if (isPlaying.value) return `▸ ${Math.round(progress.value * 100)}%`;
   if (status.value !== 'ready') return 'IDLE';
   if (view.value === 'beat') return bpm.value > 0 ? `≈ ${Math.round(bpm.value)} BPM` : 'BEATS';
-  if (view.value === 'downbeat') return `${markerCount.value} BARS`;
+  if (view.value === 'downbeat') return `${markerCount.value} ${downbeatsText.value}`;
   if (view.value === 'meter-estimate') {
     if (!meterSearched.value) return tooFewBeatsText.value;
     const top = meterCandidates.value[0];

@@ -216,8 +216,7 @@ export const masteringDemos: SonareDemoDef[] = [
   {
     id: 'mono-fold',
     archetype: 'mono-fold',
-    // Source is unused for `mono-fold` (the centre tone is synthesized in-browser);
-    // a matching tone keeps the intent readable.
+    // Source is unused for `mono-fold`; the phase-shifted pair is synthesized in-browser.
     source: { kind: 'generate', signal: 'sine', freq: 220 },
     viz: 'waveform',
     title: {
@@ -225,19 +224,29 @@ export const masteringDemos: SonareDemoDef[] = [
       ja: 'モノフォールド — ステレオ幅が打ち消されるとき',
     },
     caption: {
-      en: 'Phones, club PAs, and many broadcast paths sum left and right to mono. Here the left channel is a steady tone and the right is the same tone, swept from in-phase toward anti-phase. The mono sum averages the two, so as the right channel turns negative the sum shrinks — at full anti-phase it cancels to silence and the correlation meter reads −1. Press play to hear the mono sum: the more anti-phase the content, the quieter the fold-down. This is why width built from opposite-polarity content can vanish on a mono system.',
-      ja: 'スマホ、クラブの PA、多くの放送経路は左右をモノに合算します。ここでは左チャンネルが一定のトーン、右チャンネルが同じトーンで、同相から逆相へとスイープします。モノ合算は両者を平均するため、右チャンネルが負へ向かうほど合算は小さくなり、完全な逆相では無音まで打ち消されて相関メーターは −1 を指します。再生するとモノ合算が聴けます — 逆相成分が多いほどフォールドダウンは小さくなります。逆相の成分で作った幅がモノ環境で消えてしまうのは、このためです。',
+      en: 'Left and right are the same sine wave with a phase offset from 0° to 180°. The mono fold averages them: at 90° it is −3.01 dB relative to the left channel, and at 180° it cancels. Correlation follows the same shift from +1 through 0 to −1. Choose the left reference or the mono fold to hear the level change.',
+      ja: '左と右に同じサイン波を置き、位相差を 0° から 180° まで動かします。モノフォールドは左右の平均です。90° では左チャンネル比 −3.01 dB、180° では打ち消し、相関は +1、0、−1 と連続して変化します。左の基準音とモノフォールドを切り替えて、レベル差を聴き比べられます。',
     },
     params: [
       {
-        key: 'antiphase',
+        key: 'phase',
         kind: 'range',
-        default: 70,
+        default: 90,
         min: 0,
-        max: 100,
+        max: 180,
         step: 1,
-        unit: '%',
-        label: { en: 'Anti-phase', ja: '逆相' },
+        unit: '°',
+        label: { en: 'Phase offset', ja: '位相差' },
+      },
+      {
+        key: 'audition',
+        kind: 'select',
+        default: 'mono',
+        label: { en: 'Audition', ja: '試聴' },
+        options: [
+          { value: 'left', label: { en: 'L reference', ja: 'L 基準' } },
+          { value: 'mono', label: { en: 'Mono fold', ja: 'モノフォールド' } },
+        ],
       },
     ],
   },

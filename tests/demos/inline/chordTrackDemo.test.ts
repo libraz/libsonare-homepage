@@ -82,8 +82,9 @@ import { useSonareDemoAudio } from '@/demos/inline/useSonareDemoAudio';
 import * as wasm from '@/wasm/index.js';
 
 const DEF = getDemo('chord-track');
-if (!DEF || DEF.source.kind !== 'clip') throw new Error('chord-track not registered on a clip');
+if (DEF?.source.kind !== 'clip') throw new Error('chord-track not registered on a clip');
 const CLIP = DEF.source.clip;
+const RATES = [32_000, 44_100, 48_000] as const;
 
 function mountDemo(active = false) {
   return mount(ChordTrackDemo, { props: { def: DEF, active } });
@@ -113,47 +114,53 @@ beforeEach(() => {
 });
 
 describe('chord recognition on the demo clip', () => {
-  it('returns a progression, not one segment, and triads only strips the extensions', async () => {
+  it('keeps both STFT vocabularies on the intended progression at browser rates', async () => {
     const { samples, sampleRate } = await useSonareDemoAudio().loadClip(CLIP);
-    const full = wasm.detectChords(samples, sampleRate, { useTriadsOnly: false, minDuration: 0.3 });
-    const triads = wasm.detectChords(samples, sampleRate, {
-      useTriadsOnly: true,
-      minDuration: 0.3,
-    });
+    expect(CLIP).toBe('chord-turnaround');
+    expect(sampleRate).toBe(32_000);
+    expect(samples.length).toBe(32_000 * 8);
+    expect(samples.some((sample) => Math.abs(sample) > 1e-4)).toBe(true);
 
-    expect(full.chords.length).toBeGreaterThan(1);
-    expect(triads.chords.length).toBeGreaterThan(1);
-    // Segments tile the clip in order.
-    for (let i = 1; i < full.chords.length; i++) {
-      expect(full.chords[i].start).toBeGreaterThanOrEqual(full.chords[i - 1].end - 1e-6);
+    for (const rate of RATES) {
+      const rateSamples = rate === sampleRate ? samples : wasm.resample(samples, sampleRate, rate);
+      const full = wasm.detectChords(rateSamples, rate, {
+        useTriadsOnly: false,
+        minDuration: 0.3,
+      });
+      const triads = wasm.detectChords(rateSamples, rate, {
+        useTriadsOnly: true,
+        minDuration: 0.3,
+      });
+
+      expect(names(full)).toEqual(['C', 'Am', 'F', 'G']);
+      expect(names(triads)).toEqual(['C', 'Am', 'F', 'G']);
+      for (const [index, expected] of [0, 2, 4, 6].entries()) {
+        expect(full.chords[index].start).toBeCloseTo(expected, 0);
+        expect(triads.chords[index].start).toBeCloseTo(expected, 0);
+      }
     }
-
-    // The full set reaches beyond the four triads on this clip; the triad set never does.
-    const triadMax = wasm.ChordQuality.Augmented;
-    expect(full.chords.some((c) => c.quality > triadMax)).toBe(true);
-    for (const c of triads.chords) expect(c.quality).toBeLessThanOrEqual(triadMax);
-
-    // The page's claim: triads only reads the C–Am–F–G turnaround, and the full set
-    // hears the F bar as an A-minor extension instead.
-    expect(names(triads)).toEqual(['C', 'Am', 'F', 'G']);
-    expect(names(full)).not.toContain('F');
-    expect(names(full).some((n) => n.startsWith('Am'))).toBe(true);
   }, 30_000);
 
-  it('merges more segments as the minimum duration rises', async () => {
+  it('merges short full-vocabulary readings at the default minimum duration', async () => {
     const { samples, sampleRate } = await useSonareDemoAudio().loadClip(CLIP);
-    const counts = [0, 0.3, 1].map(
-      (minDuration) => wasm.detectChords(samples, sampleRate, { minDuration }).chords.length,
-    );
-    expect(counts[0]).toBeGreaterThan(counts[1]);
-    expect(counts[1]).toBeGreaterThan(counts[2]);
-    // The shortest bar in the triad reading is F; a half-second floor removes it.
-    const merged = wasm.detectChords(samples, sampleRate, {
-      useTriadsOnly: true,
-      minDuration: 0.5,
-    });
-    expect(names(merged)).not.toContain('F');
-    expect(merged.chords.length).toBeGreaterThan(1);
+    const expected = new Set(['C', 'Am', 'F', 'G']);
+    for (const rate of RATES) {
+      const rateSamples = rate === sampleRate ? samples : wasm.resample(samples, sampleRate, rate);
+      const raw = wasm.detectChords(rateSamples, rate, {
+        useTriadsOnly: false,
+        minDuration: 0,
+      });
+      const merged = wasm.detectChords(rateSamples, rate, {
+        useTriadsOnly: false,
+        minDuration: 0.3,
+      });
+
+      expect(raw.chords.length).toBeGreaterThan(merged.chords.length);
+      expect(names(merged)).toEqual([...expected]);
+      expect(
+        raw.chords.some((chord) => chord.end - chord.start < 0.3 && !expected.has(chord.name)),
+      ).toBe(true);
+    }
   }, 30_000);
 });
 
@@ -181,7 +188,10 @@ describe('ChordTrackDemo', () => {
       expect(wrapper.find('figure.td--error').exists()).toBe(false);
       expect(wrapper.find('figure.td--ready').exists()).toBe(true);
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][2]).toEqual({ useTriadsOnly: false, minDuration: 0.3 });
+      expect(spy.mock.calls[0][2]).toEqual({
+        useTriadsOnly: false,
+        minDuration: 0.3,
+      });
       expect(wrapper.find('.td__state').text()).toMatch(/^\d+ CHORDS$/);
     } finally {
       spy.mockRestore();

@@ -8,8 +8,8 @@
  * quality, and faded by its confidence; the boundaries drop through the waveform as
  * markers that light up when the playhead crosses them. The template vocabulary and
  * the minimum segment duration are the two controls because they are the two that
- * move the answer on the shipped clip: the full set hears extensions where the triad
- * set hears plain chords, and a longer minimum merges short spans into a neighbour.
+ * move the answer on the shipped clip: the default STFT pass reads the four triads
+ * cleanly, while a shorter minimum preserves brief extension readings near changes.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { hexA, peakEnvelope } from '@/demos/inline/audio/processors';
