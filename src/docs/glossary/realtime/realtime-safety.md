@@ -33,7 +33,7 @@ libsonare's realtime path follows the callback rules in a few concrete ways:
 
 | Technique | Why it matters |
 |-----------|----------------|
-| Pre-allocated buffers | No allocation happens per audio block |
+| Pre-allocated buffers for the configured block size | Ordinary blocks avoid allocator work after setup |
 | Lock-free parameter updates | UI changes do not stall the audio thread |
 | Parameter smoothing | Control changes do not click |
 | Denormal guards | Tiny floating-point tail values do not spike CPU |
@@ -53,7 +53,7 @@ The intended pattern is:
 The site runs this path SAB-free: it does not require `SharedArrayBuffer`, so it does not need special COOP/COEP headers.
 
 ::: details How libsonare implements realtime safety
-The mixer strips, buses, `RealtimeEngine`, and `StreamAnalyzer` share a real-time-safe core: pre-allocated buffers (including `Mixer.createRealtimeBuffer()` for per-block reuse), lock-free parameter changes, denormal guards, parameter smoothers for click-free moves, and plugin-delay compensation so parallel paths stay aligned. State that must cross threads is moved through lock-free channels and surfaced as telemetry rather than read directly. The same DSP therefore runs in offline rendering and inside a browser AudioWorklet without code changes.
+The mixer strips, buses, and `RealtimeEngine` use pre-allocated buffers (including `Mixer.createRealtimeBuffer()` for per-block reuse), lock-free parameter changes, denormal guards, parameter smoothers for click-free moves, and plugin-delay compensation so parallel paths stay aligned. `StreamAnalyzer` also pre-allocates its FFT, feature, and pending-output storage for ordinary bounded blocks, but `process()` synchronously computes the FFT, enabled features, and progressive estimates. Larger input chunks can grow its sanitization, resampling, or overlap buffers. For a hard realtime callback, construct and configure it outside the callback, feed it stable blocks from a streaming source, and drain frames on the consumer side. State that must cross threads is moved through lock-free channels and surfaced as telemetry rather than read directly. The same DSP implementation can run offline or in an AudioWorklet when its configured block work fits the callback deadline.
 :::
 
 Related: [Realtime and Streaming](../../realtime-streaming.md), [Streaming Analysis](./streaming-analysis.md), [Realtime Engine](./realtime-engine.md), [Browser Local Processing](../concepts/browser-local-processing.md)

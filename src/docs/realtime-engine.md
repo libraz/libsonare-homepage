@@ -235,7 +235,10 @@ Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan
 | Goal | Raw `RealtimeEngine` | `SonareEngine` worklet API |
 |------|----------------------|-------------------------------|
 | Fold a lane into a group bus (or pass `busId 0` to restore it to the master mix) | lane `outputBusId` in `setTrackLanes(...)` (`0` or absent = master mix) | `setTrackOutputBus(target, busId)` (`busId 0` restores the master mix) |
+| Fold a bus into another bus, or send it a copy | bus `outputBusId` and `sends` in `setTrackBuses(...)` (`0`/absent output = master mix) | same fields on `setTrackBuses(...)` |
 | Key one lane's insert off another lane (ducking) | `setLaneSidechain(trackId, insertIndex, sourceTrackId)` (pass `0` to clear) | `setLaneSidechain(target, insertIndex, sourceTarget)` (pass `null` to clear) |
+| Key a bus insert off a track or another bus | `setBusSidechain(busId, insertIndex, sourceKind, sourceId)` (`sourceId 0` clears) | same |
+| Key a master insert off a track or a bus | `setMasterSidechain(insertIndex, sourceKind, sourceId)` | same |
 | Pan a lane | `setTrackStripPan(trackId, pan)` | `setTrackStripPan(target, pan)` |
 | Pan law / pan mode | `setTrackStripPanLaw(...)`, `setTrackStripPanMode(...)` | same names |
 | Independent L/R (dual) pan | `setTrackStripDualPan(trackId, left, right)` | `setTrackStripDualPan(target, left, right)` |
@@ -244,6 +247,21 @@ Beyond the lane/send graph, a few realtime-safe controls reshape routing and pan
 | Bypass a bus insert | `setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass?)` | same |
 
 `setTrackStripInsertParamByName(...)` is the realtime automation entry point — it addresses a parameter by the JSON key reported by [`masteringInsertParamInfo(name)`](./mastering-processors.md), so a host can change an insert's automatable parameters live without rebuilding the strip JSON. On the worklet API, `target` is a track id *or name*.
+
+`sourceKind` for a bus or master sidechain key is `'track'` (a lane's post-strip signal, before its lane fader) or `'bus'` (a bus's processed signal, before its own `gainDb`, folded to stereo when it is wider); Python takes the same names, or the matching `0`/`1` ordinal, on `set_bus_sidechain` / `set_master_sidechain`. A master `insertIndex` counts its pre-fader inserts first, then its post-fader ones, the same order every other master insert setter uses. Both keys share the lane sidechain binding table (32 entries) and are control-thread-only, like `setTrackBuses` itself.
+
+```typescript
+// Route bus 2's output into bus 1, with a pre-fader send to the same bus,
+// then duck bus 1's compressor off bus 2's own signal.
+engine.setTrackBuses([
+  { busId: 1, gainDb: 0 },
+  { busId: 2, gainDb: -6, outputBusId: 1, sends: [{ busId: 1, levelDb: -12, sendTiming: 'preFader' }] },
+]);
+engine.setBusSidechain(1, 0, 'bus', 2);   // insert 0 on bus 1, keyed from bus 2
+engine.setMasterSidechain(0, 'track', 1); // insert 0 on the master, keyed from track 1
+```
+
+A bus's output, a send, or a sidechain key that lands on a narrower destination — a smaller bus, the master at its rendered width, or a stereo key tap — is folded through the [ITU-R BS.775 downmix the surround section below uses](#surround-group-buses-and-wide-meters); a wider destination receives the source planes on the same indices. Configuring a bus list is validated as one dependency graph over every output, send, and bus-sourced key: a cycle, a reference to an undeclared bus, a bus routed to itself, or removing a bus a lane still targets is refused and leaves the previous configuration in place.
 
 ## Parameter automation
 
@@ -386,7 +404,9 @@ A gap in one clip that lines up with a `ClipPageUnderrun` record is the host sup
 
 ## Surround group buses and wide meters
 
-A bus declared with a surround `channelLayout` (`SonareChannelLayout`: `0` mono, `1` stereo, `2` 5.1, `3` 7.1) becomes a **surround group bus**: it sums into the master plane-by-plane and exposes per-plane meters. A lane routed to it is folded to a point source, then placed from its strip [`surroundPan`](./mixing.md#surround-and-multichannel) values. `azimuth`, `divergence`, and `lfe` are active; `elevation` and `distance` are reserved. The standalone `Mixer` remains stereo, so this DSP is specific to the realtime engine's wide-bus render path.
+A bus declared with a surround `channelLayout` (`SonareChannelLayout`: `0` mono, `1` stereo, `2` 5.1, `3` 7.1) becomes a **surround group bus**: it sums into the master plane-by-plane and exposes per-plane meters. A lane routed to it is folded to a point source, then placed from its strip [`surroundPan`](./mixing.md#surround-and-multichannel) values. `azimuth`, `divergence`, and `lfe` are active; `elevation` and `distance` are reserved. The [mixer graph and project bounce](./project-bounce.md#bounce-options) render a surround bus at the same width and follow the same rules; only the standalone `Mixer` (`processStereo`) stays stereo-only.
+
+A strip fed by a surround bus — the return strip on the far side of a bus output or send — runs at the bus's own width rather than folding it to stereo and re-scattering it: its fader, inserts and sends all act on every plane, and only a strip with a stereo (or narrower) main output keeps its pan and width stages. A destination narrower than a bus's width — another bus, the master at its rendered channel count, or a sidechain key tap, which is always stereo — receives an [ITU-R BS.775](https://www.itu.int/rec/R-REC-BS.775) downmix rather than the front pair alone; a wider destination receives the source planes on their own indices unchanged. A surround bus, and the master when it is built wider than stereo, refuses a non-default pan or width for the same reason it already refused pan — there is no stereo image on a speaker bed to narrow, widen, or move.
 
 ```typescript
 engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]);  // a 5.1 group bus
@@ -441,6 +461,8 @@ engine.setMidiClips([{
 ```
 
 Looping clips repeat their event list every `loopLengthSamples`. To clear the schedule, call `setMidiClips([])`. If you work at the *project* level instead (notes in PPQ, takes, comping), build the arrangement with [Project Editing](./project-editing.md) and bounce it — this realtime schedule is the lower-level API a DAW front end compiles into.
+
+A clip carries `gain` (linear, default `1`), `fadeInSamples` and `fadeOutSamples` (default `0`, over the clip's full length rather than per loop repeat), applied to the destination's rendered instrument output rather than to the events themselves — note timing and velocity are unaffected. Per destination, the envelope follows the most recently started active clip. When that clip ends, an older clip that is still active takes over; only when none is active does the destination hold the most recently ended clip's end value (`0` after a fade-out, its `gain` otherwise). If clips start together, the larger clip id wins. Before any clip on a destination has started, the destination plays at unity. Several tracks routed to the same destination share this envelope — the selected clip governs the whole destination, not one clip per track. `fadeOutSamples` above `0` is rejected when `lengthSamples` is `0` (open-ended): a clip with no end has nothing to fade toward. A zero-initialized `SonareEngineMidiClipSchedule` on the C ABI is silent (`gain` reads `0`); the JS and Python bindings default an omitted `gain` to `1` instead.
 
 ## Sending a track to external MIDI gear
 

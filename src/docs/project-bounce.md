@@ -44,7 +44,7 @@ Project positions and clip lengths are expressed in **PPQ — quarter notes as a
 ::: tip Bounce reflects the full mixer, not raw clips
 Tracks do not sum naively. Each track renders through its channel strip — trim, EQ, inserts, fader, pan, sends, and buses — via the [scene mixer](./mixing.md). The bounce is the routed master, exactly what realtime playback would produce.
 
-`setClipGain` (and clip fades) shape **audio clips** only; they have no effect on MIDI clips during bounce. To set the volume of a MIDI-driven instrument, use the track fader / channel strip (the [mixer scene](./mixing.md)) — see [Project Editing](./project-editing.md#editing-clips).
+`setClipGain` and clip fades reach a MIDI clip too: they shape the bound instrument's rendered output at that clip's destination rather than the clip's own samples, which a MIDI clip has none of. See [Project Editing](./project-editing.md#editing-clips) for how the envelope resolves when several clips share a destination, and use the track fader / channel strip (the [mixer scene](./mixing.md)) to move a whole MIDI track's level instead.
 :::
 
 ## What You Will Learn
@@ -121,9 +121,13 @@ Every field of the options object is optional:
 |--------|---------|---------|
 | `totalFrames` | Render length in output frames | auto-derived (see below) |
 | `blockSize` | Render block size | engine default (128) |
-| `numChannels` | Output channel count | 2 |
+| `numChannels` | Output channel count: `1`, `2`, `6`, or `8` | 2 |
 | `sampleRate` | Output sample rate (Hz) | the project sample rate |
 | `instrumentLatencySamples` | Host-instrument PDC (plugin delay compensation) fed to the compiler | 0 |
+
+::: info `numChannels` cannot exceed the mixer scene's master layout
+The master bus processes the bounce at `numChannels` — a `"5.1"` master layout allows `6`, a `"7.1"` layout allows `8`, and a plain stereo master stays at `1` or `2` (see [Bus](./mixing-scene-json.md#bus)). A value outside `{1, 2, 6, 8}`, or wider than the master layout, is refused. Bouncing a surround scene at a narrower `numChannels` than its master carries folds the extra planes down through the same [ITU-R BS.775 downmix](./realtime-engine.md#surround-group-buses-and-wide-meters) the realtime engine applies, rather than dropping them.
+:::
 
 ::: info What is PDC / latency compensation?
 Some instruments and effects need a few samples of "lookahead" and so report their audio a little late. **PDC** (plugin delay compensation) tells the compiler how many samples late an instrument is, so the engine can shift it back into alignment and keep every track in time. If your instrument has no latency, leave this at `0`.

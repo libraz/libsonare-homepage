@@ -29,13 +29,13 @@ Air Band Amount works in the very high-frequency region: it lifts and re-excites
 
 It should be subtle. If the track starts to hiss or feel detached from the midrange, the amount is too high.
 
-::: warning It re-excites a present top end; it cannot synthesise a missing one
-Both halves of the stage are driven by the energy of the band they are meant to fill, so it is self-limiting. While the band's envelope sits below roughly −36 dBFS it produces no boost at all; even fully open the shelf tops out near +3 dB, and the synthesised component is held at least 6 dB below the band it was derived from. That is enough to open up a dull-but-present top end. If the upper octave was genuinely removed — a hard cliff from a lossy or generated render — the detector has nothing to follow, so use Exciter Amount instead: it builds new harmonics from the midrange and can reach above the cliff.
+::: warning It needs energy in its detector band
+Both halves of the stage are driven by energy above the shelf frequency, so they are self-limiting. Below roughly −36 dBFS of detector-band envelope, the dynamic shelf applies no boost; the harmonic path can still add a component if that band has energy. Even fully open, the shelf tops out near +3 dB, and the synthesised component is held at most half the detector band's RMS level. With the default 12 kHz shelf, a source cut off at 16 kHz may still have enough 12–16 kHz energy to drive newly generated harmonics above the cutoff. This cannot restore the original missing detail. If the detector band itself is absent, use Exciter Amount instead: it builds harmonics from lower frequencies.
 :::
 
 ## Adjustment Order
 
-Start with Tilt EQ when the whole master is too dark or too bright. Move to Exciter Amount only when the track has the right balance but still lacks presence. Use Air Band Amount last, especially when the upper octave feels closed off or the source has a generated 16 kHz edge.
+Start with Tilt EQ when the whole master is too dark or too bright. Move to Exciter Amount only when the track has the right balance but still lacks presence. Use Air Band Amount last when there is upper-band energy to work with; at a 16 kHz cutoff, audition it only if content remains above the shelf frequency.
 
 This order prevents a common mistake: using exciter or air-band processing to fix a broad tonal imbalance. If the low end is too heavy, adding air may create a louder, harsher master while the actual imbalance remains.
 

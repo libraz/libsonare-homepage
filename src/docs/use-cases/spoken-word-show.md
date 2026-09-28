@@ -13,7 +13,7 @@ By the end of this page you should be able to:
 
 - render host, guest, and a music bed through the built-in `commentaryDucking` mixer preset and read exactly what routes the duck;
 - edit the duck depth in the scene and tell a real change from a no-op;
-- master an episode with the `speech` preset instead of letting the assistant guess a music genre, and say why that matters here;
+- master an episode with the `speech` preset and see how the assistant explains that named choice;
 - read the loudness number that decides whether the episode is ready for a podcast platform.
 
 ## The whole job
@@ -44,7 +44,7 @@ sonare mix --scene scene.json \
   --input music-bed=music-bed.wav \
   -o show.wav --json
 
-# 4. Master for the platform with the explicit speech preset, not the genre-guessing assistant.
+# 4. Master for the platform with the explicit speech preset.
 sonare mastering show.wav \
   --preset speech \
   -o show-master.wav --json
@@ -52,7 +52,7 @@ sonare mastering show.wav \
 # 5. Confirm the loudness the episode actually landed at (a second render is
 #    unavoidable here: --report only comes from a run that also writes audio).
 sonare mastering show.wav \
-  --assistant --explain --target-platform podcast \
+  --assistant --preset speech --explain --target-platform podcast \
   -o show-assistant.wav --report show-report.json --json
 ```
 
@@ -167,7 +167,7 @@ sonare mix --scene scene.json \
 
 `strip_count` is 3 because this scene has no aux returns — every `--input` names a real strip, so there is no silent return to account for the way there is in the four-stem song scene. Each `--input` id must match a strip `id` in the scene; a strip nothing names is fed silence, which is the right behavior for a bed you deliberately withhold on some episodes but a silent surprise if you typo `music-bed` as `musicbed`.
 
-## Step 4 — Master with the speech preset, not the assistant's guess
+## Step 4 — Master with the speech preset
 
 ```bash
 sonare mastering show.wav --preset speech -o show-master.wav --json
@@ -177,17 +177,17 @@ sonare mastering show.wav --preset speech -o show-master.wav --json
 {"mode": "preset", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.95, "output": "show-master.wav", "preset": "speech", "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "loudness.optimize"]}
 ```
 
-Compare that against letting `--assistant` pick a chain on its own:
+The assistant can start from the same named preset and add its explanation to the report:
 
 ```bash
-sonare mastering show.wav --assistant --explain --target-platform podcast -o show-assistant.wav --report show-report.json --json
+sonare mastering show.wav --assistant --preset speech --explain --target-platform podcast -o show-assistant.wav --report show-report.json --json
 ```
 
 ```json
-{"mode": "assistant", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.29, "stages": ["eq.tilt", "dynamics.compressor", "stereo.imager", "loudness.optimize"], "explanation": ["base preset selected from top genre candidate: classical", "target loudness and ceiling applied from AssistantConfig"]}
+{"mode": "assistant", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.29, "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "stereo.monoMaker", "loudness.optimize"], "explanation": ["base preset: speech", "target loudness and ceiling applied from AssistantConfig", "speech preset enables de-esser and mono compatibility"]}
 ```
 
-Both land at the same -16 LUFS `--target-platform podcast` asks for. The difference is the chain that gets you there. The assistant profiled this ducked mixdown and picked `classical` as its base genre — a reasonable-looking guess on a signal that is mostly one instrument-shaped tone plus speech-shaped tone, and completely wrong for what the file actually is. Its chain has no denoise stage and no de-esser. The explicit `speech` preset has both, plus the same tilt, compressor, and loudness optimizer. For spoken word, name the preset — don't rely on the assistant to recognize speech from a genre classifier tuned on music.
+The standalone `speech` preset targets its built-in -16 LUFS. The assistant run starts from the same chain and gets -16 LUFS from `--target-platform podcast`; it also adds the speech preset's low-frequency mono-maker stage and includes the reasons in `explanation`. The assistant never infers a genre from the audio, so the `--preset speech` choice stays visible and reproducible.
 
 ::: danger `--target-platform` requires `--assistant`
 ```bash
@@ -195,25 +195,29 @@ sonare mastering show.wav --preset speech --target-platform podcast -o x.wav --j
 # Error: --target-platform requires --assistant
 # exit code 3
 ```
-The platform target is an assistant input, not a global option. A `--preset` run has no genre classification for it to modify, so the flag is rejected outright. Run the `--assistant --target-platform podcast` pass anyway, as step 5 does below, and read its `--report` for the loudness figure — you just don't use its *processing chain* if you master with `--preset speech`.
+The platform target is an assistant input, not a global option. A standalone `--preset` run cannot combine it, so the flag is rejected. Use `--assistant --preset speech --target-platform podcast` when you need both the named speech chain and the platform target.
 :::
 
-`--target-platform` accepts `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `club`, or `cd`. Full option list: `sonare mastering --help`. What each target actually asks for is in [Delivery Targets](../glossary/mastering/delivery-targets.md).
+`--target-platform` accepts `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `club`, or `cd`. `broadcast`, `podcast`, `club`, and `cd` supply their own loudness and ceiling when the corresponding values were not explicit; the other accepted names leave the current values unchanged. Full option list: `sonare mastering --help`. What each target actually asks for is in [Delivery Targets](../glossary/mastering/delivery-targets.md).
 
 ## Step 5 — Check whether your voices are safe in mono
 
 ```bash
-sonare mastering show.wav --assistant --target-platform podcast --speech-mono-amount 0 -o show-mono0.wav --json
-sonare mastering show.wav --assistant --target-platform podcast --speech-mono-amount 1 -o show-mono1.wav --json
-cmp show-mono0.wav show-mono1.wav   # identical — no output
+sonare mastering show.wav --assistant --preset speech --target-platform podcast --speech-mono-amount 0 -o show-mono0.wav --json
+sonare mastering show.wav --assistant --preset speech --target-platform podcast --speech-mono-amount 1 -o show-mono1.wav --json
+if cmp -s show-mono0.wav show-mono1.wav; then
+  echo "mono amount did not change these files"
+else
+  echo "mono amount changed the render"
+fi
 ```
 
-`--speech-mono-amount` (0–1, default 1) is documented as collapsing the low/center of speech-like material toward mono. On this fixture the two extremes produce byte-identical files. That is the assistant's genre classification again: `--speech-mono-amount` is an *assistant* option — it is rejected outright on a `--preset` run — and the assistant only applies its speech-specific mono handling to material it classifies as speech-like. Since it classified this episode as `classical` (see step 4), the flag has nothing to act on here, regardless of value.
+`--speech-mono-amount` (0–1, default 1) controls how much of the `speech` preset's side signal below its 120 Hz mono-maker crossover is collapsed toward mono. The assistant applies it because `--preset speech` selects that preset; it does not depend on audio genre classification. A value of `0` leaves that low-frequency side signal unchanged, while `1` removes that side component through the crossover; higher frequencies retain their side signal. The audible and byte-level difference depends on how much low-frequency side information the episode carries.
 
-The reasoning behind wanting the collapse at all still applies to a real show: a phone speaker, a Bluetooth earbud in mono-call mode, and a podcast app's "boost voice" setting all sum left and right into one channel before the listener hears anything. `host`'s `pan: 0` and `guest`'s `pan: 0.1` in this preset are already close to center for exactly that reason — a small offset separates two speakers without risking phase cancellation when a device folds the pair down. If your real recordings carry a wider stereo image on the voices than this preset's fixed pans — a stereo room mic on the guest, for instance — that is the case `--speech-mono-amount` exists for, and it is worth confirming on your own material that the assistant actually recognizes it as speech before relying on the flag to narrow it.
+The reason to test the low-frequency fold still applies to a real show: a phone speaker, a Bluetooth earbud in mono-call mode, and a podcast app's "boost voice" setting all sum left and right before playback. `host`'s `pan: 0` and `guest`'s `pan: 0.1` in this preset are already close to center, so the amount matters most when the recordings carry wider low-frequency side information, such as a stereo room mic on the guest.
 
-::: tip Verify the classification before trusting a speech-only flag
-Any assistant option scoped to "speech-like material" is only as good as the classifier that decides what counts. Run with `--explain` and check the `explanation` field's stated genre before assuming a speech-specific flag fired.
+::: tip Verify the preset before trusting a speech-only flag
+Run with `--explain` and check for `speech preset enables de-esser and mono compatibility` in `explanation`. That confirms the assistant started from the speech preset and applied the speech-specific stage.
 :::
 
 ## Step 6 — Read the loudness that matters

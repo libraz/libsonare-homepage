@@ -41,12 +41,12 @@ Python では `annotate_keys` が `(start_ppq, end_ppq, tonic_pc, mode)` タプ�
 
 - **ピッチクラス**（`tonicPc`・`rootPc`）: `0..11` で、C = 0、C#/Db = 1、… B = 11。`255` は不明を表します。
 - **キーモード**（`mode`）: `1` = major、`2` = minor。
-- **コードクオリティ**（`quality`）: `1` = major、`2` = minor、`3` = diminished、`4` = augmented（全リストは[コード認識](./glossary/analysis/chord-recognition.md)を参照）。
+- **コードクオリティ**（`quality`）: `1` = major、`2` = minor、`3` = diminished、`4` = augmented、`5` = dominant、`6` = half-diminished、`7` = suspended。`extensions` で同じ系統内の種類を区別します（検出側のクオリティは[コード認識](./glossary/analysis/chord-recognition.md)を参照）。
 
 つまり `{ tonicPc: 0, mode: 1 }` は C メジャー、`{ rootPc: 7, quality: 1 }` は G メジャーコードです。
 
 ::: warning これらは解析 API の列挙体ではなくアレンジ側の序数
-ここでの `mode` と `quality` の数値は**1 始まりのアレンジ側の序数**（major = 1）で、`detectKey` / `detectChords` が返す**0 始まり**の `Mode`／`ChordQuality` 列挙体（major = 0、minor = 1、diminished = 2、augmented = 3）とは別物です。両者は 1 つずれており、そのまま渡せません。解析 API の `ChordQuality.Minor`（= 1）を `annotateChords` の `quality` へ直接渡すと、ここでは**メジャー**として扱われてしまいます。注釈へ書き込む前に解析 API の結果を変換してください（たとえば `quality = analysisQuality + 1`）。
+ここでの `mode` と `quality` の数値は**アレンジ側の序数**で、`detectKey` / `detectChords` が返す**0 始まり**の `Mode`／`ChordQuality` 列挙体とは別物です。キーモードと基本的な 4 種類の三和音は 1 つずれます（解析側の major = 0、こちらでは 1）。解析 API の `ChordQuality.Minor`（= 1）を `annotateChords` の `quality` へ直接渡すと、ここでは**メジャー**として扱われます。`+1` で変換できるのはその 4 種類の三和音だけです。拡張コードは系統と `extensions` を明示的に対応づけてください。たとえば Dominant7 → `{ quality: 5, extensions: [7] }`、HalfDim7 → `{ quality: 6, extensions: [7] }`、Sus4 → `{ quality: 7, extensions: [4] }` です。
 :::
 
 ## アシストサイドカー
@@ -430,4 +430,3 @@ const audio = project.bounce({ numChannels: 2 });
 ```
 
 アレンジがエラーなくコンパイルできたら、次は MIDI トラックを鳴らすことも含めて音声へ変換する番です。[プロジェクトバウンス & レンダリング](./project-bounce.md)へ進んでください。
-

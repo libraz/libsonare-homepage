@@ -163,7 +163,11 @@ audio, and the flag reads two ways:
 - **`--synth <preset>`** pins every destination to one fixed NativeSynth preset.
   Run `sonare project synth-presets` to list the names.
 
-`project bounce` writes the channel count you ask for with `--channels`.
+`project bounce` writes the channel count you ask for with `--channels`. Its
+positive output widths are `1`, `2`, `6`, or `8`; omitting the option or passing
+`0` or a negative value selects the default two channels. A `"5.1"` master
+allows up to six channels and a `"7.1"` master up to eight. Mono and stereo
+masters, and scenes without a master, allow up to two.
 
 ```bash
 # Print the project ABI version
@@ -188,6 +192,9 @@ sonare project synth-presets
 # Render a project to a WAV at the requested channel count
 sonare project bounce --in project.json --sample-rate 48000 --channels 2 -o bounce.wav
 
+# Render a 5.1 master to a six-channel WAV
+sonare project bounce --in project-51.json --sample-rate 48000 --channels 6 -o bounce-51.wav
+
 # Render the MIDI tracks through the built-in synth, following GM programs
 sonare project bounce --in project.json --synth -o gm-bounce.wav
 
@@ -202,7 +209,7 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | Validate a project JSON; optionally write canonicalized JSON | `--in`, `-o`, `--strict` (any diagnostic fails) |
 | `sonare project compile` | Compile-check a project JSON; prints diagnostics, exits non-zero on errors (writes no file) | `--in`, `--json` |
 | `sonare project synth-presets` | List the NativeSynth preset names `--synth` accepts | `--json` |
-| `sonare project bounce` | Render a project to a WAV at the requested channel count | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
+| `sonare project bounce` | Render a project to a WAV; positive `--channels` widths are `1`, `2`, `6`, or `8` (default `2`), capped by the master layout (mono, stereo, or no master allows up to two) | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
 | `sonare project export-smf` | Export the project to a Standard MIDI File | `--in`, `-o` |
 | `sonare project import-smf` | Build a project from a Standard MIDI File | `--smf`, `-o` |
 | `sonare project export-midi2` | Export the project to a MIDI 2.0 Clip File | `--in`, `-o` |
@@ -241,8 +248,9 @@ sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wa
 ```
 
 Both CLIs also have `midi-render`, a shorthand for `project bounce` that always
-takes the synth path — omit `--synth` there and it follows GM programs. The full
-option set is listed in the `sonare project` table earlier in this section.
+takes the synth path — omit `--synth` there and it follows GM programs. It uses
+the same `--channels` values and scene-master cap. The full option set is listed
+in the `sonare project` table earlier in this section.
 
 #### transcribe
 
@@ -274,4 +282,3 @@ commands; use the Project API for SoundFont-backed bounces.
 
 Related: [Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md),
 [Native Synth](./native-synth.md), [SoundFont Player](./soundfont-player.md).
-

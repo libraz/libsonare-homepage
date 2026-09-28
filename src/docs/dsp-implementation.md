@@ -76,7 +76,8 @@ Most processors are not built from unique magic. They combine a small set of par
 
 ::: details Plain-language gloss of the building blocks
 - **Lookahead** — the processor delays the audio slightly so it can "see" a peak a few milliseconds before it plays, and turn the gain down smoothly instead of clamping it. The cost is a little latency.
-- **Oversampling & true-peak filter** — temporarily runs the audio at a higher sample rate to catch *inter-sample peaks* (peaks that fall between two samples and that a DAC will actually reconstruct), and to keep distortion from folding back into the audible range (aliasing).
+- **True-peak interpolation** — uses an oversampled reconstruction filter to estimate peaks between stored samples. It approximates the specified reconstruction response; it does not measure a particular DAC's analogue output.
+- **Oversampled nonlinear processing** — runs a distortion-producing processor at a higher rate, then filters before returning to the original rate to reduce audible aliasing. This is a separate use of oversampling from true-peak metering.
 - **Mid/side (M/S)** — re-expresses a stereo signal as a *mid* (mono center) channel and a *side* (left-minus-right difference) channel, so you can process the center and the width independently, then convert back.
 - **Partitioned convolution** — convolution applies one signal's "fingerprint" to another (e.g. a room impulse response, or a linear-phase EQ). Partitioning splits a long filter into blocks so it can run efficiently in real time.
 - **Haas widening** — a very short delay (under ~40 ms) on one channel that the ear hears as extra stereo width rather than an echo.
@@ -85,13 +86,13 @@ Most processors are not built from unique magic. They combine a small set of par
 
 ## Analysis And Feature DSP
 
-The analysis side — music information retrieval (MIR): extracting tempo, key, chords, and similar musical facts from audio — is built from reusable feature stages rather than one monolithic analyzer. The STFT (short-time Fourier transform) and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, pitch trackers, and section features. Higher-level analyzers then reuse those representations where possible.
+The analysis side — music information retrieval (MIR): extracting tempo, key, chords, and similar musical facts from audio — is built from reusable feature stages rather than one monolithic analyzer. STFT (short-time Fourier transform) and frame utilities feed mel/MFCC, chroma, onset envelopes, tempograms, and section features. YIN-style pitch tracking works from waveform periodicity; its FFT-accelerated difference calculation is separate from the cached STFT spectrogram. Higher-level analyzers reuse representations where possible.
 
 For a newcomer, the analysis side runs roughly like this:
 
 1. Cut the audio into short windows.
-2. Convert each window into its frequency content.
-3. Build a purpose-specific summary: onsets for rhythm, chroma for harmony, mel or MFCC for timbre.
+2. Compute the representation the task needs: a spectrum for spectral features, or a periodicity measure for F0 tracking.
+3. Build a purpose-specific summary: onsets for rhythm, chroma for harmony, mel or MFCC for timbre, or a pitch contour for melody.
 4. Estimate the high-level result — BPM, key, chords — from those summaries.
 
 | Family | Implementation role | Main use |
@@ -114,35 +115,9 @@ The streaming variant, `StreamingMasteringChain`, runs the same stages in the sa
 
 Offline-only processors can still appear in high-level workflows. Real-time render paths are limited by each processor's contract; changes that resize buffers or rebuild FIR kernels are not audio-thread safe.
 
-Presets are not separate DSP algorithms. They are named configurations that combine repair, EQ, dynamics, stereo processing, true-peak limiting, and loudness optimization with genre/platform defaults.
+Presets are not separate DSP algorithms. They are named configurations that enable selected repair, EQ, dynamics, saturation, spectral, stereo, maximizer, and loudness slots with genre/platform defaults.
 
-In practice it helps to picture the chain as a queue the audio walks through in order: clean up unwanted noise, shape the tone, tame the level swings, check the stereo spread, and finally manage peaks and loudness. Each stage is useful on its own, but the final sound comes from the order and the settings together.
-
-<FlowDiagram
-  title="Mastering Chain Stage Order"
-  :nodes="[
-    { id: 'repair', label: 'Repair', col: 0, row: 0, group: 'clean' },
-    { id: 'eq', label: 'EQ', col: 1, row: 0, group: 'tone' },
-    { id: 'dyn', label: 'Dynamics', col: 2, row: 0, group: 'tone' },
-    { id: 'stereo', label: 'Stereo Processing', col: 3, row: 0, group: 'image' },
-    { id: 'tp', label: 'True-Peak Limiting', col: 4, row: 0, group: 'output' },
-    { id: 'loud', label: 'Loudness Optimization', col: 5, row: 0, group: 'output', variant: 'success' }
-  ]"
-  :edges="[
-    { from: 'repair', to: 'eq' },
-    { from: 'eq', to: 'dyn' },
-    { from: 'dyn', to: 'stereo' },
-    { from: 'stereo', to: 'tp' },
-    { from: 'tp', to: 'loud' }
-  ]"
-  :groups="[
-    { id: 'clean', label: 'Clean up' },
-    { id: 'tone', label: 'Tone and level' },
-    { id: 'image', label: 'Image' },
-    { id: 'output', label: 'Output' }
-  ]"
-  caption="The same configuration always produces this stage order; presets change the settings inside the stages, not their sequence."
-/>
+The fixed slot order is **repair → EQ → dynamics → saturation → spectral → stereo (stereo path only) → maximizer → loudness**. A configuration can skip a slot, but cannot reorder it. The [full chain figure](./mastering-processors.md#chain-order) shows every slot and which ones a sample preset enables. The loudness slot includes its own true-peak limiter after normalization; presets avoid enabling a separate maximizer limiter as well, which would limit twice.
 
 ## Dynamics
 
@@ -163,7 +138,7 @@ In practice it helps to picture the chain as a queue the audio walks through in 
 | `dynamics.vocalRider` | Slow envelope follower adjusts vocal level toward a target range | Automatic level riding for vocals or speech | Designed as gradual gain automation, not a peak limiter |
 
 ::: details Dynamics terms: knee, makeup gain, sidechain, ducking
-- **Knee** — how abruptly a compressor engages around its threshold. A *hard knee* clamps suddenly at the threshold; a *soft knee* eases in over a range, sounding gentler.
+- **Knee** — the shape of the input/output curve around the threshold. A *hard knee* changes slope at the threshold; a *soft knee* blends into the compressed slope over a range. Attack and release determine how quickly the gain follows that curve.
 - **Makeup gain** — after a compressor lowers the loud parts, the whole signal is quieter, so makeup gain raises it back up to a comparable level — now more even than before.
 - **Sidechain** — feeding a *different* signal into a processor's level detector so it reacts to that signal instead of itself.
 - **Ducking** — the classic sidechain use: a music bed automatically dips whenever a voice (the key signal) is present, then comes back up when the voice stops.

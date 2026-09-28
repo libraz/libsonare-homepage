@@ -17,7 +17,7 @@ Use this page when you want to:
 This is different from music analysis. `detectBpm(...)` and `analyze(...)` describe a song. The room-acoustic APIs describe, synthesize, or apply the recording space.
 
 ::: info What is an impulse response?
-An impulse response (IR) records how a room rings and decays after a short excitation such as a clap, balloon pop, or sweep. Because it captures the room reaction rather than the song, it is a cleaner input for RT60, clarity, and other room-acoustic metrics.
+An impulse response (IR) records how a room rings and decays after a short excitation such as a clap or balloon pop. A sine-sweep recording must be deconvolved with the known sweep to obtain an IR before analysis. Because an IR captures the room reaction rather than the song or the excitation, it is a cleaner input for RT60, clarity, and other room-acoustic metrics.
 :::
 
 <SonareDemo id="room-decay" />
@@ -205,16 +205,16 @@ Use this section when you are not only measuring a recording, but also creating 
 `estimateRoom(...)` estimates an equivalent room from a recording. Treat it as a practical model, not exact geometry. Always check `confidence`, because ordinary recordings may not contain enough clear room decay.
 
 ::: warning What `estimateRoom(...)` actually solves
-It solves the *scale* of a shape you supply, not the shape itself.
+It solves a *scale* only under the supplied shape and absorption priors; it does not recover the shape itself.
 
 - The length : width : height ratios come from `aspectHintLw` / `aspectHintLh`, which default to `1`. A call that omits them always returns three identical dimensions — a cube — so do not present `length`, `width`, and `height` as recovered proportions unless you passed hints.
-- A single decay fixes only the *product* of volume and absorption, so `referenceAbsorption` (default `0.15`) is the prior that pins the volume down. The reported volume scales with the cube of it: a prior half the room's true mean absorption reports roughly an eighth of the volume. Keep it fixed when comparing recordings.
+- A single decay constrains the ratio `V / A`, where `A` is equivalent absorption area, rather than determining volume and absorption separately. With a fixed shape, surface area grows with the square of linear scale while volume grows with its cube, so a larger room needs a higher mean absorption to keep the same RT60. `referenceAbsorption` (default `0.15`) supplies the missing prior that pins the volume down. Under Sabine, the reported volume scales approximately with the cube of that prior; the default Eyring model uses the corresponding `-ln(1 − α)` term, so treat the cube rule as a Sabine approximation. Keep it fixed when comparing recordings.
 
 The prior is clamped into `[0.01, 0.99]` rather than refused, so an out-of-range value still returns a successful estimate — computed from the clamped number, which at the low end is worth three orders of magnitude in the reported volume.
 :::
 
 ::: info In C, a zero prior means "use the default"
-Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_absorption` is no exception: it selects the library default of `0.15`. The idiom the C header is written for is `SonareRoomEstimateConfig cfg = {};`, so a literal zero taken at face value would land on the analyzer's `0.01` floor and — because the volume goes as the **cube** of the prior — report a normal room as a fraction of a cubic meter, with full confidence, and then hand `sonare_synthesize_rir` an unrelated reverb to build from it. Node, Python, and WASM pass `0.15` explicitly and behave the same way. If you really do want a near-rigid prior, request `0.01` rather than `0`.
+Every float in `SonareRoomEstimateConfig` reads `0` as *unset*, and `reference_absorption` is no exception: it selects the library default of `0.15`. The idiom the C header is written for is `SonareRoomEstimateConfig cfg = {};`, so a literal zero taken at face value would land on the analyzer's `0.01` floor and — because the prior controls the solved room scale — report a normal room as a fraction of a cubic meter, with full confidence, and then hand `sonare_synthesize_rir` an unrelated reverb to build from it. Under Sabine, this scale produces a volume that changes approximately with the **cube** of the prior; the default Eyring model uses `-ln(1 − α)` instead. Node, Python, and WASM pass `0.15` explicitly and behave the same way. If you really do want a near-rigid prior, request `0.01` rather than `0`.
 :::
 
 `roomMorph(...)` is an offline creative effect. It adds a synthesized target-room character and may soften part of the existing tail. Do not treat or present its output as dereverberation: it adds room character, it does not remove existing reverb.
@@ -347,7 +347,7 @@ Air absorption models the loss along the propagation path, inside the air. It is
 | `isBlind` / `is_blind` | Whether the result came from blind estimation rather than an impulse-response assumption. |
 
 ::: warning Blind analysis returns decay only
-`detectAcoustic(...)` always runs the blind path, and the blind path recovers a decay rate and nothing else. `c50`, `c80`, and `d50` come back `NaN`; `c50Bands` and `c80Bands` come back empty; `edt` is a copy of `rt60` rather than an independently fitted early decay time, and `edtBands` likewise mirrors `rt60Bands`. Call `analyzeImpulseResponse(...)` on a clap, pop, or sweep-derived IR whenever you need clarity numbers or a real EDT, and guard for `NaN` before formatting these fields in a UI.
+`detectAcoustic(...)` always runs the blind path, and the blind path recovers a late-decay rate and nothing else. `c50`, `c80`, and `d50` come back `NaN`; `c50Bands` and `c80Bands` come back empty; `edt` is `NaN` because the blind path has no direct-sound arrival for an independent 0-to-−10 dB fit, and `edtBands` keeps the requested band count but every entry is `NaN`. Call `analyzeImpulseResponse(...)` on a clap, pop, or deconvolved sweep-derived IR whenever you need clarity numbers or a real EDT, and guard for `NaN` before formatting these fields in a UI.
 :::
 
 ::: details What do RT60, EDT, C50/C80, and D50 measure?

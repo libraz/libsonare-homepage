@@ -181,7 +181,7 @@ Every clip operation is a single undoable command and addresses the clip by its 
 | Split | `splitClip(clipId, splitPpq)` | Cuts the clip at an absolute PPQ; returns the new clip's id |
 | Trim | `trimClip(clipId, newStartPpq, newLengthPpq)` | Resets start and length |
 | Move | `moveClip(clipId, newStartPpq, newTrackId?)` | Slides the clip, optionally to another track |
-| Gain | `setClipGain(clipId, gain)` | Linear per-clip playback gain (`>= 0`). Audio clips only — stored on MIDI clips but never applied at bounce |
+| Gain | `setClipGain(clipId, gain)` | Linear per-clip playback gain (`>= 0`). On an audio clip it scales the clip's own samples; on a MIDI clip it scales the bound instrument's rendered output instead |
 | Fade | `setClipFade(clipId, fadeIn, fadeOut)` | Fade-in / fade-out regions with a curve |
 | Loop | `setClipLoop(clipId, mode, loopLengthPpq?, loopCrossfadePpq?)` | `'off'` or `'loop'` with a loop length and optional loop-seam crossfade |
 | Re-source | `setClipSource(clipId, sourceId)` | Rebinds the clip to a different registered source |
@@ -202,8 +202,8 @@ const copyId = project.duplicateClip(tailId, 8);
 
 Fade curves are `'linear'`, `'equal-power'`, `'exponential'`, and `'logarithmic'`. Each fade length is clamped to the clip length, so an oversized fade cannot start before the clip; a negative length is rejected outright. Loop mode is `'off'` or `'loop'`; a positive `loopLengthPpq` is required when looping. `loopCrossfadePpq` is an optional equal-power crossfade at the loop seam. `0` keeps a hard loop; positive values blend the loop tail with the pre-roll source material. The engine clamps the value to the available source offset and half the loop length, and disables the seam crossfade for warped clips.
 
-::: warning `setClipGain` / `setClipFade` apply to audio clips only
-`setClipGain` and `setClipFade` operate on **audio clips only**. On a MIDI clip the values are stored (undoably, and they round-trip through `toJson()`) but never reach the rendered notes: the compiler copies a MIDI clip's events verbatim into the render schedule and gates the clip only by its track's mute / solo / gain, so per-clip gain and fades do not affect the sound. To control the volume of an instrument playing MIDI, set the **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)); a track gain of `0` silences the track's MIDI notes entirely.
+::: warning `setClipGain` / `setClipFade` shape a MIDI clip's rendered audio, not its events
+The compiler still copies a MIDI clip's note-on / note-off events verbatim into the render schedule — gain and fade never touch velocity or timing. What they shape instead is the bound instrument's *rendered output* at the clip's MIDI destination: while this clip is the most recently started one still active on that destination, its output follows `gain` and glides through the fade region the same way an audio clip's samples do. When it ends, an older clip that is still active takes over again. Only when no clip remains active does the destination hold the most recently ended clip's end value (`0` after a fade-out, `gain` otherwise). If clips start together, the larger clip id wins. Several tracks sharing one destination therefore share this envelope — the selected clip governs the whole destination, not each track independently. The **track gain** (`setTrackGain(trackId, gain)`, folded into the channel-strip fader in the [mixer scene](./mixing.md)) still layers underneath and is unaffected; a track gain of `0` silences the track's MIDI notes entirely regardless of any clip gain or fade.
 :::
 
 In Python the same operations are snake_case, and fades take separate length/curve arguments:

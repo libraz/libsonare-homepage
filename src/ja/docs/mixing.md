@@ -230,13 +230,12 @@ import libsonare as sonare
 sonare.mixing_scene_preset_names()                          # ['vocalReverbSend', 'drumBusSubgroup', 'commentaryDucking']
 scene_json = sonare.mixing_scene_preset_json("vocalReverbSend")
 
-mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
-block = mixer.process_stereo(
-    [vocal_block_l, return_block_l],
-    [vocal_block_r, return_block_r],
-)
-vocal_meter = mixer.strip_meter(0, tap="postFader")         # 「メーター」参照
-mixer.close()                                               # ネイティブハンドルを解放
+with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
+    block = mixer.process_stereo(
+        [vocal_block_l, return_block_l],
+        [vocal_block_r, return_block_r],
+    )
+    vocal_meter = mixer.strip_meter(0, tap="postFader")     # 「メーター」参照
 ```
 
 ```bash [CLI]
@@ -429,7 +428,7 @@ JavaScript API のパンローは `const3dB`、`const4.5dB`、`const6dB`、`line
 
 ### サラウンドとマルチチャンネル
 
-ステレオより広いバス向けに、ストリップは `SurroundPan` 位置（`setSurroundPan(strip, { azimuth, divergence, lfe })`、Python は `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`）を保持します。フェーズ 1 では `azimuth`（−180…180°、0 = 正面中央）・`divergence`（0 = 点音源、1 = 前方へ広がる）・`lfe`（0…1 の LFE＝低域効果チャンネルのプレーンへの送り）が有効で、`elevation` と `distance` は予約です。位置はシーンに保存され JSON で往復しますが、オフラインの `Mixer` は依然ステレオでレンダリングします。これらの値を消費するサラウンドパンナーは[リアルタイムエンジンのサラウンドグループバス](./realtime-engine.md#サラウンドグループバスとワイドメーター)で動くため、ここで位置を設定し、サラウンドミックスはエンジンでレンダリングしてください。
+ステレオより広いバス向けに、ストリップは `SurroundPan` 位置（`setSurroundPan(strip, { azimuth, divergence, lfe })`、Python は `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`）を保持します。フェーズ 1 では `azimuth`（−180…180°、0 = 正面中央）・`divergence`（0 = 点音源、1 = 前方へ広がる）・`lfe`（0…1 の LFE＝低域効果チャンネルのプレーンへの送り）が有効で、`elevation` と `distance` は予約です。位置はシーンに保存され JSON で往復しますが、*単体の* `Mixer`（`processStereo`）は依然ステレオのみをレンダリングします。同じサラウンドパンナーは[リアルタイムエンジンのサラウンドグループバス](./realtime-engine.md#サラウンドグループバスとワイドメーター)と、対応する出力幅での[プロジェクトバウンス](./project-bounce.md#バウンスオプション)でも動くため、ここで位置を設定し、サラウンドミックスはそのどちらかでレンダリングしてください。
 
 ## オートメーション
 
@@ -477,7 +476,7 @@ mixer.scheduleInsertAutomation(stripIndex, insertIndex, paramId, sampleRate * 4,
 ゴニオメーター（ベクトルスコープとも呼びます）は、左信号と右信号を点群として描く表示です。ステレオ像を一目で示します。ほぼ垂直な線はモノラル、横に広がった塊は広いステレオ展開、横方向ににじむ表示はモノラルで打ち消し合いかねない位相の問題を警告します。`correlation` メーターを絵にしたものです。
 :::
 
-**ゴニオメーター**は別の時間領域ビューです。`readGoniometerLatest(strip, maxPoints)` が直近の左／右サンプル対（古い→新しい）を返し、ステレオベクトルスコープを描画できます。latest read 経路は割り当てなしなので、UI からのポーリングで音声スレッドに余計な負荷を増やしません。
+**ゴニオメーター**は別の時間領域ビューです。`readGoniometerLatest(strip, maxPoints)` が直近の左／右サンプル対（古い→新しい）を返し、ステレオベクトルスコープを描画できます。コア側の読み取りは割り当てを行いません。ストリップが持つ事前確保リングから呼び出し側の領域へ点をコピーするため、UI からポーリングしても音声スレッド側の確保は増えません。WASM バインディングはその後、一時領域と、プレーンな JavaScript 配列および各要素の `{ left, right }` オブジェクトを確保します。JS 呼び出し全体にはバインディング側の確保がありますが、戻り値は構造化複製できるプレーンデータなので、`structuredClone` や `postMessage` に安全に渡せます。
 
 ## リアルタイムと AudioWorklet ブリッジ
 

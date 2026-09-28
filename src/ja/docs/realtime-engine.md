@@ -220,7 +220,10 @@ WASM と Node は `{ output, monitor }` を返します。Python は `set_track_
 | 目的 | 生の `RealtimeEngine` | `SonareEngine` ワークレット API |
 |------|----------------------|--------------------------------------|
 | レーンをグループバスへ折り込む（`busId 0` でマスターミックスへ戻す） | `setTrackLanes(...)` のレーン `outputBusId`（`0` または未指定でマスターミックス） | `setTrackOutputBus(target, busId)`（`busId 0` でマスターミックスへ戻す） |
+| バスを別バスへ折り込む、またはコピーをセンドする | `setTrackBuses(...)` のバス `outputBusId` と `sends`（出力が `0`／未指定ならマスターミックス） | `setTrackBuses(...)` の同じフィールド |
 | あるレーンのインサートを別レーンでキーイング（ダッキング） | `setLaneSidechain(trackId, insertIndex, sourceTrackId)`（`0` で解除） | `setLaneSidechain(target, insertIndex, sourceTarget)`（`null` で解除） |
+| バスのインサートをトラックか別バスでキーイング | `setBusSidechain(busId, insertIndex, sourceKind, sourceId)`（`sourceId 0` で解除） | 同名 |
+| マスターのインサートをトラックかバスでキーイング | `setMasterSidechain(insertIndex, sourceKind, sourceId)` | 同名 |
 | レーンをパンする | `setTrackStripPan(trackId, pan)` | `setTrackStripPan(target, pan)` |
 | パンロー／パンモード | `setTrackStripPanLaw(...)`、`setTrackStripPanMode(...)` | 同名 |
 | 左右独立（デュアル）パン | `setTrackStripDualPan(trackId, left, right)` | `setTrackStripDualPan(target, left, right)` |
@@ -229,6 +232,21 @@ WASM と Node は `{ output, monitor }` を返します。Python は `set_track_
 | バスインサートをバイパス | `setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass?)` | 同名 |
 
 `setTrackStripInsertParamByName(...)` はリアルタイムオートメーションの入り口です。[`masteringInsertParamInfo(name)`](./mastering-processors.md) が返す JSON キーでパラメータを指定するため、ホストはストリップ JSON を作り直さずにインサートの自動化可能なパラメータをライブで変更できます。ワークレット API では `target` はトラック id または名前です。
+
+バス／マスターのサイドチェインキーにおける `sourceKind` は `'track'`（レーンのストリップ処理後・レーンフェーダー前の信号）または `'bus'`（バスの処理後・自身の `gainDb` 前の信号。より広ければステレオへ畳まれる）です。Python の `set_bus_sidechain` / `set_master_sidechain` も同じ名前、または対応する `0`／`1` の序数を取ります。マスターの `insertIndex` は、他のマスターインサートセッターと同じ順序で、まずプリフェーダーインサート、続いてポストフェーダーインサートを数えます。どちらのキーもレーンのサイドチェインバインディングテーブル（32 エントリ）を共有し、`setTrackBuses` 自体と同じくコントロールスレッド専用です。
+
+```typescript
+// バス 2 の出力をバス 1 へ折り込み、同じバスへプリフェーダーセンドも送ってから、
+// バス 1 のコンプレッサーをバス 2 自身の信号でダッキングする。
+engine.setTrackBuses([
+  { busId: 1, gainDb: 0 },
+  { busId: 2, gainDb: -6, outputBusId: 1, sends: [{ busId: 1, levelDb: -12, sendTiming: 'preFader' }] },
+]);
+engine.setBusSidechain(1, 0, 'bus', 2);   // バス 1 のインサート 0 を、バス 2 でキーイング
+engine.setMasterSidechain(0, 'track', 1); // マスターのインサート 0 を、トラック 1 でキーイング
+```
+
+バスの出力・センド・サイドチェインキーが自分より狭い宛先（より小さいバス、レンダリング幅でのマスター、あるいは常にステレオであるサイドチェインのキータップ）へ届くときは、[下のサラウンドの節で使う ITU-R BS.775 ダウンミックス](#サラウンドグループバスとワイドメーター)で畳まれます。宛先が広ければ、送り元のプレーンはそのままのインデックスで届きます。バスリストの設定は、出力・センド・バス発のキーすべてを 1 つの依存グラフとして検証されます。閉路、未宣言のバスへの参照、バスの自己参照、レーンがまだ使っているバスの削除は拒否され、以前の設定のまま変わりません。
 
 ## パラメータオートメーション
 
@@ -371,7 +389,9 @@ engine.setClips([{
 
 ## サラウンドグループバスとワイドメーター
 
-サラウンドの `channelLayout`（`SonareChannelLayout`: `0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）で宣言したバスは**サラウンドグループバス**になります。バスはプレーンごとにマスターへ合算し、プレーン別メーターを公開します。そこへルーティングしたレーンは点音源へフォールドされた後、ストリップの [`surroundPan`](./mixing.md#サラウンドとマルチチャンネル) に従って配置されます。`azimuth`、`divergence`、`lfe` は有効で、`elevation` と `distance` は予約です。単体の `Mixer` はステレオのままなので、この DSP はリアルタイムエンジンのワイドバス経路に固有です。
+サラウンドの `channelLayout`（`SonareChannelLayout`: `0` モノラル、`1` ステレオ、`2` 5.1、`3` 7.1）で宣言したバスは**サラウンドグループバス**になります。バスはプレーンごとにマスターへ合算し、プレーン別メーターを公開します。そこへルーティングしたレーンは点音源へフォールドされた後、ストリップの [`surroundPan`](./mixing.md#サラウンドとマルチチャンネル) に従って配置されます。`azimuth`、`divergence`、`lfe` は有効で、`elevation` と `distance` は予約です。[ミキサーグラフとプロジェクトバウンス](./project-bounce.md#バウンスオプション)も同じ幅でサラウンドバスをレンダリングし、同じ規則に従います。ステレオ専用なのは単体の `Mixer`（`processStereo`）だけです。
+
+サラウンドバスから信号を受けるストリップ ── バス出力やセンドの先にあるリターンストリップ ── は、ベッドをステレオへ畳んでから再度散布するのではなく、そのバス自身の幅で動作します。フェーダー・インサート・センドはすべてのプレーンに作用し、主出力がステレオ（またはそれ以下）のストリップだけがパン／幅のステージを保ちます。バスの幅より狭い宛先 ── 別のバス、レンダリング時のチャンネル数でのマスター、あるいは常にステレオであるサイドチェインのキータップ ── は、前方ペアだけを取るのではなく [ITU-R BS.775](https://www.itu.int/rec/R-REC-BS.775) ダウンミックスを受け取ります。広い宛先は送り元のプレーンをそのままのインデックスで受け取ります。サラウンドバス、そしてステレオより広く構築されたマスターは、パンをすでに拒否しているのと同じ理由で、既定以外のパンや幅を拒否します ── スピーカーベッドには、狭めたり広げたり動かしたりするステレオ像がありません。
 
 ```typescript
 engine.setTrackBuses([{ busId: 1, channelLayout: 2 }]);  // 5.1 のグループバス
@@ -426,6 +446,8 @@ engine.setMidiClips([{
 ```
 
 ループするクリップは `loopLengthSamples` ごとにイベントリストを繰り返します。スケジュールを空にするには `setMidiClips([])` を呼びます。*プロジェクト*レベル（PPQ 単位のノート、テイク、コンピング）で作業したい場合は、[プロジェクト編集](./project-editing.md)でアレンジを組んでバウンスしてください。このリアルタイムスケジュールは、DAW フロントエンドがコンパイルして渡す低レベル側の API です。
+
+クリップは `gain`（リニア、既定 `1`）、`fadeInSamples`、`fadeOutSamples`（既定 `0`。内部ループの 1 周ごとではなく、クリップ全長に対して 1 回）を持ち、イベント自体（ノートのタイミングや強さ）ではなく、宛先のレンダー後の楽器出力に適用されます。宛先ごとに、アクティブなクリップのうち最も新しく開始したものがエンベロープを決めます。そのクリップが終了しても、先に開始したクリップがまだアクティブなら、そちらのエンベロープに戻ります。アクティブなクリップがなくなった場合に限り、最後に終了したクリップの終了時点の値（フェードアウトがあれば `0`、なければ `gain`）を保持します。同時に開始したクリップは id が大きいほうが優先されます。宛先上のどのクリップもまだ開始していない間は、宛先はユニティで再生されます。同じ宛先へルーティングされた複数のトラックはこのエンベロープを共有します ── トラックごとではなく、選ばれたクリップが宛先全体を決めます。`lengthSamples` が `0`（オープンエンド）のとき `fadeOutSamples` を `0` より大きくすると拒否されます。終わりのないクリップにはフェードしていく先がありません。C ABI 上でゼロ初期化された `SonareEngineMidiClipSchedule` は無音です（`gain` が `0` になります）。JS と Python のバインディングは、省略された `gain` を `0` ではなく `1` として扱います。
 
 ## トラックを外部 MIDI 機器へ送る
 

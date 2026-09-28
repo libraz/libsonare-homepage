@@ -10,7 +10,7 @@ description: C50, C80, and D50 — early-to-late energy ratios that measure whet
 [Reverberation time](./reverberation-time.md) tells you how long a room rings, but not whether you can understand it. A room can have a moderate RT60 and still be perfectly intelligible if the early energy dominates, or muddy if the late tail does. Clarity and definition put a number on that balance by splitting the impulse response at a time boundary and comparing the energy on each side.
 
 ::: warning Clarity needs an impulse response
-C50, C80, and D50 are produced only by `analyzeImpulseResponse(...)`. Blind analysis of ordinary music (`detectAcoustic(...)`) recovers a decay *rate* and nothing more: all three come back `NaN`, and the per-band `c50Bands` / `c80Bands` arrays come back empty. If you need clarity figures, record a clap, a balloon pop, or a sweep and analyse that instead.
+C50, C80, and D50 are produced only by `analyzeImpulseResponse(...)`. Blind analysis of ordinary music (`detectAcoustic(...)`) recovers a decay *rate* and nothing more: all three come back `NaN`, and the per-band `c50Bands` / `c80Bands` arrays come back empty. If you need clarity figures, record a clap or a balloon pop, or record a sine sweep and deconvolve it with the known sweep before passing the resulting IR to the analyzer. A raw recorded sweep is the excitation convolved with the room response, not an impulse response.
 :::
 
 <ClarityWindowFigure

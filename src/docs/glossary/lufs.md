@@ -28,10 +28,10 @@ An integrated LUFS reading is not the average of the whole file. Loudness is mea
 
 <LoudnessGateFigure
   title="Which blocks reach the average"
-  caption="Silence and a hushed intro are excluded before the average is taken, which is why the integrated value sits close to the level of the track's body rather than somewhere between its loud and quiet parts. Adding a long silent tail to a file therefore does not lower its integrated LUFS."
+  caption="In this example, the intro falls below the relative gate and is excluded. A quieter passage above the gate still contributes to the average. Adding a long silent tail does not lower integrated LUFS."
 />
 
-That is why a fade-in, a spoken intro, or a silent tail cannot drag the number down — and why the reading tracks how loud the *music* is rather than how much of the timeline it occupies.
+Silence below the absolute gate is excluded. A fade-in or spoken intro can lower integrated LUFS if its blocks remain above the relative gate; only blocks below the threshold are excluded. The meter evaluates the whole programme that passes the gates, including speech when present.
 
 ## Choosing a Target
 

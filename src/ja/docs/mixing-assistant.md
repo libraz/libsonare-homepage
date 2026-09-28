@@ -357,7 +357,7 @@ sonare mix --scene scene.json --input kick=kick.wav --input vocal=vocal.wav
 
 ## 利用可否
 
-アシスタントは切り離し可能なビルド単位です。`BUILD_MIXING_ASSISTANT` の既定は **ON** で、有効にすると `BUILD_MIXING` も強制的に有効になります。一方 `SONARE_WASM_ANALYSIS_ONLY` はこれを強制的に **OFF** にするため、解析専用の WASM モジュールはアシスタントを含みません。
+アシスタントは切り離し可能なビルド単位です。`BUILD_MIXING_ASSISTANT` の既定は **ON** で、有効にすると `BUILD_MIXING` も強制的に有効になります。Node ネイティブアドオンの通常ビルドは既存の CMake キャッシュ値にかかわらず `BUILD_MIXING_ASSISTANT=ON` を強制します。一般の CMake ビルドでは引き続きこのオプションを OFF にできます。一方 `SONARE_WASM_ANALYSIS_ONLY` はこれを強制的に **OFF** にするため、解析専用の WASM モジュールはアシスタントを含みません。
 
 ::: warning シンボルではなくケーパビリティを見てください
 ```typescript

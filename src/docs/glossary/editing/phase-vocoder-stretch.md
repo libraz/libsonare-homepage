@@ -21,25 +21,25 @@ The core tool is the **phase vocoder**.
 At a high level, it does three things:
 
 1. Run an STFT (short-time Fourier transform) to split audio into short time-frequency frames.
-2. Resample those frames along the time axis, changing how quickly they advance.
-3. Rebuild phase so partials stay continuous instead of smearing.
+2. Read spectral frames at positions corresponding to the new timeline, interpolating where needed.
+3. Estimate each bin's phase advance from consecutive analysis frames and accumulate it on the output timeline.
 
-Step 1 is the same framing every analysis feature uses; [Spectrogram and STFT](../analysis/spectrogram-stft.md) illustrates how those frames are cut, which is worth a look before reading the phase discussion below.
+Step 1 uses the same STFT principle as spectral analysis, though individual features can choose different window and hop settings. [Spectrogram and STFT](../analysis/spectrogram-stft.md) illustrates how frames are cut.
 
 The hard part is **phase coherence**. The STFT splits each frame into frequency *bins* — one slot per narrow band of frequencies. When frames are spaced differently than they were analyzed, the phase in each bin has to be re-propagated so the individual frequency components (the *partials* that make up the sound) stay continuous. If that goes wrong, you hear the classic "phasey" or metallic artifact.
 
-Intuitively, the audio is cut into thin slices of time and the slices are laid out again at a new spacing. Drop slices and the sound gets shorter; repeat them and it gets longer. Adjusting the phase so the waveform joins smoothly at every seam is the phase vocoder's real job.
+The output reads spectral frames along a new time axis. For example, a slower read spreads the changing spectrum over more output frames. It does not shorten audio by dropping waveform slices or lengthen it by duplicating them: estimated phase advances keep each frequency component moving continuously between synthesized frames.
 
 ## Two operations, one backend
 
 | Operation | Changes | Keeps | How |
 |-----------|---------|-------|-----|
 | Time stretch | Duration | Pitch | Phase vocoder rescales the time axis |
-| Pitch shift | Pitch | Duration | Time-stretch by a ratio, then resample back to the original length |
+| Pitch shift | Pitch | Approximate duration | Time-stretch at the reciprocal pitch ratio, then resample at the shifted rate |
 
 This is why pitch shift and time stretch share a backend: a pitch shift is a time stretch followed by resampling. `rate > 1.0` shortens a clip; `semitones = 12` shifts up an octave.
 
-To picture a shift up a semitone: stretch the audio slightly longer, then play it back slightly faster so it lands on its original length again.
+To picture a shift up a semitone: use a stretch rate of `1 / 2^(1/12)` to make the audio slightly longer, then resample it at roughly `2^(1/12)` times the original rate. Rounding in the resampling step can leave a small sample-count difference.
 
 <SonareDemo id="time-stretch" />
 
@@ -60,9 +60,9 @@ Small moves stay transparent because the assumptions still hold. Large moves exp
 Practical rule: keep edits conservative for natural results, and treat big moves as deliberate creative effects.
 
 ::: details How libsonare implements stretching
-libsonare's `timeStretch` and `pitchShift` sit on a *peak-locked* phase-vocoder core (`phase_vocoder_phaselocked`, the `NativeSpectral` backend) combined with resampling for the pitch axis. Peak locking is what keeps the bins around each spectral peak phase-consistent, and it is the reason the "phasey" artifact above is muted rather than obvious. A plain, unlocked `phase_vocoder` exists as a lightweight C++-only fallback; the JavaScript and Python entry points always take the peak-locked path and expose no backend choice. A pitch shift is implemented as a time-stretch by the pitch ratio followed by a resample back to the original duration. The same core underlies `noteStretch` (region-bounded stretching) and the pitch path of `voiceChange`. All operate on decoded mono `Float32Array` / sample sequences.
+libsonare's default `NativeSpectral` backend uses a *peak-locked* phase vocoder (`phase_vocoder_phaselocked`), with resampling for pitch changes. Peak locking keeps bins near a spectral peak phase-consistent and can reduce phasey artifacts. A plain `phase_vocoder` is also available through the C++ backend choice; the JavaScript and Python entry points use the native spectral path. For an upward pitch ratio `R`, pitch shift first stretches at rate `1/R`, then resamples at the effective rate `sampleRate × R`. `noteStretch` and the pitch path of `voiceChange` also use spectral editing. These functions operate on decoded mono samples.
 
-Quality degrades gradually with the size of the move, so conservative ratios keep artifacts below the audible threshold on most material. They never reach zero: every call runs a full STFT round trip at a 2048-sample window with re-propagated phase, so a little transient softening and residual phasiness is there even at a ratio near 1. If a passage must stay bit-exact, do not send it through the stretcher at all.
+Artifacts depend on the source and stretch ratio. Transients and dense mixtures can be more sensitive than sustained tones, even for small edits. The configured STFT window and hop also affect the result; a passage that must stay bit-exact should bypass the stretcher.
 :::
 
 Related: [Editing Basics](../concepts/editing-basics.md), [Pitch Correction](./pitch-correction.md), [Voice and Formant](./voice-formant.md), [Editing DSP](../../editing-dsp.md)

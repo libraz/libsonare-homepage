@@ -27,6 +27,8 @@ The workhorse of the family is the **digital waveguide**, and it is simpler than
 - A **loss filter** stands in for what the trip costs. Every reflection loses energy, and loses more of it at high frequencies than at low — which is exactly why a plucked note goes dull before it goes quiet. One filter in the loop reproduces the whole decay behaviour.
 - An **exciter** puts energy in. A hammer, a plectrum, a bow, a reed, a pair of lips, a jet of air.
 
+These roles describe a family of architectures; they do not imply identical delay lines or feedback topology.
+
 <FlowDiagram
   title="The waveguide loop"
   :nodes="[
@@ -41,10 +43,10 @@ The workhorse of the family is the **digital waveguide**, and it is simpler than
     { from: 'loss', to: 'exc', label: 'the wave comes back' },
     { from: 'delay', to: 'rad', label: 'tap', style: 'dashed' }
   ]"
-  caption="Pitch is the length of the round trip, decay is the loss filter, and the only stage that differs between a bow, a reed and a lip is the exciter — which is why brightness and damping mean the same thing on all of them."
+  caption="Pitch follows each resonator's delay and feedback topology, and decay follows its losses. Bow, reed, and lip models also differ in bore or string, reflection sign and coefficients, loss filters, and radiation, so brightness and damping are model-specific controls."
 />
 
-Because the loop is shared and only the exciter changes, the family is unusually coherent: a control that means "brighter" on a clarinet model means the same thing on a trumpet model, since both are describing the same loss stage.
+These models share delay and feedback concepts, so delay, reflection, loss, and excitation are useful terms across the family. They are not one loop with only the exciter swapped. A bowed string uses two delay lines meeting at the bow. A reed uses one bore whose cylindrical and conical topologies change the feedback sign and period. Brass uses a full-period bore with a two-pole lip resonator and its own bell reflection. `brightness` and `damping` therefore map to each model's own reflection and loss stages.
 
 ## Expression becomes continuous, not switched
 

@@ -44,7 +44,7 @@ sonare mix --scene scene.json \
   --input music-bed=music-bed.wav \
   -o show.wav --json
 
-# 4. Master for the platform with the explicit speech preset, not the genre-guessing assistant.
+# 4. Master for the platform with the explicit speech preset.
 sonare mastering show.wav \
   --preset speech \
   -o show-master.wav --json
@@ -52,7 +52,7 @@ sonare mastering show.wav \
 # 5. Confirm the loudness the episode actually landed at (a second render is
 #    unavoidable here: --report only comes from a run that also writes audio).
 sonare mastering show.wav \
-  --assistant --explain --target-platform podcast \
+  --assistant --preset speech --explain --target-platform podcast \
   -o show-assistant.wav --report show-report.json --json
 ```
 
@@ -167,7 +167,7 @@ sonare mix --scene scene.json \
 
 `strip_count` が 3 なのは、このシーンに aux リターンが 1 本もないからです。すべての `--input` が実在するストリップを指しており、4 ステムの楽曲シーンにあったような無音のリターンを気にする必要がありません。各 `--input` の ID はシーン内のストリップ `id` と一致していなければならず、どの `--input` も名指ししなかったストリップには無音が入ります。これはベッドをある回だけ意図的に外すなら正しい挙動ですが、`music-bed` を `musicbed` と打ち間違えたときも同じことが黙って起こります。
 
-## ステップ 4 — アシスタントの推測ではなく speech プリセットでマスタリングする
+## ステップ 4 — speech プリセットでマスタリングする
 
 ```bash
 sonare mastering show.wav --preset speech -o show-master.wav --json
@@ -177,17 +177,17 @@ sonare mastering show.wav --preset speech -o show-master.wav --json
 {"mode": "preset", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.95, "output": "show-master.wav", "preset": "speech", "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "loudness.optimize"]}
 ```
 
-これを、`--assistant` にチェーンを自分で選ばせた場合と比べます。
+同じ名前付きプリセットをアシスタントの出発点にすると、レポートへ説明も追加できます。
 
 ```bash
-sonare mastering show.wav --assistant --explain --target-platform podcast -o show-assistant.wav --report show-report.json --json
+sonare mastering show.wav --assistant --preset speech --explain --target-platform podcast -o show-assistant.wav --report show-report.json --json
 ```
 
 ```json
-{"mode": "assistant", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.29, "stages": ["eq.tilt", "dynamics.compressor", "stereo.imager", "loudness.optimize"], "explanation": ["base preset selected from top genre candidate: classical", "target loudness and ceiling applied from AssistantConfig"]}
+{"mode": "assistant", "input_lufs": -21.13, "output_lufs": -16.01, "applied_gain_db": 6.29, "stages": ["repair.denoise", "eq.tilt", "dynamics.deesser", "dynamics.compressor", "stereo.monoMaker", "loudness.optimize"], "explanation": ["base preset: speech", "target loudness and ceiling applied from AssistantConfig", "speech preset enables de-esser and mono compatibility"]}
 ```
 
-どちらも `--target-platform podcast` が求める -16 LUFS に同じように到達します。違うのはそこへ至るチェーンです。アシスタントはこのダッキング済みミックスダウンをプロファイリングし、ベースジャンルとして `classical` を選びました。楽器のような音色と発話のような音色が混在する信号に対しては一見もっともらしい推測ですが、実際のファイルの中身とはまったく違います。そのチェーンにはデノイズ段もデエッサーもありません。明示的な `speech` プリセットはその両方に加えて、同じティルト・コンプレッサー・ラウドネス最適化を備えています。話しことばを扱うときは、音楽向けに調整されたジャンル分類器にアシスタントの判断を委ねず、プリセットを名指ししてください。
+単独の `speech` プリセット実行は、組み込みの -16 LUFS を目標にします。アシスタント実行は同じチェーンを出発点にし、`--target-platform podcast` から -16 LUFS を取得します。さらに speech プリセットの低域モノメーカー段と説明を加えます。アシスタントは音声からジャンルを推測しないため、`--preset speech` という選択がそのまま表示され、再現できます。
 
 ::: danger `--target-platform` は `--assistant` を要求します
 ```bash
@@ -195,25 +195,29 @@ sonare mastering show.wav --preset speech --target-platform podcast -o x.wav --j
 # Error: --target-platform requires --assistant
 # exit code 3
 ```
-プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。`--preset` 実行にはアシスタントが調整すべきジャンル分類そのものが存在しないため、フラグはそのまま拒否されます。それでも下のステップ 5 のように `--assistant --target-platform podcast` の実行自体は行い、その `--report` からラウドネスの数値を読んでください。`--preset speech` でマスタリングする場合に使わないのは、その*処理チェーン*だけです。
+プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。単独の `--preset` 実行と組み合わせることはできないため、このフラグは拒否されます。名前付き speech チェーンとプラットフォームターゲットを両方使うときは、`--assistant --preset speech --target-platform podcast` を指定します。
 :::
 
-`--target-platform` は `streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` を受け付けます。全オプションは `sonare mastering --help` で確認できます。各ターゲットが実際に何を要求しているかは [配信ターゲット](../glossary/mastering/delivery-targets.md) にまとまっています。
+`--target-platform` は `streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` を受け付けます。`broadcast`、`podcast`、`club`、`cd` は、対応する値を明示していない場合に固有のラウドネスと天井を適用します。それ以外の名前は受け付けますが、現在の値を変更しません。全オプションは `sonare mastering --help` で確認できます。各ターゲットが実際に何を要求しているかは [配信ターゲット](../glossary/mastering/delivery-targets.md) にまとまっています。
 
 ## ステップ 5 — 声がモノラルで安全かを確認する
 
 ```bash
-sonare mastering show.wav --assistant --target-platform podcast --speech-mono-amount 0 -o show-mono0.wav --json
-sonare mastering show.wav --assistant --target-platform podcast --speech-mono-amount 1 -o show-mono1.wav --json
-cmp show-mono0.wav show-mono1.wav   # identical — no output
+sonare mastering show.wav --assistant --preset speech --target-platform podcast --speech-mono-amount 0 -o show-mono0.wav --json
+sonare mastering show.wav --assistant --preset speech --target-platform podcast --speech-mono-amount 1 -o show-mono1.wav --json
+if cmp -s show-mono0.wav show-mono1.wav; then
+  echo "mono amount did not change these files"
+else
+  echo "mono amount changed the render"
+fi
 ```
 
-`--speech-mono-amount`（0〜1、既定値 1）は、発話らしい素材の低域・中央成分をモノラルへ寄せると説明されています。この教材素材では、両極端の値がバイト単位で同一のファイルを生成します。原因はここでもアシスタントのジャンル分類です。`--speech-mono-amount` はアシスタント専用のオプションで、`--preset` 実行に渡すとそのまま拒否されますし、アシスタントは自身が発話らしいと分類した素材にしかこの発話専用のモノラル処理を適用しません。この番組は `classical` に分類されている（ステップ 4 を参照）ため、値をいくつにしてもこのフラグには作用対象がありません。
+`--speech-mono-amount`（0〜1、既定値 1）は、speech プリセットの 120 Hz モノメーカー・クロスオーバーより下にあるサイド成分をモノラルへ寄せる量を調整します。`--preset speech` を選んでいるためアシスタントがこの処理を適用し、音声のジャンル分類には依存しません。0 は低域のサイド成分をそのまま残し、1 はクロスオーバーより下のサイド成分を取り除きます。クロスオーバーより上のサイド成分は残ります。聴感上およびバイト単位の差は、エピソードにどれだけ低域のサイド成分があるかで変わります。
 
-それでもこの機能そのものの狙いは実番組にそのまま当てはまります。携帯電話のスピーカー、通話モードの Bluetooth イヤホン、ポッドキャストアプリの「音声を強調」設定は、いずれもリスナーの耳に届く前に左右をひとつのチャンネルへ合算します。このプリセットで `host` の `pan` が 0、`guest` の `pan` が 0.1 とほぼセンターに寄せてあるのはまさにこの理由からで、わずかなオフセットは、デバイスがペアをモノラルへ畳んだときの位相打ち消しのリスクを冒さずに 2 人の声を分離します。もし実際の収録がこのプリセットの固定パンより広いステレオイメージを声に持たせている場合、たとえばゲストにステレオの部屋鳴りマイクを使っているような場合は、それこそ `--speech-mono-amount` が用意されている状況です。ただしその場合も、フラグに絞り込みを任せる前に、アシスタントが実際にそれを発話として認識しているかを自分の素材で確かめる価値があります。
+この低域の折りたたみを試す理由は実番組にもあります。携帯電話のスピーカー、通話モードの Bluetooth イヤホン、ポッドキャストアプリの「音声を強調」設定は、再生前に左右をひとつのチャンネルへ合算します。このシーンでは `host` の `pan` が 0、`guest` の `pan` が 0.1 とほぼセンターなので、差が大きくなるのはステレオの部屋鳴りマイクなど、収録に広い低域サイド成分が含まれる場合です。
 
-::: tip 発話専用フラグを信じる前に分類結果を確認する
-「発話らしい素材」に限定されたアシスタントのオプションは、その判定を下す分類器と同じだけの精度しかありません。発話専用フラグが実際に発火したと判断するのは、`--explain` を付けて実行し、`explanation` フィールドが述べているジャンルを確認してからにしてください。
+::: tip 発話専用フラグを使う前にプリセットを確認する
+`--explain` を付けて実行し、`explanation` フィールドに `speech preset enables de-esser and mono compatibility` が含まれることを確認してください。speech プリセットを出発点にし、発話向けの処理が適用されたことを確認できます。
 :::
 
 ## ステップ 6 — 信じるべきラウドネスを読む

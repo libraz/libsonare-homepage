@@ -28,7 +28,7 @@ libsonare covers several related jobs:
 | Headless-DAW runtime | Author projects with audio/MIDI tracks, sequence MIDI, and bounce or play back in realtime ([Project Editing](./project-editing.md), [Project Bounce](./project-bounce.md), [Realtime and Streaming](./realtime-streaming.md)) |
 
 ::: info Loudness, LUFS, and true peak
-LUFS (Loudness Units relative to Full Scale) is the streaming/broadcast standard for perceived loudness, so two tracks at the same LUFS sound equally loud. True peak measures the highest level including inter-sample peaks (ISP) — peaks that occur between samples, which ordinary peak meters miss. Tracking them matters because they can distort on playback.
+LUFS (Loudness Units relative to Full Scale) is a standardized estimate of programme loudness used in streaming and broadcasting. Matching two tracks by integrated LUFS is a useful starting point for comparison, but differences in spectrum and dynamics can still make them sound unequally loud. True peak estimates the highest level of the reconstructed signal, including peaks between samples that a sample-peak meter misses. Those peaks can cause distortion during playback or encoding.
 :::
 
 libsonare is written in C++17 for performance and can be compiled to **WebAssembly**, making it possible to run the same processors directly in web browsers — no server required.

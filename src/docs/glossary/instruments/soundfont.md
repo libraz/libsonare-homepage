@@ -44,7 +44,7 @@ Because a SoundFont is addressed by `(bank, program)`, a **General MIDI**-compli
     { from: 'sf2', to: 'out' },
     { from: 'syn', to: 'out', style: 'dashed' }
   ]"
-  caption="Every program resolves to a backend — the SF2 sample when the loaded SoundFont covers it, otherwise the NativeSynth GM fallback — so a note is never dropped."
+  caption="Each used (channel, bank, program) group gets one status. It is SF2 only when the loaded SoundFont covers every played note in that group; an uncovered note uses the NativeSynth GM fallback."
 />
 
 The principle underneath is simple: a note list is instrument-agnostic, and the address decides which instrument performs it. The piano roll below makes that tangible — the notes never change; switching the instrument points the same MIDI at a different sound.
@@ -53,23 +53,23 @@ The principle underneath is simple: a note list is instrument-agnostic, and the 
 
 ## How libsonare resolves a note
 
-libsonare can load a SoundFont and play MIDI through it, but it adds one important guarantee. After you supply a `.sf2` file, every MIDI program is resolved to a backend:
+libsonare can load a SoundFont and play MIDI through it, but it adds one important guarantee. After you supply a `.sf2` file, every used `(channel, bank, program)` group is summarized by one backend status:
 
 | Situation | Backend | What you hear |
 |-----------|---------|---------------|
-| The loaded SoundFont covers the `(bank, program)` | `'sf2'` | The recorded SF2 sample |
-| The program is missing, or no SoundFont is loaded | `'synth'` | The NativeSynth General MIDI **fallback** bank |
+| Every played note in the `(channel, bank, program)` group is covered by the loaded SoundFont's zones | `'sf2'` | SF2 samples for those notes |
+| At least one played note is uncovered, or no SoundFont is loaded | `'synth'` | NativeSynth General MIDI **fallback** for uncovered notes |
 
-The key consequence: **MIDI never renders silent.** If a SoundFont is missing a sound — or you have not loaded one at all — libsonare falls back to its built-in NativeSynth GM bank for that program instead of dropping the note. You always get a usable instrument for every program in the arrangement.
+The key consequence: an uncovered MIDI note does not become silent solely because a SoundFont lacks a zone. libsonare falls back to its built-in NativeSynth GM bank for each such note. The manifest is conservative and group-level: if any played note in a `(channel, bank, program)` group lacks an SF2 zone, that group's status is `'synth'`, even when other notes in the same group use SF2.
 
 ::: tip Why the fallback matters
 Different SoundFonts cover different instruments, and a small `.sf2` might only include a handful of programs. The fallback means you can hand libsonare any arrangement and any SoundFont (or none) and still hear the complete piece — then swap in a richer SoundFont later to upgrade the sounds, with no change to the MIDI.
 :::
 
-You can inspect exactly what resolved where: a per-program report tells you, for each `(channel, bank, program)` the arrangement plays, whether it ended up on the `'sf2'` or `'synth'` backend and which preset name it matched.
+You can inspect exactly what resolved where: `soundFontManifest()` reports one status for each `(channel, bank, program)` group the arrangement plays. The backend summarizes all notes in that group and is `'synth'` when at least one note uses fallback.
 
 ::: details How libsonare implements this
-On a `Project`, `loadSoundFont(bytes)` registers an `.sf2` file from a byte buffer. `soundFontManifest()` then returns one `Sf2ProgramStatus` per `(channel, bank, program)` combination the arrangement uses, each with a `backend` of `'sf2'` or `'synth'` and the resolved `presetName` — so you can see at a glance which programs are covered by your SoundFont and which fell back to the NativeSynth GM bank (drum channels report bank `128`). `bounceWithSf2Instrument(...)` renders the arrangement through the SoundFont player, applying the same GM fallback per note so the output is never silent for an uncovered program. The fallback bank is the data-free floor: even with no SoundFont loaded at all, every program still resolves to a NativeSynth voice.
+On a `Project`, `loadSoundFont(bytes)` registers an `.sf2` file from a byte buffer. `soundFontManifest()` then returns one `Sf2ProgramStatus` per `(channel, bank, program)` combination the arrangement uses, each with a `backend` of `'sf2'` or `'synth'` and the resolved `presetName` (drum channels report bank `128`). The manifest aggregates all note-ons in each combination: any note that escapes the SoundFont's zones changes that entry to `'synth'`; this does not mean every note in the group used NativeSynth. `bounceWithSf2Instrument(...)` applies the same GM fallback per note, so uncovered notes still render. Even with no SoundFont loaded, every note resolves to a NativeSynth voice.
 :::
 
 Related: [SoundFont Player](../../soundfont-player.md), [Built-in Synthesizer (NativeSynth)](../../native-synth.md), [MIDI Basics](./midi-basics.md)

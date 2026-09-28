@@ -521,16 +521,12 @@ offline = sonare.mix_stereo(
     width=[1, 0.9],
 )
 
-# Mixer はコンテキストマネージャではありません。使い終わったら close() を呼びます。
-mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
-try:
+with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
     print(mixer.scene_warnings())  # 非致命的: どのプロセッサも読まない insert パラメータ（タイプミス）
     print(mixer.latency_samples())  # ドライ／ウェット整列用のコンパイル済みグラフ遅延
     block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
     meter = mixer.strip_meter(0, tap="postFader")
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")
-finally:
-    mixer.close()
 ```
 
 `mixer.process_stereo(...)` は `MixerStereoResult` 名前付きタプルを返します。`.left` と `.right`（`list[float]`）、`.sample_rate`（`int`）を持ち、Node/WASM の `{left, right, sampleRate}` と同じ形です。
@@ -570,7 +566,7 @@ with sonare.Project() as project:
     audio = project.bounce_with_synth_instrument("e-piano", num_channels=2)
 ```
 
-`Project` は自動クリーンアップのために `with` に対応しますが、`Mixer` は対応しません（`mixer.close()` を明示的に呼んでください）。
+`Project` と `Mixer` は `with` による自動クリーンアップに対応します。
 
 シンセプリセットの確認には `synth_preset_patch(name)` を使います。名前付きカタログプリセットを `SynthPatch` として返すので、バインドする前にフィールドを確認・調整できます（不明な名前では `SonareError` を送出し、`'va:'` ルーティング接頭辞も受け付けます）。`synth_enum_tables()` は実行時の enum 名テーブル（`dict[str, tuple[str, ...]]`）を返し、`SynthModRouting` のソース／デスティネーション名を、読み込まれたビルドに対して検証できます。
 

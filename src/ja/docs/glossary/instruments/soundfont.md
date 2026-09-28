@@ -44,7 +44,7 @@ SoundFont は `(bank, program)` でアドレス指定されるので、**General
     { from: 'sf2', to: 'out' },
     { from: 'syn', to: 'out', style: 'dashed' }
   ]"
-  caption="すべてのプログラムはバックエンドへ解決されます。読み込んだ SoundFont がカバーしていれば SF2 サンプル、そうでなければ NativeSynth GM フォールバックが受け持つので、ノートが失われることはありません。"
+  caption="使用された (channel, bank, program) の各グループに 1 つの状態が付きます。読み込んだ SoundFont がそのグループで演奏されるすべてのノートをカバーする場合だけ SF2 となり、カバーされないノートには NativeSynth GM フォールバックが使われます。"
 />
 
 根底の原理は単純です。ノートのリストは楽器に依存せず、どの楽器で演奏するかはアドレスが決めます。下のピアノロールで確かめられます。音符はそのままで、楽器を切り替えると同じ MIDI が別の音色を指すだけです。
@@ -53,23 +53,23 @@ SoundFont は `(bank, program)` でアドレス指定されるので、**General
 
 ## libsonare がノートを解決する仕組み
 
-libsonare は SoundFont を読み込んで MIDI を鳴らせますが、ここに 1 つ重要な保証を加えています。`.sf2` ファイルを与えると、すべての MIDI プログラムがバックエンドへ解決されます。
+libsonare は SoundFont を読み込んで MIDI を鳴らせますが、ここに 1 つ重要な保証を加えています。`.sf2` ファイルを与えると、使用された `(channel, bank, program)` の各グループを 1 つのバックエンド状態にまとめます。
 
 | 状況 | バックエンド | 聞こえる音 |
 |------|------------|------------|
-| 読み込んだ SoundFont が `(bank, program)` をカバーする | `'sf2'` | 録音された SF2 サンプル |
-| プログラムが欠けている、または SoundFont 未読み込み | `'synth'` | NativeSynth の General MIDI **フォールバック**バンク |
+| `(channel, bank, program)` グループで演奏されるすべてのノートを、読み込んだ SoundFont のゾーンがカバーする | `'sf2'` | それらのノートに使われる SF2 サンプル |
+| カバーされないノートが 1 つでもある、または SoundFont 未読み込み | `'synth'` | カバーされないノート向けの NativeSynth General MIDI **フォールバック** |
 
-重要な帰結は、**MIDI が決して無音にならない**ことです。SoundFont にその音が欠けていても、SoundFont を一切読み込んでいなくても、libsonare はそのプログラムを内蔵の NativeSynth GM バンクで補い、ノートを落としません。アレンジメント中のすべてのプログラムに、必ず使える楽器が割り当てられます。
+重要な帰結は、SoundFont にゾーンがないことだけを理由に **MIDI ノートが無音にならない**ことです。libsonare はそのノートごとに内蔵の NativeSynth GM バンクへフォールバックします。マニフェストは保守的なグループ単位の情報なので、同じ `(channel, bank, program)` グループにあるノートの 1 つでも SF2 のゾーンから外れると、そのグループの状態は `'synth'` になります。ほかのノートが SF2 を使っていても同じです。
 
 ::: tip フォールバックが重要な理由
 SoundFont ごとにカバーする楽器は異なり、小さな `.sf2` にはプログラムが数個しか入っていないこともあります。フォールバックがあるので、どんなアレンジメントとどんな SoundFont（なくてもかまいません）を渡しても曲全体を聴けます。あとから充実した SoundFont に差し替えれば、MIDI を変えずに音だけを良くできます。
 :::
 
-何がどこに解決されたかは正確に確認できます。プログラムごとのレポートに、アレンジメントが鳴らす各 `(channel, bank, program)` がどちらのバックエンド（`'sf2'` か `'synth'`）に落ちたか、どのプリセット名に一致したかが載ります。
+何がどこに解決されたかは正確に確認できます。`soundFontManifest()` は、アレンジメントが鳴らす各 `(channel, bank, program)` グループについて 1 つの状態を返します。バックエンドはそのグループ内のすべてのノートをまとめて判定し、少なくとも 1 つのノートがフォールバックを使うと `'synth'` になります。
 
 ::: details libsonare での実装
-`Project` 上で `loadSoundFont(bytes)` がバイトバッファから `.sf2` ファイルを登録します。続いて `soundFontManifest()` が、アレンジメントの使う `(channel, bank, program)` の組ごとに 1 件の `Sf2ProgramStatus` を返します。各エントリは `'sf2'` か `'synth'` の `backend` と、解決された `presetName` を持ちます。そのため、どのプログラムが SoundFont でカバーされ、どれが NativeSynth GM バンクへフォールバックしたかが一目で分かります（ドラムチャンネルはバンク `128` を報告します）。`bounceWithSf2Instrument(...)` は SoundFont プレイヤーを通じてアレンジメントをレンダリングし、ノートごとに同じ GM フォールバックを適用するため、カバーされていないプログラムでも出力が無音になりません。フォールバックバンクはデータ不要の最終手段で、SoundFont を一切読み込んでいなくても、すべてのプログラムが NativeSynth のボイスへ解決されます。
+`Project` 上で `loadSoundFont(bytes)` がバイトバッファから `.sf2` ファイルを登録します。続いて `soundFontManifest()` が、アレンジメントの使う `(channel, bank, program)` の組ごとに 1 件の `Sf2ProgramStatus` を返します。各エントリは `'sf2'` か `'synth'` の `backend` と、解決された `presetName` を持ちます（ドラムチャンネルはバンク `128` を報告します）。マニフェストは各組のすべてのノートオンを集約し、SoundFont のゾーンから外れるノートが 1 つでもあれば、そのエントリを `'synth'` に変えます。これはグループ内のすべてのノートが NativeSynth を使ったという意味ではありません。`bounceWithSf2Instrument(...)` はノートごとに同じ GM フォールバックを適用するため、カバーされていないノートもレンダリングされます。SoundFont を一切読み込んでいない場合も、すべてのノートが NativeSynth のボイスへ解決されます。
 :::
 
 関連: [SoundFont プレイヤー](../../soundfont-player.md)、[内蔵シンセサイザー（NativeSynth）](../../native-synth.md)、[MIDI の基礎](./midi-basics.md)

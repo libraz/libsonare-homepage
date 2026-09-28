@@ -513,16 +513,12 @@ offline = sonare.mix_stereo(
     width=[1, 0.9],
 )
 
-# Mixer is not a context manager — call close() when done.
-mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
-try:
+with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
     print(mixer.scene_warnings())  # non-fatal: insert params no processor reads (typos)
     print(mixer.latency_samples())  # compiled graph latency for dry/wet alignment
     block = mixer.process_stereo([vocal_block_l, music_block_l], [vocal_block_r, music_block_r])
     meter = mixer.strip_meter(0, tap="postFader")
     mixer.schedule_fader_automation(0, 48000 * 8, -6, curve="s-curve")
-finally:
-    mixer.close()
 ```
 
 `mixer.process_stereo(...)` returns a `MixerStereoResult` named tuple with `.left` and `.right` (`list[float]`) and `.sample_rate` (`int`), mirroring the Node/WASM `{left, right, sampleRate}` shape.
@@ -562,7 +558,7 @@ with sonare.Project() as project:
     audio = project.bounce_with_synth_instrument("e-piano", num_channels=2)
 ```
 
-Note that `Project` supports `with` for automatic cleanup, while `Mixer` does not (call `mixer.close()` explicitly).
+`Project` and `Mixer` support `with` for automatic cleanup.
 
 For synth preset introspection, `synth_preset_patch(name)` returns a named catalog preset as a `SynthPatch` (it raises `SonareError` for unknown names and accepts a `'va:'` routing prefix) so you can inspect and tweak fields before binding it. `synth_enum_tables()` returns the runtime enum-name tables (`dict[str, tuple[str, ...]]`) for validating `SynthModRouting` source/destination names against the loaded build.
 

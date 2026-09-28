@@ -41,12 +41,12 @@ The numeric fields are small fixed encodings:
 
 - **Pitch class** (`tonicPc`, `rootPc`): `0..11` with C = 0, C#/Db = 1, … B = 11; `255` means unknown.
 - **Key mode** (`mode`): `1` = major, `2` = minor.
-- **Chord quality** (`quality`): `1` = major, `2` = minor, `3` = diminished, `4` = augmented (see [Chord Recognition](./glossary/analysis/chord-recognition.md) for the full list).
+- **Chord quality** (`quality`): `1` = major, `2` = minor, `3` = diminished, `4` = augmented, `5` = dominant, `6` = half-diminished, `7` = suspended. `extensions` distinguishes variants within a family (see [Chord Recognition](./glossary/analysis/chord-recognition.md) for detector qualities).
 
 So `{ tonicPc: 0, mode: 1 }` is C major and `{ rootPc: 7, quality: 1 }` is a G major chord.
 
 ::: warning These are arrangement ordinals, not the analysis enums
-The `mode` and `quality` numbers here are **1-based arrangement ordinals** (major = 1), distinct from the **0-based** `Mode` and `ChordQuality` enums that `detectKey` / `detectChords` return (major = 0, minor = 1, diminished = 2, augmented = 3). They are off by one and cannot be passed through: feeding a `ChordQuality.Minor` (= 1) straight from the analysis API into `annotateChords`'s `quality` would label the chord **major** here. Remap analysis-API results before annotating (e.g. `quality = analysisQuality + 1`).
+The `mode` and `quality` numbers here are **arrangement ordinals**, distinct from the **0-based** `Mode` and `ChordQuality` enums returned by `detectKey` / `detectChords`. Key modes and the four basic triads are offset by one (major = 0 in analysis, 1 here), so passing analysis `ChordQuality.Minor` (= 1) directly to `annotateChords` would label the chord **major**. The `+1` conversion applies only to those four triads. Extended detector qualities need an explicit family and `extensions` mapping: for example, Dominant7 → `{ quality: 5, extensions: [7] }`, HalfDim7 → `{ quality: 6, extensions: [7] }`, and Sus4 → `{ quality: 7, extensions: [4] }`.
 :::
 
 ## Assist sidecars
@@ -433,4 +433,3 @@ const audio = project.bounce({ numChannels: 2 });
 ```
 
 Once your arrangement compiles cleanly, the natural next step is turning it into audio — including making MIDI tracks audible. Continue with [Project Bounce & Rendering](./project-bounce.md).
-

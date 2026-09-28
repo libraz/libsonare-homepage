@@ -485,8 +485,8 @@ repair のチェーンキーは、単発プロセッサのレジストリ名で�
   フィールド検証は厳格です。バージョン 2 の `dynamics.multibandComp` オブジェクト内で未知のキーがあれば拒否され、バンド数はカットオフ数 + 1 と一致していなければなりません。
 :::
 
-::: warning 到達性: JSON ドキュメントの機能であって JS オブジェクトの機能ではない
-バージョン 2 の構造化形式に到達できるのは JSON ドキュメント経由です — CLI の `sonare mastering --config <file>`、またはチェーン設定を JSON として読み書きするコードです。WASM `masteringChain()` の TypeScript 型 `MasteringChainConfig.dynamics.multibandComp` インターフェースは、依然として固定の low/mid/high 省略形しか公開していないため、JavaScript で `MasteringChainConfig` オブジェクトを直接組み立てる方法では任意バンド数の形式には到達できません。到達するには、JSON ドキュメントを自分で書くか、より広いクロスオーバー数（たとえば[名前付きプロセッサ](#ソロプロセッサ)の `multiband.compressor` とその最大 9 バンドまでの `cutoffNHz` スロット）で生成したものを JSON 経路に渡す必要があります。
+::: warning 到達性: JSON ドキュメントの機能であり、各バインディングのチェーン設定オブジェクトには未対応
+バージョン 2 の構造化形式は、チェーン設定 JSON ドキュメント経由で利用できます。たとえば CLI の `sonare mastering --config <file>` が読み込みます。Python の `mastering_chain()`、Node の `masteringChain()`、WASM の `masteringChain()` に渡す TypeScript 型 `MasteringChainConfig` は、ネストした設定をスカラー値のドット記法へ展開します。3 つのバインディングで公開される `dynamics.multibandComp` の形は固定の low/mid/high 省略形だけなので、任意バンド数の v2 オブジェクトを直接渡すことはできません。v2 を使うときは JSON ドキュメントの経路を使ってください。型付きチェーンメソッドには、この形式へ変換するオブジェクトアダプターはありません。
 :::
 
 ## 関連

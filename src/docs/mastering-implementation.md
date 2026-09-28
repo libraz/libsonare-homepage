@@ -80,7 +80,7 @@ Correlation (phase correlation, roughly −1 to +1) measures how similar the lef
 The grouped pages are intentionally broad. A compressor page can explain threshold, ratio, attack, release, knee, detector behavior, and gain-reduction reading together; splitting those into one page per parameter would hide the actual decision.
 
 ::: info Compressor vocabulary
-*Threshold* is the level where compression starts; *ratio* is how hard it clamps above that; *attack*/*release* are how fast it reacts and recovers; *knee* is how gradually it eases in around the threshold; *gain reduction* is how many dB it is currently turning the signal down.
+*Threshold* is the level where compression starts; *ratio* sets the slope above it (for example, 4:1 maps 4 dB above threshold to 1 dB of output rise); *attack*/*release* set how fast the gain follows and recovers; *knee* sets the transition width around threshold; *gain reduction* is how many dB the processor is currently turning the signal down.
 :::
 
 ## Algorithm Boundaries

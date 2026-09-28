@@ -27,7 +27,7 @@ By the end of this page you should be able to:
 | Make a clip longer or shorter without changing the note | Time stretch | `rate` is a playback-speed multiplier: `rate=2.0` plays twice as fast, so the clip is half as long; `rate=0.5` is half speed and twice as long. The pitch does not change. (Note: `noteStretch`'s `stretchRatio` is a length multiplier, so it works the opposite way.) |
 | Move the whole clip up or down in pitch | Pitch shift | `semitones=12` means one octave up; `-12` means one octave down |
 | Nudge a vocal note toward a target note | Pitch correction | You must know or estimate the current pitch first |
-| Hold or shorten one note region | Note stretch | Region positions are sample offsets, not seconds; `stretchRatio > 1` lengthens the region |
+| Hold or shorten one note region | Note stretch | Region positions are sample offsets, not seconds; `stretchRatio > 1` lengthens the replacement region, and the whole-clip shift follows that region-length change |
 | Attenuate or heal a time-frequency region | Spectral edit | Draw a rectangle in samples and Hz, then apply `gain`, `attenuate`, `mute`, or `heal` |
 | Change vocal character | Voice change | Pitch changes the note; formant changes the perceived body or character of the voice |
 | Process live voice blocks with presets | Realtime voice changer | Use this for AudioWorklet, monitoring, or chunked processing where DSP state must continue across blocks |
@@ -264,13 +264,13 @@ const offsetSample = Math.round(offsetSeconds * sampleRate);
 const heldNote = noteStretch(vocal, sampleRate, { onsetSample, offsetSample, stretchRatio: 1.25 });
 ```
 
-`stretchRatio` is the length multiplier for the selected region.
+`stretchRatio` is the nominal length multiplier for the selected region. `noteStretch` blends the source samples at the replacement region's start and end with equal-power crossfades. Those crossfades stay inside the replacement region and do not consume neighboring samples. The output clip length and the shift of audio after the region therefore follow the replacement region's length change. `stretchRatio: 1.0` keeps the whole clip length neutral; for other ratios, the time-stretch backend can round the replacement length by a few samples. A clip edge has no neighboring audio on that side, so it has no crossfade there.
 
 | `stretchRatio` | Result |
 |----------------|--------|
-| `1.25` | Make the region 25% longer |
-| `1.0` | Keep the same length |
-| `0.8` | Make the region 20% shorter |
+| `1.25` | Make the replacement region 25% longer; following audio shifts later by that region-length increase, subject to sample rounding |
+| `1.0` | Keep the replacement region and whole clip at the same length |
+| `0.8` | Make the replacement region 20% shorter; following audio shifts earlier by that region-length decrease, subject to sample rounding |
 
 ### Offline `voiceChange(...)` vs `RealtimeVoiceChanger`
 

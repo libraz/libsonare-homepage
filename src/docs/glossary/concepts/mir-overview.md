@@ -132,7 +132,7 @@ Separating them first often improves downstream tasks because drums and pitched 
 
 <SonareDemo id="hpss-separation" />
 
-**Pitch estimation** tracks the fundamental frequency: the lowest partial of the harmonic series, equivalently the rate at which the waveform repeats. It is not necessarily the *strongest* frequency — an upper harmonic often dominates a bright brass note or a bass heard through a small speaker, and the pitch is still heard at F0 even when no energy is present there at all. That is why the estimators work from the waveform period rather than from the loudest spectral peak. Useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
+**Pitch estimation** tracks F0, the frequency that governs waveform periodicity and, for harmonic sounds, the spacing between partials. F0 need not appear as a spectral component, so it is not necessarily the lowest or strongest observed peak. An upper harmonic can dominate a bright brass note or a bass heard through a small speaker, and the pitch can remain perceptible even when the F0 component is absent. Inharmonic sounds such as bells and cymbals may have no single well-defined F0. Estimators therefore use waveform periodicity rather than the loudest spectral peak. This is useful for melody, vocals, monophonic instruments, tuning checks, and transcription-style workflows.
 
 ## Adjacent: room acoustics
 

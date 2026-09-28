@@ -5,7 +5,7 @@ description: The libsonare explainable mastering helpers — masteringAudioProfi
 
 # Mastering Assistant API
 
-libsonare provides three **JSON-returning** mastering helpers for apps that need *explainable* decisions, not just rendered audio. They run **local DSP analysis only** — no upload, no remote model, no hidden preset — and hand back structured JSON your UI can inspect, store in a report, or display.
+libsonare provides three **JSON-returning** mastering helpers for apps that need *explainable* decisions, not just rendered audio. They run **local DSP analysis only** — no upload and no remote model — and hand back structured JSON your UI can inspect, store in a report, or display. The assistant starts from the preset you provide and uses `streaming` when you omit it.
 
 If "LUFS", "true peak", "crest factor", or "tonal balance" are unfamiliar, read [What Is Mastering?](./glossary/concepts/what-is-mastering.md) and [Reading Mastering Meters](./glossary/mastering/meter-reading.md) first — this page assumes the vocabulary and focuses on the JSON contract.
 
@@ -74,7 +74,7 @@ import { init, masteringAudioProfile, masteringAssistantSuggest, masteringStream
 await init();
 
 const profile    = JSON.parse(masteringAudioProfile(samples, sampleRate));
-const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: 'pop', targetLufs: -14, ceilingDb: -1 }));
 const preview    = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
   { name: 'YouTube',  targetLufs: -14, ceilingDb: -1 },
   { name: 'Podcast',  targetLufs: -16, ceilingDb: -1 },
@@ -87,7 +87,7 @@ import libsonare as sonare
 
 profile    = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sr))
 suggestion = json.loads(sonare.mastering_assistant_suggest(
-    samples, sample_rate=sr, params={"targetLufs": -14, "ceilingDb": -1}))
+    samples, sample_rate=sr, params={"preset": "pop", "targetLufs": -14, "ceilingDb": -1}))
 preview    = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sr, platforms=[
     {"name": "YouTube", "targetLufs": -14, "ceilingDb": -1},
     {"name": "Podcast", "targetLufs": -16, "ceilingDb": -1},
@@ -96,7 +96,7 @@ preview    = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=
 
 ```bash [CLI]
 sonare mastering-profile source.wav
-sonare mastering-suggest source.wav --params targetLufs=-14,ceilingDb=-1
+sonare mastering-suggest source.wav --preset pop --params targetLufs=-14,ceilingDb=-1
 sonare mastering-streaming source.wav \
   --platforms '[{"name":"YouTube","targetLufs":-14,"ceilingDb":-1},{"name":"Podcast","targetLufs":-16,"ceilingDb":-1}]'
 ```
@@ -129,19 +129,19 @@ try {
 
 ## `masteringAudioProfile` — measure the source
 
-A read-only summary of the input: how loud it is, how its energy is spread across the spectrum, how dynamic it is, and which genres it resembles. Nothing is processed.
+A read-only summary of the input: how loud it is, how its energy is spread across the spectrum, how dynamic it is, and whether the optional defect detectors found damage. Nothing is processed.
 
-Optional `params` are numeric and accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`), and `truePeakOversample`/`true_peak_oversample` (default `4`).
+Optional `params` accept either JS-style or Python-style names: `nFft`/`n_fft` (default `2048`), `hopLength`/`hop_length` (default `512`), `truePeakOversample`/`true_peak_oversample` (default `4`), and `detectDefects`/`detect_defects` (default `false`).
 
 ::: info Why oversample for true peak?
-Digital peaks are sampled at fixed points, but the real waveform can rise *between* those samples. Oversampling re-measures the signal at a higher rate (here 4×) to catch these inter-sample peaks, so the reported `truePeakDb` reflects what a converter actually outputs. Higher factors are more accurate but cost more CPU.
+Stored samples have fixed positions, but a band-limited reconstruction can peak *between* them. Here, a 4× interpolation filter estimates those inter-sample peaks. The reported `truePeakDb` approximates the reconstructed signal under that filter; it is not a measurement of a particular converter's analogue output. Higher factors can improve the estimate but cost more CPU.
 :::
 
 Use this result to explain the input, not to judge it. A profile can tell you that the source is already loud, dark, dense, or transient-heavy. It does not mean the source has passed or failed mastering.
 
 | What it does | What it does not do |
 |--------------|---------------------|
-| Measures loudness, true peak, crest factor, spectrum, dynamics, and genre candidates | It does not change the audio |
+| Measures loudness, true peak, crest factor, spectrum, dynamics, and optional defects | It does not change the audio |
 | Gives your UI facts to display before rendering | It does not choose final settings by itself |
 
 ```json
@@ -161,11 +161,7 @@ Use this result to explain the input, not to judge it. A profile can tell you th
     "centroidHz": 5806.83, "flatness": 0.0035, "rolloffHz": 15386.5
   },
   "dynamics": { "shortTermLufsStd": 0, "attackDensity": 3, "sustainRatio": 1 },
-  "genreCandidates": [
-    { "name": "hipHop", "score": 0.70 },
-    { "name": "edm",    "score": 0.65 },
-    { "name": "pop",    "score": 0.45 }
-  ]
+  "defects": { "measured": false }
 }
 ```
 
@@ -181,12 +177,12 @@ Use this result to explain the input, not to judge it. A profile can tell you th
 | | `rolloffHz` | Frequency below which most energy sits |
 | `dynamics` | `attackDensity` | How busy the transients are |
 | | `sustainRatio` | How sustained vs. transient the material is |
-| `genreCandidates` | `[{name, score}]` | Best-matching styles; the top one seeds the suggestion's base preset |
+| `defects` | object | Defect counters and measurements; `measured` is `false` unless `detectDefects` is enabled |
 
 ::: info Reading the spectral bands
 The `*RmsDb` fields go from low to high frequency: `sub` (deep bass) → `low`/`lowMid` (bass and warmth) → `mid` (body, vocals) → `highMid`/`high` (presence, clarity) → `air` (top-end sparkle).
 
-They are relative band levels on an internal FFT scale, not dBFS — the example above reads `lowRmsDb: 40.35`, well above 0. And because music has a natural downward spectral tilt, `air` reads far below `low` on essentially every normal master, so comparing the bands against each other would call almost any track dark. Judge dark versus bright by comparing a band against the *same* band on a reference track or on a previous render. The genre heuristics inside the library work the same way: their dull/lo-fi test is `air` sitting more than 22 dB below `mid`, not below 0.
+They are relative band levels on an internal FFT scale, not dBFS — the example above reads `lowRmsDb: 40.35`, well above 0. And because music has a natural downward spectral tilt, `air` reads far below `low` on essentially every normal master, so comparing the bands against each other would call almost any track dark. Judge dark versus bright by comparing a band against the *same* band on a reference track or on a previous render.
 :::
 
 ::: details What do loudness range, attack density, and sustain ratio mean?
@@ -202,12 +198,12 @@ A `crestFactorDb` of 5.8 is not "bad" — it just describes the signal. Use the 
 
 ## `masteringAssistantSuggest` — propose a chain
 
-Builds on the profile to propose a ready-to-render mastering chain, plus a human-readable rationale. The third argument carries your intent (`targetLufs`, `ceilingDb`, …).
+Builds on the profile to propose a ready-to-render mastering chain, plus a human-readable rationale. The third argument carries your intent and the base preset (`preset`, `targetLufs`, `ceilingDb`, …).
 
-Accepted intent keys are `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`.
+Accepted keys are `preset`, `targetPlatform`/`target_platform`, `targetLufs`/`target_lufs`, `ceilingDb`/`ceiling_db`, `enableRepair`/`enable_repair`, `preferStreamingSafe`/`prefer_streaming_safe`, and `speechMonoAmount`/`speech_mono_amount`. `preset` and `targetPlatform` take names; the other keys are numeric or boolean.
 
 ::: details What the optional intent keys do
-`enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. `preferStreamingSafe` biases the suggestion toward a safe ceiling and target for streaming delivery rather than maximum loudness. `speechMonoAmount` (0–1) collapses the low/center of speech toward mono for intelligibility on small or mono speakers.
+`preset` chooses the chain to start from and defaults to `streaming`; the assistant never infers it from the audio. `targetPlatform` applies its loudness and ceiling only for targets with an explicit rule (`broadcast`, `podcast`, `club`, or `cd`), and only for values you have not supplied. `streaming`, `youtube`, `audiobook`, and `cinema` are accepted names but leave the assistant's current target and ceiling unchanged. `enableRepair` turns on the cleanup stages (declick, denoise, etc.) when the source has defects. `preferStreamingSafe` selects the streaming-safe denoise estimator when repair is enabled. `speechMonoAmount` (0–1) controls how much the speech preset collapses side energy below its 120 Hz mono-maker crossover.
 :::
 
 Think of this helper as a preset generator with an explanation. It returns a full starting point that your app can render directly, but the intended workflow is still editable.
@@ -216,7 +212,7 @@ Think of this helper as a preset generator with an explanation. It returns a ful
 |--------------------|---------------|
 | `chainConfig.params` | Fill controls or pass as `masterAudio` overrides |
 | `explanation` | Show why stages were enabled or tuned |
-| `genreCandidates` | Pick the base preset or show alternatives |
+| `preset` input | Choose the base preset before calling the assistant |
 | `profile` | Keep the suggestion self-contained in reports |
 
 ```json
@@ -225,26 +221,20 @@ Think of this helper as a preset generator with an explanation. It returns a ful
     "version": 1,
     "params": {
       "eq.tilt.enabled": true,
-      "eq.tilt.tiltDb": -0.5,
+      "eq.tilt.tiltDb": 0.5,
       "dynamics.transientShaper.enabled": true,
       "dynamics.compressor.enabled": true,
-      "dynamics.compressor.thresholdDb": -18,
-      "saturation.tape.enabled": true,
-      "spectral.airBand.enabled": true,
-      "maximizer.truePeakLimiter.enabled": true,
-      "maximizer.truePeakLimiter.ceilingDb": -1,
+      "saturation.exciter.enabled": true,
+      "stereo.imager.enabled": true,
       "loudness.enabled": true,
       "loudness.targetLufs": -14,
       "loudness.ceilingDb": -1
     }
   },
   "explanation": [
-    "base preset selected from top genre candidate: hipHop",
-    "target loudness and ceiling applied from AssistantConfig",
-    "air band enabled because the spectral profile is dark",
-    "transient shaper enabled for dense attacks"
+    "base preset: pop",
+    "target loudness and ceiling applied from AssistantConfig"
   ],
-  "genreCandidates": [ { "name": "hipHop", "score": 0.70 } ],
   "profile": { "integratedLufs": -8.7, "truePeakDb": -2.43, "crestFactorDb": 5.75, "...": "flattened profile" }
 }
 ```
@@ -253,22 +243,21 @@ Think of this helper as a preset generator with an explanation. It returns a ful
 |-------|---------|
 | `chainConfig.params` | The **full proposed chain** as flat dot-notation keys (`stage.processor.param`). `*.enabled` is a JSON boolean (`true`/`false`). **These are the same keys `masterAudio` overrides accept**, so the suggestion can be rendered directly. |
 | `explanation` | Plain-language reasons for each decision — show these in your UI so the choice is transparent. |
-| `genreCandidates` | The same ranked styles as the profile; the top one is the base preset. |
 | `profile` | A flattened copy of the source profile, so a suggestion is self-contained. |
 
 ::: details The params object covers the whole default chain
-The example above is trimmed. The real `params` map contains **every** parameter of the default chain — all repair stages (declick, declip, decrackle, dehum, dereverb, denoise), EQ, de-esser, transient shaper, compressor, multiband, saturation (tape/exciter), air band, stereo, the true-peak limiter, and the loudness stage — each with its full parameter set and an `enabled` flag. The assistant flips `enabled` and tunes a few values based on the profile; everything else stays at its documented default. Treat the map as an overridable snapshot of the whole chain, not a sparse diff.
+The example above is trimmed. The real `params` map contains **every** parameter in the selected preset's chain — repair stages, EQ, dynamics, saturation, stereo, the true-peak limiter, and loudness — each with its full parameter set and an `enabled` flag. The assistant starts from the named preset, applies the requested target and ceiling, adds the speech preset's low-frequency mono-maker stage for `speech`, and can enable measured repair stages when `enableRepair` is true. Treat the map as an overridable snapshot of the whole chain, not a sparse diff.
 :::
 
 ### Turning a suggestion into a master
 
-Because `chainConfig.params` uses `masterAudio`'s override keys, rendering the suggestion is one call — use the top genre candidate as the base preset and pass the whole params map, not just the few keys shown above, as overrides:
+Because `chainConfig.params` uses `masterAudio`'s override keys, rendering the suggestion is one call. Choose the base preset explicitly, pass the same name to the assistant and to `masterAudio`, and pass the whole params map as overrides:
 
 ::: code-group
 
 ```typescript [Browser]
-const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
-const basePreset = suggestion.genreCandidates[0].name;        // e.g. "hipHop"
+const basePreset = 'pop';
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: basePreset, targetLufs: -14, ceilingDb: -1 }));
 
 const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
 console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
@@ -276,8 +265,8 @@ console.log(mastered.report.bandEnergyDeltaDb.length); // 32 frequency bands
 ```
 
 ```typescript [Node]
-const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
-const basePreset = suggestion.genreCandidates[0].name;
+const basePreset = 'pop';
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: basePreset, targetLufs: -14, ceilingDb: -1 }));
 
 const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
 console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
@@ -285,9 +274,9 @@ console.log(mastered.report.bandEnergyDeltaDb.length); // 32 frequency bands
 ```
 
 ```python [Python]
+base_preset = "pop"
 suggestion = json.loads(sonare.mastering_assistant_suggest(
-    samples, sample_rate=sr, params={"targetLufs": -14, "ceilingDb": -1}))
-base_preset = suggestion["genreCandidates"][0]["name"]        # e.g. "hipHop"
+    samples, sample_rate=sr, params={"preset": base_preset, "targetLufs": -14, "ceilingDb": -1}))
 
 mastered = sonare.master_audio(
     samples, sample_rate=sr,
@@ -300,9 +289,10 @@ print(len(mastered.report.band_energy_delta_db))  # 32 frequency bands
 ```
 
 ```bash [CLI]
-sonare mastering source.wav --target-lufs -14 --ceiling-db -1 \
+sonare mastering-suggest source.wav --preset pop \
+  --target-lufs -14 --ceiling-db -1 --config-out suggestion-chain.json
+sonare mastering source.wav --chain-config suggestion-chain.json \
   --report mastering-report.json -o master.wav
-sonare mastering-processors
 ```
 
 :::

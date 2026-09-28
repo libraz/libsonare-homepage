@@ -11,14 +11,14 @@ Unlike [chroma](./chroma-features.md), which folds octaves away, pitch tracking 
 
 ## Fundamental frequency (F0)
 
-A pitched sound is not one frequency. It is a stack made from a **fundamental frequency (F0)** plus **partials** above it. For voices and for bowed or blown instruments those partials sit at near-integer multiples of F0, which is why they are called harmonics.
+A pitched sound has a periodic waveform and often a series of spectral **partials**. The **fundamental frequency (F0)** is the frequency that governs that periodicity and, for harmonic sounds, the spacing between partials. F0 may be absent as a spectral component while still determining perceived pitch; this is the missing fundamental. Inharmonic sounds such as bells and cymbals can have partials without a single well-defined F0. For voices and for bowed or blown instruments, partials often sit near integer multiples of F0, so they are called harmonics.
 
-For example, when a singer holds A4, the F0 is 440 Hz. The recording also contains energy at 880 Hz, 1320 Hz, and other multiples.
+For example, when a singer holds A4, the F0 is 440 Hz. The recording often contains energy near 880 Hz, 1320 Hz, and other multiples.
 
-The pitch you *perceive* corresponds to the F0. That is why pitch tracking is really **F0 estimation** over time. The hard part is deciding which peak is the fundamental and which peaks are harmonics.
+The pitch you *perceive* generally corresponds to F0. That is why pitch tracking is really **F0 estimation** over time. The task is to infer the waveform's periodicity rather than choose the lowest or loudest spectral peak.
 
 ::: tip The integer-multiple picture has two limits
-Stiff strings are progressively sharp of the ideal series — a piano's upper partials land tens of cents above exact multiples — and struck idiophones such as bells, cymbals, and drums have partials with no integer relation and often no well-defined F0 at all. In the other direction, the pitch is still heard at F0 when the F0 component is missing from the spectrum entirely. So the fundamental is the lowest member of the series, not the loudest peak; that is exactly why the estimators below measure a waveform period instead of picking a spectral maximum.
+Stiff strings are progressively sharp of the ideal series — a piano's upper partials land tens of cents above exact multiples — and struck idiophones such as bells, cymbals, and drums have partials with no integer relation and often no well-defined F0 at all. A pitched sound can still have a perceptual F0 when its F0 component is missing from the spectrum. The lowest or loudest observed peak is therefore not a reliable F0 rule; the estimators below infer F0 from waveform periodicity instead of selecting a spectral maximum.
 :::
 
 ## YIN and pYIN

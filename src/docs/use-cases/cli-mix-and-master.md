@@ -53,7 +53,7 @@ sonare repair mix.wav --detect --json > defects.json
 
 # 5. Master for the delivery target, keeping the report.
 sonare mastering mix.wav \
-  --assistant --explain \
+  --assistant --preset edm --explain \
   --target-platform streaming \
   -o master.wav --report report.json --json
 ```
@@ -194,7 +194,7 @@ sonare repair mix.wav --detect --json
 
 ```bash
 sonare mastering mix.wav \
-  --assistant --explain \
+  --assistant --preset edm --explain \
   --target-platform streaming \
   -o master.wav --report report.json --json
 ```
@@ -202,24 +202,20 @@ sonare mastering mix.wav \
 ```json
 {"mode": "assistant",
  "input_lufs": -19.61, "output_lufs": -14.11, "applied_gain_db": 7.53,
- "stages": ["eq.tilt", "dynamics.transientShaper", "dynamics.compressor",
-            "saturation.exciter", "spectral.airBand", "stereo.imager",
-            "loudness.optimize"],
- "explanation": ["base preset selected from top genre candidate: edm",
-                 "target loudness and ceiling applied from AssistantConfig",
-                 "air band enabled because the spectral profile is dark",
-                 "compressor adjusted because loudness range is high",
-                 "transient shaper enabled for dense attacks"],
+ "stages": ["eq.tilt", "dynamics.compressor", "saturation.exciter",
+            "stereo.imager", "loudness.optimize"],
+ "explanation": ["base preset: edm",
+                 "target loudness and ceiling applied from AssistantConfig"],
  "latency_samples": 0}
 ```
 
-`--assistant` profiles the mixdown, picks a base preset from the genre it measures, and adapts the chain to what it found; `--explain` makes it say which of those adaptations fired and why. `--target-platform` selects the loudness and ceiling the chain aims at — `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `club`, or `cd`. The processors themselves are catalogued in [Mastering Processors](../mastering-processors.md), and the decision rules in [Mastering Assistant](../mastering-assistant.md).
+`--assistant` profiles the mixdown and starts from the preset named with `--preset`; when the option is omitted, it starts from `streaming`. The assistant does not infer a genre from the audio. `--explain` reports the selected base preset and any repair or speech-specific decisions. `--target-platform` accepts `streaming`, `youtube`, `broadcast`, `podcast`, `audiobook`, `cinema`, `club`, or `cd`; `broadcast`, `podcast`, `club`, and `cd` supply their own loudness and ceiling when the corresponding values were not explicit, while the other accepted names leave the current values unchanged. The processors themselves are catalogued in [Mastering Processors](../mastering-processors.md), and the assistant contract is in [Mastering Assistant](../mastering-assistant.md).
 
 ::: warning `--target-platform` requires `--assistant`
-The platform target is an assistant input, not a global. Passing it to a preset run exits with code 3 and says so. To master to a fixed preset instead, use `--preset <name>` and set `--target-lufs` / `--ceiling-db` yourself.
+The platform target is an assistant input, not a global. Passing it to a preset run exits with code 3 and says so. To master with a fixed preset, use `--preset <name>` with that preset's built-in target. If you need a different target or ceiling, use `--assistant --preset <name>` with `--target-lufs` / `--ceiling-db`, or write the suggested chain with `mastering-suggest` and render it with `--chain-config`.
 :::
 
-If you disagree with the genre the assistant measured, name the preset instead: `sonare mastering-presets --json` lists all thirty, from `pop` and `jpop` through `speech` and `fieldRecording` to `vinyl` and `shellac78`.
+Choose the base preset explicitly when the material has a known role: `sonare mastering-presets --json` lists all thirty, from `pop` and `jpop` through `speech` and `fieldRecording` to `vinyl` and `shellac78`. The same name works with `--assistant --preset <name>`; restoration presets such as `vinyl` are rejected by the assistant because they do not provide a mastering loudness target.
 
 ## Step 6 — Believe the right number
 

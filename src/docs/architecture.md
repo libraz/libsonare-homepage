@@ -19,9 +19,11 @@ By the end of this page you should be able to:
 
 ## Module Overview
 
-The layers below run top to bottom: the API layer is what apps call, and every
-call eventually funnels down into the shared `Spectrogram`/`FFT` core so no
-analyzer, effect, or mastering processor recomputes the same transform twice.
+The layers below run top to bottom: the API layer is what apps call. Spectral
+analysis and some effects use the shared transform primitives; filters, dynamics,
+mixing, and other processors have their own signal paths. Within one
+`MusicAnalyzer`, selected intermediate features are cached, but separate
+processors may compute their own transforms.
 Groups mirror the `src/` subdirectories from the Directory Structure section
 below; nodes inside a group are representative members, not an exhaustive
 class list — see the Page Map for where each subsystem's full API is documented.
@@ -249,11 +251,13 @@ src/
 
 ### Audio Analysis Pipeline
 
-Every analyzer branches off the same STFT (short-time Fourier transform) /
-Spectrogram output instead of recomputing it: onset strength drives BPM and
-beat tracking, while the
-chromagram drives key and chord recognition, and `MusicAnalyzer.analyze()`
-just collects whichever of these were touched into one `AnalysisResult`.
+This diagram shows the main feature relationships, not a single shared STFT
+instance. Within a `MusicAnalyzer`, the ordinary chromagram uses a cached
+spectrogram, and a cached mel representation feeds the onset strength used by
+BPM and beat tracking. Harmonic/CQT chroma for key and chord analysis can
+compute additional transforms. `MusicAnalyzer.analyze()` builds an
+`AnalysisResult`, including optional fields enabled by its configuration, and
+reuses intermediates already available on that analyzer.
 
 <FlowDiagram
   title="Audio Analysis Pipeline"
@@ -264,7 +268,7 @@ just collects whichever of these were touched into one `AnalysisResult`.
     { id: 'stft', label: 'STFT', col: 2, row: 0, group: 'core' },
     { id: 'spec', label: 'Spectrogram', col: 3, row: 0, group: 'core', variant: 'accent' },
     { id: 'mel', label: 'Mel Spectrogram', col: 4, row: 0, group: 'features' },
-    { id: 'chroma', label: 'Chromagram', col: 4, row: 1, group: 'features' },
+    { id: 'harmony', label: 'Harmony Transforms', col: 4, row: 3, group: 'features' },
     { id: 'onset', label: 'Onset Strength', col: 4, row: 2, group: 'features' },
     { id: 'bpm', label: 'BPM Detection', col: 5, row: 0, group: 'analysis' },
     { id: 'key', label: 'Key Detection', col: 5, row: 1, group: 'analysis' },
@@ -278,12 +282,12 @@ just collects whichever of these were touched into one `AnalysisResult`.
     { from: 'audio', to: 'stft' },
     { from: 'stft', to: 'spec' },
     { from: 'spec', to: 'mel' },
-    { from: 'spec', to: 'chroma' },
+    { from: 'audio', to: 'harmony' },
     { from: 'mel', to: 'onset' },
     { from: 'onset', to: 'bpm' },
     { from: 'onset', to: 'beat' },
-    { from: 'chroma', to: 'key' },
-    { from: 'chroma', to: 'chord' },
+    { from: 'harmony', to: 'key' },
+    { from: 'harmony', to: 'chord' },
     { from: 'bpm', to: 'result' },
     { from: 'key', to: 'result' },
     { from: 'beat', to: 'result' },
@@ -296,17 +300,18 @@ just collects whichever of these were touched into one `AnalysisResult`.
     { id: 'analysis', label: 'Analysis' },
     { id: 'output', label: 'Output' }
   ]"
-  caption="File and in-memory buffer paths converge on Audio; from there every feature and analyzer shares the same Spectrogram."
+  caption="This is a feature map: some intermediate results are cached within one MusicAnalyzer, while other analyses use their own transforms."
 />
 
 ### Audio Effects Pipeline
 
 HPSS — harmonic/percussive source separation, which splits a signal into its
-sustained-tone and transient parts — and the phase vocoder both run on the same
-complex STFT and reconstruct through a shared iSTFT, so they never diverge on
-transform parameters. Time
-stretch and pitch shift instead take a separate path straight from `Audio`,
-since pitch shift layers a resampler on top of the same time-stretch core.
+sustained-tone and transient parts — and the phase vocoder both operate on
+complex STFT data and reconstruct audio with an inverse STFT. The diagram shows
+their shared *type of processing*, not one transform instance or a guarantee
+that their window and hop settings match. `timeStretch` can use the native
+spectral backend or a phase-vocoder fallback; pitch shift combines time stretch
+with resampling.
 
 <FlowDiagram
   title="Audio Effects Pipeline"
@@ -344,7 +349,7 @@ since pitch shift layers a resampler on top of the same time-stretch core.
 />
 
 ::: details What is a phase vocoder?
-A phase vocoder is the standard way to time-stretch audio (or, combined with resampling, pitch-shift it) without obvious artifacts. It takes the STFT and *advances the phase* of each frequency bin to fit the new timeline before reconstructing, so a sound can be made longer or shorter while its pitch and spectral character stay intact. libsonare uses it for `timeStretch` / `pitchShift` and the editing-DSP voice tools.
+A phase vocoder time-stretches audio by advancing STFT-bin phases to fit a new timeline before reconstruction. Combined with resampling, it can also shift pitch. It approximately preserves pitch during a stretch, but transients may smear and extreme ratios can sound artificial. libsonare offers a phase-vocoder backend for `timeStretch`; other editing paths may use a different spectral backend.
 :::
 
 <SonareDemo id="time-stretch" />
@@ -418,7 +423,7 @@ AnalysisResult result = analyzer.analyze();
 ```
 
 ::: tip Why this matters
-Asking just for the key does **not** force chord recognition or section detection to run. Conversely, calling `analyze()` once reuses any intermediates already computed — no redundant FFTs.
+Asking just for the key does **not** force chord recognition or section detection to run. Calling `analyze()` reuses intermediates already computed on that `MusicAnalyzer`; distinct feature paths can still perform additional transforms.
 :::
 
 ### Zero-Copy Audio Slicing

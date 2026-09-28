@@ -147,7 +147,7 @@ description: ミキサーシーンの交換形式を解説。ストリップ・�
 | `role` | string | `"master"`、`"aux"`（既定）、または `"submix"` などのグループバス |
 | `layout` | string | バスのチャンネルレイアウト。`"mono"`、`"stereo"`（既定）、`"5.1"`、`"7.1"` のいずれか。マスターバスはプロジェクトの出力レイアウトを持ちます。ライターは既定のステレオでは省略します |
 | `inputTrimDb` | number | バス入力のゲイン。既定 `0` |
-| `width` | number | バスのステレオ幅。既定 `1`。ストリップと同じく `0` … `2` へクランプ |
+| `width` | number | バスのステレオ幅。既定 `1`。ストリップと同じく `0` … `2` へクランプ。`layout` がステレオより広いと拒否されます ── サラウンドベッドには狭めたり広げたりするステレオ像がありません |
 | `polarityInvertLeft` / `polarityInvertRight` | boolean | バスのチャンネルごとの極性反転。既定 `false` |
 | `inserts` | array | バス自体のプロセッサ（ストリップと同じ[インサート](#インサート)形式） |
 
@@ -356,15 +356,13 @@ const saved = mixer.toSceneJson();   // 同じ形式へラウンドトリップ
 import libsonare as sonare
 
 scene_json = sonare.mixing_scene_preset_json('vocalReverbSend')
-mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
+with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
+    mixer.scene_warnings()  # [] — タイプミスした insert パラメータがあれば非致命的にここへ並ぶ
 
-mixer.scene_warnings()  # [] — タイプミスした insert パラメータがあれば非致命的にここへ並ぶ
+    mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # トポロジー変更
+    mixer.compile()                                                  # タイミングが重要な処理の前に再構築
 
-mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # トポロジー変更
-mixer.compile()                                                  # タイミングが重要な処理の前に再構築
-
-saved = mixer.to_scene_json()   # 同じ形式へラウンドトリップ
-mixer.close()                   # ネイティブハンドルを解放
+    saved = mixer.to_scene_json()   # 同じ形式へラウンドトリップ
 ```
 
 ```bash [Python CLI]

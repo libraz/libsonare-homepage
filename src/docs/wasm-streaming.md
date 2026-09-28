@@ -222,7 +222,7 @@ The analyzer still computes internally in float. Select the transfer precision w
 
 Both quantized read paths accept an optional `StreamQuantizeConfig` to widen the quantization ranges for unusually loud or quiet streams that would otherwise saturate; see [custom quantization ranges](./realtime-streaming.md#custom-quantization-ranges).
 
-Plain lists and objects returned from WASM are rooted back into the JavaScript realm that called them. That means arrays from name-list helpers (`*Names()`), preset-name helpers, section results, key-candidate calls, and the object from `synthPresetPatch(...)` can be passed through `structuredClone()` or `postMessage()` without first rebuilding them by hand. Typed-array payloads still follow the normal transferable-buffer rules below.
+Plain lists and objects returned from WASM are rooted back into the JavaScript realm that called them. That means arrays from name-list helpers (`*Names()`), preset-name helpers, section results, key-candidate calls, the object from `synthPresetPatch(...)`, mixer meter snapshots (`meterTap`, `stripMeter`, `busMeter`), and goniometer samples (`readGoniometerLatest`) can be passed through `structuredClone()` or `postMessage()` without first rebuilding them by hand. Handles with native methods, such as `Mixer` and `StreamAnalyzer`, are not cloneable; send their plain data results instead. Typed-array payloads still follow the normal transferable-buffer rules below.
 
 ::: details What are "Structure-of-Arrays" and transferable objects?
 - **Structure-of-Arrays (SoA)** means each field lives in its own flat typed array — all timestamps in one array, all mel values in another — instead of an array of per-frame objects. It is cheaper to slice and cheaper to hand to another thread.
@@ -397,4 +397,3 @@ try {
 ```
 
 Use `realtimeVoiceChangerPresetJson(name)` to inspect a built-in preset and `validateRealtimeVoiceChangerPresetJson(json)` before accepting user-authored preset JSON. `RealtimeVoiceChangerConfigInput` accepts one of the six strict `VoicePresetId` strings or a preset object with either a `dsp` object or a `macros` object, never both. `voiceCharacterPresetId(...)` returns `null` for an unknown numeric ordinal and throws for an unknown string ID; `realtimeVoiceChangerPresetConfig(...)` throws when it cannot resolve a preset. If you need the canonical ID or resolved flat POD config, use `voiceCharacterPresetId(...)` and `realtimeVoiceChangerPresetConfig(...)`.
-

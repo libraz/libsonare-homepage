@@ -43,7 +43,7 @@ const DEFAULTS: Record<Key, string> = {
   absoluteGate: 'absolute gate −70 LUFS',
   relativeGate: 'relative gate — 10 LU below',
   integrated: 'integrated LUFS',
-  blockNote: 'silence and a quiet intro never reach the average',
+  blockNote: 'in this example, silence and the quiet intro do not count',
 };
 
 const label = (key: Key) => props.labels?.[key] ?? DEFAULTS[key];

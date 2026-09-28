@@ -13,7 +13,7 @@ The demo exposes common platform-style targets such as Spotify, YouTube, Apple M
 
 ## Loudness Target
 
-The loudness target is the integrated [LUFS](../lufs.md) (Loudness Units relative to Full Scale) value the renderer aims for after processing. LUFS measures perceived loudness rather than raw sample level, and "integrated" means a *gated* average across the whole track: loudness is taken in 400 ms blocks, and blocks below -70 LUFS or more than 10 LU below the track's own mean are dropped before averaging. A silent tail or a hushed intro therefore cannot pull the number down — see [LUFS](../lufs.md) for the gating in detail.
+The loudness target is the integrated [LUFS](../lufs.md) (Loudness Units relative to Full Scale) value the renderer aims for after processing. LUFS estimates programme loudness rather than raw sample level, and "integrated" means a *gated* average across the whole track: loudness is taken in 400 ms blocks, with an absolute gate at -70 LUFS and a relative gate 10 LU below the absolute-gated average. Silence is excluded, but a quieter intro above the relative gate still contributes and can lower the result. See [LUFS](../lufs.md) for the gating in detail.
 
 | Target | Practical use |
 |--------|---------------|

@@ -53,7 +53,7 @@ sonare repair mix.wav --detect --json > defects.json
 
 # 5. 配信ターゲット向けにマスタリングし、レポートを残す。
 sonare mastering mix.wav \
-  --assistant --explain \
+  --assistant --preset edm --explain \
   --target-platform streaming \
   -o master.wav --report report.json --json
 ```
@@ -194,7 +194,7 @@ sonare repair mix.wav --detect --json
 
 ```bash
 sonare mastering mix.wav \
-  --assistant --explain \
+  --assistant --preset edm --explain \
   --target-platform streaming \
   -o master.wav --report report.json --json
 ```
@@ -202,24 +202,20 @@ sonare mastering mix.wav \
 ```json
 {"mode": "assistant",
  "input_lufs": -19.61, "output_lufs": -14.11, "applied_gain_db": 7.53,
- "stages": ["eq.tilt", "dynamics.transientShaper", "dynamics.compressor",
-            "saturation.exciter", "spectral.airBand", "stereo.imager",
-            "loudness.optimize"],
- "explanation": ["base preset selected from top genre candidate: edm",
-                 "target loudness and ceiling applied from AssistantConfig",
-                 "air band enabled because the spectral profile is dark",
-                 "compressor adjusted because loudness range is high",
-                 "transient shaper enabled for dense attacks"],
+ "stages": ["eq.tilt", "dynamics.compressor", "saturation.exciter",
+            "stereo.imager", "loudness.optimize"],
+ "explanation": ["base preset: edm",
+                 "target loudness and ceiling applied from AssistantConfig"],
  "latency_samples": 0}
 ```
 
-`--assistant` はミックスダウンをプロファイリングし、計測したジャンルからベースプリセットを選び、見つかった特徴に応じてチェーンを調整します。`--explain` は、その調整のうちどれが発火したかとその理由を言わせるフラグです。`--target-platform` はチェーンが狙うラウドネスと天井を選びます。`streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` から選べます。プロセッサ自体は [マスタリングプロセッサ](../mastering-processors.md) に、判断ルールは [マスタリングアシスタント](../mastering-assistant.md) にまとまっています。
+`--assistant` はミックスダウンをプロファイリングし、`--preset` で指定したプリセットを出発点にします。省略時は `streaming` を使います。音源からジャンルを推測することはありません。`--explain` は、ベースプリセットとリペアやスピーチ固有の判断を出力します。`--target-platform` は `streaming`、`youtube`、`broadcast`、`podcast`、`audiobook`、`cinema`、`club`、`cd` を受け付けます。`broadcast`、`podcast`、`club`、`cd` は、対応する値を明示していない場合に固有のラウドネスと天井を適用します。それ以外の名前は受け付けますが、現在の値を変更しません。プロセッサ自体は [マスタリングプロセッサ](../mastering-processors.md) に、アシスタントの契約は [マスタリングアシスタント](../mastering-assistant.md) にまとまっています。
 
 ::: warning `--target-platform` は `--assistant` を要求します
-プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。プリセット実行に渡すと終了コード 3 でその旨を表示して止まります。固定プリセットでマスタリングしたい場合は `--preset <name>` を使い、`--target-lufs` と `--ceiling-db` を自分で指定してください。
+プラットフォームターゲットはアシスタントへの入力であって、全体設定ではありません。プリセット実行に渡すと終了コード 3 でその旨を表示して止まります。固定プリセットでマスタリングする場合は、`--preset <name>` とそのプリセットの組み込みターゲットを使います。別のターゲットや天井を指定する場合は、`--assistant --preset <name>` と `--target-lufs`／`--ceiling-db` を組み合わせるか、`mastering-suggest` でチェーンを書き出して `--chain-config` でレンダリングします。
 :::
 
-アシスタントが計測したジャンルに納得できないときは、プリセットを名指ししてください。`sonare mastering-presets --json` が 30 種すべてを列挙します。`pop` や `jpop` から `speech`、`fieldRecording`、さらに `vinyl` や `shellac78` まで揃っています。
+素材の役割が決まっている場合は、ベースプリセットを明示してください。`sonare mastering-presets --json` が 30 種すべてを列挙します。`pop` や `jpop` から `speech`、`fieldRecording`、さらに `vinyl` や `shellac78` まで揃っています。`--assistant --preset <name>` に同じ名前を渡せます。`vinyl` などのリストア用プリセットはマスタリング用のラウドネスターゲットを持たないため、アシスタントでは拒否されます。
 
 ## ステップ 6 — どの数値を信じるか
 

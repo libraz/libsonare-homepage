@@ -5,7 +5,7 @@ description: libsonare の説明可能なマスタリング補助 API、masterin
 
 # マスタリングアシスタント API
 
-libsonare は、レンダリング済み音声だけでなく*判断根拠*を扱いたいアプリ向けに、**JSON を返す**マスタリング補助 API を 3 つ提供します。**ローカル DSP 解析のみ**で動作し、アップロードも外部モデルも隠れたプリセットも使わず、UI 表示やレポート保存に使える構造化 JSON を返します。
+libsonare は、レンダリング済み音声だけでなく*判断根拠*を扱いたいアプリ向けに、**JSON を返す**マスタリング補助 API を 3 つ提供します。**ローカル DSP 解析のみ**で動作し、アップロードも外部モデルも使いません。UI 表示やレポート保存に使える構造化 JSON を返します。アシスタントは指定したプリセットを出発点にし、省略時は `streaming` を使います。
 
 「LUFS」「True Peak」「クレストファクター」「トーナルバランス」に馴染みがなければ、先に [マスタリングとは?](./glossary/concepts/what-is-mastering.md) と [メーターの読み方](./glossary/mastering/meter-reading.md) を読んでください。本ページは用語を前提に JSON の契約に集中します。
 
@@ -74,7 +74,7 @@ import { init, masteringAudioProfile, masteringAssistantSuggest, masteringStream
 await init();
 
 const profile    = JSON.parse(masteringAudioProfile(samples, sampleRate));
-const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: 'pop', targetLufs: -14, ceilingDb: -1 }));
 const preview    = JSON.parse(masteringStreamingPreview(samples, sampleRate, [
   { name: 'YouTube',  targetLufs: -14, ceilingDb: -1 },
   { name: 'Podcast',  targetLufs: -16, ceilingDb: -1 },
@@ -87,7 +87,7 @@ import libsonare as sonare
 
 profile    = json.loads(sonare.mastering_audio_profile(samples, sample_rate=sr))
 suggestion = json.loads(sonare.mastering_assistant_suggest(
-    samples, sample_rate=sr, params={"targetLufs": -14, "ceilingDb": -1}))
+    samples, sample_rate=sr, params={"preset": "pop", "targetLufs": -14, "ceilingDb": -1}))
 preview    = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=sr, platforms=[
     {"name": "YouTube", "targetLufs": -14, "ceilingDb": -1},
     {"name": "Podcast", "targetLufs": -16, "ceilingDb": -1},
@@ -96,7 +96,7 @@ preview    = json.loads(sonare.mastering_streaming_preview(samples, sample_rate=
 
 ```bash [CLI]
 sonare mastering-profile source.wav
-sonare mastering-suggest source.wav --params targetLufs=-14,ceilingDb=-1
+sonare mastering-suggest source.wav --preset pop --params targetLufs=-14,ceilingDb=-1
 sonare mastering-streaming source.wav \
   --platforms '[{"name":"YouTube","targetLufs":-14,"ceilingDb":-1},{"name":"Podcast","targetLufs":-16,"ceilingDb":-1}]'
 ```
@@ -129,19 +129,19 @@ try {
 
 ## `masteringAudioProfile` — ソースを測る
 
-入力の読み取り専用の要約です。どれだけ大きいか、スペクトル全体にエネルギーがどう広がっているか、どれだけダイナミックか、どのジャンルに似ているか。何も処理しません。
+入力の読み取り専用の要約です。どれだけ大きいか、スペクトル全体にエネルギーがどう広がっているか、どれだけダイナミックか、任意の不具合検出が何を見つけたかを示します。何も処理しません。
 
-任意の `params` は数値で、JS 風／Python 風のどちらの名前も受け付けます: `nFft`/`n_fft`（既定 `2048`）、`hopLength`/`hop_length`（既定 `512`）、`truePeakOversample`/`true_peak_oversample`（既定 `4`）。
+任意の `params` は JS 風／Python 風のどちらの名前も受け付けます: `nFft`/`n_fft`（既定 `2048`）、`hopLength`/`hop_length`（既定 `512`）、`truePeakOversample`/`true_peak_oversample`（既定 `4`）、`detectDefects`/`detect_defects`（既定 `false`）です。
 
 ::: info True Peak でオーバーサンプリングする理由
-デジタルのピークは固定された点でサンプリングされますが、実際の波形はその*サンプルとサンプルの間*で高くなることがあります。オーバーサンプリングは信号をより高いレートで（ここでは 4 倍で）測り直し、こうしたサンプル間ピーク（ISP）を捉えます。これにより `truePeakDb` が、コンバーターが実際に出力する値を反映します。倍率を上げるほど正確になりますが、CPU 負荷も増えます。
+保存されたサンプルの位置は固定されていますが、帯域制限された波形を再構成すると*サンプル間*でピークが高くなることがあります。ここでは 4 倍の補間フィルターでサンプル間ピークを推定します。`truePeakDb` はそのフィルターによる再構成波形の近似値で、個々のコンバーターのアナログ出力を測った値ではありません。倍率を上げると推定精度を高められますが、CPU 負荷も増えます。
 :::
 
 この結果は、元音源を説明するために使います。合否判定ではありません。たとえば「すでに大きい」「暗い」「密度が高い」「アタックが多い」といった事実を UI に出すためのものです。
 
 | すること | しないこと |
 |----------|------------|
-| ラウドネス、True Peak、クレストファクター、スペクトル、ダイナミクス、ジャンル候補を測る | 音声を変更しない |
+| ラウドネス、True Peak、クレストファクター、スペクトル、ダイナミクス、任意の不具合を測る | 音声を変更しない |
 | レンダリング前に UI へ表示する材料を返す | 最終設定を単独では決めない |
 
 ```json
@@ -161,11 +161,7 @@ try {
     "centroidHz": 5806.83, "flatness": 0.0035, "rolloffHz": 15386.5
   },
   "dynamics": { "shortTermLufsStd": 0, "attackDensity": 3, "sustainRatio": 1 },
-  "genreCandidates": [
-    { "name": "hipHop", "score": 0.70 },
-    { "name": "edm",    "score": 0.65 },
-    { "name": "pop",    "score": 0.45 }
-  ]
+  "defects": { "measured": false }
 }
 ```
 
@@ -181,12 +177,12 @@ try {
 | | `rolloffHz` | エネルギーの大半が収まる周波数 |
 | `dynamics` | `attackDensity` | トランジェントの密度 |
 | | `sustainRatio` | 持続的か過渡的か |
-| `genreCandidates` | `[{name, score}]` | 最も近いスタイル。先頭が提案のベースプリセットになる |
+| `defects` | object | 不具合のカウンターと測定値。`detectDefects` を有効にしない場合は `measured` が `false` |
 
 ::: info スペクトル帯域の読み方
 `*RmsDb` のフィールドは低域から高域へ並びます: `sub`（重低音）→ `low`/`lowMid`（低音と温かみ）→ `mid`（芯、ボーカル）→ `highMid`/`high`（存在感、明瞭さ）→ `air`（高域のきらめき）。
 
-これらの値は内部 FFT スケール上の相対的な帯域レベルであり、dBFS ではありません。上の例でも `lowRmsDb: 40.35` と 0 を大きく超えています。さらに音楽のスペクトルはもともと高域に向かって下がるため、通常のマスターならほぼ例外なく `air` は `low` よりはるかに低く出ます。帯域どうしを見比べると、どの曲もほとんど「暗め」と判定してしまいます。暗め／明るめは、リファレンストラックや過去のレンダリング結果の同じ帯域と比べて判断してください。ライブラリ内部のジャンル推定も同じ考え方で、`air` が `mid` より 22 dB 以上低いことをローファイ／こもり気味の条件にしています（0 dB を基準にはしていません）。
+これらの値は内部 FFT スケール上の相対的な帯域レベルであり、dBFS ではありません。上の例でも `lowRmsDb: 40.35` と 0 を大きく超えています。さらに音楽のスペクトルはもともと高域に向かって下がるため、通常のマスターならほぼ例外なく `air` は `low` よりはるかに低く出ます。帯域どうしを見比べると、どの曲もほとんど「暗め」と判定してしまいます。暗め／明るめは、リファレンストラックや過去のレンダリング結果の同じ帯域と比べて判断してください。
 :::
 
 ::: details ラウドネスレンジ・アタック密度・サステイン比とは？
@@ -202,12 +198,12 @@ try {
 
 ## `masteringAssistantSuggest` — チェーンを提案
 
-プロファイルを土台に、そのままレンダリングできるマスタリングチェーンと、人が読める根拠を提案します。第 3 引数に意図（`targetLufs`、`ceilingDb` など）を渡します。
+プロファイルを土台に、そのままレンダリングできるマスタリングチェーンと、人が読める根拠を提案します。第 3 引数に出発点のプリセットと意図（`preset`、`targetLufs`、`ceilingDb` など）を渡します。
 
-意図として受け付けるキーは `targetLufs`/`target_lufs`、`ceilingDb`/`ceiling_db`、`enableRepair`/`enable_repair`、`preferStreamingSafe`/`prefer_streaming_safe`、`speechMonoAmount`/`speech_mono_amount` です。
+受け付けるキーは `preset`、`targetPlatform`/`target_platform`、`targetLufs`/`target_lufs`、`ceilingDb`/`ceiling_db`、`enableRepair`/`enable_repair`、`preferStreamingSafe`/`prefer_streaming_safe`、`speechMonoAmount`/`speech_mono_amount` です。`preset` と `targetPlatform` は名前を渡し、それ以外は数値または真偽値を渡します。
 
 ::: details 任意の意図キーの働き
-`enableRepair` は、ソースに不具合があるときにクリーンアップ段（declick、denoise など）を有効にします。`preferStreamingSafe` は、最大音量よりも配信向けの安全なシーリングとターゲットへ提案を寄せます。`speechMonoAmount`（0〜1）は、小型スピーカーやモノラルスピーカーでの聞き取りやすさのために、スピーチの低域／中央成分をモノラル寄りにまとめます。
+`preset` は出発点にするチェーンを選び、省略時は `streaming` になります。アシスタントは音源からプリセットを推測しません。`targetPlatform` は、対象に固有の規則（`broadcast`、`podcast`、`club`、`cd`）があり、対応する値を明示していない場合だけラウドネスと天井を適用します。`streaming`、`youtube`、`audiobook`、`cinema` も受け付けますが、アシスタントの現在のターゲットと天井は変更しません。`enableRepair` は、ソースに不具合があるときにクリーンアップ段（declick、denoise など）を有効にします。`preferStreamingSafe` は、リペアを有効にしたときにストリーミング向けの denoise 推定器を選びます。`speechMonoAmount`（0〜1）は、speech プリセットの 120 Hz モノメーカー・クロスオーバーより下にあるサイド成分をモノラルへ寄せる量です。
 :::
 
 このヘルパーは「根拠つきのプリセット生成」と考えると分かりやすいです。すぐレンダリングできる出発点を一式返しますが、想定ワークフローはユーザーが編集できる形です。
@@ -216,7 +212,7 @@ try {
 |------------|--------|
 | `chainConfig.params` | UI コントロールへ展開する、または `masterAudio` の上書き値として渡す |
 | `explanation` | なぜ各段が有効化・調整されたかを表示する |
-| `genreCandidates` | ベースプリセットを選ぶ、または候補として表示する |
+| `preset` 入力 | アシスタントを呼ぶ前にベースプリセットを選ぶ |
 | `profile` | レポート内で提案を自己完結させる |
 
 ```json
@@ -225,26 +221,20 @@ try {
     "version": 1,
     "params": {
       "eq.tilt.enabled": true,
-      "eq.tilt.tiltDb": -0.5,
+      "eq.tilt.tiltDb": 0.5,
       "dynamics.transientShaper.enabled": true,
       "dynamics.compressor.enabled": true,
-      "dynamics.compressor.thresholdDb": -18,
-      "saturation.tape.enabled": true,
-      "spectral.airBand.enabled": true,
-      "maximizer.truePeakLimiter.enabled": true,
-      "maximizer.truePeakLimiter.ceilingDb": -1,
+      "saturation.exciter.enabled": true,
+      "stereo.imager.enabled": true,
       "loudness.enabled": true,
       "loudness.targetLufs": -14,
       "loudness.ceilingDb": -1
     }
   },
   "explanation": [
-    "base preset selected from top genre candidate: hipHop",
-    "target loudness and ceiling applied from AssistantConfig",
-    "air band enabled because the spectral profile is dark",
-    "transient shaper enabled for dense attacks"
+    "base preset: pop",
+    "target loudness and ceiling applied from AssistantConfig"
   ],
-  "genreCandidates": [ { "name": "hipHop", "score": 0.70 } ],
   "profile": { "integratedLufs": -8.7, "truePeakDb": -2.43, "crestFactorDb": 5.75, "...": "平坦化したプロファイル" }
 }
 ```
@@ -253,22 +243,21 @@ try {
 |-----------|------|
 | `chainConfig.params` | **提案チェーン全体**をフラットなドット記法キー（`stage.processor.param`）で表したもの。`*.enabled` は JSON のブール値（`true`／`false`）です。**`masterAudio` の上書き値が受け付けるキーと同一**なので、提案をそのままレンダリングできます。 |
 | `explanation` | 各判断の平易な理由。UI に表示して選択を透明にしてください。 |
-| `genreCandidates` | プロファイルと同じ順位付きスタイル。先頭がベースプリセット。 |
 | `profile` | ソースプロファイルの平坦化コピー。提案が自己完結します。 |
 
 ::: details params オブジェクトは既定チェーン全体
-上の例は省略版です。実際の `params` マップは、既定チェーンの**すべて**のパラメータを含みます。含まれるのは、リペア全段（declick、declip、decrackle、dehum、dereverb、denoise）、EQ、ディエッサー、トランジェントシェイパー、コンプレッサー、マルチバンド、サチュレーション（tape/exciter）、エアバンド、ステレオ、True Peak リミッター、ラウドネス段です。それぞれに全パラメータと `enabled` フラグが付きます。アシスタントはプロファイルに基づき `enabled` を切り替え、いくつかの値を調整し、残りは既定のままにします。マップは疎な差分ではなく、チェーン全体を上書きできるスナップショットとして扱ってください。
+上の例は省略版です。実際の `params` マップは、選択したプリセットのチェーンにある**すべて**のパラメータを含みます。リペア、EQ、ダイナミクス、サチュレーション、ステレオ、True Peak リミッター、ラウドネス段などが対象で、それぞれに全パラメータと `enabled` フラグが付きます。アシスタントは指定したプリセットを土台に、ターゲットと天井を適用します。`speech` プリセットでは低域のサイド成分をまとめるモノメーカー段（120 Hz のクロスオーバー）を追加し、`enableRepair` を有効にすると測定した不具合に対応するリペア段を有効にします。マップは疎な差分ではなく、チェーン全体を上書きできるスナップショットとして扱ってください。
 :::
 
 ### 提案をマスターとしてレンダリングする
 
-`chainConfig.params` は `masterAudio` の上書きキーを使うので、提案のレンダリングは 1 回の呼び出しです。先頭のジャンル候補をベースプリセットにし、params マップ全体（上に示した数キーだけでなく、チェーン全体です）を上書き値として渡します。
+`chainConfig.params` は `masterAudio` の上書きキーを使うので、提案のレンダリングは 1 回の呼び出しです。ベースプリセットを明示し、アシスタントと `masterAudio` に同じ名前を渡します。params マップ全体（上に示した数キーだけでなく、チェーン全体です）を上書き値として渡します。
 
 ::: code-group
 
 ```typescript [ブラウザ]
-const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
-const basePreset = suggestion.genreCandidates[0].name;        // 例 "hipHop"
+const basePreset = 'pop';
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: basePreset, targetLufs: -14, ceilingDb: -1 }));
 
 const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
 console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
@@ -276,8 +265,8 @@ console.log(mastered.report.bandEnergyDeltaDb.length); // 32 周波数帯
 ```
 
 ```typescript [Node]
-const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { targetLufs: -14, ceilingDb: -1 }));
-const basePreset = suggestion.genreCandidates[0].name;
+const basePreset = 'pop';
+const suggestion = JSON.parse(masteringAssistantSuggest(samples, sampleRate, { preset: basePreset, targetLufs: -14, ceilingDb: -1 }));
 
 const mastered = masterAudio(samples, sampleRate, basePreset, suggestion.chainConfig.params);
 console.log(mastered.report.before.integratedLufs, '→', mastered.report.after.integratedLufs);
@@ -285,9 +274,9 @@ console.log(mastered.report.bandEnergyDeltaDb.length); // 32 周波数帯
 ```
 
 ```python [Python]
+base_preset = "pop"
 suggestion = json.loads(sonare.mastering_assistant_suggest(
-    samples, sample_rate=sr, params={"targetLufs": -14, "ceilingDb": -1}))
-base_preset = suggestion["genreCandidates"][0]["name"]        # 例 "hipHop"
+    samples, sample_rate=sr, params={"preset": base_preset, "targetLufs": -14, "ceilingDb": -1}))
 
 mastered = sonare.master_audio(
     samples, sample_rate=sr,
@@ -300,9 +289,10 @@ print(len(mastered.report.band_energy_delta_db))  # 32 周波数帯
 ```
 
 ```bash [CLI]
-sonare mastering source.wav --target-lufs -14 --ceiling-db -1 \
+sonare mastering-suggest source.wav --preset pop \
+  --target-lufs -14 --ceiling-db -1 --config-out suggestion-chain.json
+sonare mastering source.wav --chain-config suggestion-chain.json \
   --report mastering-report.json -o master.wav
-sonare mastering-processors
 ```
 
 :::

@@ -230,13 +230,12 @@ import libsonare as sonare
 sonare.mixing_scene_preset_names()                          # ['vocalReverbSend', 'drumBusSubgroup', 'commentaryDucking']
 scene_json = sonare.mixing_scene_preset_json("vocalReverbSend")
 
-mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
-block = mixer.process_stereo(
-    [vocal_block_l, return_block_l],
-    [vocal_block_r, return_block_r],
-)
-vocal_meter = mixer.strip_meter(0, tap="postFader")         # see "Metering"
-mixer.close()                                               # release the native handle
+with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
+    block = mixer.process_stereo(
+        [vocal_block_l, return_block_l],
+        [vocal_block_r, return_block_r],
+    )
+    vocal_meter = mixer.strip_meter(0, tap="postFader")     # see "Metering"
 ```
 
 ```bash [CLI]
@@ -415,7 +414,7 @@ Those figures are the raw pan-law gains. In `balance` — the default mode — t
 
 ### Surround and multichannel
 
-For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE — low-frequency effects — plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the offline `Mixer` still renders stereo — the surround panner that consumes these values runs in the [realtime engine's surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters), so set the position here and render the surround mix through the engine.
+For buses wider than stereo, a strip carries a `SurroundPan` position — set with `setSurroundPan(strip, { azimuth, divergence, lfe })` (Python `set_surround_pan(strip, azimuth=..., divergence=..., lfe=...)`). Phase 1 honors `azimuth` (−180…180°, 0 = front-centre), `divergence` (0 = point source, 1 = spread across the front), and `lfe` (0…1 send into the LFE — low-frequency effects — plane); `elevation` and `distance` are reserved. The position is stored on the scene and round-trips through JSON, but the *standalone* `Mixer` (`processStereo`) still renders stereo only. The same surround panner runs in the [realtime engine's surround group buses](./realtime-engine.md#surround-group-buses-and-wide-meters) and in a [project bounce](./project-bounce.md#bounce-options) at a matching output width, so set the position here and render the surround mix through either of those instead.
 
 ## Automation
 
@@ -463,7 +462,7 @@ Every strip (and the master) exposes a rich `MixMeterSnapshot`. Read it post-ren
 A goniometer (also called a vectorscope) is a dot-cloud display of the left vs. right signal. It shows the stereo image at a glance: a near-vertical line means mono, a wide blob means a wide stereo spread, and a horizontal smear warns of phase problems that may cancel in mono. It is the picture version of the `correlation` meter.
 :::
 
-The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope. The latest-read path is allocation-free, so UI polling does not add audio-thread pressure.
+The **goniometer** is a separate, time-domain view: `readGoniometerLatest(strip, maxPoints)` returns the most recent left/right sample pairs (oldest → newest) for plotting a stereo vectorscope. The core read is allocation-free: it copies the points from the strip's pre-allocated ring into caller-owned storage, so UI polling does not add allocations to the audio thread. The WASM binding then allocates a temporary result and returns a plain JavaScript array of plain `{ left, right }` point objects. The JS call therefore allocates at the binding boundary, but its result is cloneable plain data that is safe to pass to `structuredClone` or `postMessage`.
 
 ## Realtime and the AudioWorklet bridge
 

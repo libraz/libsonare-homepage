@@ -151,7 +151,7 @@ A send routes a *copy* of the strip's signal to a destination bus. The `timing` 
 | `role` | string | `"master"`, `"aux"` (the default), or a group bus such as `"submix"` |
 | `layout` | string | Channel layout of the bus: `"mono"`, `"stereo"` (default), `"5.1"`, or `"7.1"`. The master bus carries the project output layout. Omitted by the writer at the stereo default |
 | `inputTrimDb` | number | Gain at the bus input, default `0` |
-| `width` | number | Stereo width of the bus, default `1`, clamped to `0` … `2` like a strip's |
+| `width` | number | Stereo width of the bus, default `1`, clamped to `0` … `2` like a strip's. Refused when `layout` is wider than stereo, since a surround bed has no stereo image to narrow or widen |
 | `polarityInvertLeft` / `polarityInvertRight` | boolean | Per-channel polarity flip on the bus, default `false` |
 | `inserts` | array | Processors on the bus itself (same [Insert](#insert) shape as a strip) |
 
@@ -360,15 +360,13 @@ const saved = mixer.toSceneJson();   // round-trips back to the same format
 import libsonare as sonare
 
 scene_json = sonare.mixing_scene_preset_json('vocalReverbSend')
-mixer = sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512)
+with sonare.Mixer.from_scene_json(scene_json, sample_rate=48000, block_size=512) as mixer:
+    mixer.scene_warnings()  # [] — typo'd insert params would be listed here, non-fatally
 
-mixer.scene_warnings()  # [] — typo'd insert params would be listed here, non-fatally
+    mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # topology change
+    mixer.compile()                                                  # rebuild before timing-critical work
 
-mixer.add_send(0, 'more-verb', 'vocal-verb', -18, 'post_fader')  # topology change
-mixer.compile()                                                  # rebuild before timing-critical work
-
-saved = mixer.to_scene_json()   # round-trips back to the same format
-mixer.close()                   # release the native handle
+    saved = mixer.to_scene_json()   # round-trips back to the same format
 ```
 
 ```bash [Python CLI]

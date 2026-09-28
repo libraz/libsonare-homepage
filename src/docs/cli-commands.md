@@ -558,5 +558,11 @@ The native CLI can generate simple test signals, and both CLIs can render a MIDI
 | `sonare tone -o tone.wav` | `--frequency`; optional `--sr` (22050), `--duration` (1.0), `--phase` (0.0), `--amplitude` (1.0) |
 | `sonare chirp -o sweep.wav` | `--fmax`; optional `--fmin`, `--exponential`, `--sr` (22050), `--duration` (1.0) |
 | `sonare clicks -o clicks.wav` | `--times` comma-separated seconds; optional `--sr` (22050), `--length`, `--frequency` (1000.0), `--click-duration` (0.1) |
-| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET` (omitted, it follows the GM programs), `--sample-rate`, `--frames`, `--block-size`, `--channels` (2), `--instrument-latency`. Both CLIs: a `project bounce` with the synth always on, so it takes neither `--audio` nor `--resolve-audio` |
+| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET` (omitted, it follows the GM programs), `--sample-rate`, `--frames`, `--block-size`, `--channels` (positive output widths `1`, `2`, `6`, or `8`; default `2`), `--instrument-latency`. Both CLIs: a `project bounce` with the synth always on, so it takes neither `--audio` nor `--resolve-audio` |
 
+`project bounce` and its `midi-render` shorthand support positive output widths
+of `1`, `2`, `6`, or `8`. Omit `--channels` or pass `0` or a negative value to
+select the default two channels. The requested output width cannot exceed the
+scene master's layout, except that mono and stereo masters (and scenes without
+a master) allow up to two channels. A `"5.1"` master permits six channels and a
+`"7.1"` master permits eight.

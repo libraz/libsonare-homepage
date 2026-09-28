@@ -222,7 +222,7 @@ TypeScript の `StreamAnalyzer` には、3 つの読み出し方法がありま�
 
 どちらの量子化読み出し経路も、オプションの `StreamQuantizeConfig` を受け取れます。通常設定では飽和してしまうほど大きい／小さいストリーム向けに量子化レンジを広げられます。[量子化レンジのカスタマイズ](./realtime-streaming.md#量子化レンジのカスタマイズ) を参照してください。
 
-WASM から返るプレーンなリストやオブジェクトは、呼び出し元の JavaScript realm の `Array` / `Object` として返されます。これにより、名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、セクション結果、キー候補、`synthPresetPatch(...)` のオブジェクトは、手作業で作り直さなくても `structuredClone()` や `postMessage()` に渡せます。TypedArray のペイロードは、下の通常の transferable buffer ルールに従います。
+WASM から返るプレーンなリストやオブジェクトは、呼び出し元の JavaScript realm の `Array` / `Object` として返されます。これにより、名前一覧ヘルパー（`*Names()`）、プリセット名ヘルパー、セクション結果、キー候補、`synthPresetPatch(...)` のオブジェクト、ミキサーのメータースナップショット（`meterTap`、`stripMeter`、`busMeter`）、ゴニオメーターのサンプル（`readGoniometerLatest`）は、手作業で作り直さなくても `structuredClone()` や `postMessage()` に渡せます。`Mixer` や `StreamAnalyzer` のようにネイティブメソッドを持つハンドル自体は clone できないため、プレーンな戻り値のデータを渡します。TypedArray のペイロードは、下の通常の transferable buffer ルールに従います。
 
 ::: details 「Structure-of-Arrays」と transferable オブジェクトとは？
 - **Structure-of-Arrays**（SoA） は、フレームごとのオブジェクトの配列ではなく、各フィールドを独立したフラットな typed array に持つ形式です（タイムスタンプは 1 本、メル値は別の 1 本…）。スライスも別スレッドへの受け渡しも安価になります。
@@ -400,4 +400,3 @@ try {
 ユーザー作成プリセット JSON を受け入れる前には、`validateRealtimeVoiceChangerPresetJson(json)` で検証してください。`RealtimeVoiceChangerConfigInput` は、6 種類の厳密な `VoicePresetId` 文字列、または `dsp` と `macros` のどちらか一方だけを持つプリセットオブジェクトを受け取ります。`voiceCharacterPresetId(...)` は未知の数値序数で `null` を返し、未知の文字列 ID では例外になります。`realtimeVoiceChangerPresetConfig(...)` は解決できないプリセットで例外になります。
 
 正規 ID や解決済みのフラット POD 設定だけが必要な場合は、`voiceCharacterPresetId(...)` と `realtimeVoiceChangerPresetConfig(...)` を使います。
-

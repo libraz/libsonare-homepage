@@ -357,7 +357,7 @@ The filter is proposed only when the share of the track's energy below its corne
 
 ## Availability
 
-The assistant is a separable build unit. `BUILD_MIXING_ASSISTANT` defaults to **ON** and forces `BUILD_MIXING` on when set, but `SONARE_WASM_ANALYSIS_ONLY` forces it **off** — so an analysis-only WASM module does not carry it.
+The assistant is a separable build unit. `BUILD_MIXING_ASSISTANT` defaults to **ON** and forces `BUILD_MIXING` on when set. A full Node native addon build forces `BUILD_MIXING_ASSISTANT=ON` regardless of any existing CMake cache value; general CMake builds can still turn the option off. `SONARE_WASM_ANALYSIS_ONLY` forces it **off** — so an analysis-only WASM module does not carry it.
 
 ::: warning Probe the capability, not the symbol
 ```typescript

@@ -32,18 +32,21 @@ Musical estimates — BPM, key, current chord, progression, pattern — **update
 
 ## Quantized reads
 
-Frames accumulate in a buffer between your `process()` calls. You drain whatever is available and render it, rather than expecting one frame per block. This **batched read** model keeps the audio callback cheap (it just buffers) and moves the variable-rate frame handling to your UI loop, where jitter is harmless. The API uses "quantized" for optional 8-bit / 16-bit output formats; that is about reducing data size, not about timing.
+Frames accumulate in a buffer between your `process()` calls. `process()` appends samples, synchronously runs the FFT and enabled per-frame features for each complete frame, and updates the progressive estimates. `readFrames(...)` only consumes frames that have already been published; it does not start analysis. Drain whatever is available rather than expecting one frame per block, and keep copying or rendering on the consumer side. The API uses "quantized" for optional 8-bit / 16-bit output formats; that is about reducing data size, not about timing.
 
 ::: details How libsonare streams analysis
 `StreamAnalyzer` is constructed once with `sampleRate`, `nFft`, `hopLength`, `nMels`, and `compute*` flags, then fed blocks via `process()`.
 
 | Call | Role |
 |------|------|
+| `process(block)` | Appends samples, analyzes complete frames synchronously, and updates progressive estimates |
 | `readFrames(availableFrames())` | Drains the buffered mel/chroma/onset/spectral frames |
 | `stats()` | Returns BPM/key/chord/progression/pattern estimates. `updated` is `true` on the periodic frames where the key or BPM estimate was recomputed — not only where the recomputed value differs from the previous one — so do not use it as a change detector |
 | `emitEveryNFrames` | Throttles frame output for UI rendering |
 
 Its default sample rate is 44100 Hz (vs the batch analyzer's 22050) because realtime audio arrives from playback/capture graphs at 44100/48000. It reuses the same STFT-derived feature stages as offline analysis.
+
+The constructor reserves working and pending-output storage for ordinary callback blocks. The current setup reserves capacity for 16,384 input samples (or `nFft` when it is larger), covering common 128–2,048-sample callbacks. A larger one-shot chunk can grow the sanitization, resampling, or overlap buffers. For a hard realtime callback, construct and configure the analyzer outside the callback, then feed it bounded blocks from a streaming source; `process()` is the analysis step, not a cheap queueing call.
 :::
 
 Related: [Realtime and Streaming](../../realtime-streaming.md), [Spectrogram and STFT](../analysis/spectrogram-stft.md), [Realtime Engine](./realtime-engine.md), [Realtime Safety](./realtime-safety.md)

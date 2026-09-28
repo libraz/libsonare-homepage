@@ -527,5 +527,6 @@ Error: take sample rate differs: t3_44.wav is 44100 Hz, the first take is 48000 
 | `sonare tone -o tone.wav` | `--frequency`; 任意で `--sr`（22050）, `--duration`（1.0）, `--phase`（0.0）, `--amplitude`（1.0） |
 | `sonare chirp -o sweep.wav` | `--fmax`; 任意で `--fmin`, `--exponential`, `--sr`（22050）, `--duration`（1.0） |
 | `sonare clicks -o clicks.wav` | 秒単位のカンマ区切り `--times`; 任意で `--sr`（22050）, `--length`, `--frequency`（1000.0）, `--click-duration`（0.1） |
-| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET`（省略時は GM プログラムに追従）, `--sample-rate`, `--frames`, `--block-size`, `--channels`（2）, `--instrument-latency`。両方の CLI にあり、常にシンセ経路を使う `project bounce` なので、`--audio` と `--resolve-audio` は受け付けない |
+| `sonare midi-render --in project.json -o render.wav` | `--in`, `-o`; `--synth PRESET`（省略時は GM プログラムに追従）, `--sample-rate`, `--frames`, `--block-size`, `--channels`（正の出力幅は `1`、`2`、`6`、`8`; 既定は `2`）, `--instrument-latency`。両方の CLI にあり、常にシンセ経路を使う `project bounce` なので、`--audio` と `--resolve-audio` は受け付けない |
 
+`project bounce` とその短縮形 `midi-render` で指定できる正の出力幅は `1`、`2`、`6`、`8` です。`--channels` を省略するか `0` 以下を渡すと、既定の 2 チャンネルになります。要求した出力幅はシーンのマスターのレイアウト幅を超えられません。ただしモノラル／ステレオのマスターと、マスターを持たないシーンは最大 2 チャンネルまで許容します。`"5.1"` は 6 チャンネルまで、`"7.1"` は 8 チャンネルまでです。

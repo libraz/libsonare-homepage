@@ -134,7 +134,7 @@ sonare-cli mix-strip vocal.wav -o strip.wav \
 - **値なしの `--synth`** — プロジェクトのチャンネルごとの General MIDI プログラムチェンジに追従し、チャンネル 10 は GM ドラムキットマップへルーティングします。プロジェクトが実際の GM プログラムを持っている場合はこちらを使います。
 - **`--synth <preset>`** — すべての送出先（デスティネーション）を 1 つの NativeSynth プリセットに固定します。名前の一覧は `sonare project synth-presets` で確認できます。
 
-`project bounce` は `--channels` で指定したチャンネル数で書き出します。
+`project bounce` は `--channels` で指定したチャンネル数で書き出します。正の出力幅は `1`、`2`、`6`、`8` から選びます。省略するか `0` 以下を指定すると、既定の 2 チャンネルになります。マスターが `"5.1"` なら最大 6 チャンネル、`"7.1"` なら最大 8 チャンネルです。モノラル／ステレオのマスター、またはマスターのないシーンでは最大 2 チャンネルまで書き出せます。
 
 ```bash
 # プロジェクトの ABI バージョンを表示
@@ -159,6 +159,9 @@ sonare project synth-presets
 # 指定したチャンネル数で WAV にレンダリング
 sonare project bounce --in project.json --sample-rate 48000 --channels 2 -o bounce.wav
 
+# 5.1 マスターを 6 チャンネル WAV にレンダリング
+sonare project bounce --in project-51.json --sample-rate 48000 --channels 6 -o bounce-51.wav
+
 # MIDI トラックを内蔵シンセサイザーでレンダリング（GM プログラムに追従）
 sonare project bounce --in project.json --synth -o gm-bounce.wav
 
@@ -173,7 +176,7 @@ sonare project bounce --in project.json --synth saw-lead -o synth-bounce.wav
 | `sonare project validate` | プロジェクト JSON を検証。正規化 JSON の書き出しも可 | `--in`, `-o`, `--strict`（診断が 1 件でもあれば失敗） |
 | `sonare project compile` | プロジェクト JSON をコンパイルチェック。診断を表示し、エラー時は非ゼロで終了（ファイルは書き出さない） | `--in`, `--json` |
 | `sonare project synth-presets` | `--synth` が受け付ける NativeSynth プリセット名を一覧表示 | `--json` |
-| `sonare project bounce` | 指定チャンネル数で WAV にレンダリング | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
+| `sonare project bounce` | プロジェクトを WAV にレンダリング。正の `--channels` 出力幅は `1`、`2`、`6`、`8`（既定は `2`）で、マスターレイアウトが上限。モノラル／ステレオ／マスターなしでは最大 2 チャンネル | `--in`, `--sample-rate`, `--frames`, `--block-size`, `--channels`, `--instrument-latency`, `--synth`, `--audio`, `--resolve-audio`, `-o` |
 | `sonare project export-smf` | プロジェクトを Standard MIDI File に書き出し | `--in`, `-o` |
 | `sonare project import-smf` | Standard MIDI File からプロジェクトを構築 | `--smf`, `-o` |
 | `sonare project export-midi2` | プロジェクトを MIDI 2.0 Clip File に書き出し | `--in`, `-o` |
@@ -204,7 +207,7 @@ sonare project import-midi2 --midi2 project.midi2 -o roundtrip2.json
 sonare project bounce --in project.json --synth --sample-rate 48000 -o render.wav
 ```
 
-どちらの CLI にも `midi-render` があります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
+どちらの CLI にも `midi-render` があります。これは常にシンセ経路を使う `project bounce` の別名で、`--synth` を省略すると GM プログラムに追従します。`--channels` の指定値とシーンのマスターによる上限も同じです。オプションの詳細は、このセクション前半の `sonare project` の表を参照してください。
 
 #### transcribe
 
@@ -232,4 +235,3 @@ sonare transcribe chords.wav -o chords.mid --polyphonic --tempo-bpm 120
 SoundFont（SF2）とデスティネーションごとのシンセ JSON はこれらの CLI コマンドには接続されていません。SoundFont を使ったバウンスには Project API を使ってください。
 
 関連: [プロジェクト編集](./project-editing.md)、[プロジェクトバウンス](./project-bounce.md)、[内蔵シンセサイザー](./native-synth.md)、[SoundFont プレイヤー](./soundfont-player.md)。
-

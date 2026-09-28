@@ -467,8 +467,8 @@ The flat `chainConfig.params` map (the shape `chainConfig.params` uses in the ta
   Field validation is strict: unknown keys anywhere in the version-2 `dynamics.multibandComp` object are rejected, and the band count must equal the cutoff count plus one.
 :::
 
-::: warning Reachability: JSON-document feature, not a JS-object feature
-The version-2 structured form is reachable through the JSON document — the CLI's `sonare mastering --config <file>`, or any code that reads/writes chain config as JSON. The WASM `masteringChain()` TypeScript `MasteringChainConfig.dynamics.multibandComp` interface still only exposes the fixed low/mid/high shorthand, so the arbitrary-band form cannot be reached by building a `MasteringChainConfig` object directly in JavaScript — only by writing the JSON document yourself or generating one with the wider crossover count (for example through the [named processor](#solo-processors) `multiband.compressor` and its up-to-9-band `cutoffNHz` slots) and passing it through the JSON path.
+::: warning Reachability: JSON-document feature, not a binding chain-object feature
+The version-2 structured form is reachable through the chain-config JSON document — for example, the CLI's `sonare mastering --config <file>` reads it. Python `mastering_chain()` config, Node `masteringChain()` config, and the WASM `masteringChain()` TypeScript `MasteringChainConfig` all flatten nested settings into scalar dot-notation parameters. Their public `dynamics.multibandComp` shapes expose only the fixed low/mid/high shorthand, so an arbitrary-band v2 object cannot be passed directly through any of those three binding APIs. Use the JSON-document entry point for v2; the typed chain methods do not provide an object-form adapter for it.
 :::
 
 ## Related
