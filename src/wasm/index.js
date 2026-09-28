@@ -87,6 +87,10 @@ function wrapModuleErrors(raw) {
     if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || value instanceof Promise) {
       return value;
     }
+    const proto = Object.getPrototypeOf(value);
+    if (Array.isArray(value) || proto === Object.prototype || proto === null) {
+      return value;
+    }
     const objectValue = value;
     const cached = objectCache.get(objectValue);
     if (cached) {
@@ -247,6 +251,7 @@ var PAN_MODE_VALUES = {
 };
 var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
 var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+var SIDECHAIN_SOURCE_KIND_VALUES = { track: 0, bus: 1 };
 var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
 function automationCurveCode(curve) {
   return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
@@ -267,6 +272,9 @@ function meterTapCode(tap) {
 }
 function sendTimingCode(timing) {
   return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
+}
+function sidechainSourceKindCode(kind) {
+  return resolveEnumOrdinal(kind, SIDECHAIN_SOURCE_KIND_VALUES, "sidechain source kind");
 }
 function trackMonitorModeCode(mode) {
   return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
@@ -6072,7 +6080,7 @@ function engineCapabilities() {
     mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
   };
 }
-var RealtimeEngine = class {
+var RealtimeEngine = class _RealtimeEngine {
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
     const module2 = getSonareModule();
     const capabilities2 = engineCapabilities();
@@ -6605,6 +6613,18 @@ var RealtimeEngine = class {
   clipCount() {
     return this.native.clipCount();
   }
+  /**
+   * Normalizes each send's pre/post tap point to the integer the native layer
+   * reads (defaults to post-fader when omitted). Shared by track lanes and
+   * buses, which carry the same send shape.
+   */
+  static normalizeSends(sends) {
+    return sends.map((send) => ({
+      ...send,
+      // Post-fader (0) is the default for an omitted sendTiming.
+      sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
+    }));
+  }
   setTrackLanes(lanes) {
     this.native.setTrackLanes(
       lanes.map((lane) => {
@@ -6614,14 +6634,7 @@ var RealtimeEngine = class {
         if (!lane.sends) {
           return lane;
         }
-        return {
-          ...lane,
-          sends: lane.sends.map((send) => ({
-            ...send,
-            // Post-fader (0) is the default for an omitted sendTiming.
-            sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
-          }))
-        };
+        return { ...lane, sends: _RealtimeEngine.normalizeSends(lane.sends) };
       })
     );
   }
@@ -6633,7 +6646,25 @@ var RealtimeEngine = class {
     this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
   }
   setTrackBuses(buses) {
-    this.native.setTrackBuses(buses);
+    this.native.setTrackBuses(
+      Array.isArray(buses) ? buses.map(
+        (bus) => bus.sends ? { ...bus, sends: _RealtimeEngine.normalizeSends(bus.sends) } : bus
+      ) : buses
+    );
+  }
+  /**
+   * Keys one insert of a bus strip from a track lane or another bus
+   * (ducking/sidechainRouter inserts). `sourceId` 0 removes the binding.
+   */
+  setBusSidechain(busId, insertIndex, sourceKind, sourceId) {
+    this.native.setBusSidechain(busId, insertIndex, sidechainSourceKindCode(sourceKind), sourceId);
+  }
+  /**
+   * Keys one insert of the master strip from a track lane or a bus. Same
+   * source rules as {@link setBusSidechain}.
+   */
+  setMasterSidechain(insertIndex, sourceKind, sourceId) {
+    this.native.setMasterSidechain(insertIndex, sidechainSourceKindCode(sourceKind), sourceId);
   }
   setBusStripJson(busId, sceneJson) {
     try {
@@ -6665,6 +6696,17 @@ var RealtimeEngine = class {
   }
   setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass = false) {
     this.native.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripEqBand}. */
+  setBusStripEqBand(busId, bandIndex, band) {
+    this.native.setBusStripEqBandJson(
+      busId,
+      bandIndex,
+      typeof band === "string" ? band : JSON.stringify(band)
+    );
+  }
+  setBusStripEqBandJson(busId, bandIndex, bandJson) {
+    this.native.setBusStripEqBandJson(busId, bandIndex, bandJson);
   }
   setMasterStripJson(sceneJson) {
     try {
@@ -6786,6 +6828,25 @@ var RealtimeEngine = class {
   /** Sets a track lane strip's dual-pan left/right positions in realtime. */
   setTrackStripDualPan(trackId, leftPan, rightPan) {
     this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
+  }
+  /**
+   * Sets a bus strip's output pan position in realtime (glitch-free). Throws
+   * for an unknown bus or one wider than stereo.
+   */
+  setBusStripPan(busId, pan) {
+    this.native.setBusStripPan(busId, pan);
+  }
+  /** Sets a bus strip's pan law in realtime. */
+  setBusStripPanLaw(busId, panLaw) {
+    this.native.setBusStripPanLaw(busId, panLawCode(panLaw));
+  }
+  /** Sets a bus strip's pan mode in realtime. */
+  setBusStripPanMode(busId, panMode) {
+    this.native.setBusStripPanMode(busId, panModeCode(panMode));
+  }
+  /** Sets a bus strip's dual-pan left/right positions in realtime. */
+  setBusStripDualPan(busId, leftPan, rightPan) {
+    this.native.setBusStripDualPan(busId, leftPan, rightPan);
   }
   /**
    * Sets a track lane strip's inter-channel alignment delay (whole samples).

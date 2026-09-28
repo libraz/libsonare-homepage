@@ -986,6 +986,13 @@ export interface WasmEngineBus {
   busId: number;
   gainDb?: number;
   channelLayout?: number;
+  /**
+   * Bus this bus's output sums into instead of the master mix; 0 or absent
+   * keeps it on the master mix.
+   */
+  outputBusId?: number;
+  /** Sends to other buses, in the same shape as a track lane's sends. */
+  sends?: WasmEngineTrackSend[];
 }
 
 export interface WasmClipPageRequest {
@@ -1390,9 +1397,17 @@ export interface WasmRealtimeEngine {
   setTrackLanes: (lanes: Array<number | WasmEngineTrackLane>) => void;
   setLaneSidechain: (trackId: number, insertIndex: number, sourceTrackId: number) => void;
   setTrackBuses: (buses: WasmEngineBus[]) => void;
+  setBusSidechain: (
+    busId: number,
+    insertIndex: number,
+    sourceKind: number,
+    sourceId: number,
+  ) => void;
+  setMasterSidechain: (insertIndex: number, sourceKind: number, sourceId: number) => void;
   setBusStripJson: (busId: number, sceneJson: string) => void;
   setTrackStripJson: (trackId: number, sceneJson: string) => void;
   setTrackStripEqBandJson: (trackId: number, bandIndex: number, bandJson: string) => void;
+  setBusStripEqBandJson: (busId: number, bandIndex: number, bandJson: string) => void;
   setTrackStripInsertBypassed: (
     trackId: number,
     insertIndex: number,
@@ -1437,6 +1452,10 @@ export interface WasmRealtimeEngine {
   setTrackStripPanLaw: (trackId: number, panLaw: number) => void;
   setTrackStripPanMode: (trackId: number, panMode: number) => void;
   setTrackStripDualPan: (trackId: number, leftPan: number, rightPan: number) => void;
+  setBusStripPan: (busId: number, pan: number) => void;
+  setBusStripPanLaw: (busId: number, panLaw: number) => void;
+  setBusStripPanMode: (busId: number, panMode: number) => void;
+  setBusStripDualPan: (busId: number, leftPan: number, rightPan: number) => void;
   setTrackStripChannelDelaySamples: (trackId: number, delaySamples: number) => void;
   createClipPageProvider: (numChannels: number, numSamples: number, pageFrames: number) => number;
   supplyClipPage: (providerId: number, pageIndex: number, channels: Float32Array[]) => void;

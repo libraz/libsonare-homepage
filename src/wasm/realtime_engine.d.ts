@@ -1,5 +1,5 @@
 import type { Articulation, ControllerBinding, MpeDimension, NoteTracking, ProjectMidiCcBinding, SynthPatch } from './project';
-import type { EqBand, PanLawInput, PanMode, SendTiming } from './public_types';
+import type { EqBand, PanLawInput, PanMode, SendTiming, SidechainSourceKind } from './public_types';
 import type { WasmClipPageRequest, WasmEngineAutomationPoint, WasmEngineBounceOptions, WasmEngineBounceResult, WasmEngineCaptureStatus, WasmEngineClip, WasmEngineFreezeOptions, WasmEngineFreezeResult, WasmEngineGraphSpec, WasmEngineMarker, WasmEngineMeterTelemetry, WasmEngineMeterTelemetryWide, WasmEngineMetronomeConfig, WasmEngineParameterInfo, WasmEngineProcessWithMonitorResult, WasmEngineScopeTelemetry, WasmEngineTelemetry, WasmEngineTempoSegment, WasmEngineTimeSignatureSegment, WasmEngineTransportState, WasmExternalMidiEvent } from './sonare.js';
 export type ExternalMidiEvent = WasmExternalMidiEvent;
 export type EngineClip = WasmEngineClip;
@@ -61,6 +61,16 @@ export interface EngineBus {
      * to stereo.
      */
     channelLayout?: number;
+    /**
+     * Bus this bus's output sums into instead of the master mix (bus-to-bus
+     * routing); 0 or absent keeps it on the master mix.
+     */
+    outputBusId?: number;
+    /**
+     * Sends to other buses, in the same shape as a track lane's sends. A
+     * pre-fader send taps before `gainDb`, a post-fader one after it.
+     */
+    sends?: EngineTrackSend[];
 }
 export interface EngineMidiEvent {
     /** Absolute render frame for this event. Default `0`. */
@@ -96,6 +106,20 @@ export interface EngineMidiClipSchedule {
     loop?: boolean;
     loopLengthSamples?: number;
     events: EngineMidiEvent[];
+    /**
+     * Linear gain applied to the destination instrument's rendered audio while
+     * this clip is the most recently started active clip on it. Absent defaults
+     * to `1` (unity).
+     */
+    gain?: number;
+    /**
+     * Linear fade lengths over the clip's full length (not per internal loop
+     * repeat). Absent defaults to `0` (no fade). `fadeOutSamples` above `0` is
+     * rejected when `lengthSamples` is absent or `<= 0` (open-ended): an
+     * open-ended clip has no end to fade out towards.
+     */
+    fadeInSamples?: number;
+    fadeOutSamples?: number;
 }
 export declare const EXPECTED_ENGINE_ABI_VERSION = 3;
 /** Options for {@link RealtimeEngine.bindMidiCc}. All fields are optional. */
@@ -462,6 +486,12 @@ export declare class RealtimeEngine {
      */
     prebakedClipChannels(clipId: number): Float32Array[] | null;
     clipCount(): number;
+    /**
+     * Normalizes each send's pre/post tap point to the integer the native layer
+     * reads (defaults to post-fader when omitted). Shared by track lanes and
+     * buses, which carry the same send shape.
+     */
+    private static normalizeSends;
     setTrackLanes(lanes: Array<number | EngineTrackLane>): void;
     /**
      * Keys one insert of a lane strip from another lane's post-strip audio
@@ -469,11 +499,24 @@ export declare class RealtimeEngine {
      */
     setLaneSidechain(trackId: number, insertIndex: number, sourceTrackId: number): void;
     setTrackBuses(buses: EngineBus[]): void;
+    /**
+     * Keys one insert of a bus strip from a track lane or another bus
+     * (ducking/sidechainRouter inserts). `sourceId` 0 removes the binding.
+     */
+    setBusSidechain(busId: number, insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): void;
+    /**
+     * Keys one insert of the master strip from a track lane or a bus. Same
+     * source rules as {@link setBusSidechain}.
+     */
+    setMasterSidechain(insertIndex: number, sourceKind: SidechainSourceKind | number, sourceId: number): void;
     setBusStripJson(busId: number, sceneJson: string): void;
     setTrackStripJson(trackId: number, sceneJson: string): void;
     setTrackStripEqBand(trackId: number, bandIndex: number, band: EqBand | string): void;
     setTrackStripEqBandJson(trackId: number, bandIndex: number, bandJson: string): void;
     setTrackStripInsertBypassed(trackId: number, insertIndex: number, bypassed: boolean, resetOnBypass?: boolean): void;
+    /** Bus-strip counterpart of {@link setTrackStripEqBand}. */
+    setBusStripEqBand(busId: number, bandIndex: number, band: EqBand | string): void;
+    setBusStripEqBandJson(busId: number, bandIndex: number, bandJson: string): void;
     setMasterStripJson(sceneJson: string): void;
     setMasterStripEqBand(bandIndex: number, band: EqBand | string): void;
     setMasterStripEqBandJson(bandIndex: number, bandJson: string): void;
@@ -554,6 +597,17 @@ export declare class RealtimeEngine {
     setTrackStripPanMode(trackId: number, panMode: PanMode | number): void;
     /** Sets a track lane strip's dual-pan left/right positions in realtime. */
     setTrackStripDualPan(trackId: number, leftPan: number, rightPan: number): void;
+    /**
+     * Sets a bus strip's output pan position in realtime (glitch-free). Throws
+     * for an unknown bus or one wider than stereo.
+     */
+    setBusStripPan(busId: number, pan: number): void;
+    /** Sets a bus strip's pan law in realtime. */
+    setBusStripPanLaw(busId: number, panLaw: PanLawInput): void;
+    /** Sets a bus strip's pan mode in realtime. */
+    setBusStripPanMode(busId: number, panMode: PanMode | number): void;
+    /** Sets a bus strip's dual-pan left/right positions in realtime. */
+    setBusStripDualPan(busId: number, leftPan: number, rightPan: number): void;
     /**
      * Sets a track lane strip's inter-channel alignment delay (whole samples).
      * Adjusts strip latency, so PDC and reported graph latency are refreshed.

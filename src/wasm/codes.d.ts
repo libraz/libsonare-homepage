@@ -1,5 +1,5 @@
 import type { ProjectAutomationCurve } from './project_types';
-import type { AutomationCurve, MeterTap, PanLawInput, PanMode, SendTiming } from './public_types';
+import type { AutomationCurve, MeterTap, PanLawInput, PanMode, SendTiming, SidechainSourceKind } from './public_types';
 /** Resolve a numeric ordinal in an inclusive range without coercion. */
 export declare function resolveOrdinalInRange(value: unknown, min: number, max: number, enumName: string): number;
 /** Resolve a public enum spelling or ordinal without permitting unknown values. */
@@ -37,5 +37,7 @@ export declare function panLawCode(panLaw: PanLawInput): number;
 export declare function panModeCode(panMode: PanMode | number): number;
 export declare function meterTapCode(tap: MeterTap | number): number;
 export declare function sendTimingCode(timing: SendTiming | number): number;
+/** Resolve a sidechain source kind to its `SonareSidechainSourceKind` ordinal. */
+export declare function sidechainSourceKindCode(kind: SidechainSourceKind | number): number;
 /** Resolve a per-track PFL/AFL monitor mode to its C-ABI ordinal. */
 export declare function trackMonitorModeCode(mode: unknown): number;

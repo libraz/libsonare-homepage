@@ -73,6 +73,10 @@ function wrapModuleErrors(raw) {
     if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || value instanceof Promise) {
       return value;
     }
+    const proto = Object.getPrototypeOf(value);
+    if (Array.isArray(value) || proto === Object.prototype || proto === null) {
+      return value;
+    }
     const objectValue = value;
     const cached = objectCache.get(objectValue);
     if (cached) {

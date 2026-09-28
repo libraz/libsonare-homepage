@@ -331,11 +331,6 @@ export declare function masteringAssistantSuggest(samples: Float32Array, sampleR
  * straight through as `overrides` to {@link mastering} / {@link masterAudio}.
  */
 export declare function masteringAssistantSuggestChain(request: MasteringAssistantParamsRequest): Record<string, number | boolean>;
-/** One entry of {@link MasteringAudioProfile.genreCandidates}. */
-export interface MasteringGenreCandidate {
-    name: string;
-    score: number;
-}
 /**
  * The shape {@link masteringAudioProfile}'s JSON parses to.
  *
@@ -403,7 +398,6 @@ export interface MasteringAudioProfile {
         humPeakHarmonicDbfs: number;
         lateDecayRatioDb: number;
     };
-    genreCandidates: MasteringGenreCandidate[];
 }
 export declare function masteringAudioProfile(request: MasteringSamplesParamsRequest): string;
 export declare function masteringAudioProfile(samples: Float32Array, sampleRate?: number, params?: MasteringProcessorParams): string;

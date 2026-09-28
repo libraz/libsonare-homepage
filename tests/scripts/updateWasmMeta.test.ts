@@ -1,11 +1,20 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const scriptPath = path.resolve('scripts/update-wasm-meta.sh');
+const copyScriptPath = path.resolve('scripts/copy-wasm.sh');
 
 let workspaces: string[] = [];
 
@@ -24,6 +33,51 @@ function runScript(root: string) {
     cwd: root,
     encoding: 'utf8',
   });
+}
+
+function createCopyWorkspace() {
+  const base = mkdtempSync(path.join(tmpdir(), 'copy-wasm-'));
+  const root = path.join(base, 'homepage');
+  const libsonare = path.join(base, 'libsonare');
+  mkdirSync(path.join(root, 'scripts'), { recursive: true });
+  mkdirSync(path.join(root, 'src/wasm'), { recursive: true });
+  mkdirSync(path.join(root, 'src/public'), { recursive: true });
+  mkdirSync(path.join(libsonare, 'bindings/wasm/dist'), { recursive: true });
+  copyFileSync(copyScriptPath, path.join(root, 'scripts/copy-wasm.sh'));
+  copyFileSync(scriptPath, path.join(root, 'scripts/update-wasm-meta.sh'));
+  chmodSync(path.join(root, 'scripts/update-wasm-meta.sh'), 0o755);
+  workspaces.push(base);
+  return { root, libsonare };
+}
+
+function runCopyScript(root: string) {
+  return spawnSync('bash', [path.join(root, 'scripts/copy-wasm.sh')], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+}
+
+function writeCopyInputs(libsonare: string, wasmBytes: Buffer, indexSource: string) {
+  const sourceFiles: Record<string, string | Buffer> = {
+    'sonare.wasm': wasmBytes,
+    'sonare.js': 'fake emscripten glue',
+    'index.js': indexSource,
+    'index.d.ts': 'export type Index = string;\n//# sourceMappingURL=index.d.ts.map\n',
+    'worklet.js': 'registerProcessor();\n//# sourceMappingURL=worklet.js.map\n',
+    'worklet.d.ts': 'export type Worklet = string;\n//# sourceMappingURL=worklet.d.ts.map\n',
+    'worker.js': 'self.onmessage = () => {};\n//# sourceMappingURL=worker.js.map\n',
+    'worker.d.ts': 'export type Worker = string;\n//# sourceMappingURL=worker.d.ts.map\n',
+  };
+  const dist = path.join(libsonare, 'bindings/wasm/dist');
+  for (const [name, contents] of Object.entries(sourceFiles)) {
+    writeFileSync(path.join(dist, name), contents);
+  }
+  writeFileSync(
+    path.join(libsonare, 'bindings/wasm/package.json'),
+    JSON.stringify({ name: '@libraz/libsonare', version: '1.2.3-test' }),
+  );
+  writeSizeBaseline(libsonare);
+  writeSourcesManifest(libsonare, wasmBytes);
 }
 
 /**
@@ -75,15 +129,9 @@ function writeSourcesManifest(
   );
 }
 
-/** Write the realtime/worklet companion assets the script requires alongside the core trio. */
-function writeCompanionAssets(root: string) {
+/** Write the worklet asset the script requires alongside the core trio. */
+function writeWorkletAsset(root: string) {
   writeFileSync(path.join(root, 'src/wasm/worklet.js'), Buffer.from('fake worklet entry'));
-  writeFileSync(path.join(root, 'src/wasm/sonare-rt.wasm'), Buffer.from('fake rt wasm'));
-  writeFileSync(path.join(root, 'src/wasm/sonare-rt.js'), Buffer.from('fake rt glue'));
-  writeFileSync(
-    path.join(root, 'src/wasm/sonare-rt-module.js'),
-    Buffer.from('fake rt module glue'),
-  );
 }
 
 describe('update-wasm-meta shell script', () => {
@@ -102,7 +150,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), sonareJsBytes);
     writeFileSync(path.join(root, 'src/wasm/index.js'), indexJsBytes);
-    writeCompanionAssets(root);
+    writeWorkletAsset(root);
     writeFileSync(
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({
@@ -142,7 +190,15 @@ describe('update-wasm-meta shell script', () => {
       gzipSize: meta.gzipSize,
       gzipKB: meta.gzipKB,
     });
-    for (const name of ['worklet.js', 'sonare-rt.wasm', 'sonare-rt.js', 'sonare-rt-module.js']) {
+    expect(meta.assets['worklet.js'].size).toBeGreaterThan(0);
+    expect(meta.assets['worklet.js'].gzipSize).toBeGreaterThan(0);
+    expect(Object.keys(meta.assets)).toEqual([
+      'sonare.js',
+      'index.js',
+      'sonare.wasm',
+      'worklet.js',
+    ]);
+    for (const name of ['sonare.js', 'index.js', 'sonare.wasm', 'worklet.js']) {
       expect(meta.assets[name].size).toBeGreaterThan(0);
       expect(meta.assets[name].gzipSize).toBeGreaterThan(0);
     }
@@ -167,6 +223,47 @@ describe('update-wasm-meta shell script', () => {
     expect(meta).not.toHaveProperty('commitHash');
   });
 
+  it('does not recopy source-mapped JS and declarations on a second copy', () => {
+    const { root, libsonare } = createCopyWorkspace();
+    const wasmBytes = Buffer.from('fake wasm artifact for copy idempotence');
+    const indexSource = 'export const version = 1;\n//# sourceMappingURL=index.js.map\n';
+    writeCopyInputs(libsonare, wasmBytes, indexSource);
+
+    const first = runCopyScript(root);
+    const second = runCopyScript(root);
+
+    expect(first.status).toBe(0);
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('No changes detected');
+    expect(second.stdout).not.toContain('Copying JS API files');
+    expect(second.stdout).not.toContain('Updated src/wasm/meta.json');
+  });
+
+  it('updates metadata and preserves provenance for a JS-only copy', () => {
+    const { root, libsonare } = createCopyWorkspace();
+    const wasmBytes = Buffer.from('fake wasm artifact for js-only update');
+    const initialIndex = 'export const version = 1;\n//# sourceMappingURL=index.js.map\n';
+    writeCopyInputs(libsonare, wasmBytes, initialIndex);
+
+    expect(runCopyScript(root).status).toBe(0);
+    const before = JSON.parse(readFileSync(path.join(root, 'src/wasm/meta.json'), 'utf8'));
+    const updatedIndex = `export const version = 2;\nexport const payload = '${'x'.repeat(32)}';\n//# sourceMappingURL=index.js.map\n`;
+    writeFileSync(path.join(libsonare, 'bindings/wasm/dist/index.js'), updatedIndex);
+
+    const result = runCopyScript(root);
+    const after = JSON.parse(readFileSync(path.join(root, 'src/wasm/meta.json'), 'utf8'));
+    const normalizedIndex = updatedIndex.replace(/^\/\/# sourceMappingURL=.*\n?/gm, '');
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Updated src/wasm/meta.json');
+    expect(after.assets['index.js'].size).toBe(Buffer.byteLength(normalizedIndex));
+    expect(after.assets['index.js'].size).not.toBe(before.assets['index.js'].size);
+    expect(readFileSync(path.join(root, 'src/wasm/index.js'), 'utf8')).toBe(normalizedIndex);
+    expect(after.md5).toBe(before.md5);
+    expect(after.buildDate).toBe(before.buildDate);
+    expect(after.sourcesDigest).toBe(before.sourcesDigest);
+  });
+
   it('derives the sources digest from the manifest source hashes', () => {
     const wasmBytes = Buffer.from('fake wasm artifact for metadata');
 
@@ -175,7 +272,7 @@ describe('update-wasm-meta shell script', () => {
       writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
       writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
       writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
-      writeCompanionAssets(root);
+      writeWorkletAsset(root);
       writeFileSync(
         path.join(libsonare, 'bindings/wasm/package.json'),
         JSON.stringify({ version: '1.0.0' }),
@@ -200,7 +297,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), wasmBytes);
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
     writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
-    writeCompanionAssets(root);
+    writeWorkletAsset(root);
     writeFileSync(
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({ version: '1.0.0' }),
@@ -219,7 +316,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), 'wasm');
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
     writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
-    writeCompanionAssets(root);
+    writeWorkletAsset(root);
     writeFileSync(
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({ version: '1.0.0' }),
@@ -254,7 +351,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), 'wasm');
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
     writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
-    writeCompanionAssets(root);
+    writeWorkletAsset(root);
 
     const result = runScript(root);
 
@@ -269,7 +366,7 @@ describe('update-wasm-meta shell script', () => {
     writeFileSync(path.join(root, 'src/wasm/sonare.wasm'), 'wasm');
     writeFileSync(path.join(root, 'src/wasm/sonare.js'), 'js');
     writeFileSync(path.join(root, 'src/wasm/index.js'), 'index');
-    writeCompanionAssets(root);
+    writeWorkletAsset(root);
     writeFileSync(
       path.join(libsonare, 'bindings/wasm/package.json'),
       JSON.stringify({ version: '1.0.0' }),

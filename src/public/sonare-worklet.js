@@ -467,6 +467,10 @@ function wrapModuleErrors(raw) {
     if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || value instanceof Promise) {
       return value;
     }
+    const proto = Object.getPrototypeOf(value);
+    if (Array.isArray(value) || proto === Object.prototype || proto === null) {
+      return value;
+    }
     const objectValue = value;
     const cached = objectCache.get(objectValue);
     if (cached) {
@@ -627,6 +631,7 @@ var PAN_MODE_VALUES = {
 };
 var METER_TAP_VALUES = { preFader: 0, postFader: 1 };
 var SEND_TIMING_VALUES = { postFader: 0, preFader: 1 };
+var SIDECHAIN_SOURCE_KIND_VALUES = { track: 0, bus: 1 };
 var TRACK_MONITOR_MODE_VALUES = { off: 0, pfl: 1, afl: 2 };
 function automationCurveCode(curve) {
   return resolveEnumOrdinal(curve, AUTOMATION_CURVE_VALUES, "automation curve");
@@ -644,6 +649,9 @@ function meterTapCode(tap) {
 }
 function sendTimingCode(timing) {
   return resolveEnumOrdinal(timing, SEND_TIMING_VALUES, "send timing");
+}
+function sidechainSourceKindCode(kind) {
+  return resolveEnumOrdinal(kind, SIDECHAIN_SOURCE_KIND_VALUES, "sidechain source kind");
 }
 function trackMonitorModeCode(mode) {
   return resolveEnumOrdinal(mode, TRACK_MONITOR_MODE_VALUES, "track monitor mode");
@@ -780,7 +788,7 @@ function engineCapabilities() {
     mode: sharedArrayBuffer && atomics ? "sab" : "postMessage"
   };
 }
-var RealtimeEngine = class {
+var RealtimeEngine = class _RealtimeEngine {
   constructor(sampleRate = 48e3, maxBlockSize = 128, commandCapacity = 1024, telemetryCapacity = 1024, maxChannels = 64) {
     const module2 = getSonareModule();
     const capabilities = engineCapabilities();
@@ -1313,6 +1321,18 @@ var RealtimeEngine = class {
   clipCount() {
     return this.native.clipCount();
   }
+  /**
+   * Normalizes each send's pre/post tap point to the integer the native layer
+   * reads (defaults to post-fader when omitted). Shared by track lanes and
+   * buses, which carry the same send shape.
+   */
+  static normalizeSends(sends) {
+    return sends.map((send) => ({
+      ...send,
+      // Post-fader (0) is the default for an omitted sendTiming.
+      sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
+    }));
+  }
   setTrackLanes(lanes) {
     this.native.setTrackLanes(
       lanes.map((lane) => {
@@ -1322,14 +1342,7 @@ var RealtimeEngine = class {
         if (!lane.sends) {
           return lane;
         }
-        return {
-          ...lane,
-          sends: lane.sends.map((send) => ({
-            ...send,
-            // Post-fader (0) is the default for an omitted sendTiming.
-            sendTiming: send.sendTiming === void 0 ? 0 : sendTimingCode(send.sendTiming)
-          }))
-        };
+        return { ...lane, sends: _RealtimeEngine.normalizeSends(lane.sends) };
       })
     );
   }
@@ -1341,7 +1354,25 @@ var RealtimeEngine = class {
     this.native.setLaneSidechain(trackId, insertIndex, sourceTrackId);
   }
   setTrackBuses(buses) {
-    this.native.setTrackBuses(buses);
+    this.native.setTrackBuses(
+      Array.isArray(buses) ? buses.map(
+        (bus) => bus.sends ? { ...bus, sends: _RealtimeEngine.normalizeSends(bus.sends) } : bus
+      ) : buses
+    );
+  }
+  /**
+   * Keys one insert of a bus strip from a track lane or another bus
+   * (ducking/sidechainRouter inserts). `sourceId` 0 removes the binding.
+   */
+  setBusSidechain(busId, insertIndex, sourceKind, sourceId) {
+    this.native.setBusSidechain(busId, insertIndex, sidechainSourceKindCode(sourceKind), sourceId);
+  }
+  /**
+   * Keys one insert of the master strip from a track lane or a bus. Same
+   * source rules as {@link setBusSidechain}.
+   */
+  setMasterSidechain(insertIndex, sourceKind, sourceId) {
+    this.native.setMasterSidechain(insertIndex, sidechainSourceKindCode(sourceKind), sourceId);
   }
   setBusStripJson(busId, sceneJson) {
     try {
@@ -1373,6 +1404,17 @@ var RealtimeEngine = class {
   }
   setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass = false) {
     this.native.setTrackStripInsertBypassed(trackId, insertIndex, bypassed, resetOnBypass);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripEqBand}. */
+  setBusStripEqBand(busId, bandIndex, band) {
+    this.native.setBusStripEqBandJson(
+      busId,
+      bandIndex,
+      typeof band === "string" ? band : JSON.stringify(band)
+    );
+  }
+  setBusStripEqBandJson(busId, bandIndex, bandJson) {
+    this.native.setBusStripEqBandJson(busId, bandIndex, bandJson);
   }
   setMasterStripJson(sceneJson) {
     try {
@@ -1494,6 +1536,25 @@ var RealtimeEngine = class {
   /** Sets a track lane strip's dual-pan left/right positions in realtime. */
   setTrackStripDualPan(trackId, leftPan, rightPan) {
     this.native.setTrackStripDualPan(trackId, leftPan, rightPan);
+  }
+  /**
+   * Sets a bus strip's output pan position in realtime (glitch-free). Throws
+   * for an unknown bus or one wider than stereo.
+   */
+  setBusStripPan(busId, pan) {
+    this.native.setBusStripPan(busId, pan);
+  }
+  /** Sets a bus strip's pan law in realtime. */
+  setBusStripPanLaw(busId, panLaw) {
+    this.native.setBusStripPanLaw(busId, panLawCode(panLaw));
+  }
+  /** Sets a bus strip's pan mode in realtime. */
+  setBusStripPanMode(busId, panMode) {
+    this.native.setBusStripPanMode(busId, panModeCode(panMode));
+  }
+  /** Sets a bus strip's dual-pan left/right positions in realtime. */
+  setBusStripDualPan(busId, leftPan, rightPan) {
+    this.native.setBusStripDualPan(busId, leftPan, rightPan);
   }
   /**
    * Sets a track lane strip's inter-channel alignment delay (whole samples).
@@ -3561,8 +3622,13 @@ var ENGINE_SYNC_MESSAGE_TYPES = {
   destroy: true,
   syncAutomation: true,
   syncBuiltinInstrument: true,
+  syncBusStripDualPan: true,
+  syncBusStripEqBand: true,
   syncBusStripInsertBypassed: true,
   syncBusStripInsertParamByName: true,
+  syncBusStripPan: true,
+  syncBusStripPanLaw: true,
+  syncBusStripPanMode: true,
   syncCapture: true,
   syncClearMidiFx: true,
   syncClearMidiInputSource: true,
@@ -4010,6 +4076,29 @@ function syncMarkers(ctx) {
 }
 
 // src/worklet/engine-mixer-facade.ts
+function cachedStripJson(ctx, target) {
+  switch (target.kind) {
+    case "track":
+      return ctx.trackStripJson.get(target.trackId);
+    case "bus":
+      return ctx.busStripJson.get(target.busId);
+    case "master":
+      return ctx.getMasterStripJson();
+  }
+}
+function cacheStripJson(ctx, target, sceneJson) {
+  switch (target.kind) {
+    case "track":
+      ctx.trackStripJson.set(target.trackId, sceneJson);
+      return;
+    case "bus":
+      ctx.busStripJson.set(target.busId, sceneJson);
+      return;
+    case "master":
+      ctx.cacheMasterStripJson(sceneJson);
+      return;
+  }
+}
 function mixerLanes(ctx) {
   return buildMixerLanes(ctx.trackLaneIds, ctx.trackSends, ctx.trackOutputBus);
 }
@@ -4035,7 +4124,9 @@ function syncMixer(ctx) {
     trackStrips,
     laneSidechains: Array.from(ctx.laneSidechains.values()),
     busStrips,
-    masterStripJson: ctx.getMasterStripJson()
+    masterStripJson: ctx.getMasterStripJson(),
+    busSidechains: Array.from(ctx.busSidechains.values()),
+    masterSidechains: Array.from(ctx.masterSidechains.values())
   });
 }
 function setTrackLanes(ctx, lanes) {
@@ -4077,17 +4168,59 @@ function setLaneSidechain(ctx, target, insertIndex, sourceTarget) {
     const sourceIndex = ctx.ensureTrackLane(sourceTarget);
     sourceTrackId = ctx.trackLaneIds[sourceIndex];
   }
+  ctx.offlineEngine.setLaneSidechain(trackId, insertIndex, sourceTrackId);
   if (sourceTrackId === 0) {
     ctx.laneSidechains.delete(key);
   } else {
     ctx.laneSidechains.set(key, { trackId, insertIndex, sourceTrackId });
   }
-  ctx.offlineEngine.setLaneSidechain(trackId, insertIndex, sourceTrackId);
   ctx.postSync({
     type: "syncMixer",
     lanes: ctx.mixerLanes(),
     laneSidechains: [{ trackId, insertIndex, sourceTrackId }]
   });
+}
+function setBusSidechain(ctx, busId, insertIndex, kind, sourceId) {
+  const sourceKind = sidechainSourceKindCode(kind);
+  ctx.ensureBus(busId);
+  ensureSidechainSource(ctx, sourceKind, sourceId);
+  ctx.offlineEngine.setBusSidechain(busId, insertIndex, sourceKind, sourceId);
+  const key = `${busId}:${insertIndex}`;
+  if (sourceId === 0) {
+    ctx.busSidechains.delete(key);
+  } else {
+    ctx.busSidechains.set(key, { busId, insertIndex, sourceKind, sourceId });
+  }
+  ctx.postSync({
+    type: "syncMixer",
+    lanes: ctx.mixerLanes(),
+    busSidechains: [{ busId, insertIndex, sourceKind, sourceId }]
+  });
+}
+function setMasterSidechain(ctx, insertIndex, kind, sourceId) {
+  const sourceKind = sidechainSourceKindCode(kind);
+  ensureSidechainSource(ctx, sourceKind, sourceId);
+  ctx.offlineEngine.setMasterSidechain(insertIndex, sourceKind, sourceId);
+  if (sourceId === 0) {
+    ctx.masterSidechains.delete(insertIndex);
+  } else {
+    ctx.masterSidechains.set(insertIndex, { insertIndex, sourceKind, sourceId });
+  }
+  ctx.postSync({
+    type: "syncMixer",
+    lanes: ctx.mixerLanes(),
+    masterSidechains: [{ insertIndex, sourceKind, sourceId }]
+  });
+}
+function ensureSidechainSource(ctx, sourceKind, sourceId) {
+  if (sourceId === 0) {
+    return;
+  }
+  if (sourceKind === 1) {
+    ctx.ensureBus(sourceId);
+  } else {
+    ctx.ensureTrackLane(sourceId);
+  }
 }
 function setSends(ctx, target, sends) {
   const laneIndex = ctx.ensureTrackLane(target);
@@ -4762,6 +4895,32 @@ function clearParameters(ctx) {
 function trackIdFor(ctx, target) {
   return ctx.trackLaneIds[ctx.ensureTrackLane(target)];
 }
+function synthesizedStripJson(target) {
+  switch (target.kind) {
+    case "track":
+      return `{"version":1,"strips":[{"id":"track-${target.trackId}"}],"buses":[],"connections":[]}`;
+    case "bus":
+      return `{"version":1,"strips":[],"buses":[{"id":"bus-${target.busId}"}],"connections":[]}`;
+    case "master":
+      return '{"version":1,"strips":[{"id":"master"}],"buses":[],"connections":[]}';
+  }
+}
+function mergeStripJson(ctx, target, update) {
+  const scene = JSON.parse(ctx.readStripJson(target) ?? synthesizedStripJson(target));
+  update(target.kind === "bus" ? scene.buses[0] : scene.strips[0]);
+  ctx.writeStripJson(target, JSON.stringify(scene));
+}
+function mergeEqBand(ctx, target, bandIndex, bandJson) {
+  mergeStripJson(ctx, target, (entry) => {
+    const eq = entry.eq ?? { enabled: true, bands: [] };
+    const bands = eq.bands ?? [];
+    while (bands.length < bandIndex) {
+      bands.push({});
+    }
+    bands[bandIndex] = JSON.parse(bandJson);
+    entry.eq = { ...eq, bands };
+  });
+}
 function setTrackStripJson(ctx, trackId, sceneJson, trackStripJson) {
   ctx.offlineEngine.setTrackStripJson(trackId, sceneJson);
   trackStripJson.set(trackId, sceneJson);
@@ -4770,6 +4929,7 @@ function setTrackStripEqBand(ctx, target, bandIndex, band) {
   const trackId = trackIdFor(ctx, target);
   const bandJson = typeof band === "string" ? band : JSON.stringify(band);
   ctx.offlineEngine.setTrackStripEqBandJson(trackId, bandIndex, bandJson);
+  mergeEqBand(ctx, { kind: "track", trackId }, bandIndex, bandJson);
   ctx.postSync({ type: "syncTrackStripEqBand", trackId, bandIndex, bandJson });
 }
 function setTrackStripInsertBypassed(ctx, target, insertIndex, bypassed, resetOnBypass) {
@@ -4791,33 +4951,55 @@ function setTrackStripInsertParamByName(ctx, target, insertIndex, paramName, val
 function setTrackStripPan(ctx, target, pan) {
   const trackId = trackIdFor(ctx, target);
   ctx.offlineEngine.setTrackStripPan(trackId, pan);
+  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+    entry.pan = pan;
+  });
   ctx.postSync({ type: "syncTrackStripPan", trackId, pan });
 }
 function setTrackStripPanLaw(ctx, target, panLaw) {
   const trackId = trackIdFor(ctx, target);
   const code = panLawCode(panLaw);
   ctx.offlineEngine.setTrackStripPanLaw(trackId, code);
+  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+    entry.panLaw = code;
+  });
   ctx.postSync({ type: "syncTrackStripPanLaw", trackId, panLaw: code });
 }
 function setTrackStripPanMode(ctx, target, panMode) {
   const trackId = trackIdFor(ctx, target);
   const code = panModeCode(panMode);
   ctx.offlineEngine.setTrackStripPanMode(trackId, code);
+  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+    entry.panMode = code;
+  });
   ctx.postSync({ type: "syncTrackStripPanMode", trackId, panMode: code });
 }
 function setTrackStripDualPan(ctx, target, leftPan, rightPan) {
   const trackId = trackIdFor(ctx, target);
   ctx.offlineEngine.setTrackStripDualPan(trackId, leftPan, rightPan);
+  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+    entry.dualPanLeft = leftPan;
+    entry.dualPanRight = rightPan;
+  });
   ctx.postSync({ type: "syncTrackStripDualPan", trackId, leftPan, rightPan });
 }
 function setTrackStripChannelDelaySamples(ctx, target, delaySamples) {
   const trackId = trackIdFor(ctx, target);
   ctx.offlineEngine.setTrackStripChannelDelaySamples(trackId, delaySamples);
+  mergeStripJson(ctx, { kind: "track", trackId }, (entry) => {
+    entry.channelDelaySamples = delaySamples;
+  });
   ctx.postSync({ type: "syncTrackStripChannelDelaySamples", trackId, delaySamples });
+}
+function cacheMasterStripScalar(ctx, field, value) {
+  mergeStripJson(ctx, { kind: "master" }, (entry) => {
+    entry[field] = value;
+  });
 }
 function setMasterStripEqBand(ctx, bandIndex, band) {
   const bandJson = typeof band === "string" ? band : JSON.stringify(band);
   ctx.offlineEngine.setMasterStripEqBandJson(bandIndex, bandJson);
+  mergeEqBand(ctx, { kind: "master" }, bandIndex, bandJson);
   ctx.postSync({ type: "syncMasterStripEqBand", bandIndex, bandJson });
 }
 function setMasterStripInsertBypassed(ctx, insertIndex, bypassed, resetOnBypass) {
@@ -4835,6 +5017,43 @@ function setBusStripInsertParamByName(ctx, busId, insertIndex, paramName, value)
 function setBusStripInsertBypassed(ctx, busId, insertIndex, bypassed, resetOnBypass) {
   ctx.offlineEngine.setBusStripInsertBypassed(busId, insertIndex, bypassed, resetOnBypass);
   ctx.postSync({ type: "syncBusStripInsertBypassed", busId, insertIndex, bypassed, resetOnBypass });
+}
+function setBusStripEqBand(ctx, busId, bandIndex, band) {
+  const bandJson = typeof band === "string" ? band : JSON.stringify(band);
+  ctx.offlineEngine.setBusStripEqBandJson(busId, bandIndex, bandJson);
+  mergeEqBand(ctx, { kind: "bus", busId }, bandIndex, bandJson);
+  ctx.postSync({ type: "syncBusStripEqBand", busId, bandIndex, bandJson });
+}
+function setBusStripPan(ctx, busId, pan) {
+  ctx.offlineEngine.setBusStripPan(busId, pan);
+  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+    entry.pan = pan;
+  });
+  ctx.postSync({ type: "syncBusStripPan", busId, pan });
+}
+function setBusStripPanLaw(ctx, busId, panLaw) {
+  const code = panLawCode(panLaw);
+  ctx.offlineEngine.setBusStripPanLaw(busId, code);
+  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+    entry.panLaw = code;
+  });
+  ctx.postSync({ type: "syncBusStripPanLaw", busId, panLaw: code });
+}
+function setBusStripPanMode(ctx, busId, panMode) {
+  const code = panModeCode(panMode);
+  ctx.offlineEngine.setBusStripPanMode(busId, code);
+  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+    entry.panMode = code;
+  });
+  ctx.postSync({ type: "syncBusStripPanMode", busId, panMode: code });
+}
+function setBusStripDualPan(ctx, busId, leftPan, rightPan) {
+  ctx.offlineEngine.setBusStripDualPan(busId, leftPan, rightPan);
+  mergeStripJson(ctx, { kind: "bus", busId }, (entry) => {
+    entry.dualPanLeft = leftPan;
+    entry.dualPanRight = rightPan;
+  });
+  ctx.postSync({ type: "syncBusStripDualPan", busId, leftPan, rightPan });
 }
 function pushMidiNoteOn(ctx, trackId, group, channel, note, velocity, renderFrame) {
   const destinationId = ctx.resolveTargetId(trackId);
@@ -5056,6 +5275,8 @@ var SonareEngine = class _SonareEngine {
     this.trackSends = /* @__PURE__ */ new Map();
     this.trackOutputBus = /* @__PURE__ */ new Map();
     this.laneSidechains = /* @__PURE__ */ new Map();
+    this.busSidechains = /* @__PURE__ */ new Map();
+    this.masterSidechains = /* @__PURE__ */ new Map();
     this.buses = [];
     this.trackStripJson = /* @__PURE__ */ new Map();
     this.busStripJson = /* @__PURE__ */ new Map();
@@ -5294,10 +5515,18 @@ var SonareEngine = class _SonareEngine {
     return setTrackMonitorMode(this.parameterContext, target, mode, renderFrame);
   }
   setStripGain(target, db) {
-    return this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_FADER_DB), db);
+    const sent = this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_FADER_DB), db);
+    if (sent && target === "master") {
+      cacheMasterStripScalar(this.stripContext, "faderDb", db);
+    }
+    return sent;
   }
   setStripPan(target, pan) {
-    return this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_PAN), pan);
+    const sent = this.sendSmoothedParam(this.stripParamId(target, ENGINE_MIXER_PARAM_PAN), pan);
+    if (sent && target === "master") {
+      cacheMasterStripScalar(this.stripContext, "pan", pan);
+    }
+    return sent;
   }
   /**
    * Declares the mixer track lanes in an explicit order.
@@ -5333,6 +5562,20 @@ var SonareEngine = class _SonareEngine {
   }
   setTrackBuses(buses) {
     setTrackBuses(this.mixerContext, buses);
+  }
+  /**
+   * Keys one insert of a bus strip from a track lane or another bus
+   * (ducking/sidechainRouter inserts). `sourceId` 0 removes the binding.
+   */
+  setBusSidechain(busId, insertIndex, sourceKind, sourceId) {
+    setBusSidechain(this.mixerContext, busId, insertIndex, sourceKind, sourceId);
+  }
+  /**
+   * Keys one insert of the master strip from a track lane or a bus. Same
+   * source rules as {@link setBusSidechain}.
+   */
+  setMasterSidechain(insertIndex, sourceKind, sourceId) {
+    setMasterSidechain(this.mixerContext, insertIndex, sourceKind, sourceId);
   }
   setBusGain(busId, db) {
     return setBusGain(this.mixerContext, busId, db);
@@ -5433,6 +5676,28 @@ var SonareEngine = class _SonareEngine {
       bypassed,
       resetOnBypass
     );
+  }
+  /** Bus-strip counterpart of {@link setTrackStripEqBand}. */
+  setBusStripEqBand(busId, bandIndex, band) {
+    this.ensureBus(busId);
+    setBusStripEqBand(this.stripContext, busId, bandIndex, band);
+  }
+  /** Bus-strip counterpart of {@link setTrackStripPan}; refused on a surround bus. */
+  setBusStripPan(busId, pan) {
+    this.ensureBus(busId);
+    setBusStripPan(this.stripContext, busId, pan);
+  }
+  setBusStripPanLaw(busId, panLaw) {
+    this.ensureBus(busId);
+    setBusStripPanLaw(this.stripContext, busId, panLaw);
+  }
+  setBusStripPanMode(busId, panMode) {
+    this.ensureBus(busId);
+    setBusStripPanMode(this.stripContext, busId, panMode);
+  }
+  setBusStripDualPan(busId, leftPan, rightPan) {
+    this.ensureBus(busId);
+    setBusStripDualPan(this.stripContext, busId, leftPan, rightPan);
   }
   setStripInsertParamByName(target, insertIndex, paramName, value) {
     if (target === "master") {
@@ -5986,6 +6251,8 @@ var SonareEngine = class _SonareEngine {
       trackSends: this.trackSends,
       trackOutputBus: this.trackOutputBus,
       laneSidechains: this.laneSidechains,
+      busSidechains: this.busSidechains,
+      masterSidechains: this.masterSidechains,
       buses: this.buses,
       trackStripJson: this.trackStripJson,
       busStripJson: this.busStripJson,
@@ -5995,7 +6262,10 @@ var SonareEngine = class _SonareEngine {
       mixerLanes: () => this.mixerLanes(),
       syncMixer: () => this.syncMixer(),
       sendSmoothedParam: (paramId, value) => this.sendSmoothedParam(paramId, value),
-      getMasterStripJson: () => this.masterStripJson
+      getMasterStripJson: () => this.masterStripJson,
+      cacheMasterStripJson: (sceneJson) => {
+        this.masterStripJson = sceneJson;
+      }
     };
   }
   // Collaborator surface handed to the strip/pan/EQ/insert/MIDI free functions
@@ -6008,7 +6278,9 @@ var SonareEngine = class _SonareEngine {
       postSync: (message) => this.postSync(message),
       postInstrumentSync: (message) => this.postInstrumentSync(message),
       ensureTrackLane: (target) => this.ensureTrackLane(target),
-      resolveTargetId: (target) => this.resolveTargetId(target)
+      resolveTargetId: (target) => this.resolveTargetId(target),
+      readStripJson: (target) => cachedStripJson(this.mixerContext, target),
+      writeStripJson: (target, sceneJson) => cacheStripJson(this.mixerContext, target, sceneJson)
     };
   }
   // Collaborator surface handed to the automation-lane free functions so they
@@ -6551,6 +6823,17 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         for (const binding of message.laneSidechains ?? []) {
           this.engine.setLaneSidechain(binding.trackId, binding.insertIndex, binding.sourceTrackId);
         }
+        for (const binding of message.busSidechains ?? []) {
+          this.engine.setBusSidechain(
+            binding.busId,
+            binding.insertIndex,
+            binding.sourceKind,
+            binding.sourceId
+          );
+        }
+        for (const binding of message.masterSidechains ?? []) {
+          this.engine.setMasterSidechain(binding.insertIndex, binding.sourceKind, binding.sourceId);
+        }
         break;
       case "syncCapture":
         this.engine.setCaptureBuffer(message.channels, message.bufferFrames);
@@ -6563,6 +6846,9 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         break;
       case "syncMasterStripEqBand":
         this.engine.setMasterStripEqBandJson(message.bandIndex, message.bandJson);
+        break;
+      case "syncBusStripEqBand":
+        this.engine.setBusStripEqBandJson(message.busId, message.bandIndex, message.bandJson);
         break;
       case "syncTrackStripInsertBypassed":
         this.engine.setTrackStripInsertBypassed(
@@ -6621,6 +6907,18 @@ var _SonareRealtimeEngineWorkletProcessor = class _SonareRealtimeEngineWorkletPr
         break;
       case "syncTrackStripDualPan":
         this.engine.setTrackStripDualPan(message.trackId, message.leftPan, message.rightPan);
+        break;
+      case "syncBusStripPan":
+        this.engine.setBusStripPan(message.busId, message.pan);
+        break;
+      case "syncBusStripPanLaw":
+        this.engine.setBusStripPanLaw(message.busId, message.panLaw);
+        break;
+      case "syncBusStripPanMode":
+        this.engine.setBusStripPanMode(message.busId, message.panMode);
+        break;
+      case "syncBusStripDualPan":
+        this.engine.setBusStripDualPan(message.busId, message.leftPan, message.rightPan);
         break;
       case "syncTrackStripChannelDelaySamples":
         this.engine.setTrackStripChannelDelaySamples(message.trackId, message.delaySamples);

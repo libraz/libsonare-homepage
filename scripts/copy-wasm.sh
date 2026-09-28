@@ -7,9 +7,10 @@ WASM_BUILD_DIR="$JS_DIST_DIR"
 DEST_DIR="src/wasm"
 
 # Required files
-# Emscripten artifacts: main module + the dedicated realtime AudioWorklet
-# runtime (sonare-rt, C-ABI-only build selectable via runtimeTarget).
-WASM_FILES=("sonare.wasm" "sonare.js" "sonare-rt.wasm" "sonare-rt.js" "sonare-rt-module.js")
+# Emscripten artifacts: the main module and its glue. The realtime worklet now
+# uses the same embind runtime, so the former sonare-rt companion artifacts are
+# no longer produced by libsonare.
+WASM_FILES=("sonare.wasm" "sonare.js")
 # tsup bundle: index.* is the high-level API, worklet.* is the AudioWorklet
 # entry, and worker.* is the offline Worker entry `OfflineWorkerClient` resolves
 # with `new URL('./worker.js', import.meta.url)` — copying it keeps that
@@ -28,13 +29,17 @@ DTS_GLOB="*.d.ts"
 # A type-check probe the upstream build leaves behind; it is not part of the API.
 DTS_EXCLUDE_GLOB="__tmp_*"
 
-# Obsolete files from the previous tsc-based layout — removed after libsonare
-# switched to a tsup bundle. Only the runtime halves: the matching declarations
-# are current again under the barrel layout and are copied by DTS_GLOB.
+# Obsolete files from previous layouts — removed after libsonare switched to a
+# tsup bundle and after the realtime runtime was folded into the main module.
+# The matching declarations are current again under the barrel layout and are
+# copied by DTS_GLOB.
 OBSOLETE_FILES=(
   "public_types.js"
   "stream_types.js"
   "wasm_types.js"
+  "sonare-rt.wasm"
+  "sonare-rt.js"
+  "sonare-rt-module.js"
 )
 
 echo "📦 Copying WASM files from libsonare..."
@@ -129,8 +134,18 @@ fi
 WASM_CHANGED=false
 JS_CHANGED=false
 
-# Compare every Emscripten artifact, not just sonare.wasm — a sonare-rt-only
-# rebuild must still trigger a copy.
+# Compare a copied JS or declaration file with its upstream source after the
+# same source-map stripping performed below. Without this normalization every
+# subsequent copy sees the upstream sourceMappingURL comment as a change.
+same_normalized_js_file() {
+  local source_file="$1"
+  local destination_file="$2"
+  [ -f "$destination_file" ] || return 1
+  cmp -s <(sed '/^\/\/# sourceMappingURL=/d' "$source_file") "$destination_file"
+}
+
+# Compare every Emscripten artifact, not just sonare.wasm — a glue-only rebuild
+# must still trigger a copy.
 for file in "${WASM_FILES[@]}"; do
   if [ ! -f "$DEST_DIR/$file" ] || ! cmp -s "$WASM_BUILD_DIR/$file" "$DEST_DIR/$file"; then
     WASM_CHANGED=true
@@ -140,7 +155,7 @@ done
 
 # Check if JS files have changed
 for file in "${JS_FILES[@]}"; do
-  if [ ! -f "$DEST_DIR/$file" ] || ! cmp -s "$JS_DIST_DIR/$file" "$DEST_DIR/$file"; then
+  if ! same_normalized_js_file "$JS_DIST_DIR/$file" "$DEST_DIR/$file"; then
     JS_CHANGED=true
     break
   fi
@@ -148,7 +163,7 @@ done
 
 for source_file in "${JS_CHUNK_FILES[@]}" "${DTS_FILES[@]}"; do
   file=$(basename "$source_file")
-  if [ ! -f "$DEST_DIR/$file" ] || ! cmp -s "$source_file" "$DEST_DIR/$file"; then
+  if ! same_normalized_js_file "$source_file" "$DEST_DIR/$file"; then
     JS_CHANGED=true
     break
   fi
@@ -263,9 +278,9 @@ fi
 
 sync_public_worklet
 
-# Remove obsolete sub-module files left over from the previous layout
+# Remove obsolete files left over from previous layouts
 if $OBSOLETE_PRESENT; then
-  echo "   Removing obsolete sub-module files..."
+  echo "   Removing obsolete files..."
   for file in "${OBSOLETE_FILES[@]}"; do
     if [ -f "$DEST_DIR/$file" ]; then
       rm "$DEST_DIR/$file"
@@ -283,8 +298,8 @@ if [ ${#STALE_CHUNKS[@]} -gt 0 ]; then
   done
 fi
 
-# Update meta.json if WASM changed
-if $WASM_CHANGED; then
+# Update meta.json when either the WASM or a JS asset changed
+if $WASM_CHANGED || $JS_CHANGED; then
   echo ""
   ./scripts/update-wasm-meta.sh
 fi
