@@ -215,6 +215,7 @@ const NOT_A_DESIGNATION = {
   'SHA-256': 'the hash the build pins artifacts with',
   'Bank-128': 'a MIDI bank number, written out in prose',
   ES2017: 'the ECMAScript edition a browser requirement is stated against',
+  KU100: 'the dummy-head measurement rig the default HRTF set is attributed to',
 };
 
 /**

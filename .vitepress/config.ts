@@ -651,6 +651,13 @@ const enDocsSidebar = [
     ],
   },
   {
+    text: 'Playback',
+    items: [
+      { text: 'Playback Renderer', link: '/docs/playback' },
+      { text: 'Channel Formats', link: '/docs/channel-formats' },
+    ],
+  },
+  {
     text: 'API By Runtime',
     items: [
       {
@@ -1162,6 +1169,13 @@ export default defineConfig({
               items: [
                 { text: '音響解析', link: '/ja/docs/acoustic-analysis' },
                 { text: '逆変換特徴量', link: '/ja/docs/inverse-features' },
+              ],
+            },
+            {
+              text: '再生',
+              items: [
+                { text: '再生レンダラー', link: '/ja/docs/playback' },
+                { text: 'チャンネル形式', link: '/ja/docs/channel-formats' },
               ],
             },
             {
