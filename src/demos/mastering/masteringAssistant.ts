@@ -1,9 +1,5 @@
 import type { MasteringModuleSettingKey } from '@/demos/mastering/masteringUi';
-import type {
-  MasteringModuleSettings,
-  MasteringPlatformId,
-  MasteringPresetId,
-} from '@/demos/mastering/useMastering';
+import type { MasteringModuleSettings } from '@/demos/mastering/useMastering';
 import { clamp } from '@/utils/scale';
 
 export interface MasteringAssistantPreviewRow {
@@ -11,23 +7,15 @@ export interface MasteringAssistantPreviewRow {
   safeCeilingDb?: number;
 }
 
-export interface MasteringPresetOption {
-  id: MasteringPresetId;
-}
-
 export interface ApplyMasteringAssistantSettingsOptions {
   currentSettings: MasteringModuleSettings;
   params: Record<string, unknown> | null;
   insightPreview: MasteringAssistantPreviewRow[];
-  presets: readonly MasteringPresetOption[];
 }
 
 export interface ApplyMasteringAssistantSettingsResult {
   applied: boolean;
   moduleSettings: MasteringModuleSettings;
-  selectedPlatform?: MasteringPlatformId;
-  customLufs?: number;
-  selectedPreset?: MasteringPresetId;
   activeModule?: string;
 }
 
@@ -48,14 +36,15 @@ function applyParam(
   if (value !== null) next[setting] = clamp(value, min, max);
 }
 
-export function normalizeAssistantPreset(
-  value: unknown,
-  presets: readonly MasteringPresetOption[],
-): MasteringPresetId | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.toLowerCase().replace(/[-_\s]/g, '');
-  const match = presets.find((preset) => preset.id.toLowerCase() === normalized);
-  return match?.id ?? null;
+function applyTighterCeiling(
+  next: MasteringModuleSettings,
+  params: Record<string, unknown>,
+  key: string,
+) {
+  const value = numericParam(params, key);
+  if (value !== null) {
+    next.limiterCeilingDb = Math.min(next.limiterCeilingDb, clamp(value, -3, -0.1));
+  }
 }
 
 export function assistantParamsFromSuggestions(
@@ -70,7 +59,6 @@ export function applyMasteringAssistantSettings({
   currentSettings,
   params,
   insightPreview,
-  presets,
 }: ApplyMasteringAssistantSettingsOptions): ApplyMasteringAssistantSettingsResult {
   if (!params && !insightPreview.some((row) => row.ceilingRisk)) {
     return { applied: false, moduleSettings: currentSettings };
@@ -92,22 +80,9 @@ export function applyMasteringAssistantSettings({
     applyParam(next, params, 'spectral.airBand.amount', 'airBandAmount', 0, 1);
     applyParam(next, params, 'stereo.imager.width', 'stereoWidth', 0.6, 1.6);
     applyParam(next, params, 'stereo.monoMaker.amount', 'monoMakerAmount', 0, 1);
-    applyParam(next, params, 'maximizer.truePeakLimiter.ceilingDb', 'limiterCeilingDb', -3, -0.1);
-    applyParam(next, params, 'loudness.ceilingDb', 'limiterCeilingDb', -3, -0.1);
+    applyTighterCeiling(next, params, 'maximizer.truePeakLimiter.ceilingDb');
+    applyTighterCeiling(next, params, 'loudness.ceilingDb');
     applyParam(next, params, 'maximizer.truePeakLimiter.lookaheadMs', 'limiterLookaheadMs', 1, 20);
-
-    const target = numericParam(params, 'loudness.targetLufs');
-    if (target !== null) {
-      result.selectedPlatform = 'custom';
-      result.customLufs = clamp(target, -24, -8);
-    }
-
-    const candidates = params.genreCandidates;
-    if (Array.isArray(candidates)) {
-      const first = candidates[0] as Record<string, unknown> | undefined;
-      const preset = normalizeAssistantPreset(first?.name, presets);
-      if (preset) result.selectedPreset = preset;
-    }
   }
 
   const safeCeiling = Math.min(

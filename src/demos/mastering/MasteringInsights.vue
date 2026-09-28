@@ -36,11 +36,11 @@ const profileStatusLabel = computed(() => {
 
 const suggestionCopy = {
   en: {
-    genrePrefix: 'base preset selected from top genre candidate:',
+    basePreset: 'base preset:',
     moves: {},
   },
   ja: {
-    genrePrefix: '最上位ジャンル候補からベースプリセットを選択:',
+    basePreset: 'ベースプリセット:',
     moves: {
       'target loudness and ceiling applied from AssistantConfig':
         '目標ラウドネスとシーリングをアシスタント設定から適用',
@@ -72,8 +72,8 @@ function formatCeiling(value: number): string {
 function formatSuggestion(move: string): string {
   const copy = localizedValue(suggestionCopy);
 
-  const genre = move.match(/^base preset selected from top genre candidate:\s*(.+)$/i);
-  if (genre) return `${copy.genrePrefix} ${genre[1]}`;
+  const basePreset = move.match(/^base preset:\s*(.+)$/i);
+  if (basePreset) return `${copy.basePreset} ${basePreset[1]}`;
 
   return (copy.moves as Record<string, string>)[move] ?? move;
 }

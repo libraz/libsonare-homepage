@@ -364,7 +364,7 @@ describe('wasm-backed demo composables', () => {
     expect(MockWorker.terminated).toBeGreaterThan(0);
   });
 
-  it('useMastering renders reference matching with resampled references and rejects missing source', async () => {
+  it('useMastering passes the original reference rate to the worker and rejects missing source', async () => {
     await expect(
       useMastering().render({
         preset: 'pop',
@@ -399,9 +399,10 @@ describe('wasm-backed demo composables', () => {
 
     const message = MockWorker.messages.at(-1);
     expect(message.type).toBe('referenceMatch');
-    expect(message.referenceLeft).toHaveLength(4);
-    expect(message.referenceRight).toHaveLength(4);
+    expect(message.referenceLeft).toHaveLength(2);
+    expect(message.referenceRight).toHaveLength(2);
     expect(message.sampleRate).toBe(SAMPLE_RATE);
+    expect(message.referenceSampleRate).toBe(SAMPLE_RATE / 2);
     expect(message.targetLufs).toBe(-14);
     expect(message.ceilingDb).toBe(-1);
     expect(message.lookaheadMs).toBe(4);

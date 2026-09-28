@@ -2,6 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const wasmMock = vi.hoisted(() => ({
   init: vi.fn(async () => undefined),
+  resample: vi.fn((samples: Float32Array, srcSr: number, targetSr: number) => {
+    const outputLength = Math.max(1, Math.round(samples.length * (targetSr / srcSr)));
+    const output = new Float32Array(outputLength);
+    for (let i = 0; i < output.length; i++) {
+      output[i] = samples[Math.min(Math.floor(i * (srcSr / targetSr)), samples.length - 1)] ?? 0;
+    }
+    return output;
+  }),
+  lufsInterleaved: vi.fn(),
   masteringChainStereoWithProgress: vi.fn(
     (
       left: Float32Array,
@@ -37,6 +46,8 @@ const wasmMock = vi.hoisted(() => ({
       appliedGainDb: 0,
     }),
   ),
+  masteringPairAnalyze: vi.fn(() => '{"bands":[]}'),
+  masteringStereoAnalyze: vi.fn(() => '{"correlation":0,"width":1,"likelyMonoCompatible":true}'),
   // The stereo entry points measure the pair itself, so the `loudness` block
   // already reports the delivered programme (6 dB above its own downmix here).
   masteringAudioProfileStereo: vi.fn(
@@ -190,6 +201,7 @@ describe('mastering worker protocol', () => {
         referenceLeft: new Float32Array([7, 8]),
         referenceRight: new Float32Array([9, 10, 11, 12]),
         sampleRate: 44_100,
+        referenceSampleRate: 44_100,
         targetLufs: -14,
         ceilingDb: -1,
         lookaheadMs: 4,
@@ -197,6 +209,7 @@ describe('mastering worker protocol', () => {
     });
 
     expect(wasmMock.masteringPairProcess).toHaveBeenCalledTimes(2);
+    expect(wasmMock.resample).not.toHaveBeenCalled();
     expect(wasmMock.masteringPairProcess.mock.calls[0]).toEqual([
       'match.applyMatchEq',
       new Float32Array([0.1, 0.2, 0.3]),
@@ -237,6 +250,169 @@ describe('mastering worker protocol', () => {
         appliedGainDb: 4,
         stages: ['match.applyMatchEq', 'eq.tilt'],
       },
+    });
+  });
+
+  it('resamples both reference channels in the worker at the source rate', async () => {
+    await (self as any).onmessage({
+      data: {
+        type: 'referenceMatch',
+        id: 12,
+        left: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+        right: new Float32Array([0.4, 0.3, 0.2, 0.1]),
+        referenceLeft: new Float32Array([7, 8, 9, 10]),
+        referenceRight: new Float32Array([10, 9, 8, 7]),
+        sampleRate: 16_000,
+        referenceSampleRate: 48_000,
+        targetLufs: -14,
+        ceilingDb: -1,
+        lookaheadMs: 4,
+      },
+    });
+
+    expect(wasmMock.resample).toHaveBeenNthCalledWith(
+      1,
+      new Float32Array([7, 8, 9, 10]),
+      48_000,
+      16_000,
+    );
+    expect(wasmMock.resample).toHaveBeenNthCalledWith(
+      2,
+      new Float32Array([10, 9, 8, 7]),
+      48_000,
+      16_000,
+    );
+    expect(wasmMock.masteringPairProcess.mock.calls[0][2]).toEqual(new Float32Array([7]));
+    expect(wasmMock.masteringPairProcess.mock.calls[1][2]).toEqual(new Float32Array([10]));
+  });
+
+  it('keeps reference analysis at the source rate after stereo resampling', async () => {
+    wasmMock.lufsInterleaved
+      .mockReturnValueOnce({ integratedLufs: -18 })
+      .mockReturnValueOnce({ integratedLufs: -12 });
+
+    await (self as any).onmessage({
+      data: {
+        type: 'referenceAnalyze',
+        id: 14,
+        sourceLeft: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+        sourceRight: new Float32Array([0.4, 0.3, 0.2, 0.1]),
+        referenceLeft: new Float32Array([1, 2]),
+        referenceRight: new Float32Array([2, 1]),
+        sampleRate: 48_000,
+        referenceSampleRate: 24_000,
+      },
+    });
+
+    expect(wasmMock.resample).toHaveBeenNthCalledWith(1, new Float32Array([1, 2]), 24_000, 48_000);
+    expect(wasmMock.resample).toHaveBeenNthCalledWith(2, new Float32Array([2, 1]), 24_000, 48_000);
+    expect(wasmMock.lufsInterleaved).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Float32Array),
+      2,
+      48_000,
+    );
+    expect(wasmMock.lufsInterleaved).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Float32Array),
+      2,
+      48_000,
+    );
+    expect(wasmMock.masteringPairAnalyze.mock.calls[0][0]).toBe('match.tonalBalance');
+    expect(wasmMock.masteringPairAnalyze.mock.calls[0][3]).toBe(48_000);
+    expect(wasmMock.masteringStereoAnalyze.mock.calls[0][3]).toBe(48_000);
+  });
+
+  it('reports stereo loudness delta for anti-phase reference material', async () => {
+    wasmMock.lufsInterleaved
+      .mockReturnValueOnce({ integratedLufs: -18 })
+      .mockReturnValueOnce({ integratedLufs: -12 });
+
+    const sourceLeft = new Float32Array([1, -1, 1, -1]);
+    const sourceRight = new Float32Array([-1, 1, -1, 1]);
+    const referenceLeft = new Float32Array([0.5, 0, 0.5, 0]);
+    const referenceRight = new Float32Array([0, 0.5, 0, 0.5]);
+
+    await (self as any).onmessage({
+      data: {
+        type: 'referenceAnalyze',
+        id: 13,
+        sourceLeft,
+        sourceRight,
+        referenceLeft,
+        referenceRight,
+        sampleRate: 48_000,
+        referenceSampleRate: 48_000,
+      },
+    });
+
+    expect(wasmMock.lufsInterleaved).toHaveBeenNthCalledWith(
+      1,
+      new Float32Array([1, -1, -1, 1, 1, -1, -1, 1]),
+      2,
+      48_000,
+    );
+    expect(wasmMock.lufsInterleaved).toHaveBeenNthCalledWith(
+      2,
+      new Float32Array([0.5, 0, 0, 0.5, 0.5, 0, 0, 0.5]),
+      2,
+      48_000,
+    );
+    expect(wasmMock.resample).not.toHaveBeenCalled();
+    expect(wasmMock.masteringPairAnalyze).toHaveBeenCalledWith(
+      'match.tonalBalance',
+      expect.any(Float32Array),
+      expect.any(Float32Array),
+      48_000,
+    );
+    const tonalCall = wasmMock.masteringPairAnalyze.mock.calls.find(
+      (call) => call[0] === 'match.tonalBalance',
+    );
+    expect(tonalCall?.[1]).toEqual(sourceLeft);
+    expect(Array.from(tonalCall?.[1] as Float32Array).some((sample) => sample !== 0)).toBe(true);
+    // The reference pair is not severely cancelling, so its ordinary average
+    // remains the tonal comparison signal.
+    expect(tonalCall?.[2]).toEqual(new Float32Array([0.25, 0.25, 0.25, 0.25]));
+    expect(wasmMock.masteringPairAnalyze).not.toHaveBeenCalledWith(
+      'match.referenceLoudness',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    const result = (posted.at(-1)!.message as any).result;
+    expect(result.loudness).toEqual({
+      sourceLufs: -18,
+      referenceLufs: -12,
+      gainToMatchDb: 6,
+    });
+  });
+
+  it.each([
+    [-Infinity, -12],
+    [-18, -Infinity],
+    [-Infinity, -Infinity],
+  ])('keeps the reference gain finite when LUFS is silent (%s, %s)', async (source, reference) => {
+    wasmMock.lufsInterleaved
+      .mockReturnValueOnce({ integratedLufs: source })
+      .mockReturnValueOnce({ integratedLufs: reference });
+
+    await (self as any).onmessage({
+      data: {
+        type: 'referenceAnalyze',
+        id: 15,
+        sourceLeft: new Float32Array([0, 0]),
+        sourceRight: new Float32Array([0, 0]),
+        referenceLeft: new Float32Array([0.2, 0.2]),
+        referenceRight: new Float32Array([0.2, 0.2]),
+        sampleRate: 48_000,
+      },
+    });
+
+    const result = (posted.at(-1)!.message as any).result;
+    expect(result.loudness).toEqual({
+      sourceLufs: source,
+      referenceLufs: reference,
+      gainToMatchDb: 0,
     });
   });
 
@@ -301,6 +477,30 @@ describe('mastering worker protocol', () => {
         ceilingRisk: false,
       },
     ]);
+  });
+
+  it('passes the selected assistant preset through the stereo request', async () => {
+    const left = new Float32Array([0.2, -0.2]);
+    const right = new Float32Array([0.1, 0.1]);
+
+    await (self as any).onmessage({
+      data: {
+        type: 'sourceAnalyze',
+        id: 23,
+        left,
+        right,
+        sampleRate: 48_000,
+        platforms: [{ name: 'Spotify', targetLufs: -14, ceilingDb: -1 }],
+        preset: 'hipHop',
+      },
+    });
+
+    expect(wasmMock.masteringAssistantSuggestStereo).toHaveBeenCalledWith({
+      left,
+      right,
+      sampleRate: 48_000,
+      params: { preset: 'hipHop' },
+    });
   });
 
   it('flags ceiling risk when the platform gain pushes the stereo true peak over the ceiling', async () => {

@@ -1,5 +1,10 @@
-import { computed, type Ref, ref } from 'vue';
-import type { MasteringInsightReport, useMastering } from '@/demos/mastering/useMastering';
+import { computed, type Ref, ref, watch } from 'vue';
+import type {
+  MasteringAssistantPreset,
+  MasteringInsightReport,
+  MasteringPresetId,
+  useMastering,
+} from '@/demos/mastering/useMastering';
 
 type MasteringApi = ReturnType<typeof useMastering>;
 
@@ -37,7 +42,21 @@ const STREAMING_TARGETS = [
   { name: 'Podcast', targetLufs: -16, ceilingDb: -1 },
 ];
 
-export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?: Ref<number>) {
+/** Map the UI's recording/genre choices to libsonare assistant presets. */
+export function assistantPresetForAnalysis(preset: MasteringPresetId): MasteringAssistantPreset {
+  if (preset === 'hiphop') return 'hipHop';
+  // The assistant has no venue-specific preset. Keep the live render preset
+  // selected in the UI, while using the dynamics-preserving acoustic profile
+  // as the analysis baseline for both live-room choices.
+  if (preset === 'liveSmall' || preset === 'liveLarge') return 'acoustic';
+  return preset;
+}
+
+export function useMasteringInsights(
+  mastering: MasteringApi,
+  currentCeilingDb?: Ref<number>,
+  selectedPreset?: Ref<MasteringPresetId>,
+) {
   const insightReport = ref<MasteringInsightReport | null>(null);
   const isAnalyzingInsights = ref(false);
   let insightRequestId = 0;
@@ -121,20 +140,30 @@ export function useMasteringInsights(mastering: MasteringApi, currentCeilingDb?:
   async function analyzeSourceInsights() {
     if (!mastering.source.value) return;
     const id = ++insightRequestId;
+    insightReport.value = null;
     isAnalyzingInsights.value = true;
     try {
-      const report = await mastering.analyzeSource(STREAMING_TARGETS);
+      const assistantPreset = selectedPreset
+        ? assistantPresetForAnalysis(selectedPreset.value)
+        : undefined;
+      const report = assistantPreset
+        ? await mastering.analyzeSource(STREAMING_TARGETS, assistantPreset)
+        : await mastering.analyzeSource(STREAMING_TARGETS);
       if (id === insightRequestId) insightReport.value = report;
     } catch (error) {
-      // Insight analysis is a best-effort background pass. A failure here (e.g. a
-      // clip too short for the assistant window) must not surface as a fatal demo
-      // error on a clip that still masters fine — clear the shared error the
-      // analysis path set and keep it on this non-fatal channel instead.
+      // Insight analysis is a best-effort background pass. A failure here (e.g.
+      // empty audio) stays on this non-fatal channel
+      // and must not mutate the shared foreground error state.
       console.warn('Mastering insight analysis failed:', error);
-      if (id === insightRequestId) mastering.error.value = null;
     } finally {
       if (id === insightRequestId) isAnalyzingInsights.value = false;
     }
+  }
+
+  if (selectedPreset) {
+    watch(selectedPreset, () => {
+      if (mastering.source.value) void analyzeSourceInsights();
+    });
   }
 
   return {

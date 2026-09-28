@@ -11,6 +11,8 @@ export type MasteringPresetId =
   | 'hiphop'
   | 'aiMusic'
   | 'speech';
+/** Preset names accepted by libsonare's mastering assistant. */
+export type MasteringAssistantPreset = 'pop' | 'edm' | 'acoustic' | 'hipHop' | 'aiMusic' | 'speech';
 export type MasteringVenueId = 'studio' | 'livehouseSmall' | 'livehouseLarge';
 export type MasteringPlatformId = 'spotify' | 'youtube' | 'apple' | 'tiktok' | 'custom';
 
@@ -232,16 +234,7 @@ export function useMastering() {
     error.value = null;
 
     try {
-      const matchedReference =
-        reference.sampleRate === source.value.sampleRate
-          ? reference
-          : {
-              ...reference,
-              sampleRate: source.value.sampleRate,
-              left: resampleLinear(reference.left, reference.sampleRate, source.value.sampleRate),
-              right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
-            };
-      const output = await renderReferenceMatchInWorker(source.value, matchedReference, options);
+      const output = await renderReferenceMatchInWorker(source.value, reference, options);
       if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
       rendered.value = output;
       renderProgress.value = 1;
@@ -278,21 +271,24 @@ export function useMastering() {
     return wasmModule.lufsInterleaved(interleaved, 2, audio.sampleRate).integratedLufs;
   }
 
-  async function analyzeSource(platforms: StreamingPlatform[]): Promise<MasteringInsightReport> {
+  async function analyzeSource(
+    platforms: StreamingPlatform[],
+    preset?: MasteringAssistantPreset,
+  ): Promise<MasteringInsightReport> {
     if (!source.value) {
       throw new Error('No audio loaded');
     }
-    const generation = ++operationGeneration;
     try {
-      const report = await analyzeSourceInWorker(source.value, platforms);
-      if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
-      return report;
+      // Source insights run in the same worker as rendering, but they are a
+      // background read. Keep them out of operationGeneration: changing the
+      // assistant preset while a render is in flight must not supersede that
+      // render. useMasteringInsights owns the latest-request guard for the UI.
+      return await analyzeSourceInWorker(source.value, platforms, preset);
     } catch (e) {
-      // The mastering assistant rejects clips shorter than one analysis window.
-      // It surfaces as a raw WASM exception pointer (a number), so normalise it
-      // into an Error and set a friendly message instead of leaking the pointer.
+      // Empty input can surface as a raw WASM exception pointer (a number), so
+      // normalise it into an Error instead of leaking the pointer. This is a background
+      // insight request; leave the shared foreground error channel untouched.
       console.error('Mastering analysis failed:', e);
-      error.value = 'Could not analyze this audio — it may be too short.';
       throw e instanceof Error ? e : new Error('Mastering analysis failed');
     }
   }
@@ -304,19 +300,9 @@ export function useMastering() {
       throw new Error('No audio loaded');
     }
 
-    const matchedReference =
-      reference.sampleRate === source.value.sampleRate
-        ? reference
-        : {
-            ...reference,
-            sampleRate: source.value.sampleRate,
-            left: resampleLinear(reference.left, reference.sampleRate, source.value.sampleRate),
-            right: resampleLinear(reference.right, reference.sampleRate, source.value.sampleRate),
-          };
-
     const generation = ++operationGeneration;
     try {
-      const report = await analyzeReferenceInWorker(source.value, matchedReference);
+      const report = await analyzeReferenceInWorker(source.value, reference);
       if (generation !== operationGeneration) throw new DOMException('Superseded', 'AbortError');
       return report;
     } catch (e) {
@@ -475,6 +461,7 @@ export function useMastering() {
           referenceLeft,
           referenceRight,
           sampleRate: audio.sampleRate,
+          referenceSampleRate: referenceAudio.sampleRate,
           targetLufs: options.targetLufs,
           ceilingDb: options.ceilingDb,
           lookaheadMs: options.lookaheadMs,
@@ -546,6 +533,7 @@ export function useMastering() {
           referenceLeft,
           referenceRight,
           sampleRate: audio.sampleRate,
+          referenceSampleRate: referenceAudio.sampleRate,
         },
         [sourceLeft.buffer, sourceRight.buffer, referenceLeft.buffer, referenceRight.buffer],
       );
@@ -555,6 +543,7 @@ export function useMastering() {
   function analyzeSourceInWorker(
     audio: DecodedMasteringAudio,
     platforms: StreamingPlatform[],
+    preset?: MasteringAssistantPreset,
   ): Promise<MasteringInsightReport> {
     const id = ++renderRequestId;
     if (!worker) {
@@ -589,10 +578,16 @@ export function useMastering() {
       worker!.addEventListener('error', onError);
       const left = new Float32Array(audio.left);
       const right = new Float32Array(audio.right);
-      worker!.postMessage(
-        { type: 'sourceAnalyze', id, left, right, sampleRate: audio.sampleRate, platforms },
-        [left.buffer, right.buffer],
-      );
+      const request = {
+        type: 'sourceAnalyze' as const,
+        id,
+        left,
+        right,
+        sampleRate: audio.sampleRate,
+        platforms,
+        ...(preset ? { preset } : {}),
+      };
+      worker!.postMessage(request, [left.buffer, right.buffer]);
     });
   }
 
@@ -645,26 +640,6 @@ function applyGain(audio: DecodedMasteringAudio, gainDb: number): DecodedMasteri
   for (let i = 0; i < audio.left.length; i++) left[i] = audio.left[i] * factor;
   for (let i = 0; i < audio.right.length; i++) right[i] = audio.right[i] * factor;
   return { ...audio, left, right };
-}
-
-function resampleLinear(
-  samples: Float32Array,
-  fromSampleRate: number,
-  toSampleRate: number,
-): Float32Array {
-  if (fromSampleRate === toSampleRate || samples.length === 0) return new Float32Array(samples);
-  const ratio = toSampleRate / fromSampleRate;
-  const outputLength = Math.max(1, Math.round(samples.length * ratio));
-  const output = new Float32Array(outputLength);
-  for (let i = 0; i < outputLength; i++) {
-    const sourceIndex = i / ratio;
-    const index = Math.floor(sourceIndex);
-    const fraction = sourceIndex - index;
-    const current = samples[Math.min(index, samples.length - 1)];
-    const next = samples[Math.min(index + 1, samples.length - 1)];
-    output[i] = current + (next - current) * fraction;
-  }
-  return output;
 }
 
 export function buildMasteringConfig(options: MasteringRenderOptions): MasteringChainConfig {

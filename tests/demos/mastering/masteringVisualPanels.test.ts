@@ -304,7 +304,7 @@ describe('MasteringInsights', () => {
         hasReport: true,
         profileItems: [],
         suggestions: [
-          'base preset selected from top genre candidate: edm',
+          'base preset: edm',
           'target loudness and ceiling applied from AssistantConfig',
           'bass-heavy fast material gets mild tilt and tape drive',
           'transient shaper enabled for dense attacks',
@@ -313,7 +313,7 @@ describe('MasteringInsights', () => {
       },
     });
 
-    expect(wrapper.text()).toContain('最上位ジャンル候補からベースプリセットを選択: edm');
+    expect(wrapper.text()).toContain('ベースプリセット: edm');
     expect(wrapper.text()).toContain('目標ラウドネスとシーリングをアシスタント設定から適用');
     expect(wrapper.text()).toContain('低域が強く速い素材のため、軽い Tilt とテープドライブを適用');
     expect(wrapper.text()).toContain('アタックが密なため、トランジェントシェイパーを有効化');

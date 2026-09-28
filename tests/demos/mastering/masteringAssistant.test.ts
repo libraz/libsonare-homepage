@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyMasteringAssistantSettings,
   assistantParamsFromSuggestions,
-  normalizeAssistantPreset,
 } from '@/demos/mastering/masteringAssistant';
-import { MASTERING_PRESETS } from '@/demos/mastering/masteringUi';
 import { defaultModuleSettings } from '@/demos/mastering/useMastering';
 
 describe('mastering assistant helpers', () => {
@@ -20,16 +18,10 @@ describe('mastering assistant helpers', () => {
     ).toMatchObject({ 'loudness.targetLufs': -13 });
   });
 
-  it('normalizes preset candidate names', () => {
-    expect(normalizeAssistantPreset('live small', MASTERING_PRESETS)).toBe('liveSmall');
-    expect(normalizeAssistantPreset('unknown', MASTERING_PRESETS)).toBeNull();
-  });
-
   it('applies bounded assistant params and ceiling guard', () => {
     const currentSettings = defaultModuleSettings();
     const result = applyMasteringAssistantSettings({
       currentSettings,
-      presets: MASTERING_PRESETS,
       params: {
         'eq.tilt.tiltDb': 99,
         'dynamics.compressor.ratio': 0,
@@ -43,10 +35,24 @@ describe('mastering assistant helpers', () => {
     expect(result.moduleSettings.tiltDb).toBe(12);
     expect(result.moduleSettings.compressorRatio).toBe(1);
     expect(result.moduleSettings.limiterCeilingDb).toBe(-1.2);
-    expect(result.selectedPlatform).toBe('custom');
-    expect(result.customLufs).toBe(-24);
-    expect(result.selectedPreset).toBe('hiphop');
+    expect(result).not.toHaveProperty('selectedPlatform');
+    expect(result).not.toHaveProperty('customLufs');
+    expect(result).not.toHaveProperty('selectedPreset');
     expect(result.activeModule).toBe('limiter');
+  });
+
+  it('does not loosen a tighter user-selected limiter ceiling', () => {
+    const currentSettings = { ...defaultModuleSettings(), limiterCeilingDb: -2 };
+    const result = applyMasteringAssistantSettings({
+      currentSettings,
+      params: {
+        'maximizer.truePeakLimiter.ceilingDb': -1,
+        'loudness.ceilingDb': -1,
+      },
+      insightPreview: [],
+    });
+
+    expect(result.moduleSettings.limiterCeilingDb).toBe(-2);
   });
 
   it('returns unchanged settings when there is nothing to apply', () => {
@@ -55,7 +61,6 @@ describe('mastering assistant helpers', () => {
     expect(
       applyMasteringAssistantSettings({
         currentSettings,
-        presets: MASTERING_PRESETS,
         params: null,
         insightPreview: [],
       }),

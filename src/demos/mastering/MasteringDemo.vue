@@ -96,7 +96,7 @@ const {
   insightPreview,
   analyzeSourceInsights,
   resetInsights,
-} = useMasteringInsights(mastering, currentCeilingDb);
+} = useMasteringInsights(mastering, currentCeilingDb, selectedPreset);
 
 // Quick is the silent default, so only Studio spells itself out in the query.
 const modeUrl = useUrlState([
@@ -278,10 +278,7 @@ function updateDiagnosticBypass(key: keyof MasteringDiagnosticBypass, value: boo
 
 function assistantParams(): Record<string, unknown> | null {
   const suggestions = insightReport.value?.suggestions as Record<string, unknown> | null;
-  const params = assistantParamsFromSuggestions(suggestions);
-  const candidates = suggestions?.genreCandidates;
-  if (!params) return Array.isArray(candidates) ? { genreCandidates: candidates } : null;
-  return Array.isArray(candidates) ? { ...params, genreCandidates: candidates } : params;
+  return assistantParamsFromSuggestions(suggestions);
 }
 
 function applyAssistantSettings() {
@@ -289,14 +286,10 @@ function applyAssistantSettings() {
     currentSettings: moduleSettings.value,
     params: assistantParams(),
     insightPreview: insightPreview.value,
-    presets,
   });
   if (!result.applied) return;
 
   moduleSettings.value = result.moduleSettings;
-  if (result.selectedPlatform) selectedPlatform.value = result.selectedPlatform;
-  if (result.customLufs !== undefined) customLufs.value = result.customLufs;
-  if (result.selectedPreset) selectedPreset.value = result.selectedPreset;
   showFineTune.value = true;
   if (mode.value === 'studio' && result.activeModule) activeModule.value = result.activeModule;
 }

@@ -22,6 +22,7 @@ type WorkerRequest =
       referenceLeft: Float32Array;
       referenceRight: Float32Array;
       sampleRate: number;
+      referenceSampleRate?: number;
       targetLufs: number;
       ceilingDb: number;
       lookaheadMs: number;
@@ -33,6 +34,7 @@ type WorkerRequest =
       right: Float32Array;
       sampleRate: number;
       platforms: StreamingPlatform[];
+      preset?: string;
     }
   | {
       type: 'referenceAnalyze';
@@ -42,10 +44,17 @@ type WorkerRequest =
       referenceLeft: Float32Array;
       referenceRight: Float32Array;
       sampleRate: number;
+      referenceSampleRate?: number;
     };
 
 type WasmModule = {
   init: () => Promise<void>;
+  resample: (samples: Float32Array, srcSr: number, targetSr: number) => Float32Array;
+  lufsInterleaved: (
+    samples: Float32Array,
+    channels: number,
+    sampleRate: number,
+  ) => { integratedLufs: number };
   masteringChainStereoWithProgress: (
     left: Float32Array,
     right: Float32Array,
@@ -83,6 +92,7 @@ type WasmModule = {
     left: Float32Array;
     right: Float32Array;
     sampleRate: number;
+    params?: Record<string, number | boolean | string>;
   }) => string;
   masteringStreamingPreviewStereo: (request: {
     left: Float32Array;
@@ -137,6 +147,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           left: request.left,
           right: request.right,
           sampleRate: request.sampleRate,
+          ...(request.preset ? { params: { preset: request.preset } } : {}),
         }),
       );
       postProgress(request.id, 0.85, 'Previewing streaming delivery');
@@ -230,21 +241,32 @@ function analyzeReference(request: Extract<WorkerRequest, { type: 'referenceAnal
   if (!wasmModule) throw new Error('WASM module is not initialized');
 
   postProgress(request.id, 0.24, 'Analyzing reference loudness');
+  const reference = resampleReference(request);
   const sourceMono = mixToMono(request.sourceLeft, request.sourceRight);
-  const referenceMono = mixToMono(request.referenceLeft, request.referenceRight);
+  const referenceMono = mixToMono(reference.left, reference.right);
   const pairLength = Math.min(sourceMono.length, referenceMono.length);
   if (pairLength <= 0) throw new Error('Reference analysis requires non-empty audio');
 
   const sourcePair = sourceMono.slice(0, pairLength);
   const referencePair = referenceMono.slice(0, pairLength);
-  const loudness = parseJson(
-    wasmModule.masteringPairAnalyze(
-      'match.referenceLoudness',
-      sourcePair,
-      referencePair,
-      request.sampleRate,
-    ),
+  const sourceLufs = wasmModule.lufsInterleaved(
+    interleaveStereo(request.sourceLeft, request.sourceRight),
+    2,
+    request.sampleRate,
   );
+  const referenceLufs = wasmModule.lufsInterleaved(
+    interleaveStereo(reference.left, reference.right),
+    2,
+    request.sampleRate,
+  );
+  const loudness = {
+    sourceLufs: sourceLufs.integratedLufs,
+    referenceLufs: referenceLufs.integratedLufs,
+    gainToMatchDb:
+      Number.isFinite(sourceLufs.integratedLufs) && Number.isFinite(referenceLufs.integratedLufs)
+        ? referenceLufs.integratedLufs - sourceLufs.integratedLufs
+        : 0,
+  };
 
   postProgress(request.id, 0.5, 'Analyzing tonal balance');
   const tonalBalance = parseJson(
@@ -257,15 +279,12 @@ function analyzeReference(request: Extract<WorkerRequest, { type: 'referenceAnal
   );
 
   postProgress(request.id, 0.76, 'Checking mono compatibility');
-  const referenceStereoLength = Math.min(
-    request.referenceLeft.length,
-    request.referenceRight.length,
-  );
+  const referenceStereoLength = Math.min(reference.left.length, reference.right.length);
   const monoCompatibility = parseJson(
     wasmModule.masteringStereoAnalyze(
       'stereo.monoCompatCheck',
-      request.referenceLeft.slice(0, referenceStereoLength),
-      request.referenceRight.slice(0, referenceStereoLength),
+      reference.left.slice(0, referenceStereoLength),
+      reference.right.slice(0, referenceStereoLength),
       request.sampleRate,
       { correlationThreshold: 0 },
     ),
@@ -315,6 +334,8 @@ function applyOutputSafety(result: MasteringChainStereoResult, ceilingDb: number
 function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'referenceMatch' }>) {
   if (!wasmModule) throw new Error('WASM module is not initialized');
 
+  const reference = resampleReference(request);
+
   // The match-EQ curve is derived by comparing the full source and reference
   // spectra, so each side keeps its own length — never truncate the source to
   // the (often shorter) reference, which would clip the tail of the master.
@@ -322,7 +343,7 @@ function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'reference
   const leftResult = wasmModule.masteringPairProcess(
     'match.applyMatchEq',
     request.left,
-    request.referenceLeft,
+    reference.left,
     request.sampleRate,
     { maxGainDb: 6, smoothingBins: 5 },
   );
@@ -331,7 +352,7 @@ function renderReferenceMatch(request: Extract<WorkerRequest, { type: 'reference
   const rightResult = wasmModule.masteringPairProcess(
     'match.applyMatchEq',
     request.right,
-    request.referenceRight,
+    reference.right,
     request.sampleRate,
     { maxGainDb: 6, smoothingBins: 5 },
   );
@@ -376,11 +397,61 @@ function postProgress(id: number, progress: number, stage: string) {
   self.postMessage({ type: 'progress', id, progress, stage });
 }
 
-/** The two-input `match.*` analyses are mono-only, so they take the downmix. */
+function resampleReference(
+  request: Pick<
+    Extract<WorkerRequest, { type: 'referenceAnalyze' | 'referenceMatch' }>,
+    'referenceLeft' | 'referenceRight' | 'sampleRate' | 'referenceSampleRate'
+  >,
+): { left: Float32Array; right: Float32Array } {
+  const referenceSampleRate = request.referenceSampleRate ?? request.sampleRate;
+  if (referenceSampleRate === request.sampleRate) {
+    return { left: request.referenceLeft, right: request.referenceRight };
+  }
+  if (!wasmModule) throw new Error('WASM module is not initialized');
+  const resample = (samples: Float32Array) =>
+    samples.length === 0
+      ? new Float32Array()
+      : wasmModule!.resample(samples, referenceSampleRate, request.sampleRate);
+  return {
+    left: resample(request.referenceLeft),
+    right: resample(request.referenceRight),
+  };
+}
+
+function interleaveStereo(left: Float32Array, right: Float32Array): Float32Array {
+  const length = Math.min(left.length, right.length);
+  const samples = new Float32Array(length * 2);
+  for (let i = 0; i < length; i++) {
+    samples[i * 2] = left[i];
+    samples[i * 2 + 1] = right[i];
+  }
+  return samples;
+}
+
+/**
+ * The two-input `match.*` analyses are mono-only, so they take a downmix. Keep
+ * a coherent average, but preserve a usable tonal signal when stereo phase
+ * cancellation would otherwise turn the pair into silence.
+ */
 function mixToMono(left: Float32Array, right: Float32Array): Float32Array {
   const length = Math.min(left.length, right.length);
   const mono = new Float32Array(length);
-  for (let i = 0; i < length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+  let monoEnergy = 0;
+  let leftEnergy = 0;
+  let rightEnergy = 0;
+  for (let i = 0; i < length; i++) {
+    const sample = (left[i] + right[i]) * 0.5;
+    mono[i] = sample;
+    monoEnergy += sample * sample;
+    leftEnergy += left[i] * left[i];
+    rightEnergy += right[i] * right[i];
+  }
+
+  const strongerEnergy = Math.max(leftEnergy, rightEnergy);
+  if (strongerEnergy > 0 && monoEnergy < strongerEnergy * 0.0625) {
+    const stronger = leftEnergy >= rightEnergy ? left : right;
+    return stronger.slice(0, length);
+  }
   return mono;
 }
 

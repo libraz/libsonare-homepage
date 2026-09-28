@@ -454,14 +454,17 @@ describe('MasteringDemo flow', () => {
     ];
     await nextTick();
 
+    // The assistant may describe its analysis preset, but it never changes the
+    // render preset chosen by the user.
+    await wrapper.find('.preset-edm').trigger('click');
     await wrapper.find('.insights-apply').trigger('click');
     await wrapper.find('.master-action').trigger('click');
     await flushPromises();
 
     expect(masteringMock.render).toHaveBeenCalledWith(
       expect.objectContaining({
-        preset: 'hiphop',
-        targetLufs: -16,
+        preset: 'edm',
+        targetLufs: -14,
         moduleSettings: expect.objectContaining({
           tiltDb: -1.2,
           compressorThresholdDb: -20,
