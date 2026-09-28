@@ -16,6 +16,53 @@ const PRESET_SAMPLE_RATE = 48000;
 // Cap uploaded audio analyzed for room acoustics (RT60/decay needs only a short window).
 const MAX_ANALYSIS_SECONDS = 30;
 
+// An ordinary stereo average is the right downmix for coherent material. If its
+// energy falls below a quarter of the stronger source channel, phase cancellation
+// has likely made the average unusably quiet, so keep that channel instead.
+const MONO_CANCELLATION_ENERGY_RATIO = 0.25;
+
+function prepareMono(buffer: AudioBuffer, maxSamples: number): Float32Array {
+  const channelCount = buffer.numberOfChannels;
+  const mono = new Float32Array(maxSamples);
+  if (channelCount === 0 || maxSamples === 0) return mono;
+
+  const gain = 1 / channelCount;
+  let strongestChannel = 0;
+  let strongestEnergy = 0;
+
+  // Accumulate the downmix and each channel's energy in one pass. This keeps the
+  // cap allocation bounded to the one buffer transferred to the worker.
+  for (let channel = 0; channel < channelCount; channel++) {
+    const samples = buffer.getChannelData(channel);
+    let channelEnergy = 0;
+    for (let i = 0; i < maxSamples; i++) {
+      const sample = samples[i];
+      mono[i] += sample * gain;
+      channelEnergy += sample * sample;
+    }
+    if (channelEnergy > strongestEnergy) {
+      strongestEnergy = channelEnergy;
+      strongestChannel = channel;
+    }
+  }
+
+  // The 1/4 threshold is calibrated for a stereo pair. With four or more
+  // independent channels their ordinary average can have this little energy.
+  if (channelCount === 2) {
+    let monoEnergy = 0;
+    for (let i = 0; i < maxSamples; i++) {
+      const sample = mono[i];
+      monoEnergy += sample * sample;
+    }
+
+    if (monoEnergy <= strongestEnergy * MONO_CANCELLATION_ENERGY_RATIO) {
+      mono.set(buffer.getChannelData(strongestChannel).subarray(0, maxSamples));
+    }
+  }
+
+  return mono;
+}
+
 /** Options for {@link useSpatialScanner}. */
 export interface SpatialScannerOptions {
   /**
@@ -116,12 +163,7 @@ export function useSpatialScanner(options: SpatialScannerOptions = {}) {
       buffer.length,
       Math.floor(MAX_ANALYSIS_SECONDS * buffer.sampleRate),
     );
-    const mono = new Float32Array(maxSamples);
-    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-      const samples = buffer.getChannelData(channel);
-      const gain = 1 / buffer.numberOfChannels;
-      for (let i = 0; i < maxSamples; i++) mono[i] += samples[i] * gain;
-    }
+    const mono = prepareMono(buffer, maxSamples);
 
     status.value = 'scanning';
     progress.value = 0.2;
