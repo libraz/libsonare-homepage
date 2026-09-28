@@ -14,7 +14,6 @@ import {
   splitMelBands,
   tuningReference,
 } from '@/demos/analyzer/audioAnalyzerProcessing';
-import { useAudioAnalysis } from '@/demos/analyzer/useAudioAnalysis';
 import { useAudioPlayer } from '@/demos/analyzer/useAudioPlayer';
 import { useStreamAnalyzer } from '@/demos/analyzer/useStreamAnalyzer';
 import DataConsole from './DataConsole.vue';
@@ -47,7 +46,8 @@ function term(key: AnalyzerTermKey) {
   };
 }
 const isLoadingDemo = ref(false);
-const isStreamingMode = ref(true); // Enable streaming by default
+const hasVisualization = ref(false);
+const analysisError = ref<string | null>(null);
 
 const decodeErrorMessage = computed(() =>
   localizedValue({
@@ -67,17 +67,6 @@ const initErrorMessage = computed(() =>
     ja: '解析エンジンを読み込めませんでした。ページを再読み込みしてからもう一度お試しください。',
   }),
 );
-
-const {
-  isAnalyzing,
-  progress,
-  progressStage,
-  result,
-  error: analysisError,
-  analysisMs,
-  realtimeFactor,
-  analyze,
-} = useAudioAnalysis();
 
 const {
   audioBuffer,
@@ -142,7 +131,7 @@ function clearLoaded() {
   resetAudio();
   resetStreamAnalyzer();
   setProcessCallback(null);
-  result.value = null;
+  hasVisualization.value = false;
   rmsData.value = null;
   chromaData.value = null;
   bandData.value = null;
@@ -231,6 +220,12 @@ async function handleFile(file: File) {
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
+    fileProgress.value = 62;
+    fileProgressStage.value = 'DETECTING BEATS';
+    const beatTimes = wasm.detectBeats(samples, buffer.sampleRate);
+    await yieldToMain();
+    if (generation !== loadGeneration) return;
+
     fileProgress.value = 70;
     fileProgressStage.value = 'COMPUTING CHROMA';
     const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
@@ -258,21 +253,8 @@ async function handleFile(file: File) {
       low: bands.low,
       high: bands.high,
     };
-
-    // Set minimal result to show UI
-    result.value = {
-      bpm: 0,
-      bpmConfidence: 0,
-      key: { root: 0, mode: 0, confidence: 0, name: '-', shortName: '-' },
-      timeSignature: { numerator: 0, denominator: 0, confidence: 0 },
-      beats: [],
-      chords: [],
-      sections: [],
-      timbre: { brightness: 0, warmth: 0, density: 0, roughness: 0, complexity: 0 },
-      dynamics: { dynamicRangeDb: 0, loudnessRangeDb: 0, crestFactor: 0, isCompressed: false },
-      rhythm: { syncopation: 0, grooveType: '', patternRegularity: 0 },
-      form: '',
-    };
+    beats.value = beatTimes;
+    hasVisualization.value = true;
 
     fileProgress.value = 100;
   } catch (e) {
@@ -318,56 +300,16 @@ function resetFile() {
   fileName.value = '';
 }
 
-// Use streaming estimates when available, fallback to batch analysis
-const displayBpm = computed(() => {
-  if (isStreamingMode.value && streamEstimate.value.bpm > 0) {
-    return streamEstimate.value.bpm;
-  }
-  return result.value?.bpm ?? 0;
-});
-
-const displayKey = computed(() => {
-  if (isStreamingMode.value && streamEstimate.value.key !== '-') {
-    return streamEstimate.value.key;
-  }
-  return result.value?.key?.name ?? '-';
-});
-
-const displayBpmConfidence = computed(() => {
-  if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.bpmConfidence * 100);
-  }
-  return result.value?.bpmConfidence ? Math.round(result.value.bpmConfidence * 100) : 0;
-});
-
-const displayKeyConfidence = computed(() => {
-  if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.keyConfidence * 100);
-  }
-  return result.value?.key?.confidence ? Math.round(result.value.key.confidence * 100) : 0;
-});
+const displayBpm = computed(() => streamEstimate.value.bpm);
+const displayKey = computed(() => streamEstimate.value.key);
+const displayBpmConfidence = computed(() => Math.round(streamEstimate.value.bpmConfidence * 100));
+const displayKeyConfidence = computed(() => Math.round(streamEstimate.value.keyConfidence * 100));
 
 // While streaming playback is running, the BPM/key estimators need a few
 // seconds of audio before they produce a value. Surface that warm-up as a
 // pending state instead of a bare "-", which reads as broken.
-const bpmPending = computed(() => isStreamingMode.value && isPlaying.value && !displayBpm.value);
-const keyPending = computed(
-  () => isStreamingMode.value && isPlaying.value && displayKey.value === '-',
-);
-
-const displayChord = computed(() => {
-  if (isStreamingMode.value && streamEstimate.value.chord !== '-') {
-    return streamEstimate.value.chord;
-  }
-  return '-';
-});
-
-const displayChordConfidence = computed(() => {
-  if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.chordConfidence * 100);
-  }
-  return 0;
-});
+const bpmPending = computed(() => isPlaying.value && !displayBpm.value);
+const keyPending = computed(() => isPlaying.value && displayKey.value === '-');
 
 const displayTuning = computed(() => {
   const cents = tuningCents.value;
@@ -375,48 +317,11 @@ const displayTuning = computed(() => {
   return `${cents > 0 ? '+' : cents < 0 ? '−' : '±'}${Math.abs(cents)}¢`;
 });
 
-const displayTimeSignature = computed(() => {
-  if (!result.value?.timeSignature || result.value.timeSignature.confidence <= 0) return '—';
-  const ts = result.value.timeSignature;
-  return `${ts.numerator}/${ts.denominator}`;
-});
-
-// Bar chord progression
-const displayCurrentBar = computed(() => {
-  if (isStreamingMode.value && streamEstimate.value.currentBar >= 0) {
-    return streamEstimate.value.currentBar + 1; // 1-indexed for display
-  }
-  return 0;
-});
-
-const displayBarChordProgression = computed(() => {
-  if (isStreamingMode.value) {
-    return streamEstimate.value.barChordProgression;
-  }
-  return [];
-});
-
-// C++ computed voted pattern (more accurate than barChordProgression.slice(-4))
-const displayVotedPattern = computed(() => {
-  if (isStreamingMode.value) {
-    return streamEstimate.value.votedPattern;
-  }
-  return [];
-});
-
-const displayDetectedPatternName = computed(() => {
-  if (isStreamingMode.value) {
-    return streamEstimate.value.detectedPatternName;
-  }
-  return '';
-});
-
-const displayDetectedPatternScore = computed(() => {
-  if (isStreamingMode.value) {
-    return Math.round(streamEstimate.value.detectedPatternScore * 100);
-  }
-  return 0;
-});
+const displayVotedPattern = computed(() => streamEstimate.value.votedPattern);
+const displayDetectedPatternName = computed(() => streamEstimate.value.detectedPatternName);
+const displayDetectedPatternScore = computed(() =>
+  Math.round(streamEstimate.value.detectedPatternScore * 100),
+);
 
 // Yield to main thread for animation
 const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -485,6 +390,10 @@ async function loadDemoFile() {
     await yieldToMain();
     if (generation !== loadGeneration) return;
 
+    const beatTimes = wasm.detectBeats(samples, buffer.sampleRate);
+    await yieldToMain();
+    if (generation !== loadGeneration) return;
+
     const chromaResult = wasm.chroma(samples, buffer.sampleRate, 2048, 1024);
     await yieldToMain();
     if (generation !== loadGeneration) return;
@@ -506,20 +415,8 @@ async function loadDemoFile() {
       low: bands.low,
       high: bands.high,
     };
-
-    result.value = {
-      bpm: 0,
-      bpmConfidence: 0,
-      key: { root: 0, mode: 0, confidence: 0, name: '-', shortName: '-' },
-      timeSignature: { numerator: 0, denominator: 0, confidence: 0 },
-      beats: [],
-      chords: [],
-      sections: [],
-      timbre: { brightness: 0, warmth: 0, density: 0, roughness: 0, complexity: 0 },
-      dynamics: { dynamicRangeDb: 0, loudnessRangeDb: 0, crestFactor: 0, isCompressed: false },
-      rhythm: { syncopation: 0, grooveType: '', patternRegularity: 0 },
-      form: '',
-    };
+    beats.value = beatTimes;
+    hasVisualization.value = true;
   } catch (e) {
     if (generation !== loadGeneration) return;
     console.error('Failed to load demo file:', e);
@@ -588,16 +485,8 @@ onUnmounted(() => {
     <!-- Drop Zone (no file) -->
     <DropZone v-else-if="!audioBuffer" @file="handleFile" />
 
-    <!-- Analysis Progress -->
-    <div v-else-if="isAnalyzing" class="analyzer__progress">
-      <div class="analyzer__progress-bar">
-        <div class="analyzer__progress-fill" :style="{ width: `${progress * 100}%` }"></div>
-      </div>
-      <span class="analyzer__progress-text">{{ progressStage }} {{ Math.round(progress * 100) }}%</span>
-    </div>
-
     <!-- Main Interface -->
-    <div v-else-if="result" class="analyzer__main">
+    <div v-else-if="hasVisualization" class="analyzer__main">
       <!-- Central Oscilloscope Area -->
       <div class="analyzer__center">
         <!-- Oscilloscope Hero -->
@@ -746,9 +635,6 @@ onUnmounted(() => {
             </div>
             <div class="analyzer__metrics-divider"></div>
             <!-- Secondary Info -->
-            <MetricItem :value="displayTimeSignature">
-              <template #label><TermLabel v-bind="term('timeSig')">{{ t('demo.panel.timeSig') }}</TermLabel></template>
-            </MetricItem>
             <MetricItem :value="formatTime(duration)">
               <template #label><TermLabel v-bind="term('duration')">{{ t('demo.panel.duration') }}</TermLabel></template>
             </MetricItem>
@@ -759,17 +645,6 @@ onUnmounted(() => {
               <template #label><TermLabel v-bind="term('tuning')">{{ t('demo.panel.tuning') }}</TermLabel></template>
             </MetricItem>
             <div class="analyzer__metrics-divider"></div>
-            <!-- Measured on this visitor's machine, not read from a table -->
-            <template v-if="analysisMs > 0">
-              <MetricItem :value="`${(analysisMs / 1000).toFixed(2)}s`">
-                <template #label>{{ t('demo.panel.analysisTime') }}</template>
-              </MetricItem>
-              <MetricItem :value="`${realtimeFactor.toFixed(0)}x`">
-                <template #label>{{ t('demo.panel.realtime') }}</template>
-              </MetricItem>
-              <p class="analyzer__measured-note">{{ t('demo.panel.measuredHere') }}</p>
-              <div class="analyzer__metrics-divider"></div>
-            </template>
             <!-- Source -->
             <MetricItem :value="fileName" variant="success">
               <template #label><TermLabel v-bind="term('source')">{{ t('demo.panel.source') }}</TermLabel></template>

@@ -129,7 +129,13 @@ export function useWaveform(
   }
 
   function setBeats(beats: Float32Array | number[], duration: number) {
-    beatMarkers.value = Array.from(beats).map((t) => t / duration);
+    beatMarkers.value =
+      duration > 0
+        ? Array.from(beats)
+            .filter((time) => Number.isFinite(time) && time >= 0 && time <= duration)
+            .map((time) => time / duration)
+        : [];
+    draw();
   }
 
   function setProgress(p: number) {

@@ -122,6 +122,15 @@ describe('WaveformVisualizer', () => {
     await wrapper.setProps({ currentTime: 1.5 });
     expect(wrapper.find('.waveform__playhead').attributes('style')).toContain('left: 75%');
     expect(ctx.fillRect).toHaveBeenCalled();
+    expect(ctx.stroke).toHaveBeenCalled();
+
+    const strokesBeforeChange = ctx.stroke.mock.calls.length;
+    await wrapper.setProps({ beats: new Float32Array([0.25, 0.75, 1.25]) });
+    expect(ctx.stroke.mock.calls.length).toBeGreaterThan(strokesBeforeChange);
+
+    const strokesBeforeClear = ctx.stroke.mock.calls.length;
+    await wrapper.setProps({ beats: undefined });
+    expect(ctx.stroke.mock.calls.length).toBe(strokesBeforeClear);
 
     await wrapper.find('.waveform').trigger('click', { clientX: 120 });
     expect(wrapper.emitted('seek')?.[0]).toEqual([1]);

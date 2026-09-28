@@ -30,6 +30,7 @@ const streamMock = vi.hoisted(() => ({
 const lang = vi.hoisted(() => ({ value: 'en' }));
 const analyzerWasmMock = vi.hoisted(() => ({
   rmsEnergy: vi.fn(() => new Float32Array([0.1, 0.2, 0.3])),
+  detectBeats: vi.fn(() => new Float32Array([0.5, 1.5, 2.5])),
   estimateTuning: vi.fn(() => 0.13),
   chroma: vi.fn(() => ({
     features: new Float32Array(36).fill(0.25),
@@ -154,6 +155,7 @@ vi.mock('@/demos/analyzer/WaveformVisualizer.vue', () => ({
           {
             class: 'waveform-stub',
             'data-duration': props.duration,
+            'data-beats': props.beats ? Array.from(props.beats).join(',') : '',
             onClick: () => emit('seek', 1.5),
           },
           'Waveform',
@@ -250,6 +252,8 @@ describe('AudioAnalyzer visual player flow', () => {
     analyzerWasmMock.estimateTuning.mockReturnValue(0.13);
     analyzerWasmMock.rmsEnergy.mockReset();
     analyzerWasmMock.rmsEnergy.mockReturnValue(new Float32Array([0.1, 0.2, 0.3]));
+    analyzerWasmMock.detectBeats.mockReset();
+    analyzerWasmMock.detectBeats.mockReturnValue(new Float32Array([0.5, 1.5, 2.5]));
     analyzerWasmMock.chroma.mockReset();
     analyzerWasmMock.chroma.mockReturnValue({
       features: new Float32Array(36).fill(0.25),
@@ -339,6 +343,14 @@ describe('AudioAnalyzer visual player flow', () => {
     expect(wrapper.text()).toContain('Axis');
     expect(wrapper.find('.synesthesia-stub').attributes('data-has-chroma')).toBe('true');
     expect(wrapper.find('.data-console-stub').attributes('data-sample-rate')).toBe('48000');
+    // This player shows live estimates; the full-file meter and benchmark live
+    // in Music Analysis rather than appearing here as permanent empty readouts.
+    const metricLabels = wrapper.findAll('.metric-item__label').map((item) => item.text());
+    expect(metricLabels).toContain('LENi');
+    expect(metricLabels).not.toContain('TIMEi');
+    expect(metricLabels).not.toContain('ANALYSIS');
+    expect(analyzerWasmMock.detectBeats).toHaveBeenCalledWith(expect.any(Float32Array), 48_000);
+    expect(wrapper.find('.waveform-stub').attributes('data-beats')).toBe('0.5,1.5,2.5');
   });
 
   it('routes transport buttons and waveform seeks to the audio player', async () => {

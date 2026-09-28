@@ -76,11 +76,11 @@ watch(
   },
 );
 
-watch([() => props.beats, () => props.duration], ([beats, duration]) => {
-  if (beats && duration && duration > 0) {
-    setBeats(beats, duration);
-  }
-});
+watch(
+  [() => props.beats, () => props.duration],
+  ([beats, duration]) => setBeats(beats ?? [], duration ?? 0),
+  { immediate: true },
+);
 
 watch([() => props.currentTime, () => props.duration], ([current, total]) => {
   if (typeof current === 'number' && typeof total === 'number' && total > 0) {
