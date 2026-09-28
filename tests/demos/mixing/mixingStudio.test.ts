@@ -258,6 +258,8 @@ describe('MixingStudio', () => {
     try {
       await loadTrack(wrapper);
 
+      expect(wrapper.text()).toContain('Applied to Bounce Mix; Play uses current controls.');
+
       await wrapper.find('.mix-autolane__plot').trigger('click', { clientX: 100, clientY: 25 });
       expect(wrapper.findAll('.mix-autolane__node')).toHaveLength(1);
       expect(wrapper.find('.mix-autolane__line').exists()).toBe(true);

@@ -236,6 +236,14 @@
   font-style: normal;
 }
 
+.mix-autolane__scope {
+  order: 1;
+  flex-basis: 100%;
+  color: var(--demo-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .mix-segment--mini {
   padding: 2px;
 }
@@ -342,5 +350,4 @@
   text-align: center;
   pointer-events: none;
 }
-
 

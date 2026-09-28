@@ -350,8 +350,8 @@ describe('mixing worker protocol', () => {
     expect((done.message as any).type).toBe('done');
     const goniometer = (done.message as any).result.stripMeters[0].goniometer;
     expect(goniometer.length).toBeGreaterThan(0);
-    // The raw embind array is not structured-cloneable; the worker's Array.from()
-    // must have re-rooted it so the whole payload clones cleanly.
+    // The legacy embind-array fixture is not structured-cloneable; the worker's
+    // compatibility copy makes the whole payload clone cleanly.
     expect(() => structuredClone(done.message)).not.toThrow();
     expect(structuredClone(done.message).result.stripMeters[0].goniometer).toEqual(goniometer);
   });

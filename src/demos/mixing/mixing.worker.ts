@@ -381,10 +381,11 @@ function accumulateStripMeter(mixer: MixerInstance, index: number, state: StripM
     state.correlation = snapshot.correlation;
     state.monoCompatible = snapshot.likelyMonoCompatible;
     try {
-      // readGoniometerLatest returns an embind-backed array whose constructor is a
-      // wrapped method, so it is not structured-cloneable and would break postMessage.
-      // Array.from() re-roots it as a plain array before it reaches the done payload.
-      state.goniometer = Array.from(mixer.readGoniometerLatest(index, GONIO_POINTS) || []);
+      // Current WASM returns plain data; copy for compatibility with older embind values.
+      state.goniometer = Array.from(
+        mixer.readGoniometerLatest(index, GONIO_POINTS) || [],
+        (point) => ({ left: point.left, right: point.right }),
+      );
     } catch {
       // Keep the previous trace if this read fails.
     }

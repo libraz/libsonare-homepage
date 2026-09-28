@@ -222,6 +222,7 @@ const {
                   <TermLabel v-bind="term('automation')">{{ copy.controls.automation }}</TermLabel>
                   <em>{{ selectedTrack.name }}</em>
                 </span>
+                <small class="mix-autolane__scope">{{ copy.controls.automationScope }}</small>
                 <div class="mix-segment mix-segment--mini">
                   <button
                     v-for="(label, index) in copy.automationParams"

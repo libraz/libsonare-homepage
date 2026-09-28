@@ -11,6 +11,7 @@ export interface RealtimeStartPayload {
   sampleRate: number;
   masterGain: number;
   startFrame: number;
+  /** Dry timeline length; the worklet adds the compiled graph tail and latency. */
   totalFrames: number;
   strips: RealtimeStripInput[];
   gates: boolean[];
@@ -34,7 +35,12 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
     this.playing = false;
     this.disposed = false;
     this.playhead = o.startFrame || 0;
-    this.totalFrames = o.totalFrames || 0;
+    // totalFrames is the dry timeline length. The graph can keep producing
+    // audio after its inputs end, so buildMixer extends it with the compiled
+    // graph's latency and tail before playback starts.
+    this.dryFrames = o.totalFrames || 0;
+    this.totalFrames = this.dryFrames;
+    this.sampleRate = o.sampleRate;
     this.masterGain = o.masterGain ?? 1;
     this.strips = o.strips || [];
     this.gates = o.gates || this.strips.map(() => true);
@@ -54,7 +60,10 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
 
   buildMixer(sceneJson) {
     if (this.mixer) { try { this.mixer.delete(); } catch (e) {} this.mixer = null; }
-    this.mixer = this.mod.createMixerFromSceneJson(sceneJson, sampleRate, BLOCK);
+    this.mixer = this.mod.createMixerFromSceneJson(sceneJson, this.sampleRate, BLOCK);
+    const tailSamples = this.mixer.tailSamples();
+    const latencySamples = this.mixer.latencySamples();
+    this.totalFrames = this.dryFrames + Math.max(0, tailSamples) + Math.max(0, latencySamples);
     this.acquireViews();
   }
 
@@ -94,6 +103,13 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
 
     if (this.outL.byteLength === 0 || (this.inL[0] && this.inL[0].byteLength === 0)) this.acquireViews();
     const pos = this.playhead;
+    const remaining = this.totalFrames ? this.totalFrames - pos : BLOCK;
+    const frames = Math.max(0, Math.min(BLOCK, remaining));
+    if (frames === 0) {
+      this.playing = false;
+      this.port.postMessage({ type: 'ended', frame: this.totalFrames });
+      return true;
+    }
     for (let s = 0; s < this.strips.length; s++) {
       const vl = this.inL[s], vr = this.inR[s];
       const audible = this.gates[s];
@@ -109,13 +125,17 @@ class LibsonareRtMixer extends AudioWorkletProcessor {
 
     this.mixer.processPreparedStereo(BLOCK);
     const g = this.masterGain;
-    for (let i = 0; i < BLOCK; i++) { outA[i] = this.outL[i] * g; outB[i] = this.outR[i] * g; }
+    for (let i = 0; i < BLOCK; i++) {
+      if (i < frames) { outA[i] = this.outL[i] * g; outB[i] = this.outR[i] * g; }
+      else { outA[i] = 0; outB[i] = 0; }
+    }
 
     this.playhead += BLOCK;
     if (++this.reportCounter >= 8) { this.reportCounter = 0; this.port.postMessage({ type: 'position', frame: this.playhead }); }
     if (this.totalFrames && this.playhead >= this.totalFrames) {
       this.playing = false;
-      this.port.postMessage({ type: 'ended', frame: this.playhead });
+      this.playhead = this.totalFrames;
+      this.port.postMessage({ type: 'ended', frame: this.totalFrames });
     }
     return true;
   }
@@ -221,6 +241,7 @@ export function useRealtimeMixer(sonareUrl: string, wasmUrl: string) {
           finish(resolve);
         } else if (msg.type === 'position') positionSec.value = msg.frame / sampleRate;
         else if (msg.type === 'ended') {
+          positionSec.value = msg.frame / sampleRate;
           playing.value = false;
           onEnded?.();
         } else if (msg.type === 'error') {

@@ -118,6 +118,8 @@ describe('mixer worklet heap views', () => {
       inputRightView: () => mixer.inR.view,
       outputLeftView: () => mixer.outL.view,
       outputRightView: () => mixer.outR.view,
+      tailSamples: () => 0,
+      latencySamples: () => 0,
       processPreparedStereo(n: number) {
         for (let i = 0; i < n; i++) {
           mixer.outL.view[i] = mixer.inL.view[i];
@@ -131,7 +133,11 @@ describe('mixer worklet heap views', () => {
     const processor = await load(
       mixerSource('/sonare.js'),
       { createMixerFromSceneJson: () => mixer },
-      { strips: [{ left: pcm, right: pcm, offsetFrames: 0 }], totalFrames: 4096 },
+      {
+        strips: [{ left: pcm, right: pcm, offsetFrames: 0 }],
+        sampleRate: 48_000,
+        totalFrames: 4096,
+      },
     );
     processor.port.onmessage({ data: { type: 'play' } });
     const block = () => {
