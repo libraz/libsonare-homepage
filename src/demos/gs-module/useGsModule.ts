@@ -60,6 +60,13 @@ export class EmptyMidiError extends Error {
   }
 }
 
+/** A stereo project bounce, split once from the WASM interleaved output. */
+export interface GsStereoRender {
+  left: Float32Array;
+  right: Float32Array;
+  frames: number;
+}
+
 /** The notes one part plays when auditioned on its own. */
 export function auditionPhrase(channel: number): SmfEvent[] {
   if (channel === RHYTHM_CHANNEL) {
@@ -79,27 +86,38 @@ export function auditionSmf(state: GsModuleState, channel: number): Uint8Array {
 
 /**
  * Bounce one or more files together with no SoundFont loaded, so every note
- * plays a fallback voice and the demo ships no sample data.
+ * plays a fallback voice and the demo ships no sample data. WASM returns
+ * interleaved stereo; this is the one place it is split into render channels.
  */
 export function bounceFiles(
   wasm: SonareWasmModule,
   files: readonly Uint8Array[],
   seconds?: number,
   gsEfxRealization: GsEfxRealization = 'modern',
-): Float32Array {
+): GsStereoRender {
   const Project = (wasm as unknown as { Project: new () => GsProject }).Project;
   const project = new Project();
   try {
     project.setSampleRate(SAMPLE_RATE);
     for (const file of files) project.importSmf(file);
     const options: { numChannels: number; sampleRate: number; totalFrames?: number } = {
-      numChannels: 1,
+      numChannels: 2,
       sampleRate: SAMPLE_RATE,
     };
     if (seconds !== undefined) options.totalFrames = Math.round(SAMPLE_RATE * seconds);
-    const audio = project.bounceWithSf2Instrument({ gsEfxRealization }, options);
-    if (audio.length === 0) throw new EmptyMidiError();
-    return audio;
+    const interleaved = project.bounceWithSf2Instrument({ gsEfxRealization }, options);
+    if (interleaved.length === 0) throw new EmptyMidiError();
+    if (interleaved.length % 2 !== 0) {
+      throw new Error('Stereo bounce returned an odd number of samples.');
+    }
+    const frames = interleaved.length / 2;
+    const left = new Float32Array(frames);
+    const right = new Float32Array(frames);
+    for (let frame = 0; frame < frames; frame++) {
+      left[frame] = interleaved[frame * 2];
+      right[frame] = interleaved[frame * 2 + 1];
+    }
+    return { left, right, frames };
   } finally {
     project.delete();
   }
@@ -180,13 +198,15 @@ export function variationsOf(wasm: SonareWasmModule, program: number): number[] 
  * Peak of the render around one moment, which is what a meter shows. A single
  * sample would read as silence every time the waveform crosses zero.
  */
-export function peakAround(buffer: Float32Array, seconds: number): number {
+export function peakAround(render: GsStereoRender, seconds: number): number {
   const centre = Math.round(seconds * SAMPLE_RATE);
   const half = Math.round((METER_WINDOW_SECONDS * SAMPLE_RATE) / 2);
   const from = Math.max(0, centre - half);
-  const to = Math.min(buffer.length, centre + half);
+  const to = Math.min(render.frames, centre + half);
   let peak = 0;
-  for (let i = from; i < to; i++) peak = Math.max(peak, Math.abs(buffer[i]));
+  for (let i = from; i < to; i++) {
+    peak = Math.max(peak, Math.abs(render.left[i]), Math.abs(render.right[i]));
+  }
   return peak;
 }
 
@@ -217,7 +237,7 @@ export function useGsModule() {
 
   const status = ref<GsRenderStatus>('idle');
   const error = shallowRef<unknown>(null);
-  const rendered = shallowRef<Float32Array | null>(null);
+  const rendered = shallowRef<GsStereoRender | null>(null);
   /** Filled on the first boot; empty until then, which the kit browser shows. */
   const drumKits = shallowRef<GsDrumKit[]>([]);
   const gmPrograms = shallowRef<GmProgram[]>([]);
@@ -252,7 +272,9 @@ export function useGsModule() {
   const frames = computed(() => setupEvents(state as GsModuleState));
   /** The render as a waveform for the scope, rebuilt only when a render lands. */
   const waveform = computed<WaveformPeak[]>(() =>
-    rendered.value ? downsampleWaveform(rendered.value, rendered.value, SCOPE_POINTS) : [],
+    rendered.value
+      ? downsampleWaveform(rendered.value.left, rendered.value.right, SCOPE_POINTS)
+      : [],
   );
   /** What each strip's meter reads, indexed by channel. */
   const activity = computed<number[]>(() => {
@@ -276,11 +298,11 @@ export function useGsModule() {
   function follow() {
     frame = 0;
     if (!playing || !audio) return;
-    const buffer = rendered.value;
-    if (!buffer) return;
+    const render = rendered.value;
+    if (!render) return;
     const elapsed = audio.currentTime - startedAt;
-    playhead.value = Math.min(1, Math.max(0, elapsed / (buffer.length / SAMPLE_RATE)));
-    playingPeak.value = peakAround(buffer, elapsed);
+    playhead.value = Math.min(1, Math.max(0, elapsed / (render.frames / SAMPLE_RATE)));
+    playingPeak.value = peakAround(render, elapsed);
     frame = requestAnimationFrame(follow);
   }
 
@@ -321,7 +343,7 @@ export function useGsModule() {
 
   onMounted(() => void prepare());
 
-  async function render(): Promise<Float32Array | null> {
+  async function render(): Promise<GsStereoRender | null> {
     const mine = ++generation;
     status.value = 'rendering';
     error.value = null;
@@ -351,15 +373,16 @@ export function useGsModule() {
   /** Render if needed, then play the buffer on screen. */
   async function play() {
     const buffer = rendered.value ?? (await render());
-    if (!buffer?.length || disposed) return;
+    if (!buffer?.frames || disposed) return;
     audio ??= new AudioContext({ sampleRate: SAMPLE_RATE });
     // A context created before a gesture starts suspended, and a suspended
     // context plays nothing while reporting success.
     if (audio.state === 'suspended') await audio.resume();
     if (disposed) return;
     stop();
-    const target = audio.createBuffer(1, buffer.length, SAMPLE_RATE);
-    target.getChannelData(0).set(buffer);
+    const target = audio.createBuffer(2, buffer.frames, SAMPLE_RATE);
+    target.getChannelData(0).set(buffer.left);
+    target.getChannelData(1).set(buffer.right);
     const source = audio.createBufferSource();
     source.buffer = target;
     source.connect(audio.destination);

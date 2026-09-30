@@ -7,7 +7,13 @@ import {
   setupEvents,
   withEfxType,
 } from '@/demos/gs-module/gsState';
-import { auditionSmf, bounceFiles, drumKitsOf } from '@/demos/gs-module/useGsModule';
+import {
+  auditionPhrase,
+  auditionSmf,
+  bounceFiles,
+  drumKitsOf,
+  type GsStereoRender,
+} from '@/demos/gs-module/useGsModule';
 import { buildSmf, noteEvents } from '@/utils/gsSysex';
 import * as wasm from '@/wasm/index.js';
 
@@ -21,15 +27,18 @@ const SECONDS = 1.6;
 /** One quantum of float32 mantissa: below this, two renders are the same render. */
 const ULP = 2 ** -24;
 
-function render(mutate: (state: GsModuleState) => void, channel = 0): Float32Array {
+function render(mutate: (state: GsModuleState) => void, channel = 0): GsStereoRender {
   const state = defaultModuleState();
   mutate(state);
   return bounceFiles(wasm, [auditionSmf(state, channel)], SECONDS);
 }
 
-function maxDeviation(a: Float32Array, b: Float32Array): number {
+function maxDeviation(a: GsStereoRender, b: GsStereoRender): number {
+  expect(a.frames).toBe(b.frames);
   let max = 0;
-  for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i] - b[i]));
+  for (let i = 0; i < a.frames; i++) {
+    max = Math.max(max, Math.abs(a.left[i] - b.left[i]), Math.abs(a.right[i] - b.right[i]));
+  }
   return max;
 }
 
@@ -39,7 +48,11 @@ function rms(buffer: Float32Array): number {
   return Math.sqrt(sum / buffer.length);
 }
 
-let base: Float32Array;
+function stereoRms(rendered: GsStereoRender): number {
+  return Math.max(rms(rendered.left), rms(rendered.right));
+}
+
+let base: GsStereoRender;
 
 beforeAll(async () => {
   await wasm.init();
@@ -48,7 +61,7 @@ beforeAll(async () => {
 
 describe('the audition renders', () => {
   it('produces audio at all', () => {
-    expect(rms(base)).toBeGreaterThan(1e-3);
+    expect(stereoRms(base)).toBeGreaterThan(1e-3);
   });
 
   it('follows a program change', () => {
@@ -72,7 +85,7 @@ describe('the audition renders', () => {
     const quiet = render((state) => {
       state.parts[0].level = 30;
     });
-    expect(rms(quiet)).toBeLessThan(rms(base) * 0.9);
+    expect(stereoRms(quiet)).toBeLessThan(stereoRms(base) * 0.9);
   });
 
   it('realizes the insertion effect the setup frames select', () => {
@@ -82,7 +95,7 @@ describe('the audition renders', () => {
     });
     // Overdrive on a fallback piano comes back far quieter than dry, which is
     // the shape of the change rather than an incidental one.
-    expect(rms(driven)).toBeLessThan(rms(base) * 0.5);
+    expect(stereoRms(driven)).toBeLessThan(stereoRms(base) * 0.5);
   });
 
   it('leaves the render alone when a part is routed to an effect set to Thru', () => {
@@ -92,6 +105,27 @@ describe('the audition renders', () => {
     expect(maxDeviation(routed, base)).toBeLessThanOrEqual(ULP);
   });
 
+  it('keeps deterministic extreme pan energy on opposite sides', () => {
+    // Use CC#10 here: unlike the GS 40 10 1C address, whose 00 means RANDOM,
+    // the MIDI controller's 00 and 7F are deterministic hard-pan endpoints.
+    const panRender = (pan: number) => {
+      const state = defaultModuleState();
+      state.parts[0].program = 40;
+      const file = buildSmf(
+        [...setupEvents(state), { beat: 0, bytes: [0xb0, 0x0a, pan] }, ...auditionPhrase(0)],
+        5,
+      );
+      return bounceFiles(wasm, [file], SECONDS);
+    };
+    const left = panRender(0);
+    const right = panRender(127);
+    const pan0Balance = rms(left.left) - rms(left.right);
+    const pan127Balance = rms(right.left) - rms(right.right);
+    expect(Math.abs(pan0Balance)).toBeGreaterThan(0.005);
+    expect(Math.abs(pan127Balance)).toBeGreaterThan(0.005);
+    expect(pan0Balance * pan127Balance).toBeLessThan(0);
+  });
+
   it('renders distinct modern and classic insertion effects from the same MIDI', () => {
     const state = defaultModuleState();
     state.efx = withEfxType(state.efx, 0x0110);
@@ -99,15 +133,15 @@ describe('the audition renders', () => {
     const file = auditionSmf(state, 0);
     const modern = bounceFiles(wasm, [file], SECONDS, 'modern');
     const classic = bounceFiles(wasm, [file], SECONDS, 'classic');
-    expect(classic.length).toBe(modern.length);
-    expect(rms(modern)).toBeGreaterThan(1e-5);
-    expect(rms(classic)).toBeGreaterThan(1e-5);
+    expect(classic.frames).toBe(modern.frames);
+    expect(stereoRms(modern)).toBeGreaterThan(1e-5);
+    expect(stereoRms(classic)).toBeGreaterThan(1e-5);
     expect(maxDeviation(classic, modern)).toBeGreaterThan(1e-4);
   });
 
   it('sounds the rhythm part on its own channel', () => {
     const drums = render(() => {}, RHYTHM_CHANNEL);
-    expect(rms(drums)).toBeGreaterThan(1e-3);
+    expect(stereoRms(drums)).toBeGreaterThan(1e-3);
     expect(maxDeviation(drums, base)).toBeGreaterThan(ULP);
   });
 
@@ -117,13 +151,13 @@ describe('the audition renders', () => {
     // tail, instead of inheriting the built-in audition's fixed preview.
     const imported = buildSmf(noteEvents(0, 60, 100, 8, 8.5), 9);
     const full = bounceFiles(wasm, [imported]);
-    expect(full.length).toBeGreaterThan(Math.round(9 * 0.5 * 44100));
-    const afterNoteOnset = full.subarray(Math.round(4 * 44100), Math.round(4.5 * 44100));
+    expect(full.frames).toBeGreaterThan(Math.round(9 * 0.5 * 44100));
+    const afterNoteOnset = full.left.subarray(Math.round(4 * 44100), Math.round(4.5 * 44100));
     expect(rms(afterNoteOnset)).toBeGreaterThan(1e-3);
   });
 
   it('omits the fixed frame limit when bouncing an imported file', () => {
-    const bounce = vi.fn(() => new Float32Array(1));
+    const bounce = vi.fn(() => new Float32Array(2));
     class ProjectMock {
       setSampleRate = vi.fn();
       importSmf = vi.fn(() => 0);
@@ -136,8 +170,26 @@ describe('the audition renders', () => {
 
     expect(bounce).toHaveBeenCalledWith(
       { gsEfxRealization: 'modern' },
-      { numChannels: 1, sampleRate: 44100 },
+      { numChannels: 2, sampleRate: 44100 },
     );
+  });
+
+  it('rejects empty and malformed stereo bounce output', () => {
+    for (const [samples, message] of [
+      [new Float32Array(), /playable/i],
+      [new Float32Array(1), /odd number of samples/i],
+    ] as const) {
+      class ProjectMock {
+        setSampleRate = vi.fn();
+        importSmf = vi.fn(() => 0);
+        bounceWithSf2Instrument = vi.fn(() => samples);
+        delete = vi.fn();
+      }
+      const importedWasm = { Project: ProjectMock } as never;
+      expect(() => bounceFiles(importedWasm, [new Uint8Array([0x4d, 0x49, 0x44, 0x49])])).toThrow(
+        message,
+      );
+    }
   });
 
   it('rejects an imported file with no notes before Web Audio playback', () => {

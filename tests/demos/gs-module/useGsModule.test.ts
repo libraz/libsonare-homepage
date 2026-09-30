@@ -6,7 +6,7 @@ import { nextTick } from 'vue';
 const { bootWasm } = vi.hoisted(() => ({ bootWasm: vi.fn() }));
 vi.mock('@/composables/useWasmBoot', () => ({ bootWasm }));
 
-import { useGsModule } from '@/demos/gs-module/useGsModule';
+import { peakAround, useGsModule } from '@/demos/gs-module/useGsModule';
 
 interface BounceRecord {
   file: Uint8Array;
@@ -15,6 +15,12 @@ interface BounceRecord {
 
 const bounces: BounceRecord[] = [];
 const sources: FakeBufferSource[] = [];
+const audioBuffers: FakeAudioBuffer[] = [];
+
+interface FakeAudioBuffer {
+  channels: Float32Array[];
+  getChannelData(channel: number): Float32Array;
+}
 
 class FakeBufferSource {
   buffer: unknown = null;
@@ -31,8 +37,15 @@ class FakeAudioContext {
   readonly close = vi.fn(async () => {});
   readonly resume = vi.fn(async () => {});
 
-  createBuffer(_channels: number, length: number, _sampleRate: number) {
-    return { getChannelData: () => new Float32Array(length) };
+  createBuffer(channels: number, length: number, _sampleRate: number): FakeAudioBuffer {
+    const buffer: FakeAudioBuffer = {
+      channels: Array.from({ length: channels }, () => new Float32Array(length)),
+      getChannelData(channel) {
+        return this.channels[channel];
+      },
+    };
+    audioBuffers.push(buffer);
+    return buffer;
   }
 
   createBufferSource() {
@@ -54,7 +67,7 @@ class FakeProject {
 
   bounceWithSf2Instrument(instrument: { gsEfxRealization: string }) {
     bounces.push({ file: this.files[0], realization: instrument.gsEfxRealization });
-    return new Float32Array([0.1, 0.2, 0.1]);
+    return new Float32Array([0.1, -0.2, 0.3, -0.4]);
   }
 
   delete() {}
@@ -72,6 +85,7 @@ function hasNoteOn(file: Uint8Array, channel: number): boolean {
 beforeEach(() => {
   bounces.length = 0;
   sources.length = 0;
+  audioBuffers.length = 0;
   bootWasm.mockReset().mockResolvedValue(fakeWasm);
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal(
@@ -82,12 +96,29 @@ beforeEach(() => {
 });
 
 describe('useGsModule render invalidation', () => {
+  it('measures the louder side of a stereo render', () => {
+    expect(
+      peakAround(
+        {
+          left: new Float32Array([0.1, 0]),
+          right: new Float32Array([0.8, 0]),
+          frames: 2,
+        },
+        0,
+      ),
+    ).toBeCloseTo(0.8);
+  });
+
   it('clears the cached render and stops playback when the selected channel changes', async () => {
     const module = useGsModule();
     await module.render();
     await module.play();
     expect(module.status.value).toBe('ready');
     expect(module.isPlaying.value).toBe(true);
+    expect(audioBuffers[0].channels).toEqual([
+      new Float32Array([0.1, 0.3]),
+      new Float32Array([-0.2, -0.4]),
+    ]);
 
     module.selectedChannel.value = 1;
     await nextTick();
