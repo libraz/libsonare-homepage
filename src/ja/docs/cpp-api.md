@@ -84,7 +84,7 @@ C ABI はプロジェクト系のシンボルを常に *エクスポート* し�
 
 ### C ABI のバージョン
 
-フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION`（5、`sonare_c_types.h`）、`SONARE_PROJECT_ABI_VERSION`（2、`sonare_c_project.h`）、`SONARE_VOICE_CHANGER_ABI_VERSION`（2、`sonare_c_voice_changer.h`）、`SONARE_ACOUSTIC_ABI_VERSION`（4、`sonare_c_acoustic.h`）の 4 つです。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違うということは両者が構造体レイアウトについて合意していないということで、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体のレイアウトが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトは同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
+フラットな POD 構造体を宣言する C ABI ヘッダーは、それぞれ構造体の正確なサイズとメンバーオフセットを保証するバージョンマクロを持ちます。`SONARE_FEATURE_ABI_VERSION`（5、`sonare_c_types.h`）、`SONARE_PROJECT_ABI_VERSION`（2、`sonare_c_project.h`）、`SONARE_VOICE_CHANGER_ABI_VERSION`（2、`sonare_c_voice_changer.h`）、`SONARE_ACOUSTIC_ABI_VERSION`（4、`sonare_c_acoustic.h`）の 4 つです。`sonare_c.h` はこれらを `SONARE_ABI_VERSION` に詰め込み（ビット 0〜7 が Feature、8〜15 が Project、16〜23 が Voice changer、24〜31 が Acoustic）、`sonare_abi_version()` は読み込まれたライブラリがコンパイル時に持っていた値を返します。リアルタイムのコマンドキューは POD ではなく SharedArrayBuffer のレコードレイアウトを表すため、これとは別に `sonare_engine_abi_version()`（現在は 3）でバージョン管理されます。POD を境界越しに渡す利用側は、最初の呼び出しの前に一度だけ `sonare_abi_version()` を自分のコンパイル時の `SONARE_ABI_VERSION` と比較し、一致しなければ先へ進みません。値が違えば両者の構造体レイアウトは一致しておらず、POD 経路は失敗するのではなくメモリを壊します。JSON の入口はレイアウトのずれを許容するので、この関門は不要です。バージョンは、保証対象の構造体のレイアウトが変わるたびに進みます（Project のバージョンはレイアウトが変わったリリースごとに 1 回）。したがって値が等しければレイアウトは同一であり、保証対象の構造体へのフィールド追加は「追加的な変更」ではなくバージョンの更新です。各バインディングが読み込み時にどの値を照合するかは [ネイティブバインディング](./native-bindings.md#abi-バージョン) にまとめています。
 
 ### リンクターゲット
 
@@ -109,7 +109,7 @@ find_package(sonare REQUIRED COMPONENTS midi)
 
 エイリアス名は `add_subdirectory()` ビルドでも同じなので、リンク行に libsonare の入手経路が現れることはありません。
 
-インストール済みビルドについて、計画を立てる前に知っておく価値のある性質が 2 つあります。
+インストール済みビルドについて、計画を立てる前に知っておきたい性質が 2 つあります。
 
 - **Eigen は利用側の要件ではありません。** インストールされるヘッダーはどれも Eigen を include しないため、利用側に必要なのは C++17 コンパイラと解決可能なスレッドライブラリだけです。パッケージ設定が宣言するのは `Threads`（および FFmpeg 付きでビルドされた場合の FFmpeg）のみです。
 - **同梱の FFT アーカイブは接頭辞付きのファイル名でインストールされます。** `libsonare_kissfft.a` と `libsonare_pffft.a` であり、利用側のライブラリディレクトリで一般的な名前を占有することはありません。CMake のターゲット名は変わりません。
@@ -373,7 +373,7 @@ effects::acoustic::RoomMorphResult morphed = effects::acoustic::room_morph(recor
 
 ### C ABI からのルームモーフ
 
-`sonare_c_acoustic.h` の `sonare_room_morph` は、入力サンプル、そのサンプルレート、`SonareRoomMorphConfig` を受け取り、モーフ後のモノラル信号を出力ポインタの組で返します。目標ルームの合成が出した診断情報は戻り値には含まれず、スレッドローカルの構造化チャンネルに置かれるので、呼び出しが返ってから読み出します。所有権と寿命はコードのとおりです。
+`sonare_c_acoustic.h` の `sonare_room_morph` は、入力サンプル、そのサンプルレート、`SonareRoomMorphConfig` を受け取り、モーフ後のモノラル信号を出力ポインタの組で返します。目標ルームの合成が出した診断情報は戻り値には含まれず、スレッドローカルの構造化チャンネルに置かれるので、呼び出しが返ってから読み出します。所有権と寿命は以下のとおりです。
 
 ```c
 float* out = NULL;

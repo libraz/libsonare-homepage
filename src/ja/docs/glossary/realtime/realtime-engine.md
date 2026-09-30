@@ -1,6 +1,6 @@
 ---
 title: リアルタイムエンジン
-description: トランスポート、クリップスケジュール、メトロノーム、オートメーション再生、メーター情報。libsonare の RealtimeEngine が解析の先で行うこと。
+description: トランスポート、クリップスケジュール、メトロノーム、オートメーション再生、メーター情報。libsonare の RealtimeEngine が解析以外に担うこと。
 ---
 
 # リアルタイムエンジン
@@ -32,7 +32,7 @@ libsonare のリアルタイム機能のうち、トランスポートと再生�
 リアルタイムの音声コールバックは、タイミングを壊さずにデバッガで覗けません。代わりにエンジンは、メーターと状態の定期的なスナップショット（テレメトリ）を出力し、UI が通常の（音声でない）スレッドで読みます。音声経路に手を触れずに、レベルメーター、ゴニオメーター（左右の位相関係を表示するステレオスコープ）、トランスポート状態を描けます。
 
 ::: details libsonare がエンジンをどうモデル化するか
-`RealtimeEngine` は `EngineController` と連携してトランスポートを所有し、`ClipAudioBuffer` ストレージ上で `ClipPlayer`/`ClipSchedule` によりクリップをスケジュールし、`Metronome`（`MetronomeConfig` → `MetronomeEvent`）でクリックを生成し、ミキサーグラフ上でオートメーションを再生します。メーターは `MeterTelemetryRecord` を生む `MeterTelemetryTap` と、UI が音声スレッド外で読む汎用 `Telemetry` チャンネル（`TelemetryType`/`TelemetryErrorCode`）で公開されます。エンジン全体はリアルタイム安全で、オフライン（バウンス）でも AudioWorklet 内でも、フリーズやキャプチャの経路を含めて同じく動きます。
+`RealtimeEngine` は `EngineController` と連携してトランスポートを管理し、`ClipAudioBuffer` ストレージ上で `ClipPlayer`/`ClipSchedule` によりクリップをスケジュールし、`Metronome`（`MetronomeConfig` → `MetronomeEvent`）でクリックを生成し、ミキサーグラフ上でオートメーションを再生します。メーターは `MeterTelemetryRecord` を生む `MeterTelemetryTap` と、UI が音声スレッド外で読む汎用 `Telemetry` チャンネル（`TelemetryType`/`TelemetryErrorCode`）で公開されます。エンジン全体はリアルタイム安全で、オフライン（バウンス）でも AudioWorklet 内でも、フリーズやキャプチャの経路を含めて同じく動きます。
 :::
 
 関連: [リアルタイムとストリーミング](../../realtime-streaming.md)、[ストリーミング解析](./streaming-analysis.md)、[リアルタイム安全性](./realtime-safety.md)、[オートメーションとメーター](../mixing/automation-metering.md)

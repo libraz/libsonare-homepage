@@ -5,7 +5,7 @@ description: ワープがオーディオクリップをプロジェクトのテ�
 
 # ワープとテンポ同期
 
-90 BPM（beats per minute、1 分あたりの拍数）で録ったドラムループを 120 BPM のプロジェクトに置くと、かみ合いません。グリッドのほうが速く進むのに、ループは自分のテンポで鳴り続けます。**ワープ** は、オーディオクリップをプロジェクトのテンポに合わせて曲げ、すべてをロックさせる機能です。
+90 BPM（beats per minute、1 分あたりの拍数）で録ったドラムループを 120 BPM のプロジェクトに置くと、かみ合いません。グリッドのほうが速く進むのに、ループは自分のテンポで鳴り続けます。**ワープ** は、オーディオクリップをプロジェクトのテンポに合わせて曲げ、全体をグリッドに同期させる機能です。
 
 ::: info ひとことで言うと
 **ワープ** = オーディオクリップを時間伸縮し、自分の元テンポではなくプロジェクトのテンポに追従させること。
@@ -54,12 +54,12 @@ description: ワープがオーディオクリップをプロジェクトのテ�
 
 どちらも音程を保つので、選択の基準は音そのものではありません。**伸縮の処理がいつ走るか**、そしてそれがホストに何を要求するかです。
 
-`tempo-sync` は再生に先立って、コントロールスレッド上で伸縮後の音声をベイクします。フェーズボコーダがクリップ全体を見渡せる代わりに、アンカーを更新するたびにベイクをやり直すことになります。またワープマップをまったく持たない `tempo-sync` クリップは、静かにフォールバックするのではなく `compile()` のエラーになります。`time-stretch` はオーディオスレッド上でブロックごとに処理するため、新しいアンカーは再ベイクなしで次のブロックから反映されます。
+`tempo-sync` は再生に先立って、コントロールスレッド上で伸縮後の音声をベイクします。フェーズボコーダがクリップ全体を見渡せる代わりに、アンカーを更新するたびにベイクをやり直すことになります。またワープマップをまったく持たない `tempo-sync` クリップは、黙ってフォールバックするのではなく `compile()` のエラーになります。`time-stretch` はオーディオスレッド上でブロックごとに処理するため、新しいアンカーは再ベイクなしで次のブロックから反映されます。
 
-その即応性は、事前確保したボイスの予算を使います。容量は既定で **8 本** で、各ボイスは **2 チャンネル** まで扱います。コントロールスレッドから `setWarpVoiceCapacity(voices)` と `warpVoiceCapacity()` で容量を設定・確認できます。Python は `set_warp_voice_capacity()` と `warp_voice_capacity()`、C は `sonare_engine_set_warp_voice_capacity()` と `sonare_engine_warp_voice_capacity()` を使います。範囲は **0..64** で、64 を超える値は拒否されます。容量 0 は `time-stretch` を無効にし、対象のクリップは `repitch` を使います。この場合は `warpStretchOverflowCount()` に加算されません。prepare 済みのエンジンで容量を変えるとボイスプールを直ちに作り直し、使用中のクリップは WSOLA 状態を引き継がずに再開します。割り当てとフォールバックの規則は [リアルタイムエンジン](../../realtime-engine.md#time-stretch-のボイス予算) にあります。
+この即応性を支えるのが、事前に確保したボイスです。容量は既定で **8 本** で、各ボイスは **2 チャンネル** まで扱います。コントロールスレッドから `setWarpVoiceCapacity(voices)` と `warpVoiceCapacity()` で容量を設定・確認できます。Python は `set_warp_voice_capacity()` と `warp_voice_capacity()`、C は `sonare_engine_set_warp_voice_capacity()` と `sonare_engine_warp_voice_capacity()` を使います。範囲は **0..64** で、64 を超える値は拒否されます。容量 0 は `time-stretch` を無効にし、対象のクリップは `repitch` を使います。この場合は `warpStretchOverflowCount()` に加算されません。prepare 済みのエンジンで容量を変えるとボイスプールを直ちに作り直し、使用中のクリップは WSOLA 状態を引き継がずに再開します。割り当てとフォールバックの規則は [リアルタイムエンジン](../../realtime-engine.md#time-stretch-のボイス予算) にあります。
 
-::: warning フォールバックは静かに起きます
-フォールバック自体は音を立てません。すべてのボイスが使用中で確保できなかった場合だけ、`warpStretchOverflowCount()` がフォールバックしたブロック数を数えます。容量 0 の意図的な無効化はカウンターに加算されません。ソースが 3 チャンネル以上の場合もストレッチャの状態に収まらないため `repitch` を使いますが、ボイス容量のオーバーフローには数えません。開発中はコントロールスレッドからこの値を監視してください。バインディングごとの名前は [リアルタイムエンジン](../../realtime-engine.md#time-stretch-のボイス予算) にあります。
+::: warning フォールバックは通知なしに起きます
+フォールバックしてもエラーや警告は出ません。すべてのボイスが使用中で確保できなかった場合だけ、`warpStretchOverflowCount()` がフォールバックしたブロック数を数えます。容量 0 の意図的な無効化はカウンターに加算されません。ソースが 3 チャンネル以上の場合もストレッチャの状態に収まらないため `repitch` を使いますが、ボイス容量のオーバーフローには数えません。開発中はコントロールスレッドからこの値を監視してください。バインディングごとの名前は [リアルタイムエンジン](../../realtime-engine.md#time-stretch-のボイス予算) にあります。
 :::
 
 ### time-stretch が行うこと、そのコスト
@@ -100,15 +100,15 @@ description: ワープがオーディオクリップをプロジェクトのテ�
 :::
 
 ::: warning tempo-sync は限界のある本物の時間伸縮
-tempo-sync は音程を保ったまま長さを変えるため、内部でフェーズボコーダを使います。これは [フェーズボコーダによるストレッチ](../editing/phase-vocoder-stretch.md) で説明しているアルゴリズムと同じ系統です。小さな伸縮は透明ですが、非常に大きな伸縮はトランジェントをにじませたり「位相っぽい」質感を加えたりします。ステレオやマルチチャンネルのクリップでは伸縮がチャンネル間で位相ロックされるため、左右のステレオイメージがずれることはありません。repitch にはそうしたアーティファクトはありません（単なるリサンプリングです）が、音程が動きます。2 つのモードは異なるコストをトレードします。
+tempo-sync は音程を保ったまま長さを変えるため、内部でフェーズボコーダを使います。これは [フェーズボコーダによるストレッチ](../editing/phase-vocoder-stretch.md) で説明しているアルゴリズムと同じ系統です。小さな伸縮は透明ですが、非常に大きな伸縮はトランジェントをにじませたり「位相っぽい」質感を加えたりします。ステレオやマルチチャンネルのクリップでは伸縮がチャンネル間で位相ロックされるため、左右のステレオイメージがずれることはありません。repitch にはそうしたアーティファクトはありません（単なるリサンプリングです）が、音程が動きます。2 つのモードでは、引き換えにするものが違います。
 :::
 
 ## 再生とバウンスの一貫性
 
-地味ですが重要な保証があります。クリップは、ライブで試聴していてもファイナルをレンダリングしていても、*同じように* ワープします。テンポマップ、ワープモード、アンカーはプロジェクトの編集モデルの一部なので、リアルタイム再生とオフラインの [バウンス](../../project-bounce.md) は一致したタイミングと音程を生みます。編集中に聞こえるものが、レンダリングで得られるものです。
+地味ですが重要な保証があります。クリップは、ライブで試聴していてもファイナルをレンダリングしていても、*同じように* ワープします。テンポマップ、ワープモード、アンカーはプロジェクトの編集モデルの一部なので、リアルタイム再生とオフラインの [バウンス](../../project-bounce.md) でタイミングと音程が一致します。編集中に聞こえる音が、そのままレンダリング結果になります。
 
 ::: details libsonare での実装
-ワープは `Project` の編集モデルにあります。クリップのモードは `setClipWarpMode(clipId, mode)` で設定し、mode は `'off' | 'repitch' | 'tempo-sync' | 'time-stretch'` のいずれかです。ワープアンカーはファーストクラスのワープマップです。`setWarpMap({ id, name?, anchors })` で各アンカーを `{ warpSample, sourceSample }` として登録し、クリップは `setClipWarpRef(clipId, warpRefId)` で参照します（`removeWarpMap` でクリア）。グリッドは `setTempoSegments`（各 `{ startPpq, bpm, endBpm? }`、`endBpm` がランプを駆動）と `setTimeSignatures`（各 `{ startPpq, numerator, denominator }`）から来ます。`tempo-sync` では伸縮を `StreamingPhaseVocoder` が行って音程を保ち、リアルタイム再生とオフライン `bounce()` の *両方* で同じ経路を使います。一方 `repitch` はリサンプリングし、音程を速度に連動させます。`time-stretch` は `repitch` と同じマップを読みつつ、オーディオスレッド上でソースの断片をオーバーラップ加算します。リサンプリングへフォールバックしたブロック数は `warpStretchOverflowCount()` が報告します。ワープモード・アンカー・テンポ・拍子のすべては `toJson()` / `Project.fromJson(json)` で JSON を往復します。
+ワープは `Project` の編集モデルにあります。クリップのモードは `setClipWarpMode(clipId, mode)` で設定し、mode は `'off' | 'repitch' | 'tempo-sync' | 'time-stretch'` のいずれかです。ワープアンカーは、クリップとは独立したワープマップとして管理されます。`setWarpMap({ id, name?, anchors })` で各アンカーを `{ warpSample, sourceSample }` として登録し、クリップは `setClipWarpRef(clipId, warpRefId)` で参照します（`removeWarpMap` でクリア）。グリッドは `setTempoSegments`（各 `{ startPpq, bpm, endBpm? }`、`endBpm` がランプを駆動）と `setTimeSignatures`（各 `{ startPpq, numerator, denominator }`）で決まります。`tempo-sync` では伸縮を `StreamingPhaseVocoder` が行って音程を保ち、リアルタイム再生とオフライン `bounce()` の *両方* で同じ経路を使います。一方 `repitch` はリサンプリングし、音程を速度に連動させます。`time-stretch` は `repitch` と同じマップを読みつつ、オーディオスレッド上でソースの断片をオーバーラップ加算します。リサンプリングへフォールバックしたブロック数は `warpStretchOverflowCount()` が報告します。ワープモード・アンカー・テンポ・拍子のすべては `toJson()` / `Project.fromJson(json)` で JSON を往復します。
 :::
 
 関連: [Project Editing](../../project-editing.md)、[フェーズボコーダによるストレッチ](../editing/phase-vocoder-stretch.md)、[Project Bounce](../../project-bounce.md)

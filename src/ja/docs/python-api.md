@@ -45,7 +45,7 @@ Python パッケージは、呼び出しを C++ ライブラリと同じネイ�
 `analyze(...)` を 1 回呼べば、コード、セクション、音色、ダイナミクス、リズム、メロディ、フォーム、拍ごとの強度を含む総合結果が返り、他のバインディングと揃っています。1 つのフィールドだけが欲しいときや、呼び出しごとにオプションを変えたいときは、下の専用関数を使ってください。
 
 ::: info 既定のサンプルレートはファミリーごとに異なる
-楽曲解析系とメータリング系のヘルパーは `sample_rate=22050` を既定とし、ルーム音響系のヘルパー（`analyze_impulse_response`、`detect_acoustic`、`estimate_room`）は `48000` を既定とします。`Audio.from_file(...)` で読み込んだ場合は、必ず `audio.sample_rate` を渡してください。そうすれば、別のレートで録音した音声にファミリーごとの既定値が静かに当たることはありません。ここでいうインパルス応答（IR）とは、短い一発の音に対して空間がどう応答するかを録音したものです。
+楽曲解析系とメータリング系のヘルパーは `sample_rate=22050` を既定とし、ルーム音響系のヘルパー（`analyze_impulse_response`、`detect_acoustic`、`estimate_room`）は `48000` を既定とします。`Audio.from_file(...)` で読み込んだ場合は、必ず `audio.sample_rate` を渡してください。そうすれば、別のレートで録音した音声にファミリーごとの既定値が気付かないうちに使われることはありません。ここでいうインパルス応答（IR）とは、短い一発の音に対して空間がどう応答するかを録音したものです。
 :::
 
 ## 目的から API を選ぶ
@@ -132,7 +132,7 @@ print(f"ビート数: {len(result.beat_times)}")
 | ネイティブライブラリが OK 以外のコードを返したとき | `SonareError`（`RuntimeError` のサブクラス） | `[4] ` という数値接頭辞が付きます |
 | C ABI に到達する前に、Python 側の引数・バッファ検証が呼び出しを拒否したとき | `SonareValueError` | 検証メッセージのみで、数値接頭辞は付きません |
 
-`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は `ErrorCode.INVALID_PARAMETER` なので、コードで分岐するコードからは、これが肩代わりしている C ABI の拒否とまったく同じに見えます。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で（[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照）、`.code_name` はバインディング間で共通の名称を返します。CLI はこれらのコードを[終了コード](./cli.md#終了コード)へ対応付けます。
+`SonareValueError` は `SonareError` と `ValueError` の**両方**を継承します。そのため `except ValueError:` でも `except sonare.SonareError:` でも捕捉でき、どちらの書き方のハンドラも、個々のエントリポイントがどちらのクラスを選ぶかを知る必要がありません。`.code` は `ErrorCode.INVALID_PARAMETER` なので、`.code` で分岐するコードから見ると、同じ入力を C ABI 側で拒否された場合とまったく同じ扱いになります。`SonareError.code` は JS バインディングが `ErrorCode` として公開するのと同じ C ABI の値で（[エラーハンドリング](./js-api-types.md#エラーハンドリング)を参照）、`.code_name` はバインディング間で共通の名称を返します。CLI はこれらのコードを[終了コード](./cli.md#終了コード)へ対応付けます。
 
 ```python
 try:
@@ -258,7 +258,7 @@ UI 転送量を抑える場合は、`read_frames(max_frames)` の代わりに量
 | `read_frames_u8(max_frames, quantize_config?)` | 特徴量配列を unsigned 8-bit 値へ量子化します。 |
 | `read_frames_i16(max_frames, quantize_config?)` | 特徴量配列を signed 16-bit 値へ量子化します。 |
 
-`quantize_config` は任意の `QuantizeConfig`（`libsonare` からエクスポート）で、既定より大幅に大きい／小さいストリームに合わせて量子化レンジを広げます。省略すると既定値を使います。フィールドと既定値は `mel_db_min=-80.0`、`mel_db_max=0.0`、`onset_max=50.0`、`rms_max=1.0`、`centroid_max=11025.0` です。量子化器は正規化値を `[0, 1]` にクランプするため、このレンジを外れた信号は端点へ静かに飽和します。これは JS/WASM ストリーミングドキュメントの `StreamQuantizeConfig` に対応します。
+`quantize_config` は任意の `QuantizeConfig`（`libsonare` からエクスポート）で、既定より大幅に大きい／小さいストリームに合わせて量子化レンジを広げます。省略すると既定値を使います。フィールドと既定値は `mel_db_min=-80.0`、`mel_db_max=0.0`、`onset_max=50.0`、`rms_max=1.0`、`centroid_max=11025.0` です。量子化器は正規化値を `[0, 1]` にクランプするため、このレンジを外れた信号は警告なしに端点で飽和します。これは JS/WASM ストリーミングドキュメントの `StreamQuantizeConfig` に対応します。
 
 どちらもタイムスタンプは float のまま保持します。外部の音声クロックと同期したい場合は、`process_with_offset(samples, sample_offset)` でチャンク開始位置を明示してください。
 

@@ -22,7 +22,7 @@ libsonare はストリップの各ブロックを 1 つの固定順で処理し�
 3. **チャンネルディレイ** — 他トラックに対して時間整合します。指定は整数サンプル単位です（`setChannelDelaySamples`、シーンのフィールドは `channelDelaySamples`）。ミリ秒指定の入口はないため、換算は自分で行ってください。
 4. **EQ** — トーン整形。位置はプリ／ポストフェーダーを選べます（後述）。
 5. **プリフェーダーインサート** — フェーダーの前で動く直列プロセッサ。
-6. **フェーダー**（+ VCA オフセット） — 他トラックと比べて取るバランスコントロール。
+6. **フェーダー**（+ VCA オフセット） — 他トラックとのバランスを取るコントロール。
 7. **パン** — 選んだ[パンロー](./pan-width.md)（中央から離れてもパートの音量が変わらないようにする規則）でトラックをステレオフィールドに配置します。
 8. **ポストフェーダーインサート** — フェーダーの後の直列プロセッサ。
 9. **ステレオ幅** — ステレオイメージを狭めたり広げたりします。
@@ -52,7 +52,7 @@ EQ はプリ／ポストフェーダーのどちらにも置けます。プリ�
 **PFL**（プリフェーダーリッスン）は、レーンストリップの後、レーンのフェーダー、ゲート、パンより前で信号を取ります。そのためトラックがミュートされていても、ゲートで閉じていても、パンで振り切られていても PFL のキューは聞こえ続け、フェーダー位置に関わらずソースの生の内容を確認するのに向きます。**AFL**（アフターフェーダーリッスン）はそれらの段の後、サラウンドパスまで含めた地点で信号を取るため、トラックが実際にミックスへ送っているのと同じレベルと定位で聞こえます。
 
 ::: details libsonare がキュータップをどうスケジュールするか
-キューモニタリングはキュー投入可能なリアルタイムコマンドです。`RealtimeEngine` の `setTrackMonitorMode(laneIndex, mode, renderFrame?)`（`EngineTrackMonitorMode` = `'off' | 'pfl' | 'afl'`）で、C ABI では `sonare_engine_set_track_monitor_mode`（`SonareEngineTrackMonitorMode`）に対応し、Python では `set_track_monitor_mode` として公開されます。他のエンジンコマンドと同様に WASM の AudioWorklet 経路からも到達可能で、モニターバスはエンジンの通常出力に折り込まれると同時に、単独でも読み出せます。
+キューモニタリングはキュー投入可能なリアルタイムコマンドです。`RealtimeEngine` の `setTrackMonitorMode(laneIndex, mode, renderFrame?)`（`EngineTrackMonitorMode` = `'off' | 'pfl' | 'afl'`）で、C ABI では `sonare_engine_set_track_monitor_mode`（`SonareEngineTrackMonitorMode`）に対応し、Python では `set_track_monitor_mode` として公開されます。他のエンジンコマンドと同様に WASM の AudioWorklet 経路からも使え、モニターバスはエンジンの通常出力に折り込まれると同時に、単独でも読み出せます。
 :::
 
 ::: details libsonare がストリップをどうモデル化するか

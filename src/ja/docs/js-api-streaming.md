@@ -9,7 +9,7 @@ libsonare JavaScript/TypeScript パッケージのブロック単位プロセッ
 
 ## StreamingEqualizer
 
-`StreamingEqualizer` は、ブロック単位で動かすリアルタイム安全な EQ オブジェクトです。
+`StreamingEqualizer` は、ブロック単位で動かす、リアルタイムスレッドで安全に使える EQ オブジェクトです。
 
 最大 24 バンド、`zero-latency` / `natural` / `linear` の位相モード、ダイナミック EQ、ミッド／サイド処理、外部サイドチェイン、スペクトルスナップショット、オフラインのリファレンスマッチを扱えます。
 

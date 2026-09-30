@@ -7,7 +7,7 @@ description: libsonare の説明可能なマスタリング補助 API、masterin
 
 libsonare は、レンダリング済み音声だけでなく*判断根拠*を扱いたいアプリ向けに、**JSON を返す**マスタリング補助 API を 3 つ提供します。**ローカル DSP 解析のみ**で動作し、アップロードも外部モデルも使いません。UI 表示やレポート保存に使える構造化 JSON を返します。アシスタントは指定したプリセットを出発点にし、省略時は `streaming` を使います。
 
-「LUFS」「True Peak」「クレストファクター」「トーナルバランス」に馴染みがなければ、先に [マスタリングとは?](./glossary/concepts/what-is-mastering.md) と [メーターの読み方](./glossary/mastering/meter-reading.md) を読んでください。本ページは用語を前提に JSON の契約に集中します。
+「LUFS」「True Peak」「クレストファクター」「トーナルバランス」に馴染みがなければ、先に [マスタリングとは?](./glossary/concepts/what-is-mastering.md) と [メーターの読み方](./glossary/mastering/meter-reading.md) を読んでください。本ページは用語を前提に、JSON の仕様に絞って説明します。
 
 ::: info 「アシスタント」は自動仕上げボタンではない
 ここでのアシスタントは、音源を測定し、なぜその処理が妥当そうかを JSON で説明する補助 API です。実際の音作りは、提案をユーザーが確認・調整し、別のレンダリング API に渡して行います。
@@ -16,7 +16,7 @@ libsonare は、レンダリング済み音声だけでなく*判断根拠*を�
 最初に組み込む場合は、次の順で読むと分かりやすくなります。
 
 1. `masteringAudioProfile(...)` で、元音源の状態をユーザーに見せる。
-2. `masteringAssistantSuggest(...)` で、編集可能なマスタリングチェーンを初期入力する。
+2. `masteringAssistantSuggest(...)` で、編集可能なマスタリングチェーンのたたき台を作る。
 3. ユーザーが提案を確認・調整してからレンダリングする。
 4. `masteringStreamingPreview(...)` で、配信プラットフォームが音量をどう扱うか説明する。
 
@@ -104,7 +104,7 @@ sonare mastering-streaming source.wav \
 :::
 
 ::: warning 短いクリップ: profile と suggest は動くが、意味のある結果には実際のスペクトル成分が必要
-`masteringAudioProfile` と `masteringAssistantSuggest` は [STFT](./glossary/analysis/spectrogram-stft.md)（短時間フーリエ変換。短い窓を少しずつずらしながら周波数解析する手法）ベースの解析全体を実行します（既定の `nFft` は 2048）。例外を投げるのは**完全に空のバッファ**だけです（`SonareError`、メッセージは "audio input must be a non-empty buffer"）。どれほど短くても、空でなければバッファは受理され、解析されます。`nFft` サイズの窓（既定 2048 サンプル）はあくまで目安であってエラー条件ではありません。1 窓ぶんより短いバッファは、意味のあるプロファイルを得るにはスペクトル成分が足りないというだけなので、「`nFft` より短い」はガードすべき失敗ではなく、UI に出す品質上の注意として扱ってください。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファであればどんなバッファでも受け付けます。`platforms` が空リストでも問題なく、その場合は既定のプラットフォーム集合（Spotify、Apple Music、YouTube）にフォールバックします。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを `isSonareError` を使った `try`／`catch` で囲んで空バッファのケースに備え、`nFft` より短い場合はハードブロックではなく、やわらかい長さのヒントを検討してください。
+`masteringAudioProfile` と `masteringAssistantSuggest` は [STFT](./glossary/analysis/spectrogram-stft.md)（短時間フーリエ変換。短い窓を少しずつずらしながら周波数解析する手法）ベースの解析全体を実行します（既定の `nFft` は 2048）。例外を投げるのは**完全に空のバッファ**だけです（`SonareError`、メッセージは "audio input must be a non-empty buffer"）。どれほど短くても、空でなければバッファは受理され、解析されます。`nFft` サイズの窓（既定 2048 サンプル）はあくまで目安であってエラー条件ではありません。1 窓ぶんより短いバッファは、意味のあるプロファイルを得るにはスペクトル成分が足りないというだけなので、「`nFft` より短い」はガードすべき失敗ではなく、UI に出す品質上の注意として扱ってください。`masteringStreamingPreview` はラウドネスを測るだけなので、空でない音声バッファであればどんなバッファでも受け付けます。`platforms` が空リストでも問題なく、その場合は既定のプラットフォーム集合（Spotify、Apple Music、YouTube）にフォールバックします。UI から短い録音やファイル選択を渡すときは、profile／suggest の呼び出しを `isSonareError` を使った `try`／`catch` で囲んで空バッファのケースに備え、`nFft` より短い場合はハードブロックではなく、長さについての控えめな注意表示を検討してください。
 
 ```typescript [ブラウザ]
 import { masteringAudioProfile, isSonareError } from '@libraz/libsonare';
@@ -242,7 +242,7 @@ try {
 | フィールド | 意味 |
 |-----------|------|
 | `chainConfig.params` | **提案チェーン全体**をフラットなドット記法キー（`stage.processor.param`）で表したもの。`*.enabled` は JSON のブール値（`true`／`false`）です。**`masterAudio` の上書き値が受け付けるキーと同一**なので、提案をそのままレンダリングできます。 |
-| `explanation` | 各判断の平易な理由。UI に表示して選択を透明にしてください。 |
+| `explanation` | 各判断の平易な理由。UI に表示して、なぜその選択になったかを示してください。 |
 | `profile` | ソースプロファイルの平坦化コピー。提案が自己完結します。 |
 
 ::: details params オブジェクトは既定チェーン全体
@@ -333,7 +333,7 @@ sonare mastering source.wav --chain-config suggestion-chain.json \
 | `ceilingRisk` | 正規化が信号をプラットフォームのシーリングを超えて押し上げる場合 `true` |
 
 ::: warning ストリーミングでは大きい＝良いではない
-−8 LUFS のマスターは YouTube で「大きく」はなりません。プラットフォームは `normalizationGainDb`（ここでは −5.3 dB）を適用して全員をほぼ同じラウドネスに揃えるので、過度なコンプはラウドネス上の利点なしにダイナミクスを犠牲にするだけです。[配信ターゲット](./glossary/mastering/delivery-targets.md) と [ラウドネスマッチング](./glossary/concepts/loudness-matching.md) を参照してください。
+−8 LUFS のマスターは YouTube で「大きく」はなりません。プラットフォームは `normalizationGainDb`（ここでは −5.3 dB）を適用してすべての曲をほぼ同じラウドネスに揃えるので、過度なコンプはラウドネス上の利点なしにダイナミクスを犠牲にするだけです。[配信ターゲット](./glossary/mastering/delivery-targets.md) と [ラウドネスマッチング](./glossary/concepts/loudness-matching.md) を参照してください。
 :::
 
 <SonareDemo id="loudness-meter" />
@@ -353,7 +353,7 @@ sonare mastering source.wav --chain-config suggestion-chain.json \
 | 配信プレビューの `normalizationGainDb` | プラットフォームが実際より大きく持ち上げるように見える |
 | `ceilingRisk` | このラウドネスから導かれるため、実際にはリスクがあっても安全と読まれうる |
 
-同じ無相関ペアで Spotify の行を見ると、`normalizationGainDb` はモノラル経路では **+8.55** に、ステレオ経路では **+2.44** になります。モノラル側の答えは、使えるヘッドルームを 6 dB 分そのまま過大に見せています。
+同じ無相関ペアで Spotify の行を見ると、`normalizationGainDb` はモノラル経路では **+8.55** に、ステレオ経路では **+2.44** になります。モノラル側の値は、使えるヘッドルームを 6 dB 分そのまま過大に見せています。
 
 したがって、素材が本当にステレオであるときはステレオ版を使ってください。`left` と `right` を渡せば、積分ラウドネスは BS.1770 のチャンネル加算で、True Peak は左右の大きい方で、ペアを直接測定します。
 

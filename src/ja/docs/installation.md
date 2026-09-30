@@ -159,7 +159,7 @@ make wasm
 ネイティブビルドの成果物（アーカイブと CLI）は `build/` 配下に残ります。これをプレフィックス配下にインストールし、別プロジェクトからリンクする手順は[次の節](#c-ライブラリのインストール)にあります。
 
 ::: warning 共有ライブラリとバインディングは一緒にビルドし直す
-Python バインディングは、別のツリーでビルドされた共有ライブラリを受け付けません。自前でビルドした `.so` / `.dylib` と、それを読み込むバインディングは、同じチェックアウトから生成する必要があります。C 構造体のレイアウトが変わるバージョンを取り込んだあとは、新しいバインディングを古い成果物へ向けるのではなく、ライブラリをビルドし直してください。公開されている wheel を使えば、対応の取れた組み合わせがそのまま入るため、この問題は起きません。
+Python バインディングは、別のツリーでビルドされた共有ライブラリを受け付けません。自前でビルドした `.so` / `.dylib` と、それを読み込むバインディングは、同じチェックアウトから生成する必要があります。C 構造体のレイアウトが変わるバージョンを取り込んだあとは、新しいバインディングを古い成果物と組み合わせるのではなく、ライブラリをビルドし直してください。公開されている wheel を使えば、対応の取れた組み合わせがそのまま入るため、この問題は起きません。
 :::
 
 ## C++ ライブラリのインストール
@@ -176,14 +176,14 @@ cmake --install build --prefix /your/prefix
 |--------------------------|------|
 | `lib/` | サブシステムごとの静的アーカイブ（`libsonare_core.a`、`libsonare_midi.a` など）、同梱 FFT の `libsonare_kissfft.a` と `libsonare_pffft.a`、`BUILD_SHARED=ON` でビルドした場合は `libsonare.so` / `.dylib` |
 | `include/sonare/` | C ABI のヘッダー。`<sonare/sonare_c.h>` としてインクルードする |
-| `include/sonare/cpp/` | C++ のヘッダーツリー。相対 include が解決できるようツリーごと入る。include ルート経由の `<sonare/cpp/sonare.h>` でも、ツリー内と同じ `"sonare.h"` でも届く |
+| `include/sonare/cpp/` | C++ のヘッダーツリー。相対 include が解決できるようツリーごと入る。include ルート経由の `<sonare/cpp/sonare.h>` でも、ツリー内と同じ `"sonare.h"` でもインクルードできる |
 | `lib/cmake/sonare/` | `sonareConfig.cmake`、`sonareConfigVersion.cmake`、`sonareTargets.cmake`。`find_package(sonare)` が読み込むファイル |
 | `lib/pkgconfig/sonare.pc` | 共有ビルドのみ。pkg-config が記述できるのはライブラリ 1 つで、静的構成は依存順に並んだアーカイブの集合だから |
 | `bin/sonare-cli` | ネイティブ CLI。`BUILD_CLI` が ON（既定）の場合 |
 
 インストールルールが生成されるのは、libsonare がネイティブ構成のトップレベルプロジェクトであるときだけです。`SONARE_INSTALL` はその場合 `ON`、`add_subdirectory()` 配下や `BUILD_WASM` では `OFF` が既定になります。親プロジェクトの install ステップに何を含めるかは親が決めることであり、WebAssembly ビルドが生成するのは C++ ライブラリではなく embind モジュールだからです。
 
-インストール時のコンポーネントはありません。`cmake --install --component` で選べるものはなく、インストールに何が含まれるかは構成時の `BUILD_*` オプションで決まります。`-DBUILD_MIXING=OFF` で構成したインストールにはミキシングのアーカイブが存在せず、パッケージファイルもそう申告します。利用側で言う「コンポーネント」は別の意味で、次項で扱います。絞り込んだ構成の例は[内蔵インストゥルメントだけをリンクする](./cpp-api.md#内蔵インストゥルメントだけをリンクする)を参照してください。
+インストール時のコンポーネントはありません。`cmake --install --component` で選べるものはなく、インストールに何が含まれるかは構成時の `BUILD_*` オプションで決まります。`-DBUILD_MIXING=OFF` で構成したインストールにはミキシングのアーカイブが存在せず、パッケージファイルにもその構成が反映されます。利用側で言う「コンポーネント」は別の意味で、次項で扱います。絞り込んだ構成の例は[内蔵インストゥルメントだけをリンクする](./cpp-api.md#内蔵インストゥルメントだけをリンクする)を参照してください。
 
 ### find_package で利用する
 
@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
 }
 ```
 
-`sonare::sonare` は、そのインストールに含まれる静的アーカイブすべてを束ねた集約ターゲットです。どのアーカイブが必要か、どの順に並べるかを自分で見極める必要はありません。各サブシステムは単独でもエクスポートされており、内蔵インストゥルメントで MIDI をレンダリングするだけのアプリなら `sonare::midi` だけで足ります。サブシステムをコンポーネントとして指名すると、存在しないサブシステムはリンク時の未定義シンボルではなく構成時のエラーになります。
+`sonare::sonare` は、そのインストールに含まれる静的アーカイブすべてを束ねた集約ターゲットです。どのアーカイブが必要か、どの順に並べるかを自分で見極める必要はありません。各サブシステムは単独でもエクスポートされており、内蔵インストゥルメントで MIDI をレンダリングするだけのアプリなら `sonare::midi` だけで足ります。サブシステムをコンポーネントとして指定すると、存在しないサブシステムはリンク時の未定義シンボルではなく構成時のエラーになります。
 
 ```cmake
 find_package(sonare REQUIRED COMPONENTS midi)
@@ -223,7 +223,7 @@ target_link_libraries(app PRIVATE sonare::midi)
 
 コンポーネント名は `BUILD_*` オプションではなくエクスポートされたターゲット名に対応します。`BUILD_ACOUSTIC_SIM` が生成するのは `sonare::acoustic` なので、コンポーネントは `acoustic` です。一覧は[リンクターゲット](./cpp-api.md#リンクターゲット)にあります。
 
-**`find_package` が探す場所。** CMake は `/usr` や `/usr/local` を含む標準のシステムプレフィックスを探索するため、既定のプレフィックスへのインストールは追加設定なしで見つかります。それ以外の場所に入れた場合、`find_package(sonare)` は `Could not find a package configuration file provided by "sonare"` で止まります。利用側にプレフィックスを教えてください。
+**`find_package` が探す場所。** CMake は `/usr` や `/usr/local` を含む標準のシステムプレフィックスを探索するため、既定のプレフィックスへのインストールは追加設定なしで見つかります。それ以外の場所に入れた場合、`find_package(sonare)` は `Could not find a package configuration file provided by "sonare"` で止まります。利用側でプレフィックスを指定してください。
 
 ```bash
 cmake -S . -B build -DCMAKE_PREFIX_PATH=/your/prefix

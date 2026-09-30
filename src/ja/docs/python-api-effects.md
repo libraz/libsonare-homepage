@@ -159,11 +159,11 @@ with sonare.RealtimeVoiceChanger(48000, preset="bright-idol", max_block_size=128
 processed = sonare.voice_change_realtime(vocal, sample_rate=48000, preset="soft-whisper")
 ```
 
-現在のプリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。組み込み ID はここに示した厳密な文字列です。カスタムマッピングはプリセット JSON のバリデーターを通し、`dsp` または `macros` のどちらか一方だけを持つ必要があります。壊れた形は拒否されます。
+現在のプリセット ID には `neutral-monitor`、`bright-idol`、`soft-whisper`、`deep-narrator`、`robot-mascot`、`dark-villain` があります。組み込み ID はここに示した厳密な文字列です。カスタムマッピングはプリセット JSON のバリデーターを通し、`dsp` または `macros` のどちらか一方だけを持つ必要があります。形式が正しくないものは拒否されます。
 
 JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voice_changer_preset_config(preset)` を使います。組み込みプリセット（ID またはインデックス）の正規化済み `RealtimeVoiceChangerConfig` を返します。
 
-`realtime_voice_changer_preset_pod(preset)` は互換 alias として残っています。
+`realtime_voice_changer_preset_pod(preset)` は互換用のエイリアスとして残っています。
 
 ## librosa 互換ヘルパー
 
@@ -188,7 +188,7 @@ JSON ではなく解決済みの POD 設定が必要な場合は、`realtime_voi
 | `deemphasis(samples, coef?, zi?)` | `list[float]` | ディエンファシス（librosa.effects.deemphasis）|
 | `trim_silence(samples, top_db?, frame_length?, hop_length?)` | `tuple[list[float], int, int]` | `librosa.effects.trim`。`(audio, start_sample, end_sample)` を返す |
 | `split_silence(samples, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | `librosa.effects.split`。非無音区間をサンプル単位で返す |
-| `split_silence_common(signals, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | 同じパートの複数テイクが揃って無音だと認める切れ目。`signals` はシーケンスのシーケンスを 1 つ取るため、信号数と各信号の長さが食い違うことがない |
+| `split_silence_common(signals, top_db?, frame_length?, hop_length?)` | `list[tuple[int, int]]` | 同じパートの複数テイクがすべて無音になっている区切り位置。`signals` はシーケンスのシーケンスを 1 つ取るため、信号数と各信号の長さが食い違うことがない |
 | `frame_signal(samples, frame_length, hop_length)` | `tuple[int, list[float]]` | `librosa.util.frame`。`(n_frames, row-major フレーム)` を返す |
 | `pad_center(values, size, pad_value?)` | `list[float]` | `librosa.util.pad_center` |
 | `fix_length(values, size, pad_value?)` | `list[float]` | `librosa.util.fix_length` |

@@ -122,7 +122,7 @@ const result = masterAudio({ samples, sampleRate, preset: 'pop' });
 
 `SonareError` は型宣言だけの存在ではなく実行時のクラスです。そのため値として
 import しても実体が得られ、このパッケージでも WASM パッケージでも同じ種類のものが
-返ります。共通の TypeScript モジュールがどちらの面から import しても、実行時に同じ
+返ります。共通の TypeScript モジュールがどちらのパッケージから import しても、実行時に同じ
 ものを受け取れます。
 
 `instanceof SonareError` はプロトタイプではなく形状（ブランド）で判定します。その
@@ -239,7 +239,7 @@ Node 22 未満では、これまでどおり `try/finally` で明示的に解放
 | `deemphasis(samples, coef?, zi?)` | `Float32Array` | ディエンファシス |
 | `trimSilence(samples, topDb?, frameLength?, hopLength?)` | `{ audio: Float32Array; startSample: number; endSample: number }` | `librosa.effects.trim`。しきい値 `trim(...)` とは別物 |
 | `splitSilence(samples, topDb?, frameLength?, hopLength?)` | `Int32Array` | `librosa.effects.split`。`[start0, end0, start1, end1, ...]` のフラット配列 |
-| `splitSilenceCommon(request)` | `Int32Array` | 同じパートの複数テイクが揃って無音だと認める切れ目。`request`: `signals`、`topDb`、`frameLength`、`hopLength`。配列の形は同じで、テイクの長さが揃っていなくてもパディングは不要 |
+| `splitSilenceCommon(request)` | `Int32Array` | 同じパートの複数テイクがすべて無音になっている区切り位置。`request`: `signals`、`topDb`、`frameLength`、`hopLength`。配列の形は同じで、テイクの長さが揃っていなくてもパディングは不要 |
 | `frameSignal(samples, frameLength, hopLength)` | `{ nFrames: number; frames: Float32Array }` | `librosa.util.frame`（row-major） |
 | `padCenter(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.pad_center` |
 | `fixLength(values, targetSize, padValue?)` | `Float32Array` | `librosa.util.fix_length` |
@@ -373,7 +373,7 @@ Node ネイティブの `RealtimeVoiceChanger` は `{ sampleRate, maxBlockSize, 
 
 処理には `processMono(...)`、`processMonoInto(...)`、`processInterleaved(...)`、`processPlanarStereo(...)` を使います。
 
-オフラインの便利用途では、`voiceChangeRealtime(...)` が同じプリセットチェーンでモノラルバッファ全体を 512 サンプルブロック単位に処理します。
+オフラインで手軽に使う場合は、`voiceChangeRealtime(...)` が同じプリセットチェーンでモノラルバッファ全体を 512 サンプルブロック単位に処理します。
 
 ```typescript
 import {

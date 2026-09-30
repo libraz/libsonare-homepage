@@ -92,7 +92,7 @@ sonare tune-to-midi take.wav --reference-smf song.mid --track 2 --unmatched-poli
 | `--max-correction-semitones` | 12 | 割り当てられたシフトはここで飽和し、拒否はされない |
 | `-o` | **必須** | 補正後の WAV |
 
-`--json` は `output`、`assigned_count`、`note_count`、`length`、`sample_rate`、`duration` を返します。`assigned_count` が 0 でもエラーにはなりません。参照がテイクと噛み合わなかったという結果なので、ファイルを信用する前に確認する価値があります。
+`--json` は `output`、`assigned_count`、`note_count`、`length`、`sample_rate`、`duration` を返します。`assigned_count` が 0 でもエラーにはなりません。参照がテイクと噛み合わなかったという結果なので、出力ファイルを使う前に確認してください。
 
 ## system-info
 
