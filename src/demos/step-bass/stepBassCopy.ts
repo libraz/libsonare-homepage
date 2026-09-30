@@ -81,7 +81,7 @@ const enKnobs: Record<KnobHelpKey, KnobHelp> = {
   cutoff: {
     title: 'Filter cutoff',
     body: 'Where the lowpass starts working. The envelope opens above this point and falls back to it, so this is the floor of every sweep rather than a fixed brightness.',
-    tip: 'The audible corner sits below this reading, further below at low resonance. The FILTER display plots the measured response.',
+    tip: 'The audible corner sits below this reading, further below at low resonance. The FILTER display approximates the response from measured curves.',
   },
   resonance: {
     title: 'Resonance',
@@ -123,11 +123,11 @@ const jaKnobs: Record<KnobHelpKey, KnobHelp> = {
   cutoff: {
     title: 'フィルタのカットオフ',
     body: 'ローパスが効きはじめる位置です。エンベロープはここより上へ開いてここへ戻るので、固定の明るさというより、掃引の下限にあたります。',
-    tip: '聴こえる折れ点はこの数値より下にあり、レゾナンスが低いほど下がります。FILTER の画面は実測の特性を描いています。',
+    tip: '聴こえる折れ点はこの数値より下にあり、レゾナンスが低いほど下がります。FILTER の画面は、実測した特性に基づく近似を描いています。',
   },
   resonance: {
     title: 'レゾナンス',
-    body: '折れ点に山を立てます。アクセントの付いたステップが通常のステップよりどれだけ明るくなるかも、ここで決まります。1 つの軸を 2 つの役目が共有している形です。',
+    body: '折れ点に山を立てます。アクセントの付いたステップが通常のステップよりどれだけ明るくなるかも、ここで決まります。1 つのつまみが 2 つの役目を兼ねています。',
   },
   envMod: {
     title: 'エンベロープ量',
@@ -249,7 +249,7 @@ export const enCopy = {
     },
     filter: {
       caption:
-        'Measured response — plotted from a rendered noise pass rather than from the CUTOFF reading. At low resonance the audible corner sits well below the number on the knob.',
+        'Measurement-based approximation, interpolated from rendered noise responses. At low resonance the audible corner sits well below the number on the knob.',
       corner: 'Corner',
       envOpen: 'Envelope open',
       axisDb: 'dB',
@@ -264,18 +264,18 @@ export const enCopy = {
 
 export const jaCopy: typeof enCopy = {
   title: 'ステップベース',
-  subtitle: '16 ステップ、1 ボイス。パネルに音を動かさないつまみはありません',
+  subtitle: '16 ステップ、1 ボイス。パネルに音が変わらないつまみはありません',
   localOnly: 'ローカル',
 
-  guideTitle: 'シーケンサはオーディオスレッドの中で回っています',
+  guideTitle: 'シーケンサーはオーディオスレッドの中で回っています',
   guideBody:
-    'アップロードも事前レンダリングもありません。パターンもトランスポートもエンジンが持っているので、CUTOFF・RESONANCE・ENV MOD を回すと、いま鳴っている音がその場で変わります。',
+    'アップロードも事前レンダリングもありません。パターンもトランスポートもエンジン側で管理しているので、CUTOFF・RESONANCE・ENV MOD を回すと、いま鳴っている音がその場で変わります。',
   guideLink: 'シンセサイザーについて読む',
 
   sections: {
     controls: '音づくりのつまみ',
     transport: 'トランスポート',
-    sequencer: 'ステップシーケンサ',
+    sequencer: 'ステップシーケンサー',
     views: 'ディスプレイ',
   },
 
@@ -287,8 +287,8 @@ export const jaCopy: typeof enCopy = {
   knobs: jaKnobs,
 
   transport: {
-    run: 'シーケンサを走らせる',
-    stop: 'シーケンサを止める',
+    run: 'シーケンサーを再生',
+    stop: 'シーケンサーを停止',
     gesture: 'RUN を押すとオーディオエンジンが起動します。',
     randomise: '自動生成',
     randomiseLabel: 'パターンを生成したものに差し替える',
@@ -313,7 +313,7 @@ export const jaCopy: typeof enCopy = {
   },
 
   grid: {
-    label: 'ステップシーケンサ、16 ステップ',
+    label: 'ステップシーケンサー、16 ステップ',
     bank: '{a} から {b} ステップ',
     ruler: 'ステップ',
     step: '{n} ステップ目',
@@ -359,7 +359,7 @@ export const jaCopy: typeof enCopy = {
     },
     filter: {
       caption:
-        '実測の周波数特性です。CUTOFF の数値ではなく、ノイズを通したレンダーから起こしています。レゾナンスが低いほど、聴こえる折れ点はつまみの数値よりかなり下にあります。',
+        'ノイズを通して実測した特性を補間した近似です。レゾナンスが低いほど、聴こえる折れ点はつまみの数値よりかなり下にあります。',
       corner: '折れ点',
       envOpen: 'エンベロープ開放',
       axisDb: 'dB',

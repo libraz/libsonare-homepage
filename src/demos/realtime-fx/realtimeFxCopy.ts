@@ -77,13 +77,13 @@ export const enCopy = {
       pitch: {
         title: 'Pitch Shift',
         body: 'Moves the voice up or down in semitones without changing its speed. 12 st is one octave.',
-        tip: 'Layered over the chosen character. Small shifts (±2 st) stay natural; pair with formant to keep it believable.',
+        tip: 'Adds to the chosen character. Start with a small shift and listen for artifacts; formant settings change the perceived vocal character.',
         default: '0 st',
       },
       formant: {
         title: 'Formant',
         body: 'Scales the resonances that define vocal character, shifting the perceived size of the speaker.',
-        tip: 'Below 1 sounds larger / deeper, above 1 sounds smaller / brighter. Adjust opposite to pitch for a natural shift.',
+        tip: 'Below 1 lowers the resonances; above 1 raises them. Adjust while listening to the source voice; changing formants opposite to pitch does not guarantee a natural result.',
         default: '1.00',
       },
       brightness: {
@@ -218,18 +218,18 @@ export const jaCopy: typeof enCopy = {
       pitch: {
         title: 'ピッチシフト',
         body: '速度を変えずに声を半音単位で上下させます。12 st が 1 オクターブです。',
-        tip: '選んだキャラクターに重ねて効きます。±2 st 程度なら自然で、フォルマントと組み合わせると説得力が増します。',
+        tip: '選んだキャラクターに重ねて効きます。小さな変化から試し、音の崩れを確認してください。フォルマント設定によって声の印象も変わります。',
         default: '0 st',
       },
       formant: {
         title: 'フォルマント',
         body: '声のキャラクターを決める共鳴を伸縮させ、話者の体格感を変えます。',
-        tip: '1 より下で大きく低く、上で小さく明るく聞こえます。ピッチと逆方向に動かすと自然なシフトになります。',
+        tip: '1 より下で共鳴周波数が下がり、上で上がります。元の声を聴きながら調整してください。ピッチと逆方向に動かしても、自然な声になるとは限りません。',
         default: '1.00',
       },
       brightness: {
         title: 'ブライトネス',
-        body: '再ピッチせずに、フォルマントのバランスを暗め（−）／明るめ（＋）へ傾けます。',
+        body: 'ピッチを変えずに、フォルマントのバランスを暗め（−）／明るめ（＋）へ傾けます。',
         tip: 'プラスで空気感のある前に出る声、マイナスで暖かく胸鳴りの多いトーンになります。',
         default: '0.10',
       },

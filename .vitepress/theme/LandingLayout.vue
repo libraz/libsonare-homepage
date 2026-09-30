@@ -253,7 +253,7 @@ const localeCopy = {
       eyebrow: '同梱されるもの',
       heading: 'サービスではなくオーディオエンジン',
       subhead:
-        'ここに書いたことはビルドで検証しています。librosa との一致は参照値と、各ランタイムの到達範囲は C ABI そのものと、CI が毎回照合します。',
+        'ここに書いたことはビルドで検証しています。librosa との一致は参照値と、各ランタイムで使える機能の範囲は C ABI そのものと、CI が毎回照合します。',
       items: [
         {
           tag: 'INSTRUMENTS',
@@ -286,7 +286,7 @@ const localeCopy = {
         },
         {
           tag: 'ANALYSIS & DAW',
-          title: '移植しても驚きのない MIR 解析。',
+          title: '移行しても結果がずれない MIR 解析。',
           body: 'BPM、キー、コード、セクション、EBU R128 ラウドネス。librosa と重なる範囲はデフォルト値が一致し、CI が参照値と照合します。解析結果はそのままヘッドレス DAW とリアルタイムエンジンへ渡せます。',
           links: [
             { label: '機能マップ', path: '/docs/api-surface' },
@@ -298,7 +298,7 @@ const localeCopy = {
     finalCta: {
       heading: '同じ DSP をどこでも動かす。',
       subhead:
-        'C++、C、Python、Node、WASM、2 つの CLI を、ひとつの Apache-2.0 ライセンスで。どこまで届くかはランタイムごとに表で公開しています。',
+        'C++、C、Python、Node、WASM、2 つの CLI を、ひとつの Apache-2.0 ライセンスで。ランタイムごとに使える機能は表で公開しています。',
       github: 'GitHub でソースを見る',
       docs: 'ドキュメントを読む',
       license: 'Apache-2.0 ライセンス',

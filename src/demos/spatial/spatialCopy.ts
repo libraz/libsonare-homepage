@@ -91,9 +91,11 @@ export const enCopy = {
   },
   actions: {
     drop: 'Drop a recording or click to browse',
-    dropHint: 'WAV · FLAC · MP3 · OGG — a clap, balloon pop, or sweep gives the cleanest estimate',
+    dropHint:
+      'WAV · FLAC · MP3 · OGG — use a clap, balloon pop, or deconvolved sweep impulse response',
     irToggle: 'Treat as impulse response',
-    irHint: 'On for a clean clap / pop / sweep. Off for ordinary music or speech (blind estimate).',
+    irHint:
+      'On for a clap, pop, or deconvolved sweep impulse response. Off for music, speech, or a raw recorded sweep.',
     rescan: 'Rescan',
     clear: 'Clear',
     morph: 'Morph demo through room',
@@ -176,11 +178,11 @@ export const enCopy = {
     blind:
       'Blind estimate from ordinary audio — useful for ranking and visualization, not an architectural measurement. A single channel resolves one equivalent source distance, so multiple talkers or instruments collapse into a single source.',
     lowConfidence:
-      'Low confidence: no clean decay region was found. Try an impulse-response recording (clap / pop / sweep).',
+      'Low confidence: no clean decay region was found. Try an impulse-response recording (clap / pop / deconvolved sweep IR).',
     truth:
       'This room was synthesized from known geometry, then estimated back — compare the estimate to the ground truth.',
     invalid:
-      'No clear room or decay was found in this recording. Room estimation needs audible reverberation — pick a sample room, or upload an impulse response (a clap, balloon pop, or sweep).',
+      'No clear room or decay was found in this recording. Room estimation needs audible reverberation — pick a sample room, or upload an impulse response (a clap, balloon pop, or deconvolved sweep IR).',
     morph:
       'Room morph renders the playable audio through the estimated shoebox model. It is a creative audition of the room, not a corrective dereverb pass.',
     exports:
@@ -234,7 +236,7 @@ export const enCopy = {
       },
       mode: {
         title: 'Estimation mode',
-        body: 'Impulse response uses a clean clap, pop, or sweep directly. Blind estimate infers the room from ordinary music or speech — useful for ranking, not architectural measurement.',
+        body: 'Impulse-response analysis accepts a clap, pop, or a sweep-derived IR after deconvolution. A raw recorded sweep must be deconvolved first. Blind estimate infers the room from ordinary music or speech — useful for ranking, not architectural measurement.',
         tip: 'Toggle "Treat as impulse response" to switch how an uploaded file is analyzed.',
       },
       rt60: {
@@ -265,7 +267,7 @@ export const enCopy = {
       confidence: {
         title: 'Confidence',
         body: 'How reliable the estimate is, from the quality of the decay region found. Clean impulse responses score high; noisy or reverb-light material scores low.',
-        tip: 'Below about 35% the estimate is rough — try an impulse-response recording (clap, pop, sweep). It grades the decay it found, not how close the geometry landed.',
+        tip: 'Below about 35% the estimate is rough — try an impulse-response recording (clap, pop, deconvolved sweep IR). It grades the decay it found, not how close the geometry landed.',
       },
       band: {
         title: 'Per-band decay',
@@ -303,9 +305,11 @@ export const jaCopy: typeof enCopy = {
   },
   actions: {
     drop: '録音をドロップ、またはクリックして選択',
-    dropHint: 'WAV・FLAC・MP3・OGG — 拍手・風船の破裂音・スイープが最も高精度です',
+    dropHint:
+      'WAV・FLAC・MP3・OGG — 拍手・風船の破裂音・逆畳み込み済みのスイープ由来 IR を使用できます',
     irToggle: 'インパルス応答として扱う',
-    irHint: 'クリーンな拍手・破裂音・スイープなら ON。通常の音楽や音声なら OFF（ブラインド推定）。',
+    irHint:
+      '拍手・破裂音などのインパルス応答、または逆畳み込み済みのスイープ由来 IR なら ON。通常の音楽・音声・録音したままのスイープは OFF。',
     rescan: '再スキャン',
     clear: 'クリア',
     morph: 'デモ音源をこの部屋に通す',
@@ -385,11 +389,11 @@ export const jaCopy: typeof enCopy = {
     blind:
       '通常の音声からのブラインド推定です。比較や可視化には有用ですが、建築的な測定値ではありません。1 チャンネルでは音源までの等価距離を 1 つだけ求めるため、複数の話者や楽器は 1 つの音源として扱われます。',
     lowConfidence:
-      '信頼度が低い状態です。クリーンな減衰領域が見つかりませんでした。インパルス応答の録音（拍手・破裂音・スイープ）をお試しください。',
+      '信頼度が低い状態です。クリーンな減衰領域が見つかりませんでした。インパルス応答の録音（拍手・破裂音・逆畳み込み済みのスイープ由来 IR）をお試しください。',
     truth:
       'この部屋は既知の形状から合成し、それを逆推定したものです。推定値と正解値を比べてみてください。',
     invalid:
-      'この録音からは明確な部屋の響きや減衰を検出できませんでした。ルーム推定には聞き取れる残響が必要です。サンプルルームを選ぶか、インパルス応答（拍手・風船の破裂音・スイープ）をアップロードしてください。',
+      'この録音からは明確な部屋の響きや減衰を検出できませんでした。ルーム推定には聞き取れる残響が必要です。サンプルルームを選ぶか、インパルス応答（拍手・風船の破裂音・逆畳み込み済みのスイープ由来 IR）をアップロードしてください。',
     morph:
       'ルームモーフは、再生対象の音声を推定されたシューボックスモデルの部屋に通してレンダーします。補正用のデリバーブではなく、部屋の響きを試聴するためのクリエイティブ処理です。',
     exports:
@@ -403,7 +407,7 @@ export const jaCopy: typeof enCopy = {
     lengthExtended:
       '指定した長さが直接音がリスナーに届くまでの時間より短かったため、届くところまで延長しています。',
     noLateTail:
-      'この部屋では拡散した後部残響が生成されませんでした。聞こえるのは直接音と初期反射だけです。',
+      'この部屋では拡散した後期残響が生成されませんでした。聞こえるのは直接音と初期反射だけです。',
   },
   errors: {
     decode: 'この音声ファイルをデコードできませんでした。WAV・FLAC・MP3・OGG をお試しください。',
@@ -423,7 +427,7 @@ export const jaCopy: typeof enCopy = {
       },
       volume: {
         title: '容積',
-        body: '寸法から求めた推定室の容積（立方メートル）です。1 本の減衰から決まるのは容積と吸音率の積だけなので、容積は平均吸音率 0.15 という仮定の上に乗っています。',
+        body: '寸法から求めた、推定した部屋の容積（立方メートル）です。1 本の減衰から決まるのは容積と吸音率の積だけなので、容積は平均吸音率 0.15 という仮定に基づいています。',
         tip: 'この仮定の 3 乗で効きます。吸音が強すぎる部屋は極端に小さく、響きすぎる部屋は大きく出ます。',
       },
       sourceDistance: {
@@ -443,7 +447,7 @@ export const jaCopy: typeof enCopy = {
       },
       mode: {
         title: '推定モード',
-        body: 'インパルス応答はクリーンな拍手・破裂音・スイープをそのまま使います。ブラインド推定は通常の音楽や音声から部屋を推測するもので、比較には有用ですが建築的な測定値ではありません。',
+        body: 'インパルス応答の解析には、拍手・破裂音や、逆畳み込み済みのスイープ由来 IR を使います。録音したままのスイープには、先に逆畳み込みが必要です。ブラインド推定は通常の音楽や音声から部屋を推測するもので、比較には有用ですが建築的な測定値ではありません。',
         tip: '「インパルス応答として扱う」を切り替えると、アップロード音源の解析方法が変わります。',
       },
       rt60: {
@@ -454,7 +458,7 @@ export const jaCopy: typeof enCopy = {
       edt: {
         title: '初期減衰時間（EDT）',
         body: '最初の 10 dB の減衰から測り 60 dB に換算した時間（秒）です。初期音場の体感的な残響感は RT60 より EDT のほうがよく表します。',
-        tip: 'EDT が RT60 より大きく短い場合、強い初期反射と長い後部残響が示唆されます。',
+        tip: 'EDT が RT60 より大きく短い場合、強い初期反射と長い後期残響が示唆されます。',
       },
       c50: {
         title: '明瞭度（C50）',
@@ -474,7 +478,7 @@ export const jaCopy: typeof enCopy = {
       confidence: {
         title: '信頼度',
         body: '見つかった減衰領域の質から求めた推定の信頼度です。クリーンなインパルス応答は高く、ノイズが多い・残響の乏しい素材は低くなります。',
-        tip: '約 35% を下回ると推定は粗くなります。インパルス応答の録音（拍手・破裂音・スイープ）をお試しください。これは見つかった減衰の質を表すもので、形状がどれだけ当たっているかを表すものではありません。',
+        tip: '約 35% を下回ると推定は粗くなります。インパルス応答の録音（拍手・破裂音・逆畳み込み済みのスイープ由来 IR）をお試しください。これは見つかった減衰の質を表すもので、形状がどれだけ当たっているかを表すものではありません。',
       },
       band: {
         title: '帯域別の減衰',
